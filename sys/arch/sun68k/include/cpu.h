@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.20 2008/01/26 14:02:54 tsutsui Exp $	*/
+/*	$NetBSD: cpu.h,v 1.23 2013/10/19 19:20:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -102,29 +102,6 @@
  * code to identify machine-dependent functions, etc.
  */
 
-#include <sys/cpu_data.h>
-struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
-	cpuid_t	ci_cpuid;
-	int	ci_mtx_count;
-	int	ci_mtx_oldspl;
-	int	ci_want_resched;
-};
-
-extern struct cpu_info cpu_info_store;
-
-#define	curcpu()			(&cpu_info_store)
-
-/*
- * definitions of cpu-dependent requirements
- * referenced in generic code
- */
-#define	cpu_number()			0
-#define	cpu_swapin(p)			/* nothing */
-#define	cpu_swapout(p)			/* nothing */
-
-void	cpu_proc_fork(struct proc *, struct proc *);
-
 /*
  * Arguments to hardclock and gatherstats encapsulate the previous
  * machine state in an opaque clockframe.  On the sun68k, we use
@@ -155,8 +132,11 @@ extern int astpending;	 /* need to trap before returning to user mode */
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-#define	cpu_need_resched(ci, flags)	\
-	do { ci->ci_want_resched = 1; aston(); } while (/* CONSTCOND */0)
+#define	cpu_need_resched(ci,flags)	do {	\
+	__USE(flags); 				\
+	ci->ci_want_resched = 1;		\
+	aston();				\
+} while (/*CONSTCOND*/0)
 
 /*
  * Give a profiling tick to the current process when the user profiling

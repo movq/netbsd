@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.25 2007/02/18 12:22:16 tsutsui Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.38 2015/10/02 05:22:50 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -26,19 +26,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.25 2007/02/18 12:22:16 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.38 2015/10/02 05:22:50 msaitoh Exp $");
 
-#include <sys/types.h>
+#define _MIPS_BUS_DMA_PRIVATE
+
 #include <sys/param.h>
-#include <sys/time.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
+#include <sys/errno.h>
 #include <sys/extent.h>
-
-#define _COBALT_BUS_DMA_PRIVATE
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/intr.h>
+#include <sys/systm.h>
+#include <sys/time.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -52,25 +52,14 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.25 2007/02/18 12:22:16 tsutsui Exp
  * PCI doesn't have any special needs; just use
  * the generic versions of these functions.
  */
-struct cobalt_bus_dma_tag pci_bus_dma_tag = {
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	_bus_dmamap_sync,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
+struct mips_bus_dma_tag pci_bus_dma_tag = {
+	._dmamap_ops = _BUS_DMAMAP_OPS_INITIALIZER,
+	._dmamem_ops = _BUS_DMAMEM_OPS_INITIALIZER,
+	._dmatag_ops = _BUS_DMATAG_OPS_INITIALIZER,
 };
 
 void
-pci_attach_hook(struct device *parent, struct device *self,
-    struct pcibus_attach_args *pba)
+pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 	/* XXX */
 
@@ -109,6 +98,11 @@ pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 	pcireg_t data;
 	int bus, dev, func;
 
+	KASSERT(pc != NULL);
+
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return (pcireg_t) -1;
+
 	pci_decompose_tag(pc, tag, &bus, &dev, &func);
 
 	/*
@@ -134,6 +128,9 @@ void
 pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 {
 
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return;
+
 	bus_space_write_4(pc->pc_bst, pc->pc_bsh, GT_PCICFG_ADDR,
 	    PCICFG_ENABLE | tag | reg);
 	bus_space_write_4(pc->pc_bst, pc->pc_bsh, GT_PCICFG_DATA, data);
@@ -141,7 +138,7 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 }
 
 int
-pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pcitag_t intrtag = pa->pa_intrtag;
@@ -152,38 +149,45 @@ pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 	pci_decompose_tag(pc, intrtag, &bus, &dev, &func);
 
 	/*
-	 * The interrupt lines of the two Tulips are connected
+	 * The interrupt lines of the internal Tulips are connected
 	 * directly to the CPU.
 	 */
-
 	if (cobalt_id == COBALT_ID_QUBE2700) {
-		if (bus == 0 && dev == 7 && pin == PCI_INTERRUPT_PIN_A)
-			*ihp = 16 + 2;
-		else
-			*ihp = line;
+		if (bus == 0 && dev == 7 && pin == PCI_INTERRUPT_PIN_A) {
+			/* tulip is connected to CPU INT2 on Qube2700 */
+			*ihp = NICU_INT + 2;
+			return 0;
+		}
 	} else {
-		if (bus == 0 && dev == 7 && pin == PCI_INTERRUPT_PIN_A)
-			*ihp = 16 + 1;
-		else if (bus == 0 && dev == 12 && pin == PCI_INTERRUPT_PIN_A)
-			*ihp = 16 + 2;
-		else
-			*ihp = line;
+		if (bus == 0 && dev == 7 && pin == PCI_INTERRUPT_PIN_A) {
+			/* the primary tulip is connected to CPU INT1 */
+			*ihp = NICU_INT + 1;
+			return 0;
+		}
+		if (bus == 0 && dev == 12 && pin == PCI_INTERRUPT_PIN_A) {
+			/* the secondary tulip is connected to CPU INT2 */
+			*ihp = NICU_INT + 2;
+			return 0;
+		}
 	}
 
+	/* sanity check */
+	if (line == 0 || line >= NICU_INT)
+		return -1;
+
+	*ihp = line;
 	return 0;
 }
 
 const char *
-pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih, char *buf, size_t len)
 {
-	static char irqstr[8];
-
-	if (ih >= 16)
-		sprintf(irqstr, "level %d", ih - 16);
+	if (ih >= NICU_INT)
+		snprintf(buf, len, "level %d", ih - NICU_INT);
 	else
-		sprintf(irqstr, "irq %d", ih);
+		snprintf(buf, len, "irq %d", ih);
 
-	return irqstr;
+	return buf;
 }
 
 const struct evcnt *
@@ -194,13 +198,26 @@ pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 	return NULL;
 }
 
+int
+pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
+		 int attr, uint64_t data)
+{
+
+	switch (attr) {
+	case PCI_INTR_MPSAFE:
+		return 0;
+	default:
+		return ENODEV;
+	}
+}
+
 void *
 pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih, int level,
     int (*func)(void *), void *arg)
 {
 
-	if (ih >= 16)
-		return cpu_intr_establish(ih - 16, level, func, arg);
+	if (ih >= NICU_INT)
+		return cpu_intr_establish(ih - NICU_INT, level, func, arg);
 	else
 		return icu_intr_establish(ih, IST_LEVEL, level, func, arg);
 }
@@ -219,7 +236,12 @@ pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin, int swiz,
     int *iline)
 {
 
-	/* not yet... */
+	/*
+	 * Use irq 9 on all devices on the Qube's PCI slot.
+	 * XXX doesn't handle devices over PCI-PCI bridges
+	 */
+	if (bus == 0 && dev == 10 && pin != PCI_INTERRUPT_PIN_NONE)
+		*iline = 9;
 }
 
 int
@@ -238,7 +260,7 @@ pci_conf_hook(pci_chipset_tag_t pc, int bus, int dev, int func, pcireg_t id)
 	if (bus == 0 && dev == 31)
 		return 0;
 
-	/* Don't configure the bridge and PCI probe. */ 
+	/* Don't configure the bridge and PCI probe. */
 	if (PCI_VENDOR(id) == PCI_VENDOR_MARVELL &&
 	    PCI_PRODUCT(id) == PCI_PRODUCT_MARVELL_GT64011)
 	        return 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_memstream.c,v 1.3 2008/02/09 14:56:20 junyoung Exp $	*/
+/*	$NetBSD: citrus_memstream.c,v 1.5 2012/03/13 21:13:31 christos Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_memstream.c,v 1.3 2008/02/09 14:56:20 junyoung Exp $");
+__RCSID("$NetBSD: citrus_memstream.c,v 1.5 2012/03/13 21:13:31 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -46,7 +46,7 @@ const char *
 _citrus_memory_stream_getln(struct _citrus_memory_stream * __restrict ms,
 			    size_t * __restrict rlen)
 {
-	int i;
+	size_t i;
 	const uint8_t *h, *p;
 	size_t ret;
 
@@ -98,7 +98,7 @@ _citrus_memory_stream_matchline(struct _citrus_memory_stream * __restrict ms,
 		p = _bcs_skip_ws_len(p, &len);
 		q = _bcs_skip_nonws_len(p, &len);
 
-		if (q-p == keylen) {
+		if ((size_t)(q-p) == keylen) {
 			if (iscasesensitive) {
 				if (memcmp(key, p, keylen) == 0)
 					break; /* match */

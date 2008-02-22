@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.32 2007/05/28 12:06:26 tls Exp $
+#	$NetBSD: Makefile,v 1.37 2017/05/21 15:28:43 riastradh Exp $
 #	from: @(#)Makefile	8.2 (Berkeley) 4/3/94
 
 .include <bsd.own.mk>
@@ -16,8 +16,12 @@ SRCS=	cmds.c cmdtab.c complete.c domacro.c fetch.c ftp.c main.c \
 .if defined(SMALLPROG)
 CPPFLAGS+=-DNO_EDITCOMPLETE -DNO_ABOUT -DNO_AUTH -DNO_HELP -DNO_STATUS -DNO_DEBUG -DNO_USAGE
 .else
-LDADD+=	-ledit -ltermcap
-DPADD+=	${LIBEDIT} ${LIBTERMCAP}
+LDADD+=	-ledit -lterminfo
+DPADD+=	${LIBEDIT} ${LIBTERMINFO}
+CPPFLAGS+= -DWITH_SSL
+SRCS+=ssl.c
+LDADD+= -lssl -lcrypto
+DPADD+= ${LIBSSL} ${LIBCRYPTO}
 .endif
 
 .if (!defined(SMALLPROG) || defined(SMALLPROG_INET6)) && (${USE_INET6} != "no")

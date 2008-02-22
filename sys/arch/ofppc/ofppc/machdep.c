@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.105 2008/02/11 17:32:18 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.117 2014/03/26 17:38:09 christos Exp $	*/
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,13 +29,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.105 2008/02/11 17:32:18 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.117 2014/03/26 17:38:09 christos Exp $");
 
 #include <sys/param.h>
+#include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/boot_flag.h>
 #include <sys/mount.h>
 #include <sys/kernel.h>
+#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -53,10 +48,11 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.105 2008/02/11 17:32:18 garbled Exp $"
 #include <machine/pmap.h>
 #include <machine/powerpc.h>
 #include <machine/trap.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/isa_machdep.h>
-#include <machine/spr.h>
 
+#include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 #include <powerpc/oea/bat.h>
 #include <powerpc/ofw_cons.h>
 #include <powerpc/rtas.h>
@@ -67,15 +63,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.105 2008/02/11 17:32:18 garbled Exp $"
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
 #endif
+#include "rtas.h"
 
-struct pmap ofw_pmap;
-char bootpath[256];
-
-void ofwppc_batinit(void);
-void ofppc_bootstrap_console(void);
+extern struct pmap ofw_pmap;
+extern char bootpath[256];
 
 extern u_int l2cr_config;
+#if (NRTAS > 0)
 extern int machine_has_rtas;
+#endif
 
 struct model_data modeldata;
 
@@ -122,11 +118,10 @@ model_init(void)
 		char buf[32];
 		int i;
 
-		modeldata.ranges_offset = 1;
 		modeldata.pciiodata[0].start = 0x00001400;
 		modeldata.pciiodata[0].limit = 0x0000ffff;
 		
-		/* the pegasos doesn't bother to set the L2 cache up*/
+		/* the pegasos doesn't bother to set the L2 cache up */
 		l2cr_config = L2CR_L2PE;
 		
 		/* fix the device_type property of a graphics card */
@@ -165,23 +160,23 @@ model_init(void)
 			}
 		}
 		if (!mode) {
-			mode = 0x102;
+			mode = 0x103;
 			width = 800;
 			height = 600;
 		}
 
 		/* init frame buffer mode */
-		sprintf(buf, "%x vesa-set-mode", mode);
+		snprintf(buf, sizeof(buf), "%x vesa-set-mode", mode);
 		OF_interpret(buf, 0, 0);
 
 		/* set dimensions and frame buffer address in OFW */
-		sprintf(buf, "%x to screen-width", width);
+		snprintf(buf, sizeof(buf), "%x to screen-width", width);
 		OF_interpret(buf, 0, 0);
-		sprintf(buf, "%x to screen-height", height);
+		snprintf(buf, sizeof(buf), "%x to screen-height", height);
 		OF_interpret(buf, 0, 0);
 		OF_interpret("vesa-frame-buffer-adr", 0, 1, &fbaddr);
 		if (fbaddr != 0) {
-			sprintf(buf, "%x to frame-buffer-adr", fbaddr);
+			snprintf(buf, sizeof(buf), "%x to frame-buffer-adr", fbaddr);
 			OF_interpret(buf, 0, 0);
 		}
 	}
@@ -217,8 +212,10 @@ cpu_reboot(int howto, char *what)
 {
 	static int syncing;
 	static char str[256];
-	int junk;
 	char *ap = str, *ap1 = ap;
+#if (NRTAS > 0)
+	int junk;
+#endif
 
 	boothowto = howto;
 	if (!cold && !(howto & RB_NOSYNC) && !syncing) {
@@ -229,22 +226,28 @@ cpu_reboot(int howto, char *what)
 	splhigh();
 	if (howto & RB_HALT) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		aprint_normal("halted\n\n");
+#if (NRTAS > 0)
 		if ((howto & 0x800) && machine_has_rtas &&
 		    rtas_has_func(RTAS_FUNC_POWER_OFF))
 			rtas_call(RTAS_FUNC_POWER_OFF, 2, 1, 0, 0, &junk);
+#endif
 		ppc_exit();
 	}
 	if (!cold && (howto & RB_DUMP))
 		oea_dumpsys();
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 	aprint_normal("rebooting\n\n");
 
+#if (NRTAS > 0)
 	if (machine_has_rtas && rtas_has_func(RTAS_FUNC_SYSTEM_REBOOT)) {
 		rtas_call(RTAS_FUNC_SYSTEM_REBOOT, 0, 1, &junk);
 		for(;;);
 	}
-
+#endif
 	if (what && *what) {
 		if (strlen(what) > sizeof str - 5)
 			aprint_normal("boot string too large, ignored\n");
@@ -351,7 +354,7 @@ ofppc_init_comcons(int isa_node)
 }
 
 void
-copy_disp_props(struct device *dev, int node, prop_dictionary_t dict)
+copy_disp_props(device_t dev, int node, prop_dictionary_t dict)
 {
 	uint32_t temp;
 	char typestr[32];
@@ -384,7 +387,8 @@ copy_disp_props(struct device *dev, int node, prop_dictionary_t dict)
 	}
 	if (!of_to_uint32_prop(dict, node, "address", "address")) {
 		uint32_t fbaddr = 0;
-			OF_interpret("frame-buffer-adr", 0, 1, &fbaddr);
+
+		OF_interpret("frame-buffer-adr", 0, 1, &fbaddr);
 		if (fbaddr != 0)
 			prop_dictionary_set_uint32(dict, "address", fbaddr);
 	}

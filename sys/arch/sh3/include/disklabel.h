@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.7 2005/12/11 12:18:58 christos Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.9 2013/05/16 18:47:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -52,7 +52,8 @@
 #include <sys/dkbad.h>
 #endif /* HAVE_NBTOOL_CONFIG_H */
 struct cpu_disklabel {
-	struct mbr_partition dosparts[MBR_PART_COUNT];
+	struct mbr_partition mbrparts[MBR_PART_COUNT];
+#define __HAVE_DISKLABEL_DKBAD
 	struct dkbad bad;
 };
 #endif

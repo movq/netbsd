@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.14 2006/04/01 15:45:00 cherry Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.20 2017/11/06 03:47:48 christos Exp $	*/
 
 /* 
  * Mach Operating System
@@ -35,28 +35,29 @@
  */
 
 #include <sys/param.h>
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 #include <machine/trap.h>
 #include <machine/psl.h>
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 
 typedef struct trapframe db_regs_t;
 extern	db_regs_t	ddb_regs;	/* register state */
 #define	DDB_REGS	(&ddb_regs)
 
-#define	PC_REGS(regs)	(*(db_addr_t *)&(regs)->pc)
+#define	PC_REGS(regs)	(*(db_addr_t *)&(regs)->tf_pc)
 
 #define	BKPT_ADDR(addr)	(addr)		/* breakpoint address */
 #define	BKPT_INST	0x03		/* breakpoint instruction */
 #define	BKPT_SIZE	(1)		/* size of breakpoint inst */
 #define	BKPT_SET(inst, addr)	(BKPT_INST)
 
-#define	FIXUP_PC_AFTER_BREAK(regs)	((regs)->pc -= BKPT_SIZE)
+#define	FIXUP_PC_AFTER_BREAK(regs)	((regs)->tf_pc -= BKPT_SIZE)
 
-#define	db_clear_single_step(regs)	((regs)->psl &= ~PSL_T)
-#define	db_set_single_step(regs)	((regs)->psl |=  PSL_T)
+#define	db_clear_single_step(regs)	((regs)->tf_psl &= ~PSL_T)
+#define	db_set_single_step(regs)	((regs)->tf_psl |=  PSL_T)
 
 #define	IS_BREAKPOINT_TRAP(type, code)	((type) == T_BPTFLT)
 #define IS_WATCHPOINT_TRAP(type, code)	((type) == T_TRCTRAP)
@@ -75,16 +76,11 @@ extern	db_regs_t	ddb_regs;	/* register state */
 #define DB_MACHINE_COMMANDS
 
 /* Prototypes */
-void	kdb_trap __P((struct trapframe *));
+void	kdb_trap(struct trapframe *);
 
 /*
  * We use a.out symbols in DDB (unless we are ELF then we use ELF symbols).
  */
-#ifdef __ELF__
 #define	DB_ELF_SYMBOLS
-#define	DB_ELFSIZE		32
-#else
-#define	DB_AOUT_SYMBOLS
-#endif
 
 #endif	/* _VAX_DB_MACHDEP_H_ */

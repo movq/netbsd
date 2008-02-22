@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sipreg.h,v 1.18 2007/12/15 05:46:21 dyoung Exp $	*/
+/*	$NetBSD: if_sipreg.h,v 1.20 2018/02/08 09:05:19 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -509,7 +502,7 @@ struct sip_desc {
 #define	PCR_PS_MCAST	0x40000000 /* pause on multicast */
 #define	PCR_PS_DA	0x20000000 /* pause on DA */
 #define	PCR_PS_ACT	0x10000000 /* pause active */
-#define	PCR_PS_RCVD	0x08000000 /* pause packet recieved */
+#define	PCR_PS_RCVD	0x08000000 /* pause packet received */
 /* #ifdef DP83820 */
 #define	PCR_PS_STHI_8	0x03000000 /* Status FIFO Hi Threshold (8packets) */
 #define	PCR_PS_STHI_4	0x02000000 /* Status FIFO Hi Threshold (4packets) */

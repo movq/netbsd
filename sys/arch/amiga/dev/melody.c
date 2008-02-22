@@ -1,4 +1,4 @@
-/*	$NetBSD: melody.c,v 1.14 2007/10/17 19:53:17 garbled Exp $ */
+/*	$NetBSD: melody.c,v 1.18 2012/10/27 17:17:30 chs Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: melody.c,v 1.14 2007/10/17 19:53:17 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: melody.c,v 1.18 2012/10/27 17:17:30 chs Exp $");
 
 /*
  * Melody audio driver.
@@ -51,11 +44,10 @@ __KERNEL_RCSID(0, "$NetBSD: melody.c,v 1.14 2007/10/17 19:53:17 garbled Exp $");
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <dev/ic/tms320av110reg.h>
 #include <dev/ic/tms320av110var.h>
-
-#include <machine/bus.h>
 
 #include <amiga/dev/zbusvar.h>
 #include <amiga/amiga/isr.h>
@@ -67,15 +59,15 @@ struct melody_softc {
 	uint8_t *		sc_intack;
 };
 
-int melody_match(struct device *, struct cfdata *, void *);
-void melody_attach(struct device *, struct device *, void *);
+int melody_match(device_t, cfdata_t, void *);
+void melody_attach(device_t, device_t, void *);
 void melody_intack(struct tav_softc *);
 
-CFATTACH_DECL(melody, sizeof(struct melody_softc),
+CFATTACH_DECL_NEW(melody, sizeof(struct melody_softc),
     melody_match, melody_attach, NULL, NULL);
 
 int
-melody_match(struct device *parent, struct cfdata *cfp, void *aux)
+melody_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zbus_args *zap;
 
@@ -90,14 +82,14 @@ melody_match(struct device *parent, struct cfdata *cfp, void *aux)
 }
 
 void
-melody_attach(struct device *parent, struct device *self, void *aux)
+melody_attach(device_t parent, device_t self, void *aux)
 {
 	struct melody_softc *sc;
 	struct zbus_args *zap;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 
-	sc = (struct melody_softc *)self;
+	sc = device_private(self);
 	zap = aux;
 
 	sc->sc_bst_leftbyte.base = (u_long)zap->va + 0;
@@ -112,12 +104,17 @@ melody_attach(struct device *parent, struct device *self, void *aux)
 		panic("melody: cant bus_space_map");
 		/* NOTREACHED */
 	}
+	sc->sc_tav.sc_dev = self;
 	sc->sc_tav.sc_iot = iot;
 	sc->sc_tav.sc_ioh = ioh;
 	sc->sc_tav.sc_pcm_ord = 0;
 	sc->sc_tav.sc_pcm_18 = 0;
 	sc->sc_tav.sc_dif = 0;
 	sc->sc_tav.sc_pcm_div = 12;
+
+	mutex_init(&sc->sc_tav.sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_tav.sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
+	cv_init(&sc->sc_tav.sc_cv, device_xname(self));
 
 	/*
 	 * Attach option boards now. They might provide additional

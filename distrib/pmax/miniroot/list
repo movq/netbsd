@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.16 2006/07/29 19:10:56 ad Exp $
+#	$NetBSD: list,v 1.23 2013/11/30 08:27:18 nakayama Exp $
 
 # extras in bin
 PROG	bin/csh
@@ -22,7 +22,7 @@ PROG	usr/bin/vi
 PROG	usr/sbin/installboot
 
 # crunchgen source directory specials: progs built in nonstandard places
-SPECIAL	vi	srcdir usr.bin/vi/build
+SPECIAL	vi	srcdir external/bsd/nvi/usr.bin/nvi
 
 # Minimize use of MFS
 SYMLINK	/tmp	var/tmp
@@ -32,26 +32,15 @@ COPYDIR	${DESTDIR}/usr/mdec	usr/mdec
 # and /boot.pmax
 COPY	${DESTDIR}/boot.pmax	boot.pmax
 
-# the zoneinfo (dont use)
-#COPYDIR	${DESTDIR}/usr/share/zoneinfo	usr/share/zoneinfo
-
-# a subset termcap file
-COPY	${ARCHDIR}/termcap.vt100 usr/share/misc/termcap
-
 # copy the kernel(s)
 COPY	${KERNOBJDIR}/GENERIC/netbsd		netbsd
 COPY	${KERNOBJDIR}/GENERIC/netbsd.ecoff	netbsd.ecoff
 COPY	${KERNOBJDIR}/INSTALL/nfsnetbsd.ecoff	nfsnetbsd.ecoff
 
 # various files that we need in /etc for the install
-#COPY	${DESTDIR}/etc/disktab		etc/disktab.shadow
-#SYMLINK	/tmp/disktab.shadow		etc/disktab
 #SYMLINK	/tmp/fstab.shadow		etc/fstab
 #SYMLINK	/tmp/resolv.conf.shadow		etc/resolv.conf
 #SYMLINK	/tmp/hosts			etc/hosts
-
-# sysinst needs disktab template
-COPY	${DESTDIR}/etc/disktab		etc/disktab.preinstall
 
 # and the installation tools
 COPY	${ARCHDIR}/dot.profile		.profile

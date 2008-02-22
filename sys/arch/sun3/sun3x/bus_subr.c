@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_subr.c,v 1.30 2006/10/03 13:02:32 tsutsui Exp $	*/
+/*	$NetBSD: bus_subr.c,v 1.33 2013/09/06 17:43:19 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_subr.c,v 1.30 2006/10/03 13:02:32 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_subr.c,v 1.33 2013/09/06 17:43:19 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,14 +102,14 @@ bus_tmapin(int bustype, int pa)
 	tmp_vpages_inuse++;
 
 	pgva = tmp_vpages[1];
-	pmap_kenter_pa(pgva, pa, VM_PROT_READ | VM_PROT_WRITE);
+	pmap_kenter_pa(pgva, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
 	pmap_update(pmap_kernel());
 	splx(s);
 
 	return ((void *)(pgva + off));
 }
 
-void 
+void
 bus_tmapout(void *vp)
 {
 	vaddr_t pgva;
@@ -172,7 +165,7 @@ done:
 	return ((void*)(va + off));
 }
 
-void 
+void
 bus_mapout(void *ptr, int sz)
 {
 	vaddr_t va;

@@ -1,9 +1,7 @@
-/*	$NetBSD: intr.h,v 1.9 2008/01/27 19:07:21 pooka Exp $	*/
+/*	$NetBSD: intr.h,v 1.22 2018/04/19 21:50:10 christos Exp $	*/
 
 /*
- * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
- *
- * Development of this software was supported by Google Summer of Code.
+ * Copyright (c) 2009, 2010 Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -30,26 +28,48 @@
 #ifndef _SYS_RUMP_INTR_H_
 #define _SYS_RUMP_INTR_H_
 
+#ifndef _LOCORE
+
 typedef uint8_t ipl_t;
 typedef struct {
         ipl_t _ipl;
 } ipl_cookie_t;
 
-int  rump_splfoo(void);
-void rump_splx(int);
+static __inline ipl_cookie_t
+makeiplcookie(ipl_t ipl)
+{
+	ipl_cookie_t c;
+	c._ipl = ipl;
+	return c;
+}
 
-#define spllower(x) ((void)0)
+#endif /* !_LOCORE */
+
+#define spllower(x) ((void)x)
 #define splraise(x) 0
-#define splsoftnet() rump_splfoo()
-#define splhigh() rump_splfoo()
-#define splsched() rump_splfoo()
-#define splvm() rump_splfoo()
-#define splx(x) rump_splx(x)
+#define splsoftserial() 0
+#define splsoftnet() 0
+#define splsoftclock() 0
+#define splhigh() 0
+#define splsched() 0
+#define splvm() 0
+#define splx(x) ((void)x)
 #define spl0() ((void)0)
 
+/*
+ * IPL_* does not mean anything to a run-to-completition rump kernel,
+ * but we sometimes assert a "not higher than" condition, so we assign
+ * different values (following spl(9)).
+ */
 #define IPL_NONE 0
-#define	IPL_SOFTBIO 0
-#define IPL_SCHED 0
-#define IPL_VM 0
+#define	IPL_SOFTCLOCK 1
+#define	IPL_SOFTBIO 2
+#define	IPL_SOFTNET 3
+#define IPL_SOFTSERIAL 4
+#define IPL_VM 5
+#define IPL_SCHED 6
+#define IPL_HIGH 7
+
+#define	splraiseipl(COOKIE)	0
 
 #endif /* _SYS_RUMP_INTR_H_ */

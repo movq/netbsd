@@ -1,4 +1,4 @@
-.\"	$NetBSD: getopt.3,v 1.31 2003/09/23 10:26:54 wiz Exp $
+.\"	$NetBSD: getopt.3,v 1.35 2017/07/03 21:32:50 wiz Exp $
 .\"
 .\" Copyright (c) 1988, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)getopt.3	8.5 (Berkeley) 4/27/95
 .\"
-.Dd September 10, 2003
+.Dd June 5, 2014
 .Dt GETOPT 3
 .Os
 .Sh NAME
@@ -64,6 +64,17 @@ The option string
 may contain the following elements: individual characters, and
 characters followed by a colon to indicate an option argument
 is to follow.
+If an individual character is followed by two colons, then the
+option argument is optional;
+.Va optarg
+is set to the rest of the current
+.Va argv
+word, or
+.Dv NULL
+if there were no more characters in the current word.
+This is a
+.Nx
+extension.
 For example, an option string
 .Qq x
 recognizes an option
@@ -170,7 +181,7 @@ while ((ch = getopt(argc, argv, "bf:")) != -1) {
 		bflag = 1;
 		break;
 	case 'f':
-		if ((fd = open(optarg, O_RDONLY, 0)) \*[Lt] 0) {
+		if ((fd = open(optarg, O_RDONLY, 0)) < 0) {
 			(void)fprintf(stderr,
 			    "myname: %s: %s\en", optarg, strerror(errno));
 			exit(1);
@@ -237,7 +248,7 @@ This was changed by
 to decouple
 .Fn getopt
 from
-.Aq Pa stdio.h .
+.In stdio.h .
 .Pp
 A single dash
 .Pq Sq -
@@ -289,7 +300,7 @@ while ((ch = getopt(argc, argv, "0123456789")) != -1) {
 	case '0': case '1': case '2': case '3': case '4':
 	case '5': case '6': case '7': case '8': case '9':
 		p = argv[optind - 1];
-		if (p[0] == '-' \*[Am]\*[Am] p[1] == ch \*[Am]\*[Am] !p[2])
+		if (p[0] == '-' && p[1] == ch && !p[2])
 			length = ch - '0';
 		else
 			length = strtol(argv[optind] + 1, NULL, 10);

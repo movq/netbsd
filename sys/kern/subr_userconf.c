@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_userconf.c,v 1.18 2005/12/11 12:24:30 christos Exp $	*/
+/*	$NetBSD: subr_userconf.c,v 1.26 2013/12/23 15:34:16 skrll Exp $	*/
 
 /*
  * Copyright (c) 1996 Mats O Jansson <moj@stacken.kth.se>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote
- *    products derived from this software without specific prior written
- *    permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -35,15 +29,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_userconf.c,v 1.18 2005/12/11 12:24:30 christos Exp $");
-
-#include "opt_userconf.h"
+__KERNEL_RCSID(0, "$NetBSD: subr_userconf.c,v 1.26 2013/12/23 15:34:16 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/time.h>
+#include <sys/userconf.h>
 
 #include <dev/cons.h>
 
@@ -64,8 +56,6 @@ static int userconf_histsz = sizeof(userconf_history);
 static char userconf_argbuf[40];		/* Additional input         */
 static char userconf_cmdbuf[40];		/* Command line             */
 static char userconf_histbuf[40];
-
-static int getsn(char *, int);
 
 #define UC_CHANGE 'c'
 #define UC_DISABLE 'd'
@@ -88,7 +78,7 @@ static const char *userconf_cmds[] = {
 	"",		 "",
 };
 
-static void
+void
 userconf_init(void)
 {
 	int i;
@@ -100,6 +90,8 @@ userconf_init(void)
 
 	userconf_maxdev = i - 1;
 	userconf_totdev = i - 1;
+
+	userconf_bootinfo();
 }
 
 static int
@@ -310,10 +302,16 @@ userconf_device(char *cmd, int *len, short *unit, short *state)
 	char *c;
 
 	c = cmd;
-	while (*c >= 'a' && *c <= 'z') {
-		l++;
+	while (!(!*c || *c == ' ' || *c == '\t' || *c == '\n'))
 		c++;
+	while (c > cmd) {
+		c--;
+		if (!((*c >= '0' && *c <= '9') || *c == '*')) {
+			c++;
+			break;
+		}
 	}
+	l = c - cmd;
 	if (*c == '*') {
 		s = FSTATE_STAR;
 		c++;
@@ -352,7 +350,7 @@ userconf_modify(const struct cflocdesc *item, int *val)
 			userconf_pnum(*val);
 		printf("] ? ");
 
-		getsn(userconf_argbuf, sizeof(userconf_argbuf));
+		cngetsn(userconf_argbuf, sizeof(userconf_argbuf));
 
 		c = userconf_argbuf;
 		while (*c == ' ' || *c == '\t' || *c == '\n') c++;
@@ -517,7 +515,7 @@ userconf_help(void)
 
 	printf("command   args                description\n");
 	while (*userconf_cmds[j] != '\0') {
-		printf(userconf_cmds[j]);
+		printf("%s", userconf_cmds[j]);
 		k = strlen(userconf_cmds[j]);
 		while (k < 10) {
 			printf(" ");
@@ -688,7 +686,7 @@ userconf_add_read(char *prompt, char field, char *dev, int len, int *val)
 }
 #endif /* 0 */
 
-static int
+int
 userconf_parse(char *cmd)
 {
 	char *c, *v;
@@ -804,70 +802,18 @@ userconf_parse(char *cmd)
 	return(0);
 }
 
-extern void user_config(void);
-
 void
-user_config(void)
+userconf_prompt(void)
 {
-	char prompt[] = "uc> ";
+	const char prompt[] = "uc> ";
 
-	userconf_init();
 	printf("userconf: configure system autoconfiguration:\n");
 
 	while (1) {
 		printf(prompt);
-		if (getsn(userconf_cmdbuf, sizeof(userconf_cmdbuf)) > 0 &&
+		if (cngetsn(userconf_cmdbuf, sizeof(userconf_cmdbuf)) > 0 &&
 		    userconf_parse(userconf_cmdbuf))
 			break;
 	}
 	printf("Continuing...\n");
-}
-
-/*
- * XXX shouldn't this be a common function?
- */
-static int
-getsn(char *cp, int size)
-{
-	char *lp;
-	int c, len;
-
-	cnpollc(1);
-
-	lp = cp;
-	len = 0;
-	for (;;) {
-		c = cngetc();
-		switch (c) {
-		case '\n':
-		case '\r':
-			printf("\n");
-			*lp++ = '\0';
-			cnpollc(0);
-			return (len);
-		case '\b':
-		case '\177':
-		case '#':
-			if (len) {
-				--len;
-				--lp;
-				printf("\b \b");
-			}
-			continue;
-		case '@':
-		case 'u'&037:
-			len = 0;
-			lp = cp;
-			printf("\n");
-			continue;
-		default:
-			if (len + 1 >= size || c < ' ') {
-				printf("\007");
-				continue;
-			}
-			printf("%c", c);
-			++len;
-			*lp++ = c;
-		}
-	}
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: timekeeper.h,v 1.1 2000/01/05 08:48:56 nisimura Exp $ */
+/* $NetBSD: timekeeper.h,v 1.4 2014/03/18 18:20:41 riastradh Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,6 +62,7 @@
 #define  MC_REGA_RSMASK 0x0f    /* Interrupt rate select mask (see below) */
 #define  MC_REGA_DVMASK 0x70    /* Divisor select mask (see below) */
 #define  MC_REGA_UIP    0x80    /* Update in progress; read only. */
+#define  MC_BASE_32_KHz	0x20    /* 32 KHz crystal (enable OSC on DS1287) */
 
 #define MC_REGB         0xb     /* Control register B */
 #define  MC_REGB_DSE    0x01    /* Daylight Savings Enable */

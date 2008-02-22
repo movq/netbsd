@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_euc.c,v 1.11 2006/03/19 01:25:44 christos Exp $	*/
+/*	$NetBSD: citrus_euc.c,v 1.17 2014/01/18 15:21:41 christos Exp $	*/
 
 /*-
  * Copyright (c)2002 Citrus Project,
@@ -60,7 +60,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_euc.c,v 1.11 2006/03/19 01:25:44 christos Exp $");
+__RCSID("$NetBSD: citrus_euc.c,v 1.17 2014/01/18 15:21:41 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -69,12 +69,12 @@ __RCSID("$NetBSD: citrus_euc.c,v 1.11 2006/03/19 01:25:44 christos Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <wchar.h>
 #include <sys/types.h>
 #include <limits.h>
 
 #include "citrus_namespace.h"
+#include "citrus_bcs.h"
 #include "citrus_types.h"
 #include "citrus_module.h"
 #include "citrus_ctype.h"
@@ -107,8 +107,10 @@ typedef struct {
 		_EUCState	s_mbrtowc;
 		_EUCState	s_mbtowc;
 		_EUCState	s_mbsrtowcs;
+		_EUCState	s_mbsnrtowcs;
 		_EUCState	s_wcrtomb;
 		_EUCState	s_wcsrtombs;
+		_EUCState	s_wcsnrtombs;
 		_EUCState	s_wctomb;
 	} states;
 } _EUCCTypeInfo;
@@ -154,7 +156,7 @@ _citrus_EUC_parse_variable(_EUCEncodingInfo *ei,
 
 	ei->mb_cur_max = 1;
 	for (x = 0; x < 4; ++x) {
-		ei->count[x] = (int) strtol(v, (char **)&e, 0);
+		ei->count[x] = (int)_bcs_strtol(v, (char **)&e, 0);
 		if (v == e || !(v = e) || ei->count[x]<1 || ei->count[x]>4) {
 			return (EFTYPE);
 		}
@@ -162,14 +164,14 @@ _citrus_EUC_parse_variable(_EUCEncodingInfo *ei,
 			ei->mb_cur_max = ei->count[x];
 		while (*v == ' ' || *v == '\t')
 			++v;
-		ei->bits[x] = (int) strtol(v, (char **)&e, 0);
+		ei->bits[x] = (int)_bcs_strtol(v, (char **)&e, 0);
 		if (v == e || !(v = e)) {
 			return (EFTYPE);
 		}
 		while (*v == ' ' || *v == '\t')
 			++v;
 	}
-	ei->mask = (int)strtol(v, (char **)&e, 0);
+	ei->mask = (int)_bcs_strtol(v, (char **)&e, 0);
 	if (v == e || !(v = e)) {
 		return (EFTYPE);
 	}

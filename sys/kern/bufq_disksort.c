@@ -1,4 +1,4 @@
-/*	$NetBSD: bufq_disksort.c,v 1.7 2007/02/01 00:36:37 cbiere Exp $	*/
+/*	$NetBSD: bufq_disksort.c,v 1.14 2017/05/04 11:03:27 kamil Exp $	*/
 /*	NetBSD: subr_disk.c,v 1.61 2004/09/25 03:30:44 thorpej Exp 	*/
 
 /*-
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,14 +68,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bufq_disksort.c,v 1.7 2007/02/01 00:36:37 cbiere Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bufq_disksort.c,v 1.14 2017/05/04 11:03:27 kamil Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/bufq_impl.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
+#include <sys/module.h>
 
 /*
  * Seek sort for disks.
@@ -187,7 +181,7 @@ insert:	TAILQ_INSERT_AFTER(&disksort->bq_head, bq, bp, b_actq);
 static struct buf *
 bufq_disksort_get(struct bufq_state *bufq, int remove)
 {
-	struct bufq_disksort *disksort = bufq->bq_private;
+	struct bufq_disksort *disksort = bufq_private(bufq);
 	struct buf *bp;
 
 	bp = TAILQ_FIRST(&disksort->bq_head);
@@ -198,14 +192,55 @@ bufq_disksort_get(struct bufq_state *bufq, int remove)
 	return (bp);
 }
 
+static struct buf *
+bufq_disksort_cancel(struct bufq_state *bufq, struct buf *buf)
+{
+	struct bufq_disksort *disksort = bufq_private(bufq);
+	struct buf *bq;
+
+	TAILQ_FOREACH(bq, &disksort->bq_head, b_actq) {
+		if (bq == buf) {
+			TAILQ_REMOVE(&disksort->bq_head, bq, b_actq);
+			return buf;
+		}
+	}
+	return NULL;
+}
+
+static void
+bufq_disksort_fini(struct bufq_state *bufq)
+{
+
+	KASSERT(bufq->bq_private != NULL);
+	kmem_free(bufq->bq_private, sizeof(struct bufq_disksort));
+}
+
 static void
 bufq_disksort_init(struct bufq_state *bufq)
 {
 	struct bufq_disksort *disksort;
 
-	disksort = malloc(sizeof(*disksort), M_DEVBUF, M_ZERO);
+	disksort = kmem_zalloc(sizeof(*disksort), KM_SLEEP);
 	bufq->bq_private = disksort;
 	bufq->bq_get = bufq_disksort_get;
 	bufq->bq_put = bufq_disksort_put;
+	bufq->bq_cancel = bufq_disksort_cancel;
+	bufq->bq_fini = bufq_disksort_fini;
 	TAILQ_INIT(&disksort->bq_head);
+}
+
+MODULE(MODULE_CLASS_BUFQ, bufq_disksort, NULL);
+
+static int
+bufq_disksort_modcmd(modcmd_t cmd, void *opaque)
+{
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		return bufq_register(&bufq_strat_disksort);
+	case MODULE_CMD_FINI:
+		return bufq_unregister(&bufq_strat_disksort);
+	default:
+		return ENOTTY;
+	}
 }

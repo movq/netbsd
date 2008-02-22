@@ -1,4 +1,4 @@
-/*	$NetBSD: adm5120_intr.c,v 1.2 2008/01/15 22:22:37 dyoung Exp $	*/
+/*	$NetBSD: adm5120_intr.c,v 1.7 2016/08/26 15:45:48 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -45,13 +45,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,19 +67,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adm5120_intr.c,v 1.2 2008/01/15 22:22:37 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adm5120_intr.c,v 1.7 2016/08/26 15:45:48 skrll Exp $");
 
 #include "opt_ddb.h"
+#define __INTR_PRIVATE
 
 #include <sys/param.h>
-#include <sys/queue.h>
+#include <sys/intr.h>
 #include <sys/malloc.h>
-#include <sys/systm.h>
-#include <sys/device.h>
-#include <sys/kernel.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
 
 #include <mips/locore.h>
 #include <mips/adm5120/include/adm5120reg.h>
@@ -99,27 +87,21 @@ __KERNEL_RCSID(0, "$NetBSD: adm5120_intr.c,v 1.2 2008/01/15 22:22:37 dyoung Exp 
  * This is a mask of bits to clear in the SR when we go to a
  * given hardware interrupt priority level.
  */
-const uint32_t ipl_sr_bits[_IPL_N] = {
-	0,					/*  0: IPL_NONE */
-	MIPS_SOFT_INT_MASK_0,			/*  1: IPL_SOFTCLOCK */
-	MIPS_SOFT_INT_MASK_0,			/*  2: IPL_SOFTNET */
-
-	MIPS_SOFT_INT_MASK_0|
-	MIPS_SOFT_INT_MASK_1|
-	MIPS_INT_MASK_0,			/*  3: IPL_VM */
-
-	MIPS_SOFT_INT_MASK_0|
-	MIPS_SOFT_INT_MASK_1|
-	MIPS_INT_MASK_0|
-	MIPS_INT_MASK_1|
-	MIPS_INT_MASK_2|
-	MIPS_INT_MASK_3|
-	MIPS_INT_MASK_4|
-	MIPS_INT_MASK_5,			/*  4: IPL_{SCHED,HIGH} */
+static const struct ipl_sr_map adm5120_ipl_sr_map = {
+    .sr_bits = {
+	    [IPL_NONE]		= 0,
+	    [IPL_SOFTCLOCK]	= MIPS_SOFT_INT_MASK_0,
+	    [IPL_SOFTBIO]	= MIPS_SOFT_INT_MASK_0,
+	    [IPL_SOFTNET]	= MIPS_SOFT_INT_MASK,
+	    [IPL_SOFTSERIAL]	= MIPS_SOFT_INT_MASK,
+	    [IPL_VM]		= MIPS_SOFT_INT_MASK|MIPS_INT_MASK_0,
+	    [IPL_SCHED]		= MIPS_INT_MASK,
+	    [IPL_HIGH]		= MIPS_INT_MASK,
+     },
 };
 
 #define	NIRQS		32
-const char *adm5120_intrnames[NIRQS] = {
+const char * const adm5120_intrnames[NIRQS] = {
 	"timer", /*  0 */
 	"uart0", /*  1 */
 	"uart1", /*  2 */
@@ -168,7 +150,7 @@ struct adm5120_cpuintr {
 };
 struct adm5120_cpuintr adm5120_cpuintrs[NINTRS];
 
-const char *adm5120_cpuintrnames[NINTRS] = {
+const char * const adm5120_cpuintrnames[NINTRS] = {
 	"int 0 (irq)",
 	"int 1 (fiq)",
 };
@@ -179,15 +161,15 @@ const char *adm5120_cpuintrnames[NINTRS] = {
 void
 evbmips_intr_init(void)
 {
-	int i;
+	ipl_sr_map = adm5120_ipl_sr_map;
 
-	for (i = 0; i < NINTRS; i++) {
+	for (size_t i = 0; i < NINTRS; i++) {
 		LIST_INIT(&adm5120_cpuintrs[i].cintr_list);
 		evcnt_attach_dynamic(&adm5120_cpuintrs[i].cintr_count,
 		    EVCNT_TYPE_INTR, NULL, "mips", adm5120_cpuintrnames[i]);
 	}
 
-	for (i = 0; i < NIRQS; i++) {
+	for (size_t i = 0; i < NIRQS; i++) {
 		/* XXX steering - use an irqmap array? */
 
 		adm5120_intrtab[i].intr_refcnt = 0;
@@ -283,13 +265,12 @@ adm5120_intr_disestablish(void *cookie)
 	free(ih, M_DEVBUF);
 }
 void
-evbmips_iointr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
+evbmips_iointr(int ipl, uint32_t ipending, struct clockframe *cf)
 {
 	struct evbmips_intrhand *ih;
-	int level;
 	uint32_t irqmask, irqstat;
 
-	for (level = NINTRS - 1; level >= 0; level--) {
+	for (int level = NINTRS - 1; level >= 0; level--) {
 		if ((ipending & (MIPS_INT_MASK_0 << level)) == 0)
 			continue;
 
@@ -306,11 +287,5 @@ evbmips_iointr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 				(*ih->ih_func)(ih->ih_arg);
 			}
 		}
-		cause &= ~(MIPS_INT_MASK_0 << level);
 	}
-
-	/* Re-enable anything that we have processed. */
-	_splset(MIPS_SR_INT_IE | ((status & ~cause) & MIPS_HARD_INT_MASK));
-
-	return;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: jensenioreg.h,v 1.2 2005/12/24 20:06:46 perry Exp $ */
+/* $NetBSD: jensenioreg.h,v 1.4 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
  * System register description for the DECpc AXP 150 ("Jensen").
  */
 
-#define	REGVAL(r)	(*(volatile u_int64_t *)ALPHA_PHYS_TO_K0SEG(r))
+#define	REGVAL(r)	(*(volatile uint64_t *)ALPHA_PHYS_TO_K0SEG(r))
 
 /*
  * EISA Interrupt Acknowledge:			1.0000.0000

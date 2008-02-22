@@ -1,5 +1,5 @@
-/*	$NetBSD: xform_tcp.c,v 1.4 2007/12/11 12:40:10 lukem Exp $ */
-/*	$FreeBSD: sys/netipsec/xform_tcp.c,v 1.1.2.1 2004/02/14 22:24:09 bms Exp $ */
+/*	$NetBSD: xform_tcp.c,v 1.21 2018/05/14 02:16:29 ozaki-r Exp $ */
+/*	$FreeBSD: xform_tcp.c,v 1.1.2.1 2004/02/14 22:24:09 bms Exp $ */
 
 /*
  * Copyright (c) 2003 Bruce M. Simpson <bms@spc.org>
@@ -28,38 +28,35 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* TCP MD5 Signature Option (RFC2385) */
+/*
+ * TCP MD5 Signature Option (RFC2385). Dummy code, everything is handled
+ * in TCP directly.
+ */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xform_tcp.c,v 1.4 2007/12/11 12:40:10 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xform_tcp.c,v 1.21 2018/05/14 02:16:29 ozaki-r Exp $");
 
+#if defined(_KERNEL_OPT)
 #include "opt_inet.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
-#include <sys/lock.h>
-#include <sys/socket.h>
 #include <sys/kernel.h>
-#include <sys/protosw.h>
-#include <sys/sysctl.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
+#ifdef TCP_SIGNATURE
 #include <netinet/tcp_timer.h>
 #include <netinet/tcp.h>
 #include <netinet/tcp_var.h>
+#endif
 
-#include <net/route.h>
 #include <netipsec/ipsec.h>
 #include <netipsec/xform.h>
-
-#ifdef INET6
-#include <netinet/ip6.h>
-#include <netipsec/ipsec6.h>
-#endif
 
 #include <netipsec/key.h>
 #include <netipsec/key_debug.h>
@@ -85,94 +82,75 @@ __KERNEL_RCSID(0, "$NetBSD: xform_tcp.c,v 1.4 2007/12/11 12:40:10 lukem Exp $");
  * Therefore we use this compromise in the meantime.
  */
 static int
-tcpsignature_init(struct secasvar *sav, struct xformsw *xsp)
+tcpsignature_init(struct secasvar *sav, const struct xformsw *xsp)
 {
 	int keylen;
 
 	if (sav->spi != htonl(TCP_SIG_SPI)) {
 		DPRINTF(("%s: SPI %x must be TCP_SIG_SPI (0x1000)\n",
 		    __func__, sav->alg_auth));
-		return (EINVAL);
+		return EINVAL;
 	}
 	if (sav->alg_auth != SADB_X_AALG_TCP_MD5) {
 		DPRINTF(("%s: unsupported authentication algorithm %u\n",
 		    __func__, sav->alg_auth));
-		return (EINVAL);
+		return EINVAL;
 	}
 	if (sav->key_auth == NULL) {
 		DPRINTF(("%s: no authentication key present\n", __func__));
-		return (EINVAL);
+		return EINVAL;
 	}
 	keylen = _KEYLEN(sav->key_auth);
 	if ((keylen < TCP_KEYLEN_MIN) || (keylen > TCP_KEYLEN_MAX)) {
 		DPRINTF(("%s: invalid key length %u\n", __func__, keylen));
-		return (EINVAL);
+		return EINVAL;
 	}
 
-	return (0);
+	return 0;
 }
 
-/*
- * Paranoia.
- *
- * Called when the SA is deleted.
- */
 static int
 tcpsignature_zeroize(struct secasvar *sav)
 {
-
-	if (sav->key_auth)
-		bzero(_KEYBUF(sav->key_auth), _KEYLEN(sav->key_auth));
+	if (sav->key_auth) {
+		explicit_memset(_KEYBUF(sav->key_auth), 0,
+		    _KEYLEN(sav->key_auth));
+	}
 
 	sav->tdb_cryptoid = 0;
 	sav->tdb_authalgxform = NULL;
 	sav->tdb_xform = NULL;
 
-	return (0);
+	return 0;
 }
 
-/*
- * Verify that an input packet passes authentication.
- * Called from the ipsec layer.
- * We do this from within tcp itself, so this routine is just a stub.
- */
 static int
 tcpsignature_input(struct mbuf *m, struct secasvar *sav, int skip,
     int protoff)
 {
-
-	return (0);
+	panic("%s: should not have been called", __func__);
 }
 
-/*
- * Prepend the authentication header.
- * Called from the ipsec layer.
- * We do this from within tcp itself, so this routine is just a stub.
- */
 static int
-tcpsignature_output(struct mbuf *m, struct ipsecrequest *isr,
-    struct mbuf **mp, int skip, int protoff)
+tcpsignature_output(struct mbuf *m, const struct ipsecrequest *isr,
+    struct secasvar *sav, int skip, int protoff)
 {
-
-	return (EINVAL);
+	panic("%s: should not have been called", __func__);
 }
 
 static struct xformsw tcpsignature_xformsw = {
-	XF_TCPSIGNATURE,	XFT_AUTH,		"TCPMD5",
-	tcpsignature_init,	tcpsignature_zeroize,
-	tcpsignature_input,	tcpsignature_output
+	.xf_type	= XF_TCPSIGNATURE,
+	.xf_flags	= XFT_AUTH,
+	.xf_name	= "TCPMD5",
+	.xf_init	= tcpsignature_init,
+	.xf_zeroize	= tcpsignature_zeroize,
+	.xf_input	= tcpsignature_input,
+	.xf_output	= tcpsignature_output,
+	.xf_next	= NULL,
 };
 
-INITFN void
+void
 tcpsignature_attach(void)
 {
-
 	xform_register(&tcpsignature_xformsw);
 }
-
-#ifdef __FreeBSD__
-SYSINIT(tcpsignature_xform_init, SI_SUB_DRIVERS, SI_ORDER_FIRST,
-    tcpsignature_attach, NULL)
-
-#endif
-

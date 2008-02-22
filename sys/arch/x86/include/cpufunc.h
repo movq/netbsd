@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.4 2008/01/01 12:51:08 yamt Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.24 2018/02/22 09:41:06 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,13 +49,19 @@ void	x86_lfence(void);
 void	x86_sfence(void);
 void	x86_mfence(void);
 void	x86_flush(void);
-void	x86_patch(void);
+#ifndef XEN
+void	x86_hotpatch(uint32_t, const uint8_t *, size_t);
+void	x86_patch_window_open(u_long *, u_long *);
+void	x86_patch_window_close(u_long, u_long);
+void	x86_patch(bool);
+#endif
 void	invlpg(vaddr_t);
 void	lidt(struct region_descriptor *);
 void	lldt(u_short);
 void	ltr(u_short);
-void	lcr0(u_int);
-u_int	rcr0(void);
+void	lcr0(u_long);
+u_long	rcr0(void);
+void	lcr2(vaddr_t);
 vaddr_t	rcr2(void);
 void	lcr3(vaddr_t);
 vaddr_t	rcr3(void);
@@ -72,33 +71,59 @@ void	lcr8(vaddr_t);
 vaddr_t	rcr8(void);
 void	tlbflush(void);
 void	tlbflushg(void);
-void	dr0(void *, uint32_t, uint32_t, uint32_t);
-vaddr_t	rdr6(void);
-void	ldr6(vaddr_t);
+register_t	rdr0(void);
+void		ldr0(register_t);
+register_t	rdr1(void);
+void		ldr1(register_t);
+register_t	rdr2(void);
+void		ldr2(register_t);
+register_t	rdr3(void);
+void		ldr3(register_t);
+register_t	rdr6(void);
+void		ldr6(register_t);
+register_t	rdr7(void);
+void		ldr7(register_t);
 void	wbinvd(void);
 void	breakpoint(void);
 void	x86_hlt(void);
 void	x86_stihlt(void);
 u_int	x86_getss(void);
-void	fldcw(void *);
+
+/* fpu save, restore etc */
+union savefpu;
+void	fldcw(const uint16_t *);
 void	fnclex(void);
 void	fninit(void);
-void	fnsave(void *);
-void	fnstcw(void *);
-void	fnstsw(void *);
-void	fp_divide_by_0(void);
-void	frstor(void *);
+void	fnsave(union savefpu *);
+void	fnstcw(uint16_t *);
+uint16_t fngetsw(void);
+void	fnstsw(uint16_t *);
+void	frstor(const union savefpu *);
 void	fwait(void);
 void	clts(void);
 void	stts(void);
-void	fldummy(const double *);
-void	fxsave(void *);
-void	fxrstor(void *);
+void	fxsave(union savefpu *);
+void	fxrstor(const union savefpu *);
+void	x86_ldmxcsr(const uint32_t *);
+void	x86_stmxcsr(uint32_t *);
+
+void	fldummy(void);
+void	fp_divide_by_0(void);
+
+/* Extended processor state functions (for AVX registers etc) */
+
+uint64_t rdxcr(uint32_t);		/* xgetbv */
+void	wrxcr(uint32_t, uint64_t);	/* xsetgv */
+
+void	xrstor(const union savefpu *, uint64_t);
+void	xsave(union savefpu *, uint64_t);
+void	xsaveopt(union savefpu *, uint64_t);
+
 void	x86_monitor(const void *, uint32_t, uint32_t);
 void	x86_mwait(uint32_t, uint32_t);
-void	x86_ldmxcsr(void *);
+/* x86_cpuid2() writes four 32bit values, %eax, %ebx, %ecx and %edx */
 #define	x86_cpuid(a,b)	x86_cpuid2((a),0,(b))
-void	x86_cpuid2(unsigned, unsigned, unsigned *);
+void	x86_cpuid2(uint32_t, uint32_t, uint32_t *);
 
 /* Use read_psl, write_psl when saving and restoring interrupt state. */
 void	x86_disable_intr(void);
@@ -110,6 +135,8 @@ void	x86_write_psl(u_long);
 u_long	x86_read_flags(void);
 void	x86_write_flags(u_long);
 
+void	x86_reset(void);
+
 /* 
  * Some of the undocumented AMD64 MSRs need a 'passcode' to access.
  *
@@ -119,11 +146,16 @@ void	x86_write_flags(u_long);
 #define	OPTERON_MSR_PASSCODE	0x9c5a203aU
 
 uint64_t	rdmsr(u_int);
-u_int64_t	rdmsr_locked(u_int, u_int);
+uint64_t	rdmsr_locked(u_int);
+int		rdmsr_safe(u_int, uint64_t *);
 uint64_t	rdtsc(void);
 uint64_t	rdpmc(u_int);
 void		wrmsr(u_int, uint64_t);
-void		wrmsr_locked(u_int, u_int, u_int64_t);
+void		wrmsr_locked(u_int, uint64_t);
+void		setds(int);
+void		setes(int);
+void		setfs(int);
+void		setusergs(int);
 
 #endif /* _KERNEL */
 

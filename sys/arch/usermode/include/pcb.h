@@ -1,4 +1,4 @@
-/* $NetBSD: pcb.h,v 1.1 2007/12/29 14:38:34 jmcneill Exp $ */
+/* $NetBSD: pcb.h,v 1.17 2012/01/14 17:42:51 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,15 +31,20 @@
 
 #include <sys/cdefs.h>
 #include <sys/ucontext.h>
+#include <sys/queue.h>
 
-extern int	getcontext(ucontext_t *);
-extern int	setcontext(const ucontext_t *);
-extern void	makecontext(ucontext_t *, void (*)(void), int, ...);
-extern int	swapcontext(ucontext_t *, const ucontext_t *);
 
+#define TRAPSTACKSIZE (USPACE -2*sizeof(ucontext_t) - 3*sizeof(register_t))
 struct pcb {
-	ucontext_t	pcb_ucp;
-	bool		pcb_needfree;
+	ucontext_t pcb_ucp;		/* switchframe */
+	ucontext_t pcb_userret_ucp;
+
+	uint8_t *sys_stack_top;		/* points at free point in sys_stack */
+	uint8_t	 sys_stack[TRAPSTACKSIZE];
+
+	void	*pcb_onfault;		/* on fault handler */
+
+	int	 pcb_errno;		/* save/restore place */
 };
 
 #endif /* !_ARCH_USERMODE_INCLUDE_PCB_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: timed-extern.h,v 1.9 2007/02/04 21:17:01 cbiere Exp $	*/
+/*	$NetBSD: timed-extern.h,v 1.11 2018/01/16 07:57:58 maya Exp $	*/
 
 /*-
  * Copyright (c) 1993 The Regents of the University of California.
@@ -62,7 +62,7 @@ void	 ignoreack(void);
 int	 in_cksum(const void *, int);
 void	 lookformaster(struct netinfo *);
 void	 makeslave(struct netinfo *);
-void	 master(void);
+void	 master(void) __dead;
 void	 masterack(void);
 void	 masterup(struct netinfo *);
 int	 measure(u_long, u_long, const char *, const struct sockaddr_in *, int);
@@ -74,7 +74,7 @@ void	 print(struct tsp *, struct sockaddr_in *);
 void	 prthp(clock_t);
 void	 rmnetmachs(struct netinfo *);
 void	 setstatus(void);
-int	 slave(void);
+void	 slave(void) __dead;
 void	 slaveack(void);
 void	 spreadtime(void);
 void	 suppress(struct sockaddr_in *, char *, struct netinfo *);

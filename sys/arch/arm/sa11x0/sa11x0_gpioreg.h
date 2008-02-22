@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0_gpioreg.h,v 1.2 2001/07/30 15:58:56 rjs Exp $	*/
+/*	$NetBSD: sa11x0_gpioreg.h,v 1.4 2009/05/29 14:06:53 rjs Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.  All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -95,3 +88,10 @@ port	name 		desc
 26	RCLK_OUT	internal clock /2
 27	32KHZ_OUT	Raw 32.768kHz osc output
  */
+
+#define GPIO_ALT_SSP_TXD	(1 << 10)
+#define GPIO_ALT_SSP_RXD	(1 << 11)
+#define GPIO_ALT_SSP_SCLK	(1 << 12)
+#define GPIO_ALT_SSP_SFRM	(1 << 13)
+#define GPIO_ALT_SSP_CLK	(1 << 19)
+

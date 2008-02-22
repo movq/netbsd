@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_stat.c,v 1.66 2007/12/20 23:03:05 dsl Exp $	 */
+/*	$NetBSD: svr4_stat.c,v 1.71 2017/08/09 18:52:00 maxv Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_stat.c,v 1.66 2007/12/20 23:03:05 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_stat.c,v 1.71 2017/08/09 18:52:00 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -186,7 +179,7 @@ svr4_sys_stat(struct lwp *l, const struct svr4_sys_stat_args *uap, register_t *r
 	struct svr4_stat	svr4_st;
 	int			error;
 
-	error = do_sys_stat(l, SCARG(uap, path), FOLLOW, &st);
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -215,7 +208,7 @@ svr4_sys_lstat(struct lwp *l, const struct svr4_sys_lstat_args *uap, register_t 
 	struct svr4_stat	svr4_st;
 	int			error;
 
-	error = do_sys_stat(l, SCARG(uap, path), NOFOLLOW, &st);
+	error = do_sys_stat(SCARG(uap, path), NOFOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -244,7 +237,7 @@ svr4_sys_fstat(struct lwp *l, const struct svr4_sys_fstat_args *uap, register_t 
 	struct svr4_stat	svr4_st;
 	int			error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &st);
+	error = do_sys_fstat(SCARG(uap, fd), &st);
 	if (error != 0)
 		return error;
 
@@ -262,7 +255,7 @@ svr4_sys_xstat(struct lwp *l, const struct svr4_sys_xstat_args *uap, register_t 
 	struct svr4_xstat	svr4_st;
 	int			error;
 
-	error = do_sys_stat(l, SCARG(uap, path), FOLLOW, &st);
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -282,7 +275,7 @@ svr4_sys_lxstat(struct lwp *l, const struct svr4_sys_lxstat_args *uap, register_
 	struct svr4_xstat	svr4_st;
 	int			error;
 
-	error = do_sys_stat(l, SCARG(uap, path), NOFOLLOW, &st);
+	error = do_sys_stat(SCARG(uap, path), NOFOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -302,7 +295,7 @@ svr4_sys_fxstat(struct lwp *l, const struct svr4_sys_fxstat_args *uap, register_
 	struct svr4_xstat	svr4_st;
 	int			error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &st);
+	error = do_sys_fstat(SCARG(uap, fd), &st);
 	if (error != 0)
 		return error;
 
@@ -319,7 +312,7 @@ svr4_sys_stat64(struct lwp *l, const struct svr4_sys_stat64_args *uap, register_
 	struct svr4_stat64	svr4_st;
 	int			error;
 
-	error = do_sys_stat(l, SCARG(uap, path), FOLLOW, &st);
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -339,7 +332,7 @@ svr4_sys_lstat64(struct lwp *l, const struct svr4_sys_lstat64_args *uap, registe
 	struct svr4_stat64	svr4_st;
 	int			error;
 
-	error = do_sys_stat(l, SCARG(uap, path), NOFOLLOW, &st);
+	error = do_sys_stat(SCARG(uap, path), NOFOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -359,7 +352,7 @@ svr4_sys_fstat64(struct lwp *l, const struct svr4_sys_fstat64_args *uap, registe
 	struct stat		st;
 	int			error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &st);
+	error = do_sys_fstat(SCARG(uap, fd), &st);
 	if (error != 0)
 		return error;
 
@@ -461,8 +454,6 @@ svr4_sys_systeminfo(struct lwp *l, const struct svr4_sys_systeminfo_args *uap, r
 	case SVR4_SI_ISALIST:
 #if defined(__sparc__)
 		str = "sparcv9 sparcv9-fsmuld sparcv8 sparcv8-fsmuld sparcv7 sparc";
-#elif defined(__i386__)
-		str = "i386";
 #else
 		str = "unknown";
 #endif
@@ -482,10 +473,7 @@ svr4_sys_systeminfo(struct lwp *l, const struct svr4_sys_systeminfo_args *uap, r
 		break;
 
 	case SVR4_SI_PLATFORM:
-#if defined(__i386__)
-		str = "i86pc";
-#elif defined(__sparc__)
-#elif defined(__sparc__)
+#if defined(__sparc__)
 		{
 			extern char machine_model[];
 
@@ -606,7 +594,7 @@ svr4_sys_utime(struct lwp *l, const struct svr4_sys_utime_args *uap, register_t 
 int
 svr4_sys_utimes(struct lwp *l, const struct svr4_sys_utimes_args *uap, register_t *retval)
 {
-	return sys_utimes(l, (const void *)uap, retval);
+	return compat_50_sys_utimes(l, (const void *)uap, retval);
 }
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: gcscide.c,v 1.6 2007/10/06 07:21:03 xtraeme Exp $	*/
+/*	$NetBSD: gcscide.c,v 1.16 2016/07/11 11:31:49 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gcscide.c,v 1.6 2007/10/06 07:21:03 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gcscide.c,v 1.16 2016/07/11 11:31:49 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: gcscide.c,v 1.6 2007/10/06 07:21:03 xtraeme Exp $");
 
 #include <machine/cpufunc.h>
 
-/* 
+/*
  * 6.4 - ATA-5 Controller Register Definitions.
  */
 #define GCSCIDE_MSR_ATAC_BASE 		0x51300000
@@ -82,10 +82,11 @@ __KERNEL_RCSID(0, "$NetBSD: gcscide.c,v 1.6 2007/10/06 07:21:03 xtraeme Exp $");
  */
 #define GCSCIDE_ATAC_DMA_SEL		(1 << 20)
 
-static int	gcscide_match(struct device *, struct cfdata *, void *);
-static void	gcscide_attach(struct device *, struct device *, void *);
+static int	gcscide_match(device_t, cfdata_t, void *);
+static void	gcscide_attach(device_t, device_t, void *);
 
-static void	gcscide_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void	gcscide_chip_map(struct pciide_softc *,
+    const struct pci_attach_args *);
 static void	gcscide_setup_channel(struct ata_channel *);
 
 /* PIO Format 1 settings */
@@ -111,8 +112,8 @@ static const uint32_t gcscide_udma_timings[] = {
 	0x7f703061	/* Ultra DMA Mode 4 */
 };
 
-CFATTACH_DECL(gcscide, sizeof(struct pciide_softc),
-    gcscide_match, gcscide_attach, NULL, NULL);
+CFATTACH_DECL_NEW(gcscide, sizeof(struct pciide_softc),
+    gcscide_match, gcscide_attach, pciide_detach, NULL);
 
 static const struct pciide_product_desc pciide_gcscide_products[] = {
 	{
@@ -125,7 +126,7 @@ static const struct pciide_product_desc pciide_gcscide_products[] = {
 };
 
 static int
-gcscide_match(struct device *parent, struct cfdata *cfdata, void *aux)
+gcscide_match(device_t parent, cfdata_t cfdata, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -138,26 +139,27 @@ gcscide_match(struct device *parent, struct cfdata *cfdata, void *aux)
 }
 
 static void
-gcscide_attach(struct device *parent, struct device *self, void *aux)
+gcscide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_gcscide_products));
 }
 
 static void
-gcscide_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+gcscide_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	pcireg_t interface;
-	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
@@ -182,7 +184,7 @@ gcscide_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		return;
 
 	pciide_mapchan(pa, &sc->pciide_channels[0], interface,
-	    &cmdsize, &ctlsize, pciide_pci_intr);
+	    pciide_pci_intr);
 }
 
 static void
@@ -197,15 +199,15 @@ gcscide_setup_channel(struct ata_channel *chp)
 
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
-		if ((drvp->drive_flags & DRIVE) == 0)
+		if (drvp->drive_type == ATA_DRIVET_NONE)
 			continue;
 
 		reg = rdmsr(drive ? GCSCIDE_ATAC_CH0D1_DMA :
 		    GCSCIDE_ATAC_CH0D0_DMA);
 
-		if (drvp->drive_flags & DRIVE_UDMA) {
+		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
 			s = splbio();
-			drvp->drive_flags &= ~DRIVE_DMA;
+			drvp->drive_flags &= ~ATA_DRIVE_DMA;
 			splx(s);
 			/* Enable the Ultra DMA mode bit */
 			reg |= GCSCIDE_ATAC_DMA_SEL;
@@ -215,7 +217,7 @@ gcscide_setup_channel(struct ata_channel *chp)
 			wrmsr(drive ? GCSCIDE_ATAC_CH0D1_DMA :
 			    GCSCIDE_ATAC_CH0D0_DMA, reg);
 
-		} else if (drvp->drive_flags & DRIVE_DMA) {
+		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
 			/* Enable the Multi-word DMA bit */
 			reg &= ~GCSCIDE_ATAC_DMA_SEL;
 			/* set the Multi-word DMA mode */

@@ -1,4 +1,4 @@
-/*	$NetBSD: rfcomm_session.c,v 1.12 2008/01/31 19:30:23 plunky Exp $	*/
+/*	$NetBSD: rfcomm_session.c,v 1.23 2014/08/05 07:55:32 rtr Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,12 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rfcomm_session.c,v 1.12 2008/01/31 19:30:23 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rfcomm_session.c,v 1.23 2014/08/05 07:55:32 rtr Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>
+#include <sys/socketvar.h>
 #include <sys/systm.h>
 #include <sys/types.h>
 
@@ -94,8 +95,7 @@ struct rfcomm_session_list
 struct rfcomm_session_list
 	rfcomm_session_listen = LIST_HEAD_INITIALIZER(rfcomm_session_listen);
 
-POOL_INIT(rfcomm_credit_pool, sizeof(struct rfcomm_credit),
-		0, 0, 0, "rfcomm_credit", NULL, IPL_SOFTNET);
+static struct pool rfcomm_credit_pool;
 
 /*
  * RFCOMM System Parameters (see section 5.3)
@@ -151,6 +151,14 @@ static const uint8_t crctable[256] = {	/* reversed, 8-bit, poly=0x07 */
 
 #define FCS(f, d)	crctable[(f) ^ (d)]
 
+void
+rfcomm_init(void)
+{
+
+	pool_init(&rfcomm_credit_pool, sizeof(struct rfcomm_credit),
+	    0, 0, 0, "rfcomm_credit", NULL, IPL_SOFTNET);
+}
+
 /*
  * rfcomm_session_alloc(list, sockaddr)
  *
@@ -162,6 +170,7 @@ rfcomm_session_alloc(struct rfcomm_session_list *list,
 			struct sockaddr_bt *laddr)
 {
 	struct rfcomm_session *rs;
+	struct sockopt sopt;
 	int err;
 
 	rs = malloc(sizeof(*rs), M_BLUETOOTH, M_NOWAIT | M_ZERO);
@@ -176,18 +185,21 @@ rfcomm_session_alloc(struct rfcomm_session_list *list,
 	SIMPLEQ_INIT(&rs->rs_credits);
 	LIST_INIT(&rs->rs_dlcs);
 
-	err = l2cap_attach(&rs->rs_l2cap, &rfcomm_session_proto, rs);
+	err = l2cap_attach_pcb(&rs->rs_l2cap, &rfcomm_session_proto, rs);
 	if (err) {
 		free(rs, M_BLUETOOTH);
 		return NULL;
 	}
 
-	(void)l2cap_getopt(rs->rs_l2cap, SO_L2CAP_OMTU, &rs->rs_mtu);
+	sockopt_init(&sopt, BTPROTO_L2CAP, SO_L2CAP_OMTU, 0);
+	(void)l2cap_getopt(rs->rs_l2cap, &sopt);
+	(void)sockopt_get(&sopt, &rs->rs_mtu, sizeof(rs->rs_mtu));
+	sockopt_destroy(&sopt);
 
 	if (laddr->bt_psm == L2CAP_PSM_ANY)
 		laddr->bt_psm = L2CAP_PSM_RFCOMM;
 
-	(void)l2cap_bind(rs->rs_l2cap, laddr);
+	(void)l2cap_bind_pcb(rs->rs_l2cap, laddr);
 
 	LIST_INSERT_HEAD(list, rs, rs_next);
 
@@ -238,7 +250,7 @@ rfcomm_session_free(struct rfcomm_session *rs)
 
 	/* Goodbye! */
 	LIST_REMOVE(rs, rs_next);
-	l2cap_detach(&rs->rs_l2cap);
+	l2cap_detach_pcb(&rs->rs_l2cap);
 	callout_destroy(&rs->rs_timeout);
 	free(rs, M_BLUETOOTH);
 }
@@ -259,13 +271,13 @@ rfcomm_session_lookup(struct sockaddr_bt *src, struct sockaddr_bt *dest)
 		if (rs->rs_state == RFCOMM_SESSION_CLOSED)
 			continue;
 
-		l2cap_sockaddr(rs->rs_l2cap, &addr);
+		l2cap_sockaddr_pcb(rs->rs_l2cap, &addr);
 
 		if (bdaddr_same(&src->bt_bdaddr, &addr.bt_bdaddr) == 0)
 			if (bdaddr_any(&src->bt_bdaddr) == 0)
 				continue;
 
-		l2cap_peeraddr(rs->rs_l2cap, &addr);
+		l2cap_peeraddr_pcb(rs->rs_l2cap, &addr);
 
 		if (addr.bt_psm != dest->bt_psm)
 			continue;
@@ -292,11 +304,10 @@ rfcomm_session_timeout(void *arg)
 {
 	struct rfcomm_session *rs = arg;
 	struct rfcomm_dlc *dlc;
-	int s;
 
 	KASSERT(rs != NULL);
 
-	s = splsoftnet();
+	mutex_enter(bt_lock);
 	callout_ack(&rs->rs_timeout);
 
 	if (rs->rs_state != RFCOMM_SESSION_OPEN) {
@@ -314,7 +325,7 @@ rfcomm_session_timeout(void *arg)
 		DPRINTF("expiring\n");
 		rfcomm_session_free(rs);
 	}
-	splx(s);
+	mutex_exit(bt_lock);
 }
 
 /***********************************************************************
@@ -335,6 +346,7 @@ static void
 rfcomm_session_connected(void *arg)
 {
 	struct rfcomm_session *rs = arg;
+	struct sockopt sopt;
 
 	DPRINTF("Connected\n");
 
@@ -347,7 +359,10 @@ rfcomm_session_connected(void *arg)
 	 * We must take note of the L2CAP MTU because currently
 	 * the L2CAP implementation can only do Basic Mode.
 	 */
-	l2cap_getopt(rs->rs_l2cap, SO_L2CAP_OMTU, &rs->rs_mtu);
+	sockopt_init(&sopt, BTPROTO_L2CAP, SO_L2CAP_OMTU, 0);
+	(void)l2cap_getopt(rs->rs_l2cap, &sopt);
+	(void)sockopt_get(&sopt, &rs->rs_mtu, sizeof(rs->rs_mtu));
+	sockopt_destroy(&sopt);
 
 	rs->rs_mtu -= 6; /* (RFCOMM overhead could be this big) */
 	if (rs->rs_mtu < RFCOMM_MTU_MIN) {
@@ -373,6 +388,13 @@ rfcomm_session_disconnected(void *arg, int err)
 	struct rfcomm_dlc *dlc;
 
 	DPRINTF("Disconnected\n");
+
+	/*
+	 * If we have any DLCs outstanding in the unlikely case that the
+	 * L2CAP channel disconnected normally, close them with an error
+	 */
+	if (err == 0)
+		err = ECONNRESET;
 
 	rs->rs_state = RFCOMM_SESSION_CLOSED;
 
@@ -434,12 +456,11 @@ rfcomm_session_complete(void *arg, int count)
 	 */
 	while (count-- > 0) {
 		credit = SIMPLEQ_FIRST(&rs->rs_credits);
-#ifdef DIAGNOSTIC
 		if (credit == NULL) {
 			printf("%s: too many packets completed!\n", __func__);
 			break;
 		}
-#endif
+
 		dlc = credit->rc_dlc;
 		if (dlc != NULL) {
 			dlc->rd_pending--;
@@ -478,7 +499,7 @@ rfcomm_session_complete(void *arg, int count)
 	 */
 	if (rs->rs_state == RFCOMM_SESSION_CLOSED) {
 		if (SIMPLEQ_EMPTY(&rs->rs_credits))
-			l2cap_disconnect(rs->rs_l2cap, 0);
+			l2cap_disconnect_pcb(rs->rs_l2cap, 0);
 	}
 }
 
@@ -801,7 +822,7 @@ rfcomm_session_recv_disc(struct rfcomm_session *rs, int dlci)
 		return;
 	}
 
-	rfcomm_dlc_close(dlc, ECONNRESET);
+	rfcomm_dlc_close(dlc, 0);
 	rfcomm_session_send_frame(rs, RFCOMM_FRAME_UA, dlci);
 }
 
@@ -832,7 +853,7 @@ rfcomm_session_recv_ua(struct rfcomm_session *rs, int dlci)
 		case RFCOMM_SESSION_WAIT_DISCONNECT:	/* We sent DISC */
 			callout_stop(&rs->rs_timeout);
 			rs->rs_state = RFCOMM_SESSION_CLOSED;
-			l2cap_disconnect(rs->rs_l2cap, 0);
+			l2cap_disconnect_pcb(rs->rs_l2cap, 0);
 			break;
 
 		default:
@@ -1357,7 +1378,8 @@ rfcomm_session_recv_mcc_pn(struct rfcomm_session *rs, int cr, struct mbuf *m)
 
 		callout_stop(&dlc->rd_timeout);
 
-		if (pn.mtu > RFCOMM_MTU_MAX || pn.mtu > dlc->rd_mtu) {
+		/* reject invalid or unacceptable MTU */
+		if (pn.mtu < RFCOMM_MTU_MIN || pn.mtu > dlc->rd_mtu) {
 			dlc->rd_state = RFCOMM_DLC_WAIT_DISCONNECT;
 			err = rfcomm_session_send_frame(rs, RFCOMM_FRAME_DISC,
 							pn.dlci);
@@ -1488,7 +1510,7 @@ rfcomm_session_send_frame(struct rfcomm_session *rs, int type, int dlci)
 	DPRINTFN(5, "dlci %d type %2.2x (%d bytes, fcs=%#2.2x)\n",
 		dlci, type, m->m_pkthdr.len, fcs);
 
-	return l2cap_send(rs->rs_l2cap, m);
+	return l2cap_send_pcb(rs->rs_l2cap, m);
 }
 
 /*
@@ -1588,7 +1610,7 @@ rfcomm_session_send_uih(struct rfcomm_session *rs, struct rfcomm_dlc *dlc,
 	/*
 	 * UIH frame ready to go..
 	 */
-	err = l2cap_send(rs->rs_l2cap, m0);
+	err = l2cap_send_pcb(rs->rs_l2cap, m0);
 	if (err)
 		goto fail;
 

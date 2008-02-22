@@ -1,6 +1,6 @@
-/*	$NetBSD: if_vlanvar.h,v 1.8 2008/02/20 17:05:53 matt Exp $	*/
+/*	$NetBSD: if_vlanvar.h,v 1.13 2018/01/15 16:36:51 maxv Exp $	*/
 
-/*-
+/*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -78,13 +71,10 @@ struct ether_vlan_header {
 	uint16_t	evl_proto;
 } __packed;
 
-#define	EVL_VLANOFTAG(tag)	((tag) & 4095)
-#define	EVL_PRIOFTAG(tag)	(((tag) >> 13) & 7)
-
 /* Configuration structure for SIOCSETVLAN and SIOCGETVLAN ioctls. */
 struct vlanreq {
-	char	vlr_parent[IFNAMSIZ];
-	u_short	vlr_tag;
+	char		vlr_parent[IFNAMSIZ];
+	uint16_t	vlr_tag;
 };
 
 #define	SIOCSETVLAN	SIOCSIFGENERIC
@@ -93,6 +83,37 @@ struct vlanreq {
 #ifdef _KERNEL
 void	vlan_input(struct ifnet *, struct mbuf *);
 void	vlan_ifdetach(struct ifnet *);
+
+/*
+ * Locking notes:
+ * + ifv_list.list is protected by ifv_list.lock (an adaptive mutex)
+ *     ifv_list.list is list of all ifvlans, and it is used to avoid
+ *     unload while busy.
+ * + ifv_hash.lists is protected by
+ *   - ifv_hash.lock (an adaptive mutex) for writer
+ *   - pserialize for reader
+ *     ifv_hash.lists is hashed list of all configured
+ *     vlan interface, and it is used to avoid unload while busy.
+ * + ifvlan->ifv_linkmib is protected by
+ *   - ifvlan->ifv_lock (an adaptive mutex) for writer
+ *   - ifv_linkmib->ifvm_psref for reader
+ *     ifvlan->ifv_linkmib is used for variant values while tagging
+ *     and untagging
+ *
+ * Locking order:
+ *     - ifv_list.lock => struct ifvlan->ifv_lock
+ *     - struct ifvlan->ifv_lock => ifv_hash.lock
+ * Other mutexes must not hold simultaneously
+ *
+ *   NOTICE
+ *     - ifvlan must not have a variant value while tagging and
+ *       untagging. Such variant values must be in ifvlan->ifv_mib
+ *     - ifvlan->ifv_mib is modified like read-copy-update.
+ *       So, once we dereference ifvlan->ifv_mib,
+ *       we must keep the pointer during the same context. If we
+ *       re-dereference ifvlan->ifv_mib, the ifv_mib may be other
+ *       one because of concurrent writer processing.
+ */
 #endif	/* _KERNEL */
 
 #endif	/* !_NET_IF_VLANVAR_H_ */

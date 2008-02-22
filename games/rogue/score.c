@@ -1,4 +1,4 @@
-/*	$NetBSD: score.c,v 1.14 2008/01/14 03:50:02 dholland Exp $	*/
+/*	$NetBSD: score.c,v 1.16 2011/08/26 06:18:17 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)score.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: score.c,v 1.14 2008/01/14 03:50:02 dholland Exp $");
+__RCSID("$NetBSD: score.c,v 1.16 2011/08/26 06:18:17 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,6 +56,12 @@ __RCSID("$NetBSD: score.c,v 1.14 2008/01/14 03:50:02 dholland Exp $");
 #include <stdio.h>
 #include "rogue.h"
 #include "pathnames.h"
+
+static void center(short, const char *);
+static int get_value(const object *);
+static void id_all(void);
+static void sell_pack(void);
+static void sf_error(void) __dead;
 
 void
 killed_by(const object *monster, short other)
@@ -516,7 +522,7 @@ is_vowel(short ch)
 		(ch == 'u') );
 }
 
-void
+static void
 sell_pack(void)
 {
 	object *obj;
@@ -548,7 +554,7 @@ sell_pack(void)
 	messagef(0, "%s", "");		/* gcc objects to just "" */
 }
 
-int
+static int
 get_value(const object *obj)
 {
 	short wc;
@@ -596,7 +602,7 @@ get_value(const object *obj)
 	return(val);
 }
 
-void
+static void
 id_all(void)
 {
 	short i;
@@ -650,7 +656,7 @@ xxx(boolean st)
 	return(r);
 }
 
-void
+static void
 center(short row, const char *buf)
 {
 	short margin;
@@ -659,7 +665,7 @@ center(short row, const char *buf)
 	mvaddstr(row, margin, buf);
 }
 
-void
+static void
 sf_error(void)
 {
 	md_lock(0);

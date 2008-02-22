@@ -1,4 +1,4 @@
-/* $NetBSD: pcdisplay.c,v 1.34 2007/10/19 12:00:21 ad Exp $ */
+/* $NetBSD: pcdisplay.c,v 1.43 2018/04/21 15:10:28 mlelstv Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcdisplay.c,v 1.34 2007/10/19 12:00:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcdisplay.c,v 1.43 2018/04/21 15:10:28 mlelstv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +60,6 @@ struct pcdisplay_config {
 };
 
 struct pcdisplay_softc {
-	struct device sc_dev;
 	struct pcdisplay_config *sc_dc;
 	int nscreens;
 #if NPCWEASEL > 0
@@ -71,8 +70,8 @@ struct pcdisplay_softc {
 static int pcdisplayconsole, pcdisplay_console_attached;
 static struct pcdisplay_config pcdisplay_console_dc;
 
-int	pcdisplay_match(struct device *, struct cfdata *, void *);
-void	pcdisplay_attach(struct device *, struct device *, void *);
+int	pcdisplay_match(device_t, cfdata_t, void *);
+void	pcdisplay_attach(device_t, device_t, void *);
 
 static int pcdisplay_is_console(bus_space_tag_t);
 static int pcdisplay_probe_col(bus_space_tag_t, bus_space_tag_t);
@@ -82,7 +81,7 @@ static void pcdisplay_init(struct pcdisplay_config *,
 			     int);
 static int pcdisplay_allocattr(void *, int, int, int, long *);
 
-CFATTACH_DECL(pcdisplay, sizeof(struct pcdisplay_softc),
+CFATTACH_DECL_NEW(pcdisplay, sizeof(struct pcdisplay_softc),
     pcdisplay_match, pcdisplay_attach, NULL, NULL);
 
 const struct wsdisplay_emulops pcdisplay_emulops = {
@@ -134,8 +133,7 @@ const struct wsdisplay_accessops pcdisplay_accessops = {
 };
 
 static int
-pcdisplay_probe_col(iot, memt)
-	bus_space_tag_t iot, memt;
+pcdisplay_probe_col(bus_space_tag_t iot, bus_space_tag_t memt)
 {
 	bus_space_handle_t memh, ioh_6845;
 	u_int16_t oldval, val;
@@ -158,8 +156,7 @@ pcdisplay_probe_col(iot, memt)
 }
 
 static int
-pcdisplay_probe_mono(iot, memt)
-	bus_space_tag_t iot, memt;
+pcdisplay_probe_mono(bus_space_tag_t iot, bus_space_tag_t memt)
 {
 	bus_space_handle_t memh, ioh_6845;
 	u_int16_t oldval, val;
@@ -182,10 +179,8 @@ pcdisplay_probe_mono(iot, memt)
 }
 
 static void
-pcdisplay_init(dc, iot, memt, mono)
-	struct pcdisplay_config *dc;
-	bus_space_tag_t iot, memt;
-	int mono;
+pcdisplay_init(struct pcdisplay_config *dc, bus_space_tag_t iot,
+    bus_space_tag_t memt, int mono)
 {
 	struct pcdisplay_handle *ph = &dc->dc_ph;
 	int cpos;
@@ -224,8 +219,7 @@ pcdisplay_init(dc, iot, memt, mono)
 }
 
 int
-pcdisplay_match(struct device *parent, struct cfdata *match,
-    void *aux)
+pcdisplay_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	int mono;
@@ -275,7 +269,7 @@ pcdisplay_match(struct device *parent, struct cfdata *match,
 	ia->ia_io[0].ir_size = 0x10;
 
 	ia->ia_niomem = 1;
-	ia->ia_iomem[0].ir_size = mono ? 0xb0000 : 0xb8000;
+	ia->ia_iomem[0].ir_addr = mono ? 0xb0000 : 0xb8000;
 	ia->ia_iomem[0].ir_size = 0x8000;
 
 	ia->ia_nirq = 0;
@@ -285,10 +279,10 @@ pcdisplay_match(struct device *parent, struct cfdata *match,
 }
 
 void
-pcdisplay_attach(struct device *parent, struct device *self, void *aux)
+pcdisplay_attach(device_t parent, device_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	struct pcdisplay_softc *sc = (struct pcdisplay_softc *)self;
+	struct pcdisplay_softc *sc = device_private(self);
 	int console;
 	struct pcdisplay_config *dc;
 	struct wsemuldisplaydev_attach_args aa;
@@ -325,7 +319,7 @@ pcdisplay_attach(struct device *parent, struct device *self, void *aux)
 	if (dc->mono) {
 		sc->sc_weasel.wh_st = dc->dc_ph.ph_memt;
 		sc->sc_weasel.wh_sh = dc->dc_ph.ph_memh;
-		sc->sc_weasel.wh_parent = &sc->sc_dev;
+		sc->sc_weasel.wh_parent = self;
 		weasel_isa_init(&sc->sc_weasel);
 	}
 #endif /* NPCWEASEL > 0 */
@@ -335,13 +329,12 @@ pcdisplay_attach(struct device *parent, struct device *self, void *aux)
 	aa.accessops = &pcdisplay_accessops;
 	aa.accesscookie = sc;
 
-        config_found(self, &aa, wsemuldisplaydevprint);
+	config_found(self, &aa, wsemuldisplaydevprint);
 }
 
 
 int
-pcdisplay_cnattach(iot, memt)
-	bus_space_tag_t iot, memt;
+pcdisplay_cnattach(bus_space_tag_t iot, bus_space_tag_t memt)
 {
 	int mono;
 
@@ -364,12 +357,11 @@ pcdisplay_cnattach(iot, memt)
 }
 
 static int
-pcdisplay_is_console(iot)
-	bus_space_tag_t iot;
+pcdisplay_is_console(bus_space_tag_t iot)
 {
 	if (pcdisplayconsole &&
 	    !pcdisplay_console_attached &&
-	    iot == pcdisplay_console_dc.dc_ph.ph_iot)
+	    bus_space_is_equal(iot, pcdisplay_console_dc.dc_ph.ph_iot))
 		return (1);
 	return (0);
 }
@@ -385,8 +377,7 @@ pcdisplay_ioctl(void *v, void *vs, u_long cmd,
 }
 
 static paddr_t
-pcdisplay_mmap(void *v, void *vs, off_t offset,
-    int prot)
+pcdisplay_mmap(void *v, void *vs, off_t offset, int prot)
 {
 	return (-1);
 }
@@ -420,9 +411,8 @@ pcdisplay_free_screen(void *v, void *cookie)
 }
 
 static int
-pcdisplay_show_screen(void *v, void *cookie,
-    int waitok, void (*cb)(void *, int, int),
-    void *cbarg)
+pcdisplay_show_screen(void *v, void *cookie, int waitok,
+    void (*cb)(void *, int, int), void *cbarg)
 {
 #ifdef DIAGNOSTIC
 	struct pcdisplay_softc *sc = v;
@@ -434,8 +424,7 @@ pcdisplay_show_screen(void *v, void *cookie,
 }
 
 static int
-pcdisplay_allocattr(void *id, int fg, int bg,
-    int flags, long *attrp)
+pcdisplay_allocattr(void *id, int fg, int bg, int flags, long *attrp)
 {
 	if (flags & WSATTR_REVERSE)
 		*attrp = FG_BLACK | BG_LIGHTGREY;

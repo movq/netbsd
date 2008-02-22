@@ -1,4 +1,4 @@
-/*	$NetBSD: gumstixvar.h,v 1.2 2006/10/17 17:06:22 kiyohara Exp $ */
+/*	$NetBSD: gumstixvar.h,v 1.6 2011/07/01 20:39:34 dyoung Exp $ */
 /*
  * Copyright (C) 2005, 2006 WIDE Project and SOUM Corporation.
  * All rights reserved.
@@ -36,7 +36,7 @@
 #include <sys/conf.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <arm/xscale/pxa2x0_gpio.h>
 #include <evbarm/gumstix/gumstixreg.h>
 
@@ -46,7 +46,7 @@ extern uint32_t system_serial_low;
 
 
 struct gxio_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 };
@@ -67,5 +67,23 @@ struct gxio_attach_args {
     pxa2x0_gpio_intr_establish((gpirq), (level), (spl), (func), (arg))
 #define gxio_intr_disestablish(sc, cookie) \
     pxa2x0_gpio_intr_disestablish((cookie))
+
+
+/*
+ * gxpcic
+ */
+struct gxpcic_slot_irqs {
+	int valid;
+	int cd;		/* PCDn */
+	int prdy;	/* PRDYn/~IRQn */
+};
+extern struct gxpcic_slot_irqs gxpcic_slot_irqs[2];
+extern int gxpcic_gpio_reset;
+
+
+/*
+ * gxlcd
+ */
+void gxlcd_cnattach(void);
 
 #endif /* _EVBARM_GUMSTIXVAR_H_ */

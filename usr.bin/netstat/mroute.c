@@ -1,4 +1,4 @@
-/*	$NetBSD: mroute.c,v 1.21 2006/05/28 16:51:40 elad Exp $	*/
+/*	$NetBSD: mroute.c,v 1.25 2014/11/06 21:30:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "from: @(#)mroute.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mroute.c,v 1.21 2006/05/28 16:51:40 elad Exp $");
+__RCSID("$NetBSD: mroute.c,v 1.25 2014/11/06 21:30:09 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -103,13 +103,13 @@ __RCSID("$NetBSD: mroute.c,v 1.21 2006/05/28 16:51:40 elad Exp $");
 #include <stdlib.h>
 #include <kvm.h>
 #include "netstat.h"
+#include "rtutil.h"
 
-static char *pktscale __P((u_long));
-static void print_bw_meter __P((struct bw_meter *, int *));
+static char *pktscale(u_long);
+static void print_bw_meter(struct bw_meter *, int *);
 
 static char *
-pktscale(n)
-	u_long n;
+pktscale(u_long n)
 {
 	static char buf[20];
 	char t;
@@ -129,17 +129,16 @@ pktscale(n)
 }
 
 void
-mroutepr(mrpaddr, mfchashtbladdr, mfchashaddr, vifaddr)
-	u_long mrpaddr, mfchashtbladdr, mfchashaddr, vifaddr;
+mroutepr(u_long mrpaddr, u_long mfchashtbladdr, u_long mfchashaddr,
+	u_long vifaddr)
 {
 	u_int mrtproto;
 	LIST_HEAD(, mfc) *mfchashtbl;
-	u_long mfchash;
+	u_long mfchash, i;
 	struct vif viftable[MAXVIFS];
 	struct mfc *mfcp, mfc;
 	struct vif *v;
 	vifi_t vifi;
-	int i;
 	int banner_printed;
 	int saved_numeric_addr;
 	int numvifs;
@@ -198,9 +197,9 @@ mroutepr(mrpaddr, mfchashtbladdr, mfchashaddr, vifaddr)
 
 		printf(" %3u     %3u  %5u  %-15.15s",
 		    vifi, v->v_threshold, v->v_rate_limit,
-		    routename4(v->v_lcl_addr.s_addr));
+		    routename4(v->v_lcl_addr.s_addr, nflag));
 		printf("  %-15.15s  %6lu  %7lu\n", (v->v_flags & VIFF_TUNNEL) ?
-		    routename4(v->v_rmt_addr.s_addr) : "",
+		    routename4(v->v_rmt_addr.s_addr, nflag) : "",
 		    v->v_pkt_in, v->v_pkt_out);
 	}
 	if (!banner_printed)
@@ -224,10 +223,10 @@ mroutepr(mrpaddr, mfchashtbladdr, mfchashaddr, vifaddr)
 			}
 
 			kread((u_long)mfcp, (char *)&mfc, sizeof(mfc));
-			printf("  %3u  %-15.15s",
-			    i, routename4(mfc.mfc_origin.s_addr));
+			printf("  %3lu  %-15.15s",
+			    i, routename4(mfc.mfc_origin.s_addr, nflag));
 			printf("  %-15.15s  %7s     %3u ",
-			    routename4(mfc.mfc_mcastgrp.s_addr),
+			    routename4(mfc.mfc_mcastgrp.s_addr, nflag),
 			    pktscale(mfc.mfc_pkt_cnt), mfc.mfc_parent);
 			for (vifi = 0; vifi <= numvifs; ++vifi)
 				if (mfc.mfc_ttls[vifi])
@@ -268,9 +267,7 @@ mroutepr(mrpaddr, mfchashtbladdr, mfchashaddr, vifaddr)
 }
 
 static void
-print_bw_meter(bw_meter, banner_printed)
-	struct bw_meter *bw_meter;
-	int *banner_printed;
+print_bw_meter(struct bw_meter *bw_meter, int *banner_printed)
 {
 	char s0[256], s1[256], s2[256], s3[256];
 	struct timeval now, end, delta;
@@ -296,9 +293,9 @@ print_bw_meter(bw_meter, banner_printed)
 		sprintf(s2, "%llu", (unsigned long long)bw_meter->bm_measured.b_bytes);
 	else
 		sprintf(s2, "?");
-	sprintf(s0, "%lu.%lu|%s|%s",
-		bw_meter->bm_start_time.tv_sec,
-		bw_meter->bm_start_time.tv_usec,
+	sprintf(s0, "%lld.%ld|%s|%s",
+		(long long)bw_meter->bm_start_time.tv_sec,
+		(long)bw_meter->bm_start_time.tv_usec,
 		s1, s2);
 	printf("  %-30s", s0);
 
@@ -319,9 +316,9 @@ print_bw_meter(bw_meter, banner_printed)
 		sprintf(s2, "%llu", (unsigned long long)bw_meter->bm_threshold.b_bytes);
 	else
 		sprintf(s2, "?");
-	sprintf(s0, "%lu.%lu|%s|%s",
-		bw_meter->bm_threshold.b_time.tv_sec,
-		bw_meter->bm_threshold.b_time.tv_usec,
+	sprintf(s0, "%lld.%ld|%s|%s",
+		(long long)bw_meter->bm_threshold.b_time.tv_sec,
+		(long)bw_meter->bm_threshold.b_time.tv_usec,
 		s1, s2);
 	printf("  %-30s", s0);
 
@@ -330,11 +327,13 @@ print_bw_meter(bw_meter, banner_printed)
 		 &bw_meter->bm_threshold.b_time, &end);
 	if (timercmp(&now, &end, <=)) {
 		timersub(&end, &now, &delta);
-		sprintf(s3, "%lu.%lu", delta.tv_sec, delta.tv_usec);
+		sprintf(s3, "%lld.%ld",
+		    (long long)delta.tv_sec, (long)delta.tv_usec);
 	} else {
 		/* Negative time */
 		timersub(&now, &end, &delta);
-		sprintf(s3, "-%lu.%lu", delta.tv_sec, delta.tv_usec);
+		sprintf(s3, "-%lld.%ld",
+		    (long long)delta.tv_sec, (long)delta.tv_usec);
 	}
 	printf(" %s", s3);
 
@@ -342,8 +341,7 @@ print_bw_meter(bw_meter, banner_printed)
 }
 
 void
-mrt_stats(mrpaddr, mstaddr)
-	u_long mrpaddr, mstaddr;
+mrt_stats(u_long mrpaddr, u_long mstaddr)
 {
 	u_int mrtproto;
 	struct mrtstat mrtstat;

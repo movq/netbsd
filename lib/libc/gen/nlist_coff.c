@@ -1,4 +1,4 @@
-/* $NetBSD: nlist_coff.c,v 1.6 2006/10/25 20:43:49 uwe Exp $ */
+/* $NetBSD: nlist_coff.c,v 1.11 2012/03/22 14:18:34 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nlist_coff.c,v 1.6 2006/10/25 20:43:49 uwe Exp $");
+__RCSID("$NetBSD: nlist_coff.c,v 1.11 2012/03/22 14:18:34 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -50,7 +50,7 @@ __RCSID("$NetBSD: nlist_coff.c,v 1.6 2006/10/25 20:43:49 uwe Exp $");
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <a.out.h>			/* for 'struct nlist' declaration */
+#include <nlist.h>
 
 #include "nlist_private.h"
 #ifdef NLIST_COFF
@@ -58,8 +58,6 @@ __RCSID("$NetBSD: nlist_coff.c,v 1.6 2006/10/25 20:43:49 uwe Exp $");
 #endif
 
 #ifdef NLIST_COFF
-#define	BAD		do { rv = -1; goto out; } while (/*CONSTCOND*/0)
-#define	BADUNMAP	do { rv = -1; goto unmap; } while (/*CONSTCOND*/0)
 
 #define ES_LEN 18
 struct coff_extsym {
@@ -81,9 +79,7 @@ struct coff_extsym {
 #define es_offset u.s.u_offset
 
 int
-__fdnlist_coff(fd, list)
-	int fd;
-	struct nlist *list;
+__fdnlist_coff(int fd, struct nlist *list)
 {
 	struct nlist *p;
 	struct coff_filehdr *filehdrp;
@@ -103,20 +99,20 @@ __fdnlist_coff(fd, list)
 	 * If we can't fstat() the file, something bad is going on.
 	 */
 	if (fstat(fd, &st) < 0)
-		BAD;
+		goto out;
 
 	/*
 	 * Map the file in its entirety.
 	 */
-	if (st.st_size > SIZE_T_MAX) {
+	if ((uintmax_t)st.st_size > (uintmax_t)SIZE_T_MAX) {
 		errno = EFBIG;
-		BAD;
+		goto out;
 	}
-	mappedsize = st.st_size;
+	mappedsize = (size_t)st.st_size;
 	mappedfile = mmap(NULL, mappedsize, PROT_READ, MAP_PRIVATE|MAP_FILE,
 	    fd, 0);
-	if (mappedfile == (char *)-1)
-		BAD;
+	if (mappedfile == MAP_FAILED)
+		goto out;
 
 	/*
 	 * Make sure we can access the executable's header
@@ -124,11 +120,11 @@ __fdnlist_coff(fd, list)
 	 * as an COFF binary.
 	 */
 	if (mappedsize < sizeof (struct coff_filehdr))
-		BADUNMAP;
-	filehdrp = (struct coff_filehdr *)&mappedfile[0];
+		goto unmap;
+	filehdrp = (void *)&mappedfile[0];
 
 	if (COFF_BADMAG(filehdrp))
-		BADUNMAP;
+		goto unmap;
 
 	/*
 	 * Find the symbol list.
@@ -137,7 +133,7 @@ __fdnlist_coff(fd, list)
 	nesyms = filehdrp->f_nsyms;
 
 	if (symoff + ES_LEN * nesyms > mappedsize)
-		BADUNMAP;
+		goto unmap;
 	extstroff = symoff + ES_LEN * nesyms;
 
 	nent = 0;
@@ -151,7 +147,7 @@ __fdnlist_coff(fd, list)
 
 	for (i = 0; i < nesyms; i++) {
 		char *symtabname;
-		char *nlistname;
+		const char *nlistname;
 		struct coff_extsym esym;
 		char name[10];
 
@@ -171,7 +167,7 @@ __fdnlist_coff(fd, list)
 			continue;
 
 		for (p = list; !ISLAST(p); p++) {
-			nlistname = p->n_un.n_name;
+			nlistname = N_NAME(p);
 			if (!strcmp(symtabname, nlistname)) {
 				/*
 				 * Translate (roughly) from COFF to nlist
@@ -193,7 +189,7 @@ done:
 unmap:
 	munmap(mappedfile, mappedsize);
 out:
-	return (rv);
+	return rv;
 }
 
 #endif /* NLIST_COFF */

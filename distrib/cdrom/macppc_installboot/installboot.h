@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.h,v 1.1 2006/09/17 03:56:03 tsutsui Exp $	*/
+/*	$NetBSD: installboot.h,v 1.4 2016/03/09 15:44:49 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,6 +42,10 @@
 
 #include <sys/stat.h>
 #include <stdint.h>
+
+#ifndef MAXNAMLEN
+#define MAXNAMLEN	511
+#endif
 
 typedef enum {
 				/* flags from global options */
@@ -138,8 +135,7 @@ struct bbinfo_params {
 int		cd9660_match(ib_params *);
 int		cd9660_findstage2(ib_params *, uint32_t *, ib_block *);
 
-int	isofncmp(const u_char *, size_t, const u_char *, size_t, int);
-void	isofntrans(u_char *, int, u_char *, u_short *, int, int, int, int);
-
+int isofncmp(const u_char *, size_t, const u_char *, size_t, int);
+void isofntrans(const u_char *, int, u_char *, u_short *, int, int, int, int);
 
 #endif	/* _INSTALLBOOT_H */

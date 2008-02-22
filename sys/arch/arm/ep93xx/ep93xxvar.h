@@ -1,4 +1,4 @@
-/*	$NetBSD: ep93xxvar.h,v 1.2 2005/12/11 12:16:45 christos Exp $ */
+/*	$NetBSD: ep93xxvar.h,v 1.6 2012/11/12 18:00:36 skrll Exp $ */
 /*
  * Copyright (c) 2004 Jesse Off
  * All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -38,12 +32,7 @@
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <machine/bus.h>
-
-struct ep93xx_softc {
-	struct device sc_dev;
-	bus_space_tag_t sc_iot;
-};
+#include <sys/bus.h>
 
 struct intrhand {
 	TAILQ_ENTRY(intrhand) ih_list;	/* link on intrq list */
@@ -58,9 +47,9 @@ struct intrhand {
 struct intrq {
 	TAILQ_HEAD(, intrhand) iq_list;	/* handler list */
 	struct evcnt iq_ev;		/* event counter */
-	u_int32_t iq_vic1_mask;		/* VIC1 IRQs to mask while handling */
-	u_int32_t iq_vic2_mask;		/* VIC2 IRQs to mask while handling */
-	u_int32_t iq_levels;		/* IPL_*'s this IRQ has */
+	uint32_t iq_vic1_mask;		/* VIC1 IRQs to mask while handling */
+	uint32_t iq_vic2_mask;		/* VIC2 IRQs to mask while handling */
+	uint32_t iq_levels;		/* IPL_*'s this IRQ has */
 	char iq_name[IRQNAMESIZE];	/* interrupt name */
 	int iq_ist;			/* share type */
 };
@@ -77,7 +66,6 @@ struct pmap_ent {
 extern struct bus_space	ep93xx_bs_tag;
 extern struct arm32_bus_dma_tag ep93xx_bus_dma;
 
-void	ep93xx_attach(struct ep93xx_softc *);
 void	ep93xx_intr_init(void);
 void	*ep93xx_intr_establish(int irq, int ipl, int (*)(void *), void *);
 void	ep93xx_intr_disestablish(void *);

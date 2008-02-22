@@ -1,6 +1,9 @@
-#	$NetBSD: Makefile.bootxx,v 1.3 2006/06/28 16:28:51 lukem Exp $
+#	$NetBSD: Makefile.bootxx,v 1.9 2016/09/08 14:42:33 christos Exp $
 
 NOMAN		=
+NOPIE		=
+
+.include <bsd.init.mk>
 
 BINMODE		= 0444
 
@@ -20,7 +23,7 @@ MIPSFLAGS	= -mips1 -G 0 -mno-abicalls
 DEBUGFLAGS	= -Wall -Werror
 DEBUGFLAGS	+= -Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
 DEBUGFLAGS	+= -Wno-format-zero-length -Wno-sign-compare
-OPTFLAGS	= -Os -mmemcpy
+OPTFLAGS	= -Os -mmemcpy -fno-unwind-tables
 FLAGS		= ${MIPSFLAGS} ${DEBUGFLAGS} ${OPTFLAGS}
 AFLAGS		= -xassembler-with-cpp -D_LOCORE ${FLAGS}
 CFLAGS		= ${FLAGS} -ffreestanding
@@ -29,7 +32,7 @@ CPPFLAGS	+= -D_STANDALONE
 CPPFLAGS	+= -nostdinc -I${.OBJDIR} -I${COMMON} -I${S}
 CPPFLAGS	+= -D__daddr_t=int32_t
 
-CLEANFILES	+= ${PROG} ${PROG}.bin ${PROG}.elf ${PROG}.tmp machine mips
+CLEANFILES	+= ${PROG} ${PROG}.bin ${PROG}.elf ${PROG}.tmp
 
 KERN_AS		= library
 .include	"${S}/lib/libkern/Makefile.inc"
@@ -37,12 +40,12 @@ LIBKERN		= ${KERNLIB}
 
 LIBS		= ${LIBKERN}
 
-.if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN:
-	@[ -h machine ] || ln -s $S/arch/${MACHINE}/include machine
-	@[ -h mips ] || ln -s $S/arch/mips/include mips
-.NOPATH: machine mips
-.endif
+# XXX SHOULD NOT NEED TO DEFINE THESE!
+LIBCRT0=
+LIBCRTI=
+LIBC=
+LIBCRTBEGIN=
+LIBCRTEND=
 
 ${PROG}: ${OBJS} ${LIBS}
 	${_MKTARGET_LINK}
@@ -54,9 +57,10 @@ ${PROG}: ${OBJS} ${LIBS}
 	ls -al ${PROG}
 #	-rm -f ${BASE}.tmp
 
-clean cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
 
+.include <bsd.klinks.mk>
 .include <bsd.prog.mk>

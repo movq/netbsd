@@ -1,7 +1,7 @@
-/* $NetBSD: sysmon_envsysvar.h,v 1.26 2007/11/20 17:24:32 xtraeme Exp $ */
+/* $NetBSD: sysmon_envsysvar.h,v 1.47 2014/11/23 10:00:20 ozaki-r Exp $ */
 
 /*-
- * Copyright (c) 2007 Juan Romero Pardines.
+ * Copyright (c) 2007, 2008 Juan Romero Pardines.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,11 +40,16 @@
 #include <dev/sysmon/sysmonvar.h>
 #include <prop/proplib.h>
 
-enum sme_description_types {
+#ifdef _KERNEL_OPT
+#include "opt_envsys.h"
+#endif
+
+enum sme_descr_type {
 	SME_DESC_UNITS = 1,
 	SME_DESC_STATES,
 	SME_DESC_DRIVE_STATES,
-	SME_DESC_BATTERY_CAPACITY
+	SME_DESC_BATTERY_CAPACITY,
+	SME_DESC_INDICATOR
 };
 
 #ifdef ENVSYS_DEBUG
@@ -65,29 +70,19 @@ enum sme_description_types {
 #define SME_EVENTS_DEFTIMEOUT	30
 
 /* 
- * struct used by a sensor description in a sysmon envsys device.
- */
-struct sme_sensor_names {
-	SLIST_ENTRY(sme_sensor_names) sme_names;
-	int	assigned;
-	char	desc[ENVSYS_DESCLEN];
-};
-
-/* 
  * struct used by a sysmon envsys event.
  */
 typedef struct sme_event {
-	struct work 		see_wk;
+	struct work		see_wk;
 	LIST_ENTRY(sme_event) 	see_list;
 	struct sysmon_envsys	*see_sme;	/* device associated */
 	struct penvsys_state	see_pes;	/* our power envsys */
 	envsys_data_t		*see_edata;	/* our sensor data */
-	int32_t			see_critval;	/* critical value set */
 	int			see_type;	/* type of the event */
-	int			see_evsent;	/* event already sent */
+	int			see_evstate;	/* state of prev event */
+	int			see_evvalue;	/* value of prev event */
 	int 			see_flags;	/* see above */
-#define SME_EVENT_WORKING	0x0001 		/* This event is busy */
-#define SME_EVENT_REFRESHED	0x0002		/* sensor already refreshed */
+#define SEE_EVENT_WORKING	0x0001 		/* This event is busy */
 } sme_event_t;
 
 /* 
@@ -100,7 +95,7 @@ typedef struct sme_event_drv {
 	int			sed_powertype;
 } sme_event_drv_t;
 
-struct sme_description_table {
+struct sme_descr_entry {
 	int 		type;
 	int 		crittype;
 	const char 	*desc;
@@ -109,44 +104,45 @@ struct sme_description_table {
 /* 
  * common stuff.
  */
-extern	kmutex_t sme_mtx; 		/* mutex for devices/events */
-extern 	kmutex_t sme_events_mtx;	/* to init/destroy the events layer */
-extern	kmutex_t sme_callout_mtx;	/* for the callouts */
-extern 	kcondvar_t sme_cv;		/* to wait for devices/events working */
+extern	kmutex_t sme_global_mtx; 	/* for the sme linked list and dict */
+extern	prop_dictionary_t sme_propd;	/* the global sensor dictionary */
 
 /* 
  * linked list for the sysmon envsys devices.
  */
-LIST_HEAD(, sysmon_envsys) sysmon_envsys_list;
+LIST_HEAD(sysmon_envsys_lh, sysmon_envsys);
+extern	struct sysmon_envsys_lh sysmon_envsys_list;
 
 /* 
  * functions to handle sysmon envsys devices.
  */
-sme_event_drv_t *sme_add_sensor_dictionary(struct sysmon_envsys *,
-					   prop_array_t,
-			    	  	   prop_dictionary_t,
-					   envsys_data_t *);
 int	sme_update_dictionary(struct sysmon_envsys *);
+int	sme_update_sensor_dictionary(prop_object_t, envsys_data_t *, bool);
 int	sme_userset_dictionary(struct sysmon_envsys *,
 			       prop_dictionary_t, prop_array_t);
 prop_dictionary_t sme_sensor_dictionary_get(prop_array_t, const char *);
 struct	sysmon_envsys *sysmon_envsys_find(const char *);
-void	sysmon_envsys_acquire(struct sysmon_envsys *);
-void	sysmon_envsys_release(struct sysmon_envsys *);
+void	sysmon_envsys_acquire(struct sysmon_envsys *, bool);
+void	sysmon_envsys_release(struct sysmon_envsys *, bool);
 
 /* 
  * functions to handle sysmon envsys events.
  */
 int	sme_event_register(prop_dictionary_t, envsys_data_t *,
-			   struct sysmon_envsys *, const char *,
-			   int32_t, int, int);
+			   struct sysmon_envsys *, sysmon_envsys_lim_t *,
+			   uint32_t, int, int);
 int	sme_event_unregister(struct sysmon_envsys *, const char *, int);
+int	sme_event_unregister_sensor(struct sysmon_envsys *, envsys_data_t *);
 void	sme_event_unregister_all(struct sysmon_envsys *);
 void	sme_event_drvadd(void *);
 int	sme_events_init(struct sysmon_envsys *);
 void	sme_events_destroy(struct sysmon_envsys *);
+void	sme_events_halt_callout(struct sysmon_envsys *);
 void	sme_events_check(void *);
 void	sme_events_worker(struct work *, void *);
+void	sme_deliver_event(sme_event_t *);
+int	sme_update_limits(struct sysmon_envsys *, envsys_data_t *);
+void	sme_schedule_callout(struct sysmon_envsys *);
 
 /* 
  * common functions to create/update objects in a dictionary.
@@ -156,6 +152,8 @@ int	sme_sensor_upint32(prop_dictionary_t, const char *, int32_t);
 int	sme_sensor_upuint32(prop_dictionary_t, const char *, uint32_t);
 int	sme_sensor_upstring(prop_dictionary_t, const char *, const char *);
 
-const struct	sme_description_table *sme_get_description_table(int);
+const struct sme_descr_entry *sme_find_table_entry(enum sme_descr_type, int);
+const struct sme_descr_entry * sme_find_table_desc(enum sme_descr_type,
+						   const char *);
 
 #endif /* _DEV_SYSMON_ENVSYSVAR_H_ */

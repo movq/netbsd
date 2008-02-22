@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.27 2008/01/02 11:48:28 ad Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.29 2013/05/16 19:06:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.27 2008/01/02 11:48:28 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.29 2013/05/16 19:06:45 christos Exp $");
 
 #include "opt_mbr.h"
 
@@ -240,6 +240,15 @@ dkcksum_mmeye(struct disklabel *lp)
 
 	while (start < end)
 		sum ^= *start++;
+
+#ifdef COMPAT_MMEYE_OLDLABEL_BROKEN
+	if (sum != 0 &&
+	    tdl.d_checksum == 0) {
+		printf("disklabel: mmeye oldlabel broken found\n");
+		sum = 0;	/* XXXX */
+	}
+#endif
+
 	return (sum);
 }
 #endif
@@ -336,7 +345,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 	cyl = LABELSECTOR / lp->d_secpercyl;
 	if (!osdep)
 		goto nombrpart;
-	dp = osdep->dosparts;
+	dp = osdep->mbrparts;
 
 	/* read master boot record */
 	bp->b_blkno = MBR_BBSECTOR;
@@ -595,7 +604,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 	cyl = LABELSECTOR / lp->d_secpercyl;
 	if (!osdep)
 		goto nombrpart;
-	dp = osdep->dosparts;
+	dp = osdep->mbrparts;
 
 	/* read master boot record */
 	bp->b_blkno = MBR_BBSECTOR;

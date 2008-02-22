@@ -1,4 +1,4 @@
-/*	$NetBSD: ctl.c,v 1.36 2006/10/22 16:12:20 christos Exp $	*/
+/*	$NetBSD: ctl.c,v 1.43 2017/03/21 07:04:29 nat Exp $	*/
 
 /*
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: ctl.c,v 1.36 2006/10/22 16:12:20 christos Exp $");
+__RCSID("$NetBSD: ctl.c,v 1.43 2017/03/21 07:04:29 nat Exp $");
 #endif
 
 
@@ -58,23 +51,25 @@ __RCSID("$NetBSD: ctl.c,v 1.36 2006/10/22 16:12:20 christos Exp $");
 
 #include "libaudio.h"
 
-struct field *findfield (const char *name);
-void prfield (struct field *p, const char *sep);
-void rdfield (struct field *p, char *q);
-void getinfo (int fd);
-void audioctl_write (int, int, char *[]);
-void usage (void);
-int main (int argc, char **argv);
+static struct field *findfield(const char *name);
+static void prfield(const struct field *p, const char *sep);
+static void rdfield(struct field *p, char *q);
+static void getinfo(int fd);
+static void audioctl_write(int, int, char *[]);
+__dead static void usage(void);
 
-audio_device_t adev;
+static audio_device_t adev;
 
-audio_info_t info;
+static audio_info_t info;
 
-char encbuf[1000];
+static char encbuf[1000];
 
-int properties, fullduplex, rerror;
+static int properties, fullduplex, rerror;
 
-struct field {
+int channel;
+int verbose;
+
+static struct field {
 	const char *name;
 	void *valp;
 	int format;
@@ -147,7 +142,7 @@ struct field {
 	{ .name = NULL },
 };
 
-static struct {
+static const struct {
 	const char *name;
 	u_int prop;
 } props[] = {
@@ -157,9 +152,8 @@ static struct {
 	{ .name = NULL },
 };
 
-struct field *
-findfield(name)
-	const char *name;
+static struct field *
+findfield(const char *name)
 {
 	int i;
 	for (i = 0; fields[i].name; i++)
@@ -168,10 +162,8 @@ findfield(name)
 	return 0;
 }
 
-void
-prfield(p, sep)
-	struct field *p;
-	const char *sep;
+static void
+prfield(const struct field *p, const char *sep)
 {
 	u_int v;
 	const char *cm, *encstr;
@@ -181,25 +173,25 @@ prfield(p, sep)
 		printf("%s%s", p->name, sep);
 	switch(p->format) {
 	case STRING:
-		printf("%s", (char*)p->valp);
+		printf("%s", (const char*)p->valp);
 		break;
 	case INT:
-		printf("%d", *(int*)p->valp);
+		printf("%d", *(const int*)p->valp);
 		break;
 	case UINT:
-		printf("%u", *(u_int*)p->valp);
+		printf("%u", *(const u_int*)p->valp);
 		break;
 	case XINT:
-		printf("0x%x", *(u_int*)p->valp);
+		printf("0x%x", *(const u_int*)p->valp);
 		break;
 	case UCHAR:
-		printf("%u", *(u_char*)p->valp);
+		printf("%u", *(const u_char*)p->valp);
 		break;
 	case ULONG:
-		printf("%lu", *(u_long*)p->valp);
+		printf("%lu", *(const u_long*)p->valp);
 		break;
 	case P_R:
-		v = *(u_int*)p->valp;
+		v = *(const u_int*)p->valp;
 		cm = "";
 		if (v & AUMODE_PLAY) {
 			if (v & AUMODE_PLAY_ALL)
@@ -242,10 +234,8 @@ prfield(p, sep)
 	}
 }
 
-void
-rdfield(p, q)
-	struct field *p;
-	char *q;
+static void
+rdfield(struct field *p, char *q)
 {
 	int enc;
 	u_int u;
@@ -296,11 +286,13 @@ rdfield(p, q)
 	p->flags |= SET;
 }
 
-void
-getinfo(fd)
-	int fd;
+static void
+getinfo(int fd)
 {
 	int pos, i;
+
+	if (channel >= 0 && ioctl(fd, AUDIO_SETCHAN, &channel) < 0)
+		err(1, "AUDIO_SETCHAN");
 
 	if (ioctl(fd, AUDIO_GETDEV, &adev) < 0)
 		err(1, "AUDIO_GETDEV");
@@ -309,11 +301,11 @@ getinfo(fd)
 		enc.index = i;
 		if (ioctl(fd, AUDIO_GETENC, &enc) < 0)
 			break;
-		if (pos >= sizeof(encbuf)-1)
+		if (pos >= (int)sizeof(encbuf)-1)
 			break;
 		if (pos)
 			encbuf[pos++] = ',';
-		if (pos >= sizeof(encbuf)-1)
+		if (pos >= (int)sizeof(encbuf)-1)
 			break;
 		pos += snprintf(encbuf+pos, sizeof(encbuf)-pos, "%s:%d%s",
 			enc.name, enc.precision,
@@ -329,21 +321,21 @@ getinfo(fd)
 		err(1, "AUDIO_GETINFO");
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	const char *prog = getprogname();
 
-	fprintf(stderr, "Usage: %s [-d file] [-n] name ...\n", prog);
-	fprintf(stderr, "Usage: %s [-d file] [-n] -w name=value ...\n", prog);
-	fprintf(stderr, "Usage: %s [-d file] [-n] -a\n", prog);
+	fprintf(stderr, "Usage: %s [-d file] [-p] channel "
+			"[-n] name ...\n", prog);
+	fprintf(stderr, "Usage: %s [-d file] [-p] channel [-n] "
+			"-w name=value ...\n", prog);
+	fprintf(stderr, "Usage: %s [-d file] [-p] channel [-n] -a\n", prog);
 	exit(1);
 }
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char *argv[])
 {
 	int fd, i, ch;
 	int aflag = 0, wflag = 0;
@@ -351,11 +343,12 @@ main(argc, argv)
 	const char *file;
 	const char *sep = "=";
 
+	channel = -1;
 	file = getenv("AUDIOCTLDEVICE");
 	if (file == NULL)
 		file = deffile;
 
-	while ((ch = getopt(argc, argv, "ad:f:nw")) != -1) {
+	while ((ch = getopt(argc, argv, "ad:f:np:w")) != -1) {
 		switch(ch) {
 		case 'a':
 			aflag++;
@@ -365,6 +358,9 @@ main(argc, argv)
 			break;
 		case 'n':
 			sep = 0;
+			break;
+		case 'p':
+			channel = atoi(optarg);
 			break;
 		case 'f': /* compatibility */
 		case 'd':
@@ -408,7 +404,8 @@ main(argc, argv)
 				getinfo(fd);
 				for (i = 0; fields[i].name; i++) {
 					if (fields[i].flags & SET) {
-						printf("%s: -> ", fields[i].name);
+						printf("%s: -> ",
+						    fields[i].name);
 						prfield(&fields[i], 0);
 						printf("\n");
 					}
@@ -420,9 +417,12 @@ main(argc, argv)
 				p = findfield(*argv);
 				if (p == 0) {
 					if (strchr(*argv, '='))
-						warnx("field %s does not exist (use -w to set a variable)", *argv);
+						warnx("field %s does not exist "
+						      "(use -w to set a "
+						      "variable)", *argv);
 					else
-						warnx("field %s does not exist", *argv);
+						warnx("field %s does not exist",
+						      *argv);
 				} else {
 					prfield(p, sep);
 					printf("\n");
@@ -435,13 +435,13 @@ main(argc, argv)
 	exit(0);
 }
 
-void
-audioctl_write(fd, argc, argv)
-	int fd;
-	int argc;
-	char *argv[];
+static void
+audioctl_write(int fd, int argc, char *argv[])
 {
 	struct field *p;
+
+	if (channel >= 0 && ioctl(fd, AUDIO_SETCHAN, &channel) < 0)
+		err(1, "AUDIO_SETCHAN");
 
 	AUDIO_INITINFO(&info);
 	while (argc--) {
@@ -459,7 +459,8 @@ audioctl_write(fd, argc, argv)
 				else {
 					rdfield(p, q);
 					if (p->valp == &fullduplex)
-						if (ioctl(fd, AUDIO_SETFD, &fullduplex) < 0)
+						if (ioctl(fd, AUDIO_SETFD,
+							   &fullduplex) < 0)
 							err(1, "set failed");
 				}
 			}

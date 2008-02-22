@@ -1,4 +1,4 @@
-/*	$NetBSD: owtemp.c,v 1.12 2007/11/16 08:00:15 xtraeme Exp $ */
+/*	$NetBSD: owtemp.c,v 1.17 2014/05/14 08:14:56 kardel Exp $ */
 /*	$OpenBSD: owtemp.c,v 1.1 2006/03/04 16:27:03 grange Exp $	*/
 
 /*
@@ -22,7 +22,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: owtemp.c,v 1.12 2007/11/16 08:00:15 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: owtemp.c,v 1.17 2014/05/14 08:14:56 kardel Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: owtemp.c,v 1.12 2007/11/16 08:00:15 xtraeme Exp $");
 #define DS_CMD_READ_SCRATCHPAD	0xbe
 
 struct owtemp_softc {
-	struct device			sc_dev;
-
 	void *				sc_onewire;
 	u_int64_t			sc_rom;
 
@@ -53,20 +51,20 @@ struct owtemp_softc {
 	int				sc_dying;
 };
 
-int	owtemp_match(struct device *, struct cfdata *, void *);
-void	owtemp_attach(struct device *, struct device *, void *);
-int	owtemp_detach(struct device *, int);
-int	owtemp_activate(struct device *, enum devact);
+static int	owtemp_match(device_t, cfdata_t, void *);
+static void	owtemp_attach(device_t, device_t, void *);
+static int	owtemp_detach(device_t, int);
+static int	owtemp_activate(device_t, enum devact);
 
-void	owtemp_update(void *);
+static void	owtemp_update(void *);
 
-CFATTACH_DECL(owtemp, sizeof(struct owtemp_softc),
+CFATTACH_DECL_NEW(owtemp, sizeof(struct owtemp_softc),
 	owtemp_match, owtemp_attach, owtemp_detach, owtemp_activate);
 
 extern struct cfdriver owtemp_cd;
 
 static const struct onewire_matchfam owtemp_fams[] = {
-	{ ONEWIRE_FAMILY_DS1920 },
+	{ ONEWIRE_FAMILY_DS1920 }, /* also DS1820 */
 	{ ONEWIRE_FAMILY_DS18B20 },
 	{ ONEWIRE_FAMILY_DS1822 },
 };
@@ -76,18 +74,20 @@ static void	owtemp_refresh(struct sysmon_envsys *, envsys_data_t *);
 static uint32_t	owtemp_decode_ds18b20(const uint8_t *);
 static uint32_t	owtemp_decode_ds1920(const uint8_t *);
 
-int
-owtemp_match(struct device *parent, struct cfdata *cf, void *aux)
+static int
+owtemp_match(device_t parent, cfdata_t match, void *aux)
 {
 	return (onewire_matchbyfam(aux, owtemp_fams,
 	    __arraycount(owtemp_fams)));
 }
 
-void
-owtemp_attach(struct device *parent, struct device *self, void *aux)
+static void
+owtemp_attach(device_t parent, device_t self, void *aux)
 {
 	struct owtemp_softc *sc = device_private(self);
 	struct onewire_attach_args *oa = aux;
+
+	aprint_naive("\n");
 
 	sc->sc_onewire = oa->oa_onewire;
 	sc->sc_rom = oa->oa_rom;
@@ -106,30 +106,30 @@ owtemp_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Initialize sensor */
 	sc->sc_sensor.units = ENVSYS_STEMP;
+	sc->sc_sensor.state = ENVSYS_SINVALID;
 	(void)strlcpy(sc->sc_sensor.desc,
-	    sc->sc_dev.dv_xname, sizeof(sc->sc_sensor.desc));
+	    device_xname(self), sizeof(sc->sc_sensor.desc));
 	if (sysmon_envsys_sensor_attach(sc->sc_sme, &sc->sc_sensor)) {
 		sysmon_envsys_destroy(sc->sc_sme);
 		return;
 	}
 
 	/* Hook into system monitor. */
-	sc->sc_sme->sme_name = sc->sc_dev.dv_xname;
+	sc->sc_sme->sme_name = device_xname(self);
 	sc->sc_sme->sme_cookie = sc;
 	sc->sc_sme->sme_refresh = owtemp_refresh;
 
 	if (sysmon_envsys_register(sc->sc_sme)) {
-		aprint_error("%s: unable to register with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to register with sysmon\n");
 		sysmon_envsys_destroy(sc->sc_sme);
 		return;
 	}
 
-	printf("\n");
+	aprint_normal("\n");
 }
 
-int
-owtemp_detach(struct device *self, int flags)
+static int
+owtemp_detach(device_t self, int flags)
 {
 	struct owtemp_softc *sc = device_private(self);
 
@@ -138,23 +138,21 @@ owtemp_detach(struct device *self, int flags)
 	return 0;
 }
 
-int
-owtemp_activate(struct device *self, enum devact act)
+static int
+owtemp_activate(device_t self, enum devact act)
 {
 	struct owtemp_softc *sc = device_private(self);
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-
-	return (0);
 }
 
-void
+static void
 owtemp_update(void *arg)
 {
 	struct owtemp_softc *sc = arg;
@@ -237,6 +235,21 @@ owtemp_decode_ds1920(const uint8_t *buf)
 	temp = (int8_t)buf[1];
 	temp = (temp << 8) | buf[0];
 
-	/* Convert to uK */
-	return (temp * 500000 + 273150000);
+	if (buf[7] != 0) {
+		/*
+	 	 * interpolate for higher precision using the count registers
+	 	 *
+	 	 * buf[7]: COUNT_PER_C(elsius)
+	 	 * buf[6]: COUNT_REMAIN
+	 	 *
+	 	 * T = TEMP - 0.25 + (COUNT_PER_C - COUNT_REMAIN) / COUNT_PER_C
+	 	 */
+		temp &= ~1;
+        	temp += 500000 * temp + (500000 * (buf[7] - buf[6])) / buf[7] - 250000;
+	} else {
+		temp *= 500000;
+	}
+
+	/* convert to uK */
+	return (temp + 273150000);
 }

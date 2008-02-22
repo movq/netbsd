@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.12 2006/07/23 12:01:26 bouyer Exp $
+#	$NetBSD: Makefile,v 1.14 2015/03/28 14:41:28 msaitoh Exp $
 
 # use 'make -f Makefile.pcidevs' to make pcidevs.h and pcidevs_data.h
 

@@ -1,6 +1,6 @@
-/*	$NetBSD: pcb.h,v 1.11 2008/01/05 21:47:19 yamt Exp $	*/
+/*	$NetBSD: pcb.h,v 1.28 2017/12/31 07:23:09 maxv Exp $	*/
 
-/*-
+/*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*-
+/*
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -77,46 +70,41 @@
 #ifndef _AMD64_PCB_H_
 #define _AMD64_PCB_H_
 
-#include <sys/signal.h>
+#ifdef __x86_64__
 
-#include <machine/segments.h>
-#include <machine/tss.h>
-#include <machine/fpu.h>
-#include <machine/sysarch.h>
+#include <x86/cpu_extended_state.h>
+#include <amd64/reg.h>
 
 #define	NIOPORTS	1024		/* # of ports we allow to be mapped */
 
-/*
- * Please note that the pcb_savefpu field in struct below must be
- * on a 16-byte boundary.
- */
 struct pcb {
 	int	  pcb_flags;
-#define	PCB_USER_LDT	0x01		/* has user-set LDT */
-#define PCB_GS64	0x02
-#define PCB_FS64	0x04
-	int	  pcb_cr0;		/* saved image of CR0 */
-	u_int64_t pcb_rsp0;
-	u_int64_t pcb_cr2;		/* page fault address (CR2) */
-	u_int64_t pcb_cr3;
-	u_int64_t pcb_rsp;
-	u_int64_t pcb_rbp;
-	u_int64_t pcb_usersp;
-	u_int64_t pcb_ldt_sel;
-	struct	savefpu pcb_savefpu __aligned(16); /* floating point state */
+#define	PCB_COMPAT32	0x01
+	u_int	  pcb_cr0;		/* saved image of CR0 */
+	uint64_t pcb_rsp0;
+	uint64_t pcb_cr2;		/* page fault address (CR2) */
+	uint64_t pcb_cr3;
+	uint64_t pcb_rsp;
+	uint64_t pcb_rbp;
 	void     *pcb_onfault;		/* copyin/out fault recovery */
-	struct cpu_info *pcb_fpcpu;	/* cpu holding our fp state. */
-	uint64_t  pcb_gs;
 	uint64_t  pcb_fs;
+	uint64_t  pcb_gs;
+	struct dbreg *pcb_dbregs;
+	uint16_t pcb_fpu_dflt_cw;
 	int pcb_iopl;
-};
 
-/*    
- * The pcb is augmented with machine-dependent additional data for 
- * core dumps. For the i386, there is nothing to add.
- */     
-struct md_coredump {
-	long	md_pad[8];
-};    
+	uint32_t pcb_unused[8];		/* unused */
+
+	struct cpu_info *pcb_fpcpu;	/* cpu holding our fp state. */
+	union savefpu	pcb_savefpu __aligned(64); /* floating point state */
+	/* **** DO NOT ADD ANYTHING HERE **** */
+};
+__CTASSERT(sizeof(struct pcb) - sizeof (union savefpu) ==  128);
+
+#else	/*	__x86_64__	*/
+
+#include <i386/pcb.h>
+
+#endif	/*	__x86_64__	*/
 
 #endif /* _AMD64_PCB_H_ */

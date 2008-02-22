@@ -1,4 +1,4 @@
-/*	$NetBSD: panic.c,v 1.12 2007/07/18 01:06:08 lukem Exp $	*/
+/*	$NetBSD: panic.c,v 1.14 2016/03/13 00:32:09 dholland Exp $	*/
 
 /*
  * panic.c - terminate fast in case of error
@@ -29,6 +29,7 @@
 
 #include <err.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -45,32 +46,31 @@
 #if 0
 static char rcsid[] = "$OpenBSD: panic.c,v 1.4 1997/03/01 23:40:09 millert Exp $";
 #else
-__RCSID("$NetBSD: panic.c,v 1.12 2007/07/18 01:06:08 lukem Exp $");
+__RCSID("$NetBSD: panic.c,v 1.14 2016/03/13 00:32:09 dholland Exp $");
 #endif
 #endif
-
-/* External variables */
 
 /* Global functions */
 
+__dead
 void
-panic(char *a)
+panic(const char *a)
 {
 
 	/*
 	 * Something fatal has happened, print error message and exit.
 	 */
 	if (fcreated) {
-		PRIV_START
+		privs_enter();
 		(void)unlink(atfile);
-		PRIV_END
+		privs_exit();
 	}
-
 	errx(EXIT_FAILURE, "%s", a);
 }
 
+__dead
 void
-perr(char *a)
+perr(const char *a)
 {
 
 	/*
@@ -78,33 +78,33 @@ perr(char *a)
 	 */
 	perror(a);
 	if (fcreated) {
-		PRIV_START
+		privs_enter();
 		(void)unlink(atfile);
-		PRIV_END
+		privs_exit();
 	}
-
 	exit(EXIT_FAILURE);
 }
 
-void 
-perr2(char *a, char *b)
+__dead
+void
+privs_fail(const char *msg)
 {
-
-	(void)fputs(a, stderr);
-	perr(b);
+	perr(msg);
 }
 
+__dead
 void
 usage(void)
 {
 
 	/* Print usage and exit.  */
-	(void)fprintf(stderr,   "usage: at [-bdlmrVv] [-f file] [-q queue] -t [[CC]YY]MMDDhhmm[.SS]\n"
-				"       at [-bdlmrVv] [-f file] [-q queue] time\n"
-				"       at [-V] -c job [job ...]\n"
-				"       atq [-Vv] [-q queue]\n"
-				"       atrm [-V] job [job ...]\n"
-				"       batch [-mVv] [-f file] [-q queue] [-t [[CC]YY]MMDDhhmm[.SS]]\n"
-				"       batch [-mVv] [-f file] [-q queue] [time]\n");
+	(void)fprintf(stderr,
+	    "usage: at [-bdlmrVv] [-f file] [-q queue] -t [[CC]YY]MMDDhhmm[.SS]\n"
+	    "       at [-bdlmrVv] [-f file] [-q queue] time\n"
+	    "       at [-V] -c job [job ...]\n"
+	    "       atq [-Vv] [-q queue]\n"
+	    "       atrm [-V] job [job ...]\n"
+	    "       batch [-mVv] [-f file] [-q queue] [-t [[CC]YY]MMDDhhmm[.SS]]\n"
+	    "       batch [-mVv] [-f file] [-q queue] [time]\n");
 	exit(EXIT_FAILURE);
 }

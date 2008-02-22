@@ -1,4 +1,4 @@
-/*	$NetBSD: j720tp.c,v 1.8 2007/10/26 10:39:40 peter Exp $	*/
+/*	$NetBSD: j720tp.c,v 1.11 2014/02/25 18:30:08 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 /* Jornada 720 touch-panel driver. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: j720tp.c,v 1.8 2007/10/26 10:39:40 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: j720tp.c,v 1.11 2014/02/25 18:30:08 pooka Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_j720tp.h"
@@ -80,15 +73,15 @@ __KERNEL_RCSID(0, "$NetBSD: j720tp.c,v 1.8 2007/10/26 10:39:40 peter Exp $");
 
 #ifdef J720TP_DEBUG
 int j720tp_debug = 0;
-#define DPRINTF(arg)		if (j720tp_debug) printf arg
-#define DPRINTFN(n, arg)	if (j720tp_debug >= (n)) printf arg
+#define DPRINTF(arg)		if (j720tp_debug) aprint_normal arg
+#define DPRINTFN(n, arg)	if (j720tp_debug >= (n)) aprint_normal arg
 #else
 #define DPRINTF(arg)		/* nothing */
 #define DPRINTFN(n, arg)	/* nothing */
 #endif
 
 struct j720tp_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 
 #define J720TP_WSMOUSE_ENABLED	0x01
 #define J720TP_WSKBD_ENABLED	0x02
@@ -101,14 +94,14 @@ struct j720tp_softc {
 	struct callout		sc_tpcallout;
 	struct j720ssp_softc	*sc_ssp;
 
-	struct device		*sc_wsmousedev;
-	struct device		*sc_wskbddev;
+	device_t		sc_wsmousedev;
+	device_t		sc_wskbddev;
 
 	struct tpcalib_softc	sc_tpcalib;
 };
 
-static int	j720tp_match(struct device *, struct cfdata *, void *);
-static void	j720tp_attach(struct device *, struct device *, void *);
+static int	j720tp_match(device_t, cfdata_t, void *);
+static void	j720tp_attach(device_t, device_t, void *);
 
 static int	j720tp_wsmouse_enable(void *);
 static int	j720tp_wsmouse_ioctl(void *, u_long, void *, int,
@@ -201,12 +194,12 @@ const struct wskbd_mapdata j720tp_wskbd_keymapdata = {
 	j720tp_wskbd_keydesctab, KB_US
 };
 
-CFATTACH_DECL(j720tp, sizeof(struct j720tp_softc),
+CFATTACH_DECL_NEW(j720tp, sizeof(struct j720tp_softc),
     j720tp_match, j720tp_attach, NULL, NULL);
 
 
 static int
-j720tp_match(struct device *parent, struct cfdata *cf, void *aux)
+j720tp_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	if (!platid_match(&platid, &platid_mask_MACH_HP_JORNADA_7XX))
@@ -218,15 +211,16 @@ j720tp_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-j720tp_attach(struct device *parent, struct device *self, void *aux)
+j720tp_attach(device_t parent, device_t self, void *aux)
 {
-	struct j720tp_softc *sc = (struct j720tp_softc *)self;
+	struct j720tp_softc *sc = device_private(self);
 	struct wsmousedev_attach_args wsma;
 	struct wskbddev_attach_args wska;
 
-	printf("\n");
+	aprint_normal("\n");
 
-	sc->sc_ssp = (struct j720ssp_softc *)parent;
+	sc->sc_dev = self;
+	sc->sc_ssp = device_private(parent);
 	sc->sc_enabled = 0;
 	sc->sc_hard_icon = 0;
 	sc->sc_rawkbd = 0;
@@ -566,14 +560,9 @@ SYSCTL_SETUP(sysctl_j720tp, "sysctl j720tp subtree setup")
 	int rc;
 
 	if ((rc = sysctl_createv(clog, 0, NULL, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "hw", NULL,
-	    NULL, 0, NULL, 0, CTL_HW, CTL_EOL)) != 0)
-		goto err;
-
-	if ((rc = sysctl_createv(clog, 0, &rnode, &rnode,
 	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "j720tp",
 	    SYSCTL_DESCR("Jornada 720 touch panel controls"),
-	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
+	    NULL, 0, NULL, 0, CTL_HW, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
 #ifdef J720TP_DEBUG
@@ -616,5 +605,5 @@ SYSCTL_SETUP(sysctl_j720tp, "sysctl j720tp subtree setup")
 
 	return;
 err:
-	printf("%s: sysctl_createv failed (rc = %d)\n", __func__, rc);
+	aprint_normal("%s: sysctl_createv failed (rc = %d)\n", __func__, rc);
 }

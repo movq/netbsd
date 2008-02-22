@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_exec_elf32.c,v 1.27 2007/04/22 08:29:58 dsl Exp $	*/
+/*	$NetBSD: netbsd32_exec_elf32.c,v 1.40 2016/08/06 15:13:13 maxv Exp $	*/
 /*	from: NetBSD: exec_aout.c,v 1.15 1996/09/26 23:34:46 cgd Exp */
 
 /*
@@ -13,8 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -59,14 +57,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_exec_elf32.c,v 1.27 2007/04/22 08:29:58 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_exec_elf32.c,v 1.40 2016/08/06 15:13:13 maxv Exp $");
 
 #define	ELFSIZE		32
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
@@ -74,15 +71,15 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_exec_elf32.c,v 1.27 2007/04/22 08:29:58 dsl
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/kauth.h>
+#include <sys/namei.h>
+
+#include <compat/common/compat_util.h>
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_exec.h>
 
-#include <machine/frame.h>
 #include <machine/netbsd32_machdep.h>
 
-int netbsd32_copyinargs(struct exec_package *, struct ps_strings *,
-			void *, size_t, const void *, const void *);
 int ELFNAME2(netbsd32,probe_noteless)(struct lwp *, struct exec_package *epp,
 				      void *eh, char *itp, vaddr_t *pos);
 extern int ELFNAME2(netbsd,signature)(struct lwp *, struct exec_package *,
@@ -97,6 +94,13 @@ ELFNAME2(netbsd32,probe)(struct lwp *l, struct exec_package *epp,
 	if ((error = ELFNAME2(netbsd,signature)(l, epp, eh)) != 0)
 		return error;
 
+#ifdef ELF_MD_PROBE_FUNC
+	if ((error = ELF_MD_PROBE_FUNC(l, epp, eh, itp, pos)) != 0)
+		return error;
+#elif defined(ELF_INTERP_NON_RELOCATABLE)
+	*pos = ELF_LINK_ADDR;
+#endif
+
 	return ELFNAME2(netbsd32,probe_noteless)(l, epp, eh, itp, pos);
 }
 
@@ -104,25 +108,20 @@ int
 ELFNAME2(netbsd32,probe_noteless)(struct lwp *l, struct exec_package *epp,
 				  void *eh, char *itp, vaddr_t *pos)
 {
-	int error;
-
-	if (itp) {
-		/* Translate interpreter name if needed */
-		if ((error = emul_find_interp(l, epp, itp)) != 0)
-			return error;
+ 	if (itp && epp->ep_interp == NULL) {
+		extern const char machine32[];
+		(void)compat_elf_check_interp(epp, itp, machine32);
 	}
-	epp->ep_flags |= EXEC_32;
-	epp->ep_vm_minaddr = VM_MIN_ADDRESS;
+#ifdef _LP64
+	epp->ep_flags |= EXEC_32 | EXEC_FORCEAUX;
+#endif
+	epp->ep_vm_minaddr = exec_vm_minaddr(VM_MIN_ADDRESS);
 	epp->ep_vm_maxaddr = USRSTACK32;
 #ifdef ELF_INTERP_NON_RELOCATABLE
 	*pos = ELF_LINK_ADDR;
 #endif
 	return 0;
 }
-
-/* round up and down to page boundaries. */
-#define	ELF_ROUND(a, b)		(((a) + (b) - 1) & ~((b) - 1))
-#define	ELF_TRUNC(a, b)		((a) & ~((b) - 1))
 
 /*
  * Copy arguments onto the stack in the normal way, but add some
@@ -141,6 +140,8 @@ netbsd32_elf32_copyargs(struct lwp *l, struct exec_package *pack,
 		return error;
 
 	a = ai;
+
+	memset(ai, 0, sizeof(ai));
 
 	/*
 	 * Push extra arguments on the stack needed by dynamically
@@ -192,8 +193,7 @@ netbsd32_elf32_copyargs(struct lwp *l, struct exec_package *pack,
 		a->a_v = kauth_cred_getgid(l->l_cred);
 		a++;
 
-		free((char *)ap, M_TEMP);
-		pack->ep_emul_arg = NULL;
+		exec_free_emul_arg(pack);
 	}
 
 	a->a_type = AT_NULL;

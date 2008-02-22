@@ -1,4 +1,4 @@
-/*	$NetBSD: map_parse.y,v 1.6 2006/02/05 18:11:46 jmmv Exp $ */
+/*	$NetBSD: map_parse.y,v 1.12 2012/10/23 15:30:45 christos Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,12 +63,12 @@ static struct wscons_keymap mapdata[KS_NUMKEYCODES];
 struct wskbd_map_data newkbmap;		/* used in util.c */
 static struct wscons_keymap *cur_mp;
 
-static int ksym_lookup(keysym_t);
+static size_t ksym_lookup(keysym_t);
 
-static int
+static size_t
 ksym_lookup(keysym_t ksym)
 {
-	int i;
+	size_t i;
 	struct wscons_keymap *mp;
 
 	for (i = 0; i < kbmap.maplen; i++) {
@@ -96,7 +89,7 @@ ksym_lookup(keysym_t ksym)
 		int ival;
 	}
 
-%token T_KEYSYM T_KEYCODE
+%token T_KEYSYM T_KEYCODE T_CMD
 %token <kval> T_KEYSYM_VAR T_KEYSYM_CMD_VAR
 %token <ival> T_NUMBER
 
@@ -104,7 +97,7 @@ ksym_lookup(keysym_t ksym)
 
 %%
 
-program		: = {
+program		: {
 			int i;
 			struct wscons_keymap *mp;
 
@@ -130,8 +123,8 @@ expr		: keysym_expr
 		| keycode_expr
 		;
 
-keysym_expr	: T_KEYSYM keysym_var "=" keysym_var = {
-			int src, dst;
+keysym_expr	: T_KEYSYM keysym_var "=" keysym_var {
+			size_t src, dst;
 
 			dst = ksym_lookup($2);
 			src = ksym_lookup($4);
@@ -141,40 +134,49 @@ keysym_expr	: T_KEYSYM keysym_var "=" keysym_var = {
 		}
 		;
 
-keycode_expr	: T_KEYCODE T_NUMBER "=" = {
+keycode_expr	: T_KEYCODE T_NUMBER "=" {
 			if ($2 >= KS_NUMKEYCODES)
 				errx(EXIT_FAILURE, "%d: keycode too large", $2);
-			if ($2 >= newkbmap.maplen)
+			if ((unsigned int)$2 >= newkbmap.maplen)
 				newkbmap.maplen = $2 + 1;
 			cur_mp = mapdata + $2;
 		} keysym_cmd keysym_list
 		;
 
 keysym_cmd	: /* empty */
-		| T_KEYSYM_CMD_VAR = {
+		| T_KEYSYM_CMD_VAR {
 			cur_mp->command = $1;
+		}
+		| T_CMD T_KEYSYM_CMD_VAR {
+			cur_mp->command = KS_Cmd;
+			cur_mp->group1[0] = $2;
+		} 
+		| T_CMD T_KEYSYM_VAR {
+			cur_mp->command = KS_Cmd;
+			cur_mp->group1[0] = $2;
 		}
 		;
 
-keysym_list	: keysym_var = {
+keysym_list	: /* empty */
+		| keysym_var {
 			cur_mp->group1[0] = $1;
 			cur_mp->group1[1] = ksym_upcase(cur_mp->group1[0]);
 			cur_mp->group2[0] = cur_mp->group1[0];
 			cur_mp->group2[1] = cur_mp->group1[1];
 		}
-		| keysym_var keysym_var = {
+		| keysym_var keysym_var {
 			cur_mp->group1[0] = $1;
 			cur_mp->group1[1] = $2;
 			cur_mp->group2[0] = cur_mp->group1[0];
 			cur_mp->group2[1] = cur_mp->group1[1];
 		}
-		| keysym_var keysym_var keysym_var = {
+		| keysym_var keysym_var keysym_var {
 			cur_mp->group1[0] = $1;
 			cur_mp->group1[1] = $2;
 			cur_mp->group2[0] = $3;
 			cur_mp->group2[1] = ksym_upcase(cur_mp->group2[0]);
 		}
-		| keysym_var keysym_var keysym_var keysym_var = {
+		| keysym_var keysym_var keysym_var keysym_var {
 			cur_mp->group1[0] = $1;
 			cur_mp->group1[1] = $2;
 			cur_mp->group2[0] = $3;
@@ -182,10 +184,10 @@ keysym_list	: keysym_var = {
 		}
 		;
 
-keysym_var	: T_KEYSYM_VAR = {
+keysym_var	: T_KEYSYM_VAR {
 			$$ = $1;
 		}
-		| T_NUMBER = {
+		| T_NUMBER {
 			char name[2];
 			int res;
 
@@ -200,9 +202,11 @@ keysym_var	: T_KEYSYM_VAR = {
 		};
 %%
 
-void
+__dead static void
 yyerror(const char *msg)
 {
+	extern char *yytext;
+	extern int yyleng;
 
-	errx(EXIT_FAILURE, "parse: %s", msg);
+	errx(EXIT_FAILURE, "parse: %s [%.*s]", msg, yyleng, yytext);
 }

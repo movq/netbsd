@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.10 2007/03/04 05:59:50 christos Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.13 2014/04/20 04:12:54 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,13 @@
 #define _HP300_AUTOCONF_H_
 
 #ifdef _KERNEL
+extern  int conscode;			/* select code of console device */
+#define CONSCODE_INTERNAL	(-1)
+#define CONSCODE_INVALID	(-2)
+extern  void *conaddr;			/* KVA of console device */
+
 void	hp300_cninit(void);
+void	hp300_cninit_deferred(void);
 void	iomap_init(void);
 void *	iomap(void *, int);
 void	iounmap(void *, int);

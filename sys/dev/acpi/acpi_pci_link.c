@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_pci_link.c,v 1.11 2007/12/16 23:11:08 jmcneill Exp $	*/
+/*	$NetBSD: acpi_pci_link.c,v 1.22 2014/09/14 19:54:05 mrg Exp $	*/
 
 /*-
  * Copyright (c) 2002 Mitsuru IWASAKI <iwasaki@jp.freebsd.org>
@@ -27,21 +27,26 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_pci_link.c,v 1.11 2007/12/16 23:11:08 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_pci_link.c,v 1.22 2014/09/14 19:54:05 mrg Exp $");
 
-#include "opt_acpi.h"
 #include <sys/param.h>
-#include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/reboot.h>
+#include <sys/systm.h>
 
-#include <dev/acpi/acpica.h>
 #include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
 #include <dev/pci/pcireg.h>
-#include <dev/pci/pcivar.h>
+
+#include "opt_acpi.h"
+
+
+#define _COMPONENT          ACPI_BUS_COMPONENT
+ACPI_MODULE_NAME            ("acpi_pci_link")
+
+MALLOC_DECLARE(M_ACPI);
 
 #define NUM_ISA_INTERRUPTS	16
 #define NUM_ACPI_INTERRUPTS	256
@@ -91,7 +96,6 @@ struct acpi_pci_link_softc {
 	struct link *pl_links;
 	char pl_name[32];
 	ACPI_HANDLE pl_handle;
-	void *pl_powerhook;
 	TAILQ_ENTRY(acpi_pci_link_softc) pl_list;
 };
 
@@ -129,8 +133,6 @@ struct link_res_request {
 	int	link_index;
 };
 
-MALLOC_DEFINE(M_PCI_LINK, "pci_link", "ACPI PCI Link structures");
-
 static int pci_link_interrupt_weights[NUM_ACPI_INTERRUPTS];
 static int pci_link_bios_isa_irqs;
 
@@ -142,7 +144,6 @@ static void acpi_pci_link_dump(struct acpi_pci_link_softc *);
 static int acpi_pci_link_attach(struct acpi_pci_link_softc *);
 static uint8_t acpi_pci_link_search_irq(struct acpi_pci_link_softc *, int, int,
 					int);
-static void acpi_pci_link_resume(int, void *);
 static struct link *acpi_pci_link_lookup(struct acpi_pci_link_softc *, int);
 static ACPI_STATUS acpi_pci_link_srs(struct acpi_pci_link_softc *,
 				     ACPI_BUFFER *);
@@ -229,7 +230,7 @@ link_add_crs(ACPI_RESOURCE *res, void *context)
 				link->l_irq = res->Data.Irq.Interrupts[0];
 				link->l_trig = res->Data.Irq.Triggering;
 				link->l_pol = res->Data.Irq.Polarity;
-		}
+			}
 		} else if (res->Data.ExtendedIrq.InterruptCount == 1) {
 			link->l_irq = res->Data.ExtendedIrq.Interrupts[0];
 			link->l_trig = res->Data.ExtendedIrq.Triggering;
@@ -256,8 +257,8 @@ link_add_prs(ACPI_RESOURCE *res, void *context)
 {
 	struct link_res_request *req;
 	struct link *link;
-	UINT8 *irqs = NULL;
-	UINT32 *ext_irqs = NULL;
+	uint8_t *irqs = NULL;
+	uint32_t *ext_irqs = NULL;
 	int i, is_ext_irq = 1;
 
 	req = (struct link_res_request *)context;
@@ -341,7 +342,7 @@ link_add_prs(ACPI_RESOURCE *res, void *context)
 		 */
 		link->l_isa_irq = TRUE;
 		link->l_irqs = malloc(sizeof(int) * link->l_num_irqs,
-		    M_PCI_LINK, M_WAITOK | M_ZERO);
+		    M_ACPI, M_WAITOK | M_ZERO);
 		for (i = 0; i < link->l_num_irqs; i++) {
 			if (is_ext_irq) {
 				link->l_irqs[i] = ext_irqs[i];
@@ -461,7 +462,7 @@ acpi_pci_link_attach(struct acpi_pci_link_softc *sc)
 		return (0);
 	}
 	sc->pl_links = malloc(sizeof(struct link) * sc->pl_num_links,
-	    M_PCI_LINK, M_WAITOK | M_ZERO);
+	    M_ACPI, M_WAITOK | M_ZERO);
 
 	/* Initialize the child links. */
 	for (i = 0; i < sc->pl_num_links; i++) {
@@ -532,7 +533,7 @@ acpi_pci_link_attach(struct acpi_pci_link_softc *sc)
 	 * run _DIS (i.e., the method doesn't exist), assume the initial
 	 * IRQ was routed by the BIOS.
 	 */
-#if 0	/* XXX causes spontaneaous resets on some systems. Disabled for now. */
+#ifndef ACPI__DIS_IS_BROKEN
 	if (ACPI_SUCCESS(AcpiEvaluateObject(sc->pl_handle, "_DIS", NULL,
 	    NULL)))
 		for (i = 0; i < sc->pl_num_links; i++)
@@ -552,11 +553,11 @@ fail:
 	ACPI_SERIAL_END(pci_link);
 	for (i = 0; i < sc->pl_num_links; i++) {
 		if (sc->pl_links[i].l_irqs != NULL)
-			free(sc->pl_links[i].l_irqs, M_PCI_LINK);
+			free(sc->pl_links[i].l_irqs, M_ACPI);
 		if (sc->pl_links[i].l_devices != NULL)
-			free(sc->pl_links[i].l_devices, M_PCI_LINK);
+			free(sc->pl_links[i].l_devices, M_ACPI);
 	}
-	free(sc->pl_links, M_PCI_LINK);
+	free(sc->pl_links, M_ACPI);
 	return (ENXIO);
 }
 
@@ -597,7 +598,7 @@ acpi_pci_link_add_functions(struct acpi_pci_link_softc *sc, struct link *link,
 
 		link->l_devices = realloc(link->l_devices,
 		    sizeof(pcitag_t) * (link->l_dev_count + 1),
-		    M_PCI_LINK, M_WAITOK);
+		    M_ACPI, M_WAITOK);
 		link->l_devices[link->l_dev_count] = tag;
 		++link->l_dev_count;
 	}
@@ -744,7 +745,7 @@ acpi_pci_link_srs_from_crs(struct acpi_pci_link_softc *sc, ACPI_BUFFER *srsbuf)
 
 	/* Fetch the _CRS. */
 	crsbuf.Pointer = NULL;
-	crsbuf.Length = ACPI_ALLOCATE_BUFFER;
+	crsbuf.Length = ACPI_ALLOCATE_LOCAL_BUFFER;
 	status = AcpiGetCurrentResources(sc->pl_handle, &crsbuf);
 	if (ACPI_SUCCESS(status) && crsbuf.Pointer == NULL)
 		status = AE_NO_MEMORY;
@@ -822,8 +823,8 @@ acpi_pci_link_srs_from_crs(struct acpi_pci_link_softc *sc, ACPI_BUFFER *srsbuf)
 				printf("%s: Unable to build resources: %s\n",
 				    sc->pl_name, AcpiFormatException(status));
 				if (srsbuf->Pointer != NULL)
-					AcpiOsFree(srsbuf->Pointer);
-				AcpiOsFree(crsbuf.Pointer);
+					ACPI_FREE(srsbuf->Pointer);
+				ACPI_FREE(crsbuf.Pointer);
 				return (status);
 			}
 		}
@@ -833,7 +834,7 @@ acpi_pci_link_srs_from_crs(struct acpi_pci_link_softc *sc, ACPI_BUFFER *srsbuf)
 		if (resource >= end)
 			break;
 	}
-	AcpiOsFree(crsbuf.Pointer);
+	ACPI_FREE(crsbuf.Pointer);
 	return (AE_OK);
 }
 
@@ -887,7 +888,7 @@ acpi_pci_link_srs_from_links(struct acpi_pci_link_softc *sc,
 			printf("%s: Unable to build resources: %s\n",
 			    sc->pl_name, AcpiFormatException(status));
 			if (srsbuf->Pointer != NULL)
-				AcpiOsFree(srsbuf->Pointer);
+				ACPI_FREE(srsbuf->Pointer);
 			return (status);
 		}
 	}
@@ -903,6 +904,10 @@ acpi_pci_link_srs(struct acpi_pci_link_softc *sc, ACPI_BUFFER *srsbuf)
 		status = acpi_pci_link_srs_from_links(sc, srsbuf);
 	else
 		status = acpi_pci_link_srs_from_crs(sc, srsbuf);
+
+	if (ACPI_FAILURE(status))
+		printf("%s: Unable to find link srs : %s\n",
+		    sc->pl_name, AcpiFormatException(status));
 
 	/* Write out new resources via _SRS. */
 	return AcpiSetCurrentResources(sc->pl_handle, srsbuf);
@@ -968,25 +973,8 @@ acpi_pci_link_route_irqs(struct acpi_pci_link_softc *sc, int *irq, int *pol,
 		if (resource >= end)
 			break;
 	}
-	AcpiOsFree(srsbuf.Pointer);
+	ACPI_FREE(srsbuf.Pointer);
 	return (AE_OK);
-}
-
-static void
-acpi_pci_link_resume(int why, void *arg)
-{
-	struct acpi_pci_link_softc *sc = arg;
-	ACPI_BUFFER srsbuf;
-
-	switch (why) {
-	case PWR_RESUME:
-		ACPI_SERIAL_BEGIN(pci_link);
-		if (ACPI_SUCCESS(acpi_pci_link_srs(sc, &srsbuf)))
-			AcpiOsFree(srsbuf.Pointer);
-		ACPI_SERIAL_END(pci_link);
-	default:
-		break;
-	}
 }
 
 /*
@@ -1129,7 +1117,6 @@ static void
 acpi_pci_link_init(struct acpi_pci_link_softc *sc)
 {
 	ACPI_BUFFER buf;
-	char acpipcilinkname[] = "acpi_pci_link";
 
 	/*
 	 * If the SCI is an ISA IRQ, add it to the bitmask of known good
@@ -1142,11 +1129,6 @@ acpi_pci_link_init(struct acpi_pci_link_softc *sc)
 	 */
 	if (AcpiGbl_FADT.SciInterrupt < NUM_ISA_INTERRUPTS)
 		pci_link_bios_isa_irqs |= (1 << AcpiGbl_FADT.SciInterrupt);
-
-        sc->pl_powerhook = powerhook_establish(acpipcilinkname,
-	    acpi_pci_link_resume, sc);
-        if (sc->pl_powerhook == NULL)
-                aprint_normal("can't establish powerhook\n");
 
 	buf.Length = sizeof (sc->pl_name);
 	buf.Pointer = sc->pl_name;
@@ -1165,10 +1147,10 @@ acpi_pci_link_devbyhandle(ACPI_HANDLE handle)
 
 	TAILQ_FOREACH(sc, &acpi_pci_linkdevs, pl_list) {
 		if (sc->pl_handle == handle)
-			return sc;  
+			return sc;
 	}
 
-	sc = malloc(sizeof (*sc), M_PCI_LINK, M_NOWAIT|M_ZERO);
+	sc = malloc(sizeof (*sc), M_ACPI, M_NOWAIT | M_ZERO);
 	if (sc == NULL)
 		return NULL;
 
@@ -1179,6 +1161,20 @@ acpi_pci_link_devbyhandle(ACPI_HANDLE handle)
 	TAILQ_INSERT_TAIL(&acpi_pci_linkdevs, sc, pl_list);
 
 	return (void *)sc;
+}
+
+void
+acpi_pci_link_resume(void)
+{
+	struct acpi_pci_link_softc *sc;
+	ACPI_BUFFER srsbuf;
+
+	TAILQ_FOREACH(sc, &acpi_pci_linkdevs, pl_list) {
+		ACPI_SERIAL_BEGIN(pci_link);
+		if (ACPI_SUCCESS(acpi_pci_link_srs(sc, &srsbuf)))
+			ACPI_FREE(srsbuf.Pointer);
+		ACPI_SERIAL_END(pci_link);
+	}
 }
 
 ACPI_HANDLE
@@ -1217,7 +1213,7 @@ acpi_AppendBufferResource(ACPI_BUFFER *buf, ACPI_RESOURCE *res)
 	/* Initialise the buffer if necessary. */
 	if (buf->Pointer == NULL) {
 	buf->Length = ACPI_INITIAL_RESOURCE_BUFFER_SIZE;
-	if ((buf->Pointer = AcpiOsAllocate(buf->Length)) == NULL)
+	if ((buf->Pointer = ACPI_ALLOCATE(buf->Length)) == NULL)
 		return (AE_NO_MEMORY);
 	rp = (ACPI_RESOURCE *)buf->Pointer;
 	rp->Type =  ACPI_RESOURCE_TYPE_END_TAG;
@@ -1257,18 +1253,18 @@ acpi_AppendBufferResource(ACPI_BUFFER *buf, ACPI_RESOURCE *res)
 	while ((((u_int8_t *)rp - (u_int8_t *)buf->Pointer) + 
 	    res->Length + ACPI_RS_SIZE_NO_DATA +
 	    ACPI_RS_SIZE_MIN) >= buf->Length) {
-		if ((newp = AcpiOsAllocate(buf->Length * 2)) == NULL)
+		if ((newp = ACPI_ALLOCATE(buf->Length * 2)) == NULL)
 			return (AE_NO_MEMORY);
 		memcpy(newp, buf->Pointer, buf->Length);
 		rp = (ACPI_RESOURCE *)((u_int8_t *)newp +
 		   ((u_int8_t *)rp - (u_int8_t *)buf->Pointer));
-		AcpiOsFree(buf->Pointer);
+		ACPI_FREE(buf->Pointer);
 		buf->Pointer = newp;
 		buf->Length += buf->Length;
 	}
 
 	/* Insert the new resource. */
-	memcpy(rp, res, res->Length + ACPI_RS_SIZE_NO_DATA);
+	memcpy(rp, res, res->Length);
 
 	/* And add the terminator. */
 	rp = ACPI_NEXT_RESOURCE(rp);

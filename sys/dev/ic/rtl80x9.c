@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl80x9.c,v 1.12 2007/10/19 11:59:59 ad Exp $	*/
+/*	$NetBSD: rtl80x9.c,v 1.16 2014/06/16 16:48:16 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl80x9.c,v 1.12 2007/10/19 11:59:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl80x9.c,v 1.16 2014/06/16 16:48:16 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,8 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtl80x9.c,v 1.12 2007/10/19 11:59:59 ad Exp $");
 #include <dev/ic/rtl80x9var.h>
 
 int
-rtl80x9_mediachange(dsc)
-	struct dp8390_softc *dsc;
+rtl80x9_mediachange(struct dp8390_softc *dsc)
 {
 
 	/*
@@ -78,9 +70,7 @@ rtl80x9_mediachange(dsc)
 }
 
 void
-rtl80x9_mediastatus(sc, ifmr)
-	struct dp8390_softc *sc;
-	struct ifmediareq *ifmr;
+rtl80x9_mediastatus(struct dp8390_softc *sc, struct ifmediareq *ifmr)
 {
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	u_int8_t cr_proto = sc->cr_proto |
@@ -102,6 +92,8 @@ rtl80x9_mediastatus(sc, ifmr)
 		if (NIC_GET(sc->sc_regt, sc->sc_regh, NERTL_RTL3_CONFIG3) &
 		    RTL3_CONFIG3_FUDUP)
 			ifmr->ifm_active |= IFM_FDX;
+		else
+			ifmr->ifm_active |= IFM_HDX;
 	}
 
 	/* Set NIC to page 0 registers. */
@@ -109,8 +101,7 @@ rtl80x9_mediastatus(sc, ifmr)
 }
 
 void
-rtl80x9_init_card(sc)
-	struct dp8390_softc *sc;
+rtl80x9_init_card(struct dp8390_softc *sc)
 {
 	struct ifmedia *ifm = &sc->sc_media;
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
@@ -163,8 +154,7 @@ rtl80x9_init_card(sc)
 }
 
 void
-rtl80x9_media_init(sc)
-	struct dp8390_softc *sc;
+rtl80x9_media_init(struct dp8390_softc *sc)
 {
 	static int rtl80x9_media[] = {
 		IFM_ETHER|IFM_AUTO,
@@ -178,8 +168,8 @@ rtl80x9_media_init(sc)
 	int i, defmedia;
 	u_int8_t conf2, conf3;
 
-	printf("%s: 10base2, 10baseT, 10baseT-FDX, auto, default ",
-	    sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev,
+	    "10base2, 10baseT, 10baseT-FDX, auto, default ");
 
 	bus_space_write_1(sc->sc_regt, sc->sc_regh, ED_P0_CR, ED_CR_PAGE_3);
 

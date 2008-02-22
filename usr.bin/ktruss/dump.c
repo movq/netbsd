@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.c,v 1.28 2007/08/01 21:39:36 ad Exp $	*/
+/*	$NetBSD: dump.c,v 1.43 2018/06/03 13:41:30 kamil Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)kdump.c	8.4 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: dump.c,v 1.28 2007/08/01 21:39:36 ad Exp $");
+__RCSID("$NetBSD: dump.c,v 1.43 2018/06/03 13:41:30 kamil Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -112,11 +112,11 @@ void	putpendq(struct ktr_entry *);
 void	syscallnameprint(int);
 void	syscallprint(struct ktr_header *);
 void	sysretprint(struct ktr_header *);
-int	wprintf(const char *, ...);
+int	xwprintf(const char *, ...) __printflike(1, 2);
 void	*xrealloc(void *, size_t *, size_t);
 
 int
-wprintf(const char *fmt, ...)
+xwprintf(const char *fmt, ...)
 {
 	va_list ap;
 	int w;
@@ -146,7 +146,7 @@ indent(int col)
 {
 
 	while (width < col)
-		if (wprintf(" ") < 0)
+		if (xwprintf(" ") < 0)
 			break;
 }
 
@@ -216,11 +216,11 @@ void
 flushpendq(struct ktr_entry *us)
 {
 	struct ktr_entry *kte, *kte_next;
-	int pid = KTE_PID(us);
+	int pid = KTE_PID(us), lid = KTE_LID(us);
 
 	for (kte = TAILQ_FIRST(&ktependq); kte != NULL; kte = kte_next) {
 		kte_next = TAILQ_NEXT(kte, kte_list);
-		if (KTE_PID(kte) == pid) {
+		if (KTE_PID(kte) == pid || KTE_LID(kte) == lid) {
 			TAILQ_REMOVE(&ktependq, kte, kte_list);
 			free(kte);
 		}
@@ -288,7 +288,7 @@ dumprecord(int trpoints, FILE *fp)
 		ktrcsw(kte);
 		break;
 	case KTR_EMUL:
-		ktremul(kte);
+		putpendq(kte);
 		break;
 	default:
 		/*
@@ -349,39 +349,66 @@ dumpheader(struct ktr_header *kth)
 	static union timeholder prevtime;
 	union timeholder temp;
 
-	wprintf("%6d ", kth->ktr_pid);
-	if (kth->ktr_version > KTRFACv0)
-		wprintf("%6d ", kth->ktr_lid);
-	wprintf("%-8.*s ", MAXCOMLEN, kth->ktr_comm);
+	temp.tv.tv_sec = temp.tv.tv_usec = 0;
+	xwprintf("%6d ", kth->ktr_pid);
+	if (kth->ktr_version > KTRFAC_VERSION(KTRFACv0))
+		xwprintf("%6d ", kth->ktr_lid);
+	xwprintf("%-8.*s ", MAXCOMLEN, kth->ktr_comm);
 	if (timestamp) {
 		if (timestamp == 2) {
-			if (kth->ktr_version == KTRFACv0) {
+			switch (kth->ktr_version) {
+			case KTRFAC_VERSION(KTRFACv0):
 				if (prevtime.tv.tv_sec == 0)
 					temp.tv.tv_sec = temp.tv.tv_usec = 0;
 				else
-					timersub(&kth->ktr_tv,
+					timersub(&kth->ktr_otv,
 					    &prevtime.tv, &temp.tv);
-				prevtime.tv = kth->ktr_tv;
-			} else {
+				prevtime.tv.tv_sec = kth->ktr_otv.tv_sec;
+				prevtime.tv.tv_usec = kth->ktr_otv.tv_usec;
+				break;
+
+			case KTRFAC_VERSION(KTRFACv1):
 				if (prevtime.ts.tv_sec == 0)
 					temp.ts.tv_sec = temp.ts.tv_nsec = 0;
 				else
 					timespecsub(&kth->ktr_time,
 					    &prevtime.ts, &temp.ts);
-				prevtime.ts = kth->ktr_time;
+				prevtime.ts.tv_sec = kth->ktr_ots.tv_sec;
+				prevtime.ts.tv_nsec = kth->ktr_ots.tv_nsec;
+				break;
+
+			case KTRFAC_VERSION(KTRFACv2):
+				if (prevtime.ts.tv_sec == 0)
+					temp.ts.tv_sec = temp.ts.tv_nsec = 0;
+				else
+					timespecsub(&kth->ktr_time,
+					    &prevtime.ts, &temp.ts);
+				prevtime.ts.tv_sec = kth->ktr_ts.tv_sec;
+				prevtime.ts.tv_nsec = kth->ktr_ts.tv_nsec;
+				break;
 			}
 		} else {
-			if (kth->ktr_version == KTRFACv0)
-				temp.tv = kth->ktr_tv;
-			else
-				temp.ts = kth->ktr_time;
+			switch (kth->ktr_version) {
+			case KTRFAC_VERSION(KTRFACv0):
+				temp.tv.tv_sec = kth->ktr_otv.tv_sec;
+				temp.tv.tv_usec = kth->ktr_otv.tv_usec;
+				break;
+			case KTRFAC_VERSION(KTRFACv1):
+				temp.ts.tv_sec = kth->ktr_ots.tv_sec;
+				temp.ts.tv_nsec = kth->ktr_ots.tv_nsec;
+				break;
+			case KTRFAC_VERSION(KTRFACv2):
+				temp.ts.tv_sec = kth->ktr_ts.tv_sec;
+				temp.ts.tv_nsec = kth->ktr_ts.tv_nsec;
+				break;
+			}
 		}
-		if (kth->ktr_version == KTRFACv0)
-			wprintf("%ld.%06ld ",
-			    (long)temp.tv.tv_sec, (long)temp.tv.tv_usec);
+		if (kth->ktr_version == KTRFAC_VERSION(KTRFACv0))
+			xwprintf("%lld.%06ld ",
+			    (long long)temp.tv.tv_sec, (long)temp.tv.tv_usec);
 		else
-			wprintf("%ld.%09ld ",
-			    (long)temp.ts.tv_sec, (long)temp.ts.tv_nsec);
+			xwprintf("%lld.%09ld ",
+			    (long long)temp.ts.tv_sec, (long)temp.ts.tv_nsec);
 	}
 }
 
@@ -396,13 +423,13 @@ ioctldecode(u_long cmd)
 		*dir++ = 'R';
 	*dir = '\0';
 
-	wprintf(decimal ? ", _IO%s('%c',%ld" : ", _IO%s('%c',%#lx",
+	xwprintf(decimal ? ", _IO%s('%c',%ld" : ", _IO%s('%c',%#lx",
 	    dirbuf, (int) ((cmd >> 8) & 0xff), cmd & 0xff);
 	if ((cmd & IOC_VOID) == 0)
-		wprintf(decimal ? ",%ld)" : ",%#lx)",
+		xwprintf(decimal ? ",%ld)" : ",%#lx)",
 		    (cmd >> 16) & 0xff);
 	else
-		wprintf(")");
+		xwprintf(")");
 }
 
 void
@@ -420,7 +447,7 @@ nameiargprint(const char *prefix, struct ktr_header *kth,
 	if (kte == NULL)
 		argprint(prefix, ap, argsize);
 	else {
-		wprintf("%s", prefix);
+		xwprintf("%s", prefix);
 		nameiprint(&kte->kte_kth);
 		free(kte);
 		(*ap)++;
@@ -433,9 +460,9 @@ syscallnameprint(int code)
 {
 
 	if (code >= cur_emul->nsysnames || code < 0)
-		wprintf("[%d]", code);
+		xwprintf("[%d]", code);
 	else
-		wprintf("%s", cur_emul->sysnames[code]);
+		xwprintf("%s", cur_emul->sysnames[code]);
 }
 
 void
@@ -443,9 +470,9 @@ argprint(const char *prefix, register_t **ap, int *argsize)
 {
 
 	if (decimal)
-		wprintf("%s%ld", prefix, (long)**ap);
+		xwprintf("%s%ld", prefix, (long)**ap);
 	else
-		wprintf("%s%#lx", prefix, (long)**ap);
+		xwprintf("%s%#lx", prefix, (long)**ap);
 	(*ap)++;
 	*argsize -= sizeof(register_t);
 }
@@ -465,7 +492,7 @@ syscallprint(struct ktr_header *kth)
 	 */
 	argsize = ktr->ktr_argsize;
 	if (argsize == 0) {
-		wprintf("(");
+		xwprintf("(");
 		goto noargument;
 	}
 
@@ -482,7 +509,7 @@ syscallprint(struct ktr_header *kth)
 	case SYS_link:
 	case SYS_unlink:
 	case SYS_chdir:
-	case SYS_mknod:
+	case SYS___mknod50:
 	case SYS_chmod:
 	case SYS_chown:
 	case SYS_unmount:
@@ -498,8 +525,9 @@ syscallprint(struct ktr_header *kth)
 	case SYS_mkfifo:
 	case SYS_mkdir:
 	case SYS_rmdir:
-	case SYS_utimes:
-	case SYS_quotactl:
+	case SYS___utimes50:
+	case SYS_compat_50_quotactl:
+	case SYS___quotactl:
 	case SYS_statvfs1:
 	case SYS_compat_30_getfh:
 	case SYS_pathconf:
@@ -508,9 +536,9 @@ syscallprint(struct ktr_header *kth)
 	case SYS___posix_rename:
 	case SYS_lchmod:
 	case SYS_lchown:
-	case SYS_lutimes:
-	case SYS___stat30:
-	case SYS___lstat30:
+	case SYS___lutimes50:
+	case SYS___stat50:
+	case SYS___lstat50:
 	case SYS___posix_chown:
 	case SYS___posix_lchown:
 	case SYS_lchflags:
@@ -530,7 +558,7 @@ syscallprint(struct ktr_header *kth)
 		break;
 
 	case SYS_compat_16___sigaction14 :
-		wprintf("(%s", signals[(int)*ap].name);
+		xwprintf("(%s", signals[(int)*ap].name);
 		ap++;
 		argsize -= sizeof(register_t);
 		break;
@@ -538,7 +566,7 @@ syscallprint(struct ktr_header *kth)
 	case SYS_ioctl :
 		argprint("(", &ap, &argsize);
 		if ((s = ioctlname(*ap)) != NULL)
-			wprintf(", %s", s);
+			xwprintf(", %s", s);
 		else
 			ioctldecode(*ap);
 		ap++;
@@ -547,10 +575,10 @@ syscallprint(struct ktr_header *kth)
 
 	case SYS_ptrace :
 		if ((long)*ap >= 0 &&
-		    *ap < sizeof(ptrace_ops) / sizeof(ptrace_ops[0]))
-			wprintf("(%s", ptrace_ops[*ap]);
+		    *ap < (register_t)(sizeof(ptrace_ops) / sizeof(ptrace_ops[0])))
+			xwprintf("(%s", ptrace_ops[*ap]);
 		else
-			wprintf("(%ld", (long)*ap);
+			xwprintf("(%ld", (long)*ap);
 		ap++;
 		argsize -= sizeof(register_t);
 		break;
@@ -566,7 +594,7 @@ print_first:
 		argprint(", ", &ap, &argsize);
 
 noargument:
-	wprintf(")");
+	xwprintf(")");
 }
 
 void
@@ -597,23 +625,24 @@ sysretprint(struct ktr_header *kth)
 
 	indent(50);
 	if (error == EJUSTRETURN)
-		wprintf(" JUSTRETURN");
+		xwprintf(" JUSTRETURN");
 	else if (error == ERESTART)
-		wprintf(" RESTART");
+		xwprintf(" RESTART");
 	else if (error) {
-		wprintf(" Err#%d", error);
+		xwprintf(" Err#%d", error);
 		if (error < MAXERRNOS && error >= -2)
-			wprintf(" %s", errnos[error].name);
+			xwprintf(" %s", errnos[error].name);
 	} else
 		switch (ktr->ktr_code) {
+		case SYS_mremap:
 		case SYS_mmap:
-			wprintf(" = %p", (long)ret);
+			xwprintf(" = %p", (void *)(intptr_t)ret);
 			break;
 		default:
-			wprintf(" = %ld", (long)ret);
-			if (kth->ktr_len > offsetof(struct ktr_sysret,
+			xwprintf(" = %ld", (long)ret);
+			if (kth->ktr_len > (int)offsetof(struct ktr_sysret,
 			    ktr_retval_1) && ktr->ktr_retval_1 != 0)
-				wprintf(", %ld", (long)ktr->ktr_retval_1);
+				xwprintf(", %ld", (long)ktr->ktr_retval_1);
 			break;
 		}
 }
@@ -623,6 +652,7 @@ ktrsysret(struct ktr_entry *kte)
 {
 	struct ktr_header *kth = &kte->kte_kth;
 	struct ktr_sysret *ktr = (struct ktr_sysret *)(kth + 1);
+	struct ktr_entry *emul;
 	struct ktr_entry *genio;
 	struct ktr_entry *syscall_ent;
 
@@ -650,9 +680,13 @@ ktrsysret(struct ktr_entry *kte)
 		free(genio);
 	}
 
-#if 0 /* Why? */
+	emul = getpendq(kth, KTR_EMUL, NULL);
+	if (emul != NULL) {
+		newline();
+		ktremul(emul);
+	}
+
 	flushpendq(kte);
-#endif
 	free(kte);
 }
 
@@ -660,7 +694,7 @@ void
 nameiprint(struct ktr_header *kth)
 {
 
-	wprintf("\"%.*s\"", kth->ktr_len, (char *)(kth + 1));
+	xwprintf("\"%.*s\"", kth->ktr_len, (char *)(kth + 1));
 }
 
 #ifdef notused
@@ -670,9 +704,9 @@ ktrnamei(struct ktr_entry *kte)
 	struct ktr_header *kth = &kte->kte_kth;
 
 	dumpheader(kth);
-	wprintf("namei(");
+	xwprintf("namei(");
 	nameiprint(kth);
-	wprintf(")");
+	xwprintf(")");
 
 	free(kte);
 }
@@ -685,7 +719,7 @@ ktremul(struct ktr_entry *kte)
 	char *emul = (char *)(kth + 1);
 
 	dumpheader(kth);
-	wprintf("emul(%s)", emul);
+	xwprintf("emul(%s)", emul);
 	setemul(emul, kth->ktr_pid, 1);
 
 	free(kte);
@@ -718,7 +752,7 @@ genioprint(struct ktr_header *kth)
 	if (maxdata && datalen > maxdata)
 		datalen = maxdata;
 	newline();
-	wprintf("       \"");
+	xwprintf("       \"");
 	for (; datalen > 0; datalen--, dp++) {
 		(void) vis(visbuf, *dp, VIS_NL|VIS_TAB|VIS_CSTYLE,
 		    /* We put NUL at the end of buffer when reading */
@@ -727,11 +761,11 @@ genioprint(struct ktr_header *kth)
 		w = strlen(visbuf);
 		if (width + w + 2 >= screenwidth)
 			break;
-		wprintf("%s", visbuf);
+		xwprintf("%s", visbuf);
 		if (width + 2 >= screenwidth)
 			break;
 	}
-	wprintf("\"");
+	xwprintf("\"");
 }
 
 #ifdef notused
@@ -742,7 +776,7 @@ ktrgenio(struct ktr_entry *kte)
 	struct ktr_genio *ktr = (struct ktr_genio *)(kth + 1);
 
 	dumpheader(kth);
-	wprintf("genio fd %d %s",
+	xwprintf("genio fd %d %s",
 	    ktr->ktr_fd, ktr->ktr_rw ? "write" : "read");
 	genioprint(kth);
 
@@ -757,11 +791,11 @@ ktrpsig(struct ktr_entry *kte)
 	struct ktr_psig *psig = (struct ktr_psig *)(kth + 1);
 
 	dumpheader(kth);
-	wprintf("SIG%s ", sys_signame[psig->signo]);
+	xwprintf("SIG%s ", sys_signame[psig->signo]);
 	if (psig->action == SIG_DFL)
-		wprintf("SIG_DFL");
+		xwprintf("SIG_DFL");
 	else {
-		wprintf("caught handler=0x%lx mask=0x%lx code=0x%x",
+		xwprintf("caught handler=0x%lx mask=0x%lx code=0x%x",
 		    (u_long)psig->action, (unsigned long)psig->mask.__bits[0],
 		    psig->code);
 	}
@@ -776,7 +810,7 @@ ktrcsw(struct ktr_entry *kte)
 	struct ktr_csw *cs = (struct ktr_csw *)(kth + 1);
 
 	dumpheader(kth);
-	wprintf("%s %s", cs->out ? "stop" : "resume",
+	xwprintf("%s %s", cs->out ? "stop" : "resume",
 	    cs->user ? "user" : "kernel");
 
 	free(kte);

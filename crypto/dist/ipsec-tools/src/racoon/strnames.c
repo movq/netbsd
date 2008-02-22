@@ -1,4 +1,4 @@
-/*	$NetBSD: strnames.c,v 1.8 2007/07/18 12:07:52 vanhu Exp $	*/
+/*	$NetBSD: strnames.c,v 1.10 2012/11/29 15:31:25 vanhu Exp $	*/
 
 /*	$KAME: strnames.c,v 1.25 2003/11/13 10:53:26 itojun Exp $	*/
 
@@ -276,6 +276,8 @@ static struct ksmap name_isakmp_notify_msg[] = {
 { ISAKMP_NTYPE_RESPONDER_LIFETIME,	"RESPONDER-LIFETIME",		NULL },
 { ISAKMP_NTYPE_REPLAY_STATUS,		"REPLAY-STATUS",		NULL },
 { ISAKMP_NTYPE_INITIAL_CONTACT,		"INITIAL-CONTACT",		NULL },
+{ ISAKMP_NTYPE_R_U_THERE,		"R-U-THERE",			NULL },
+{ ISAKMP_NTYPE_R_U_THERE_ACK,		"R-U-THERE-ACK",		NULL },
 #ifdef ENABLE_HYBRID
 { ISAKMP_NTYPE_UNITY_HEARTBEAT,		"HEARTBEAT (Unity)",		NULL },
 #endif
@@ -469,6 +471,7 @@ static struct ksmap name_ipsecdoi_trns_esp[] = {
 { IPSECDOI_ESP_RC4,		"RC4",		NULL },
 { IPSECDOI_ESP_NULL,		"NULL",		NULL },
 { IPSECDOI_ESP_AES,		"AES",		NULL },
+{ IPSECDOI_ESP_AESGCM16,	"AES_GCM_16",	NULL },
 { IPSECDOI_ESP_TWOFISH,		"TWOFISH",	NULL },
 { IPSECDOI_ESP_CAMELLIA,	"CAMELLIA",	NULL },
 };
@@ -581,6 +584,7 @@ static struct ksmap name_attr_ipsec_auth[] = {
 { IPSECDOI_ATTR_AUTH_HMAC_SHA2_512,	"hmac-sha512",	NULL },
 { IPSECDOI_ATTR_AUTH_DES_MAC,		"des-mac",	NULL },
 { IPSECDOI_ATTR_AUTH_KPDK,		"kpdk",		NULL },
+{ IPSECDOI_ATTR_AUTH_NONE,		"non_auth",		NULL },
 };
 
 char *

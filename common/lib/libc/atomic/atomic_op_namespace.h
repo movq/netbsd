@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic_op_namespace.h,v 1.2 2007/11/28 16:55:07 ad Exp $	*/
+/*	$NetBSD: atomic_op_namespace.h,v 1.7 2014/10/13 07:31:12 martin Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,6 +57,8 @@
 #define	atomic_and_uint_nv	_atomic_and_uint_nv
 #define	atomic_and_ulong_nv	_atomic_and_ulong_nv
 #define	atomic_and_64_nv	_atomic_and_64_nv
+#define	atomic_and_16_nv	_atomic_and_16_nv
+#define	atomic_and_8_nv		_atomic_and_8_nv
 
 #define	atomic_or_32		_atomic_or_32
 #define	atomic_or_uint		_atomic_or_uint
@@ -80,6 +75,14 @@
 #define	atomic_cas_ulong	_atomic_cas_ulong
 #define	atomic_cas_ptr		_atomic_cas_ptr
 #define	atomic_cas_64		_atomic_cas_64
+#define atomic_cas_16		_atomic_cas_16
+#define atomic_cas_8		_atomic_cas_8
+
+#define	atomic_cas_32_ni	_atomic_cas_32_ni
+#define	atomic_cas_uint_ni	_atomic_cas_uint_ni
+#define	atomic_cas_ulong_ni	_atomic_cas_ulong_ni
+#define	atomic_cas_ptr_ni	_atomic_cas_ptr_ni
+#define	atomic_cas_64_ni	_atomic_cas_64_ni
 
 #define	atomic_swap_32		_atomic_swap_32
 #define	atomic_swap_uint	_atomic_swap_uint
@@ -119,8 +122,18 @@
 
 #if defined(_KERNEL)
 #define	atomic_op_alias(a,s)	__strong_alias(a,s)
+#ifdef _HARDKERNEL
+#define	crt_alias(a,s)	__strong_alias(a,s)
+#endif
 #else
 #define	atomic_op_alias(a,s)	__weak_alias(a,s)
+#ifdef _LIBC
+#define	crt_alias(a,s)	__strong_alias(a,s)
+#endif
 #endif /* _KERNEL */
+
+#ifndef	crt_alias
+#define	crt_alias(a,s)
+#endif
 
 #endif /* _ATOMIC_OP_NAMESPACE_H_ */

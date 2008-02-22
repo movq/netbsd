@@ -1,4 +1,4 @@
-/*	$NetBSD: ukphy.c,v 1.32 2007/12/29 19:34:56 dyoung Exp $	*/
+/*	$NetBSD: ukphy.c,v 1.49 2016/07/07 06:55:41 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,11 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -71,9 +59,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ukphy.c,v 1.32 2007/12/29 19:34:56 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ukphy.c,v 1.49 2016/07/07 06:55:41 msaitoh Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_mii.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,21 +78,12 @@ __KERNEL_RCSID(0, "$NetBSD: ukphy.c,v 1.32 2007/12/29 19:34:56 dyoung Exp $");
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
-#ifdef MIIVERBOSE
-struct mii_knowndev {
-	int oui;
-	int model;
-	const char *descr;
-};
-#include <dev/mii/miidevs.h>
-#include <dev/mii/miidevs_data.h>
-#endif
+static int	ukphymatch(device_t, cfdata_t, void *);
+static void	ukphyattach(device_t, device_t, void *);
 
-static int	ukphymatch(struct device *, struct cfdata *, void *);
-static void	ukphyattach(struct device *, struct device *, void *);
-
-CFATTACH_DECL(ukphy, sizeof(struct mii_softc),
-    ukphymatch, ukphyattach, mii_phy_detach, mii_phy_activate);
+CFATTACH_DECL3_NEW(ukphy, sizeof(struct mii_softc),
+    ukphymatch, ukphyattach, mii_phy_detach, mii_phy_activate, NULL, NULL,
+    DVF_DETACH_SHUTDOWN);
 
 static int	ukphy_service(struct mii_softc *, struct mii_data *, int);
 
@@ -111,8 +92,7 @@ static const struct mii_phy_funcs ukphy_funcs = {
 };
 
 static int
-ukphymatch(struct device *parent, struct cfdata *match,
-    void *aux)
+ukphymatch(device_t parent, cfdata_t match, void *aux)
 {
 
 	/*
@@ -122,7 +102,7 @@ ukphymatch(struct device *parent, struct cfdata *match,
 }
 
 static void
-ukphyattach(struct device *parent, struct device *self, void *aux)
+ukphyattach(device_t parent, device_t self, void *aux)
 {
 	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
@@ -130,28 +110,22 @@ ukphyattach(struct device *parent, struct device *self, void *aux)
 	int oui = MII_OUI(ma->mii_id1, ma->mii_id2);
 	int model = MII_MODEL(ma->mii_id2);
 	int rev = MII_REV(ma->mii_id2);
-#ifdef MIIVERBOSE
-	int i;
-#endif
+	const char *descr;
 
-	aprint_naive(": Media interface\n");
-	aprint_normal(": Generic IEEE 802.3u media interface\n");
-#ifdef MIIVERBOSE
-	for (i = 0; mii_knowndevs[i].descr != NULL; i++)
-		if (mii_knowndevs[i].oui == oui &&
-		    mii_knowndevs[i].model == model)
-			break;
-	if (mii_knowndevs[i].descr != NULL)
-		aprint_normal("%s: %s (OUI 0x%06x, model 0x%04x), rev. %d\n",
-		       sc->mii_dev.dv_xname, mii_knowndevs[i].descr,
-		       oui, model, rev);
+	if ((descr = mii_get_descr(oui, model)) != NULL)
+		aprint_normal(": %s (OUI 0x%06x, model 0x%04x), rev. %d\n",
+		       descr, oui, model, rev);
 	else
-#endif
-		aprint_normal("%s: OUI 0x%06x, model 0x%04x, rev. %d\n",
-		       sc->mii_dev.dv_xname, oui, model, rev);
+		aprint_normal(": OUI 0x%06x, model 0x%04x, rev. %d\n",
+		       oui, model, rev);
+	aprint_naive(": Media interface\n");
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
+	sc->mii_mpd_oui = MII_OUI(ma->mii_id1, ma->mii_id2);
+	sc->mii_mpd_model = MII_MODEL(ma->mii_id2);
+	sc->mii_mpd_rev = MII_REV(ma->mii_id2);
 	sc->mii_funcs = &ukphy_funcs;
 	sc->mii_pdata = mii;
 	sc->mii_flags = ma->mii_flags;
@@ -164,20 +138,16 @@ ukphyattach(struct device *parent, struct device *self, void *aux)
 
 	PHY_RESET(sc);
 
-	sc->mii_capabilities =
-	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
+	sc->mii_capabilities = PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
 	if (sc->mii_capabilities & BMSR_EXTSTAT)
 		sc->mii_extcapabilities = PHY_READ(sc, MII_EXTSR);
-	aprint_normal("%s: ", sc->mii_dev.dv_xname);
+	aprint_normal_dev(self, "");
 	if ((sc->mii_capabilities & BMSR_MEDIAMASK) == 0 &&
 	    (sc->mii_extcapabilities & EXTSR_MEDIAMASK) == 0)
 		aprint_error("no media present");
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
-
-	if (!pmf_device_register(self, NULL, mii_phy_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -220,12 +190,6 @@ ukphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 		 * If we're not currently selected, just return.
 		 */
 		if (IFM_INST(ife->ifm_media) != sc->mii_inst)
-			return (0);
-
-		/*
-		 * Only used for autonegotiation.
-		 */
-		if (IFM_SUBTYPE(ife->ifm_media) != IFM_AUTO)
 			return (0);
 
 		if (mii_phy_tick(sc) == EJUSTRETURN)

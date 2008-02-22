@@ -1,4 +1,4 @@
-/* 	$NetBSD: xcvbus.c,v 1.1 2006/12/02 22:18:47 freza Exp $ */
+/* 	$NetBSD: xcvbus.c,v 1.3 2011/07/01 19:03:50 dyoung Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xcvbus.c,v 1.1 2006/12/02 22:18:47 freza Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xcvbus.c,v 1.3 2011/07/01 19:03:50 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: xcvbus.c,v 1.1 2006/12/02 22:18:47 freza Exp $");
 #include <sys/extent.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <powerpc/ibm4xx/dev/plbvar.h>
 
 #include <evbppc/virtex/dev/xcvbusvar.h>
@@ -49,7 +49,7 @@ static int	xcvbus_match(device_t, cfdata_t, void *);
 static void	xcvbus_attach(device_t, device_t, void *);
 
 
-CFATTACH_DECL(xcvbus, sizeof(struct device),
+CFATTACH_DECL_NEW(xcvbus, 0,
     xcvbus_match, xcvbus_attach, NULL, NULL);
 
 
@@ -101,7 +101,7 @@ xcvbus_print(void *aux, const char *pnp)
 }
 
 int
-xcvbus_child_match(struct device *parent, struct cfdata *cf, void *aux)
+xcvbus_child_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct xcvbus_attach_args *vaa = aux;
 

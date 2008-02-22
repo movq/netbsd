@@ -1,4 +1,4 @@
-/*	$NetBSD: pcibios.c,v 1.35 2007/12/25 18:33:33 perry Exp $	*/
+/*	$NetBSD: pcibios.c,v 1.39 2010/07/26 22:33:23 jym Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcibios.c,v 1.35 2007/12/25 18:33:33 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcibios.c,v 1.39 2010/07/26 22:33:23 jym Exp $");
 
 #include "opt_pcibios.h"
 #include "opt_pcifixup.h"
@@ -173,7 +166,7 @@ pcibios_init(void)
 		return;
 	}
 
-	aprint_normal("PCI BIOS rev. %d.%d found at 0x%lx\n",
+	aprint_normal("PCI BIOS rev. %d.%d found at %#" PRIxPADDR "\n",
 	    rev_maj, rev_min >> 4, ei.bei_entry);
 	aprint_verbose("pcibios: config mechanism %s%s, special cycles %s%s, "
 	    "last bus %d\n",
@@ -187,7 +180,7 @@ pcibios_init(void)
 	 * The PCI BIOS tells us the config mechanism; fill it in now
 	 * so that pci_mode_detect() doesn't have to look for it.
 	 */
-	pci_mode = mech1 ? 1 : 2;
+	pci_mode_set(mech1 ? 1 : 2);
 
 	pcibios_present = 1;
 
@@ -204,7 +197,7 @@ pcibios_init(void)
 		/*
 		 * Fixup interrupt routing.
 		 */
-		rv = pci_intr_fixup(NULL, X86_BUS_SPACE_IO, &pciirq);
+		rv = pci_intr_fixup(NULL, x86_bus_space_io, &pciirq);
 		switch (rv) {
 		case -1:
 			/* Non-fatal error. */
@@ -257,8 +250,8 @@ pcibios_pir_init(void)
 			cksum += *(unsigned char *)(p + i);
 
 		aprint_normal(
-		    "PCI IRQ Routing Table rev. %d.%d found at 0x%lx, "
-		    "size %d bytes (%d entries)\n", rev_maj, rev_min, pa,
+		    "PCI IRQ Routing Table rev. %d.%d found at %#" PRIxPADDR
+		    ", size %d bytes (%d entries)\n", rev_maj, rev_min, pa,
 		    tablesize, (tablesize - 32) / 16);
 
 		if (cksum != 0) {

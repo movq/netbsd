@@ -1,4 +1,4 @@
-/*	$NetBSD: if_netdock_nubus.c,v 1.16 2007/10/17 19:55:15 garbled Exp $	*/
+/*	$NetBSD: if_netdock_nubus.c,v 1.27 2018/06/26 06:47:58 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2000,2002 Daishi Kato <daishi@axlight.com>
@@ -43,7 +43,7 @@
 /***********************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_netdock_nubus.c,v 1.16 2007/10/17 19:55:15 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_netdock_nubus.c,v 1.27 2018/06/26 06:47:58 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -62,10 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_netdock_nubus.c,v 1.16 2007/10/17 19:55:15 garble
 #include <netinet/if_inarp.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <machine/bus.h>
 #include <machine/viareg.h>
@@ -118,7 +115,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_netdock_nubus.c,v 1.16 2007/10/17 19:55:15 garble
 /***********************/
 
 typedef struct netdock_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 	struct ethercom	sc_ethercom;
 #define sc_if		sc_ethercom.ec_if
 
@@ -131,8 +128,8 @@ typedef struct netdock_softc {
 
 /***********************/
 
-static int	netdock_nubus_match(struct device *, struct cfdata *, void *);
-static void	netdock_nubus_attach(struct device *, struct device *, void *);
+static int	netdock_nubus_match(device_t, cfdata_t, void *);
+static void	netdock_nubus_attach(device_t, device_t, void *);
 static int	netdock_nb_get_enaddr(bus_space_tag_t, bus_space_handle_t,
 			struct nubus_attach_args *, u_int8_t *);
 #ifdef NETDOCK_DEBUG_DRIVER
@@ -187,13 +184,13 @@ static struct mbuf *netdock_get(struct netdock_softc *, int);
 
 /***********************/
 
-CFATTACH_DECL(netdock_nubus, sizeof(struct netdock_softc),
+CFATTACH_DECL_NEW(netdock_nubus, sizeof(struct netdock_softc),
     netdock_nubus_match, netdock_nubus_attach, NULL, NULL);
 
 /***********************/
 
 static int
-netdock_nubus_match(struct device *parent, struct cfdata *cf, void *aux)
+netdock_nubus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct nubus_attach_args *na = (struct nubus_attach_args *)aux;
 	bus_space_handle_t bsh;
@@ -225,9 +222,9 @@ netdock_nubus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-netdock_nubus_attach(struct device *parent, struct device *self, void *aux)
+netdock_nubus_attach(device_t parent, device_t self, void *aux)
 {
-	struct netdock_softc *sc = (struct netdock_softc *)self;
+	struct netdock_softc *sc = device_private(self);
 	struct nubus_attach_args *na = (struct nubus_attach_args *)aux;
 	bus_space_tag_t bst;
 	bus_space_handle_t bsh;
@@ -241,6 +238,7 @@ netdock_nubus_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	sc->sc_regt = bst;
+	sc->sc_dev = self;
 	cardtype = nubus_get_card_name(bst, bsh, na->fmt);
 
 #ifdef NETDOCK_DEBUG_DRIVER
@@ -357,9 +355,9 @@ netdock_setup(struct netdock_softc *sc, u_int8_t *lladdr)
 
 	memcpy(sc->sc_enaddr, lladdr, ETHER_ADDR_LEN);
 	printf("%s: Ethernet address %s\n",
-	    sc->sc_dev.dv_xname, ether_sprintf(lladdr));
+	    device_xname(sc->sc_dev), ether_sprintf(lladdr));
 
-	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_ioctl = netdock_ioctl;
 	ifp->if_start = netdock_start;
@@ -383,23 +381,25 @@ netdock_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	int temp;
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifa = (struct ifaddr *)data;
 		ifp->if_flags |= IFF_UP;
+		(void)netdock_init(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-			(void)netdock_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
-			(void)netdock_init(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
+		if ((err = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		/* XXX see the comment in ed_ioctl() about code re-use */
 		if ((ifp->if_flags & IFF_UP) == 0 &&
 		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			netdock_stop(sc);
@@ -427,7 +427,7 @@ netdock_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 		break;
 	default:
-		err = EINVAL;
+		err = ether_ioctl(ifp, cmd, data);
 		break;
 	}
 	splx(s);
@@ -450,12 +450,9 @@ netdock_start(struct ifnet *ifp)
 
 		if ((m->m_flags & M_PKTHDR) == 0)
 			panic("%s: netdock_start: no header mbuf",
-				sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m, BPF_D_OUT);
 
 		if ((netdock_put(sc, m)) == 0) {
 			IF_PREPEND(&ifp->if_snd, m);
@@ -573,7 +570,8 @@ netdock_put(struct netdock_softc *sc, struct mbuf *m0)
 		totlen += m->m_len;
 
 	if (totlen >= ETHER_MAX_LEN)
-		panic("%s: netdock_put: packet overflow", sc->sc_dev.dv_xname);
+		panic("%s: netdock_put: packet overflow",
+		    device_xname(sc->sc_dev));
 
 	totlen += 6;
 	tmplen = totlen;
@@ -766,12 +764,7 @@ netdock_read(struct netdock_softc *sc, int len)
 	if (m == 0)
 		return (0);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf) 
-		bpf_mtap(ifp->if_bpf, m);
-#endif
-
-	(*ifp->if_input)(ifp, m);
+	if_percpuq_enqueue(ifp->if_percpuq, m);
 
 	return (1);
 }
@@ -789,7 +782,7 @@ netdock_get(struct netdock_softc *sc, int datalen)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		return (NULL);
-	m->m_pkthdr.rcvif = &sc->sc_if;
+	m_set_rcvif(m, &sc->sc_if);
 	m->m_pkthdr.len = datalen;
 	len = MHLEN;
 	top = NULL;
@@ -809,6 +802,8 @@ netdock_get(struct netdock_softc *sc, int datalen)
 			if ((m->m_flags & M_EXT) == 0) {
 				if (top)
 					m_freem(top);
+				else
+					m_freem(m);
 				return (NULL);
 			}
 			len = MCLBYTES;

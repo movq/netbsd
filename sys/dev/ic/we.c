@@ -1,4 +1,4 @@
-/*	$NetBSD: we.c,v 1.13 2007/10/19 12:00:05 ad Exp $	*/
+/*	$NetBSD: we.c,v 1.17 2010/03/19 15:59:22 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: we.c,v 1.13 2007/10/19 12:00:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: we.c,v 1.17 2010/03/19 15:59:22 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,7 +97,7 @@ static int	we_ring_copy(struct dp8390_softc *, int, void *, u_short);
 static void	we_read_hdr(struct dp8390_softc *, int, struct dp8390_ring *);
 static int	we_test_mem(struct dp8390_softc *);
 
-static inline void we_readmem(struct we_softc *, int, u_int8_t *, int);
+static inline void we_readmem(struct we_softc *, int, uint8_t *, int);
 
 /*
  * Delay needed when switching 16-bit access to shared memory.
@@ -138,13 +131,10 @@ if (((wsc)->sc_flags & WE_16BIT_NOTOGGLE) == 0) {			\
 }
 
 int
-we_config(self, wsc, typestr)
-	struct device *self;
-	struct we_softc *wsc;
-	const char *typestr;
+we_config(device_t self, struct we_softc *wsc, const char *typestr)
 {
 	struct dp8390_softc *sc = &wsc->sc_dp8390;
-	u_int8_t x;
+	uint8_t x;
 	int i, forced_16bit = 0;
 
 	/*
@@ -163,13 +153,13 @@ we_config(self, wsc, typestr)
 
 	/* Now we can use the NIC_{GET,PUT}() macros. */
 
-	printf("%s: %s Ethernet (%s-bit)\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(self, "%s Ethernet (%s-bit)\n",
 	    typestr, wsc->sc_flags & WE_16BIT_ENABLE ? "16" : "8");
 
 	/* Get station address from EEPROM. */
 	for (i = 0; i < ETHER_ADDR_LEN; i++)
-		sc->sc_enaddr[i] = bus_space_read_1(wsc->sc_asict,
-					wsc->sc_asich, WE_PROM + i);
+		sc->sc_enaddr[i] =
+		    bus_space_read_1(wsc->sc_asict, wsc->sc_asich, WE_PROM + i);
 
 	/*
 	 * Set upper address bits and 8/16 bit access to shared memory.
@@ -179,7 +169,8 @@ we_config(self, wsc, typestr)
 		    bus_space_read_1(wsc->sc_asict, wsc->sc_asich, WE_LAAR) &
 		    ~WE_LAAR_M16EN;
 		bus_space_write_1(wsc->sc_asict, wsc->sc_asich, WE_LAAR,
-		    wsc->sc_laar_proto | (wsc->sc_flags & WE_16BIT_ENABLE ? WE_LAAR_M16EN : 0));
+		    wsc->sc_laar_proto |
+		    (wsc->sc_flags & WE_16BIT_ENABLE ? WE_LAAR_M16EN : 0));
 	} else if ((wsc->sc_type & WE_SOFTCONFIG) ||
 #ifdef TOSH_ETHER
 	    (wsc->sc_type == WE_TYPE_TOSHIBA1) ||
@@ -191,27 +182,31 @@ we_config(self, wsc, typestr)
 		if (wsc->sc_flags & WE_16BIT_ENABLE)
 			wsc->sc_laar_proto |= WE_LAAR_L16EN;
 		bus_space_write_1(wsc->sc_asict, wsc->sc_asich, WE_LAAR,
-		    wsc->sc_laar_proto | (wsc->sc_flags & WE_16BIT_ENABLE ? WE_LAAR_M16EN : 0));
+		    wsc->sc_laar_proto |
+		    (wsc->sc_flags & WE_16BIT_ENABLE ? WE_LAAR_M16EN : 0));
 	}
 
 	/*
 	 * Set address and enable interface shared memory.
 	 */
 	if (sc->is790) {
-		/* XXX MAGIC CONSTANTS XXX */
-		x = bus_space_read_1(wsc->sc_asict, wsc->sc_asich, 0x04);
-		bus_space_write_1(wsc->sc_asict, wsc->sc_asich, 0x04, x | 0x80);
-		bus_space_write_1(wsc->sc_asict, wsc->sc_asich, 0x0b,
-		    ((wsc->sc_maddr >> 13) & 0x0f) |
-		    ((wsc->sc_maddr >> 11) & 0x40) |
-		    (bus_space_read_1(wsc->sc_asict, wsc->sc_asich, 0x0b) & 0xb0));
-		bus_space_write_1(wsc->sc_asict, wsc->sc_asich, 0x04, x);
+		x = bus_space_read_1(wsc->sc_asict, wsc->sc_asich, WE790_HWR);
+		bus_space_write_1(wsc->sc_asict, wsc->sc_asich,
+		    WE790_HWR, x | WE790_HWR_SWH);
+		bus_space_write_1(wsc->sc_asict, wsc->sc_asich, WE790_RAR,
+		    ((wsc->sc_maddr >> WE790_RAR_OFF_SHIFT) & WE790_RAR_OFF) |
+		    ((wsc->sc_maddr & (1 << WE790_RAR_BASE_SHIFT)) != 0 ?
+		     WE790_RAR_BASE1 : WE790_RAR_BASE0) |
+		    (bus_space_read_1(wsc->sc_asict, wsc->sc_asich, WE790_RAR) &
+		     ~(WE790_RAR_OFF | WE790_RAR_BASE)));
+		bus_space_write_1(wsc->sc_asict, wsc->sc_asich, WE790_HWR, x);
 		wsc->sc_msr_proto = 0x00;
 		sc->cr_proto = 0x00;
 	} else {
 #ifdef TOSH_ETHER
 		if (wsc->sc_type == WE_TYPE_TOSHIBA1 ||
 		    wsc->sc_type == WE_TYPE_TOSHIBA4) {
+			/* XXX MAGIC CONSTANTS XXX */
 			bus_space_write_1(wsc->sc_asict, wsc->sc_asich,
 			    WE_MSR + 1,
 			    ((wsc->sc_maddr >> 8) & 0xe0) | 0x04);
@@ -263,8 +258,8 @@ we_config(self, wsc, typestr)
 	else
 		sc->sc_media_init = dp8390_media_init;
 	if (dp8390_config(sc)) {
-		printf("%s: configuration failed\n", sc->sc_dev.dv_xname);
-		return (1);
+		aprint_error_dev(self, "configuration failed\n");
+		return 1;
 	}
 
 	/*
@@ -281,12 +276,11 @@ we_config(self, wsc, typestr)
 	 */
 	WE_MEM_DISABLE(wsc);
 
-	return (0);
+	return 0;
 }
 
 static int
-we_test_mem(sc)
-	struct dp8390_softc *sc;
+we_test_mem(struct dp8390_softc *sc)
 {
 	struct we_softc *wsc = (struct we_softc *)sc;
 	bus_space_tag_t memt = sc->sc_buft;
@@ -311,13 +305,13 @@ we_test_mem(sc)
 		}
 	}
 
-	return (0);
+	return 0;
 
  fail:
-	printf("%s: failed to clear shared memory at offset 0x%x\n",
-	    sc->sc_dev.dv_xname, i);
+	aprint_error_dev(sc->sc_dev,
+	    "failed to clear shared memory at offset 0x%x\n", i);
 	WE_MEM_DISABLE(wsc);
-	return (1);
+	return 1;
 }
 
 /*
@@ -326,11 +320,7 @@ we_test_mem(sc)
  * up to a word - ok as long as mbufs are word-sized.
  */
 static inline void
-we_readmem(wsc, from, to, len)
-	struct we_softc *wsc;
-	int from;
-	u_int8_t *to;
-	int len;
+we_readmem(struct we_softc *wsc, int from, uint8_t *to, int len)
 {
 	bus_space_tag_t memt = wsc->sc_dp8390.sc_buft;
 	bus_space_handle_t memh = wsc->sc_dp8390.sc_bufh;
@@ -340,25 +330,22 @@ we_readmem(wsc, from, to, len)
 
 	if (wsc->sc_flags & WE_16BIT_ENABLE)
 		bus_space_read_region_stream_2(memt, memh, from,
-		    (u_int16_t *)to, len >> 1);
+		    (uint16_t *)to, len >> 1);
 	else
 		bus_space_read_region_1(memt, memh, from,
 		    to, len);
 }
 
 static int
-we_write_mbuf(sc, m, buf)
-	struct dp8390_softc *sc;
-	struct mbuf *m;
-	int buf;
+we_write_mbuf(struct dp8390_softc *sc, struct mbuf *m, int buf)
 {
 	struct we_softc *wsc = (struct we_softc *)sc;
 	bus_space_tag_t memt = wsc->sc_dp8390.sc_buft;
 	bus_space_handle_t memh = wsc->sc_dp8390.sc_bufh;
-	u_int8_t *data, savebyte[2];
+	uint8_t *data, savebyte[2];
 	int savelen, len, leftover;
 #ifdef DIAGNOSTIC
-	u_int8_t *lim;
+	uint8_t *lim;
 #endif
 
 	savelen = m->m_pkthdr.len;
@@ -371,7 +358,7 @@ we_write_mbuf(sc, m, buf)
 	if ((wsc->sc_flags & WE_16BIT_ENABLE) == 0) {
 		for (; m != NULL; buf += m->m_len, m = m->m_next)
 			bus_space_write_region_1(memt, memh,
-			    buf, mtod(m, u_int8_t *), m->m_len);
+			    buf, mtod(m, uint8_t *), m->m_len);
 		if (savelen < ETHER_MIN_LEN - ETHER_CRC_LEN) {
 			bus_space_set_region_1(memt, memh,
 			    buf, 0, ETHER_MIN_LEN - ETHER_CRC_LEN - savelen);
@@ -388,7 +375,7 @@ we_write_mbuf(sc, m, buf)
 		len = m->m_len;
 		if (len == 0)
 			continue;
-		data = mtod(m, u_int8_t *);
+		data = mtod(m, uint8_t *);
 #ifdef DIAGNOSTIC
 		lim = data + len;
 #endif
@@ -402,11 +389,11 @@ we_write_mbuf(sc, m, buf)
 				savebyte[1] = *data++;
 				len--;
 				bus_space_write_stream_2(memt, memh, buf,
-				    *(u_int16_t *)savebyte);
+				    *(uint16_t *)savebyte);
 				buf += 2;
 				leftover = 0;
-			} else if (BUS_SPACE_ALIGNED_POINTER(data, u_int16_t)
-				   == 0) {
+			} else if (BUS_SPACE_ALIGNED_POINTER(data, uint16_t)
+			    == 0) {
 				/*
 				 * Unaligned dta; buffer the next byte.
 				 */
@@ -422,7 +409,7 @@ we_write_mbuf(sc, m, buf)
 				leftover = len & 1;
 				len &= ~1;
 				bus_space_write_region_stream_2(memt, memh,
-				    buf, (u_int16_t *)data, len >> 1);
+				    buf, (uint16_t *)data, len >> 1);
 				data += len;
 				buf += len;
 				if (leftover)
@@ -440,7 +427,7 @@ we_write_mbuf(sc, m, buf)
 	if (leftover) {
 		savebyte[1] = 0;
 		bus_space_write_stream_2(memt, memh, buf,
-		    *(u_int16_t *)savebyte);
+		    *(uint16_t *)savebyte);
 		buf += 2;
 	}
 	if (savelen < ETHER_MIN_LEN - ETHER_CRC_LEN) {
@@ -452,17 +439,13 @@ we_write_mbuf(sc, m, buf)
  out:
 	WE_MEM_DISABLE(wsc);
 
-	return (savelen);
+	return savelen;
 }
 
 static int
-we_ring_copy(sc, src, dstv, amount)
-	struct dp8390_softc *sc;
-	int src;
-	void *dstv;
-	u_short amount;
+we_ring_copy(struct dp8390_softc *sc, int src, void *dstv, u_short amount)
 {
-	char *dst = dstv;
+	uint8_t *dst = dstv;
 	struct we_softc *wsc = (struct we_softc *)sc;
 	u_short tmp_amount;
 
@@ -480,18 +463,16 @@ we_ring_copy(sc, src, dstv, amount)
 
 	we_readmem(wsc, src, dst, amount);
 
-	return (src + amount);
+	return src + amount;
 }
 
 static void
-we_read_hdr(sc, packet_ptr, packet_hdrp)
-	struct dp8390_softc *sc;
-	int packet_ptr;
-	struct dp8390_ring *packet_hdrp;
+we_read_hdr(struct dp8390_softc *sc, int packet_ptr,
+    struct dp8390_ring *packet_hdrp)
 {
 	struct we_softc *wsc = (struct we_softc *)sc;
 
-	we_readmem(wsc, packet_ptr, (u_int8_t *)packet_hdrp,
+	we_readmem(wsc, packet_ptr, (uint8_t *)packet_hdrp,
 	    sizeof(struct dp8390_ring));
 #if BYTE_ORDER == BIG_ENDIAN
 	packet_hdrp->count = bswap16(packet_hdrp->count);
@@ -499,8 +480,7 @@ we_read_hdr(sc, packet_ptr, packet_hdrp)
 }
 
 static void
-we_recv_int(sc)
-	struct dp8390_softc *sc;
+we_recv_int(struct dp8390_softc *sc)
 {
 	struct we_softc *wsc = (struct we_softc *)sc;
 
@@ -512,9 +492,9 @@ we_recv_int(sc)
 static void
 we_media_init(struct dp8390_softc *sc)
 {
-	struct we_softc *wsc = (void *) sc;
+	struct we_softc *wsc = (struct we_softc *)sc;
 	int defmedia = IFM_ETHER;
-	u_int8_t x;
+	uint8_t x;
 
 	if (sc->is790) {
 		x = bus_space_read_1(wsc->sc_asict, wsc->sc_asich, WE790_HWR);
@@ -536,14 +516,13 @@ we_media_init(struct dp8390_softc *sc)
 	}
 
 	ifmedia_init(&sc->sc_media, 0, dp8390_mediachange, dp8390_mediastatus);
-	ifmedia_add(&sc->sc_media, IFM_ETHER|IFM_10_2, 0, NULL);
-	ifmedia_add(&sc->sc_media, IFM_ETHER|IFM_10_5, 0, NULL);
+	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_10_2, 0, NULL);
+	ifmedia_add(&sc->sc_media, IFM_ETHER | IFM_10_5, 0, NULL);
 	ifmedia_set(&sc->sc_media, defmedia);
 }
 
 static int
-we_mediachange(sc)
-	struct dp8390_softc *sc;
+we_mediachange(struct dp8390_softc *sc)
 {
 
 	/*
@@ -552,13 +531,11 @@ we_mediachange(sc)
 	 * set up in we_init_card() called via dp8390_init().
 	 */
 	dp8390_reset(sc);
-	return (0);
+	return 0;
 }
 
 static void
-we_mediastatus(sc, ifmr)
-	struct dp8390_softc *sc;
-	struct ifmediareq *ifmr;
+we_mediastatus(struct dp8390_softc *sc, struct ifmediareq *ifmr)
 {
 	struct ifmedia *ifm = &sc->sc_media;
 
@@ -569,8 +546,7 @@ we_mediastatus(sc, ifmr)
 }
 
 static void
-we_init_card(sc)
-	struct dp8390_softc *sc;
+we_init_card(struct dp8390_softc *sc)
 {
 	struct we_softc *wsc = (struct we_softc *)sc;
 	struct ifmedia *ifm = &sc->sc_media;
@@ -582,14 +558,12 @@ we_init_card(sc)
 }
 
 static void
-we_set_media(wsc, media)
-	struct we_softc *wsc;
-	int media;
+we_set_media(struct we_softc *wsc, int media)
 {
 	struct dp8390_softc *sc = &wsc->sc_dp8390;
 	bus_space_tag_t asict = wsc->sc_asict;
 	bus_space_handle_t asich = wsc->sc_asich;
-	u_int8_t hwr, gcr, irr;
+	uint8_t hwr, gcr, irr;
 
 	if (sc->is790) {
 		hwr = bus_space_read_1(asict, asich, WE790_HWR);

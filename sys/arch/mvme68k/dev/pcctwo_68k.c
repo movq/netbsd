@@ -1,4 +1,4 @@
-/*	$NetBSD: pcctwo_68k.c,v 1.8 2008/01/12 09:54:24 tsutsui Exp $	*/
+/*	$NetBSD: pcctwo_68k.c,v 1.10 2012/10/27 17:18:04 chs Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	      This product includes software developed by the NetBSD
- *	      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcctwo_68k.c,v 1.8 2008/01/12 09:54:24 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcctwo_68k.c,v 1.10 2012/10/27 17:18:04 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -62,10 +55,10 @@ __KERNEL_RCSID(0, "$NetBSD: pcctwo_68k.c,v 1.8 2008/01/12 09:54:24 tsutsui Exp $
 /*
  * Autoconfiguration stuff.
  */
-void pcctwoattach(struct device *, struct device *, void *);
-int pcctwomatch(struct device *, struct cfdata *, void *);
+void pcctwoattach(device_t, device_t, void *);
+int pcctwomatch(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(pcctwo, sizeof(struct pcctwo_softc),
+CFATTACH_DECL_NEW(pcctwo, sizeof(struct pcctwo_softc),
     pcctwomatch, pcctwoattach, NULL, NULL);
 
 
@@ -150,13 +143,13 @@ static struct evcnt *pcctwoisrevcnt(void *, int);
 
 /* ARGSUSED */
 int
-pcctwomatch(struct device *parent, struct cfdata *cf, void *args)
+pcctwomatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma;
 	bus_space_handle_t bh;
 	uint8_t cid;
 
-	ma = args;
+	ma = aux;
 
 	/* There can be only one. */
 	if (sys_pcctwo || strcmp(ma->ma_name, pcctwo_cd.cd_name))
@@ -186,15 +179,15 @@ pcctwomatch(struct device *parent, struct cfdata *cf, void *args)
 
 /* ARGSUSED */
 void
-pcctwoattach(struct device *parent, struct device *self, void *args)
+pcctwoattach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args *ma;
 	struct pcctwo_softc *sc;
 	const struct pcctwo_device *pd = NULL;
 	uint8_t cid;
 
-	ma = args;
-	sc = sys_pcctwo = (struct pcctwo_softc *)self;
+	sc = sys_pcctwo = device_private(self);
+	ma = aux;
 
 	/* Get a handle to the PCCChip2's registers */
 	sc->sc_bust = ma->ma_bust;

@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.h,v 1.129 2007/11/07 15:56:23 ad Exp $	*/
+/*	$NetBSD: conf.h,v 1.151 2016/12/17 03:46:52 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -44,6 +44,7 @@
  */
 
 #include <sys/queue.h>
+#include <sys/device_if.h>
 
 struct buf;
 struct knote;
@@ -53,7 +54,7 @@ struct uio;
 struct vnode;
 
 /*
- * Types for d_type
+ * Types for d_flag
  */
 #define D_OTHER		0x0000
 #define	D_TAPE		0x0001
@@ -61,6 +62,8 @@ struct vnode;
 #define	D_TTY		0x0003
 #define	D_TYPEMASK	0x00ff
 #define	D_MPSAFE	0x0100
+#define	D_NEGOFFSAFE	0x0200
+#define	D_MCLOSE	0x0400
 
 /*
  * Block device switch table
@@ -72,6 +75,7 @@ struct bdevsw {
 	int		(*d_ioctl)(dev_t, u_long, void *, int, struct lwp *);
 	int		(*d_dump)(dev_t, daddr_t, void *, size_t);
 	int		(*d_psize)(dev_t);
+	int		(*d_discard)(dev_t, off_t, off_t);
 	int		d_flag;
 };
 
@@ -89,18 +93,22 @@ struct cdevsw {
 	int		(*d_poll)(dev_t, int, struct lwp *);
 	paddr_t		(*d_mmap)(dev_t, off_t, int);
 	int		(*d_kqfilter)(dev_t, struct knote *);
+	int		(*d_discard)(dev_t, off_t, off_t);
 	int		d_flag;
 };
 
 #ifdef _KERNEL
 
-int devsw_attach(const char *, const struct bdevsw *, int *,
-		 const struct cdevsw *, int *);
-void devsw_detach(const struct bdevsw *, const struct cdevsw *);
+#include <sys/mutex.h>
+extern kmutex_t device_lock;
+
+int devsw_attach(const char *, const struct bdevsw *, devmajor_t *,
+		 const struct cdevsw *, devmajor_t *);
+int devsw_detach(const struct bdevsw *, const struct cdevsw *);
 const struct bdevsw *bdevsw_lookup(dev_t);
 const struct cdevsw *cdevsw_lookup(dev_t);
-int bdevsw_lookup_major(const struct bdevsw *);
-int cdevsw_lookup_major(const struct cdevsw *);
+devmajor_t bdevsw_lookup_major(const struct bdevsw *);
+devmajor_t cdevsw_lookup_major(const struct cdevsw *);
 
 #define	dev_type_open(n)	int n (dev_t, int, int, struct lwp *)
 #define	dev_type_close(n)	int n (dev_t, int, int, struct lwp *)
@@ -116,6 +124,7 @@ int cdevsw_lookup_major(const struct cdevsw *);
 #define	dev_type_dump(n)	int n (dev_t, daddr_t, void *, size_t)
 #define	dev_type_size(n)	int n (dev_t)
 #define	dev_type_kqfilter(n)	int n (dev_t, struct knote *)
+#define dev_type_discard(n)	int n (dev_t, off_t, off_t)
 
 #define	noopen		((dev_type_open((*)))enodev)
 #define	noclose		((dev_type_close((*)))enodev)
@@ -125,10 +134,11 @@ int cdevsw_lookup_major(const struct cdevsw *);
 #define	nostop		((dev_type_stop((*)))enodev)
 #define	notty		NULL
 #define	nopoll		seltrue
-#define	nommap		((dev_type_mmap((*)))enodev)
+paddr_t	nommap(dev_t, off_t, int);
 #define	nodump		((dev_type_dump((*)))enodev)
 #define	nosize		NULL
 #define	nokqfilter	seltrue_kqfilter
+#define nodiscard	((dev_type_discard((*)))enodev)
 
 #define	nullopen	((dev_type_open((*)))nullop)
 #define	nullclose	((dev_type_close((*)))nullop)
@@ -137,9 +147,9 @@ int cdevsw_lookup_major(const struct cdevsw *);
 #define	nullioctl	((dev_type_ioctl((*)))nullop)
 #define	nullstop	((dev_type_stop((*)))nullop)
 #define	nullpoll	((dev_type_poll((*)))nullop)
-#define	nullmmap	((dev_type_mmap((*)))nullop)
 #define	nulldump	((dev_type_dump((*)))nullop)
 #define	nullkqfilter	((dev_type_kqfilter((*)))eopnotsupp)
+#define nulldiscard	((dev_type_discard((*)))nullop)
 
 /* device access wrappers. */
 
@@ -148,6 +158,8 @@ dev_type_close(bdev_close);
 dev_type_strategy(bdev_strategy);
 dev_type_ioctl(bdev_ioctl);
 dev_type_dump(bdev_dump);
+dev_type_size(bdev_size);
+dev_type_discard(bdev_discard);
 
 dev_type_open(cdev_open);
 dev_type_close(cdev_close);
@@ -159,9 +171,12 @@ dev_type_tty(cdev_tty);
 dev_type_poll(cdev_poll);
 dev_type_mmap(cdev_mmap);
 dev_type_kqfilter(cdev_kqfilter);
+dev_type_discard(cdev_discard);
 
 int	cdev_type(dev_t);
+int	cdev_flags(dev_t);
 int	bdev_type(dev_t);
+int	bdev_flags(dev_t);
 
 /* symbolic sleep message strings */
 extern	const char devopn[], devio[], devwait[], devin[], devout[];
@@ -222,27 +237,46 @@ int	seltrue_kqfilter(dev_t, struct knote *);
 #ifdef COMPAT_16
 #define	_DEV_ZERO_oARM	3	/* reserved: old ARM /dev/zero minor */
 #endif
+#define DEV_FULL	11	/* minor device 11 is '\0'/ENOSPC */
 #define	DEV_ZERO	12	/* minor device 12 is '\0'/rathole */
 
-#endif /* _KERNEL */
+enum devnode_class {
+	DEVNODE_DONTBOTHER,
+	DEVNODE_SINGLE,
+	DEVNODE_VECTOR,
+};
+#define DEVNODE_FLAG_LINKZERO	0x01	/* create name -> name0 link */
+#define DEVNODE_FLAG_ISMINOR0	0x02	/* vector[0] specifies minor */
+#ifdef notyet
+#define DEVNODE_FLAG_ISMINOR1	0x04	/* vector[1] specifies starting minor */
+#endif
 
 struct devsw_conv {
 	const char *d_name;
-	int d_bmajor;
-	int d_cmajor;
+	devmajor_t d_bmajor;
+	devmajor_t d_cmajor;
+
+	/* information about /dev nodes related to the device */
+	enum devnode_class d_class;
+	int d_flags;
+	int d_vectdim[2];
 };
 
-#ifdef _KERNEL
 void devsw_init(void);
-const char *devsw_blk2name(int);
-int devsw_name2blk(const char *, char *, size_t);
+const char *devsw_blk2name(devmajor_t);
+const char *cdevsw_getname(devmajor_t);
+const char *bdevsw_getname(devmajor_t);
+devmajor_t devsw_name2blk(const char *, char *, size_t);
+devmajor_t devsw_name2chr(const char *, char *, size_t);
 dev_t devsw_chr2blk(dev_t);
 dev_t devsw_blk2chr(dev_t);
+
+void mm_init(void);
 #endif /* _KERNEL */
 
 #ifdef _KERNEL
-struct	device;
-void	setroot(struct device *, int);
+void	setroot(device_t, int);
+void	rootconf(void);
 void	swapconf(void);
 #endif /* _KERNEL */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.5 2004/01/05 17:55:48 augustss Exp $	*/
+/*	$NetBSD: parse.c,v 1.10 2017/12/10 20:38:14 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1999, 2001 Lennart Augustsson <augustss@NetBSD.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: parse.c,v 1.5 2004/01/05 17:55:48 augustss Exp $");
+__RCSID("$NetBSD: parse.c,v 1.10 2017/12/10 20:38:14 bouyer Exp $");
 
 #include <assert.h>
 #include <stdlib.h>
@@ -35,7 +35,7 @@ __RCSID("$NetBSD: parse.c,v 1.5 2004/01/05 17:55:48 augustss Exp $");
 #include <sys/time.h>
 
 #include <dev/usb/usb.h>
-#include <dev/usb/usbhid.h>
+#include <dev/hid/hid.h>
 
 #include "usbhid.h"
 #include "usbvar.h"
@@ -50,6 +50,7 @@ struct hid_data {
 	int nusage;
 	int minset;
 	int logminsize;
+	int phyminsize;
 	int multi;
 	int multimax;
 	int kindset;
@@ -174,6 +175,14 @@ hid_get_item_raw(hid_data_t s, hid_item_t *h)
 			else if (s->logminsize == 2)
 				c->logical_minimum =(int16_t)c->logical_minimum;
 		}
+		if (c->physical_minimum >= c->physical_maximum) {
+			if (s->phyminsize == 1)
+				c->physical_minimum =
+					(int8_t)c->physical_minimum;
+			else if (s->phyminsize == 2)
+				c->physical_minimum =
+					(int16_t)c->physical_minimum;
+		}
 		if (s->multi < s->multimax) {
 			c->usage = s->usages[min(s->multi, s->nusage-1)];
 			s->multi++;
@@ -229,7 +238,6 @@ hid_get_item_raw(hid_data_t s, hid_item_t *h)
 		case 2:
 			dval = *data++;
 			dval |= *data++ << 8;
-			dval = /*(int16_t)*/dval;
 			break;
 		case 4:
 			dval = *data++;
@@ -333,13 +341,17 @@ hid_get_item_raw(hid_data_t s, hid_item_t *h)
 				c->logical_maximum = dval;
 				break;
 			case 3:
-				c->physical_maximum = dval;
+				c->physical_minimum = dval;
+				s->phyminsize = bSize;
 				break;
 			case 4:
 				c->physical_maximum = dval;
 				break;
 			case 5:
-				c->unit_exponent = dval;
+				if ( dval > 7 && dval < 0x10)
+					c->unit_exponent = -16 + dval;
+				else
+					c->unit_exponent = dval;
 				break;
 			case 6:
 				c->unit = dval;
@@ -363,6 +375,8 @@ hid_get_item_raw(hid_data_t s, hid_item_t *h)
 				break;
 			case 11: /* Pop */
 				hi = c->next;
+				if (hi == NULL)
+					break;
 				s->cur = *hi;
 				free(hi);
 				break;

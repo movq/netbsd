@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_lwp.c,v 1.16 2007/12/20 23:03:05 dsl Exp $	*/
+/*	$NetBSD: svr4_lwp.c,v 1.20 2017/07/28 16:57:12 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_lwp.c,v 1.16 2007/12/20 23:03:05 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_lwp.c,v 1.20 2017/07/28 16:57:12 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -49,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_lwp.c,v 1.16 2007/12/20 23:03:05 dsl Exp $");
 #include <sys/time.h>
 #include <sys/resourcevar.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/syscallargs.h>
@@ -103,12 +95,11 @@ svr4_sys__lwp_create(struct lwp *l, const struct svr4_sys__lwp_create_args *uap,
 int
 svr4_sys__lwp_kill(struct lwp *l, const struct svr4_sys__lwp_kill_args *uap, register_t *retval)
 {
-	struct sys_kill_args ap;
-	SCARG(&ap, pid) = SCARG(uap, lwpid);
-	SCARG(&ap, signum) = SCARG(uap, signum);
+	struct sys__lwp_kill_args ap;
+	SCARG(&ap, target) = SCARG(uap, lwpid);
+	SCARG(&ap, signo) = SCARG(uap, signum);
 
-	/* XXX NJWLWP */
-	return sys_kill(l, &ap, retval);
+	return sys__lwp_kill(l, &ap, retval);
 }
 
 int
@@ -116,6 +107,8 @@ svr4_sys__lwp_info(struct lwp *l, const struct svr4_sys__lwp_info_args *uap, reg
 {
 	struct svr4_lwpinfo lwpinfo;
 	int error;
+
+	memset(&lwpinfo, 0, sizeof(lwpinfo));
 
 	/* XXX NJWLWP */
 	TIMEVAL_TO_TIMESPEC(&l->l_proc->p_stats->p_ru.ru_stime, &lwpinfo.lwp_stime);

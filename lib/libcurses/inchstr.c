@@ -1,4 +1,4 @@
-/*	$NetBSD: inchstr.c,v 1.2 2002/01/02 10:38:28 blymn Exp $	*/
+/*	$NetBSD: inchstr.c,v 1.7 2017/01/06 13:53:18 roy Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -23,21 +23,21 @@
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY WASABI SYSTEMS, INC. ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL WASABI SYSTEMS, INC. BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * ARE DISCLAIMED. IN NO EVENT SHALL WASABI SYSTEMS, INC. BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: inchstr.c,v 1.2 2002/01/02 10:38:28 blymn Exp $");
+__RCSID("$NetBSD: inchstr.c,v 1.7 2017/01/06 13:53:18 roy Exp $");
 #endif				/* not lint */
 
 #include "curses.h"
@@ -54,12 +54,14 @@ __warn_references(inchstr,
 int
 inchstr(chtype *chstr)
 {
+
 	return winchstr(stdscr, chstr);
 }
 
 int
 inchnstr(chtype *chstr, int n)
 {
+
 	return winchnstr(stdscr, chstr, n);
 }
 
@@ -72,12 +74,14 @@ __warn_references(mvinchstr,
 int
 mvinchstr(int y, int x, chtype *chstr)
 {
+
 	return mvwinchstr(stdscr, y, x, chstr);
 }
 
 int
 mvinchnstr(int y, int x, chtype *chstr, int n)
 {
+
 	return mvwinchnstr(stdscr, y, x, chstr, n);
 }
 
@@ -90,6 +94,7 @@ __warn_references(mvwinchstr,
 int
 mvwinchstr(WINDOW *win, int y, int x, chtype *chstr)
 {
+
 	if (wmove(win, y, x) == ERR)
 		return ERR;
 
@@ -99,6 +104,7 @@ mvwinchstr(WINDOW *win, int y, int x, chtype *chstr)
 int
 mvwinchnstr(WINDOW *win, int y, int x, chtype *chstr, int n)
 {
+
 	if (wmove(win, y, x) == ERR)
 		return ERR;
 
@@ -134,17 +140,22 @@ winchnstr(WINDOW *win, chtype *chstr, int n)
 	if (chstr == NULL)
 		return ERR;
 
-	start = &win->lines[win->cury]->line[win->curx];
+	start = &win->alines[win->cury]->line[win->curx];
 	/* (n - 1) to leave room for the trailing 0 element */
 	if (n < 0 || (n - 1) > win->maxx - win->curx - 1)
 		epos = win->maxx - 1;
 	else
 		/* extra -1 for trailing NUL */
 		epos = win->curx + n -1 - 1;
-	end = &win->lines[win->cury]->line[epos];
+	end = &win->alines[win->cury]->line[epos];
 
 	while (start <= end) {
-		*chstr = start->ch;
+		/* or in the attributes but strip out internal flags */
+#ifdef HAVE_WCHAR
+		*chstr = start->ch | (start->attr & ~__ACS_IS_WACS);
+#else
+		*chstr = start->ch | start->attr;
+#endif
 		chstr++;
 		start++;
 	}

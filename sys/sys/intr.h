@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.6 2007/12/03 17:14:59 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.19 2015/08/17 06:16:03 knakahara Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,9 +32,12 @@
 #ifndef _SYS_INTR_H_
 #define	_SYS_INTR_H_
 
-#include <machine/intr.h>
+#define INTRIDBUF 64
+#define INTRDEVNAMEBUF 256
 
 #ifdef _KERNEL
+
+#include <sys/types.h>
 
 struct cpu_info;
 
@@ -49,6 +45,7 @@ struct cpu_info;
 void	*softint_establish(u_int, void (*)(void *), void *);
 void	softint_disestablish(void *);
 void	softint_schedule(void *);
+void	softint_schedule_cpu(void *, struct cpu_info *);
 
 /* MI hooks. */
 void	softint_init(struct cpu_info *);
@@ -58,7 +55,9 @@ void	softint_block(lwp_t *);
 
 /* MD-MI interface. */
 void	softint_init_md(lwp_t *, u_int, uintptr_t *);
+#ifndef __HAVE_MD_SOFTINT_TRIGGER
 void	softint_trigger(uintptr_t);
+#endif
 void	softint_dispatch(lwp_t *, int);
 
 /* Flags for softint_establish(). */
@@ -67,35 +66,39 @@ void	softint_dispatch(lwp_t *, int);
 #define	SOFTINT_SERIAL	0x0002
 #define	SOFTINT_NET	0x0003
 #define	SOFTINT_MPSAFE	0x0100
+#define	SOFTINT_RCPU	0x0200
+
+/* Implementation private flags. */
+#define	SOFTINT_PENDING	0x1000
+#define	SOFTINT_ACTIVE	0x2000
 
 #define	SOFTINT_COUNT	0x0004
 #define	SOFTINT_LVLMASK	0x00ff
+#define	SOFTINT_IMPMASK	0xf000
 
 extern u_int	softint_timing;
-extern int	safepri;
 
 /*
- * Historical aliases.  XXX Audio devices should run at
- * IPL_SCHED, but they need to acquire kernel_lock.
+ * Historical aliases.
  */
 #define	IPL_BIO		IPL_VM
 #define	IPL_NET		IPL_VM
 #define	IPL_TTY		IPL_VM
-#define	IPL_LPT		IPL_VM
-#define	IPL_AUDIO	IPL_VM
+#define	IPL_AUDIO	IPL_SCHED
 #define	IPL_CLOCK	IPL_SCHED
-#define	IPL_IPI		IPL_HIGH
 #define	IPL_SERIAL	IPL_HIGH
 
 #define	splbio()	splvm()
 #define	splnet()	splvm()
 #define	spltty()	splvm()
-#define	spllpt()	splvm()
-#define	splaudio()	splvm()
+#define	splaudio()	splsched()
 #define	splclock()	splsched()
-#define	splipi()	splhigh()
 #define	splserial()	splhigh()
 
+#include <machine/intr.h>
+
+#elif defined(_KMEMUSER)
+#define	SOFTINT_COUNT	0x0004
 #endif	/* _KERNEL */
 
 #endif	/* _SYS_INTR_H_ */

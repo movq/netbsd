@@ -1,4 +1,4 @@
-/*	$NetBSD: aedvar.h,v 1.3 2002/09/06 13:18:43 gehenna Exp $	*/
+/*	$NetBSD: aedvar.h,v 1.6 2012/10/27 17:18:00 chs Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Bradley A. Grantham.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -40,8 +35,6 @@
 #endif				/* AED_MAX_EVENTS */
 
 struct aed_softc {
-	struct  device  sc_dev;
-
 	struct callout sc_repeat_ch;
 
 	/* ADB info */
@@ -72,4 +65,4 @@ struct aed_softc {
 /* Options */
 #define AED_MSEMUL	0x1		/* emulate mouse buttons */
 
-void	aed_input __P((adb_event_t *event));
+void	aed_input(adb_event_t *event);

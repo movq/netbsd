@@ -1,4 +1,4 @@
-/* $NetBSD: if_tr_mca.c,v 1.16 2006/11/16 01:33:05 christos Exp $ */
+/* $NetBSD: if_tr_mca.c,v 1.24 2016/07/14 04:19:27 msaitoh Exp $ */
 
 /*_
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,28 +15,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_mca.c,v 1.16 2006/11/16 01:33:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_mca.c,v 1.24 2016/07/14 04:19:27 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,10 +61,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_tr_mca.c,v 1.16 2006/11/16 01:33:05 christos Exp 
 #define TR_MBPS_4 0
 #define TR_MBPS_16 1
 
-int	tr_mca_probe(struct device *, struct cfdata *, void *);
-void	tr_mca_attach(struct device *, struct device *, void *);
+int	tr_mca_probe(device_t, cfdata_t, void *);
+void	tr_mca_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(tr_mca, sizeof(struct tr_softc),
+CFATTACH_DECL_NEW(tr_mca, sizeof(struct tr_softc),
     tr_mca_probe, tr_mca_attach, NULL, NULL);
 
 /* supported products */
@@ -85,8 +79,7 @@ static const struct tr_mca_product {
 static const struct tr_mca_product *tr_mca_lookup(int);
 
 static const struct tr_mca_product *
-tr_mca_lookup(id)
-	int id;
+tr_mca_lookup(int id)
 {
 	const struct tr_mca_product *trp;
 
@@ -98,7 +91,7 @@ tr_mca_lookup(id)
 }
 
 int
-tr_mca_probe(struct device *parent, struct cfdata *match,
+tr_mca_probe(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct mca_attach_args *ma = aux;
@@ -111,7 +104,7 @@ tr_mca_probe(struct device *parent, struct cfdata *match,
 
 
 void
-tr_mca_attach(struct device *parent, struct device *self, void *aux)
+tr_mca_attach(device_t parent, device_t self, void *aux)
 {
 	struct tr_softc *sc = device_private(self);
 	struct mca_attach_args *ma = aux;
@@ -124,6 +117,7 @@ tr_mca_attach(struct device *parent, struct device *self, void *aux)
 	pos3 = mca_conf_read(ma->ma_mc, ma->ma_slot, 3);
 	pos4 = mca_conf_read(ma->ma_mc, ma->ma_slot, 4);
 	pos5 = mca_conf_read(ma->ma_mc, ma->ma_slot, 5);
+	__USE(pos5);
 
 	/*
 	 * POS register 2: (adf pos0)
@@ -176,22 +170,23 @@ tr_mca_attach(struct device *parent, struct device *self, void *aux)
 
 	/* map the pio registers */
 	if (bus_space_map(ma->ma_iot, iobase, TR_PIOSIZE, 0, &pioh)) {
-		printf("%s: unable to map PIO space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map PIO space\n");
 		return;
 	}
 
 	/* map the mmio registers */
 	if (bus_space_map(ma->ma_memt, rom_addr, TR_MMIOSIZE, 0, &mmioh)) {
-		printf("%s: unable to map MMIO space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map MMIO space\n");
 		return;
 	}
 
 	/* map the sram space */
 	if (bus_space_map(ma->ma_memt, sram_addr, sram_size, 0, &sramh)) {
-		printf("%s: unable to map SRAM space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map SRAM space\n");
 		return;
 	}
 
+	sc->sc_dev = self;
 	sc->sc_piot = ma->ma_iot;
 	sc->sc_pioh = pioh;
 	sc->sc_memt = ma->ma_memt;
@@ -224,8 +219,8 @@ tr_mca_attach(struct device *parent, struct device *self, void *aux)
 	/* establish interrupt handler */
 	sc->sc_ih = mca_intr_establish(ma->ma_mc, irq, IPL_NET, tr_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt handler\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(self,
+		    "couldn't establish interrupt handler\n");
 		return;
 	}
 

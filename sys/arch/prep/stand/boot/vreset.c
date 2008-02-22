@@ -1,4 +1,4 @@
-/* $NetBSD: vreset.c,v 1.6 2006/06/27 23:26:13 garbled Exp $ */
+/* $NetBSD: vreset.c,v 1.9 2014/04/03 23:49:47 mrg Exp $ */
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -83,7 +76,8 @@ static vga_reg_t CR_regs[CRREGS] = {
 	{ 0x0,	0x61 }, /* 00: horizontal total */
 	{ 0x1,	0x4f }, /* 01: horizontal display-enable end */
 	{ 0x2,	0x50 }, /* 02: start horizontal blanking */
-	{ 0x3,	0x82 }, /* 03: display skew control / end horizontal blanking */	{ 0x4,	0x55 }, /* 04: start horizontal retrace pulse */
+	{ 0x3,	0x82 }, /* 03: display skew control / end horizontal blanking */
+	{ 0x4,	0x55 }, /* 04: start horizontal retrace pulse */
 	{ 0x5,	0x81 }, /* 05: horizontal retrace delay / end horiz. retrace */
 	{ 0x6,	0xf0 }, /* 06: vertical total */
 	{ 0x7,	0x1f }, /* 07: overflow register */
@@ -240,9 +234,8 @@ vga_reset(u_char *ISA_mem)
 static void
 write_attr(u_int8_t index, u_int8_t data, u_int8_t videoOn)
 {
-	u_int8_t v;
 
-	v = inb(0x3da);		/* reset attr addr toggle */
+	(void)inb(0x3da);	/* reset attr addr toggle */
 	if (videoOn)
 		outb(0x3c0, (index & 0x1F) | 0x20);
 	else

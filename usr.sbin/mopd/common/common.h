@@ -1,4 +1,4 @@
-/*	$NetBSD: common.h,v 1.6 2002/06/06 22:52:25 thorpej Exp $	*/
+/*	$NetBSD: common.h,v 1.9 2011/08/30 19:49:10 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +23,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- *	$NetBSD: common.h,v 1.6 2002/06/06 22:52:25 thorpej Exp $
+ *	$NetBSD: common.h,v 1.9 2011/08/30 19:49:10 joerg Exp $
  *
  */
 
@@ -58,11 +53,11 @@ struct if_info {
 	int	trans;			/* Transport type Ethernet/802.3   */
 	u_char	eaddr[6];		/* Ethernet addr of this interface */
 	char	if_name[IFNAME_SIZE];	/* Interface Name		   */
-	int	(*iopen) __P((char *, int, u_short, int));
+	int	(*iopen)(const char *, int, u_short, int);
 					/* Interface Open Routine	   */
-	int	(*write) __P((int, u_char *, int, int));
+	int	(*write)(int, const u_char *, int, int);
 					/* Interface Write Routine	   */
-	void	(*read) __P((void));	/* Interface Read Routine          */
+	void	(*read)(void);	/* Interface Read Routine          */
 	struct if_info *next;		/* Next Interface		   */
 };
 

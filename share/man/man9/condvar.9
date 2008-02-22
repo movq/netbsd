@@ -1,4 +1,4 @@
-.\"	$NetBSD: condvar.9,v 1.10 2008/01/26 14:16:27 wiz Exp $
+.\"	$NetBSD: condvar.9,v 1.19 2017/11/13 09:09:28 wiz Exp $
 .\"
 .\" Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 26, 2008
+.Dd November 12, 2017
 .Dt CONDVAR 9
 .Os
 .Sh NAME
@@ -46,6 +39,8 @@
 .Nm cv_wait_sig ,
 .Nm cv_timedwait ,
 .Nm cv_timedwait_sig ,
+.Nm cv_timedwaitbt ,
+.Nm cv_timedwaitbt_sig ,
 .Nm cv_signal ,
 .Nm cv_broadcast ,
 .Nm cv_has_waiters
@@ -64,12 +59,21 @@
 .Fn cv_timedwait "kcondvar_t *cv" "kmutex_t *mtx" "int ticks"
 .Ft int
 .Fn cv_timedwait_sig "kcondvar_t *cv" "kmutex_t *mtx" "int ticks"
+.Ft int
+.Fn cv_timedwaitbt "kcondvar_t *cv" "kmutex_t *mtx" "struct bintime *bt" \
+"const struct bintime *epsilon"
+.Ft int
+.Fn cv_timedwaitbt_sig "kcondvar_t *cv" "kmutex_t *mtx" "struct bintime *bt" \
+"const struct bintime *epsilon"
 .Ft void
 .Fn cv_signal "kcondvar_t *cv"
 .Ft void
 .Fn cv_broadcast "kcondvar_t *cv"
 .Ft bool
 .Fn cv_has_waiters "kcondvar_t *cv"
+.Pp
+.Cd "options DIAGNOSTIC"
+.Cd "options LOCKDEBUG"
 .Sh DESCRIPTION
 Condition variables (CVs) are used in the kernel to synchronize access
 to resources that are limited (for example, memory) and to wait for
@@ -80,6 +84,20 @@ The
 type provides storage for the CV object.
 This should be treated as an opaque object and not examined directly by
 consumers.
+.Sh OPTIONS
+.Bl -tag -width abcd
+.It Cd "options DIAGNOSTIC"
+.Pp
+Kernels compiled with the
+.Dv DIAGNOSTIC
+option perform basic sanity checks on CV operations.
+.It Cd "options LOCKDEBUG"
+.Pp
+Kernels compiled with the
+.Dv LOCKDEBUG
+option perform potentially CPU intensive sanity checks
+on CV operations.
+.El
 .Sh FUNCTIONS
 .Bl -tag -width abcd
 .It Fn cv_init "cv" "wmesg"
@@ -121,7 +139,7 @@ A small window exists between testing for availability of a resource and
 waiting for the resource with
 .Fn cv_wait ,
 in which the resource may become available again.
-The interlock is used to guarentee that the resource will not be signalled
+The interlock is used to guarantee that the resource will not be signalled
 as available until the calling LWP has begun to wait for it.
 .Pp
 Non-interruptable waits have the potential to deadlock the system, and so must
@@ -131,7 +149,7 @@ be kept short (typically, under one second).
 As per
 .Fn cv_wait ,
 but causes the current LWP to wait interruptably.
-If the LWP recieves a signal, or is interrupted by another condition such
+If the LWP receives a signal, or is interrupted by another condition such
 as its containing process exiting, the wait is ended early and an error
 code returned.
 .Pp
@@ -182,6 +200,31 @@ As per
 but also accepts a timeout value and will return
 .Er EWOULDBLOCK
 if the timeout expires.
+.It Fn cv_timedwaitbt "cv" "mtx" "bt" "epsilon"
+.It Fn cv_timedwaitbt_sig "cv" "mtx" "bt" "epsilon"
+.Pp
+Similar to
+.Fn cv_timedwait
+and
+.Fn cv_timedwait_sig ,
+but
+.Fa bt
+is decremented in place with the amount of time actually waited, and on
+return contains the amount of time remaining, possibly negative if the
+timeout expired.
+.Pp
+The hint
+.Fa epsilon
+requests that the wakeup not be delayed more than
+.Fa bt Li "+" Fa epsilon ,
+so that the system can coalesce multiple wakeups within their
+respective epsilons into a single high-resolution clock interrupt or
+choose to use cheaper low-resolution clock interrupts instead.
+.Pp
+However, the system is still limited by its best clock interrupt
+resolution and by scheduling competition, which may delay the wakeup by
+more than
+.Fa bt Li "+" Fa epsilon .
 .It Fn cv_signal "cv"
 .Pp
 Awaken one LWP (potentially among many) that is waiting on the specified
@@ -227,36 +270,43 @@ Consuming a resource:
 	 * Lock the resource.  Its mutex will also serve as the
 	 * interlock.
 	 */
-	mutex_enter(\*[Am]res-\*[Gt]mutex);
+	mutex_enter(&res->mutex);
 
 	/*
-	 * Wait for the resource to become available.
+	 * Wait for the resource to become available.  Timeout after
+	 * five seconds.  If the resource is not available within the
+	 * alloted time, return an error.
 	 */
-	while (res-\*[Gt]state == BUSY)
-		cv_wait(\*[Am]res-\*[Gt]condvar, \*[Am]res-\*[Gt]mutex);
+	struct bintime timeout = { .sec = 5, .frac = 0 };
+	const struct bintime epsilon = { .sec = 1, .frac = 0 };
+	while (res->state == BUSY) {
+		error = cv_timedwaitbt(&res->condvar, \\
+		    &res->mutex, &timeout, &epsilon);
+		if (error) {
+			KASSERT(error == EWOULDBLOCK);
+			if (res->state != BUSY)
+				break;
+			mutex_exit(&res->mutex);
+			return ETIMEDOUT;
+		}
+	}
 
 	/*
 	 * It's now available to us.  Take ownership of the
 	 * resource, and consume it.
 	 */
-	res-\*[Gt]state = BUSY;
-	mutex_exit(\*[Am]res-\*[Gt]mutex);
+	res->state = BUSY;
+	mutex_exit(&res->mutex);
 	consume(res);
 
 Releasing a resource for the next consumer to use:
 
-	mutex_enter(\*[Am]res-\*[Gt]mutex);
-	res-\*[Gt]state = IDLE;
-	cv_signal(\*[Am]res-\*[Gt]condvar);
-	mutex_exit(\*[Am]res-\*[Gt]mutex);
+	mutex_enter(&res->mutex);
+	res->state = IDLE;
+	cv_signal(&res->condvar);
+	mutex_exit(&res->mutex);
 .Ed
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where code implementing condition variables can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The core of the CV implementation is in
 .Pa sys/kern/kern_condvar.c .
 .Pp
@@ -265,8 +315,8 @@ The header file
 describes the public interface.
 .Sh SEE ALSO
 .Xr sigaction 2 ,
+.Xr membar_ops 3 ,
 .Xr errno 9 ,
-.Xr mb 9 ,
 .Xr mstohz 9 ,
 .Xr mutex 9 ,
 .Xr rwlock 9
@@ -282,3 +332,9 @@ describes the public interface.
 .Sh HISTORY
 The CV primitives first appeared in
 .Nx 5.0 .
+The
+.Fn cv_timedwaitbt
+and
+.Fn cv_timedwaitbt_sig
+primitives first appeared in
+.Nx 9.0 .

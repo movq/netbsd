@@ -1,4 +1,4 @@
-/*	$NetBSD: bivideo.c,v 1.27 2007/10/19 11:59:42 ad Exp $	*/
+/*	$NetBSD: bivideo.c,v 1.34 2017/06/13 19:13:55 spz Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bivideo.c,v 1.27 2007/10/19 11:59:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bivideo.c,v 1.34 2017/06/13 19:13:55 spz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_hpcfb.h"
@@ -47,8 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: bivideo.c,v 1.27 2007/10/19 11:59:42 ad Exp $");
 #include <sys/buf.h>
 #include <sys/ioctl.h>
 #include <sys/reboot.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
 #include <machine/autoconf.h>
@@ -79,16 +77,14 @@ int bivideo_dont_attach = 0;
 /*
  *  function prototypes
  */
-int	bivideomatch(struct device *, struct cfdata *, void *);
-void	bivideoattach(struct device *, struct device *, void *);
+int	bivideomatch(device_t, cfdata_t, void *);
+void	bivideoattach(device_t, device_t, void *);
 int	bivideo_ioctl(void *, u_long, void *, int, struct lwp *);
 paddr_t	bivideo_mmap(void *, off_t, int);
 
 struct bivideo_softc {
-	struct device		sc_dev;
 	struct hpcfb_fbconf	sc_fbconf;
 	struct hpcfb_dspconf	sc_dspconf;
-	void			*sc_powerhook;	/* power management hook */
 	int			sc_powerstate;
 #define PWRSTAT_SUSPEND		(1<<0)
 #define PWRSTAT_VIDEOOFF	(1<<1)
@@ -110,6 +106,8 @@ struct bivideo_softc {
 static int bivideo_init(struct hpcfb_fbconf *);
 static void bivideo_power(int, void *);
 static void bivideo_update_powerstate(struct bivideo_softc *, int);
+static bool bivideo_suspend(device_t, const pmf_qual_t *);
+static bool bivideo_resume(device_t, const pmf_qual_t *);
 void	bivideo_init_backlight(struct bivideo_softc *, int);
 void	bivideo_init_brightness(struct bivideo_softc *, int);
 void	bivideo_init_contrast(struct bivideo_softc *, int);
@@ -126,7 +124,7 @@ void	bivideo_set_contrast(struct bivideo_softc *, int);
 /*
  *  static variables
  */
-CFATTACH_DECL(bivideo, sizeof(struct bivideo_softc),
+CFATTACH_DECL_NEW(bivideo, sizeof(struct bivideo_softc),
     bivideomatch, bivideoattach, NULL, NULL);
 
 struct hpcfb_accessops bivideo_ha = {
@@ -140,7 +138,7 @@ static int attach_flag = 0;
  *  function bodies
  */
 int
-bivideomatch(struct device *parent, struct cfdata *match, void *aux)
+bivideomatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -152,7 +150,7 @@ bivideomatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-bivideoattach(struct device *parent, struct device *self, void *aux)
+bivideoattach(device_t parent, device_t self, void *aux)
 {
 	struct bivideo_softc *sc = device_private(self);
 	struct hpcfb_attach_args ha;
@@ -174,15 +172,12 @@ bivideoattach(struct device *parent, struct device *self, void *aux)
 	}
 	printf("\n");
 	printf("%s: framebuffer address: 0x%08lx\n",
-		sc->sc_dev.dv_xname, (u_long)bootinfo->fb_addr);
+		device_xname(self), (u_long)bootinfo->fb_addr);
 
 	/* Add a suspend hook to power saving */
 	sc->sc_powerstate = 0;
-	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
-	    bivideo_power, sc);
-	if (sc->sc_powerhook == NULL)
-		printf("%s: WARNING: unable to establish power hook\n",
-			sc->sc_dev.dv_xname);
+	if (!pmf_device_register(self, bivideo_suspend, bivideo_resume))
+		aprint_error_dev(self, "unable to establish power handler\n");
 
 	/* initialize backlight brightness and lcd contrast */
 	sc->sc_lcd_inited = 0;
@@ -373,6 +368,24 @@ bivideo_update_powerstate(struct bivideo_softc *sc, int updates)
 			     (sc->sc_powerstate & PWRSTAT_BACKLIGHT)));
 }
 
+static bool
+bivideo_suspend(device_t self, const pmf_qual_t *qual)
+{
+	struct bivideo_softc *sc = device_private(self);
+
+	bivideo_power(PWR_SUSPEND, sc);
+	return true;
+}
+
+static bool
+bivideo_resume(device_t self, const pmf_qual_t *qual)
+{
+	struct bivideo_softc *sc = device_private(self);
+
+	bivideo_power(PWR_RESUME, sc);
+	return true;
+}
+
 int
 bivideo_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
@@ -389,8 +402,8 @@ bivideo_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 
 		if (sc->sc_fbconf.hf_class != HPCFB_CLASS_INDEXCOLOR ||
 		    sc->sc_fbconf.hf_pack_width != 8 ||
-		    256 <= cmap->index ||
-		    256 < (cmap->index + cmap->count))
+		    cmap->index >= 256 ||
+		    cmap->count > 256 - cmap->index)
 			return (EINVAL);
 
 		error = copyout(&bivideo_cmap_r[cmap->index], cmap->red,

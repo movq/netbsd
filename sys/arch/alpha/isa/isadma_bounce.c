@@ -1,4 +1,4 @@
-/* $NetBSD: isadma_bounce.c,v 1.7 2007/03/04 16:01:18 yamt Exp $ */
+/* $NetBSD: isadma_bounce.c,v 1.13 2016/02/29 15:28:35 christos Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: isadma_bounce.c,v 1.7 2007/03/04 16:01:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isadma_bounce.c,v 1.13 2016/02/29 15:28:35 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,12 +43,10 @@ __KERNEL_RCSID(0, "$NetBSD: isadma_bounce.c,v 1.7 2007/03/04 16:01:18 yamt Exp $
 #include <sys/mbuf.h>
 
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
-
-#include <uvm/uvm_extern.h>
 
 extern	paddr_t avail_end;
 
@@ -95,9 +86,9 @@ struct isadma_bounce_cookie {
 #define	ID_BUFTYPE_UIO		3
 #define	ID_BUFTYPE_RAW		4
 
-int	isadma_bounce_alloc_bouncebuf __P((bus_dma_tag_t, bus_dmamap_t,
-	    bus_size_t, int));
-void	isadma_bounce_free_bouncebuf __P((bus_dma_tag_t, bus_dmamap_t));
+int	isadma_bounce_alloc_bouncebuf(bus_dma_tag_t, bus_dmamap_t,
+	    bus_size_t, int);
+void	isadma_bounce_free_bouncebuf(bus_dma_tag_t, bus_dmamap_t);
 
 /*
  * Create an ISA DMA map.
@@ -222,8 +213,7 @@ isadma_bounce_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	 * and we can bounce, we will.
 	 */
 	error = _bus_dmamap_load_direct(t, map, buf, buflen, p, flags);
-	if (error == 0 ||
-	    (error != 0 && (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0))
+	if (error == 0 || (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0)
 		return (error);
 
 	/*
@@ -269,7 +259,7 @@ isadma_bounce_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
  */
 int
 isadma_bounce_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map,
-    struct mbuf *m0, int flags)  
+    struct mbuf *m0, int flags)
 {
 	struct isadma_bounce_cookie *cookie = map->_dm_cookie;
 	int error;
@@ -293,8 +283,7 @@ isadma_bounce_dmamap_load_mbuf(bus_dma_tag_t t, bus_dmamap_t map,
 	 * and we can bounce, we will.
 	 */
 	error = _bus_dmamap_load_mbuf_direct(t, map, m0, flags);
-	if (error == 0 ||
-	    (error != 0 && (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0))
+	if (error == 0 || (cookie->id_flags & ID_MIGHT_NEED_BOUNCE) == 0)
 		return (error);
 
 	/*

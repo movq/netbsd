@@ -1,4 +1,4 @@
-/*	$NetBSD: shutdown.c,v 1.50 2008/02/09 04:09:22 dholland Exp $	*/
+/*	$NetBSD: shutdown.c,v 1.57 2017/08/07 22:08:12 uwe Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)shutdown.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: shutdown.c,v 1.50 2008/02/09 04:09:22 dholland Exp $");
+__RCSID("$NetBSD: shutdown.c,v 1.57 2017/08/07 22:08:12 uwe Exp $");
 #endif
 #endif /* not lint */
 
@@ -91,6 +91,7 @@ static time_t offset, shuttime;
 static int dofast, dohalt, doreboot, killflg, nofork, nosync, dodump;
 static size_t mbuflen;
 static int dopowerdown;
+static int dodebug, dosilent, doverbose;
 static const char *whom;
 static char mbuf[BUFSIZ];
 static char *bootstr;
@@ -98,12 +99,12 @@ static char *bootstr;
 static void badtime(void) __dead;
 static void die_you_gravy_sucking_pig_dog(void) __dead;
 static void doitfast(void);
-void dorcshutdown(void);
+static void dorcshutdown(void);
 static void finish(int) __dead;
 static void getoffset(char *);
-static void loop(void);
+static void loop(void) __dead;
 static void nolog(void);
-static void timeout(int);
+static void timeout(int) __dead;
 static void timewarn(time_t);
 static void usage(void) __dead;
 
@@ -120,7 +121,7 @@ main(int argc, char *argv[])
 	if (geteuid())
 		errx(1, "%s: Not super-user", strerror(EPERM));
 #endif
-	while ((ch = getopt(argc, argv, "b:Ddfhknpr")) != -1)
+	while ((ch = getopt(argc, argv, "b:Ddfhknprvxz")) != -1)
 		switch (ch) {
 		case 'b':
 			bootstr = optarg;
@@ -148,6 +149,15 @@ main(int argc, char *argv[])
 			break;
 		case 'r':
 			doreboot = 1;
+			break;
+		case 'v':
+			doverbose = 1;
+			break;
+		case 'x':
+			dodebug = 1;
+			break;
+		case 'z':
+			dosilent = 1;
 			break;
 		case '?':
 		default:
@@ -240,7 +250,7 @@ main(int argc, char *argv[])
 #endif
 }
 
-void
+static void
 loop(void)
 {
 	const struct interval *tp;
@@ -284,7 +294,7 @@ loop(void)
 
 static jmp_buf alarmbuf;
 
-void
+static void
 timewarn(time_t timeleft)
 {
 	static int first;
@@ -321,7 +331,7 @@ timewarn(time_t timeleft)
 		(void)fprintf(pf, "System going down IMMEDIATELY\n\n");
 
 	if (mbuflen)
-		(void)fwrite(mbuf, sizeof(*mbuf), mbuflen, pf);
+		(void)fwrite(mbuf, 1, mbuflen, pf);
 
 	/*
 	 * play some games, just in case wall doesn't come back
@@ -370,7 +380,7 @@ die_you_gravy_sucking_pig_dog(void)
 		doitfast();
 	dorcshutdown();
 	if (doreboot || dohalt) {
-		const char *args[16];
+		const char *args[20];
 		const char **arg, *path;
 #ifndef DEBUG
 		int serrno;
@@ -384,6 +394,12 @@ die_you_gravy_sucking_pig_dog(void)
 			path = _PATH_HALT;
 			*arg++ = "halt";
 		}
+		if (doverbose)
+			*arg++ = "-v";
+		if (dodebug)
+			*arg++ = "-x";
+		if (dosilent)
+			*arg++ = "-z";
 		if (dodump)
 			*arg++ = "-d";
 		if (nosync)
@@ -393,8 +409,9 @@ die_you_gravy_sucking_pig_dog(void)
 		*arg++ = "-l";
 		if (bootstr)
 			*arg++ = bootstr;
-		*arg++ = 0;
+		*arg++ = NULL;
 #ifndef DEBUG
+		(void)unlink(_PATH_NOLOGIN);
 		(void)execve(path, __UNCONST(args), NULL);
 		serrno = errno;
 		syslog(LOG_ERR, "Can't exec `%s' (%m)", path);
@@ -418,7 +435,7 @@ die_you_gravy_sucking_pig_dog(void)
 
 #define	ATOI2(s)	((s) += 2, ((s)[-2] - '0') * 10 + ((s)[-1] - '0'))
 
-void
+static void
 getoffset(char *timearg)
 {
 	struct tm *lt;
@@ -498,7 +515,7 @@ getoffset(char *timearg)
 		errx(1, "time is already past");
 }
 
-void
+static void
 dorcshutdown(void)
 {
 	(void)printf("\r\nAbout to run shutdown hooks...\r\n");
@@ -511,7 +528,7 @@ dorcshutdown(void)
 }
 
 #define	FSMSG	"fastboot file for fsck\n"
-void
+static void
 doitfast(void)
 {
 	int fastfd;
@@ -524,7 +541,7 @@ doitfast(void)
 }
 
 #define	NOMSG	"\n\nNO LOGINS: System going down at "
-void
+static void
 nolog(void)
 {
 	int logfd;
@@ -569,7 +586,7 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "Usage: %s [-Ddfhknpr] time [message ... | -]\n",
+	    "Usage: %s [-Ddfhknprvxz] [-b bootstr] time [message ... | -]\n",
 	    getprogname());
 	exit(1);
 }

@@ -1,4 +1,4 @@
-# $NetBSD: md.sgimips,v 1.7 2004/09/29 04:59:05 sekiya Exp $
+# $NetBSD: md.sgimips,v 1.11 2014/08/06 12:15:01 martin Exp $
 ./usr/mdec/aoutboot				base-sysutil-bin
 ./usr/mdec/ip2xboot				base-sysutil-bin
 ./usr/mdec/ip30boot				base-sysutil-bin

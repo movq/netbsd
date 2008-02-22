@@ -1,4 +1,4 @@
-/*	$NetBSD: in_pcb_hdr.h,v 1.5 2007/03/04 06:03:20 christos Exp $	*/
+/*	$NetBSD: in_pcb_hdr.h,v 1.13 2017/06/02 03:41:20 ozaki-r Exp $	*/
 
 /*
  * Copyright (C) 2003 WIDE Project.
@@ -73,23 +73,47 @@ struct inpcbpolicy;
 struct inpcb_hdr {
 	LIST_ENTRY(inpcb_hdr) inph_hash;
 	LIST_ENTRY(inpcb_hdr) inph_lhash;
-	CIRCLEQ_ENTRY(inpcb_hdr) inph_queue;
+	TAILQ_ENTRY(inpcb_hdr) inph_queue;
 	int	  inph_af;		/* address family - AF_INET */
 	void *	  inph_ppcb;		/* pointer to per-protocol pcb */
 	int	  inph_state;		/* bind/connect state */
+	int       inph_portalgo;
 	struct	  socket *inph_socket;	/* back pointer to socket */
 	struct	  inpcbtable *inph_table;
-#if 1 /* IPSEC */
 	struct	  inpcbpolicy *inph_sp;	/* security policy */
-#endif
 };
 
 #define	sotoinpcb_hdr(so)	((struct inpcb_hdr *)(so)->so_pcb)
+#define	inph_locked(inph)	(solocked((inph)->inph_socket))
 
 LIST_HEAD(inpcbhead, inpcb_hdr);
 
+struct vestigial_inpcb;
+struct in6_addr;
+
+/* Hooks for vestigial pcb entries.
+ * If vestigial entries exist for a table (TCP only)
+ * the vestigial pointer is set.
+ */
+typedef struct vestigial_hooks {
+	/* IPv4 hooks */
+	void	*(*init_ports4)(struct in_addr, u_int, int);
+	int	(*next_port4)(void *, struct vestigial_inpcb *);
+	int	(*lookup4)(struct in_addr, uint16_t,
+			   struct in_addr, uint16_t,
+			   struct vestigial_inpcb *);
+	/* IPv6 hooks */
+	void	*(*init_ports6)(const struct in6_addr*, u_int, int);
+	int	(*next_port6)(void *, struct vestigial_inpcb *);
+	int	(*lookup6)(const struct in6_addr *, uint16_t,
+			   const struct in6_addr *, uint16_t,
+			   struct vestigial_inpcb *);
+} vestigial_hooks_t;
+
+TAILQ_HEAD(inpcbqueue, inpcb_hdr);
+
 struct inpcbtable {
-	CIRCLEQ_HEAD(, inpcb_hdr) inpt_queue;
+	struct	  inpcbqueue inpt_queue;
 	struct	  inpcbhead *inpt_porthashtbl;
 	struct	  inpcbhead *inpt_bindhashtbl;
 	struct	  inpcbhead *inpt_connecthashtbl;
@@ -98,6 +122,8 @@ struct inpcbtable {
 	u_long	  inpt_connecthash;
 	u_int16_t inpt_lastport;
 	u_int16_t inpt_lastlow;
+
+	vestigial_hooks_t *vestige;
 };
 #define inpt_lasthi inpt_lastport
 

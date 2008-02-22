@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.15 2007/11/29 00:14:27 ad Exp $	*/
+/*	$NetBSD: lock.h,v 1.20 2017/09/17 00:01:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,14 +39,16 @@
 #ifndef _MIPS_LOCK_H_
 #define	_MIPS_LOCK_H_
 
+#include <sys/param.h>
+
 static __inline int
-__SIMPLELOCK_LOCKED_P(__cpu_simple_lock_t *__ptr)
+__SIMPLELOCK_LOCKED_P(const __cpu_simple_lock_t *__ptr)
 {
-	return *__ptr == __SIMPLELOCK_LOCKED;
+	return *__ptr != __SIMPLELOCK_UNLOCKED;
 }
 
 static __inline int
-__SIMPLELOCK_UNLOCKED_P(__cpu_simple_lock_t *__ptr)
+__SIMPLELOCK_UNLOCKED_P(const __cpu_simple_lock_t *__ptr)
 {
 	return *__ptr == __SIMPLELOCK_UNLOCKED;
 }
@@ -70,7 +65,7 @@ __cpu_simple_lock_set(__cpu_simple_lock_t *__ptr)
 	*__ptr = __SIMPLELOCK_LOCKED;
 }
 
-#ifndef _KERNEL
+#ifndef _HARDKERNEL
 
 static __inline int
 __cpu_simple_lock_try(__cpu_simple_lock_t *lp)
@@ -147,9 +142,11 @@ mb_memory(void)
 }
 #endif	/* MIPS1 */
 
-#else	/* !_KERNEL */
+#else	/* !_HARDKERNEL */
 
-unsigned _atomic_cas_uint(volatile unsigned *, unsigned, unsigned);
+u_int	_atomic_cas_uint(volatile u_int *, u_int, u_int);
+u_long	_atomic_cas_ulong(volatile u_long *, u_long, u_long);
+void *	_atomic_cas_ptr(volatile void *, void *, void *);
 void	mb_read(void);
 void	mb_write(void);
 void	mb_memory(void);
@@ -158,12 +155,12 @@ static __inline int
 __cpu_simple_lock_try(__cpu_simple_lock_t *lp)
 {
 
-	return _atomic_cas_uint((volatile unsigned *)lp,
+	return _atomic_cas_uint(lp,
 	    __SIMPLELOCK_UNLOCKED, __SIMPLELOCK_LOCKED) ==
 	    __SIMPLELOCK_UNLOCKED;
 }
 
-#endif	/* _KERNEL */
+#endif	/* _HARDKERNEL */
 
 static __inline void
 __cpu_simple_lock_init(__cpu_simple_lock_t *lp)
@@ -177,17 +174,23 @@ static __inline void
 __cpu_simple_lock(__cpu_simple_lock_t *lp)
 {
 
-	while (!__cpu_simple_lock_try(lp))
+	while (!__cpu_simple_lock_try(lp)) {
 		while (*lp == __SIMPLELOCK_LOCKED)
 			/* spin */;
+	}
 }
 
 static __inline void
 __cpu_simple_unlock(__cpu_simple_lock_t *lp)
 {
 
+#ifndef _MIPS_ARCH_OCTEONP
 	mb_memory();
+#endif
 	*lp = __SIMPLELOCK_UNLOCKED;
+#ifdef _MIPS_ARCH_OCTEONP
+	mb_write();
+#endif
 }
 
 #endif /* _MIPS_LOCK_H_ */

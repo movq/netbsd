@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.16 2006/07/18 12:21:42 tsutsui Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.20 2018/01/20 13:56:08 skrll Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.16 2006/07/18 12:21:42 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.20 2018/01/20 13:56:08 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,42 +38,44 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.16 2006/07/18 12:21:42 tsutsui Exp $")
 
 #include "locators.h"
 
-static int	mainbus_match(struct device *, struct cfdata *, void *);
-static void	mainbus_attach(struct device *, struct device *, void *);
-static int	mainbus_search(struct device *, struct cfdata *,
+static int	mainbus_match(device_t, cfdata_t, void *);
+static void	mainbus_attach(device_t, device_t, void *);
+static int	mainbus_search(device_t, cfdata_t,
 			       const int *, void *);
 int		mainbus_print(void *, const char *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
+extern struct mips_bus_space cobalt_bs;
+
 static int
-mainbus_match(struct device *parent, struct cfdata *match, void *aux)
+mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return 1;
 }
 
 static void
-mainbus_attach(struct device *parent, struct device *self, void *aux)
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args ma;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	config_search_ia(mainbus_search, self, "mainbus", &ma);
 }
 
 static int
-mainbus_search(struct device *parent, struct cfdata *cf, const int *ldesc,
-    void *aux)
+mainbus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
 	do {
 		ma->ma_addr = cf->cf_loc[MAINBUSCF_ADDR];
-		ma->ma_iot = 0;
+		ma->ma_iot = &cobalt_bs;
 		ma->ma_level = cf->cf_loc[MAINBUSCF_LEVEL];
+		ma->ma_irq = cf->cf_loc[MAINBUSCF_IRQ];
 		if (config_match(parent, cf, ma) > 0)
 			config_attach(parent, cf, ma, mainbus_print);
 	} while (cf->cf_fstate == FSTATE_STAR);
@@ -90,9 +92,11 @@ mainbus_print(void *aux, const char *pnp)
 		return QUIET;
 
 	if (ma->ma_addr != MAINBUSCF_ADDR_DEFAULT)
-		aprint_normal(" addr 0x%lx", ma->ma_addr);
+		aprint_normal(" addr 0x%"PRIxBUSADDR, ma->ma_addr);
 	if (ma->ma_level != MAINBUSCF_LEVEL_DEFAULT)
 		aprint_normal(" level %d", ma->ma_level);
+	if (ma->ma_irq != MAINBUSCF_IRQ_DEFAULT)
+		aprint_normal(" irq %d", ma->ma_irq);
 
 	return UNCONF;
 }

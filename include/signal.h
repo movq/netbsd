@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.48 2006/01/07 20:10:29 kleink Exp $	*/
+/*	$NetBSD: signal.h,v 1.56 2017/05/09 11:14:16 kre Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -56,6 +56,13 @@ extern const int sys_nsig __RENAME(__sys_nsig14);
 
 __BEGIN_DECLS
 int	raise(int);
+
+#if defined(_NETBSD_SOURCE)
+const char *signalname(int);
+int signalnext(int);
+int signalnumber(const char *);
+#endif
+
 #if defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || \
     defined(_NETBSD_SOURCE)
 int	kill(pid_t, int);
@@ -87,60 +94,70 @@ int	sigprocmask(int, const sigset_t * __restrict, sigset_t * __restrict)
     __RENAME(__sigprocmask14);
 int	sigsuspend(const sigset_t *) __RENAME(__sigsuspend14);
 
-#if (defined(__GNUC__) && defined(__STDC__)) || defined(_SIGINLINE)
-#ifndef errno
+#if defined(__c99inline) || defined(__SIGSETOPS_BODY)
+
+#if defined(__SIGSETOPS_BODY)
+#undef	__c99inline
+#define	__c99inline
+#endif
+
+/* note: this appears in both errno.h and signal.h */
+#ifndef __errno
 int *__errno(void);
-#define errno (*__errno())
+#define __errno __errno
 #endif
-#ifndef _SIGINLINE
-#define _SIGINLINE extern __inline
+
+/* the same as "errno" - but signal.h is not allowed to define that */
+#ifndef ___errno
+#define ___errno (*__errno())
 #endif
-_SIGINLINE int
+
+__c99inline int
 sigaddset(sigset_t *set, int signo)
 {
 	if (signo <= 0 || signo >= _NSIG) {
-		errno = 22;			/* EINVAL */
+		___errno = 22;			/* EINVAL */
 		return (-1);
 	}
 	__sigaddset(set, signo);
 	return (0);
 }
 
-_SIGINLINE int
+__c99inline int
 sigdelset(sigset_t *set, int signo)
 {
 	if (signo <= 0 || signo >= _NSIG) {
-		errno = 22;			/* EINVAL */
+		___errno = 22;			/* EINVAL */
 		return (-1);
 	}
 	__sigdelset(set, signo);
 	return (0);
 }
 
-_SIGINLINE int
+__c99inline int
 sigismember(const sigset_t *set, int signo)
 {
 	if (signo <= 0 || signo >= _NSIG) {
-		errno = 22;			/* EINVAL */
+		___errno = 22;			/* EINVAL */
 		return (-1);
 	}
 	return (__sigismember(set, signo));
 }
 
-_SIGINLINE int
+__c99inline int
 sigemptyset(sigset_t *set)
 {
 	__sigemptyset(set);
 	return (0);
 }
 
-_SIGINLINE int
+__c99inline int
 sigfillset(sigset_t *set)
 {
 	__sigfillset(set);
 	return (0);
 }
-#endif /* (__GNUC__ && __STDC__) || _LIBC */
+#endif /* __c99inline */
 #endif /* !__LIBC12_SOURCE__ */
 
 /*
@@ -170,12 +187,17 @@ void	(*sigset (int, void (*)(int)))(int);
     defined(_NETBSD_SOURCE)
 int	sigwait	(const sigset_t * __restrict, int * __restrict);
 int	sigwaitinfo(const sigset_t * __restrict, siginfo_t * __restrict);
+void	psiginfo(const siginfo_t *, const char *);
 
-struct timespec;
+#ifndef __LIBC12_SOURCE__
+#include <sys/timespec.h>
 int	sigtimedwait(const sigset_t * __restrict,
-	    siginfo_t * __restrict, const struct timespec * __restrict);
+    siginfo_t * __restrict, const struct timespec * __restrict)
+    __RENAME(__sigtimedwait50);
 int	__sigtimedwait(const sigset_t * __restrict,
-	    siginfo_t * __restrict, struct timespec * __restrict);
+    siginfo_t * __restrict, struct timespec * __restrict)
+    __RENAME(____sigtimedwait50);
+#endif
 #endif /* _POSIX_C_SOURCE >= 200112 || _XOPEN_SOURCE_EXTENDED || ... */
 
 
@@ -183,7 +205,7 @@ int	__sigtimedwait(const sigset_t * __restrict,
 #ifndef __PSIGNAL_DECLARED
 #define __PSIGNAL_DECLARED
 /* also in unistd.h */
-void	psignal(unsigned int, const char *);
+void	psignal(int, const char *);
 #endif /* __PSIGNAL_DECLARED */
 int	sigblock(int);
 int	sigsetmask(int);

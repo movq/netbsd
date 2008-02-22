@@ -1,4 +1,4 @@
-.\"	$NetBSD: sort.1,v 1.25 2004/07/23 13:20:36 wiz Exp $
+.\"	$NetBSD: sort.1,v 1.38 2017/07/03 21:34:21 wiz Exp $
 .\"
 .\" Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,24 +59,34 @@
 .\"
 .\"     @(#)sort.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd January 13, 2001
+.Dd June 1, 2016
 .Dt SORT 1
 .Os
 .Sh NAME
 .Nm sort
 .Nd sort or merge text files
 .Sh SYNOPSIS
-.Nm sort
-.Op Fl bcdfHimnrSsu
+.Nm
+.Op Fl bdfHilmnrSsu
 .Oo
 .Fl k
-.Ar field1 Ns Op Li \&, Ns Ar field2
+.Ar kstart Ns Op Li \&, Ns Ar kend
 .Oc
 .Op Fl o Ar output
 .Op Fl R Ar char
 .Op Fl T Ar dir
 .Op Fl t Ar char
 .Op Ar
+.Nm
+.Fl C Ns | Ns Fl c
+.Op Fl bdfilnru
+.Oo
+.Fl k
+.Ar kstart Ns Op Li \&, Ns Ar kend
+.Op Fl t Ar char
+.Oc
+.Op Fl R Ar char
+.Op Ar file
 .Sh DESCRIPTION
 The
 .Nm
@@ -96,6 +99,10 @@ regards each input line as a single field.
 .Pp
 The following options are available:
 .Bl -tag -width Fl
+.It Fl C
+Identical to
+.Fl c
+without the error messages in the case of unsorted input.
 .It Fl c
 Check that the single input file is sorted.
 If the file is not sorted,
@@ -106,6 +113,11 @@ returns 0.
 .Nm
 .Fl c
 produces no output.
+See also
+.Fl u .
+.It Fl H
+Ignored for compatibility with earlier versions of
+.Nm .
 .It Fl m
 Merge only; the input files are assumed to be pre-sorted.
 .It Fl o Ar output
@@ -113,6 +125,15 @@ The argument given is the name of an
 .Ar output
 file to be used instead of the standard output.
 This file can be the same as one of the input files.
+.It Fl S
+Don't use stable sort.
+Default is to use stable sort.
+.It Fl s
+Use stable sort, keeps records with equal keys in their original order.
+This is the default.
+Provided for compatibility with other
+.Nm
+implementations only.
 .It Fl T Ar dir
 Use
 .Ar dir
@@ -130,9 +151,13 @@ If used with the
 option, check that there are no lines with duplicate keys.
 .El
 .Pp
-The following options override the default ordering rules.
-When ordering options appear independent of key field
-specifications, the requested field ordering rules are
+The following options,
+which should be given before any
+.Fl k
+options, override the default ordering rules.
+When ordering options appear independent of,
+and before, key field specifications,
+the requested field ordering rules are
 applied globally to all sort keys.
 When attached to a specific key (see
 .Fl k ) ,
@@ -150,9 +175,11 @@ Considers all lowercase characters that have uppercase
 equivalents to be the same for purposes of comparison.
 .It Fl i
 Ignore all non-printable characters.
+.It Fl l
+Sort by the string length of the field, not by the field itself.
 .It Fl n
 An initial numeric string, consisting of optional blank space, optional
-minus sign, and zero or more digits (including decimal point)
+plus or minus sign, and zero or more digits (including decimal point)
 .\" with
 .\" optional radix character and thousands
 .\" separator
@@ -165,18 +192,6 @@ option no longer implies the
 option.)
 .It Fl r
 Reverse the sense of comparisons.
-.It Fl S
-Don't use stable sort.
-Default is to use stable sort.
-.It Fl s
-Use stable sort.
-This is the default.
-Provided for compatibility with other
-.Nm
-implementations only.
-.It Fl H
-Use a merge sort instead of a radix sort.
-This option should be used for files larger than 60Mb.
 .El
 .Pp
 The treatment of field separators can be altered using these options:
@@ -201,6 +216,34 @@ option (see below).
 Note that the
 .Fl b
 option has no effect unless key fields are specified.
+.It Fl k Ar kstart Ns Op Li \&, Ns Ar kend
+Designates the starting position,
+.Ar kstart ,
+and optional ending position,
+.Ar kend ,
+of a key field.
+The
+.Fl k
+option replaces the obsolescent options
+.Cm \(pl Ns Ar pos1
+and
+.Fl Ns Ar pos2 .
+.It Fl R Ar char
+.Ar char
+is used as the record separator character.
+This should be used with discretion;
+.Fl R Aq Ar alphanumeric
+usually produces undesirable results.
+If char is not a single character, then it
+specifies the value of the desired record
+separator as an integer specified in any
+of the normal NNN, 0ooo, or 0xXXX ways,
+or as an octal value preceded by \e.
+Caution: do not attempt to specify Ctl-A
+as
+.Dq -R 1
+which will not do what was intended at all!
+The default record separator is newline.
 .It Fl t Ar char
 .Ar char
 is used as the field separator character.
@@ -221,28 +264,6 @@ blank-space characters, and consecutive blank spaces do
 delimit an empty field; further, the initial blank space
 .Em is
 considered part of a field when determining key offsets.
-.It Fl R Ar char
-.Ar char
-is used as the record separator character.
-This should be used with discretion;
-.Fl R Ar \*[Lt]alphanumeric\*[Gt]
-usually produces undesirable results.
-The default record separator is newline.
-.It Xo
-.Fl k
-.Ar field1 Ns Op Li \&, Ns Ar field2
-.Xc
-Designates the starting position,
-.Ar field1 ,
-and optional ending position,
-.Ar field2 ,
-of a key field.
-The
-.Fl k
-option replaces the obsolescent options
-.Cm \(pl Ns Ar pos1
-and
-.Fl Ns Ar pos2 .
 .El
 .Pp
 The following operands are available:
@@ -271,29 +292,29 @@ first field.
 Fields are specified
 by the
 .Fl k
-.Ar field1 Ns Op \&, Ns Ar field2
+.Ar kstart Ns Op \&, Ns Ar kend
 argument.
 A missing
-.Ar field2
+.Ar kend
 argument defaults to the end of a line.
 .Pp
 The arguments
-.Ar field1
+.Ar kstart
 and
-.Ar field2
+.Ar kend
 have the form
 .Ar m Ns Li \&. Ns Ar n
 and can be followed by one or more of the letters
 .Cm b , d , f , i ,
-.Cm n ,
+.Cm l , n ,
 and
 .Cm r ,
 which correspond to the options discussed above.
 A
-.Ar field1
+.Ar kstart
 position specified by
 .Ar m Ns Li \&. Ns Ar n
-.Pq Ar m , n No \*[Gt] 0
+.Pq Ar m , n No > 0
 is interpreted as the
 .Ar n Ns th
 character in the
@@ -302,7 +323,7 @@ field.
 A missing
 .Li \&. Ns Ar n
 in
-.Ar field1
+.Ar kstart
 means
 .Ql \&.1 ,
 indicating the first character of the
@@ -320,7 +341,7 @@ refers to the first non-blank character in the
 field.
 .Pp
 A
-.Ar field2
+.Ar kend
 position specified by
 .Ar m Ns Li \&. Ns Ar n
 is interpreted as
@@ -370,18 +391,38 @@ option is still supported, except for
 which has no
 .Fl k
 equivalent.
-.Sh RETURN VALUES
-Sort exits with one of the following values:
-.Bl -tag -width flag -compact
-.It 0
-Normal behavior.
-.It 1
-On disorder (or non-uniqueness) with the
-.Fl c
-option
-.It 2
-An error occurred.
-.El
+.Pp
+.Nm
+compares records by comparing the key fields selected by
+.Fl k
+arguments,
+from first given to last,
+until discovering a difference.
+If there are no
+.Fl k
+arguments, the whole record is treated as a single key.
+After exhausting the
+.Fl k
+arguments, if no difference has been found,
+then the result depends upon the
+.Fl u
+and
+.Fl S
+option settings.
+With
+.Fl u
+the records are considered identical, and one is supressed.
+Otherwise with
+.Fl s
+set (default) the records are left in their original order,
+or with
+.Fl S
+(posix mode) the whole record is considered as a tie breaker.
+.\"
+.\" If you fail to understand why it doesn't matter which order
+.\" the records are output when they are wholly identical, there
+.\" is nothing that this man page can say that wll help!
+.\"
 .Sh ENVIRONMENT
 If the following environment variable exists, it is used by
 .Nm .
@@ -408,6 +449,20 @@ Once sorting is finished, this file replaces
 and
 .Xr unlink 2 ) .
 .El
+.Sh EXIT STATUS
+Sort exits with one of the following values:
+.Bl -tag -width flag -compact
+.It 0
+Normal behavior.
+.It 1
+On disorder (or non-uniqueness) with the
+.Fl c
+(or
+.Fl C )
+option.
+.It 2
+An error occurred.
+.El
 .Sh SEE ALSO
 .Xr comm 1 ,
 .Xr join 1 ,
@@ -426,10 +481,9 @@ implementation appeared in
 and is used since
 .Nx 1.6 .
 .Sh BUGS
-To sort files larger than 60Mb, use
-.Nm
-.Fl H ;
-files larger than 704Mb must be sorted in smaller pieces, then merged.
+Posix requires the locale's thousands separator be ignored in numbers.
+It may be faster to sort very large files in pieces and then explicitly
+merge them.
 .Sh NOTES
 This
 .Nm
@@ -458,7 +512,7 @@ and merge sorts and did not.)
 Thus performance depends highly on efficient choice of sort keys, and the
 .Fl b
 option and the
-.Ar field2
+.Ar kend
 argument of the
 .Fl k
 option should be used whenever possible.

@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.15 2007/02/08 21:36:58 drochner Exp $	*/
+/*	$NetBSD: utilities.c,v 1.23 2013/06/23 02:06:04 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,11 +40,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +58,7 @@
 #if 0
 static char sccsid[] = "@(#)utilities.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: utilities.c,v 1.15 2007/02/08 21:36:58 drochner Exp $");
+__RCSID("$NetBSD: utilities.c,v 1.23 2013/06/23 02:06:04 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -75,6 +70,7 @@ __RCSID("$NetBSD: utilities.c,v 1.15 2007/02/08 21:36:58 drochner Exp $");
 #include <ufs/ufs/dinode.h> /* for IFMT & friends */
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
@@ -83,12 +79,11 @@ __RCSID("$NetBSD: utilities.c,v 1.15 2007/02/08 21:36:58 drochner Exp $");
 #include "fsutil.h"
 #include "fsck.h"
 #include "extern.h"
+#include "exitvalues.h"
 
 long	diskreads, totalreads;	/* Disk cache statistics */
 
 static void rwerror(const char *, daddr_t);
-
-extern int returntosingle;
 
 int
 ftypeok(struct ext2fs_dinode *dp)
@@ -160,12 +155,14 @@ bufinit(void)
 	if (bufcnt < MINBUFS)
 		bufcnt = MINBUFS;
 	for (i = 0; i < bufcnt; i++) {
-		bp = (struct bufarea *)malloc(sizeof(struct bufarea));
-		bufp = malloc((unsigned int)sblock.e2fs_bsize);
+		bp = malloc(sizeof(struct bufarea));
+		bufp = malloc((size_t)sblock.e2fs_bsize);
 		if (bp == NULL || bufp == NULL) {
+			free(bp);
+			free(bufp);
 			if (i >= MINBUFS)
 				break;
-			errexit("cannot allocate buffer pool\n");
+			errexit("cannot allocate buffer pool");
 		}
 		bp->b_un.b_buf = bufp;
 		bp->b_prev = &bufhead;
@@ -186,13 +183,13 @@ getdatablk(daddr_t blkno, long size)
 	struct bufarea *bp;
 
 	for (bp = bufhead.b_next; bp != &bufhead; bp = bp->b_next)
-		if (bp->b_bno == fsbtodb(&sblock, blkno))
+		if (bp->b_bno == EXT2_FSBTODB(&sblock, blkno))
 			goto foundit;
 	for (bp = bufhead.b_prev; bp != &bufhead; bp = bp->b_prev)
 		if ((bp->b_flags & B_INUSE) == 0)
 			break;
 	if (bp == &bufhead)
-		errexit("deadlocked buffer pool\n");
+		errexit("deadlocked buffer pool");
 	getblk(bp, blkno, size);
 	diskreads++;
 	/* fall through */
@@ -213,7 +210,7 @@ getblk(struct bufarea *bp, daddr_t blk, long size)
 {
 	daddr_t dblk;
 
-	dblk = fsbtodb(&sblock, blk);
+	dblk = EXT2_FSBTODB(&sblock, blk);
 	if (bp->b_bno != dblk) {
 		flush(fswritefd, bp);
 		bp->b_errs = bread(fsreadfd, bp->b_un.b_buf, dblk, size);
@@ -241,7 +238,7 @@ flush(int fd, struct bufarea *bp)
 	for (i = 0; i < sblock.e2fs_ngdb; i++) {
 		bwrite(fswritefd, (char *)
 			&sblock.e2fs_gd[i* sblock.e2fs_bsize / sizeof(struct ext2_gd)],
-		    fsbtodb(&sblock, ((sblock.e2fs_bsize>1024)?0:1)+i+1),
+		    EXT2_FSBTODB(&sblock, ((sblock.e2fs_bsize>1024)?0:1)+i+1),
 		    sblock.e2fs_bsize);
 	}
 }
@@ -254,7 +251,7 @@ rwerror(const char *mesg, daddr_t blk)
 		printf("\n");
 	pfatal("CANNOT %s: BLK %lld", mesg, (long long)blk);
 	if (reply("CONTINUE") == 0)
-		errexit("Program terminated\n");
+		errexit("Program terminated");
 }
 
 void
@@ -282,10 +279,10 @@ ckfini(int markclean)
 		flush(fswritefd, bp);
 		nbp = bp->b_prev;
 		free(bp->b_un.b_buf);
-		free((char *)bp);
+		free(bp);
 	}
 	if (bufhead.b_size != cnt)
-		errexit("Panic: lost %d buffers\n", bufhead.b_size - cnt);
+		errexit("Panic: lost %d buffers", bufhead.b_size - cnt);
 	pbp = pdirbp = (struct bufarea *)0;
 	if (markclean && (sblock.e2fs.e2fs_state & E2FS_ISCLEAN) == 0) {
 		/*
@@ -462,39 +459,6 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 	memcpy(namebuf, cp, (size_t)(&namebuf[MAXPATHLEN] - cp));
 }
 
-void
-catch(int n)
-{
-	ckfini(0);
-	exit(12);
-}
-
-/*
- * When preening, allow a single quit to signal
- * a special exit after filesystem checks complete
- * so that reboot sequence may be interrupted.
- */
-void
-catchquit(int n)
-{
-	printf("returning to single-user after filesystem check\n");
-	returntosingle = 1;
-	(void)signal(SIGQUIT, SIG_DFL);
-}
-
-/*
- * Ignore a single quit signal; wait and flush just in case.
- * Used by child processes in preen.
- */
-void
-voidquit(int n)
-{
-
-	sleep(1);
-	(void)signal(SIGQUIT, SIG_IGN);
-	(void)signal(SIGQUIT, SIG_DFL);
-}
-
 /*
  * determine whether an inode should be fixed.
  */
@@ -529,7 +493,7 @@ dofix(struct inodesc *idesc, const char *msg)
 		return (0);
 
 	default:
-		errexit("UNKNOWN INODESC FIX MODE %d\n", idesc->id_fix);
+		errexit("UNKNOWN INODESC FIX MODE %d", idesc->id_fix);
 	}
 	/* NOTREACHED */
 }

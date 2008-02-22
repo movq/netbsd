@@ -1,4 +1,4 @@
-/*	$NetBSD: if_agrvar_impl.h,v 1.7 2007/05/20 07:57:04 yamt Exp $	*/
+/*	$NetBSD: if_agrvar_impl.h,v 1.11 2017/01/28 22:56:09 maya Exp $	*/
 
 /*-
  * Copyright (c)2005 YAMAMOTO Takashi,
@@ -35,6 +35,7 @@
 
 #include <sys/mutex.h>
 #include <sys/queue.h>
+#include <sys/workqueue.h>
 
 struct agr_port;
 struct agr_softc;
@@ -103,14 +104,24 @@ struct agr_ifreq {
 };
 
 struct agr_softc {
-	kmutex_t sc_ioctl_lock;
+	kmutex_t sc_entry_mtx;
 	kmutex_t sc_lock;
+	kcondvar_t sc_ports_cv;
+	kcondvar_t sc_insc_cv;
+	volatile int sc_noentry;
+	volatile int sc_insc;
+	volatile bool sc_wrports;
+	volatile int sc_rdports;
+	volatile int sc_paused;
+	struct workqueue *sc_wq;
+	struct work sc_wk;
 	struct callout sc_callout;
 	int sc_nports;
 	TAILQ_HEAD(, agr_port) sc_ports;
 	const struct agr_iftype_ops *sc_iftop;
 	uint32_t sc_rr_counter;	/* distributor algorithm specific */
 	void *sc_iftprivate;
+	int sc_nvlans;		/* number of vlans attached */
 	struct ifnet sc_if; /* should be the last. see agr_alloc_softc(). */
 };
 
@@ -124,9 +135,6 @@ struct agr_softc {
 void agr_lock(struct agr_softc *);
 void agr_unlock(struct agr_softc *);
 
-void agr_ioctl_lock(struct agr_softc *);
-void agr_ioctl_unlock(struct agr_softc *);
-
 int agrport_ioctl(struct agr_port *, u_long, void *);
 
 struct agr_softc *agr_alloc_softc(void);
@@ -135,8 +143,10 @@ void agr_free_softc(struct agr_softc *);
 int agr_xmit_frame(struct ifnet *, struct mbuf *); /* XXX */
 
 #define	AGR_ROUNDROBIN(sc)	(((sc)->sc_if.if_flags & IFF_LINK0) != 0)
+#define	AGR_STATIC(sc)		(((sc)->sc_if.if_flags & IFF_LINK1) != 0)
 
-void agrtimer_init(struct agr_softc *);
+int agrtimer_init(struct agr_softc *);
+void agrtimer_destroy(struct agr_softc *);
 void agrtimer_start(struct agr_softc *);
 void agrtimer_stop(struct agr_softc *);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.4 2007/11/11 05:20:27 isaki Exp $	*/
+/*	$NetBSD: devopen.c,v 1.7 2016/06/26 04:17:17 isaki Exp $	*/
 
 /*
  * Copyright (c) 2001 Minoura Makoto
@@ -28,6 +28,7 @@
 
 #include <sys/param.h>
 #include <sys/disklabel.h>
+#include <machine/bootinfo.h>
 #include <lib/libkern/libkern.h>
 #include <lib/libsa/stand.h>
 #include "libx68k.h"
@@ -38,17 +39,34 @@ int devopen_open_dir = 0;
 /*
  * Parse a device spec.
  *
- * sd<unit><part>:<file>
+ * [ha@]<dev><unit><part>:<file>
+ *  ha   - host adaptor ("spc0", "spc1", "mha0")
+ *  dev  - device name (e.g., "sd")
  *  unit - 0-7
  *  part - a-p
  */
 int
-devparse(const char *fname, int *dev, int *unit, int *part, char **file)
+devparse(const char *fname, int *ha, int *dev, int *unit, int *part,
+	char **file)
 {
 	char const *s;
 	int i;
 
 	s = fname;
+
+	if (strncmp(s, "spc0@", 5) == 0) {
+		*ha = (X68K_BOOT_SCSIIF_SPC << 4) | 0;
+		s += 5;
+	} else if (strncmp(s, "spc1@", 5) == 0) {
+		*ha = (X68K_BOOT_SCSIIF_SPC << 4) | 1;
+		s += 5;
+	} else if (strncmp(s, "mha0@", 5) == 0) {
+		*ha = (X68K_BOOT_SCSIIF_MHA << 4) | 0;
+		s += 5;
+	} else {
+		*ha = 0;
+	}
+
 	for (i = 0; devspec[i].ds_name != 0; i++) {
 		if (strncmp (devspec[i].ds_name, s,
 			     strlen(devspec[i].ds_name)) == 0)
@@ -60,14 +78,19 @@ devparse(const char *fname, int *dev, int *unit, int *part, char **file)
 	s += strlen(devspec[i].ds_name);
 	*dev = devspec[i].ds_dev;
 
-	*unit = *s++ - '0';
-	if (*unit < 0 || *unit > devspec[i].ds_maxunit)
-		/* bad unit */
-		return ENODEV;
-	*part = *s++ - 'a';
-	if (*part < 0 || *part > MAXPARTITIONS)
-		/* bad partition */
-		return ENODEV;
+	if (devspec[i].ds_net) {
+		*unit = 0;
+		*part = 0;
+	} else {
+		*unit = *s++ - '0';
+		if (*unit < 0 || *unit > devspec[i].ds_maxunit)
+			/* bad unit */
+			return ENODEV;
+		*part = *s++ - 'a';
+		if (*part < 0 || *part > MAXPARTITIONS)
+			/* bad partition */
+			return ENODEV;
+	}
 
 	if (*s++ != ':')
 		return ENODEV;
@@ -86,22 +109,22 @@ int
 devopen(struct open_file *f, const char *fname, char **file)
 {
 	int error;
-	int dev, unit, part;
+	int ha, dev, unit, part;
 	struct devsw *dp = &devsw[0];
 
-	error = devparse(fname, &dev, &unit, &part, file);
+	error = devparse(fname, &ha, &dev, &unit, &part, file);
 	if (error)
-	    return error;
+		return error;
 
 	dp = &devsw[dev];
 
-	if (!dp->dv_open)
+	if (dp->dv_open == NULL)
 		return ENODEV;
 
 	f->f_dev = dp;
 
 	if ((error = (*dp->dv_open)(f, unit, part)) == 0)
-	    return 0;
+		return 0;
 
 	return error;
 }

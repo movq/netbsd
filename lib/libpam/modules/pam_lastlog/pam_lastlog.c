@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_lastlog.c,v 1.12 2006/11/03 18:55:40 christos Exp $	*/
+/*	$NetBSD: pam_lastlog.c,v 1.15 2014/01/07 02:07:43 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1987, 1988, 1991, 1993, 1994
@@ -47,7 +47,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_lastlog/pam_lastlog.c,v 1.20 2004/01/26 19:28:37 des Exp $");
 #else
-__RCSID("$NetBSD: pam_lastlog.c,v 1.12 2006/11/03 18:55:40 christos Exp $");
+__RCSID("$NetBSD: pam_lastlog.c,v 1.15 2014/01/07 02:07:43 joerg Exp $");
 #endif
 
 #include <sys/param.h>
@@ -60,6 +60,7 @@ __RCSID("$NetBSD: pam_lastlog.c,v 1.12 2006/11/03 18:55:40 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
+#include <errno.h>
 #include <time.h>
 #include <unistd.h>
 #include <stdarg.h>
@@ -94,6 +95,7 @@ static void domsg(pam_handle_t *, time_t, const char *, size_t, const char *,
     size_t);
 #endif
 
+__printflike(2, 3)
 static void
 logit(int level, const char *fmt, ...)
 {
@@ -284,17 +286,17 @@ doutmpx(const char *username, const char *hostname, const char *tty,
 	utmpx.ut_type = USER_PROCESS;
 	utmpx.ut_pid = getpid();
 	t = tty + strlen(tty);
-	if (t - tty >= sizeof(utmpx.ut_id)) {
+	if ((size_t)(t - tty) >= sizeof(utmpx.ut_id)) {
 		(void)strncpy(utmpx.ut_id, t - sizeof(utmpx.ut_id),
 		    sizeof(utmpx.ut_id));
 	} else {
 		(void)strncpy(utmpx.ut_id, tty, sizeof(utmpx.ut_id));
 	}
 	if (pututxline(&utmpx) == NULL)
-		logit(LOG_NOTICE, "Cannot update utmpx %m");
+		logit(LOG_NOTICE, "Cannot update utmpx: %s", strerror(errno));
 	endutxent();
 	if (updwtmpx(_PATH_WTMPX, &utmpx) != 0)
-		logit(LOG_NOTICE, "Cannot update wtmpx %m");
+		logit(LOG_NOTICE, "Cannot update wtmpx: %s", strerror(errno));
 }
 
 static void
@@ -323,7 +325,7 @@ dolastlogx(pam_handle_t *pamh, int quiet, const struct passwd *pwd,
 		(void)memset(&ll.ll_ss, 0, sizeof(ll.ll_ss));
 
 	if (updlastlogx(_PATH_LASTLOGX, pwd->pw_uid, &ll) != 0)
-		logit(LOG_NOTICE, "Cannot update lastlogx %m");
+		logit(LOG_NOTICE, "Cannot update lastlogx: %s", strerror(errno));
 	PAM_LOG("Login recorded in %s", _PATH_LASTLOGX);
 }
 #endif
@@ -352,7 +354,8 @@ dolastlog(pam_handle_t *pamh, int quiet, const struct passwd *pwd,
 	int fd;
 
 	if ((fd = open(_PATH_LASTLOG, O_RDWR, 0)) == -1) {
-		logit(LOG_NOTICE, "Cannot open `%s' %m", _PATH_LASTLOG);
+		logit(LOG_NOTICE, "Cannot open `%s': %s", _PATH_LASTLOG,
+		    strerror(errno));
 		return;
 	}
 	(void)lseek(fd, (off_t)(pwd->pw_uid * sizeof(ll)), SEEK_SET);

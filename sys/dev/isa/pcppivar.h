@@ -1,4 +1,4 @@
-/* $NetBSD: pcppivar.h,v 1.8 2008/01/10 07:58:39 dyoung Exp $ */
+/* $NetBSD: pcppivar.h,v 1.12 2017/06/14 05:01:35 pgoyette Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -34,21 +34,22 @@ typedef void *pcppi_tag_t;
 
 struct pcppi_attach_args {
 	pcppi_tag_t pa_cookie;
+	void (*pa_bell_func)(pcppi_tag_t, int, int, int);
 };
 
 struct pcppi_softc {
-        struct device sc_dv;  
+	device_t sc_dv;  
 
-        bus_space_tag_t sc_iot;
-        bus_space_handle_t sc_ppi_ioh;
-        bus_size_t sc_size;
-        struct attimer_softc *sc_timer;
+	bus_space_tag_t sc_iot;
+	bus_space_handle_t sc_ppi_ioh;
+	bus_size_t sc_size;
+	device_t sc_timer;
         
-        struct callout sc_bell_ch;
+	int sc_bellactive, sc_bellpitch;
+	int sc_timeout;
 
-        int sc_bellactive, sc_bellpitch;
-        int sc_slp;
-        int sc_timeout;
+	kcondvar_t sc_slp;
+	callout_t sc_bell_ch;
 };
 
 void pcppi_attach(struct pcppi_softc *);
@@ -58,5 +59,6 @@ int pcppi_detach(device_t, int);
 #define	PCPPI_BELL_POLL		0x02	/* synchronous; poll for complete */
 
 void pcppi_bell(pcppi_tag_t, int, int, int);
+void pcppi_bell_locked(pcppi_tag_t, int, int, int);
 
 #endif /* ! _PCPPIVAR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.27 2008/01/20 18:09:09 joerg Exp $	*/
+/*	$NetBSD: types.h,v 1.37 2016/01/23 22:31:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -44,8 +44,7 @@ typedef struct label_t {
 } label_t;
 #endif
 
-/* NB: This should probably be if defined(_KERNEL) */
-#if defined(_NETBSD_SOURCE)
+#if defined(_KERNEL) || defined(_KMEMUSER) || defined(_KERNTYPES) || defined(_STANDALONE)
 typedef	unsigned long	vm_offset_t;
 typedef	unsigned long	vm_size_t;
 
@@ -53,22 +52,38 @@ typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
-#endif
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
 
 typedef int		register_t;
+#define	PRIxREGISTER	"x"
+#endif
 
-typedef	volatile unsigned char __cpu_simple_lock_t;
+typedef	unsigned char	__cpu_simple_lock_nv_t;
+typedef	int		__register_t;
 
 #define	__SIMPLELOCK_LOCKED	0x80
 #define	__SIMPLELOCK_UNLOCKED	0
 
-#define	__SWAP_BROKEN
-
 #define	__HAVE_AST_PERPROC
+#define	__HAVE_NEW_STYLE_BUS_H
+#define	__HAVE_CPU_DATA_FIRST
 #define	__HAVE_SYSCALL_INTERN
+#define	__HAVE_MM_MD_DIRECT_MAPPED_IO
+#define	__HAVE_MM_MD_DIRECT_MAPPED_PHYS
+#define	__HAVE_MM_MD_KERNACC
 
 #if defined(_KERNEL)
 #define	__HAVE_RAS
 #endif
+
+#define	__HAVE_CPU_LWP_SETPRIVATE
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_COMMON___TLS_GET_ADDR
+#define	__HAVE_TLS_VARIANT_I
 
 #endif	/* !_SH3_TYPES_H_ */

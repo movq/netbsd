@@ -1,4 +1,4 @@
-/*	$NetBSD: eppcic.c,v 1.3 2007/10/17 19:53:40 garbled Exp $	*/
+/*	$NetBSD: eppcic.c,v 1.7 2012/10/27 17:17:37 chs Exp $	*/
 
 /*
  * Copyright (c) 2005 HAMAJIMA Katsuomi. All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eppcic.c,v 1.3 2007/10/17 19:53:40 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eppcic.c,v 1.7 2012/10/27 17:17:37 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -35,7 +35,7 @@ __KERNEL_RCSID(0, "$NetBSD: eppcic.c,v 1.3 2007/10/17 19:53:40 garbled Exp $");
 #include <sys/device.h>
 #include <sys/kthread.h>
 #include <uvm/uvm_param.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciachip.h>
@@ -79,7 +79,7 @@ int eppcic_debug = EPPCIC_DEBUG;
 struct eppcic_handle {
 	int			ph_socket;	/* socket number */
 	struct eppcic_softc	*ph_sc;
-	struct device		*ph_card;
+	device_t		ph_card;
 	int			(*ph_ih_func)(void *);
 	void			*ph_ih_arg;
 	lwp_t			*ph_event_thread;
@@ -144,19 +144,20 @@ static struct pcmcia_chip_functions eppcic_functions = {
 };
 
 void
-eppcic_attach_common(struct device *parent, struct device *self, void *aux,
+eppcic_attach_common(device_t parent, device_t self, void *aux,
 		     eppcic_chipset_tag_t pcic)
 {
-	struct eppcic_softc *sc = (struct eppcic_softc *)self;
+	struct eppcic_softc *sc = device_private(self);
 	struct epsoc_attach_args *sa = aux;
 	struct eppcic_handle *ph;
 	int reg;
 	int i;
 
 	if (!sa->sa_gpio) {
-		printf("%s: epgpio requires\n", self->dv_xname);
+		printf("%s: epgpio requires\n", device_xname(self));
 		return;
 	}
+	sc->sc_dev = self;
 	sc->sc_gpio = sa->sa_gpio;
 	sc->sc_iot = sa->sa_iot;
 	sc->sc_hclk = sa->sa_hclk;
@@ -164,7 +165,7 @@ eppcic_attach_common(struct device *parent, struct device *self, void *aux,
 	sc->sc_enable = 0;
 	if (bus_space_map(sa->sa_iot, sa->sa_addr,
 			  sa->sa_size, 0, &sc->sc_ioh)){
-		printf("%s: Cannot map registers\n", self->dv_xname);
+		printf("%s: Cannot map registers\n", device_xname(self));
 		return;
 	}
 	printf("\n");
@@ -175,7 +176,7 @@ eppcic_attach_common(struct device *parent, struct device *self, void *aux,
 #endif
 	/* socket 0 */
 	if (!(ph = malloc(sizeof(struct eppcic_handle), M_DEVBUF, M_NOWAIT))) {
-		printf("%s: Cannot allocate memory\n", self->dv_xname);
+		printf("%s: Cannot allocate memory\n", device_xname(self));
 		return; /* ENOMEM */
 	}
 	sc->sc_ph[0] = ph;
@@ -218,8 +219,6 @@ static void
 eppcic_attach_socket(struct eppcic_handle *ph)
 {
 	struct eppcic_softc *sc = ph->ph_sc;
-	eppcic_chipset_tag_t pcic = sc->sc_pcic;
-	int wait;
 
 	ph->ph_width = 16;
 	ph->ph_vcc = 3;
@@ -233,13 +232,6 @@ eppcic_attach_socket(struct eppcic_handle *ph)
 	epgpio_in(sc->sc_gpio, ph->ph_port, ph->ph_vs[1]);
 	ph->ph_status[0] = epgpio_read(sc->sc_gpio, ph->ph_port, ph->ph_cd[0]);
 	ph->ph_status[1] = epgpio_read(sc->sc_gpio, ph->ph_port, ph->ph_cd[1]);
-	wait = (pcic->power_ctl)(sc, ph->ph_socket, POWER_OFF);
-	delay(wait);
-	eppcic_set_pcreg(ph, ph->ph_space[IO].reg);
-	eppcic_set_pcreg(ph, ph->ph_space[COMMON].reg);
-	eppcic_set_pcreg(ph, ph->ph_space[ATTRIBUTE].reg);
-	wait = (pcic->power_ctl)(sc, ph->ph_socket, POWER_ON);
-	delay(wait);
 }
 
 static void
@@ -253,8 +245,6 @@ eppcic_config_socket(struct eppcic_handle *ph)
 	paa.paa_busname = "pcmcia";
 	paa.pct = (pcmcia_chipset_tag_t)&eppcic_functions;
 	paa.pch = (pcmcia_chipset_handle_t)ph;
-	paa.iobase = ph->ph_space[IO].base;
-	paa.iosize = ph->ph_space[IO].size;
 	ph->ph_card = config_found_ia((void*)sc, "pcmciabus", &paa,
 				      eppcic_print);
 	
@@ -273,12 +263,9 @@ eppcic_config_socket(struct eppcic_handle *ph)
 
 	DPRINTFN(1, ("eppcic_config_socket: cd1=%d, cd2=%d\n",ph->ph_status[0],ph->ph_status[1]));
 
-	if (!(ph->ph_status[0] | ph->ph_status[1]))
-		pcmcia_card_attach(ph->ph_card);
-
 	ph->ph_run = 1;
 	kthread_create(PRI_NONE, 0, NULL, eppcic_event_thread, ph,
-	    &ph->ph_event_thread, "%s,%d", sc->sc_dev.dv_xname,
+	    &ph->ph_event_thread, "%s,%d", device_xname(sc->sc_dev),
 	    ph->ph_socket);
 }
 
@@ -292,6 +279,9 @@ static void
 eppcic_event_thread(void *arg)
 {
 	struct eppcic_handle *ph = arg;
+
+	if (!(ph->ph_status[0] | ph->ph_status[1]))
+		pcmcia_card_attach(ph->ph_card);
 
 	for (;;) {
 		tsleep(ph, PWAIT, "CSC wait", 0);
@@ -333,10 +323,11 @@ eppcic_intr_carddetect(void *arg)
 
 	DPRINTFN(1, ("eppcic_intr: cd1=%#x, cd2=%#x\n",nstatus[0],nstatus[1]));
 
-	if (nstatus[0] != ph->ph_status[0] || nstatus[1] != ph->ph_status[1])
+	if (nstatus[0] != ph->ph_status[0] || nstatus[1] != ph->ph_status[1]) {
+		ph->ph_status[0] = nstatus[0];
+		ph->ph_status[1] = nstatus[1];
 		wakeup(ph);
-	ph->ph_status[0] = nstatus[0];
-	ph->ph_status[1] = nstatus[1];
+	}
 	return 0;
 }
 
@@ -381,11 +372,11 @@ eppcic_mem_map(pcmcia_chipset_handle_t pch, int kind, bus_addr_t addr,
 		ph->ph_width = 16;
 	switch (kind & ~PCMCIA_WIDTH_MEM_MASK) {
 	case PCMCIA_MEM_ATTR:
-		eppcic_set_pcreg(ph, ph->ph_space[ATTRIBUTE].reg);
+		eppcic_set_pcreg(ph, ATTRIBUTE);
 		pa += ph->ph_space[ATTRIBUTE].base;
 		break;
 	case PCMCIA_MEM_COMMON:
-		eppcic_set_pcreg(ph, ph->ph_space[COMMON].reg);
+		eppcic_set_pcreg(ph, COMMON);
 		pa += ph->ph_space[COMMON].base;
 		break;
 	default:
@@ -460,7 +451,7 @@ eppcic_io_map(pcmcia_chipset_handle_t pch, int width, bus_addr_t offset,
 		DPRINTFN(1, ("(unknown)\n"));
 		return -1;
 	}
-	eppcic_set_pcreg(ph, ph->ph_space[IO].reg);
+	eppcic_set_pcreg(ph, IO);
 	*windowp = 0; /* unused */
 	return 0;
 }
@@ -590,13 +581,13 @@ eppcic_get_voltage(struct eppcic_handle *ph)
 			vcc = 5;
 		else
 			printf("%s: unsupported Vcc 5 Volts",
-			       sc->sc_dev.dv_xname);
+			       device_xname(sc->sc_dev));
 	} else {
 		if (cap | VCC_3V)
 			vcc = 3;
 		else
 			printf("%s: unsupported Vcc 3.3 Volts",
-			       sc->sc_dev.dv_xname);
+			       device_xname(sc->sc_dev));
 	}
 	DPRINTFN(1, ("eppcic_get_voltage: vs1=%d, vs2=%d (%dV)\n",epgpio_read_bit(sc->sc_gpio, ph->ph_port, ph->ph_vs[0]),epgpio_read_bit(sc->sc_gpio, ph->ph_port, ph->ph_vs[1]),vcc));
 	return vcc;
@@ -686,4 +677,5 @@ eppcic_set_pcreg(struct eppcic_handle *ph, int kind)
 			  | (atiming<<EP93XX_PCMCIA_ACCESS_SHIFT)
 			  | (htiming<<EP93XX_PCMCIA_HOLD_SHIFT)
 			  | (ptiming<<EP93XX_PCMCIA_PRECHARGE_SHIFT));
+	tsleep(ph->ph_space, PWAIT, "eppcic_set_pcreg", hz / 4);
 }

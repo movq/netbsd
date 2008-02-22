@@ -1,4 +1,4 @@
-/*	$NetBSD: iopaauvar.h,v 1.6 2007/11/17 15:28:37 ad Exp $	*/
+/*	$NetBSD: iopaauvar.h,v 1.8 2012/02/12 16:31:01 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -54,7 +54,7 @@
 #define	AAU_IO_BOUNDARY		4096
 
 struct iopaau_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct dmover_backend sc_dmb;
 
 	struct dmover_request *sc_running;
@@ -90,6 +90,6 @@ int	iopaau_func_fill8_setup(struct iopaau_softc *,
 int	iopaau_func_xor_setup(struct iopaau_softc *,
 	    struct dmover_request *);
 
-void	iopaau_desc_free(struct pool_cache *, void *);
+void	iopaau_desc_free(pool_cache_t, void *);
 
 #endif /* _XSCALE_IOPAAUVAR_H_ */

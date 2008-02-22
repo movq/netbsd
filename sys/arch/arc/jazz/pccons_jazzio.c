@@ -1,4 +1,4 @@
-/* $NetBSD: pccons_jazzio.c,v 1.7 2005/11/15 12:12:21 tsutsui Exp $ */
+/* $NetBSD: pccons_jazzio.c,v 1.11 2011/07/01 19:25:42 dyoung Exp $ */
 /* NetBSD: vga_isa.c,v 1.4 2000/08/14 20:14:51 thorpej Exp  */
 
 /*
@@ -6,17 +6,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccons_jazzio.c,v 1.7 2005/11/15 12:12:21 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccons_jazzio.c,v 1.11 2011/07/01 19:25:42 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,7 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: pccons_jazzio.c,v 1.7 2005/11/15 12:12:21 tsutsui Ex
 #include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/wired_map.h>
 
 #include <mips/pte.h>
@@ -49,17 +49,17 @@ __KERNEL_RCSID(0, "$NetBSD: pccons_jazzio.c,v 1.7 2005/11/15 12:12:21 tsutsui Ex
 
 #define PCKBD_INTR 6	/* XXX - should be obtained from firmware */
 
-int	pccons_jazzio_match(struct device *, struct cfdata *, void *);
-void	pccons_jazzio_attach(struct device *, struct device *, void *);
+static int	pccons_jazzio_match(device_t, cfdata_t, void *);
+static void	pccons_jazzio_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pc_jazzio, sizeof(struct pc_softc),
+CFATTACH_DECL_NEW(pc_jazzio, sizeof(struct pc_softc),
     pccons_jazzio_match, pccons_jazzio_attach, NULL, NULL);
 
 /*
  * chipset-dependent pccons configuration
  */
 
-void pccons_jazzio_init(void);
+static void pccons_jazzio_init(void);
 
 struct pccons_config pccons_jazzio_conf = {
 	0x3b4, 0xb0000,	/* mono: iobase, memaddr */
@@ -68,14 +68,15 @@ struct pccons_config pccons_jazzio_conf = {
 	pccons_jazzio_init
 };
 
-void
+static void
 pccons_jazzio_init(void)
 {
 
 	/* nothing to do */
 }
 
-int	pccons_jazzio_init_tag(const char *, bus_space_tag_t*,bus_space_tag_t*);
+static int pccons_jazzio_init_tag(const char *, bus_space_tag_t *,
+    bus_space_tag_t *);
 
 int
 pccons_jazzio_init_tag(const char *name, bus_space_tag_t *iotp,
@@ -128,8 +129,8 @@ pccons_jazzio_init_tag(const char *name, bus_space_tag_t *iotp,
 	return 0;
 }
 
-int
-pccons_jazzio_match(struct device *parent, struct cfdata *match, void *aux)
+static int
+pccons_jazzio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct jazzio_attach_args *ja = aux;
 	bus_space_tag_t crt_iot, crt_memt;
@@ -144,15 +145,15 @@ pccons_jazzio_match(struct device *parent, struct cfdata *match, void *aux)
 	return 1;
 }
 
-void
-pccons_jazzio_attach(struct device *parent, struct device *self, void *aux)
+static void
+pccons_jazzio_attach(device_t parent, device_t self, void *aux)
 {
-	struct pc_softc *sc = (struct pc_softc *)self;
+	struct pc_softc *sc = device_private(self);
 	struct jazzio_attach_args *ja = aux;
 	bus_space_tag_t crt_iot, crt_memt;
 
 	pccons_jazzio_init_tag(ja->ja_name, &crt_iot, &crt_memt);
-	jazzio_intr_establish(PCKBD_INTR, pcintr, self);
+	jazzio_intr_establish(PCKBD_INTR, pcintr, sc);
 	pccons_common_attach(sc, crt_iot, crt_memt, ja->ja_bust,
 	    &pccons_jazzio_conf);
 }

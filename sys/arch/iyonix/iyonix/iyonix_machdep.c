@@ -1,4 +1,4 @@
-/*	$NetBSD: iyonix_machdep.c,v 1.7 2008/01/19 13:11:18 chris Exp $	*/
+/*	$NetBSD: iyonix_machdep.c,v 1.25 2016/12/22 14:47:58 cherry Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -69,11 +69,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Machine dependant functions for kernel setup for Iyonix.
+ * Machine dependent functions for kernel setup for Iyonix.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iyonix_machdep.c,v 1.7 2008/01/19 13:11:18 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iyonix_machdep.c,v 1.25 2016/12/22 14:47:58 cherry Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -89,10 +89,15 @@ __KERNEL_RCSID(0, "$NetBSD: iyonix_machdep.c,v 1.7 2008/01/19 13:11:18 chris Exp
 #include <sys/reboot.h>
 #include <sys/termios.h>
 #include <sys/ksyms.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <dev/cons.h>
+
+#include <dev/pci/ppbreg.h>
+#include <dev/ic/i8259reg.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -102,9 +107,7 @@ __KERNEL_RCSID(0, "$NetBSD: iyonix_machdep.c,v 1.7 2008/01/19 13:11:18 chris Exp
 #include <ddb/db_extern.h>
 
 #include <acorn32/include/bootconfig.h>
-#include <machine/bus.h>
-#include <machine/cpu.h>
-#include <machine/frame.h>
+#include <arm/locore.h>
 #include <arm/undefined.h>
 
 #include <arm/arm32/machdep.h>
@@ -114,9 +117,6 @@ __KERNEL_RCSID(0, "$NetBSD: iyonix_machdep.c,v 1.7 2008/01/19 13:11:18 chris Exp
 
 #include <iyonix/iyonix/iyonixreg.h>
 #include <iyonix/iyonix/obiovar.h>
-
-#include <dev/pci/ppbreg.h>
-#include <dev/ic/i8259reg.h>
 
 #include "ksyms.h"
 
@@ -129,33 +129,16 @@ __KERNEL_RCSID(0, "$NetBSD: iyonix_machdep.c,v 1.7 2008/01/19 13:11:18 chris Exp
  */
 #define KERNEL_VM_SIZE		0x0C000000
 
-/*
- * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
- * on where the ROM appears when you turn the MMU off.
- *
- * XXX Not actually used on Iyonix -- clean up the generic
- * ARM code.
- */
-
-u_int cpu_reset_address = 0x00000000;
-
-/* Define various stack sizes in pages */
-#define IRQ_STACK_SIZE	1
-#define ABT_STACK_SIZE	1
-#define UND_STACK_SIZE	1
-
 struct bootconfig bootconfig;		/* Boot config storage */
-char *boot_args = NULL;
-char *boot_file = NULL;
 
-vm_offset_t physical_start;
-vm_offset_t physical_freestart;
-vm_offset_t physical_freeend;
-vm_offset_t physical_end;
+char *boot_args;
+
+vaddr_t physical_start;
+vaddr_t physical_freestart;
+vaddr_t physical_freeend;
+vaddr_t physical_end;
 u_int free_pages;
-vm_offset_t pagetables_start;
-int physmem = 0;
+vaddr_t pagetables_start;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
@@ -163,18 +146,9 @@ int max_processes = 64;			/* Default number */
 #endif	/* !PMAP_STATIC_L1S */
 
 /* Physical and virtual addresses for some global pages */
-pv_addr_t systempage;
-pv_addr_t irqstack;
-pv_addr_t undstack;
-pv_addr_t abtstack;
-pv_addr_t kernelstack;
 pv_addr_t minidataclean;
 
-vm_offset_t msgbufphys;
-
-extern u_int data_abort_handler_address;
-extern u_int prefetch_abort_handler_address;
-extern u_int undefined_handler_address;
+paddr_t msgbufphys;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -195,20 +169,36 @@ extern int pmap_debug_level;
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
-struct user *proc0paddr;
-
 char iyonix_macaddr[ETHER_ADDR_LEN];
+
+char boot_consdev[16];
 
 /* Prototypes */
 
-void	consinit(void);
 void	iyonix_pic_init(void);
 void	iyonix_read_machineid(void);
+
+void	consinit(void);
+
+static void consinit_com(const char *consdev);
+static void consinit_genfb(const char *consdev);
+static void process_kernel_args(void);
+static void parse_iyonix_bootargs(char *args);
 
 #include "com.h"
 #if NCOM > 0
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
+#endif
+
+#include "genfb.h"
+
+#if (NGENFB == 0) && (NCOM == 0)
+# error "No valid console device (com or genfb)"
+#elif defined(COMCONSOLE) || (NGENFB == 0)
+# define DEFAULT_CONSDEV "com"
+#else
+# define DEFAULT_CONSDEV "genfb"
 #endif
 
 /*
@@ -270,6 +260,7 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -298,6 +289,8 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -448,12 +441,26 @@ initarm(void *arg)
 	int loop;
 	int loop1;
 	u_int l1pagetable;
-	pv_addr_t kernel_l1pt;
-	paddr_t memstart;
-	psize_t memsize;
+	paddr_t memstart = 0;
+	psize_t memsize = 0;
 
 	/* Calibrate the delay loop. */
 	i80321_calibrate_delay();
+
+	/* Ensure bootconfig has valid magic */
+	if (passed_bootconfig->magic != BOOTCONFIG_MAGIC)
+		printf("Bad bootconfig magic: %x\n", bootconfig.magic);
+
+	bootconfig = *passed_bootconfig;
+
+	/* Fake bootconfig structure for anything that still needs it */
+	/* XXX must make the memory description h/w independent */
+	bootconfig.dram[0].address = memstart;
+	bootconfig.dram[0].pages = memsize / PAGE_SIZE;
+	bootconfig.dramblocks = 1;
+
+	/* process arguments - can update boothowto */
+	process_kernel_args();
 
 	/*
 	 * Since we map the on-board devices VA==PA, and the kernel
@@ -488,18 +495,6 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("initarm: Configuring system ...\n");
 #endif
-
-	/* Ensure bootconfig has valid magic */
-	if (passed_bootconfig->magic != BOOTCONFIG_MAGIC)
-		printf("Bad bootconfig magic: %x\n", bootconfig.magic);
-
-	bootconfig = *passed_bootconfig;
-
-	/* Fake bootconfig structure for anything that still needs it */
-	/* XXX must make the memory description h/w independent */
-	bootconfig.dram[0].address = memstart;
-	bootconfig.dram[0].pages = memsize / PAGE_SIZE;
-	bootconfig.dramblocks = 1;
 
 	/*
 	 * Set up the variables that define the availability of
@@ -718,7 +713,7 @@ initarm(void *arg)
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa, true);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -728,8 +723,7 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("done!\n");
@@ -786,7 +780,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_setpagesize();	/* initialize PAGE_SIZE-dependent variables */
+	uvm_md_init();
 	uvm_page_physload(atop(physical_freestart), atop(physical_freeend),
 	    atop(physical_freestart), atop(physical_freeend),
 	    VM_FREELIST_DEFAULT);
@@ -795,8 +789,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("pmap ");
 #endif
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
 	/* Setup the IRQ system */
 #ifdef VERBOSE_INIT_ARM
@@ -808,15 +801,6 @@ initarm(void *arg)
 	printf("done.\n");
 #endif
 
-#ifdef BOOTHOWTO
-	boothowto = BOOTHOWTO;
-#endif
-
-#if NKSYMS || defined(DDB) || defined(LKM)
-	/* Firmware doesn't load symbols. */
-	ksyms_init(0, NULL, NULL);
-#endif
-
 #ifdef DDB
 	db_machine_init();
 	if (boothowto & RB_KDB)
@@ -825,6 +809,9 @@ initarm(void *arg)
 
 	iyonix_pic_init();
 
+	printf("args: %s\n", bootconfig.args);
+	printf("howto: %x\n", boothowto);
+
 	/* We return the new stack pointer address */
 	return(kernelstack.pv_va + USPACE_SVC_STACK_TOP);
 }
@@ -832,9 +819,6 @@ initarm(void *arg)
 void
 consinit(void)
 {
-	static const bus_addr_t comcnaddrs[] = {
-		IYONIX_UART1,		/* com0 */
-	};
 	static int consinit_called;
 
 	if (consinit_called != 0)
@@ -842,6 +826,23 @@ consinit(void)
 
 	consinit_called = 1;
 
+	/* We let consinit_<foo> worry about device numbers */
+	if (strncmp(boot_consdev, "genfb", 5) &&
+	    strncmp(boot_consdev, "com", 3))
+	        strcpy(boot_consdev, DEFAULT_CONSDEV);
+
+	if (!strncmp(boot_consdev, "com", 3)) 
+		consinit_com(boot_consdev);
+	else
+		consinit_genfb(boot_consdev);
+}
+
+static void
+consinit_com(const char *consdev)
+{
+	static const bus_addr_t comcnaddrs[] = {
+		IYONIX_UART1,		/* com0 */
+	};
 	/*
 	 * Console devices are mapped VA==PA.  Our devmap reflects
 	 * this, so register it now so drivers can map the console
@@ -849,6 +850,9 @@ consinit(void)
 	 */
 	pmap_devmap_register(iyonix_devmap);
 
+	/* When we support more than the first serial port as console,
+	 * we should check consdev for a number.
+	 */
 #if NCOM > 0
 	if (comcnattach(&obio_bs_tag, comcnaddrs[comcnunit], comcnspeed,
 	    COM_FREQ, COM_TYPE_NORMAL, comcnmode))
@@ -858,12 +862,56 @@ consinit(void)
 #else
 	panic("serial console @%lx not configured", comcnaddrs[comcnunit]);
 #endif
+
 #if KGDB
 #if NCOM > 0
 	if (strcmp(kgdb_devname, "com") == 0) {
 		com_kgdb_attach(&obio_bs_tag, kgdb_devaddr, kgdb_devrate,
-				COM_FREQ, COM_TYPE_NORMAL, kgdb_devmode);
+		    COM_FREQ, COM_TYPE_NORMAL, kgdb_devmode);
 	}
 #endif	/* NCOM > 0 */
 #endif	/* KGDB */
+}
+
+static void
+consinit_genfb(const char *consdev)
+{
+	/* NOTYET */
+}
+
+static void
+process_kernel_args(void)
+{
+	char *args;
+
+	/* Ok now we will check the arguments for interesting parameters. */
+	args = bootconfig.args;
+
+#ifdef BOOTHOWTO
+	boothowto = BOOTHOWTO;
+#else
+	boothowto = 0;
+#endif
+
+	/* Only arguments itself are passed from the bootloader */
+	while (*args == ' ')
+		++args;
+
+	boot_args = args;
+	parse_mi_bootargs(boot_args);
+	parse_iyonix_bootargs(boot_args);
+}
+
+static void
+parse_iyonix_bootargs(char *args)
+{
+	char *ptr;
+
+	if (get_bootconf_option(args, "consdev", BOOTOPT_TYPE_STRING, &ptr))
+	{
+		/* ptr may have trailing clutter */
+		strlcpy(boot_consdev, ptr, sizeof(boot_consdev));
+		if ( (ptr = strchr(boot_consdev, ' ')) )
+			*ptr = 0;
+	}
 }

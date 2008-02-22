@@ -1,4 +1,4 @@
-.\"	$NetBSD: unlink.2,v 1.20 2004/05/13 10:20:58 wiz Exp $
+.\"	$NetBSD: unlink.2,v 1.29 2017/03/30 18:54:26 abhinav Exp $
 .\"
 .\" Copyright (c) 1980, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,11 +29,12 @@
 .\"
 .\"     @(#)unlink.2	8.1 (Berkeley) 6/4/93
 .\"
-.Dd June 4, 1993
+.Dd July 28, 2013
 .Dt UNLINK 2
 .Os
 .Sh NAME
-.Nm unlink
+.Nm unlink ,
+.Nm unlinkat
 .Nd remove directory entry
 .Sh LIBRARY
 .Lb libc
@@ -41,6 +42,9 @@
 .In unistd.h
 .Ft int
 .Fn unlink "const char *path"
+.In fcntl.h
+.Ft int
+.Fn unlinkat "int fd" "const char *path" "int flag"
 .Sh DESCRIPTION
 The
 .Fn unlink
@@ -56,32 +60,74 @@ all resources associated with the file are reclaimed.
 If one or more process have the file open when the last link is removed,
 the link is removed, but the removal of the file is delayed until
 all references to it have been closed.
+.Pp
+.Fn unlinkat
+works the same way as
+.Fn unlink
+except if
+.Fa path
+is relative.
+In that case, it is looked up from a directory whose file
+descriptor was passed as
+.Fa fd .
+Search permission is required on this directory.
+.\"    (These alternatives await a decision about the semantics of O_SEARCH)
+.\" Search permission is required on this directory
+.\" except if
+.\" .Fa fd
+.\" was opened with the
+.\" .Dv O_SEARCH
+.\" flag.
+.\"    - or -
+.\" This file descriptor must have been opened with the
+.\" .Dv O_SEARCH
+.\" flag.
+.Fa fd
+can be set to
+.Dv AT_FDCWD
+in order to specify the current directory.
+.Pp
+.Fn unlinkat
+will remove directories just like
+.Xr rmdir 2 ,
+provided
+.Dv AT_REMOVEDIR
+is set in
+.Fa flag .
 .Sh RETURN VALUES
-Upon successful completion, a value of 0 is returned.
-Otherwise, a value of \-1 is returned and
-.Va errno
-is set to indicate the error.
+.Rv -std unlink unlinkat
 .Sh ERRORS
 The
 .Fn unlink
-succeeds unless:
+and
+.Fn unlinkat
+functions succeed unless:
 .Bl -tag -width Er
-.It Bq Er ENOTDIR
-A component of the path prefix is not a directory.
-.It Bq Er ENAMETOOLONG
-A component of a pathname exceeded
-.Dv {NAME_MAX}
-characters, or an entire path name exceeded
-.Dv {PATH_MAX}
-characters.
-.It Bq Er ENOENT
-The named file does not exist.
 .It Bq Er EACCES
 Search permission is denied for a component of the path prefix, or
 write permission is denied on the directory containing the link
 to be removed.
+.It Bq Er EBUSY
+The entry to be unlinked is the mount point for a
+mounted file system.
+.It Bq Er EFAULT
+.Fa path
+points outside the process's allocated address space.
+.It Bq Er EIO
+An I/O error occurred while deleting the directory entry
+or deallocating the inode.
 .It Bq Er ELOOP
 Too many symbolic links were encountered in translating the pathname.
+.It Bq Er ENAMETOOLONG
+A component of a pathname exceeded
+.Brq Dv NAME_MAX
+characters, or an entire path name exceeded
+.Brq Dv PATH_MAX
+characters.
+.It Bq Er ENOENT
+The named file does not exist.
+.It Bq Er ENOTDIR
+A component of the path prefix is not a directory.
 .It Bq Er EPERM
 The named file is a directory and the effective user ID
 of the process is not the super-user, the file system
@@ -91,17 +137,39 @@ on a directory,
 or the directory containing the file is marked sticky,
 and neither the containing directory nor the file to be removed
 are owned by the effective user ID.
-.It Bq Er EBUSY
-The entry to be unlinked is the mount point for a
-mounted file system.
-.It Bq Er EIO
-An I/O error occurred while deleting the directory entry
-or deallocating the inode.
 .It Bq Er EROFS
 The named file resides on a read-only file system.
-.It Bq Er EFAULT
+.El
+.Pp
+In addition,
+.Fn unlinkat
+will fail if:
+.Bl -tag -width Er
+.It Bq Er EBADF
 .Fa path
-points outside the process's allocated address space.
+does not specify an absolute path and
+.Fa fd
+is neither
+.Dv AT_FDCWD
+nor a valid file descriptor open for reading or searching.
+.It Bq Er ENOTDIR
+.Fa path
+is not an absolute path and
+.Fa fd
+is a file descriptor associated with a non-directory file; or
+.Fa flag
+has
+.Dv AT_REMOVEDIR
+set and
+.Fa path
+does not name a directory.
+.It Bq Er ENOTEMPTY
+.Fa flag
+has
+.Dv AT_REMOVEDIR
+set and
+.Fa path
+is a directory that is not empty.
 .El
 .Sh SEE ALSO
 .Xr close 2 ,
@@ -113,8 +181,11 @@ The
 .Fn unlink
 function conforms to
 .St -p1003.1-90 .
+.Fn unlinkat
+conforms to
+.St -p1003.1-2008 .
 .Sh HISTORY
 An
 .Fn unlink
 function call appeared in
-.At v6 .
+.At v2 .

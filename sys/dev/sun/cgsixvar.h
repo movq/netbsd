@@ -1,4 +1,4 @@
-/*	$NetBSD: cgsixvar.h,v 1.8 2006/10/16 22:27:16 macallan Exp $ */
+/*	$NetBSD: cgsixvar.h,v 1.14 2016/04/21 18:06:06 macallan Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include "wsdisplay.h"
+#include <dev/wscons/wsdisplay_vconsvar.h>
+#include <dev/wscons/wsdisplay_glyphcachevar.h>
 
 /*
  * color display (cgsix) driver; common definitions.
@@ -56,7 +53,7 @@ struct cg6_cursor {		/* cg6 hardware cursor status */
 
 /* per-display variables */
 struct cgsix_softc {
-	struct device	sc_dev;		/* base device */
+	device_t	sc_dev;		/* base device */
 	struct fbdevice	sc_fb;		/* frame buffer device */
 	bus_space_tag_t	sc_bustag;
 	bus_addr_t	sc_paddr;	/* phys address for device mmap() */
@@ -75,18 +72,17 @@ struct cgsix_softc {
 	uint32_t sc_stride;
 	uint32_t sc_mono_width;	/* how many monochrome pixels to write */
 	uint32_t sc_ramsize;		/* VRAM size in bytes */
-#if NWSDISPLAY > 0	
+	int sc_fb_is_open;
 	int sc_mode;
 	uint32_t sc_bg;
 	struct vcons_data vd;
-#endif	
+	uint8_t sc_default_cmap[768];
+	glyphcache sc_gc;	
 	union	bt_cmap sc_cmap;	/* Brooktree color map */
 };
 
-#ifdef RASTERCONSOLE
-extern int cgsix_use_rasterconsole;
-#else
-#define cgsix_use_rasterconsole 0
-#endif
+#define IS_IN_EMUL_MODE(sc) \
+	((sc->sc_fb_is_open == 0) && \
+	 (sc->sc_mode == WSDISPLAYIO_MODE_EMUL))
 
 void	cg6attach(struct cgsix_softc *, const char *, int);

@@ -1,4 +1,4 @@
-.\"	$NetBSD: iostat.8,v 1.22 2003/08/07 11:25:22 agc Exp $
+.\"	$NetBSD: iostat.8,v 1.25 2017/03/05 23:07:12 mlelstv Exp $
 .\"
 .\" Copyright (c) 1985, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	from: @(#)iostat.8	8.1 (Berkeley) 6/6/93
 .\"
-.Dd March 1, 2003
+.Dd July 9, 2015
 .Dt IOSTAT 8
 .Os
 .Sh NAME
@@ -39,10 +39,8 @@
 statistics
 .Sh SYNOPSIS
 .Nm
-.Op Fl CdDITx
+.Op Fl CdDITxy
 .Op Fl c Ar count
-.Op Fl M Ar core
-.Op Fl N Ar system
 .Op Fl w Ar wait
 .Op Ar drives
 .Sh DESCRIPTION
@@ -106,13 +104,6 @@ transfers, and time spent in transfers.
 Use of this flag disables the default display.
 .It Fl I
 Show the running total values, rather than an average.
-.It Fl M Ar core
-Extract values associated with the name list from the specified core
-instead of the default
-.Dq Pa /dev/mem .
-.It Fl N Ar system
-Extract the name list from the specified system instead of the default
-.Dq Pa /netbsd .
 .It Fl T
 Show tty statistics.
 This is enabled by default unless the
@@ -136,6 +127,8 @@ This option overrides all other display options, and all
 disks are displayed unless specific disks
 are provided as arguments.
 Additionally, separate read and write statistics are displayed.
+.It Fl y
+Shows the extended statistics and additional queuing statistics.
 .El
 .Pp
 .Nm
@@ -151,13 +144,16 @@ characters written to terminals
 .It disks
 Disk operations.
 The header of the field is the disk name and unit number.
-If more than four disk drives are configured in the system,
+If more drives are configured in the system that fit across the
+current display,
 .Nm
-displays only the first four drives.
+displays only those drives that fit on the display.
 To force
 .Nm
-to display specific drives, their names may be supplied on the command
-line.
+to display specific drives, they may be supplied on the command
+line, either as names or
+.Fn fnmatch
+patterns.
 .Pp
 .Bl -tag -width indent -compact
 .It KB/t
@@ -178,6 +174,24 @@ Kilobytes transferred
 Disk transfers
 .It time
 Seconds spent in disk activity
+.Pp
+.El
+With the
+.Fl y
+flag, the following queuing measurements are added
+.Bl -tag -width indent -compact
+.It wait
+Number of I/O requests queued up
+.It actv
+Number of currently active I/O requests
+.It wsvc_t
+Average waiting time of an I/O request in milliseconds
+.It asvc_t
+Average duration of an I/O request in milliseconds
+.It wtime
+Seconds spent in the waiting queue.
+Queuing data might not be available from all drivers
+and is then shown as zeros.
 .El
 .It cpu
 .Bl -tag -width indent -compact
@@ -191,13 +205,6 @@ Seconds spent in disk activity
 % of CPU time in idle mode
 .El
 .El
-.Sh FILES
-.Bl -tag -width /dev/mem -compact
-.It Pa /netbsd
-Default kernel namelist.
-.It Pa /dev/mem
-Default memory file.
-.El
 .Sh SEE ALSO
 .Xr fstat 1 ,
 .Xr netstat 1 ,
@@ -205,6 +212,7 @@ Default memory file.
 .Xr \&ps 1 ,
 .Xr systat 1 ,
 .Xr vmstat 1 ,
+.Xr fnmatch 3 ,
 .Xr pstat 8
 .Pp
 The sections starting with ``Interpreting system activity'' in
@@ -217,3 +225,7 @@ The
 .Fl x
 option was added in
 .Nx 1.4 .
+Collection of queueing values and the
+.Fl y
+option were added in
+.Nx 8.0 .

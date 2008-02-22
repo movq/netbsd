@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_sense.c,v 1.7 2008/02/11 20:29:15 dyoung Exp $	*/
+/*	$NetBSD: scsi_sense.c,v 1.9 2011/06/22 05:18:03 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: scsi_sense.c,v 1.7 2008/02/11 20:29:15 dyoung Exp $");
+__RCSID("$NetBSD: scsi_sense.c,v 1.9 2011/06/22 05:18:03 mrg Exp $");
 #endif
 
 
@@ -387,7 +380,7 @@ scsi_print_sense_data(const unsigned char *s, int slen, int verbosity)
 	 * nonzero data. If we have some, go back and print the lot,
 	 * otherwise we're done.
 	 */
-	if (sbs)
+	if (cp)
 		i = 18;
 	else
 		i = 15;

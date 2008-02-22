@@ -1,4 +1,4 @@
-/*	$NetBSD: cacvar.h,v 1.16 2007/06/27 17:57:55 mhitch Exp $	*/
+/*	$NetBSD: cacvar.h,v 1.21 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,6 +34,9 @@
 
 #include <sys/mutex.h>
 #include <sys/condvar.h>
+
+#include <dev/sysmon/sysmonvar.h>
+#include <sys/envsys.h>
 
 #define	CAC_MAX_CCBS	256
 #define	CAC_MAX_XFER	(0xffff * 512)
@@ -75,8 +71,8 @@ struct cac_softc;
 struct cac_ccb;
 
 struct cac_context {
-	void		(*cc_handler)(struct device *, void *, int);
-	struct device	*cc_dv;
+	void		(*cc_handler)(device_t, void *, int);
+	device_t	cc_dv;
 	void 		*cc_context;
 };
 
@@ -108,13 +104,14 @@ struct cac_linkage {
 };
 
 struct cac_softc {
-	struct device		sc_dv;
+	device_t		sc_dev;
 	kmutex_t		sc_mutex;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	bus_dma_tag_t		sc_dmat;
 	bus_dmamap_t		sc_dmamap;
 	int			sc_nunits;
+	uint64_t		sc_unitmask;
 	void			*sc_ih;
 	void *			sc_ccbs;
 	paddr_t			sc_ccbs_paddr;
@@ -122,7 +119,18 @@ struct cac_softc {
 	SIMPLEQ_HEAD(, cac_ccb)	sc_ccb_queue;
 	kcondvar_t		sc_ccb_cv;
 	struct cac_linkage	sc_cl;
+
+	/* scsi ioctl from sd device */
+	int			(*sc_ioctl)(device_t, u_long, void *);
+
+	struct sysmon_envsys    *sc_sme;
+	envsys_data_t		*sc_sensor;
 };
+
+/* XXX These have to become spinlocks in case of fine SMP */
+#define	CAC_LOCK(sc) splbio()
+#define	CAC_UNLOCK(sc, lock) splx(lock)
+typedef	int cac_lock_t;
 
 struct cac_attach_args {
 	int		caca_unit;
@@ -131,6 +139,7 @@ struct cac_attach_args {
 int	cac_cmd(struct cac_softc *, int, void *, int, int, int, int,
 		struct cac_context *);
 int	cac_init(struct cac_softc *, const char *, int);
+int	cac_rescan(device_t, const char *, const int *);
 int	cac_intr(void *);
 
 extern const struct	cac_linkage cac_l0;

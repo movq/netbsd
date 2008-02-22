@@ -1,4 +1,4 @@
-/*	$NetBSD: synapticsreg.h,v 1.5 2007/01/17 23:14:03 uwe Exp $	*/
+/*	$NetBSD: synapticsreg.h,v 1.9 2017/11/06 21:07:17 blymn Exp $	*/
 
 /*
  * Copyright (c) 2005, Steve C. Woodford
@@ -35,40 +35,48 @@
  *
  */
 
-#ifndef _DEV_PCKBCPORT_SYNAPTICSREG_H_
-#define _DEV_PCKBCPORT_SYNAPTICSREG_H_
+#ifndef	_DEV_PCKBCPORT_SYNAPTICSREG_H_
+#define	_DEV_PCKBCPORT_SYNAPTICSREG_H_
 
 /* Synaptics information queries. */
-#define SYNAPTICS_IDENTIFY_TOUCHPAD	0x0
-#define SYNAPTICS_READ_MODE		0x1
-#define SYNAPTICS_READ_CAPABILITIES	0x2
-#define SYNAPTICS_READ_MODEL_ID		0x3
-#define SYNAPTICS_EXTENDED_QUERY	0x9
+#define	SYNAPTICS_IDENTIFY_TOUCHPAD	0x0
+#define	SYNAPTICS_READ_MODE		0x1
+#define	SYNAPTICS_READ_CAPABILITIES	0x2
+#define	SYNAPTICS_READ_MODEL_ID		0x3
+#define	SYNAPTICS_EXTENDED_QUERY	0x9
+#define	SYNAPTICS_CONTINUED_CAPABILITIES 0x0c
+
+/* Synaptics special commands */
+#define	SYNAPTICS_CMD_SET_MODE2		0x14
+#define	SYNAPTICS_CMD_CLIENT_CMD	0x28
 
 /* Magic numbers. */
-#define SYNAPTICS_MIN_VERSION		45 /* 4.5 */
-#define SYNAPTICS_MAGIC_BYTE		0x47
+#define	SYNAPTICS_MIN_VERSION		45 /* 4.5 */
+#define	SYNAPTICS_MAGIC_BYTE		0x47
 
 /* Capability bits. */
-#define SYNAPTICS_CAP_EXTENDED		(1 << 15)
-#define SYNAPTICS_CAP_EXTNUM		(1 << 14 | 1 << 13 | 1 << 12)
-#define SYNAPTICS_CAP_MBUTTON		(1 << 10)
-#define SYNAPTICS_CAP_PASSTHROUGH	(1 << 7)
-#define SYNAPTICS_CAP_SLEEP		(1 << 4)
-#define SYNAPTICS_CAP_4BUTTON		(1 << 3)
-#define SYNAPTICS_CAP_MULTIDETECT	(1 << 1)
-#define SYNAPTICS_CAP_PALMDETECT	(1 << 0)
+#define	SYNAPTICS_CAP_EXTENDED		(1 << 15)
+#define	SYNAPTICS_CAP_EXTNUM		(1 << 14 | 1 << 13 | 1 << 12)
+#define	SYNAPTICS_CAP_MBUTTON		(1 << 10)
+#define	SYNAPTICS_CAP_PASSTHROUGH	(1 << 7)
+#define	SYNAPTICS_CAP_MULTIFINGERREPORT (1 << 5)
+#define	SYNAPTICS_CAP_SLEEP		(1 << 4)
+#define	SYNAPTICS_CAP_4BUTTON		(1 << 3)
+#define	SYNAPTICS_CAP_MULTIDETECT	(1 << 1)
+#define	SYNAPTICS_CAP_PALMDETECT	(1 << 0)
 
 /* Mode bits. */
-#define SYNAPTICS_MODE_ABSOLUTE		(1 << 7)
-#define SYNAPTICS_MODE_RATE		(1 << 6)
-#define SYNAPTICS_MODE_SLEEP		(1 << 3)
-#define SYNAPTICS_MODE_GEST		(1 << 2)
-#define SYNAPTICS_MODE_W		(1)
+#define	SYNAPTICS_MODE_ABSOLUTE		(1 << 7)
+#define	SYNAPTICS_MODE_RATE		(1 << 6)
+#define	SYNAPTICS_MODE_SLEEP		(1 << 3)
+#define	SYNAPTICS_MODE_EXTENDED_W	(1 << 2) /* double meaning */
+#define	SYNAPTICS_MODE_GEST		(1 << 2)
+#define	SYNAPTICS_MODE_4BYTE_CLIENT	(1 << 1)
+#define	SYNAPTICS_MODE_W		(1)
 
 /* Extended mode button masks. */
-#define SYN_1BUTMASK			0x1
-#define SYN_2BUTMASK			0x1
+#define	SYN_1BUTMASK			0x1
+#define	SYN_2BUTMASK			0x1
 
 /* Touchpad edge boundaries (Recommended values from Synaptics documentation) */
 #define	SYNAPTICS_EDGE_LEFT		1632
@@ -90,11 +98,19 @@
 #define	SYNAPTICS_WIDTH_TWO_FINGERS	0
 #define	SYNAPTICS_WIDTH_THREE_OR_MORE	1
 #define	SYNAPTICS_WIDTH_PEN		2
+#define	SYNAPTICS_WIDTH_EXTENDED_W	2
+#define	SYNAPTICS_WIDTH_ADVANCEDGESTURE	2
+#define	SYNAPTICS_WIDTH_PASSTHROUGH	3
 #define	SYNAPTICS_WIDTH_FINGER_MIN	4
 #define	SYNAPTICS_WIDTH_FINGER_NORMAL	5
 #define	SYNAPTICS_WIDTH_FINGER_MAX	7
 #define	SYNAPTICS_WIDTH_PALM_MIN	8
 #define	SYNAPTICS_WIDTH_PALM_MAX	14
 #define	SYNAPTICS_WIDTH_MAX		15
+
+/* Extended W types */
+#define SYNAPTICS_EW_WHEEL		0
+#define SYNAPTICS_EW_SECONDARY_FINGER	1
+#define SYNAPTICS_EW_FINGER_STATUS	2
 
 #endif	/* _DEV_PCKBCPORT_SYNAPTICSREG_H_ */

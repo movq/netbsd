@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_types.h,v 1.6 2008/01/15 22:38:35 njoly Exp $ */
+/*	$NetBSD: linux32_types.h,v 1.15 2011/11/18 04:08:56 christos Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -38,14 +38,15 @@
 #include <compat/linux32/arch/amd64/linux32_types.h>
 #endif
 
-typedef unsigned short linux32_gid16_t;
-typedef unsigned short linux32_uid16_t;
+typedef uint16_t linux32_gid16_t;
+typedef uint16_t linux32_uid16_t;
 
 typedef netbsd32_pointer_t linux32_oldmmapp;
 typedef netbsd32_pointer_t linux32_utsnamep;
 typedef netbsd32_pointer_t linux32_stat64p;
 typedef netbsd32_pointer_t linux32_statp;
 typedef netbsd32_pointer_t linux32_statfsp;
+typedef netbsd32_pointer_t linux32_statfs64p;
 typedef netbsd32_pointer_t linux32_sigactionp_t;
 typedef netbsd32_pointer_t linux32_sigsetp_t;
 typedef netbsd32_pointer_t linux32___sysctlp_t;
@@ -56,11 +57,18 @@ typedef netbsd32_pointer_t linux32_tmsp_t;
 typedef netbsd32_pointer_t linux32_sched_paramp_t;
 typedef netbsd32_pointer_t linux32_utimbufp_t;
 typedef netbsd32_pointer_t linux32_oldold_utsnamep_t;
+typedef netbsd32_pointer_t linux32_uidp_t;
+typedef netbsd32_pointer_t linux32_gidp_t;
 typedef netbsd32_pointer_t linux32_uid16p_t;
 typedef netbsd32_pointer_t linux32_gid16p_t;
 typedef netbsd32_pointer_t linux32_oldselectp_t;
 typedef netbsd32_pointer_t linux32_sysinfop_t;
 typedef netbsd32_pointer_t linux32_oldutsnamep_t;
+typedef netbsd32_pointer_t linux32_timespecp_t;
+typedef netbsd32_pointer_t linux32_robust_list_headp_t;
+typedef netbsd32_pointer_t linux32_robust_list_headpp_t;
+typedef netbsd32_pointer_t linux32_sizep_t;
+typedef netbsd32_pointer_t linux32_intp_t;
 
 struct linux32_sysctl {
 	netbsd32_intp name;
@@ -69,7 +77,7 @@ struct linux32_sysctl {
 	netbsd32_size_tp oldlenp;
 	netbsd32_voidp newval;
 	netbsd32_size_t newlen;
-	unsigned int0[4];
+	unsigned int __unused0[4];
 };
 
 struct linux32_tms {
@@ -84,7 +92,7 @@ struct linux32_oldselect {
         netbsd32_fd_setp_t readfds;
         netbsd32_fd_setp_t writefds;
         netbsd32_fd_setp_t exceptfds;
-        netbsd32_timevalp_t timeout;
+        netbsd32_timeval50p_t timeout;
 };
 
 struct linux32_sysinfo {
@@ -101,6 +109,14 @@ struct linux32_sysinfo {
         netbsd32_u_long freebig;
         unsigned int mem_unit;
         char _f[20-2*sizeof(netbsd32_long)-sizeof(int)];	
+};
+
+#define LINUX32_MAXNAMLEN	255
+struct linux32_dirent {
+	linux32_ino_t	d_ino;
+	linux32_off_t	d_off;
+	u_short		d_reclen;
+	char		d_name[LINUX32_MAXNAMLEN + 2];
 };
 
 #endif /* !_LINUX32_TYPES_H */

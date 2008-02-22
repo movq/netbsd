@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep_ofw.c,v 1.10 2008/02/11 17:32:18 garbled Exp $ */
+/* $NetBSD: pci_machdep_ofw.c,v 1.22 2017/06/01 02:45:07 chs Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep_ofw.c,v 1.10 2008/02/11 17:32:18 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep_ofw.c,v 1.22 2017/06/01 02:45:07 chs Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -49,15 +42,14 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep_ofw.c,v 1.10 2008/02/11 17:32:18 garbled
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
-
 #include <machine/autoconf.h>
 #include <machine/pio.h>
-#include <machine/intr.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -133,10 +125,10 @@ foundic:
 		}
 
 		irgot = OF_getprop(node, "reg", reg, sizeof(reg));
-		
+
 		if (!picnodes[nrofpics].intrs)
 			picnodes[nrofpics].intrs = 16;
-		
+
 		if (nrofpics > 0)
 			picnodes[nrofpics].offset = picnodes[nrofpics-1].offset
 			    + picnodes[nrofpics-1].intrs;
@@ -188,7 +180,7 @@ genofw_fixup_picnode_offsets(void)
 			continue;
 		if (picnodes[i].type == PICNODE_TYPE_IVR)
 			continue;
-		
+
 		picnodes[i].offset = curoff;
 		curoff += picnodes[i].intrs;
 	}
@@ -246,12 +238,12 @@ genofw_setup_pciintr_map(void *v, struct genppc_pci_chipset_businfo *pbi,
 			sub = prop_dictionary_create_with_capacity(4);
 		pin = map[i*reclen + acells];
 		intr_num = prop_number_create_integer(map[i*reclen + acells + icells + 1] + picnodes[pic].offset);
-		sprintf(key, "pin-%c", 'A' + (pin-1));
+		snprintf(key, sizeof(key), "pin-%c", 'A' + (pin-1));
 		prop_dictionary_set(sub, key, intr_num);
 		prop_object_release(intr_num);
 		/* should we care about level? */
 
-		sprintf(key, "devfunc-%d", dev*0x8 + func);
+		snprintf(key, sizeof(key), "devfunc-%d", dev*0x8 + func);
 		prop_dictionary_set(dict, key, sub);
 		if (curdev != dev) {
 			prop_object_release(sub);
@@ -301,10 +293,10 @@ nomap:
 			if (OF_getprop(node, "interrupts", &pin, 4) < 0)
 				pin = 1;
 			intr_num = prop_number_create_integer(irqs[0]);
-			sprintf(key, "pin-%c", 'A' + (pin-1));
+			snprintf(key, sizeof(key), "pin-%c", 'A' + (pin-1));
 			prop_dictionary_set(sub, key, intr_num);
 			prop_object_release(intr_num);
-			sprintf(key, "devfunc-%d", dev*0x8 + func);
+			snprintf(key, sizeof(key), "devfunc-%d", dev*0x8 + func);
 			prop_dictionary_set(dict, key, sub);
 			prop_object_release(sub);
 			foundirqs++;
@@ -339,10 +331,10 @@ nomap:
 			if (OF_getprop(node, "interrupts", &pin, 4) < 0)
 				pin = 1;
 			intr_num = prop_number_create_integer(irq);
-			sprintf(key, "pin-%c", 'A' + (pin-1));
+			snprintf(key, sizeof(key), "pin-%c", 'A' + (pin-1));
 			prop_dictionary_set(sub, key, intr_num);
 			prop_object_release(intr_num);
-			sprintf(key, "devfunc-%d", dev*0x8 + func);
+			snprintf(key, sizeof(key), "devfunc-%d", dev*0x8 + func);
 			prop_dictionary_set(dict, key, sub);
 			prop_object_release(sub);
 		}
@@ -355,7 +347,7 @@ genofw_find_node_by_devfunc(int startnode, int bus, int dev, int func)
 {
 	int node, sz, p=0;
 	uint32_t reg;
-	
+
 	for (node = startnode; node; node = p) {
 		sz = OF_getprop(node, "reg", &reg, sizeof(reg));
 		if (sz != sizeof(reg))
@@ -377,19 +369,18 @@ genofw_find_node_by_devfunc(int startnode, int bus, int dev, int func)
 }
 
 int
-genofw_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+genofw_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	struct genppc_pci_chipset_businfo *pbi;
 	prop_dictionary_t dict, devsub;
 	prop_object_t pinsub;
 	prop_number_t pbus;
-	int busno, bus, pin, line, swiz, dev, origdev, func, i;
+	int busno, pin, line, dev, origdev, func, i;
 	char key[20];
 
 	pin = pa->pa_intrpin;
 	line = pa->pa_intrline;
-	bus = busno = pa->pa_bus;
-	swiz = pa->pa_intrswiz;
+	busno = pa->pa_bus;
 	origdev = dev = pa->pa_device;
 	func = pa->pa_function;
 	i = 0;
@@ -415,7 +406,7 @@ genofw_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		    "ofw-pcibus-rawdevnum");
 		dev = prop_number_integer_value(pbus);
 
-		/* now that we know the parent bus, we need to find it's pbi */
+		/* now that we know the parent bus, we need to find its pbi */
 		pbi = SIMPLEQ_FIRST(&pa->pa_pc->pc_pbi);
 		while (busno--)
 			pbi = SIMPLEQ_NEXT(pbi, next);
@@ -439,11 +430,11 @@ genofw_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		goto bad;
 	}
 
-	sprintf(key, "devfunc-%d", dev*0x8 + func);
+	snprintf(key, sizeof(key), "devfunc-%d", dev*0x8 + func);
 	devsub = prop_dictionary_get(dict, key);
 	if (devsub == NULL)
 		goto bad;
-	sprintf(key, "pin-%c", 'A' + (pin-1));
+	snprintf(key, sizeof(key), "pin-%c", 'A' + (pin-1));
 	pinsub = prop_dictionary_get(devsub, key);
 	if (pinsub == NULL)
 		goto bad;
@@ -463,9 +454,9 @@ bad:
 }
 
 int
-genofw_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
-	pcireg_t id)
+genofw_pci_conf_hook(void *v, int bus, int dev, int func, pcireg_t id)
 {
+	pci_chipset_tag_t pct = v;
 	struct genppc_pci_chipset_businfo *pbi;
 	prop_number_t pbus;
 	pcitag_t tag;
@@ -491,6 +482,11 @@ genofw_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
 	 */
 	if (strncmp(model_name, "Pegasos2", 8) == 0) {
 
+		/* never reconfigure the MV64361 host bridge */
+		if (PCI_VENDOR(id) == PCI_VENDOR_MARVELL &&
+		    PCI_PRODUCT(id) == PCI_PRODUCT_MARVELL_MV64360)
+			return 0;
+
 		/* we want to leave viaide(4) alone */
 		if (PCI_VENDOR(id) == PCI_VENDOR_VIATECH &&
 		    PCI_PRODUCT(id) == PCI_PRODUCT_VIATECH_VT82C586A_IDE)
@@ -502,14 +498,14 @@ genofw_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
 			return (PCI_CONF_ALL & ~PCI_CONF_MAP_IO);
 
 	}
-	
+
 	tag = pci_make_tag(pct, bus, dev, func);
 	class = pci_conf_read(pct, tag, PCI_CLASS_REG);
 
 	/* leave video cards alone */
 	if (PCI_CLASS(class) == PCI_CLASS_DISPLAY)
 		return 0;
-	
+
 	/* NOTE, all device specific stuff must be above this line */
 	/* don't do this on the primary host bridge */
 	if (bus == 0 && dev == 0 && func == 0)
@@ -521,9 +517,7 @@ genofw_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
 	 */
 	if (PCI_CLASS(class) == PCI_CLASS_BRIDGE &&
 	    PCI_SUBCLASS(class) == PCI_SUBCLASS_BRIDGE_PCI) {
-		pbi = malloc(sizeof(struct genppc_pci_chipset_businfo),
-		    M_DEVBUF, M_NOWAIT);
-		KASSERT(pbi != NULL);
+		pbi = kmem_alloc(sizeof(*pbi), KM_SLEEP);
 		pbi->pbi_properties = prop_dictionary_create();
 		KASSERT(pbi->pbi_properties != NULL);
 		node = genofw_find_node_by_devfunc(pct->pc_node, bus, dev,
@@ -532,7 +526,7 @@ genofw_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
 			aprint_error("Cannot find node for device "
 			    "bus %d dev %d func %d\n", bus, dev, func);
 			prop_object_release(pbi->pbi_properties);
-			free(pbi, M_DEVBUF);
+			kmem_free(pbi, sizeof(*pbi));
 			return (PCI_CONF_DEFAULT);
 		}
 		genofw_setup_pciintr_map((void *)pct, pbi, node);

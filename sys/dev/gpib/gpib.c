@@ -1,4 +1,4 @@
-/*	$NetBSD: gpib.c,v 1.10 2007/03/04 06:01:46 christos Exp $	*/
+/*	$NetBSD: gpib.c,v 1.23 2016/07/11 11:31:50 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpib.c,v 1.10 2007/03/04 06:01:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpib.c,v 1.23 2016/07/11 11:31:50 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +46,9 @@ __KERNEL_RCSID(0, "$NetBSD: gpib.c,v 1.10 2007/03/04 06:01:46 christos Exp $");
 
 #include "locators.h"
 
+#ifndef DEBUG
 #define DEBUG
+#endif
 
 #ifdef DEBUG
 int gpibdebug = 0xff;
@@ -65,16 +60,14 @@ int gpibdebug = 0xff;
 #define DPRINTF(mask, str)	/* nothing */
 #endif
 
-int	gpibmatch(struct device *, struct cfdata *, void *);
-void	gpibattach(struct device *, struct device *, void *);
+int	gpibmatch(device_t, cfdata_t, void *);
+void	gpibattach(device_t, device_t, void *);
 
-CFATTACH_DECL(gpib, sizeof(struct gpib_softc),
+CFATTACH_DECL_NEW(gpib, sizeof(struct gpib_softc),
 	gpibmatch, gpibattach, NULL, NULL);
 
-static int	gpibsubmatch1(struct device *, struct cfdata *,
-			      const int *, void *);
-static int	gpibsubmatch2(struct device *, struct cfdata *,
-			      const int *, void *);
+static int	gpibsubmatch1(device_t, cfdata_t, const int *, void *);
+static int	gpibsubmatch2(device_t, cfdata_t, const int *, void *);
 static int	gpibprint(void *, const char *);
 
 dev_type_open(gpibopen);
@@ -85,8 +78,18 @@ dev_type_ioctl(gpibioctl);
 dev_type_poll(gpibpoll);
 
 const struct cdevsw gpib_cdevsw = {
-	gpibopen, gpibclose, gpibread, gpibwrite, gpibioctl,
-	nostop, notty, gpibpoll, nommap, nokqfilter, D_OTHER
+	.d_open = gpibopen,
+	.d_close = gpibclose,
+	.d_read = gpibread,
+	.d_write = gpibwrite,
+	.d_ioctl = gpibioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = gpibpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 
 extern struct cfdriver gpib_cd;
@@ -96,26 +99,22 @@ extern struct cfdriver gpib_cd;
 int gpibtimeout = 100000;	/* # of status tests before we give up */
 
 int
-gpibmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+gpibmatch(device_t parent, cfdata_t match, void *aux)
 {
 
 	return (1);
 }
 
 void
-gpibattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+gpibattach(device_t parent, device_t self, void *aux)
 {
 	struct gpib_softc *sc = device_private(self);
-	struct cfdata *cf = device_cfdata(&sc->sc_dev);
+	cfdata_t cf = device_cfdata(self);
 	struct gpibdev_attach_args *gda = aux;
 	struct gpib_attach_args ga;
 	int address;
 
+	sc->sc_dev = self;
 	sc->sc_ic = gda->ga_ic;
 
 	/*
@@ -141,22 +140,19 @@ gpibattach(parent, self, aux)
 	for (address=0; address<GPIB_NDEVS; address++) {
 		ga.ga_ic = sc->sc_ic;
 		ga.ga_address = address;
-		(void) config_search_ia(gpibsubmatch1, &sc->sc_dev, "gpib", &ga);
+		(void) config_search_ia(gpibsubmatch1, sc->sc_dev, "gpib",
+		    &ga);
 	}
 
 	/* attach the wild-carded devices - probably protocol busses */
 	ga.ga_ic = sc->sc_ic;
-	(void) config_search_ia(gpibsubmatch2,  &sc->sc_dev, "gpib", &ga);
+	(void) config_search_ia(gpibsubmatch2, sc->sc_dev, "gpib", &ga);
 }
 
 int
-gpibsubmatch1(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+gpibsubmatch1(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct gpib_softc *sc = (struct gpib_softc *)parent;
+	struct gpib_softc *sc = device_private(parent);
 	struct gpib_attach_args *ga = aux;
 
 	if (cf->cf_loc[GPIBCF_ADDRESS] != ga->ga_address)
@@ -175,11 +171,7 @@ gpibsubmatch1(parent, cf, ldesc, aux)
 }
 
 int
-gpibsubmatch2(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+gpibsubmatch2(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct gpib_attach_args *ga = aux;
 
@@ -195,9 +187,7 @@ gpibsubmatch2(parent, cf, ldesc, aux)
 }
 
 int
-gpibprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+gpibprint(void *aux, const char *pnp)
 {
 	struct gpib_attach_args *ga = aux;
 
@@ -207,9 +197,7 @@ gpibprint(aux, pnp)
 }
 
 int
-gpibdevprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+gpibdevprint(void *aux, const char *pnp)
 {
 
 	if (pnp != NULL)
@@ -221,8 +209,7 @@ gpibdevprint(aux, pnp)
  * Called by hardware driver, pass to device driver.
  */
 int
-gpibintr(v)
-	void *v;
+gpibintr(void *v)
 {
 	struct gpib_softc *sc = v;
 	gpib_handle_t hdl;
@@ -238,16 +225,11 @@ gpibintr(v)
  * Create a callback handle.
  */
 int
-_gpibregister(sc, slave, callback, arg, hdl)
-	struct gpib_softc *sc;
-	int slave;
-	gpib_callback_t callback;
-	void *arg;
-	gpib_handle_t *hdl;
+_gpibregister(struct gpib_softc *sc, int slave, gpib_callback_t callback,
+    void *arg, gpib_handle_t *hdl)
 {
 
-	MALLOC(*hdl, gpib_handle_t, sizeof(struct gpibqueue),
-	    M_DEVBUF, M_NOWAIT);
+	*hdl = malloc(sizeof(struct gpibqueue), M_DEVBUF, M_NOWAIT);
 	if (*hdl == NULL) {
 		DPRINTF(DBG_FAIL, ("_gpibregister: can't allocate queue\n"));
 		return (1);
@@ -264,9 +246,7 @@ _gpibregister(sc, slave, callback, arg, hdl)
  * Request exclusive access to the GPIB bus.
  */
 int
-_gpibrequest(sc, hdl)
-	struct gpib_softc *sc;
-	gpib_handle_t hdl;
+_gpibrequest(struct gpib_softc *sc, gpib_handle_t hdl)
 {
 
 	DPRINTF(DBG_FOLLOW, ("_gpibrequest: sc=%p hdl=%p\n", sc, hdl));
@@ -282,9 +262,7 @@ _gpibrequest(sc, hdl)
  * Release exclusive access to the GPIB bus.
  */
 void
-_gpibrelease(sc, hdl)
-	struct gpib_softc *sc;
-	gpib_handle_t hdl;
+_gpibrelease(struct gpib_softc *sc, gpib_handle_t hdl)
 {
 
 	DPRINTF(DBG_FOLLOW, ("_gpibrelease: sc=%p hdl=%p\n", sc, hdl));
@@ -299,8 +277,7 @@ _gpibrelease(sc, hdl)
  * Asynchronous wait.
  */
 void
-_gpibawait(sc)
-	struct gpib_softc *sc;
+_gpibawait(struct gpib_softc *sc)
 {
 	int slave;
 
@@ -314,9 +291,7 @@ _gpibawait(sc)
  * Synchronous (spin) wait.
  */
 int
-_gpibswait(sc, slave)
-	struct gpib_softc *sc;
-	int slave;
+_gpibswait(struct gpib_softc *sc, int slave)
 {
 	int timo = gpibtimeout;
 	int (*pptest)(void *, int);
@@ -326,7 +301,7 @@ _gpibswait(sc, slave)
 	pptest = sc->sc_ic->pptest;
 	while ((*pptest)(sc->sc_ic->cookie, slave) == 0) {
 		if (--timo == 0) {
-			printf("%s: swait timeout\n", sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev, "swait timeout\n");
 			return(-1);
 		}
 	}
@@ -338,9 +313,7 @@ _gpibswait(sc, slave)
  * claimed and allocated.
  */
 int
-gpib_isalloc(sc, address)
-	struct gpib_softc *sc;
-	u_int8_t address;
+gpib_isalloc(struct gpib_softc *sc, u_int8_t address)
 {
 
 	DPRINTF(DBG_FOLLOW, ("gpib_isalloc: sc=%p address=%d\n", sc, address));
@@ -357,9 +330,7 @@ gpib_isalloc(sc, address)
  * Resource accounting: allocate the address.
  */
 int
-gpib_alloc(sc, address)
-	struct gpib_softc *sc;
-	u_int8_t address;
+gpib_alloc(struct gpib_softc *sc, u_int8_t address)
 {
 
 	DPRINTF(DBG_FOLLOW, ("gpib_alloc: sc=%p address=%d\n", sc, address));
@@ -380,9 +351,7 @@ gpib_alloc(sc, address)
  * Resource accounting: deallocate the address.
  */
 void
-gpib_dealloc(sc, address)
-	struct gpib_softc *sc;
-	u_int8_t address;
+gpib_dealloc(struct gpib_softc *sc, u_int8_t address)
 {
 
 	DPRINTF(DBG_FOLLOW, ("gpib_free: sc=%p address=%d\n", sc, address));
@@ -399,12 +368,7 @@ gpib_dealloc(sc, address)
 }
 
 int
-_gpibsend(sc, slave, sec, ptr, origcnt)
-	struct gpib_softc *sc;
-	int slave;
-	int sec;
-	void *ptr;
-	int origcnt;
+_gpibsend(struct gpib_softc *sc, int slave, int sec, void *ptr, int origcnt)
 {
 	int rv;
 	int cnt = 0;
@@ -452,17 +416,12 @@ senderror:
 	(*sc->sc_ic->ifc)(sc->sc_ic->cookie);
 	DPRINTF(DBG_FAIL,
 	    ("%s: _gpibsend failed: slave %d, sec %x, sent %d of %d bytes\n",
-	    sc->sc_dev.dv_xname, slave, sec, cnt, origcnt));
+	    device_xname(sc->sc_dev), slave, sec, cnt, origcnt));
 	return (cnt);
 }
 
 int
-_gpibrecv(sc, slave, sec, ptr, origcnt)
-	struct gpib_softc *sc;
-	int slave;
-	int sec;
-	void *ptr;
-	int origcnt;
+_gpibrecv(struct gpib_softc *sc, int slave, int sec, void *ptr, int origcnt)
 {
 	int rv;
 	u_int8_t cmds[4];
@@ -525,14 +484,11 @@ recverror:
  */
 
 int
-gpibopen(dev, flags, mode, l)
-	dev_t dev;
-	int flags, mode;
-	struct lwp *l;
+gpibopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct gpib_softc *sc;
 
-	sc = device_lookup(&gpib_cd, GPIBUNIT(dev));
+	sc = device_lookup_private(&gpib_cd, GPIBUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -546,14 +502,11 @@ gpibopen(dev, flags, mode, l)
 }
 
 int
-gpibclose(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+gpibclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct gpib_softc *sc;
 
-	sc = device_lookup(&gpib_cd, GPIBUNIT(dev));
+	sc = device_lookup_private(&gpib_cd, GPIBUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -565,14 +518,11 @@ gpibclose(dev, flag, mode, l)
 }
 
 int
-gpibread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+gpibread(dev_t dev, struct uio *uio, int flags)
 {
 	struct gpib_softc *sc;
 
-	sc = device_lookup(&gpib_cd, GPIBUNIT(dev));
+	sc = device_lookup_private(&gpib_cd, GPIBUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -582,14 +532,11 @@ gpibread(dev, uio, flags)
 }
 
 int
-gpibwrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+gpibwrite(dev_t dev, struct uio *uio, int flags)
 {
 	struct gpib_softc *sc;
 
-	sc = device_lookup(&gpib_cd, GPIBUNIT(dev));
+	sc = device_lookup_private(&gpib_cd, GPIBUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -599,16 +546,11 @@ gpibwrite(dev, uio, flags)
 }
 
 int
-gpibioctl(dev, cmd, data, flag, l)
-	dev_t dev;
-	u_long cmd;
-	void *data;
-	int flag;
-	struct lwp *l;
+gpibioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct gpib_softc *sc;
 
-	sc = device_lookup(&gpib_cd, GPIBUNIT(dev));
+	sc = device_lookup_private(&gpib_cd, GPIBUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -625,14 +567,11 @@ gpibioctl(dev, cmd, data, flag, l)
 }
 
 int
-gpibpoll(dev, events, l)
-	dev_t dev;
-	int events;
-	struct lwp *l;
+gpibpoll(dev_t dev, int events, struct lwp *l)
 {
 	struct gpib_softc *sc;
 
-	sc = device_lookup(&gpib_cd, GPIBUNIT(dev));
+	sc = device_lookup_private(&gpib_cd, GPIBUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 

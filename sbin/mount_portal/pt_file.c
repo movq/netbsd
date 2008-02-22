@@ -1,4 +1,4 @@
-/*	$NetBSD: pt_file.c,v 1.17 2007/07/02 18:07:45 pooka Exp $	*/
+/*	$NetBSD: pt_file.c,v 1.19 2017/05/10 13:58:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pt_file.c,v 1.17 2007/07/02 18:07:45 pooka Exp $");
+__RCSID("$NetBSD: pt_file.c,v 1.19 2017/05/10 13:58:25 christos Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -84,10 +84,10 @@ lose_credentials(struct portal_cred *pcr)
 				pcr->pcr_gid);
 		}
 		/*
-		 * ... and now do the setuid() where we lose all special
-		 * powers (both real and effective userid).
+		 * ... and now do the seteuid() where we temporarily give
+		 * away our root privileges. 
 		 */
-		if (setuid(pcr->pcr_uid) < 0) {
+		if (seteuid(pcr->pcr_uid) < 0) {
 			syslog(LOG_WARNING,
 				"lose_credentials: setuid(%d) failed (%m)",
 				pcr->pcr_uid);
@@ -133,10 +133,9 @@ portal_file(struct portal_cred *pcr, char *key, char **v, int *fdp)
 	int     fd;
 	char    pbuf[MAXPATHLEN];
 	int     error;
-	int     origuid, origgid;
+	int     origuid;
 
 	origuid = getuid();
-	origgid = getgid();
 	pbuf[0] = '/';
 	strlcpy(pbuf + 1, key + (v[1] ? strlen(v[1]) : 0), sizeof(pbuf) - 1);
 	DEBUG_SYSLOG(LOG_DEBUG, "path = %s, uid = %d, gid = %d",

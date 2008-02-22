@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.mips,v 1.50 2008/02/18 15:21:04 tsutsui Exp $
+#	$NetBSD: Makefile.mips,v 1.68 2018/06/05 11:39:49 christos Exp $
 
 # Makefile for NetBSD
 #
@@ -46,17 +46,43 @@ GENASSYM_CONF=	${MIPS}/mips/genassym.cf
 CPPFLAGS+=	-D${MACHINE}
 DEFGP?=		-G 0
 GP?=		${DEFGP}
-CFLAGS+=	${GP} -mno-abicalls -msoft-float -ffixed-23
-.if ${MACHINE_ARCH} == "mips64eb" || ${MACHINE_ARCH} == "mips64el"
-CFLAGS+=	-msym32
+
+.if ${ACTIVE_CC} == "gcc"
+COPTS.mips_fpu.c+=	-mhard-float -Wa,-mhard-float
+AFLAGS.fp.S+=		-Wa,-mhard-float
 .endif
-AFLAGS+=	-mno-abicalls -x assembler-with-cpp -traditional-cpp ${AOPTS}
+
+CFLAGS+=	${GP} -mno-abicalls -msoft-float -ffixed-24
+.if defined(LP64) && ${LP64} == "yes"
+.if ${MACHINE_ARCH} == "mips64eb" || ${MACHINE_ARCH} == "mips64el"
+CFLAGS+=	-msym32 -mabi=64
+AFLAGS+=	-msym32 -mabi=64
+.endif
+.if ${MACHINE_ARCH} == "mips64eb"
+LDFLAGS+=	-Wl,-m,elf64btsmip
+LINKFORMAT+=	-m elf64btsmip
+SYSTEM_LD_TAIL_EXTRA+= \
+		;echo ${OBJCOPY} -O elf32-ntradbigmips $@ $@.elf32; \
+		${OBJCOPY} -O elf32-ntradbigmips $@ $@.elf32
+.endif
+.if ${MACHINE_ARCH} == "mips64el"
+LDFLAGS+=	-Wl,-m,elf64ltsmip
+LINKFORMAT+=	-m elf64ltsmip
+SYSTEM_LD_TAIL_EXTRA+= \
+		;echo ${OBJCOPY} -O elf32-ntradlittlemips $@ $@.elf32; \
+		${OBJCOPY} -O elf32-ntradlittlemips $@ $@.elf32
+.endif
+.endif # LP64=yes
+AFLAGS+=	-mno-abicalls -x assembler-with-cpp ${AOPTS}
 
 ##
 ## (3) libkern and compat
 ##
-.if !empty(IDENT:M-DLKM)
+OPT_MODULAR=	%MODULAR%
+.if !empty(OPT_MODULAR)
 KERN_AS=	obj
+.else
+KERN_AS=	library
 .endif
 
 ##
@@ -82,7 +108,6 @@ TEXTADDR?=		${DEFTEXTADDR}
 .endif
 KERNLDSCRIPT?=		${MIPS}/conf/kern.ldscript
 # some mips ports specify a "magic" format
-LINKFORMAT+=		-T ${KERNLDSCRIPT}
 EXTRA_LINKFLAGS=	${GP} ${LDOPTS}
 LINKFLAGS_NORMAL=	-X
 STRIPFLAGS=		-g -X
@@ -99,7 +124,7 @@ mips_machdep.o pmap.o: Makefile
 
 # various assembly files that depend on assym.h
 copy.o fp.o locore.o locore_mips1.o locore_mips3.o: assym.h
-lock_stubs.o mips32_subr.o mips3_subr.o mips5900_subr.o: assym.h
+lock_stubs.o mips32_subr.o mips3_subr.o: assym.h
 mips64_subr.o mipsX_subr.o sigcode.o: assym.h
 
 
@@ -121,9 +146,6 @@ mips64_subr.o mipsX_subr.o sigcode.o: assym.h
 %LOAD
 
 %RULES
-
-## Include rules for Atheros WLAN
-.include "$S/contrib/dev/ath/netbsd/Makefile.ath.inc"
 
 ##
 ## (9) port independent kernel machinery

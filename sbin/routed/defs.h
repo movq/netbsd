@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.24 2005/06/27 01:00:06 christos Exp $	*/
+/*	$NetBSD: defs.h,v 1.28 2017/10/02 11:02:19 maya Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -69,10 +69,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#ifdef sgi
-#include <strings.h>
-#include <bstring.h>
-#endif
 #include <stdarg.h>
 #include <syslog.h>
 #include <time.h>
@@ -83,14 +79,9 @@
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
 #include <sys/socket.h>
-#ifdef sgi
-#define _USER_ROUTE_TREE
-#include <net/radix.h>
-#else
 #include "radix.h"
 #define UNUSED __attribute__((unused))
 #define PATTRIB(f,l) __attribute__((format (printf,f,l)))
-#endif
 #include <net/if.h>
 #include <net/route.h>
 #include <net/if_dl.h>
@@ -112,9 +103,7 @@
  * So define it here so it can be changed for the target system.
  * It should be defined somewhere netinet/in.h, but it is not.
  */
-#ifdef sgi
-#define naddr u_int32_t
-#elif defined (__NetBSD__)
+#if defined (__NetBSD__)
 #define naddr u_int32_t
 #define _HAVE_SA_LEN
 #define _HAVE_SIN_LEN
@@ -161,9 +150,7 @@
 
 
 /* Router Discovery parameters */
-#ifndef sgi
 #define INADDR_ALLROUTERS_GROUP		0xe0000002  /* 224.0.0.2 */
-#endif
 #define	MaxMaxAdvertiseInterval		1800
 #define	MinMaxAdvertiseInterval		4
 #define	DefMaxAdvertiseInterval		600
@@ -207,7 +194,7 @@ struct rt_entry {
 #	    define RS_IF	0x001	/* for network interface */
 #	    define RS_NET_INT	0x002	/* authority route */
 #	    define RS_NET_SYN	0x004	/* fake net route for subnet */
-#	    define RS_NO_NET_SYN (RS_LOCAL | RS_LOCAL | RS_IF)
+#	    define RS_NO_NET_SYN (RS_LOCAL | RS_IF)
 #	    define RS_SUBNET	0x008	/* subnet route from any source */
 #	    define RS_LOCAL	0x010	/* loopback for pt-to-pt */
 #	    define RS_MHOME	0x020	/* from -m */
@@ -311,9 +298,6 @@ struct interface {
 		u_int	ierrors;
 		u_int	opackets;
 		u_int	oerrors;
-#ifdef sgi
-		u_int	odrops;
-#endif
 		time_t	ts;		/* timestamp on network stats */
 	} int_data;
 #	define MAX_AUTH_KEYS 5
@@ -520,12 +504,6 @@ extern char inittracename[MAXPATHLEN+1];
 
 extern struct radix_node_head *rhead;
 
-
-#ifdef sgi
-/* Fix conflicts */
-#define	dup2(x,y)		BSDdup2(x,y)
-#endif /* sgi */
-
 extern void fix_sock(int, const char *);
 extern void fix_select(void);
 extern void rip_off(void);
@@ -552,7 +530,7 @@ struct msg_limit {
 extern void	msglim(struct msg_limit *, naddr,
 		       const char *, ...) PATTRIB(3,4);
 #define	LOGERR(msg) msglog(msg ": %s", strerror(errno))
-extern void	logbad(int, const char *, ...) PATTRIB(2,3);
+__dead extern void	logbad(int, const char *, ...) PATTRIB(2,3);
 #define	BADERR(dump,msg) logbad(dump,msg ": %s", strerror(errno))
 #ifdef DEBUG
 #define	DBGERR(dump,msg) BADERR(dump,msg)
@@ -643,7 +621,8 @@ void rt_xaddrs(struct rt_addrinfo *, struct sockaddr *, struct sockaddr *,
 extern naddr	std_mask(naddr);
 extern naddr	ripv1_mask_net(naddr, struct interface *);
 extern naddr	ripv1_mask_host(naddr,struct interface *);
-#define		on_net(a,net,mask) (((ntohl(a) ^ (net)) & (mask)) == 0)
+#define		on_net_h(a,net,mask) ((((a) ^ (net)) & (mask)) == 0)
+#define		on_net(a,net,mask) on_net_h(ntohl(a),net,mask)
 extern int	check_dst(naddr);
 extern struct interface *check_dup(naddr, naddr, naddr, int);
 extern int	check_remote(struct interface *);

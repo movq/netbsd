@@ -1,4 +1,4 @@
-/*	$NetBSD: utmpentry.h,v 1.5 2006/09/20 19:39:23 christos Exp $	*/
+/*	$NetBSD: utmpentry.h,v 1.8 2015/11/21 15:01:43 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,8 +57,20 @@ struct utmpentry {
 	struct utmpentry *next;
 };
 
-extern int maxname, maxline, maxhost;
+extern size_t maxname, maxline, maxhost;
 extern int etype;
 
-int getutentries(const char *, struct utmpentry **);
-void freeutentries(struct utmpentry *);
+/*
+ * getutentries provides a linked list of struct utmpentry and returns
+ * the number of entries. The first argument, if not null, names an 
+ * alternate utmp(x) file to look in.
+ *
+ * The memory returned by getutentries belongs to getutentries. The
+ * list returned (or elements of it) may be returned again later if
+ * utmp hasn't changed in the meantime.
+ *
+ * endutentries clears and frees the cached data.
+ */
+
+size_t getutentries(const char *, struct utmpentry **);
+void endutentries(void);

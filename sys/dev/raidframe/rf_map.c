@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_map.c,v 1.43 2007/03/04 06:02:38 christos Exp $	*/
+/*	$NetBSD: rf_map.c,v 1.47 2016/10/15 20:31:15 oster Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  **************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_map.c,v 1.43 2007/03/04 06:02:38 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_map.c,v 1.47 2016/10/15 20:31:15 oster Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -374,7 +374,7 @@ rf_ConfigureMapModule(RF_ShutdownList_t **listp)
 }
 
 RF_AccessStripeMapHeader_t *
-rf_AllocAccessStripeMapHeader()
+rf_AllocAccessStripeMapHeader(void)
 {
 	RF_AccessStripeMapHeader_t *p;
 
@@ -392,7 +392,7 @@ rf_FreeAccessStripeMapHeader(RF_AccessStripeMapHeader_t *p)
 
 
 RF_VoidFunctionPointerListElem_t *
-rf_AllocVFPListElem()
+rf_AllocVFPListElem(void)
 {
 	RF_VoidFunctionPointerListElem_t *p;
 
@@ -411,7 +411,7 @@ rf_FreeVFPListElem(RF_VoidFunctionPointerListElem_t *p)
 
 
 RF_VoidPointerListElem_t *
-rf_AllocVPListElem()
+rf_AllocVPListElem(void)
 {
 	RF_VoidPointerListElem_t *p;
 
@@ -429,7 +429,7 @@ rf_FreeVPListElem(RF_VoidPointerListElem_t *p)
 }
 
 RF_ASMHeaderListElem_t *
-rf_AllocASMHeaderListElem()
+rf_AllocASMHeaderListElem(void)
 {
 	RF_ASMHeaderListElem_t *p;
 
@@ -447,7 +447,7 @@ rf_FreeASMHeaderListElem(RF_ASMHeaderListElem_t *p)
 }
 
 RF_FailedStripe_t *
-rf_AllocFailedStripeStruct()
+rf_AllocFailedStripeStruct(void)
 {
 	RF_FailedStripe_t *p;
 
@@ -468,7 +468,7 @@ rf_FreeFailedStripeStruct(RF_FailedStripe_t *p)
 
 
 RF_PhysDiskAddr_t *
-rf_AllocPhysDiskAddr()
+rf_AllocPhysDiskAddr(void)
 {
 	RF_PhysDiskAddr_t *p;
 
@@ -557,7 +557,7 @@ rf_FreeAccessStripeMap(RF_AccessStripeMapHeader_t *hdr)
 {
 	RF_AccessStripeMap_t *p;
 	RF_PhysDiskAddr_t *pdp, *trailer, *pdaList = NULL, *pdaEnd = NULL;
-	int     count = 0, t, asm_count = 0;
+	int     count = 0, t;
 
 	for (p = hdr->stripeMap; p; p = p->next) {
 
@@ -598,8 +598,6 @@ rf_FreeAccessStripeMap(RF_AccessStripeMapHeader_t *hdr)
 		}
 		if (trailer)
 			pdaEnd = trailer;
-
-		asm_count++;
 	}
 
 	/* debug only */
@@ -632,9 +630,9 @@ rf_CheckStripeForFailures(RF_Raid_t *raidPtr, RF_AccessStripeMap_t *asmap)
 	RF_SectorNum_t diskOffset, poffset;
 
 	/* quick out in the fault-free case.  */
-	RF_LOCK_MUTEX(raidPtr->mutex);
+	rf_lock_mutex2(raidPtr->mutex);
 	numFailures = raidPtr->numFailures;
-	RF_UNLOCK_MUTEX(raidPtr->mutex);
+	rf_unlock_mutex2(raidPtr->mutex);
 	if (numFailures == 0)
 		return (0);
 
@@ -683,9 +681,9 @@ rf_NumFailedDataUnitsInStripe(RF_Raid_t *raidPtr, RF_AccessStripeMap_t *asmap)
 	int     numFailures;
 
 	/* quick out in the fault-free case.  */
-	RF_LOCK_MUTEX(raidPtr->mutex);
+	rf_lock_mutex2(raidPtr->mutex);
 	numFailures = raidPtr->numFailures;
-	RF_UNLOCK_MUTEX(raidPtr->mutex);
+	rf_unlock_mutex2(raidPtr->mutex);
 	if (numFailures == 0)
 		return (0);
 	numFailures = 0;
@@ -848,7 +846,7 @@ rf_ASMParityAdjust(RF_PhysDiskAddr_t *toAdjust,
 }
 
 /* Check if a disk has been spared or failed. If spared, redirect the
- * I/O.  If it has been failed, record it in the asm pointer.  Fourth
+ * I/O.  If it has been failed, record it in the asm pointer.  Fifth
  * arg is whether data or parity.  */
 void
 rf_ASMCheckStatus(RF_Raid_t *raidPtr, RF_PhysDiskAddr_t *pda_p,

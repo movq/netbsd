@@ -1,4 +1,4 @@
-/* $NetBSD: rsbus.c,v 1.5 2007/03/26 22:46:20 hubertf Exp $ */
+/* $NetBSD: rsbus.c,v 1.10 2012/10/27 17:17:23 chs Exp $ */
 
 /*
  * Copyright (c) 2002
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,13 +29,12 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: rsbus.c,v 1.5 2007/03/26 22:46:20 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rsbus.c,v 1.10 2012/10/27 17:17:23 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <acorn32/eb7500atx/rsbus.h>
 
@@ -51,28 +44,25 @@ extern struct bus_space rsbus_bs_tag;
 
 /* Declare prototypes */
 
-static int	rsbus_match(struct device *, struct cfdata *, void *);
-static void	rsbus_attach(struct device *, struct device *, void *);
+static int	rsbus_match(device_t, cfdata_t, void *);
+static void	rsbus_attach(device_t, device_t, void *);
 static int	rsbus_print(void *, const char *);
-static int	rsbus_search(struct device *, struct cfdata *,
+static int	rsbus_search(device_t, cfdata_t,
 			     const int *, void *);
 
-CFATTACH_DECL(rsbus, sizeof(struct rsbus_softc),
+CFATTACH_DECL_NEW(rsbus, sizeof(struct rsbus_softc),
     rsbus_match, rsbus_attach, NULL, NULL);
  
 static int
-rsbus_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+rsbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return(1);
 }
 
 static void
-rsbus_attach(struct device *parent, struct device *self, void *aux)
+rsbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct rsbus_softc *sc = (void *) self;
+	struct rsbus_softc *sc = device_private(self);
 	sc->sc_iot = &rsbus_bs_tag;
 
 	printf("\n");
@@ -84,13 +74,9 @@ rsbus_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-rsbus_search(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+rsbus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct rsbus_softc *sc = (struct rsbus_softc *)parent;
+	struct rsbus_softc *sc = device_private(parent);
 	struct rsbus_attach_args sa;
 
 	sa.sa_iot = sc->sc_iot;
@@ -105,11 +91,9 @@ rsbus_search(parent, cf, ldesc, aux)
 }
 
 static int
-rsbus_print(aux, name)
-	void *aux;
-	const char *name;
+rsbus_print(void *aux, const char *name)
 {
-        struct rsbus_attach_args *sa = (struct rsbus_attach_args*)aux;
+        struct rsbus_attach_args *sa = aux;
 
 	if (sa->sa_size)
 		aprint_normal(" addr 0x%lx", sa->sa_addr);
@@ -120,4 +104,3 @@ rsbus_print(aux, name)
 
 	return (UNCONF);
 }
-

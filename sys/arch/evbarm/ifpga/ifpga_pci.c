@@ -1,4 +1,4 @@
-/*	$NetBSD: ifpga_pci.c,v 1.12 2005/12/11 12:17:09 christos Exp $	*/
+/*	$NetBSD: ifpga_pci.c,v 1.20 2017/04/21 12:18:59 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2001 ARM Ltd
@@ -64,7 +64,7 @@
 #define _ARM32_BUS_DMA_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ifpga_pci.c,v 1.12 2005/12/11 12:17:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ifpga_pci.c,v 1.20 2017/04/21 12:18:59 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: ifpga_pci.c,v 1.12 2005/12/11 12:17:09 christos Exp 
 #include <evbarm/dev/v360reg.h>
 
 
-void		ifpga_pci_attach_hook (struct device *, struct device *,
+void		ifpga_pci_attach_hook (device_t, device_t,
 		    struct pcibus_attach_args *);
 int		ifpga_pci_bus_maxdevs (void *, int);
 pcitag_t	ifpga_pci_make_tag (void *, int, int, int);
@@ -93,9 +93,9 @@ void		ifpga_pci_decompose_tag (void *, pcitag_t, int *, int *,
 		    int *);
 pcireg_t	ifpga_pci_conf_read (void *, pcitag_t, int);
 void		ifpga_pci_conf_write (void *, pcitag_t, int, pcireg_t);
-int		ifpga_pci_intr_map (struct pci_attach_args *,
+int		ifpga_pci_intr_map (const struct pci_attach_args *,
 		    pci_intr_handle_t *);
-const char	*ifpga_pci_intr_string (void *, pci_intr_handle_t);
+const char	*ifpga_pci_intr_string (void *, pci_intr_handle_t, char *, size_t);
 const struct evcnt *ifpga_pci_intr_evcnt (void *, pci_intr_handle_t);
 void		*ifpga_pci_intr_establish (void *, pci_intr_handle_t, int,
 		    int (*)(void *), void *);
@@ -113,8 +113,13 @@ struct arm32_pci_chipset ifpga_pci_chipset = {
 	ifpga_pci_intr_map,
 	ifpga_pci_intr_string,
 	ifpga_pci_intr_evcnt,
+	NULL,	/* intr_setattr */
 	ifpga_pci_intr_establish,
-	ifpga_pci_intr_disestablish
+	ifpga_pci_intr_disestablish,
+#ifdef __HAVE_PCI_CONF_HOOK
+	NULL,
+#endif
+	ifpga_pci_conf_interrupt,
 };
 
 /*
@@ -156,7 +161,7 @@ pci_intr(void *arg)
 
 
 void
-ifpga_pci_attach_hook(struct device *parent, struct device *self,
+ifpga_pci_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 #ifdef PCI_DEBUG
@@ -207,6 +212,9 @@ ifpga_pci_conf_read(void *pcv, pcitag_t tag, int reg)
 	struct ifpga_pci_softc *sc = (struct ifpga_pci_softc *)pcv;
 	int bus, device, function;
 	u_int address;
+
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return (pcireg_t) -1;
 
 	ifpga_pci_decompose_tag(pcv, tag, &bus, &device, &function);
 
@@ -260,6 +268,9 @@ ifpga_pci_conf_write(void *pcv, pcitag_t tag, int reg, pcireg_t data)
 	    pcv, tag, reg, data);
 #endif
 
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return;
+
 	ifpga_pci_decompose_tag(pcv, tag, &bus, &device, &function);
 
 	/* Reset the appertures so that we can talk to the register space.  */
@@ -296,7 +307,7 @@ ifpga_pci_conf_write(void *pcv, pcitag_t tag, int reg, pcireg_t data)
 }
 
 int
-ifpga_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+ifpga_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int line = pa->pa_intrline;
 
@@ -321,18 +332,16 @@ ifpga_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-ifpga_pci_intr_string(void *pcv, pci_intr_handle_t ih)
+ifpga_pci_intr_string(void *pcv, pci_intr_handle_t ih, char *buf, size_t len)
 {
-	static char irqstr[12];		/* 6 + 1 + NULL + sanity */
-
 #ifdef PCI_DEBUG
 	printf("ifpga_pci_intr_string(pcv=%p, ih=0x%lx)\n", pcv, ih);
 #endif
 	if (ih == 0)
 		panic("ifpga_pci_intr_string: bogus handle 0x%lx", ih);
 
-	sprintf(irqstr, "pciint%ld", ih - IFPGA_INTRNUM_PCIINT0);
-	return irqstr;	
+	snprintf(buf, len, "pciint%ld", ih - IFPGA_INTRNUM_PCIINT0);
+	return buf;	
 }
 
 const struct evcnt *
@@ -348,15 +357,12 @@ ifpga_pci_intr_establish(void *pcv, pci_intr_handle_t ih, int level,
     int (*func) (void *), void *arg)
 {
 	void *intr;
-	int length;
 
 #ifdef PCI_DEBUG
 	printf("ifpga_pci_intr_establish(pcv=%p, ih=0x%lx, level=%d, "
 	    "func=%p, arg=%p)\n", pcv, ih, level, func, arg);
 #endif
 
-	/* Copy the interrupt string to a private buffer */
-	length = strlen(ifpga_pci_intr_string(pcv, ih));
 	intr = ifpga_intr_establish(ih, level, func, arg);
 
 	return intr;
@@ -369,7 +375,5 @@ ifpga_pci_intr_disestablish(void *pcv, void *cookie)
 	printf("ifpga_pci_intr_disestablish(pcv=%p, cookie=%p)\n",
 	    pcv, cookie);
 #endif
-	/* XXXX Need to free the string */
-
 	ifpga_intr_disestablish(cookie);
 }

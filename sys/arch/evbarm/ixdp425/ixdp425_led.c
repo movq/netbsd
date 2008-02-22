@@ -1,4 +1,4 @@
-/*	$NetBSD: ixdp425_led.c,v 1.3 2007/10/17 19:54:13 garbled Exp $ */
+/*	$NetBSD: ixdp425_led.c,v 1.6 2012/10/14 14:20:58 msaitoh Exp $ */
 /*
  * Copyright (c) 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +26,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixdp425_led.c,v 1.3 2007/10/17 19:54:13 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixdp425_led.c,v 1.6 2012/10/14 14:20:58 msaitoh Exp $");
 
 /*
  * LED support for IXDP425
@@ -45,19 +39,18 @@ __KERNEL_RCSID(0, "$NetBSD: ixdp425_led.c,v 1.3 2007/10/17 19:54:13 garbled Exp 
 #include <sys/kernel.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/ixp425_sipvar.h>
 #include <arm/xscale/ixp425var.h>
 
-static int	ixdpled_match(struct device *, struct cfdata *, void *);
-static void	ixdpled_attach(struct device *, struct device *, void *);
+static int	ixdpled_match(device_t, cfdata_t, void *);
+static void	ixdpled_attach(device_t, device_t, void *);
 static void	ixdpled_callout(void *);
 
 extern void	ixp425_expbus_init(void);
 
 struct ixdpled_softc {
-	struct device		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	bus_addr_t		sc_baseaddr;
@@ -65,19 +58,19 @@ struct ixdpled_softc {
 	struct callout		sc_co;
 };
 
-CFATTACH_DECL(ixdpled, sizeof(struct ixdpled_softc),
+CFATTACH_DECL_NEW(ixdpled, sizeof(struct ixdpled_softc),
     ixdpled_match, ixdpled_attach, NULL, NULL);
 
 static int
-ixdpled_match(struct device *parent, struct cfdata *match, void *aux)
+ixdpled_match(device_t parent, cfdata_t match, void *aux)
 {
 	return (1);
 }
 
 static void
-ixdpled_attach(struct device *parent, struct device *self, void *aux)
+ixdpled_attach(device_t parent, device_t self, void *aux)
 {
-	struct ixdpled_softc*		sc = (struct ixdpled_softc*) self;
+	struct ixdpled_softc*		sc = device_private(self);
 	struct ixpsip_attach_args*	sa = aux;
 
 	printf("\n");
@@ -87,7 +80,7 @@ ixdpled_attach(struct device *parent, struct device *self, void *aux)
 
 	if(bus_space_map(sc->sc_iot, sa->sa_addr, sa->sa_size, 0,
 			 &sc->sc_ioh)) {
-		printf("%s: unable to map registers\n", self->dv_xname);
+		printf("%s: unable to map registers\n", device_xname(self));
 		return;
 	}
 

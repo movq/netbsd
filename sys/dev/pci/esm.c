@@ -1,4 +1,4 @@
-/*      $NetBSD: esm.c,v 1.44 2007/12/09 20:28:07 jmcneill Exp $      */
+/*      $NetBSD: esm.c,v 1.59 2016/07/07 06:55:41 msaitoh Exp $      */
 
 /*-
  * Copyright (c) 2002, 2003 Matt Fredette
@@ -66,26 +66,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esm.c,v 1.44 2007/12/09 20:28:07 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esm.c,v 1.59 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/device.h>
-
 #include <sys/bus.h>
-
 #include <sys/audioio.h>
+
 #include <dev/audio_if.h>
 #include <dev/mulaw.h>
 #include <dev/auconv.h>
+
 #include <dev/ic/ac97var.h>
 #include <dev/ic/ac97reg.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
-
 #include <dev/pci/esmreg.h>
 #include <dev/pci/esmvar.h>
 
@@ -133,9 +132,7 @@ static inline void	wp_settimer(struct esm_softc *, u_int);
 static inline void	wp_starttimer(struct esm_softc *);
 static inline void	wp_stoptimer(struct esm_softc *);
 
-static inline uint16_t	wc_rdreg(struct esm_softc *, uint16_t);
 static inline void	wc_wrreg(struct esm_softc *, uint16_t, uint16_t);
-static inline uint16_t	wc_rdchctl(struct esm_softc *, int);
 static inline void	wc_wrchctl(struct esm_softc *, int, uint16_t);
 
 static inline u_int	calc_timer_freq(struct esm_chinfo*);
@@ -146,11 +143,21 @@ static void		esmch_set_format(struct esm_chinfo *,
 static void		esmch_combine_input(struct esm_softc *,
 			    struct esm_chinfo *);
 
-static bool		esm_suspend(device_t);
-static bool		esm_resume(device_t);
+static bool		esm_suspend(device_t, const pmf_qual_t *);
+static bool		esm_resume(device_t, const pmf_qual_t *);
+static void		esm_childdet(device_t, device_t);
+static int		esm_match(device_t, cfdata_t, void *);
+static void		esm_attach(device_t, device_t, void *);
+static int		esm_detach(device_t, int);
+static int		esm_intr(void *);
 
-CFATTACH_DECL(esm, sizeof(struct esm_softc),
-    esm_match, esm_attach, NULL, NULL);
+static void		esm_freemem(struct esm_softc *, struct esm_dma *);
+static int		esm_allocmem(struct esm_softc *, size_t, size_t,
+			             struct esm_dma *);
+
+
+CFATTACH_DECL2_NEW(esm, sizeof(struct esm_softc),
+    esm_match, esm_attach, esm_detach, NULL, NULL, esm_childdet);
 
 const struct audio_hw_if esm_hw_if = {
 	NULL,				/* open */
@@ -180,7 +187,7 @@ const struct audio_hw_if esm_hw_if = {
 	esm_trigger_output,
 	esm_trigger_input,
 	NULL,
-	NULL,
+	esm_get_locks,
 };
 
 struct audio_device esm_device = {
@@ -239,7 +246,7 @@ esm_get_quirks(pcireg_t subid)
 {
 	int i;
 
-	for (i = 0; i < (sizeof esm_quirks / sizeof esm_quirks[0]); i++) {
+	for (i = 0; i < __arraycount(esm_quirks); i++) {
 		if (PCI_VENDOR(subid) == esm_quirks[i].eq_vendor &&
 		    PCI_PRODUCT(subid) == esm_quirks[i].eq_product) {
 			return esm_quirks[i].eq_quirks;
@@ -277,8 +284,8 @@ esm_dump_regs(struct esm_softc *ess)
 {
 	int i;
 
-	printf("%s registers:", ess->sc_dev.dv_xname);
-	for (i = 0; i < (sizeof dump_regs / sizeof dump_regs[0]); i++) {
+	printf("%s registers:", device_xname(ess->sc_dev));
+	for (i = 0; i < __arraycount(dump_regs); i++) {
 		if (i % 5 == 0)
 			printf("\n");
 		printf("0x%2.2x: ", dump_regs[i].offset);
@@ -326,7 +333,7 @@ esm_read_codec(void *sc, uint8_t regno, uint16_t *result)
 	}
 	if (t == 20)
 		printf("%s: esm_read_codec() PROGLESS timed out.\n",
-		    ess->sc_dev.dv_xname);
+		    device_xname(ess->sc_dev));
 
 	bus_space_write_1(ess->st, ess->sh, PORT_CODEC_CMD,
 	    CODEC_CMD_READ | regno);
@@ -342,7 +349,7 @@ esm_read_codec(void *sc, uint8_t regno, uint16_t *result)
 	if (t == 20)
 		/* Timed out, but perform dummy read. */
 		printf("%s: esm_read_codec() RW_DONE timed out.\n",
-		    ess->sc_dev.dv_xname);
+		    device_xname(ess->sc_dev));
 
 	*result = bus_space_read_2(ess->st, ess->sh, PORT_CODEC_REG);
 
@@ -366,7 +373,7 @@ esm_write_codec(void *sc, uint8_t regno, uint16_t data)
 	if (t == 20) {
 		/* Timed out. Abort writing. */
 		printf("%s: esm_write_codec() PROGLESS timed out.\n",
-		    ess->sc_dev.dv_xname);
+		    device_xname(ess->sc_dev));
 		return -1;
 	}
 
@@ -421,7 +428,7 @@ apu_setindex(struct esm_softc *ess, uint16_t reg)
 		bus_space_write_2(ess->st, ess->sh, PORT_DSP_DATA, reg);
 	}
 	if (t == 1000)
-		printf("%s: apu_setindex() timed out.\n", ess->sc_dev.dv_xname);
+		printf("%s: apu_setindex() timed out.\n", device_xname(ess->sc_dev));
 }
 
 static inline uint16_t
@@ -451,7 +458,7 @@ wp_wrapu(struct esm_softc *ess, int ch, uint16_t reg, uint16_t data)
 		bus_space_write_2(ess->st, ess->sh, PORT_DSP_DATA, data);
 	}
 	if (t == 1000)
-		printf("%s: wp_wrapu() timed out.\n", ess->sc_dev.dv_xname);
+		printf("%s: wp_wrapu() timed out.\n", device_xname(ess->sc_dev));
 }
 
 static inline void
@@ -499,27 +506,12 @@ wp_stoptimer(struct esm_softc *ess)
 
 /* WaveCache */
 
-static inline uint16_t
-wc_rdreg(struct esm_softc *ess, uint16_t reg)
-{
-
-	bus_space_write_2(ess->st, ess->sh, PORT_WAVCACHE_INDEX, reg);
-	return bus_space_read_2(ess->st, ess->sh, PORT_WAVCACHE_DATA);
-}
-
 static inline void
 wc_wrreg(struct esm_softc *ess, uint16_t reg, uint16_t data)
 {
 
 	bus_space_write_2(ess->st, ess->sh, PORT_WAVCACHE_INDEX, reg);
 	bus_space_write_2(ess->st, ess->sh, PORT_WAVCACHE_DATA, data);
-}
-
-static inline uint16_t
-wc_rdchctl(struct esm_softc *ess, int ch)
-{
-
-	return wc_rdreg(ess, ch << 3);
 }
 
 static inline void
@@ -589,7 +581,7 @@ esm_initcodec(struct esm_softc *ess)
 		delay(21);
 
 		/* Try cold reset. */
-		printf("%s: will perform cold reset.\n", ess->sc_dev.dv_xname);
+		printf("%s: will perform cold reset.\n", device_xname(ess->sc_dev));
 		data = bus_space_read_2(ess->st, ess->sh, PORT_GPIO_DIR);
 		if (pci_conf_read(ess->pc, ess->tag, 0x58) & 1)
 			data |= 0x10;
@@ -687,14 +679,14 @@ esm_init_output (void *sc, void *start, int size)
 	p = &ess->sc_dma;
 	if ((char *)start != (char *)p->addr + MAESTRO_PLAYBUF_OFF) {
 		printf("%s: esm_init_output: bad addr %p\n",
-		    ess->sc_dev.dv_xname, start);
+		    device_xname(ess->sc_dev), start);
 		return EINVAL;
 	}
 
 	ess->pch.base = DMAADDR(p) + MAESTRO_PLAYBUF_OFF;
 
 	DPRINTF(ESM_DEBUG_DMA, ("%s: pch.base = 0x%x\n",
-		ess->sc_dev.dv_xname, ess->pch.base));
+		device_xname(ess->sc_dev), ess->pch.base));
 
 	return 0;
 }
@@ -709,7 +701,7 @@ esm_init_input (void *sc, void *start, int size)
 	p = &ess->sc_dma;
 	if ((char *)start != (char *)p->addr + MAESTRO_RECBUF_OFF) {
 		printf("%s: esm_init_input: bad addr %p\n",
-		    ess->sc_dev.dv_xname, start);
+		    device_xname(ess->sc_dev), start);
 		return EINVAL;
 	}
 
@@ -723,7 +715,7 @@ esm_init_input (void *sc, void *start, int size)
 	}
 
 	DPRINTF(ESM_DEBUG_DMA, ("%s: rch.base = 0x%x\n",
-		ess->sc_dev.dv_xname, ess->rch.base));
+		device_xname(ess->sc_dev), ess->rch.base));
 
 	return 0;
 }
@@ -754,7 +746,7 @@ esm_trigger_output(void *sc, void *start, void *end, int blksize,
 #ifdef DIAGNOSTIC
 	if (ess->pactive) {
 		printf("%s: esm_trigger_output: already running",
-		    ess->sc_dev.dv_xname);
+		    device_xname(ess->sc_dev));
 		return EINVAL;
 	}
 #endif
@@ -764,7 +756,7 @@ esm_trigger_output(void *sc, void *start, void *end, int blksize,
 	p = &ess->sc_dma;
 	if ((char *)start != (char *)p->addr + MAESTRO_PLAYBUF_OFF) {
 		printf("%s: esm_trigger_output: bad addr %p\n",
-		    ess->sc_dev.dv_xname, start);
+		    device_xname(ess->sc_dev), start);
 		return EINVAL;
 	}
 
@@ -870,7 +862,7 @@ esm_trigger_input(void *sc, void *start, void *end, int blksize,
 #ifdef DIAGNOSTIC
 	if (ess->ractive) {
 		printf("%s: esm_trigger_input: already running",
-		    ess->sc_dev.dv_xname);
+		    device_xname(ess->sc_dev));
 		return EINVAL;
 	}
 #endif
@@ -880,7 +872,7 @@ esm_trigger_input(void *sc, void *start, void *end, int blksize,
 	p = &ess->sc_dma;
 	if ((char *)start != (char *)p->addr + MAESTRO_RECBUF_OFF) {
 		printf("%s: esm_trigger_input: bad addr %p\n",
-		    ess->sc_dev.dv_xname, start);
+		    device_xname(ess->sc_dev), start);
 		return EINVAL;
 	}
 
@@ -1310,15 +1302,13 @@ esm_query_devinfo(void *sc, mixer_devinfo_t *dip)
 }
 
 void *
-esm_malloc(void *sc, int direction, size_t size,
-    struct malloc_type *pool, int flags)
+esm_malloc(void *sc, int direction, size_t size)
 {
 	struct esm_softc *ess;
 	int off;
 
 	DPRINTF(ESM_DEBUG_DMA,
-	    ("esm_malloc(%p, %d, 0x%lx, %p, 0x%x)",
-	    sc, direction, (unsigned long int)size, pool, flags));
+	    ("esm_malloc(%p, %d, 0x%zd)", sc, direction, size));
 	ess = sc;
 	/*
 	 * Each buffer can only be allocated once.
@@ -1342,13 +1332,11 @@ esm_malloc(void *sc, int direction, size_t size,
 }
 
 void
-esm_free(void *sc, void *ptr, struct malloc_type *pool)
+esm_free(void *sc, void *ptr, size_t size)
 {
 	struct esm_softc *ess;
 
-	DPRINTF(ESM_DEBUG_DMA,
-	    ("esm_free(%p, %p, %p)\n",
-	    sc, ptr, pool));
+	DPRINTF(ESM_DEBUG_DMA, ("esm_free(%p, %p, %zd)\n", sc, ptr, size));
 	ess = sc;
 	if ((char *)ptr == (char *)ess->sc_dma.addr + MAESTRO_PLAYBUF_OFF)
 		ess->rings_alloced &= ~AUMODE_PLAY;
@@ -1401,7 +1389,7 @@ esm_get_props(void *sc)
  * Bus space.
  */
 
-int
+static int
 esm_intr(void *sc)
 {
 	struct esm_softc *ess;
@@ -1411,9 +1399,13 @@ esm_intr(void *sc)
 
 	ess = sc;
 	ret = 0;
+
+	mutex_spin_enter(&ess->sc_intr_lock);
 	status = bus_space_read_1(ess->st, ess->sh, PORT_HOSTINT_STAT);
-	if (!status)
+	if (!status) {
+		mutex_spin_exit(&ess->sc_intr_lock);
 		return 0;
+	}
 
 	/* Acknowledge all. */
 	bus_space_write_2(ess->st, ess->sh, PORT_INT_STAT, 1);
@@ -1489,11 +1481,29 @@ esm_intr(void *sc)
 		}
 		ret++;
 	}
+	mutex_spin_exit(&ess->sc_intr_lock);
 
 	return ret;
 }
 
-int
+static void
+esm_freemem(struct esm_softc *sc, struct esm_dma *p)
+{
+	if (p->size == 0)
+		return;
+
+	bus_dmamem_free(sc->dmat, p->segs, p->nsegs);
+
+	bus_dmamem_unmap(sc->dmat, p->addr, p->size);
+
+	bus_dmamap_destroy(sc->dmat, p->map);
+
+	bus_dmamap_unload(sc->dmat, p->map);
+
+	p->size = 0;
+}
+
+static int
 esm_allocmem(struct esm_softc *sc, size_t size, size_t align,
     struct esm_dma *p)
 {
@@ -1501,23 +1511,23 @@ esm_allocmem(struct esm_softc *sc, size_t size, size_t align,
 
 	p->size = size;
 	error = bus_dmamem_alloc(sc->dmat, p->size, align, 0,
-				 p->segs, sizeof(p->segs)/sizeof(p->segs[0]),
-				 &p->nsegs, BUS_DMA_NOWAIT);
+				 p->segs, __arraycount(p->segs),
+				 &p->nsegs, BUS_DMA_WAITOK);
 	if (error)
 		return error;
 
 	error = bus_dmamem_map(sc->dmat, p->segs, p->nsegs, p->size,
-			       &p->addr, BUS_DMA_NOWAIT|BUS_DMA_COHERENT);
+			       &p->addr, BUS_DMA_WAITOK|BUS_DMA_COHERENT);
 	if (error)
 		goto free;
 
 	error = bus_dmamap_create(sc->dmat, p->size, 1, p->size,
-				  0, BUS_DMA_NOWAIT, &p->map);
+				  0, BUS_DMA_WAITOK, &p->map);
 	if (error)
 		goto unmap;
 
 	error = bus_dmamap_load(sc->dmat, p->map, p->addr, p->size, NULL,
-				BUS_DMA_NOWAIT);
+				BUS_DMA_WAITOK);
 	if (error)
 		goto destroy;
 
@@ -1530,11 +1540,12 @@ esm_allocmem(struct esm_softc *sc, size_t size, size_t align,
  free:
 	bus_dmamem_free(sc->dmat, p->segs, p->nsegs);
 
+	p->size = 0;
 	return error;
 }
 
-int
-esm_match(struct device *dev, struct cfdata *match, void *aux)
+static int
+esm_match(device_t dev, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -1557,10 +1568,9 @@ esm_match(struct device *dev, struct cfdata *match, void *aux)
 	return 0;
 }
 
-void
-esm_attach(struct device *parent, struct device *self, void *aux)
+static void
+esm_attach(device_t parent, device_t self, void *aux)
 {
-	char devinfo[256];
 	struct esm_softc *ess;
 	struct pci_attach_args *pa;
 	const char *intrstr;
@@ -1568,20 +1578,21 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 	pcitag_t tag;
 	pci_intr_handle_t ih;
 	pcireg_t csr, data;
-	int revision;
 	uint16_t codec_data;
 	uint16_t pcmbar;
 	int error;
+	char intrbuf[PCI_INTRSTR_LEN];
 
-	ess = (struct esm_softc *)self;
+	ess = device_private(self);
+	ess->sc_dev = self;
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
 	tag = pa->pa_tag;
-	aprint_naive(": Audio controller\n");
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	revision = PCI_REVISION(pa->pa_class);
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, revision);
+	pci_aprint_devinfo(pa, "Audio controller");
+
+	mutex_init(&ess->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&ess->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
 
 	/* Enable the device. */
 	csr = pci_conf_read(pc, tag, PCI_COMMAND_STATUS_REG);
@@ -1590,8 +1601,10 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map I/O register */
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0,
-	    &ess->st, &ess->sh, NULL, NULL)) {
-		aprint_error("%s: can't map i/o space\n", ess->sc_dev.dv_xname);
+	    &ess->st, &ess->sh, NULL, &ess->sz)) {
+		aprint_error_dev(ess->sc_dev, "can't map i/o space\n");
+		mutex_destroy(&ess->sc_lock);
+		mutex_destroy(&ess->sc_intr_lock);
 		return;
 	}
 
@@ -1605,36 +1618,39 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 
 	DPRINTF(ESM_DEBUG_PCI,
 	    ("%s: sub-system vendor 0x%4.4x, product 0x%4.4x\n",
-	    ess->sc_dev.dv_xname,
+	    device_xname(ess->sc_dev),
 	    PCI_VENDOR(ess->subid), PCI_PRODUCT(ess->subid)));
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: can't map interrupt\n", ess->sc_dev.dv_xname);
+		aprint_error_dev(ess->sc_dev, "can't map interrupt\n");
+		mutex_destroy(&ess->sc_lock);
+		mutex_destroy(&ess->sc_intr_lock);
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	ess->ih = pci_intr_establish(pc, ih, IPL_AUDIO, esm_intr, self);
 	if (ess->ih == NULL) {
-		aprint_error("%s: can't establish interrupt",
-		    ess->sc_dev.dv_xname);
+		aprint_error_dev(ess->sc_dev, "can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
+		mutex_destroy(&ess->sc_lock);
+		mutex_destroy(&ess->sc_intr_lock);
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n",
-	    ess->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(ess->sc_dev, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Setup PCI config registers
 	 */
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, ess,
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
 	    pci_activate_null)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", ess->sc_dev.dv_xname,
-		    error);
+		aprint_error_dev(ess->sc_dev, "cannot activate %d\n", error);
+		mutex_destroy(&ess->sc_lock);
+		mutex_destroy(&ess->sc_intr_lock);
 		return;
 	}
 	delay(100000);
@@ -1657,8 +1673,9 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 
 	esm_read_codec(ess, 0, &codec_data);
 	if (codec_data == 0x80) {
-		aprint_error("%s: PT101 codec detected!\n",
-		    ess->sc_dev.dv_xname);
+		aprint_error_dev(ess->sc_dev, "PT101 codec detected!\n");
+		mutex_destroy(&ess->sc_lock);
+		mutex_destroy(&ess->sc_intr_lock);
 		return;
 	}
 
@@ -1681,14 +1698,18 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 	ess->host_if.reset = esm_reset_codec;
 	ess->host_if.flags = esm_flags_codec;
 
-	if (ac97_attach(&ess->host_if, self) != 0)
+	if (ac97_attach(&ess->host_if, self, &ess->sc_lock) != 0) {
+		mutex_destroy(&ess->sc_lock);
+		mutex_destroy(&ess->sc_intr_lock);
 		return;
+	}
 
 	/* allocate our DMA region */
 	if (esm_allocmem(ess, MAESTRO_DMA_SZ, MAESTRO_DMA_ALIGN,
 		&ess->sc_dma)) {
-		aprint_error("%s: couldn't allocate memory!\n",
-		    ess->sc_dev.dv_xname);
+		aprint_error_dev(ess->sc_dev, "couldn't allocate memory!\n");
+		mutex_destroy(&ess->sc_lock);
+		mutex_destroy(&ess->sc_intr_lock);
 		return;
 	}
 	ess->rings_alloced = 0;
@@ -1698,60 +1719,101 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 		wc_wrreg(ess, pcmbar,
 		    DMAADDR(&ess->sc_dma) >> WAVCACHE_BASEADDR_SHIFT);
 
-	audio_attach_mi(&esm_hw_if, self, &ess->sc_dev);
+	audio_attach_mi(&esm_hw_if, self, ess->sc_dev);
 
 	if (!pmf_device_register(self, esm_suspend, esm_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
+static void
+esm_childdet(device_t self, device_t child)
+{
+	/* we hold no child references, so do nothing */
+}
+
+static int
+esm_detach(device_t self, int flags)
+{
+	int rc;
+	struct esm_softc *ess = device_private(self);
+
+	if ((rc = config_detach_children(self, flags)) != 0)
+		return rc;
+	pmf_device_deregister(self);
+
+	/* free our DMA region */
+	esm_freemem(ess, &ess->sc_dma);
+
+	if (ess->codec_if != NULL) {
+		mutex_enter(&ess->sc_lock);
+		ess->codec_if->vtbl->detach(ess->codec_if);
+		mutex_exit(&ess->sc_lock);
+	}
+
+	/* XXX Restore CONF_MAESTRO? */
+	/* XXX Restore legacy emulations? */
+	/* XXX Restore PCI config registers? */
+
+	if (ess->ih != NULL)
+		pci_intr_disestablish(ess->pc, ess->ih);
+
+	bus_space_unmap(ess->st, ess->sh, ess->sz);
+	mutex_destroy(&ess->sc_lock);
+	mutex_destroy(&ess->sc_intr_lock);
+
+	return 0;
+}
+
 static bool
-esm_suspend(device_t dv)
+esm_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct esm_softc *ess = device_private(dv);
-	int x;
 
-	x = splaudio();
+	mutex_enter(&ess->sc_lock);
+	mutex_spin_enter(&ess->sc_intr_lock);
 	wp_stoptimer(ess);
 	bus_space_write_2(ess->st, ess->sh, PORT_HOSTINT_CTRL, 0);
-
 	esm_halt_output(ess);
 	esm_halt_input(ess);
-	splx(x);
+	mutex_spin_exit(&ess->sc_intr_lock);
 
 	/* Power down everything except clock. */
 	esm_write_codec(ess, AC97_REG_POWER, 0xdf00);
 	delay(20);
 	bus_space_write_4(ess->st, ess->sh, PORT_RINGBUS_CTRL, 0);
 	delay(1);
+	mutex_exit(&ess->sc_lock);
 
 	return true;
 }
 
 static bool
-esm_resume(device_t dv)
+esm_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct esm_softc *ess = device_private(dv);
-	int x;
 	uint16_t pcmbar;
 
 	delay(100000);
+
+	mutex_enter(&ess->sc_lock);
+	mutex_spin_enter(&ess->sc_intr_lock);
 	esm_init(ess);
 
 	/* set DMA base address */
 	for (pcmbar = WAVCACHE_PCMBAR; pcmbar < WAVCACHE_PCMBAR + 4; pcmbar++)
 		wc_wrreg(ess, pcmbar,
 		    DMAADDR(&ess->sc_dma) >> WAVCACHE_BASEADDR_SHIFT);
-
+	mutex_spin_exit(&ess->sc_intr_lock);
 	ess->codec_if->vtbl->restore_ports(ess->codec_if);
+	mutex_spin_enter(&ess->sc_intr_lock);
 #if 0
 	if (mixer_reinit(dev)) {
 		printf("%s: unable to reinitialize the mixer\n",
-		    ess->sc_dev.dv_xname);
+		    device_xname(ess->sc_dev));
 		return ENXIO;
 	}
 #endif
 
-	x = splaudio();
 #if TODO
 	if (ess->pactive)
 		esm_start_output(ess);
@@ -1762,7 +1824,18 @@ esm_resume(device_t dv)
 		set_timer(ess);
 		wp_starttimer(ess);
 	}
-	splx(x);
+	mutex_spin_exit(&ess->sc_intr_lock);
+	mutex_exit(&ess->sc_lock);
 
 	return true;
+}
+
+void
+esm_get_locks(void *addr, kmutex_t **intr, kmutex_t **proc)
+{
+	struct esm_softc *esm;
+
+	esm = addr;
+	*intr = &esm->sc_intr_lock;
+	*proc = &esm->sc_lock;
 }

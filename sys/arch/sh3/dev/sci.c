@@ -1,4 +1,4 @@
-/* $NetBSD: sci.c,v 1.49 2007/11/19 18:51:42 ad Exp $ */
+/* $NetBSD: sci.c,v 1.61 2014/11/15 19:20:01 christos Exp $ */
 
 /*-
  * Copyright (C) 1999 T.Horiuchi and SAITOH Masanobu.  All rights reserved.
@@ -41,13 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -100,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sci.c,v 1.49 2007/11/19 18:51:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sci.c,v 1.61 2014/11/15 19:20:01 christos Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_sci.h"
@@ -137,7 +130,7 @@ void scicnpoolc(dev_t, int);
 int sciintr(void *);
 
 struct sci_softc {
-	struct device sc_dev;		/* boilerplate */
+	device_t sc_dev;		/* boilerplate */
 	struct tty *sc_tty;
 	void *sc_si;
 	callout_t sc_diag_ch;
@@ -188,8 +181,8 @@ struct sci_softc {
 };
 
 /* controller driver configuration */
-static int sci_match(struct device *, struct cfdata *, void *);
-static void sci_attach(struct device *, struct device *, void *);
+static int sci_match(device_t, cfdata_t, void *);
+static void sci_attach(device_t, device_t, void *);
 
 void	sci_break(struct sci_softc *, int);
 void	sci_iflush(struct sci_softc *);
@@ -203,11 +196,8 @@ integrate void sci_stsoft(struct sci_softc *, struct tty *);
 integrate void sci_schedrx(struct sci_softc *);
 void	scidiag(void *);
 
-#define	SCIUNIT_MASK		0x7ffff
-#define	SCIDIALOUT_MASK	0x80000
-
-#define	SCIUNIT(x)	(minor(x) & SCIUNIT_MASK)
-#define	SCIDIALOUT(x)	(minor(x) & SCIDIALOUT_MASK)
+#define	SCIUNIT(x)	TTUNIT(x)
+#define	SCIDIALOUT(x)	TTDIALOUT(x)
 
 /* Hardware flag masks */
 #define	SCI_HW_NOIEN	0x01
@@ -238,7 +228,7 @@ int scicn_speed = 9600;
 
 u_int sci_rbuf_size = SCI_RING_SIZE;
 
-CFATTACH_DECL(sci, sizeof(struct sci_softc),
+CFATTACH_DECL_NEW(sci, sizeof(struct sci_softc),
     sci_match, sci_attach, NULL, NULL);
 
 extern struct cfdriver sci_cd;
@@ -255,8 +245,18 @@ dev_type_tty(scitty);
 dev_type_poll(scipoll);
 
 const struct cdevsw sci_cdevsw = {
-	sciopen, sciclose, sciread, sciwrite, sciioctl,
-	scistop, scitty, scipoll, nommap, ttykqfilter, D_TTY
+	.d_open = sciopen,
+	.d_close = sciclose,
+	.d_read = sciread,
+	.d_write = sciwrite,
+	.d_ioctl = sciioctl,
+	.d_stop = scistop,
+	.d_tty = scitty,
+	.d_poll = scipoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 void InitializeSci (unsigned int);
@@ -365,23 +365,24 @@ sci_getc(void)
 }
 
 static int
-sci_match(struct device *parent, struct cfdata *cfp, void *aux)
+sci_match(device_t parent, cfdata_t cf, void *aux)
 {
 
-	if (strcmp(cfp->cf_name, "sci") || sci_attached)
+	if (strcmp(cf->cf_name, "sci") || sci_attached)
 		return 0;
 
 	return 1;
 }
 
 static void
-sci_attach(struct device *parent, struct device *self, void *aux)
+sci_attach(device_t parent, device_t self, void *aux)
 {
-	struct sci_softc *sc = (struct sci_softc *)self;
+	struct sci_softc *sc = device_private(self);
 	struct tty *tp;
 
 	sci_attached = 1;
 
+	sc->sc_dev = self;
 	sc->sc_hwflags = 0;	/* XXX */
 	sc->sc_swflags = 0;	/* XXX */
 	sc->sc_fifolen = 0;	/* XXX */
@@ -389,7 +390,7 @@ sci_attach(struct device *parent, struct device *self, void *aux)
 	if (sciisconsole) {
 		SET(sc->sc_hwflags, SCI_HW_CONSOLE);
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
-		printf("\n%s: console\n", sc->sc_dev.dv_xname);
+		printf("\n%s: console\n", device_xname(self));
 	} else {
 		InitializeSci(9600);
 		printf("\n");
@@ -409,7 +410,7 @@ sci_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, scisoft, sc);
 	SET(sc->sc_hwflags, SCI_HW_DEV_OK);
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = scistart;
 	tp->t_param = sciparam;
 	tp->t_hwiflow = NULL;
@@ -418,7 +419,7 @@ sci_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_rbuf = malloc(sci_rbuf_size << 1, M_DEVBUF, M_NOWAIT);
 	if (sc->sc_rbuf == NULL) {
 		printf("%s: unable to allocate ring buffer\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(self));
 		return;
 	}
 	sc->sc_ebuf = sc->sc_rbuf + (sci_rbuf_size << 1);
@@ -432,7 +433,7 @@ sci_attach(struct device *parent, struct device *self, void *aux)
 static void
 scistart(struct tty *tp)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(tp->t_dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd,SCIUNIT(tp->t_dev));
 	int s;
 
 	s = spltty();
@@ -484,11 +485,11 @@ out:
 static int
 sciparam(struct tty *tp, struct termios *t)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(tp->t_dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(tp->t_dev));
 	int ospeed = t->c_ospeed;
 	int s;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return (EIO);
 
 	/* Check requested parameters. */
@@ -596,7 +597,6 @@ void
 sci_iflush(struct sci_softc *sc)
 {
 	unsigned char err_c;
-	volatile unsigned char c;
 
 	if (((err_c = SHREG_SCSSR)
 	     & (SCSSR_RDRF | SCSSR_ORER | SCSSR_FER | SCSSR_PER)) != 0) {
@@ -606,7 +606,7 @@ sci_iflush(struct sci_softc *sc)
 			return;
 		}
 
-		c = SHREG_SCRDR;
+		(void)SHREG_SCRDR;
 
 		SHREG_SCSSR &= ~SCSSR_RDRF;
 	}
@@ -615,20 +615,17 @@ sci_iflush(struct sci_softc *sc)
 int
 sciopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int unit = SCIUNIT(dev);
 	struct sci_softc *sc;
 	struct tty *tp;
 	int s, s2;
 	int error;
 
-	if (unit >= sci_cd.cd_ndevs)
-		return (ENXIO);
-	sc = sci_cd.cd_devs[unit];
+	sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	if (sc == 0 || !ISSET(sc->sc_hwflags, SCI_HW_DEV_OK) ||
 	    sc->sc_rbuf == NULL)
 		return (ENXIO);
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return (ENXIO);
 
 #ifdef KGDB
@@ -728,7 +725,7 @@ bad:
 int
 sciclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	/* XXX This is for cons.c. */
@@ -738,7 +735,7 @@ sciclose(dev_t dev, int flag, int mode, struct lwp *l)
 	(*tp->t_linesw->l_close)(tp, flag);
 	ttyclose(tp);
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return (0);
 
 	return (0);
@@ -747,7 +744,7 @@ sciclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 sciread(dev_t dev, struct uio *uio, int flag)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return ((*tp->t_linesw->l_read)(tp, uio, flag));
@@ -756,7 +753,7 @@ sciread(dev_t dev, struct uio *uio, int flag)
 int
 sciwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
@@ -765,7 +762,7 @@ sciwrite(dev_t dev, struct uio *uio, int flag)
 int
 scipoll(dev_t dev, int events, struct lwp *l)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return ((*tp->t_linesw->l_poll)(tp, events, l));
@@ -774,7 +771,7 @@ scipoll(dev_t dev, int events, struct lwp *l)
 struct tty *
 scitty(dev_t dev)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return (tp);
@@ -783,12 +780,12 @@ scitty(dev_t dev)
 int
 sciioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int error;
 	int s;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return (EIO);
 
 	error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, l);
@@ -871,7 +868,7 @@ sci_break(struct sci_softc *sc, int onoff)
 void
 scistop(struct tty *tp, int flag)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(tp->t_dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(tp->t_dev));
 	int s;
 
 	s = splserial();
@@ -901,7 +898,7 @@ scidiag(void *arg)
 	splx(s);
 
 	log(LOG_WARNING, "%s: %d silo overflow%s, %d ibuf flood%s\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(sc->sc_dev),
 	    overflows, overflows == 1 ? "" : "s",
 	    floods, floods == 1 ? "" : "s");
 }
@@ -991,9 +988,7 @@ sci_rxsoft(struct sci_softc *sc, struct tty *tp)
 }
 
 integrate void
-sci_txsoft(sc, tp)
-	struct sci_softc *sc;
-	struct tty *tp;
+sci_txsoft(struct sci_softc *sc, struct tty *tp)
 {
 
 	CLR(tp->t_state, TS_BUSY);
@@ -1048,7 +1043,7 @@ scisoft(void *arg)
 	struct sci_softc *sc = arg;
 	struct tty *tp;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return;
 
 	tp = sc->sc_tty;
@@ -1079,7 +1074,7 @@ sciintr(void *arg)
 	u_int cc;
 	u_short ssr;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return (0);
 
 	end = sc->sc_ebuf;
@@ -1275,7 +1270,7 @@ sciintr(void *arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_SCI)
+#ifdef RND_SCI
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);
 #endif
 
@@ -1283,8 +1278,7 @@ sciintr(void *arg)
 }
 
 void
-scicnprobe(cp)
-	struct consdev *cp;
+scicnprobe(struct consdev *cp)
 {
 	int maj;
 

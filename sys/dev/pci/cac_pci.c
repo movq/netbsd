@@ -1,4 +1,4 @@
-/*	$NetBSD: cac_pci.c,v 1.26 2007/10/19 12:00:41 ad Exp $	*/
+/*	$NetBSD: cac_pci.c,v 1.35 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,13 +34,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac_pci.c,v 1.26 2007/10/19 12:00:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac_pci.c,v 1.35 2016/09/27 03:33:32 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/queue.h>
+#include <sys/module.h>
 
 #include <machine/endian.h>
 #include <sys/bus.h>
@@ -57,6 +51,8 @@ __KERNEL_RCSID(0, "$NetBSD: cac_pci.c,v 1.26 2007/10/19 12:00:41 ad Exp $");
 
 #include <dev/ic/cacreg.h>
 #include <dev/ic/cacvar.h>
+
+#include "ioconf.h"
 
 static struct	cac_ccb *cac_pci_l0_completed(struct cac_softc *);
 static int	cac_pci_l0_fifo_full(struct cac_softc *);
@@ -137,15 +133,14 @@ cac_pci_findtype(struct pci_attach_args *pa)
 }
 
 static int
-cac_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+cac_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return (cac_pci_findtype(aux) != NULL);
 }
 
 static void
-cac_pci_attach(struct device *parent, struct device *self, void *aux)
+cac_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa;
 	const struct cac_pci_type *ct;
@@ -155,10 +150,12 @@ cac_pci_attach(struct device *parent, struct device *self, void *aux)
 	const char *intrstr;
 	pcireg_t reg;
 	int memr, ior, i;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	aprint_naive(": RAID controller\n");
 
-	sc = (struct cac_softc *)self;
+	sc = device_private(self);
+	sc->sc_dev = self;
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
 	ct = cac_pci_findtype(pa);
@@ -193,8 +190,7 @@ cac_pci_attach(struct device *parent, struct device *self, void *aux)
 		    &sc->sc_iot, &sc->sc_ioh, NULL, NULL))
 		    	ior = -1;
 	if (memr == -1 && ior == -1) {
-		aprint_error("%s: can't map i/o or memory space\n",
-		    self->dv_xname);
+		aprint_error_dev(self, "can't map i/o or memory space\n");
 		return;
 	}
 
@@ -210,13 +206,13 @@ cac_pci_attach(struct device *parent, struct device *self, void *aux)
 		aprint_error("can't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, cac_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error("can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 
@@ -227,8 +223,8 @@ cac_pci_attach(struct device *parent, struct device *self, void *aux)
 	cac_init(sc, intrstr, (ct->ct_flags & CT_STARTFW) != 0);
 }
 
-CFATTACH_DECL(cac_pci, sizeof(struct cac_softc),
-    cac_pci_match, cac_pci_attach, NULL, NULL);
+CFATTACH_DECL3_NEW(cac_pci, sizeof(struct cac_softc),
+    cac_pci_match, cac_pci_attach, NULL, NULL, cac_rescan, NULL, 0);
 
 static void
 cac_pci_l0_submit(struct cac_softc *sc, struct cac_ccb *ccb)
@@ -253,7 +249,7 @@ cac_pci_l0_completed(struct cac_softc *sc)
 
 	if ((off & 3) != 0)
 		printf("%s: failed command list returned: %lx\n",
-		    sc->sc_dv.dv_xname, (long)off);
+		    device_xname(sc->sc_dev), (long)off);
 
 	off = (off & ~3) - sc->sc_ccbs_paddr;
 	ccb = (struct cac_ccb *)((char *)sc->sc_ccbs + off);
@@ -286,4 +282,45 @@ cac_pci_l0_fifo_full(struct cac_softc *sc)
 {
 
 	return (cac_inl(sc, CAC_42REG_CMD_FIFO) != 0);
+}
+
+MODULE(MODULE_CLASS_DRIVER, cac_pci, "cac,pci");
+
+#ifdef _MODULE
+/*
+ * XXX Don't allow ioconf.c to redefine the "struct cfdriver ld_cd"
+ * XXX it will be defined in the common-code module
+ */
+#undef  CFDRIVER_DECL
+#define CFDRIVER_DECL(name, class, attr)
+#include "ioconf.c"
+#endif
+ 
+static int
+cac_pci_modcmd(modcmd_t cmd, void *opaque)
+{
+	int error = 0;
+ 
+#ifdef _MODULE
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		/* 
+		 * We skip over the first entry in cfdriver[] array
+		 * since the cfdriver is attached by the common
+		 * (non-attachment-specific) code.
+		 */
+		error = config_init_component(&cfdriver_ioconf_cac_pci[1],
+		    cfattach_ioconf_cac_pci, cfdata_ioconf_cac_pci);
+		break;
+	case MODULE_CMD_FINI:
+		error = config_fini_component(&cfdriver_ioconf_cac_pci[1],  
+		    cfattach_ioconf_cac_pci, cfdata_ioconf_cac_pci);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+#endif
+
+	return error;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: m41st84.c,v 1.10 2007/12/11 12:09:22 lukem Exp $	*/
+/*	$NetBSD: m41st84.c,v 1.24 2018/06/16 21:22:13 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: m41st84.c,v 1.10 2007/12/11 12:09:22 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: m41st84.c,v 1.24 2018/06/16 21:22:13 thorpej Exp $");
+
+#include "opt_strtc.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,59 +53,83 @@ __KERNEL_RCSID(0, "$NetBSD: m41st84.c,v 1.10 2007/12/11 12:09:22 lukem Exp $");
 
 #include <dev/i2c/i2cvar.h>
 #include <dev/i2c/m41st84reg.h>
+#include <dev/i2c/m41st84var.h>
+
+#include "ioconf.h"
 
 struct strtc_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	i2c_tag_t sc_tag;
 	int sc_address;
 	int sc_open;
 	struct todr_chip_handle sc_todr;
 };
 
-static void	strtc_attach(struct device *, struct device *, void *);
-static int	strtc_match(struct device *, struct cfdata *, void *);
+static void	strtc_attach(device_t, device_t, void *);
+static int	strtc_match(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(strtc, sizeof(struct strtc_softc),
+CFATTACH_DECL_NEW(strtc, sizeof(struct strtc_softc),
     strtc_match, strtc_attach, NULL, NULL);
-extern struct cfdriver strtc_cd;
 
+#ifndef STRTC_NO_USERRAM
 dev_type_open(strtc_open);
 dev_type_close(strtc_close);
 dev_type_read(strtc_read);
 dev_type_write(strtc_write);
 
 const struct cdevsw strtc_cdevsw = {
-	strtc_open, strtc_close, strtc_read, strtc_write, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER
+	.d_open = strtc_open,
+	.d_close = strtc_close,
+	.d_read = strtc_read,
+	.d_write = strtc_write,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
+#endif
 
 static int strtc_clock_read(struct strtc_softc *, struct clock_ymdhms *);
 static int strtc_clock_write(struct strtc_softc *, struct clock_ymdhms *);
-static int strtc_gettime(struct todr_chip_handle *, volatile struct timeval *);
-static int strtc_settime(struct todr_chip_handle *, volatile struct timeval *);
+static int strtc_gettime(struct todr_chip_handle *, struct timeval *);
+static int strtc_settime(struct todr_chip_handle *, struct timeval *);
 
 static int
-strtc_match(struct device *parent, struct cfdata *cf, void *arg)
+strtc_match(device_t parent, cfdata_t cf, void *arg)
 {
 	struct i2c_attach_args *ia = arg;
+	int match_result;
 
+	if (iic_use_direct_match(ia, cf, NULL, &match_result))
+		return match_result;
+
+	/* indirect config - check typical address */
 	if (ia->ia_addr == M41ST84_ADDR)
-		return (1);
+		return I2C_MATCH_ADDRESS_ONLY;
 
-	return (0);
+	return 0;
 }
 
 static void
-strtc_attach(struct device *parent, struct device *self, void *arg)
+strtc_attach(device_t parent, device_t self, void *arg)
 {
 	struct strtc_softc *sc = device_private(self);
 	struct i2c_attach_args *ia = arg;
 
+#ifndef STRTC_NO_USERRAM
 	aprint_naive(": Real-time Clock/NVRAM\n");
 	aprint_normal(": M41ST84 Real-time Clock/NVRAM\n");
-
+#else
+	aprint_naive(": Real-time Clock\n");
+	aprint_normal(": M41T8x Real-time Clock\n");
+#endif
 	sc->sc_tag = ia->ia_tag;
 	sc->sc_address = ia->ia_addr;
+	sc->sc_dev = self;
 	sc->sc_open = 0;
 	sc->sc_todr.cookie = sc;
 	sc->sc_todr.todr_gettime = strtc_gettime;
@@ -113,13 +139,14 @@ strtc_attach(struct device *parent, struct device *self, void *arg)
 	todr_attach(&sc->sc_todr);
 }
 
+#ifndef STRTC_NO_USERRAM
 /*ARGSUSED*/
 int
 strtc_open(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct strtc_softc *sc;
 
-	if ((sc = device_lookup(&strtc_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&strtc_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	/* XXX: Locking */
@@ -137,7 +164,7 @@ strtc_close(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct strtc_softc *sc;
 
-	if ((sc = device_lookup(&strtc_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&strtc_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	sc->sc_open = 0;
@@ -152,7 +179,7 @@ strtc_read(dev_t dev, struct uio *uio, int flags)
 	u_int8_t ch, cmdbuf[1];
 	int a, error;
 
-	if ((sc = device_lookup(&strtc_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&strtc_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	if (uio->uio_offset >= M41ST84_USER_RAM_SIZE)
@@ -168,8 +195,8 @@ strtc_read(dev_t dev, struct uio *uio, int flags)
 				      sc->sc_address, cmdbuf, 1,
 				      &ch, 1, 0)) != 0) {
 			iic_release_bus(sc->sc_tag, 0);
-			printf("%s: strtc_read: read failed at 0x%x\n",
-			    sc->sc_dev.dv_xname, a);
+			aprint_error_dev(sc->sc_dev,
+			    "strtc_read: read failed at 0x%x\n", a);
 			return (error);
 		}
 		if ((error = uiomove(&ch, 1, uio)) != 0) {
@@ -191,7 +218,7 @@ strtc_write(dev_t dev, struct uio *uio, int flags)
 	u_int8_t cmdbuf[2];
 	int a, error;
 
-	if ((sc = device_lookup(&strtc_cd, minor(dev))) == NULL)
+	if ((sc = device_lookup_private(&strtc_cd, minor(dev))) == NULL)
 		return (ENXIO);
 
 	if (uio->uio_offset >= M41ST84_USER_RAM_SIZE)
@@ -209,8 +236,8 @@ strtc_write(dev_t dev, struct uio *uio, int flags)
 		if ((error = iic_exec(sc->sc_tag,
 		    uio->uio_resid ? I2C_OP_WRITE : I2C_OP_WRITE_WITH_STOP,
 		    sc->sc_address, cmdbuf, 1, &cmdbuf[1], 1, 0)) != 0) {
-			printf("%s: strtc_write: write failed at 0x%x\n",
-			    sc->sc_dev.dv_xname, a);
+			aprint_error_dev(sc->sc_dev,
+			    "strtc_write: write failed at 0x%x\n", a);
 			break;
 		}
 	}
@@ -219,9 +246,10 @@ strtc_write(dev_t dev, struct uio *uio, int flags)
 
 	return (error);
 }
+#endif	/* STRTC_NO_USERRAM */
 
 static int
-strtc_gettime(struct todr_chip_handle *ch, volatile struct timeval *tv)
+strtc_gettime(struct todr_chip_handle *ch, struct timeval *tv)
 {
 	struct strtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt, check;
@@ -247,7 +275,7 @@ strtc_gettime(struct todr_chip_handle *ch, volatile struct timeval *tv)
 }
 
 static int
-strtc_settime(struct todr_chip_handle *ch, volatile struct timeval *tv)
+strtc_settime(struct todr_chip_handle *ch, struct timeval *tv)
 {
 	struct strtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt;
@@ -263,12 +291,12 @@ strtc_settime(struct todr_chip_handle *ch, volatile struct timeval *tv)
 static int
 strtc_clock_read(struct strtc_softc *sc, struct clock_ymdhms *dt)
 {
-	u_int8_t bcd[M41ST84_REG_DATE_BYTES], cmdbuf[1];
+	u_int8_t bcd[M41ST84_REG_DATE_BYTES], cmdbuf[2];
 	int i;
 
 	if (iic_acquire_bus(sc->sc_tag, I2C_F_POLL)) {
-		printf("%s: strtc_clock_read: failed to acquire I2C bus\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "strtc_clock_read: failed to acquire I2C bus\n");
 		return (0);
 	}
 
@@ -281,8 +309,8 @@ strtc_clock_read(struct strtc_softc *sc, struct clock_ymdhms *dt)
 	if (iic_exec(sc->sc_tag, I2C_OP_READ, sc->sc_address,
 		     cmdbuf, 1, &cmdbuf[1], 1, I2C_F_POLL)) {
 		iic_release_bus(sc->sc_tag, I2C_F_POLL);
-		printf("%s: strtc_clock_read: failed to read HT\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "strtc_clock_read: failed to read HT\n");
 		return (0);
 	}
 	if (cmdbuf[1] & M41ST84_AL_HOUR_HT) {
@@ -290,8 +318,8 @@ strtc_clock_read(struct strtc_softc *sc, struct clock_ymdhms *dt)
 		if (iic_exec(sc->sc_tag, I2C_OP_WRITE, sc->sc_address,
 			     cmdbuf, 1, &cmdbuf[1], 1, I2C_F_POLL)) {
 			iic_release_bus(sc->sc_tag, I2C_F_POLL);
-			printf("%s: strtc_clock_read: failed to reset HT\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev,
+			    "strtc_clock_read: failed to reset HT\n");
 			return (0);
 		}
 	}
@@ -304,8 +332,9 @@ strtc_clock_read(struct strtc_softc *sc, struct clock_ymdhms *dt)
 			     sc->sc_address, cmdbuf, 1,
 			     &bcd[i], 1, I2C_F_POLL)) {
 			iic_release_bus(sc->sc_tag, I2C_F_POLL);
-			printf("%s: strtc_clock_read: failed to read rtc "
-			    "at 0x%x\n", sc->sc_dev.dv_xname, i);
+			aprint_error_dev(sc->sc_dev,
+			    "strtc_clock_read: failed to read rtc "
+			    "at 0x%x\n", i);
 			return (0);
 		}
 	}
@@ -316,14 +345,14 @@ strtc_clock_read(struct strtc_softc *sc, struct clock_ymdhms *dt)
 	/*
 	 * Convert the M41ST84's register values into something useable
 	 */
-	dt->dt_sec = FROMBCD(bcd[M41ST84_REG_SEC] & M41ST84_SEC_MASK);
-	dt->dt_min = FROMBCD(bcd[M41ST84_REG_MIN] & M41ST84_MIN_MASK);
-	dt->dt_hour = FROMBCD(bcd[M41ST84_REG_CENHR] & M41ST84_HOUR_MASK);
-	dt->dt_day = FROMBCD(bcd[M41ST84_REG_DATE] & M41ST84_DATE_MASK);
-	dt->dt_mon = FROMBCD(bcd[M41ST84_REG_MONTH] & M41ST84_MONTH_MASK);
+	dt->dt_sec = bcdtobin(bcd[M41ST84_REG_SEC] & M41ST84_SEC_MASK);
+	dt->dt_min = bcdtobin(bcd[M41ST84_REG_MIN] & M41ST84_MIN_MASK);
+	dt->dt_hour = bcdtobin(bcd[M41ST84_REG_CENHR] & M41ST84_HOUR_MASK);
+	dt->dt_day = bcdtobin(bcd[M41ST84_REG_DATE] & M41ST84_DATE_MASK);
+	dt->dt_mon = bcdtobin(bcd[M41ST84_REG_MONTH] & M41ST84_MONTH_MASK);
 
 	/* XXX: Should be an MD way to specify EPOCH used by BIOS/Firmware */
-	dt->dt_year = FROMBCD(bcd[M41ST84_REG_YEAR]) + POSIX_BASE_YEAR;
+	dt->dt_year = bcdtobin(bcd[M41ST84_REG_YEAR]) + POSIX_BASE_YEAR;
 
 	return (1);
 }
@@ -338,18 +367,18 @@ strtc_clock_write(struct strtc_softc *sc, struct clock_ymdhms *dt)
 	 * Convert our time representation into something the M41ST84
 	 * can understand.
 	 */
-	bcd[M41ST84_REG_CSEC] = TOBCD(0);	/* must always write as 0 */
-	bcd[M41ST84_REG_SEC] = TOBCD(dt->dt_sec);
-	bcd[M41ST84_REG_MIN] = TOBCD(dt->dt_min);
-	bcd[M41ST84_REG_CENHR] = TOBCD(dt->dt_hour);
-	bcd[M41ST84_REG_DATE] = TOBCD(dt->dt_day);
-	bcd[M41ST84_REG_DAY] = TOBCD(dt->dt_wday);
-	bcd[M41ST84_REG_MONTH] = TOBCD(dt->dt_mon);
-	bcd[M41ST84_REG_YEAR] = TOBCD((dt->dt_year - POSIX_BASE_YEAR) % 100);
+	bcd[M41ST84_REG_CSEC] = bintobcd(0);	/* must always write as 0 */
+	bcd[M41ST84_REG_SEC] = bintobcd(dt->dt_sec);
+	bcd[M41ST84_REG_MIN] = bintobcd(dt->dt_min);
+	bcd[M41ST84_REG_CENHR] = bintobcd(dt->dt_hour);
+	bcd[M41ST84_REG_DATE] = bintobcd(dt->dt_day);
+	bcd[M41ST84_REG_DAY] = bintobcd(dt->dt_wday);
+	bcd[M41ST84_REG_MONTH] = bintobcd(dt->dt_mon);
+	bcd[M41ST84_REG_YEAR] = bintobcd((dt->dt_year - POSIX_BASE_YEAR) % 100);
 
 	if (iic_acquire_bus(sc->sc_tag, I2C_F_POLL)) {
-		printf("%s: strtc_clock_write: failed to acquire I2C bus\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "strtc_clock_write: failed to acquire I2C bus\n");
 		return (0);
 	}
 
@@ -360,8 +389,8 @@ strtc_clock_write(struct strtc_softc *sc, struct clock_ymdhms *dt)
 	if (iic_exec(sc->sc_tag, I2C_OP_WRITE, sc->sc_address,
 		     cmdbuf, 1, &cmdbuf[1], 1, I2C_F_POLL)) {
 		iic_release_bus(sc->sc_tag, I2C_F_POLL);
-		printf("%s: strtc_clock_write: failed to Hold Clock\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "strtc_clock_write: failed to Hold Clock\n");
 		return (0);
 	}
 
@@ -374,8 +403,8 @@ strtc_clock_write(struct strtc_softc *sc, struct clock_ymdhms *dt)
 	if (iic_exec(sc->sc_tag, I2C_OP_READ, sc->sc_address,
 		     cmdbuf, 1, &cmdbuf[1], 1, I2C_F_POLL)) {
 		iic_release_bus(sc->sc_tag, I2C_F_POLL);
-		printf("%s: strtc_clock_write: failed to read HT\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "strtc_clock_write: failed to read HT\n");
 		return (0);
 	}
 	if (cmdbuf[1] & M41ST84_AL_HOUR_HT) {
@@ -383,8 +412,8 @@ strtc_clock_write(struct strtc_softc *sc, struct clock_ymdhms *dt)
 		if (iic_exec(sc->sc_tag, I2C_OP_WRITE, sc->sc_address,
 			     cmdbuf, 1, &cmdbuf[1], 1, I2C_F_POLL)) {
 			iic_release_bus(sc->sc_tag, I2C_F_POLL);
-			printf("%s: strtc_clock_write: failed to reset HT\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev,
+			    "strtc_clock_write: failed to reset HT\n");
 			return (0);
 		}
 	}
@@ -400,8 +429,9 @@ strtc_clock_write(struct strtc_softc *sc, struct clock_ymdhms *dt)
 			     sc->sc_address, cmdbuf, 1, &bcd[i], 1,
 			     I2C_F_POLL)) {
 			iic_release_bus(sc->sc_tag, I2C_F_POLL);
-			printf("%s: strtc_clock_write: failed to write rtc "
-			    " at 0x%x\n", sc->sc_dev.dv_xname, i);
+			aprint_error_dev(sc->sc_dev,
+			    "strtc_clock_write: failed to write rtc "
+			    " at 0x%x\n", i);
 			/* XXX: Clock Hold is likely still asserted! */
 			return (0);
 		}
@@ -411,3 +441,30 @@ strtc_clock_write(struct strtc_softc *sc, struct clock_ymdhms *dt)
 
 	return (1);
 }
+
+#ifndef STRTC_NO_WATCHDOG
+void
+strtc_wdog_config(void *arg, uint8_t wd)
+{
+	struct strtc_softc *sc = arg;
+	uint8_t	cmdbuf[2];
+
+	if (iic_acquire_bus(sc->sc_tag, I2C_F_POLL)) {
+		aprint_error_dev(sc->sc_dev,
+		    "strtc_wdog_config: failed to acquire I2C bus\n");
+		return;
+	}
+
+	cmdbuf[0] = M41ST84_REG_WATCHDOG;
+	cmdbuf[1] = wd;
+
+	if (iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP, sc->sc_address,
+		     cmdbuf, 1, &cmdbuf[1], 1, I2C_F_POLL)) {
+		aprint_error_dev(sc->sc_dev,
+		    "strtc_wdog_config: failed to write watchdog\n");
+		return;
+	}
+
+	iic_release_bus(sc->sc_tag, I2C_F_POLL);
+}
+#endif	/* STRTC_NO_WATCHDOG */

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.sun3,v 1.100 2008/02/19 14:31:40 joerg Exp $
+# $NetBSD: Makefile.sun3,v 1.107 2018/03/07 15:02:36 maya Exp $
 
 # Makefile for NetBSD
 #
@@ -32,13 +32,21 @@ GENASSYM_CONF=	${SUN3}/${MACHTYPE}/genassym.cf
 ## (2) compile settings
 ##
 CPPFLAGS+=	-Dsun3
-CFLAGS+=	${CMACHFLAGS} -msoft-float -fno-defer-pop
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+CFLAGS+=	${CMACHFLAGS} -fno-defer-pop
+CFLAGS+=	-msoft-float
+AFLAGS+=	-x assembler-with-cpp
 
 ##
 ## (3) libkern and compat
 ##
+OPT_MODULAR=   %MODULAR%
+.if !empty(OPT_MODULAR)
 KERN_AS=	obj
+COMPAT_AS=	obj
+.else
+KERN_AS=	library
+COMPAT_AS=	library
+.endif
 
 ##
 ## (4) local objects, compile rules, and dependencies
@@ -49,6 +57,8 @@ MD_SFILES=	${SUN3}/${MACHTYPE}/locore.s
 
 locore.o: ${SUN3}/${MACHTYPE}/locore.s
 	${NORMAL_S}
+
+.include "$S/arch/m68k/conf/Makefile.kern.m68k.inc"
 
 ##
 ## (5) link settings

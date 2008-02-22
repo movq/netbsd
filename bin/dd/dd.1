@@ -1,4 +1,4 @@
-.\"	$NetBSD: dd.1,v 1.21 2007/04/13 00:38:45 lukem Exp $
+.\"	$NetBSD: dd.1,v 1.34 2017/07/04 06:48:15 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)dd.1	8.2 (Berkeley) 1/13/94
 .\"
-.Dd April 13, 2007
+.Dd August 18, 2016
 .Dt DD 1
 .Os
 .Sh NAME
@@ -40,7 +40,7 @@
 .Nd convert and copy a file
 .Sh SYNOPSIS
 .Nm
-.Op operands ...
+.Op operand ...
 .Sh DESCRIPTION
 The
 .Nm
@@ -91,6 +91,95 @@ bytes instead of the default 512.
 Read input from
 .Ar file
 instead of the standard input.
+.It Cm iflag= Ns Ar flags
+Use comma-separated
+.Ar flags
+when calling
+.Xr open 2
+for the input file.
+The possible values are
+.Va O_
+flags documented in
+.Xr open 2 ,
+specified as lowercase and with the leading
+.Va O_
+removed.
+Default value is
+.Va rdonly .
+.It Cm iseek= Ns Ar n
+Seek on the input file
+.Ar n
+blocks.
+This is synonymous with
+.Cm skip= Ns Ar n .
+.It Cm msgfmt= Ns Ar fmt
+Specify the message format
+.Ar fmt
+to be used when writing information to standard output.
+Possible values are:
+.Bl -tag -width xxxxx -offset indent -compact
+.It quiet
+turns off information summary report except for errors and
+.Cm progress .
+.It posix
+default information summary report as specified by POSIX.
+.It human
+default information summary report extended with human-readable
+values.
+.El
+.Pp
+When
+.Ar fmt
+does not correspond to any value given above,
+it contains a string that will be used as format specifier
+for the information summary output.
+Each conversion specification is introduced by the character
+.Cm % .
+The following ones are available:
+.Bl -tag -width xx -offset indent -compact
+.It b
+total number of bytes transferred
+.It B
+total number of bytes transferred in
+.Xr humanize_number 3
+format
+.It e
+speed transfer
+.It E
+speed transfer in
+.Xr humanize_number 3
+format
+.It i
+number of partial input block(s)
+.It I
+number of full input block(s)
+.It o
+number of partial output block(s)
+.It O
+number of full output block(s)
+.It s
+time elapsed since the beginning in
+.Do seconds.ms Dc
+format
+.It p
+number of sparse output blocks
+.It t
+number of truncated blocks
+.It w
+number of odd-length swab blocks
+.It P
+singular/plural of
+.Do block Dc
+depending on number of sparse blocks
+.It T
+singular/plural of
+.Do block Dc
+depending on number of truncated blocks
+.It W
+singular/plural of
+.Do block Dc
+depending on number of swab blocks
+.El
 .It Cm obs= Ns Ar n
 Set the output block size to
 .Va n
@@ -106,11 +195,43 @@ If an initial portion of the output file is skipped (see the
 .Cm seek
 operand)
 the output file is truncated at that point.
+.It Cm oflag= Ns Ar flags
+Same as
+.Cm iflag
+but for the call to
+.Xr open 2
+on the output file.
+The default value is
+.Va creat ,
+which should be explicitly added in
+.Cm oflag
+in order to output to a nonexistent file.
+The default or specified value is or'ed with
+.Va rdwr
+for a first
+.Xr open 2
+attempt, then on failure with
+.Va wronly
+on a second attempt.
+In both cases,
+.Va trunc
+is automatically added if none of
+.Cm oseek ,
+.Cm seek ,
+or
+.Cm conv=notrunc
+operands are used,
+.It Cm oseek= Ns Ar n
+Seek on the output file
+.Ar n
+blocks.
+This is synonymous with
+.Cm seek= Ns Ar n .
 .It Cm seek= Ns Ar n
 Seek
 .Va n
 blocks from the beginning of the output before copying.
-On non-tape devices, a
+On non-tape devices, an
 .Xr lseek 2
 operation is used.
 Otherwise, existing blocks are read and the data discarded.
@@ -126,7 +247,7 @@ bytes.
 Skip
 .Va n
 blocks from the beginning of the input before copying.
-On input which supports seeks, a
+On input which supports seeks, an
 .Xr lseek 2
 operation is used.
 Otherwise, input data is read and discarded.
@@ -142,12 +263,9 @@ This will cause a
 to be printed (to the standard error output) for every
 .Va n
 full or partial blocks written to the output file.
-.It Xo
 .Sm off
-.Cm conv=
-.Cm value Op \&, Cm value \&...
+.It Cm conv= Cm value Op \&, Cm value \&...
 .Sm on
-.Xc
 Where
 .Cm value
 is one of the symbols from the following list.
@@ -175,7 +293,7 @@ specifies the recommended one which is compatible with
 The value
 .Cm oldascii
 specifies the one used in historic
-.Tn AT\*[Am]T
+.Tn AT&T
 and pre-
 .Bx 4.3 Reno
 systems.
@@ -222,7 +340,7 @@ The values
 and
 .Cm oldibm
 are maps used in historic
-.Tn AT\*[Am]T
+.Tn AT&T
 and pre
 .Bx 4.3 Reno
 systems.
@@ -358,9 +476,18 @@ in the same format as the standard completion message and
 .Nm
 will exit.
 .Sh EXIT STATUS
-The
-.Nm
-utility exits 0 on success and \*[Gt]0 if an error occurred.
+.Ex -std dd
+.Sh EXAMPLES
+To print summary information in human-readable form:
+.Pp
+.Dl dd if=/dev/zero of=/dev/null count=1 msgfmt=human
+.Pp
+To customize the information summary output and print it through
+.Xr unvis 3 :
+.Bd -literal -offset indent
+dd if=/dev/zero of=/dev/null count=1 \e
+     msgfmt='speed:%E, in %s seconds\en' 2>&1 | unvis
+.Ed
 .Sh SEE ALSO
 .Xr cp 1 ,
 .Xr mt 1 ,
@@ -373,7 +500,9 @@ utility is expected to be a superset of the
 standard.
 The
 .Cm files
-operand and the
+and
+.Cm msgfmt
+operands and the
 .Cm ascii ,
 .Cm ebcdic ,
 .Cm ibm ,
@@ -384,3 +513,8 @@ and
 values are extensions to the
 .Tn POSIX
 standard.
+.Sh HISTORY
+A
+.Nm
+utility appeared in
+.At v5 .

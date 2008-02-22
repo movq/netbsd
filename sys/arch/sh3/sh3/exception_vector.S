@@ -1,4 +1,4 @@
-/*	$NetBSD: exception_vector.S,v 1.35 2008/02/14 22:46:14 uwe Exp $	*/
+/*	$NetBSD: exception_vector.S,v 1.50 2016/11/02 00:11:59 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,8 @@
 
 #include "opt_cputype.h"
 #include "opt_ddb.h"
+#include "opt_ptrace.h"
+
 #include "assym.h"
 
 #include <sh3/param.h>
@@ -53,7 +48,7 @@
 #define _ALIGN_TEXT	.align 5
 #include <sh3/asm.h>
 
-__KERNEL_RCSID(0, "$NetBSD: exception_vector.S,v 1.35 2008/02/14 22:46:14 uwe Exp $")
+__KERNEL_RCSID(0, "$NetBSD: exception_vector.S,v 1.50 2016/11/02 00:11:59 pgoyette Exp $")
 
 
 /*
@@ -78,7 +73,6 @@ __KERNEL_RCSID(0, "$NetBSD: exception_vector.S,v 1.35 2008/02/14 22:46:14 uwe Ex
  */
 NENTRY(sh_vector_generic)
 	__EXCEPTION_ENTRY
-	__INTR_MASK(r0, r1)
 	/* Identify exception cause */
 	MOV	(EXPEVT, r0)
 	mov.l	@r0, r0
@@ -95,22 +89,22 @@ NENTRY(sh_vector_generic)
 	bt	1f
 
 	/* tlb_exception(curlwp, tf, TEA); */
-	__EXCEPTION_UNBLOCK(r0, r1)
+	__INTR_MASK_EXCEPTION_UNBLOCK(r0, r1, r3)
 	mov.l	.Lg_tlb_exception, r0
 	jsr	@r0
 	 mov	r14, r5			/* 2nd arg */
-	bra	2f
+	bra	.Lg_return_from_exception
 	 nop
 
 	/* general_exception(curlwp, tf, TEA); */
 1:	mov	r4, r8
-#ifdef DDB
+#if defined(PTRACE_HOOKS) || defined(DDB)
 	mov	#0, r2
 	MOV	(BBRA, r1)
-	mov.w	r2, @r1			/* disable UBC */
 	mov.l	r2, @(TF_UBC, r14)	/* clear tf->tf_ubc */
-#endif /* DDB */
-	__EXCEPTION_UNBLOCK(r0, r1)
+	mov.w	r2, @r1			/* disable UBC channel A */
+#endif
+	__INTR_MASK_EXCEPTION_UNBLOCK(r0, r1, r3)
 	mov.l	.Lg_general_exception, r0
 	jsr	@r0
 	 mov	r14, r5			/* 2nd arg */
@@ -120,23 +114,34 @@ NENTRY(sh_vector_generic)
 	mov.l	.Lg_ast, r0
 	jsr	@r0
 	 mov	r14, r5
-#ifdef DDB	/* BBRA = tf->tf_ubc */
+
+#if defined(PTRACE_HOOKS) || defined(DDB)
+	mov.l	@(TF_UBC, r14), r2
+	tst	r2, r2			! single-step == 0?
+	bt	.Lg_return_from_exception
+
+	!! We are returning from DDB to do single step.  Channel A in
+	!! UBC is already rigged, we just need to enable it.
+	MOV	(BBRA, r3)
+	MOV	(BARA, r5)
 	__EXCEPTION_BLOCK(r0, r1)
-	mov.l	@(TF_UBC, r14), r0
-	MOV	(BBRA, r1)
-	mov.w	r0, @r1
-#endif /* DDB */
-2:	__EXCEPTION_RETURN
+	mov.l	@(TF_SPC, r14), r4
+	mov.l	r4, @r5			! BARA = tf->tf_spc
+	mov.w	r2, @r3			! BBRA = tf->tf_ubc
+#endif /* PTRACE || DDB */
+.Lg_return_from_exception:
+	__EXCEPTION_RETURN
 
 	.align	5
-.Lg_curlwp:		.long	_C_LABEL(curlwp)
 REG_SYMBOL(EXPEVT)
-REG_SYMBOL(BBRA)
+.Lg_curlwp:		.long	_C_LABEL(curlwp)
 REG_SYMBOL(TEA)
+.Lg_TLB_PROT_ST:	.long	EXPEVT_TLB_PROT_ST
 .Lg_tlb_exception:	.long	_C_LABEL(tlb_exception)
 .Lg_general_exception:	.long	_C_LABEL(general_exception)
 .Lg_ast:		.long	_C_LABEL(ast)
-.Lg_TLB_PROT_ST:	.long	EXPEVT_TLB_PROT_ST
+REG_SYMBOL(BBRA)
+REG_SYMBOL(BARA)
 
 /* LINTSTUB: Var: char sh_vector_generic_end[1]; */
 VECTOR_END_MARKER(sh_vector_generic_end)
@@ -264,8 +269,7 @@ NENTRY(sh3_vector_tlbmiss)
 	mov.l	@r2, r2			! *SH3_EXPEVT
 	mov.l	@r0, r6			! arg3: va = *SH3_TEA
 	mov.l	@r1, r4			! arg1: curlwp
-	__INTR_MASK(r0, r1)
-	__EXCEPTION_UNBLOCK(r0, r1)
+	__INTR_MASK_EXCEPTION_UNBLOCK(r0, r1, r3)
 	mov.l	.L3_tlb_exception, r0
 	mov.l	r2, @(TF_EXPEVT, r14)	! tf->tf_expevt = EXPEVT
 	jsr	@r0
@@ -415,8 +419,7 @@ NENTRY(sh4_vector_tlbmiss)
 	mov.l	@(0x24, r0), r2		! *SH4_EXPEVT
 	mov.l	@(0x0c, r0), r6		! arg3: va = *SH4_TEA
 	mov.l	@r1, r4			! arg1: curlwp
-	__INTR_MASK(r0, r1)
-	__EXCEPTION_UNBLOCK(r0, r1)
+	__INTR_MASK_EXCEPTION_UNBLOCK(r0, r1, r3)
 	mov.l	.L4_tlb_exception, r0
 	mov.l	r2, @(TF_EXPEVT, r14)	! tf->tf_expevt = EXPEVT
 	jsr	@r0
@@ -452,57 +455,25 @@ VECTOR_END_MARKER(sh4_vector_tlbmiss_end)
  */
 NENTRY(sh_vector_interrupt)
 	__EXCEPTION_ENTRY
-	stc	r0_bank, r6		! ssp - 3rd arg to intc_intr()
+	!! arguments for intc_intr(): for struct clockframe
+	stc	ssr, r4
+	stc	spc, r5
+	stc	r0_bank, r6		! ssp
+	__INTR_MASK_EXCEPTION_UNBLOCK(r0, r1, r3)
 
-	mov.l	.Li_intfp, r8
-	mov.l	@r8, r8
-	cmp/hi	r8, r14		! r14 > intfp ?
-	bf/s	.Li_on_intstack	! if (r14 <= intfp) already on intstack
-	 movt	r10		! remember to avoid re-testing later
-
-	!! else - switch to the interrupt stack
-	mov.l	.Li_intsp, r9
-	mov.l	@r9, r9
-
-	mov.l	r15, @-r9
-	stc.l	r6_bank, @-r9
-	mov	r9, r15
-	ldc	r8, r6_bank	! intfp
-.Li_on_intstack:
-
-	__INTR_MASK(r0, r1)
-	__EXCEPTION_UNBLOCK(r0, r1)	! enable exceptions for P3 access
-
-	mov.l	.Li_uvmexp_intrs, r2
+	mov.l	.Li_ci_idepth, r8	! callee-saved
 	mov.l	.Li_intc_intr, r0
+	mov.l	@r8, r9			! callee-saved
 	mov	#0, r1
-	mov.l	@r2, r3
+	add	#1, r9			! curcpu()->ci_idepth++
 	mov.l	r1, @(TF_EXPEVT, r14)	! tf->tf_expevt = 0 (for debug)?
-	add	#1, r3			! ++uvmexp.intrs
 	jsr	@r0			! intc_intr(ssr, spc, ssp)
-	 mov.l	r3, @r2
+	 mov.l	r9, @r8
 
-	!! r10 reflects if we have switched to the interrupt stack on
-	!! entry.  If not - we are in a nested interrupt, so stay on
-	!! the interrupt stack, and we know we are returning to kernel
-	tst	r10, r10
-	bt	.Li_return_to_kernel
-
-	!! Switch to the lwp's stack to run the AST check, so that if
-	!! interrupted lwp is preemtped, it is later resumed on its
-	!! own stack, not on the intterupt stack
-	mov	#0x10, r10
-	stc	sr, r11
-	swap.b	r10, r10
-	mov	r11, r2
-	swap.w	r10, r10	! r10 = PSL_BL
-	or	r10, r2
-	ldc	r2, sr		! block exceptions
-
-	ldc.l	@r15+, r6_bank
-	mov.l	@r15+, r15
-
-	ldc	r11, sr		! unblock exceptions
+	cmp/pl	r9			! curcpu()->ci_idepth > 0
+	add	#-1, r9			! curcpu()->ci_idepth--
+	bt/s	.Li_return_to_kernel	! returning from a nested interrupt
+	 mov.l	r9, @r8
 
 	mov.l	@(TF_SSR, r14), r2
 	mov.l	.Li_PSL_MD, r1
@@ -535,9 +506,7 @@ NENTRY(sh_vector_interrupt)
 	__EXCEPTION_RETURN
 
 	.align	5
-.Li_intfp:		.long	_C_LABEL(intfp)
-.Li_intsp:		.long	_C_LABEL(intsp)
-.Li_uvmexp_intrs:	.long	_C_LABEL(uvmexp) + UVMEXP_INTRS
+.Li_ci_idepth:		.long	_C_LABEL(cpu_info_store) + CI_IDEPTH
 .Li_intc_intr:		.long	_C_LABEL(intc_intr)
 .Li_PSL_MD:		.long	0x40000000 /* PSL_MD */
 .Li_ras_start:		.long	_C_LABEL(_lock_cas_ras_start)

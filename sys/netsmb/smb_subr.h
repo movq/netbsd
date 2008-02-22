@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_subr.h,v 1.17 2008/01/02 11:49:03 ad Exp $	*/
+/*	$NetBSD: smb_subr.h,v 1.22 2017/07/28 14:37:27 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -42,19 +42,19 @@
 
 MALLOC_DECLARE(M_SMBTEMP);
 
-#define SMBERROR(format, args...) printf("%s: "format, __func__ ,## args)
-#define SMBPANIC(format, args...) printf("%s: "format, __func__ ,## args)
+#define SMBERROR(x)	aprint_error x
+#define SMBPANIC(x)	aprint_error x
 
 #ifdef SMB_SOCKET_DEBUG
-#define SMBSDEBUG(format, args...) printf("%s: "format, __func__ ,## args)
+#define SMBSDEBUG(x)	aprint_debug x
 #else
-#define SMBSDEBUG(format, args...)
+#define SMBSDEBUG(x)	/* nothing */
 #endif
 
 #ifdef SMB_IOD_DEBUG
-#define SMBIODEBUG(format, args...) printf("%s: "format, __func__ ,## args)
+#define SMBIODEBUG(x)	aprint_debug x
 #else
-#define SMBIODEBUG(format, args...)
+#define SMBIODEBUG(x)	/* nothing */
 #endif
 
 #ifdef SMB_SOCKETDATA_DEBUG
@@ -64,15 +64,14 @@ void m_dumpm(struct mbuf *m);
 #define m_dumpm(m)
 #endif
 
-#ifdef __NetBSD__
 #define SIGISMEMBER(s,n) sigismember(&(s),n)
-#endif
 
 #define	SMB_SIGMASK(set) 						\
 	(SIGISMEMBER(set, SIGINT) || SIGISMEMBER(set, SIGTERM) ||	\
 	 SIGISMEMBER(set, SIGHUP) || SIGISMEMBER(set, SIGKILL) ||	\
 	 SIGISMEMBER(set, SIGQUIT))
 
+/* smb_suser() is not used in NetBSD. */
 #define	smb_suser(cred)	kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL)
 
 /*
@@ -109,18 +108,18 @@ void smb_makescred(struct smb_cred *scred, struct lwp *l,
     kauth_cred_t cred);
 int  smb_proc_intr(struct lwp *);
 char *smb_strdup(const char *s);
-char *smb_strdupin(char *s, int maxlen);
-void *smb_memdupin(void *umem, int len);
+char *smb_strdupin(char *s, size_t maxlen);
+void *smb_memdupin(void *umem, size_t len);
 void smb_strtouni(u_int16_t *dst, const char *src);
 void smb_strfree(char *s);
 void smb_memfree(void *s);
-void *smb_zmalloc(unsigned long size, struct malloc_type *type, int flags);
+void *smb_zmalloc(size_t size, struct malloc_type *type, int flags);
 
 int  smb_encrypt(const u_char *apwd, u_char *C8, u_char *RN);
 int  smb_ntencrypt(const u_char *apwd, u_char *C8, u_char *RN);
 int  smb_maperror(int eclass, int eno);
 int  smb_put_dmem(struct mbchain *mbp, struct smb_vc *vcp,
-	const char *src, int len, int caseopt);
+	const char *src, size_t len, int caseopt);
 int  smb_put_dstring(struct mbchain *mbp, struct smb_vc *vcp,
 	const char *src, int caseopt);
 int  smb_put_string(struct smb_rq *rqp, const char *src);
@@ -129,5 +128,6 @@ int  smb_put_asunistring(struct smb_rq *rqp, const char *src);
 #endif
 
 struct sockaddr *dup_sockaddr(struct sockaddr *, int);
+int dup_sockaddr_copyin(struct sockaddr **, struct sockaddr *, size_t);
 
 #endif /* !_NETSMB_SMB_SUBR_H_ */

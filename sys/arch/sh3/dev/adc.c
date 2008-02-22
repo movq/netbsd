@@ -1,4 +1,4 @@
-/*	$NetBSD: adc.c,v 1.7 2006/10/27 00:08:32 uwe Exp $ */
+/*	$NetBSD: adc.c,v 1.13 2010/08/08 16:23:40 chs Exp $ */
 
 /*
  * Copyright (c) 2003 Valeriy E. Ushakov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adc.c,v 1.7 2006/10/27 00:08:32 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adc.c,v 1.13 2010/08/08 16:23:40 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -42,31 +42,27 @@ __KERNEL_RCSID(0, "$NetBSD: adc.c,v 1.7 2006/10/27 00:08:32 uwe Exp $");
 #define ADC_(x)    (*((volatile uint8_t *)SH7709_AD ## x))
 
 
-struct adc_softc {
-	struct device sc_dev;
-};
+static int	adc_match(device_t, cfdata_t, void *);
+static void	adc_attach(device_t, device_t, void *);
 
-static int	adc_match(struct device *, struct cfdata *, void *);
-static void	adc_attach(struct device *, struct device *, void *);
-
-CFATTACH_DECL(adc, sizeof(struct adc_softc),
+CFATTACH_DECL_NEW(adc, 0,
     adc_match, adc_attach, NULL, NULL);
 
-static int	adc_search(struct device *, struct cfdata *,
-			   const int *, void *);
+static int	adc_search(device_t, cfdata_t, const int *, void *);
 static int	adc_print(void *, const char *);
 
 
 static int
-adc_match(struct device *parent, struct cfdata *cfp, void *aux)
+adc_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	/* REMINDER: also in 7727 and 7729 */
 	if ((cpu_product != CPU_PRODUCT_7709)
-	    && (cpu_product != CPU_PRODUCT_7709A))
+	    && (cpu_product != CPU_PRODUCT_7709A)
+	    && (cpu_product != CPU_PRODUCT_7706))
 		return (0);
 
-	if (strcmp(cfp->cf_name, "adc") != 0)
+	if (strcmp(cf->cf_name, "adc") != 0)
 		return (0);
 
 	return (1);
@@ -74,21 +70,30 @@ adc_match(struct device *parent, struct cfdata *cfp, void *aux)
 
 
 static void
-adc_attach(struct device *parent, struct device *self, void *aux)
+adc_attach(device_t parent, device_t self, void *aux)
 {
-	/* struct adc_softc *sc = (struct adc_softc *)self; */
 
 	ADC_(CSR) = 0;
 	ADC_(CR) = 0;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
+
 	config_search_ia(adc_search, self, "adc", NULL);
+
+	/*
+	 * XXX: TODO: provide hooks to manage power.  For now register
+	 * null hooks which is no worse than before.
+	 *
+	 * NB: ADC registers are reset by standby!
+	 */
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 
 static int
-adc_search(struct device *parent, struct cfdata *cf,
-	   const int *ldesc, void *aux)
+adc_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 
 	if (config_match(parent, cf, NULL) > 0)
@@ -136,14 +141,12 @@ adc_sample_channel(int chan)
 	csr = ADC_(CSR);
 	if ((csr & SH7709_ADCSR_ADST) != 0) {
 		/* another conversion is in progress?! */
-		printf("adc_sample_channel(%d): CSR=%s", chan,
-		       bitmask_snprintf(csr, SH7709_ADCSR_BITS,
-					bits, sizeof(bits)));
+	        snprintb(bits, sizeof(bits), SH7709_ADCSR_BITS, csr);
+		printf("adc_sample_channel(%d): CSR=%s", chan, bits);
 		cr = ADC_(CR);
 		cr &= ~0x07;	/* three lower bits always read as 1s */
-		printf(", CR=%s\n",
-		       bitmask_snprintf(cr, SH7709_ADCR_BITS,
-					bits, sizeof(bits)));
+	        snprintb(bits, sizeof(bits), SH7709_ADCR_BITS, cr);
+		printf(", CR=%s\n", bits);
 		return (-1);
 	}
 #endif

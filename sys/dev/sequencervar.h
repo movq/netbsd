@@ -1,7 +1,7 @@
-/*	$NetBSD: sequencervar.h,v 1.12 2007/02/09 21:55:26 ad Exp $	*/
+/*	$NetBSD: sequencervar.h,v 1.17 2014/12/22 07:02:22 mrg Exp $	*/
 
 /*
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,7 @@
  */
 
 #include <sys/callout.h>
+#include <sys/vnode.h>
 
 struct midi_softc;
 
@@ -74,27 +68,32 @@ struct midi_dev {
 	int	instr_bank_size;
 	int	unit;
 	struct	sequencer_softc *seq;
-	struct	midi_softc *msc;
 	char	doingsysex;	/* doing a SEQ_SYSEX */
+	vnode_t *vp;
 };
 
 struct sequencer_softc {
-	struct	device dev;
-	struct	device *sc_dev;	/* Hardware device struct */
-	struct	callout sc_callout;
-	int	isopen;		/* Open indicator */
+	callout_t sc_callout;
+	kmutex_t lock;
+	kcondvar_t wchan;
+	kcondvar_t rchan;
+	kcondvar_t lchan;
+	int	dvlock;
+	int	dying;
+	u_int	isopen;		/* Open indicator */
 	int	flags;		/* Open flags */
 	int	mode;
 #define SEQ_OLD 0
 #define SEQ_NEW 1
-	int	rchan, wchan;
 	int	pbus;
-	struct	selinfo wsel;	/* write selector */
-	struct	selinfo rsel;	/* read selector */
-	struct	proc *async;	/* process who wants audio SIGIO */
+	struct selinfo wsel;	/* write selector */
+	struct selinfo rsel;	/* read selector */
+	pid_t	async;	/* process who wants audio SIGIO */
 	void	*sih;
+	pcq_t	*pcq;
 
 	int	nmidi;		/* number of MIDI devices */
+	int	ndevs;
 	struct	midi_dev **devs;
 	struct	syn_timer timer;
 
@@ -104,6 +103,8 @@ struct sequencer_softc {
 
 	struct	sequencer_queue inq; /* input event queue */
 	u_long	input_stamp;
+	int	sc_unit;
+	LIST_ENTRY(sequencer_softc) sc_link;
 };
 
 void seq_event_intr(void *, seq_event_t *);

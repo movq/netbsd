@@ -1,4 +1,4 @@
-/*	NetBSD: pci_machdep.c,v 1.12 2001/06/19 11:56:27 nonaka Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.10 2016/10/19 00:08:41 nonaka Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -49,7 +49,7 @@
 #include <uvm/uvm_extern.h>
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isavar.h>
@@ -58,12 +58,6 @@
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pciconf.h>
-
-#define	PCI_MODE1_ENABLE	0x80000000UL
-#define	PCI_MODE1_ADDRESS_REG	(PREP_BUS_SPACE_IO + 0xcf8)
-#define	PCI_MODE1_DATA_REG	(PREP_BUS_SPACE_IO + 0xcfc)
-
-#define	PCI_CBIO		0x10
 
 void
 ibmnws_pci_get_chipset_tag_indirect(pci_chipset_tag_t pc)
@@ -84,13 +78,24 @@ ibmnws_pci_get_chipset_tag_indirect(pci_chipset_tag_t pc)
 	pc->pc_intr_evcnt = genppc_pci_intr_evcnt;
 	pc->pc_intr_establish = genppc_pci_intr_establish;
 	pc->pc_intr_disestablish = genppc_pci_intr_disestablish;
+	pc->pc_intr_setattr = genppc_pci_intr_setattr;
+	pc->pc_intr_type = genppc_pci_intr_type;
+	pc->pc_intr_alloc = genppc_pci_intr_alloc;
+	pc->pc_intr_release = genppc_pci_intr_release;
+	pc->pc_intx_alloc = genppc_pci_intx_alloc;
+
+	pc->pc_msi_v = (void *)pc;
+	genppc_pci_chipset_msi_init(pc);
+
+	pc->pc_msix_v = (void *)pc;
+	genppc_pci_chipset_msix_init(pc);
 
 	pc->pc_conf_interrupt = genppc_pci_conf_interrupt;
 	pc->pc_decompose_tag = genppc_pci_indirect_decompose_tag;
 	pc->pc_conf_hook = ibmnws_pci_conf_hook;
 
-	pc->pc_addr = mapiodev(PCI_MODE1_ADDRESS_REG, 4);
-	pc->pc_data = mapiodev(PCI_MODE1_DATA_REG, 4);
+	pc->pc_addr = mapiodev(PCI_MODE1_ADDRESS_REG, 4, false);
+	pc->pc_data = mapiodev(PCI_MODE1_DATA_REG, 4, false);
 	pc->pc_bus = 0;
 	pc->pc_node = 0;
 	pc->pc_memt = 0;
@@ -98,7 +103,7 @@ ibmnws_pci_get_chipset_tag_indirect(pci_chipset_tag_t pc)
 }
 
 int
-ibmnws_pci_bus_maxdevs(pci_chipset_tag_t pct, int busno)
+ibmnws_pci_bus_maxdevs(void *v, int busno)
 {
 
 	/*
@@ -109,7 +114,7 @@ ibmnws_pci_bus_maxdevs(pci_chipset_tag_t pct, int busno)
 }
 
 int
-ibmnws_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func, pcireg_t id)
+ibmnws_pci_conf_hook(void *v, int bus, int dev, int func, pcireg_t id)
 {
 
 	/*

@@ -1,4 +1,4 @@
-/* $NetBSD: au_timer.c,v 1.8 2008/01/09 20:38:35 wiz Exp $ */
+/* $NetBSD: au_timer.c,v 1.11 2011/07/01 18:39:29 dyoung Exp $ */
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,14 +36,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: au_timer.c,v 1.8 2008/01/09 20:38:35 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: au_timer.c,v 1.11 2011/07/01 18:39:29 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/lwp.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <mips/locore.h>
 
 #include <mips/alchemy/include/aureg.h>
@@ -70,6 +70,7 @@ do {									\
 void
 au_cal_timers(bus_space_tag_t st, bus_space_handle_t sh)
 {
+	struct cpu_info * const ci = curcpu();
 	uint32_t ctrdiff[4], startctr, endctr;
 	uint32_t ctl, ctr, octr;
 	int i;
@@ -109,42 +110,24 @@ au_cal_timers(bus_space_tag_t st, bus_space_handle_t sh)
 		SET_PC_REG(PC_COUNTER_CONTROL, 0, ctl);
 
 	/* Compute the number of cycles per second. */
-	curcpu()->ci_cpu_freq = ((ctrdiff[2] + ctrdiff[3]) / 2) * 16;
+	ci->ci_cpu_freq = ((ctrdiff[2] + ctrdiff[3]) / 2) * 16;
+	ci->ci_cctr_freq = ci->ci_cpu_freq;
 
 	/* Compute the number of ticks for hz. */
-	curcpu()->ci_cycles_per_hz = (curcpu()->ci_cpu_freq + hz / 2) / hz;
+	ci->ci_cycles_per_hz = (ci->ci_cpu_freq + hz / 2) / hz;
 
 	/* Compute the delay divisor. */
-	curcpu()->ci_divisor_delay =
-	    ((curcpu()->ci_cpu_freq + 500000) / 1000000);
-
-	/*
-	 * To implement a more accurate microtime using the CP0 COUNT
-	 * register we need to divide that register by the number of
-	 * cycles per MHz.  But...
-	 *
-	 * DIV and DIVU are expensive on MIPS (eg 75 clocks on the
-	 * R4000).  MULT and MULTU are only 12 clocks on the same CPU.
-	 * On the SB1 these appear to be 40-72 clocks for DIV/DIVU and 3
-	 * clocks for MUL/MULTU.
-	 *
-	 * The strategy we use to to calculate the reciprocal of cycles
-	 * per MHz, scaled by 1<<32.  Then we can simply issue a MULTU
-	 * and pluck of the HI register and have the results of the
-	 * division.
-	 */
-	curcpu()->ci_divisor_recip =
-	    0x100000000ULL / curcpu()->ci_divisor_delay;
+	ci->ci_divisor_delay = (ci->ci_cpu_freq + 500000) / 1000000;
 
 	/*
 	 * Get correct cpu frequency if the CPU runs at twice the
 	 * external/cp0-count frequency.
 	 */
-	if (mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT)
-		curcpu()->ci_cpu_freq *= 2;
+	if (mips_options.mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT)
+		ci->ci_cpu_freq *= 2;
 
 #ifdef DEBUG
 	printf("Timer calibration: %lu cycles/sec [(%u, %u) * 16]\n",
-	    curcpu()->ci_cpu_freq, ctrdiff[2], ctrdiff[3]);
+	    ci->ci_cpu_freq, ctrdiff[2], ctrdiff[3]);
 #endif
 }

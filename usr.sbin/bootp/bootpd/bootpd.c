@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootpd.c,v 1.21 2007/05/27 16:31:41 tls Exp $");
+__RCSID("$NetBSD: bootpd.c,v 1.27 2017/05/04 16:26:09 sevan Exp $");
 #endif
 
 /*
@@ -103,7 +103,7 @@ __RCSID("$NetBSD: bootpd.c,v 1.21 2007/05/27 16:31:41 tls Exp $");
  * Externals, forward declarations, and global variables
  */
 
-extern void dumptab(char *);
+extern void dumptab(const char *);
 
 PRIVATE void catcher(int);
 PRIVATE int chk_access(char *, int32 *);
@@ -114,8 +114,7 @@ PRIVATE void dovend_rfc1048(struct bootp *, struct host *, int32);
 PRIVATE void handle_reply(void);
 PRIVATE void handle_request(void);
 PRIVATE void sendreply(int forward, int32 dest_override);
-PRIVATE void usage(void);
-int main(int, char **);
+__dead PRIVATE void usage(void);
 
 /*
  * IP port numbers for client and server obtained from /etc/services
@@ -146,7 +145,7 @@ int actualtimeout = 15 * 60000;			/* fifteen minutes */
 int s;							/* Socket file descriptor */
 char *pktbuf;					/* Receive packet buffer */
 int pktlen;
-char *progname;
+const char *progname;
 char *chdir_path;
 char hostname[MAXHOSTNAMELEN + 1];	/* System host name */
 struct in_addr my_ip_addr;
@@ -159,8 +158,8 @@ PRIVATE int do_dumptab = 0;
  * Globals below are associated with the bootp database file (bootptab).
  */
 
-char *bootptab = CONFIG_FILE;
-char *bootpd_dump = DUMPTAB_FILE;
+const char *bootptab = CONFIG_FILE;
+const char *bootpd_dump = DUMPTAB_FILE;
 
 
 
@@ -519,7 +518,7 @@ main(int argc, char **argv)
 			report(LOG_INFO, "recvd pkt from IP addr %s",
 				   inet_ntoa(recv_addr.sin_addr));
 		}
-		if (n < sizeof(struct bootp)) {
+		if (n < (int)sizeof(struct bootp)) {
 			if (debug) {
 				report(LOG_INFO, "received short packet");
 			}
@@ -597,8 +596,9 @@ handle_request(void)
 	int32 bootsize = 0;
 	unsigned hlen, hashcode;
 	int32 dest;
-	char realpath[1024];
+	char lrealpath[1024];
 	char *clntpath;
+	size_t clntpathmaxlen;
 	char *homedir, *bootfile;
 	int n;
 
@@ -809,11 +809,13 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	 * daemon chroot directory (i.e. /tftpboot).
 	 */
 	if (hp->flags.tftpdir) {
-		strlcpy(realpath, hp->tftpdir->string, sizeof(realpath));
-		clntpath = &realpath[strlen(realpath)];
+		strlcpy(lrealpath, hp->tftpdir->string, sizeof(lrealpath));
+		clntpath = &lrealpath[strlen(lrealpath)];
+		clntpathmaxlen = sizeof(lrealpath) + lrealpath - clntpath;
 	} else {
-		realpath[0] = '\0';
-		clntpath = realpath;
+		lrealpath[0] = '\0';
+		clntpath = lrealpath;
+		clntpathmaxlen = sizeof(lrealpath);
 	}
 
 	/*
@@ -865,17 +867,17 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	 */
 	if (homedir) {
 		if (homedir[0] != '/')
-			strlcat(realpath, "/", sizeof(realpath));
-		strlcat(realpath, homedir, sizeof(realpath));
+			strlcat(lrealpath, "/", sizeof(lrealpath));
+		strlcat(lrealpath, homedir, sizeof(lrealpath));
 		homedir = NULL;
 	}
 	if (bootfile) {
 		if (bootfile[0] != '/') {
-			strlcat(realpath, "/", sizeof(realpath));
-			realpath[sizeof(realpath) - 1] = '\0';
+			strlcat(lrealpath, "/", sizeof(lrealpath));
+			lrealpath[sizeof(lrealpath) - 1] = '\0';
 		}
-		strlcat(realpath, bootfile, sizeof(realpath));
-		realpath[sizeof(realpath) - 1] = '\0';
+		strlcat(lrealpath, bootfile, sizeof(lrealpath));
+		lrealpath[sizeof(lrealpath) - 1] = '\0';
 		bootfile = NULL;
 	}
 
@@ -883,11 +885,11 @@ HW addr type is IEEE 802.  convert to %s and check again\n",
 	 * First try to find the file with a ".host" suffix
 	 */
 	n = strlen(clntpath);
-	strlcat(clntpath, ".", sizeof(clntpath));
-	strlcat(clntpath, hp->hostname->string, sizeof(clntpath));
-	if (chk_access(realpath, &bootsize) < 0) {
+	strlcat(clntpath, ".", clntpathmaxlen);
+	strlcat(clntpath, hp->hostname->string, clntpathmaxlen);
+	if (chk_access(lrealpath, &bootsize) < 0) {
 		clntpath[n] = 0;			/* Try it without the suffix */
-		if (chk_access(realpath, &bootsize) < 0) {
+		if (chk_access(lrealpath, &bootsize) < 0) {
 			/* neither "file.host" nor "file" was found */
 #ifdef	CHECK_FILE_ACCESS
 
@@ -1224,7 +1226,7 @@ dovend_rfc1048(struct bootp *bp, struct host *hp, int32 bootsize)
 		 * a response of that same length where the additional length
 		 * is assumed to be part of the bp_vend (options) area.
 		 */
-		if (pktlen > sizeof(*bp)) {
+		if (pktlen > (int)sizeof(*bp)) {
 			if (debug > 1)
 				report(LOG_INFO, "request message length=%d", pktlen);
 		}
@@ -1237,7 +1239,7 @@ dovend_rfc1048(struct bootp *bp, struct host *hp, int32 bootsize)
 		 */
 		{
 			byte *p, *ep;
-			byte tag, len;
+			byte tag, llen;
 			short msgsz = 0;
 			
 			p = vp + 4;
@@ -1250,10 +1252,10 @@ dovend_rfc1048(struct bootp *bp, struct host *hp, int32 bootsize)
 				if (tag == TAG_END)
 					break;
 				/* Now scan the length byte. */
-				len = *p++;
+				llen = *p++;
 				switch (tag) {
 				case TAG_MAX_MSGSZ:
-					if (len == 2) {
+					if (llen == 2) {
 						bcopy(p, (char*)&msgsz, 2);
 						msgsz = ntohs(msgsz);
 					}
@@ -1262,10 +1264,10 @@ dovend_rfc1048(struct bootp *bp, struct host *hp, int32 bootsize)
 					/* XXX - Should preserve this if given... */
 					break;
 				} /* swtich */
-				p += len;
+				p += llen;
 			}
 
-			if (msgsz > sizeof(*bp)) {
+			if (msgsz > (int)sizeof(*bp)) {
 				if (debug > 1)
 					report(LOG_INFO, "request has DHCP msglen=%d", msgsz);
 				pktlen = msgsz;
@@ -1273,12 +1275,12 @@ dovend_rfc1048(struct bootp *bp, struct host *hp, int32 bootsize)
 		}
 	}
 
-	if (pktlen < sizeof(*bp)) {
+	if (pktlen < (int)sizeof(*bp)) {
 		report(LOG_ERR, "invalid response length=%d", pktlen);
 		pktlen = sizeof(*bp);
 	}
 	bytesleft = ((byte*)bp + pktlen) - vp;
-	if (pktlen > sizeof(*bp)) {
+	if (pktlen > (int)sizeof(*bp)) {
 		if (debug > 1)
 			report(LOG_INFO, "extended reply, length=%d, options=%d",
 				   pktlen, bytesleft);
@@ -1304,7 +1306,7 @@ dovend_rfc1048(struct bootp *bp, struct host *hp, int32 bootsize)
 	if (hp->flags.bootsize) {
 		/* always enough room here */
 		bootsize = (hp->flags.bootsize_auto) ?
-			((bootsize + 511) / 512) : (hp->bootsize);	/* Round up */
+			((bootsize + 511) / 512) : ((int32_t)hp->bootsize);	/* Round up */
 		*vp++ = TAG_BOOT_SIZE;
 		*vp++ = 2;
 		*vp++ = (byte) ((bootsize >> 8) & 0xFF);

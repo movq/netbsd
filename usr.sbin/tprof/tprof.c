@@ -1,4 +1,4 @@
-/*	$NetBSD: tprof.c,v 1.2 2008/01/03 15:01:07 yamt Exp $	*/
+/*	$NetBSD: tprof.c,v 1.5 2012/01/10 23:39:33 joerg Exp $	*/
 
 /*-
  * Copyright (c)2008 YAMAMOTO Takashi,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: tprof.c,v 1.2 2008/01/03 15:01:07 yamt Exp $");
+__RCSID("$NetBSD: tprof.c,v 1.5 2012/01/10 23:39:33 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/ioctl.h>
@@ -53,7 +53,7 @@ __RCSID("$NetBSD: tprof.c,v 1.2 2008/01/03 15:01:07 yamt Exp $");
 int devfd;
 int outfd;
 
-static void
+__dead static void
 usage(void)
 {
 
@@ -135,28 +135,28 @@ main(int argc, char *argv[])
 	} else {
 		outfd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 		if (outfd == -1) {
-			err(EXIT_FAILURE, "%s", optarg);
+			err(EXIT_FAILURE, "%s", outfile);
 		}
 	}
 
 	devfd = open(_PATH_TPROF, O_RDWR);
 	if (devfd == -1) {
-		err(EXIT_SUCCESS, "%s", _PATH_TPROF);
+		err(EXIT_FAILURE, "%s", _PATH_TPROF);
 	}
 
 	ret = ioctl(devfd, TPROF_IOC_GETVERSION, &version);
 	if (ret == -1) {
-		err(EXIT_SUCCESS, "TPROF_IOC_GETVERSION");
+		err(EXIT_FAILURE, "TPROF_IOC_GETVERSION");
 	}
 	if (version != TPROF_VERSION) {
-		errx(EXIT_SUCCESS, "version mismatch: version=%d, expected=%d",
+		errx(EXIT_FAILURE, "version mismatch: version=%d, expected=%d",
 		    version, TPROF_VERSION);
 	}
 
 	memset(&param, 0, sizeof(param));
 	ret = ioctl(devfd, TPROF_IOC_START, &param);
 	if (ret == -1) {
-		err(EXIT_SUCCESS, "TPROF_IOC_START");
+		err(EXIT_FAILURE, "TPROF_IOC_START");
 	}
 
 	pid = fork();

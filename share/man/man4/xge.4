@@ -1,4 +1,4 @@
-.\"	$NetBSD: xge.4,v 1.2 2005/09/10 22:48:09 wiz Exp $
+.\"	$NetBSD: xge.4,v 1.5 2014/03/18 18:20:39 riastradh Exp $
 .\"
 .\" Copyright (c) 2005, SUNET, Swedish University Computer Network.
 .\" All rights reserved.
@@ -47,7 +47,7 @@ device driver supports the Neterion Xframe-I LR Ethernet adapter,
 which uses a single mode fiber (1310nm) interface.
 .Pp
 The Xframe supports IPv4/TCP/UDP checksumming in hardware, as well
-as TCP Segmentation Offloading (TSO) and hardvare VLAN handling.
+as TCP Segmentation Offloading (TSO) and hardware VLAN handling.
 The driver currently does not support the hardware VLAN feature.
 See
 .Xr ifconfig 8
@@ -91,6 +91,6 @@ driver first appeared in
 The
 .Nm
 driver was written by
-.An Anders Magnusson Aq ragge@ludd.luth.se .
+.An Anders Magnusson Aq Mt ragge@ludd.luth.se .
 .Sh BUGS
 There should be an XGMII framework for the driver to use.

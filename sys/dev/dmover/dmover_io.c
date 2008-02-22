@@ -1,4 +1,4 @@
-/*	$NetBSD: dmover_io.c,v 1.29 2008/01/04 21:17:52 ad Exp $	*/
+/*	$NetBSD: dmover_io.c,v 1.45 2017/11/30 20:25:55 christos Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dmover_io.c,v 1.29 2008/01/04 21:17:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dmover_io.c,v 1.45 2017/11/30 20:25:55 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -64,7 +64,6 @@ __KERNEL_RCSID(0, "$NetBSD: dmover_io.c,v 1.29 2008/01/04 21:17:52 ad Exp $");
 #include <sys/proc.h>
 #include <sys/poll.h>
 #include <sys/malloc.h>
-#include <sys/simplelock.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/filio.h>
@@ -72,11 +71,17 @@ __KERNEL_RCSID(0, "$NetBSD: dmover_io.c,v 1.29 2008/01/04 21:17:52 ad Exp $");
 #include <sys/systm.h>
 #include <sys/workqueue.h>
 #include <sys/once.h>
+#include <sys/stat.h>
+#include <sys/kauth.h>
+#include <sys/mutex.h>
+#include <sys/condvar.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <dev/dmover/dmovervar.h>
 #include <dev/dmover/dmover_io.h>
+
+#include "ioconf.h"
 
 struct dmio_usrreq_state {
 	union {
@@ -99,12 +104,19 @@ struct dmio_state {
 	struct selinfo ds_selq;
 	volatile int ds_flags;
 	u_int ds_nreqs;
-	struct simplelock ds_slock;
+	kmutex_t ds_lock;
+	kcondvar_t ds_complete_cv;
+	kcondvar_t ds_nreqs_cv;
+	struct timespec ds_atime;
+	struct timespec ds_mtime;
+	struct timespec ds_btime;
 };
 
 static ONCE_DECL(dmio_cleaner_control);
 static struct workqueue *dmio_cleaner;
 static int dmio_cleaner_init(void);
+static struct dmio_state *dmio_state_get(void);
+static void dmio_state_put(struct dmio_state *);
 static void dmio_usrreq_fini1(struct work *wk, void *);
 
 #define	DMIO_STATE_SEL		0x0001
@@ -118,14 +130,21 @@ static void dmio_usrreq_fini1(struct work *wk, void *);
 struct pool dmio_state_pool;
 struct pool dmio_usrreq_state_pool;
 
-void	dmoverioattach(int);
-
 dev_type_open(dmoverioopen);
 
 const struct cdevsw dmoverio_cdevsw = {
-	dmoverioopen, noclose, noread, nowrite, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
-	D_OTHER
+	.d_open = dmoverioopen,
+	.d_close = noclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 
 /*
@@ -154,6 +173,40 @@ dmio_cleaner_init(void)
 
 	return workqueue_create(&dmio_cleaner, "dmioclean", dmio_usrreq_fini1,
 	    NULL, PWAIT, IPL_SOFTCLOCK, 0);
+}
+
+static struct dmio_state *
+dmio_state_get(void)
+{
+	struct dmio_state *ds;
+
+	ds = pool_get(&dmio_state_pool, PR_WAITOK);
+
+	memset(ds, 0, sizeof(*ds));
+
+	getnanotime(&ds->ds_btime);
+	ds->ds_atime = ds->ds_mtime = ds->ds_btime;
+
+	mutex_init(&ds->ds_lock, MUTEX_DEFAULT, IPL_SOFTCLOCK);
+	cv_init(&ds->ds_complete_cv, "dmvrrd");
+	cv_init(&ds->ds_nreqs_cv, "dmiowr");
+	TAILQ_INIT(&ds->ds_pending);
+	TAILQ_INIT(&ds->ds_complete);
+	selinit(&ds->ds_selq);
+
+	return ds;
+}
+
+static void
+dmio_state_put(struct dmio_state *ds)
+{
+
+	seldestroy(&ds->ds_selq);
+	cv_destroy(&ds->ds_nreqs_cv);
+	cv_destroy(&ds->ds_complete_cv);
+	mutex_destroy(&ds->ds_lock);
+
+	pool_put(&dmio_state_pool, ds);
 }
 
 /*
@@ -327,14 +380,11 @@ static void
 dmio_usrreq_fini1(struct work *wk, void *dummy)
 {
 	struct dmio_usrreq_state *dus = (void *)wk;
-	int s;
 
 	KASSERT(wk == &dus->dus_work);
 
 	uvmspace_free(dus->dus_vmspace);
-	s = splsoftclock();
 	pool_put(&dmio_usrreq_state_pool, dus);
-	splx(s);
 }
 
 /*
@@ -350,7 +400,7 @@ dmio_read(struct file *fp, off_t *offp, struct uio *uio,
 	struct dmio_usrreq_state *dus;
 	struct dmover_request *dreq;
 	struct dmio_usrresp resp;
-	int s, error = 0, progress = 0;
+	int error = 0, progress = 0;
 
 	if ((uio->uio_resid % sizeof(resp)) != 0)
 		return (EINVAL);
@@ -358,8 +408,8 @@ dmio_read(struct file *fp, off_t *offp, struct uio *uio,
 	if (ds->ds_session == NULL)
 		return (ENXIO);
 
-	s = splsoftclock();
-	simple_lock(&ds->ds_slock);
+	getnanotime(&ds->ds_atime);
+	mutex_enter(&ds->ds_lock);
 
 	while (uio->uio_resid != 0) {
 
@@ -371,9 +421,7 @@ dmio_read(struct file *fp, off_t *offp, struct uio *uio,
 					goto out;
 				}
 				ds->ds_flags |= DMIO_STATE_READ_WAIT;
-				error = ltsleep(&ds->ds_complete,
-				    PRIBIO | PCATCH, "dmvrrd", 0,
-				    &ds->ds_slock);
+				error = cv_wait_sig(&ds->ds_complete_cv, &ds->ds_lock);
 				if (error)
 					goto out;
 				continue;
@@ -383,16 +431,14 @@ dmio_read(struct file *fp, off_t *offp, struct uio *uio,
 			ds->ds_nreqs--;
 			if (ds->ds_flags & DMIO_STATE_WRITE_WAIT) {
 				ds->ds_flags &= ~DMIO_STATE_WRITE_WAIT;
-				wakeup(&ds->ds_nreqs);
+				cv_broadcast(&ds->ds_nreqs_cv);
 			}
 			if (ds->ds_flags & DMIO_STATE_SEL) {
 				ds->ds_flags &= ~DMIO_STATE_SEL;
-				selwakeup(&ds->ds_selq);
+				selnotify(&ds->ds_selq, POLLIN | POLLRDNORM, 0);
 			}
 			break;
 		}
-
-		simple_unlock(&ds->ds_slock);
 
 		dreq = dus->dus_req;
 		resp.resp_id = dus->dus_id;
@@ -406,7 +452,7 @@ dmio_read(struct file *fp, off_t *offp, struct uio *uio,
 
 		dmio_usrreq_fini(ds, dus);
 
-		splx(s);
+		mutex_exit(&ds->ds_lock);
 
 		progress = 1;
 
@@ -416,13 +462,11 @@ dmio_read(struct file *fp, off_t *offp, struct uio *uio,
 		if (error)
 			return (error);
 
-		s = splsoftclock();
-		simple_lock(&ds->ds_slock);
+		mutex_enter(&ds->ds_lock);
 	}
 
  out:
-	simple_unlock(&ds->ds_slock);
-	splx(s);
+	mutex_exit(&ds->ds_lock);
 
 	return (error);
 }
@@ -440,30 +484,29 @@ dmio_usrreq_done(struct dmover_request *dreq)
 
 	/* We're already at splsoftclock(). */
 
-	simple_lock(&ds->ds_slock);
+	mutex_enter(&ds->ds_lock);
 	TAILQ_REMOVE(&ds->ds_pending, dus, dus_q);
 	if (ds->ds_flags & DMIO_STATE_DEAD) {
-		ds->ds_nreqs--;
+		int nreqs = --ds->ds_nreqs;
+		mutex_exit(&ds->ds_lock);
 		dmio_usrreq_fini(ds, dus);
 		dmover_request_free(dreq);
-		if (ds->ds_nreqs == 0) {
-			simple_unlock(&ds->ds_slock);
-			seldestroy(&ds->ds_selq);
-			pool_put(&dmio_state_pool, ds);
-			return;
+		if (nreqs == 0) {
+			dmio_state_put(ds);
 		}
-	} else {
-		TAILQ_INSERT_TAIL(&ds->ds_complete, dus, dus_q);
-		if (ds->ds_flags & DMIO_STATE_READ_WAIT) {
-			ds->ds_flags &= ~DMIO_STATE_READ_WAIT;
-			wakeup(&ds->ds_complete);
-		}
-		if (ds->ds_flags & DMIO_STATE_SEL) {
-			ds->ds_flags &= ~DMIO_STATE_SEL;
-			selwakeup(&ds->ds_selq);
-		}
+		return;
 	}
-	simple_unlock(&ds->ds_slock);
+
+	TAILQ_INSERT_TAIL(&ds->ds_complete, dus, dus_q);
+	if (ds->ds_flags & DMIO_STATE_READ_WAIT) {
+		ds->ds_flags &= ~DMIO_STATE_READ_WAIT;
+		cv_broadcast(&ds->ds_complete_cv);
+	}
+	if (ds->ds_flags & DMIO_STATE_SEL) {
+		ds->ds_flags &= ~DMIO_STATE_SEL;
+		selnotify(&ds->ds_selq, POLLOUT | POLLWRNORM, 0);
+	}
+	mutex_exit(&ds->ds_lock);
 }
 
 /*
@@ -479,7 +522,7 @@ dmio_write(struct file *fp, off_t *offp, struct uio *uio,
 	struct dmio_usrreq_state *dus;
 	struct dmover_request *dreq;
 	struct dmio_usrreq req;
-	int error = 0, s, progress = 0;
+	int error = 0, progress = 0;
 
 	if ((uio->uio_resid % sizeof(req)) != 0)
 		return (EINVAL);
@@ -487,8 +530,8 @@ dmio_write(struct file *fp, off_t *offp, struct uio *uio,
 	if (ds->ds_session == NULL)
 		return (ENXIO);
 
-	s = splsoftclock();
-	simple_lock(&ds->ds_slock);
+	getnanotime(&ds->ds_mtime);
+	mutex_enter(&ds->ds_lock);
 
 	while (uio->uio_resid != 0) {
 
@@ -498,8 +541,7 @@ dmio_write(struct file *fp, off_t *offp, struct uio *uio,
 				break;
 			}
 			ds->ds_flags |= DMIO_STATE_WRITE_WAIT;
-			error = ltsleep(&ds->ds_nreqs, PRIBIO | PCATCH,
-			    "dmiowr", 0, &ds->ds_slock);
+			error = cv_wait_sig(&ds->ds_complete_cv, &ds->ds_lock);
 			if (error)
 				break;
 			continue;
@@ -507,15 +549,13 @@ dmio_write(struct file *fp, off_t *offp, struct uio *uio,
 
 		ds->ds_nreqs++;
 
-		simple_unlock(&ds->ds_slock);
-		splx(s);
+		mutex_exit(&ds->ds_lock);
 
 		progress = 1;
 
 		error = uiomove(&req, sizeof(req), uio);
 		if (error) {
-			s = splsoftclock();
-			simple_lock(&ds->ds_slock);
+			mutex_enter(&ds->ds_lock);
 			ds->ds_nreqs--;
 			break;
 		}
@@ -524,23 +564,17 @@ dmio_write(struct file *fp, off_t *offp, struct uio *uio,
 		dreq = dmover_request_alloc(ds->ds_session, NULL);
 		if (dreq == NULL) {
 			/* XXX */
-			s = splsoftclock();
-			simple_lock(&ds->ds_slock);
 			ds->ds_nreqs--;
 			error = ENOMEM;
-			break;
+			return error;
 		}
-		s = splsoftclock();
 		dus = pool_get(&dmio_usrreq_state_pool, PR_WAITOK);
-		splx(s);
 
 		error = dmio_usrreq_init(fp, dus, &req, dreq);
 		if (error) {
 			dmover_request_free(dreq);
-			s = splsoftclock();
 			pool_put(&dmio_usrreq_state_pool, dus);
-			simple_lock(&ds->ds_slock);
-			break;
+			return error;
 		}
 
 		dreq->dreq_callback = dmio_usrreq_done;
@@ -549,24 +583,37 @@ dmio_write(struct file *fp, off_t *offp, struct uio *uio,
 		dus->dus_req = dreq;
 		dus->dus_id = req.req_id;
 
-		s = splsoftclock();
-		simple_lock(&ds->ds_slock);
+		mutex_enter(&ds->ds_lock);
 
 		TAILQ_INSERT_TAIL(&ds->ds_pending, dus, dus_q);
 
-		simple_unlock(&ds->ds_slock);
-		splx(s);
+		mutex_exit(&ds->ds_lock);
 
 		dmover_process(dreq);
 
-		s = splsoftclock();
-		simple_lock(&ds->ds_slock);
+		mutex_enter(&ds->ds_lock);
 	}
 
-	simple_unlock(&ds->ds_slock);
-	splx(s);
+	mutex_exit(&ds->ds_lock);
 
 	return (error);
+}
+
+static int
+dmio_stat(struct file *fp, struct stat *st)
+{
+	struct dmio_state *ds = fp->f_data;
+
+	(void)memset(st, 0, sizeof(*st));
+	KERNEL_LOCK(1, NULL);
+	st->st_dev = makedev(cdevsw_lookup_major(&dmoverio_cdevsw), 0);
+	st->st_atimespec = ds->ds_atime;
+	st->st_mtimespec = ds->ds_mtime;
+	st->st_ctimespec = st->st_birthtimespec = ds->ds_btime;
+	st->st_uid = kauth_cred_geteuid(fp->f_cred);
+	st->st_gid = kauth_cred_getegid(fp->f_cred);
+	KERNEL_UNLOCK_ONE(NULL);
+	return 0;
 }
 
 /*
@@ -575,10 +622,10 @@ dmio_write(struct file *fp, off_t *offp, struct uio *uio,
  *	Ioctl file op.
  */
 static int
-dmio_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
+dmio_ioctl(struct file *fp, u_long cmd, void *data)
 {
 	struct dmio_state *ds = (struct dmio_state *) fp->f_data;
-	int error, s;
+	int error;
 
 	switch (cmd) {
 	case FIONBIO:
@@ -590,26 +637,22 @@ dmio_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
 		struct dmio_setfunc *dsf = data;
 		struct dmover_session *dses;
 
-		s = splsoftclock();
-		simple_lock(&ds->ds_slock);
+		mutex_enter(&ds->ds_lock);
 
 		if (ds->ds_session != NULL ||
 		    (ds->ds_flags & DMIO_STATE_LARVAL) != 0) {
-			simple_unlock(&ds->ds_slock);
-			splx(s);
+			mutex_exit(&ds->ds_lock);
 			return (EBUSY);
 		}
 
 		ds->ds_flags |= DMIO_STATE_LARVAL;
 
-		simple_unlock(&ds->ds_slock);
-		splx(s);
+		mutex_exit(&ds->ds_lock);
 
 		dsf->dsf_name[DMIO_MAX_FUNCNAME - 1] = '\0';
 		error = dmover_session_create(dsf->dsf_name, &dses);
 
-		s = splsoftclock();
-		simple_lock(&ds->ds_slock);
+		mutex_enter(&ds->ds_lock);
 
 		if (error == 0) {
 			dses->dses_cookie = ds;
@@ -617,8 +660,7 @@ dmio_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
 		}
 		ds->ds_flags &= ~DMIO_STATE_LARVAL;
 
-		simple_unlock(&ds->ds_slock);
-		splx(s);
+		mutex_exit(&ds->ds_lock);
 		break;
 	    }
 
@@ -635,16 +677,15 @@ dmio_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
  *	Poll file op.
  */
 static int
-dmio_poll(struct file *fp, int events, struct lwp *l)
+dmio_poll(struct file *fp, int events)
 {
 	struct dmio_state *ds = (struct dmio_state *) fp->f_data;
-	int s, revents = 0;
+	int revents = 0;
 
 	if ((events & (POLLIN | POLLRDNORM | POLLOUT | POLLWRNORM)) == 0)
 		return (revents);
 
-	s = splsoftclock();
-	simple_lock(&ds->ds_slock);
+	mutex_enter(&ds->ds_lock);
 
 	if (ds->ds_flags & DMIO_STATE_DEAD) {
 		/* EOF */
@@ -667,13 +708,12 @@ dmio_poll(struct file *fp, int events, struct lwp *l)
 			revents |= events & (POLLOUT | POLLWRNORM);
 
 	if (revents == 0) {
-		selrecord(l, &ds->ds_selq);
+		selrecord(curlwp, &ds->ds_selq);
 		ds->ds_flags |= DMIO_STATE_SEL;
 	}
 
  out:
-	simple_unlock(&ds->ds_slock);
-	splx(s);
+	mutex_exit(&ds->ds_lock);
 
 	return (revents);
 }
@@ -684,15 +724,13 @@ dmio_poll(struct file *fp, int events, struct lwp *l)
  *	Close file op.
  */
 static int
-dmio_close(struct file *fp, struct lwp *l)
+dmio_close(struct file *fp)
 {
 	struct dmio_state *ds = (struct dmio_state *) fp->f_data;
 	struct dmio_usrreq_state *dus;
 	struct dmover_session *dses;
-	int s;
 
-	s = splsoftclock();
-	simple_lock(&ds->ds_slock);
+	mutex_enter(&ds->ds_lock);
 
 	ds->ds_flags |= DMIO_STATE_DEAD;
 
@@ -700,8 +738,10 @@ dmio_close(struct file *fp, struct lwp *l)
 	while ((dus = TAILQ_FIRST(&ds->ds_complete)) != NULL) {
 		TAILQ_REMOVE(&ds->ds_complete, dus, dus_q);
 		ds->ds_nreqs--;
+		mutex_exit(&ds->ds_lock);
 		dmover_request_free(dus->dus_req);
 		dmio_usrreq_fini(ds, dus);
+		mutex_enter(&ds->ds_lock);
 	}
 
 	/*
@@ -710,15 +750,12 @@ dmio_close(struct file *fp, struct lwp *l)
 	 */
 	if (ds->ds_nreqs == 0) {
 		dses = ds->ds_session;
-		simple_unlock(&ds->ds_slock);
-		seldestroy(&ds->ds_selq);
-		pool_put(&dmio_state_pool, ds);
+		mutex_exit(&ds->ds_lock);
+		dmio_state_put(ds);
 	} else {
 		dses = NULL;
-		simple_unlock(&ds->ds_slock);
+		mutex_exit(&ds->ds_lock);
 	}
-
-	splx(s);
 
 	fp->f_data = NULL;
 
@@ -729,14 +766,16 @@ dmio_close(struct file *fp, struct lwp *l)
 }
 
 static const struct fileops dmio_fileops = {
-	dmio_read,
-	dmio_write,
-	dmio_ioctl,
-	fnullop_fcntl,
-	dmio_poll,
-	fbadop_stat,
-	dmio_close,
-	fnullop_kqfilter
+	.fo_name = "dmio",
+	.fo_read = dmio_read,
+	.fo_write = dmio_write,
+	.fo_ioctl = dmio_ioctl,
+	.fo_fcntl = fnullop_fcntl,
+	.fo_poll = dmio_poll,
+	.fo_stat = dmio_stat,
+	.fo_close = dmio_close,
+	.fo_kqfilter = fnullop_kqfilter,
+	.fo_restart = fnullop_restart,
 };
 
 /*
@@ -749,21 +788,12 @@ dmoverioopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct dmio_state *ds;
 	struct file *fp;
-	int error, fd, s;
+	int error, fd;
 
-	/* falloc() will use the descriptor for us. */
-	if ((error = falloc(l, &fp, &fd)) != 0)
+	if ((error = fd_allocfile(&fp, &fd)) != 0)
 		return (error);
 
-	s = splsoftclock();
-	ds = pool_get(&dmio_state_pool, PR_WAITOK);
-	splx(s);
+	ds = dmio_state_get();
 
-	memset(ds, 0, sizeof(*ds));
-	simple_lock_init(&ds->ds_slock);
-	TAILQ_INIT(&ds->ds_pending);
-	TAILQ_INIT(&ds->ds_complete);
-	selinit(&ds->ds_selq);
-
-	return fdclone(l, fp, fd, flag, &dmio_fileops, ds);
+	return fd_clone(fp, fd, flag, &dmio_fileops, ds);
 }

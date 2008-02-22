@@ -1,7 +1,7 @@
-/*	$NetBSD: ad1848_isa.c,v 1.33 2007/10/19 12:00:14 ad Exp $	*/
+/*	$NetBSD: ad1848_isa.c,v 1.38 2011/11/23 23:07:32 jmcneill Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -102,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.33 2007/10/19 12:00:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.38 2011/11/23 23:07:32 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,11 +105,10 @@ __KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.33 2007/10/19 12:00:14 ad Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/buf.h>
-
 #include <sys/cpu.h>
 #include <sys/bus.h>
-
 #include <sys/audioio.h>
+#include <sys/malloc.h>
 
 #include <dev/audio_if.h>
 #include <dev/auconv.h>
@@ -364,6 +356,9 @@ ad1848_isa_probe(struct ad1848_isa_softc *isc)
 				case 0x82:
 					sc->chip_name = "CS4232";
 					break;
+				case 0xa2:
+					sc->chip_name = "CS4232C";
+					break;
 				case 0x03:
 				case 0x83:
 					sc->chip_name = "CS4236";
@@ -458,8 +453,8 @@ ad1848_isa_attach(struct ad1848_isa_softc *isc)
 		error = isa_dmamap_create(isc->sc_ic, isc->sc_playdrq,
 		    isc->sc_play_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW);
 		if (error) {
-			printf("%s: can't create map for drq %d\n",
-			    sc->sc_dev.dv_xname, isc->sc_playdrq);
+			aprint_error_dev(sc->sc_dev, "can't create map for drq %d\n",
+			    isc->sc_playdrq);
 			return;
 		}
 	}
@@ -469,8 +464,8 @@ ad1848_isa_attach(struct ad1848_isa_softc *isc)
 		error = isa_dmamap_create(isc->sc_ic, isc->sc_recdrq,
 		    isc->sc_rec_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW);
 		if (error) {
-			printf("%s: can't create map for drq %d\n",
-			    sc->sc_dev.dv_xname, isc->sc_recdrq);
+			aprint_error_dev(sc->sc_dev, "can't create map for drq %d\n",
+			    isc->sc_recdrq);
 			isa_dmamap_destroy(isc->sc_ic, isc->sc_playdrq);
 			return;
 		}
@@ -506,8 +501,10 @@ ad1848_isa_open(void *addr, int flags)
 
 #ifndef AUDIO_NO_POWER_CTL
 	/* Power-up chip */
-	if (isc->powerctl)
+	if (isc->powerctl) {
+		KASSERT(mutex_owned(&sc->sc_intr_lock));
 		isc->powerctl(isc->powerarg, flags);
+	}
 #endif
 
 	/* Init and mute wave output */
@@ -516,8 +513,10 @@ ad1848_isa_open(void *addr, int flags)
 	error = ad1848_open(sc, flags);
 	if (error) {
 #ifndef AUDIO_NO_POWER_CTL
-		if (isc->powerctl)
+		if (isc->powerctl) {
+			KASSERT(mutex_owned(&sc->sc_intr_lock));
 			isc->powerctl(isc->powerarg, 0);
+		}
 #endif
 		goto bad;
 	}
@@ -534,9 +533,6 @@ bad:
 	return error;
 }
 
-/*
- * Close function is called at splaudio().
- */
 void
 ad1848_isa_close(void *addr)
 {
@@ -550,8 +546,10 @@ ad1848_isa_close(void *addr)
 
 #ifndef AUDIO_NO_POWER_CTL
 	/* Power-down chip */
-	if (isc->powerctl)
+	if (isc->powerctl) {
+		KASSERT(mutex_owned(&sc->sc_intr_lock));
 		isc->powerctl(isc->powerarg, 0);
+	}
 #endif
 
 	if (isc->sc_playdrq != -1)
@@ -698,6 +696,9 @@ ad1848_isa_intr(void *arg)
 
 	isc = arg;
 	sc = &isc->sc_ad1848;
+
+	KASSERT(mutex_owned(&sc->sc_intr_lock));
+
 	retval = 0;
 	/* Get intr status */
 	status = ADREAD(sc, AD1848_STATUS);
@@ -738,9 +739,7 @@ void *
 ad1848_isa_malloc(
 	void *addr,
 	int direction,
-	size_t size,
-	struct malloc_type *pool,
-	int flags)
+	size_t size)
 {
 	struct ad1848_isa_softc *isc;
 	int drq;
@@ -750,14 +749,14 @@ ad1848_isa_malloc(
 		drq = isc->sc_playdrq;
 	else
 		drq = isc->sc_recdrq;
-	return isa_malloc(isc->sc_ic, drq, size, pool, flags);
+	return isa_malloc(isc->sc_ic, drq, size, M_DEVBUF, M_WAITOK);
 }
 
 void
-ad1848_isa_free(void *addr, void *ptr, struct malloc_type *pool)
+ad1848_isa_free(void *addr, void *ptr, size_t size)
 {
 
-	isa_free(ptr, pool);
+	isa_free(ptr, M_DEVBUF);
 }
 
 size_t

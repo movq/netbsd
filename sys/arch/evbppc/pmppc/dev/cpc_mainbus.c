@@ -1,4 +1,4 @@
-/*	$NetBSD: cpc_mainbus.c,v 1.2 2007/10/17 19:54:19 garbled Exp $	*/
+/*	$NetBSD: cpc_mainbus.c,v 1.6 2011/07/01 19:03:09 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpc_mainbus.c,v 1.2 2007/10/17 19:54:19 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpc_mainbus.c,v 1.6 2011/07/01 19:03:09 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/extent.h>
@@ -45,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: cpc_mainbus.c,v 1.2 2007/10/17 19:54:19 garbled Exp 
 #include <sys/malloc.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include "locators.h"
 
 #include <dev/pci/pcivar.h>
@@ -62,18 +55,18 @@ __KERNEL_RCSID(0, "$NetBSD: cpc_mainbus.c,v 1.2 2007/10/17 19:54:19 garbled Exp 
 struct genppc_pci_chipset *genppc_pct;
 
 void
-cpc_attach(struct device *self, pci_chipset_tag_t pc, bus_space_tag_t mem,
+cpc_attach(device_t self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 	   bus_space_tag_t pciio, bus_dma_tag_t tag, int attachpci,
 	   uint freq);
 
-static int	cpc_mainbus_match(struct device *, struct cfdata *, void *);
-static void	cpc_mainbus_attach(struct device *, struct device *, void *);
+static int	cpc_mainbus_match(device_t, cfdata_t, void *);
+static void	cpc_mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(cpc_mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(cpc_mainbus, 0,
     cpc_mainbus_match, cpc_mainbus_attach, NULL, NULL);
 
 int
-cpc_mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
+cpc_mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *maa = aux;
 
@@ -81,7 +74,7 @@ cpc_mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-cpc_mainbus_attach(struct device *parent, struct device *self, void *aux)
+cpc_mainbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct genppc_pci_chipset_businfo *pbi;
 
@@ -101,5 +94,5 @@ cpc_mainbus_attach(struct device *parent, struct device *self, void *aux)
 		   a_config.a_bus_freq);
 
 	if (!a_config.a_is_monarch)
-		printf("%s: not Monarch, pci not attached\n", self->dv_xname);
+		aprint_error_dev(self, "not Monarch, pci not attached\n");
 }

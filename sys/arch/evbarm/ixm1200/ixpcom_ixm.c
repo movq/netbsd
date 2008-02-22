@@ -1,4 +1,4 @@
-/*	$NetBSD: ixpcom_ixm.c,v 1.6 2003/03/25 06:53:16 igy Exp $ */
+/*	$NetBSD: ixpcom_ixm.c,v 1.11 2012/10/27 17:17:48 chs Exp $ */
 /*
  * Copyright (c) 2002
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixpcom_ixm.c,v 1.6 2003/03/25 06:53:16 igy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixpcom_ixm.c,v 1.11 2012/10/27 17:17:48 chs Exp $");
 
 /* Front-end of ixpcom */
 
@@ -46,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixpcom_ixm.c,v 1.6 2003/03/25 06:53:16 igy Exp $");
 #include <sys/termios.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/ixp12x0/ixp12x0_comreg.h>
 #include <arm/ixp12x0/ixp12x0_comvar.h>
@@ -56,17 +50,14 @@ __KERNEL_RCSID(0, "$NetBSD: ixpcom_ixm.c,v 1.6 2003/03/25 06:53:16 igy Exp $");
 
 #include <evbarm/ixm1200/ixpcom_ixmvar.h>
 
-static int	ixpcom_ixm_match(struct device *, struct cfdata *, void *);
-static void	ixpcom_ixm_attach(struct device *, struct device *, void *);
+static int	ixpcom_ixm_match(device_t, cfdata_t, void *);
+static void	ixpcom_ixm_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(ixpcom_ixm, sizeof(struct ixpcom_softc),
+CFATTACH_DECL_NEW(ixpcom_ixm, sizeof(struct ixpcom_softc),
     ixpcom_ixm_match, ixpcom_ixm_attach, NULL, NULL);
 
 static int
-ixpcom_ixm_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ixpcom_ixm_match(device_t parent, cfdata_t match, void *aux)
 {
 	if (strcmp(match->cf_name, "ixpcom") == 0)
 		return 1;
@@ -74,28 +65,24 @@ ixpcom_ixm_match(parent, match, aux)
 }
 
 static void
-ixpcom_ixm_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;  
-	void *aux;
+ixpcom_ixm_attach(device_t parent, device_t self, void *aux)
 {
-	struct ixpcom_ixm_softc *isc = (struct ixpcom_ixm_softc *)self;
+	struct ixpcom_ixm_softc *isc = device_private(self);
 	struct ixpcom_softc *sc = &isc->sc_ixpcom;
 	struct ixpsip_attach_args *sa = aux;
 
+	sc->sc_dev = self;
 	isc->sc_iot = sa->sa_iot;
 	sc->sc_iot = sa->sa_iot;
 	sc->sc_baseaddr = sa->sa_addr;
 
-	printf("\n");
-
 	if (bus_space_map(sa->sa_iot, sa->sa_addr, sa->sa_size, 0,
 			 &sc->sc_ioh)) {
-		printf("%s: unable to map device\n", sc->sc_dev.dv_xname);
+		aprint_error(": unable to map device\n");
 		return;
 	}
 
-	printf("%s: IXP12x0 UART\n", sc->sc_dev.dv_xname);
+	aprint_normal(": IXP12x0 UART\n");
 
 	ixpcom_attach_subr(sc);
 

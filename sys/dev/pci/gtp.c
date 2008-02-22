@@ -1,4 +1,4 @@
-/* $NetBSD: gtp.c,v 1.14 2007/10/19 12:00:44 ad Exp $ */
+/* $NetBSD: gtp.c,v 1.20 2016/07/11 11:31:51 msaitoh Exp $ */
 /*	$OpenBSD: gtp.c,v 1.1 2002/06/03 16:13:21 mickey Exp $	*/
 
 /*
@@ -29,7 +29,7 @@
 /* Gemtek PCI Radio Card Device Driver */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gtp.c,v 1.14 2007/10/19 12:00:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gtp.c,v 1.20 2016/07/11 11:31:51 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,12 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: gtp.c,v 1.14 2007/10/19 12:00:44 ad Exp $");
 
 #define PCI_CBIO 0x10
 
-static int	gtp_match(struct device *, struct cfdata *, void *);
-static void	gtp_attach(struct device *, struct device *, void *);
+static int	gtp_match(device_t, cfdata_t, void *);
+static void	gtp_attach(device_t, device_t, void *);
 
-static int     gtp_get_info(void *, struct radio_info *);
-static int     gtp_set_info(void *, struct radio_info *);
-static int     gtp_search(void *, int);
+static int	gtp_get_info(void *, struct radio_info *);
+static int	gtp_set_info(void *, struct radio_info *);
+static int	gtp_search(void *, int);
 
 #define GEMTEK_PCI_CAPS	RADIO_CAPS_DETECT_SIGNAL |			\
 			RADIO_CAPS_DETECT_STEREO |			\
@@ -93,8 +93,6 @@ static const struct radio_hw_if gtp_hw_if = {
 };
 
 struct gtp_softc {
-	struct device	sc_dev;
-
 	int	mute;
 	u_int8_t	vol;
 	u_int32_t	freq;
@@ -104,7 +102,7 @@ struct gtp_softc {
 	struct tea5757_t	tea;
 };
 
-CFATTACH_DECL(gtp, sizeof(struct gtp_softc),
+CFATTACH_DECL_NEW(gtp, sizeof(struct gtp_softc),
     gtp_match, gtp_attach, NULL, NULL);
 
 static void	gtp_set_mute(struct gtp_softc *);
@@ -119,7 +117,7 @@ static uint32_t	gtp_hardware_read(bus_space_tag_t, bus_space_handle_t,
 				  bus_size_t);
 
 static int
-gtp_match(struct device *parent, struct cfdata *cf, void *aux)
+gtp_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	/* FIXME:
@@ -139,21 +137,16 @@ gtp_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-gtp_attach(struct device *parent, struct device *self, void *aux)
+gtp_attach(device_t parent, device_t self, void *aux)
 {
-	struct gtp_softc *sc = (struct gtp_softc *) self;
+	struct gtp_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
-	struct cfdata *cf = device_cfdata(&sc->sc_dev);
+	cfdata_t cf = device_cfdata(self);
 	pci_chipset_tag_t pc = pa->pa_pc;
 	bus_size_t iosize;
 	pcireg_t csr;
-	char devinfo[256];
 
-	aprint_naive(": Radio controller\n");
-
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, "Radio controller");
 
 	/* Map I/O registers */
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0, &sc->tea.iot,
@@ -181,7 +174,7 @@ gtp_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_normal(": Gemtek PR103\n");
 
-	radio_attach_mi(&gtp_hw_if, sc, &sc->sc_dev);
+	radio_attach_mi(&gtp_hw_if, sc, self);
 }
 
 static int

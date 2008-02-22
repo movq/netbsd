@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_aselect.c,v 1.25 2007/03/04 06:02:36 christos Exp $	*/
+/*	$NetBSD: rf_aselect.c,v 1.29 2017/01/04 15:50:34 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_aselect.c,v 1.25 2007/03/04 06:02:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_aselect.c,v 1.29 2017/01/04 15:50:34 christos Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -100,8 +100,6 @@ InitHdrNode(RF_DagHeader_t **hdr, RF_Raid_t *raidPtr, RF_RaidAccessDesc_t *desc)
  *   third-pass optimizer to eliminate dead code (need true data dependencies)
  *****************************************************************************/
 
-#define MAXNSTRIPES 50
-
 int
 rf_SelectAlgorithm(RF_RaidAccessDesc_t *desc, RF_RaidAccessFlags_t flags)
 {
@@ -117,8 +115,7 @@ rf_SelectAlgorithm(RF_RaidAccessDesc_t *desc, RF_RaidAccessFlags_t flags)
 	int     i, j, k;
 	RF_FuncList_t *stripeFuncsList, *stripeFuncs, *stripeFuncsEnd, *temp;
 	RF_AccessStripeMap_t *asm_up, *asm_bp;
-	RF_AccessStripeMapHeader_t ***asmh_u, *endASMList;
-	RF_AccessStripeMapHeader_t ***asmh_b;
+	RF_AccessStripeMapHeader_t *endASMList;
 	RF_ASMHeaderListElem_t *asmhle, *tmpasmhle;
 	RF_VoidFunctionPointerListElem_t *vfple, *tmpvfple;
 	RF_FailedStripe_t *failed_stripes_list, *failed_stripes_list_end;
@@ -127,11 +124,11 @@ rf_SelectAlgorithm(RF_RaidAccessDesc_t *desc, RF_RaidAccessFlags_t flags)
 	RF_ASMHeaderListElem_t *failed_stripes_asmh_b_end = NULL;
 	RF_VoidFunctionPointerListElem_t *failed_stripes_vfple_end = NULL;
 	RF_VoidFunctionPointerListElem_t *failed_stripes_bvfple_end = NULL;
-	RF_VoidFuncPtr **stripeUnitFuncs, uFunc;
-	RF_VoidFuncPtr **blockFuncs, bFunc;
+	RF_VoidFuncPtr uFunc;
+	RF_VoidFuncPtr bFunc;
 	int     numStripesBailed = 0, cantCreateDAGs = RF_FALSE;
 	int     numStripeUnitsBailed = 0;
-	int     stripeNum, numUnitDags = 0, stripeUnitNum, numBlockDags = 0;
+	int     stripeNum, stripeUnitNum, numBlockDags = 0;
 	RF_StripeNum_t numStripeUnits;
 	RF_SectorNum_t numBlocks;
 	RF_RaidAddr_t address;
@@ -140,9 +137,6 @@ rf_SelectAlgorithm(RF_RaidAccessDesc_t *desc, RF_RaidAccessFlags_t flags)
 	void *buffer;
 
 	lastdag_h = NULL;
-	asmh_u = asmh_b = NULL;
-	stripeUnitFuncs = NULL;
-	blockFuncs = NULL;
 
 	stripeFuncsList = NULL;
 	stripeFuncsEnd = NULL;
@@ -224,7 +218,7 @@ rf_SelectAlgorithm(RF_RaidAccessDesc_t *desc, RF_RaidAccessFlags_t flags)
 				/* check to see if we found a creation func
 				 * for this stripe unit */
 
-				if (vfple->fn == (RF_VoidFuncPtr) NULL) {
+				if (vfple->fn == NULL) {
 					/* could not find creation function
 					 * for stripe unit so, let's see if we
 					 * can find one for each block in the
@@ -272,8 +266,6 @@ rf_SelectAlgorithm(RF_RaidAccessDesc_t *desc, RF_RaidAccessFlags_t flags)
 							cantCreateDAGs = RF_TRUE;
 					}
 					numStripeUnitsBailed++;
-				} else {
-					numUnitDags++;
 				}
 			}
 			RF_ASSERT(j == numStripeUnits);
@@ -377,7 +369,7 @@ rf_SelectAlgorithm(RF_RaidAccessDesc_t *desc, RF_RaidAccessFlags_t flags)
 				tmpvfple = failed_stripe->bvfple;
 				for (j = 0, physPtr = asm_p->physInfo; physPtr; physPtr = physPtr->next, j++) {
 					uFunc = vfple->fn; /* stripeUnitFuncs[stripeNum][j]; */
-					if (uFunc == (RF_VoidFuncPtr) NULL) {
+					if (uFunc == NULL) {
 						/* use bailout functions for
 						 * this stripe unit */
 						for (k = 0; k < physPtr->numSector; k++) {

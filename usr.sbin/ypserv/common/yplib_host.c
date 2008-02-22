@@ -1,4 +1,4 @@
-/*	$NetBSD: yplib_host.c,v 1.7 2004/10/30 16:01:48 dsl Exp $	*/
+/*	$NetBSD: yplib_host.c,v 1.9 2011/08/30 17:06:22 plunky Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@theos.com>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: yplib_host.c,v 1.7 2004/10/30 16:01:48 dsl Exp $");
+__RCSID("$NetBSD: yplib_host.c,v 1.9 2011/08/30 17:06:22 plunky Exp $");
 #endif
 
 #include <sys/param.h>
@@ -136,7 +136,7 @@ yp_match_host(CLIENT *client, char *indomain, char *inmap, const char *inkey,
 
 	yprk.domain = indomain;
 	yprk.map = inmap;
-	yprk.keydat.dptr = (char *)inkey;
+	yprk.keydat.dptr = __UNCONST(inkey);
 	yprk.keydat.dsize = inkeylen;
 
 	memset(&yprv, 0, sizeof yprv);
@@ -152,7 +152,7 @@ yp_match_host(CLIENT *client, char *indomain, char *inmap, const char *inkey,
 		memcpy(*outval, yprv.valdat.dptr, *outvallen);
 		(*outval)[*outvallen] = '\0';
 	}
-	xdr_free(xdr_ypresp_val, (char *)&yprv);
+	xdr_free((xdrproc_t)xdr_ypresp_val, (char *)&yprv);
 	return r;
 }
 
@@ -186,7 +186,7 @@ yp_first_host(CLIENT *client, char *indomain, char *inmap, char **outkey,
 		memcpy(*outval, yprkv.valdat.dptr, *outvallen);
 		(*outval)[*outvallen] = '\0';
 	}
-	xdr_free(xdr_ypresp_key_val, (char *)&yprkv);
+	xdr_free((xdrproc_t)xdr_ypresp_key_val, (char *)&yprkv);
 	return r;
 }
 
@@ -223,12 +223,12 @@ yp_next_host(CLIENT *client, char *indomain, char *inmap, char *inkey,
 		memcpy(*outval, yprkv.valdat.dptr, *outvallen);
 		(*outval)[*outvallen] = '\0';
 	}
-	xdr_free(xdr_ypresp_key_val, (char *)&yprkv);
+	xdr_free((xdrproc_t)xdr_ypresp_key_val, (char *)&yprkv);
 	return r;
 }
 
 int
-yp_all_host(CLIENT *client, char *indomain, char *inmap,
+yp_all_host(CLIENT *client, const char *indomain, const char *inmap,
 	    struct ypall_callback *incallback)
 {
 	struct ypreq_nokey yprnk;
@@ -264,7 +264,7 @@ yp_order_host(CLIENT *client, char *indomain, char *inmap, int *outorder)
 		clnt_perror(client, "yp_order_host: clnt_call");
 
 	*outorder = ypro.ordernum;
-	xdr_free(xdr_ypresp_order, (char *)&ypro);
+	xdr_free((xdrproc_t)xdr_ypresp_order, (char *)&ypro);
 	return ypprot_err(ypro.status);
 }
 
@@ -288,7 +288,7 @@ yp_master_host(CLIENT *client, char *indomain, char *inmap, char **outname)
 	if (!(r = ypprot_err(yprm.status))) {
 		*outname = (char *)strdup(yprm.master);
 	}
-	xdr_free(xdr_ypresp_master, (char *)&yprm);
+	xdr_free((xdrproc_t)xdr_ypresp_master, (char *)&yprm);
 	return r;
 }
 

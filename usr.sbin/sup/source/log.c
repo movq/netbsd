@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.9 2007/12/20 20:17:52 christos Exp $	*/
+/*	$NetBSD: log.c,v 1.12 2013/03/08 20:58:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -63,14 +63,27 @@ logopen(char *program)
 	opened++;
 }
 
+static void
+vfmtbuf(int f, char *buf, size_t bufsiz, const char *fmt, va_list ap)
+{
+	char hostname[MAXHOSTNAMELEN];
+	char xbuf[STRINGLENGTH], ybuf[STRINGLENGTH];
+	gethostname(hostname, sizeof(hostname));
+	snprintf(ybuf, sizeof(ybuf), "SUP@%s%s ", hostname, f ? ":" : "");
+	vsnprintf(xbuf, sizeof(xbuf), fmt, ap);
+	snprintf(buf, bufsiz, "%s%s", ybuf, xbuf);
+	return;
+}
+
+
 void
-logquit(int retval, char *fmt, ...)
+logquit(int retval, const char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	vfmtbuf(1, buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	if (opened) {
 		syslog(LOG_ERR, "%s", buf);
@@ -81,13 +94,13 @@ logquit(int retval, char *fmt, ...)
 }
 
 void
-logerr(char *fmt, ...)
+logerr(const char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	vfmtbuf(1, buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	if (opened) {
 		syslog(LOG_ERR, "%s", buf);
@@ -98,13 +111,13 @@ logerr(char *fmt, ...)
 }
 
 void
-loginfo(char *fmt, ...)
+loginfo(const char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	vfmtbuf(0, buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	if (opened) {
 		syslog(LOG_INFO, "%s", buf);
@@ -131,13 +144,13 @@ int allow_severity = LIBWRAP_ALLOW_FACILITY | LIBWRAP_ALLOW_SEVERITY;
 int deny_severity = LIBWRAP_DENY_FACILITY | LIBWRAP_DENY_SEVERITY;
 
 void
-logdeny(char *fmt, ...)
+logdeny(const char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	vfmtbuf(1, buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	if (opened) {
 		syslog(deny_severity, "%s", buf);
@@ -148,13 +161,13 @@ logdeny(char *fmt, ...)
 }
 
 void
-logallow(char *fmt, ...)
+logallow(const char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
 
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, ap);
+	vfmtbuf(1, buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	if (opened) {
 		syslog(allow_severity, "%s", buf);

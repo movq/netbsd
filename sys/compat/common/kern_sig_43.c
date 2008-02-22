@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sig_43.c,v 1.30 2007/12/20 23:02:44 dsl Exp $	*/
+/*	$NetBSD: kern_sig_43.c,v 1.34 2011/01/19 10:21:16 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sig_43.c,v 1.30 2007/12/20 23:02:44 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sig_43.c,v 1.34 2011/01/19 10:21:16 tsutsui Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -63,12 +56,9 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sig_43.c,v 1.30 2007/12/20 23:02:44 dsl Exp $")
 #include <sys/core.h>
 #include <sys/kauth.h>
 
-#include <sys/mount.h>
 #include <sys/syscallargs.h>
 
 #include <sys/cpu.h>
-
-#include <sys/user.h>		/* for coredump */
 
 #include <compat/sys/signal.h>
 
@@ -145,9 +135,9 @@ compat_43_sys_sigblock(struct lwp *l, const struct compat_43_sys_sigblock_args *
 
 	nsm = SCARG(uap, mask);
 	compat_43_sigmask_to_sigset(&nsm, &nss);
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	error = sigprocmask1(l, SIG_BLOCK, &nss, &oss);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	if (error)
 		return (error);
 	compat_43_sigset_to_sigmask(&oss, &osm);
@@ -168,9 +158,9 @@ compat_43_sys_sigsetmask(struct lwp *l, const struct compat_43_sys_sigsetmask_ar
 
 	nsm = SCARG(uap, mask);
 	compat_43_sigmask_to_sigset(&nsm, &nss);
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	error = sigprocmask1(l, SIG_SETMASK, &nss, &oss);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	if (error)
 		return (error);
 	compat_43_sigset_to_sigmask(&oss, &osm);

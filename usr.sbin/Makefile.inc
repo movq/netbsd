@@ -1,5 +1,6 @@
-#	$NetBSD: Makefile.inc,v 1.5 1997/10/18 06:42:25 lukem Exp $
+#	$NetBSD: Makefile.inc,v 1.7 2016/01/23 21:22:50 christos Exp $
 #	from: @(#)Makefile.inc	8.1 (Berkeley) 6/6/93
 
 BINDIR?=	/usr/sbin
-WARNS?=		1
+WARNS?=		4
+CPPFLAGS+=	-D_KERNTYPES

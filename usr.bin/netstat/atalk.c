@@ -1,4 +1,4 @@
-/*	$NetBSD: atalk.c,v 1.10 2006/04/06 18:30:31 rpaulo Exp $	*/
+/*	$NetBSD: atalk.c,v 1.16 2015/06/06 13:08:31 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from @(#)atalk.c	1.1 (Whistle) 6/6/96";
 #else
-__RCSID("$NetBSD: atalk.c,v 1.10 2006/04/06 18:30:31 rpaulo Exp $");
+__RCSID("$NetBSD: atalk.c,v 1.16 2015/06/06 13:08:31 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -44,6 +44,7 @@ __RCSID("$NetBSD: atalk.c,v 1.10 2006/04/06 18:30:31 rpaulo Exp $");
 #include <sys/socketvar.h>
 #include <sys/mbuf.h>
 #include <sys/protosw.h>
+#include <sys/sysctl.h>
 
 #include <net/route.h>
 #include <net/if.h>
@@ -53,6 +54,7 @@ __RCSID("$NetBSD: atalk.c,v 1.10 2006/04/06 18:30:31 rpaulo Exp $");
 #include <netatalk/at.h>
 #include <netatalk/ddp_var.h>
 
+#include <err.h>
 #include <nlist.h>
 #include <kvm.h>
 #include <errno.h>
@@ -65,11 +67,6 @@ struct socket   sockb;
 
 static int first = 1;
 
-static char *at_pr_net __P((struct sockaddr_at *, int));
-static char *at_pr_host __P((struct sockaddr_at *, int));
-static char *at_pr_range __P((struct sockaddr_at *));
-static char *at_pr_port __P((struct sockaddr_at *));
-
 /*
  * Print a summary of connections related to a Network Systems
  * protocol.  For XXX, also give state of connection.
@@ -77,10 +74,8 @@ static char *at_pr_port __P((struct sockaddr_at *));
  * -a (all) flag is specified.
  */
 
-static char *
-at_pr_net(sat, numeric)
-	struct sockaddr_at *sat;
-	int numeric;
+static const char *
+at_pr_net(const struct sockaddr_at *sat, int numeric)
 {
 	static char mybuf[50];
 
@@ -96,10 +91,8 @@ at_pr_net(sat, numeric)
 	return (mybuf);
 }
 
-static char *
-at_pr_host(sat, numeric)
-	struct sockaddr_at *sat;
-	int numeric;
+static const char *
+at_pr_host(const struct sockaddr_at *sat, int numeric)
 {
 	static char mybuf[50];
 
@@ -116,9 +109,8 @@ at_pr_host(sat, numeric)
 	return (mybuf);
 }
 
-static char *
-at_pr_port(sat)
-	struct sockaddr_at *sat;
+static const char *
+at_pr_port(const struct sockaddr_at *sat)
 {
 	static char mybuf[50];
 
@@ -134,9 +126,8 @@ at_pr_port(sat)
 	}
 }
 
-static char *
-at_pr_range(sat)
-	struct sockaddr_at *sat;
+static const char *
+at_pr_range(const struct sockaddr_at *sat)
 {
 	static char mybuf[50];
 
@@ -159,12 +150,10 @@ at_pr_range(sat)
  *	4 for port
  *	8 for numeric only
  */
-char *
-atalk_print(sa, what)
-	const struct sockaddr *sa;
-	int what;
+const char *
+atalk_print(const struct sockaddr *sa, int what)
 {
-	struct sockaddr_at *sat = (struct sockaddr_at *) sa;
+	const struct sockaddr_at *sat = (const struct sockaddr_at *) sa;
 	static char mybuf[50];
 	int numeric = (what & 0x08);
 
@@ -196,26 +185,23 @@ atalk_print(sa, what)
 	return (mybuf);
 }
 
-char *
-atalk_print2(sa, mask, what)
-	const struct sockaddr *sa;
-	const struct sockaddr *mask;
-	int what;
+const char *
+atalk_print2(const struct sockaddr *sa, const struct sockaddr *mask, int what)
 {
 	int		n, l;
 	static char     buf[100];
-	struct sockaddr_at *sat1, *sat2;
+	const struct sockaddr_at *sat1, *sat2;
 	struct sockaddr_at thesockaddr;
 	struct sockaddr *sa2;
 
-	sat1 = (struct sockaddr_at *) sa;
-	sat2 = (struct sockaddr_at *) mask;
+	sat1 = (const struct sockaddr_at *) sa;
+	sat2 = (const struct sockaddr_at *) mask;
 	sa2 = (struct sockaddr *) & thesockaddr;
 
 	thesockaddr.sat_addr.s_net = sat1->sat_addr.s_net &
 	    sat2->sat_addr.s_net;
 	n = snprintf(buf, sizeof(buf), "%s", atalk_print(sa2, 1 | (what & 8)));
-	if (n >= sizeof(buf))
+	if (n >= (int)sizeof(buf))
 		n = sizeof(buf) - 1;
 	else if (n == -1)
 		n = 0;	/* What else can be done ? */
@@ -224,7 +210,7 @@ atalk_print2(sa, mask, what)
 		    ~sat2->sat_addr.s_net;
 		l = snprintf(buf + n, sizeof(buf) - n,
 		    "-%s", atalk_print(sa2, 1 | (what & 8)));
-		if (l >= sizeof(buf) - n)
+		if (l >= (int)(sizeof(buf) - n))
 			l = sizeof(buf) - n - 1;
 		if (l > 0)
 			n += l;
@@ -232,7 +218,7 @@ atalk_print2(sa, mask, what)
 	if (what & 2) {
 		l = snprintf(buf + n, sizeof(buf) - n, ".%s",
 		    atalk_print(sa, what & (~1)));
-		if (l >= sizeof(buf) - n)
+		if (l >= (int)(sizeof(buf) - n))
 			l = sizeof(buf) - n - 1;
 		if (l > 0)
 			n += l;
@@ -241,21 +227,16 @@ atalk_print2(sa, mask, what)
 }
 
 void
-atalkprotopr(off, name)
-	u_long off;
-	char  *name;
+atalkprotopr(u_long off, const char *name)
 {
-	struct ddpcb    cb;
-	struct ddpcb *prev, *next;
-	struct ddpcb   *initial;
+	struct ddpcb *next;
+	struct ddpcb *initial;
 	int width = 22;
 	if (off == 0)
 		return;
 	if (kread(off, (char *)&initial, sizeof(struct ddpcb *)) < 0)
 		return;
-	ddpcb = cb;
-	prev = (struct ddpcb *)off;
-	for (next = initial; next != NULL; prev = next) {
+	for (next = initial; next != NULL;) {
 		u_long	ppcb = (u_long)next;
 
 		if (kread((u_long)next, (char *)&ddpcb, sizeof(ddpcb)) < 0)
@@ -296,32 +277,38 @@ atalkprotopr(off, name)
 	}
 }
 #define ANY(x,y,z) \
-	((sflag==1 || (x)) ? printf("\t%ld %s%s%s\n",x,y,plural(x),z) : 0)
+	((sflag==1 || (x)) ? printf("\t%llu %s%s%s\n",(unsigned long long)x,y,plural(x),z) : 0)
 
 /*
  * Dump DDP statistics structure.
  */
 void
-ddp_stats(off, name)
-	u_long off;
-	char *name;
+ddp_stats(u_long off, const char *name)
 {
-	struct ddpstat  ddpstat;
+	uint64_t ddpstat[DDP_NSTATS];
 
-	if (off == 0)
+	if (use_sysctl) {
+		size_t size = sizeof(ddpstat);
+
+		if (sysctlbyname("net.atalk.ddp.stats", ddpstat, &size,
+				 NULL, 0) == -1)
+			return;
+	} else {
+		warnx("%s stats not available via KVM.", name);
 		return;
-	if (kread(off, (char *)&ddpstat, sizeof(ddpstat)) < 0)
-		return;
+	}
+
 	printf("%s:\n", name);
-	ANY(ddpstat.ddps_short, "packet", " with short headers ");
-	ANY(ddpstat.ddps_long, "packet", " with long headers ");
-	ANY(ddpstat.ddps_nosum, "packet", " with no checksum ");
-	ANY(ddpstat.ddps_tooshort, "packet", " too short ");
-	ANY(ddpstat.ddps_badsum, "packet", " with bad checksum ");
-	ANY(ddpstat.ddps_toosmall, "packet", " with not enough data ");
-	ANY(ddpstat.ddps_forward, "packet", " forwarded ");
-	ANY(ddpstat.ddps_encap, "packet", " encapsulated ");
-	ANY(ddpstat.ddps_cantforward, "packet", " rcvd for unreachable dest ");
-	ANY(ddpstat.ddps_nosockspace, "packet", " dropped due to no socket space ");
+
+	ANY(ddpstat[DDP_STAT_SHORT], "packet", " with short headers ");
+	ANY(ddpstat[DDP_STAT_LONG], "packet", " with long headers ");
+	ANY(ddpstat[DDP_STAT_NOSUM], "packet", " with no checksum ");
+	ANY(ddpstat[DDP_STAT_TOOSHORT], "packet", " too short ");
+	ANY(ddpstat[DDP_STAT_BADSUM], "packet", " with bad checksum ");
+	ANY(ddpstat[DDP_STAT_TOOSMALL], "packet", " with not enough data ");
+	ANY(ddpstat[DDP_STAT_FORWARD], "packet", " forwarded ");
+	ANY(ddpstat[DDP_STAT_ENCAP], "packet", " encapsulated ");
+	ANY(ddpstat[DDP_STAT_CANTFORWARD], "packet", " rcvd for unreachable dest ");
+	ANY(ddpstat[DDP_STAT_NOSOCKSPACE], "packet", " dropped due to no socket space ");
 }
 #undef ANY

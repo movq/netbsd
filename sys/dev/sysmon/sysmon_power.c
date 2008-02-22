@@ -1,4 +1,4 @@
-/*	$NetBSD: sysmon_power.c,v 1.35 2007/12/22 18:35:13 jmcneill Exp $	*/
+/*	$NetBSD: sysmon_power.c,v 1.58 2017/10/25 08:12:39 maya Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -69,9 +69,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.35 2007/12/22 18:35:13 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.58 2017/10/25 08:12:39 maya Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
+#endif
+
 #include <sys/param.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
@@ -83,15 +86,20 @@ __KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.35 2007/12/22 18:35:13 jmcneill E
 #include <sys/kmem.h>
 #include <sys/proc.h>
 #include <sys/device.h>
+#include <sys/rndsource.h>
+#include <sys/module.h>
+#include <sys/once.h>
 
 #include <dev/sysmon/sysmonvar.h>
 #include <prop/proplib.h>
+
+MODULE(MODULE_CLASS_DRIVER, sysmon_power, "sysmon");
 
 /*
  * Singly linked list for dictionaries to be stored/sent.
  */
 struct power_event_dictionary {
-	SLIST_ENTRY(power_event_dictionary) pev_dict_head;
+	SIMPLEQ_ENTRY(power_event_dictionary) pev_dict_head;
 	prop_dictionary_t dict;
 	int flags;
 };
@@ -120,6 +128,7 @@ static const struct power_event_description pswitch_type_desc[] = {
 	{ PSWITCH_TYPE_RESET, 		"reset_button" },
 	{ PSWITCH_TYPE_ACADAPTER,	"acadapter" },
 	{ PSWITCH_TYPE_HOTKEY,		"hotkey_button" },
+	{ PSWITCH_TYPE_RADIO,		"radio_button" },
 	{ -1, NULL }
 };
 
@@ -133,9 +142,10 @@ static const struct power_event_description penvsys_event_desc[] = {
 	{ PENVSYS_EVENT_CRITUNDER,	"critical-under" },
 	{ PENVSYS_EVENT_WARNOVER,	"warning-over" },
 	{ PENVSYS_EVENT_WARNUNDER,	"warning-under" },
-	{ PENVSYS_EVENT_USER_CRITMAX,	"critical-over" },
-	{ PENVSYS_EVENT_USER_CRITMIN,	"critical-under" },
-	{ PENVSYS_EVENT_BATT_USERCAP,	"user-capacity" },
+	{ PENVSYS_EVENT_BATT_CRIT,	"critical-capacity" },
+	{ PENVSYS_EVENT_BATT_WARN,	"warning-capacity" },
+	{ PENVSYS_EVENT_BATT_HIGH,	"high-capacity" },
+	{ PENVSYS_EVENT_BATT_MAX,	"maximum-capacity" },
 	{ PENVSYS_EVENT_STATE_CHANGED,	"state-changed" },
 	{ PENVSYS_EVENT_LOW_POWER,	"low-power" },
 	{ -1, NULL }
@@ -165,8 +175,10 @@ static int sysmon_power_event_queue_head;
 static int sysmon_power_event_queue_tail;
 static int sysmon_power_event_queue_count;
 
-static SLIST_HEAD(, power_event_dictionary) pev_dict_list =
-    SLIST_HEAD_INITIALIZER(&pev_dict_list);
+static krndsource_t sysmon_rndsource;
+
+static SIMPLEQ_HEAD(, power_event_dictionary) pev_dict_list =
+    SIMPLEQ_HEAD_INITIALIZER(pev_dict_list);
 
 static struct selinfo sysmon_power_event_queue_selinfo;
 static struct lwp *sysmon_power_daemon;
@@ -181,25 +193,72 @@ static int sysmon_power_daemon_task(struct power_event_dictionary *,
 				    void *, int);
 static void sysmon_power_destroy_dictionary(struct power_event_dictionary *);
 
+static struct sysmon_opvec sysmon_power_opvec = {
+	sysmonopen_power, sysmonclose_power, sysmonioctl_power,
+	sysmonread_power, sysmonpoll_power, sysmonkqfilter_power
+};
+
 #define	SYSMON_NEXT_EVENT(x)		(((x) + 1) % SYSMON_MAX_POWER_EVENTS)
+
+ONCE_DECL(once_power);
+
+static int
+power_preinit(void)
+{
+
+	mutex_init(&sysmon_power_event_queue_mtx, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&sysmon_power_event_queue_cv, "smpower");
+
+	return 0;
+}
 
 /*
  * sysmon_power_init:
  *
  * 	Initializes the mutexes and condition variables in the
- * 	boot process via init_main.c.
+ * 	boot process via module initialization process.
  */
-void
+int
 sysmon_power_init(void)
 {
-	mutex_init(&sysmon_power_event_queue_mtx, MUTEX_DEFAULT, IPL_NONE);
-	cv_init(&sysmon_power_event_queue_cv, "smpower");
+	int error;
+
+	(void)RUN_ONCE(&once_power, power_preinit);
+
+	selinit(&sysmon_power_event_queue_selinfo);
+
+	rnd_attach_source(&sysmon_rndsource, "system-power",
+			  RND_TYPE_POWER, RND_FLAG_DEFAULT);
+
+	error = sysmon_attach_minor(SYSMON_MINOR_POWER, &sysmon_power_opvec);
+
+	return error;
+}
+
+int
+sysmon_power_fini(void)
+{
+	int error;
+
+	if (sysmon_power_daemon != NULL)
+		error = EBUSY;
+	else
+		error = sysmon_attach_minor(SYSMON_MINOR_POWER, NULL);
+
+	if (error == 0) {
+		rnd_detach_source(&sysmon_rndsource);
+		seldestroy(&sysmon_power_event_queue_selinfo);
+		cv_destroy(&sysmon_power_event_queue_cv);
+		mutex_destroy(&sysmon_power_event_queue_mtx);
+	}
+
+	return error;
 }
 
 /*
  * sysmon_queue_power_event:
  *
- *	Enqueue a power event for the power mangement daemon.  Returns
+ *	Enqueue a power event for the power management daemon.  Returns
  *	non-zero if we were able to enqueue a power event.
  */
 static int
@@ -259,7 +318,7 @@ sysmon_power_event_queue_flush(void)
  * sysmon_power_daemon_task:
  *
  *	Assign required power event members and sends a signal
- *	to the process to notify that an event was enqueued succesfully.
+ *	to the process to notify that an event was enqueued successfully.
  */
 static int
 sysmon_power_daemon_task(struct power_event_dictionary *ped,
@@ -316,9 +375,10 @@ sysmon_power_daemon_task(struct power_event_dictionary *ped,
 	case PENVSYS_EVENT_CRITOVER:
 	case PENVSYS_EVENT_WARNUNDER:
 	case PENVSYS_EVENT_WARNOVER:
-	case PENVSYS_EVENT_USER_CRITMAX:
-	case PENVSYS_EVENT_USER_CRITMIN:
-	case PENVSYS_EVENT_BATT_USERCAP:
+	case PENVSYS_EVENT_BATT_CRIT:
+	case PENVSYS_EVENT_BATT_WARN:
+	case PENVSYS_EVENT_BATT_HIGH:
+	case PENVSYS_EVENT_BATT_MAX:
 	case PENVSYS_EVENT_STATE_CHANGED:
 	case PENVSYS_EVENT_LOW_POWER:
 	    {
@@ -360,10 +420,10 @@ sysmon_power_daemon_task(struct power_event_dictionary *ped,
 		 * dictionary is ready to be fetched.
 		 */
 		ped->flags |= SYSMON_POWER_DICTIONARY_READY;
-		SLIST_INSERT_HEAD(&pev_dict_list, ped, pev_dict_head);
+		SIMPLEQ_INSERT_TAIL(&pev_dict_list, ped, pev_dict_head);
 		cv_broadcast(&sysmon_power_event_queue_cv);
 		mutex_exit(&sysmon_power_event_queue_mtx);
-		selnotify(&sysmon_power_event_queue_selinfo, 0);
+		selnotify(&sysmon_power_event_queue_selinfo, 0, 0);
 	}
 
 out:
@@ -424,6 +484,7 @@ int
 sysmonread_power(dev_t dev, struct uio *uio, int flags)
 {
 	power_event_t pev;
+	int rv;
 
 	/* We only allow one event to be read at a time. */
 	if (uio->uio_resid != POWER_EVENT_MSG_SIZE)
@@ -432,19 +493,21 @@ sysmonread_power(dev_t dev, struct uio *uio, int flags)
 	mutex_enter(&sysmon_power_event_queue_mtx);
 	for (;;) {
 		if (sysmon_get_power_event(&pev)) {
-			mutex_exit(&sysmon_power_event_queue_mtx);
-			return uiomove(&pev, POWER_EVENT_MSG_SIZE, uio);
+			rv =  uiomove(&pev, POWER_EVENT_MSG_SIZE, uio);
+			break;
 		}
 
 		if (flags & IO_NDELAY) {
-			mutex_exit(&sysmon_power_event_queue_mtx);
-			return EWOULDBLOCK;
+			rv = EWOULDBLOCK;
+			break;
 		}
 
 		cv_wait(&sysmon_power_event_queue_cv,
 			&sysmon_power_event_queue_mtx);
 	}
 	mutex_exit(&sysmon_power_event_queue_mtx);
+
+	return rv;
 }
 
 /*
@@ -494,11 +557,19 @@ filt_sysmon_power_read(struct knote *kn, long hint)
 	return kn->kn_data > 0;
 }
 
-static const struct filterops sysmon_power_read_filtops =
-    { 1, NULL, filt_sysmon_power_rdetach, filt_sysmon_power_read };
+static const struct filterops sysmon_power_read_filtops = {
+    .f_isfd = 1,
+    .f_attach = NULL,
+    .f_detach = filt_sysmon_power_rdetach,
+    .f_event = filt_sysmon_power_read,
+};
 
-static const struct filterops sysmon_power_write_filtops =
-    { 1, NULL, filt_sysmon_power_rdetach, filt_seltrue };
+static const struct filterops sysmon_power_write_filtops = {
+    .f_isfd = 1,
+    .f_attach = NULL,
+    .f_detach = filt_sysmon_power_rdetach,
+    .f_event = filt_seltrue,
+};
 
 /*
  * sysmonkqfilter_power:
@@ -535,7 +606,7 @@ sysmonkqfilter_power(dev_t dev, struct knote *kn)
 /*
  * sysmonioctl_power:
  *
- *	Perform a power managmenet control request.
+ *	Perform a power management control request.
  */
 int
 sysmonioctl_power(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
@@ -544,6 +615,7 @@ sysmonioctl_power(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 
 	switch (cmd) {
 	case POWER_IOC_GET_TYPE:
+	case POWER_IOC_GET_TYPE_WITH_LOSSAGE:
 	    {
 		struct power_type *power_type = (void *) data;
 
@@ -562,7 +634,7 @@ sysmonioctl_power(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		 * as busy.
 		 */
 		mutex_enter(&sysmon_power_event_queue_mtx);
-		ped = SLIST_FIRST(&pev_dict_list);
+		ped = SIMPLEQ_FIRST(&pev_dict_list);
 		if (!ped || !ped->dict) {
 			mutex_exit(&sysmon_power_event_queue_mtx);
 			error = ENOTSUP;
@@ -597,7 +669,7 @@ sysmonioctl_power(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		mutex_enter(&sysmon_power_event_queue_mtx);
 		ped->flags &= ~SYSMON_POWER_DICTIONARY_BUSY;
 		ped->flags &= ~SYSMON_POWER_DICTIONARY_READY;
-		SLIST_REMOVE_HEAD(&pev_dict_list, pev_dict_head);
+		SIMPLEQ_REMOVE_HEAD(&pev_dict_list, pev_dict_head);
 		mutex_exit(&sysmon_power_event_queue_mtx);
 		sysmon_power_destroy_dictionary(ped);
 
@@ -639,7 +711,7 @@ sysmon_power_make_dictionary(prop_dictionary_t dict, void *power_data,
 
 #define SETPROP(key, str)						\
 do {									\
-	if ((str) && !prop_dictionary_set_cstring(dict,			\
+	if ((str) != NULL && !prop_dictionary_set_cstring(dict,		\
 						  (key),		\
 						  (str))) {		\
 		printf("%s: failed to set %s\n", __func__, (str));	\
@@ -761,7 +833,7 @@ sysmon_power_settype(const char *type)
  * sysmon_penvsys_event:
  *
  * 	Puts an event onto the sysmon power queue and sends the
- * 	appropiate event if the daemon is running, otherwise a
+ * 	appropriate event if the daemon is running, otherwise a
  * 	message is shown.
  */
 void
@@ -771,6 +843,8 @@ sysmon_penvsys_event(struct penvsys_state *pes, int event)
 	const char *mystr = NULL;
 
 	KASSERT(pes != NULL);
+
+	rnd_add_uint32(&sysmon_rndsource, pes->pes_type);
 
 	if (sysmon_power_daemon != NULL) {
 		/*
@@ -783,6 +857,9 @@ sysmon_penvsys_event(struct penvsys_state *pes, int event)
 
 		if (sysmon_power_daemon_task(ped, pes, event) == 0)
 			return;
+		/* We failed */
+		prop_object_release(ped->dict);
+		kmem_free(ped, sizeof(*ped));
 	}
 
 	switch (pes->pes_type) {
@@ -797,8 +874,20 @@ sysmon_penvsys_event(struct penvsys_state *pes, int event)
 			    pes->pes_dvname, pes->pes_sensname,
 			    pes->pes_statedesc);
 			break;
-		case PENVSYS_EVENT_BATT_USERCAP:
+		case PENVSYS_EVENT_BATT_CRIT:
 			mystr = "critical capacity";
+			PENVSYS_SHOWSTATE(mystr);
+			break;
+		case PENVSYS_EVENT_BATT_WARN:
+			mystr = "warning capacity";
+			PENVSYS_SHOWSTATE(mystr);
+			break;
+		case PENVSYS_EVENT_BATT_HIGH:
+			mystr = "high capacity";
+			PENVSYS_SHOWSTATE(mystr);
+			break;
+		case PENVSYS_EVENT_BATT_MAX:
+			mystr = "maximum capacity";
 			PENVSYS_SHOWSTATE(mystr);
 			break;
 		case PENVSYS_EVENT_NORMAL:
@@ -819,12 +908,10 @@ sysmon_penvsys_event(struct penvsys_state *pes, int event)
 			PENVSYS_SHOWSTATE(mystr);
 			break;
 		case PENVSYS_EVENT_CRITOVER:
-		case PENVSYS_EVENT_USER_CRITMAX:
 			mystr = "critical over";
 			PENVSYS_SHOWSTATE(mystr);
 			break;
 		case PENVSYS_EVENT_CRITUNDER:
-		case PENVSYS_EVENT_USER_CRITMIN:
 			mystr = "critical under";
 			PENVSYS_SHOWSTATE(mystr);
 			break;
@@ -850,6 +937,7 @@ sysmon_penvsys_event(struct penvsys_state *pes, int event)
 			printf("%s: state changed on '%s' to '%s'\n",
 			    pes->pes_dvname, pes->pes_sensname,
 			    pes->pes_statedesc);
+			break;
 		case PENVSYS_EVENT_NORMAL:
 			printf("%s: normal state on '%s' (%s)\n",
 			    pes->pes_dvname, pes->pes_sensname,
@@ -871,7 +959,8 @@ sysmon_penvsys_event(struct penvsys_state *pes, int event)
 int
 sysmon_pswitch_register(struct sysmon_pswitch *smpsw)
 {
-	/* nada */
+	(void)RUN_ONCE(&once_power, power_preinit);
+
 	return 0;
 }
 
@@ -926,6 +1015,9 @@ sysmon_pswitch_event(struct sysmon_pswitch *smpsw, int event)
 
 		if (sysmon_power_daemon_task(ped, smpsw, event) == 0)
 			return;
+		/* We failed */
+		prop_object_release(ped->dict);
+		kmem_free(ped, sizeof(*ped));
 	}
 	
 	switch (smpsw->smpsw_type) {
@@ -1009,17 +1101,43 @@ sysmon_pswitch_event(struct sysmon_pswitch *smpsw, int event)
 			/*
 			 * Come out of power-save state.
 			 */
-			printf("%s: AC adapter online.\n", smpsw->smpsw_name);
+			aprint_normal("%s: AC adapter online.\n",
+			    smpsw->smpsw_name);
 			break;
 
 		case PSWITCH_EVENT_RELEASED:
 			/*
 			 * Try to enter a power-save state.
 			 */
-			printf("%s: AC adapter offline.\n", smpsw->smpsw_name);
+			aprint_normal("%s: AC adapter offline.\n",
+			    smpsw->smpsw_name);
 			break;
 		}
 		break;
 
 	}
 }
+
+static
+int   
+sysmon_power_modcmd(modcmd_t cmd, void *arg)
+{
+	int ret;
+ 
+	switch (cmd) { 
+	case MODULE_CMD_INIT:
+		ret = sysmon_power_init();
+		break;
+ 
+	case MODULE_CMD_FINI: 
+		ret = sysmon_power_fini();
+		break;
+ 
+	case MODULE_CMD_STAT:
+	default: 
+		ret = ENOTTY;
+	}
+
+	return ret;
+}
+

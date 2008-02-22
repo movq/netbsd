@@ -1,7 +1,6 @@
-/*	$NetBSD: ypwhich.c,v 1.15 2008/01/25 19:54:40 christos Exp $	*/
+/*	$NetBSD: ypwhich.c,v 1.21 2017/08/11 20:32:34 ginsbach Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor
  * All rights reserved.
  *
@@ -13,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +27,7 @@
 
 /*
  * ypwhich
- * author: Chuck Cranor <chuck@ccrc.wustl.edu>
+ * author: Chuck Cranor <chuck@netbsd>
  * date: 31-Oct-97
  *
  * notes: this is a full rewrite of Theo de Raadt's ypwhich.
@@ -56,6 +53,7 @@
 #include <rpcsvc/yp_prot.h>
 #include <rpcsvc/ypclnt.h>
 
+#include "ypalias_init.h"
 
 /*
  * ypwhich: query a host about its yp service
@@ -78,25 +76,12 @@
  *   -x: print list of yp map aliases and exit
  */
 
-static const char *ypnicknames[] = {
-	"aliases",	"mail.aliases",
-	"ethers",	"ethers.byname",
-	"group",	"group.byname",
-	"hosts",	"hosts.byaddr",
-	"networks",	"networks.byaddr",
-	"passwd",	"passwd.byname",
-	"protocols",	"protocols.bynumber",
-	"services",	"services.byname",
-	0,		0,
-};
-
-
 /*
  * prototypes
  */
 
 static void find_mapmaster(const char *, const char *, const char *,
-    int, int, int);
+    int, int, int, const struct ypalias *);
 static struct in_addr *find_server(const char *, const char *, int);
 static CLIENT *mkclient(struct sockaddr_in *, unsigned long, unsigned long,
     int);
@@ -113,14 +98,17 @@ main(int argc, char *argv[])
 	char   *ourdomain;
 	int     inhibit = 0, force = 0, tcp = 0;
 	char   *targmap = NULL;
-	int     ch, saw_m, lcv;
+	int     ch, saw_m;
 	struct in_addr *inaddr;
 	struct hostent *he;
+	size_t i;
+	const struct ypalias *ypaliases;
 
 	/*
          * get default domainname and parse options
          */
 
+	ypaliases = ypalias_init();
 	(void)yp_get_default_domain(&ourdomain);
 	saw_m = 0;
 	while ((ch = getopt(argc, argv, "h:d:xtTfm")) != -1) {
@@ -132,9 +120,9 @@ main(int argc, char *argv[])
 			ourdomain = optarg;
 			break;
 		case 'x':
-			for (lcv = 0; ypnicknames[lcv]; lcv += 2)
+			for (i = 0; ypaliases[i].alias; i++)
 				(void)printf("Use \"%s\" for map \"%s\"\n",
-				    ypnicknames[lcv], ypnicknames[lcv + 1]);
+				    ypaliases[i].alias, ypaliases[i].name);
 			return 0;
 		case 'f':
 			force = 1;
@@ -180,7 +168,7 @@ main(int argc, char *argv[])
          */
 	if (saw_m)
 		find_mapmaster(targhost, ourdomain, targmap, inhibit, force,
-		    tcp);
+		    tcp, ypaliases);
 	else {
 		inaddr = find_server(targhost, ourdomain, tcp);
 		he = gethostbyaddr((void *)&inaddr->s_addr,
@@ -201,7 +189,7 @@ usage(void)
 {
 	const char *pname = getprogname();
 	(void)fprintf(stderr, "Usage:\t%s [-T] [-d domain] [[-h] host]\n"
-	    "\t%s [-T] [-h host] [-d domain] [-f] [-t] -m [mapname]\n"
+	    "\t%s [-fTt] [-d domain] [-h host] -m [mapname]\n"
 	    "\t%s [-T] -x\n", pname, pname, pname);
 	exit(1);
 }
@@ -282,11 +270,10 @@ find_server(const char *host, const char *domain, int tcp)
  */
 static void
 find_mapmaster(const char *host, const char *domain, const char *map,
-    int inhibit, int force, int tcp)
+    int inhibit, int force, int tcp, const struct ypalias *ypaliases)
 {
 	struct in_addr *inaddr, faddr;
 	struct hostent *he;
-	int     lcv;
 	struct sockaddr_in sin;
 	CLIENT *ypserv;
 	int     yperr;
@@ -296,9 +283,10 @@ find_mapmaster(const char *host, const char *domain, const char *map,
 	struct ypmaplist fakelist, *ypml;
 	struct ypresp_master yprespmaster;
 	struct ypreq_nokey ypreqkey;
+	size_t i;
 
 	/*
-         * we can either ask the hosts ypbind where it's ypserv is located,
+         * we can either ask the hosts ypbind where its ypserv is located,
          * or we can be forced to assume that ypserv is running on the host.
          */
 	if (force) {
@@ -318,9 +306,9 @@ find_mapmaster(const char *host, const char *domain, const char *map,
          * now translate nicknames [unless inhibited]
          */
 	if (map && !inhibit) {
-		for (lcv = 0; ypnicknames[lcv]; lcv += 2) {
-			if (strcmp(map, ypnicknames[lcv]) == 0) {
-				map = ypnicknames[lcv + 1];
+		for (i = 0; ypaliases[i].alias; i++) {
+			if (strcmp(map, ypaliases[i].alias) == 0) {
+				map = ypaliases[i].name;
 				break;
 			}
 		}
@@ -403,7 +391,7 @@ find_mapmaster(const char *host, const char *domain, const char *map,
 			(void)printf("%s %s\n", ypml->ypml_name,
 			    yprespmaster.master);
 		}
-		xdr_free(xdr_ypresp_master, (void *)&yprespmaster);
+		xdr_free((xdrproc_t)xdr_ypresp_master, (void *)&yprespmaster);
 	}
 	clnt_destroy(ypserv);
 

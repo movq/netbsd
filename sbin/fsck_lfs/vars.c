@@ -1,4 +1,4 @@
-/* $NetBSD: vars.c,v 1.12 2006/09/01 19:52:48 perseant Exp $	 */
+/* $NetBSD: vars.c,v 1.18 2015/08/12 18:28:00 dholland Exp $	 */
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,8 +30,6 @@
 
 #include <sys/param.h>
 #include <sys/time.h>
-#include <ufs/ufs/dinode.h>
-#include <ufs/ufs/dir.h>
 #include <sys/mount.h>		/* XXX */
 #include <ufs/lfs/lfs.h>
 #include "fsck.h"
@@ -55,8 +46,6 @@ struct lfs *fs;
 daddr_t idaddr;			/* inode block containing ifile inode */
 long numdirs, listmax, inplast;
 
-long dev_bsize;			/* computed value of DEV_BSIZE */
-long secsize;			/* actual disk sector size */
 char nflag;			/* assume a no response */
 char yflag;			/* assume a yes response */
 int bflag;			/* location of alternate super block */
@@ -87,7 +76,5 @@ int lfmode;			/* lost & found directory creation mode */
 
 daddr_t n_blks;			/* number of blocks in use */
 ino_t n_files;			/* number of files in use */
-
-struct ufs1_dinode zino;
 
 int no_roll_forward = 0;	/* don't roll forward */

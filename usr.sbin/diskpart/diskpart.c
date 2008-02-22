@@ -29,15 +29,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)diskpart.c	8.3 (Berkeley) 11/30/94";
 #else
-__RCSID("$NetBSD: diskpart.c,v 1.15 2004/10/29 21:21:42 dsl Exp $");
+__RCSID("$NetBSD: diskpart.c,v 1.20 2015/01/02 19:46:02 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,7 +64,7 @@ __RCSID("$NetBSD: diskpart.c,v 1.15 2004/10/29 21:21:42 dsl Exp $");
  * Default partition sizes, where they exist.
  */
 #define	NDEFAULTS	4
-int	defpart[NDEFAULTS][NPARTITIONS] = {
+static int	defpart[NDEFAULTS][NPARTITIONS] = {
    { 15884, 66880, 0, 15884, 307200, 0, 0, 291346 },	/* ~ 356+ Mbytes */
    { 15884, 33440, 0, 15884, 55936, 0, 0, 291346 },	/* ~ 206-355 Mbytes */
    { 15884, 33440, 0, 15884, 55936, 0, 0, 0 },		/* ~ 61-205 Mbytes */
@@ -77,7 +77,7 @@ int	defpart[NDEFAULTS][NPARTITIONS] = {
  * covers the physical space on a disk.
  */
 #define	NLAYOUTS	3
-char	layouts[NLAYOUTS][NPARTITIONS] = {
+static char	layouts[NLAYOUTS][NPARTITIONS] = {
    { 'a', 'b', 'h', 'g' },
    { 'a', 'b', 'h', 'd', 'e', 'f' },
    { 'c' },
@@ -89,7 +89,7 @@ char	layouts[NLAYOUTS][NPARTITIONS] = {
  * with zero block and frag sizes are special cases
  * (e.g. swap areas or for access to the entire device).
  */
-struct	partition defparam[NPARTITIONS] = {
+static struct	partition defparam[NPARTITIONS] = {
 	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, },		/* a */
 	{ 0, 0, { 1024 }, FS_SWAP,   8, { 0 }, },		/* b */
 	{ 0, 0, { 1024 }, FS_UNUSED, 8, { 0 }, },		/* c */
@@ -108,27 +108,25 @@ struct	partition defparam[NPARTITIONS] = {
  * table; another 126 sectors past this is needed as a
  * pool of replacement sectors.
  */
-int	badsecttable = 126;	/* # sectors */
+static int	badsecttable = 126;	/* # sectors */
 
-int	pflag;			/* print device driver partition tables */
-int	dflag;			/* print disktab entry */
+static int	pflag;			/* print device driver partition tables */
+static int	dflag;			/* print disktab entry */
 
-int	gettype __P((const char *, const char *const *));
-int	main __P((int, char **));
-struct disklabel *promptfordisk __P((const char *));
-void	usage __P((void));
+static int	gettype(const char *, const char *const *);
+static struct disklabel *promptfordisk(const char *);
+__dead static void	usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-
 	struct disklabel *dp;
-	int curcyl, spc, def, part, layout, j, ch;
+	int spc, def, part, layout, j, ch;
+	uint32_t curcyl;
 	int threshhold, numcyls[NPARTITIONS], startcyl[NPARTITIONS];
 	off_t totsize = 0;
-	char *lp, *tyname;
+	const char *tyname;
+	char *lp;
 
 	while ((ch = getopt(argc, argv, "pds:")) != -1) {
 		switch (ch) {
@@ -183,7 +181,7 @@ main(argc, argv)
 	 * bad sectors are mapped.
 	 * If disk size was specified explicitly, use specified size.
 	 */
-	if (dp->d_type == DTYPE_SMD && dp->d_flags & D_BADSECT &&
+	if (dp->d_type == DKTYPE_SMD && dp->d_flags & D_BADSECT &&
 	    totsize == 0) {
 		badsecttable = dp->d_nsectors +
 		    roundup(badsecttable, dp->d_nsectors);
@@ -269,7 +267,7 @@ main(argc, argv)
 				printf("\t0,\t0,\n");
 				continue;
 			}
-			if (dp->d_type != DTYPE_MSCP) {
+			if (dp->d_type != DKTYPE_MSCP) {
 			       printf("\t%d,\t%d,\t\t/* %c=cyl %d thru %d */\n",
 					defpart[def][part], startcyl[part],
 					'A' + part, startcyl[part],
@@ -306,7 +304,7 @@ main(argc, argv)
 			dp->d_nsectors, dp->d_ntracks, dp->d_ncylinders);
 		if (dp->d_secpercyl != dp->d_nsectors * dp->d_ntracks)
 			printf("sc#%d:", dp->d_secpercyl);
-		if (dp->d_type == DTYPE_SMD && dp->d_flags & D_BADSECT)
+		if (dp->d_type == DKTYPE_SMD && dp->d_flags & D_BADSECT)
 			printf("sf:");
 		printf("\\\n\t:dt=%s:", dktypenames[dp->d_type]);
 		for (part = NDDATA - 1; part >= 0; part--)
@@ -362,23 +360,22 @@ main(argc, argv)
 	exit(0);
 }
 
-struct disklabel disk;
+static struct disklabel disk;
 
-struct	field {
-	char		*f_name;
-	char		*f_defaults;
+static struct	field {
+	const char	*f_name;
+	const char	*f_defaults;
 	u_int32_t	*f_location;
 } fields[] = {
 	{ "sector size",		"512",	&disk.d_secsize },
-	{ "#sectors/track",		0,	&disk.d_nsectors },
-	{ "#tracks/cylinder",		0,	&disk.d_ntracks },
-	{ "#cylinders",			0,	&disk.d_ncylinders },
-	{ 0, 0, 0 },
+	{ "#sectors/track",		NULL,	&disk.d_nsectors },
+	{ "#tracks/cylinder",		NULL,	&disk.d_ntracks },
+	{ "#cylinders",			NULL,	&disk.d_ncylinders },
+	{ NULL, NULL, 0 },
 };
 
-struct disklabel *
-promptfordisk(name)
-	const char *name;
+static struct disklabel *
+promptfordisk(const char *name)
 {
 	struct disklabel *dp = &disk;
 	struct field *fp;
@@ -437,7 +434,7 @@ gettype:
 		goto gettype;
 	}
 	fprintf(stderr, "(type <cr> to get default value, if only one)\n");
-	if (dp->d_type == DTYPE_SMD) {
+	if (dp->d_type == DKTYPE_SMD) {
 		fprintf(stderr,
 		    "Do '%s' disks support bad144 bad block forwarding (yes)? ",
 		    dp->d_typename);
@@ -462,7 +459,8 @@ again:
 				fprintf(stderr, "no default value\n");
 				goto again;
 			}
-			cp = fp->f_defaults;
+			/* XXX __UNCONST */
+			cp = __UNCONST(fp->f_defaults);
 		}
 		*fp->f_location = atol(cp);
 		if (*fp->f_location == 0) {
@@ -494,10 +492,8 @@ again:
 	return (dp);
 }
 
-int
-gettype(t, names)
-	const char *t;
-	const char *const *names;
+static int
+gettype(const char *t, const char *const *names)
 {
 	const char *const *nm;
 
@@ -509,7 +505,7 @@ gettype(t, names)
 	return (-1);
 }
 
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: diskpart [-dp] [-s size] disk-type\n");

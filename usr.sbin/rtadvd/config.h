@@ -1,10 +1,10 @@
-/*	$NetBSD: config.h,v 1.6 2006/03/05 23:47:08 rpaulo Exp $	*/
+/*	$NetBSD: config.h,v 1.10 2018/04/20 10:39:37 roy Exp $	*/
 /*	$KAME: config.h,v 1.9 2003/08/06 04:19:40 ono Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -16,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -30,18 +30,20 @@
  * SUCH DAMAGE.
  */
 
-extern void getconfig __P((char *));
-extern void delete_prefix __P((struct prefix *));
-extern void invalidate_prefix __P((struct prefix *));
-extern void update_prefix __P((struct prefix *));
-extern void make_prefix __P((struct rainfo *, int, struct in6_addr *, int));
-extern void make_packet __P((struct rainfo *));
-extern void get_prefix __P((struct rainfo *));
-
+extern void free_rainfo(struct rainfo *);
+extern void getconfig(const char *, int);
+extern void delete_prefix(struct prefix *);
+extern void invalidate_prefix(struct prefix *);
+extern void update_prefix(struct prefix *);
+extern void make_prefix(struct rainfo *, int, struct in6_addr *, int);
+extern void make_packet(struct rainfo *);
+extern void get_prefix(struct rainfo *);
 
 /*
- * it is highly unlikely to have 100 prefix information options,
+ * it is highly unlikely to have 100 information options,
  * so it should be okay to limit it
  */
 #define MAXPREFIX	100
 #define MAXROUTE	100
+#define MAXRDNSS	100
+#define MAXDNSSL	100

@@ -1,4 +1,4 @@
-/* $NetBSD: xenbus.h,v 1.7 2007/11/22 16:16:58 bouyer Exp $ */
+/* $NetBSD: xenbus.h,v 1.13 2011/12/07 15:47:42 cegger Exp $ */
 /******************************************************************************
  * xenbus.h
  *
@@ -34,8 +34,10 @@
 
 #include <sys/device.h>
 #include <sys/queue.h>
-#include <xen/xen3-public/io/xenbus.h>
-#include <xen/xen3-public/io/xs_wire.h>
+#include <xen/xen-public/xen.h>
+#include <xen/xen-public/io/xenbus.h>
+#include <xen/xen-public/io/xs_wire.h>
+#include <xen/xen-public/grant_table.h>	/* for grant_ref_t */
 
 /* xenbus to hypervisor attach */
 struct xenbus_attach_args {
@@ -83,7 +85,7 @@ struct xenbus_device {
 	xenbusdev_type_t xbusd_type;
 	union {
 		struct {
-			struct device *f_dev;
+			device_t f_dev;
 		} f;
 		struct {
 			void *b_cookie; /* private to backend driver */
@@ -121,6 +123,8 @@ int xenbus_read(struct xenbus_transaction *t,
 		  char **);
 int xenbus_read_ul(struct xenbus_transaction *,
 		  const char *, const char *, unsigned long *, int);
+int xenbus_read_ull(struct xenbus_transaction *,
+		  const char *, const char *, unsigned long long *, int);
 int xenbus_write(struct xenbus_transaction *t,
 		 const char *dir, const char *node, const char *string);
 int xenbus_mkdir(struct xenbus_transaction *t,
@@ -156,10 +160,6 @@ void xs_resume(void);
 
 /* Used by xenbus_dev to borrow kernel's store connection. */
 int xenbus_dev_request_and_reply(struct xsd_sockmsg *msg, void **);
-
-/* Called from xen core code. */
-void xenbus_suspend(void);
-void xenbus_resume(void);
 
 void xenbus_probe(void *);
 
@@ -257,6 +257,8 @@ void xenbus_dev_error(struct xenbus_device *dev, int err, const char *fmt,
 void xenbus_dev_fatal(struct xenbus_device *dev, int err, const char *fmt,
 		      ...);
 
+bool xenbus_device_suspend(struct xenbus_device *);
+bool xenbus_device_resume(struct xenbus_device *);
 
 #endif /* _ASM_XEN_XENBUS_H */
 

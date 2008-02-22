@@ -1,4 +1,4 @@
-/*	$NetBSD: bootstrap.h,v 1.5 2007/03/04 06:00:03 christos Exp $	*/
+/*	$NetBSD: bootstrap.h,v 1.10 2017/12/10 02:32:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -35,7 +35,7 @@
 #include <sys/queue.h>
 
 /*
- * Generic device specifier; architecture-dependant 
+ * Generic device specifier; architecture-dependent 
  * versions may be larger, but should be allowed to
  * overlap.
  */
@@ -50,12 +50,13 @@ struct devdesc
 #define	DEVT_CD		3
 };
 
-/* Commands and return values; nonzero return sets command_errmsg != NULL */
 typedef int	(bootblk_cmd_t)(int argc, char *argv[]);
-extern char	*command_errmsg;	
-extern char	command_errbuf[];	/* XXX blah, length */
+int command_seterr(const char *fmt, ...) __printflike(1, 2);
+const char *command_geterr(void);
+
 #define CMD_OK		0
 #define CMD_ERROR	1
+
 
 /* interp.c */
 void	interact(void);
@@ -78,7 +79,9 @@ int	getrootmount(char *rootdev);
 
 /* misc.c */
 char	*unargv(int argc, char *argv[]);
+#if 0
 void	hexdump(void *region, size_t len);
+#endif
 size_t	strlenout(vaddr_t str);
 char	*strdupout(vaddr_t str);
 void	kern_bzero(vaddr_t dest, size_t len);
@@ -124,6 +127,7 @@ struct console
 };
 extern struct console	*consoles[];
 void		cons_probe(void);
+int		ischar(void);
 
 /*
  * Plug-and-play enumerator/configurator interface.
@@ -191,7 +195,7 @@ struct preloaded_file
     vaddr_t			f_addr;		/* load address */
     size_t			f_size;		/* file size */
     struct preloaded_file	*f_next;	/* next file */
-    u_long                      *marks;         /* filled by loadfile() */
+    u_long                      marks[MARK_MAX];/* filled by loadfile() */
 };
 
 struct file_format
@@ -211,6 +215,7 @@ int			mod_loadkld(const char *name, int argc, char *argv[]);
 struct preloaded_file *file_alloc(void);
 struct preloaded_file *file_findfile(char *name, char *type);
 
+int file_loadkernel(char *filename, int argc, char *argv[]);
 void file_discard(struct preloaded_file *fp);
 
 int	elf64_loadfile(char *filename, u_int64_t dest, struct preloaded_file **result);
@@ -329,6 +334,12 @@ time_t	time(time_t *tloc);
 
 /* calloc.c */
 void    *calloc(unsigned int, unsigned int);
+
+/* various string functions */
+size_t	strspn(const char *s1, const char *s2);
+size_t	strlen(const char *s);
+char *strcpy(char * restrict dst, const char * restrict src);
+char *strcat(char * restrict s, const char * restrict append);
 
 /* pager.c */
 extern void	pager_open(void);

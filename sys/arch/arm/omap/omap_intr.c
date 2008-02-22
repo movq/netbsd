@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_intr.c,v 1.4 2008/01/06 01:37:54 matt Exp $	*/
+/*	$NetBSD: omap_intr.c,v 1.11 2014/03/26 08:52:00 christos Exp $	*/
 
 /*
  * Based on arch/arm/xscale/pxa2x0_intr.c
@@ -42,13 +42,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap_intr.c,v 1.4 2008/01/06 01:37:54 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap_intr.c,v 1.11 2014/03/26 08:52:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/lock.h>
 
@@ -71,22 +73,6 @@ uint32_t omap_spl_masks[NIPL][OMAP_NBANKS] =
  */
 
 uint32_t omap_global_masks[OMAP_NBANKS];
-
-#ifdef __HAVE_FAST_SOFTINTS
-#define	SI_SOFTCLOCK	0
-#define	SI_SOFTBIO	1
-#define	SI_SOFTNET	2
-#define	SI_SOFTSERIAL	3
-/* Array to translate from software interrupt number to priority level. */
-static const int si_to_ipl[] = {
-	[SI_SOFTCLOCK] = IPL_SOFTCLOCK,
-	[SI_SOFTBIO] = IPL_SOFTBIO,
-	[SI_SOFTNET] = IPL_SOFTNET,
-	[SI_SOFTSERIAL] = IPL_SOFTSERIAL,
-};
-
-static int soft_interrupt(void *);
-#endif
 
 static int stray_interrupt(void *);
 static void init_interrupt_masks(void);
@@ -119,17 +105,16 @@ static struct irq_handler {
 	/* struct evbnt ev; */
 } handler[OMAP_NIRQ];
 
-volatile int current_spl_level;
 static int extirq_level[OMAP_NIRQ];
 
 int
-omapintc_match(struct device *parent, struct cfdata *cf, void *aux)
+omapintc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (1);
 }
 
 void
-omapintc_attach(struct device *parent, struct device *self, void *args)
+omapintc_attach(device_t parent, device_t self, void *args)
 {
 	int i;
 	aprint_normal(": Interrupt Controller\n");
@@ -189,21 +174,11 @@ omapintc_attach(struct device *parent, struct device *self, void *args)
 		handler[i].func = stray_interrupt;
 		handler[i].cookie = (void *)(intptr_t) i;
 		extirq_level[i] = IPL_SERIAL;
-		sprintf(handler[i].irq_num_str, "#%d", i);
+		snprintf(handler[i].irq_num_str,
+		    sizeof(handler[i].irq_num_str), "#%d", i);
 		if (handler[i].name == NULL)
 			omapintc_set_name(i, handler[i].irq_num_str, false);
 	}
-#ifdef __HAVE_FAST_SOFTINTS
-	/* and then set up the software interrupts. */
-	for(i = 0; i < __arraycount(omap_si_to_irq); ++i) {
-		int irq = omap_si_to_irq[i];
-		handler[irq].func = soft_interrupt;
-		/* Cookie value zero means pass interrupt frame instead */
-		handler[irq].cookie = (void *)(intptr_t) (i | 0x80000000);
-		KASSERT(i < __arraycount(si_to_ipl));
-		extirq_level[irq] = si_to_ipl[i];
-	}
-#endif
 
 	/* Initialize our table of masks. */
 	init_interrupt_masks();
@@ -221,7 +196,7 @@ omapintc_attach(struct device *parent, struct device *self, void *args)
 static void
 dispatch_irq(int irqno, struct clockframe *frame)
 {
-	if (extirq_level[irqno] != current_spl_level)
+	if (extirq_level[irqno] != curcpl())
 		splx(extirq_level[irqno]);
 
 #ifndef MULTIPLE_HANDLERS_ON_ONE_IRQ
@@ -245,7 +220,7 @@ omap_irq_handler(void *arg)
 	int bank;
 	int level2 = 0;
 
-	saved_spl_level = current_spl_level;
+	saved_spl_level = curcpl();
 
 	for (bank = 0; bank < OMAP_NBANKS; bank++) {
 		int masked = read_icu(omap_intr_bank_bases[bank],
@@ -342,19 +317,6 @@ stray_interrupt(void *cookie)
 	return 0;
 }
 
-#ifdef __HAVE_FAST_SOFTINTS
-static int
-soft_interrupt(void *cookie)
-{
-	int si = (int)cookie & ~(0x80000000);
-
-	softintr_dispatch(si);
-
-	return 0;
-}
-#endif
-
-
 static inline void
 level_block_irq(int lvl, const omap_intr_info_t *inf)
 {
@@ -401,7 +363,7 @@ omap_update_intr_masks(int irqno, int level)
 	 */
 
 	/* Refresh the hardware's masks in case the current level's changed. */
-	omap_splx(current_spl_level);
+	omap_splx(curcpl());
 
 	restore_interrupts(psw);
 }
@@ -466,16 +428,6 @@ _spllower(int ipl)
 
 	return omap_spllower(ipl);
 }
-
-#ifdef __HAVE_FAST_SOFTINTS
-#undef _setsoftintr
-void
-_setsoftintr(int si)
-{
-
-	return omap_setsoftintr(si);
-}
-#endif
 
 void *
 omap_intr_establish(int irqno, int level, const char *name,

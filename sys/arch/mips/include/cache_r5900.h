@@ -1,4 +1,4 @@
-/*	$NetBSD: cache_r5900.h,v 1.5 2005/12/24 20:07:19 perry Exp $	*/
+/*	$NetBSD: cache_r5900.h,v 1.9 2016/07/11 16:15:35 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -134,14 +127,14 @@ do {									\
 } while (/*CONSTCOND*/0)
 
 void	r5900_icache_sync_all_64(void);
-void	r5900_icache_sync_range_64(vaddr_t, vsize_t);
+void	r5900_icache_sync_range_64(register_t, vsize_t);
 void	r5900_icache_sync_range_index_64(vaddr_t, vsize_t);
 
 void	r5900_pdcache_wbinv_all_64(void);
-void	r5900_pdcache_wbinv_range_64(vaddr_t, vsize_t);
+void	r5900_pdcache_wbinv_range_64(register_t, vsize_t);
 void	r5900_pdcache_wbinv_range_index_64(vaddr_t, vsize_t);
 
-void	r5900_pdcache_inv_range_64(vaddr_t, vsize_t);
-void	r5900_pdcache_wb_range_64(vaddr_t, vsize_t);
+void	r5900_pdcache_inv_range_64(register_t, vsize_t);
+void	r5900_pdcache_wb_range_64(register_t, vsize_t);
 
 #endif /* !_LOCORE */

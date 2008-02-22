@@ -1,4 +1,4 @@
-/*      $NetBSD: ixm1200_pci.c,v 1.4 2003/03/25 06:53:16 igy Exp $ */
+/*      $NetBSD: ixm1200_pci.c,v 1.11 2014/03/29 19:28:27 christos Exp $ */
 #define PCI_DEBUG
 /*
  * Copyright (c) 2002, 2003
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixm1200_pci.c,v 1.4 2003/03/25 06:53:16 igy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixm1200_pci.c,v 1.11 2014/03/29 19:28:27 christos Exp $");
 
 /*
  * IXM1200 PCI interrupt support.
@@ -45,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixm1200_pci.c,v 1.4 2003/03/25 06:53:16 igy Exp $");
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <evbarm/ixm1200/ixm1200reg.h>
 #include <evbarm/ixm1200/ixm1200var.h>
@@ -58,17 +52,15 @@ __KERNEL_RCSID(0, "$NetBSD: ixm1200_pci.c,v 1.4 2003/03/25 06:53:16 igy Exp $");
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/ppbreg.h>
 
-int ixm1200_pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
-const char *ixm1200_pci_intr_string(void *, pci_intr_handle_t);
+int ixm1200_pci_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
+const char *ixm1200_pci_intr_string(void *, pci_intr_handle_t, char *, size_t);
 const struct evcnt *ixm1200_pci_intr_evcnt(void *, pci_intr_handle_t);
 void *ixm1200_pci_intr_establish(void *, pci_intr_handle_t, int,
 	int (*func)(void *), void *);
 void ixm1200_pci_intr_disestablish(void *, void *);
 
 void
-ixm1200_pci_init(pc, cookie)
-	pci_chipset_tag_t pc;
-	void *cookie;
+ixm1200_pci_init(pci_chipset_tag_t pc, void *cookie)
 {
 	pc->pc_intr_v = cookie;
 	pc->pc_intr_map = ixm1200_pci_intr_map;
@@ -79,9 +71,7 @@ ixm1200_pci_init(pc, cookie)
 }
 
 int
-ixm1200_pci_intr_map(pa, ihp)
-	struct pci_attach_args *pa;
-	pci_intr_handle_t *ihp;
+ixm1200_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 #ifdef PCI_DEBUG
 	void *v = pa->pa_pc;
@@ -100,31 +90,20 @@ ixm1200_pci_intr_map(pa, ihp)
 }
 
 const char *
-ixm1200_pci_intr_string(v, ih)
-	void *v;
-	pci_intr_handle_t ih;
+ixm1200_pci_intr_string(void *v, pci_intr_handle_t ih, char *buf, size_t len)
 {
-	static char irqstr[IRQNAMESIZE];
-
-	sprintf(irqstr, "IXM1200 irq %ld", ih);
-	return (irqstr);
+	snprintf(buf, len, "IXM1200 irq %ld", ih);
+	return buf;
 }
 
 const struct evcnt *
-ixm1200_pci_intr_evcnt(v, ih)
-	void *v;
-	pci_intr_handle_t ih;
+ixm1200_pci_intr_evcnt(void *v, pci_intr_handle_t ih)
 {
 	return (NULL);
 }
 
 void *
-ixm1200_pci_intr_establish(v, ih, ipl, func, arg)
-	void *v;
-	pci_intr_handle_t ih;
-	int ipl;
-	int (*func)(void *);
-	void *arg;
+ixm1200_pci_intr_establish(void *v, pci_intr_handle_t ih, int ipl, int (*func)(void *), void *arg)
 {
 #ifdef PCI_DEBUG
 	printf("ixm1200_pci_intr_establish(v=%p, irq=%d, ipl=%d, func=%p, arg=%p)\n",

@@ -1,7 +1,7 @@
-/*	$NetBSD: azalia.h,v 1.17 2007/05/13 03:30:46 kent Exp $	*/
+/*	$NetBSD: azalia.h,v 1.21 2011/11/23 23:07:35 jmcneill Exp $	*/
 
 /*-
- * Copyright (c) 2005 The NetBSD Foundation, Inc.
+ * Copyright (c) 2005, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -538,6 +531,15 @@ typedef struct {
 					 (nid >= (codec)->wstart &&   \
 					  nid < (codec)->wend))
 
+#define PIN_STATUS(wid, conn)						\
+	do {								\
+		if ((wid)->type != COP_AWTYPE_PIN_COMPLEX)		\
+			(conn) = 0;					\
+		else							\
+			(conn) =					\
+			    ((wid)->d.pin.config & CORB_CD_PORT_MASK) >> 30; \
+	} while (0)
+
 typedef struct {
 	int nconv;
 	nid_t conv[HDA_MAX_CHANNELS]; /* front, surround, clfe, side, ... */
@@ -558,7 +560,7 @@ typedef struct codec_t {
 	int (*get_port)(struct codec_t *, mixer_ctrl_t *);
 	int (*unsol_event)(struct codec_t *, int);
 
-	struct azalia_t *az;
+	device_t dev; 		/* parent azalia(4) instance */
 	uint32_t vid;		/* codec vendor/device ID */
 	uint32_t subid;		/* PCI subvendor/device ID */
 	const char *name;
@@ -576,13 +578,16 @@ typedef struct codec_t {
 	int running;
 
 	int nmixers, maxmixers;
+	size_t szmixers;
 	mixer_item_t *mixers;
 
 	struct audio_format *formats;
 	int nformats;
+	size_t szformats;
 	struct audio_encoding_set *encodings;
 
 	uint32_t *extra;
+	size_t szextra;
 } codec_t;
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ipccall.h,v 1.13 2007/12/20 23:02:54 dsl Exp $	*/
+/*	$NetBSD: linux_ipccall.h,v 1.16 2013/12/27 15:10:53 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,41 +45,41 @@
  * linux_ipc() call, and based on which the actual system calls
  * are made.
  */
-#define LINUX_SYS_semop		1
-#define LINUX_SYS_semget	2
-#define LINUX_SYS_semctl	3
-#define LINUX_SYS_msgsnd	11
-#define LINUX_SYS_msgrcv	12
-#define LINUX_SYS_msgget	13
-#define LINUX_SYS_msgctl	14
-#define LINUX_SYS_shmat		21
-#define LINUX_SYS_shmdt		22
-#define LINUX_SYS_shmget	23
-#define LINUX_SYS_shmctl	24
+#define LINUX_SYS_SEMOP		1
+#define LINUX_SYS_SEMGET	2
+#define LINUX_SYS_SEMCTL	3
+#define LINUX_SYS_MSGSND	11
+#define LINUX_SYS_MSGRCV	12
+#define LINUX_SYS_MSGGET	13
+#define LINUX_SYS_MSGCTL	14
+#define LINUX_SYS_SHMAT		21
+#define LINUX_SYS_SHMDT		22
+#define LINUX_SYS_SHMGET	23
+#define LINUX_SYS_SHMCTL	24
 
 
 #  ifdef SYSVSEM
-__inline int linux_semop(struct lwp *, const struct linux_sys_ipc_args *,
+int linux_semop(struct lwp *, const struct linux_sys_ipc_args *,
     register_t *);
-__inline int linux_semget(struct lwp *, const struct linux_sys_ipc_args *,
+int linux_semget(struct lwp *, const struct linux_sys_ipc_args *,
     register_t *);
 #  endif
 
 
 #  ifdef SYSVMSG
-__inline int linux_msgsnd(struct lwp *, const struct linux_sys_ipc_args *,
+int linux_msgsnd(struct lwp *, const struct linux_sys_ipc_args *,
     register_t *);
-__inline int linux_msgrcv(struct lwp *, const struct linux_sys_ipc_args *,
+int linux_msgrcv(struct lwp *, const struct linux_sys_ipc_args *,
     register_t *);
-__inline int linux_msgget(struct lwp *, const struct linux_sys_ipc_args *,
+int linux_msgget(struct lwp *, const struct linux_sys_ipc_args *,
     register_t *);
 #  endif
 
 
 #  ifdef SYSVSHM
-__inline int linux_shmdt(struct lwp *, const struct linux_sys_ipc_args *,
+int linux_shmdt(struct lwp *, const struct linux_sys_ipc_args *,
     register_t *);
-__inline int linux_shmget(struct lwp *, const struct linux_sys_ipc_args *,
+int linux_shmget(struct lwp *, const struct linux_sys_ipc_args *,
     register_t *);
 #  endif
 

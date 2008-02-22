@@ -1,4 +1,4 @@
-/* $NetBSD: abortfixup.c,v 1.7 2005/12/24 21:22:46 perry Exp $ */
+/* $NetBSD: abortfixup.c,v 1.10 2011/10/17 16:39:15 mbalmer Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,13 +32,14 @@
 
 #include <sys/types.h>
 
-__RCSID("$NetBSD: abortfixup.c,v 1.7 2005/12/24 21:22:46 perry Exp $");
+__RCSID("$NetBSD: abortfixup.c,v 1.10 2011/10/17 16:39:15 mbalmer Exp $");
 
 #include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <err.h>
 
 jmp_buf buf;
 
@@ -79,7 +73,7 @@ main(void)
 		"	str r1, [r0], r1, ror #10");
 		
 		/* Should not be reached if OK */
-		printf("!!! Regression test FAILED - no SEGV recieved\n");
+		printf("!!! Regression test FAILED - no SEGV received\n");
 		exit(1);
 	}
 
@@ -94,7 +88,7 @@ main(void)
 		"	str r1, [r0, r1, ror #10]");
 		
 		/* Should not be reached if OK */
-		printf("!!! Regression test FAILED - no SEGV recieved\n");
+		printf("!!! Regression test FAILED - no SEGV received\n");
 		exit(1);
 	}
 

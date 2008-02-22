@@ -1,21 +1,21 @@
-/* $NetBSD: dec_kn20aa.c,v 1.59 2007/03/04 15:18:10 yamt Exp $ */
+/* $NetBSD: dec_kn20aa.c,v 1.65 2012/10/13 17:58:54 jdc Exp $ */
 
 /*
  * Copyright (c) 1995, 1996, 1997 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_kn20aa.c,v 1.59 2007/03/04 15:18:10 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_kn20aa.c,v 1.65 2012/10/13 17:58:54 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: dec_kn20aa.c,v 1.59 2007/03/04 15:18:10 yamt Exp $")
 #include <machine/rpb.h>
 #include <machine/autoconf.h>
 #include <machine/cpuconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/alpha.h>
 #include <machine/logout.h>
 
@@ -74,15 +74,15 @@ __KERNEL_RCSID(0, "$NetBSD: dec_kn20aa.c,v 1.59 2007/03/04 15:18:10 yamt Exp $")
 #endif
 static int comcnrate = CONSPEED;
 
-void dec_kn20aa_init __P((void));
-static void dec_kn20aa_cons_init __P((void));
-static void dec_kn20aa_device_register __P((struct device *, void *));
+void dec_kn20aa_init(void);
+static void dec_kn20aa_cons_init(void);
+static void dec_kn20aa_device_register(device_t, void *);
 
 static void dec_kn20aa_mcheck_handler
-	__P((unsigned long, struct trapframe *, unsigned long, unsigned long));
+(unsigned long, struct trapframe *, unsigned long, unsigned long);
 
-static void dec_kn20aa_mcheck __P((unsigned long, unsigned long,
-				     unsigned long, struct trapframe *));
+static void dec_kn20aa_mcheck(unsigned long, unsigned long,
+				     unsigned long, struct trapframe *);
 
 #ifdef KGDB
 #include <machine/db_machdep.h>
@@ -99,9 +99,9 @@ const struct alpha_variation_table dec_kn20aa_variations[] = {
 };
 
 void
-dec_kn20aa_init()
+dec_kn20aa_init(void)
 {
-	u_int64_t variation;
+	uint64_t variation;
 
 	platform.family = "AlphaStation 500 or 600 (KN20AA)";
 
@@ -119,7 +119,7 @@ dec_kn20aa_init()
 }
 
 static void
-dec_kn20aa_cons_init()
+dec_kn20aa_cons_init(void)
 {
 	struct ctb *ctb;
 	struct cia_config *ccp;
@@ -131,7 +131,7 @@ dec_kn20aa_cons_init()
 	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
 
 	switch (ctb->ctb_term_type) {
-	case CTB_PRINTERPORT: 
+	case CTB_PRINTERPORT:
 		/* serial console ... */
 		/* XXX */
 		{
@@ -155,7 +155,7 @@ dec_kn20aa_cons_init()
 		/* display console ... */
 		/* XXX */
 		(void) pckbc_cnattach(&ccp->cc_iot, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT);
+		    PCKBC_KBD_SLOT, 0);
 
 		if (CTB_TURBOSLOT_TYPE(ctb->ctb_turboslot) ==
 		    CTB_TURBOSLOT_TYPE_ISA)
@@ -183,14 +183,12 @@ dec_kn20aa_cons_init()
 }
 
 static void
-dec_kn20aa_device_register(dev, aux)
-	struct device *dev;
-	void *aux;
+dec_kn20aa_device_register(device_t dev, void *aux)
 {
 	static int found, initted, diskboot, netboot;
-	static struct device *pcidev, *ctrlrdev;
+	static device_t pcidev, ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	struct device *parent = device_parent(dev);
+	device_t parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -216,7 +214,7 @@ dec_kn20aa_device_register(dev, aux)
 	
 			pcidev = dev;
 #if 0
-			printf("\npcidev = %s\n", dev->dv_xname);
+			printf("\npcidev = %s\n", device_xname(dev));
 #endif
 			return;
 		}
@@ -237,13 +235,13 @@ dec_kn20aa_device_register(dev, aux)
 			if (netboot) {
 				booted_device = dev;
 #if 0
-				printf("\nbooted_device = %s\n", dev->dv_xname);
+				printf("\nbooted_device = %s\n", device_xname(dev));
 #endif
 				found = 1;
 			} else {
 				ctrlrdev = dev;
 #if 0
-				printf("\nctrlrdev = %s\n", dev->dv_xname);
+				printf("\nctrlrdev = %s\n", device_xname(dev));
 #endif
 			}
 			return;
@@ -272,18 +270,14 @@ dec_kn20aa_device_register(dev, aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", dev->dv_xname);
+		printf("\nbooted_device = %s\n", device_xname(dev));
 #endif
 		found = 1;
 	}
 }
 
 static void
-dec_kn20aa_mcheck(mces, type, logout, framep)
-	unsigned long mces;
-	unsigned long type;
-	unsigned long logout;
-	struct trapframe *framep;
+dec_kn20aa_mcheck(unsigned long mces, unsigned long type, unsigned long logout, struct trapframe *framep)
 {
 	struct mchkinfo *mcp;
 	mc_hdr_ev5 *hdr;
@@ -310,11 +304,7 @@ dec_kn20aa_mcheck(mces, type, logout, framep)
 }
 
 static void
-dec_kn20aa_mcheck_handler(mces, framep, vector, param)
-	unsigned long mces;
-	struct trapframe *framep;
-	unsigned long vector;
-	unsigned long param;
+dec_kn20aa_mcheck_handler(unsigned long mces, struct trapframe *framep, unsigned long vector, unsigned long param)
 {
 
 	switch (vector) {

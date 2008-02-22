@@ -1,4 +1,4 @@
-/*	$NetBSD: bootparamd.c,v 1.44 2004/10/30 15:23:30 dsl Exp $	*/
+/*	$NetBSD: bootparamd.c,v 1.46 2011/08/30 20:29:41 joerg Exp $	*/
 
 /*
  * This code is not copyright, and is placed in the public domain.
@@ -11,7 +11,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootparamd.c,v 1.44 2004/10/30 15:23:30 dsl Exp $");
+__RCSID("$NetBSD: bootparamd.c,v 1.46 2011/08/30 20:29:41 joerg Exp $");
 #endif
 
 #include <sys/types.h>
@@ -53,7 +53,7 @@ static char hostname[MAX_MACHINE_NAME];
 static char askname[MAX_MACHINE_NAME];
 static char domain_name[MAX_MACHINE_NAME];
 
-extern void bootparamprog_1 __P((struct svc_req *, SVCXPRT *));
+extern void bootparamprog_1(struct svc_req *, SVCXPRT *);
 
 int	_rpcsvcdirty = 0;
 int	_rpcpmstart = 0;
@@ -61,22 +61,19 @@ int     debug = 0;
 int     dolog = 0;
 struct in_addr route_addr;
 struct sockaddr_in my_addr;
-char   *bootpfile = _PATH_BOOTPARAMS;
+const char *bootpfile = _PATH_BOOTPARAMS;
 char   *iface = NULL;
 
-int	main __P((int, char *[]));
-int	lookup_bootparam __P((char *, char *, char *, char **, char **));
-void	usage __P((void));
-static int get_localaddr __P((const char *, struct sockaddr_in *));
+static int	lookup_bootparam(char *, char *, char *, char **, char **);
+__dead static void	usage(void);
+static int get_localaddr(const char *, struct sockaddr_in *);
 
 
 /*
  * ever familiar
  */
 int
-main(argc, argv)
-	int     argc;
-	char  *argv[];
+main(int argc, char  *argv[])
 {
 	SVCXPRT *transp;
 	struct hostent *he;
@@ -154,9 +151,7 @@ main(argc, argv)
 }
 
 bp_whoami_res *
-bootparamproc_whoami_1_svc(whoami, rqstp)
-	bp_whoami_arg *whoami;
-	struct svc_req *rqstp;
+bootparamproc_whoami_1_svc(bp_whoami_arg *whoami, struct svc_req *rqstp)
 {
 	static bp_whoami_res res;
 	struct hostent *he;
@@ -228,13 +223,11 @@ bootparamproc_whoami_1_svc(whoami, rqstp)
 
 
 bp_getfile_res *
-bootparamproc_getfile_1_svc(getfile, rqstp)
-	bp_getfile_arg *getfile;
-	struct svc_req *rqstp;
+bootparamproc_getfile_1_svc(bp_getfile_arg *getfile, struct svc_req *rqstp)
 {
 	static bp_getfile_res res;
 	struct hostent *he;
-	int     err;
+	int     error;
 
 	if (debug)
 		warnx("getfile got question for \"%s\" and file \"%s\"",
@@ -258,9 +251,9 @@ bootparamproc_getfile_1_svc(getfile, rqstp)
 	}
 
 	(void)strlcpy(askname, he->h_name, sizeof(askname));
-	err = lookup_bootparam(askname, NULL, getfile->file_id,
+	error = lookup_bootparam(askname, NULL, getfile->file_id,
 	    &res.server_name, &res.server_path);
-	if (err == 0) {
+	if (error == 0) {
 		he = gethostbyname(res.server_name);
 		if (!he) {
 			if (debug)
@@ -276,7 +269,7 @@ bootparamproc_getfile_1_svc(getfile, rqstp)
 		memmove(&res.server_address.bp_address_u.ip_addr,
 		    he->h_addr, 4);
 		res.server_address.address_type = IP_ADDR_TYPE;
-	} else if (err == ENOENT && !strcmp(getfile->file_id, "dump")) {
+	} else if (error == ENOENT && !strcmp(getfile->file_id, "dump")) {
 		/* Special for dump, answer with null strings. */
 		res.server_name[0] = '\0';
 		res.server_path[0] = '\0';
@@ -312,13 +305,9 @@ bootparamproc_getfile_1_svc(getfile, rqstp)
 }
 
 
-int
-lookup_bootparam(client, client_canonical, id, server, path)
-	char	*client;
-	char	*client_canonical;
-	char	*id;
-	char	**server;
-	char	**path;
+static int
+lookup_bootparam(char *client, char *client_canonical, char *id,
+    char **server, char **path)
 {
 	FILE   *f = fopen(bootpfile, "r");
 #ifdef YP
@@ -462,8 +451,8 @@ lookup_bootparam(client, client_canonical, id, server, path)
 	return found ? ENOENT : EPERM;
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	fprintf(stderr,
 	    "usage: %s [-ds] [-i interface] [-r router] [-f bootparamsfile]\n",
@@ -472,9 +461,7 @@ usage()
 }
 
 static int
-get_localaddr(ifname, sin)
-	const char *ifname;
-	struct sockaddr_in *sin;
+get_localaddr(const char *ifname, struct sockaddr_in *sin)
 {
 	struct ifaddrs *ifap, *ifa;
 

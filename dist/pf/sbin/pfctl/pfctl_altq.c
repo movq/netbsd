@@ -1,5 +1,5 @@
-/*	$NetBSD: pfctl_altq.c,v 1.7 2006/10/12 19:59:08 peter Exp $	*/
-/*	$OpenBSD: pfctl_altq.c,v 1.86 2005/02/28 14:04:51 henning Exp $	*/
+/*	$NetBSD: pfctl_altq.c,v 1.10 2018/02/04 08:44:36 mrg Exp $	*/
+/*	$OpenBSD: pfctl_altq.c,v 1.92 2007/05/27 05:15:17 claudio Exp $	*/
 
 /*
  * Copyright (c) 2002
@@ -98,21 +98,6 @@ pfaltq_store(struct pf_altq *a)
 	TAILQ_INSERT_TAIL(&altqs, altq, entries);
 }
 
-void
-pfaltq_free(struct pf_altq *a)
-{
-	struct pf_altq	*altq;
-
-	TAILQ_FOREACH(altq, &altqs, entries) {
-		if (strncmp(a->ifname, altq->ifname, IFNAMSIZ) == 0 &&
-		    strncmp(a->qname, altq->qname, PF_QNAME_SIZE) == 0) {
-			TAILQ_REMOVE(&altqs, altq, entries);
-			free(altq);
-			return;
-		}
-	}
-}
-
 struct pf_altq *
 pfaltq_lookup(const char *ifname)
 {
@@ -162,7 +147,7 @@ print_altq(const struct pf_altq *a, unsigned level, struct node_queue_bw *bw,
 	struct node_queue_opt *qopts)
 {
 	if (a->qname[0] != 0) {
-		print_queue(a, level, bw, 0, qopts);
+		print_queue(a, level, bw, 1, qopts);
 		return;
 	}
 
@@ -243,8 +228,8 @@ eval_pfaltq(struct pfctl *pf, struct pf_altq *pa, struct node_queue_bw *bw,
 		pa->ifbandwidth = bw->bw_absolute;
 	else
 		if ((rate = getifspeed(pa->ifname)) == 0) {
-			fprintf(stderr, "cannot determine interface bandwidth "
-			    "for %s, specify an absolute bandwidth\n",
+			fprintf(stderr, "interface %s does not know its bandwidth, "
+			    "please specify an absolute bandwidth\n",
 			    pa->ifname);
 			errors++;
 		} else if ((pa->ifbandwidth = eval_bwspec(bw, rate)) == 0)
@@ -465,12 +450,13 @@ cbq_compute_idletime(struct pfctl *pf, struct pf_altq *pa)
 		 * this causes integer overflow in kernel!
 		 * (bandwidth < 6Kbps when max_pkt_size=1500)
 		 */
-		if (pa->bandwidth != 0 && (pf->opts & PF_OPT_QUIET) == 0)
+		if (pa->bandwidth != 0 && (pf->opts & PF_OPT_QUIET) == 0) {
 			warnx("queue bandwidth must be larger than %s",
 			    rate2str(ifnsPerByte * (double)opts->maxpktsize /
 			    (double)INT_MAX * (double)pa->ifbandwidth));
 			fprintf(stderr, "cbq: queue %s is too slow!\n",
 			    pa->qname);
+		}
 		nsPerByte = (double)(INT_MAX / opts->maxpktsize);
 	}
 
@@ -702,8 +688,8 @@ eval_pfqueue_hfsc(struct pfctl *pf, struct pf_altq *pa)
 	}
 
 	if ((opts->rtsc_m1 < opts->rtsc_m2 && opts->rtsc_m1 != 0) ||
-	    (opts->rtsc_m1 < opts->rtsc_m2 && opts->rtsc_m1 != 0) ||
-	    (opts->rtsc_m1 < opts->rtsc_m2 && opts->rtsc_m1 != 0)) {
+	    (opts->lssc_m1 < opts->lssc_m2 && opts->lssc_m1 != 0) ||
+	    (opts->ulsc_m1 < opts->ulsc_m2 && opts->ulsc_m1 != 0)) {
 		warnx("m1 must be zero for convex curve: %s", pa->qname);
 		return (-1);
 	}
@@ -896,9 +882,6 @@ print_hfsc_opts(const struct pf_altq *a, const struct node_queue_opt *qopts)
 /*
  * admission control using generalized service curve
  */
-#ifdef __OpenBSD__
-#define	INFINITY	HUGE_VAL  /* positive infinity defined in <math.h> */
-#endif
 
 /* add a new service curve to a generalized service curve */
 static void
@@ -908,7 +891,7 @@ gsc_add_sc(struct gen_sc *gsc, struct service_curve *sc)
 		return;
 	if (sc->d != 0)
 		gsc_add_seg(gsc, 0.0, 0.0, (double)sc->d, (double)sc->m1);
-	gsc_add_seg(gsc, (double)sc->d, 0.0, INFINITY, (double)sc->m2);
+	gsc_add_seg(gsc, (double)sc->d, 0.0, HUGE_VAL, (double)sc->m2);
 }
 
 /*
@@ -932,10 +915,10 @@ is_gsc_under_sc(struct gen_sc *gsc, struct service_curve *sc)
 		return (1);
 	}
 	/*
-	 * gsc has a dummy entry at the end with x = INFINITY.
+	 * gsc has a dummy entry at the end with x = HUGE_VAL.
 	 * loop through up to this dummy entry.
 	 */
-	end = gsc_getentry(gsc, INFINITY);
+	end = gsc_getentry(gsc, HUGE_VAL);
 	if (end == NULL)
 		return (1);
 	last = NULL;
@@ -992,10 +975,10 @@ gsc_getentry(struct gen_sc *gsc, double x)
 		return (NULL);
 
 	new->x = x;
-	if (x == INFINITY || s == NULL)
+	if (x == HUGE_VAL || s == NULL)
 		new->d = 0;
-	else if (s->x == INFINITY)
-		new->d = INFINITY;
+	else if (s->x == HUGE_VAL)
+		new->d = HUGE_VAL;
 	else
 		new->d = s->x - x;
 	if (prev == NULL) {
@@ -1008,12 +991,12 @@ gsc_getentry(struct gen_sc *gsc, double x)
 		 * the start point intersects with the segment pointed by
 		 * prev.  divide prev into 2 segments
 		 */
-		if (x == INFINITY) {
-			prev->d = INFINITY;
+		if (x == HUGE_VAL) {
+			prev->d = HUGE_VAL;
 			if (prev->m == 0)
 				new->y = prev->y;
 			else
-				new->y = INFINITY;
+				new->y = HUGE_VAL;
 		} else {
 			prev->d = x - prev->x;
 			new->y = prev->d * prev->m + prev->y;
@@ -1031,8 +1014,8 @@ gsc_add_seg(struct gen_sc *gsc, double x, double y, double d, double m)
 	struct segment	*start, *end, *s;
 	double		 x2;
 
-	if (d == INFINITY)
-		x2 = INFINITY;
+	if (d == HUGE_VAL)
+		x2 = HUGE_VAL;
 	else
 		x2 = x + d;
 	start = gsc_getentry(gsc, x);
@@ -1045,7 +1028,7 @@ gsc_add_seg(struct gen_sc *gsc, double x, double y, double d, double m)
 		s->y += y + (s->x - x) * m;
 	}
 
-	end = gsc_getentry(gsc, INFINITY);
+	end = gsc_getentry(gsc, HUGE_VAL);
 	for (; s != end; s = LIST_NEXT(s, _next)) {
 		s->y += m * d;
 	}
@@ -1102,26 +1085,7 @@ rate2str(double rate)
 u_int32_t
 getifspeed(char *ifname)
 {
-#ifdef __OpenBSD__
-	int		s;
-	struct ifreq	ifr;
-	struct if_data	ifrdat;
-
-	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-		err(1, "socket");
-	bzero(&ifr, sizeof(ifr));
-	if (strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name)) >=
-	    sizeof(ifr.ifr_name))
-		errx(1, "getifspeed: strlcpy");
-	ifr.ifr_data = (caddr_t)&ifrdat;
-	if (ioctl(s, SIOCGIFDATA, (caddr_t)&ifr) == -1)
-		err(1, "SIOCGIFDATA");
-	if (shutdown(s, SHUT_RDWR) == -1)
-		err(1, "shutdown");
-	if (close(s) == -1)
-		err(1, "close");
-	return ((u_int32_t)ifrdat.ifi_baudrate);
-#else
+#ifdef __NetBSD__
 	int			 s;
 	struct ifdatareq	 ifdr;
 	struct if_data		*ifrdat;
@@ -1135,12 +1099,27 @@ getifspeed(char *ifname)
 	if (ioctl(s, SIOCGIFDATA, &ifdr) == -1)
 		err(1, "getifspeed: SIOCGIFDATA");
 	ifrdat = &ifdr.ifdr_data;
-	if (shutdown(s, SHUT_RDWR) == -1)
-		err(1, "getifspeed: shutdown");
 	if (close(s) == -1)
 		err(1, "getifspeed: close");
 	return ((u_int32_t)ifrdat->ifi_baudrate);
-#endif
+#else
+	int		s;
+	struct ifreq	ifr;
+	struct if_data	ifrdat;
+
+	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+		err(1, "socket");
+	bzero(&ifr, sizeof(ifr));
+	if (strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name)) >=
+	    sizeof(ifr.ifr_name))
+		errx(1, "getifspeed: strlcpy");
+	ifr.ifr_data = (caddr_t)&ifrdat;
+	if (ioctl(s, SIOCGIFDATA, (caddr_t)&ifr) == -1)
+		err(1, "SIOCGIFDATA");
+	if (close(s))
+		err(1, "close");
+	return ((u_int32_t)ifrdat.ifi_baudrate);
+#endif /* !__NetBSD__ */
 }
 
 u_long
@@ -1157,8 +1136,6 @@ getifmtu(char *ifname)
 		errx(1, "getifmtu: strlcpy");
 	if (ioctl(s, SIOCGIFMTU, (caddr_t)&ifr) == -1)
 		err(1, "SIOCGIFMTU");
-	if (shutdown(s, SHUT_RDWR) == -1)
-		err(1, "shutdown");
 	if (close(s) == -1)
 		err(1, "close");
 	if (ifr.ifr_mtu > 0)

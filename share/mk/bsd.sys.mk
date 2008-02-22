@@ -1,11 +1,66 @@
-#	$NetBSD: bsd.sys.mk,v 1.158 2008/01/09 11:26:14 simonb Exp $
+#	$NetBSD: bsd.sys.mk,v 1.284 2018/06/24 19:35:12 kamil Exp $
 #
 # Build definitions used for NetBSD source tree builds.
 
 .if !defined(_BSD_SYS_MK_)
 _BSD_SYS_MK_=1
 
+.if !empty(.INCLUDEDFROMFILE:MMakefile*)
+error1:
+	@(echo "bsd.sys.mk should not be included from Makefiles" >& 2; exit 1)
+.endif
+.if !defined(_BSD_OWN_MK_)
+error2:
+	@(echo "bsd.own.mk must be included before bsd.sys.mk" >& 2; exit 1)
+.endif
+
+# XXX: LLVM does not support -iremap and -fdebug-*
+.if ${MKREPRO:Uno} == "yes" && ${MKLLVM:Uno} != "yes"
+.export NETBSDSRCDIR DESTDIR X11SRCDIR
+
+.if !empty(DESTDIR)
+CPPFLAGS+=	-Wp,-iremap,${DESTDIR}:
+REPROFLAGS+=	-fdebug-prefix-map=\$$DESTDIR=
+.endif
+
+CPPFLAGS+=	-Wp,-fno-canonical-system-headers
+CPPFLAGS+=	-Wp,-iremap,${NETBSDSRCDIR}:/usr/src
+CPPFLAGS+=	-Wp,-iremap,${X11SRCDIR}:/usr/xsrc
+
+REPROFLAGS+=	-fdebug-prefix-map=\$$NETBSDSRCDIR=/usr/src
+REPROFLAGS+=	-fdebug-prefix-map=\$$X11SRCDIR=/usr/xsrc
+.if defined(MAKEOBJDIRPREFIX)
+NETBSDOBJDIR=	${MAKEOBJDIRPREFIX}${NETBSDSRCDIR}
+.endif
+
+.if defined(NETBSDOBJDIR)
+.export NETBSDOBJDIR
+REPROFLAGS+=	-fdebug-prefix-map=\$$NETBSDOBJDIR=/usr/obj
+.endif
+
+LINTFLAGS+=	-R${NETBSDSRCDIR}=/usr/src -R${X11SRCDIR}=/usr/xsrc
+LINTFLAGS+=	-R${DESTDIR}=
+
+# XXX: Cannot handle MAKEOBJDIR, yet.
+REPROFLAGS+=	-fdebug-regex-map='/usr/src/(.*)/obj$$=/usr/obj/\1'
+REPROFLAGS+=	-fdebug-regex-map='/usr/src/(.*)/obj/(.*)=/usr/obj/\1/\2'
+REPROFLAGS+=	-fdebug-regex-map='/usr/src/(.*)/obj\..*=/usr/obj/\1'
+REPROFLAGS+=	-fdebug-regex-map='/usr/src/(.*)/obj\..*/(.*)=/usr/obj/\1/\2'
+
+CFLAGS+=	${REPROFLAGS}
+CXXFLAGS+=	${REPROFLAGS}
+.endif
+
+# NetBSD sources use C99 style, with some GCC extensions.
+# Coverity does not like -std=gnu99
+.if !defined(COVERITY_TOP_CONFIG)
+CFLAGS+=	${${ACTIVE_CC} == "clang":? -std=gnu99 :}
+CFLAGS+=	${${ACTIVE_CC} == "gcc":? -std=gnu99 :}
+CFLAGS+=	${${ACTIVE_CC} == "pcc":? -std=gnu99 :}
+.endif
+
 .if defined(WARNS)
+CFLAGS+=	${${ACTIVE_CC} == "clang":? -Wno-sign-compare -Wno-pointer-sign :}
 .if ${WARNS} > 0
 CFLAGS+=	-Wall -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 #CFLAGS+=	-Wmissing-declarations -Wredundant-decls -Wnested-externs
@@ -15,168 +70,176 @@ CFLAGS+=	-Wall -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 # in a traditional environment' warning, as opposed to 'this code behaves
 # differently in traditional and ansi environments' which is the warning
 # we wanted, and now we don't get anymore.
-CFLAGS+=	-Wno-sign-compare -Wno-traditional
+CFLAGS+=	-Wno-sign-compare
+# Don't suppress warnings coming from constructs in system headers.
+# Our system headers should be clean and we want to warn about things like:
+# isdigit((char)1)
+CFLAGS+=	${${ACTIVE_CC} == "gcc" :? -Wsystem-headers :}
+CFLAGS+=	${${ACTIVE_CC} == "gcc" :? -Wno-traditional :}
+.if !defined(NOGCCERROR)
+# Set assembler warnings to be fatal
+CFLAGS+=	${${ACTIVE_CC} == "gcc" :? -Wa,--fatal-warnings :}
 .endif
+
+# Set linker warnings to be fatal
+# XXX no proper way to avoid "FOO is a patented algorithm" warnings
+# XXX on linking static libs
+.if (!defined(MKPIC) || ${MKPIC} != "no") && \
+    (!defined(LDSTATIC) || ${LDSTATIC} != "-static")
+# XXX there are some strange problems not yet resolved
+. if !defined(HAVE_GCC) || defined(HAVE_LLVM)
+LDFLAGS+=	-Wl,--fatal-warnings
+. endif
+.endif
+.endif
+
+LDFLAGS+=	-Wl,--warn-shared-textrel
+
 .if ${WARNS} > 1
 CFLAGS+=	-Wreturn-type -Wswitch -Wshadow
 .endif
 .if ${WARNS} > 2
 CFLAGS+=	-Wcast-qual -Wwrite-strings
 CFLAGS+=	-Wextra -Wno-unused-parameter
+# Readd -Wno-sign-compare to override -Wextra with clang
+CFLAGS+=	-Wno-sign-compare
 CXXFLAGS+=	-Wabi
 CXXFLAGS+=	-Wold-style-cast
 CXXFLAGS+=	-Wctor-dtor-privacy -Wnon-virtual-dtor -Wreorder \
-		-Wno-deprecated -Wno-non-template-friend \
-		-Woverloaded-virtual -Wno-pmf-conversions -Wsign-promo -Wsynth
+		-Wno-deprecated -Woverloaded-virtual -Wsign-promo -Wsynth
+CXXFLAGS+=	${${ACTIVE_CXX} == "gcc":? -Wno-non-template-friend -Wno-pmf-conversions :}
 .endif
-.if ${WARNS} > 3 && ${HAVE_GCC} >= 3
-CFLAGS+=	-std=gnu99
+.if ${WARNS} > 3 && (defined(HAVE_GCC) || defined(HAVE_LLVM))
+.if ${WARNS} > 4
+CFLAGS+=	-Wold-style-definition
+.endif
+.if ${WARNS} > 5
+CFLAGS+=	-Wconversion
+.endif
+CFLAGS+=	-Wsign-compare -Wformat=2
+CFLAGS+=	${${ACTIVE_CC} == "gcc":? -Wno-format-zero-length :}
+.endif
+.if ${WARNS} > 3 && defined(HAVE_LLVM)
+CFLAGS+=	${${ACTIVE_CC} == "clang":? -Wpointer-sign -Wmissing-noreturn :}
+.endif
+.if (defined(HAVE_GCC) \
+     && (${MACHINE_ARCH} == "coldfire" || \
+	 ${MACHINE_CPU} == "sh3" || \
+	 ${MACHINE_CPU} == "m68k"))
+# XXX GCC 4.5 for sh3 and m68k (which we compile with -Os) is extra noisy for
+# cases it should be better with
+CFLAGS+=	-Wno-uninitialized
+CFLAGS+=	-Wno-maybe-uninitialized
 .endif
 .endif
+
+.if ${MKRELRO:Uno} != "no"
+LDFLAGS+=	-Wl,-z,relro
+.endif
+.if ${MKRELRO:Uno} == "full"
+LDFLAGS+=	-Wl,-z,now
+.endif
+
+.if ${MKSANITIZER:Uno} == "yes"
+SANITIZERFLAGS+=	-fsanitize=${USE_SANITIZER}
+.else
+SANITIZERFLAGS=		# empty
+.endif
+
+
+CWARNFLAGS+=	${CWARNFLAGS.${ACTIVE_CC}}
 
 CPPFLAGS+=	${AUDIT:D-D__AUDIT__}
-CFLAGS+=	${CWARNFLAGS} ${NOGCCERROR:D:U-Werror}
+_NOWERROR=	${defined(NOGCCERROR) || (${ACTIVE_CC} == "clang" && defined(NOCLANGERROR)):?yes:no}
+CFLAGS+=	${${_NOWERROR} == "no" :?-Werror:} ${CWARNFLAGS}
 LINTFLAGS+=	${DESTDIR:D-d ${DESTDIR}/usr/include}
 
-.if (${MACHINE_ARCH} == "alpha") || (${MACHINE_ARCH} == "hppa") || \
-	(${MACHINE_ARCH} == "mipsel") || (${MACHINE_ARCH} == "mipseb")
-HAS_SSP=	no
-.else
-HAS_SSP=	yes
-.endif
-
-.if defined(USE_FORT) && (${USE_FORT} != "no")
-USE_SSP?=	yes
-.if !defined(KERNSRCDIR) && !defined(KERN) # not for kernels nor kern modules
+.if !defined(NOSSP) && (${USE_SSP:Uno} != "no") && (${BINDIR:Ux} != "/usr/mdec")
+.   if !defined(KERNSRCDIR) && !defined(KERN) # not for kernels / kern modules
 CPPFLAGS+=	-D_FORTIFY_SOURCE=2
-.endif
+.   endif
+.   if !defined(COVERITY_TOP_CONFIG)
+COPTS+=	-fstack-protector -Wstack-protector 
+
+# GCC 4.8 on m68k erroneously does not protect functions with
+# variables needing special alignement, see
+#	http://gcc.gnu.org/bugzilla/show_bug.cgi?id=59674
+# (the underlying issue for sh and vax may be different, needs more
+# investigation, symptoms are similar but for different sources)
+# also true for GCC 5, assume GCC 6 too.
+.	if "${ACTIVE_CC}" == "gcc" && \
+     ( ${HAVE_GCC} == "5" || \
+       ${HAVE_GCC} == "6" ) && \
+     ( ${MACHINE_CPU} == "sh3" || \
+       ${MACHINE_ARCH} == "vax" || \
+       ${MACHINE_CPU} == "m68k" || \
+       ${MACHINE_CPU} == "or1k" )
+COPTS+=	-Wno-error=stack-protector 
+.	endif
+
+COPTS+=	${${ACTIVE_CC} == "clang":? --param ssp-buffer-size=1 :}
+COPTS+=	${${ACTIVE_CC} == "gcc":? --param ssp-buffer-size=1 :}
+.   endif
 .endif
 
-.if defined(USE_SSP) && (${USE_SSP} != "no") && (${BINDIR:Ux} != "/usr/mdec")
-.if ${HAS_SSP} == "yes"
-COPTS+=		-fstack-protector -Wstack-protector --param ssp-buffer-size=1
-.endif
-.endif
-
-.if defined(MKSOFTFLOAT) && (${MKSOFTFLOAT} != "no")
-COPTS+=		-msoft-float
+.if ${MKSOFTFLOAT:Uno} != "no"
+# sh3 defaults to soft-float and specifies hard-float a different way
+.if ${MACHINE_CPU} != "sh3"
+COPTS+=		${${ACTIVE_CC} == "gcc":? -msoft-float :}
 FOPTS+=		-msoft-float
 .endif
+.elif ${MACHINE_ARCH} == "coldfire"
+COPTS+=		-mhard-float
+FOPTS+=		-mhard-float
+.endif
 
-.if defined(MKIEEEFP) && (${MKIEEEFP} != "no")
+#.if !empty(MACHINE_ARCH:Mearmv7*)
+#COPTS+=		-mthumb
+#FOPTS+=		-mthumb
+#.endif
+
+.if ${MKIEEEFP:Uno} != "no"
 .if ${MACHINE_ARCH} == "alpha"
 CFLAGS+=	-mieee
 FFLAGS+=	-mieee
 .endif
 .endif
 
-.if defined(MKPIE) && (${MKPIE} != "no")
-CFLAGS+=	-fPIC
-LDFLAGS+=	-Wl,-pie -shared-libgcc
-.endif
-
 .if ${MACHINE} == "sparc64" && ${MACHINE_ARCH} == "sparc"
 CFLAGS+=	-Wa,-Av8plus
 .endif
 
+.if !defined(NOGCCERROR)
+.if (${MACHINE_ARCH} == "mips64el") || (${MACHINE_ARCH} == "mips64eb")
+CPUFLAGS+=	-Wa,--fatal-warnings
+.endif
+.endif
+
+#.if ${MACHINE} == "sbmips"
+#CFLAGS+=	-mips64 -mtune=sb1
+#.endif
+
+#.if (${MACHINE_ARCH} == "mips64el" || ${MACHINE_ARCH} == "mips64eb") && \
+#    (defined(MKPIC) && ${MKPIC} == "no")
+#CPUFLAGS+=	-mno-abicalls -fno-PIC
+#.endif
 CFLAGS+=	${CPUFLAGS}
 AFLAGS+=	${CPUFLAGS}
 
-# Helpers for cross-compiling
-HOST_CC?=	cc
-HOST_CFLAGS?=	-O
-HOST_COMPILE.c?=${HOST_CC} ${HOST_CFLAGS} ${HOST_CPPFLAGS} -c
-HOST_COMPILE.cc?=      ${HOST_CXX} ${HOST_CXXFLAGS} ${HOST_CPPFLAGS} -c
-.if defined(HOSTPROG_CXX) 
-HOST_LINK.c?=	${HOST_CXX} ${HOST_CXXFLAGS} ${HOST_CPPFLAGS} ${HOST_LDFLAGS}
-.else
-HOST_LINK.c?=	${HOST_CC} ${HOST_CFLAGS} ${HOST_CPPFLAGS} ${HOST_LDFLAGS}
-.endif
-
-HOST_CXX?=	c++
-HOST_CXXFLAGS?=	-O
-
-HOST_CPP?=	cpp
-HOST_CPPFLAGS?=
-
-HOST_LD?=	ld
-HOST_LDFLAGS?=
-
-HOST_AR?=	ar
-HOST_RANLIB?=	ranlib
-
-HOST_LN?=	ln
-
-HOST_SED?=	sed
-
-.if !empty(HOST_CYGWIN)
-HOST_SH?=	/usr/bin/bash
-.else
-HOST_SH?=	sh
+.if !defined(NOPIE) && (!defined(LDSTATIC) || ${LDSTATIC} != "-static")
+# Position Independent Executable flags
+PIE_CFLAGS?=        -fPIE
+PIE_LDFLAGS?=       -pie ${${ACTIVE_CC} == "gcc":? -shared-libgcc :}
+PIE_AFLAGS?=	    -fPIE
 .endif
 
 ELF2ECOFF?=	elf2ecoff
 MKDEP?=		mkdep
+MKDEPCXX?=	mkdep
 OBJCOPY?=	objcopy
 OBJDUMP?=	objdump
 PAXCTL?=	paxctl
 STRIP?=		strip
-
-AWK?=		awk
-
-TOOL_ASN1_COMPILE?=	asn1_compile
-TOOL_ATF_COMPILE?=	atf-compile
-TOOL_CAP_MKDB?=		cap_mkdb
-TOOL_CAT?=		cat
-TOOL_CKSUM?=		cksum
-TOOL_COMPILE_ET?=	compile_et
-TOOL_CONFIG?=		config
-TOOL_CRUNCHGEN?=	crunchgen
-TOOL_CTAGS?=		ctags
-TOOL_DB?=		db
-TOOL_EQN?=		eqn
-TOOL_FGEN?=		fgen
-TOOL_GENASSYM?=		genassym
-TOOL_GENCAT?=		gencat
-TOOL_GROFF?=		groff
-TOOL_HEXDUMP?=		hexdump
-TOOL_INDXBIB?=		indxbib
-TOOL_INSTALLBOOT?=	installboot
-TOOL_INSTALL_INFO?=	install-info
-TOOL_JOIN?=		join
-TOOL_M4?=		m4
-TOOL_MAKEFS?=		makefs
-TOOL_MAKEINFO?=		makeinfo
-TOOL_MAKEWHATIS?=	/usr/libexec/makewhatis
-TOOL_MDSETIMAGE?=	mdsetimage
-TOOL_MENUC?=		menuc
-TOOL_MKCSMAPPER?=	mkcsmapper
-TOOL_MKESDB?=		mkesdb
-TOOL_MKLOCALE?=		mklocale
-TOOL_MKMAGIC?=		file
-TOOL_MKTEMP?=		mktemp
-TOOL_MSGC?=		msgc
-TOOL_MTREE?=		mtree
-TOOL_PAX?=		pax
-TOOL_PIC?=		pic
-TOOL_PREPMKBOOTIMAGE?=	prep-mkbootimage
-TOOL_PWD_MKDB?=		pwd_mkdb
-TOOL_REFER?=		refer
-TOOL_ROFF_ASCII?=	nroff
-TOOL_ROFF_DVI?=		${TOOL_GROFF} -Tdvi
-TOOL_ROFF_HTML?=	${TOOL_GROFF} -Tlatin1 -mdoc2html
-TOOL_ROFF_PS?=		${TOOL_GROFF} -Tps
-TOOL_ROFF_RAW?=		${TOOL_GROFF} -Z
-TOOL_RPCGEN?=		rpcgen
-TOOL_SED?=		sed
-TOOL_SOELIM?=		soelim
-TOOL_STAT?=		stat
-TOOL_SPARKCRC?=		sparkcrc
-TOOL_SUNLABEL?=		sunlabel
-TOOL_TBL?=		tbl
-TOOL_UUDECODE?=		uudecode
-TOOL_VGRIND?=		vgrind -f
-TOOL_ZIC?=		zic
 
 .SUFFIXES:	.o .ln .lo .c .cc .cpp .cxx .C .m ${YHEADER:D.h}
 
@@ -184,10 +247,13 @@ TOOL_ZIC?=		zic
 .c.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 
 .c.ln:
 	${_MKTARGET_COMPILE}
-	${LINT} ${LINTFLAGS} \
+	${LINT} ${LINTFLAGS} ${LINTFLAGS.${.IMPSRC:T}} \
 	    ${CPPFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
 	    ${CPPFLAGS.${.IMPSRC:T}:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
 	    -i ${.IMPSRC}
@@ -203,6 +269,9 @@ TOOL_ZIC?=		zic
 .m.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.m} ${OBJCOPTS} ${OBJCOPTS.${.IMPSRC:T}} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 
 # Host-compiled C objects
 # The intermediate step is necessary for Sun CC, which objects to calling
@@ -222,20 +291,27 @@ TOOL_ZIC?=		zic
 .s.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.s} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 
 .S.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.S} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 
 # Lex
-LPREFIX?=	yy
-LFLAGS+=	-P${LPREFIX}
+LFLAGS+=	${LPREFIX.${.IMPSRC:T}:D-P${LPREFIX.${.IMPSRC:T}}}
+LFLAGS+=	${LPREFIX:D-P${LPREFIX}}
 
 .l.c:
 	${_MKTARGET_LEX}
 	${LEX.l} -o${.TARGET} ${.IMPSRC}
 
 # Yacc
+YFLAGS+=	${YPREFIX.${.IMPSRC:T}:D-p${YPREFIX.${.IMPSRC:T}}} ${YHEADER.${.IMPSRC:T}:D-d}
 YFLAGS+=	${YPREFIX:D-p${YPREFIX}} ${YHEADER:D-d}
 
 .y.c:
@@ -243,7 +319,24 @@ YFLAGS+=	${YPREFIX:D-p${YPREFIX}} ${YHEADER:D-d}
 	${YACC.y} -o ${.TARGET} ${.IMPSRC}
 
 .ifdef YHEADER
+.if empty(.MAKEFLAGS:M-n)
 .y.h: ${.TARGET:.h=.c}
+.endif
+.endif
+
+# Objcopy
+.if ${MACHINE_ARCH} == aarch64eb
+# AARCH64 big endian needs to preserve $x/$d symbols for the linker.
+OBJCOPYLIBFLAGS_EXTRA=-w -K '[$$][dx]' -K '[$$][dx]\.*'
+.elif ${MACHINE_CPU} == "arm"
+# ARM big endian needs to preserve $a/$d/$t symbols for the linker.
+OBJCOPYLIBFLAGS_EXTRA=-w -K '[$$][adt]' -K '[$$][adt]\.*'
+.endif
+
+.if ${MKSTRIPSYM:Uyes} == "yes"
+OBJCOPYLIBFLAGS?=${"${.TARGET:M*.po}" != "":?-X:-x} ${OBJCOPYLIBFLAGS_EXTRA}
+.else
+OBJCOPYLIBFLAGS?=-X ${OBJCOPYLIBFLAGS_EXTRA}
 .endif
 
 .endif	# !defined(_BSD_SYS_MK_)

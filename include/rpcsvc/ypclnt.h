@@ -1,4 +1,4 @@
-/*	$NetBSD: ypclnt.h,v 1.13 2005/02/03 04:39:33 perry Exp $	*/
+/*	$NetBSD: ypclnt.h,v 1.15 2016/01/22 23:23:13 dholland Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -28,6 +28,8 @@
 
 #ifndef _RPCSVC_YPCLNT_H_
 #define _RPCSVC_YPCLNT_H_
+
+#include <sys/cdefs.h>
 
 #define YPERR_BADARGS	1		/* args to function are bad */
 #define YPERR_RPC	2		/* RPC failure */
@@ -80,6 +82,7 @@ int	yp_order	(const char *, const char *, int *);
 int	yp_all		(const char *, const char *, struct ypall_callback *);
 char *	yperr_string	(int);
 int	ypprot_err	(unsigned int);
+int	yp_setbindtries	(int);
 __END_DECLS
 
 #endif /* _RPCSVC_YPCLNT_H_ */

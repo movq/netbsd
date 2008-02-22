@@ -1,4 +1,4 @@
-/*	$NetBSD: dumpsys.c,v 1.3 2008/01/24 15:31:23 ad Exp $	*/
+/*	$NetBSD: dumpsys.c,v 1.16 2011/12/12 19:03:09 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000, 2004, 2006, 2008 The NetBSD Foundation, Inc.
@@ -20,13 +20,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dumpsys.c,v 1.3 2008/01/24 15:31:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dumpsys.c,v 1.16 2011/12/12 19:03:09 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,7 +83,6 @@ __KERNEL_RCSID(0, "$NetBSD: dumpsys.c,v 1.3 2008/01/24 15:31:23 ad Exp $");
 #include <machine/kcore.h>
 
 #include <uvm/uvm_extern.h>
-#include <uvm/uvm_page.h>
 
 /*
  * Exports, needed by savecore, the debugger or elsewhere in the kernel.
@@ -176,14 +168,16 @@ dodumpsys(void)
 	if (dumpsize == 0)
 		cpu_dumpconf();
 	if (dumplo <= 0 || dumpsize == 0) {
-		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
-		    minor(dumpdev));
+		printf("\ndump to dev %llu,%llu not possible\n",
+		    (unsigned long long)major(dumpdev),
+		    (unsigned long long)minor(dumpdev));
 		return;
 	}
-	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
-	    minor(dumpdev), dumplo);
+	printf("\ndumping to dev %llu,%llu offset %ld\n",
+	    (unsigned long long)major(dumpdev),
+	    (unsigned long long)minor(dumpdev), dumplo);
 
-	psize = (*bdev->d_psize)(dumpdev);
+	psize = bdev_size(dumpdev);
 	printf("dump ");
 	if (psize == -1) {
 		printf("area unavailable\n");
@@ -280,19 +274,11 @@ failed:
 void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int nblks, dumpblks;	/* size of dump area */
 
 	if (dumpdev == NODEV)
 		goto bad;
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		goto bad;
-	}
-	if (bdev->d_psize == NULL)
-		goto bad;
-	nblks = (*bdev->d_psize)(dumpdev);
+	nblks = bdev_size(dumpdev);
 	if (nblks <= ctod(1))
 		goto bad;
 
@@ -346,9 +332,8 @@ dump_misc_init(void)
 		if (max_paddr < top)
 			max_paddr = top;
 	}
-#ifdef DEBUG
-	printf("dump_misc_init: max_paddr = 0x%lx\n",
-	    (unsigned long)max_paddr);
+#ifdef DUMP_DEBUG
+	printf("dump_misc_init: max_paddr = %#" PRIxPADDR "\n", max_paddr);
 #endif
 
 	sparse_dump_physmap = (void*)uvm_km_alloc(kernel_map,
@@ -615,7 +600,6 @@ cpu_dump_mempagecnt(void)
 static int
 cpu_dump(void)
 {
-	int (*dump)(dev_t, daddr_t, void *, size_t);
 	kcore_seg_t seg;
 	cpu_kcore_hdr_t cpuhdr;
 	const struct bdevsw *bdev;
@@ -623,7 +607,6 @@ cpu_dump(void)
 	bdev = bdevsw_lookup(dumpdev);
 	if (bdev == NULL)
 		return (ENXIO);
-	dump = bdev->d_dump;
 
 	/*
 	 * Generate a segment header.
@@ -636,6 +619,8 @@ cpu_dump(void)
 	 * Add the machine-dependent header info.
 	 */
 	cpuhdr.pdppaddr = PDPpaddr;
+	if (use_pae == 1)
+		cpuhdr.pdppaddr |= I386_KCORE_PAE;
 	cpuhdr.nmemsegs = dump_nmemsegs;
 	(void)dump_header_addbytes(&cpuhdr, ALIGN(sizeof(cpuhdr)));
 
@@ -661,7 +646,7 @@ dumpsys_seg(paddr_t maddr, paddr_t bytes)
 	for (i = 0; i < bytes; i += n, dump_totalbytesleft -= n) {
 		/* Print out how many MBs we have left to go. */
 		if ((dump_totalbytesleft % (1024*1024)) == 0)
-			printf("%lu ", (unsigned long)
+			printf_nolog("%lu ", (unsigned long)
 			    (dump_totalbytesleft / (1024 * 1024)));
 
 		/* Limit size for next transfer. */
@@ -671,7 +656,7 @@ dumpsys_seg(paddr_t maddr, paddr_t bytes)
 
 		for (m = 0; m < n; m += NBPG)
 			pmap_kenter_pa(dumpspace + m, maddr + m,
-			    VM_PROT_READ);
+			    VM_PROT_READ, 0);
 		pmap_update(pmap_kernel());
 
 		error = (*dump)(dumpdev, blkno, (void *)dumpspace, n);

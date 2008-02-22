@@ -1,4 +1,4 @@
-/*	$NetBSD: banner.c,v 1.16 2006/11/22 16:15:42 reed Exp $	*/
+/*	$NetBSD: banner.c,v 1.21 2012/10/13 19:44:36 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993, 1994
@@ -31,21 +31,21 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)banner.c	8.4 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: banner.c,v 1.16 2006/11/22 16:15:42 reed Exp $");
+__RCSID("$NetBSD: banner.c,v 1.21 2012/10/13 19:44:36 dholland Exp $");
 #endif
 #endif /* not lint */
 
 /*
  * banner - prints large signs
- * banner [-w width] [-d] [-t] message ...
+ * banner [-dt] [-w width] [message]
  */
 
 #include <err.h>
@@ -60,7 +60,7 @@ __RCSID("$NetBSD: banner.c,v 1.16 2006/11/22 16:15:42 reed Exp $");
 #define NBYTES 9271
 
 /* Pointers into data_table for each ASCII char */
-const int asc_ptr[NCHARS] = {
+static const int asc_ptr[NCHARS] = {
 /* ^@ */   0,      0,      0,      0,      0,      0,      0,      0,
 /* ^H */   0,      0,      0,      0,      0,      0,      0,      0,
 /* ^P */   0,      0,      0,      0,      0,      0,      0,      0,
@@ -87,7 +87,7 @@ const int asc_ptr[NCHARS] = {
  * is the next elt in array) and goto second
  * next element in array.
  */
-const unsigned char data_table[NBYTES] = {
+static const unsigned char data_table[NBYTES] = {
 /*             0     1     2     3     4     5     6     7     8     9 */
 /*    0 */   129,  227,  130,   34,    6,   90,   19,  129,   32,   10, 
 /*   10 */    74,   40,  129,   31,   12,   64,   53,  129,   30,   14, 
@@ -1019,13 +1019,13 @@ const unsigned char data_table[NBYTES] = {
 /* 9270 */   193
 };
 
-char	line[DWIDTH];
-char	message[MAXMSG];
-char	print[DWIDTH];
-int	debug, i, j, linen, max, nchars, pc, term, trace, x, y;
-int	width = DWIDTH;	/* -w option: scrunch letters to 80 columns */
+static char line[DWIDTH];
+static char message[MAXMSG];
+static char print[DWIDTH];
+static int debug, linen, max, nchars, pc, term, trace;
+static int width = DWIDTH;	/* -w option: scrunch letters to 80 columns */
 
-static void
+__dead static void
 toolong(void)
 {
 	errx(EXIT_FAILURE, "message too long");
@@ -1035,6 +1035,9 @@ int
 main(int argc, char *argv[])
 { 
 	int ch;
+	int i, j, x, y;
+
+	x = y = 0;
 
 	while ((ch = getopt(argc, argv, "w:td")) != -1)
 		switch (ch) {
@@ -1051,7 +1054,7 @@ main(int argc, char *argv[])
 			break;
 		case '?':
 		default:
-			(void)fprintf(stderr, "usage: banner [-w width]\n");
+			(void)fprintf(stderr, "usage: banner [-w width] [message]\n");
 			exit(1);
 		}
 	argc -= optind;

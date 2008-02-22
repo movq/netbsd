@@ -1,4 +1,4 @@
-/* $NetBSD: ixp12x0_intr.c,v 1.17 2008/01/08 02:07:51 matt Exp $ */
+/* $NetBSD: ixp12x0_intr.c,v 1.31 2015/04/08 08:35:54 ozaki-r Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.17 2008/01/08 02:07:51 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.31 2015/04/08 08:35:54 ozaki-r Exp $");
 
 /*
  * Interrupt support for the Intel ixp12x0
@@ -46,15 +39,12 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.17 2008/01/08 02:07:51 matt Exp $
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
-#include <sys/simplelock.h>
 #include <sys/termios.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
+#include <sys/lwp.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
-
-#include <arm/cpufunc.h>
+#include <arm/locore.h>
 
 #include <arm/ixp12x0/ixp12x0reg.h> 
 #include <arm/ixp12x0/ixp12x0var.h> 
@@ -63,68 +53,34 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_intr.c,v 1.17 2008/01/08 02:07:51 matt Exp $
 #include <arm/ixp12x0/ixp12x0_pcireg.h> 
 
 
-extern u_int32_t	ixpcom_cr;	/* current cr from *_com.c */
-extern u_int32_t	ixpcom_imask;	/* tell mask to *_com.c */
+extern uint32_t	ixpcom_cr;	/* current cr from *_com.c */
+extern uint32_t	ixpcom_imask;	/* tell mask to *_com.c */
 
 /* Interrupt handler queues. */
 struct intrq intrq[NIRQ];
 
 /* Interrupts to mask at each level. */
-static u_int32_t imask[NIPL];
-static u_int32_t pci_imask[NIPL];
+static uint32_t imask[NIPL];
+static uint32_t pci_imask[NIPL];
 
 /* Current interrupt priority level. */
-volatile int current_spl_level;
 volatile int hardware_spl_level;
 
 /* Software copy of the IRQs we have enabled. */
-volatile u_int32_t intr_enabled;
-volatile u_int32_t pci_intr_enabled;
+volatile uint32_t intr_enabled;
+volatile uint32_t pci_intr_enabled;
 
-/* Interrupts pending. */
-static volatile int ipending;
+void	ixp12x0_intr_dispatch(struct trapframe *);
 
-#ifdef __HAVE_FAST_SOFTINTS
-/*
- * Map a software interrupt queue index (to the unused bits in the
- * ICU registers -- XXX will need to revisit this if those bits are
- * ever used in future steppings).
- */
-static const u_int32_t si_to_irqbit[SI_NQUEUES] = {
-	IXP12X0_INTR_bit30,		/* SI_SOFT */
-	IXP12X0_INTR_bit29,		/* SI_SOFTCLOCK */
-	IXP12X0_INTR_bit28,		/* SI_SOFTNET */
-	IXP12X0_INTR_bit27,		/* SI_SOFTSERIAL */
-};
+#define IXPREG(reg)	*((volatile uint32_t*) (reg))
 
-#define	INT_SWMASK							\
-	((1U << IXP12X0_INTR_bit30) | (1U << IXP12X0_INTR_bit29) |	\
-	 (1U << IXP12X0_INTR_bit28) | (1U << IXP12X0_INTR_bit27))
-
-#define	SI_TO_IRQBIT(si)	(1U << si_to_irqbit[(si)])
-
-/*
- * Map a software interrupt queue to an interrupt priority level.
- */
-static const int si_to_ipl[] = {
-	[SI_SOFTBIO] =		IPL_SOFTBIO,
-	[SI_SOFTCLOCK] =	IPL_SOFTCLOCK,
-	[SI_SOFTNET] =		IPL_SOFTNET,
-	[SI_SOFTSERIAL] =	IPL_SOFTSERIAL,
-};
-#endif /* __HAVE_FAST_SOFTINTS */
-
-void	ixp12x0_intr_dispatch(struct irqframe *frame);
-
-#define IXPREG(reg)	*((volatile u_int32_t*) (reg))
-
-static inline u_int32_t
+static inline uint32_t
 ixp12x0_irq_read(void)
 {
 	return IXPREG(IXP12X0_IRQ_VBASE) & IXP12X0_INTR_MASK;
 }
 
-static inline u_int32_t
+static inline uint32_t
 ixp12x0_pci_irq_read(void)
 {
 	return IXPREG(IXPPCI_IRQ_STATUS);
@@ -149,7 +105,7 @@ ixp12x0_disable_uart_irq(void)
 }
 
 static void
-ixp12x0_set_intrmask(u_int32_t irqs, u_int32_t pci_irqs)
+ixp12x0_set_intrmask(uint32_t irqs, uint32_t pci_irqs)
 {
 	if (irqs & (1U << IXP12X0_INTR_UART)) {
 		ixp12x0_disable_uart_irq();
@@ -244,59 +200,29 @@ ixp12x0_intr_calculate_masks(void)
 
 	KASSERT(imask[IPL_NONE] == 0);
 	KASSERT(pci_imask[IPL_NONE] == 0);
+	KASSERT(imask[IPL_SOFTCLOCK] == 0);
+	KASSERT(pci_imask[IPL_SOFTCLOCK] == 0);
+	KASSERT(imask[IPL_SOFTBIO] == 0);
+	KASSERT(pci_imask[IPL_SOFTBIO] == 0);
+	KASSERT(imask[IPL_SOFTNET] == 0);
+	KASSERT(pci_imask[IPL_SOFTNET] == 0);
+	KASSERT(imask[IPL_SOFTSERIAL] == 0);
+	KASSERT(pci_imask[IPL_SOFTSERIAL] == 0);
 
-#ifdef __HAVE_FAST_SOFTINTS
-	/*
-	 * Initialize the soft interrupt masks to block themselves.
-	 */
-	imask[IPL_SOFTBIO] = SI_TO_IRQBIT(SI_SOFTBIO);
-	imask[IPL_SOFTCLOCK] = SI_TO_IRQBIT(SI_SOFTCLOCK);
-	imask[IPL_SOFTNET] = SI_TO_IRQBIT(SI_SOFTNET);
-	imask[IPL_SOFTSERIAL] = SI_TO_IRQBIT(SI_SOFTSERIAL);
-#endif
-
-	/*
-	 * splsoftclock() is the only interface that users of the
-	 * generic software interrupt facility have to block their
-	 * soft intrs, so splsoftclock() must also block IPL_SOFT.
-	 */
-	imask[IPL_SOFTCLOCK] |= imask[IPL_SOFTBIO];
-	pci_imask[IPL_SOFTCLOCK] |= pci_imask[IPL_SOFTBIO];
+	KASSERT(imask[IPL_VM] != 0);
+	KASSERT(pci_imask[IPL_VM] != 0);
 
 	/*
-	 * splsoftnet() must also block splsoftclock(), since we don't
-	 * want timer-driven network events to occur while we're
-	 * processing incoming packets.
+	 * splsched() must block anything that uses the scheduler.
 	 */
-	imask[IPL_SOFTNET] |= imask[IPL_SOFTCLOCK];
-	pci_imask[IPL_SOFTNET] |= pci_imask[IPL_SOFTCLOCK];
-
-	/*
-	 * Enforce a hierarchy that gives "slow" device (or devices with
-	 * limited input buffer space/"real-time" requirements) a better
-	 * chance at not dropping data.
-	 */
-	imask[IPL_SOFTSERIAL] |= imask[IPL_SOFTNET];
-	pci_imask[IPL_SOFTSERIAL] |= pci_imask[IPL_SOFTNET];
-
-	/*
-	 * splvm() blocks all interrupts that use the kernel memory
-	 * allocation facilities.
-	 */
-	imask[IPL_VM] |= imask[IPL_SOFTSERIAL];
-	pci_imask[IPL_VM] |= pci_imask[IPL_SOFTSERIAL];
-
-	/*
-	 * splclock() must block anything that uses the scheduler.
-	 */
-	imask[IPL_CLOCK] |= imask[IPL_VM];
-	pci_imask[IPL_CLOCK] |= pci_imask[IPL_VM];
+	imask[IPL_SCHED] |= imask[IPL_VM];
+	pci_imask[IPL_SCHED] |= pci_imask[IPL_VM];
 
 	/*
 	 * splhigh() must block "everything".
 	 */
-	imask[IPL_HIGH] |= imask[IPL_CLOCK];
-	pci_imask[IPL_HIGH] |= pci_imask[IPL_CLOCK];
+	imask[IPL_HIGH] |= imask[IPL_SCHED];
+	pci_imask[IPL_HIGH] |= pci_imask[IPL_SCHED];
 
 	/*
 	 * Now compute which IRQs must be blocked when servicing any
@@ -326,51 +252,13 @@ ixp12x0_intr_calculate_masks(void)
 	}
 }
 
-#ifdef __HAVE_FAST_SOFTINTS
-static void
-ixp12x0_do_pending(void)
-{
-	static __cpu_simple_lock_t processing = __SIMPLELOCK_UNLOCKED;
-	int	new;
-	u_int	oldirqstate;
-
-	if (__cpu_simple_lock_try(&processing) == 0)
-		return;
-
-	new = current_spl_level;
-
-	oldirqstate = disable_interrupts(I32_bit);
-
-#define	DO_SOFTINT(si)							\
-	if ((ipending & ~imask[new]) & SI_TO_IRQBIT(si)) {		\
-		ipending &= ~SI_TO_IRQBIT(si);				\
-		current_spl_level = si_to_ipl[(si)];			\
-		restore_interrupts(oldirqstate);			\
-		softintr_dispatch(si);					\
-		oldirqstate = disable_interrupts(I32_bit);		\
-		current_spl_level = new;				\
-	}
-
-	DO_SOFTINT(SI_SOFTSERIAL);
-	DO_SOFTINT(SI_SOFTNET);
-	DO_SOFTINT(SI_SOFTCLOCK);
-	DO_SOFTINT(SI_SOFT);
-
-	__cpu_simple_unlock(&processing);
-
-	restore_interrupts(oldirqstate);
-}
-#endif
-
 inline void
 splx(int new)
 {
-	int	old;
 	u_int	oldirqstate;
 
 	oldirqstate = disable_interrupts(I32_bit);
-	old = current_spl_level;
-	current_spl_level = new;
+	set_curcpl(new);
 	if (new != hardware_spl_level) {
 		hardware_spl_level = new;
 		ixp12x0_set_intrmask(imask[new], pci_imask[new]);
@@ -378,9 +266,7 @@ splx(int new)
 	restore_interrupts(oldirqstate);
 
 #ifdef __HAVE_FAST_SOFTINTS
-	/* If there are software interrupts to process, do it. */
-	if ((ipending & INT_SWMASK) & ~imask[new])
-		ixp12x0_do_pending();
+	cpu_dosoftints();
 #endif
 }
 
@@ -391,8 +277,8 @@ _splraise(int ipl)
 	u_int	oldirqstate;
 
 	oldirqstate = disable_interrupts(I32_bit);
-	old = current_spl_level;
-	current_spl_level = ipl;
+	old = curcpl();
+	set_curcpl(ipl);
 	restore_interrupts(oldirqstate);
 	return (old);
 }
@@ -400,29 +286,13 @@ _splraise(int ipl)
 int
 _spllower(int ipl)
 {
-	int	old = current_spl_level;
+	int	old = curcpl();
 
 	if (old <= ipl)
 		return (old);
 	splx(ipl);
 	return (old);
 }
-
-#ifdef __HAVE_FAST_SOFTINTS
-void
-_setsoftintr(int si)
-{
-	u_int	oldirqstate;
-
-	oldirqstate = disable_interrupts(I32_bit);
-	ipending |= SI_TO_IRQBIT(si);
-	restore_interrupts(oldirqstate);
-
-	/* Process unmasked pending soft interrupts. */
-	if ((ipending & INT_SWMASK) & ~imask[current_spl_level])
-		ixp12x0_do_pending();
-}
-#endif
 
 /*
  * ixp12x0_intr_init:
@@ -443,11 +313,12 @@ ixp12x0_intr_init(void)
 		iq = &intrq[i];
 		TAILQ_INIT(&iq->iq_list);
 
-		sprintf(iq->iq_name, "ipl %d", i);
+		snprintf(iq->iq_name, sizeof(iq->iq_name), "ipl %d", i);
 		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
 				     NULL, "ixpintr", iq->iq_name);
 	}
-	current_spl_level = 0;
+	curcpu()->ci_intr_depth = 0;
+	curcpu()->ci_cpl = 0;
 	hardware_spl_level = 0;
 
 	ixp12x0_intr_calculate_masks();
@@ -464,7 +335,7 @@ ixp12x0_intr_establish(int irq, int ipl, int (*ih_func)(void *), void *arg)
 	u_int			oldirqstate;
 #ifdef DEBUG
 	printf("ixp12x0_intr_establish(irq=%d, ipl=%d, ih_func=%08x, arg=%08x)\n",
-	       irq, ipl, (u_int32_t) ih_func, (u_int32_t) arg);
+	       irq, ipl, (uint32_t) ih_func, (uint32_t) arg);
 #endif
 	if (irq < 0 || irq > NIRQ)
 		panic("ixp12x0_intr_establish: IRQ %d out of range", ipl);
@@ -505,28 +376,27 @@ ixp12x0_intr_disestablish(void *cookie)
 }
 
 void
-ixp12x0_intr_dispatch(struct irqframe *frame)
+ixp12x0_intr_dispatch(struct trapframe *frame)
 {
 	struct intrq*		iq;
 	struct intrhand*	ih;
+	struct cpu_info* const	ci = curcpu();
+	const int		ppl = ci->ci_cpl;
 	u_int			oldirqstate;
-	int			pcpl;
-	u_int32_t		hwpend;
-	u_int32_t		pci_hwpend;
+	uint32_t		hwpend;
+	uint32_t		pci_hwpend;
 	int			irq;
-	u_int32_t		ibit;
+	uint32_t		ibit;
 
-	pcpl = current_spl_level;
 
 	hwpend = ixp12x0_irq_read();
 	pci_hwpend = ixp12x0_pci_irq_read();
 
-	hardware_spl_level = pcpl;
-	ixp12x0_set_intrmask(imask[pcpl] | hwpend,
-			     pci_imask[pcpl] | pci_hwpend);
+	hardware_spl_level = ppl;
+	ixp12x0_set_intrmask(imask[ppl] | hwpend, pci_imask[ppl] | pci_hwpend);
 
-	hwpend &= ~imask[pcpl];
-	pci_hwpend &= ~pci_imask[pcpl];
+	hwpend &= ~imask[ppl];
+	pci_hwpend &= ~pci_imask[ppl];
 
 	while (hwpend) {
 		irq = ffs(hwpend) - 1;
@@ -534,12 +404,9 @@ ixp12x0_intr_dispatch(struct irqframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		uvmexp.intrs++;
-		for (ih = TAILQ_FIRST(&iq->iq_list); ih != NULL;
-		     ih = TAILQ_NEXT(ih, ih_list)) {
-			int	ipl;
-
-			current_spl_level = ipl = ih->ih_ipl;
+		ci->ci_data.cpu_nintr++;
+		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
+			ci->ci_cpl = ih->ih_ipl;
 			oldirqstate = enable_interrupts(I32_bit);
 			(void) (*ih->ih_func)(ih->ih_arg ? ih->ih_arg : frame);
 			restore_interrupts(oldirqstate);
@@ -552,29 +419,21 @@ ixp12x0_intr_dispatch(struct irqframe *frame)
 
 		iq = &intrq[irq + SYS_NIRQ];
 		iq->iq_ev.ev_count++;
-		uvmexp.intrs++;
-		for (ih = TAILQ_FIRST(&iq->iq_list); ih != NULL;
-		     ih = TAILQ_NEXT(ih, ih_list)) {
-			int	ipl;
-
-			current_spl_level = ipl = ih->ih_ipl;
+		ci->ci_data.cpu_nintr++;
+		TAILQ_FOREACH(ih, &iq->iq_list, ih_list) {
+			ci->ci_cpl = ih->ih_ipl;
 			oldirqstate = enable_interrupts(I32_bit);
 			(void) (*ih->ih_func)(ih->ih_arg ? ih->ih_arg : frame);
 			restore_interrupts(oldirqstate);
-			pci_hwpend &= ~ibit;
 		}
+		pci_hwpend &= ~ibit;
 	}
 
-	current_spl_level = pcpl;
-	hardware_spl_level = pcpl;
-	ixp12x0_set_intrmask(imask[pcpl], pci_imask[pcpl]);
+	ci->ci_cpl = ppl;
+	hardware_spl_level = ppl;
+	ixp12x0_set_intrmask(imask[ppl], pci_imask[ppl]);
 
 #ifdef __HAVE_FAST_SOFTINTS
-	/* Check for pendings soft intrs. */
-	if ((ipending & INT_SWMASK) & ~imask[pcpl]) {
-		oldirqstate = enable_interrupts(I32_bit);
-		ixp12x0_do_pending();
-		restore_interrupts(oldirqstate);
-	}
+	cpu_dosoftints();
 #endif
 }

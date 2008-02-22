@@ -1,4 +1,4 @@
-/* $NetBSD: radlib.c,v 1.9 2006/11/09 17:02:52 christos Exp $ */
+/* $NetBSD: radlib.c,v 1.12 2018/02/05 00:43:06 christos Exp $ */
 
 /*-
  * Copyright 1998 Juniper Networks, Inc.
@@ -30,7 +30,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: /repoman/r/ncvs/src/lib/libradius/radlib.c,v 1.12 2004/06/14 20:55:30 stefanf Exp $");
 #else
-__RCSID("$NetBSD: radlib.c,v 1.9 2006/11/09 17:02:52 christos Exp $");
+__RCSID("$NetBSD: radlib.c,v 1.12 2018/02/05 00:43:06 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -83,16 +83,16 @@ __RCSID("$NetBSD: radlib.c,v 1.9 2006/11/09 17:02:52 christos Exp $");
 static void	 clear_password(struct rad_handle *);
 static void	 generr(struct rad_handle *, const char *, ...)
 		    __printflike(2, 3);
-static void	 insert_scrambled_password(struct rad_handle *, int);
-static void	 insert_request_authenticator(struct rad_handle *, int);
-static void	 insert_message_authenticator(struct rad_handle *, int);
-static int	 is_valid_response(struct rad_handle *, int,
+static void	 insert_scrambled_password(struct rad_handle *, size_t);
+static void	 insert_request_authenticator(struct rad_handle *, size_t);
+static void	 insert_message_authenticator(struct rad_handle *, size_t);
+static int	 is_valid_response(struct rad_handle *, size_t,
 		    const struct sockaddr_in *);
 static int	 put_password_attr(struct rad_handle *, int,
 		    const void *, size_t);
 static int	 put_raw_attr(struct rad_handle *, int,
 		    const void *, size_t);
-static int	 split(char *, const char *[], size_t, char *, size_t);
+static size_t	 split(char *, const char *[], size_t, char *, size_t);
 
 static void
 clear_password(struct rad_handle *h)
@@ -115,7 +115,7 @@ generr(struct rad_handle *h, const char *format, ...)
 }
 
 static void
-insert_scrambled_password(struct rad_handle *h, int srv)
+insert_scrambled_password(struct rad_handle *h, size_t srv)
 {
 	MD5_CTX ctx;
 	unsigned char md5[MD5_DIGEST_LENGTH];
@@ -149,7 +149,7 @@ insert_scrambled_password(struct rad_handle *h, int srv)
 }
 
 static void
-insert_request_authenticator(struct rad_handle *h, int srv)
+insert_request_authenticator(struct rad_handle *h, size_t srv)
 {
 	MD5_CTX ctx;
 	const struct rad_server *srvp;
@@ -171,26 +171,25 @@ insert_request_authenticator(struct rad_handle *h, int srv)
 
 static void
 /*ARGSUSED*/
-insert_message_authenticator(struct rad_handle *h, int srv)
+insert_message_authenticator(struct rad_handle *h, size_t srv)
 {
 #ifdef WITH_SSL
 	u_char md[EVP_MAX_MD_SIZE];
 	u_int md_len;
 	const struct rad_server *srvp;
-	HMAC_CTX ctx;
+	HMAC_CTX *ctx;
 	srvp = &h->servers[srv];
 
 	if (h->authentic_pos != 0) {
-		HMAC_CTX_init(&ctx);
-		HMAC_Init(&ctx, srvp->secret,
-		    (int)strlen(srvp->secret), EVP_md5());
-		HMAC_Update(&ctx, &h->request[POS_CODE], (size_t)(POS_AUTH - POS_CODE));
-		HMAC_Update(&ctx, &h->request[POS_AUTH], (size_t)LEN_AUTH);
-		HMAC_Update(&ctx, &h->request[POS_ATTRS],
+		ctx = HMAC_CTX_new();
+		HMAC_Init_ex(ctx, srvp->secret,
+		    (int)strlen(srvp->secret), EVP_md5(), NULL);
+		HMAC_Update(ctx, &h->request[POS_CODE], (size_t)(POS_AUTH - POS_CODE));
+		HMAC_Update(ctx, &h->request[POS_AUTH], (size_t)LEN_AUTH);
+		HMAC_Update(ctx, &h->request[POS_ATTRS],
 		    (size_t)(h->req_len - POS_ATTRS));
-		HMAC_Final(&ctx, md, &md_len);
-		HMAC_CTX_cleanup(&ctx);
-		HMAC_cleanup(&ctx);
+		HMAC_Final(ctx, md, &md_len);
+		HMAC_CTX_free(ctx);
 		(void)memcpy(&h->request[h->authentic_pos + 2], md,
 		    (size_t)md_len);
 	}
@@ -202,17 +201,17 @@ insert_message_authenticator(struct rad_handle *h, int srv)
  * specified server.
  */
 static int
-is_valid_response(struct rad_handle *h, int srv,
+is_valid_response(struct rad_handle *h, size_t srv,
     const struct sockaddr_in *from)
 {
 	MD5_CTX ctx;
 	unsigned char md5[MD5_DIGEST_LENGTH];
 	const struct rad_server *srvp;
-	int len;
+	size_t len;
 #ifdef WITH_SSL
-	HMAC_CTX hctx;
+	HMAC_CTX *hctx;
 	u_char resp[MSGSIZE], md[EVP_MAX_MD_SIZE];
-	int pos;
+	size_t pos;
 	u_int md_len;
 #endif
 
@@ -263,18 +262,17 @@ is_valid_response(struct rad_handle *h, int srv,
 				(void)memset(&resp[pos + 2], 0,
 				    (size_t)MD5_DIGEST_LENGTH);
 
-				HMAC_CTX_init(&hctx);
-				HMAC_Init(&hctx, srvp->secret,
-				    (int)strlen(srvp->secret), EVP_md5());
-				HMAC_Update(&hctx, &h->response[POS_CODE],
+				hctx = HMAC_CTX_new();
+				HMAC_Init_ex(hctx, srvp->secret,
+				    (int)strlen(srvp->secret), EVP_md5(), NULL);
+				HMAC_Update(hctx, &h->response[POS_CODE],
 				    (size_t)(POS_AUTH - POS_CODE));
-				HMAC_Update(&hctx, &h->request[POS_AUTH],
+				HMAC_Update(hctx, &h->request[POS_AUTH],
 				    (size_t)LEN_AUTH);
-				HMAC_Update(&hctx, &resp[POS_ATTRS],
+				HMAC_Update(hctx, &resp[POS_ATTRS],
 				    (size_t)(h->resp_len - POS_ATTRS));
-				HMAC_Final(&hctx, md, &md_len);
-				HMAC_CTX_cleanup(&hctx);
-				HMAC_cleanup(&hctx);
+				HMAC_Final(hctx, md, &md_len);
+				HMAC_CTX_free(hctx);
 				if (memcmp(md, &h->response[pos + 2],
 				    (size_t)MD5_DIGEST_LENGTH) != 0)
 					return 0;
@@ -388,7 +386,7 @@ rad_add_server(struct rad_handle *h, const char *host, int port,
 void
 rad_close(struct rad_handle *h)
 {
-	int srv;
+	size_t srv;
 
 	if (h->fd != -1)
 		close(h->fd);
@@ -420,7 +418,7 @@ rad_config(struct rad_handle *h, const char *path)
 	while (fgets(buf, (int)sizeof buf, fp) != NULL) {
 		size_t len;
 		const char *fields[5];
-		int nfields;
+		size_t nfields;
 		char msg[ERRSIZE];
 		const char *type;
 		const char *host;
@@ -452,9 +450,10 @@ rad_config(struct rad_handle *h, const char *path)
 		buf[len - 1] = '\0';
 
 		/* Extract the fields from the line. */
+		msg[0] = '\0';
 		nfields = split(buf, fields, sizeof(fields) / sizeof(fields[0]),
 		    msg, sizeof msg);
-		if (nfields == -1) {
+		if (msg[0] != '\0') {
 			generr(h, "%s:%d: %s", path, linenum, msg);
 			retval = -1;
 			break;
@@ -709,7 +708,7 @@ rad_get_attr(struct rad_handle *h, const void **value, size_t *len)
 int
 rad_init_send_request(struct rad_handle *h, int *fd, struct timeval *tv)
 {
-	int srv;
+	size_t srv;
 
 	/* Make sure we have a socket to use */
 	if (h->fd == -1) {
@@ -986,14 +985,15 @@ rad_strerror(struct rad_handle *h)
  * The return value is the actual number of fields parsed, and is always
  * <= maxfields.
  *
- * On a syntax error, places a message in the msg string, and returns -1.
+ * On a syntax error, places a message in the msg string, and returns
+ * SIZE_MAX.
  */
-static int
+static size_t
 split(char *str, const char *fields[], size_t maxfields, char *msg,
     size_t msglen)
 {
 	char *p;
-	int i;
+	size_t i;
 	static const char ws[] = " \t";
 
 	for (i = 0;  i < maxfields;  i++)
@@ -1006,7 +1006,7 @@ split(char *str, const char *fields[], size_t maxfields, char *msg,
 			break;
 		if (i >= maxfields) {
 			snprintf(msg, msglen, "line has too many fields");
-			return -1;
+			return SIZE_MAX;
 		}
 		if (*p == '"') {
 			char *dst;
@@ -1020,13 +1020,13 @@ split(char *str, const char *fields[], size_t maxfields, char *msg,
 					    *p != '\0') {
 						snprintf(msg, msglen,
 						    "invalid `\\' escape");
-						return -1;
+						return SIZE_MAX;
 					}
 				}
 				if (*p == '\0') {
 					snprintf(msg, msglen,
 					    "unterminated quoted string");
-					return -1;
+					return SIZE_MAX;
 				}
 				*dst++ = *p++;
 			}
@@ -1035,12 +1035,12 @@ split(char *str, const char *fields[], size_t maxfields, char *msg,
 			if (*fields[i] == '\0') {
 				snprintf(msg, msglen,
 				    "empty quoted string not permitted");
-				return -1;
+				return SIZE_MAX;
 			}
 			if (*p != '\0' && strspn(p, ws) == 0) {
 				snprintf(msg, msglen, "quoted string not"
 				    " followed by white space");
-				return -1;
+				return SIZE_MAX;
 			}
 		} else {
 			fields[i] = p;

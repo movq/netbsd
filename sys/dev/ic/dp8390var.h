@@ -1,4 +1,4 @@
-/*	$NetBSD: dp8390var.h,v 1.28 2007/03/04 06:01:54 christos Exp $	*/
+/*	$NetBSD: dp8390var.h,v 1.33 2015/04/13 16:33:24 riastradh Exp $	*/
 
 /*
  * Device driver for National Semiconductor DS8390/WD83C690 based ethernet
@@ -13,10 +13,7 @@
  * the author assume any responsibility for damages incurred with its use.
  */
 
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 /*
  * We include MII glue here -- some DP8390 compatible chips have
@@ -30,7 +27,7 @@
  * dp8390_softc: per line info and status
  */
 struct dp8390_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 	void	*sc_ih;
 	int	sc_flags;		/* interface flags, from config */
 
@@ -71,9 +68,7 @@ struct dp8390_softc {
 
 	int	sc_enabled;	/* boolean; power enabled on interface */
 
-#if NRND > 0
-	rndsource_element_t rnd_source; /* random source */
-#endif
+	krndsource_t rnd_source; /* random source */
 
 	int	(*test_mem)(struct dp8390_softc *);
 	void	(*init_card)(struct dp8390_softc *);
@@ -176,7 +171,7 @@ void	dp8390_read(struct dp8390_softc *, int, u_short);
 int	dp8390_enable(struct dp8390_softc *);
 void	dp8390_disable(struct dp8390_softc *);
 
-int	dp8390_activate(struct device *, enum devact);
+int	dp8390_activate(device_t, enum devact);
 
 int	dp8390_detach(struct dp8390_softc *, int);
 

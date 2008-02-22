@@ -1,4 +1,4 @@
-/*	$NetBSD: ms.c,v 1.34 2007/12/28 20:49:49 joerg Exp $ */
+/*	$NetBSD: ms.c,v 1.39 2014/07/25 08:10:31 dholland Exp $ */
 
 /*
  * based on:
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.34 2007/12/28 20:49:49 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.39 2014/07/25 08:10:31 dholland Exp $");
 
 /*
  * Mouse driver.
@@ -85,8 +85,8 @@ __KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.34 2007/12/28 20:49:49 joerg Exp $");
 #include <dev/wscons/wsconsio.h>
 #endif
 
-void msattach(struct device *, struct device *, void *);
-int msmatch(struct device *, struct cfdata *, void *);
+void msattach(device_t, device_t, void *);
+int msmatch(device_t, cfdata_t, void *);
 
 /* per-port state */
 struct ms_port {
@@ -103,7 +103,7 @@ struct ms_port {
 	volatile int ms_ready;	   /* event queue is ready */
 	struct	evvar ms_events;   /* event queue state */
 #if NWSMOUSE > 0
-	struct device *ms_wsmousedev; /* wsmouse device */
+	device_t ms_wsmousedev; /* wsmouse device */
 	int     ms_wsenabled;      /* feeding events to wscons */
 #endif
 };
@@ -111,11 +111,10 @@ struct ms_port {
 #define	MS_NPORTS	2
 
 struct ms_softc {
-	struct device sc_dev;		/* base device */
 	struct ms_port sc_ports[MS_NPORTS];
 };
 
-CFATTACH_DECL(ms, sizeof(struct ms_softc),
+CFATTACH_DECL_NEW(ms, sizeof(struct ms_softc),
     msmatch, msattach, NULL, NULL);
 
 void msintr(void *);
@@ -132,8 +131,18 @@ dev_type_poll(mspoll);
 dev_type_kqfilter(mskqfilter);
 
 const struct cdevsw ms_cdevsw = {
-	msopen, msclose, msread, nowrite, msioctl,
-	nostop, notty, mspoll, nommap, mskqfilter,
+	.d_open = msopen,
+	.d_close = msclose,
+	.d_read = msread,
+	.d_write = nowrite,
+	.d_ioctl = msioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = mspoll,
+	.d_mmap = nommap,
+	.d_kqfilter = mskqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 #define	MS_UNIT(d)	((minor(d) & ~0x1) >> 1)
@@ -162,12 +171,12 @@ static struct wsmouse_accessops ms_wscons_accessops = {
 #endif
 
 int
-msmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+msmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	static int ms_matched = 0;
 
 	/* Allow only one instance. */
-	if (!matchname((char *)auxp, "ms") || ms_matched)
+	if (!matchname((char *)aux, "ms") || ms_matched)
 		return 0;
 
 	ms_matched = 1;
@@ -175,12 +184,12 @@ msmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 }
 
 void
-msattach(struct device *pdp, struct device *dp, void *auxp)
+msattach(device_t parent, device_t self, void *aux)
 {
 #if NWSMOUSE > 0
 	struct wsmousedev_attach_args waa;
 #endif
-	struct ms_softc *sc = (void *) dp;
+	struct ms_softc *sc = device_private(self);
 	int i;
 
 	printf("\n");
@@ -193,7 +202,7 @@ msattach(struct device *pdp, struct device *dp, void *auxp)
 		
 		sc->sc_ports[i].ms_wsenabled = 0;
 		sc->sc_ports[i].ms_wsmousedev = 
-		    config_found(dp, &waa, wsmousedevprint);
+		    config_found(self, &waa, wsmousedevprint);
 #endif
 	}
 }
@@ -355,7 +364,7 @@ msintr(void *arg)
 			d = to_one[d - 1];	/* from 1..7 to {1,2,4} */
 			fe->id = to_id[d - 1];	/* from {1,2,4} to ID */
 			fe->value = mb & d ? VKEY_DOWN : VKEY_UP;
-			getmicrotime(&fe->time);
+			firm_gettime(fe);
 			fe++;
 
 			if (put >= EV_QSIZE) {
@@ -374,7 +383,7 @@ msintr(void *arg)
 
 			fe->id = LOC_X_DELTA;
 			fe->value = ms->ms_dx;
-			getmicrotime(&fe->time);
+			firm_gettime(fe);
 			fe++;
 
 			if (put >= EV_QSIZE) {
@@ -393,7 +402,7 @@ msintr(void *arg)
 
 			fe->id = LOC_Y_DELTA;
 			fe->value = ms->ms_dy;
-			getmicrotime(&fe->time);
+			firm_gettime(fe);
 			fe++;
 
 			if (put >= EV_QSIZE) {
@@ -523,9 +532,7 @@ mspoll(dev_t dev, int events, struct lwp *l)
 }
 
 int
-mskqfilter(dev, kn)
-	dev_t dev;
-	struct knote *kn;
+mskqfilter(dev_t dev, struct knote *kn)
 {
 	struct ms_port *ms;
 

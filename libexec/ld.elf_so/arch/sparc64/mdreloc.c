@@ -1,4 +1,4 @@
-/*	$NetBSD: mdreloc.c,v 1.41 2007/02/23 01:17:11 matt Exp $	*/
+/*	$NetBSD: mdreloc.c,v 1.69 2018/04/03 21:10:27 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2000 Eduardo Horvath.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,15 +32,16 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.41 2007/02/23 01:17:11 matt Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.69 2018/04/03 21:10:27 joerg Exp $");
 #endif /* not lint */
+
+#include <machine/elf_support.h>
 
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/stat.h>
 
 #include "rtldenv.h"
 #include "debug.h"
@@ -75,7 +69,7 @@ __RCSID("$NetBSD: mdreloc.c,v 1.41 2007/02/23 01:17:11 matt Exp $");
 #define _RF_U		0x04000000		/* Unaligned */
 #define _RF_SZ(s)	(((s) & 0xff) << 8)	/* memory target size */
 #define _RF_RS(s)	( (s) & 0xff)		/* right shift */
-static const int reloc_target_flags[] = {
+static const int reloc_target_flags[R_TYPE(TLS_TPOFF64)+1] = {
 	0,							/* NONE */
 	_RF_S|_RF_A|		_RF_SZ(8)  | _RF_RS(0),		/* RELOC_8 */
 	_RF_S|_RF_A|		_RF_SZ(16) | _RF_RS(0),		/* RELOC_16 */
@@ -133,6 +127,7 @@ static const int reloc_target_flags[] = {
 	_RF_S|_RF_A|		_RF_SZ(64) | _RF_RS(0),		/* REGISTER */
 	_RF_S|_RF_A|	_RF_U|	_RF_SZ(64) | _RF_RS(0),		/* UA64 */
 	_RF_S|_RF_A|	_RF_U|	_RF_SZ(16) | _RF_RS(0),		/* UA16 */
+/* TLS relocs not represented here! */
 };
 
 #ifdef RTLD_DEBUG_RELOC
@@ -147,7 +142,13 @@ static const char *reloc_names[] = {
 	"HM10", "LM22", "PC_HH22", "PC_HM10", "PC_LM22", 
 	"WDISP16", "WDISP19", "GLOB_JMP", "7", "5", "6",
 	"DISP64", "PLT64", "HIX22", "LOX10", "H44", "M44", 
-	"L44", "REGISTER", "UA64", "UA16"
+	"L44", "REGISTER", "UA64", "UA16",
+	"TLS_GD_HI22", "TLS_GD_LO10", "TLS_GD_ADD", "TLS_GD_CALL",
+	"TLS_LDM_HI22", "TLS_LDM_LO10", "TLS_LDM_ADD", "TLS_LDM_CALL",
+	"TLS_LDO_HIX22", "TLS_LDO_LOX10", "TLS_LDO_ADD", "TLS_IE_HI22", 
+	"TLS_IE_LO10", "TLS_IE_LD", "TLS_IE_LDX", "TLS_IE_ADD", "TLS_LE_HIX22", 
+	"TLS_LE_LOX10", "TLS_DTPMOD32", "TLS_DTPMOD64", "TLS_DTPOFF32", 
+	"TLS_DTPOFF64", "TLS_TPOFF32", "TLS_TPOFF64",
 };
 #endif
 
@@ -158,6 +159,7 @@ static const char *reloc_names[] = {
 #define RELOC_USE_ADDEND(t)		((reloc_target_flags[t] & _RF_A) != 0)
 #define RELOC_TARGET_SIZE(t)		((reloc_target_flags[t] >> 8) & 0xff)
 #define RELOC_VALUE_RIGHTSHIFT(t)	(reloc_target_flags[t] & 0xff)
+#define RELOC_TLS(t)			(t >= R_TYPE(TLS_GD_HI22))
 
 static const long reloc_target_bitmask[] = {
 #define _BM(x)	(~(-(1ULL << (x))))
@@ -170,20 +172,20 @@ static const long reloc_target_bitmask[] = {
 	_BM(10), _BM(13), _BM(22),	/* GOT10, GOT13, GOT22 */
 	_BM(10), _BM(22),		/* _PC10, _PC22 */  
 	_BM(30), 0,			/* _WPLT30, _COPY */
-	_BM(32), _BM(32), _BM(32),	/* _GLOB_DAT, JMP_SLOT, _RELATIVE */
+	-1, _BM(32), -1,		/* _GLOB_DAT, JMP_SLOT, _RELATIVE */
 	_BM(32), _BM(32),		/* _UA32, PLT32 */
 	_BM(22), _BM(10),		/* _HIPLT22, LOPLT10 */
 	_BM(32), _BM(22), _BM(10),	/* _PCPLT32, _PCPLT22, _PCPLT10 */
 	_BM(10), _BM(11), -1,		/* _10, _11, _64 */
-	_BM(10), _BM(22),		/* _OLO10, _HH22 */
+	_BM(13), _BM(22),		/* _OLO10, _HH22 */
 	_BM(10), _BM(22),		/* _HM10, _LM22 */
 	_BM(22), _BM(10), _BM(22),	/* _PC_HH22, _PC_HM10, _PC_LM22 */
 	_BM(16), _BM(19),		/* _WDISP16, _WDISP19 */
 	-1,				/* GLOB_JMP */
-	_BM(7), _BM(5), _BM(6)		/* _7, _5, _6 */
+	_BM(7), _BM(5), _BM(6),		/* _7, _5, _6 */
 	-1, -1,				/* DISP64, PLT64 */
 	_BM(22), _BM(13),		/* HIX22, LOX10 */
-	_BM(22), _BM(10), _BM(13),	/* H44, M44, L44 */
+	_BM(22), _BM(10), _BM(12),	/* H44, M44, L44 */
 	-1, -1, _BM(16),		/* REGISTER, UA64, UA16 */
 #undef _BM
 };
@@ -192,18 +194,6 @@ static const long reloc_target_bitmask[] = {
 /*
  * Instruction templates:
  */
-#define	BAA	0x10400000	/*	ba,a	%xcc, 0 */
-#define	SETHI	0x03000000	/*	sethi	%hi(0), %g1 */
-#define	JMP	0x81c06000	/*	jmpl	%g1+%lo(0), %g0 */
-#define	NOP	0x01000000	/*	sethi	%hi(0), %g0 */
-#define	OR	0x82806000	/*	or	%g1, 0, %g1 */
-#define	XOR	0x82c06000	/*	xor	%g1, 0, %g1 */
-#define	MOV71	0x8283a000	/*	or	%o7, 0, %g1 */
-#define	MOV17	0x9c806000	/*	or	%g1, 0, %o7 */
-#define	CALL	0x40000000	/*	call	0 */
-#define	SLLX	0x8b407000	/*	sllx	%g1, 0, %g1 */
-#define	SETHIG5	0x0b000000	/*	sethi	%hi(0), %g5 */
-#define	ORG5	0x82804005	/*	or	%g1, %g5, %g1 */
 
 
 /* %hi(v)/%lo(v) with variable shift */
@@ -296,7 +286,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 			break;
 		}
 	}
-	relalim = (const Elf_Rela *)((caddr_t)rela + relasz);
+	relalim = (const Elf_Rela *)((const uint8_t *)rela + relasz);
 	for (; rela < relalim; rela++) {
 		where = (Elf_Addr *)(relocbase + rela->r_offset);
 		*where = (Elf_Addr)(relocbase + rela->r_addend);
@@ -304,28 +294,41 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 }
 
 int
-_rtld_relocate_nonplt_objects(const Obj_Entry *obj)
+_rtld_relocate_nonplt_objects(Obj_Entry *obj)
 {
 	const Elf_Rela *rela;
 	const Elf_Sym *def = NULL;
 	const Obj_Entry *defobj = NULL;
+	unsigned long last_symnum = ULONG_MAX;
 
 	for (rela = obj->rela; rela < obj->relalim; rela++) {
 		Elf_Addr *where;
 		Elf_Word type;
 		Elf_Addr value = 0, mask;
-		unsigned long	 symnum;
+		unsigned long symnum;
 
 		where = (Elf_Addr *) (obj->relocbase + rela->r_offset);
-		symnum = ELF_R_SYM(rela->r_info);
 
 		type = ELF_R_TYPE(rela->r_info);
 		if (type == R_TYPE(NONE))
 			continue;
 
+		/* OLO10 relocations have extra info */
+		if ((type & 0x00ff) == R_SPARC_OLO10)
+			type = R_SPARC_OLO10;
+
 		/* We do JMP_SLOTs in _rtld_bind() below */
 		if (type == R_TYPE(JMP_SLOT))
 			continue;
+
+		/* IFUNC relocations are handled in _rtld_call_ifunc */
+		if (type == R_TYPE(IRELATIVE)) {
+			if (obj->ifunc_remaining_nonplt == 0) {
+				obj->ifunc_remaining_nonplt =
+				    obj->relalim - rela;
+			}
+			continue;
+		}
 
 		/* COPY relocs are also handled elsewhere */
 		if (type == R_TYPE(COPY))
@@ -333,12 +336,68 @@ _rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 
 		/*
 		 * We use the fact that relocation types are an `enum'
-		 * Note: R_SPARC_UA16 is currently numerically largest.
+		 * Note: R_SPARC_TLS_TPOFF64 is currently numerically largest.
 		 */
-		if (type > R_TYPE(UA16))
-			return (-1);
+		if (type > R_TYPE(TLS_TPOFF64)) {
+			dbg(("unknown relocation type %x at %p", type, rela));
+			return -1;
+		}
 
 		value = rela->r_addend;
+
+		if (RELOC_RESOLVE_SYMBOL(type) || RELOC_TLS(type)) {
+			symnum = ELF_R_SYM(rela->r_info);
+			if (last_symnum != symnum) {
+				last_symnum = symnum;
+				def = _rtld_find_symdef(symnum, obj, &defobj,
+				    false);
+				if (def == NULL)
+					return -1;
+			}
+		}
+
+		/*
+		 * Handle TLS relocations here, they are different.
+		 */
+		if (RELOC_TLS(type)) {
+			switch (type) {
+			case R_TYPE(TLS_DTPMOD64):
+				*where = (Elf64_Addr)defobj->tlsindex;
+
+				rdbg(("TLS_DTPMOD64 %s in %s --> %p",
+				    obj->strtab +
+				    obj->symtab[symnum].st_name,
+				    obj->path, (void *)*where));
+
+				break;
+
+			case R_TYPE(TLS_DTPOFF64):
+				*where = (Elf64_Addr)(def->st_value
+				    + rela->r_addend);
+
+				rdbg(("DTPOFF64 %s in %s --> %p",
+				    obj->strtab +
+				        obj->symtab[symnum].st_name,
+				    obj->path, (void *)*where));
+
+				break;
+
+			case R_TYPE(TLS_TPOFF64):
+				if (!defobj->tls_done &&
+					_rtld_tls_offset_allocate(obj))
+					     return -1;
+
+				*where = (Elf64_Addr)(def->st_value -
+				    defobj->tlsoffset + rela->r_addend);
+
+				rdbg(("TLS_TPOFF64 %s in %s --> %p",
+				    obj->strtab + obj->symtab[symnum].st_name,
+				    obj->path, (void *)*where));
+
+				break;
+			}
+			continue;
+		}
 
 		/*
 		 * Handle relative relocs here, as an optimization.
@@ -351,15 +410,13 @@ _rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 		}
 
 		if (RELOC_RESOLVE_SYMBOL(type)) {
-
-			/* Find the symbol */
-			def = _rtld_find_symdef(symnum, obj, &defobj,
-			    false);
-			if (def == NULL)
-				return -1;
-
 			/* Add in the symbol's absolute address */
 			value += (Elf_Addr)(defobj->relocbase + def->st_value);
+		}
+
+		if (type == R_SPARC_OLO10) {
+			value = (value & 0x3ff)
+			    + (((Elf64_Xword)rela->r_info<<32)>>40);
 		}
 
 		if (RELOC_PC_RELATIVE(type)) {
@@ -446,9 +503,16 @@ _rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 }
 
 int
-_rtld_relocate_plt_lazy(const Obj_Entry *obj)
+_rtld_relocate_plt_lazy(Obj_Entry *obj)
 {
-	return (0);
+	const Elf_Rela *rela;
+
+	for (rela = obj->pltrelalim; rela-- > obj->pltrela; ) {
+		if (ELF_R_TYPE(rela->r_info) == R_TYPE(JMP_IREL))
+			obj->ifunc_remaining = obj->pltrelalim - rela + 1;
+	}
+
+	return 0;
 }
 
 caddr_t
@@ -460,7 +524,8 @@ _rtld_bind(const Obj_Entry *obj, Elf_Word reloff)
 
 	result = 0;	/* XXX gcc */
 
-	if (ELF_R_TYPE(obj->pltrela->r_info) == R_TYPE(JMP_SLOT)) {
+	if (ELF_R_TYPE(obj->pltrela->r_info) == R_TYPE(JMP_SLOT) ||
+	    ELF_R_TYPE(obj->pltrela->r_info) == R_TYPE(JMP_IREL)) {
 		/*
 		 * XXXX
 		 *
@@ -473,15 +538,18 @@ _rtld_bind(const Obj_Entry *obj, Elf_Word reloff)
 		 * 
 		 * So, to provide binary compatibility, we will check the first
 		 * entry, if it is reserved it should not be of the type
-		 * JMP_SLOT.  If it is JMP_SLOT, then the 4 reserved entries
-		 * were not generated and our index is 4 entries too far.
+		 * JMP_SLOT or JMP_REL.  If it is either of those, then
+		 * the 4 reserved entries were not generated and our index
+		 * is 4 entries too far.
 		 */
 		rela -= 4;
 	}
 
+	_rtld_shared_enter();
 	err = _rtld_relocate_plt_object(obj, rela, &result);
 	if (err)
 		_rtld_die();
+	_rtld_shared_exit();
 
 	return (caddr_t)result;
 }
@@ -497,7 +565,8 @@ _rtld_relocate_plt_objects(const Obj_Entry *obj)
 	 * Check for first four reserved entries - and skip them.
 	 * See above for details.
 	 */
-	if (ELF_R_TYPE(obj->pltrela->r_info) != R_TYPE(JMP_SLOT))
+	if (ELF_R_TYPE(obj->pltrela->r_info) != R_TYPE(JMP_SLOT) &&
+	    ELF_R_TYPE(obj->pltrela->r_info) != R_TYPE(JMP_IREL))
 		rela += 4;
 
 	for (; rela < obj->pltrelalim; rela++)
@@ -507,231 +576,59 @@ _rtld_relocate_plt_objects(const Obj_Entry *obj)
 	return 0;
 }
 
+static inline void
+_rtld_write_plt(Elf_Word *where, Elf_Addr value, const Elf_Rela *rela,
+    const Obj_Entry *obj)
+{
+	if (rela && rela->r_addend) {
+		Elf_Addr *ptr = (Elf_Addr *)where;
+		/*
+		 * This entry is >= 32768.  The relocations points to a
+		 * PC-relative pointer to the bind_0 stub at the top of the
+		 * PLT section.  Update it to point to the target function.
+		 */
+		ptr[0] += value - (Elf_Addr)obj->pltgot;
+	} else {
+		sparc_write_branch(where + 1, (void *)value);
+	}
+}
+
 /*
  * New inline function that is called by _rtld_relocate_plt_object and
  * _rtld_bind
  */
 static inline int
-_rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *tp)
+_rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela,
+    Elf_Addr *tp)
 {
 	Elf_Word *where = (Elf_Word *)(obj->relocbase + rela->r_offset);
 	const Elf_Sym *def;
 	const Obj_Entry *defobj;
-	Elf_Addr value, offset;
+	Elf_Addr value;
+	unsigned long info = rela->r_info;
 
-	/* Fully resolve procedure addresses now */
+	if (ELF_R_TYPE(info) == R_TYPE(JMP_IREL))
+		return 0;
 
-	assert(ELF_R_TYPE(rela->r_info) == R_TYPE(JMP_SLOT));
+	assert(ELF_R_TYPE(info) == R_TYPE(JMP_SLOT));
 
-	def = _rtld_find_symdef(ELF_R_SYM(rela->r_info), obj, &defobj, true);
-	if (def == NULL)
+	def = _rtld_find_plt_symdef(ELF_R_SYM(info), obj, &defobj, tp != NULL);
+	if (__predict_false(def == NULL))
 		return -1;
+	if (__predict_false(def == &_rtld_sym_zero))
+		return 0;
 
-	value = (Elf_Addr)(defobj->relocbase + def->st_value);
-	rdbg(("bind now/fixup in %s --> new=%p", 
-	    defobj->strtab + def->st_name, (void *)value));
-
-	/*
-	 * At the PLT entry pointed at by `where', we now construct
-	 * a direct transfer to the now fully resolved function
-	 * address.
-	 *
-	 * A PLT entry is supposed to start by looking like this:
-	 *
-	 *	sethi	%hi(. - .PLT0), %g1
-	 *	ba,a	%xcc, .PLT1
-	 *	nop
-	 *	nop
-	 *	nop
-	 *	nop
-	 *	nop
-	 *	nop
-	 *
-	 * When we replace these entries we start from the second
-	 * entry and do it in reverse order so the last thing we
-	 * do is replace the branch.  That allows us to change this
-	 * atomically.
-	 *
-	 * We now need to find out how far we need to jump.  We
-	 * have a choice of several different relocation techniques
-	 * which are increasingly expensive.
-	 */
-
-	offset = ((Elf_Addr)where) - value;
-	if (rela->r_addend) {
-		Elf_Addr *ptr = (Elf_Addr *)where;
-		/*
-		 * This entry is >=32768.  The relocations points to a
-		 * PC-relative pointer to the bind_0 stub at the top of the
-		 * PLT section.  Update it to point to the target function.
-		 */
-		ptr[0] += value - (Elf_Addr)obj->pltgot;
-
-	} else if (offset <= (1L<<20) && offset >= -(1L<<20)) {
-		/* 
-		 * We're within 1MB -- we can use a direct branch insn.
-		 *
-		 * We can generate this pattern:
-		 *
-		 *	sethi	%hi(. - .PLT0), %g1
-		 *	ba,a	%xcc, addr
-		 *	nop
-		 *	nop
-		 *	nop
-		 *	nop
-		 *	nop
-		 *	nop
-		 *
-		 */
-		where[1] = BAA | ((offset >> 2) &0x3fffff);
-		__asm volatile("iflush %0+4" : : "r" (where));
-	} else if (value >= 0 && value < (1L<<32)) {
-		/* 
-		 * We're within 32-bits of address zero.
-		 *
-		 * The resulting code in the jump slot is:
-		 *
-		 *	sethi	%hi(. - .PLT0), %g1
-		 *	sethi	%hi(addr), %g1
-		 *	jmp	%g1+%lo(addr)
-		 *	nop
-		 *	nop
-		 *	nop
-		 *	nop
-		 *	nop
-		 *
-		 */
-		where[2] = JMP   | LOVAL(value, 0);
-		where[1] = SETHI | HIVAL(value, 10);
-		__asm volatile("iflush %0+8" : : "r" (where));
-		__asm volatile("iflush %0+4" : : "r" (where));
-
-	} else if (value <= 0 && value > -(1L<<32)) {
-		/* 
-		 * We're within 32-bits of address -1.
-		 *
-		 * The resulting code in the jump slot is:
-		 *
-		 *	sethi	%hi(. - .PLT0), %g1
-		 *	sethi	%hix(addr), %g1
-		 *	xor	%g1, %lox(addr), %g1
-		 *	jmp	%g1
-		 *	nop
-		 *	nop
-		 *	nop
-		 *	nop
-		 *
-		 */
-		where[3] = JMP;
-		where[2] = XOR | ((~value) & 0x00001fff);
-		where[1] = SETHI | HIVAL(~value, 10);
-		__asm volatile("iflush %0+12" : : "r" (where));
-		__asm volatile("iflush %0+8" : : "r" (where));
-		__asm volatile("iflush %0+4" : : "r" (where));
-
-	} else if (offset <= (1L<<32) && offset >= -((1L<<32) - 4)) {
-		/* 
-		 * We're within 32-bits -- we can use a direct call insn 
-		 *
-		 * The resulting code in the jump slot is:
-		 *
-		 *	sethi	%hi(. - .PLT0), %g1
-		 *	mov	%o7, %g1
-		 *	call	(.+offset)
-		 *	 mov	%g1, %o7
-		 *	nop
-		 *	nop
-		 *	nop
-		 *	nop
-		 *
-		 */
-		where[3] = MOV17;
-		where[2] = CALL	  | ((offset >> 4) & 0x3fffffff);
-		where[1] = MOV71;
-		__asm volatile("iflush %0+12" : : "r" (where));
-		__asm volatile("iflush %0+8" : : "r" (where));
-		__asm volatile("iflush %0+4" : : "r" (where));
-
-	} else if (offset >= 0 && offset < (1L<<44)) {
-		/* 
-		 * We're within 44 bits.  We can generate this pattern:
-		 *
-		 * The resulting code in the jump slot is:
-		 *
-		 *	sethi	%hi(. - .PLT0), %g1
-		 *	sethi	%h44(addr), %g1
-		 *	or	%g1, %m44(addr), %g1
-		 *	sllx	%g1, 12, %g1	
-		 *	jmp	%g1+%l44(addr)	
-		 *	nop
-		 *	nop
-		 *	nop
-		 *
-		 */
-		where[4] = JMP   | LOVAL(offset, 0);
-		where[3] = SLLX  | 12;
-		where[2] = OR    | (((offset) >> 12) & 0x00001fff);
-		where[1] = SETHI | HIVAL(offset, 22);
-		__asm volatile("iflush %0+16" : : "r" (where));
-		__asm volatile("iflush %0+12" : : "r" (where));
-		__asm volatile("iflush %0+8" : : "r" (where));
-		__asm volatile("iflush %0+4" : : "r" (where));
-
-	} else if (offset < 0 && offset > -(1L<<44)) {
-		/* 
-		 * We're within 44 bits.  We can generate this pattern:
-		 *
-		 * The resulting code in the jump slot is:
-		 *
-		 *	sethi	%hi(. - .PLT0), %g1
-		 *	sethi	%h44(-addr), %g1
-		 *	xor	%g1, %m44(-addr), %g1
-		 *	sllx	%g1, 12, %g1	
-		 *	jmp	%g1+%l44(addr)	
-		 *	nop
-		 *	nop
-		 *	nop
-		 *
-		 */
-		where[4] = JMP   | LOVAL(offset, 0);
-		where[3] = SLLX  | 12;
-		where[2] = XOR   | (((~offset) >> 12) & 0x00001fff);
-		where[1] = SETHI | HIVAL(~offset, 22);
-		__asm volatile("iflush %0+16" : : "r" (where));
-		__asm volatile("iflush %0+12" : : "r" (where));
-		__asm volatile("iflush %0+8" : : "r" (where));
-		__asm volatile("iflush %0+4" : : "r" (where));
-
+	if (ELF_ST_TYPE(def->st_info) == STT_GNU_IFUNC) {
+		if (tp == NULL)
+			return 0;
+		value = _rtld_resolve_ifunc(defobj, def);
 	} else {
-		/* 
-		 * We need to load all 64-bits
-		 *
-		 * The resulting code in the jump slot is:
-		 *
-		 *	sethi	%hi(. - .PLT0), %g1
-		 *	sethi	%hh(addr), %g1
-		 *	sethi	%lm(addr), %g5
-		 *	or	%g1, %hm(addr), %g1
-		 *	sllx	%g1, 32, %g1
-		 *	or	%g1, %g5, %g1
-		 *	jmp	%g1+%lo(addr)
-		 *	nop
-		 *
-		 */
-		where[6] = JMP     | LOVAL(value, 0);
-		where[5] = ORG5;
-		where[4] = SLLX    | 32;
-		where[3] = OR      | LOVAL(value, 32);
-		where[2] = SETHIG5 | HIVAL(value, 10);
-		where[1] = SETHI   | HIVAL(value, 42);
-		__asm volatile("iflush %0+24" : : "r" (where));
-		__asm volatile("iflush %0+20" : : "r" (where));
-		__asm volatile("iflush %0+16" : : "r" (where));
-		__asm volatile("iflush %0+12" : : "r" (where));
-		__asm volatile("iflush %0+8" : : "r" (where));
-		__asm volatile("iflush %0+4" : : "r" (where));
-
+		value = (Elf_Addr)(defobj->relocbase + def->st_value);
 	}
+	rdbg(("bind now/fixup in %s at %p --> new=%p", 
+	    defobj->strtab + def->st_name, (void*)where, (void *)value));
+
+	_rtld_write_plt(where, value, rela, obj);
 
 	if (tp)
 		*tp = value;

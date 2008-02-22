@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: scan.l,v 1.37 2007/02/06 00:08:31 he Exp $ */
+/* $NetBSD: scan.l,v 1.80 2018/01/15 21:58:54 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: scan.l,v 1.37 2007/02/06 00:08:31 he Exp $");
+__RCSID("$NetBSD: scan.l,v 1.80 2018/01/15 21:58:54 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -49,8 +49,7 @@ __RCSID("$NetBSD: scan.l,v 1.37 2007/02/06 00:08:31 he Exp $");
 #include "lint1.h"
 #include "cgram.h"
 
-#define CHAR_MASK	(~(~0 << CHAR_BIT))
-#define YY_NO_UNPUT
+#define CHAR_MASK	((int)(~(~0U << CHAR_BIT)))
 
 /* Current position (its also updated when an included file is parsed) */
 pos_t	curr_pos = { 1, "", 0 };
@@ -60,6 +59,9 @@ pos_t	curr_pos = { 1, "", 0 };
  * parsed).
  */
 pos_t	csrc_pos = { 1, "", 0 };
+
+/* Are we parsing a gcc attribute? */
+int attron;
 
 static	void	incline(void);
 static	void	badchar(int);
@@ -84,23 +86,31 @@ static	int	wcstrg(void);
 
 %}
 
+
 L	[_A-Za-z]
 D	[0-9]
 NZD	[1-9]
+BD	[0-1]
 OD	[0-7]
 HD	[0-9A-Fa-f]
 EX	([eE][+-]?[0-9]+)
+HX	(p[+-]?[0-9A-Fa-f]+)
+TL	([fFlL]?[i]?)
+
+%option nounput
 
 %%
 
 {L}({L}|{D})*		 	return (name());
+0[bB]{BD}+[lLuU]*		return (icon(2));
 0{OD}*[lLuU]*			return (icon(8));
 {NZD}{D}*[lLuU]*		return (icon(10));
 0[xX]{HD}+[lLuU]*		return (icon(16));
-{D}+\.{D}*{EX}?[fFlL]?		|
-{D}+{EX}[fFlL]?			|
-0[xX]{HD}+p{HD}+[fFlL]?		|
-\.{D}+{EX}?[fFlL]?		return (fcon());
+{D}+\.{D}*{EX}?{TL}	|
+{D}+{EX}{TL}		|
+0[xX]{HD}+\.{HD}*{HX}{TL} |
+0[xX]{HD}+{HX}{TL} 	|
+\.{D}+{EX}?{TL}		return (fcon());
 "="				return (operator(T_ASSIGN, ASSIGN));
 "*="				return (operator(T_OPASS, MULASS));
 "/="				return (operator(T_OPASS, DIVASS));
@@ -189,57 +199,95 @@ static	struct	kwtab {
 	scl_t	kw_scl;		/* storage class if kw_token T_SCLASS */
 	tspec_t	kw_tspec;	/* type spec. if kw_token T_TYPE or T_SOU */
 	tqual_t	kw_tqual;	/* type qual. fi kw_token T_QUAL */
-	u_int	kw_c89;		/* c89 keyword */
-	u_int	kw_c99;		/* c99 keyword */
-	u_int	kw_gcc;		/* GCC keyword */
+	u_int	kw_c89 : 1;	/* c89 keyword */
+	u_int	kw_c99 : 1;	/* c99 keyword */
+	u_int	kw_gcc : 1;	/* GCC keyword */
+	u_int	kw_attr : 1;	/* GCC attribute, keyword */
+	u_int	kw_deco : 3;	/* name[1] __name[2] __name__[4] */
 } kwtab[] = {
-	{ "asm",	T_ASM,		0,	0,	0,	  0, 0, 1 },
-	{ "__asm",	T_ASM,		0,	0,	0,	  0, 0, 0 },
-	{ "__asm__",	T_ASM,		0,	0,	0,	  0, 0, 0 },
-	{ "auto",	T_SCLASS,	AUTO,	0,	0,	  0, 0, 0 },
-	{ "break",	T_BREAK,	0,	0,	0,	  0, 0, 0 },
-	{ "_Bool",	T_TYPE,		0,	BOOL,	0,	  0, 1, 0 },
-	{ "case",	T_CASE,		0,	0,	0,	  0, 0, 0 },
-	{ "char",	T_TYPE,		0,	CHAR,	0,	  0, 0, 0 },
-	{ "const",	T_QUAL,		0,	0,	CONST,	  1, 0, 0 },
-	{ "__const__",	T_QUAL,		0,	0,	CONST,	  0, 0, 0 },
-	{ "__const",	T_QUAL,		0,	0,	CONST,	  0, 0, 0 },
-	{ "continue",	T_CONTINUE,	0,	0,	0,	  0, 0, 0 },
-	{ "default",	T_DEFAULT,	0,	0,	0,	  0, 0, 0 },
-	{ "do",		T_DO,		0,	0,	0,	  0, 0, 0 },
-	{ "double",	T_TYPE,		0,	DOUBLE,	0,	  0, 0, 0 },
-	{ "else",	T_ELSE,		0,	0,	0,	  0, 0, 0 },
-	{ "enum",	T_ENUM,		0,	0,	0,	  0, 0, 0 },
-	{ "extern",	T_SCLASS,	EXTERN,	0,	0,	  0, 0, 0 },
-	{ "float",	T_TYPE,		0,	FLOAT,	0,	  0, 0, 0 },
-	{ "for",	T_FOR,		0,	0,	0,	  0, 0, 0 },
-	{ "goto",	T_GOTO,		0,	0,	0,	  0, 0, 0 },
-	{ "if",		T_IF,		0,	0,	0,	  0, 0, 0 },
-	{ "inline",	T_SCLASS,	INLINE,	0,	0,	  0, 1, 0 },
-	{ "__inline__",	T_SCLASS,	INLINE,	0,	0,	  0, 0, 0 },
-	{ "__inline",	T_SCLASS,	INLINE,	0,	0,	  0, 0, 0 },
-	{ "int",	T_TYPE,		0,	INT,	0,	  0, 0, 0 },
-	{ "__symbolrename", T_SYMBOLRENAME, 0,	0,	0,	  0, 0, 0 },
-	{ "long",	T_TYPE,		0,	LONG,	0,	  0, 0, 0 },
-	{ "register",	T_SCLASS,	REG,	0,	0,	  0, 0, 0 },
-	{ "return",	T_RETURN,	0,	0,	0,	  0, 0, 0 },
-	{ "short",	T_TYPE,		0,	SHORT,	0,	  0, 0, 0 },
-	{ "signed",	T_TYPE,		0,	SIGNED,	0,	  1, 0, 0 },
-	{ "__signed__",	T_TYPE,		0,	SIGNED,	0,	  0, 0, 0 },
-	{ "__signed",	T_TYPE,		0,	SIGNED,	0,	  0, 0, 0 },
-	{ "sizeof",	T_SIZEOF,	0,	0,	0,	  0, 0, 0 },
-	{ "static",	T_SCLASS,	STATIC,	0,	0,	  0, 0, 0 },
-	{ "struct",	T_SOU,		0,	STRUCT,	0,	  0, 0, 0 },
-	{ "switch",	T_SWITCH,	0,	0,	0,	  0, 0, 0 },
-	{ "typedef",	T_SCLASS,	TYPEDEF, 0,	0,	  0, 0, 0 },
-	{ "union",	T_SOU,		0,	UNION,	0,	  0, 0, 0 },
-	{ "unsigned",	T_TYPE,		0,	UNSIGN,	0,	  0, 0, 0 },
-	{ "void",	T_TYPE,		0,	VOID,	0,	  0, 0, 0 },
-	{ "volatile",	T_QUAL,		0,	0,	VOLATILE, 1, 0, 0 },
-	{ "__volatile__", T_QUAL,	0,	0,	VOLATILE, 0, 0, 0 },
-	{ "__volatile",	T_QUAL,		0,	0,	VOLATILE, 0, 0, 0 },
-	{ "while",	T_WHILE,	0,	0,	0,	  0, 0, 0 },
-	{ NULL,		0,		0,	0,	0,	  0, 0, 0 }
+	{ "_Bool",	T_TYPE,		0,	BOOL,	0,	  0,1,0,0,1 },
+	{ "_Complex",	T_TYPE,		0,	COMPLEX,0,	  0,1,0,0,1 },
+	{ "_Generic",	T_GENERIC,	0,	0,	0,	  0,1,0,0,1 },
+	{ "_Noreturn",	T_NORETURN,	0,	0,	0,	  0,1,0,0,1 },
+	{ "alias",	T_AT_ALIAS,	0,	0,	0,	  0,0,1,1,5 },
+	{ "aligned",	T_AT_ALIGNED,	0,	0,	0,	  0,0,1,1,5 },
+	{ "alignof",	T_ALIGNOF,	0,	0,	0,	  0,0,0,0,4 },
+	{ "always_inline", T_AT_ALWAYS_INLINE, 0,0,	0,	  0,0,1,1,5 },
+	{ "asm",	T_ASM,		0,	0,	0,	  0,0,1,0,7 },
+	{ "attribute",	T_ATTRIBUTE,	0,	0,	0,	  0,0,1,0,6 },
+	{ "auto",	T_SCLASS,	AUTO,	0,	0,	  0,0,0,0,1 },
+	{ "bounded",	T_AT_BOUNDED,	0,	0,	0,	  0,0,1,1,5 },
+	{ "break",	T_BREAK,	0,	0,	0,	  0,0,0,0,1 },
+	{ "buffer",	T_AT_BUFFER,	0,	0,	0,	  0,0,1,1,5 },
+	{ "builtin_offsetof", T_BUILTIN_OFFSETOF, 0, 0, 0,	  0,0,1,0,2 },
+	{ "case",	T_CASE,		0,	0,	0,	  0,0,0,0,1 },
+	{ "char",	T_TYPE,		0,	CHAR,	0,	  0,0,0,0,1 },
+	{ "cold",	T_AT_COLD,	0,	0,	0,	  0,0,1,1,5 },
+	{ "const",	T_QUAL,		0,	0,	CONST,	  1,0,0,0,7 },
+	{ "constructor",T_AT_CONSTRUCTOR,0,	0,	0,	  0,0,1,1,5 },
+	{ "continue",	T_CONTINUE,	0,	0,	0,	  0,0,0,0,1 },
+	{ "default",	T_DEFAULT,	0,	0,	0,	  0,0,0,0,1 },
+	{ "deprecated",	T_AT_DEPRECATED,0,	0,	0,	  0,0,1,1,5 },
+	{ "do",		T_DO,		0,	0,	0,	  0,0,0,0,1 },
+	{ "double",	T_TYPE,		0,	DOUBLE,	0,	  0,0,0,0,1 },
+	{ "else",	T_ELSE,		0,	0,	0,	  0,0,0,0,1 },
+	{ "enum",	T_ENUM,		0,	0,	0,	  0,0,0,0,1 },
+	{ "extension",  T_EXTENSION,	0,	0,	0,	  0,0,1,0,4 },
+	{ "extern",	T_SCLASS,	EXTERN,	0,	0,	  0,0,0,0,1 },
+	{ "float",	T_TYPE,		0,	FLOAT,	0,	  0,0,0,0,1 },
+	{ "for",	T_FOR,		0,	0,	0,	  0,0,0,0,1 },
+	{ "format",	T_AT_FORMAT,	0,	0,	0,	  0,0,1,1,5 },
+	{ "format_arg", T_AT_FORMAT_ARG,0,	0,	0,	  0,0,1,1,5 },
+	{ "gnu_inline",	T_AT_GNU_INLINE,0,	0,	0,	  0,0,1,1,5 },
+	{ "goto",	T_GOTO,		0,	0,	0,	  0,0,0,0,1 },
+	{ "if",		T_IF,		0,	0,	0,	  0,0,0,0,1 },
+	{ "imag",	T_IMAG,		0,	0,	0,	  0,1,0,0,4 },
+	{ "inline",	T_SCLASS,	INLINE,	0,	0,	  0,1,0,0,7 },
+	{ "int",	T_TYPE,		0,	INT,	0,	  0,0,0,0,1 },
+	{ "long",	T_TYPE,		0,	LONG,	0,	  0,0,0,0,1 },
+	{ "may_alias",	T_AT_MAY_ALIAS,	0,	0,	0,	  0,0,1,1,5 },
+	{ "minbytes",	T_AT_MINBYTES,	0,	0,	0,	  0,0,1,1,5 },
+	{ "mode",	T_AT_MODE,	0,	0,	0,	  0,0,1,1,5 },
+	{ "no_instrument_function", T_AT_NO_INSTRUMENT_FUNCTION,
+					0,	0,	0,	  0,0,1,1,5 },
+	{ "nonnull",	T_AT_NONNULL,	0,	0,	0,	  0,0,1,1,5 },
+	{ "noreturn",	T_AT_NORETURN,	0,	0,	0,	  0,0,1,1,5 },
+	{ "packed",	T_AT_PACKED,	0,	0,	0,	  0,0,1,1,5 },
+	{ "packed",	T_PACKED,	0,	0,	0,	  0,0,0,0,2 },
+	{ "pcs",	T_AT_PCS,	0,	0,	0,	  0,0,0,0,5 },
+	{ "printf",	T_AT_FORMAT_PRINTF,0,	0,	0,	  0,0,1,1,5 },
+	{ "pure",	T_AT_PURE,	0,	0,	0,	  0,0,1,1,5 },
+	{ "real",	T_REAL,		0,	0,	0,	  0,1,0,0,4 },
+	{ "register",	T_SCLASS,	REG,	0,	0,	  0,0,0,0,1 },
+	{ "restrict",	T_QUAL,		0,	0,	RESTRICT, 0,1,0,0,5 },
+	{ "return",	T_RETURN,	0,	0,	0,	  0,0,0,0,1 },
+	{ "returns_twice", T_AT_RETURNS_TWICE,0,0,	0,	  0,0,1,1,5 },
+	{ "scanf",	T_AT_FORMAT_SCANF,0,	0,	0,	  0,0,1,1,5 },
+	{ "section",	T_AT_SECTION,	0,	0,	0,	  0,0,1,1,7 },
+	{ "sentinel",	T_AT_SENTINEL,	0,	0,	0,	  0,0,1,1,5 },
+	{ "short",	T_TYPE,		0,	SHORT,	0,	  0,0,0,0,1 },
+	{ "signed",	T_TYPE,		0,	SIGNED,	0,	  1,0,0,0,3 },
+	{ "sizeof",	T_SIZEOF,	0,	0,	0,	  0,0,0,0,1 },
+	{ "static",	T_SCLASS,	STATIC,	0,	0,	  0,0,0,0,1 },
+	{ "strfmon",	T_AT_FORMAT_STRFMON,0,	0,	0,	  0,0,1,1,5 },
+	{ "strftime",	T_AT_FORMAT_STRFTIME,0,	0,	0,	  0,0,1,1,5 },
+	{ "string",	T_AT_STRING,	0,	0,	0,	  0,0,1,1,5 },
+	{ "struct",	T_SOU,		0,	STRUCT,	0,	  0,0,0,0,1 },
+	{ "switch",	T_SWITCH,	0,	0,	0,	  0,0,0,0,1 },
+	{ "symbolrename", T_SYMBOLRENAME, 0,	0,	0,	  0,0,0,0,2 },
+	{ "transparent_union",T_AT_TUNION,0,	0,	0,	  0,0,1,1,5 },
+	{ "typedef",	T_SCLASS,	TYPEDEF, 0,	0,	  0,0,0,0,1 },
+	{ "typeof",	T_TYPEOF,	0,	0,	0,	  0,0,1,0,7 },
+	{ "union",	T_SOU,		0,	UNION,	0,	  0,0,0,0,1 },
+	{ "unsigned",	T_TYPE,		0,	UNSIGN,	0,	  0,0,0,0,1 },
+	{ "unused",	T_AT_UNUSED,	0,	0,	0,	  0,0,1,1,5 },
+	{ "used",	T_AT_USED,	0,	0,	0,	  0,0,1,1,5 },
+	{ "visibility", T_AT_VISIBILITY,0,	0,	0,	  0,0,1,1,5 },
+	{ "void",	T_TYPE,		0,	VOID,	0,	  0,0,0,0,1 },
+	{ "volatile",	T_QUAL,		0,	0,	VOLATILE, 1,0,0,0,7 },
+	{ "weak",	T_AT_WEAK,	0,	0,	0,	  0,0,1,1,5 },
+	{ "while",	T_WHILE,	0,	0,	0,	  0,0,0,0,1 },
+	{ NULL,		0,		0,	0,	0,	  0,0,0,0,0 }
 };
 
 /* Symbol table */
@@ -261,6 +309,54 @@ static	sbuf_t	 *sbfrlst;
 symt_t	symtyp;
 
 
+static void
+addkw(struct kwtab *kw, int deco)
+{
+	sym_t *sym;
+	size_t h;
+	char buf[256];
+	const char *name;
+
+	if (!(kw->kw_deco & deco))
+		return;
+
+	switch (deco) {
+	case 1:
+		name = kw->kw_name;
+		break;
+	case 2:
+		snprintf(buf, sizeof(buf), "__%s", kw->kw_name);
+		name = strdup(buf);
+		break;
+	case 4:
+		snprintf(buf, sizeof(buf), "__%s__", kw->kw_name);
+		name = strdup(buf);
+		break;
+	default:
+		abort();
+	}
+
+	if (name == NULL)
+		err(1, "Can't init symbol table");
+		
+	sym = getblk(sizeof (sym_t));
+	sym->s_name = name;
+	sym->s_keyw = kw;
+	sym->s_value.v_quad = kw->kw_token;
+	if (kw->kw_token == T_TYPE || kw->kw_token == T_SOU) {
+		sym->s_tspec = kw->kw_tspec;
+	} else if (kw->kw_token == T_SCLASS) {
+		sym->s_scl = kw->kw_scl;
+	} else if (kw->kw_token == T_QUAL) {
+		sym->s_tqual = kw->kw_tqual;
+	}
+	h = hash(sym->s_name);
+	if ((sym->s_link = symtab[h]) != NULL)
+		symtab[h]->s_rlink = &sym->s_link;
+	sym->s_rlink = &symtab[h];
+	symtab[h] = sym;
+}
+
 /*
  * All keywords are written to the symbol table. This saves us looking
  * in a extra table for each name we found.
@@ -269,8 +365,7 @@ void
 initscan(void)
 {
 	struct	kwtab *kw;
-	sym_t	*sym;
-	int	h, i;
+	size_t	i;
 	uint64_t uq;
 
 	for (kw = kwtab; kw->kw_name != NULL; kw++) {
@@ -280,21 +375,9 @@ initscan(void)
 			continue;
 		if (kw->kw_gcc && !gflag)
 			continue;
-		sym = getblk(sizeof (sym_t));
-		sym->s_name = kw->kw_name;
-		sym->s_keyw = 1;
-		sym->s_value.v_quad = kw->kw_token;
-		if (kw->kw_token == T_TYPE || kw->kw_token == T_SOU) {
-			sym->s_tspec = kw->kw_tspec;
-		} else if (kw->kw_token == T_SCLASS) {
-			sym->s_scl = kw->kw_scl;
-		} else if (kw->kw_token == T_QUAL) {
-			sym->s_tqual = kw->kw_tqual;
-		}
-		h = hash(sym->s_name);
-		if ((sym->s_link = symtab[h]) != NULL)
-			symtab[h]->s_rlink = &sym->s_link;
-		(symtab[h] = sym)->s_rlink = &symtab[h];
+		addkw(kw, 1); 
+		addkw(kw, 2); 
+		addkw(kw, 4);
 	}
 
 	/* initialize bit-masks for quads */
@@ -318,10 +401,15 @@ allocsb(void)
 
 	if ((sb = sbfrlst) != NULL) {
 		sbfrlst = sb->sb_nxt;
+#ifdef BLKDEBUG
+		(void)memset(sb, 0, sizeof (*sb));
+#else
+		sb->sb_nxt = NULL;
+#endif
 	} else {
 		sb = xmalloc(sizeof (sbuf_t));
+		(void)memset(sb, 0, sizeof (*sb));
 	}
-	(void)memset(sb, 0, sizeof (sb));
 	return (sb);
 }
 
@@ -332,6 +420,7 @@ static void
 freesb(sbuf_t *sb)
 {
 
+	(void)memset(sb, ZERO, sizeof (*sb));
 	sb->sb_nxt = sbfrlst;
 	sbfrlst = sb;
 }
@@ -374,7 +463,7 @@ hash(const char *s)
  * more deeply by data written to yylval.
  *
  * If it is a symbol, T_NAME is returned and the pointer to a sbuf struct
- * is stored in yylval. This struct contains the name of the symbol, it's
+ * is stored in yylval. This struct contains the name of the symbol, its
  * length and hash value. If there is already a symbol of the same name
  * and type in the symbol table, the sbuf struct also contains a pointer
  * to the symbol table entry.
@@ -391,7 +480,6 @@ name(void)
 	sb->sb_name = yytext;
 	sb->sb_len = yyleng;
 	sb->sb_hash = hash(yytext);
-
 	if ((sym = search(sb)) != NULL && sym->s_keyw) {
 		freesb(sb);
 		return (keyw(sym));
@@ -424,8 +512,12 @@ search(sbuf_t *sb)
 
 	for (sym = symtab[sb->sb_hash]; sym != NULL; sym = sym->s_link) {
 		if (strcmp(sym->s_name, sb->sb_name) == 0) {
-			if (sym->s_keyw || sym->s_kind == symtyp)
-				return (sym);
+			if (sym->s_keyw) {
+				struct kwtab *kw = sym->s_keyw;
+				if (!kw->kw_attr || attron)
+					return (sym);
+			} else if (!attron && sym->s_kind == symtyp)
+				return sym;
 		}
 	}
 
@@ -469,8 +561,8 @@ icon(int base)
 	cp = yytext;
 	len = yyleng;
 
-	/* skip 0x */
-	if (base == 16) {
+	/* skip 0[xX] or 0[bB] */
+	if (base == 16 || base == 2) {
 		cp += 2;
 		len -= 2;
 	}
@@ -562,6 +654,12 @@ icon(int base)
 			}
 		}
 		break;
+	case ULONG:
+		if (uq > TARG_ULONG_MAX) {
+			/* integer constant out of range */
+			warning(252);
+		}
+		break;
 	case QUAD:
 		if (uq > TARG_QUAD_MAX && !tflag) {
 			typ = UQUAD;
@@ -569,7 +667,13 @@ icon(int base)
 				ansiu = 1;
 		}
 		break;
-		/* LINTED (enumeration values not handled in switch) */
+	case UQUAD:
+		if (uq > TARG_UQUAD_MAX) {
+			/* integer constant out of range */
+			warning(252);
+		}
+		break;
+		/* LINTED206: (enumeration values not handled in switch) */
 	case STRUCT:
 	case VOID:
 	case LDOUBLE:
@@ -582,8 +686,6 @@ icon(int base)
 	case NOTSPEC:
 	case DOUBLE:
 	case FLOAT:
-	case UQUAD:
-	case ULONG:
 	case USHORT:
 	case SHORT:
 	case UCHAR:
@@ -591,6 +693,10 @@ icon(int base)
 	case CHAR:
 	case BOOL:
 	case UNSIGN:
+	case FCOMPLEX:
+	case DCOMPLEX:
+	case LCOMPLEX:
+	case COMPLEX:
 		break;
 
 	case NTSPEC:	/* this value unused */
@@ -668,6 +774,10 @@ fcon(void)
 	cp = yytext;
 	len = yyleng;
 
+	if (cp[len - 1] == 'i') {
+		/* imaginary, do nothing for now */
+		len--;
+	}
 	if ((c = cp[len - 1]) == 'f' || c == 'F') {
 		typ = FLOAT;
 		len--;
@@ -675,6 +785,8 @@ fcon(void)
 		typ = LDOUBLE;
 		len--;
 	} else {
+		if (c == 'd' || c == 'D') 
+			len--;
 		typ = DOUBLE;
 	}
 
@@ -700,7 +812,7 @@ fcon(void)
 			errno = 0;
 			break;
 		default:
-			LERROR("fcon()");
+			LERROR("fcon(%s->%s)", cp, eptr);
 		}
 	}
 	if (errno != 0)
@@ -740,7 +852,8 @@ operator(int t, op_t o)
 static int
 ccon(void)
 {
-	int	n, val, c;
+	size_t	n;
+	int val, c;
 	char	cv;
 
 	n = 0;
@@ -783,7 +896,8 @@ static int
 wccon(void)
 {
 	static	char buf[MB_LEN_MAX + 1];
-	int	i, c;
+	size_t	i;
+	int c;
 	wchar_t	wc;
 
 	i = 0;
@@ -908,7 +1022,7 @@ getescc(int d)
 				/* bad octal digit %c */
 				warning(77, c);
 			pbc = c;
-			if (v > UCHAR_MAX) {
+			if (v > TARG_UCHAR_MAX) {
 				/* character escape does not fit in char. */
 				warning(76);
 				v &= CHAR_MASK;
@@ -978,6 +1092,9 @@ directive(void)
 		continue;
 
 	if (!isdigit((unsigned char)c)) {
+		if (strncmp(cp, "pragma", 6) == 0
+		    && isspace((unsigned char)cp[6]))
+			return;
 	error:
 		/* undefined or invalid # directive */
 		warning(255);
@@ -1020,7 +1137,8 @@ directive(void)
 		 */
 		if (first) {
 			csrc_pos.p_file = curr_pos.p_file;
-			outsrc(curr_pos.p_file);
+			outsrc(fnxform(curr_pos.p_file,
+			    strlen(curr_pos.p_file)));
 			first = 0;
 		}
 	}
@@ -1039,7 +1157,7 @@ directive(void)
  *	CONSTCOND CONSTANTCOND CONSTANTCONDITION
  *	FALLTHRU FALLTHROUGH
  *	LINTLIBRARY
- *	LINTED NOSTRICT
+ *	LINTEDn NOSTRICTn
  *	LONGLONG
  *	NOTREACHED
  *	PRINTFLIKEn
@@ -1066,9 +1184,9 @@ comment(void)
 		{ "FALLTHRU",		0,	fallthru	},
 		{ "FALLTHROUGH",	0,	fallthru	},
 		{ "LINTLIBRARY",	0,	lintlib		},
-		{ "LINTED",		0,	linted		},
+		{ "LINTED",		1,	linted		},
 		{ "LONGLONG",		0,	longlong	},
-		{ "NOSTRICT",		0,	linted		},
+		{ "NOSTRICT",		1,	linted		},
 		{ "NOTREACHED",		0,	notreach	},
 		{ "PRINTFLIKE",		1,	printflike	},
 		{ "PROTOLIB",		1,	protolib	},
@@ -1077,7 +1195,8 @@ comment(void)
 	};
 	char	keywd[32];
 	char	arg[32];
-	int	l, i, a;
+	size_t	l, i;
+	int	a;
 	int	eoc;
 
 	eoc = 0;
@@ -1176,7 +1295,7 @@ void
 clrwflgs(void)
 {
 
-	nowarn = 0;
+	lwarn = LWARN_ALL;
 	quadflg = 0;
 	ccflg = 0;
 }
@@ -1221,7 +1340,8 @@ static int
 wcstrg(void)
 {
 	char	*s;
-	int	c, i, n, wi;
+	int	c, n;
+	size_t	i, wi;
 	size_t	len, max, wlen;
 	wchar_t	*ws;
 	strg_t	*strg;
@@ -1239,7 +1359,7 @@ wcstrg(void)
 		/* unterminated string constant */
 		error(258);
 
-	/* get length of wide character string */
+	/* get length of wide-character string */
 	(void)mblen(NULL, 0);
 	for (i = 0, wlen = 0; i < len; i += n, wlen++) {
 		if ((n = mblen(&s[i], MB_CUR_MAX)) == -1) {
@@ -1309,7 +1429,7 @@ getsym(sbuf_t *sb)
 
 	if (sym != NULL) {
 		if (sym->s_kind != symtyp)
-			LERROR("storesym()");
+			LERROR("storesym(%d, %d)", sym->s_kind, symtyp);
 		symtyp = FVFT;
 		freesb(sb);
 		return (sym);
@@ -1344,7 +1464,8 @@ getsym(sbuf_t *sb)
 
 	if ((sym->s_link = symtab[sb->sb_hash]) != NULL)
 		symtab[sb->sb_hash]->s_rlink = &sym->s_link;
-	(symtab[sb->sb_hash] = sym)->s_rlink = &symtab[sb->sb_hash];
+	sym->s_rlink = &symtab[sb->sb_hash];
+	symtab[sb->sb_hash] = sym;
 
 	*di->d_ldlsym = sym;
 	di->d_ldlsym = &sym->s_dlnxt;
@@ -1378,7 +1499,8 @@ mktempsym(type_t *t)
 
 	if ((sym->s_link = symtab[h]) != NULL)
 		symtab[h]->s_rlink = &sym->s_link;
-	(symtab[h] = sym)->s_rlink = &symtab[h];
+	sym->s_rlink = &symtab[h];
+	symtab[h] = sym;
 
 	*dcs->d_ldlsym = sym;
 	dcs->d_ldlsym = &sym->s_dlnxt;
@@ -1431,7 +1553,8 @@ inssym(int bl, sym_t *sym)
 	h = hash(sym->s_name);
 	if ((sym->s_link = symtab[h]) != NULL)
 		symtab[h]->s_rlink = &sym->s_link;
-	(symtab[h] = sym)->s_rlink = &symtab[h];
+	sym->s_rlink = &symtab[h];
+	symtab[h] = sym;
 	sym->s_blklev = bl;
 	if (sym->s_link != NULL && sym->s_blklev < sym->s_link->s_blklev)
 		LERROR("inssym()");
@@ -1483,7 +1606,8 @@ pushdown(sym_t *sym)
 
 	if ((nsym->s_link = symtab[h]) != NULL)
 		symtab[h]->s_rlink = &nsym->s_link;
-	(symtab[h] = nsym)->s_rlink = &symtab[h];
+	nsym->s_rlink = &symtab[h];
+	symtab[h] = nsym;
 
 	*dcs->d_ldlsym = nsym;
 	dcs->d_ldlsym = &nsym->s_dlnxt;

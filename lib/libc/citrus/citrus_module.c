@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_module.c,v 1.5 2005/11/29 03:11:58 christos Exp $	*/
+/*	$NetBSD: citrus_module.c,v 1.13 2018/01/04 20:57:28 kamil Exp $	*/
 
 /*-
  * Copyright (c)1999, 2000, 2001, 2002 Citrus Project,
@@ -41,13 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -96,8 +89,10 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_module.c,v 1.5 2005/11/29 03:11:58 christos Exp $");
+__RCSID("$NetBSD: citrus_module.c,v 1.13 2018/01/04 20:57:28 kamil Exp $");
 #endif /* LIBC_SCCS and not lint */
+
+#include "namespace.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -106,9 +101,10 @@ __RCSID("$NetBSD: citrus_module.c,v 1.5 2005/11/29 03:11:58 christos Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <locale.h>
 #include <stddef.h>
 #include <paths.h>
+#include "citrus_namespace.h"
+#include "citrus_bcs.h"
 #include "citrus_module.h"
 
 #include <sys/types.h>
@@ -117,8 +113,8 @@ __RCSID("$NetBSD: citrus_module.c,v 1.5 2005/11/29 03:11:58 christos Exp $");
 
 #ifdef _I18N_DYNAMIC
 
-static int _getdewey(int [], char *);
-static int _cmpndewey(int [], int, int [], int);
+static unsigned int _getdewey(int [], char *);
+static int _cmpndewey(int [], unsigned int, int [], unsigned int);
 static const char *_findshlib(char *, int *, int *);
 
 static const char *_pathI18nModule = NULL;
@@ -128,10 +124,10 @@ static const char *_pathI18nModule = NULL;
 #undef minor
 #define MAXDEWEY	3	/*ELF*/
 
-static int
+static unsigned int
 _getdewey(int dewey[], char *cp)
 {
-	int	i, n;
+	unsigned int	i, n;
 
 	_DIAGASSERT(dewey != NULL);
 	_DIAGASSERT(cp != NULL);
@@ -144,7 +140,7 @@ _getdewey(int dewey[], char *cp)
 		if (*cp < '0' || '9' < *cp)
 			return 0;
 
-		dewey[n++] = (int)strtol(cp, &cp, 10);
+		dewey[n++] = (int)_bcs_strtol(cp, &cp, 10);
 	}
 
 	return n;
@@ -157,9 +153,9 @@ _getdewey(int dewey[], char *cp)
  * Return  0 if equal.
  */
 static int
-_cmpndewey(int d1[], int n1, int d2[], int n2)
+_cmpndewey(int d1[], unsigned int n1, int d2[], unsigned int n2)
 {
-	register int	i;
+	register unsigned int	i;
 
 	_DIAGASSERT(d1 != NULL);
 	_DIAGASSERT(d2 != NULL);
@@ -188,7 +184,7 @@ static const char *
 _findshlib(char *name, int *majorp, int *minorp)
 {
 	int		dewey[MAXDEWEY];
-	int		ndewey;
+	unsigned int	ndewey;
 	int		tmp[MAXDEWEY];
 	int		i;
 	int		len;
@@ -221,7 +217,7 @@ _findshlib(char *name, int *majorp, int *minorp)
 			continue;
 
 		while ((dp = readdir(dd)) != NULL) {
-			int	n;
+			unsigned int	n;
 
 			if (dp->d_namlen < len + 4)
 				continue;
@@ -308,12 +304,24 @@ _citrus_load_module(_citrus_module_t *rhandle, const char *encname)
 
 	if (_pathI18nModule == NULL) {
 		p = getenv("PATH_I18NMODULE");
-		if (p != NULL && !issetugid()) {
+		if (p == NULL || issetugid()) {
+			_pathI18nModule = _PATH_I18NMODULE;
+#ifdef MLIBDIR
+			p = strrchr(_pathI18nModule, '/');
+			if (p != NULL) {
+				snprintf(path, sizeof(path), "%.*s/%s/%s",
+				    (int)(p - _pathI18nModule),
+				    _pathI18nModule, MLIBDIR, p + 1);
+				p = path;
+			} else
+				p = NULL;
+#endif
+		}
+		if (p != NULL) {
 			_pathI18nModule = strdup(p);
 			if (_pathI18nModule == NULL)
 				return ENOMEM;
-		} else
-			_pathI18nModule = _PATH_I18NMODULE;
+		}
 	}
 
 	(void)snprintf(path, sizeof(path), "lib%s", encname);

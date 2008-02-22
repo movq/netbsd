@@ -1,4 +1,4 @@
-/*	$NetBSD: simide.c,v 1.24 2006/09/24 23:14:58 bjh21 Exp $	*/
+/*	$NetBSD: simide.c,v 1.31 2017/10/20 07:06:06 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1997-1998 Mark Brinicombe
@@ -40,17 +40,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: simide.c,v 1.24 2006/09/24 23:14:58 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: simide.c,v 1.31 2017/10/20 07:06:06 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
 
 #include <machine/intr.h>
 #include <machine/io.h>
-#include <machine/bus.h>
 #include <acorn32/podulebus/podulebus.h>
 #include <acorn32/podulebus/simidereg.h>
 
@@ -89,19 +89,18 @@ struct simide_softc {
 	struct bus_space 	sc_tag;			/* custom tag */
 	struct simide_channel {
 		struct ata_channel sc_channel;	/* generic part */
-		struct ata_queue sc_chqueue;		/* channel queue */
 		irqhandler_t	sc_ih;			/* interrupt handler */
 		int		sc_irqmask;	/* IRQ mask for this channel */
 	} simide_channels[2];
 	struct wdc_regs sc_wdc_regs[2];
 };
 
-int	simide_probe	__P((struct device *, struct cfdata *, void *));
-void	simide_attach	__P((struct device *, struct device *, void *));
-void	simide_shutdown	__P((void *arg));
-int	simide_intr	__P((void *arg));
+int	simide_probe	(device_t, cfdata_t, void *);
+void	simide_attach	(device_t, device_t, void *);
+void	simide_shutdown	(void *arg);
+int	simide_intr	(void *arg);
 
-CFATTACH_DECL(simide, sizeof(struct simide_softc),
+CFATTACH_DECL_NEW(simide, sizeof(struct simide_softc),
     simide_probe, simide_attach, NULL, NULL);
 
 
@@ -137,10 +136,7 @@ struct {
  */
 
 int
-simide_probe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+simide_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct podule_attach_args *pa = (void *)aux;
 
@@ -155,11 +151,9 @@ simide_probe(parent, cf, aux)
  */
 
 void
-simide_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+simide_attach(device_t parent, device_t self, void *aux)
 {
-	struct simide_softc *sc = (void *)self;
+	struct simide_softc *sc = device_private(self);
 	struct podule_attach_args *pa = (void *)aux;
 	int status;
 	u_int iobase;
@@ -173,6 +167,7 @@ simide_attach(parent, self, aux)
 	if (pa->pa_podule_number == -1)
 		panic("Podule has disappeared !");
 
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_podule_number = pa->pa_podule_number;
 	sc->sc_podule = pa->pa_podule;
 	podules[sc->sc_podule_number].attached = 1;
@@ -203,11 +198,12 @@ simide_attach(parent, self, aux)
 	if (bus_space_map(sc->sc_ctliot, pa->pa_podule->mod_base +
 	    CONTROL_REGISTERS_POFFSET, CONTROL_REGISTER_SPACE, 0,
 	    &sc->sc_ctlioh))
-		panic("%s: Cannot map control registers", self->dv_xname);
+		panic("%s: Cannot map control registers", device_xname(self));
 
 	/* Install a clean up handler to make sure IRQ's are disabled */
 	if (shutdownhook_establish(simide_shutdown, (void *)sc) == NULL)
-		panic("%s: Cannot install shutdown handler", self->dv_xname);
+		panic("%s: Cannot install shutdown handler",
+		    device_xname(self));
 
 	/* Set the interrupt info for this podule */
 	sc->sc_podule->irq_addr = pa->pa_podule->mod_base
@@ -219,21 +215,21 @@ simide_attach(parent, self, aux)
 	status = bus_space_read_1(sc->sc_ctliot, sc->sc_ctlioh,
 	    STATUS_REGISTER_OFFSET);
 
-	printf(":");
+	aprint_normal(":");
 	/* If any of the bits in STATUS_FAULT are zero then we have a fault. */
 	if ((status & STATUS_FAULT) != STATUS_FAULT)
-		printf(" card/cable fault (%02x) -", status);
+		aprint_normal(" card/cable fault (%02x) -", status);
 
 	if (!(status & STATUS_RESET))
-		printf(" (reset)");
+		aprint_normal(" (reset)");
 	if (!(status & STATUS_ADDR_TEST))
-		printf(" (addr)");
+		aprint_normal(" (addr)");
 	if (!(status & STATUS_CS_TEST))
-		printf(" (cs)");
+		aprint_normal(" (cs)");
 	if (!(status & STATUS_RW_TEST))
-		printf(" (rw)");
+		aprint_normal(" (rw)");
 
-	printf("\n");
+	aprint_normal("\n");
 
 	/* Perhaps we should just abort at this point. */
 /*	if ((status & STATUS_FAULT) != STATUS_FAULT)
@@ -252,6 +248,7 @@ simide_attach(parent, self, aux)
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 2;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 	for (channel = 0 ; channel < 2; channel++) {
 		scp = &sc->simide_channels[channel];
 		sc->sc_chanarray[channel] = &scp->sc_channel;
@@ -260,8 +257,6 @@ simide_attach(parent, self, aux)
 
 		cp->ch_channel = channel;
 		cp->ch_atac = &sc->sc_wdcdev.sc_atac;
-		cp->ch_queue = &scp->sc_chqueue;
-		cp->ch_ndrive = 2;
 		wdr->cmd_iot = wdr->ctl_iot = &sc->sc_tag;
 		iobase = pa->pa_podule->mod_base;
 		if (bus_space_map(wdr->cmd_iot, iobase +
@@ -276,7 +271,7 @@ simide_attach(parent, self, aux)
 				continue;
 			}
 		}
-		wdc_init_shadow_regs(cp);
+		wdc_init_shadow_regs(wdr);
 		if (bus_space_map(wdr->ctl_iot, iobase +
 		    simide_info[channel].aux_register, 4, 0, &wdr->ctl_ioh)) {
 			bus_space_unmap(wdr->cmd_iot, wdr->cmd_baseioh,
@@ -297,7 +292,7 @@ simide_attach(parent, self, aux)
 		ihp->ih_maskbits = scp->sc_irqmask;
 		if (irq_claim(sc->sc_podule->interrupt, ihp))
 			panic("%s: Cannot claim interrupt %d",
-			    self->dv_xname, sc->sc_podule->interrupt);
+			    device_xname(self), sc->sc_podule->interrupt);
 		/* clear any pending interrupts and enable interrupts */
 		sc->sc_ctl_reg |= scp->sc_irqmask;
 		bus_space_write_1(sc->sc_ctliot, sc->sc_ctlioh,
@@ -314,8 +309,7 @@ simide_attach(parent, self, aux)
  */
 
 void
-simide_shutdown(arg)
-	void *arg;
+simide_shutdown(void *arg)
 {
 	struct simide_softc *sc = arg;
 
@@ -332,8 +326,7 @@ simide_shutdown(arg)
  * If the interrupt was from our card pass it on to the wdc interrupt handler
  */
 int
-simide_intr(arg)
-	void *arg;
+simide_intr(void *arg)
 {
 	struct simide_channel *scp = arg;
 	irqhandler_t *ihp = &scp->sc_ih;

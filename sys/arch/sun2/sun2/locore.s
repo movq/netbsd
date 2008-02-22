@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.20 2007/10/17 19:57:43 garbled Exp $	*/
+/*	$NetBSD: locore.s,v 1.25 2014/03/24 18:50:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -154,7 +154,8 @@ L_high_code:
 	movc	%d0,%dfc
 
 | Setup process zero user/kernel stacks.
-	movl	_C_LABEL(proc0paddr),%a1 | get proc0 pcb addr
+	lea	_C_LABEL(lwp0),%a0	| lwp0
+	movl	%a0@(L_PCB),%a1		| XXXuvm_lwp_getuarea
 	lea	%a1@(USPACE-4),%sp	| set SSP to last word
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
@@ -166,7 +167,7 @@ L_high_code:
 | is finished, to avoid spurrious interrupts.
 
 /*
- * Create a fake exception frame so that cpu_fork() can copy it.
+ * Create a fake exception frame so that cpu_lwp_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -175,8 +176,7 @@ L_high_code:
 	movw	#PSL_USER,%sp@-		| tf_sr for user mode
 	clrl	%sp@-			| tf_stackadj
 	lea	%sp@(-64),%sp		| tf_regs[16]
-	lea	_C_LABEL(lwp0),%a0	| proc0.p_md.md_regs = 
-	movl	%a1,%a0@(L_MD_REGS)	|   trapframe
+	movl	%a1,%a0@(L_MD_REGS)	| lwp0.p_md.md_regs = trapframe
 	jbsr	_C_LABEL(main)		| main(&trapframe)
 	PANIC("main() returned")
 
@@ -400,12 +400,6 @@ Lbrkpt2:
  *   %d0,%d1,%a0,%a1, sr, pc, vo
  */
 
-#define INTERRUPT_SAVEREG \
-	moveml	#0xC0C0,%sp@-
-
-#define INTERRUPT_RESTORE \
-	moveml	%sp@+,#0x0303
-
 /*
  * This is the common auto-vector interrupt handler,
  * for which the CPU provides the vector=0x18+level.
@@ -419,7 +413,7 @@ Lbrkpt2:
 GLOBAL(_isr_autovec)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(isr_autovec)
-	INTERRUPT_RESTORE
+	INTERRUPT_RESTOREREG
 	jra	_ASM_LABEL(rei)
 
 /* clock: see clock.c */
@@ -431,7 +425,7 @@ GLOBAL(_isr_autovec)
 GLOBAL(_isr_clock)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(clock_intr)
-	INTERRUPT_RESTORE
+	INTERRUPT_RESTOREREG
 	jra	_ASM_LABEL(rei)
 
 | Handler for all vectored interrupts (i.e. VME interrupts)
@@ -443,11 +437,8 @@ GLOBAL(_isr_clock)
 GLOBAL(_isr_vectored)
 	INTERRUPT_SAVEREG
 	jbsr	_C_LABEL(isr_vectored)
-	INTERRUPT_RESTORE
+	INTERRUPT_RESTOREREG
 	jra	_ASM_LABEL(rei)
-
-#undef	INTERRUPT_SAVEREG
-#undef	INTERRUPT_RESTORE
 
 /* interrupt counters (needed by vmstat) */
 GLOBAL(intrnames)
@@ -575,14 +566,6 @@ Ldorte:
 GLOBAL(getsp)
 	movl	%sp,%d0			| get current SP
 	addql	#4,%d0			| compensate for return address
-	rts
-
-ENTRY(getsfc)
-	movc	%sfc,%d0
-	rts
-
-ENTRY(getdfc)
-	movc	%dfc,%d0
 	rts
 
 ENTRY(getvbr)

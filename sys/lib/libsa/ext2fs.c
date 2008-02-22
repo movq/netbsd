@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs.c,v 1.4 2007/12/02 06:47:43 tsutsui Exp $	*/
+/*	$NetBSD: ext2fs.c,v 1.25 2016/08/21 08:27:57 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -120,7 +115,7 @@
 #endif
 typedef uint32_t	ino32_t;
 #ifndef FSBTODB
-#define FSBTODB(fs, indp) fsbtodb(fs, indp)
+#define FSBTODB(fs, indp) EXT2_FSBTODB(fs, indp)
 #endif
 
 /*
@@ -150,6 +145,7 @@ struct file {
 	size_t		f_buf_size;	/* size of data block */
 	daddr_t		f_buf_blkno;	/* block number of data block */
 };
+
 
 static int read_inode(ino32_t, struct open_file *);
 static int block_map(struct open_file *, indp_t, indp_t *);
@@ -189,8 +185,9 @@ read_inode(ino32_t inumber, struct open_file *f)
 	if (rsize != fs->e2fs_bsize)
 		return EIO;
 
-	dip = (struct ext2fs_dinode *)buf;
-	e2fs_iload(&dip[ino_to_fsbo(fs, inumber)], &fp->f_di);
+	dip = (struct ext2fs_dinode *)(buf +
+	    EXT2_DINODE_SIZE(fs) * ino_to_fsbo(fs, inumber));
+	e2fs_iload(dip, &fp->f_di, EXT2_DINODE_SIZE(fs));
 
 	/*
 	 * Clear out the old buffers
@@ -219,37 +216,37 @@ block_map(struct open_file *f, indp_t file_block, indp_t *disk_block_p)
 	/*
 	 * Index structure of an inode:
 	 *
-	 * e2di_blocks[0..NDADDR-1]
-	 *			hold block numbers for blocks
-	 *			0..NDADDR-1
+	 * e2di_blocks[0..EXT2FS_NDADDR-1]
+	 *		hold block numbers for blocks
+	 *		0..EXT2FS_NDADDR-1
 	 *
-	 * e2di_blocks[NDADDR+0]
-	 *			block NDADDR+0 is the single indirect block
-	 *			holds block numbers for blocks
-	 *			NDADDR .. NDADDR + NINDIR(fs)-1
+	 * e2di_blocks[EXT2FS_NDADDR+0]
+	 *		block EXT2FS_NDADDR+0 is the single indirect block
+	 *		holds block numbers for blocks
+	 *		EXT2FS_NDADDR .. EXT2FS_NDADDR + EXT2_NINDIR(fs)-1
 	 *
-	 * e2di_blocks[NDADDR+1]
-	 *			block NDADDR+1 is the double indirect block
-	 *			holds block numbers for INDEX blocks for blocks
-	 *			NDADDR + NINDIR(fs) ..
-	 *			NDADDR + NINDIR(fs) + NINDIR(fs)**2 - 1
+	 * e2di_blocks[EXT2FS_NDADDR+1]
+	 *		block EXT2FS_NDADDR+1 is the double indirect block
+	 *		holds block numbers for INDEX blocks for blocks
+	 *		EXT2FS_NDADDR + EXT2_NINDIR(fs) ..
+	 *		EXT2FS_NDADDR + EXT2_NINDIR(fs) + EXT2_NINDIR(fs)**2 - 1
 	 *
-	 * e2di_blocks[NDADDR+2]
-	 *			block NDADDR+2 is the triple indirect block
-	 *			holds block numbers for	double-indirect
-	 *			blocks for blocks
-	 *			NDADDR + NINDIR(fs) + NINDIR(fs)**2 ..
-	 *			NDADDR + NINDIR(fs) + NINDIR(fs)**2
-	 *				+ NINDIR(fs)**3 - 1
+	 * e2di_blocks[EXT2FS_NDADDR+2]
+	 *		block EXT2FS_NDADDR+2 is the triple indirect block
+	 *		holds block numbers for	double-indirect
+	 *		blocks for blocks
+	 *		EXT2FS_NDADDR + EXT2_NINDIR(fs) + EXT2_NINDIR(fs)**2 ..
+	 *		EXT2FS_NDADDR + EXT2_NINDIR(fs) + EXT2_NINDIR(fs)**2
+	 *			+ EXT2_NINDIR(fs)**3 - 1
 	 */
 
-	if (file_block < NDADDR) {
+	if (file_block < EXT2FS_NDADDR) {
 		/* Direct block. */
 		*disk_block_p = fs2h32(fp->f_di.e2di_blocks[file_block]);
 		return 0;
 	}
 
-	file_block -= NDADDR;
+	file_block -= EXT2FS_NDADDR;
 
 	ind_cache = file_block >> LN2_IND_CACHE_SZ;
 	if (ind_cache == fp->f_ind_cache_block) {
@@ -262,14 +259,15 @@ block_map(struct open_file *f, indp_t file_block, indp_t *disk_block_p)
 		level += fp->f_nishift;
 		if (file_block < (indp_t)1 << level)
 			break;
-		if (level > NIADDR * fp->f_nishift)
+		if (level > EXT2FS_NIADDR * fp->f_nishift)
 			/* Block number too high */
 			return EFBIG;
 		file_block -= (indp_t)1 << level;
 	}
 
 	ind_block_num =
-	    fs2h32(fp->f_di.e2di_blocks[NDADDR + (level / fp->f_nishift - 1)]);
+	    fs2h32(fp->f_di.e2di_blocks[EXT2FS_NDADDR +
+	    (level / fp->f_nishift - 1)]);
 
 	for (;;) {
 		level -= fp->f_nishift;
@@ -319,12 +317,12 @@ buf_read_file(struct open_file *f, char **buf_p, size_t *size_p)
 	struct m_ext2fs *fs = fp->f_fs;
 	long off;
 	indp_t file_block;
-	indp_t disk_block;
+	indp_t disk_block = 0;	/* XXX: gcc */
 	size_t block_size;
 	int rc;
 
-	off = blkoff(fs, fp->f_seekp);
-	file_block = lblkno(fs, fp->f_seekp);
+	off = ext2_blkoff(fs, fp->f_seekp);
+	file_block = ext2_lblkno(fs, fp->f_seekp);
 	block_size = fs->e2fs_bsize;	/* no fragment */
 
 	if (file_block != fp->f_buf_blkno) {
@@ -431,7 +429,7 @@ read_sblock(struct open_file *f, struct m_ext2fs *fs)
 	if (ext2fs.e2fs_rev > E2FS_REV1 ||
 	    (ext2fs.e2fs_rev == E2FS_REV1 &&
 	     (ext2fs.e2fs_first_ino != EXT2_FIRSTINO ||
-	      ext2fs.e2fs_inode_size != EXT2_DINODE_SIZE ||
+	     (ext2fs.e2fs_inode_size != 128 && ext2fs.e2fs_inode_size != 256) ||
 	      ext2fs.e2fs_features_incompat & ~EXT2F_INCOMPAT_SUPP))) {
 		return ENODEV;
 	}
@@ -449,7 +447,7 @@ read_sblock(struct open_file *f, struct m_ext2fs *fs)
 	fs->e2fs_bmask = ~fs->e2fs_qbmask;
 	fs->e2fs_ngdb =
 	    howmany(fs->e2fs_ncg, fs->e2fs_bsize / sizeof(struct ext2_gd));
-	fs->e2fs_ipb = fs->e2fs_bsize / EXT2_DINODE_SIZE;
+	fs->e2fs_ipb = fs->e2fs_bsize / ext2fs.e2fs_inode_size;
 	fs->e2fs_itpg = fs->e2fs.e2fs_ipg / fs->e2fs_ipb;
 
 	return 0;
@@ -489,7 +487,7 @@ read_gdblock(struct open_file *f, struct m_ext2fs *fs)
 /*
  * Open a file.
  */
-int
+__compactcall int
 ext2fs_open(const char *path, struct open_file *f)
 {
 #ifndef LIBSA_FS_SINGLECOMPONENT
@@ -514,6 +512,7 @@ ext2fs_open(const char *path, struct open_file *f)
 
 	/* allocate space and read super block */
 	fs = alloc(sizeof(*fs));
+	memset(fs, 0, sizeof(*fs));
 	fp->f_fs = fs;
 	twiddle();
 
@@ -547,7 +546,7 @@ ext2fs_open(const char *path, struct open_file *f)
 		 * of divide and remainder and avoinds pulling in the
 		 * 64bit division routine into the boot code.
 		 */
-		mult = NINDIR(fs);
+		mult = EXT2_NINDIR(fs);
 #ifdef DEBUG
 		if (!powerof2(mult)) {
 			/* Hummm was't a power of 2 */
@@ -691,10 +690,12 @@ ext2fs_open(const char *path, struct open_file *f)
 out:
 	if (rc)
 		ext2fs_close(f);
+	else
+		fsmod = "ext2fs";
 	return rc;
 }
 
-int
+__compactcall int
 ext2fs_close(struct open_file *f)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -717,7 +718,7 @@ ext2fs_close(struct open_file *f)
  * Copy a portion of a file into kernel memory.
  * Cross block boundaries when necessary.
  */
-int
+__compactcall int
 ext2fs_read(struct open_file *f, void *start, size_t size, size_t *resid)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -755,7 +756,7 @@ ext2fs_read(struct open_file *f, void *start, size_t size, size_t *resid)
  * Not implemented.
  */
 #ifndef LIBSA_NO_FS_WRITE
-int
+__compactcall int
 ext2fs_write(struct open_file *f, void *start, size_t size, size_t *resid)
 {
 
@@ -764,7 +765,7 @@ ext2fs_write(struct open_file *f, void *start, size_t size, size_t *resid)
 #endif /* !LIBSA_NO_FS_WRITE */
 
 #ifndef LIBSA_NO_FS_SEEK
-off_t
+__compactcall off_t
 ext2fs_seek(struct open_file *f, off_t offset, int where)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -787,7 +788,7 @@ ext2fs_seek(struct open_file *f, off_t offset, int where)
 }
 #endif /* !LIBSA_NO_FS_SEEK */
 
-int
+__compactcall int
 ext2fs_stat(struct open_file *f, struct stat *sb)
 {
 	struct file *fp = (struct file *)f->f_fsdata;
@@ -801,6 +802,78 @@ ext2fs_stat(struct open_file *f, struct stat *sb)
 	sb->st_size = fp->f_di.e2di_size;
 	return 0;
 }
+
+#if defined(LIBSA_ENABLE_LS_OP)
+
+#include "ls.h"
+
+static const char    *const typestr[] = {
+	"unknown",
+	"REG",
+	"DIR",
+	"CHR",
+	"BLK",
+	"FIFO",
+	"SOCK",
+	"LNK"
+};
+
+__compactcall void
+ext2fs_ls(struct open_file *f, const char *pattern)
+{
+	struct file *fp = (struct file *)f->f_fsdata;
+	size_t block_size = fp->f_fs->e2fs_bsize;
+	char *buf;
+	size_t buf_size;
+	lsentry_t *names = NULL;
+
+	fp->f_seekp = 0;
+	while (fp->f_seekp < (off_t)fp->f_di.e2di_size) {
+		struct ext2fs_direct  *dp, *edp;
+		int rc = buf_read_file(f, &buf, &buf_size);
+		if (rc)
+			goto out;
+		if (buf_size != block_size || buf_size == 0)
+			goto out;
+
+		dp = (struct ext2fs_direct *)buf;
+		edp = (struct ext2fs_direct *)(buf + buf_size);
+
+		for (; dp < edp;
+		     dp = (void *)((char *)dp + fs2h16(dp->e2d_reclen))) {
+			const char *t;
+
+			if (fs2h16(dp->e2d_reclen) <= 0)
+				goto out;
+
+			if (fs2h32(dp->e2d_ino) == 0)
+				continue;
+
+			if (dp->e2d_type >= NELEM(typestr) ||
+			    !(t = typestr[dp->e2d_type])) {
+				/*
+				 * This does not handle "old"
+				 * filesystems properly. On little
+				 * endian machines, we get a bogus
+				 * type name if the namlen matches a
+				 * valid type identifier. We could
+				 * check if we read namlen "0" and
+				 * handle this case specially, if
+				 * there were a pressing need...
+				 */
+				printf("bad dir entry\n");
+				goto out;
+			}
+			lsadd(&names, pattern, dp->e2d_name,
+			    strlen(dp->e2d_name), fs2h32(dp->e2d_ino), t);
+		}
+		fp->f_seekp += buf_size;
+	}
+
+	lsprint(names);
+out:	lsfree(names);
+}
+#endif
 
 /*
  * byte swap functions for big endian machines
@@ -852,23 +925,13 @@ e2fs_sb_bswap(struct ext2fs *old, struct ext2fs *new)
 	new->e2fs_reserved_ngdb	=	bswap16(old->e2fs_reserved_ngdb);
 }
 
-void e2fs_cg_bswap(struct ext2_gd *old, struct ext2_gd *new, int size)
+void e2fs_i_bswap(struct ext2fs_dinode *old, struct ext2fs_dinode *new,
+    size_t isize)
 {
-	int i;
+	/* preserve non-swapped and unused fields */
+	memcpy(new, old, isize);
 
-	for (i = 0; i < (size / sizeof(struct ext2_gd)); i++) {
-		new[i].ext2bgd_b_bitmap	= bswap32(old[i].ext2bgd_b_bitmap);
-		new[i].ext2bgd_i_bitmap	= bswap32(old[i].ext2bgd_i_bitmap);
-		new[i].ext2bgd_i_tables	= bswap32(old[i].ext2bgd_i_tables);
-		new[i].ext2bgd_nbfree	= bswap16(old[i].ext2bgd_nbfree);
-		new[i].ext2bgd_nifree	= bswap16(old[i].ext2bgd_nifree);
-		new[i].ext2bgd_ndirs	= bswap16(old[i].ext2bgd_ndirs);
-	}
-}
-
-void e2fs_i_bswap(struct ext2fs_dinode *old, struct ext2fs_dinode *new)
-{
-
+	/* swap what needs to be swapped */
 	new->e2di_mode		=	bswap16(old->e2di_mode);
 	new->e2di_uid		=	bswap16(old->e2di_uid);
 	new->e2di_gid		=	bswap16(old->e2di_gid);
@@ -880,12 +943,41 @@ void e2fs_i_bswap(struct ext2fs_dinode *old, struct ext2fs_dinode *new)
 	new->e2di_dtime		=	bswap32(old->e2di_dtime);
 	new->e2di_nblock	=	bswap32(old->e2di_nblock);
 	new->e2di_flags		=	bswap32(old->e2di_flags);
+	new->e2di_version	=	bswap32(old->e2di_version);
 	new->e2di_gen		=	bswap32(old->e2di_gen);
 	new->e2di_facl		=	bswap32(old->e2di_facl);
-	new->e2di_dacl		=	bswap32(old->e2di_dacl);
-	new->e2di_faddr		=	bswap32(old->e2di_faddr);
-	memcpy(&new->e2di_blocks[0], &old->e2di_blocks[0],
-	    (NDADDR + NIADDR) * sizeof(uint32_t));
+	new->e2di_size_high	=	bswap32(old->e2di_size_high);
+	new->e2di_nblock_high	=	bswap16(old->e2di_nblock_high);
+	new->e2di_facl_high	=	bswap16(old->e2di_facl_high);
+	new->e2di_uid_high	=	bswap16(old->e2di_uid_high);
+	new->e2di_gid_high	=	bswap16(old->e2di_gid_high);
+	new->e2di_checksum_low  = 	bswap16(old->e2di_checksum_low);
+
+	/*
+	 * Following fields are only supported for inode sizes bigger
+	 * than the old ext2 one
+	 */
+	if (isize == EXT2_REV0_DINODE_SIZE)
+		return;
+
+	new->e2di_extra_isize   = bswap16(old->e2di_extra_isize);
+	new->e2di_checksum_high = bswap16(old->e2di_checksum_high);
+
+	/* Following fields are ext4, might not be actually present */
+	if (EXT2_DINODE_FITS(new, e2di_ctime_extra, isize))
+		new->e2di_ctime_extra   = bswap32(old->e2di_ctime_extra);
+	if (EXT2_DINODE_FITS(new, e2di_mtime_extra, isize))
+		new->e2di_mtime_extra	= bswap32(old->e2di_mtime_extra);
+	if (EXT2_DINODE_FITS(new, e2di_atime_extra, isize))
+		new->e2di_atime_extra	= bswap32(old->e2di_atime_extra);
+	if (EXT2_DINODE_FITS(new, e2di_crtime, isize))
+		new->e2di_crtime	= bswap32(old->e2di_crtime);
+	if (EXT2_DINODE_FITS(new, e2di_crtime_extra, isize))
+		new->e2di_crtime_extra	= bswap32(old->e2di_crtime_extra);
+	if (EXT2_DINODE_FITS(new, e2di_version_high, isize))
+		new->e2di_version_high	= bswap32(old->e2di_version_high);
+	if (EXT2_DINODE_FITS(new, e2di_projid, isize))
+		new->e2di_projid	= bswap32(old->e2di_projid);
 }
 #endif
 

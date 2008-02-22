@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc_asm_arm9.S,v 1.6 2007/10/17 19:53:29 garbled Exp $	*/
+/*	$NetBSD: cpufunc_asm_arm9.S,v 1.11 2014/03/30 01:15:03 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2004 ARM Limited
@@ -31,8 +31,9 @@
  * ARM9 assembly functions for CPU / MMU / TLB specific operations
  */
  
-#include <machine/cpu.h>
+#include "assym.h"
 #include <machine/asm.h>
+#include <arm/locore.h>
 
 /*
  * Functions to set the MMU Translation Table Base register
@@ -41,14 +42,19 @@
  * addresses that are about to change.
  */
 ENTRY(arm9_setttb)
+	cmp	r1, #0
+	beq	1f
+
 	stmfd	sp!, {r0, lr}
 	bl	_C_LABEL(arm9_idcache_wbinv_all)
 	ldmfd	sp!, {r0, lr}
-
+	cmp	r0, #1			/* make sure EQ=0 */
+1:
 	mcr	p15, 0, r0, c2, c0, 0	/* load new TTB */
 
-	mcr	p15, 0, r0, c8, c7, 0	/* invalidate I+D TLBs */
-	mov	pc, lr
+	mcrne	p15, 0, r0, c8, c7, 0	/* invalidate I+D TLBs */
+	RET
+END(arm9_setttb)
 
 /*
  * TLB functions
@@ -56,7 +62,13 @@ ENTRY(arm9_setttb)
 ENTRY(arm9_tlb_flushID_SE)
 	mcr	p15, 0, r0, c8, c6, 1	/* flush D tlb single entry */
 	mcr	p15, 0, r0, c8, c5, 1	/* flush I tlb single entry */
+#if PAGE_SIZE == 2 * L2_S_SIZE
+	add	r0, r0, #L2_S_SIZE
+	mcr	p15, 0, r0, c8, c6, 1	/* flush D tlb single entry */
+	mcr	p15, 0, r0, c8, c5, 1	/* flush I tlb single entry */
+#endif
 	mov	pc, lr
+END(arm9_tlb_flushID_SE)
 
 /*
  * Cache operations.  For the entire cache we use the set/index
@@ -83,6 +95,7 @@ ENTRY_NP(arm9_icache_sync_range)
 	subs	r1, r1, ip
 	bpl	.Larm9_sync_next
 	mov	pc, lr
+END(arm9_icache_sync_range)
 
 ENTRY_NP(arm9_icache_sync_all)
 .Larm9_icache_sync_all:
@@ -110,7 +123,8 @@ ENTRY_NP(arm9_icache_sync_all)
 	mov	pc, lr
 
 .Larm9_line_size:
-	.word	_C_LABEL(arm_pdcache_line_size)
+	.word	_C_LABEL(arm_pcache) + DCACHE_LINE_SIZE
+END(arm9_icache_sync_all)
 
 ENTRY(arm9_dcache_wb_range)
 	ldr	ip, .Larm9_line_size
@@ -127,7 +141,8 @@ ENTRY(arm9_dcache_wb_range)
 	subs	r1, r1, ip
 	bpl	.Larm9_wb_next
 	mov	pc, lr
-	
+END(arm9_dcache_wb_range)
+
 ENTRY(arm9_dcache_wbinv_range)
 	ldr	ip, .Larm9_line_size
 	cmp	r1, #0x4000
@@ -143,7 +158,8 @@ ENTRY(arm9_dcache_wbinv_range)
 	subs	r1, r1, ip
 	bpl	.Larm9_wbinv_next
 	mov	pc, lr
-	
+END(arm9_dcache_wbinv_range)
+
 /*
  * Note, we must not invalidate everything.  If the range is too big we
  * must use wb-inv of the entire cache.
@@ -163,6 +179,7 @@ ENTRY(arm9_dcache_inv_range)
 	subs	r1, r1, ip
 	bpl	.Larm9_inv_next
 	mov	pc, lr
+END(arm9_dcache_inv_range)
 
 ENTRY(arm9_idcache_wbinv_range)
 	ldr	ip, .Larm9_line_size
@@ -180,6 +197,7 @@ ENTRY(arm9_idcache_wbinv_range)
 	subs	r1, r1, ip
 	bpl	.Larm9_id_wbinv_next
 	mov	pc, lr
+END(arm9_idcache_wbinv_range)
 
 ENTRY_NP(arm9_idcache_wbinv_all)
 .Larm9_idcache_wbinv_all:
@@ -209,11 +227,13 @@ ENTRY(arm9_dcache_wbinv_all)
 
 .Larm9_cache_data:
 	.word	_C_LABEL(arm9_dcache_sets_max)
+END(arm9_dcache_wbinv_all)
+END(arm9_idcache_wbinv_all)
 
 /*
  * Context switch.
  *
- * These is the CPU-specific parts of the context switcher cpu_switch()
+ * These are the CPU-specific parts of the context switcher cpu_switch()
  * These functions actually perform the TTB reload.
  */
 ENTRY(arm9_context_switch)
@@ -230,6 +250,7 @@ ENTRY(arm9_context_switch)
 	nop
 	nop
 	mov	pc, lr
+END(arm9_context_switch)
 
 	.bss
 

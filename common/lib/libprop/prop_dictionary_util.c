@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_dictionary_util.c,v 1.2 2007/08/16 16:28:18 thorpej Exp $	*/
+/*	$NetBSD: prop_dictionary_util.c,v 1.5 2012/07/27 09:10:59 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,8 +38,20 @@
  * exactly what we're doing here.
  */
 
-#include <prop/proplib.h>
 #include "prop_object_impl.h"	/* only to hide kernel vs. not-kernel */
+#include <prop/proplib.h>
+
+bool
+prop_dictionary_get_dict(prop_dictionary_t dict, const char *key, prop_dictionary_t *dp)
+{
+	prop_object_t o;
+	o = prop_dictionary_get(dict, key);
+	if (o == NULL || prop_object_type(o) != PROP_TYPE_DICTIONARY)
+		return false;
+	*dp = o;
+	return true;
+
+}
 
 bool
 prop_dictionary_get_bool(prop_dictionary_t dict,
@@ -213,3 +218,15 @@ TEMPLATE(,)
 TEMPLATE(_nocopy,const)
 
 #undef TEMPLATE
+
+bool
+prop_dictionary_set_and_rel(prop_dictionary_t dict, const char *key,
+    prop_object_t po)
+{
+	bool ret;
+	if (po == NULL)
+		return false;
+	ret = prop_dictionary_set(dict, key, po);
+	prop_object_release(po);
+	return ret;
+}

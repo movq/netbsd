@@ -1,4 +1,4 @@
-/*	$NetBSD: field.c,v 1.24 2006/02/07 20:07:42 wiz Exp $	*/
+/*	$NetBSD: field.c,v 1.31 2016/03/09 19:47:13 christos Exp $	*/
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
  *                         (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -29,8 +29,9 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: field.c,v 1.24 2006/02/07 20:07:42 wiz Exp $");
+__RCSID("$NetBSD: field.c,v 1.31 2016/03/09 19:47:13 christos Exp $");
 
+#include <sys/param.h>
 #include <stdlib.h>
 #include <strings.h>
 #include <stdarg.h>
@@ -325,20 +326,20 @@ field_buffer_init(FIELD *field, int buffer, unsigned int len)
 		field->cursor_xpos = 0;
 		field->cursor_ypos = 0;
 		field->row_count = 1; /* must be at least one row  XXX need to shift old rows (if any) to free list??? */
-		field->lines->length = len;
-		if ((newp = realloc(field->lines->string,
+		field->alines->length = len;
+		if ((newp = realloc(field->alines->string,
 				    (size_t) len + 1)) == NULL)
 			return E_SYSTEM_ERROR;
-		field->lines->string = newp;
-		field->lines->allocated = len + 1;
-		strlcpy(field->lines->string, field->buffers[buffer].string,
+		field->alines->string = newp;
+		field->alines->allocated = len + 1;
+		strlcpy(field->alines->string, field->buffers[buffer].string,
 			(size_t) len + 1);
-		field->lines->expanded =
-			_formi_tab_expanded_length(field->lines->string,
-						   0, field->lines->length);
+		field->alines->expanded =
+			_formi_tab_expanded_length(field->alines->string,
+						   0, field->alines->length);
 
-		field->start_line = field->lines;
-		field->cur_line = field->lines;
+		field->start_line = field->alines;
+		field->cur_line = field->alines;
 		
 		  /* we have to hope the wrap works - if it does not then the
 		     buffer is pretty much borked */
@@ -351,7 +352,7 @@ field_buffer_init(FIELD *field, int buffer, unsigned int len)
 		   * multiline case is handled when the wrap is done.
 		   */
 		if (field->row_count == 1)
-			_formi_calculate_tabs(field->lines);
+			_formi_calculate_tabs(field->alines);
 
 		  /* redraw the field to reflect the new contents. If the field
 		   * is attached....
@@ -408,7 +409,7 @@ set_field_printf(FIELD *field, int buffer, char *fmt, ...)
  */
 
 int
-set_field_buffer(FIELD *field, int buffer, char *value)
+set_field_buffer(FIELD *field, int buffer, const char *value)
 {
 	unsigned int len;
 	int status;
@@ -424,26 +425,19 @@ set_field_buffer(FIELD *field, int buffer, char *value)
 	    && ((field->rows + field->nrows) == 1))
 		len = field->cols;
 
-#ifdef DEBUG
-	if (_formi_create_dbg_file() != E_OK)
-		return E_SYSTEM_ERROR;
-
-	fprintf(dbg,
-		"set_field_buffer: entry: len = %d, value = %s, buffer=%d\n",
-		len, value, buffer);
-	fprintf(dbg, "set_field_buffer: entry: string = ");
+	_formi_dbg_printf( "%s: len = %d, value = %s, buffer=%d\n", __func__,
+	    len, value, buffer);
 	if (field->buffers[buffer].string != NULL)
-		fprintf(dbg, "%s, len = %d\n", field->buffers[buffer].string,
-			field->buffers[buffer].length);
+		_formi_dbg_printf("%s: string=%s, len = %d\n", __func__,
+		    field->buffers[buffer].string,
+		    field->buffers[buffer].length);
 	else
-		fprintf(dbg, "(null), len = 0\n");
-	fprintf(dbg, "set_field_buffer: entry: lines.len = %d\n",
-		field->lines[0].length);
-#endif
+		_formi_dbg_printf("%s: string=(null), len = 0\n", __func__);
+	_formi_dbg_printf("%s: lines.len = %d\n", __func__,
+	    field->alines[0].length);
 	
-	if ((field->buffers[buffer].string =
-	     (char *) realloc(field->buffers[buffer].string,
-			      (size_t) len + 1)) == NULL)
+	if ((field->buffers[buffer].string = realloc(
+	    field->buffers[buffer].string, (size_t) len + 1)) == NULL)
 		return E_SYSTEM_ERROR;
 
 	strlcpy(field->buffers[buffer].string, value, (size_t) len + 1);
@@ -451,14 +445,11 @@ set_field_buffer(FIELD *field, int buffer, char *value)
 	field->buffers[buffer].allocated = len + 1;
 	status = field_buffer_init(field, buffer, len);
 
-#ifdef DEBUG
-	fprintf(dbg, "set_field_buffer: exit: len = %d, value = %s\n",
-		len, value);
-	fprintf(dbg, "set_field_buffer: exit: string = %s, len = %d\n",
-		field->buffers[buffer].string, field->buffers[buffer].length);
-	fprintf(dbg, "set_field_buffer: exit: lines.len = %d\n",
-		field->lines[0].length);
-#endif
+	_formi_dbg_printf("%s: len = %d, value = %s\n", __func__, len, value);
+	_formi_dbg_printf("%s: string = %s, len = %d\n", __func__,
+	    field->buffers[buffer].string, field->buffers[buffer].length);
+	_formi_dbg_printf("%s: lines.len = %d\n", __func__,
+		field->alines[0].length);
 
 	return status;
 }
@@ -472,6 +463,7 @@ field_buffer(FIELD *field, int buffer)
 
 	char *reformat, *p;
 	_FORMI_FIELD_LINES *linep;
+	size_t bufsize, pos;
 	
 	if (field == NULL)
 		return NULL;
@@ -491,49 +483,35 @@ field_buffer(FIELD *field, int buffer)
 	if (_formi_sync_buffer(field) != E_OK)
 		return NULL;
 	
-	if ((field->opts & O_REFORMAT) != O_REFORMAT) {
+	if ((field->opts & O_REFORMAT) != O_REFORMAT)
 		return field->buffers[buffer].string;
-	} else {
-		if (field->row_count > 1) {
-			  /* reformat */
-			reformat = (char *)
-				malloc(strlen(field->buffers[buffer].string)
-				       + ((field->row_count - 1)
-					  * sizeof(char)) + 1);
 
-			if (reformat == NULL)
+	if (field->row_count <= 1)
+		return strdup(field->buffers[buffer].string);
+
+	/*
+	 * create a single string containing each line,
+	 * separated by newline, last line having no
+	 * newline, but NUL terminated.
+	 */
+	bufsize = pos = 0;
+	reformat = NULL;
+	for (linep = field->alines; linep; linep = linep->next) {
+		size_t len = strlen(linep->string);
+		if (len + 1 >= bufsize - pos) {
+			bufsize += MAX(1024, 2 * len);
+			p = realloc(reformat, bufsize);
+			if (p == NULL) {
+				free(reformat);
 				return NULL;
-
-			  /*
-			   * foreach row copy line, append newline, no
-			   * newline on last row.
-			   */
-			p = reformat;
-			linep = field->lines;
-			
-			do
-			{
-				if (linep->length != 0) {
-					strncpy(p, linep->string,
-						(size_t) linep->length);
-					p += linep->length;
-				}
-				
-				linep = linep->next;
-				if (linep != NULL)
-					*p = '\n';
-				p++;
 			}
-			while (linep != NULL);
-
-			p = '\0';
-			return reformat;
-		} else {
-			asprintf(&reformat, "%s",
-				 field->buffers[buffer].string);
-			return reformat;
+			reformat = p;
 		}
+		memcpy(reformat + pos, linep->string, len);
+		pos += len;
+		reformat[pos++] = linep->next ? '\n' : '\0';
 	}
+	return reformat;
 }
 
 /*
@@ -825,29 +803,29 @@ new_field(int rows, int cols, int frow, int fcol, int nrows, int nbuf)
 		new->buffers[i].allocated = 1;
 	}
 
-	if ((new->lines = (_FORMI_FIELD_LINES *)
+	if ((new->alines = (_FORMI_FIELD_LINES *)
 	     malloc(sizeof(struct _formi_field_lines))) == NULL) {
 		free(new->buffers);
 		free(new);
 		return NULL;
 	}
 
-	new->lines->prev = NULL;
-	new->lines->next = NULL;
-	new->lines->allocated = 0;
-	new->lines->length = 0;
-	new->lines->expanded = 0;
-	new->lines->string = NULL;
-	new->lines->hard_ret = FALSE;
-	new->lines->tabs = NULL;
-	new->start_line = new->lines;
-	new->cur_line = new->lines;
+	new->alines->prev = NULL;
+	new->alines->next = NULL;
+	new->alines->allocated = 0;
+	new->alines->length = 0;
+	new->alines->expanded = 0;
+	new->alines->string = NULL;
+	new->alines->hard_ret = FALSE;
+	new->alines->tabs = NULL;
+	new->start_line = new->alines;
+	new->cur_line = new->alines;
 	
 	return new;
 }
 
 /*
- * Duplicate the given field, including it's buffers.
+ * Duplicate the given field, including its buffers.
  */
 FIELD *
 dup_field(FIELD *field, int frow, int fcol)
@@ -912,7 +890,7 @@ int
 free_field(FIELD *field)
 {
 	FIELD *flink;
-	int i;
+	unsigned int i;
 	_formi_tab_t *ts, *nts;
 	
 	if (field == NULL)
@@ -925,9 +903,9 @@ free_field(FIELD *field)
 		  /* no it is not - release the buffers */
 		free(field->buffers);
 		  /* free the tab structures */
-		for (i = 0; i < field->row_count - 1; i++) {
-			if (field->lines[i].tabs != NULL) {
-				ts = field->lines[i].tabs;
+		for (i = 0; i + 1 < field->row_count; i++) {
+			if (field->alines[i].tabs != NULL) {
+				ts = field->alines[i].tabs;
 				while (ts != NULL) {
 					nts = ts->fwd;
 					free(ts);

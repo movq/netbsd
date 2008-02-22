@@ -1,4 +1,4 @@
-/*	$NetBSD: oboe.c,v 1.29 2007/12/15 00:39:30 perry Exp $	*/
+/*	$NetBSD: oboe.c,v 1.45 2017/10/25 08:12:38 maya Exp $	*/
 
 /*	XXXXFVDL THIS DRIVER IS BROKEN FOR NON-i386 -- vtophys() usage	*/
 
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.29 2007/12/15 00:39:30 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.45 2017/10/25 08:12:38 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,14 +60,12 @@ __KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.29 2007/12/15 00:39:30 perry Exp $");
 
 #include <sys/bus.h>
 #include <sys/intr.h>
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/oboereg.h>
 
-static int oboe_match(struct device *parent, struct cfdata *match, void *aux);
-static void oboe_attach(struct device *parent, struct device *self, void *aux);
-static int oboe_activate(struct device *self, enum devact act);
-static int oboe_detach(struct device *self, int flags);
+static int oboe_match(device_t parent, cfdata_t match, void *aux);
+static void oboe_attach(device_t parent, device_t self, void *aux);
+static int oboe_detach(device_t self, int flags);
 
 static int oboe_open(void *h, int flag, int mode, struct lwp *l);
 static int oboe_close(void *h, int flag, int mode, struct lwp *l);
@@ -96,8 +87,7 @@ int oboedebug = 1;
 struct oboe_dma;
 
 struct oboe_softc {
-	struct device		sc_dev;
-	struct device		*sc_child;
+	device_t		sc_child;
 	struct pci_attach_args	sc_pa;
 	pci_intr_handle_t *	sc_ih;
 	unsigned int		sc_revision;	/* PCI Revision ID */
@@ -159,8 +149,8 @@ static void oboe_startchip(struct oboe_softc *);
 static void oboe_stopchip(struct oboe_softc *);
 static int oboe_setbaud(struct oboe_softc *, int);
 
-CFATTACH_DECL(oboe, sizeof(struct oboe_softc),
-    oboe_match, oboe_attach, oboe_detach, oboe_activate);
+CFATTACH_DECL_NEW(oboe, sizeof(struct oboe_softc),
+    oboe_match, oboe_attach, oboe_detach, NULL);
 
 static struct irframe_methods oboe_methods = {
 	oboe_open, oboe_close, oboe_read, oboe_write, oboe_poll,
@@ -168,8 +158,7 @@ static struct irframe_methods oboe_methods = {
 };
 
 static int
-oboe_match(struct device *parent, struct cfdata *match,
-    void *aux)
+oboe_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -181,13 +170,14 @@ oboe_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-oboe_attach(struct device *parent, struct device *self, void *aux)
+oboe_attach(device_t parent, device_t self, void *aux)
 {
-	struct oboe_softc *sc = (struct oboe_softc *)self;
+	struct oboe_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	pci_intr_handle_t ih;
 	struct ir_attach_args ia;
 	const char *intrstring;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	sc->sc_revision = PCI_REVISION(pa->pa_class);
 	printf(": Toshiba Fast Infrared Type O, revision %d\n",
@@ -196,7 +186,7 @@ oboe_attach(struct device *parent, struct device *self, void *aux)
 	/* Map I/O registers. */
 	if (pci_mapreg_map(pa, IO_BAR, PCI_MAPREG_TYPE_IO, 0,
 	    &sc->sc_iot, &sc->sc_ioh, NULL, NULL)) {
-		printf("%s: can't map I/O space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map I/O space\n");
 		return;
 	}
 
@@ -216,25 +206,27 @@ oboe_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Reset the device; bail out upon failure. */
 	if (oboe_reset(sc) != 0) {
-		printf("%s: can't reset\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't reset\n");
 		return;
 	}
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
-	intrstring = pci_intr_string(pa->pa_pc, ih);
+	intrstring = pci_intr_string(pa->pa_pc, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih  = pci_intr_establish(pa->pa_pc, ih, IPL_IR, oboe_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstring != NULL)
-			printf(" at %s", intrstring);
-		printf("\n");
+			aprint_error(" at %s", intrstring);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstring);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstring);
+
+	selinit(&sc->sc_rsel);
+	selinit(&sc->sc_wsel);
 
 	sc->sc_txs = 0;
 	sc->sc_rxs = 0;
@@ -246,39 +238,20 @@ oboe_attach(struct device *parent, struct device *self, void *aux)
 
 	oboe_alloc_taskfile(sc);
 
-	sc->sc_child = config_found((void *)sc, &ia, ir_print);
+	sc->sc_child = config_found(self, &ia, ir_print);
 }
 
 static int
-oboe_activate(struct device *self, enum devact act)
+oboe_detach(device_t self, int flags)
 {
-	struct oboe_softc *sc = (struct oboe_softc *)self;
-	int error = 0;
+	struct oboe_softc *sc = device_private(self);
 
-	DPRINTF(("%s: sc=%p\n", __func__, sc));
-
-	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_child != NULL)
-			error = config_deactivate(sc->sc_child);
-		break;
-	}
-	return (error);
-}
-
-static int
-oboe_detach(struct device *self, int flags)
-{
 #ifdef OBOE_DEBUG
-	struct oboe_softc *sc = (struct oboe_softc *)self;
-
 	/* XXX needs reference counting for proper detach. */
 	DPRINTF(("%s: sc=%p\n", __func__, sc));
 #endif
+	seldestroy(&sc->sc_rsel);
+	seldestroy(&sc->sc_wsel);
 	return (0);
 }
 
@@ -326,9 +299,9 @@ oboe_read(void *h, struct uio *uio, int flag)
 	int s;
 	int slot;
 
-	DPRINTF(("%s: resid=%d, iovcnt=%d, offset=%ld\n",
+	DPRINTF(("%s: resid=%zu, iovcnt=%d, offset=%jd\n",
 		 __func__, uio->uio_resid, uio->uio_iovcnt,
-		 (long)uio->uio_offset));
+		 (intmax_t)uio->uio_offset));
 
 	s = splir();
 	while (sc->sc_saved == 0) {
@@ -352,7 +325,7 @@ oboe_read(void *h, struct uio *uio, int flag)
 		slot = (sc->sc_rxs - sc->sc_saved + RX_SLOTS) % RX_SLOTS;
 		if (uio->uio_resid < sc->sc_lens[slot]) {
 			DPRINTF(("oboe_read: uio buffer smaller than frame size"
-			    "(%d < %d)\n", uio->uio_resid, sc->sc_lens[slot]));
+			    "(%zu < %d)\n", uio->uio_resid, sc->sc_lens[slot]));
 			error = EINVAL;
 		} else {
 			DPRINTF(("oboe_read: moving %d bytes from %p\n",
@@ -520,10 +493,19 @@ filt_oboewdetach(struct knote *kn)
 	splx(s);
 }
 
-static const struct filterops oboeread_filtops =
-	{ 1, NULL, filt_oboerdetach, filt_oboeread };
-static const struct filterops oboewrite_filtops =
-	{ 1, NULL, filt_oboewdetach, filt_seltrue };
+static const struct filterops oboeread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_oboerdetach,
+	.f_event = filt_oboeread,
+};
+
+static const struct filterops oboewrite_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_oboewdetach,
+	.f_event = filt_seltrue,
+};
 
 static int
 oboe_kqfilter(void *h, struct knote *kn)
@@ -611,7 +593,7 @@ oboe_intr(void *p)
 			DPRINTF(("oboe_intr: waking up reader\n"));
 			wakeup(&sc->sc_rxs);
 		}
-		selnotify(&sc->sc_rsel, 0);
+		selnotify(&sc->sc_rsel, 0, 0);
 		DPRINTF(("oboe_intr returning\n"));
 	}
 	if (irqstat & OBOE_ISR_TXDONE) {
@@ -630,7 +612,7 @@ oboe_intr(void *p)
 			DPRINTF(("oboe_intr: waking up writer\n"));
 			wakeup(&sc->sc_txs);
 		}
-		selnotify(&sc->sc_wsel, 0);
+		selnotify(&sc->sc_wsel, 0, 0);
 	}
 	return (1);
 }
@@ -646,14 +628,14 @@ oboe_init_taskfile(struct oboe_softc *sc)
 		sc->sc_taskfile->xmit[i].len = 0;
 		sc->sc_taskfile->xmit[i].control = 0x00;
 		sc->sc_taskfile->xmit[i].buffer =
-			vtophys((u_int)sc->sc_xmit_bufs[i]); /* u_int? */
+		    vtophys((uintptr_t)sc->sc_xmit_bufs[i]);
 	}
 
 	for (i = 0; i < RX_SLOTS; ++i) {
 		sc->sc_taskfile->recv[i].len = 0;
 		sc->sc_taskfile->recv[i].control = 0x83;
 		sc->sc_taskfile->recv[i].buffer =
-			vtophys((u_int)sc->sc_recv_bufs[i]); /* u_int? */
+		    vtophys((uintptr_t)sc->sc_recv_bufs[i]);
 	}
 
 	sc->sc_txpending = 0;
@@ -666,10 +648,9 @@ oboe_alloc_taskfile(struct oboe_softc *sc)
 {
 	int i;
 	/* XXX */
-	uint32_t addr = (uint32_t)malloc(OBOE_TASK_BUF_LEN, M_DEVBUF, M_WAITOK);
-	if (addr == 0) {
-		goto bad;
-	}
+	uintptr_t addr =
+	    (uintptr_t)malloc(OBOE_TASK_BUF_LEN, M_DEVBUF, M_WAITOK);
+
 	addr &= ~(sizeof (struct OboeTaskFile) - 1);
 	addr += sizeof (struct OboeTaskFile);
 	sc->sc_taskfile = (struct OboeTaskFile *) addr;
@@ -679,26 +660,15 @@ oboe_alloc_taskfile(struct oboe_softc *sc)
 			malloc(TX_BUF_SZ, M_DEVBUF, M_WAITOK);
 		sc->sc_xmit_stores[i] =
 			malloc(TX_BUF_SZ, M_DEVBUF, M_WAITOK);
-		if (sc->sc_xmit_bufs[i] == NULL ||
-		    sc->sc_xmit_stores[i] == NULL) {
-			goto bad;
-		}
 	}
 	for (i = 0; i < RX_SLOTS; ++i) {
 		sc->sc_recv_bufs[i] =
 			malloc(RX_BUF_SZ, M_DEVBUF, M_WAITOK);
 		sc->sc_recv_stores[i] =
 			malloc(RX_BUF_SZ, M_DEVBUF, M_WAITOK);
-		if (sc->sc_recv_bufs[i] == NULL ||
-		    sc->sc_recv_stores[i] == NULL) {
-			goto bad;
-		}
 	}
 
 	return 0;
-bad:
-	printf("oboe: malloc for buffers failed()\n");
-	return 1;
 }
 
 static void
@@ -714,7 +684,7 @@ oboe_startchip (struct oboe_softc *sc)
 	OUTB(sc, 0x0f, OBOE_REG_1A);
 	OUTB(sc, 0xff, OBOE_REG_1B);
 
-	physaddr = vtophys((u_int)sc->sc_taskfile); /* u_int? */
+	physaddr = vtophys((uintptr_t)sc->sc_taskfile);
 
 	OUTB(sc, (physaddr >> 0x0a) & 0xff, OBOE_TFP0);
 	OUTB(sc, (physaddr >> 0x12) & 0xff, OBOE_TFP1);

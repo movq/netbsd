@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep.h,v 1.14 2007/10/17 19:56:49 garbled Exp $ */
+/* $NetBSD: pci_machdep.h,v 1.18 2011/06/22 18:06:35 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,9 +36,9 @@
  * prep-specific PCI functions.
  * NOT TO BE USED DIRECTLY BY MACHINE INDEPENDENT CODE.
  */
-int prep_pci_bus_maxdevs(pci_chipset_tag_t, int);
-int prep_pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
-int prep_pci_conf_hook(pci_chipset_tag_t, int, int, int, pcireg_t);
+int prep_pci_bus_maxdevs(void *, int);
+int prep_pci_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
+int prep_pci_conf_hook(void *, int, int, int, pcireg_t);
 
 void prep_pci_get_chipset_tag_direct(pci_chipset_tag_t);
 void prep_pci_get_chipset_tag(pci_chipset_tag_t pc);

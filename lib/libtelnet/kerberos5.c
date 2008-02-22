@@ -1,4 +1,4 @@
-/*	$NetBSD: kerberos5.c,v 1.17 2006/03/22 16:32:39 christos Exp $	*/
+/*	$NetBSD: kerberos5.c,v 1.20 2014/04/26 22:10:40 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -74,6 +74,7 @@ int got_forwarded_creds;/* Tell telnetd to pass -F or -f to login. */
 
 int require_hwpreauth;
 
+const char *get_krb5_err_text(krb5_context, krb5_error_code);
 void kerberos5_forward(Authenticator *);
 
 static unsigned char str_data[1024] = {IAC, SB, TELOPT_AUTHENTICATION, 0,
@@ -95,10 +96,10 @@ krb5_context telnet_context;
 static krb5_auth_context auth_context;
 
 static int
-Data(Authenticator *ap, int type, void *d, int c)
+Data(Authenticator *ap, int type, const void *d, int c)
 {
 	unsigned char *p = str_data + 4;
-	unsigned char *cd = (unsigned char *) d;
+	const unsigned char *cd = (const unsigned char *) d;
 
 	if (c == -1)
 		c = strlen(cd);
@@ -123,6 +124,22 @@ Data(Authenticator *ap, int type, void *d, int c)
 	if (str_data[3] == TELQUAL_IS)
 		printsub('>', &str_data[2], p - &str_data[2]);
 	return (telnet_net_write(str_data, p - str_data));
+}
+
+const char *
+get_krb5_err_text(krb5_context ctx, krb5_error_code ret)
+{
+	static const char	*str = NULL;
+
+	if (str)
+		krb5_free_error_message(ctx, str);
+
+	str = krb5_get_error_message(ctx, ret);
+
+	if (str != NULL)
+		return str;
+
+	return "unknown";
 }
 
 int
@@ -180,7 +197,7 @@ kerberos5_send(Authenticator *ap)
 		if (auth_debug_mode) {
 			printf(
 			"Kerberos V5: could not get default ccache: %s\r\n",
-			    krb5_get_err_text(telnet_context, ret));
+			    get_krb5_err_text(telnet_context, ret));
 		}
 		return (0);
 	}
@@ -196,7 +213,7 @@ kerberos5_send(Authenticator *ap)
 		if (auth_debug_mode) {
 			printf(
 			"Kerberos V5: krb5_auth_con_init failed: %s\r\n",
-			    krb5_get_err_text(telnet_context, ret));
+			    get_krb5_err_text(telnet_context, ret));
 		}
 		return (0);
 	}
@@ -206,11 +223,12 @@ kerberos5_send(Authenticator *ap)
 		if (auth_debug_mode) {
 			printf("Kerberos V5: "
 			    "krb5_auth_con_setaddrs_from_fd failed: %s\r\n",
-			    krb5_get_err_text(telnet_context, ret));
+			    get_krb5_err_text(telnet_context, ret));
 		}
 		return (0);
 	}
-	krb5_auth_con_setkeytype(telnet_context, auth_context, KEYTYPE_DES);
+	krb5_auth_con_setkeytype(telnet_context, auth_context,
+	    ETYPE_DES_CBC_CRC);
 
 	foo[0] = ap->type;
 	foo[1] = ap->way;
@@ -222,7 +240,7 @@ kerberos5_send(Authenticator *ap)
 	if (ret) {
 		if (1 || auth_debug_mode) {
 			printf("Kerberos V5: mk_req failed (%s)\r\n",
-			    krb5_get_err_text(telnet_context, ret));
+			    get_krb5_err_text(telnet_context, ret));
 		}
 		return (0);
 	}
@@ -269,7 +287,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 			auth_finished(ap, AUTH_REJECT);
 			if (auth_debug_mode)
 				printf("Kerberos V5: krb5_auth_con_init failed (%s)\r\n",
-				    krb5_get_err_text(telnet_context, ret));
+				    get_krb5_err_text(telnet_context, ret));
 			return;
 		}
 		ret = krb5_auth_con_setaddrs_from_fd(telnet_context,
@@ -280,7 +298,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 			if (auth_debug_mode)
 				printf("Kerberos V5: "
 				    "krb5_auth_con_setaddrs_from_fd failed (%s)\r\n",
-				    krb5_get_err_text(telnet_context, ret));
+				    get_krb5_err_text(telnet_context, ret));
 			return;
 		}
 		ret = krb5_sock_to_principal(telnet_context, 0, "host",
@@ -291,7 +309,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 			if (auth_debug_mode)
 				printf("Kerberos V5: "
 				    "krb5_sock_to_principal failed (%s)\r\n",
-				    krb5_get_err_text(telnet_context, ret));
+				    get_krb5_err_text(telnet_context, ret));
 			return;
 		}
 		ret = krb5_rd_req(telnet_context, &auth_context, &auth,
@@ -303,7 +321,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 
 			asprintf(&errbuf,
 			    "Read req failed: %s",
-			    krb5_get_err_text(telnet_context, ret));
+			    get_krb5_err_text(telnet_context, ret));
 			Data(ap, KRB_REJECT, errbuf, -1);
 			if (auth_debug_mode)
 				printf("%s\r\n", errbuf);
@@ -321,7 +339,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 			if (ret) {
 				char *errbuf;
 				asprintf(&errbuf, "Bad checksum: %s",
-				    krb5_get_err_text(telnet_context, ret));
+				    get_krb5_err_text(telnet_context, ret));
 				Data(ap, KRB_REJECT, errbuf, -1);
 				if (auth_debug_mode)
 					printf("%s\r\n", errbuf);
@@ -338,7 +356,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 			if (auth_debug_mode)
 				printf("Kerberos V5: "
 				    "krb5_auth_con_getremotesubkey failed (%s)\r\n",
-				    krb5_get_err_text(telnet_context, ret));
+				    get_krb5_err_text(telnet_context, ret));
 			return;
 		}
 		if (key_block == NULL) {
@@ -352,7 +370,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 			if (auth_debug_mode)
 				printf("Kerberos V5: "
 				       "krb5_auth_con_getkey failed (%s)\r\n",
-				       krb5_get_err_text(telnet_context, ret));
+				       get_krb5_err_text(telnet_context, ret));
 			return;
 		}
 		if (key_block == NULL) {
@@ -373,7 +391,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 				if (auth_debug_mode)
 					printf("Kerberos V5: "
 					    "krb5_mk_rep failed (%s)\r\n",
-					    krb5_get_err_text(telnet_context,
+					    get_krb5_err_text(telnet_context,
 					    ret));
 				krb5_free_keyblock(telnet_context, key_block);
 				return;
@@ -440,7 +458,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 			if (ret) {
 				if (auth_debug_mode)
 					printf("Kerberos V5: could not get ccache: %s\r\n",
-					    krb5_get_err_text(telnet_context,
+					    get_krb5_err_text(telnet_context,
 					    ret));
 				break;
 			}
@@ -449,7 +467,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 			if (ret) {
 				if (auth_debug_mode)
 					printf("Kerberos V5: could not init ccache: %s\r\n",
-					    krb5_get_err_text(telnet_context,
+					    get_krb5_err_text(telnet_context,
 					        ret));
 				break;
 			}
@@ -460,7 +478,7 @@ kerberos5_is(Authenticator * ap, unsigned char *data, int cnt)
 
 				asprintf(&errbuf,
 				    "Read forwarded creds failed: %s",
-				    krb5_get_err_text(telnet_context, ret));
+				    get_krb5_err_text(telnet_context, ret));
 				if (errbuf == NULL)
 					Data(ap, KRB_FORWARD_REJECT, NULL, 0);
 				else
@@ -523,7 +541,7 @@ kerberos5_reply(Authenticator * ap, unsigned char *data, int cnt)
 				    auth_context, &keyblock);
 			if (ret) {
 				printf("[ krb5_auth_con_getkey: %s ]\r\n",
-				    krb5_get_err_text(telnet_context, ret));
+				    get_krb5_err_text(telnet_context, ret));
 				auth_send_retry();
 				return;
 			}
@@ -551,7 +569,7 @@ kerberos5_reply(Authenticator * ap, unsigned char *data, int cnt)
 			    auth_context, &inbuf, &reply);
 			if (ret) {
 				printf("[ Mutual authentication failed: %s ]\r\n",
-				    krb5_get_err_text(telnet_context, ret));
+				    get_krb5_err_text(telnet_context, ret));
 				auth_send_retry();
 				return;
 			}
@@ -663,14 +681,14 @@ kerberos5_forward(Authenticator * ap)
 	if (ret) {
 		if (auth_debug_mode)
 			printf("KerberosV5: could not get default ccache: %s\r\n",
-			    krb5_get_err_text(telnet_context, ret));
+			    get_krb5_err_text(telnet_context, ret));
 		return;
 	}
 	ret = krb5_cc_get_principal(telnet_context, ccache, &principal);
 	if (ret) {
 		if (auth_debug_mode)
 			printf("KerberosV5: could not get principal: %s\r\n",
-			    krb5_get_err_text(telnet_context, ret));
+			    get_krb5_err_text(telnet_context, ret));
 		return;
 	}
 	memset(&creds, 0, sizeof(creds));
@@ -684,7 +702,7 @@ kerberos5_forward(Authenticator * ap)
 	if (ret) {
 		if (auth_debug_mode)
 			printf("KerberosV5: could not get principal: %s\r\n",
-			    krb5_get_err_text(telnet_context, ret));
+			    get_krb5_err_text(telnet_context, ret));
 		return;
 	}
 	creds.times.endtime = 0;
@@ -699,7 +717,7 @@ kerberos5_forward(Authenticator * ap)
 	if (ret) {
 		if (auth_debug_mode)
 			printf("Kerberos V5: error getting forwarded creds: %s\r\n",
-			    krb5_get_err_text(telnet_context, ret));
+			    get_krb5_err_text(telnet_context, ret));
 		return;
 	}
 	if (!Data(ap, KRB_FORWARD, out_data.data, out_data.length)) {

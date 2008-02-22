@@ -1,4 +1,4 @@
-/* $NetBSD: scan_ffs.c,v 1.20 2007/12/15 19:44:47 perry Exp $ */
+/* $NetBSD: scan_ffs.c,v 1.32 2015/10/15 06:25:23 dholland Exp $ */
 
 /*
  * Copyright (c) 2005-2007 Juan Romero Pardines
@@ -33,7 +33,7 @@
  
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: scan_ffs.c,v 1.20 2007/12/15 19:44:47 perry Exp $");
+__RCSID("$NetBSD: scan_ffs.c,v 1.32 2015/10/15 06:25:23 dholland Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -44,50 +44,12 @@ __RCSID("$NetBSD: scan_ffs.c,v 1.20 2007/12/15 19:44:47 perry Exp $");
 #include <sys/fcntl.h>
 #include <sys/mount.h>
 
-#include <ufs/ufs/dinode.h>
 #include <ufs/lfs/lfs.h>
+#include <ufs/lfs/lfs_accessors.h>
 #include <ufs/lfs/lfs_extern.h>
 
-/* Undefine macros defined by both lfs/lfs.h and ffs/fs.h */
-#undef fsbtodb
-#undef dbtofsb
-#undef blkoff
-#undef fragoff
-#undef lblktosize
-#undef lblkno
-#undef numfrags
-#undef blkroundup
-#undef fragroundup
-#undef fragstoblks
-#undef blkstofrags
-#undef fragnum
-#undef blknum
-#undef blksize
-#undef INOPB
-#undef INOPF
-#undef NINDIR
-
+#include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
-
-/* Undefine macros defined by both lfs/lfs.h and ffs/fs.h */
-/* ...to make sure we don't later depend on their (ambigious) definition */
-#undef fsbtodb
-#undef dbtofsb
-#undef blkoff
-#undef fragoff
-#undef lblktosize
-#undef lblkno
-#undef numfrags
-#undef blkroundup
-#undef fragroundup
-#undef fragstoblks
-#undef blkstofrags
-#undef fragnum
-#undef blknum
-#undef blksize
-#undef INOPB
-#undef INOPF
-#undef NINDIR
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -273,7 +235,7 @@ ffs_scan(struct sblockinfo *sbi, int n)
 		 * Really enough for now.
 		 */
 		for (i = 1; i < 16; i <<= 1)
-			if ((BLK_CNT - lastblk) == (i * SBLOCKSIZE / 512)) {
+			if ((BLK_CNT - lastblk) == (daddr_t)(i * SBLOCKSIZE / 512)) {
 				if (flags & LABELS)
 					ffs_printpart(sbi, LABELS, i, n);
 				else
@@ -287,34 +249,38 @@ static void
 lfs_printpart(struct sblockinfo *sbi, int flag, int n)
 {
 	if (flags & VERBOSE)
-               	(void)printf("offset: %" PRIu64 " size %" PRIu32
-			" fsid %" PRIx32 "\n", sbi->lfs_off, sbi->lfs->lfs_size,
-			sbi->lfs->lfs_ident);
+               	(void)printf("offset: %" PRIu64 " size %" PRIu64
+			" fsid %" PRIx32 "\n", sbi->lfs_off,
+			lfs_sb_getsize(sbi->lfs),
+			lfs_sb_getident(sbi->lfs));
 	switch (flag) {
 	case LABELS:
 		(void)printf("X:  %9" PRIu64,
-               		(uint64_t)(sbi->lfs->lfs_size *
-               		sbi->lfs->lfs_fsize / 512));
+               		(lfs_sb_getsize(sbi->lfs) *
+               		lfs_sb_getfsize(sbi->lfs) / 512));
 		(void)printf(" %9" PRIu64, sbi->lfs_off); 
-		(void)printf(" 4.4LFS %6d %5d %7d # %s [LFSv%d]\n",
-			sbi->lfs->lfs_fsize, sbi->lfs->lfs_bsize,
-			sbi->lfs->lfs_nseg, sbi->lfs_path, 
-			sbi->lfs->lfs_version);
+		(void)printf(" 4.4LFS %6d %5d %7d # %s [LFS%d v%d]\n",
+			lfs_sb_getfsize(sbi->lfs), lfs_sb_getbsize(sbi->lfs),
+			lfs_sb_getnseg(sbi->lfs), sbi->lfs_path, 
+			sbi->lfs->lfs_is64 ? 64 : 32,
+			lfs_sb_getversion(sbi->lfs));
 		break;
 	case BLOCKS:
-		(void)printf("LFSv%d", sbi->lfs->lfs_version);
+		(void)printf("LFS%d v%d", sbi->lfs->lfs_is64 ? 64 : 32,
+			lfs_sb_getversion(sbi->lfs));
 		(void)printf(" sb at %" PRIu64, sbi->lfs_off + btodb(LFS_LABELPAD));
-		(void)printf(" fsid %" PRIx32, sbi->lfs->lfs_ident);
+		(void)printf(" fsid %" PRIx32, lfs_sb_getident(sbi->lfs));
 		(void)printf(" size %" PRIu64 ", last mounted on %s\n",
-			(uint64_t)(sbi->lfs->lfs_size *
-			sbi->lfs->lfs_fsize / 512), sbi->lfs_path);
+			(lfs_sb_getsize(sbi->lfs) *
+			lfs_sb_getfsize(sbi->lfs) / 512), sbi->lfs_path);
 		break;
 	default:
-		(void)printf("LFSv%d ", sbi->lfs->lfs_version);
+		(void)printf("LFS%d v%d ", sbi->lfs->lfs_is64 ? 64 : 32,
+			lfs_sb_getversion(sbi->lfs));
 		(void)printf("at %" PRIu64, sbi->lfs_off);
 		(void)printf(" size %" PRIu64 ", last mounted on %s\n",
-			(uint64_t)(sbi->lfs->lfs_size *
-			sbi->lfs->lfs_fsize / 512), sbi->lfs_path);
+			(lfs_sb_getsize(sbi->lfs) *
+			lfs_sb_getfsize(sbi->lfs) / 512), sbi->lfs_path);
 		break;
 	}
 }
@@ -322,8 +288,10 @@ lfs_printpart(struct sblockinfo *sbi, int flag, int n)
 static void
 lfs_scan(struct sblockinfo *sbi, int n)
 {
+	size_t namesize;
+
 	/* Check to see if the sb checksums correctly */
-	if (lfs_sb_cksum(&(sbi->lfs->lfs_dlfs)) != sbi->lfs->lfs_cksum) {
+	if (lfs_sb_cksum(sbi->lfs) != lfs_sb_getcksum(sbi->lfs)) {
 		if (flags & VERBOSE)
 			printf("LFS bad superblock at %" PRIu64 "\n",
 				BLK_CNT);
@@ -348,12 +316,17 @@ lfs_scan(struct sblockinfo *sbi, int n)
 	 */
 	case FIRST_SBLOCK_ADDRESS:
 		/* copy partition offset */
-		if (sbi->lfs_off != lastblk)
+		if ((daddr_t)sbi->lfs_off != lastblk)
 			sbi->lfs_off = BLK_CNT - (LFS_LABELPAD / 512);
 		break;
 	case SECOND_SBLOCK_ADDRESS:
 		/* copy the path of last mount */
-		(void)memcpy(sbi->lfs_path, sbi->lfs->lfs_fsmnt, MAXMNTLEN);
+		namesize = MIN(sizeof(sbi->lfs_path), MIN(
+			       sizeof(sbi->lfs->lfs_dlfs_u.u_32.dlfs_fsmnt),
+			       sizeof(sbi->lfs->lfs_dlfs_u.u_64.dlfs_fsmnt)));
+		(void)memcpy(sbi->lfs_path, lfs_sb_getfsmnt(sbi->lfs),
+			     namesize);
+		sbi->lfs_path[namesize - 1] = '\0';
 		/* print now that we have the info */
 		if (flags & LABELS)
 			lfs_printpart(sbi, LABELS, n);
@@ -371,6 +344,31 @@ lfs_scan(struct sblockinfo *sbi, int n)
 		break;
 	default:
 		break;
+	}
+}
+
+static int
+lfs_checkmagic(struct sblockinfo *sbinfo)
+{
+	switch (sbinfo->lfs->lfs_dlfs_u.u_32.dlfs_magic) {
+	case LFS_MAGIC:
+		sbinfo->lfs->lfs_is64 = false;
+		sbinfo->lfs->lfs_dobyteswap = false;
+		return 1;
+	case LFS_MAGIC_SWAPPED:
+		sbinfo->lfs->lfs_is64 = false;
+		sbinfo->lfs->lfs_dobyteswap = true;
+		return 1;
+	case LFS64_MAGIC:
+		sbinfo->lfs->lfs_is64 = true;
+		sbinfo->lfs->lfs_dobyteswap = false;
+		return 1;
+	case LFS64_MAGIC_SWAPPED:
+		sbinfo->lfs->lfs_is64 = true;
+		sbinfo->lfs->lfs_dobyteswap = true;
+		return 1;
+	default:
+		return 0;
 	}
 }
 
@@ -412,7 +410,7 @@ scan_disk(int fd, daddr_t beg, daddr_t end, int fflags)
 				break;
 			case FSTYPE_NONE:
 				/* maybe LFS? */
-				if (sbinfo.lfs->lfs_magic == LFS_MAGIC)
+				if (lfs_checkmagic(&sbinfo))
 					lfs_scan(&sbinfo, n);
 				break;
 			default:

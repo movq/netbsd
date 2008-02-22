@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_attach.c,v 1.8 2007/12/14 16:55:20 christos Exp $	*/
+/*	$NetBSD: mime_attach.c,v 1.19 2017/11/09 20:27:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_attach.c,v 1.8 2007/12/14 16:55:20 christos Exp $");
+__RCSID("$NetBSD: mime_attach.c,v 1.19 2017/11/09 20:27:50 christos Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
@@ -48,7 +41,6 @@ __RCSID("$NetBSD: mime_attach.c,v 1.8 2007/12/14 16:55:20 christos Exp $");
 #include <fcntl.h>
 #include <libgen.h>
 #include <magic.h>
-#include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,6 +59,7 @@ __RCSID("$NetBSD: mime_attach.c,v 1.8 2007/12/14 16:55:20 christos Exp $");
 #include "mime_child.h"
 #endif
 #include "glob.h"
+#include "sig.h"
 
 #if 0
 /*
@@ -231,43 +224,45 @@ is_text(const char *ctype)
 static const char *
 content_encoding_core(void *fh, const char *ctype)
 {
-	int c, lastc;
-	int ctrlchar, endwhite;
+#define MAILMSG_CLEAN	0x0
+#define MAILMSG_ENDWS	0x1
+#define MAILMSG_CTRLC	0x2
+#define MAILMSG_8BIT	0x4
+#define MAILMSG_LONGL	0x8
+	int c, lastc, state;
 	size_t curlen, maxlen;
 
+	state = MAILMSG_CLEAN;
 	curlen = 0;
-	maxlen = 0;
-	ctrlchar = 0;
-	endwhite = 0;
+	maxlen = line_limit();
 	lastc = EOF;
 	while ((c = fgetc(fh)) != EOF) {
 		curlen++;
 
-		if (c == '\0' || (lastc == '\r' && c != '\n'))
+		if (c == '\0')
 			return MIME_TRANSFER_BASE64;
 
 		if (c > 0x7f) {
-			if (is_text(ctype))
-				return MIME_TRANSFER_QUOTED;
-			else
+			if (!is_text(ctype))
 				return MIME_TRANSFER_BASE64;
+			state |= MAILMSG_8BIT;
+			continue;
 		}
 		if (c == '\n') {
 			if (is_WSP(lastc))
-				endwhite = 1;
+				state |= MAILMSG_ENDWS;
 			if (curlen > maxlen)
-				maxlen = curlen;
+				state |= MAILMSG_LONGL;
 			curlen = 0;
 		}
-		else if ((c < 0x20 && c != '\t') || c == 0x7f)
-			ctrlchar = 1;
-
+		else if ((c < 0x20 && c != '\t') || c == 0x7f || lastc == '\r')
+			state |= MAILMSG_CTRLC;
 		lastc = c;
 	}
 	if (lastc == EOF) /* no characters read */
 		return MIME_TRANSFER_7BIT;
 
-	if (lastc != '\n' || ctrlchar || endwhite || maxlen > line_limit())
+	if (lastc != '\n' || state != MAILMSG_CLEAN)
 		return MIME_TRANSFER_QUOTED;
 
 	return MIME_TRANSFER_7BIT;
@@ -278,7 +273,7 @@ content_encoding_by_name(const char *filename, const char *ctype)
 {
 	FILE *fp;
 	const char *enc;
-	fp = Fopen(filename, "r");
+	fp = Fopen(filename, "ref");
 	if (fp == NULL) {
 		warn("content_encoding_by_name: %s", filename);
 		return MIME_TRANSFER_BASE64;	/* safe */
@@ -298,14 +293,14 @@ content_encoding_by_fileno(int fd, const char *ctype)
 
 	cur_pos = lseek(fd, (off_t)0, SEEK_CUR);
 	if ((fd2 = dup(fd)) == -1 ||
-	    (fp = Fdopen(fd2, "r")) == NULL) {
+	    (fp = Fdopen(fd2, "ref")) == NULL) {
 		warn("content_encoding_by_fileno");
 		if (fd2 != -1)
 			(void)close(fd2);
 		return MIME_TRANSFER_BASE64;
 	}
 	encoding = content_encoding_core(fp, ctype);
-	Fclose(fp);
+	(void)Fclose(fp);
 	(void)lseek(fd, cur_pos, SEEK_SET);
 	return encoding;
 }
@@ -344,10 +339,11 @@ content_type_by_name(char *filename)
 	magic_t magic;
 	struct stat sb;
 
+#ifdef BROKEN_MAGIC
 	/*
-	 * libmagic produces annoying results on very short files.
-	 * The common case is with mime-encode-message defined and an
-	 * empty message body.
+	 * libmagic(3) produces annoying results on very short files.
+	 * The common case is MIME encoding an empty message body.
+	 * XXX - it would be better to fix libmagic(3)!
 	 *
 	 * Note: a 1-byte message body always consists of a newline,
 	 * so size determines all there.  However, 1-byte attachments
@@ -358,8 +354,9 @@ content_type_by_name(char *filename)
 		if (sb.st_size < 2 && S_ISREG(sb.st_mode)) {
 			FILE *fp;
 			int ch;
+
 			if (sb.st_size == 0 || filename == NULL ||
-			    (fp = Fopen(filename, "r")) == NULL)
+			    (fp = Fopen(filename, "ref")) == NULL)
 				return "text/plain";
 
 			ch = fgetc(fp);
@@ -369,18 +366,19 @@ content_type_by_name(char *filename)
 			    "text/plain" : "application/octet-stream";
 		}
 	}
+#endif
 	magic = magic_open(MAGIC_MIME);
 	if (magic == NULL) {
-		warn("magic_open: %s", magic_error(magic));
+		warnx("magic_open: %s", magic_error(magic));
 		return NULL;
 	}
 	if (magic_load(magic, NULL) != 0) {
-		warn("magic_load: %s", magic_error(magic));
+		warnx("magic_load: %s", magic_error(magic));
 		return NULL;
 	}
 	cp = magic_file(magic, filename);
 	if (cp == NULL) {
-		warn("magic_load: %s", magic_error(magic));
+		warnx("magic_load: %s", magic_error(magic));
 		return NULL;
 	}
 	if (filename &&
@@ -531,7 +529,7 @@ fput_body(FILE *fi, FILE *fo, struct Content *Cp)
 
 	enc = mime_fio_encoder(Cp->C_encoding);
 	if (enc == NULL)
-		warnx("unknown transfer encoding type: %s\n", Cp->C_encoding);
+		warnx("unknown transfer encoding type: %s", Cp->C_encoding);
 	else
 		enc(fi, fo, 0);
 }
@@ -547,7 +545,7 @@ fput_attachment(FILE *fo, struct attachment *ap)
 
 	switch (ap->a_type) {
 	case ATTACH_FNAME:
-		fi = Fopen(ap->a_name, "r");
+		fi = Fopen(ap->a_name, "ref");
 		if (fi == NULL)
 			err(EXIT_FAILURE, "Fopen: %s", ap->a_name);
 		break;
@@ -558,7 +556,7 @@ fput_attachment(FILE *fo, struct attachment *ap)
 		 * finished with the attachment, so the Fclose() below
 		 * is OK for now.  This will be changed in the future.
 		 */
-		fi = Fdopen(ap->a_fileno, "r");
+		fi = Fdopen(ap->a_fileno, "ref");
 		if (fi == NULL)
 			err(EXIT_FAILURE, "Fdopen: %d", ap->a_fileno);
 		break;
@@ -571,7 +569,7 @@ fput_attachment(FILE *fo, struct attachment *ap)
 		(void)snprintf(mailtempname, sizeof(mailtempname),
 		    "%s/mail.RsXXXXXXXXXX", tmpdir);
 		if ((fd = mkstemp(mailtempname)) == -1 ||
-		    (fi = Fdopen(fd, "w+")) == NULL) {
+		    (fi = Fdopen(fd, "wef+")) == NULL) {
 			if (fd != -1)
 				(void)close(fd);
 			err(EXIT_FAILURE, "%s", mailtempname);
@@ -616,7 +614,7 @@ mktemp_file(FILE **nfo, FILE **nfi, const char *hint)
 	(void)snprintf(tempname, sizeof(tempname), "%s/%sXXXXXXXXXX",
 	    tmpdir, hint);
 	if ((fd = mkstemp(tempname)) == -1 ||
-	    (*nfo = Fdopen(fd, "w")) == NULL) {
+	    (*nfo = Fdopen(fd, "wef")) == NULL) {
 		if (fd != -1)
 			(void)close(fd);
 		warn("%s", tempname);
@@ -624,7 +622,7 @@ mktemp_file(FILE **nfo, FILE **nfi, const char *hint)
 	}
 	(void)rm(tempname);
 	if ((fd2 = dup(fd)) == -1 ||
-	    (*nfi = Fdopen(fd2, "r")) == NULL) {
+	    (*nfi = Fdopen(fd2, "ref")) == NULL) {
 		warn("%s", tempname);
 		(void)Fclose(*nfo);
 		return -1;
@@ -794,9 +792,15 @@ get_line(el_mode_t *em, const char *pr, const char *str, int i)
 	 * seems to handle it badly.
 	 */
 	(void)easprintf(&prompt, "#%-7d %s: ", i, pr);
-	line = my_getline(em, prompt, __UNCONST(str));
-	/* LINTED */
-	line = line ? savestr(line) : __UNCONST("");
+	line = my_gets(em, prompt, __UNCONST(str));
+	if (line != NULL) {
+		(void)strip_WSP(line);	/* strip trailing whitespace */
+		line = skip_WSP(line);	/* skip leading white space */
+		line = savestr(line);	/* XXX - do we need this? */
+	}
+	else {
+		line = __UNCONST("");
+	}
 	free(prompt);
 
 	return line;
@@ -807,8 +811,8 @@ sget_line(el_mode_t *em, const char *pr, const char **str, int i)
 {
 	char *line;
 	line = get_line(em, pr, *str, i);
-	if (strcmp(line, *str) != 0)
-		*str = savestr(line);
+	if (line != NULL && strcmp(line, *str) != 0)
+		*str = line;
 }
 
 static void
@@ -956,14 +960,14 @@ edit_attachlist(struct attachment *alist)
  * Hook used by the '~@' escape to attach files.
  */
 PUBLIC struct attachment*
-mime_attach_files(struct attachment *attach, char *linebuf)
+mime_attach_files(struct attachment * volatile attach, char *linebuf)
 {
 	struct attachment *ap;
 	char *argv[MAXARGC];
 	int argc;
 	int attach_num;
 
-	argc = getrawlist(linebuf, argv, sizeofarray(argv));
+	argc = getrawlist(linebuf, argv, (int)__arraycount(argv));
 	attach_num = 1;
 	for (ap = attach; ap && ap->a_flink; ap = ap->a_flink)
 			attach_num++;
@@ -1011,7 +1015,8 @@ mime_attach_optargs(struct name *optargs)
 		int i;
 
 		if (expand_optargs != NULL)
-			argc = getrawlist(np->n_name, argv, sizeofarray(argv));
+			argc = getrawlist(np->n_name,
+			    argv, (int)__arraycount(argv));
 		else {
 			if (np->n_name == '\0')
 				argc = 0;

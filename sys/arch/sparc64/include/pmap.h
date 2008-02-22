@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.38 2007/03/04 06:00:50 christos Exp $	*/
+/*	$NetBSD: pmap.h,v 1.61 2016/11/04 05:41:01 macallan Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -38,6 +38,12 @@
 #include <machine/pte.h>
 #include <sys/queue.h>
 #include <uvm/uvm_object.h>
+#ifdef _KERNEL
+#include <machine/cpuset.h>
+#ifdef SUN4V
+#include <machine/hypervisor.h>
+#endif
+#endif
 #endif
 
 /*
@@ -87,6 +93,11 @@
 
 #ifndef _LOCORE
 
+#ifdef _LP64
+int	sparc64_mmap_range_test(vaddr_t, vaddr_t);
+#define	MD_MMAP_RANGE_TEST(MINVA, MAXVA)	sparc64_mmap_range_test(MINVA, MAXVA)
+#endif
+
 /*
  * Support for big page sizes.  This maps the page size to the
  * page bits.
@@ -94,7 +105,7 @@
 struct page_size_map {
 	uint64_t mask;
 	uint64_t code;
-#ifdef DEBUG
+#if defined(DEBUG) || 1
 	uint64_t use;
 #endif
 };
@@ -108,15 +119,30 @@ extern struct page_size_map page_size_map[];
 #define va_to_dir(v)	(int)((((paddr_t)(v))>>PDSHIFT)&PDMASK)
 #define va_to_pte(v)	(int)((((paddr_t)(v))>>PTSHIFT)&PTMASK)
 
+#ifdef MULTIPROCESSOR
+#define PMAP_LIST_MAXNUMCPU	CPUSET_MAXNUMCPU
+#else
+#define PMAP_LIST_MAXNUMCPU	1
+#endif
+
 struct pmap {
 	struct uvm_object pm_obj;
+	kmutex_t pm_obj_lock;
 #define pm_lock pm_obj.vmobjlock
 #define pm_refs pm_obj.uo_refs
-	LIST_ENTRY(pmap) pm_list;		/* pmap_ctxlist */
+	LIST_ENTRY(pmap) pm_list[PMAP_LIST_MAXNUMCPU];	/* per cpu ctx used list */
 
 	struct pmap_statistics pm_stats;
 
-	int pm_ctx;		/* Current context */
+	/*
+	 * We record the context used on any cpu here. If the context
+	 * is actually present in the TLB, it will be the plain context
+	 * number. If the context is allocated, but has been flushed
+	 * from the tlb, the number will be negative.
+	 * If this pmap has no context allocated on that cpu, the entry
+	 * will be 0.
+	 */
+	int pm_ctx[PMAP_LIST_MAXNUMCPU];	/* Current context per cpu */
 
 	/*
 	 * This contains 64-bit pointers to pages that contain
@@ -138,7 +164,7 @@ struct prom_map {
 	uint64_t	tte;
 };
 
-#define PMAP_NC		0x001	/* Set the E bit in the page */
+#define PMAP_NC		0x001	/* Don't cache, set the E bit in the page */
 #define PMAP_NVC	0x002	/* Don't enable the virtual cache */
 #define PMAP_LITTLE	0x004	/* Map in little endian mode */
 /* Large page size hints --
@@ -151,13 +177,9 @@ struct prom_map {
 /* If these bits are different in va's to the same PA
    then there is an aliasing in the d$ */
 #define VA_ALIAS_MASK   (1 << 13)
-
-typedef	struct pmap *pmap_t;
+#define PMAP_WC		0x20	/* allow write combinimg */
 
 #ifdef	_KERNEL
-extern struct pmap kernel_pmap_;
-#define	pmap_kernel()	(&kernel_pmap_)
-
 #ifdef PMAP_COUNT_DEBUG
 /* diagnostic versions if PMAP_COUNT_DEBUG option is used */
 int pmap_count_res(struct pmap *);
@@ -174,8 +196,27 @@ int pmap_count_wired(struct pmap *);
 void pmap_activate_pmap(struct pmap *);
 void pmap_update(struct pmap *);
 void pmap_bootstrap(u_long, u_long);
+
 /* make sure all page mappings are modulo 16K to prevent d$ aliasing */
-#define	PMAP_PREFER(pa, va, sz, td)	(*(va)+=(((*(va))^(pa))&(1<<(PGSHIFT))))
+#define	PMAP_PREFER(fo, va, sz, td)	pmap_prefer((fo), (va), (td))
+static inline void
+pmap_prefer(vaddr_t fo, vaddr_t *va, int td)
+{
+	vaddr_t newva;
+	vaddr_t m;
+
+	m = 2 * PAGE_SIZE;
+	newva = (*va & ~(m - 1)) | (fo & (m - 1));
+
+	if (td) {
+		if (newva > *va)
+			newva -= m;
+	} else {
+		if (newva < *va)
+			newva += m;
+	}
+	*va = newva;
+}
 
 #define	PMAP_GROWKERNEL         /* turn on pmap_growkernel interface */
 #define PMAP_NEED_PROCWR
@@ -191,12 +232,42 @@ void		switchexit(struct lwp *, int);
 void		pmap_kprotect(vaddr_t, vm_prot_t);
 
 /* SPARC64 specific */
-int	ctx_alloc(struct pmap *);
-void	ctx_free(struct pmap *);
+void		pmap_copy_page_phys(paddr_t, paddr_t);
+void		pmap_zero_page_phys(paddr_t);
+
+#ifdef SUN4V
+/* sun4v specific */
+void		pmap_setup_intstack_sun4v(paddr_t);
+void		pmap_setup_tsb_sun4v(struct tsb_desc*);
+#endif
 
 /* Installed physical memory, as discovered during bootstrap. */
 extern int phys_installed_size;
 extern struct mem_region *phys_installed;
+
+#define	__HAVE_VM_PAGE_MD
+
+/*
+ * For each struct vm_page, there is a list of all currently valid virtual
+ * mappings of that page.  An entry is a pv_entry_t.
+ */
+struct pmap;
+typedef struct pv_entry {
+	struct pv_entry	*pv_next;	/* next pv_entry */
+	struct pmap	*pv_pmap;	/* pmap where mapping lies */
+	vaddr_t		pv_va;		/* virtual address for mapping */
+} *pv_entry_t;
+/* PV flags encoded in the low bits of the VA of the first pv_entry */
+
+struct vm_page_md {
+	struct pv_entry mdpg_pvh;
+};
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	(pg)->mdpage.mdpg_pvh.pv_next = NULL;				\
+	(pg)->mdpage.mdpg_pvh.pv_pmap = NULL;				\
+	(pg)->mdpage.mdpg_pvh.pv_va = 0;				\
+} while (/*CONSTCOND*/0)
 
 #endif	/* _KERNEL */
 

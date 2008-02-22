@@ -1,4 +1,4 @@
-/*	$NetBSD: quip_client.c,v 1.9 2006/10/12 19:59:13 peter Exp $	*/
+/*	$NetBSD: quip_client.c,v 1.12 2016/02/17 19:51:29 christos Exp $	*/
 /*	$KAME: quip_client.c,v 1.9 2003/05/17 05:59:00 itojun Exp $	*/
 /*
  * Copyright (C) 1999-2000
@@ -122,8 +122,7 @@ quip_openserver(void)
 	strlcpy(addr.sun_path, QUIP_PATH,sizeof(addr.sun_path));
 
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		fprintf(stderr, "can't talk to altqd!\n"
-			"probably, altqd is not running\n");
+		warnx("can't talk to altqd;probably, altqd is not running");
 		return (-1);
 	}
 
@@ -269,7 +268,6 @@ void
 quip_rawmode(void)
 {
 	char line[MAXLINESIZE];
-	int result_code;
 
 	printf(">>>Entering the raw interactive mode to the server:\n\n");
 	if (server == NULL) {
@@ -297,7 +295,7 @@ quip_rawmode(void)
 		quip_sendrequest(server, line);
 
 		/* get a response message from the server */
-		result_code = quip_recvresponse(server, NULL, NULL, NULL);
+		(void)quip_recvresponse(server, NULL, NULL, NULL);
 	}
 }
 
@@ -359,7 +357,7 @@ quip_selectqdisc(char *ifname, char *qdisc_name)
 	if (result_code != 200)
 		errx(1, "can't get qdisc info");
 
-	if (sscanf(buf, "%s", qdisc) != 1)
+	if (sscanf(buf, "%63s", qdisc) != 1)
 		errx(1, "can't get qdisc name");
 
 	if (qdisc_name != NULL && strcmp(qdisc, qdisc_name) != 0)

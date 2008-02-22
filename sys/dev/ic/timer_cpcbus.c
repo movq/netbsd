@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_cpcbus.c,v 1.8 2007/10/19 12:00:03 ad Exp $	*/
+/*	$NetBSD: timer_cpcbus.c,v 1.12 2012/10/27 17:18:23 chs Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_cpcbus.c,v 1.8 2007/10/19 12:00:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_cpcbus.c,v 1.12 2012/10/27 17:18:23 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -47,18 +40,17 @@ __KERNEL_RCSID(0, "$NetBSD: timer_cpcbus.c,v 1.8 2007/10/19 12:00:03 ad Exp $");
 #include <dev/ic/cpc700var.h>
 
 struct cpctim_softc {
-	struct device sc_dev;
 	void *sc_ih;
 };
 
-static int	cpctim_match(struct device *, struct cfdata *, void *);
-static void	cpctim_attach(struct device *, struct device *, void *);
+static int	cpctim_match(device_t, cfdata_t, void *);
+static void	cpctim_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(cpctim, sizeof(struct cpctim_softc),
+CFATTACH_DECL_NEW(cpctim, sizeof(struct cpctim_softc),
     cpctim_match, cpctim_attach, NULL, NULL);
 
 int
-cpctim_match(struct device *parent, struct cfdata *cf, void *aux)
+cpctim_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct cpcbus_attach_args *caa = aux;
 
@@ -66,11 +58,11 @@ cpctim_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-cpctim_attach(struct device *parent, struct device *self, void *aux)
+cpctim_attach(device_t parent, device_t self, void *aux)
 {
 #if 0
 	struct cpcbus_attach_args *caa = aux;
-	struct cpctim_softc *sc = (struct cpctim_softc *)self;
+	struct cpctim_softc *sc = device_private(self);
 	int addr = caa->cpca_addr;
 	int irq = caa->cpca_irq;
 

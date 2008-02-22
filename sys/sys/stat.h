@@ -1,4 +1,4 @@
-/*	$NetBSD: stat.h,v 1.56 2007/10/19 15:58:52 christos Exp $	*/
+/*	$NetBSD: stat.h,v 1.68 2013/10/17 18:01:11 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -42,22 +42,18 @@
 #include <sys/featuretest.h>
 #include <sys/types.h>		/* XXX */
 
-#if defined(_NETBSD_SOURCE)
-#include <sys/time.h>
-#endif
-
+#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0) >= 700 || \
+    defined(_NETBSD_SOURCE)
 /*
- * On systems with 8 byte longs and 4 byte time_ts, padding the time_ts
- * is required in order to have a consistent ABI.  This is because the
- * stat structure used to contain timespecs, which had different
- * alignment constraints than a time_t and a long alone.  The padding
- * should be removed the next time the stat structure ABI is changed.
- * (This will happen whever we change to 8 byte time_t.)
+ * POSIX:2008 / XPG7 requires struct timespec to be declared in
+ * this header, but does not provide the usual exemption
+ * "inclusion of this header may make visible symbols defined in <time.h>".
+ *
+ * This is a Standard omission, acknowledged by the committee and
+ * scheduled to be corrected in Technical Corrigendum 2, according to
+ * http://austingroupbugs.net/view.php?id=531
  */
-#if defined(_LP64)	/* XXXX  && _BSD_TIME_T_ == int */
-#define	__STATPAD(x)	int x;
-#else
-#define	__STATPAD(x)	/* nothing */
+#include <sys/time.h>
 #endif
 
 struct stat {
@@ -68,23 +64,20 @@ struct stat {
 	uid_t	  st_uid;		/* user ID of the file's owner */
 	gid_t	  st_gid;		/* group ID of the file's group */
 	dev_t	  st_rdev;		/* device type */
-#if defined(_NETBSD_SOURCE)
-	struct	  timespec st_atimespec;/* time of last access */
-	struct	  timespec st_mtimespec;/* time of last data modification */
-	struct	  timespec st_ctimespec;/* time of last file status change */
-	struct 	  timespec st_birthtimespec; /* time of creation */
+#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0) >= 700 || \
+    defined(_NETBSD_SOURCE)
+	struct	  timespec st_atim;	/* time of last access */
+	struct	  timespec st_mtim;	/* time of last data modification */
+	struct	  timespec st_ctim;	/* time of last file status change */
+	struct	  timespec st_birthtim;	/* time of creation */
 #else
 	time_t	  st_atime;		/* time of last access */
-	__STATPAD(__pad0)
 	long	  st_atimensec;		/* nsec of last access */
 	time_t	  st_mtime;		/* time of last data modification */
-	__STATPAD(__pad1)
 	long	  st_mtimensec;		/* nsec of last data modification */
 	time_t	  st_ctime;		/* time of last file status change */
-	__STATPAD(__pad2)
 	long	  st_ctimensec;		/* nsec of last file status change */
 	time_t	  st_birthtime;		/* time of creation */
-	__STATPAD(__pad3)
 	long	  st_birthtimensec;	/* nsec of time of creation */
 #endif
 	off_t	  st_size;		/* file size, in bytes */
@@ -95,16 +88,23 @@ struct stat {
 	uint32_t  st_spare[2];
 };
 
-#undef __STATPAD
+#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0) >= 700 || \
+    defined(_NETBSD_SOURCE)
+/* Standard-mandated compatibility */
+#define	st_atime		st_atim.tv_sec
+#define	st_mtime		st_mtim.tv_sec
+#define	st_ctime		st_ctim.tv_sec
+#define	st_birthtime		st_birthtim.tv_sec
+#endif
 
 #if defined(_NETBSD_SOURCE)
-#define	st_atime		st_atimespec.tv_sec
-#define	st_atimensec		st_atimespec.tv_nsec
-#define	st_mtime		st_mtimespec.tv_sec
-#define	st_mtimensec		st_mtimespec.tv_nsec
-#define	st_ctime		st_ctimespec.tv_sec
-#define	st_ctimensec		st_ctimespec.tv_nsec
-#define st_birthtime		st_birthtimespec.tv_sec
+#define	st_atimespec		st_atim
+#define	st_atimensec		st_atim.tv_nsec
+#define	st_mtimespec		st_mtim
+#define	st_mtimensec		st_mtim.tv_nsec
+#define	st_ctimespec		st_ctim
+#define	st_ctimensec		st_ctim.tv_nsec
+#define	st_birthtimespec        st_birthtim
 #define st_birthtimensec	st_birthtimespec.tv_nsec
 #endif
 
@@ -168,21 +168,21 @@ struct stat {
 #define	S_ARCH2	_S_ARCH2
 #endif
 
-#define	S_ISDIR(m)	((m & _S_IFMT) == _S_IFDIR)	/* directory */
-#define	S_ISCHR(m)	((m & _S_IFMT) == _S_IFCHR)	/* char special */
-#define	S_ISBLK(m)	((m & _S_IFMT) == _S_IFBLK)	/* block special */
-#define	S_ISREG(m)	((m & _S_IFMT) == _S_IFREG)	/* regular file */
-#define	S_ISFIFO(m)	((m & _S_IFMT) == _S_IFIFO)	/* fifo */
+#define	S_ISDIR(m)	(((m) & _S_IFMT) == _S_IFDIR)	/* directory */
+#define	S_ISCHR(m)	(((m) & _S_IFMT) == _S_IFCHR)	/* char special */
+#define	S_ISBLK(m)	(((m) & _S_IFMT) == _S_IFBLK)	/* block special */
+#define	S_ISREG(m)	(((m) & _S_IFMT) == _S_IFREG)	/* regular file */
+#define	S_ISFIFO(m)	(((m) & _S_IFMT) == _S_IFIFO)	/* fifo */
 #if ((_POSIX_C_SOURCE - 0) >= 200112L) || defined(_XOPEN_SOURCE) || \
     defined(_NETBSD_SOURCE)
-#define	S_ISLNK(m)	((m & _S_IFMT) == _S_IFLNK)	/* symbolic link */
+#define	S_ISLNK(m)	(((m) & _S_IFMT) == _S_IFLNK)	/* symbolic link */
 #endif
 #if ((_POSIX_C_SOURCE - 0) >= 200112L) || ((_XOPEN_SOURCE - 0) >= 600) || \
     defined(_NETBSD_SOURCE)
-#define	S_ISSOCK(m)	((m & _S_IFMT) == _S_IFSOCK)	/* socket */
+#define	S_ISSOCK(m)	(((m) & _S_IFMT) == _S_IFSOCK)	/* socket */
 #endif
 #if defined(_NETBSD_SOURCE)
-#define	S_ISWHT(m)	((m & _S_IFMT) == _S_IFWHT)	/* whiteout */
+#define	S_ISWHT(m)	(((m) & _S_IFMT) == _S_IFWHT)	/* whiteout */
 #endif
 
 #if defined(_NETBSD_SOURCE)
@@ -214,6 +214,8 @@ struct stat {
 #define	SF_APPEND	0x00040000	/* writes to file may only append */
 /*	SF_NOUNLINK	0x00100000	   [NOT IMPLEMENTED] */
 #define	SF_SNAPSHOT	0x00200000	/* snapshot inode */
+#define	SF_LOG		0x00400000	/* WAPBL log file inode */
+#define	SF_SNAPINVAL	0x00800000	/* snapshot is invalid */
 
 #ifdef _KERNEL
 /*
@@ -225,6 +227,15 @@ struct stat {
 #endif /* _KERNEL */
 #endif /* _NETBSD_SOURCE */
 
+#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0) >= 700 || \
+    defined(_NETBSD_SOURCE)
+/*
+ * Special values for utimensat and futimens
+ */
+#define UTIME_NOW	((1 << 30) - 1)
+#define UTIME_OMIT	((1 << 30) - 2)
+#endif
+
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/cdefs.h>
 
@@ -233,16 +244,21 @@ int	chmod(const char *, mode_t);
 int	mkdir(const char *, mode_t);
 int	mkfifo(const char *, mode_t);
 #ifndef __LIBC12_SOURCE__
-int	stat(const char *, struct stat *) __RENAME(__stat30);
-int	fstat(int, struct stat *) __RENAME(__fstat30);
+int	stat(const char *, struct stat *) __RENAME(__stat50);
+int	fstat(int, struct stat *) __RENAME(__fstat50);
 #endif
 mode_t	umask(mode_t);
+#if (_POSIX_C_SOURCE - 0) >= 200112L || defined(_XOPEN_SOURCE) || \
+    defined(_NETBSD_SOURCE)
+#ifndef __LIBC12_SOURCE__
+int	lstat(const char *, struct stat *) __RENAME(__lstat50);
+#endif
+#endif /* _POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE || _NETBSD_SOURCE */
 #if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 int	fchmod(int, mode_t);
 #ifndef __LIBC12_SOURCE__
-int	lstat(const char *, struct stat *) __RENAME(__lstat30);
+int	mknod(const char *, mode_t, dev_t) __RENAME(__mknod50);
 #endif
-int	mknod(const char *, mode_t, dev_t);
 #endif /* defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE) */
 
 #if defined(_NETBSD_SOURCE)
@@ -251,6 +267,32 @@ int	fchflags(int, unsigned long);
 int	lchflags(const char *, unsigned long);
 int	lchmod(const char *, mode_t);
 #endif /* defined(_NETBSD_SOURCE) */
+
+#ifndef __LIBC12_SOURCE__
+/*
+ * X/Open Extended API set 2 (a.k.a. C063)
+ */
+#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0) >= 700 || \
+    defined(_NETBSD_SOURCE) || defined(_INCOMPLETE_XOPEN_C063)
+int     fchmodat(int, const char *, mode_t, int);
+int     fstatat(int, const char *, struct stat *, int);
+int     mkdirat(int, const char *, mode_t);
+int     mkfifoat(int, const char *, mode_t);
+int     mknodat(int, const char *, mode_t, dev_t);
+int     utimensat(int, const char *, const struct timespec *, int);
+#endif
+
+#ifdef _NETBSD_SOURCE
+int utimens(const char *, const struct timespec *);
+int lutimens(const char *, const struct timespec *);
+#endif
+
+#if (_POSIX_C_SOURCE - 0) >= 200809L || (_XOPEN_SOURCE - 0) >= 700 || \
+    defined(_NETBSD_SOURCE)
+int futimens(int, const struct timespec *);
+#endif
+#endif
+
 __END_DECLS
 
 #endif /* !_KERNEL && !_STANDALONE */

@@ -1,4 +1,4 @@
-/*	$NetBSD: strings.h,v 1.12 2007/08/02 21:49:10 kristerw Exp $	*/
+/*	$NetBSD: strings.h,v 1.18 2011/08/22 01:24:15 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,12 +46,19 @@ typedef	_BSD_SIZE_T_	size_t;
 
 #include <sys/cdefs.h>
 
+#include <machine/int_types.h>
+
 __BEGIN_DECLS
 int	 bcmp(const void *, const void *, size_t);
 void	 bcopy(const void *, void *, size_t);
 void	 bzero(void *, size_t);
 int	 ffs(int);
 char	*index(const char *, int);
+unsigned int	popcount(unsigned int) __constfunc;
+unsigned int	popcountl(unsigned long) __constfunc;
+unsigned int	popcountll(unsigned long long) __constfunc;
+unsigned int	popcount32(__uint32_t) __constfunc;
+unsigned int	popcount64(__uint64_t) __constfunc;
 char	*rindex(const char *, int);
 int	 strcasecmp(const char *, const char *);
 int	 strncasecmp(const char *, const char *, size_t);

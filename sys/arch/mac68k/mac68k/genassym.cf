@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.31 2007/10/17 19:55:14 garbled Exp $
+#	$NetBSD: genassym.cf,v 1.38 2017/02/02 21:50:23 rin Exp $
 
 #
 # Copyright (c) 1990 The Regents of the University of California.
@@ -12,11 +12,7 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the University of
-#	California, Berkeley and its contributors.
-# 4. Neither the name of the University nor the names of its contributors
+# 3. Neither the name of the University nor the names of its contributors
 #    may be used to endorse or promote products derived from this software
 #    without specific prior written permission.
 #
@@ -45,7 +41,6 @@ include	<sys/mbuf.h>
 include	<sys/msgbuf.h>
 include	<sys/proc.h>
 include	<sys/syscall.h>
-include	<sys/user.h>
 
 include <uvm/uvm_extern.h>
 
@@ -56,7 +51,7 @@ endif
 
 include	<machine/cpu.h>
 include	<machine/psl.h>
-include	<machine/reg.h>
+include	<machine/pcb.h>
 include	<machine/pte.h>
 
 # machine class
@@ -85,13 +80,11 @@ define	P1PAGES 		P1PAGES
 define	PAGE_SIZE		PAGE_SIZE
 define	NPTEPG			NPTEPG
 define	PGSHIFT 		PGSHIFT
-define	SYSPTSIZE		SYSPTSIZE
-define	USRPTSIZE		USRPTSIZE
 define	USRIOSIZE		USRIOSIZE
 define	USRSTACK		USRSTACK
 
 # lwp & proc fields and values
-define	L_ADDR			offsetof(struct lwp, l_addr)
+define	L_PCB			offsetof(struct lwp, l_addr)
 define	L_PRIORITY		offsetof(struct lwp, l_priority)
 define	L_STAT			offsetof(struct lwp, l_stat)
 define	L_WCHAN			offsetof(struct lwp, l_wchan)
@@ -109,7 +102,7 @@ define	LSRUN			LSRUN
 define	LSONPROC		LSONPROC
 
 # interrupt/fault metering
-define	UVMEXP_INTRS		offsetof(struct uvmexp, intrs)
+define	CI_NINTR		offsetof(struct cpu_info, ci_data.cpu_nintr)
 
 #mE PSL values (should just include psl.h?)
 define	PSL_S			PSL_S
@@ -173,6 +166,13 @@ define	SYS_compat_13_sigreturn13 SYS_compat_13_sigreturn13
 define	ENOENT			ENOENT
 define	EFAULT			EFAULT
 define	ENAMETOOLONG		ENAMETOOLONG
+
+# machine ids
+define MACH_MACC610		MACH_MACC610
+define MACH_MACQ610		MACH_MACQ610
+define MACH_MACC650		MACH_MACC650
+define MACH_MACQ650		MACH_MACQ650
+define MACH_MACQ800		MACH_MACQ800
 
 # SVR4 binary compatibility
 ifdef COMPAT_SVR4

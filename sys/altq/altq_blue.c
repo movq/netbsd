@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_blue.c,v 1.22 2007/03/04 05:59:00 christos Exp $	*/
+/*	$NetBSD: altq_blue.c,v 1.24 2016/04/20 08:58:48 knakahara Exp $	*/
 /*	$KAME: altq_blue.c,v 1.15 2005/04/13 03:44:24 suz Exp $	*/
 
 /*
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_blue.c,v 1.22 2007/03/04 05:59:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_blue.c,v 1.24 2016/04/20 08:58:48 knakahara Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"
@@ -80,6 +80,7 @@ __KERNEL_RCSID(0, "$NetBSD: altq_blue.c,v 1.22 2007/03/04 05:59:00 christos Exp 
 #include <sys/errno.h>
 #include <sys/kernel.h>
 #include <sys/kauth.h>
+#include <sys/cprng.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -111,7 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: altq_blue.c,v 1.22 2007/03/04 05:59:00 christos Exp 
 static blue_queue_t *blue_list = NULL;
 
 /* internal function prototypes */
-static int blue_enqueue(struct ifaltq *, struct mbuf *, struct altq_pktattr *);
+static int blue_enqueue(struct ifaltq *, struct mbuf *);
 static struct mbuf *blue_dequeue(struct ifaltq *, int);
 static int drop_early(blue_t *);
 static int mark_ecn(struct mbuf *, struct altq_pktattr *, int);
@@ -390,12 +391,17 @@ blue_init(blue_t *rp, int flags, int pkttime, int blue_max_pmark,
  *		 ENOBUFS when drop occurs.
  */
 static int
-blue_enqueue(struct ifaltq *ifq, struct mbuf *m, struct altq_pktattr *pktattr)
+blue_enqueue(struct ifaltq *ifq, struct mbuf *m)
 {
+	struct altq_pktattr pktattr;
 	blue_queue_t *rqp = (blue_queue_t *)ifq->altq_disc;
 	int error = 0;
 
-	if (blue_addq(rqp->rq_blue, rqp->rq_q, m, pktattr) == 0)
+	pktattr.pattr_class = m->m_pkthdr.pattr_class;
+	pktattr.pattr_af = m->m_pkthdr.pattr_af;
+	pktattr.pattr_hdr = m->m_pkthdr.pattr_hdr;
+
+	if (blue_addq(rqp->rq_blue, rqp->rq_q, m, &pktattr) == 0)
 		ifq->ifq_len++;
 	else
 		error = ENOBUFS;
@@ -504,7 +510,7 @@ blue_addq(blue_t *rp, class_queue_t *q, struct mbuf *m,
 static int
 drop_early(blue_t *rp)
 {
-	if ((arc4random() % rp->blue_max_pmark) < rp->blue_pmark) {
+	if ((cprng_fast32() % rp->blue_max_pmark) < rp->blue_pmark) {
 		/* drop or mark */
 		return (1);
 	}

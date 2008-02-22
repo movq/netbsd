@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.66 2007/10/17 19:57:08 garbled Exp $	*/
+/*	$NetBSD: pmap.c,v 1.82 2017/02/02 21:35:29 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.66 2007/10/17 19:57:08 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.82 2017/02/02 21:35:29 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,6 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.66 2007/10/17 19:57:08 garbled Exp $");
 #include <sys/socketvar.h>	/* XXX: for sock_loan_thresh */
 
 #include <uvm/uvm.h>
+#include <uvm/uvm_physseg.h>
 
 #include <sh3/mmu.h>
 #include <sh3/cache.h>
@@ -64,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.66 2007/10/17 19:57:08 garbled Exp $");
 #define	__PMAP_PTP_OFSET(va)	((va >> PGSHIFT) & (__PMAP_PTP_PG_N - 1))
 
 struct pmap __pmap_kernel;
+struct pmap *const kernel_pmap_ptr = &__pmap_kernel;
 STATIC vaddr_t __pmap_kve;	/* VA of last kernel virtual */
 paddr_t avail_start;		/* PA of first available physical page */
 paddr_t avail_end;		/* PA of last available physical page */
@@ -107,14 +102,14 @@ STATIC bool __pmap_map_change(pmap_t, vaddr_t, paddr_t, vm_prot_t,
     pt_entry_t);
 
 void
-pmap_bootstrap()
+pmap_bootstrap(void)
 {
 
 	/* Steal msgbuf area */
 	initmsgbuf((void *)uvm_pageboot_alloc(MSGBUFSIZE), MSGBUFSIZE);
 
-	avail_start = ptoa(vm_physmem[0].start);
-	avail_end = ptoa(vm_physmem[vm_nphysseg - 1].end);
+	avail_start = ptoa(uvm_physseg_get_start(uvm_physseg_get_first()));
+	avail_end = ptoa(uvm_physseg_get_end(uvm_physseg_get_last()));
 	__pmap_kve = VM_MIN_KERNEL_ADDRESS;
 
 	pmap_kernel()->pm_refcnt = 1;
@@ -132,35 +127,29 @@ pmap_bootstrap()
 vaddr_t
 pmap_steal_memory(vsize_t size, vaddr_t *vstart, vaddr_t *vend)
 {
-	struct vm_physseg *bank;
-	int i, j, npage;
+	int npage;
 	paddr_t pa;
 	vaddr_t va;
+	uvm_physseg_t bank;
 
 	KDASSERT(!uvm.page_init_done);
 
 	size = round_page(size);
 	npage = atop(size);
 
-	for (i = 0, bank = &vm_physmem[i]; i < vm_nphysseg; i++, bank++)
-		if (npage <= bank->avail_end - bank->avail_start)
+	for (bank = uvm_physseg_get_first();
+	     uvm_physseg_valid_p(bank);
+	     bank = uvm_physseg_get_next(bank)) {
+		if (npage <= uvm_physseg_get_avail_end(bank)
+				- uvm_physseg_get_avail_start(bank))
 			break;
-	KDASSERT(i != vm_nphysseg);
-
-	/* Steal pages */
-	pa = ptoa(bank->avail_start);
-	bank->avail_start += npage;
-	bank->start += npage;
-
-	/* GC memory bank */
-	if (bank->avail_start == bank->end) {
-		/* Remove this segment from the list. */
-		vm_nphysseg--;
-		KDASSERT(vm_nphysseg > 0);
-		for (j = i; i < vm_nphysseg; j++)
-			vm_physmem[j] = vm_physmem[j + 1];
 	}
 
+	KDASSERT(uvm_physseg_valid_p(bank));
+
+	/* Steal pages */
+	pa = ptoa(uvm_physseg_get_avail_start(bank));
+	uvm_physseg_unplug(atop(pa), npage);
 	va = SH3_PHYS_TO_P1SEG(pa);
 	memset((void *)va, 0, size);
 
@@ -216,7 +205,7 @@ pmap_virtual_space(vaddr_t *start, vaddr_t *end)
 }
 
 void
-pmap_init()
+pmap_init(void)
 {
 
 	/* Initialize pmap module */
@@ -245,7 +234,7 @@ pmap_init()
 }
 
 pmap_t
-pmap_create()
+pmap_create(void)
 {
 	pmap_t pmap;
 
@@ -329,7 +318,7 @@ pmap_deactivate(struct lwp *l)
 }
 
 int
-pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
+pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 {
 	struct vm_page *pg;
 	struct vm_page_md *pvh;
@@ -345,7 +334,7 @@ pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 		entry |= _PG_WIRED;
 
 	if (pg != NULL) {	/* memory-space */
-		pvh = &pg->mdpage;
+		pvh = VM_PAGE_TO_MD(pg);
 		entry |= PG_C;	/* always cached */
 
 		/* Seed modified/reference tracking */
@@ -489,7 +478,7 @@ __pmap_pv_enter(pmap_t pmap, struct vm_page *pg, vaddr_t va)
 		 * XXX mapping them uncached (like arm and mips do).
 		 */
  again:
-		pvh = &pg->mdpage;
+		pvh = VM_PAGE_TO_MD(pg);
 		SLIST_FOREACH(pv, &pvh->pvh_head, pv_link) {
 			if (sh_cache_indexof(va) !=
 			    sh_cache_indexof(pv->pv_va)) {
@@ -501,7 +490,7 @@ __pmap_pv_enter(pmap_t pmap, struct vm_page *pg, vaddr_t va)
 	}
 
 	/* Register pv map */
-	pvh = &pg->mdpage;
+	pvh = VM_PAGE_TO_MD(pg);
 	pv = __pmap_pv_alloc();
 	pv->pv_pmap = pmap;
 	pv->pv_va = va;
@@ -553,12 +542,12 @@ __pmap_pv_remove(pmap_t pmap, struct vm_page *pg, vaddr_t vaddr)
 	int s;
 
 	s = splvm();
-	pvh = &pg->mdpage;
+	pvh = VM_PAGE_TO_MD(pg);
 	SLIST_FOREACH(pv, &pvh->pvh_head, pv_link) {
 		if (pv->pv_pmap == pmap && pv->pv_va == vaddr) {
 			if (SH_HAS_VIRTUAL_ALIAS ||
 			    (SH_HAS_WRITEBACK_CACHE &&
-				(pg->mdpage.pvh_flags & PVH_MODIFIED))) {
+				(pvh->pvh_flags & PVH_MODIFIED))) {
 				/*
 				 * Always use index ops. since I don't want to
 				 * worry about address space.
@@ -581,7 +570,7 @@ __pmap_pv_remove(pmap_t pmap, struct vm_page *pg, vaddr_t vaddr)
 }
 
 void
-pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
+pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 {
 	pt_entry_t *pte, entry;
 
@@ -655,7 +644,7 @@ void
 pmap_protect(pmap_t pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 {
 	bool kernel = pmap == pmap_kernel();
-	pt_entry_t *pte, entry;
+	pt_entry_t *pte, entry, protbits;
 	vaddr_t va;
 
 	sva = trunc_page(sva);
@@ -663,6 +652,22 @@ pmap_protect(pmap_t pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 	if ((prot & VM_PROT_READ) == VM_PROT_NONE) {
 		pmap_remove(pmap, sva, eva);
 		return;
+	}
+
+	switch (prot) {
+	default:
+		panic("pmap_protect: invalid protection mode %x", prot);
+		/* NOTREACHED */
+	case VM_PROT_READ:
+		/* FALLTHROUGH */
+	case VM_PROT_READ | VM_PROT_EXECUTE:
+		protbits = kernel ? PG_PR_KRO : PG_PR_URO;
+		break;
+	case VM_PROT_READ | VM_PROT_WRITE:
+		/* FALLTHROUGH */
+	case VM_PROT_ALL:
+		protbits = kernel ? PG_PR_KRW : PG_PR_URW;
+		break;
 	}
 
 	for (va = sva; va < eva; va += PAGE_SIZE) {
@@ -678,22 +683,7 @@ pmap_protect(pmap_t pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 				sh_dcache_wbinv_range_index(va, PAGE_SIZE);
 		}
 
-		entry &= ~PG_PR_MASK;
-		switch (prot) {
-		default:
-			panic("pmap_protect: invalid protection mode %x", prot);
-			/* NOTREACHED */
-		case VM_PROT_READ:
-			/* FALLTHROUGH */
-		case VM_PROT_READ | VM_PROT_EXECUTE:
-			entry |= kernel ? PG_PR_KRO : PG_PR_URO;
-			break;
-		case VM_PROT_READ | VM_PROT_WRITE:
-			/* FALLTHROUGH */
-		case VM_PROT_ALL:
-			entry |= kernel ? PG_PR_KRW : PG_PR_URW;
-			break;
-		}
+		entry = (entry & ~PG_PR_MASK) | protbits;
 		*pte = entry;
 
 		if (pmap->pm_asid != -1)
@@ -704,7 +694,7 @@ pmap_protect(pmap_t pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 void
 pmap_page_protect(struct vm_page *pg, vm_prot_t prot)
 {
-	struct vm_page_md *pvh = &pg->mdpage;
+	struct vm_page_md *pvh = VM_PAGE_TO_MD(pg);
 	struct pv_entry *pv;
 	struct pmap *pmap;
 	vaddr_t va;
@@ -794,24 +784,25 @@ pmap_copy_page(paddr_t src, paddr_t dst)
 bool
 pmap_is_referenced(struct vm_page *pg)
 {
+	struct vm_page_md *pvh = VM_PAGE_TO_MD(pg);
 
-	return ((pg->mdpage.pvh_flags & PVH_REFERENCED) ? true : false);
+	return ((pvh->pvh_flags & PVH_REFERENCED) ? true : false);
 }
 
 bool
 pmap_clear_reference(struct vm_page *pg)
 {
-	struct vm_page_md *pvh = &pg->mdpage;
+	struct vm_page_md *pvh = VM_PAGE_TO_MD(pg);
 	struct pv_entry *pv;
 	pt_entry_t *pte;
 	pmap_t pmap;
 	vaddr_t va;
 	int s;
 
-	if ((pg->mdpage.pvh_flags & PVH_REFERENCED) == 0)
+	if ((pvh->pvh_flags & PVH_REFERENCED) == 0)
 		return (false);
 
-	pg->mdpage.pvh_flags &= ~PVH_REFERENCED;
+	pvh->pvh_flags &= ~PVH_REFERENCED;
 
 	s = splvm();
 	/* Restart reference bit emulation */
@@ -836,14 +827,15 @@ pmap_clear_reference(struct vm_page *pg)
 bool
 pmap_is_modified(struct vm_page *pg)
 {
+	struct vm_page_md *pvh = VM_PAGE_TO_MD(pg);
 
-	return ((pg->mdpage.pvh_flags & PVH_MODIFIED) ? true : false);
+	return ((pvh->pvh_flags & PVH_MODIFIED) ? true : false);
 }
 
 bool
 pmap_clear_modify(struct vm_page *pg)
 {
-	struct vm_page_md *pvh = &pg->mdpage;
+	struct vm_page_md *pvh = VM_PAGE_TO_MD(pg);
 	struct pv_entry *pv;
 	struct pmap *pmap;
 	pt_entry_t *pte, entry;
@@ -903,15 +895,21 @@ pmap_phys_address(paddr_t cookie)
  * a virtual cache alias against vaddr_t foff.
  */
 void
-pmap_prefer(vaddr_t foff, vaddr_t *vap)
+pmap_prefer(vaddr_t foff, vaddr_t *vap, int td)
 {
-	vaddr_t va;
+	if (!SH_HAS_VIRTUAL_ALIAS) 
+		return;
 
-	if (SH_HAS_VIRTUAL_ALIAS) {
-		va = *vap;
+	vaddr_t va = *vap;
+	vsize_t d = (foff - va) & sh_cache_prefer_mask;
 
-		*vap = va + ((foff - va) & sh_cache_prefer_mask);
-	}
+	if (d == 0)
+		return;
+
+	if (td)
+		*vap = va - ((-d) & sh_cache_prefer_mask);
+	else
+		*vap = va + d;
 }
 #endif /* SH4 */
 
@@ -1028,12 +1026,14 @@ __pmap_pte_load(pmap_t pmap, vaddr_t va, int flags)
 
 	/* Emulate reference/modified tracking for managed page. */
 	if (flags != 0 && (pg = PHYS_TO_VM_PAGE(entry & PG_PPN)) != NULL) {
+		struct vm_page_md *pvh = VM_PAGE_TO_MD(pg);
+
 		if (flags & PVH_REFERENCED) {
-			pg->mdpage.pvh_flags |= PVH_REFERENCED;
+			pvh->pvh_flags |= PVH_REFERENCED;
 			entry |= PG_V;
 		}
 		if (flags & PVH_MODIFIED) {
-			pg->mdpage.pvh_flags |= PVH_MODIFIED;
+			pvh->pvh_flags |= PVH_MODIFIED;
 			entry |= PG_D;
 		}
 		*pte = entry;
@@ -1051,7 +1051,7 @@ __pmap_pte_load(pmap_t pmap, vaddr_t va, int flags)
  *	Allocate new ASID. if all ASID is used, steal from other process.
  */
 int
-__pmap_asid_alloc()
+__pmap_asid_alloc(void)
 {
 	struct proc *p;
 	int i, j, k, n, map, asid;

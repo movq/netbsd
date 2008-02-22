@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.27 2007/03/04 06:00:06 christos Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.30 2014/01/04 00:10:02 dsl Exp $	*/
 
 /*
  * Copyright (c) 1993 Christopher G. Demetriou
@@ -53,17 +53,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.27 2007/03/04 06:00:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.30 2014/01/04 00:10:02 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/ptrace.h>
+
+#include <machine/frame.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
-#include <machine/reg.h>
 
 static inline struct frame *
 process_frame(struct lwp *l)
@@ -77,8 +78,9 @@ process_frame(struct lwp *l)
 static inline struct fpframe *
 process_fpframe(struct lwp *l)
 {
+	struct pcb *pcb = lwp_getpcb(l);
 
-	return &l->l_addr->u_pcb.pcb_fpregs;
+	return &pcb->pcb_fpregs;
 }
 
 int
@@ -94,7 +96,7 @@ process_read_regs(struct lwp *l, struct reg *regs)
 }
 
 int
-process_read_fpregs(struct lwp *l, struct fpreg *regs)
+process_read_fpregs(struct lwp *l, struct fpreg *regs, size_t *sz)
 {
 	struct fpframe *frame = process_fpframe(l);
 
@@ -138,7 +140,7 @@ process_write_regs(struct lwp *l, const struct reg *regs)
 }
 
 int
-process_write_fpregs(struct lwp *l, const struct fpreg *regs)
+process_write_fpregs(struct lwp *l, const struct fpreg *regs, size_t sz)
 {
 	struct fpframe *frame = process_fpframe(l);
 

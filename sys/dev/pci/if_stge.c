@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stge.c,v 1.41 2008/02/07 01:21:57 dyoung Exp $	*/
+/*	$NetBSD: if_stge.c,v 1.65 2018/06/26 06:48:01 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,9 +35,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.41 2008/02/07 01:21:57 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.65 2018/06/26 06:48:01 msaitoh Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,16 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.41 2008/02/07 01:21:57 dyoung Exp $");
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <uvm/uvm_extern.h>		/* for PAGE_SIZE */
-
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -81,6 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.41 2008/02/07 01:21:57 dyoung Exp $");
 #include <dev/pci/pcidevs.h>
 
 #include <dev/pci/if_stgereg.h>
+
+#include <prop/proplib.h>
 
 /* #define	STGE_CU_BUG			1 */
 #define	STGE_VLAN_UNTAG			1
@@ -139,12 +129,11 @@ struct stge_descsoft {
  * Software state per device.
  */
 struct stge_softc {
-	struct device sc_dev;		/* generic device information */
+	device_t sc_dev;		/* generic device information */
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
 	bus_dma_tag_t sc_dmat;		/* bus DMA tag */
 	struct ethercom sc_ethercom;	/* ethernet common data */
-	void *sc_sdhook;		/* shutdown hook */
 	int sc_rev;			/* silicon revision */
 
 	void *sc_ih;			/* interrupt cookie */
@@ -273,7 +262,7 @@ static int	stge_ioctl(struct ifnet *, u_long, void *);
 static int	stge_init(struct ifnet *);
 static void	stge_stop(struct ifnet *, int);
 
-static void	stge_shutdown(void *);
+static bool	stge_shutdown(device_t, int);
 
 static void	stge_reset(struct stge_softc *);
 static void	stge_rxdrain(struct stge_softc *);
@@ -289,20 +278,20 @@ static int	stge_intr(void *);
 static void	stge_txintr(struct stge_softc *);
 static void	stge_rxintr(struct stge_softc *);
 
-static int	stge_mii_readreg(struct device *, int, int);
-static void	stge_mii_writereg(struct device *, int, int, int);
-static void	stge_mii_statchg(struct device *);
+static int	stge_mii_readreg(device_t, int, int);
+static void	stge_mii_writereg(device_t, int, int, int);
+static void	stge_mii_statchg(struct ifnet *);
 
-static int	stge_match(struct device *, struct cfdata *, void *);
-static void	stge_attach(struct device *, struct device *, void *);
+static int	stge_match(device_t, cfdata_t, void *);
+static void	stge_attach(device_t, device_t, void *);
 
 int	stge_copy_small = 0;
 
-CFATTACH_DECL(stge, sizeof(struct stge_softc),
+CFATTACH_DECL_NEW(stge, sizeof(struct stge_softc),
     stge_match, stge_attach, NULL, NULL);
 
-static uint32_t stge_mii_bitbang_read(struct device *);
-static void	stge_mii_bitbang_write(struct device *, uint32_t);
+static uint32_t stge_mii_bitbang_read(device_t);
+static void	stge_mii_bitbang_write(device_t, uint32_t);
 
 static const struct mii_bitbang_ops stge_mii_bitbang_ops = {
 	stge_mii_bitbang_read,
@@ -370,8 +359,7 @@ stge_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-stge_match(struct device *parent, struct cfdata *cf,
-    void *aux)
+stge_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -382,9 +370,9 @@ stge_match(struct device *parent, struct cfdata *cf,
 }
 
 static void
-stge_attach(struct device *parent, struct device *self, void *aux)
+stge_attach(device_t parent, device_t self, void *aux)
 {
-	struct stge_softc *sc = (struct stge_softc *) self;
+	struct stge_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -393,10 +381,12 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_tag_t iot, memt;
 	bus_space_handle_t ioh, memh;
 	bus_dma_segment_t seg;
+	prop_data_t data;
 	int ioh_valid, memh_valid;
 	int i, rseg, error;
 	const struct stge_product *sp;
 	uint8_t enaddr[ETHER_ADDR_LEN];
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	callout_init(&sc->sc_tick_ch, 0);
 
@@ -408,7 +398,7 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_rev = PCI_REVISION(pa->pa_class);
 
-	printf(": %s, rev. %d\n", sp->stge_name, sc->sc_rev);
+	pci_aprint_devinfo_fancy(pa, NULL, sp->stge_name, 1);
 
 	/*
 	 * Map the device.
@@ -427,8 +417,7 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_st = iot;
 		sc->sc_sh = ioh;
 	} else {
-		printf("%s: unable to map device registers\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map device registers\n");
 		return;
 	}
 
@@ -440,30 +429,28 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 	    PCI_COMMAND_MASTER_ENABLE);
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
-	    NULL)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
-		    error);
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self, NULL)) &&
+	    error != EOPNOTSUPP) {
+		aprint_error_dev(self, "cannot activate %d\n", error);
 		return;
 	}
 	/*
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: unable to map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, stge_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Allocate the control data structures, and create and load the
@@ -472,32 +459,34 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct stge_control_data), PAGE_SIZE, 0, &seg, 1, &rseg,
 	    0)) != 0) {
-		printf("%s: unable to allocate control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(self,
+		    "unable to allocate control data, error = %d\n", error);
 		goto fail_0;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
 	    sizeof(struct stge_control_data), (void **)&sc->sc_control_data,
 	    BUS_DMA_COHERENT)) != 0) {
-		printf("%s: unable to map control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(self,
+		    "unable to map control data, error = %d\n", error);
 		goto fail_1;
 	}
 
 	if ((error = bus_dmamap_create(sc->sc_dmat,
 	    sizeof(struct stge_control_data), 1,
 	    sizeof(struct stge_control_data), 0, 0, &sc->sc_cddmamap)) != 0) {
-		printf("%s: unable to create control data DMA map, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+		aprint_error_dev(self,
+		    "unable to create control data DMA map, error = %d\n",
+		    error);
 		goto fail_2;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_cddmamap,
 	    sc->sc_control_data, sizeof(struct stge_control_data), NULL,
 	    0)) != 0) {
-		printf("%s: unable to load control data DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(self,
+		    "unable to load control data DMA map, error = %d\n",
+		    error);
 		goto fail_3;
 	}
 
@@ -511,8 +500,9 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 		if ((error = bus_dmamap_create(sc->sc_dmat,
 		    ETHER_MAX_LEN_JUMBO, STGE_NTXFRAGS, MCLBYTES, 0, 0,
 		    &sc->sc_txsoft[i].ds_dmamap)) != 0) {
-			printf("%s: unable to create tx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(self,
+			    "unable to create tx DMA map %d, error = %d\n",
+			    i, error);
 			goto fail_4;
 		}
 	}
@@ -523,8 +513,9 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 	for (i = 0; i < STGE_NRXDESC; i++) {
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
 		    MCLBYTES, 0, 0, &sc->sc_rxsoft[i].ds_dmamap)) != 0) {
-			printf("%s: unable to create rx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(self,
+			    "unable to create rx DMA map %d, error = %d\n",
+			    i, error);
 			goto fail_5;
 		}
 		sc->sc_rxsoft[i].ds_mbuf = NULL;
@@ -567,17 +558,31 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 		    STGE_StationAddress2) >> 8;
 		sc->sc_stge1023 = 0;
 	} else {
-		uint16_t myaddr[ETHER_ADDR_LEN / 2];
-		for (i = 0; i <ETHER_ADDR_LEN / 2; i++) {
-			stge_read_eeprom(sc, STGE_EEPROM_StationAddress0 + i, 
-			    &myaddr[i]);
-			myaddr[i] = le16toh(myaddr[i]);
+		data = prop_dictionary_get(device_properties(self),
+		    "mac-address");
+		if (data != NULL) {
+			/*
+			 * Try to get the station address from device
+			 * properties first, in case the EEPROM is missing.
+			 */
+			KASSERT(prop_object_type(data) == PROP_TYPE_DATA);
+			KASSERT(prop_data_size(data) == ETHER_ADDR_LEN);
+			(void)memcpy(enaddr, prop_data_data_nocopy(data),
+			    ETHER_ADDR_LEN);
+		} else {
+			uint16_t myaddr[ETHER_ADDR_LEN / 2];
+			for (i = 0; i <ETHER_ADDR_LEN / 2; i++) {
+				stge_read_eeprom(sc,
+				    STGE_EEPROM_StationAddress0 + i,
+				    &myaddr[i]);
+				myaddr[i] = le16toh(myaddr[i]);
+			}
+			(void)memcpy(enaddr, myaddr, sizeof(enaddr));
 		}
-		(void)memcpy(enaddr, myaddr, sizeof(enaddr));
 		sc->sc_stge1023 = 1;
 	}
 
-	printf("%s: Ethernet address %s\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(self, "Ethernet address %s\n",
 	    ether_sprintf(enaddr));
 
 	/*
@@ -596,7 +601,7 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ethercom.ec_mii = &sc->sc_mii;
 	ifmedia_init(&sc->sc_mii.mii_media, IFM_IMASK, ether_mediachange,
 	    ether_mediastatus);
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(self, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, MIIF_DOPAUSE);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE, 0, NULL);
@@ -605,7 +610,7 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_AUTO);
 
 	ifp = &sc->sc_ethercom.ec_if;
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = stge_ioctl;
@@ -653,6 +658,7 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 	 * Attach the interface.
 	 */
 	if_attach(ifp);
+	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, enaddr);
 
 #ifdef STGE_EVENT_COUNTERS
@@ -660,50 +666,51 @@ stge_attach(struct device *parent, struct device *self, void *aux)
 	 * Attach event counters.
 	 */
 	evcnt_attach_dynamic(&sc->sc_ev_txstall, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txstall");
+	    NULL, device_xname(self), "txstall");
 	evcnt_attach_dynamic(&sc->sc_ev_txdmaintr, EVCNT_TYPE_INTR,
-	    NULL, sc->sc_dev.dv_xname, "txdmaintr");
+	    NULL, device_xname(self), "txdmaintr");
 	evcnt_attach_dynamic(&sc->sc_ev_txindintr, EVCNT_TYPE_INTR,
-	    NULL, sc->sc_dev.dv_xname, "txindintr");
+	    NULL, device_xname(self), "txindintr");
 	evcnt_attach_dynamic(&sc->sc_ev_rxintr, EVCNT_TYPE_INTR,
-	    NULL, sc->sc_dev.dv_xname, "rxintr");
+	    NULL, device_xname(self), "rxintr");
 
 	evcnt_attach_dynamic(&sc->sc_ev_txseg1, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txseg1");
+	    NULL, device_xname(self), "txseg1");
 	evcnt_attach_dynamic(&sc->sc_ev_txseg2, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txseg2");
+	    NULL, device_xname(self), "txseg2");
 	evcnt_attach_dynamic(&sc->sc_ev_txseg3, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txseg3");
+	    NULL, device_xname(self), "txseg3");
 	evcnt_attach_dynamic(&sc->sc_ev_txseg4, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txseg4");
+	    NULL, device_xname(self), "txseg4");
 	evcnt_attach_dynamic(&sc->sc_ev_txseg5, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txseg5");
+	    NULL, device_xname(self), "txseg5");
 	evcnt_attach_dynamic(&sc->sc_ev_txsegmore, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txsegmore");
+	    NULL, device_xname(self), "txsegmore");
 	evcnt_attach_dynamic(&sc->sc_ev_txcopy, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txcopy");
+	    NULL, device_xname(self), "txcopy");
 
 	evcnt_attach_dynamic(&sc->sc_ev_rxipsum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "rxipsum");
+	    NULL, device_xname(self), "rxipsum");
 	evcnt_attach_dynamic(&sc->sc_ev_rxtcpsum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "rxtcpsum");
+	    NULL, device_xname(self), "rxtcpsum");
 	evcnt_attach_dynamic(&sc->sc_ev_rxudpsum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "rxudpsum");
+	    NULL, device_xname(self), "rxudpsum");
 	evcnt_attach_dynamic(&sc->sc_ev_txipsum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txipsum");
+	    NULL, device_xname(self), "txipsum");
 	evcnt_attach_dynamic(&sc->sc_ev_txtcpsum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txtcpsum");
+	    NULL, device_xname(self), "txtcpsum");
 	evcnt_attach_dynamic(&sc->sc_ev_txudpsum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txudpsum");
+	    NULL, device_xname(self), "txudpsum");
 #endif /* STGE_EVENT_COUNTERS */
 
 	/*
 	 * Make sure the interface is shutdown during reboot.
 	 */
-	sc->sc_sdhook = shutdownhook_establish(stge_shutdown, sc);
-	if (sc->sc_sdhook == NULL)
-		printf("%s: WARNING: unable to establish shutdown hook\n",
-		    sc->sc_dev.dv_xname);
+	if (pmf_device_register1(self, NULL, NULL, stge_shutdown))
+		pmf_class_network_register(self, ifp);
+	else
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
 	return;
 
 	/*
@@ -739,12 +746,15 @@ stge_attach(struct device *parent, struct device *self, void *aux)
  *
  *	Make sure the interface is stopped at reboot time.
  */
-static void
-stge_shutdown(void *arg)
+static bool
+stge_shutdown(device_t self, int howto)
 {
-	struct stge_softc *sc = arg;
+	struct stge_softc *sc = device_private(self);
+	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
-	stge_stop(&sc->sc_ethercom.ec_if, 1);
+	stge_stop(ifp, 1);
+	stge_reset(sc);
+	return true;
 }
 
 static void
@@ -760,7 +770,7 @@ stge_dma_wait(struct stge_softc *sc)
 	}
 
 	if (i == STGE_TIMEOUT)
-		printf("%s: DMA wait timed out\n", sc->sc_dev.dv_xname);
+		printf("%s: DMA wait timed out\n", device_xname(sc->sc_dev));
 }
 
 /*
@@ -795,8 +805,9 @@ stge_start(struct ifnet *ifp)
 	 * descriptors.
 	 */
 	for (;;) {
-		struct m_tag *mtag;
 		uint64_t tfc;
+		bool have_vtag;
+		uint16_t vtag;
 
 		/*
 		 * Grab a packet off the queue.
@@ -817,7 +828,9 @@ stge_start(struct ifnet *ifp)
 		/*
 		 * See if we have any VLAN stuff.
 		 */
-		mtag = VLAN_OUTPUT_TAG(&sc->sc_ethercom, m0);
+		have_vtag = vlan_has_tag(m0);
+		if (have_vtag)
+			vtag = vlan_get_tag(m0);
 
 		/*
 		 * Get the last and next available transmit descriptor.
@@ -842,7 +855,7 @@ stge_start(struct ifnet *ifp)
 			if (error == EFBIG) {
 				printf("%s: Tx packet consumes too many "
 				    "DMA segments, dropping...\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 				IFQ_DEQUEUE(&ifp->if_snd, m0);
 				m_freem(m0);
 				continue;
@@ -921,7 +934,7 @@ stge_start(struct ifnet *ifp)
 		    TFD_FragCount(seg) | csum_flags |
 		    (((nexttx & STGE_TXINTR_SPACING_MASK) == 0) ?
 			TFD_TxDMAIndicate : 0);
-		if (mtag) {
+		if (have_vtag) {
 #if	0
 			struct ether_header *eh =
 			    mtod(m0, struct ether_header *);
@@ -933,7 +946,7 @@ stge_start(struct ifnet *ifp)
 #ifdef	STGE_VLAN_CFI
 			    TFD_CFI |
 #endif
-			    TFD_VID(VLAN_TAG_VALUE(mtag));
+			    TFD_VID(vtag);
 		}
 		tfd->tfd_control = htole64(tfc);
 
@@ -956,13 +969,10 @@ stge_start(struct ifnet *ifp)
 		sc->sc_txpending++;
 		sc->sc_txlast = nexttx;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0, BPF_D_OUT);
 	}
 
 	if (sc->sc_txpending == (STGE_NTXDESC - 1)) {
@@ -998,7 +1008,7 @@ stge_watchdog(struct ifnet *ifp)
 	 */
 	stge_txintr(sc);
 	if (sc->sc_txpending != 0) {
-		printf("%s: device timeout\n", sc->sc_dev.dv_xname);
+		printf("%s: device timeout\n", device_xname(sc->sc_dev));
 		ifp->if_oerrors++;
 
 		(void) stge_init(ifp);
@@ -1069,7 +1079,7 @@ stge_intr(void *arg)
 		/* Host interface errors. */
 		if (isr & IS_HostError) {
 			printf("%s: Host interface error\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			wantinit = 1;
 			continue;
 		}
@@ -1080,7 +1090,7 @@ stge_intr(void *arg)
 			stge_rxintr(sc);
 			if (isr & IS_RFDListEnd) {
 				printf("%s: receive ring overflow\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 				/*
 				 * XXX Should try to recover from this
 				 * XXX more gracefully.
@@ -1116,12 +1126,12 @@ stge_intr(void *arg)
 						sc->sc_txthresh = 0x0fff;
 					printf("%s: transmit underrun, new "
 					    "threshold: %d bytes\n",
-					    sc->sc_dev.dv_xname,
+					    device_xname(sc->sc_dev),
 					    sc->sc_txthresh << 5);
 				}
 				if (txstat & TS_MaxCollisions)
 					printf("%s: excessive collisions\n",
-					    sc->sc_dev.dv_xname);
+					    device_xname(sc->sc_dev));
 			}
 			wantinit = 1;
 		}
@@ -1135,7 +1145,7 @@ stge_intr(void *arg)
 	    sc->sc_IntEnable);
 
 	/* Try to get more packets going. */
-	stge_start(ifp);
+	if_schedule_deferred_start(ifp);
 
 	return (1);
 }
@@ -1339,23 +1349,19 @@ stge_rxintr(struct stge_softc *sc)
 			}
 		}
 
-		m->m_pkthdr.rcvif = ifp;
+		m_set_rcvif(m, ifp);
 		m->m_pkthdr.len = len;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass if up the stack if it's for us.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
 #ifdef	STGE_VLAN_UNTAG
 		/*
 		 * Check for VLAN tagged packets
 		 */
 		if (status & RFD_VLANDetected)
-			VLAN_INPUT_TAG(ifp, m, RFD_TCI(status), continue);
+			vlan_set_tag(m, RFD_TCI(status));
 
 #endif
 #if	0
@@ -1371,7 +1377,7 @@ stge_rxintr(struct stge_softc *sc)
 		}
 #endif
 		/* Pass it on. */
-		(*ifp->if_input)(ifp, m);
+		if_percpuq_enqueue(ifp->if_percpuq, m);
 	}
 
 	/* Update the receive pointer. */
@@ -1465,7 +1471,8 @@ stge_reset(struct stge_softc *sc)
 	}
 
 	if (i == STGE_TIMEOUT)
-		printf("%s: reset failed to complete\n", sc->sc_dev.dv_xname);
+		printf("%s: reset failed to complete\n",
+		    device_xname(sc->sc_dev));
 
 	delay(1000);
 }
@@ -1517,7 +1524,7 @@ stge_init(struct ifnet *ifp)
 			if ((error = stge_add_rxbuf(sc, i)) != 0) {
 				printf("%s: unable to allocate or map rx "
 				    "buffer %d, error = %d\n",
-				    sc->sc_dev.dv_xname, i, error);
+				    device_xname(sc->sc_dev), i, error);
 				/*
 				 * XXX Should attempt to run with fewer receive
 				 * XXX buffers instead of just failing.
@@ -1666,7 +1673,7 @@ stge_init(struct ifnet *ifp)
 
  out:
 	if (error)
-		printf("%s: interface not running\n", sc->sc_dev.dv_xname);
+		printf("%s: interface not running\n", device_xname(sc->sc_dev));
 	return (error);
 }
 
@@ -1744,14 +1751,14 @@ stge_stop(struct ifnet *ifp, int disable)
 		}
 	}
 
-	if (disable)
-		stge_rxdrain(sc);
-
 	/*
 	 * Mark the interface down and cancel the watchdog timer.
 	 */
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 	ifp->if_timer = 0;
+
+	if (disable)
+		stge_rxdrain(sc);
 }
 
 static int
@@ -1779,13 +1786,13 @@ stge_read_eeprom(struct stge_softc *sc, int offset, uint16_t *data)
 
 	if (stge_eeprom_wait(sc))
 		printf("%s: EEPROM failed to come ready\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 
 	bus_space_write_2(sc->sc_st, sc->sc_sh, STGE_EepromCtrl,
 	    EC_EepromAddress(offset) | EC_EepromOpcode(EC_OP_RR));
 	if (stge_eeprom_wait(sc))
 		printf("%s: EEPROM read timed out\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 	*data = bus_space_read_2(sc->sc_st, sc->sc_sh, STGE_EepromData);
 }
 
@@ -1823,7 +1830,7 @@ stge_add_rxbuf(struct stge_softc *sc, int idx)
 	    m->m_ext.ext_buf, m->m_ext.ext_size, NULL, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: can't load rx DMA map %d, error = %d\n",
-		    sc->sc_dev.dv_xname, idx, error);
+		    device_xname(sc->sc_dev), idx, error);
 		panic("stge_add_rxbuf");	/* XXX */
 	}
 
@@ -1931,7 +1938,7 @@ stge_set_filter(struct stge_softc *sc)
  *	Read a PHY register on the MII of the TC9021.
  */
 static int
-stge_mii_readreg(struct device *self, int phy, int reg)
+stge_mii_readreg(device_t self, int phy, int reg)
 {
 
 	return (mii_bitbang_readreg(self, &stge_mii_bitbang_ops, phy, reg));
@@ -1943,7 +1950,7 @@ stge_mii_readreg(struct device *self, int phy, int reg)
  *	Write a PHY register on the MII of the TC9021.
  */
 static void
-stge_mii_writereg(struct device *self, int phy, int reg, int val)
+stge_mii_writereg(device_t self, int phy, int reg, int val)
 {
 
 	mii_bitbang_writereg(self, &stge_mii_bitbang_ops, phy, reg, val);
@@ -1955,9 +1962,9 @@ stge_mii_writereg(struct device *self, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-stge_mii_statchg(struct device *self)
+stge_mii_statchg(struct ifnet *ifp)
 {
-	struct stge_softc *sc = (struct stge_softc *) self;
+	struct stge_softc *sc = ifp->if_softc;
 
 	if (sc->sc_mii.mii_media_active & IFM_FDX)
 		sc->sc_MACCtrl |= MC_DuplexSelect;
@@ -1975,9 +1982,9 @@ stge_mii_statchg(struct device *self)
  *	Read the MII serial port for the MII bit-bang module.
  */
 static uint32_t
-stge_mii_bitbang_read(struct device *self)
+stge_mii_bitbang_read(device_t self)
 {
-	struct stge_softc *sc = (void *) self;
+	struct stge_softc *sc = device_private(self);
 
 	return (bus_space_read_1(sc->sc_st, sc->sc_sh, STGE_PhyCtrl));
 }
@@ -1988,9 +1995,9 @@ stge_mii_bitbang_read(struct device *self)
  *	Write the MII serial port for the MII bit-bang module.
  */
 static void
-stge_mii_bitbang_write(struct device *self, uint32_t val)
+stge_mii_bitbang_write(device_t self, uint32_t val)
 {
-	struct stge_softc *sc = (void *) self;
+	struct stge_softc *sc = device_private(self);
 
 	bus_space_write_1(sc->sc_st, sc->sc_sh, STGE_PhyCtrl,
 	    val | sc->sc_PhyCtrl);

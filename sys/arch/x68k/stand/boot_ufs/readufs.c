@@ -1,10 +1,10 @@
-/*	$NetBSD: readufs.c,v 1.8 2007/03/04 06:01:07 christos Exp $	*/
+/*	$NetBSD: readufs.c,v 1.15 2013/01/22 09:39:14 dholland Exp $	*/
 /*	from Id: readufs.c,v 1.8 2003/04/08 09:19:32 itohy Exp 	*/
 
 /*
  * Read UFS (FFS / LFS)
  *
- * Written in 1999, 2002, 2003 by ITOH Yasufumi (itohy@NetBSD.org).
+ * Written in 1999, 2002, 2003 by ITOH Yasufumi.
  * Public domain.
  *
  * Intended to be used for boot programs (first stage).
@@ -15,23 +15,20 @@
 
 #define fs	ufs_info
 
-static void raw_read_queue __P((void *buf, daddr_t blkpos, size_t bytelen));
-static int ufs_read_indirect __P((daddr_t blk, int level, void **buf,
-		unsigned *poff, size_t count));
+static void raw_read_queue(void *buf, daddr_t blkpos, size_t bytelen);
+static int ufs_read_indirect(daddr_t blk, int level, uint8_t **buf,
+		unsigned *poff, size_t count);
 
 #ifdef DEBUG_WITH_STDIO
-void ufs_list_dir __P((ino32_t dirino));
-int main __P((int argc, char *argv[]));
+void ufs_list_dir(ino32_t dirino);
+int main(int argc, char *argv[]);
 #endif
 
 #ifdef DEBUG_WITH_STDIO
 int fd;
 
 void
-RAW_READ(buf, blkpos, bytelen)
-	void *buf;
-	daddr_t blkpos;
-	size_t bytelen;
+RAW_READ(void *buf, daddr_t blkpos, size_t bytelen)
 {
 
 	if (pread(fd, buf, bytelen, (off_t)dbtob(blkpos)) != (ssize_t) bytelen)
@@ -48,10 +45,8 @@ struct ufs_info fs;
 static size_t rq_len;
 
 static void
-raw_read_queue(buf, blkpos, bytelen)
-	void *buf;
-	daddr_t blkpos;
-	size_t bytelen;		/* must be DEV_BSIZE aligned */
+raw_read_queue(void *buf, daddr_t blkpos, size_t bytelen)
+	/* bytelen:		 must be DEV_BSIZE aligned */
 {
 	static daddr_t rq_start;
 	static char *rq_buf;
@@ -84,15 +79,12 @@ raw_read_queue(buf, blkpos, bytelen)
  * No support for holes or (short) symbolic links.
  */
 size_t
-ufs_read(di, buf, off, count)
-	union ufs_dinode *di;
-	void *buf;
-	unsigned off;	/* position in block */
-	size_t count;
+ufs_read(union ufs_dinode *di, void *buf, unsigned off, size_t count)
+	/* off:	 position in block */
 {
 	struct ufs_info *ufsinfo = &fs;
 	size_t bsize = ufsinfo->bsize;
-	void *b = buf;
+	uint8_t *b = buf;
 	int i;
 	size_t disize, nread;
 	daddr_t pos;
@@ -116,7 +108,7 @@ ufs_read(di, buf, off, count)
 	RAW_READ_QUEUE_INIT();
 
 	/* Read direct blocks. */
-	for ( ; off < NDADDR && count > 0; off++) {
+	for ( ; off < UFS_NDADDR && count > 0; off++) {
 #if defined(USE_UFS1) && defined(USE_UFS2)
 		if (uver == UFSTYPE_UFS1)
 			pos = di->di1.di_db[off];
@@ -133,10 +125,10 @@ ufs_read(di, buf, off, count)
 		b += bsize;
 		count -= bsize;
 	}
-	off -= NDADDR;
+	off -= UFS_NDADDR;
 
 	/* Read indirect blocks. */
-	for (i = 0; i < NIADDR && count > 0; i++) {
+	for (i = 0; i < UFS_NIADDR && count > 0; i++) {
 #if defined(USE_UFS1) && defined(USE_UFS2)
 		if (uver == UFSTYPE_UFS1)
 			pos = di->di1.di_ib[i];
@@ -154,12 +146,8 @@ ufs_read(di, buf, off, count)
 }
 
 static int
-ufs_read_indirect(blk, level, buf, poff, count)
-	daddr_t blk;
-	int level;
-	void **buf;
-	unsigned *poff;	/* position in block */
-	size_t count;
+ufs_read_indirect(daddr_t blk, int level, uint8_t **buf, unsigned *poff, size_t count)
+	/* poff:	 position in block */
 {
 	struct ufs_info *ufsinfo = &fs;
 	size_t bsize = ufsinfo->bsize;
@@ -233,9 +221,7 @@ ufs_read_indirect(blk, level, buf, poff, count)
  * look-up fn in directory dirino
  */
 ino32_t
-ufs_lookup(dirino, fn)
-	ino32_t dirino;
-	const char *fn;
+ufs_lookup(ino32_t dirino, const char *fn)
 {
 	union ufs_dinode dirdi;
 	struct direct *pdir;
@@ -268,12 +254,11 @@ ufs_lookup(dirino, fn)
  * look-up a file in absolute pathname from the root directory
  */
 ino32_t
-ufs_lookup_path(path)
-	const char *path;
+ufs_lookup_path(const char *path)
 {
 	char fn[FFS_MAXNAMLEN + 1];
 	char *p;
-	ino32_t ino = ROOTINO;
+	ino32_t ino = UFS_ROOTINO;
 
 	do {
 		while (*path == '/')
@@ -289,10 +274,7 @@ ufs_lookup_path(path)
 
 #if 0
 size_t
-ufs_load_file(buf, dirino, fn)
-	void *buf;
-	ino32_t dirino;
-	const char *fn;
+ufs_load_file(void *buf, ino32_t dirino, const char *fn)
 {
 	size_t cnt, disize;
 	union ufs_dinode dinode;
@@ -307,7 +289,7 @@ ufs_load_file(buf, dirino, fn)
 #endif
 
 int
-ufs_init()
+ufs_init(void)
 {
 	return 1
 #ifdef USE_FFS
@@ -321,8 +303,7 @@ ufs_init()
 
 #ifdef DEBUG_WITH_STDIO
 void
-ufs_list_dir(dirino)
-	ino32_t dirino;
+ufs_list_dir(ino32_t dirino)
 {
 	union ufs_dinode dirdi;
 	struct direct *pdir;
@@ -358,7 +339,7 @@ main(argc, argv)
 		errx(1, "%s: unknown fs", argv[1]);
 
 #if 1
-	ufs_list_dir(ROOTINO);
+	ufs_list_dir(UFS_ROOTINO);
 	{
 		void *p;
 		size_t cnt;

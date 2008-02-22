@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.c,v 1.50 2007/12/28 20:49:49 joerg Exp $ */
+/*	$NetBSD: kbd.c,v 1.57 2014/07/25 08:10:31 dholland Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.50 2007/12/28 20:49:49 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.57 2014/07/25 08:10:31 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -143,14 +143,14 @@ struct kbd_softc {
 
 	int k_console;		/* true if used as console keyboard */
 #if NWSKBD>0
-	struct device *k_wskbddev; /* pointer to wskbd for sending strokes */
+	device_t k_wskbddev; /* pointer to wskbd for sending strokes */
 	int k_pollingmode;         /* polling mode on? whatever it isss... */
 #endif
 };
 struct kbd_softc kbd_softc;
 
-int kbdmatch(struct device *, struct cfdata *, void *);
-void kbdattach(struct device *, struct device *, void *);
+int kbdmatch(device_t, cfdata_t, void *);
+void kbdattach(device_t, device_t, void *);
 void kbdintr(int);
 void kbdstuffchar(u_char);
 
@@ -160,7 +160,7 @@ int drkbdputc(u_int8_t);
 int drkbdputc2(u_int8_t, u_int8_t);
 int drkbdwaitfor(int);
 
-CFATTACH_DECL(kbd, sizeof(struct device),
+CFATTACH_DECL_NEW(kbd, 0,
     kbdmatch, kbdattach, NULL, NULL);
 
 dev_type_open(kbdopen);
@@ -171,23 +171,33 @@ dev_type_poll(kbdpoll);
 dev_type_kqfilter(kbdkqfilter);
 
 const struct cdevsw kbd_cdevsw = {
-	kbdopen, kbdclose, kbdread, nowrite, kbdioctl,
-	nostop, notty, kbdpoll, nommap, kbdkqfilter,
+	.d_open = kbdopen,
+	.d_close = kbdclose,
+	.d_read = kbdread,
+	.d_write = nowrite,
+	.d_ioctl = kbdioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = kbdpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = kbdkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 /*ARGSUSED*/
 int
-kbdmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+kbdmatch(device_t parent, cfdata_t cf, void *aux)
 {
 
-	if (matchname((char *)auxp, "kbd"))
+	if (matchname((char *)aux, "kbd"))
 		return(1);
 	return(0);
 }
 
 /*ARGSUSED*/
 void
-kbdattach(struct device *pdp, struct device *dp, void *auxp)
+kbdattach(device_t parent, device_t self, void *aux)
 {
 #ifdef DRACO
 	kbdenable();
@@ -200,7 +210,7 @@ kbdattach(struct device *pdp, struct device *dp, void *auxp)
 #endif
 
 #if NWSKBD>0
-	if (dp != NULL) {
+	if (self != NULL) {
 		/*
 		 * Try to attach the wskbd.
 		 */
@@ -209,7 +219,7 @@ kbdattach(struct device *pdp, struct device *dp, void *auxp)
 		waa.keymap = &kbd_mapdata;
 		waa.accessops = &kbd_accessops;
 		waa.accesscookie = NULL;
-		kbd_softc.k_wskbddev = config_found(dp, &waa, wskbddevprint);
+		kbd_softc.k_wskbddev = config_found(self, &waa, wskbddevprint);
 
 		kbd_softc.k_pollingmode = 0;
 	}
@@ -527,9 +537,7 @@ kbdpoll(dev_t dev, int events, struct lwp *l)
 }
 
 int
-kbdkqfilter(dev, kn)
-	dev_t dev;
-	struct knote *kn;
+kbdkqfilter(dev_t dev, struct knote *kn)
 {
 
 	return (ev_kqfilter(&kbd_softc.k_events, kn));
@@ -562,7 +570,7 @@ kbdintr(int mask)
 	}
 #endif
 	/* wait 200 microseconds (for bloody Cherry keyboards..) */
-	DELAY(2000);			/* fudge delay a bit for some keyboards */
+	DELAY(200);			/* fudge delay a bit for some keyboards */
 	ciaa.cra &= ~(1 << 6);
 
 	/* process the character */
@@ -654,7 +662,7 @@ kbdgetcn(void)
 	ciaa.cra |= (1 << 6);	/* serial line output */
 	ciaa.sdr = 0xff;	/* ack */
 	/* wait 200 microseconds */
-	DELAY(2000);	/* XXXX only works as long as DELAY doesn't
+	DELAY(200);	/* XXXX only works as long as DELAY doesn't
 			 * use a timer and waits.. */
 	ciaa.cra &= ~(1 << 6);
 	ciaa.sdr = in;
@@ -724,7 +732,7 @@ kbdstuffchar(u_char c)
 	}
 	fe->id = KEY_CODE(c);
 	fe->value = KEY_UP(c) ? VKEY_UP : VKEY_DOWN;
-	getmicrotime(&fe->time);
+	firm_gettime(fe);
 	k->k_events.ev_put = put;
 	EV_WAKEUP(&k->k_events);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: nslu2_mainbus.c,v 1.1 2006/02/28 20:40:33 scw Exp $	*/
+/*	$NetBSD: nslu2_mainbus.c,v 1.5 2012/10/27 17:17:48 chs Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nslu2_mainbus.c,v 1.1 2006/02/28 20:40:33 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nslu2_mainbus.c,v 1.5 2012/10/27 17:17:48 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,18 +42,19 @@ __KERNEL_RCSID(0, "$NetBSD: nslu2_mainbus.c,v 1.1 2006/02/28 20:40:33 scw Exp $"
 #include <arm/xscale/ixp425var.h>
 
 static int
-ixp425_mainbus_match(struct device *parent, struct cfdata *cf, void *arg)
+ixp425_mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (1);
 }
 
 static void
-ixp425_mainbus_attach(struct device *parent, struct device *self, void *arg)
+ixp425_mainbus_attach(device_t parent, device_t self, void *aux)
 {
 
-	ixp425_attach((struct ixp425_softc *) self);
+	ixp425_intr_evcnt_attach();
+	ixp425_attach(self);
 }
 
-CFATTACH_DECL(ixpio_mainbus, sizeof(struct ixp425_softc),
+CFATTACH_DECL_NEW(ixpio_mainbus, sizeof(struct ixp425_softc),
     ixp425_mainbus_match, ixp425_mainbus_attach, NULL, NULL);

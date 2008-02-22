@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310_pci.c,v 1.9 2005/12/11 12:17:09 christos Exp $	*/
+/*	$NetBSD: iq80310_pci.c,v 1.13 2014/03/29 19:28:27 christos Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -40,14 +40,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80310_pci.c,v 1.9 2005/12/11 12:17:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80310_pci.c,v 1.13 2014/03/29 19:28:27 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <evbarm/iq80310/iq80310reg.h>
 #include <evbarm/iq80310/iq80310var.h>
@@ -58,8 +58,9 @@ __KERNEL_RCSID(0, "$NetBSD: iq80310_pci.c,v 1.9 2005/12/11 12:17:09 christos Exp
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/ppbreg.h>
 
-int	iq80310_pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
-const char *iq80310_pci_intr_string(void *, pci_intr_handle_t);
+int	iq80310_pci_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
+const char *iq80310_pci_intr_string(void *, pci_intr_handle_t, char *, size_t);
 const struct evcnt *iq80310_pci_intr_evcnt(void *, pci_intr_handle_t);
 void	*iq80310_pci_intr_establish(void *, pci_intr_handle_t,
 	    int, int (*func)(void *), void *);
@@ -79,7 +80,7 @@ iq80310_pci_init(pci_chipset_tag_t pc, void *cookie)
 
 #if defined(IOP310_TEAMASA_NPWR)
 int
-iq80310_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+iq80310_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	struct i80312_softc *sc = pa->pa_pc->pc_intr_v;
 	pcireg_t reg;
@@ -123,7 +124,7 @@ iq80310_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 #else /* Default to stock IQ80310 */
 int
-iq80310_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+iq80310_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	struct i80312_softc *sc = pa->pa_pc->pc_intr_v;
 	pcitag_t tag;
@@ -229,12 +230,10 @@ iq80310_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 #endif /* list of IQ80310-based designs */
 
 const char *
-iq80310_pci_intr_string(void *v, pci_intr_handle_t ih)
+iq80310_pci_intr_string(void *v, pci_intr_handle_t ih, char *buf, size_t len)
 {
-	static char irqstr[IRQNAMESIZE];
-
-	sprintf(irqstr, "iq80310 irq %ld", ih);
-	return (irqstr);
+	snprintf(buf, len, "iq80310 irq %ld", ih);
+	return buf;
 }
 
 const struct evcnt *

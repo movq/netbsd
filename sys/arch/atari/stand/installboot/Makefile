@@ -1,11 +1,16 @@
-#	$NetBSD: Makefile,v 1.5 2001/12/12 01:49:39 tv Exp $
+#	$NetBSD: Makefile,v 1.9 2015/08/12 17:59:51 tsutsui Exp $
 
+WARNS=	4
 PROG=	installboot
 NOMAN=	# defined
 SRCS=	installboot.c disklabel.c
 BINDIR=	/usr/mdec
+.ifndef SMALLPROG
+CPPFLAGS+=	-DCHECK_OS_BOOTVERSION -DNO_USAGE
 LDADD=	-lkvm
+.endif
 
-CFLAGS+=-Wall
+# XXX needs proper struct or union to calculate boot sector uint16_t cksums
+CFLAGS+=	-fno-strict-aliasing
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: engine.c,v 1.21 2007/02/08 05:44:18 junyoung Exp $	*/
+/*	$NetBSD: engine.c,v 1.24 2012/03/13 21:13:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -181,7 +181,7 @@ matcher(
     int eflags)
 {
 	const char *endp;
-	int i;
+	size_t i;
 	struct match mv;
 	struct match *m = &mv;
 	const char *dp;
@@ -212,8 +212,8 @@ matcher(
 	/* prescreening; this does wonders for this rather slow code */
 	if (g->must != NULL) {
 		for (dp = start; dp < stop; dp++)
-			if (*dp == g->must[0] && stop - dp >= g->mlen &&
-				memcmp(dp, g->must, (size_t)g->mlen) == 0)
+			if (*dp == g->must[0] && (size_t)(stop - dp) >= g->mlen &&
+				memcmp(dp, g->must, g->mlen) == 0)
 				break;
 		if (dp == stop)		/* we didn't find g->must */
 			return(REG_NOMATCH);
@@ -783,7 +783,7 @@ fast(
 	int c = (start == m->beginp) ? OUT : *(start-1);
 	int lastc;	/* previous c */
 	int flagch;
-	int i;
+	size_t i;
 	const char *coldp; /* last p after which no match was underway */
 
 	_DIAGASSERT(m != NULL);
@@ -878,7 +878,7 @@ slow(
 	int c = (start == m->beginp) ? OUT : *(start-1);
 	int lastc;	/* previous c */
 	int flagch;
-	int i;
+	size_t i;
 	const char *matchp;	/* last p at which a match ended */
 
 	_DIAGASSERT(m != NULL);

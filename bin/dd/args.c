@@ -1,4 +1,4 @@
-/*	$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $	*/
+/*	$NetBSD: args.c,v 1.39 2015/03/18 13:23:49 manu Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -38,13 +38,16 @@
 #if 0
 static char sccsid[] = "@(#)args.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $");
+__RCSID("$NetBSD: args.c,v 1.39 2015/03/18 13:23:49 manu Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/types.h>
 #include <sys/time.h>
 
+#ifndef NO_IOFLAG
+#include <fcntl.h>
+#endif /* NO_IOFLAG */
 #include <err.h>
 #include <errno.h>
 #include <limits.h>
@@ -56,12 +59,32 @@ __RCSID("$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $");
 #include "extern.h"
 
 static int	c_arg(const void *, const void *);
-#ifndef	NO_CONV
+
+#ifdef NO_MSGFMT
+static void	f_msgfmt(char *) __dead;
+#else
+static void	f_msgfmt(char *);
+#endif /* NO_MSGFMT */
+
+#ifdef NO_CONV
+static void	f_conv(char *) __dead;
+#else
+static void	f_conv(char *);
 static int	c_conv(const void *, const void *);
-#endif
+#endif /* NO_CONV */
+
+#ifdef NO_IOFLAG
+static void	f_iflag(char *) __dead;
+static void	f_oflag(char *) __dead;
+#else
+static void	f_iflag(char *);
+static void	f_oflag(char *);
+static u_int	f_ioflag(char *, u_int);
+static int	c_ioflag(const void *, const void *);
+#endif /* NO_IOFLAG */
+
 static void	f_bs(char *);
 static void	f_cbs(char *);
-static void	f_conv(char *);
 static void	f_count(char *);
 static void	f_files(char *);
 static void	f_ibs(char *);
@@ -86,8 +109,13 @@ static const struct arg {
 	{ "files",	f_files,	C_FILES, C_FILES },
 	{ "ibs",	f_ibs,		C_IBS,	 C_BS|C_IBS },
 	{ "if",		f_if,		C_IF,	 C_IF },
+	{ "iflag",	f_iflag,	C_IFLAG, C_IFLAG },
+	{ "iseek",	f_skip,		C_SKIP,	 C_SKIP },
+	{ "msgfmt",	f_msgfmt,	0,	 0 },
 	{ "obs",	f_obs,		C_OBS,	 C_BS|C_OBS },
 	{ "of",		f_of,		C_OF,	 C_OF },
+	{ "oflag",	f_oflag,	C_OFLAG, C_OFLAG },
+	{ "oseek",	f_seek,		C_SEEK,	 C_SEEK },
 	{ "progress",	f_progress,	0,	 0 },
 	{ "seek",	f_seek,		C_SEEK,	 C_SEEK },
 	{ "skip",	f_skip,		C_SKIP,	 C_SKIP },
@@ -105,6 +133,12 @@ jcl(char **argv)
 	in.dbsz = out.dbsz = 512;
 
 	while ((oper = *++argv) != NULL) {
+		if ((oper = strdup(oper)) == NULL) {
+			errx(EXIT_FAILURE,
+			    "unable to allocate space for the argument %s",
+			    *argv);
+			/* NOTREACHED */
+		}
 		if ((arg = strchr(oper, '=')) == NULL) {
 			errx(EXIT_FAILURE, "unknown operand %s", oper);
 			/* NOTREACHED */
@@ -115,9 +149,8 @@ jcl(char **argv)
 			/* NOTREACHED */
 		}
 		tmp.name = oper;
-		if (!(ap = (struct arg *)bsearch(&tmp, args,
-		    sizeof(args)/sizeof(struct arg), sizeof(struct arg),
-		    c_arg))) {
+		if (!(ap = bsearch(&tmp, args,
+		    __arraycount(args), sizeof(*args), c_arg))) {
 			errx(EXIT_FAILURE, "unknown operand %s", tmp.name);
 			/* NOTREACHED */
 		}
@@ -242,6 +275,30 @@ f_if(char *arg)
 	in.name = arg;
 }
 
+#ifdef NO_MSGFMT
+/* Build a small version (i.e. for a ramdisk root) */
+static void
+f_msgfmt(char *arg)
+{
+
+	errx(EXIT_FAILURE, "msgfmt option disabled");
+	/* NOTREACHED */
+}
+#else	/* NO_MSGFMT */
+static void
+f_msgfmt(char *arg)
+{
+
+	/*
+	 * If the format string is not valid, dd_write_msg() will print
+	 * an error and exit.
+	 */
+	dd_write_msg(arg, 0);
+
+	msgfmt = arg;
+}
+#endif	/* NO_MSGFMT */
+
 static void
 f_obs(char *arg)
 {
@@ -322,14 +379,14 @@ f_conv(char *arg)
 
 	while (arg != NULL) {
 		tmp.name = strsep(&arg, ",");
-		if (!(cp = (struct conv *)bsearch(&tmp, clist,
-		    sizeof(clist)/sizeof(struct conv), sizeof(struct conv),
-		    c_conv))) {
+		if (!(cp = bsearch(&tmp, clist,
+		    __arraycount(clist), sizeof(*clist), c_conv))) {
 			errx(EXIT_FAILURE, "unknown conversion %s", tmp.name);
 			/* NOTREACHED */
 		}
 		if (ddflags & cp->noset) {
-			errx(EXIT_FAILURE, "%s: illegal conversion combination", tmp.name);
+			errx(EXIT_FAILURE,
+			    "%s: illegal conversion combination", tmp.name);
 			/* NOTREACHED */
 		}
 		ddflags |= cp->set;
@@ -347,3 +404,102 @@ c_conv(const void *a, const void *b)
 }
 
 #endif	/* NO_CONV */
+
+static void
+f_iflag(char *arg)
+{
+/* Build a small version (i.e. for a ramdisk root) */
+#ifdef	NO_IOFLAG
+	errx(EXIT_FAILURE, "iflag option disabled");
+	/* NOTREACHED */
+#else
+	iflag = f_ioflag(arg, C_IFLAG);
+	return;
+#endif
+}
+
+static void
+f_oflag(char *arg)
+{
+/* Build a small version (i.e. for a ramdisk root) */
+#ifdef	NO_IOFLAG
+	errx(EXIT_FAILURE, "oflag option disabled");
+	/* NOTREACHED */
+#else
+	oflag = f_ioflag(arg, C_OFLAG);
+	return;
+#endif
+}
+
+#ifndef	NO_IOFLAG
+static const struct ioflag {
+	const char *name;
+	u_int set;
+	u_int allowed;
+} olist[] = {
+     /* the array needs to be sorted by the first column so
+	bsearch() can be used to find commands quickly */
+	{ "alt_io",	O_ALT_IO,	C_IFLAG|C_OFLAG	},
+	{ "append",	O_APPEND,	C_OFLAG		},
+	{ "async",	O_ASYNC,	C_IFLAG|C_OFLAG	},
+	{ "cloexec",	O_CLOEXEC,	C_IFLAG|C_OFLAG	},
+	{ "creat",	O_CREAT,	C_OFLAG		},
+	{ "direct",	O_DIRECT,	C_IFLAG|C_OFLAG	},
+	{ "directory",	O_DIRECTORY,	C_NONE		},
+	{ "dsync",	O_DSYNC,	C_OFLAG		},
+	{ "excl",	O_EXCL,		C_IFLAG|C_OFLAG	},
+	{ "exlock",	O_EXLOCK,	C_IFLAG|C_OFLAG	},
+	{ "noctty",	O_NOCTTY,	C_IFLAG|C_OFLAG	},
+	{ "nofollow",	O_NOFOLLOW,	C_IFLAG|C_OFLAG	},
+	{ "nonblock",	O_NONBLOCK,	C_IFLAG|C_OFLAG	},
+	{ "nosigpipe",	O_NOSIGPIPE,	C_IFLAG|C_OFLAG	},
+	{ "rdonly",	O_RDONLY,	C_IFLAG		},
+	{ "rdwr",	O_RDWR,		C_IFLAG		},
+	{ "rsync",	O_RSYNC,	C_IFLAG		},
+	{ "search",	O_SEARCH,	C_IFLAG|C_OFLAG	},
+	{ "shlock",	O_SHLOCK,	C_IFLAG|C_OFLAG	},
+	{ "sync",	O_SYNC,		C_IFLAG|C_OFLAG	},
+	{ "trunc",	O_TRUNC,	C_IFLAG|C_OFLAG	},
+	{ "wronly",	O_WRONLY,	C_NONE		},
+};
+
+static u_int
+f_ioflag(char *arg, u_int flagtype)
+{
+	u_int ioflag = 0;
+	struct ioflag *cp, tmp;
+	const char *flagstr = (flagtype == C_IFLAG) ? "iflag" : "oflag";
+
+	while (arg != NULL) {
+		tmp.name = strsep(&arg, ",");
+		if (!(cp = bsearch(&tmp, olist,
+		    __arraycount(olist), sizeof(*olist), c_ioflag))) {
+			errx(EXIT_FAILURE, "unknown %s %s", flagstr, tmp.name);
+			/* NOTREACHED */
+		}
+
+		if ((cp->set & O_ACCMODE) && (flagtype == C_OFLAG)) {
+			warnx("rdonly, rdwr and wronly are ignored for oflag");
+			continue;
+		}
+
+		if ((cp->allowed & flagtype) == 0) {
+			warnx("%s set for %s but makes no sense",
+			      cp->name, flagstr);
+		}
+		
+		ioflag |= cp->set;
+	}
+
+
+	return ioflag;
+}
+
+static int
+c_ioflag(const void *a, const void *b)
+{
+
+	return (strcmp(((const struct ioflag *)a)->name,
+	    ((const struct ioflag *)b)->name));
+}
+#endif	/* NO_IOFLAG */

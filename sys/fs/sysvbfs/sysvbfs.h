@@ -1,4 +1,4 @@
-/*	$NetBSD: sysvbfs.h,v 1.6 2007/07/31 21:14:18 pooka Exp $	*/
+/*	$NetBSD: sysvbfs.h,v 1.10 2014/12/26 15:23:21 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,13 +32,10 @@
 #ifndef _FS_SYSVBFS_SYSVBFS_H_
 #define	_FS_SYSVBFS_SYSVBFS_H_
 
-struct sysvbfs_args {
-	char	*fspec;		/* blocks special holding the fs to mount */
-};
-
-#ifdef _KERNEL
 struct bfs;
 struct buf;
+
+#include <fs/sysvbfs/sysvbfs_args.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/genfs_node.h>
@@ -62,15 +52,13 @@ struct sysvbfs_node {
 	int update_ctime;
 	int update_atime;
 	int update_mtime;
-
-	LIST_ENTRY(sysvbfs_node) link;
+	int removed;
 };
 
 struct sysvbfs_mount {
 	struct mount *mountp;
 	struct vnode *devvp;		/* block device mounted vnode */
 	struct bfs *bfs;
-	LIST_HEAD(, sysvbfs_node) bnode_head;
 };
 
 /* v-node ops. */
@@ -108,5 +96,4 @@ extern const struct genfs_ops sysvbfs_genfsops;
 int sysvbfs_update(struct vnode *, const struct timespec *,
     const struct timespec *, int);
 
-#endif /* _KERNEL */
 #endif /* _FS_SYSVBFS_SYSVBFS_H_ */

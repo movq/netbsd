@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sm_obio.c,v 1.1 2003/06/18 10:51:15 bsh Exp $ */
+/*	$NetBSD: if_sm_obio.c,v 1.7 2018/02/08 09:05:17 dholland Exp $ */
 
 /*
  * Copyright (c) 2002, 2003  Genetec Corporation.  All rights reserved.
@@ -49,13 +49,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sm_obio.c,v 1.1 2003/06/18 10:51:15 bsh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sm_obio.c,v 1.7 2018/02/08 09:05:17 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,7 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_obio.c,v 1.1 2003/06/18 10:51:15 bsh Exp $");
 #include <net/if_media.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -101,8 +94,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_obio.c,v 1.1 2003/06/18 10:51:15 bsh Exp $");
 
 #include "opt_lubbock.h"	/* LUBBOCK_SMC91C96_16BIT */
 
-int	sm_obio_match(struct device *, struct cfdata *, void *);
-void	sm_obio_attach(struct device *, struct device *, void *);
+int	sm_obio_match(device_t, cfdata_t, void *);
+void	sm_obio_attach(device_t, device_t, void *);
 
 struct sm_obio_softc {
 	struct	smc91cxx_softc sc_smc;		/* real "smc" softc */
@@ -111,7 +104,7 @@ struct sm_obio_softc {
 	void	*sc_ih;				/* interrupt handler */
 };
 
-CFATTACH_DECL(sm_obio, sizeof(struct sm_obio_softc), sm_obio_match, 
+CFATTACH_DECL_NEW(sm_obio, sizeof(struct sm_obio_softc), sm_obio_match, 
     sm_obio_attach, NULL, NULL);
 
 extern struct bus_space  smobio8_bs_tag;
@@ -131,12 +124,12 @@ smc_obio_intr(void *arg)
 #endif /* SM_OBIO_INTR_PARANOIA */
 
 int
-sm_obio_match(struct device *parent, struct cfdata *match, void *aux)
+sm_obio_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct obio_attach_args *oba = aux;
 	bus_space_tag_t iot = &smobio8_bs_tag;
 	bus_space_handle_t ioh;
-	u_int16_t tmp;
+	uint16_t tmp;
 	int rv = 0;
 	extern const char *smc91cxx_idstrs[];
 
@@ -184,9 +177,9 @@ sm_obio_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-sm_obio_attach(struct device *parent, struct device *self, void *aux)
+sm_obio_attach(device_t parent, device_t self, void *aux)
 {
-	struct sm_obio_softc *isc = (struct sm_obio_softc *)self;
+	struct sm_obio_softc *isc = device_private(self);
 	struct smc91cxx_softc *sc = &isc->sc_smc;
 	struct obio_attach_args *oba = aux;
 	bus_space_handle_t ioh;
@@ -225,20 +218,20 @@ sm_obio_attach(struct device *parent, struct device *self, void *aux)
 
 #endif /* LUBBOCK_SMC91C96_16BIT */
 
+	sc->sc_dev = self;
 	sc->sc_bst = iot;
 	sc->sc_bsh = ioh;
 
 	/* should always be enabled */
 	sc->sc_flags |= SMC_FLAGS_ENABLED;
 
-	/* Perform generic intialization. */
+	/* Perform generic initialization. */
 	smc91cxx_attach(sc, NULL);
 
 	/* Establish the interrupt handler. */
-	isc->sc_ih = obio_intr_establish((struct obio_softc *)parent,
+	isc->sc_ih = obio_intr_establish(device_private(parent),
 					 oba->oba_intr, IPL_NET, smintr, sc);
 
 	if (isc->sc_ih == NULL)
-		printf("%s: couldn't establish interrupt handler\n",
-		    sc->sc_dev.dv_xname);
+		aprint_normal_dev(self, "couldn't establish interrupt handler\n");
 }

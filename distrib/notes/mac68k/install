@@ -1,4 +1,4 @@
-.\"	$NetBSD: install,v 1.28 2007/12/14 21:15:58 pavel Exp $
+.\"	$NetBSD: install,v 1.30 2008/09/27 23:15:21 tsutsui Exp $
 .\"
 .\" Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,7 +54,7 @@ each partition on which you wish to build a file system and click on the
 .Ic Change
 button. If you are placing the entire installation on a single
 partition, select the
-.Ic NetBSD Root\*&Usr
+.Ic NetBSD Root\*[Am]Usr
 radio button. If you are using
 multiple partitions, select
 .Ic NetBSD Root
@@ -273,7 +266,7 @@ All forms of virtual memory are disabled (the Memory control
 panel, RAM Doubler, or other software-based memory enhancement
 products); and
 .It
-Your system is in B\*&W mode (1-bit color or grayscale) as shown
+Your system is in B\*[Am]W mode (1-bit color or grayscale) as shown
 by the Monitors control panel. You may choose to have the
 Booter do this for you automatically by selecting the appropriate
 check box and radio button in the

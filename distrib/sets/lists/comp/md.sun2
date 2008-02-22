@@ -1,4 +1,4 @@
-# $NetBSD: md.sun2,v 1.16 2007/02/09 22:49:47 ad Exp $
+# $NetBSD: md.sun2,v 1.21 2015/12/24 14:16:46 christos Exp $
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/include/sun2				comp-c-include
 ./usr/include/sun2/_G_config.h			comp-obsolete		obsolete
@@ -17,6 +17,7 @@
 ./usr/include/sun2/endian.h			comp-c-include
 ./usr/include/sun2/endian_machdep.h		comp-c-include
 ./usr/include/sun2/fbio.h			comp-c-include
+./usr/include/sun2/fenv.h			comp-c-include
 ./usr/include/sun2/float.h			comp-c-include
 ./usr/include/sun2/frame.h			comp-c-include
 ./usr/include/sun2/idprom.h			comp-c-include
@@ -52,11 +53,11 @@
 ./usr/include/sun2/rwlock.h			comp-c-include
 ./usr/include/sun2/setjmp.h			comp-c-include
 ./usr/include/sun2/signal.h			comp-c-include
-./usr/include/sun2/stdarg.h			comp-c-include
+./usr/include/sun2/stdarg.h			comp-obsolete		obsolete
 ./usr/include/sun2/svr4_machdep.h		comp-obsolete		obsolete
 ./usr/include/sun2/trap.h			comp-c-include
 ./usr/include/sun2/types.h			comp-c-include
-./usr/include/sun2/varargs.h			comp-c-include
+./usr/include/sun2/varargs.h			comp-obsolete		obsolete
 ./usr/include/sun2/vmparam.h			comp-c-include
 ./usr/include/sun2/vuid_event.h			comp-c-include
 ./usr/include/sun2/wchar_limits.h		comp-c-include

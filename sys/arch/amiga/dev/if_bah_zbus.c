@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bah_zbus.c,v 1.10 2002/10/02 04:55:51 thorpej Exp $ */
+/*	$NetBSD: if_bah_zbus.c,v 1.17 2017/10/23 09:21:40 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,8 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef __m68k__
+#include "opt_m68k_arch.h"
+#endif
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bah_zbus.c,v 1.10 2002/10/02 04:55:51 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bah_zbus.c,v 1.17 2017/10/23 09:21:40 msaitoh Exp $");
 
 /*
  * Driver frontend for the Commodore Busines Machines and the
@@ -53,8 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_bah_zbus.c,v 1.10 2002/10/02 04:55:51 thorpej Exp
 #include <sys/socket.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
 
@@ -77,15 +74,15 @@ struct bah_zbus_softc {
 	struct	isr		sc_isr;
 };
 
-int	bah_zbus_match(struct device *, struct cfdata *, void *);
-void	bah_zbus_attach(struct device *, struct device *, void *);
+int	bah_zbus_match(device_t, cfdata_t, void *);
+void	bah_zbus_attach(device_t, device_t, void *);
 void	bah_zbus_reset(struct bah_softc *, int);
 
-CFATTACH_DECL(bah_zbus, sizeof(struct bah_zbus_softc),
+CFATTACH_DECL_NEW(bah_zbus, sizeof(struct bah_zbus_softc),
     bah_zbus_match, bah_zbus_attach, NULL, NULL);
 
 int
-bah_zbus_match(struct device *parent, struct cfdata *cfp, void *aux)
+bah_zbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zbus_args *zap = aux;
 
@@ -96,15 +93,17 @@ bah_zbus_match(struct device *parent, struct cfdata *cfp, void *aux)
 }
 
 void
-bah_zbus_attach(struct device *parent, struct device *self, void *aux)
+bah_zbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct bah_zbus_softc *bsc = (void *)self;
+	struct bah_zbus_softc *bsc = device_private(self);
 	struct bah_softc *sc = &bsc->sc_bah;
 	struct zbus_args *zap = aux;
+	int rv;
 
+	sc->sc_dev = self;
 #if (defined(BAH_DEBUG) && (BAH_DEBUG > 2))
-	printf("\n%s: attach(0x%x, 0x%x, 0x%x)\n",
-	    sc->sc_dev.dv_xname, parent, self, aux);
+	printf("\n%s: attach(0x%p, 0x%p, 0x%p)\n",
+	    device_xname(self), parent, self, aux);
 #endif
 	bsc->sc_bst.base = (bus_addr_t)zap->va;
 	bsc->sc_bst.absm = &amiga_bus_stride_2;
@@ -117,7 +116,11 @@ bah_zbus_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_reset = bah_zbus_reset;
 
-	bah_attach_subr(sc);
+	rv = bah_attach_subr(sc);
+	if (rv != 0) {
+		aprint_error_dev(self, "bah_attach_subr failed(%d)\n", rv);
+		return;
+	}
 
 	bsc->sc_isr.isr_intr = bahintr;
 	bsc->sc_isr.isr_arg = sc;

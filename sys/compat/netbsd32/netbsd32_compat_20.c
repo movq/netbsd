@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_20.c,v 1.20 2008/01/30 11:46:59 ad Exp $	*/
+/*	$NetBSD: netbsd32_compat_20.c,v 1.37 2018/05/10 02:36:07 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,16 +27,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_20.c,v 1.20 2008/01/30 11:46:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_20.c,v 1.37 2018/05/10 02:36:07 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/ktrace.h>
 #include <sys/vnode.h>
+#include <sys/socket.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/namei.h>
@@ -70,21 +68,12 @@ compat_20_netbsd32_from_statvfs(struct statvfs *sbp, struct netbsd32_statfs *sb3
 	sb32p->f_spare[1] = 0;
 	sb32p->f_spare[2] = 0;
 	sb32p->f_spare[3] = 0;
-#if 1
-	/* May as well do the whole batch in one go */
-	(void)memcpy(sb32p->f_fstypename, sbp->f_fstypename,
-	    sizeof(sb32p->f_fstypename) +
-	    sizeof(sb32p->f_mntonname) +
-	    sizeof(sb32p->f_mntfromname));
-#else
-	/* If we want to be careful */
 	(void)memcpy(sb32p->f_fstypename, sbp->f_fstypename,
 	    sizeof(sb32p->f_fstypename));
 	(void)memcpy(sb32p->f_mntonname, sbp->f_mntonname,
 	    sizeof(sb32p->f_mntonname));
 	(void)memcpy(sb32p->f_mntfromname, sbp->f_mntfromname,
 	    sizeof(sb32p->f_mntfromname));
-#endif
 }
 
 int
@@ -95,58 +84,63 @@ compat_20_netbsd32_getfsstat(struct lwp *l, const struct compat_20_netbsd32_getf
 		syscallarg(netbsd32_long) bufsize;
 		syscallarg(int) flags;
 	} */
-	struct mount *mp, *nmp;
-	struct statvfs *sp;
+	int root = 0;
+	struct proc *p = l->l_proc;
+	mount_iterator_t *iter;
+	struct mount *mp;
+	struct statvfs *sb;
 	struct netbsd32_statfs sb32;
 	void *sfsp;
-	long count, maxcount, error;
+	size_t count, maxcount;
+	int error = 0;
 
+	sb = STATVFSBUF_GET();
 	maxcount = SCARG(uap, bufsize) / sizeof(struct netbsd32_statfs);
 	sfsp = SCARG_P32(uap, buf);
-	mutex_enter(&mountlist_lock);
+	mountlist_iterator_init(&iter);
 	count = 0;
-	for (mp = mountlist.cqh_first; mp != (void *)&mountlist; mp = nmp) {
-		if (vfs_trybusy(mp, RW_READER, &mountlist_lock)) {
-			nmp = mp->mnt_list.cqe_next;
-			continue;
-		}
+	while ((mp = mountlist_iterator_next(iter)) != NULL) {
 		if (sfsp && count < maxcount) {
-			sp = &mp->mnt_stat;
-			/*
-			 * If MNT_NOWAIT or MNT_LAZY is specified, do not
-			 * refresh the fsstat cache. MNT_WAIT or MNT_LAZY
-			 * overrides MNT_NOWAIT.
-			 */
-			if (SCARG(uap, flags) != MNT_NOWAIT &&
-			    SCARG(uap, flags) != MNT_LAZY &&
-			    (SCARG(uap, flags) == MNT_WAIT ||
-			     SCARG(uap, flags) == 0) &&
-			    (error = VFS_STATVFS(mp, sp)) != 0) {
-				mutex_enter(&mountlist_lock);
-				nmp = mp->mnt_list.cqe_next;
-				vfs_unbusy(mp, false);
+			error = dostatvfs(mp, sb, l, SCARG(uap, flags), 0);
+			if (error) {
+				error = 0;
 				continue;
 			}
-			sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
-			compat_20_netbsd32_from_statvfs(sp, &sb32);
+			compat_20_netbsd32_from_statvfs(sb, &sb32);
 			error = copyout(&sb32, sfsp, sizeof(sb32));
-			if (error) {
-				vfs_unbusy(mp, false);
-				return (error);
-			}
+			if (error)
+				goto out;
 			sfsp = (char *)sfsp + sizeof(sb32);
+			root |= strcmp(sb->f_mntonname, "/") == 0;
 		}
 		count++;
-		mutex_enter(&mountlist_lock);
-		nmp = mp->mnt_list.cqe_next;
-		vfs_unbusy(mp, false);
 	}
-	mutex_exit(&mountlist_lock);
+
+	if (root == 0 && p->p_cwdi->cwdi_rdir) {
+		/*
+		 * fake a root entry
+		 */
+		error = dostatvfs(p->p_cwdi->cwdi_rdir->v_mount,
+		    sb, l, SCARG(uap, flags), 1);
+		if (error != 0)
+			goto out;
+		if (sfsp) {
+			compat_20_netbsd32_from_statvfs(sb, &sb32);
+			error = copyout(&sb32, sfsp, sizeof(sb32));
+			if (error != 0)
+				goto out;
+		}
+		count++;
+	}
+
 	if (sfsp && count > maxcount)
 		*retval = maxcount;
 	else
 		*retval = count;
-	return (0);
+out:
+	mountlist_iterator_destroy(iter);
+	STATVFSBUF_PUT(sb);
+	return error;
 }
 
 int
@@ -157,23 +151,25 @@ compat_20_netbsd32_statfs(struct lwp *l, const struct compat_20_netbsd32_statfs_
 		syscallarg(netbsd32_statfsp_t) buf;
 	} */
 	struct mount *mp;
-	struct statvfs *sp;
+	struct statvfs *sb;
 	struct netbsd32_statfs s32;
 	int error;
-	struct nameidata nd;
+	struct vnode *vp;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG_P32(uap, path));
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(SCARG_P32(uap, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return (error);
-	mp = nd.ni_vp->v_mount;
-	sp = &mp->mnt_stat;
-	vrele(nd.ni_vp);
-	if ((error = VFS_STATVFS(mp, sp)) != 0)
-		return (error);
-	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
-	compat_20_netbsd32_from_statvfs(sp, &s32);
-	return copyout(&s32, SCARG_P32(uap, buf), sizeof(s32));
+	mp = vp->v_mount;
+	vrele(vp);
+	sb = STATVFSBUF_GET();
+	if ((error = dostatvfs(mp, sb, l, 0, 0)) != 0)
+		goto out;
+	compat_20_netbsd32_from_statvfs(sb, &s32);
+	error = copyout(&s32, SCARG_P32(uap, buf), sizeof(s32));
+out:
+	STATVFSBUF_PUT(sb);
+	return error;
 }
 
 int
@@ -183,25 +179,24 @@ compat_20_netbsd32_fstatfs(struct lwp *l, const struct compat_20_netbsd32_fstatf
 		syscallarg(int) fd;
 		syscallarg(netbsd32_statfsp_t) buf;
 	} */
-	struct file *fp;
+	file_t *fp;
 	struct mount *mp;
-	struct statvfs *sp;
+	struct statvfs *sb;
 	struct netbsd32_statfs s32;
 	int error;
-	struct proc *p = l->l_proc;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
-	mp = ((struct vnode *)fp->f_data)->v_mount;
-	sp = &mp->mnt_stat;
-	if ((error = VFS_STATVFS(mp, sp)) != 0)
+	mp = fp->f_vnode->v_mount;
+	sb = STATVFSBUF_GET();
+	if ((error = dostatvfs(mp, sb, l, 0, 0)) != 0)
 		goto out;
-	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
-	compat_20_netbsd32_from_statvfs(sp, &s32);
+	compat_20_netbsd32_from_statvfs(sb, &s32);
 	error = copyout(&s32, SCARG_P32(uap, buf), sizeof(s32));
  out:
-	FILE_UNUSE(fp, l);
+	STATVFSBUF_PUT(sb);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 

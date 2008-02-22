@@ -1,4 +1,4 @@
-/* $NetBSD: s3c2xx0_intr.c,v 1.12 2008/01/06 01:37:56 matt Exp $ */
+/* $NetBSD: s3c2xx0_intr.c,v 1.18 2014/03/26 08:52:00 christos Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -73,14 +73,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c2xx0_intr.c,v 1.12 2008/01/06 01:37:56 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c2xx0_intr.c,v 1.18 2014/03/26 08:52:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
-#include <uvm/uvm_extern.h>
-#include <machine/bus.h>
+
+#include <sys/bus.h>
 #include <machine/intr.h>
+
 #include <arm/cpufunc.h>
 
 #include <arm/s3c2xx0/s3c2xx0reg.h>
@@ -88,13 +89,6 @@ __KERNEL_RCSID(0, "$NetBSD: s3c2xx0_intr.c,v 1.12 2008/01/06 01:37:56 matt Exp $
 
 volatile uint32_t *s3c2xx0_intr_mask_reg;
 
-static inline void
-__raise(int ipl)
-{
-	if (current_spl_level < ipl) {
-		s3c2xx0_setipl(ipl);
-	}
-}
 /*
  * modify interrupt mask table for SPL levels
  */
@@ -124,48 +118,6 @@ s3c2xx0_update_intr_masks(int irqno, int level)
 	s3c2xx0_imask[IPL_HIGH] &= s3c2xx0_imask[IPL_CLOCK];
 }
 
-#ifdef __HAVE_FAST_SOFTINTS
-void
-s3c2xx0_do_pending(int enable_int)
-{
-	static __cpu_simple_lock_t processing = __SIMPLELOCK_UNLOCKED;
-	int oldirqstate, irqstate, spl_save;
-
-	if (__cpu_simple_lock_try(&processing) == 0)
-		return;
-
-	spl_save = current_spl_level;
-
-	oldirqstate = irqstate = disable_interrupts(I32_bit);
-
-	if (enable_int)
-		irqstate &= ~I32_bit;
-
-
-#define	DO_SOFTINT(si,ipl)						\
-	if (get_pending_softint() & SI_TO_IRQBIT(si)) {			\
-		softint_pending &= ~SI_TO_IRQBIT(si);			\
-                __raise(ipl);                                           \
-		restore_interrupts(irqstate);				\
-		softintr_dispatch(si);					\
-		disable_interrupts(I32_bit);				\
-		s3c2xx0_setipl(spl_save);				\
-	}
-
-	do {
-		DO_SOFTINT(SI_SOFTSERIAL, IPL_SOFTSERIAL);
-		DO_SOFTINT(SI_SOFTNET, IPL_SOFTNET);
-		DO_SOFTINT(SI_SOFTBIO, IPL_SOFTBIO);
-		DO_SOFTINT(SI_SOFTCLOCK, IPL_SOFTCLOCK);
-	} while (get_pending_softint());
-
-	__cpu_simple_unlock(&processing);
-
-	restore_interrupts(oldirqstate);
-}
-#endif /* __HAVE_FAST_SOFTINTS */
-
-
 static int
 stray_interrupt(void *cookie)
 {
@@ -191,6 +143,10 @@ s3c2xx0_intr_init(struct s3c2xx0_intr_dispatch * dispatch_table, int icu_len)
 		dispatch_table[i].func = stray_interrupt;
 		dispatch_table[i].cookie = (void *) (i);
 		dispatch_table[i].level = IPL_VM;
+		snprintf(dispatch_table[i].name,
+		    sizeof(dispatch_table[i].name), "irq %d", i);
+		evcnt_attach_dynamic(&dispatch_table[i].ev, EVCNT_TYPE_INTR,
+				     NULL, "s3c2xx0", dispatch_table[i].name);
 	}
 
 	global_intr_mask = ~0;		/* no intr is globally blocked. */
@@ -231,12 +187,3 @@ _spllower(int ipl)
 {
 	return s3c2xx0_spllower(ipl);
 }
-
-#ifdef __HAVE_FAST_SOFTINTS
-#undef _setsoftintr
-void
-_setsoftintr(int si)
-{
-	return s3c2xx0_setsoftintr(si);
-}
-#endif

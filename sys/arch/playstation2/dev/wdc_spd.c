@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_spd.c,v 1.22 2006/01/16 20:30:19 bouyer Exp $	*/
+/*	$NetBSD: wdc_spd.c,v 1.29 2017/10/20 07:06:07 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_spd.c,v 1.22 2006/01/16 20:30:19 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_spd.c,v 1.29 2017/10/20 07:06:07 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,7 +70,6 @@ struct wdc_spd_softc {
 	struct wdc_softc sc_wdcdev;
 	struct ata_channel *sc_chanlist[1];
 	struct ata_channel sc_channel;
-	struct ata_queue sc_chqueue;
 	struct wdc_regs sc_wdc_regs;
 	void *sc_ih;
 };
@@ -88,17 +80,17 @@ struct wdc_spd_softc {
 #define STATIC static
 #endif
 
-STATIC int wdc_spd_match(struct device *, struct cfdata *, void *);
-STATIC void wdc_spd_attach(struct device *, struct device *, void *);
+STATIC int wdc_spd_match(device_t, cfdata_t, void *);
+STATIC void wdc_spd_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(wdc_spd, sizeof (struct wdc_spd_softc),
+CFATTACH_DECL_NEW(wdc_spd, sizeof (struct wdc_spd_softc),
     wdc_spd_match, wdc_spd_attach, NULL, NULL);
 
 extern struct cfdriver wdc_cd;
 
 STATIC void __wdc_spd_enable(void);
 STATIC void __wdc_spd_disable(void) __attribute__((__unused__));
-STATIC void __wdc_spd_bus_space(struct ata_channel *);
+STATIC void __wdc_spd_bus_space(struct wdc_regs *);
 
 /*
  * wdc register is 16 bit wide.
@@ -170,27 +162,20 @@ STATIC const struct playstation2_bus_space _wdc_spd_space = {
 };
 
 int
-wdc_spd_match(struct device *parent, struct cfdata *cf, void *aux)
+wdc_spd_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct spd_attach_args *spa = aux;
-	struct ata_channel ch;
-	struct wdc_softc wdc;
 	struct wdc_regs wdr;
 	int i, result;
 
 	if (spa->spa_slot != SPD_HDD)
 		return (0);
 
-	memset(&wdc, 0, sizeof(wdc));
-	memset(&ch, 0, sizeof(ch));
-	ch.ch_atac = &wdc.sc_atac;
-	wdc.regs = &wdr;
-
-	__wdc_spd_bus_space(&ch);
+	__wdc_spd_bus_space(&wdr);
 
 	for (i = 0, result = 0; i < 8; i++) { /* 8 sec */
 		if (result == 0)
-			result = wdcprobe(&ch);
+			result = wdcprobe(&wdr);
 		delay(1000000);
 	}
 	
@@ -198,15 +183,16 @@ wdc_spd_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-wdc_spd_attach(struct device *parent, struct device *self, void *aux)
+wdc_spd_attach(device_t parent, device_t self, void *aux)
 {
 	struct spd_attach_args *spa = aux;
-	struct wdc_spd_softc *sc = (void *)self;
+	struct wdc_spd_softc *sc = device_private(self);
 	struct wdc_softc *wdc = &sc->sc_wdcdev;
 	struct ata_channel *ch = &sc->sc_channel;
 
-	printf(": %s\n", spa->spa_product_name);
+	aprint_normal(": %s\n", spa->spa_product_name);
 
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_wdcdev.regs = &sc->sc_wdc_regs;
 
 	wdc->sc_atac.atac_cap =
@@ -217,10 +203,9 @@ wdc_spd_attach(struct device *parent, struct device *self, void *aux)
 	wdc->sc_atac.atac_nchannels = 1;
 	ch->ch_channel = 0;
 	ch->ch_atac = &sc->sc_wdcdev.sc_atac;
-	ch->ch_queue = &sc->sc_chqueue;
-	ch->ch_ndrive = 2;
+	ch->ch_ndrives = 2;
 
-	__wdc_spd_bus_space(ch);
+	__wdc_spd_bus_space(CHAN_TO_WDC_REGS(ch));
 
 	spd_intr_establish(SPD_HDD, wdcintr, &sc->sc_channel);
 
@@ -230,15 +215,14 @@ wdc_spd_attach(struct device *parent, struct device *self, void *aux)
 }
 
 void
-__wdc_spd_bus_space(struct ata_channel *ch)
+__wdc_spd_bus_space(struct wdc_regs *wdr)
 {
-	struct wdc_regs *wdr = CHAN_TO_WDC_REGS(ch);
 	int i;
 
 	wdr->cmd_iot = &_wdc_spd_space;
 	for (i = 0; i < 8; i++)
 		wdr->cmd_iohs[i] = SPD_HDD_IO_BASE + i * 2; /*  wdc register is 16 bit wide. */
-	wdc_init_shadow_regs(ch);
+	wdc_init_shadow_regs(wdr);
 	wdr->ctl_iot = &_wdc_spd_space;
 	wdr->ctl_ioh = SPD_HDD_IO_BASE + WDC_SPD_HDD_AUXREG_OFFSET;
 	wdr->data32iot = wdr->cmd_iot;
@@ -246,7 +230,7 @@ __wdc_spd_bus_space(struct ata_channel *ch)
 }
 
 void
-__wdc_spd_enable()
+__wdc_spd_enable(void)
 {
 	u_int16_t r;
 
@@ -256,7 +240,7 @@ __wdc_spd_enable()
 }
 
 void
-__wdc_spd_disable()
+__wdc_spd_disable(void)
 {
 	u_int16_t r;
 

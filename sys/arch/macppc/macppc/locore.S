@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.60 2008/02/05 18:14:02 garbled Exp $	*/
+/*	$NetBSD: locore.S,v 1.72 2014/11/09 00:05:06 chs Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -35,6 +35,7 @@
 #include "opt_kgdb.h"
 #include "opt_ipkdb.h"
 #include "opt_lockdebug.h"
+#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_altivec.h"
 #include "opt_ppcparam.h"
@@ -44,14 +45,13 @@
 #include <sys/syscall.h>
 
 #include <machine/param.h>
-#include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
-#define _NOREGNAMES
 #include <machine/asm.h>
-#include <machine/vmparam.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
+
 /*
  * Some instructions gas doesn't understand (yet?)
  */
@@ -63,8 +63,6 @@
 	.data
 GLOBAL(esym)
 	.long	0			/* end of symbol table */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
 GLOBAL(oeacpufeat)
 	.long	0			/* cpu features */
 
@@ -84,17 +82,27 @@ _C_LABEL(kernel_text):
 	.text
 	.globl	__start
 __start:
-	bl	_C_LABEL(ofwinit)	/* init OF */
+	bl	_C_LABEL(ofwinit)		/* init OF */
+	mr	13,6
+	mr	14,7
+	bl	_C_LABEL(cpu_model_init)	/* init oeacpufeat */
 
 	li	0,0
 	mtmsr	0			/* Disable FPU/MMU/exceptions */
+#if defined(PMAP_OEA64_BRIDGE)
+	mfmsr	0			/* Clear SF and ISF bits */
+	clrldi	0,0,3
+	mtmsrd	0
+#endif /* PMAP_OEA64_BRIDGE */
 	isync
 
 /* compute end of kernel memory */
 	lis	4,_C_LABEL(end)@ha
 	addi	4,4,_C_LABEL(end)@l
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	/* skip symbol table */
+	mr	6,13
+	mr	7,14
 	cmpwi	6,0
 	beq	1f
 	add	9,6,7			/* r9 = args + l */

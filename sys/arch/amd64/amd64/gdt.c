@@ -1,11 +1,11 @@
-/*	$NetBSD: gdt.c,v 1.16 2008/01/05 21:47:18 yamt Exp $	*/
+/*	$NetBSD: gdt.c,v 1.45 2018/01/05 08:04:20 maxv Exp $	*/
 
-/*-
- * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
+/*
+ * Copyright (c) 1996, 1997, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by John T. Kohl and Charles M. Hannum.
+ * by John T. Kohl, by Charles M. Hannum, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,16 +37,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.16 2008/01/05 21:47:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.45 2018/01/05 08:04:20 maxv Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_xen.h"
+#include "opt_user_ldt.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/mutex.h>
-#include <sys/user.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm.h>
 
@@ -61,309 +55,214 @@ __KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.16 2008/01/05 21:47:18 yamt Exp $");
 
 #ifdef XEN
 #include <xen/hypervisor.h>
-#endif 
+#endif
 
+#define NSLOTS(sz)	\
+	(((sz) - DYNSEL_START) / sizeof(struct sys_segment_descriptor))
+#define NDYNSLOTS	NSLOTS(MAXGDTSIZ)
 
-int gdt_size;		/* size of GDT in bytes */
-int gdt_dyncount;	/* number of dyn. allocated GDT entries in use */
-int gdt_dynavail;
-int gdt_next;		/* next available slot for sweeping */
-int gdt_free;		/* next free slot; terminated with GNULL_SEL */
+typedef struct {
+	bool busy[NDYNSLOTS];
+	size_t nslots;
+} gdt_bitmap_t;
 
-kmutex_t gdt_lock_store;
+/* size of GDT in bytes */
+#ifdef XEN
+const size_t gdt_size = FIRST_RESERVED_GDT_BYTE;
+#else
+const size_t gdt_size = MAXGDTSIZ;
+#endif
 
-static inline void gdt_lock(void);
-static inline void gdt_unlock(void);
-void gdt_init(void);
-void gdt_grow(void);
-int gdt_get_slot(void);
-void gdt_put_slot(int);
+/* bitmap of busy slots */
+static gdt_bitmap_t gdt_bitmap;
 
+#if defined(USER_LDT) || !defined(XEN)
+static void set_sys_gdt(int, void *, size_t, int, int, int);
+#endif
+
+void
+update_descriptor(void *tp, void *ep)
+{
+	uint64_t *table, *entry;
+
+	table = tp;
+	entry = ep;
+
+#ifndef XEN
+	*table = *entry;
+#else
+	paddr_t pa;
+
+	if (!pmap_extract_ma(pmap_kernel(), (vaddr_t)table, &pa) ||
+	    HYPERVISOR_update_descriptor(pa, *entry))
+		panic("HYPERVISOR_update_descriptor failed");
+#endif
+}
+
+#if defined(USER_LDT) || !defined(XEN)
 /*
- * Lock and unlock the GDT, to avoid races in case gdt_{ge,pu}t_slot() sleep
- * waiting for memory.
- *
- * Note that the locking done here is not sufficient for multiprocessor
- * systems.  A freshly allocated slot will still be of type SDT_SYSNULL for
- * some time after the GDT is unlocked, so gdt_compact() could attempt to
- * reclaim it.
+ * Called on a newly-allocated GDT slot, so no race between CPUs.
  */
-static inline void
-gdt_lock(void)
+static void
+set_sys_gdt(int slot, void *base, size_t limit, int type, int dpl, int gran)
 {
-
-	mutex_enter(&gdt_lock_store);
-}
-
-static inline void
-gdt_unlock(void)
-{
-
-	mutex_exit(&gdt_lock_store);
-}
-
-void
-set_mem_gdt(struct mem_segment_descriptor *sd, void *base, size_t limit,
-	    int type, int dpl, int gran, int def32, int is64)
-{
-#if 0
+	union {
+		struct sys_segment_descriptor sd;
+		uint64_t bits[2];
+	} d;
 	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci;
-	int off;
-#endif
+	int idx;
 
-        set_mem_segment(sd, base, limit, type, dpl, gran, def32, is64);
-#if 0
-	off = (char *)sd - gdtstore;
-        for (CPU_INFO_FOREACH(cii, ci)) {
-                if (ci->ci_gdt != NULL)
-			*(struct mem_segment_descriptor *)(ci->ci_gdt + off) =
-			    *sd;
-        }
-#endif
+	set_sys_segment(&d.sd, base, limit, type, dpl, gran);
+	idx = IDXSEL(GDYNSEL(slot, SEL_KPL));
+	for (CPU_INFO_FOREACH(cii, ci)) {
+		KASSERT(ci->ci_gdt != NULL);
+		update_descriptor(&ci->ci_gdt[idx + 0], &d.bits[0]);
+		update_descriptor(&ci->ci_gdt[idx + 1], &d.bits[1]);
+	}
 }
-
-void
-set_sys_gdt(struct sys_segment_descriptor *sd, void *base, size_t limit,
-	    int type, int dpl, int gran)
-{
-#if 0
-	CPU_INFO_ITERATOR cii;
-	struct cpu_info *ci;
-	int off;
-#endif
-
-        set_sys_segment(sd, base, limit, type, dpl, gran);
-#if 0
-	off = (char *)sd - gdtstore;
-        for (CPU_INFO_FOREACH(cii, ci)) {
-                if (ci->ci_gdt != NULL)
-			*(struct sys_segment_descriptor *)(ci->ci_gdt + off) =
-			    *sd;
-        }
-#endif
-}
-
+#endif	/* USER_LDT || !XEN */
 
 /*
- * Initialize the GDT.
+ * Initialize the GDT. We already have a gdtstore, which was temporarily used
+ * by the bootstrap code. Now, we allocate a new gdtstore, and put it in cpu0.
  */
 void
 gdt_init(void)
 {
 	char *old_gdt;
-	struct vm_page *pg;
-	vaddr_t va;
 	struct cpu_info *ci = &cpu_info_primary;
 
-	mutex_init(&gdt_lock_store, MUTEX_DEFAULT, IPL_NONE);
-
-	gdt_size = MINGDTSIZ;
-	gdt_dyncount = 0;
-	gdt_next = 0;
-	gdt_free = GNULL_SEL;
-	gdt_dynavail =
-	    (gdt_size - DYNSEL_START) / sizeof (struct sys_segment_descriptor);
+	/* Initialize the global values */
+	memset(&gdt_bitmap.busy, 0, sizeof(gdt_bitmap.busy));
+	gdt_bitmap.nslots = NSLOTS(gdt_size);
 
 	old_gdt = gdtstore;
-	gdtstore = (char *)uvm_km_alloc(kernel_map, MAXGDTSIZ, 0,
+
+#ifdef __HAVE_PCPU_AREA
+	/* The GDT is part of the pcpuarea */
+	gdtstore = (char *)&pcpuarea->ent[cpu_index(ci)].gdt;
+#else
+	struct vm_page *pg;
+	vaddr_t va;
+
+	/* Allocate gdt_size bytes of memory. */
+	gdtstore = (char *)uvm_km_alloc(kernel_map, gdt_size, 0,
 	    UVM_KMF_VAONLY);
-	for (va = (vaddr_t)gdtstore; va < (vaddr_t)gdtstore + MINGDTSIZ;
+	for (va = (vaddr_t)gdtstore; va < (vaddr_t)gdtstore + gdt_size;
 	    va += PAGE_SIZE) {
 		pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_ZERO);
 		if (pg == NULL) {
 			panic("gdt_init: no pages");
 		}
 		pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
-		    VM_PROT_READ | VM_PROT_WRITE);
+		    VM_PROT_READ | VM_PROT_WRITE, 0);
 	}
 	pmap_update(pmap_kernel());
+#endif
+
+	/* Copy the initial bootstrap GDT into the new area. */
 	memcpy(gdtstore, old_gdt, DYNSEL_START);
-	ci->ci_gdt = gdtstore;
+	ci->ci_gdt = (void *)gdtstore;
 #ifndef XEN
 	set_sys_segment(GDT_ADDR_SYS(gdtstore, GLDT_SEL), ldtstore,
 	    LDT_SIZE - 1, SDT_SYSLDT, SEL_KPL, 0);
 #endif
+
 	gdt_init_cpu(ci);
 }
 
 /*
- * Allocate shadow GDT for a slave CPU.
+ * Allocate shadow GDT for a secondary CPU. It contains the same values as the
+ * GDT present in cpu0 (gdtstore).
  */
 void
 gdt_alloc_cpu(struct cpu_info *ci)
 {
-#if 0
-        ci->ci_gdt = (char *)uvm_km_valloc(kernel_map, MAXGDTSIZ);
-        uvm_map_pageable(kernel_map, (vaddr_t)ci->ci_gdt,
-            (vaddr_t)ci->ci_gdt + MINGDTSIZ, false, false);
-        memset(ci->ci_gdt, 0, MINGDTSIZ);
-        memcpy(ci->ci_gdt, gdtstore,
-	   DYNSEL_START + gdt_dyncount * sizeof(struct sys_segment_descriptor));
+#ifdef __HAVE_PCPU_AREA
+	ci->ci_gdt = (union descriptor *)&pcpuarea->ent[cpu_index(ci)].gdt;
 #else
-	ci->ci_gdt = gdtstore;
+	struct vm_page *pg;
+	vaddr_t va;
+
+	ci->ci_gdt = (union descriptor *)uvm_km_alloc(kernel_map, gdt_size,
+	    0, UVM_KMF_VAONLY);
+	for (va = (vaddr_t)ci->ci_gdt; va < (vaddr_t)ci->ci_gdt + gdt_size;
+	    va += PAGE_SIZE) {
+		while ((pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_ZERO))
+		    == NULL) {
+			uvm_wait("gdt_alloc_cpu");
+		}
+		pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
+		    VM_PROT_READ | VM_PROT_WRITE, 0);
+	}
+	pmap_update(pmap_kernel());
 #endif
+
+	memcpy(ci->ci_gdt, gdtstore, gdt_size);
 }
 
-
 /*
- * Load appropriate gdt descriptor; we better be running on *ci
- * (for the most part, this is how a CPU knows who it is).
+ * Load appropriate GDT descriptor into the currently running CPU, which must
+ * be ci.
  */
 void
 gdt_init_cpu(struct cpu_info *ci)
 {
 	struct region_descriptor region;
 
-#ifndef XEN
-	setregion(&region, ci->ci_gdt, (u_int16_t)(MAXGDTSIZ - 1));
-#else
-	/* Enter only allocated frames */
-	setregion(&region, ci->ci_gdt, (u_int16_t)(gdt_size - 1));
-#endif
+	KASSERT(curcpu() == ci);
+
+	setregion(&region, ci->ci_gdt, (uint16_t)(gdt_size - 1));
 	lgdt(&region);
 }
 
-#ifdef MULTIPROCESSOR
-
-void
-gdt_reload_cpu(struct cpu_info *ci)
-{
-	struct region_descriptor region;
-
-#ifndef XEN
-	setregion(&region, ci->ci_gdt, MAXGDTSIZ - 1);
-#else
-	/* Enter only allocated frames */
-	setregion(&region, ci->ci_gdt, gdt_size - 1);
-#endif
-	lgdt(&region);
-}
-#endif
-
-
-/*
- * Grow or shrink the GDT.
- */
-void
-gdt_grow(void)
-{
-	size_t old_len, new_len;
-	struct vm_page *pg;
-	vaddr_t va;
-
-	old_len = gdt_size;
-	gdt_size <<= 1;
-	new_len = old_len << 1;
-	gdt_dynavail =
-	    (gdt_size - DYNSEL_START) / sizeof (struct sys_segment_descriptor);
-
-	for (va = (vaddr_t)gdtstore + old_len; va < (vaddr_t)gdtstore + new_len;
-	    va += PAGE_SIZE) {
-		while ((pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_ZERO)) ==
-		       NULL) {
-			uvm_wait("gdt_grow");
-		}
-		pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
-		    VM_PROT_READ | VM_PROT_WRITE);
-	}
-	pmap_update(pmap_kernel());
-}
-
-/*
- * Allocate a GDT slot as follows:
- * 1) If there are entries on the free list, use those.
- * 2) If there are fewer than gdt_dynavail entries in use, there are free slots
- *    near the end that we can sweep through.
- * 3) As a last resort, we increase the size of the GDT, and sweep through
- *    the new slots.
- */
-int
+#if !defined(XEN) || defined(USER_LDT)
+static int
 gdt_get_slot(void)
 {
-	int slot;
-	struct sys_segment_descriptor *gdt;
+	size_t i;
 
-	gdt = (struct sys_segment_descriptor *)&gdtstore[DYNSEL_START];
+	KASSERT(mutex_owned(&cpu_lock));
 
-	gdt_lock();
-
-	if (gdt_free != GNULL_SEL) {
-		slot = gdt_free;
-		gdt_free = gdt[slot].sd_xx3;	/* XXXfvdl res. field abuse */
-	} else {
-#ifdef DIAGNOSTIC
-		if (gdt_next != gdt_dyncount)
-			panic("gdt_get_slot botch 1");
-#endif
-		if (gdt_next >= gdt_dynavail) {
-#ifdef DIAGNOSTIC
-			if (gdt_size >= MAXGDTSIZ)
-				panic("gdt_get_slot botch 2");
-#endif
-			gdt_grow();
+	for (i = 0; i < gdt_bitmap.nslots; i++) {
+		if (!gdt_bitmap.busy[i]) {
+			gdt_bitmap.busy[i] = true;
+			return (int)i;
 		}
-		slot = gdt_next++;
 	}
+	panic("gdt_get_slot: out of memory");
 
-	gdt_dyncount++;
-	gdt_unlock();
-	return (slot);
+	/* NOTREACHED */
+	return 0;
 }
 
-/*
- * Deallocate a GDT slot, putting it on the free list.
- */
-void
+static void
 gdt_put_slot(int slot)
 {
-	struct sys_segment_descriptor *gdt;
-
-	gdt = (struct sys_segment_descriptor *)&gdtstore[DYNSEL_START];
-
-	gdt_lock();
-	gdt_dyncount--;
-
-	gdt[slot].sd_type = SDT_SYSNULL;
-	gdt[slot].sd_xx3 = gdt_free;
-	gdt_free = slot;
-
-	gdt_unlock();
+	KASSERT(mutex_owned(&cpu_lock));
+	KASSERT(slot < gdt_bitmap.nslots);
+	gdt_bitmap.busy[slot] = false;
 }
+#endif
 
 int
 tss_alloc(struct x86_64_tss *tss)
 {
 #ifndef XEN
 	int slot;
-	struct sys_segment_descriptor *gdt;
 
-	gdt = (struct sys_segment_descriptor *)&gdtstore[DYNSEL_START];
+	mutex_enter(&cpu_lock);
 
 	slot = gdt_get_slot();
-#if 0
-	printf("tss_alloc: slot %d addr %p\n", slot, &gdt[slot]);
-#endif
-	set_sys_gdt(&gdt[slot], tss, sizeof (struct x86_64_tss)-1,
-	    SDT_SYS386TSS, SEL_KPL, 0);
-#if 0
-	printf("lolimit %lx lobase %lx type %lx dpl %lx p %lx hilimit %lx\n"
-	       "xx1 %lx gran %lx hibase %lx xx2 %lx zero %lx xx3 %lx pad %lx\n",
-		(unsigned long)gdt[slot].sd_lolimit,
-		(unsigned long)gdt[slot].sd_lobase,
-		(unsigned long)gdt[slot].sd_type,
-		(unsigned long)gdt[slot].sd_dpl,
-		(unsigned long)gdt[slot].sd_p,
-		(unsigned long)gdt[slot].sd_hilimit,
-		(unsigned long)gdt[slot].sd_xx1,
-		(unsigned long)gdt[slot].sd_gran,
-		(unsigned long)gdt[slot].sd_hibase,
-		(unsigned long)gdt[slot].sd_xx2,
-		(unsigned long)gdt[slot].sd_zero,
-		(unsigned long)gdt[slot].sd_xx3);
-#endif
+	set_sys_gdt(slot, tss, sizeof(struct x86_64_tss) - 1, SDT_SYS386TSS,
+	    SEL_KPL, 0);
+
+	mutex_exit(&cpu_lock);
+
 	return GDYNSEL(slot, SEL_KPL);
-#else  /* XEN */
+#else
 	/* TSS, what for? */
 	return GSEL(GNULL_SEL, SEL_KPL);
 #endif
@@ -373,68 +272,66 @@ void
 tss_free(int sel)
 {
 #ifndef XEN
+	mutex_enter(&cpu_lock);
 	gdt_put_slot(IDXDYNSEL(sel));
+	mutex_exit(&cpu_lock);
 #else
 	KASSERT(sel == GSEL(GNULL_SEL, SEL_KPL));
 #endif
 }
 
-void
-ldt_alloc(struct pmap *pmap, char *ldt, size_t len)
+#ifdef USER_LDT
+int
+ldt_alloc(void *ldtp, size_t len)
 {
 	int slot;
-	struct sys_segment_descriptor *gdt;
 
-	gdt = (struct sys_segment_descriptor *)&gdtstore[DYNSEL_START];
+	KASSERT(mutex_owned(&cpu_lock));
 
 	slot = gdt_get_slot();
-	set_sys_gdt(&gdt[slot], ldt, len - 1, SDT_SYSLDT, SEL_KPL, 0);
-	pmap->pm_ldt_sel = GSEL(slot, SEL_KPL);
+	set_sys_gdt(slot, ldtp, len - 1, SDT_SYSLDT, SEL_KPL, 0);
+
+	return GDYNSEL(slot, SEL_KPL);
 }
 
 void
-ldt_free(struct pmap *pmap)
+ldt_free(int sel)
 {
 	int slot;
 
-	slot = IDXDYNSEL(pmap->pm_ldt_sel);
+	KASSERT(mutex_owned(&cpu_lock));
+
+	slot = IDXDYNSEL(sel);
 
 	gdt_put_slot(slot);
 }
+#endif
 
 #ifdef XEN
 void
-lgdt(desc)
-	struct region_descriptor *desc;
+lgdt(struct region_descriptor *desc)
 {
 	paddr_t frames[16];
-	int i;
+	size_t i;
 	vaddr_t va;
 
 	/*
-	* XXX: Xen even checks descriptors AFTER limit.
-	* Zero out last frame after limit if needed.
-	*/
+	 * Xen even checks descriptors AFTER limit. Zero out last frame after
+	 * limit if needed.
+	 */
 	va = desc->rd_base + desc->rd_limit + 1;
-	__PRINTK(("memset 0x%lx -> 0x%lx\n", va, roundup(va, PAGE_SIZE)));
-	memset((void *) va, 0, roundup(va, PAGE_SIZE) - va);
-	for  (i = 0; i < roundup(desc->rd_limit,PAGE_SIZE) >> PAGE_SHIFT; i++) {
-		/*
-		* The lgdt instr uses virtual addresses, do some translation fo
-r Xen.
-		* Mark pages R/O too, else Xen will refuse to use them
-		*/
+	memset((void *)va, 0, roundup(va, PAGE_SIZE) - va);
 
-		frames[i] = ((paddr_t) xpmap_ptetomach(
-				(pt_entry_t *) (desc->rd_base + (i << PAGE_SHIFT
-))))
-			>> PAGE_SHIFT;
-		__PRINTK(("frames[%d] = 0x%lx (pa 0x%lx)\n", i, frames[i],
-		    xpmap_mtop(frames[i] << PAGE_SHIFT)));
-		pmap_pte_clearbits(kvtopte(desc->rd_base + (i << PAGE_SHIFT)),
-		    PG_RW);
+	/*
+	 * The lgdt instruction uses virtual addresses, do some translation for
+	 * Xen. Mark pages R/O too, otherwise Xen will refuse to use them.
+	 */
+	for (i = 0; i < roundup(desc->rd_limit, PAGE_SIZE) >> PAGE_SHIFT; i++) {
+		va = desc->rd_base + (i << PAGE_SHIFT);
+		frames[i] = ((paddr_t)xpmap_ptetomach((pt_entry_t *)va)) >>
+		    PAGE_SHIFT;
+		pmap_pte_clearbits(kvtopte(va), PG_RW);
 	}
-	__PRINTK(("HYPERVISOR_set_gdt(%d)\n", (desc->rd_limit + 1) >> 3));
 
 	if (HYPERVISOR_set_gdt(frames, (desc->rd_limit + 1) >> 3))
 		panic("lgdt(): HYPERVISOR_set_gdt() failed");

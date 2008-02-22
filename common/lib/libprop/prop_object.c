@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_object.c,v 1.19 2008/01/05 01:15:02 ad Exp $	*/
+/*	$NetBSD: prop_object.c,v 1.30 2015/05/12 14:59:35 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,8 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <prop/prop_object.h>
 #include "prop_object_impl.h"
+#include <prop/prop_object.h>
+
+#ifdef _PROP_NEED_REFCNT_MTX
+static pthread_mutex_t _prop_refcnt_mtx = PTHREAD_MUTEX_INITIALIZER;
+#endif /* _PROP_NEED_REFCNT_MTX */
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/mman.h>
@@ -419,10 +416,11 @@ _prop_object_internalize_find_tag(struct _prop_object_internalize_context *ctx,
 
 	ctx->poic_tagname = cp;
 
-	while (!_PROP_ISSPACE(*cp) && *cp != '/' && *cp != '>')
+	while (!_PROP_ISSPACE(*cp) && *cp != '/' && *cp != '>') {
+		if (_PROP_EOF(*cp))
+			return (false);
 		cp++;
-	if (_PROP_EOF(*cp))
-		return (false);
+	}
 
 	ctx->poic_tagname_len = cp - ctx->poic_tagname;
 
@@ -465,10 +463,11 @@ _prop_object_internalize_find_tag(struct _prop_object_internalize_context *ctx,
 
 	ctx->poic_tagattr = cp;
 
-	while (!_PROP_ISSPACE(*cp) && *cp != '=')
+	while (!_PROP_ISSPACE(*cp) && *cp != '=') {
+		if (_PROP_EOF(*cp))
+			return (false);
 		cp++;
-	if (_PROP_EOF(*cp))
-		return (false);
+	}
 
 	ctx->poic_tagattr_len = cp - ctx->poic_tagattr;
 	
@@ -480,10 +479,11 @@ _prop_object_internalize_find_tag(struct _prop_object_internalize_context *ctx,
 		return (false);
 	
 	ctx->poic_tagattrval = cp;
-	while (*cp != '\"')
+	while (*cp != '\"') {
+		if (_PROP_EOF(*cp))
+			return (false);
 		cp++;
-	if (_PROP_EOF(*cp))
-		return (false);
+	}
 	ctx->poic_tagattrval_len = cp - ctx->poic_tagattrval;
 	
 	cp++;
@@ -633,7 +633,7 @@ match_start:
 						   poi->poi_taglen))
 			break;
 	}
-	if (poi == NULL) {
+	if ((poi == NULL) || (poi->poi_tag == NULL)) {
 		while (_prop_stack_pop(&stack, &obj, &iter, &data, NULL)) {
 			iter_func = (prop_object_internalizer_continue_t)iter;
 			(*iter_func)(&stack, &obj, ctx, data, NULL);
@@ -847,6 +847,7 @@ _prop_object_externalize_write_file(const char *fname, const char *xml,
 	char tname[PATH_MAX];
 	int fd;
 	int save_errno;
+	mode_t myumask;
 
 	if (len > SSIZE_MAX) {
 		errno = EFBIG;
@@ -856,28 +857,28 @@ _prop_object_externalize_write_file(const char *fname, const char *xml,
 	/*
 	 * Get the directory name where the file is to be written
 	 * and create the temporary file.
-	 *
-	 * We don't use mkstemp() because mkstemp() always creates the
-	 * file with mode 0600.  We do, however, use mktemp() safely.
 	 */
- again:
 	_prop_object_externalize_file_dirname(fname, tname);
-	if (strlcat(tname, "/.plistXXXXXX", sizeof(tname)) >= sizeof(tname)) {
+#define PLISTTMP "/.plistXXXXXX"
+	if (strlen(tname) + strlen(PLISTTMP) >= sizeof(tname)) {
 		errno = ENAMETOOLONG;
 		return (false);
 	}
-	if (mktemp(tname) == NULL)
+	strcat(tname, PLISTTMP);
+#undef PLISTTMP
+
+	if ((fd = mkstemp(tname)) == -1)
 		return (false);
-	if ((fd = open(tname, O_CREAT|O_RDWR|O_EXCL, 0666)) == -1) {
-		if (errno == EEXIST)
-			goto again;
-		return (false);
-	}
 
 	if (write(fd, xml, len) != (ssize_t)len)
 		goto bad;
 
 	if (fsync(fd) == -1)
+		goto bad;
+
+	myumask = umask(0);
+	(void)umask(myumask);
+	if (fchmod(fd, 0666 & ~myumask) == -1)
 		goto bad;
 
 	(void) close(fd);
@@ -927,7 +928,7 @@ _prop_object_internalize_map_file(const char *fname)
 		return (NULL);
 	}
 	mf->poimf_mapsize = ((size_t)sb.st_size + pgmask) & ~pgmask;
-	if (mf->poimf_mapsize < sb.st_size) {
+	if (mf->poimf_mapsize < (size_t)sb.st_size) {
 		(void) close(fd);
 		_PROP_FREE(mf, M_TEMP);
 		return (NULL);
@@ -982,24 +983,6 @@ _prop_object_internalize_unmap_file(
 #endif /* !_KERNEL && !_STANDALONE */
 
 /*
- * Retain / release serialization --
- *
- * Eventually we would like to use atomic operations.  But until we have
- * an MI API for them that is common to userland and the kernel, we will
- * use a lock instead.
- *
- * We use a single global mutex for all serialization.  In the kernel, because
- * we are still under a biglock, this will basically never contend (properties
- * cannot be manipulated at interrupt level).  In userland, this will cost
- * nothing for single-threaded programs.  For multi-threaded programs, there
- * could be contention, but it probably won't cost that much unless the program
- * makes heavy use of property lists.
- */
-_PROP_MUTEX_DECL_STATIC(_prop_refcnt_mutex)
-#define	_PROP_REFCNT_LOCK()	_PROP_MUTEX_LOCK(_prop_refcnt_mutex)
-#define	_PROP_REFCNT_UNLOCK()	_PROP_MUTEX_UNLOCK(_prop_refcnt_mutex)
-
-/*
  * prop_object_retain --
  *	Increment the reference count on an object.
  */
@@ -1007,13 +990,10 @@ void
 prop_object_retain(prop_object_t obj)
 {
 	struct _prop_object *po = obj;
-	uint32_t ocnt;
+	uint32_t ncnt __unused;
 
-	_PROP_REFCNT_LOCK();
-	ocnt = po->po_refcnt++;
-	_PROP_REFCNT_UNLOCK();
-
-	_PROP_ASSERT(ocnt != 0xffffffffU);
+	_PROP_ATOMIC_INC32_NV(&po->po_refcnt, ncnt);
+	_PROP_ASSERT(ncnt != 0);
 }
 
 /*
@@ -1029,6 +1009,7 @@ static void
 prop_object_release_emergency(prop_object_t obj)
 {
 	struct _prop_object *po;
+	void (*unlock)(void);
 	prop_object_t parent = NULL;
 	uint32_t ocnt;
 
@@ -1036,22 +1017,36 @@ prop_object_release_emergency(prop_object_t obj)
 		po = obj;
 		_PROP_ASSERT(obj);
 
-		_PROP_REFCNT_LOCK();
-    		ocnt = po->po_refcnt--;
-		_PROP_REFCNT_UNLOCK();
+		if (po->po_type->pot_lock != NULL)
+		po->po_type->pot_lock();
 
+		/* Save pointerto unlock function */
+		unlock = po->po_type->pot_unlock;
+		
+		/* Dance a bit to make sure we always get the non-racy ocnt */
+		_PROP_ATOMIC_DEC32_NV(&po->po_refcnt, ocnt);
+		ocnt++;
 		_PROP_ASSERT(ocnt != 0);
-		if (ocnt != 1)
-			break;
 
+		if (ocnt != 1) {
+			if (unlock != NULL)
+				unlock();
+			break;
+		}
+		
 		_PROP_ASSERT(po->po_type);		
-		if ((po->po_type->pot_free)(NULL, &obj) == 0)
+		if ((po->po_type->pot_free)(NULL, &obj) ==
+		    _PROP_OBJECT_FREE_DONE) {
+			if (unlock != NULL)
+				unlock();
 			break;
+		}
 
+		if (unlock != NULL)
+			unlock();
+		
 		parent = po;
-		_PROP_REFCNT_LOCK();
-		++po->po_refcnt;
-		_PROP_REFCNT_UNLOCK();
+		_PROP_ATOMIC_INC32(&po->po_refcnt);
 	}
 	_PROP_ASSERT(parent);
 	/* One object was just freed. */
@@ -1071,6 +1066,7 @@ prop_object_release(prop_object_t obj)
 {
 	struct _prop_object *po;
 	struct _prop_stack stack;
+	void (*unlock)(void); 
 	int ret;
 	uint32_t ocnt;
 
@@ -1081,24 +1077,32 @@ prop_object_release(prop_object_t obj)
 			po = obj;
 			_PROP_ASSERT(obj);
 
-			_PROP_REFCNT_LOCK();
-			ocnt = po->po_refcnt--;
-			_PROP_REFCNT_UNLOCK();
+			if (po->po_type->pot_lock != NULL)
+				po->po_type->pot_lock();
 
+			/* Save pointer to object unlock function */
+			unlock = po->po_type->pot_unlock;
+			
+			_PROP_ATOMIC_DEC32_NV(&po->po_refcnt, ocnt);
+			ocnt++;
 			_PROP_ASSERT(ocnt != 0);
+
 			if (ocnt != 1) {
 				ret = 0;
+				if (unlock != NULL)
+					unlock();
 				break;
 			}
-
+			
 			ret = (po->po_type->pot_free)(&stack, &obj);
+
+			if (unlock != NULL)
+				unlock();
 
 			if (ret == _PROP_OBJECT_FREE_DONE)
 				break;
 			
-			_PROP_REFCNT_LOCK();
-			++po->po_refcnt;
-			_PROP_REFCNT_UNLOCK();
+			_PROP_ATOMIC_INC32(&po->po_refcnt);
 		} while (ret == _PROP_OBJECT_FREE_RECURSE);
 		if (ret == _PROP_OBJECT_FREE_FAILED)
 			prop_object_release_emergency(obj);
@@ -1139,7 +1143,7 @@ prop_object_equals_with_error(prop_object_t obj1, prop_object_t obj2,
 	void *stored_pointer1, *stored_pointer2;
 	prop_object_t next_obj1, next_obj2;
 	struct _prop_stack stack;
-	int ret;
+	_prop_object_equals_rv_t ret;
 
 	_prop_stack_init(&stack);
 	if (error_flag)
@@ -1155,14 +1159,17 @@ prop_object_equals_with_error(prop_object_t obj1, prop_object_t obj2,
 		return (false);
     
  continue_subtree:
-	ret = (*po1->po_type->pot_equals)(obj1, obj2, &stored_pointer1, &stored_pointer2,
-	    &next_obj1, &next_obj2);
+	ret = (*po1->po_type->pot_equals)(obj1, obj2,
+					  &stored_pointer1, &stored_pointer2,
+					  &next_obj1, &next_obj2);
 	if (ret == _PROP_OBJECT_EQUALS_FALSE)
 		goto finish;
 	if (ret == _PROP_OBJECT_EQUALS_TRUE) {
 		if (!_prop_stack_pop(&stack, &obj1, &obj2,
 				     &stored_pointer1, &stored_pointer2))
 			return true;
+		po1 = obj1;
+		po2 = obj2;
 		goto continue_subtree;
 	}
 	_PROP_ASSERT(ret == _PROP_OBJECT_EQUALS_RECURSE);

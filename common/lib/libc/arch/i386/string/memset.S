@@ -1,4 +1,4 @@
-/*	$NetBSD: memset.S,v 1.3 2007/11/12 18:41:59 ad Exp $	*/
+/*	$NetBSD: memset.S,v 1.5 2014/05/23 03:17:31 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +32,7 @@
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS)
-	RCSID("$NetBSD: memset.S,v 1.3 2007/11/12 18:41:59 ad Exp $")
+	RCSID("$NetBSD: memset.S,v 1.5 2014/05/23 03:17:31 uebayasi Exp $")
 #endif
 
 #ifdef BZERO
@@ -107,3 +104,8 @@ ENTRY(memset)
 #endif
 	popl	%edi
 	ret
+#ifdef BZERO
+END(bzero)
+#else
+END(memset)
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: podulebus_io.c,v 1.4 2005/12/11 12:16:05 christos Exp $	*/
+/*	$NetBSD: podulebus_io.c,v 1.9 2018/03/16 17:56:31 ryo Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -37,11 +37,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: podulebus_io.c,v 1.4 2005/12/11 12:16:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: podulebus_io.c,v 1.9 2018/03/16 17:56:31 ryo Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* Proto types for all the bus_space structure functions */
 
@@ -52,90 +52,85 @@ bs_protos(bs_notimpl);
 
 struct bus_space podulebus_bs_tag = {
 	/* cookie */
-	(void *) 2,			/* Shift to apply to registers */
+	.bs_cookie = (void *) 2,	/* Shift to apply to registers */
 
 	/* mapping/unmapping */
-	podulebus_bs_map,
-	podulebus_bs_unmap,
-	podulebus_bs_subregion,
+	.bs_map = podulebus_bs_map,
+	.bs_unmap = podulebus_bs_unmap,
+	.bs_subregion = podulebus_bs_subregion,
 
 	/* allocation/deallocation */
-	podulebus_bs_alloc,
-	podulebus_bs_free,
+	.bs_alloc = podulebus_bs_alloc,
+	.bs_free = podulebus_bs_free,
 
 	/* get kernel virtual address */
-	0, /* there is no linear mapping */
+	.bs_vaddr = 0, /* there is no linear mapping */
 
 	/* mmap bus space for userland */
-	bs_notimpl_bs_mmap, /* there is no bus mapping ... well maybe EASI space? */
+	.bs_mmap = bs_notimpl_bs_mmap, /* there is no bus mapping ... well maybe EASI space? */
 
 	/* barrier */
-	podulebus_bs_barrier,
+	.bs_barrier = podulebus_bs_barrier,
 
 	/* read (single) */
-	podulebus_bs_r_1,
-	podulebus_bs_r_2,
-	podulebus_bs_r_4,
-	bs_notimpl_bs_r_8,
+	.bs_r_1 = podulebus_bs_r_1,
+	.bs_r_2 = podulebus_bs_r_2,
+	.bs_r_4 = podulebus_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
 
 	/* read multiple */
-	podulebus_bs_rm_1,
-   	podulebus_bs_rm_2,
-	bs_notimpl_bs_rm_4,
-	bs_notimpl_bs_rm_8,
+	.bs_rm_1 = podulebus_bs_rm_1,
+	.bs_rm_2 = podulebus_bs_rm_2,
+	.bs_rm_4 = bs_notimpl_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
 
 	/* read region */
-	podulebus_bs_rr_1,
-	podulebus_bs_rr_2,
-	bs_notimpl_bs_rr_4,
-	bs_notimpl_bs_rr_8,
+	.bs_rr_1 = podulebus_bs_rr_1,
+	.bs_rr_2 = podulebus_bs_rr_2,
+	.bs_rr_4 = bs_notimpl_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
 
 	/* write (single) */
-	podulebus_bs_w_1,
-	podulebus_bs_w_2,
-	podulebus_bs_w_4,
-	bs_notimpl_bs_w_8,
+	.bs_w_1 = podulebus_bs_w_1,
+	.bs_w_2 = podulebus_bs_w_2,
+	.bs_w_4 = podulebus_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
 
 	/* write multiple */
-	podulebus_bs_wm_1,
-	podulebus_bs_wm_2,
-	bs_notimpl_bs_wm_4,
-	bs_notimpl_bs_wm_8,
+	.bs_wm_1 = podulebus_bs_wm_1,
+	.bs_wm_2 = podulebus_bs_wm_2,
+	.bs_wm_4 = bs_notimpl_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
 
 	/* write region */
-	podulebus_bs_wr_1,
-	podulebus_bs_wr_2,
-	bs_notimpl_bs_wr_4,
-	bs_notimpl_bs_wr_8,
+	.bs_wr_1 = podulebus_bs_wr_1,
+	.bs_wr_2 = podulebus_bs_wr_2,
+	.bs_wr_4 = bs_notimpl_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
 
 	/* set multiple */
-	bs_notimpl_bs_sm_1,
-	bs_notimpl_bs_sm_2,
-	bs_notimpl_bs_sm_4,
-	bs_notimpl_bs_sm_8,
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
 
 	/* set region */
-	podulebus_bs_sr_1,
-	podulebus_bs_sr_2,
-	bs_notimpl_bs_sr_4,
-	bs_notimpl_bs_sr_8,
+	.bs_sr_1 = podulebus_bs_sr_1,
+	.bs_sr_2 = podulebus_bs_sr_2,
+	.bs_sr_4 = bs_notimpl_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
 
 	/* copy */
-	bs_notimpl_bs_c_1,
-	bs_notimpl_bs_c_2,
-	bs_notimpl_bs_c_4,
-	bs_notimpl_bs_c_8,
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = bs_notimpl_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
 };
 
 /* bus space functions */
 
 int
-podulebus_bs_map(t, bpa, size, cacheable, bshp)
-	void *t;
-	bus_addr_t bpa;
-	bus_size_t size;
-	int cacheable;
-	bus_space_handle_t *bshp;
+podulebus_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_space_handle_t *bshp)
 {
 	/*
 	 * Temporary implementation as all I/O is already mapped etc.
@@ -147,24 +142,16 @@ podulebus_bs_map(t, bpa, size, cacheable, bshp)
 	}
 
 int
-podulebus_bs_alloc(t, rstart, rend, size, alignment, boundary, cacheable,
-    bpap, bshp)
-	void *t;
-	bus_addr_t rstart, rend;
-	bus_size_t size, alignment, boundary;
-	int cacheable;
-	bus_addr_t *bpap;
-	bus_space_handle_t *bshp;
+podulebus_bs_alloc(void *t, bus_addr_t rstart, bus_addr_t rend,
+    bus_size_t size, bus_size_t alignment, bus_size_t boundary,
+    int cacheable, bus_addr_t *bpap, bus_space_handle_t *bshp)
 {
 	panic("podulebus_bs_alloc(): Help!");
 }
 
 
 void
-podulebus_bs_unmap(t, bsh, size)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+podulebus_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 {
 	/*
 	 * Temporary implementation
@@ -172,10 +159,7 @@ podulebus_bs_unmap(t, bsh, size)
 }
 
 void    
-podulebus_bs_free(t, bsh, size)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+podulebus_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
 {
 
 	panic("podulebus_bs_free(): Help!");
@@ -184,11 +168,7 @@ podulebus_bs_free(t, bsh, size)
 }
 
 int
-podulebus_bs_subregion(t, bsh, offset, size, nbshp)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, size;
-	bus_space_handle_t *nbshp;
+podulebus_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
 {
 
 	*nbshp = bsh + (offset << ((int)t));
@@ -196,11 +176,7 @@ podulebus_bs_subregion(t, bsh, offset, size, nbshp)
 }
 
 void
-podulebus_bs_barrier(t, bsh, offset, len, flags)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, len;
-	int flags;
+podulebus_bs_barrier(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t len, int flags)
 {
 }	
 
@@ -208,7 +184,7 @@ podulebus_bs_barrier(t, bsh, offset, len, flags)
 
 void
 podulebus_bs_rr_1(void *cookie, bus_space_handle_t bsh,
-			bus_size_t offset, u_int8_t *datap, bus_size_t count)
+			bus_size_t offset, uint8_t *datap, bus_size_t count)
 {
 	int i;
 
@@ -218,7 +194,7 @@ podulebus_bs_rr_1(void *cookie, bus_space_handle_t bsh,
 
 void
 podulebus_bs_rr_2(void *cookie, bus_space_handle_t bsh,
-			bus_size_t offset, u_int16_t *datap, bus_size_t count)
+			bus_size_t offset, uint16_t *datap, bus_size_t count)
 {
 	int i;
 
@@ -228,7 +204,7 @@ podulebus_bs_rr_2(void *cookie, bus_space_handle_t bsh,
 
 void
 podulebus_bs_wr_1(void *cookie, bus_space_handle_t bsh,
-			 bus_size_t offset, u_int8_t const *datap,
+			 bus_size_t offset, uint8_t const *datap,
 			 bus_size_t count)
 {
 	int i;
@@ -239,7 +215,7 @@ podulebus_bs_wr_1(void *cookie, bus_space_handle_t bsh,
 
 void
 podulebus_bs_wr_2(void *cookie, bus_space_handle_t bsh,
-			 bus_size_t offset, u_int16_t const *datap,
+			 bus_size_t offset, uint16_t const *datap,
 			 bus_size_t count)
 {
 	int i;
@@ -250,7 +226,7 @@ podulebus_bs_wr_2(void *cookie, bus_space_handle_t bsh,
 
 void
 podulebus_bs_sr_1(void *cookie, bus_space_handle_t bsh,
-		       bus_size_t offset, u_int8_t value, bus_size_t count)
+		       bus_size_t offset, uint8_t value, bus_size_t count)
 {
 	int i;
 
@@ -260,7 +236,7 @@ podulebus_bs_sr_1(void *cookie, bus_space_handle_t bsh,
 
 void
 podulebus_bs_sr_2(void *cookie, bus_space_handle_t bsh,
-		       bus_size_t offset, u_int16_t value, bus_size_t count)
+		       bus_size_t offset, uint16_t value, bus_size_t count)
 {
 	int i;
 

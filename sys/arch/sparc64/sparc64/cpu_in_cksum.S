@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_in_cksum.S,v 1.1 2008/02/03 13:27:12 martin Exp $ */
+/*	$NetBSD: cpu_in_cksum.S,v 1.4 2015/10/17 18:51:32 nakayama Exp $ */
 
 /*
  * Copyright (c) 2001 Eduardo Horvath
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Eduardo Horvath.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,12 +26,6 @@
 
 #include "assym.h"
 #include <machine/asm.h>
-
-#ifdef __arch64__
-#define	LDPTR	ldx
-#else
-#define	LDPTR	lduw
-#endif
 
 /*
  * int cpu_in_cksum(struct mbuf *m, int len, int off, uint32_t initial_sum);
@@ -100,11 +89,7 @@ ENTRY(cpu_in_cksum)
 	lduw	[%o0 + M_LEN], %o2	! Code duplicated at Lloop
 	srlx	%o3, 32, %g4	! REDUCE bigtime
 	sethi	%hi(0xffff), %g5
-#ifdef __arch64__
-	ldx	[%o0 + M_DATA], %o5
-#else
-	lduw	[%o0 + M_DATA], %o5
-#endif
+	LDPTR	[%o0 + M_DATA], %o5
 	srl	%o3, 0, %o3
 	or	%g5, %lo(0xffff), %g5
 	
@@ -117,11 +102,7 @@ Lloop:
 	lduw	[%o0 + M_LEN], %o2
 	srlx	%o3, 32, %g4	! REDUCE bigtime
 	sethi	%hi(0xffff), %g5
-#ifdef	__arch64__
-	ldx	[%o0 + M_DATA], %o5
-#else
-	lduw	[%o0 + M_DATA], %o5
-#endif
+	LDPTR	[%o0 + M_DATA], %o5
 	srl	%o3, 0, %o3
 	or	%g5, %lo(0xffff), %g5
 0:	
@@ -215,11 +196,7 @@ Lfinish_byte:
 	add	%o3, %o4, %o3
 	
 Lnext:
-#ifdef __arch64__
-	ldx	[%o0 + M_NEXT], %o0
-#else
-	lduw	[%o0 + M_NEXT], %o0
-#endif
+	LDPTR	[%o0 + M_NEXT], %o0
 Lfinish:
 	srlx	%o3, 32, %o4	! Reduce to 32-bits
 	srl	%o3, 0, %o3

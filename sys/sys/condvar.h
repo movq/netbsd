@@ -1,7 +1,7 @@
-/*	$NetBSD: condvar.h,v 1.7 2007/11/06 00:25:48 ad Exp $	*/
+/*	$NetBSD: condvar.h,v 1.14 2017/07/03 03:12:42 riastradh Exp $	*/
 
 /*-
- * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,36 +32,32 @@
 #ifndef _SYS_CONDVAR_H_
 #define	_SYS_CONDVAR_H_
 
-#include <sys/mutex.h>
-
-/*
- * The condition variable implementation is private to kern_condvar.c but
- * the size of a kcondvar_t must remain constant.  cv_waiters is protected
- * both by the interlock passed to cv_wait() (increment only), and the sleep
- * queue lock acquired with sleeptab_lookup() (increment and decrement). 
- * cv_wmesg is static and does not change throughout the life of the CV.
- */
 typedef struct kcondvar {
-	const char	*cv_wmesg;	/* description for /bin/ps */
-	u_int		cv_waiters;	/* number of waiters */
+	void		*cv_opaque[3];
 } kcondvar_t;
 
 #ifdef _KERNEL
 
+struct bintime;
+struct kmutex;
+
 void	cv_init(kcondvar_t *, const char *);
 void	cv_destroy(kcondvar_t *);
 
-void	cv_wait(kcondvar_t *, kmutex_t *);
-int	cv_wait_sig(kcondvar_t *, kmutex_t *);
-int	cv_timedwait(kcondvar_t *, kmutex_t *, int);
-int	cv_timedwait_sig(kcondvar_t *, kmutex_t *, int);
+void	cv_wait(kcondvar_t *, struct kmutex *);
+int	cv_wait_sig(kcondvar_t *, struct kmutex *);
+int	cv_timedwait(kcondvar_t *, struct kmutex *, int);
+int	cv_timedwait_sig(kcondvar_t *, struct kmutex *, int);
+int	cv_timedwaitbt(kcondvar_t *, struct kmutex *, struct bintime *,
+	    const struct bintime *);
+int	cv_timedwaitbt_sig(kcondvar_t *, struct kmutex *, struct bintime *,
+	    const struct bintime *);
 
 void	cv_signal(kcondvar_t *);
 void	cv_broadcast(kcondvar_t *);
 
-void	cv_wakeup(kcondvar_t *);
-
 bool	cv_has_waiters(kcondvar_t *);
+bool	cv_is_valid(kcondvar_t *);
 
 /* The "lightning bolt", awoken once per second by the clock interrupt. */
 extern kcondvar_t lbolt;

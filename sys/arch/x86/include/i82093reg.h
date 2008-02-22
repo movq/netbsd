@@ -1,4 +1,4 @@
-/* 	$NetBSD: i82093reg.h,v 1.1 2003/02/26 21:26:10 fvdl Exp $ */
+/* 	$NetBSD: i82093reg.h,v 1.5 2017/04/22 04:25:09 nonaka Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,6 +50,8 @@
 
 #define	IOAPIC_REG		0x0000
 #define IOAPIC_DATA		0x0010
+#define IOAPIC_EOI		0x0040
+#define		IOAPIC_EOI_MASK		0x000000ff
 
 /*
  * Internal I/O APIC registers.

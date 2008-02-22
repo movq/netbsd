@@ -1,4 +1,4 @@
-/*	$NetBSD: setjmp.h,v 1.7 2002/03/05 14:17:16 simonb Exp $	*/
+/*	$NetBSD: setjmp.h,v 1.9 2009/12/14 00:46:05 matt Exp $	*/
 
 /*
  * mips/setjmp.h: machine dependent setjmp-related information.
@@ -7,10 +7,7 @@
  * struct sigcontext to restore it.
  */
 
-#include <machine/cdefs.h>	/* for API selection */
-
-#if !defined(_MIPS_BSD_API) || _MIPS_BSD_API == _MIPS_BSD_API_LP32
 #define _JBLEN 87		/* XXX Naively 84; 87 for compatibility */
-#else
-#define _JBLEN	120
+#ifdef __mips_n32
+#define	_BSD_JBSLOT_T_		long long
 #endif

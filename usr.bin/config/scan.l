@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: scan.l,v 1.9 2007/11/09 23:41:08 cube Exp $	*/
+/*	$NetBSD: scan.l,v 1.26 2016/08/07 10:37:24 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,6 +40,9 @@
  *
  *	from: @(#)scan.l	8.1 (Berkeley) 6/6/93
  */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: scan.l,v 1.26 2016/08/07 10:37:24 christos Exp $");
 
 #include <sys/param.h>
 #include <errno.h>
@@ -105,14 +108,15 @@ static int endinclude(void);
 static int getincludepath(void);
 static int getcurifdef(void);
 
-#define	yywrap() 1
 
 %}
 
+%option  noyywrap nounput noinput
+
 PATH	[A-Za-z_0-9]*[./][-A-Za-z_0-9./]*
-QCHARS	([^"\n]|\\\")+
+QCHARS	\"(\\.|[^\\"])*\" 
 WORD	[A-Za-z_][-A-Za-z_0-9]*
-FILENAME	({PATH}|\"{QCHARS}\")
+FILENAME	({PATH}|{QCHARS})
 RESTOFLINE	[ \t]*(#[^\n]*)?\n
 
 %x	IGNORED
@@ -135,6 +139,7 @@ defflag		return DEFFLAG;
 defopt		return DEFOPT;
 defparam	return DEFPARAM;
 defpseudo	return DEFPSEUDO;
+defpseudodev	return DEFPSEUDODEV;
 devclass	return DEVCLASS;
 device		return DEVICE;
 device-major	return DEVICE_MAJOR;
@@ -143,6 +148,8 @@ file		return XFILE;
 file-system	return FILE_SYSTEM;
 flags		return FLAGS;
 ident		return IDENT;
+ioconf		return IOCONF;
+linkzero	return LINKZERO;
 machine		return XMACHINE;
 major		return MAJOR;
 makeoptions	return MAKEOPTIONS;
@@ -152,15 +159,21 @@ minor		return MINOR;
 needs-count	return NEEDS_COUNT;
 needs-flag	return NEEDS_FLAG;
 no		return NO;
+-no		return CNO;
 object		return XOBJECT;
 obsolete	return OBSOLETE;
 on		return ON;
 options		return OPTIONS;
 prefix		return PREFIX;
+buildprefix	return BUILDPREFIX;
 pseudo-device	return PSEUDO_DEVICE;
+pseudo-root	return PSEUDO_ROOT;
 root		return ROOT;
+select		return SELECT;
+single		return SINGLE;
 source		return SOURCE;
 type		return TYPE;
+vector 		return VECTOR;
 version 	return VERSION;
 with		return WITH;
 
@@ -312,12 +325,11 @@ package[ \t]+{FILENAME}{RESTOFLINE}	{
 		return EMPTYSTRING;
 	}
 
-\"{QCHARS}	{
-		tok = input();  /* eat closing quote */
-		if (tok != '"') {
-			cfgerror("closing quote missing\n");
-			unput(tok);
-		}
+{QCHARS}	{
+		size_t l = strlen(yytext);
+		if (l > 1 && yytext[l - 1] == '"')
+			yytext[l - 1] = '\0';
+
 		yylval.str = intern(yytext + 1);
 		return QSTRING;
 	}
@@ -328,7 +340,7 @@ package[ \t]+{FILENAME}{RESTOFLINE}	{
 	}
 0[xX][0-9a-fA-F]+ {
 		yylval.num.fmt = 16;
-		yylval.num.val = strtoull(yytext + 2, NULL, 16);
+		yylval.num.val = (long long)strtoull(yytext + 2, NULL, 16);
 		return NUMBER;
 	}
 [1-9][0-9]* {
@@ -352,7 +364,7 @@ package[ \t]+{FILENAME}{RESTOFLINE}	{
 		/* Detect NUL characters in the config file and
 		 * error out.
 		 */
-		cfgerror("NUL character detected at line %i\n", yyline);
+		cfgerror("NUL character detected at line %i", yyline);
 	}
 #.*	{ /* ignored (comment) */; }
 [ \t]+	{ /* ignored (white space) */; }
@@ -386,10 +398,11 @@ curdir_push(const char *fname)
 	else {
 		char *cwd, buf[PATH_MAX];
 
-		if ((cwd = getcwd(buf, sizeof(buf))) == NULL)
+		if ((cwd = getcwd(buf, sizeof(buf))) == NULL) {
+			free(f);
 			return (-1);
-		p = emalloc(strlen(cwd) + strlen(d) + 2);
-		sprintf(p, "%s/%s", cwd, d);
+		}
+		easprintf(&p, "%s/%s", cwd, d);
 	}
 	free(f);
 	pf = ecalloc(1, sizeof(*pf));
@@ -409,7 +422,7 @@ curdir_pop(void)
 	if (SLIST_EMPTY(&curdirs))
 		panic("curdirs is empty");
 	/* LINTED cast away const (pf_prefix is malloc'd for curdirs) */
-	free((void *)pf->pf_prefix);
+	free((void *)__UNCONST(pf->pf_prefix));
 	free(pf);
 }
 
@@ -464,6 +477,8 @@ package(const char *fname)
 	free(fname2);
 }
 
+int includedepth;
+
 /*
  * Open the named file for inclusion at the current point.  Returns 0 on
  * success (file opened and previous state pushed), nonzero on failure
@@ -489,13 +504,12 @@ include(const char *fname, int ateof, int conditional, int direct)
 		s = estrdup(fname);
 	else if (fname[0] == '.' && fname[1] == '/') {
 		struct prefix *pf = SLIST_FIRST(&curdirs);
-		s = emalloc(strlen(pf->pf_prefix) + strlen(fname));
-		sprintf(s, "%s/%s", pf->pf_prefix, fname + 2);
+		easprintf(&s, "%s/%s", pf->pf_prefix, fname + 2);
 	} else
 		s = sourcepath(fname);
 	if ((fp = fopen(s, "r")) == NULL) {
 		if (conditional == 0)
-			cfgerror("cannot open %s for reading: %s\n", s,
+			cfgerror("cannot open %s for reading: %s", s,
 			    strerror(errno));
 		else if (vflag)
 			cfgwarn("cannot open conditional include file %s: %s",
@@ -504,7 +518,7 @@ include(const char *fname, int ateof, int conditional, int direct)
 		return (-1);
 	}
 	if (curdir_push(s) == -1) {
-		cfgerror("cannot record current working directory for %s\n", s);
+		cfgerror("cannot record current working directory for %s", s);
 		fclose(fp);
 		free(s);
 		return (-1);
@@ -521,10 +535,12 @@ include(const char *fname, int ateof, int conditional, int direct)
 	if (interesting)
 		logconfig_include(fp, fname);
 	incl = in;
+	CFGDBG(1, "include `%s' from `%s' line %d", fname, yyfile, yyline);
 	yy_switch_to_buffer(yy_create_buffer(fp, YY_BUF_SIZE));
 	yyfile = intern(s);
 	yyline = 1;
 	free(s);
+	includedepth++;
 	return (0);
 }
 
@@ -532,7 +548,7 @@ include(const char *fname, int ateof, int conditional, int direct)
  * Extract the pathname from a include/cinclude/package into curinclpath
  */
 static int
-getincludepath()
+getincludepath(void)
 {
 	const char *p = yytext;
 	ptrdiff_t len;
@@ -556,7 +572,7 @@ getincludepath()
 	}
 
 	len = e-p;
-	if (len > sizeof(curinclpath)-1)
+	if (len > (ptrdiff_t)sizeof(curinclpath)-1)
 		len = sizeof(curinclpath)-1;
 	strncpy(curinclpath, p, sizeof(curinclpath));
 	curinclpath[len] = '\0';
@@ -587,6 +603,8 @@ endinclude(void)
 	interesting = in->in_interesting;
 	free(in);
 
+	includedepth--;
+
 	return (ateof);
 }
 
@@ -595,12 +613,12 @@ endinclude(void)
  * us to consume a newline, we have to subtract one.  yychar is yacc's
  * token lookahead, so we can tell.
  */
-int
+u_short
 currentline(void)
 {
 	extern int yychar;
 
-	return (yyline - (yychar == '\n'));
+	return (u_short)(yyline - (yychar == '\n'));
 }
 
 static int

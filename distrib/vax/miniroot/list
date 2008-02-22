@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.7 2004/05/10 01:49:36 mhitch Exp $
+#	$NetBSD: list,v 1.16 2013/11/30 08:27:18 nakayama Exp $
 
 # Vax extras
 PROG	sbin/disklabel
@@ -17,8 +17,8 @@ PROG	usr/bin/vi
 PROG	usr/sbin/installboot
 
 # crunchgen source directory specials
-SPECIAL	vi	srcdir usr.bin/vi/build
-SPECIAL	less	srcdir usr.bin/less/less
+SPECIAL	vi	srcdir external/bsd/nvi/usr.bin/nvi
+SPECIAL	less	srcdir external/bsd/less/bin/less
 
 # Minimize use of MFS
 SYMLINK	/tmp	var/tmp
@@ -26,23 +26,14 @@ SYMLINK	/tmp	var/tmp
 # we need the contents of /usr/mdec
 COPYDIR	${DESTDIR}/usr/mdec	usr/mdec
 
-# the zoneinfo
-COPYDIR	${DESTDIR}/usr/share/zoneinfo	usr/share/zoneinfo
-
-# and the termcap file
-COPY	${NETBSDSRCDIR}/share/termcap/termcap.src usr/share/misc/termcap
-
 # copy the kernel
 COPY	${KERNOBJDIR}/GENERIC/netbsd	netbsd
 
 # various files that we need in /etc for the install
-COPY	${DESTDIR}/etc/disktab		etc/disktab.shadow
-SYMLINK	/tmp/disktab.shadow		etc/disktab
 SYMLINK	/tmp/fstab.shadow		etc/fstab
 SYMLINK	/tmp/resolv.conf.shadow		etc/resolv.conf
 SYMLINK	/tmp/hosts			etc/hosts
 
 # and the installation tools
 COPY	${ARCHDIR}/dot.profile		.profile
-COPY	${ARCHDIR}/../install.md	install.md
 COPY	${DESTDIR}/usr/mdec/boot	boot

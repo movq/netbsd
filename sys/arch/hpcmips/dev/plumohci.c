@@ -1,4 +1,4 @@
-/*	$NetBSD: plumohci.c,v 1.11 2007/03/04 05:59:52 christos Exp $ */
+/*	$NetBSD: plumohci.c,v 1.15 2016/04/23 10:15:29 skrll Exp $ */
 
 /*-
  * Copyright (c) 2000 UCHIYAMA Yasushi
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plumohci.c,v 1.11 2007/03/04 05:59:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plumohci.c,v 1.15 2016/04/23 10:15:29 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,8 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: plumohci.c,v 1.11 2007/03/04 05:59:52 christos Exp $
 #include <hpcmips/dev/plumpowervar.h>
 #include <hpcmips/dev/plumohcireg.h>
 
-int plumohci_match(struct device *, struct cfdata *, void *);
-void plumohci_attach(struct device *, struct device *, void *);
+int plumohci_match(device_t, cfdata_t, void *);
+void plumohci_attach(device_t, device_t, void *);
 int plumohci_intr(void *);
 
 void __plumohci_dmamap_sync(bus_dma_tag_t, bus_dmamap_t,
@@ -111,42 +111,44 @@ struct plumohci_shm {
 struct plumohci_softc {
 	struct ohci_softc sc;
 	void *sc_ih;
-	void *sc_wakeih;		
+	void *sc_wakeih;
 
 	LIST_HEAD(, plumohci_shm) sc_shm_head;
 };
 
-CFATTACH_DECL(plumohci, sizeof(struct plumohci_softc),
+CFATTACH_DECL_NEW(plumohci, sizeof(struct plumohci_softc),
     plumohci_match, plumohci_attach, NULL, NULL);
 
 int
-plumohci_match(struct device *parent, struct cfdata *match, void *aux)
+plumohci_match(device_t parent, cfdata_t match, void *aux)
 {
 	/* PLUM2 builtin OHCI module */
 
-	return (1);
+	return 1;
 }
 
 void
-plumohci_attach(struct device *parent, struct device *self, void *aux)
+plumohci_attach(device_t parent, device_t self, void *aux)
 {
-	struct plumohci_softc *sc = (struct plumohci_softc *)self;
+	struct plumohci_softc *sc = device_private(self);
 	struct plum_attach_args *pa = aux;
-	usbd_status r;
+
+	sc->sc.sc_dev = self;
+	sc->sc.sc_bus.ub_hcpriv = sc;
 
 	sc->sc.iot = pa->pa_iot;
-	sc->sc.sc_bus.dmatag = &plumohci_bus_dma_tag.bdt;
+	sc->sc.sc_bus.ub_dmatag = &plumohci_bus_dma_tag.bdt;
 	plumohci_bus_dma_tag._dmamap_chipset_v = sc;
 
 	/* Map I/O space */
-	if (bus_space_map(sc->sc.iot, PLUM_OHCI_REGBASE, OHCI_PAGE_SIZE, 
+	if (bus_space_map(sc->sc.iot, PLUM_OHCI_REGBASE, OHCI_PAGE_SIZE,
 	    0, &sc->sc.ioh)) {
 		printf(": cannot map mem space\n");
 		return;
 	}
 
 	/* power up */
-	/* 
+	/*
 	 * in the case of PLUM2, UHOSTC uses the VRAM as the shared RAM
 	 * so establish power/clock of Video contoroller
 	 */
@@ -161,12 +163,12 @@ plumohci_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = plum_intr_establish(pa->pa_pc, PLUM_INT_USB, IST_EDGE,
 	    IPL_USB, ohci_intr, sc);
 #if 0
-	/* 
-	 *  enable the clock restart request interrupt 
+	/*
+	 *  enable the clock restart request interrupt
 	 *  (for USBSUSPEND state)
 	 */
-	sc->sc_wakeih = plum_intr_establish(pa->pa_pc, PLUM_INT_USBWAKE, 
-	    IST_EDGE, IPL_USB, 
+	sc->sc_wakeih = plum_intr_establish(pa->pa_pc, PLUM_INT_USBWAKE,
+	    IST_EDGE, IPL_USB,
 	    plumohci_intr, sc);
 #endif
 	/*
@@ -176,10 +178,10 @@ plumohci_attach(struct device *parent, struct device *self, void *aux)
 
 	printf("\n");
 
-	r = ohci_init(&sc->sc);
+	int err = ohci_init(&sc->sc);
 
-	if (r != USBD_NORMAL_COMPLETION) {
-		printf(": init failed, error=%d\n", r);
+	if (err) {
+		printf(": init failed, error=%d\n", err);
 
 		plum_intr_disestablish(pa->pa_pc, sc->sc_ih);
 		plum_intr_disestablish(pa->pa_pc, sc->sc_wakeih);
@@ -188,8 +190,7 @@ plumohci_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	/* Attach usb device. */
-	sc->sc.sc_child = config_found((void *) sc, &sc->sc.sc_bus,
-	    usbctlprint);
+	sc->sc.sc_child = config_found(self, &sc->sc.sc_bus, usbctlprint);
 }
 
 int
@@ -201,7 +202,7 @@ plumohci_intr(void *arg)
 
 /*
  * Plum2 OHCI specific busdma routines.
- *	Plum2 OHCI shared buffer can't allocate on memory 
+ *	Plum2 OHCI shared buffer can't allocate on memory
  *	but V-RAM (busspace).
  */
 
@@ -239,16 +240,16 @@ __plumohci_dmamem_alloc(bus_dma_tag_t tx, bus_size_t size,
 	 */
 	error = bus_space_alloc(sc->sc.iot, PLUM_OHCI_SHMEMBASE,
 	    PLUM_OHCI_SHMEMBASE + PLUM_OHCI_SHMEMSIZE - 1,
-	    size, OHCI_PAGE_SIZE, OHCI_PAGE_SIZE, 0,
+	    size, OHCI_PAGE_SIZE, 0, 0,
 	    (bus_addr_t *)(void *)&caddr, &bsh);
 	if (error)
-		return (1);
+		return 1;
 
 	pmap_extract(pmap_kernel(), (vaddr_t)caddr, &paddr);
 
 	ps = malloc(sizeof(struct plumohci_shm), M_DEVBUF, M_NOWAIT);
 	if (ps == 0)
-		return (1);
+		return 1;
 
 	ps->ps_bsh = bsh;
 	ps->ps_size = segs[0].ds_len = size;
@@ -259,7 +260,7 @@ __plumohci_dmamem_alloc(bus_dma_tag_t tx, bus_size_t size,
 
 	*rsegs = 1;
 
-	return (0);
+	return 0;
 }
 
 void
@@ -299,11 +300,11 @@ __plumohci_dmamem_map(bus_dma_tag_t tx, bus_dma_segment_t *segs, int nsegs,
 
 			*kvap = ps->ps_caddr;
 
-			return (0);
+			return 0;
 		}
 	}
 
-	return (1);
+	return 1;
 }
 
 void

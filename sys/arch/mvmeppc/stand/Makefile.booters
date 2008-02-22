@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.booters,v 1.6 2005/12/11 12:18:20 christos Exp $
+#	$NetBSD: Makefile.booters,v 1.15 2017/04/08 19:53:21 christos Exp $
 
 S?=		${.CURDIR}/../../../..
 MDEC_DIR?=	/usr/mdec
@@ -18,32 +18,23 @@ NOLINT=# defined
 INCPATH=-I${.OBJDIR} -I${.CURDIR} -I${.CURDIR}/../libsa -I${.CURDIR}/../libbug \
         -I${.CURDIR}/../../include -I${S} -I${S}/lib/libsa
 CFLAGS= -nostdinc -ffreestanding
-CPPFLAGS= -D_STANDALONE \
-	-DLIBSA_USE_MEMSET -DLIBSA_USE_MEMCPY ${INCPATH} ${DEFS}
+CPPFLAGS= -D_STANDALONE ${INCPATH} ${DEFS}
 BINDIR= ${MDEC_DIR}
 
-.if exists(${.CURDIR}/version)
-SRCS+= vers.c
-CLEANFILES+= vers.c
+# XXX SHOULD NOT NEED TO DEFINE THESE!
+LIBCRT0=
+LIBCRTI=
+LIBC=
+LIBCRTBEGIN=
+LIBCRTEND=
 
-vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh -DM ${.CURDIR}/version "mvmeppc"
-.endif
+.include "${S}/conf/newvers_stand.mk"
 
-CLEANFILES+= machine powerpc
-
-machine :
-	-rm -f ${.TARGET}
-	ln -s $S/arch/mvmeppc/include machine
-
-powerpc :
-	-rm -f ${.TARGET}
-	ln -s $S/arch/powerpc/include powerpc
+.include <bsd.klinks.mk>
 
 .if defined(LIB)
 
-lib${LIB}.a:: machine powerpc ${OBJS}
-beforedepend:	machine powerpc
+lib${LIB}.a:: ${OBJS}
 
 .else
 
@@ -57,18 +48,10 @@ ${PROG}: machine powerpc ${PROGDEPENDS}
 
 LIB_SA_DIR=	${.CURDIR}/../libsa
 LIBSA_DIR!=	cd ${LIB_SA_DIR} && ${PRINTOBJDIR}
-LIBSA=${LIBSA_DIR}/libsa.a
-
-.PHONY: ${LIBSA}
-${LIBSA}:
-	@echo making sure libsa is up to date...
-	@cd ${LIB_SA_DIR} && ${MAKE}
+LIBSA=		${LIBSA_DIR}/lib/sa/libsa.a
+LIBKERN=	${LIBSA_DIR}/lib/kern/libkern.a
 
 SRTOBJ?= ${LIBSA_DIR}/srt0.o
-.PHONY: ${SRTOBJ}
-${SRTOBJ}:
-	@echo making sure srt0 is up to date...
-	@cd ${LIB_SA_DIR} && ${MAKE} srt0.o
 
 #WRTVID_BOOT_DIR=  ${.CURDIR}/../wrtvid
 #WRTVID_DIR!=	cd ${WRTVID_BOOT_DIR} && ${PRINTOBJDIR}

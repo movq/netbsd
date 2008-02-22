@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.syspkg.mk,v 1.3 2004/03/02 23:25:05 xtraeme Exp $
+#	$NetBSD: bsd.syspkg.mk,v 1.5 2008/10/25 22:27:34 apb Exp $
 #
 #	This file is derived from:
 #
@@ -98,7 +98,7 @@ PKG_DEINSTALL_FILE=		${PKGDIR}/DEINSTALL
 MESSAGE_FILE=		${PKGDIR}/MESSAGE
 .endif
 
-AWK?=		/usr/bin/awk
+AWK?=		${TOOL_AWK:U/usr/bin/awk}
 CAT?=		/bin/cat
 CP?=		/bin/cp
 DC?=		/usr/bin/dc
@@ -113,7 +113,7 @@ MKDIR?=		/bin/mkdir -p
 MV?=		/bin/mv
 PKG_TOOLS_BIN?= /usr/sbin
 RM?=		/bin/rm
-SED?=		/usr/bin/sed
+SED?=		${TOOL_SED:U/usr/bin/sed}
 SETENV?=	/usr/bin/env
 SH?=		/bin/sh
 TEST?=		test				# Shell builtin

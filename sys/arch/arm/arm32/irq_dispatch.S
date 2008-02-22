@@ -1,4 +1,4 @@
-/*	$NetBSD: irq_dispatch.S,v 1.9 2008/01/06 03:45:26 matt Exp $	*/
+/*	$NetBSD: irq_dispatch.S,v 1.16 2015/06/02 14:06:16 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Fujitsu Component Limited
@@ -70,8 +70,8 @@
 #include "assym.h"
 
 #include <machine/asm.h>
-#include <machine/cpu.h>
-#include <machine/frame.h>
+
+#include <arm/locore.h>
 
 #include "opt_arm_intr_impl.h"
 #ifdef ARM_INTR_IMPL
@@ -90,52 +90,98 @@
  *	which can be used by different platforms.
  */
 	.text
-	.align	0
-.Lcurrent_intr_depth:
-	.word	_C_LABEL(cpu_info_store) + CI_IDEPTH
-
-LOCK_CAS_CHECK_LOCALS
-
-AST_ALIGNMENT_FAULT_LOCALS
-
-ASENTRY_NP(irq_entry)
+	.p2align	5
+ARM_ASENTRY_NP(irq_entry)
 	sub	lr, lr, #0x00000004	/* Adjust the lr */
 
 	PUSHFRAMEINSVC			/* Push an interrupt frame */
-	ENABLE_ALIGNMENT_FAULTS
+	ENABLE_ALIGNMENT_FAULTS		/* finishes with curcpu() in r4 */
+
+#ifdef _ARM_ARCH_7
+	clrex				/* force all strex to fail */
+	dmb				/* synchronize memory writes */
+#endif
 
 	/*
 	 * Increment the interrupt nesting depth and call the interrupt
 	 * dispatch routine.  We've pushed a frame, so we can safely use
 	 * callee-saved regs here.  We use the following registers, which
-	 * we expect to presist:
+	 * we expect to persist:
 	 *
-	 *	r5	address of `current_intr_depth' variable
-	 *	r6	old value of `current_intr_depth'
+	 *	r4	address of current cpu_info
+	 *	r6	old value of `ci_intr_depth'
 	 */
-	ldr	r5, .Lcurrent_intr_depth
-	mov	r0, sp			/* arg for dispatcher */
-	ldr	r6, [r5]
+	ldr	r6, [r4, #CI_INTR_DEPTH]
 	add	r1, r6, #1
-	str	r1, [r5]
+	str	r1, [r4, #CI_INTR_DEPTH]
 
+	mov	r0, sp			/* arg for dispatcher */
 	bl	ARM_IRQ_HANDLER
 
 	/*
 	 * Restore the old interrupt depth value (which should be the
 	 * same as decrementing it at this point).
 	 */
-	str	r6, [r5]
+	str	r6, [r4, #CI_INTR_DEPTH]
 
 	LOCK_CAS_CHECK
 
 	DO_AST_AND_RESTORE_ALIGNMENT_FAULTS
 	PULLFRAMEFROMSVCANDEXIT
+#ifdef __thumb__
+	subs	pc, lr, #0		/* Exit */
+#else
 	movs	pc, lr			/* Exit */
+#endif
 
-	.bss
 	.align	0
+LOCK_CAS_CHECK_LOCALS
 
-	.global _C_LABEL(astpending)
-_C_LABEL(astpending):
-	.word	0
+AST_ALIGNMENT_FAULT_LOCALS
+ASEND(irq_entry)
+
+	.p2align	5
+ARM_ASENTRY_NP(irq_idle_entry)
+	PUSHIDLEFRAME
+
+	/*
+	 * Increment the interrupt nesting depth and call the interrupt
+	 * dispatch routine.  We've pushed a frame, so we can safely use
+	 * callee-saved regs here.  We use the following registers, which
+	 * we expect to persist:
+	 *
+	 *	r4	address of current cpu_info
+	 *	r6	old value of `ci_intr_depth'
+	 */
+	GET_CURCPU(r4)
+	ldr	r6, [r4, #CI_INTR_DEPTH]
+	add	r1, r6, #1
+	str	r1, [r4, #CI_INTR_DEPTH]
+
+#ifdef _ARM_ARCH_7
+	clrex				/* force all strex to fail */
+	dmb				/* synchronize memory writes */
+#endif
+
+	mov	r0, sp			/* arg for dispatcher */
+	bl	ARM_IRQ_HANDLER
+
+	/*
+	 * Restore the old interrupt depth value (which should be the
+	 * same as decrementing it at this point).
+	 */
+	str	r6, [r4, #CI_INTR_DEPTH]
+
+#if defined(__HAVE_FAST_SOFTINTS) && !defined(__HAVE_PIC_FAST_SOFTINTS)
+        ldr	r2, [r4, #CI_CPL]	/* Get current priority level */
+	ldr	r3, [r4, #CI_SOFTINTS]	/* Get pending softint mask */
+#endif
+
+	PULLIDLEFRAME			/* restore r4, r6, sp, lr */
+
+#if defined(__HAVE_FAST_SOFTINTS) && !defined(__HAVE_PIC_FAST_SOFTINTS)
+        lsrs	r3, r3, r2		/* shift mask by cpl */
+	bne	_C_LABEL(dosoftints)	/* dosoftints(void) */
+#endif
+	RET
+ASEND(irq_idle_entry)

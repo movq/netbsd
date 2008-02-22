@@ -1,4 +1,4 @@
-/*	$NetBSD: dmacvar.h,v 1.7 2005/12/11 12:19:37 christos Exp $	*/
+/*	$NetBSD: dmacvar.h,v 1.12 2017/08/11 07:30:01 isaki Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -62,8 +55,6 @@ struct dmac_dma_xfer {
 	struct dmac_sg_array *dx_array;	/* DMAC array chain */
 	int		dx_done;
 #endif
-	int		dx_nextoff;	/* for continued operation */
-	int		dx_nextsize;
 };
 
 /*
@@ -85,14 +76,14 @@ struct dmac_channel_stat {
 	struct dmac_dma_xfer	ch_xfer;
 	struct dmac_sg_array	*ch_map; /* transfer map for arraychain mode */
 	bus_dma_segment_t	ch_seg[1];
-	struct device		*ch_softc; /* device softc link */
+	struct dmac_softc	*ch_softc; /* device softc link */
 };
 
 /*
  * DMAC softc
  */
 struct dmac_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 
 	bus_space_tag_t		sc_bst;
 	bus_space_handle_t	sc_bht;
@@ -106,19 +97,24 @@ struct dmac_softc {
 #define DMAC_MAXSEGSZ	0xff00
 #define DMAC_BOUNDARY	0
 
-struct dmac_channel_stat *dmac_alloc_channel(struct device *, int, const char *,
-	int, dmac_intr_handler_t, void *, int, dmac_intr_handler_t, void *);
-		/* ch, name, normalv, normal, errorv, error */
-int dmac_free_channel(struct device *, int, void *);
+struct dmac_channel_stat *dmac_alloc_channel(device_t,
+	int,		/* ch */
+	const char *,	/* name */
+	int, dmac_intr_handler_t, void *,	/* normal handler */
+	int, dmac_intr_handler_t, void *,	/* error handler */
+	uint8_t,	/* dcr */
+	uint8_t		/* ocr */
+);
+int dmac_free_channel(device_t, int, void *);
 		/* ch, channel */
 struct dmac_dma_xfer *dmac_alloc_xfer(struct dmac_channel_stat *,
 	bus_dma_tag_t, bus_dmamap_t);
-int dmac_load_xfer(struct device *, struct dmac_dma_xfer *);
+int dmac_load_xfer(struct dmac_softc *, struct dmac_dma_xfer *);
 
-int dmac_start_xfer(struct device *, struct dmac_dma_xfer *);
-int dmac_start_xfer_offset(struct device *, struct dmac_dma_xfer *,
+int dmac_start_xfer(struct dmac_softc *, struct dmac_dma_xfer *);
+int dmac_start_xfer_offset(struct dmac_softc *, struct dmac_dma_xfer *,
 	u_int, u_int);
-int dmac_abort_xfer(struct device *, struct dmac_dma_xfer *);
+int dmac_abort_xfer(struct dmac_softc *, struct dmac_dma_xfer *);
 /* Compatibility function: alloc, fill defaults, load */
 struct dmac_dma_xfer *dmac_prepare_xfer(struct dmac_channel_stat *,
 	bus_dma_tag_t, bus_dmamap_t, int, int, void *);

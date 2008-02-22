@@ -1,4 +1,4 @@
-/*	$NetBSD: device.h,v 1.10 2005/12/11 12:16:26 christos Exp $	*/
+/*	$NetBSD: device.h,v 1.14 2012/10/27 17:17:26 chs Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -38,7 +38,7 @@
  * passed in some cases and the devices will deal with it)
  */
 void config_console(void);
-int amiga_config_found(struct cfdata *, struct device *, void *, cfprint_t );
+int amiga_config_found(cfdata_t, device_t, void *, cfprint_t);
 int simple_devprint(void *, const char *);
 int matchname(const char *, const char *);
 /*
@@ -47,7 +47,6 @@ int matchname(const char *, const char *);
 extern int amiga_realconfig;
 
 
-#define getsoftc(cdnam, unit) \
-    ((unit) >= (cdnam).cd_ndevs ? NULL : (cdnam).cd_devs[unit])
+#define getsoftc(cdnam, unit)	device_lookup_private(&(cdnam), (unit))
 
 #endif /* _AMIGA_DEVICE_H_ */

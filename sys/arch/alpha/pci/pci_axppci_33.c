@@ -1,21 +1,21 @@
-/* $NetBSD: pci_axppci_33.c,v 1.29 2002/09/27 15:35:38 provos Exp $ */
+/* $NetBSD: pci_axppci_33.c,v 1.38 2014/03/21 16:39:29 christos Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Authors: Jeffrey Hsu and Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_axppci_33.c,v 1.29 2002/09/27 15:35:38 provos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_axppci_33.c,v 1.38 2014/03/21 16:39:29 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -38,10 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_axppci_33.c,v 1.29 2002/09/27 15:35:38 provos Ex
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isavar.h>
@@ -56,18 +54,18 @@ __KERNEL_RCSID(0, "$NetBSD: pci_axppci_33.c,v 1.29 2002/09/27 15:35:38 provos Ex
 
 #include "sio.h"
 
-int     dec_axppci_33_intr_map __P((struct pci_attach_args *, pci_intr_handle_t *));
-const char *dec_axppci_33_intr_string __P((void *, pci_intr_handle_t));
-const struct evcnt *dec_axppci_33_intr_evcnt __P((void *, pci_intr_handle_t));
-void    *dec_axppci_33_intr_establish __P((void *, pci_intr_handle_t,
-	    int, int (*func)(void *), void *));
-void    dec_axppci_33_intr_disestablish __P((void *, void *));
+int     dec_axppci_33_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
+const char *dec_axppci_33_intr_string(void *, pci_intr_handle_t, char *, size_t);
+const struct evcnt *dec_axppci_33_intr_evcnt(void *, pci_intr_handle_t);
+void    *dec_axppci_33_intr_establish(void *, pci_intr_handle_t,
+	    int, int (*func)(void *), void *);
+void    dec_axppci_33_intr_disestablish(void *, void *);
 
 #define	LCA_SIO_DEVICE	7	/* XXX */
 
 void
-pci_axppci_33_pickintr(lcp)
-	struct lca_config *lcp;
+pci_axppci_33_pickintr(struct lca_config *lcp)
 {
 	bus_space_tag_t iot = &lcp->lc_iot;
 	pci_chipset_tag_t pc = &lcp->lc_pc;
@@ -77,7 +75,7 @@ pci_axppci_33_pickintr(lcp)
 	/* XXX MAGIC NUMBER */
 	sioclass = pci_conf_read(pc, pci_make_tag(pc, 0, LCA_SIO_DEVICE, 0),
 	    PCI_CLASS_REG);
-        sioII = (sioclass & 0xff) >= 3;
+	sioII = (sioclass & 0xff) >= 3;
 
 	if (!sioII)
 		printf("WARNING: SIO NOT SIO II... NO BETS...\n");
@@ -100,16 +98,14 @@ pci_axppci_33_pickintr(lcp)
 }
 
 int
-dec_axppci_33_intr_map(pa, ihp)
-	struct pci_attach_args *pa;
-	pci_intr_handle_t *ihp;
+dec_axppci_33_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	int device, pirq;
 	pcireg_t pirqreg;
-	u_int8_t pirqline;
+	uint8_t pirqline;
 
 #ifndef DIAGNOSTIC
 	pirq = 0;				/* XXX gcc -Wuninitialized */
@@ -193,9 +189,9 @@ dec_axppci_33_intr_map(pa, ihp)
 		break;
 
 	default:
-                printf("dec_axppci_33_intr_map: weird device number %d\n",
+	        printf("dec_axppci_33_intr_map: weird device number %d\n",
 		    device);
-                return 1;
+	        return 1;
 	}
 
 	pirqreg = pci_conf_read(pc, pci_make_tag(pc, 0, LCA_SIO_DEVICE, 0),
@@ -219,21 +215,17 @@ dec_axppci_33_intr_map(pa, ihp)
 }
 
 const char *
-dec_axppci_33_intr_string(lcv, ih)
-	void *lcv;
-	pci_intr_handle_t ih;
+dec_axppci_33_intr_string(void *lcv, pci_intr_handle_t ih, char *buf, size_t len)
 {
 #if 0
 	struct lca_config *lcp = lcv;
 #endif
 
-	return sio_intr_string(NULL /*XXX*/, ih);
+	return sio_intr_string(NULL /*XXX*/, ih, buf, len);
 }
 
 const struct evcnt *
-dec_axppci_33_intr_evcnt(lcv, ih)
-	void *lcv;
-	pci_intr_handle_t ih;
+dec_axppci_33_intr_evcnt(void *lcv, pci_intr_handle_t ih)
 {
 #if 0
 	struct lca_config *lcp = lcv;
@@ -243,11 +235,7 @@ dec_axppci_33_intr_evcnt(lcv, ih)
 }
 
 void *
-dec_axppci_33_intr_establish(lcv, ih, level, func, arg)
-	void *lcv, *arg;
-	pci_intr_handle_t ih;
-	int level;
-	int (*func) __P((void *));
+dec_axppci_33_intr_establish(void *lcv, pci_intr_handle_t ih, int level, int (*func)(void *), void *arg)
 {
 #if 0
 	struct lca_config *lcp = lcv;
@@ -258,8 +246,7 @@ dec_axppci_33_intr_establish(lcv, ih, level, func, arg)
 }
 
 void
-dec_axppci_33_intr_disestablish(lcv, cookie)
-	void *lcv, *cookie;
+dec_axppci_33_intr_disestablish(void *lcv, void *cookie)
 {
 #if 0
 	struct lca_config *lcp = lcv;

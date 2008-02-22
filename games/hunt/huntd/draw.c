@@ -1,4 +1,4 @@
-/*	$NetBSD: draw.c,v 1.4 2008/01/28 03:23:29 dholland Exp $	*/
+/*	$NetBSD: draw.c,v 1.9 2014/03/29 19:41:10 dholland Exp $	*/
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.
  * All rights reserved.
@@ -32,19 +32,23 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: draw.c,v 1.4 2008/01/28 03:23:29 dholland Exp $");
+__RCSID("$NetBSD: draw.c,v 1.9 2014/03/29 19:41:10 dholland Exp $");
 #endif /* not lint */
 
-# include	"hunt.h"
+#include "hunt.h"
+
+static void drawstatus(PLAYER *);
+static void see(PLAYER *, int);
+static char translate(char);
+static int player_sym(PLAYER *, int, int);
 
 void
-drawmaze(pp)
-	PLAYER	*pp;
+drawmaze(PLAYER *pp)
 {
-	int	x;
-	char	*sp;
-	int	y;
-	char	*endp;
+	int x;
+	char *sp;
+	int y;
+	char *endp;
 
 	clrscr(pp);
 	outstr(pp, pp->p_maze[0], WIDTH);
@@ -70,16 +74,15 @@ drawmaze(pp)
  * drawstatus - put up the status lines (this assumes the screen
  *		size is 80x24 with the maze being 64x24)
  */
-void
-drawstatus(pp)
-	PLAYER	*pp;
+static void
+drawstatus(PLAYER *pp)
 {
-	int	i;
-	PLAYER	*np;
+	int i;
+	PLAYER *np;
 
 	cgoto(pp, STAT_AMMO_ROW, STAT_LABEL_COL);
 	outstr(pp, "Ammo:", 5);
-	(void) sprintf(Buf, "%3d", pp->p_ammo);
+	(void) snprintf(Buf, sizeof(Buf), "%3d", pp->p_ammo);
 	cgoto(pp, STAT_AMMO_ROW, STAT_VALUE_COL);
 	outstr(pp, Buf, 3);
 
@@ -90,43 +93,44 @@ drawstatus(pp)
 
 	cgoto(pp, STAT_DAM_ROW, STAT_LABEL_COL);
 	outstr(pp, "Damage:", 7);
-	(void) sprintf(Buf, "%2d/%2d", pp->p_damage, pp->p_damcap);
+	(void) snprintf(Buf, sizeof(Buf), "%2d/%2d", pp->p_damage,
+		pp->p_damcap);
 	cgoto(pp, STAT_DAM_ROW, STAT_VALUE_COL);
 	outstr(pp, Buf, 5);
 
 	cgoto(pp, STAT_KILL_ROW, STAT_LABEL_COL);
 	outstr(pp, "Kills:", 6);
-	(void) sprintf(Buf, "%3d", (pp->p_damcap - MAXDAM) / 2);
+	(void) snprintf(Buf, sizeof(Buf), "%3d", (pp->p_damcap - MAXDAM) / 2);
 	cgoto(pp, STAT_KILL_ROW, STAT_VALUE_COL);
 	outstr(pp, Buf, 3);
 
 	cgoto(pp, STAT_PLAY_ROW, STAT_LABEL_COL);
 	outstr(pp, "Player:", 7);
 	for (i = STAT_PLAY_ROW + 1, np = Player; np < End_player; np++) {
-		(void) sprintf(Buf, "%5.2f%c%-10.10s %c", np->p_ident->i_score,
+		(void) snprintf(Buf, sizeof(Buf), "%5.2f%c%-10.10s %c",
+			np->p_ident->i_score,
 			stat_char(np), np->p_ident->i_name,
 			np->p_ident->i_team);
 		cgoto(pp, i++, STAT_NAME_COL);
 		outstr(pp, Buf, STAT_NAME_LEN);
 	}
 
-# ifdef MONITOR
+#ifdef MONITOR
 	cgoto(pp, STAT_MON_ROW, STAT_LABEL_COL);
 	outstr(pp, "Monitor:", 8);
 	for (i = STAT_MON_ROW + 1, np = Monitor; np < End_monitor; np++) {
-		(void) sprintf(Buf, "%5.5s %-10.10s %c", " ",
+		(void) snprintf(Buf, sizeof(Buf), "%5.5s %-10.10s %c", " ",
 			np->p_ident->i_name, np->p_ident->i_team);
 		cgoto(pp, i++, STAT_NAME_COL);
 		outstr(pp, Buf, STAT_NAME_LEN);
 	}
-# endif
+#endif
 }
 
 void
-look(pp)
-	PLAYER	*pp;
+look(PLAYER *pp)
 {
-	int	x, y;
+	int x, y;
 
 	x = pp->p_x;
 	y = pp->p_y;
@@ -162,21 +166,19 @@ look(pp)
 		see(pp, LEFTS);
 		see(pp, RIGHT);
 		break;
-# ifdef FLY
+#ifdef FLY
 	  case FLYER:
 		break;
-# endif
+#endif
 	}
 	cgoto(pp, y, x);
 }
 
-void
-see(pp, face)
-	PLAYER	*pp;
-	int	face;
+static void
+see(PLAYER *pp, int face)
 {
-	char	*sp;
-	int	y, x, i, cnt;
+	char *sp;
+	int y, x, i, cnt;
 
 	x = pp->p_x;
 	y = pp->p_y;
@@ -258,13 +260,11 @@ see(pp, face)
 }
 
 void
-check(pp, y, x)
-	PLAYER	*pp;
-	int	y, x;
+check(PLAYER *pp, int y, int x)
 {
-	int	indx;
-	int	ch;
-	PLAYER	*rpp;
+	int indx;
+	int ch;
+	PLAYER *rpp;
 
 	indx = y * sizeof Maze[0] + x;
 	ch = ((char *) Maze)[indx];
@@ -286,21 +286,20 @@ check(pp, y, x)
  *	Update the status of players
  */
 void
-showstat(pp)
-	PLAYER	*pp;
+showstat(PLAYER *pp)
 {
-	PLAYER	*np;
-	int	y;
-	char	c;
+	PLAYER *np;
+	int y;
+	char c;
 
 	y = STAT_PLAY_ROW + 1 + (pp - Player);
 	c = stat_char(pp);
-# ifdef MONITOR
+#ifdef MONITOR
 	for (np = Monitor; np < End_monitor; np++) {
 		cgoto(np, y, STAT_SCAN_COL);
 		outch(np, c);
 	}
-# endif
+#endif
 	for (np = Player; np < End_player; np++) {
 		cgoto(np, y, STAT_SCAN_COL);
 		outch(np, c);
@@ -313,21 +312,19 @@ showstat(pp)
  *	unless he is cloaked.
  */
 void
-drawplayer(pp, draw)
-	PLAYER	*pp;
-	FLAG	draw;
+drawplayer(PLAYER *pp, bool draw)
 {
-	PLAYER	*newp;
-	int	x, y;
+	PLAYER *newp;
+	int x, y;
 
 	x = pp->p_x;
 	y = pp->p_y;
 	Maze[y][x] = draw ? pp->p_face : pp->p_over;
 
-# ifdef MONITOR
+#ifdef MONITOR
 	for (newp = Monitor; newp < End_monitor; newp++)
 		check(newp, y, x);
-# endif
+#endif
 
 	for (newp = Player; newp < End_player; newp++) {
 		if (!draw || newp == pp) {
@@ -351,9 +348,7 @@ drawplayer(pp, draw)
 }
 
 void
-message(pp, s)
-	PLAYER	*pp;
-	const char	*s;
+message(PLAYER *pp, const char *s)
 {
 	cgoto(pp, HEIGHT, 0);
 	outstr(pp, s, strlen(s));
@@ -365,9 +360,8 @@ message(pp, s)
  *	Turn a character into the right direction character if we are
  *	looking at the current player.
  */
-char
-translate(ch)
-	char	ch;
+static char
+translate(char ch)
 {
 	switch (ch) {
 	  case LEFTS:
@@ -386,12 +380,10 @@ translate(ch)
  * player_sym:
  *	Return the player symbol
  */
-int
-player_sym(pp, y, x)
-	PLAYER	*pp;
-	int	y, x;
+static int
+player_sym(PLAYER *pp, int y, int x)
 {
-	PLAYER	*npp;
+	PLAYER *npp;
 
 	npp = play_at(y, x);
 	if (npp->p_ident->i_team == ' ')

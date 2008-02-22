@@ -1,4 +1,4 @@
-/*	$NetBSD: vrdsu.c,v 1.9 2005/12/11 12:17:34 christos Exp $	*/
+/*	$NetBSD: vrdsu.c,v 1.12 2015/06/09 22:46:36 matt Exp $	*/
 
 /*
  * Copyright (c) 1999 Shin Takemura All rights reserved.
@@ -27,32 +27,33 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrdsu.c,v 1.9 2005/12/11 12:17:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrdsu.c,v 1.12 2015/06/09 22:46:36 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/device.h>
-#include <uvm/uvm_param.h>
+#include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <uvm/uvm_extern.h>
+
+#include <mips/cpuregs.h>
 
 #include <hpcmips/vr/vripif.h>
 #include <hpcmips/vr/dsureg.h>
 #include <hpcmips/vr/vrdsuvar.h>
 
 struct vrdsu_softc {
-	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 };
 
-static int vrdsumatch(struct device *, struct cfdata *, void *);
-static void vrdsuattach(struct device *, struct device *, void *);
+static int vrdsumatch(device_t, cfdata_t, void *);
+static void vrdsuattach(device_t, device_t, void *);
 
 static void vrdsu_write(struct vrdsu_softc *, int, unsigned short);
 static unsigned short vrdsu_read(struct vrdsu_softc *, int);
 
-CFATTACH_DECL(vrdsu, sizeof(struct vrdsu_softc),
+CFATTACH_DECL_NEW(vrdsu, sizeof(struct vrdsu_softc),
     vrdsumatch, vrdsuattach, NULL, NULL);
 
 struct vrdsu_softc *the_dsu_sc = NULL;
@@ -72,16 +73,16 @@ vrdsu_read(struct vrdsu_softc *sc, int port)
 }
 
 static int
-vrdsumatch(struct device *parent, struct cfdata *cf, void *aux)
+vrdsumatch(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (1);
 }
 
 static void
-vrdsuattach(struct device *parent, struct device *self, void *aux)
+vrdsuattach(device_t parent, device_t self, void *aux)
 {
-	struct vrdsu_softc *sc = (struct vrdsu_softc *)self;
+	struct vrdsu_softc *sc = device_private(self);
 	struct vrip_attach_args *va = aux;
 
 	sc->sc_iot = va->va_iot;
@@ -95,7 +96,7 @@ vrdsuattach(struct device *parent, struct device *self, void *aux)
 }
 
 void
-vrdsu_reset()
+vrdsu_reset(void)
 {
 
 	if (the_dsu_sc) {

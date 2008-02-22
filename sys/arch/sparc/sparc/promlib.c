@@ -1,4 +1,4 @@
-/*	$NetBSD: promlib.c,v 1.40 2006/05/20 07:08:26 mrg Exp $ */
+/*	$NetBSD: promlib.c,v 1.46 2017/09/11 19:25:07 palle Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: promlib.c,v 1.40 2006/05/20 07:08:26 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: promlib.c,v 1.46 2017/09/11 19:25:07 palle Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_sparc_arch.h"
@@ -59,7 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: promlib.c,v 1.40 2006/05/20 07:08:26 mrg Exp $");
 #include <sys/malloc.h>
 #endif /* _STANDALONE */
 
-#include <machine/stdarg.h>
 #include <machine/oldmon.h>
 #include <machine/promlib.h>
 #include <machine/ctlreg.h>
@@ -157,8 +149,9 @@ notimplemented(void)
 	char str[64];
 	int n;
 
-	n = sprintf(str, "Operation not implemented on ROM version %d\r\n",
-		    promops.po_version);
+	n = snprintf(str, sizeof(str),
+	    "Operation not implemented on ROM version %d\r\n",
+	    promops.po_version);
 
 	/*
 	 * Use PROM vector directly, in case we're called before prom_init().
@@ -269,6 +262,22 @@ prom_getpropint(int node, const char *name, int deflt)
 		return (deflt);
 
 	return (*ip);
+}
+
+/*
+ * Fetch an unsigned 64-bit integer (or pointer) property.
+ * The return value is the property, or the default if there was none.
+ */
+uint64_t
+prom_getpropuint64(int node, const char *name, uint64_t deflt)
+{
+	uint64_t uint64buf, *uint64p = &uint64buf;
+	int len = 2;
+
+	if (prom_getprop(node, name, sizeof(uint64_t), &len, &uint64p) != 0)
+		return deflt;
+
+	return uint64buf;
 }
 
 /*
@@ -1000,12 +1009,24 @@ prom_getidprom(void)
 
 void prom_getether(int node, u_char *cp)
 {
-	struct idprom *idp = prom_getidprom();
+	struct idprom *idp;
+
+	if (prom_get_node_ether(node, cp))
+		return;
+
+	/* Fall back on the machine's global ethernet address */
+	idp = prom_getidprom();
+	memcpy(cp, idp->idp_etheraddr, 6);
+}
+
+bool
+prom_get_node_ether(int node, u_char *cp)
+{
 	char buf[6+1], *bp;
 	int nitem;
 
 	if (node == 0)
-		goto read_idprom;
+		return false;
 
 	/*
 	 * First, try the node's "mac-address" property.
@@ -1020,7 +1041,7 @@ void prom_getether(int node, u_char *cp)
 	if (prom_getprop(node, "mac-address", 1, &nitem, &bp) == 0 &&
 	    nitem >= 6) {
 		memcpy(cp, bp, 6);
-		return;
+		return true;
 	}
 
 	/*
@@ -1030,17 +1051,15 @@ void prom_getether(int node, u_char *cp)
 	 */
 	if (prom_getoption("local-mac-address?", buf, sizeof buf) != 0 ||
 	    strcmp(buf, "true") != 0)
-		goto read_idprom;
+		return false;
 
 	/* Retrieve the node's "local-mac-address" property, if any */
 	nitem = 6;
 	if (prom_getprop(node, "local-mac-address", 1, &nitem, &cp) == 0 &&
 	    nitem == 6)
-		return;
+		return true;
 
-	/* Fall back on the machine's global ethernet address */
-read_idprom:
-	memcpy(cp, idp->idp_etheraddr, 6);
+	return false;
 }
 
 /*
@@ -1273,6 +1292,8 @@ prom_init_opf(void)
 	node = findchosen();
 	OF_getprop(node, "stdin", &promops.po_stdin, sizeof(int));
 	OF_getprop(node, "stdout", &promops.po_stdout, sizeof(int));
+
+	OF_init();
 }
 
 /*

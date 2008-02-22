@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.38 2007/12/31 00:22:13 christos Exp $	*/
+/*	$NetBSD: extern.h,v 1.46 2016/10/22 22:02:55 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -36,6 +36,7 @@
 #include <kvm.h>
 
 #define ADJINETCTR(c, o, n, e)	(c.e = n.e - o.e)
+#define xADJINETCTR(c, o, n, e)	(c[e] = n[e] - o[e])
 
 extern struct	command global_commands[];
 extern struct	mode *curmode;
@@ -49,7 +50,7 @@ extern kvm_t	*kd;
 extern long	ntext, textp;
 extern int	CMDLINE;
 extern int	hz, stathz, maxslp;
-extern int	naptime;
+extern double	naptime;
 extern int	nhosts;
 extern int	nports;
 extern int	protos;
@@ -74,6 +75,7 @@ int	 checkport6(struct in6pcb *);
 void	 closebufcache(WINDOW *);
 void	 closedf(WINDOW *);
 void	 closeicmp(WINDOW *);
+void	 closeifstat(WINDOW *);
 void	 closeiostat(WINDOW *);
 void	 closeip(WINDOW *);
 void	 closevmstat(WINDOW *);
@@ -83,19 +85,21 @@ void	 closenetstat(WINDOW *);
 void	 closepigs(WINDOW *);
 void	 closeswap(WINDOW *);
 void	 closetcp(WINDOW *);
+int	 cmdifstat(const char *, const char *);
 void	 command(char *);
 void	 df_all(char *);
 void	 df_some(char *);
-void	 die(int);
+void	 die(int) __dead;
 void	 disks_add(char *);
 void	 disks_remove(char *);
 void	 disks_drives(char *);
 void	 display(int);
-void	 error(const char *, ...)
-     __attribute__((__format__(__printf__, 1, 2)));
+void	 error(const char *, ...) __printflike(1, 2);
+void	 clearerror(void);
 void	 fetchbufcache(void);
 void	 fetchdf(void);
 void	 fetchicmp(void);
+void	 fetchifstat(void);
 void	 fetchiostat(void);
 void	 fetchip(void);
 void	 fetchvmstat(void);
@@ -109,15 +113,20 @@ int	 fetch_cptime(u_int64_t *);
 void	 global_help(char *);
 void	 global_interval(char *);
 void	 global_load(char *);
-void	 global_quit(char *);
+void	 global_quit(char *) __dead;
 void	 global_stop(char *);
 void	 icmp_boot(char *);
 void	 icmp_run(char *);
 void	 icmp_time(char *);
 void	 icmp_zero(char *);
+int	 ifcmd(const char *cmd, const char *args);
+void	 ifstat_match(char*);
+void	 ifstat_pps(char*);
+void	 ifstat_scale(char*);
 int	 initbufcache(void);
 int	 initdf(void);
 int	 initicmp(void);
+int	 initifstat(void);
 int	 initiostat(void);
 int	 initip(void);
 int	 initvmstat(void);
@@ -136,11 +145,12 @@ void	 ip_boot(char *);
 void	 ip_run(char *);
 void	 ip_time(char *);
 void	 ip_zero(char *);
-void	 keyboard(void) __attribute__((__noreturn__));
+void	 keyboard(void) __dead;
 ssize_t	 kvm_ckread(const void *, void *, size_t, const char *);
 void	 labelbufcache(void);
 void	 labeldf(void);
 void	 labelicmp(void);
+void	 labelifstat(void);
 void	 labeliostat(void);
 void	 labelip(void);
 void	 labelvmstat(void);
@@ -162,10 +172,11 @@ void	 netstat_reset(char *);
 void	 netstat_show(char *);
 void	 netstat_tcp(char *);
 void	 netstat_udp(char *);
-void	 nlisterr(struct nlist []) __attribute__((__noreturn__));
+void	 nlisterr(struct nlist []) __dead;
 WINDOW	*openbufcache(void);
 WINDOW	*opendf(void);
 WINDOW	*openicmp(void);
+WINDOW	*openifstat(void);
 WINDOW	*openiostat(void);
 WINDOW	*openip(void);
 WINDOW	*openvmstat(void);
@@ -175,11 +186,13 @@ WINDOW	*opennetstat(void);
 WINDOW	*openpigs(void);
 WINDOW	*openswap(void);
 WINDOW	*opentcp(void);
+int	 prefix(const char *, const char *);
 void	 ps_user(char *);
 void	 redraw(void);
 void	 showbufcache(void);
 void	 showdf(void);
 void	 showicmp(void);
+void	 showifstat(void);
 void	 showiostat(void);
 void	 showip(void);
 void	 showvmstat(void);
@@ -219,17 +232,4 @@ void	 ip6_boot(char *);
 void	 ip6_run(char *);
 void	 ip6_time(char *);
 void	 ip6_zero(char *);
-#endif
-
-#ifdef IPSEC
-void	 closeipsec(WINDOW *);
-void	 fetchipsec(void);
-int	 initipsec(void);
-void	 labelipsec(void);
-WINDOW	*openipsec(void);
-void	 showipsec(void);
-void	 ipsec_boot(char *);
-void	 ipsec_run(char *);
-void	 ipsec_time(char *);
-void	 ipsec_zero(char *);
 #endif

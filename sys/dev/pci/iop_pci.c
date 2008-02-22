@@ -1,4 +1,4 @@
-/*	$NetBSD: iop_pci.c,v 1.21 2007/10/19 12:00:50 ad Exp $	*/
+/*	$NetBSD: iop_pci.c,v 1.29 2016/07/14 04:12:08 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iop_pci.c,v 1.21 2007/10/19 12:00:50 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iop_pci.c,v 1.29 2016/07/14 04:12:08 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,15 +57,14 @@ __KERNEL_RCSID(0, "$NetBSD: iop_pci.c,v 1.21 2007/10/19 12:00:50 ad Exp $");
 #define	PCI_INTERFACE_I2O_POLLED	0x00
 #define	PCI_INTERFACE_I2O_INTRDRIVEN	0x01
 
-static void	iop_pci_attach(struct device *, struct device *, void *);
-static int	iop_pci_match(struct device *, struct cfdata *, void *);
+static void	iop_pci_attach(device_t, device_t, void *);
+static int	iop_pci_match(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(iop_pci, sizeof(struct iop_softc),
+CFATTACH_DECL_NEW(iop_pci, sizeof(struct iop_softc),
     iop_pci_match, iop_pci_attach, NULL, NULL);
 
 static int
-iop_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+iop_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 	u_int product, vendor;
@@ -113,7 +105,7 @@ iop_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-iop_pci_attach(struct device *parent, struct device *self, void *aux)
+iop_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct iop_softc *sc;
@@ -122,9 +114,11 @@ iop_pci_attach(struct device *parent, struct device *self, void *aux)
 	const char *intrstr;
 	pcireg_t reg;
 	int i;
+	char intrbuf[PCI_INTRSTR_LEN];
 
-	sc = (struct iop_softc *)self;
-	pa = (struct pci_attach_args *)aux;
+	sc = device_private(self);
+	sc->sc_dev = self;
+	pa = aux;
 	pc = pa->pa_pc;
 	printf(": ");
 
@@ -140,14 +134,14 @@ iop_pci_attach(struct device *parent, struct device *self, void *aux)
 		}
 	}
 	if (i == PCI_MAPREG_END) {
-		printf("can't find mapping\n");
+		aprint_error("can't find mapping\n");
 		return;
 	}
 
 	/* Map the register window. */
 	if (pci_mapreg_map(pa, i, PCI_MAPREG_TYPE_MEM, 0, &sc->sc_iot,
 	    &sc->sc_ioh, NULL, NULL)) {
-		printf("%s: can't map register window\n", sc->sc_dv.dv_xname);
+		aprint_error_dev(self, "can't map register window\n");
 		return;
 	}
 
@@ -156,7 +150,7 @@ iop_pci_attach(struct device *parent, struct device *self, void *aux)
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_DPT_RAID_2005S) {
 		i += 4;	/* next BAR */
 		if (i == PCI_MAPREG_END) {
-			printf("can't find mapping\n");
+			aprint_error("can't find mapping\n");
 			return;
 		}
 
@@ -167,8 +161,8 @@ iop_pci_attach(struct device *parent, struct device *self, void *aux)
 #endif
 		if (pci_mapreg_map(pa, i, PCI_MAPREG_TYPE_MEM, 0,
 		    &sc->sc_msg_iot, &sc->sc_msg_ioh, NULL, NULL)) {
-			printf("%s: can't map 2nd register window\n",
-			    sc->sc_dv.dv_xname);
+			aprint_error_dev(self,
+			    "can't map 2nd register window\n");
 			return;
 		}
 	} else {
@@ -190,16 +184,16 @@ iop_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt.. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("can't map interrupt\n");
+		aprint_error("can't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, iop_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("can't establish interrupt");
+		aprint_error("can't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 

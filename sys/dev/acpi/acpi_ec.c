@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_ec.c,v 1.50 2008/01/18 01:03:24 jmcneill Exp $	*/
+/*	$NetBSD: acpi_ec.c,v 1.75 2017/03/11 08:26:23 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2007 Joerg Sonnenberger <joerg@NetBSD.org>.
@@ -59,20 +59,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_ec.c,v 1.50 2008/01/18 01:03:24 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_ec.c,v 1.75 2017/03/11 08:26:23 tsutsui Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/callout.h>
 #include <sys/condvar.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
 #include <sys/mutex.h>
+#include <sys/systm.h>
 
-#include <sys/bus.h>
-
+#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 #include <dev/acpi/acpi_ecvar.h>
+
+#define _COMPONENT          ACPI_EC_COMPONENT
+ACPI_MODULE_NAME            ("acpi_ec")
 
 /* Maximum time to wait for global ACPI lock in ms */
 #define	EC_LOCK_TIMEOUT		5
@@ -119,7 +122,7 @@ struct acpiec_softc {
 	ACPI_HANDLE sc_ech;
 
 	ACPI_HANDLE sc_gpeh;
-	UINT8 sc_gpebit;
+	uint8_t sc_gpebit;
 
 	bus_space_tag_t sc_data_st;
 	bus_space_handle_t sc_data_sh;
@@ -128,7 +131,7 @@ struct acpiec_softc {
 	bus_space_handle_t sc_csr_sh;
 
 	bool sc_need_global_lock;
-	UINT32 sc_global_lock;
+	uint32_t sc_global_lock;
 
 	kmutex_t sc_mtx, sc_access_mtx;
 	kcondvar_t sc_cv, sc_cv_sci;
@@ -139,27 +142,29 @@ struct acpiec_softc {
 	uint8_t sc_cur_addr, sc_cur_val;
 };
 
-static int acpiecdt_match(device_t, struct cfdata *, void *);
+static int acpiecdt_match(device_t, cfdata_t, void *);
 static void acpiecdt_attach(device_t, device_t, void *);
 
-static int acpiec_match(device_t, struct cfdata *, void *);
+static int acpiec_match(device_t, cfdata_t, void *);
 static void acpiec_attach(device_t, device_t, void *);
 
 static void acpiec_common_attach(device_t, device_t, ACPI_HANDLE,
-    bus_addr_t, bus_addr_t, ACPI_HANDLE, uint8_t);
+    bus_space_tag_t, bus_addr_t, bus_space_tag_t, bus_addr_t,
+    ACPI_HANDLE, uint8_t);
 
-static bool acpiec_resume(device_t);
-static bool acpiec_suspend(device_t);
+static bool acpiec_suspend(device_t, const pmf_qual_t *);
+static bool acpiec_resume(device_t, const pmf_qual_t *);
+static bool acpiec_shutdown(device_t, int);
 
 static bool acpiec_parse_gpe_package(device_t, ACPI_HANDLE,
     ACPI_HANDLE *, uint8_t *);
 
 static void acpiec_callout(void *);
 static void acpiec_gpe_query(void *);
-static UINT32 acpiec_gpe_handler(void *);
-static ACPI_STATUS acpiec_space_setup(ACPI_HANDLE, UINT32, void *, void **);
-static ACPI_STATUS acpiec_space_handler(UINT32, ACPI_PHYSICAL_ADDRESS,
-    UINT32, ACPI_INTEGER *, void *, void *);
+static uint32_t acpiec_gpe_handler(ACPI_HANDLE, uint32_t, void *);
+static ACPI_STATUS acpiec_space_setup(ACPI_HANDLE, uint32_t, void *, void **);
+static ACPI_STATUS acpiec_space_handler(uint32_t, ACPI_PHYSICAL_ADDRESS,
+    uint32_t, ACPI_INTEGER *, void *, void *);
 
 static void acpiec_gpe_state_machine(device_t);
 
@@ -185,7 +190,7 @@ acpiecdt_find(device_t parent, ACPI_HANDLE *ec_handle,
 
 	if (ecdt->Control.BitWidth != 8 || ecdt->Data.BitWidth != 8) {
 		aprint_error_dev(parent,
-		    "ECDT register width invalid (%d/%d)\n",
+		    "ECDT register width invalid (%u/%u)\n",
 		    ecdt->Control.BitWidth, ecdt->Data.BitWidth);
 		return false;
 	}
@@ -206,7 +211,7 @@ acpiecdt_find(device_t parent, ACPI_HANDLE *ec_handle,
 }
 
 static int
-acpiecdt_match(device_t parent, struct cfdata *match, void *aux)
+acpiecdt_match(device_t parent, cfdata_t match, void *aux)
 {
 	ACPI_HANDLE ec_handle;
 	bus_addr_t cmd_reg, data_reg;
@@ -221,6 +226,7 @@ acpiecdt_match(device_t parent, struct cfdata *match, void *aux)
 static void
 acpiecdt_attach(device_t parent, device_t self, void *aux)
 {
+	struct acpibus_attach_args *aa = aux;
 	ACPI_HANDLE ec_handle;
 	bus_addr_t cmd_reg, data_reg;
 	uint8_t gpebit;
@@ -228,15 +234,15 @@ acpiecdt_attach(device_t parent, device_t self, void *aux)
 	if (!acpiecdt_find(parent, &ec_handle, &cmd_reg, &data_reg, &gpebit))
 		panic("ECDT disappeared");
 
-	aprint_naive(": ACPI Embedded Controller via ECDT\n");
+	aprint_naive("\n");
 	aprint_normal(": ACPI Embedded Controller via ECDT\n");
 
-	acpiec_common_attach(parent, self, ec_handle, cmd_reg, data_reg,
-	    NULL, gpebit);
+	acpiec_common_attach(parent, self, ec_handle, aa->aa_iot, cmd_reg,
+	    aa->aa_iot, data_reg, NULL, gpebit);
 }
 
 static int
-acpiec_match(device_t parent, struct cfdata *match, void *aux)
+acpiec_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -257,52 +263,56 @@ acpiec_attach(device_t parent, device_t self, void *aux)
 	ACPI_STATUS rv;
 
 	if (ec_singleton != NULL) {
-		aprint_naive(": ACPI Embedded Controller (disabled)\n");
-		aprint_normal(": ACPI Embedded Controller (disabled)\n");
-		if (!pmf_device_register(self, NULL, NULL))
-			aprint_error_dev(self, "couldn't establish power handler\n");
-		return;
+		aprint_naive(": using %s\n", device_xname(ec_singleton));
+		aprint_normal(": using %s\n", device_xname(ec_singleton));
+		goto fail0;
 	}
-
-	aprint_naive(": ACPI Embedded Controller\n");
-	aprint_normal(": ACPI Embedded Controller\n");
 
 	if (!acpiec_parse_gpe_package(self, aa->aa_node->ad_handle,
 				      &gpe_handle, &gpebit))
-		return;
+		goto fail0;
 
 	rv = acpi_resource_parse(self, aa->aa_node->ad_handle, "_CRS",
 	    &ec_res, &acpi_resource_parse_ops_default);
 	if (rv != AE_OK) {
 		aprint_error_dev(self, "resource parsing failed: %s\n",
 		    AcpiFormatException(rv));
-		return;
+		goto fail0;
 	}
 
 	if ((io0 = acpi_res_io(&ec_res, 0)) == NULL) {
 		aprint_error_dev(self, "no data register resource\n");
-		goto free_res;
+		goto fail1;
 	}
 	if ((io1 = acpi_res_io(&ec_res, 1)) == NULL) {
 		aprint_error_dev(self, "no CSR register resource\n");
-		goto free_res;
+		goto fail1;
 	}
 
 	acpiec_common_attach(parent, self, aa->aa_node->ad_handle,
-	    io1->ar_base, io0->ar_base, gpe_handle, gpebit);
+	    aa->aa_iot, io1->ar_base, aa->aa_iot, io0->ar_base,
+	    gpe_handle, gpebit);
 
-free_res:
 	acpi_resource_cleanup(&ec_res);
+	return;
+
+fail1:	acpi_resource_cleanup(&ec_res);
+fail0:	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static void
 acpiec_common_attach(device_t parent, device_t self,
-    ACPI_HANDLE ec_handle, bus_addr_t cmd_reg, bus_addr_t data_reg,
+    ACPI_HANDLE ec_handle, bus_space_tag_t cmdt, bus_addr_t cmd_reg,
+    bus_space_tag_t datat, bus_addr_t data_reg,
     ACPI_HANDLE gpe_handle, uint8_t gpebit)
 {
 	struct acpiec_softc *sc = device_private(self);
 	ACPI_STATUS rv;
 	ACPI_INTEGER val;
+
+	sc->sc_csr_st = cmdt;
+	sc->sc_data_st = datat;
 
 	sc->sc_ech = ec_handle;
 	sc->sc_gpeh = gpe_handle;
@@ -358,14 +368,7 @@ acpiec_common_attach(device_t parent, device_t self,
 		goto post_csr_map;
 	}
 
-	rv = AcpiSetGpeType(sc->sc_gpeh, sc->sc_gpebit, ACPI_GPE_TYPE_RUNTIME);
-	if (rv != AE_OK) {
-		aprint_error_dev(self, "unable to set GPE type: %s\n",
-		    AcpiFormatException(rv));
-		goto post_csr_map;
-	}
-
-	rv = AcpiEnableGpe(sc->sc_gpeh, sc->sc_gpebit, ACPI_ISR);
+	rv = AcpiEnableGpe(sc->sc_gpeh, sc->sc_gpebit);
 	if (rv != AE_OK) {
 		aprint_error_dev(self, "unable to enable GPE: %s\n",
 		    AcpiFormatException(rv));
@@ -380,7 +383,8 @@ acpiec_common_attach(device_t parent, device_t self,
 
 	ec_singleton = self;
 
-	if (!pmf_device_register(self, acpiec_suspend, acpiec_resume))
+	if (!pmf_device_register1(self, acpiec_suspend, acpiec_resume,
+	    acpiec_shutdown))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	return;
@@ -393,10 +397,12 @@ post_csr_map:
 	bus_space_unmap(sc->sc_csr_st, sc->sc_csr_sh, 1);
 post_data_map:
 	bus_space_unmap(sc->sc_data_st, sc->sc_data_sh, 1);
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static bool
-acpiec_suspend(device_t dv)
+acpiec_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	acpiec_cold = true;
 
@@ -404,10 +410,18 @@ acpiec_suspend(device_t dv)
 }
 
 static bool
-acpiec_resume(device_t dv)
+acpiec_resume(device_t dv, const pmf_qual_t *qual)
 {
 	acpiec_cold = false;
 
+	return true;
+}
+
+static bool
+acpiec_shutdown(device_t dv, int how)
+{
+
+	acpiec_cold = true;
 	return true;
 }
 
@@ -431,52 +445,41 @@ acpiec_parse_gpe_package(device_t self, ACPI_HANDLE ec_handle,
 	if (p->Type == ACPI_TYPE_INTEGER) {
 		*gpe_handle = NULL;
 		*gpebit = p->Integer.Value;
-		AcpiOsFree(p);
+		ACPI_FREE(p);
 		return true;
 	}
 
 	if (p->Type != ACPI_TYPE_PACKAGE) {
 		aprint_error_dev(self, "_GPE is neither integer nor package\n");
-		AcpiOsFree(p);
+		ACPI_FREE(p);
 		return false;
 	}
 	
 	if (p->Package.Count != 2) {
 		aprint_error_dev(self, "_GPE package does not contain 2 elements\n");
-		AcpiOsFree(p);
+		ACPI_FREE(p);
 		return false;
 	}
 
 	c = &p->Package.Elements[0];
-	switch (c->Type) {
-	case ACPI_TYPE_LOCAL_REFERENCE:
-	case ACPI_TYPE_ANY:
-		*gpe_handle = c->Reference.Handle;
-		break;
-	case ACPI_TYPE_STRING:
-		/* XXX should be using real scope here */
-		rv = AcpiGetHandle(NULL, p->String.Pointer, gpe_handle);
-		if (rv != AE_OK) {
-			aprint_error_dev(self,
-			    "_GPE device reference unresolvable\n");
-			AcpiOsFree(p);
-			return false;
-		}
-		break;
-	default:
-		aprint_error_dev(self, "_GPE device reference incorrect\n");
-		AcpiOsFree(p);
+	rv = acpi_eval_reference_handle(c, gpe_handle);
+
+	if (ACPI_FAILURE(rv)) {
+		aprint_error_dev(self, "failed to evaluate _GPE handle\n");
+		ACPI_FREE(p);
 		return false;
 	}
+
 	c = &p->Package.Elements[1];
+
 	if (c->Type != ACPI_TYPE_INTEGER) {
 		aprint_error_dev(self,
 		    "_GPE package needs integer as 2nd field\n");
-		AcpiOsFree(p);
+		ACPI_FREE(p);
 		return false;
 	}
 	*gpebit = c->Integer.Value;
-	AcpiOsFree(p);
+	ACPI_FREE(p);
 	return true;
 }
 
@@ -505,7 +508,7 @@ acpiec_write_command(struct acpiec_softc *sc, uint8_t cmd)
 }
 
 static ACPI_STATUS
-acpiec_space_setup(ACPI_HANDLE region, UINT32 func, void *arg,
+acpiec_space_setup(ACPI_HANDLE region, uint32_t func, void *arg,
     void **region_arg)
 {
 	if (func == ACPI_REGION_DEACTIVATE)
@@ -576,15 +579,13 @@ acpiec_read(device_t dv, uint8_t addr, uint8_t *val)
 		}
 		if (sc->sc_state != EC_STATE_FREE) {
 			mutex_exit(&sc->sc_mtx);
-			AcpiClearGpe(sc->sc_gpeh, sc->sc_gpebit, ACPI_NOT_ISR);
 			acpiec_unlock(dv);
 			aprint_error_dev(dv, "command timed out, state %d\n",
 			    sc->sc_state);
 			return AE_ERROR;
 		}
-	} else while (cv_timedwait(&sc->sc_cv, &sc->sc_mtx, EC_CMD_TIMEOUT * hz)) {
+	} else if (cv_timedwait(&sc->sc_cv, &sc->sc_mtx, EC_CMD_TIMEOUT * hz)) {
 		mutex_exit(&sc->sc_mtx);
-		AcpiClearGpe(sc->sc_gpeh, sc->sc_gpebit, ACPI_NOT_ISR);
 		acpiec_unlock(dv);
 		aprint_error_dev(dv, "command takes over %d sec...\n", EC_CMD_TIMEOUT);
 		return AE_ERROR;
@@ -625,15 +626,13 @@ acpiec_write(device_t dv, uint8_t addr, uint8_t val)
 		}
 		if (sc->sc_state != EC_STATE_FREE) {
 			mutex_exit(&sc->sc_mtx);
-			AcpiClearGpe(sc->sc_gpeh, sc->sc_gpebit, ACPI_NOT_ISR);
 			acpiec_unlock(dv);
 			aprint_error_dev(dv, "command timed out, state %d\n",
 			    sc->sc_state);
 			return AE_ERROR;
 		}
-	} else while (cv_timedwait(&sc->sc_cv, &sc->sc_mtx, EC_CMD_TIMEOUT * hz)) {
+	} else if (cv_timedwait(&sc->sc_cv, &sc->sc_mtx, EC_CMD_TIMEOUT * hz)) {
 		mutex_exit(&sc->sc_mtx);
-		AcpiClearGpe(sc->sc_gpeh, sc->sc_gpebit, ACPI_NOT_ISR);
 		acpiec_unlock(dv);
 		aprint_error_dev(dv, "command takes over %d sec...\n", EC_CMD_TIMEOUT);
 		return AE_ERROR;
@@ -646,22 +645,20 @@ done:
 }
 
 static ACPI_STATUS
-acpiec_space_handler(UINT32 func, ACPI_PHYSICAL_ADDRESS paddr,
-    UINT32 width, ACPI_INTEGER *value, void *arg, void *region_arg)
+acpiec_space_handler(uint32_t func, ACPI_PHYSICAL_ADDRESS paddr,
+    uint32_t width, ACPI_INTEGER *value, void *arg, void *region_arg)
 {
 	device_t dv;
-	struct acpiec_softc *sc;
 	ACPI_STATUS rv;
 	uint8_t addr, reg;
 	unsigned int i;
 
 	if (paddr > 0xff || width % 8 != 0 || value == NULL || arg == NULL ||
-	    paddr + width / 8 > 0xff)
+	    paddr + width / 8 > 0x100)
 		return AE_BAD_PARAMETER;
 
 	addr = paddr;
 	dv = arg;
-	sc = device_private(dv);
 
 	rv = AE_OK;
 
@@ -740,8 +737,8 @@ done:
 	snprintf(qxx, sizeof(qxx), "_Q%02X", (unsigned int)reg);
 	rv = AcpiEvaluateObject(sc->sc_ech, qxx, NULL, NULL);
 	if (rv != AE_OK && rv != AE_NOT_FOUND) {
-		aprint_error("%s: GPE query method %s failed: %s",
-		    device_xname(dv), qxx, AcpiFormatException(rv));
+		aprint_error_dev(dv, "GPE query method %s failed: %s",
+		    qxx, AcpiFormatException(rv));
 	}
 
 	goto loop;
@@ -843,26 +840,22 @@ acpiec_callout(void *arg)
 	device_t dv = arg;
 	struct acpiec_softc *sc = device_private(dv);
 
-	AcpiClearGpe(sc->sc_gpeh, sc->sc_gpebit, ACPI_NOT_ISR);
-
 	mutex_enter(&sc->sc_mtx);
 	acpiec_gpe_state_machine(dv);
 	mutex_exit(&sc->sc_mtx);
 }
 
-static UINT32
-acpiec_gpe_handler(void *arg)
+static uint32_t
+acpiec_gpe_handler(ACPI_HANDLE hdl, uint32_t gpebit, void *arg)
 {
 	device_t dv = arg;
 	struct acpiec_softc *sc = device_private(dv);
-
-	AcpiClearGpe(sc->sc_gpeh, sc->sc_gpebit, ACPI_ISR);
 
 	mutex_enter(&sc->sc_mtx);
 	acpiec_gpe_state_machine(dv);
 	mutex_exit(&sc->sc_mtx);
 
-	return 0;
+	return ACPI_INTERRUPT_HANDLED | ACPI_REENABLE_GPE;
 }
 
 ACPI_STATUS

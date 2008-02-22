@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ipwvar.h,v 1.12 2007/12/09 20:28:09 jmcneill Exp $	*/
+/*	$NetBSD: if_ipwvar.h,v 1.18 2017/02/02 10:05:35 nonaka Exp $	*/
 
 /*-
  * Copyright (c) 2004
@@ -26,6 +26,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include <sys/ioccom.h>
 
 struct ipw_firmware {
 	void	*main;
@@ -62,30 +64,26 @@ struct ipw_soft_buf {
 
 struct ipw_rx_radiotap_header {
 	struct ieee80211_radiotap_header wr_ihdr;
-	uint8_t		wr_flags;
 	uint16_t	wr_chan_freq;
 	uint16_t	wr_chan_flags;
 	uint8_t		wr_antsignal;
-};
+} __packed;
 
 #define IPW_RX_RADIOTAP_PRESENT						\
-	((1 << IEEE80211_RADIOTAP_FLAGS) |				\
-	 (1 << IEEE80211_RADIOTAP_CHANNEL) |				\
+	((1 << IEEE80211_RADIOTAP_CHANNEL) |				\
 	 (1 << IEEE80211_RADIOTAP_DB_ANTSIGNAL))
 
 struct ipw_tx_radiotap_header {
 	struct ieee80211_radiotap_header wt_ihdr;
-	uint8_t		wt_flags;
 	uint16_t	wt_chan_freq;
 	uint16_t	wt_chan_flags;
-};
+} __packed;
 
 #define IPW_TX_RADIOTAP_PRESENT						\
-	((1 << IEEE80211_RADIOTAP_FLAGS) |				\
-	 (1 << IEEE80211_RADIOTAP_CHANNEL))
+	((1 << IEEE80211_RADIOTAP_CHANNEL))
 
 struct ipw_softc {
-	struct device			sc_dev;
+	device_t			sc_dev;
 
 	struct ethercom			sc_ec;
 	struct ieee80211com		sc_ic;
@@ -93,7 +91,7 @@ struct ipw_softc {
 					    enum ieee80211_state, int);
 
 	struct ipw_firmware		fw;
-	char				sc_fwname[24];
+	const char			*sc_fwname;
 	uint32_t			flags;
 #define IPW_FLAG_FW_CACHED		(1 << 0)
 #define IPW_FLAG_FW_INITED		(1 << 1)
@@ -105,6 +103,7 @@ struct ipw_softc {
 	bus_space_tag_t			sc_st;
 	bus_space_handle_t		sc_sh;
 	void				*sc_ih;
+	void				*sc_soft_ih;
 	pci_chipset_tag_t		sc_pct;
 	pcitag_t			sc_pcitag;
 	bus_size_t			sc_sz;
@@ -150,7 +149,6 @@ struct ipw_softc {
 
 	int				dwelltime;
 
-#if NBPFILTER > 0
 	struct bpf_if			*sc_drvbpf;
 
 	union {
@@ -166,7 +164,6 @@ struct ipw_softc {
 	} sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int				sc_txtap_len;
-#endif
 };
 
 #define	sc_if	sc_ec.ec_if

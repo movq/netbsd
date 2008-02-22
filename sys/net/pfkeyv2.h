@@ -1,4 +1,4 @@
-/*	$NetBSD: pfkeyv2.h,v 1.26 2008/02/20 17:05:53 matt Exp $	*/
+/*	$NetBSD: pfkeyv2.h,v 1.32 2017/07/04 08:11:32 ozaki-r Exp $	*/
 /*	$KAME: pfkeyv2.h,v 1.36 2003/07/25 09:33:37 itojun Exp $	*/
 
 /*
@@ -310,14 +310,16 @@ struct sadb_x_nat_t_frag {
 #define SADB_X_EXT_NAT_T_TYPE         20
 #define SADB_X_EXT_NAT_T_SPORT        21
 #define SADB_X_EXT_NAT_T_DPORT        22
-#define SADB_X_EXT_NAT_T_OA           23
-#define SADB_X_EXT_NAT_T_FRAG	      24
+#define SADB_X_EXT_NAT_T_OA           23	/* compat */
+#define SADB_X_EXT_NAT_T_OAI          23
+#define SADB_X_EXT_NAT_T_OAR          24
+#define SADB_X_EXT_NAT_T_FRAG	      25
 #if 0
 #define	SADB_X_EXT_TAG		      25	/* KAME */
 #define	SADB_X_EXT_SA3		      26	/* KAME */
 #define	SADB_X_EXT_PACKET	      27	/* KAME */
 #endif
-#define SADB_EXT_MAX                  24
+#define SADB_EXT_MAX                  25
 
 #define SADB_SATYPE_UNSPEC	0
 #define SADB_SATYPE_AH		2
@@ -337,7 +339,20 @@ struct sadb_x_nat_t_frag {
 #define SADB_SASTATE_DEAD     3
 #define SADB_SASTATE_MAX      3
 
+#define SADB_SASTATE_USABLE_P(sav) \
+    ((sav)->state == SADB_SASTATE_MATURE || (sav)->state == SADB_SASTATE_DYING)
+
 #define SADB_SAFLAGS_PFS      1
+
+/*
+ * Statistics variable definitions. For ESP/AH/IPCOMP we define
+ * indirection arrays of 256 elements indexed by algorithm (which
+ * is uint8_t. All unknown/unhandled entries are summed in the 0th
+ * element. We provide three variables per protocol:
+ * 	1. *_STATS_INIT: a list of initializers
+ * 	2. *_STATS_NUM: number of algorithms/statistics including (0/unknown)
+ *	3. *_STATS_STR: a list of strings to symbolically print the statistics
+ */
 
 /* RFC2367 numbers - meets RFC2407 */
 #define SADB_AALG_NONE		0
@@ -349,12 +364,52 @@ struct sadb_x_nat_t_frag {
 #define SADB_X_AALG_SHA2_384	6
 #define SADB_X_AALG_SHA2_512	7
 #define SADB_X_AALG_RIPEMD160HMAC 8
-#define SADB_X_AALG_AES_XCBC_MAC 9 /* draft-ietf-ipsec-ciph-aes-xcbc-mac-04 */
+#define SADB_X_AALG_AES_XCBC_MAC 9 /* RFC3566 */
+#define SADB_X_AALG_AES128GMAC	11 /* RFC4543 + Errata1821 */
+#define SADB_X_AALG_AES192GMAC	12
+#define SADB_X_AALG_AES256GMAC	13
 /* private allocations should use 249-255 (RFC2407) */
 #define SADB_X_AALG_MD5		249	/* Keyed MD5 */
 #define SADB_X_AALG_SHA		250	/* Keyed SHA */
 #define SADB_X_AALG_NULL	251	/* null authentication */
 #define SADB_X_AALG_TCP_MD5	252	/* Keyed TCP-MD5 (RFC2385) */
+
+
+#define SADB_AALG_STATS_INIT \
+    [SADB_AALG_NONE] = 1, \
+    [SADB_AALG_MD5HMAC] = 2, \
+    [SADB_AALG_SHA1HMAC] = 3, \
+    [SADB_X_AALG_SHA2_256] = 4, \
+    [SADB_X_AALG_SHA2_384] = 5, \
+    [SADB_X_AALG_SHA2_512] = 6, \
+    [SADB_X_AALG_RIPEMD160HMAC] = 7, \
+    [SADB_X_AALG_AES_XCBC_MAC] = 8, \
+    [SADB_X_AALG_AES128GMAC] = 9, \
+    [SADB_X_AALG_AES192GMAC] = 10, \
+    [SADB_X_AALG_AES256GMAC] = 11, \
+    [SADB_X_AALG_MD5] = 12, \
+    [SADB_X_AALG_SHA] = 13, \
+    [SADB_X_AALG_NULL] = 14, \
+    [SADB_X_AALG_TCP_MD5] = 15,
+
+#define SADB_AALG_STATS_NUM 16
+#define SADB_AALG_STATS_STR \
+    "*unknown*", \
+    "none", \
+    "hmac-md5", \
+    "hmac-sha1", \
+    "hmac-sha2-256", \
+    "hmac-sha2-384", \
+    "hmac-sha2-512", \
+    "hmac-ripe-md160", \
+    "aes-xbc-mac", \
+    "aes-128-mac", \
+    "aes-192-mac", \
+    "aes-256-mac", \
+    "md5", \
+    "sha", \
+    "null", \
+    "tcp-md5",
 
 /* RFC2367 numbers - meets RFC2407 */
 #define SADB_EALG_NONE		0
@@ -367,9 +422,48 @@ struct sadb_x_nat_t_frag {
 #define SADB_X_EALG_BLOWFISHCBC	7
 #define SADB_X_EALG_RIJNDAELCBC	12
 #define SADB_X_EALG_AES		12
-#define SADB_X_EALG_AESCTR	13
+#define SADB_X_EALG_AESCTR	13 /* RFC3686 */
+#define SADB_X_EALG_AESGCM8	18 /* RFC4106 */
+#define SADB_X_EALG_AESGCM12	19
+#define SADB_X_EALG_AESGCM16	20
+#define SADB_X_EALG_CAMELLIACBC	22 /* RFC4312 */
+#define SADB_X_EALG_AESGMAC	23 /* RFC4543 + Errata1821 */
 /* private allocations should use 249-255 (RFC2407) */
 #define SADB_X_EALG_SKIPJACK    250
+
+#define SADB_EALG_STATS_INIT \
+    [SADB_EALG_NONE] = 1, \
+    [SADB_EALG_DESCBC] = 2, \
+    [SADB_EALG_3DESCBC] = 3, \
+    [SADB_EALG_NULL] = 4, \
+    [SADB_X_EALG_CAST128CBC] = 5, \
+    [SADB_X_EALG_BLOWFISHCBC] = 6, \
+    [SADB_X_EALG_RIJNDAELCBC] = 7, \
+    [SADB_X_EALG_AESCTR] = 8, \
+    [SADB_X_EALG_AESGCM8] = 9, \
+    [SADB_X_EALG_AESGCM12] = 10, \
+    [SADB_X_EALG_AESGCM16] = 11, \
+    [SADB_X_EALG_CAMELLIACBC] = 12, \
+    [SADB_X_EALG_AESGMAC] = 13, \
+    [SADB_X_EALG_SKIPJACK] = 14,
+
+#define SADB_EALG_STATS_NUM 15
+#define SADB_EALG_STATS_STR \
+    "*unknown*", \
+    "none", \
+    "des-cbc", \
+    "3des-cbc", \
+    "null", \
+    "cast128-cbc", \
+    "blowfish-cbc", \
+    "aes-cbc", \
+    "aes-ctr", \
+    "aes-gcm-8", \
+    "aes-gcm-12", \
+    "aes-gcm-16", \
+    "camelia-cbc", \
+    "aes-gmac", \
+    "skipjack",
 
 /* private allocations - based on RFC2407/IANA assignment */
 #define SADB_X_CALG_NONE	0
@@ -377,6 +471,22 @@ struct sadb_x_nat_t_frag {
 #define SADB_X_CALG_DEFLATE	2
 #define SADB_X_CALG_LZS		3
 #define SADB_X_CALG_MAX		4
+
+#define SADB_CALG_STATS_INIT \
+    [SADB_X_CALG_NONE] = 1, \
+    [SADB_X_CALG_OUI] = 2, \
+    [SADB_X_CALG_DEFLATE] = 3, \
+    [SADB_X_CALG_LZS] = 4,
+
+#define SADB_CALG_STATS_NUM 5
+
+#define SADB_CALG_STATS_STR \
+    "*unknown*", \
+    "none", \
+    "oui", \
+    "deflate", \
+    "lzs",
+
 
 #define SADB_IDENTTYPE_RESERVED   0
 #define SADB_IDENTTYPE_PREFIX     1
@@ -420,11 +530,11 @@ struct sadb_x_nat_t_frag {
 /* Utilities */
 #define PFKEY_ALIGN8(a) (1 + (((a) - 1) | (8 - 1)))
 #define	PFKEY_EXTLEN(msg) \
-	PFKEY_UNUNIT64(((struct sadb_ext *)(void *)(msg))->sadb_ext_len)
+	PFKEY_UNUNIT64(((const struct sadb_ext *)(const void *)(msg))->sadb_ext_len)
 #define PFKEY_ADDR_PREFIX(ext) \
-	(((struct sadb_address *)(void *)(ext))->sadb_address_prefixlen)
+	(((const struct sadb_address *)(const void *)(ext))->sadb_address_prefixlen)
 #define PFKEY_ADDR_PROTO(ext) \
-	(((struct sadb_address *)(void *)(ext))->sadb_address_proto)
+	(((const struct sadb_address *)(const void *)(ext))->sadb_address_proto)
 #define PFKEY_ADDR_SADDR(ext) \
 	((struct sockaddr *)(void *)((char *)(void *)(ext) + \
 	sizeof(struct sadb_address)))

@@ -1,4 +1,4 @@
-/*	$NetBSD: func.c,v 1.22 2005/09/24 15:30:35 perry Exp $	*/
+/*	$NetBSD: func.c,v 1.26 2016/08/19 10:58:15 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: func.c,v 1.22 2005/09/24 15:30:35 perry Exp $");
+__RCSID("$NetBSD: func.c,v 1.26 2016/08/19 10:58:15 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -130,8 +130,12 @@ int	llibflg;
 
 /*
  * Nonzero if warnings are suppressed by a LINTED directive
+ * LWARN_BAD:	error
+ * LWARN_ALL: 	warnings on
+ * LWARN_NONE:	all warnings ignored
+ * 0..n: warning n ignored
  */
-int	nowarn;
+int	lwarn = LWARN_ALL;
 
 /*
  * Nonzero if bitfield type errors are suppressed by a BITFIELDTYPE
@@ -210,7 +214,7 @@ chkreach(void)
 void
 funcdef(sym_t *fsym)
 {
-	int	n, warn;
+	int	n, dowarn;
 	sym_t	*arg, *sym, *rdsym;
 
 	funcsym = fsym;
@@ -285,14 +289,14 @@ funcdef(sym_t *fsym)
 
 	if ((rdsym = dcs->d_rdcsym) != NULL) {
 
-		if (!isredec(fsym, (warn = 0, &warn))) {
+		if (!isredec(fsym, (dowarn = 0, &dowarn))) {
 
 			/*
 			 * Print nothing if the newly defined function
 			 * is defined in old style. A better warning will
 			 * be printed in cluparg().
 			 */
-			if (warn && !fsym->s_osdef) {
+			if (dowarn && !fsym->s_osdef) {
 				/* redeclaration of %s */
 				(*(sflag ? error : warning))(27, fsym->s_name);
 				prevdecl(-1, rdsym);
@@ -534,7 +538,7 @@ if1(tnode_t *tn)
 		tn = cconv(tn);
 	if (tn != NULL)
 		tn = promote(NOOP, 0, tn);
-	expr(tn, 0, 1, 1);
+	expr(tn, 0, 1, 0);
 	pushctrl(T_IF);
 }
 
@@ -774,6 +778,8 @@ do2(tnode_t *tn)
 		} else {
 			cstk->c_infinite = tn->tn_val->v_ldbl != 0.0;
 		}
+		if (!cstk->c_infinite && cstk->c_cont)
+		    error(323);
 	}
 
 	expr(tn, 0, 1, 1);
@@ -1239,9 +1245,9 @@ linted(int n)
 {
 
 #ifdef DEBUG
-	printf("%s, %d: nowarn = 1\n", curr_pos.p_file, curr_pos.p_line);
+	printf("%s, %d: lwarn = %d\n", curr_pos.p_file, curr_pos.p_line, n);
 #endif
-	nowarn = 1;
+	lwarn = n;
 }
 
 /*

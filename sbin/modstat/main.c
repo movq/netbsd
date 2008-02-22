@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.2 2008/01/19 01:18:47 ad Exp $	*/
+/*	$NetBSD: main.c,v 1.24 2016/11/16 10:43:37 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,19 +28,25 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.2 2008/01/19 01:18:47 ad Exp $");
+__RCSID("$NetBSD: main.c,v 1.24 2016/11/16 10:43:37 pgoyette Exp $");
 #endif /* !lint */
 
 #include <sys/module.h>
+#include <sys/param.h>
+#include <sys/sysctl.h>
 
+#include <err.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <err.h>
+#include <stdbool.h>
 
-int	main(int, char **);
+#include "prog_ops.h"
+
 static void	usage(void) __dead;
+static int	modstatcmp(const void *, const void *);
 
 static const char *classes[] = {
 	"any",
@@ -55,12 +54,20 @@ static const char *classes[] = {
 	"vfs",
 	"driver",
 	"exec",
+	"secmodel",
+	"bufq"
 };
+const unsigned int class_max = __arraycount(classes);
 
 static const char *sources[] = {
-	"kernel",
+	"builtin",
 	"boot",
 	"filesys",
+};
+const unsigned int source_max = __arraycount(sources);
+
+static const char *modflags[] = {
+	"-", "f", "a", "af"
 };
 
 int
@@ -71,12 +78,23 @@ main(int argc, char **argv)
 	size_t len;
 	const char *name;
 	char sbuf[32];
-	int ch;
+	int ch, rc, modauto = 1;
+	size_t maxnamelen = 16, i, modautolen;
+	char loadable = '\0';
+	bool address = false;
 
 	name = NULL;
 
-	while ((ch = getopt(argc, argv, "n:")) != -1) {
+	while ((ch = getopt(argc, argv, "Aaekn:")) != -1) {
 		switch (ch) {
+		case 'A':			/* FALLTHROUGH */
+		case 'a':			/* FALLTHROUGH */
+		case 'e':
+			loadable = (char)ch;
+			break;
+		case 'k':
+			address = true;
+			break;
 		case 'n':
 			name = optarg;
 			break;
@@ -88,13 +106,68 @@ main(int argc, char **argv)
 
 	argc -= optind;
 	argv += optind;
-	if (argc != 0)
+	if (argc == 1 && name == NULL)
+		name = argv[0];
+	else if (argc != 0)
 		usage();
 
-	for (len = 4096;;) {
+	if (prog_init && prog_init() == -1)
+		err(1, "prog init failed");
+
+	if (loadable == 'A' || loadable == 'a') {
+		if (prog_modctl(MODCTL_EXISTS, (void *)(uintptr_t)1)) {
+			switch (errno) {
+			case ENOSYS:
+				errx(EXIT_FAILURE, "The kernel was compiled "
+				    "without options MODULAR.");
+				break;
+			case EPERM:
+				errx(EXIT_FAILURE, "Modules can not be "
+				    "autoloaded right now.");
+				break;
+			default:
+				err(EXIT_FAILURE, "modctl_exists for autoload");
+				break;
+			}
+		} else {
+			if (loadable == 'A') {
+				modautolen = sizeof(modauto);
+				rc = sysctlbyname("kern.module.autoload",
+				    &modauto, &modautolen, NULL, 0);
+				if (rc != 0) {
+					err(EXIT_FAILURE, "sysctl "
+					    "kern.module.autoload failed.");
+				}
+			}
+			errx(EXIT_SUCCESS, "Modules can be autoloaded%s.",
+			modauto ? "" : ", but kern.module.autoload = 0");
+		}
+	}
+
+	if (loadable == 'e') {
+		if (prog_modctl(MODCTL_EXISTS, (void *)(uintptr_t)0)) {
+			switch (errno) {
+			case ENOSYS:
+				errx(EXIT_FAILURE, "The kernel was compiled "
+				    "without options MODULAR.");
+				break;
+			case EPERM:
+				errx(EXIT_FAILURE, "You are not allowed to "
+				    "load modules right now.");
+				break;
+			default:
+				err(EXIT_FAILURE, "modctl_exists for autoload");
+				break;
+			}
+		} else {
+			errx(EXIT_SUCCESS, "You can load modules.");
+		}
+	}
+
+	for (len = 8192;;) {
 		iov.iov_base = malloc(len);
 		iov.iov_len = len;
-		if (modctl(MODCTL_STAT, &iov)) {
+		if (prog_modctl(MODCTL_STAT, &iov)) {
 			err(EXIT_FAILURE, "modctl(MODCTL_STAT)");
 		}
 		if (len >= iov.iov_len) {
@@ -104,9 +177,22 @@ main(int argc, char **argv)
 		len = iov.iov_len;
 	}
 
-	printf("NAME\t\tCLASS\tSOURCE\tREFS\tSIZE\tREQUIRES\n");
 	len = iov.iov_len / sizeof(modstat_t);
+	qsort(iov.iov_base, len, sizeof(modstat_t), modstatcmp);
+	for (i = 0, ms = iov.iov_base; i < len; i++, ms++) {
+		size_t namelen = strlen(ms->ms_name);
+		if (maxnamelen < namelen)
+			maxnamelen = namelen;
+	}
+	printf("%-*s %-8s %-8s %-4s %5s ",
+	    (int)maxnamelen, "NAME", "CLASS", "SOURCE", "FLAG", "REFS");
+	if (address)
+		printf("%-16s ", "ADDRESS");
+	printf("%7s %s \n", "SIZE", "REQUIRES");
 	for (ms = iov.iov_base; len != 0; ms++, len--) {
+		const char *class;
+		const char *source;
+
 		if (name != NULL && strcmp(ms->ms_name, name) != 0) {
 			continue;
 		}
@@ -120,9 +206,22 @@ main(int argc, char **argv)
 		} else {
 			snprintf(sbuf, sizeof(sbuf), "%u", ms->ms_size);
 		}
-		printf("%-16s%s\t%s\t%d\t%s\t%s\n",
-		    ms->ms_name, classes[ms->ms_class], sources[ms->ms_source],
-		    ms->ms_refcnt, sbuf, ms->ms_required);
+		if (ms->ms_class <= class_max)
+			class = classes[ms->ms_class];
+		else
+			class = "UNKNOWN";
+		if (ms->ms_source < source_max)
+			source = sources[ms->ms_source];
+		else
+			source = "UNKNOWN";
+
+		printf("%-*s %-8s %-8s %-4s %5d ",
+		    (int)maxnamelen, ms->ms_name, class, source, 
+		    modflags[ms->ms_flags & (__arraycount(modflags) - 1)],
+		    ms->ms_refcnt);
+		if (address)
+			printf("%-16" PRIx64 " ", ms->ms_addr);
+		printf("%7s %s\n", sbuf, ms->ms_required);
 	}
 
 	exit(EXIT_SUCCESS);
@@ -132,6 +231,17 @@ static void
 usage(void)
 {
 
-	(void)fprintf(stderr, "Usage: %s [-n name]", getprogname());
+	(void)fprintf(stderr, "Usage: %s [-Aaen] [name]\n", getprogname());
 	exit(EXIT_FAILURE);
+}
+
+static int
+modstatcmp(const void *a, const void *b)
+{
+	const modstat_t *msa, *msb;
+
+	msa = a;
+	msb = b;
+
+	return strcmp(msa->ms_name, msb->ms_name);
 }

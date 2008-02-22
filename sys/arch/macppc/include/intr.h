@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.26 2007/10/17 19:55:31 garbled Exp $	*/
+/*	$NetBSD: intr.h,v 1.32 2013/04/20 13:32:40 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,26 +32,32 @@
 #ifndef _MACPPC_INTR_H_
 #define _MACPPC_INTR_H_
 
-#include <powerpc/intr.h>
-
 #ifdef _KERNEL_OPT
 #include "opt_multiprocessor.h"
 #endif
 
 #ifndef _LOCORE
 
-#define ICU_LEN		64
+#define ICU_LEN		128
 
 #ifdef MULTIPROCESSOR
 struct cpu_info;
+
+#include <powerpc/pic/ipivar.h>
 #endif /* MULTIPROCESSOR */
 
-#endif /* _LOCORE */
+
+#ifdef _KERNEL
 
 /* probe for a PIC and set it up, return TRUE on success */
 int init_ohare(void);
 int init_heathrow(void);
+int init_u3_ht(void);
 int init_grandcentral(void);
 void setup_hammerhead_ipi(void);
+#endif
+#endif /* _LOCORE */
+
+#include <powerpc/intr.h>
 
 #endif /* _MACPPC_INTR_H_ */

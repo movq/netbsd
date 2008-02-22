@@ -1,4 +1,4 @@
-/*	$NetBSD: rev.c,v 1.7 2003/08/07 11:15:39 agc Exp $	*/
+/*	$NetBSD: rev.c,v 1.12 2011/09/16 15:39:28 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1987, 1992, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rev.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: rev.c,v 1.7 2003/08/07 11:15:39 agc Exp $");
+__RCSID("$NetBSD: rev.c,v 1.12 2011/09/16 15:39:28 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -47,23 +47,25 @@ __RCSID("$NetBSD: rev.c,v 1.7 2003/08/07 11:15:39 agc Exp $");
 
 #include <err.h>
 #include <errno.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
+#include <wchar.h>
 
-int	main __P((int, char **));
-void	usage __P((void));
+__dead static void usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
-	char *filename, *p, *t;
+	const char *filename;
+	wchar_t *p, *t;
 	FILE *fp;
 	size_t len;
 	int ch, rval;
+
+	setlocale(LC_ALL, "");
+	setprogname(argv[0]);
 
 	while ((ch = getopt(argc, argv, "")) != -1)
 		switch(ch) {
@@ -88,13 +90,13 @@ main(argc, argv)
 			}
 			filename = *argv++;
 		}
-		while ((p = fgetln(fp, &len)) != NULL) {
-			if (p[len - 1] == '\n')
+		while ((p = fgetwln(fp, &len)) != NULL) {
+			if (p[len - 1] == L'\n')
 				--len;
 			t = p + len - 1;
 			for (t = p + len - 1; t >= p; --t)
-				putchar(*t);
-			putchar('\n');
+				putwchar(*t);
+			putwchar(L'\n');
 		}
 		if (ferror(fp)) {
 			warn("%s", filename);
@@ -105,9 +107,9 @@ main(argc, argv)
 	exit(rval);
 }
 
-void
-usage()
+static void
+usage(void)
 {
-	(void)fprintf(stderr, "usage: rev [file ...]\n");
-	exit(1);
+	(void)fprintf(stderr, "usage: %s [file ...]\n", getprogname());
+	exit(EXIT_FAILURE);
 }

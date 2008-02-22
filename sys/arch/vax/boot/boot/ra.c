@@ -1,4 +1,4 @@
-/*	$NetBSD: ra.c,v 1.17 2006/07/01 05:55:34 mrg Exp $ */
+/*	$NetBSD: ra.c,v 1.22 2018/03/21 18:27:27 ragge Exp $ */
 /*
  * Copyright (c) 1995 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -70,9 +65,8 @@ static volatile struct uda {
 
 static struct disklabel ralabel;
 static char io_buf[DEV_BSIZE];
-static int dpart, dunit, remap, is_tmscp, curblock;
+static int dpart, dunit, is_tmscp, curblock;
 static volatile u_short *ra_ip, *ra_sa, *ra_sw;
-static volatile u_int *mapregs;
 
 int
 raopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
@@ -88,15 +82,14 @@ raopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 	    adapt, ctlr, unit, part);
 	printf("raopen: csrbase %x nexaddr %x\n", csrbase, nexaddr);
 #endif
-	bzero(&ralabel, sizeof(struct disklabel));
-	bzero((void *)&uda, sizeof(struct uda));
+	memset(&ralabel, 0, sizeof(struct disklabel));
+	memset((void *)&uda, 0, sizeof(struct uda));
 	if (bootrpb.devtyp == BDEV_TK)
 		is_tmscp = 1;
 	dunit = unit;
 	dpart = part;
 	if (ctlr < 0)
 		ctlr = 0;
-	remap = csrbase && nexaddr;
 	curblock = 0;
 	if (csrbase) { /* On a uda-alike adapter */
 		if (askname == 0) {
@@ -107,14 +100,9 @@ raopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 			csrbase += (ctlr ? 000334 : 012150);
 		ra_ip = (u_short *)csrbase;
 		ra_sa = ra_sw = (u_short *)csrbase + 1;
-		if (nexaddr) { /* have map registers */
-			mapregs = (u_int *)nexaddr + 512;
-			mapregs[494] = PG_V | (((u_int)&uda) >> 9);
-			mapregs[495] = mapregs[494] + 1;
-			ubauda = (struct uda *)((char*)0x3dc00 +
-			    (((u_int)(&uda))&0x1ff));
-		} else
-			ubauda = &uda;
+		
+		ubauda = (struct uda *)ubmap(494,
+		    (int)&uda, sizeof(struct uda));
 		johan = (((u_int)ubauda) & 0xffff) + 8;
 		johan2 = (((u_int)ubauda) >> 16) & 077;
 		*ra_ip = 0; /* Start init */
@@ -242,6 +230,7 @@ igen:	uda.uda_cmd.mscp_opcode = cmd;
 	printf("sending cmd %x...", cmd);
 #endif
 	hej = *ra_ip;
+	__USE(hej);
 	to = 10000000;
 	while (uda.uda_ca.ca_rspdsc < 0) {
 //		if (uda.uda_ca.ca_cmdint)
@@ -262,21 +251,13 @@ int
 rastrategy(void *f, int func, daddr_t dblk,
     size_t size, void *buf, size_t *rsize)
 {
-	u_int	pfnum, mapnr, nsize;
 
 #ifdef DEV_DEBUG
-	printf("rastrategy: buf %p remap %d is_tmscp %d\n",
-	    buf, remap, is_tmscp);
+	printf("rastrategy: buf %p is_tmscp %d\n",
+	    buf, is_tmscp);
 #endif
-	if (remap) {
-		pfnum = (u_int)buf >> VAX_PGSHIFT;
 
-		for(mapnr = 0, nsize = size; (nsize + VAX_NBPG) > 0;
-		    nsize -= VAX_NBPG)
-			mapregs[mapnr++] = PG_V | pfnum++;
-		uda.uda_cmd.mscp_seq.seq_buffer = ((u_int)buf) & 0x1ff;
-	} else
-		uda.uda_cmd.mscp_seq.seq_buffer = ((u_int)buf);
+	uda.uda_cmd.mscp_seq.seq_buffer = ubmap(0, (int)buf, size);
 
 	if (is_tmscp) {
 		int i;

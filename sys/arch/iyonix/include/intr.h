@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.8 2007/12/03 15:33:47 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.10 2012/06/10 13:15:24 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001, 2003 Wasabi Systems, Inc.
@@ -64,8 +64,6 @@
 #define IST_EDGE_RISING  5
 #define IST_EDGE_BOTH    6
 
-#define	__NEWINTR	/* enables new hooks in cpu_fork()/cpu_switch() */
-
 #ifndef _LOCORE
 
 #if defined(_LKM)
@@ -73,7 +71,6 @@
 int	_splraise(int);
 int	_spllower(int);
 void	splx(int);
-void	_setsoftintr(int);
 
 #else	/* _LKM */
 
@@ -145,8 +142,6 @@ splraiseipl(ipl_cookie_t icookie)
 #define	spl0()		_spllower(IPL_NONE)
 
 #include <sys/spl.h>
-
-#include <arm/softintr.h>
 
 #endif /* ! _LOCORE */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.53 2007/12/03 09:54:24 isaki Exp $	*/
+/*	$NetBSD: main.c,v 1.66 2017/01/10 21:08:15 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -32,41 +32,41 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.1 (Berkeley) 6/20/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.53 2007/12/03 09:54:24 isaki Exp $");
+__RCSID("$NetBSD: main.c,v 1.66 2017/01/10 21:08:15 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/stat.h>
-#include <termios.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/utsname.h>
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <time.h>
-#include <ctype.h>
+#include <limits.h>
 #include <pwd.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
+#include <term.h>
+#include <termios.h>
 #include <time.h>
+#include <ttyent.h>
 #include <unistd.h>
 #include <util.h>
-#include <limits.h>
-#include <ttyent.h>
-#include <termcap.h>
 
 #include "gettytab.h"
 #include "pathnames.h"
@@ -92,7 +92,7 @@ extern char editedhost[];
 
 struct termios tmode, omode;
 
-int crmod, digit, lower, upper;
+int crmod, digit_or_punc, lower, upper;
 
 char	hostname[MAXHOSTNAMELEN + 1];
 struct	utsname kerninfo;
@@ -136,33 +136,33 @@ const unsigned char partab[] = {
 
 static void	clearscreen(void);
 
-jmp_buf timeout;
+sigjmp_buf timeout;
 
-static void
+__dead static void
 /*ARGSUSED*/
 dingdong(int signo)
 {
 
 	(void)alarm(0);
 	(void)signal(SIGALRM, SIG_DFL);
-	longjmp(timeout, 1);
+	siglongjmp(timeout, 1);
 }
 
-jmp_buf	intrupt;
+sigjmp_buf intrupt;
 
-static void
+__dead static void
 /*ARGSUSED*/
 interrupt(int signo)
 {
 
 	(void)signal(SIGINT, interrupt);
-	longjmp(intrupt, 1);
+	siglongjmp(intrupt, 1);
 }
 
 /*
  * Action to take when getty is running too long.
  */
-static void
+__dead static void
 /*ARGSUSED*/
 timeoverrun(int signo)
 {
@@ -174,20 +174,25 @@ timeoverrun(int signo)
 static int	getname(void);
 static void	oflush(void);
 static void	prompt(void);
-static void	putchr(int);
+static int	putchr(int);
 static void	putf(const char *);
-static void	putpad(const char *);
 static void	xputs(const char *);
+
+#define putpad(s) tputs(s, 1, putchr)
 
 int
 main(int argc, char *argv[], char *envp[])
 {
 	const char *progname;
-	char *tname;
-	int repcnt = 0, failopenlogged = 0, uugetty = 0, first_time = 1;
+	int repcnt = 0, failopenlogged = 0;
+	volatile int first_time = 1;
 	struct rlimit limit;
 	struct passwd *pw;
 	int rval;
+	/* this is used past the siglongjmp, so make sure it is not cached
+	   in registers that might become invalid. */
+	volatile int uugetty = 0;
+	const char * volatile tname = "default";
 
 	(void)signal(SIGINT, SIG_IGN);
 	openlog("getty", LOG_PID, LOG_AUTH);
@@ -292,7 +297,6 @@ main(int argc, char *argv[], char *envp[])
 
 	gettable("default", defent);
 	gendefaults();
-	tname = "default";
 	if (argc > 1)
 		tname = argv[1];
 	for (;;) {
@@ -355,7 +359,7 @@ main(int argc, char *argv[], char *envp[])
 		if (IM && *IM)
 			putf(IM);
 		oflush();
-		if (setjmp(timeout)) {
+		if (sigsetjmp(timeout, 1)) {
 			tmode.c_ispeed = tmode.c_ospeed = 0;
 			(void)tcsetattr(0, TCSANOW, &tmode);
 			exit(1);
@@ -367,7 +371,7 @@ main(int argc, char *argv[], char *envp[])
 		if (NN) {
 			name[0] = '\0';
 			lower = 1;
-			upper = digit = 0;
+			upper = digit_or_punc = 0;
 		} else if (AL) {
 			const char *p = AL;
 			char *q = name;
@@ -378,7 +382,7 @@ main(int argc, char *argv[], char *envp[])
 				else if (islower((unsigned char)*p))
 					lower = 1;
 				else if (isdigit((unsigned char)*p))
-					digit++;
+					digit_or_punc = 1;
 				*q++ = *p++;
 			}
 		} else if ((rval = getname()) == 2) {
@@ -398,7 +402,7 @@ main(int argc, char *argv[], char *envp[])
 				xputs("user names may not start with '-'.");
 				continue;
 			}
-			if (!(upper || lower || digit))
+			if (!(upper || lower || digit_or_punc))
 				continue;
 			setflags(2);
 			if (crmod) {
@@ -453,7 +457,7 @@ getname(void)
 	/*
 	 * Interrupt may happen if we use CBREAK mode
 	 */
-	if (setjmp(intrupt)) {
+	if (sigsetjmp(intrupt, 1)) {
 		(void)signal(SIGINT, SIG_IGN);
 		return (0);
 	}
@@ -469,7 +473,7 @@ getname(void)
 		syslog(LOG_ERR, "%s: %m", ttyn);
 		exit(1);
 	}
-	crmod = digit = lower = upper = 0;
+	crmod = digit_or_punc = lower = upper = 0;
 	ppp_state = ppp_connection = 0;
 	np = name;
 	for (;;) {
@@ -539,8 +543,8 @@ getname(void)
 			prompt();
 			np = name;
 			continue;
-		} else if (isdigit(c))
-			digit++;
+		} else if (isdigit(c) || c == '_')
+			digit_or_punc = 1;
 		if (IG && (c <= ' ' || c > 0176))
 			continue;
 		*np++ = c;
@@ -567,43 +571,6 @@ getname(void)
 }
 
 static void
-putpad(const char *s)
-{
-	int pad = 0;
-	speed_t ospd = cfgetospeed(&tmode);
-
-	if (isdigit((unsigned char)*s)) {
-		while (isdigit((unsigned char)*s)) {
-			pad *= 10;
-			pad += *s++ - '0';
-		}
-		pad *= 10;
-		if (*s == '.' && isdigit((unsigned char)s[1])) {
-			pad += s[1] - '0';
-			s += 2;
-		}
-	}
-
-	xputs(s);
-	/*
-	 * If no delay needed, or output speed is
-	 * not comprehensible, then don't try to delay.
-	 */
-	if (pad == 0)
-		return;
-
-	/*
-	 * Round up by a half a character frame, and then do the delay.
-	 * Too bad there are no user program accessible programmed delays.
-	 * Transmitting pad characters slows many terminals down and also
-	 * loads the system.
-	 */
-	pad = (pad * ospd + 50000) / 100000;
-	while (pad--)
-		putchr(*PC);
-}
-
-static void
 xputs(const char *s)
 {
 	while (*s)
@@ -613,7 +580,7 @@ xputs(const char *s)
 char	outbuf[OBUFSIZ];
 size_t	obufcnt = 0;
 
-static void
+static int
 putchr(int cc)
 {
 	unsigned char c;
@@ -628,8 +595,9 @@ putchr(int cc)
 		outbuf[obufcnt++] = c;
 		if (obufcnt >= OBUFSIZ)
 			oflush();
-	} else
-		(void)write(STDOUT_FILENO, &c, 1);
+		return 1;
+	}
+	return write(STDOUT_FILENO, &c, 1);
 }
 
 static void
@@ -678,8 +646,7 @@ putf(const char *cp)
 		case 'd':
 			(void)time(&t);
 			(void)strftime(db, sizeof(db),
-			    /* SCCS eats %M% */
-			    "%l:%M" "%p on %A, %d %B %Y", localtime(&t));
+			    "%l:%M%p on %A, %d %B %Y", localtime(&t));
 			xputs(db);
 			break;
 
@@ -712,8 +679,7 @@ static void
 clearscreen(void)
 {
 	struct ttyent *typ;
-	struct tinfo *tinfo;
-	char *cs;
+	int err;
 
 	if (rawttyn == NULL)
 		return;
@@ -724,12 +690,12 @@ clearscreen(void)
 	    (typ->ty_type[0] == 0))
 		return;
 
-	if (t_getent(&tinfo, typ->ty_type) <= 0)
+	if (setupterm(typ->ty_type, 0, &err) == ERR)
 		return;
 
-	cs = t_agetstr(tinfo, "cl");
-	if (cs == NULL)
-		return;
+	if (clear_screen)
+		putpad(clear_screen);
 
-	putpad(cs);
+	del_curterm(cur_term);
+	cur_term = NULL;
 }

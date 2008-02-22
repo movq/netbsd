@@ -1,4 +1,4 @@
-.\"	$NetBSD: rdist.1,v 1.18 2004/07/13 12:02:23 wiz Exp $
+.\"	$NetBSD: rdist.1,v 1.21 2017/07/03 21:34:21 wiz Exp $
 .\"
 .\" Copyright (c) 1985, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -103,13 +103,13 @@ The equivalent distfile is as follows.
 .Pp
 .Bd -filled -offset indent -compact
 .Pq Ar name ...
-.Li -\*[Gt]
+.Li ->
 .Op Ar login@
 .Ar host
-.Bd -filled -offset indent -compact
+.Ed
+.Bd -filled -offset indentindent -compact
 .Li install
 .Op Ar dest ;
-.Ed
 .Ed
 .El
 .Pp
@@ -188,7 +188,7 @@ Files are normally updated if their
 and
 .Ar size
 (see
-.Xr stat  2  )
+.Xr stat 2 )
 disagree.
 The
 .Fl y
@@ -207,9 +207,9 @@ to do the updating.
 Each entry has one of the following formats.
 .Pp
 .Bd -literal -offset indent -compact
-\*[Lt]variable name\*[Gt] `=' \*[Lt]name list\*[Gt]
-[label:]\*[Lt]source list\*[Gt] `\-\*[Gt]' \*[Lt]destination list\*[Gt] \*[Lt]command list\*[Gt]
-[label:]\*[Lt]source list\*[Gt] `::' \*[Lt]time_stamp file\*[Gt] \*[Lt]command list\*[Gt]
+<variable name> `=' <name list>
+[label:]<source list> `\->' <destination list> <command list>
+[label:]<source list> `::' <time_stamp file> <command list>
 .Ed
 .Pp
 The first format is used for defining variables.
@@ -241,16 +241,16 @@ a name enclosed in curly braces (see the examples at the end).
 .Pp
 The source and destination lists have the following format:
 .Bd -literal -offset indent
-\*[Lt]name\*[Gt]
+<name>
 .Ed
 or
 .Bd -literal -offset indent -compact
-`(' \*[Lt]zero or more names separated by white-space\*[Gt] `)'
+`(' <zero or more names separated by white-space> `)'
 .Ed
 .Pp
 The shell meta-characters `[', `]', `{', `}', `*', and `?'
 are recognized and expanded (on the local host only) in the same way as
-.Xr csh  1  .
+.Xr csh 1 .
 They can be escaped with a backslash.
 The `~' character is also expanded in the same way as
 .Xr csh 1
@@ -266,11 +266,11 @@ The command list consists of zero or more commands of the following
 format.
 .Bd -ragged -offset indent -compact
 .Bl -column except_patx pattern\ listx
-.It `install'	\*[Lt]options\*[Gt]	opt_dest_name `;'
-.It `notify'	\*[Lt]name list\*[Gt]	`;'
-.It `except'	\*[Lt]name list\*[Gt]	`;'
-.It `except_pat'	\*[Lt]pattern list\*[Gt]	`;'
-.It `special'	\*[Lt]name list\*[Gt]	string `;'
+.It `install'	<options>	opt_dest_name `;'
+.It `notify'	<name list>	`;'
+.It `except'	<name list>	`;'
+.It `except_pat'	<pattern list>	`;'
+.It `special'	<name list>	string `;'
 .El
 .Ed
 .Pp
@@ -325,7 +325,7 @@ command except that
 .Ar pattern list
 is a list of regular expressions
 (see
-.Xr ed  1
+.Xr ed 1
 for details).
 If one of the patterns matches some string within a file name, that file will
 be ignored.
@@ -340,7 +340,7 @@ must be escaped with `\e'.
 The
 .Ic special
 command is used to specify
-.Xr sh  1
+.Xr sh 1
 commands that are to be executed on the
 remote host after the file in
 .Ar name list
@@ -374,20 +374,20 @@ FILES = ( /bin /lib /usr/bin /usr/games
 EXLIB = ( Mail.rc aliases aliases.dir aliases.pag crontab dshrc
 \tsendmail.cf sendmail.fc sendmail.hf sendmail.st uucp vfont )
 
-${FILES} -\*[Gt] ${HOSTS}
+${FILES} -> ${HOSTS}
 \tinstall -R ;
 \texcept /usr/lib/${EXLIB} ;
 \texcept /usr/games/lib ;
 \tspecial /usr/lib/sendmail "/usr/lib/sendmail -bz" ;
 
 srcs:
-/usr/src/bin -\*[Gt] arpa
+/usr/src/bin -> arpa
 \texcept_pat ( \e\e.o\e$ /SCCS\e$ ) ;
 
 IMAGEN = (ips dviimp catdvi)
 
 imagen:
-/usr/local/${IMAGEN} -\*[Gt] arpa
+/usr/local/${IMAGEN} -> arpa
 \tinstall /usr/local/lib ;
 \tnotify ralph ;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_proto.c,v 1.9 2007/11/20 20:18:00 plunky Exp $	*/
+/*	$NetBSD: bt_proto.c,v 1.16 2016/01/21 15:41:30 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bt_proto.c,v 1.9 2007/11/20 20:18:00 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bt_proto.c,v 1.16 2016/01/21 15:41:30 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>
@@ -50,14 +50,27 @@ __KERNEL_RCSID(0, "$NetBSD: bt_proto.c,v 1.9 2007/11/20 20:18:00 plunky Exp $");
 
 DOMAIN_DEFINE(btdomain);	/* forward declare and add to link set */
 
-const struct protosw btsw[] = {
+static void	bt_init(void);
+
+PR_WRAP_CTLOUTPUT(hci_ctloutput)
+PR_WRAP_CTLOUTPUT(sco_ctloutput)
+PR_WRAP_CTLOUTPUT(l2cap_ctloutput)
+PR_WRAP_CTLOUTPUT(rfcomm_ctloutput)
+
+#define	hci_ctloutput		hci_ctloutput_wrapper
+#define	sco_ctloutput		sco_ctloutput_wrapper
+#define	l2cap_ctloutput		l2cap_ctloutput_wrapper
+#define	rfcomm_ctloutput	rfcomm_ctloutput_wrapper
+
+static const struct protosw btsw[] = {
 	{ /* raw HCI commands */
 		.pr_type = SOCK_RAW,
 		.pr_domain = &btdomain,
 		.pr_protocol = BTPROTO_HCI,
 		.pr_flags = (PR_ADDR | PR_ATOMIC),
+		.pr_init = hci_init,
 		.pr_ctloutput = hci_ctloutput,
-		.pr_usrreq = hci_usrreq,
+		.pr_usrreqs = &hci_usrreqs,
 	},
 	{ /* HCI SCO data (audio) */
 		.pr_type = SOCK_SEQPACKET,
@@ -65,7 +78,7 @@ const struct protosw btsw[] = {
 		.pr_protocol = BTPROTO_SCO,
 		.pr_flags = (PR_CONNREQUIRED | PR_ATOMIC | PR_LISTEN),
 		.pr_ctloutput = sco_ctloutput,
-		.pr_usrreq = sco_usrreq,
+		.pr_usrreqs = &sco_usrreqs,
 	},
 	{ /* L2CAP Connection Oriented */
 		.pr_type = SOCK_SEQPACKET,
@@ -73,7 +86,8 @@ const struct protosw btsw[] = {
 		.pr_protocol = BTPROTO_L2CAP,
 		.pr_flags = (PR_CONNREQUIRED | PR_ATOMIC | PR_LISTEN),
 		.pr_ctloutput = l2cap_ctloutput,
-		.pr_usrreq = l2cap_usrreq,
+		.pr_usrreqs = &l2cap_usrreqs,
+		.pr_init = l2cap_init,
 	},
 	{ /* RFCOMM */
 		.pr_type = SOCK_STREAM,
@@ -81,13 +95,24 @@ const struct protosw btsw[] = {
 		.pr_protocol = BTPROTO_RFCOMM,
 		.pr_flags = (PR_CONNREQUIRED | PR_LISTEN | PR_WANTRCVD),
 		.pr_ctloutput = rfcomm_ctloutput,
-		.pr_usrreq = rfcomm_usrreq,
+		.pr_usrreqs = &rfcomm_usrreqs,
+		.pr_init = rfcomm_init,
 	},
 };
 
 struct domain btdomain = {
 	.dom_family = AF_BLUETOOTH,
 	.dom_name = "bluetooth",
+	.dom_init = bt_init,
 	.dom_protosw = btsw,
 	.dom_protoswNPROTOSW = &btsw[__arraycount(btsw)],
 };
+
+kmutex_t *bt_lock;
+
+static void
+bt_init(void)
+{
+
+	bt_lock = mutex_obj_alloc(MUTEX_DEFAULT, IPL_NONE);
+}

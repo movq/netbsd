@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC32_IP3x,v 1.70 2008/02/02 10:31:08 sekiya Exp $
+#	$NetBSD: GENERIC32_IP3x,v 1.116 2018/03/18 11:33:58 jmcneill Exp $
 #
 # GENERIC32_IP3x machine description file
 # 
@@ -28,14 +28,15 @@ makeoptions	TEXTADDR="0x80069000"	# entry point
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC32_IP3x-$Revision: 1.70 $"
+#ident		"GENERIC32_IP3x-$Revision: 1.116 $"
 
 maxusers	32
 
 # CPU related options
 options 	MIPS3		# MIPS3 support
-options		ENABLE_MIPS4_CACHE_R10K # enable R10000 cache ops
-#options	BLINK		# blinkenlitzen
+options 	ENABLE_MIPS4_CACHE_R10K # enable R10000 cache ops
+#options 	BLINK		# blinkenlitzen
+makeoptions	CPUFLAGS="-march=mips3 -mtune=vr5000"
 
 # Standard system options
 #options 	INSECURE	# disable kernel security levels
@@ -46,23 +47,19 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
-options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
-
-#options 	LKM		# loadable kernel modules (XXX: working?)
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-# Enable experimental buffer queue strategy for better responsiveness under 
-# high disk I/O load. Use it with caution - it's not proven to be stable yet.
+# Alternate buffer queue strategies for better responsiveness under high
+# disk I/O load.
 #options 	BUFQ_READPRIO
-#options 	BUFQ_PRIOCSCAN
+options 	BUFQ_PRIOCSCAN
 
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC	# expensive kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
-#options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	KGDB		# remote debugger
@@ -71,16 +68,10 @@ options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #makeoptions	DEBUG="-g"	# compile full symbol table
 
 # Compatibility options
-options 	COMPAT_15	# NetBSD 1.5
-options		COMPAT_16	# NetBSD 1.6
-options		COMPAT_20	# NetBSD 2.0
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
+include 	"conf/compat_netbsd15.config"
 
-options 	COMPAT_IRIX	# binary compatibility with IRIX
-#options	COMPAT_LINUX	# binary compatibility with Linux
-#options	COMPAT_ULTRIX	# binary compatibility with Ultrix 
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+options 	COMPAT_LINUX	# binary compatibility with Linux
+#options 	COMPAT_ULTRIX	# binary compatibility with Ultrix 
 
 # File systems
 file-system 	FFS		# UFS
@@ -95,23 +86,25 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system 	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
 file-system	CODA		# Coda File System; also needs vcoda (below)
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 file-system	EFS		# Silicon Graphics Extent File System
 
 # File system options
-options 	QUOTA		# UFS quotas
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
-options 	SOFTDEP		# FFS soft updates support.
-#options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
+options 	WAPBL		# File system journaling support
+#options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	UFS_EXTATTR	# Extended attribute support for UFS1
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
 				# immutable) behave as system flags.
 
@@ -120,18 +113,13 @@ options 	NFSSERVER	# Network File System server
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
-#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-#options 	ISO,TPIP	# OSI
-#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
 options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
-options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
@@ -149,6 +137,10 @@ options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	ALTQ_RED	# Random Early Detection
 #options 	ALTQ_RIO	# RED with IN/OUT
 #options 	ALTQ_WFQ	# Weighted Fair Queueing
+
+# JIT compiler for bpfilter
+#options	SLJIT
+#options	BPFJIT
 
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
@@ -178,13 +170,14 @@ crime0 		at mainbus0 addr 0x14000000
 crmfb0		at mainbus0 addr 0x16000000
 wsdisplay* 	at crmfb? console ?
 mace0 		at mainbus0 addr 0x1f000000
-options		MACE_NEEDS_DELAYS
+#options 	MACE_NEEDS_DELAYS
 macepci0 	at mace0 offset 0x080000 intr 7
 pci0 		at macepci0 bus 0
 pci*		at ppb? bus ?
 options 	PCI_NETBSD_CONFIGURE
 
 options 	WSEMUL_VT100
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WS_KERNEL_FG=WSCOL_GREEN
 options 	WS_KERNEL_BG=WSCOL_BLACK
 options 	WS_DEFAULT_BG=WSCOL_BLACK
@@ -327,6 +320,9 @@ ulpt*   at uhub? port ? configuration ? interface ?
 umodem* at uhub? port ? configuration ?
 ucom*   at umodem?
 
+# Option N.V. Wireless WAN modems
+uhso*	at uhub? port ? configuration ?
+
 # USB Mass Storage
 umass*  at uhub? port ? configuration ? interface ?
 #wd* at umass?
@@ -385,7 +381,7 @@ ukyopon* at uhub? port ?
 ucom*	at ukyopon? portno ?
 
 # USB scanners
-uscanner* at uhub? port ?
+#uscanner* at uhub? port ?
 
 # USB scanners that use SCSI emulation, e.g., HP5300
 usscanner* at uhub? port ?
@@ -410,6 +406,8 @@ sbp*	at ieee1394if? euihi ? euilo ?
 # Audio support
 audio*  at audiobus?
 
+spkr*	at audio?			# PC speaker (synthesized)
+
 # MIDI support
 midi*   at midibus?
 
@@ -419,12 +417,12 @@ pseudo-device	crypto			# /dev/crypto device
 pseudo-device	swcrypto		# software crypto implementation
 
 # disk/mass storage pseudo-devices
-pseudo-device	ccd		4	# concatenated/striped disk devices
-#pseudo-device	cgd		4	# cryptographic disk devices
-#pseudo-device	raid		4	# RAIDframe disk driver
+pseudo-device	ccd			# concatenated/striped disk devices
+#pseudo-device	cgd			# cryptographic disk devices
+#pseudo-device	raid			# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-pseudo-device	fss		4	# file system snapshot device
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 
@@ -444,41 +442,39 @@ pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
-#options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
+#options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	sequencer	1	# MIDI sequencer
-pseudo-device	rnd			# /dev/random and in-kernel generator
+pseudo-device	sequencer		# MIDI sequencer
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
+pseudo-device	putter			# for puffs and pud
 
 # wscons pseudo-devices
 pseudo-device	wsmux			# mouse & keyboard multiplexor
 pseudo-device	wsfont
 
-# a pseudo device needed for Coda	# also needs CODA (above)
-pseudo-device	vcoda		4	# coda minicache <-> venus comm.
+# userland interface to drivers, including autoconf and properties retrieval
+pseudo-device	drvctl
 
-# pseudo devices used for IRIX binary compatibility
-pseudo-device	irix_kmem		# IRIX /dev/kmem
-pseudo-device	irix_usema		# IRIX /dev/usema
+# a pseudo device needed for Coda	# also needs CODA (above)
+pseudo-device	vcoda			# coda minicache <-> venus comm.
 
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec		1
+#pseudo-device	veriexec
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel
 # code size.
 #
-#options VERIFIED_EXEC_FP_RMD160
 #options VERIFIED_EXEC_FP_SHA256
 #options VERIFIED_EXEC_FP_SHA384
 #options VERIFIED_EXEC_FP_SHA512
-#options VERIFIED_EXEC_FP_SHA1
-#options VERIFIED_EXEC_FP_MD5

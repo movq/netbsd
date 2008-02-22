@@ -1,4 +1,4 @@
-/*	$NetBSD: lm75reg.h,v 1.3 2006/05/17 00:10:54 kiyohara Exp $	*/
+/*	$NetBSD: lm75reg.h,v 1.5 2016/01/03 17:28:33 jdc Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -43,9 +43,9 @@
  *
  *	100 1xxx
  */
-#define	LM75_ADDRMASK		0x78
+#define	LM75_ADDRMASK		0x3f8
 #define	LM75_ADDR		0x48
-#define	LM77_ADDRMASK		0x7c
+#define	LM77_ADDRMASK		0x3fc
 #define	LM77_ADDR		0x48
 
 /*
@@ -66,6 +66,7 @@
 #define	LM75_REG_CONFIG			0x01
 #define	LM75_REG_THYST_SET_POINT	0x02
 #define	LM75_REG_TOS_SET_POINT		0x03
+#define	LM75_REG_ID			0x07	/* LM75A only */
 
 #define	LM77_REG_TCRIT_SET_POINT	0x03
 #define	LM77_REG_TLOW_SET_POINT		0x04

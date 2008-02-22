@@ -1,4 +1,4 @@
-/*	$NetBSD: vs.c,v 1.32 2007/03/11 08:09:25 isaki Exp $	*/
+/*	$NetBSD: vs.c,v 1.49 2017/09/30 04:07:04 isaki Exp $	*/
 
 /*
  * Copyright (c) 2001 Tetsuya Isaki. All rights reserved.
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vs.c,v 1.32 2007/03/11 08:09:25 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vs.c,v 1.49 2017/09/30 04:07:04 isaki Exp $");
 
 #include "audio.h"
 #include "vs.h"
@@ -41,6 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: vs.c,v 1.32 2007/03/11 08:09:25 isaki Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/kmem.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -67,8 +66,8 @@ extern int audiodebug;
 #define DPRINTF(y,x)
 #endif
 
-static int  vs_match(struct device *, struct cfdata *, void *);
-static void vs_attach(struct device *, struct device *, void *);
+static int  vs_match(device_t, cfdata_t, void *);
+static void vs_attach(device_t, device_t, void *);
 
 static int  vs_dmaintr(void *);
 static int  vs_dmaerrintr(void *);
@@ -79,23 +78,24 @@ static void vs_close(void *);
 static int  vs_query_encoding(void *, struct audio_encoding *);
 static int  vs_set_params(void *, int, int, audio_params_t *,
 	audio_params_t *, stream_filter_list_t *, stream_filter_list_t *);
-static int  vs_trigger_output(void *, void *, void *, int,
-	void (*)(void *), void *, const audio_params_t *);
-static int  vs_trigger_input(void *, void *, void *, int,
-	void (*)(void *), void *, const audio_params_t *);
+static int  vs_init_output(void *, void *, int);
+static int  vs_init_input(void *, void *, int);
+static int  vs_start_input(void *, void *, int, void (*)(void *), void *);
+static int  vs_start_output(void *, void *, int, void (*)(void *), void *);
 static int  vs_halt_output(void *);
 static int  vs_halt_input(void *);
-static int  vs_allocmem(struct vs_softc *, size_t, size_t, size_t, int,
+static int  vs_allocmem(struct vs_softc *, size_t, size_t, size_t,
 	struct vs_dma *);
 static void vs_freemem(struct vs_dma *);
 static int  vs_getdev(void *, struct audio_device *);
 static int  vs_set_port(void *, mixer_ctrl_t *);
 static int  vs_get_port(void *, mixer_ctrl_t *);
 static int  vs_query_devinfo(void *, mixer_devinfo_t *);
-static void *vs_allocm(void *, int, size_t, struct malloc_type *, int);
-static void vs_freem(void *, void *, struct malloc_type *);
+static void *vs_allocm(void *, int, size_t);
+static void vs_freem(void *, void *, size_t);
 static size_t vs_round_buffersize(void *, int, size_t);
 static int  vs_get_props(void *);
+static void vs_get_locks(void *, kmutex_t **, kmutex_t **);
 
 /* lower functions */
 static int vs_round_sr(u_long);
@@ -104,7 +104,7 @@ static inline void vs_set_po(struct vs_softc *, u_long);
 
 extern struct cfdriver vs_cd;
 
-CFATTACH_DECL(vs, sizeof(struct vs_softc),
+CFATTACH_DECL_NEW(vs, sizeof(struct vs_softc),
     vs_match, vs_attach, NULL, NULL);
 
 static int vs_attached;
@@ -117,10 +117,10 @@ static const struct audio_hw_if vs_hw_if = {
 	vs_set_params,
 	NULL,			/* round_blocksize */
 	NULL,			/* commit_settings */
-	NULL,			/* init_output */
-	NULL,			/* init_input */
-	NULL,			/* start_output */
-	NULL,			/* start_input */
+	vs_init_output,
+	vs_init_input,
+	vs_start_output,
+	vs_start_input,
 	vs_halt_output,
 	vs_halt_input,
 	NULL,			/* speaker_ctl */
@@ -134,9 +134,10 @@ static const struct audio_hw_if vs_hw_if = {
 	vs_round_buffersize,
 	NULL,			/* mappage */
 	vs_get_props,
-	vs_trigger_output,
-	vs_trigger_input,
+	NULL,			/* trigger_output */
+	NULL,			/* trigger_input */
 	NULL,
+	vs_get_locks,
 };
 
 static struct audio_device vs_device = {
@@ -159,21 +160,8 @@ struct {
 
 #define NUM_RATE	(sizeof(vs_l2r)/sizeof(vs_l2r[0]))
 
-struct {
-	const char *name;
-	int	encoding;
-	int	precision;
-} vs_encodings[] = {
-	{AudioEadpcm,      AUDIO_ENCODING_ADPCM,       4},
-	{AudioEslinear,    AUDIO_ENCODING_SLINEAR,     8},
-	{AudioEulinear,    AUDIO_ENCODING_ULINEAR,     8},
-	{AudioEmulaw,      AUDIO_ENCODING_ULAW,	       8},
-	{AudioEslinear_be, AUDIO_ENCODING_SLINEAR_BE, 16},
-	{AudioEslinear_le, AUDIO_ENCODING_SLINEAR_LE, 16},
-};
-
 static int
-vs_match(struct device *parent, struct cfdata *cf, void *aux)
+vs_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct intio_attach_args *ia;
 
@@ -207,14 +195,15 @@ vs_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-vs_attach(struct device *parent, struct device *self, void *aux)
+vs_attach(device_t parent, device_t self, void *aux)
 {
 	struct vs_softc *sc;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	struct intio_attach_args *ia;
 
-	sc = (struct vs_softc *)self;
+	sc = device_private(self);
+	sc->sc_dev = self;
 	ia = aux;
 	vs_attached = 1;
 
@@ -230,6 +219,10 @@ vs_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_hw_if = &vs_hw_if;
 	sc->sc_addr = (void *) ia->ia_addr;
 	sc->sc_dmas = NULL;
+	sc->sc_prev_vd = NULL;
+	sc->sc_active = 0;
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 
 	/* XXX */
 	bus_space_map(iot, PPI_ADDR, PPI_MAPSIZE, BUS_SPACE_MAP_SHIFTED,
@@ -239,11 +232,13 @@ vs_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_dmat = ia->ia_dmat;
 	sc->sc_dma_ch = dmac_alloc_channel(parent, ia->ia_dma, "vs",
 		ia->ia_dmaintr,   vs_dmaintr, sc,
-		ia->ia_dmaintr+1, vs_dmaerrintr, sc);
+		ia->ia_dmaintr+1, vs_dmaerrintr, sc,
+		(DMAC_DCR_XRM_CSWOH | DMAC_DCR_OTYP_EASYNC | DMAC_DCR_OPS_8BIT),
+		(DMAC_OCR_SIZE_BYTE | DMAC_OCR_REQG_EXTERNAL));
 
-	printf("%s: MSM6258V ADPCM voice synthesizer\n", sc->sc_dev.dv_xname);
+	aprint_normal_dev(self, "MSM6258V ADPCM voice synthesizer\n");
 
-	audio_attach_mi(&vs_hw_if, sc, &sc->sc_dev);
+	audio_attach_mi(&vs_hw_if, sc, sc->sc_dev);
 }
 
 /*
@@ -256,31 +251,18 @@ vs_dmaintr(void *hdl)
 
 	DPRINTF(2, ("vs_dmaintr\n"));
 	sc = hdl;
+
+	mutex_spin_enter(&sc->sc_intr_lock);
+
 	if (sc->sc_pintr) {
-		/* start next transfer */
-		sc->sc_current.dmap += sc->sc_current.blksize;
-		if (sc->sc_current.dmap + sc->sc_current.blksize
-		    > sc->sc_current.bufsize)
-			sc->sc_current.dmap -= sc->sc_current.bufsize;
-		dmac_start_xfer_offset(sc->sc_dma_ch->ch_softc,
-					sc->sc_current.xfer,
-					sc->sc_current.dmap,
-					sc->sc_current.blksize);
 		sc->sc_pintr(sc->sc_parg);
 	} else if (sc->sc_rintr) {
-		/* start next transfer */
-		sc->sc_current.dmap += sc->sc_current.blksize;
-		if (sc->sc_current.dmap + sc->sc_current.blksize
-		    > sc->sc_current.bufsize)
-			sc->sc_current.dmap -= sc->sc_current.bufsize;
-		dmac_start_xfer_offset(sc->sc_dma_ch->ch_softc,
-					sc->sc_current.xfer,
-					sc->sc_current.dmap,
-					sc->sc_current.blksize);
 		sc->sc_rintr(sc->sc_rarg);
 	} else {
 		printf("vs_dmaintr: spurious interrupt\n");
 	}
+
+	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return 1;
 }
@@ -291,7 +273,7 @@ vs_dmaerrintr(void *hdl)
 	struct vs_softc *sc;
 
 	sc = hdl;
-	DPRINTF(1, ("%s: DMA transfer error.\n", sc->sc_dev.dv_xname));
+	DPRINTF(1, ("%s: DMA transfer error.\n", device_xname(sc->sc_dev)));
 	/* XXX */
 	vs_dmaintr(sc);
 
@@ -312,6 +294,7 @@ vs_open(void *hdl, int flags)
 	sc = hdl;
 	sc->sc_pintr = NULL;
 	sc->sc_rintr = NULL;
+	sc->sc_active = 0;
 
 	return 0;
 }
@@ -328,17 +311,22 @@ vs_query_encoding(void *hdl, struct audio_encoding *fp)
 {
 
 	DPRINTF(1, ("vs_query_encoding\n"));
-	if (fp->index >= sizeof(vs_encodings) / sizeof(vs_encodings[0]))
-		return EINVAL;
 
-	strcpy(fp->name, vs_encodings[fp->index].name);
-	fp->encoding  = vs_encodings[fp->index].encoding;
-	fp->precision = vs_encodings[fp->index].precision;
-	if (fp->encoding == AUDIO_ENCODING_ADPCM)
+	if (fp->index == 0) {
+		strcpy(fp->name, AudioEslinear);
+		fp->encoding = AUDIO_ENCODING_SLINEAR;
+		fp->precision = 8;
 		fp->flags = 0;
-	else
-		fp->flags = AUDIO_ENCODINGFLAG_EMULATED;
-	return 0;
+		return 0;
+	}
+	if (fp->index == 1) {
+		strcpy(fp->name, AudioEslinear_be);
+		fp->encoding = AUDIO_ENCODING_SLINEAR_BE;
+		fp->precision = 16;
+		fp->flags = 0;
+		return 0;
+	}
+	return EINVAL;
 }
 
 static int
@@ -375,99 +363,62 @@ vs_set_params(void *hdl, int setmode, int usemode,
 	stream_filter_list_t *pfil, stream_filter_list_t *rfil)
 {
 	struct vs_softc *sc;
-	struct audio_params *p;
-	int mode;
-	int rate;
-	stream_filter_factory_t *pswcode;
-	stream_filter_factory_t *rswcode;
 	audio_params_t hw;
-	int matched;
-
-	DPRINTF(1, ("vs_set_params: setmode=%d, usemode=%d\n",
-		setmode, usemode));
+	stream_filter_factory_t *pconv;
+	stream_filter_factory_t *rconv;
+	int rate;
 
 	sc = hdl;
-	/* set first record info, then play info */
-	for (mode = AUMODE_RECORD; mode != -1;
-	     mode = (mode == AUMODE_RECORD) ? AUMODE_PLAY : -1) {
-		if ((setmode & mode) == 0)
-			continue;
 
-		p = (mode == AUMODE_PLAY) ? play : rec;
+	DPRINTF(1, ("vs_set_params: mode=%d enc=%d rate=%d prec=%d ch=%d: ",
+		setmode, play->encoding, play->sample_rate,
+		play->precision, play->channels));
 
-		if (p->channels != 1)
-			return EINVAL;
+	/* *play and *rec are identical because !AUDIO_PROP_INDEPENDENT */
 
-		rate = p->sample_rate;
-		pswcode = NULL;
-		rswcode = NULL;
-		hw = *p;
-		hw.encoding = AUDIO_ENCODING_ADPCM;
-		hw.precision = hw.validbits = 4;
-		DPRINTF(1, ("vs_set_params: encoding=%d, precision=%d\n",
-			p->encoding, p->precision));
-		matched = 0;
-		switch (p->precision) {
-		case 4:
-			if (p->encoding == AUDIO_ENCODING_ADPCM)
-				matched = 1;
-			break;
-		case 8:
-			switch (p->encoding) {
-			case AUDIO_ENCODING_ULAW:
-				matched = 1;
-				hw.encoding = AUDIO_ENCODING_ULINEAR_LE;
-				hw.precision = hw.validbits = 8;
-				pfil->prepend(pfil, mulaw_to_linear8, &hw);
-				hw.encoding = AUDIO_ENCODING_ADPCM;
-				hw.precision = hw.validbits = 4;
-				pfil->prepend(pfil, msm6258_linear8_to_adpcm, &hw);
-				rfil->append(rfil, msm6258_adpcm_to_linear8, &hw);
-				hw.encoding = AUDIO_ENCODING_ULINEAR_LE;
-				hw.precision = hw.validbits = 8;
-				rfil->append(rfil, linear8_to_mulaw, &hw);
-				break;
-			case AUDIO_ENCODING_SLINEAR:
-			case AUDIO_ENCODING_SLINEAR_LE:
-			case AUDIO_ENCODING_SLINEAR_BE:
-			case AUDIO_ENCODING_ULINEAR:
-			case AUDIO_ENCODING_ULINEAR_LE:
-			case AUDIO_ENCODING_ULINEAR_BE:
-				matched = 1;
-				pfil->append(pfil, msm6258_linear8_to_adpcm, &hw);
-				rfil->append(rfil, msm6258_adpcm_to_linear8, &hw);
-				break;
-			}
-			break;
-		case 16:
-			switch (p->encoding) {
-			case AUDIO_ENCODING_SLINEAR_LE:
-			case AUDIO_ENCODING_SLINEAR_BE:
-				matched = 1;
-				pfil->append(pfil, msm6258_slinear16_to_adpcm, &hw);
-				rfil->append(rfil, msm6258_adpcm_to_slinear16, &hw);
-				break;
-			}
-			break;
-		}
-		if (matched == 0) {
-			DPRINTF(1, ("vs_set_params: mode=%d, encoding=%d\n",
-				mode, p->encoding));
-			return EINVAL;
-		}
-
-		DPRINTF(1, ("vs_set_params: rate=%d -> ", rate));
-		rate = vs_round_sr(rate);
-		DPRINTF(1, ("%d\n", rate));
-		if (rate < 0)
-			return EINVAL;
-		if (mode == AUMODE_PLAY) {
-			sc->sc_current.prate = rate;
-		} else {
-			sc->sc_current.rrate = rate;
-		}
+	if (play->channels != 1) {
+		DPRINTF(1, ("channels not matched\n"));
+		return EINVAL;
 	}
 
+	rate = vs_round_sr(play->sample_rate);
+	if (rate < 0) {
+		DPRINTF(1, ("rate not matched\n"));
+		return EINVAL;
+	}
+
+	if (play->precision == 8 && play->encoding == AUDIO_ENCODING_SLINEAR) {
+		pconv = msm6258_linear8_to_adpcm;
+		rconv = msm6258_adpcm_to_linear8;
+	} else if (play->precision == 16 &&
+	           play->encoding == AUDIO_ENCODING_SLINEAR_BE) {
+		pconv = msm6258_slinear16_to_adpcm;
+		rconv = msm6258_adpcm_to_slinear16;
+	} else {
+		DPRINTF(1, ("prec/enc not matched\n"));
+		return EINVAL;
+	}
+
+	sc->sc_current.rate = rate;
+
+	/* pfil and rfil are independent even if !AUDIO_PROP_INDEPENDENT */
+
+	if ((setmode & AUMODE_PLAY) != 0) {
+		hw = *play;
+		hw.encoding = AUDIO_ENCODING_ADPCM;
+		hw.precision = 4;
+		hw.validbits = 4;
+		pfil->prepend(pfil, pconv, &hw);
+	}
+	if ((setmode & AUMODE_RECORD) != 0) {
+		hw = *rec;
+		hw.encoding = AUDIO_ENCODING_ADPCM;
+		hw.precision = 4;
+		hw.validbits = 4;
+		rfil->prepend(rfil, rconv, &hw);
+	}
+
+	DPRINTF(1, ("accepted\n"));
 	return 0;
 }
 
@@ -493,97 +444,122 @@ vs_set_po(struct vs_softc *sc, u_long po)
 }
 
 static int
-vs_trigger_output(void *hdl, void *start, void *end, int bsize,
-		  void (*intr)(void *), void *arg,
-		  const audio_params_t *p)
+vs_init_output(void *hdl, void *buffer, int size)
 {
 	struct vs_softc *sc;
-	struct vs_dma *vd;
-	struct dmac_dma_xfer *xf;
-	struct dmac_channel_stat *chan;
 
-	DPRINTF(2, ("vs_trigger_output: start=%p, bsize=%d, intr=%p, arg=%p\n",
-		 start, bsize, intr, arg));
+	DPRINTF(1, ("%s\n", __func__));
 	sc = hdl;
-	chan = sc->sc_dma_ch;
-	sc->sc_pintr = intr;
-	sc->sc_parg  = arg;
-	sc->sc_current.blksize = bsize;
-	sc->sc_current.bufsize = (char *)end - (char *)start;
-	sc->sc_current.dmap = 0;
 
-	/* Find DMA buffer. */
-	for (vd = sc->sc_dmas; vd != NULL && KVADDR(vd) != start;
-	     vd = vd->vd_next)
-		continue;
-	if (vd == NULL) {
-		printf("%s: trigger_output: bad addr %p\n",
-		    sc->sc_dev.dv_xname, start);
-		return EINVAL;
-	}
-
-	vs_set_sr(sc, sc->sc_current.prate);
+	/* Set rate and pan */
+	vs_set_sr(sc, sc->sc_current.rate);
 	vs_set_po(sc, VS_PANOUT_LR);
-
-	xf = dmac_alloc_xfer(chan, sc->sc_dmat, vd->vd_map);
-	sc->sc_current.xfer = xf;
-	chan->ch_dcr = (DMAC_DCR_XRM_CSWOH | DMAC_DCR_OTYP_EASYNC |
-			DMAC_DCR_OPS_8BIT);
-	chan->ch_ocr = DMAC_OCR_REQG_EXTERNAL;
-	xf->dx_ocr = DMAC_OCR_DIR_MTD;
-	xf->dx_scr = DMAC_SCR_MAC_COUNT_UP | DMAC_SCR_DAC_NO_COUNT;
-	xf->dx_device = sc->sc_addr + MSM6258_DATA*2 + 1;
-
-	dmac_load_xfer(chan->ch_softc, xf);
-	dmac_start_xfer_offset(chan->ch_softc, xf, 0, sc->sc_current.blksize);
-	bus_space_write_1(sc->sc_iot, sc->sc_ioh, MSM6258_STAT, 2);
 
 	return 0;
 }
 
 static int
-vs_trigger_input(void *hdl, void *start, void *end, int bsize,
-		 void (*intr)(void *), void *arg,
-		 const audio_params_t *p)
+vs_init_input(void *hdl, void *buffer, int size)
+{
+	struct vs_softc *sc;
+
+	DPRINTF(1, ("%s\n", __func__));
+	sc = hdl;
+
+	/* Set rate */
+	vs_set_sr(sc, sc->sc_current.rate);
+
+	return 0;
+}
+
+static int
+vs_start_output(void *hdl, void *block, int blksize, void (*intr)(void *),
+	void *arg)
 {
 	struct vs_softc *sc;
 	struct vs_dma *vd;
-	struct dmac_dma_xfer *xf;
 	struct dmac_channel_stat *chan;
 
-	DPRINTF(2, ("vs_trigger_input: start=%p, bsize=%d, intr=%p, arg=%p\n",
-		 start, bsize, intr, arg));
+	DPRINTF(2, ("%s: block=%p blksize=%d\n", __func__, block, blksize));
 	sc = hdl;
-	chan = sc->sc_dma_ch;
-	sc->sc_rintr = intr;
-	sc->sc_rarg  = arg;
-	sc->sc_current.blksize = bsize;
-	sc->sc_current.bufsize = (char *)end - (char *)start;
-	sc->sc_current.dmap = 0;
+
+	sc->sc_pintr = intr;
+	sc->sc_parg  = arg;
 
 	/* Find DMA buffer. */
-	for (vd = sc->sc_dmas; vd != NULL && KVADDR(vd) != start;
-	     vd = vd->vd_next)
-		continue;
+	for (vd = sc->sc_dmas; vd != NULL; vd = vd->vd_next) {
+		if (KVADDR(vd) <= block && block < KVADDR_END(vd)
+			break;
+	}
 	if (vd == NULL) {
-		printf("%s: trigger_output: bad addr %p\n",
-		    sc->sc_dev.dv_xname, start);
+		printf("%s: start_output: bad addr %p\n",
+		    device_xname(sc->sc_dev), block);
 		return EINVAL;
 	}
 
-	vs_set_sr(sc, sc->sc_current.rrate);
-	xf = dmac_alloc_xfer(chan, sc->sc_dmat, vd->vd_map);
-	sc->sc_current.xfer = xf;
-	chan->ch_dcr = (DMAC_DCR_XRM_CSWOH | DMAC_DCR_OTYP_EASYNC |
-			DMAC_DCR_OPS_8BIT);
-	chan->ch_ocr = DMAC_OCR_REQG_EXTERNAL;
-	xf->dx_ocr = DMAC_OCR_DIR_DTM;
-	xf->dx_scr = DMAC_SCR_MAC_COUNT_UP | DMAC_SCR_DAC_NO_COUNT;
-	xf->dx_device = sc->sc_addr + MSM6258_DATA*2 + 1;
+	chan = sc->sc_dma_ch;
 
-	dmac_load_xfer(chan->ch_softc, xf);
-	dmac_start_xfer_offset(chan->ch_softc, xf, 0, sc->sc_current.blksize);
-	bus_space_write_1(sc->sc_iot, sc->sc_ioh, MSM6258_STAT, 4);
+	if (vd != sc->sc_prev_vd) {
+		sc->sc_current.xfer = dmac_prepare_xfer(chan, sc->sc_dmat,
+		    vd->vd_map, DMAC_OCR_DIR_MTD,
+		    (DMAC_SCR_MAC_COUNT_UP | DMAC_SCR_DAC_NO_COUNT),
+		    sc->sc_addr + MSM6258_DATA * 2 + 1);
+		sc->sc_prev_vd = vd;
+	}
+	dmac_start_xfer_offset(chan->ch_softc, sc->sc_current.xfer,
+	    (int)block - (int)KVADDR(vd), blksize);
+
+	if (sc->sc_active == 0) {
+		bus_space_write_1(sc->sc_iot, sc->sc_ioh,
+			MSM6258_CMD, MSM6258_CMD_PLAY_START);
+		sc->sc_active = 1;
+	}
+
+	return 0;
+}
+
+static int
+vs_start_input(void *hdl, void *block, int blksize, void (*intr)(void *),
+	void *arg)
+{
+	struct vs_softc *sc;
+	struct vs_dma *vd;
+	struct dmac_channel_stat *chan;
+
+	DPRINTF(2, ("%s: block=%p blksize=%d\n", __func__, block, blksize));
+	sc = hdl;
+
+	sc->sc_rintr = intr;
+	sc->sc_rarg  = arg;
+
+	/* Find DMA buffer. */
+	for (vd = sc->sc_dmas; vd != NULL; vd = vd->vd_next) {
+		if (KVADDR(vd) <= block && block < KVADDR_END(vd)
+			break;
+	}
+	if (vd == NULL) {
+		printf("%s: start_output: bad addr %p\n",
+		    device_xname(sc->sc_dev), block);
+		return EINVAL;
+	}
+
+	chan = sc->sc_dma_ch;
+
+	if (vd != sc->sc_prev_vd) {
+		sc->sc_current.xfer = dmac_prepare_xfer(chan, sc->sc_dmat,
+		    vd->vd_map, DMAC_OCR_DIR_DTM,
+		    (DMAC_SCR_MAC_COUNT_UP | DMAC_SCR_DAC_NO_COUNT),
+		    sc->sc_addr + MSM6258_DATA * 2 + 1);
+		sc->sc_prev_vd = vd;
+	}
+	dmac_start_xfer_offset(chan->ch_softc, sc->sc_current.xfer,
+	    (int)block - (int)KVADDR(vd), blksize);
+
+	if (sc->sc_active == 0) {
+		bus_space_write_1(sc->sc_iot, sc->sc_ioh,
+			MSM6258_CMD, MSM6258_CMD_REC_START);
+		sc->sc_active = 1;
+	}
 
 	return 0;
 }
@@ -595,9 +571,13 @@ vs_halt_output(void *hdl)
 
 	DPRINTF(1, ("vs_halt_output\n"));
 	sc = hdl;
-	/* stop ADPCM play */
-	dmac_abort_xfer(sc->sc_dma_ch->ch_softc, sc->sc_current.xfer);
-	bus_space_write_1(sc->sc_iot, sc->sc_ioh, MSM6258_STAT, 1);
+	if (sc->sc_active) {
+		/* stop ADPCM play */
+		dmac_abort_xfer(sc->sc_dma_ch->ch_softc, sc->sc_current.xfer);
+		bus_space_write_1(sc->sc_iot, sc->sc_ioh,
+			MSM6258_CMD, MSM6258_CMD_STOP);
+		sc->sc_active = 0;
+	}
 
 	return 0;
 }
@@ -609,47 +589,50 @@ vs_halt_input(void *hdl)
 
 	DPRINTF(1, ("vs_halt_input\n"));
 	sc = hdl;
-	/* stop ADPCM recoding */
-	dmac_abort_xfer(sc->sc_dma_ch->ch_softc, sc->sc_current.xfer);
-	bus_space_write_1(sc->sc_iot, sc->sc_ioh, MSM6258_STAT, 1);
+	if (sc->sc_active) {
+		/* stop ADPCM recoding */
+		dmac_abort_xfer(sc->sc_dma_ch->ch_softc, sc->sc_current.xfer);
+		bus_space_write_1(sc->sc_iot, sc->sc_ioh,
+			MSM6258_CMD, MSM6258_CMD_STOP);
+		sc->sc_active = 0;
+	}
 
 	return 0;
 }
 
 static int
 vs_allocmem(struct vs_softc *sc, size_t size, size_t align, size_t boundary,
-	int flags, struct vs_dma *vd)
+	struct vs_dma *vd)
 {
-	int error, wait;
+	int error;
 
 #ifdef DIAGNOSTIC
 	if (size > DMAC_MAXSEGSZ)
 		panic ("vs_allocmem: maximum size exceeded, %d", (int) size);
 #endif
 
-	wait = (flags & M_NOWAIT) ? BUS_DMA_NOWAIT : BUS_DMA_WAITOK;
 	vd->vd_size = size;
 
 	error = bus_dmamem_alloc(vd->vd_dmat, vd->vd_size, align, boundary,
 				 vd->vd_segs,
 				 sizeof (vd->vd_segs) / sizeof (vd->vd_segs[0]),
-				 &vd->vd_nsegs, wait);
+				 &vd->vd_nsegs, BUS_DMA_WAITOK);
 	if (error)
 		goto out;
 
 	error = bus_dmamem_map(vd->vd_dmat, vd->vd_segs, vd->vd_nsegs,
 			       vd->vd_size, &vd->vd_addr,
-			       wait | BUS_DMA_COHERENT);
+			       BUS_DMA_WAITOK | BUS_DMA_COHERENT);
 	if (error)
 		goto free;
 
 	error = bus_dmamap_create(vd->vd_dmat, vd->vd_size, 1, DMAC_MAXSEGSZ,
-				  0, wait, &vd->vd_map);
+				  0, BUS_DMA_WAITOK, &vd->vd_map);
 	if (error)
 		goto unmap;
 
 	error = bus_dmamap_load(vd->vd_dmat, vd->vd_map, vd->vd_addr,
-				vd->vd_size, NULL, wait);
+				vd->vd_size, NULL, BUS_DMA_WAITOK);
 	if (error)
 		goto destroy;
 
@@ -713,21 +696,19 @@ vs_query_devinfo(void *hdl, mixer_devinfo_t *mi)
 }
 
 static void *
-vs_allocm(void *hdl, int direction, size_t size, struct malloc_type *type,
-    int flags)
+vs_allocm(void *hdl, int direction, size_t size)
 {
 	struct vs_softc *sc;
 	struct vs_dma *vd;
 	int error;
 
-	if ((vd = malloc(size, type, flags)) == NULL)
-		return NULL;
+	vd = kmem_alloc(sizeof(*vd), KM_SLEEP);
 	sc = hdl;
 	vd->vd_dmat = sc->sc_dmat;
 
-	error = vs_allocmem(sc, size, 32, 0, flags, vd);
+	error = vs_allocmem(sc, size, 32, 0, vd);
 	if (error) {
-		free(vd, type);
+		kmem_free(vd, sizeof(*vd));
 		return NULL;
 	}
 	vd->vd_next = sc->sc_dmas;
@@ -737,7 +718,7 @@ vs_allocm(void *hdl, int direction, size_t size, struct malloc_type *type,
 }
 
 static void
-vs_freem(void *hdl, void *addr, struct malloc_type *type)
+vs_freem(void *hdl, void *addr, size_t size)
 {
 	struct vs_softc *sc;
 	struct vs_dma *p, **pp;
@@ -747,7 +728,7 @@ vs_freem(void *hdl, void *addr, struct malloc_type *type)
 		if (KVADDR(p) == addr) {
 			vs_freemem(p);
 			*pp = p->vd_next;
-			free(p, type);
+			kmem_free(p, sizeof(*p));
 			return;
 		}
 	}
@@ -777,7 +758,7 @@ vs_mappage(void *addr, void *mem, off_t off, int prot)
 		continue;
 	if (p == NULL) {
 		printf("%s: mappage: bad addr %p\n",
-		    sc->sc_dev.dv_xname, start);
+		    device_xname(sc->sc_dev), start);
 		return -1;
 	}
 
@@ -793,4 +774,16 @@ vs_get_props(void *hdl)
 	DPRINTF(1, ("vs_get_props\n"));
 	return 0 /* | dependent | half duplex | no mmap */;
 }
+
+static void
+vs_get_locks(void *hdl, kmutex_t **intr, kmutex_t **thread)
+{
+	struct vs_softc *sc;
+
+	DPRINTF(1, ("vs_get_locks\n"));
+	sc = hdl;
+	*intr = &sc->sc_intr_lock;
+	*thread = &sc->sc_lock;
+}
+
 #endif /* NAUDIO > 0 && NVS > 0*/

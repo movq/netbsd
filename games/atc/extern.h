@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.14 2008/01/31 05:19:44 dholland Exp $	*/
+/*	$NetBSD: extern.h,v 1.19 2015/06/25 05:33:02 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -43,6 +43,9 @@
  * For more info on this and all of my stuff, mail edjames@berkeley.edu.
  */
 
+#include <time.h>  /* for time_t */
+
+
 extern char		GAMES[];
 extern const char	*filename;
 
@@ -53,7 +56,7 @@ extern time_t		start_time;
 extern FILE		*filein, *fileout;
 #endif 
 
-extern C_SCREEN		screen, *sp;
+extern C_SCREEN		*sp;
 
 extern LIST		air, ground;
 
@@ -61,81 +64,44 @@ extern struct termios	tty_start, tty_new;
 
 extern DISPLACEMENT	displacement[MAXDIR];
 
-int		addplane(void);
+/* in graphics.c */
+void shutdown_gr(void);
+void ioaskquit(void);
+void ionoquit(void);
+void losermsg(const PLANE *p, const char *msg);
+
+/* misc */
+void		addplane(void);
 void		append(LIST *, PLANE *);
 void		check_adir(int, int, int);
-void		check_edge(int, int);
-void		check_edir(int, int, int);
-void		check_line(int, int, int, int);
-void		check_linepoint(int, int);
-void		check_point(int, int);
-int		checkdefs(void);
-int		compar(const void *, const void *);
 void		delete(LIST *, PLANE *);
-int		dir_deg(int);
 int		dir_no(int);
 void		done_screen(void);
 void		draw_all(void);
-void		draw_line(WINDOW *, int, int, int, int, const char *);
 void		erase_all(void);
 int		getAChar(void);
 int		getcommand(void);
-int		gettoken(void);
 void		init_gr(void);
 void		ioaddstr(int, const char *);
 void		ioclrtobot(void);
 void		ioclrtoeol(int);
 void		ioerror(int, int, const char *);
 void		iomove(int);
-int		list_games(void);
 int		log_score(int);
-void		log_score_quit(int) __attribute__((__noreturn__));
-void		loser(const PLANE *, const char *) __attribute__((__noreturn__));
+void		log_score_quit(int) __dead;
+void		loser(const PLANE *, const char *) __dead;
 int		main(int, char *[]);
 char		name(const PLANE *);
-int		next_plane(void);
-void		noise(void);
 int		number(int);
 void		open_score_file(void);
 void		planewin(void);
-int		pop(void);
-void		push(int, int);
-void		quit(int);
-int		read_file(const char *);
 void		redraw(void);
-void		rezero(void);
 void		setup_screen(const C_SCREEN *);
-int		too_close(const PLANE *p1, const PLANE *p2, int);
 void		update(int);
-int		yyerror(const char *);
 int		yylex(void);
 #ifndef YYEMPTY
 int		yyparse(void);
 #endif
-const char     *Left(int);
-const char     *Right(int);
-const char     *airport(int);
-const char     *beacon(int);
-const char     *benum(int);
-const char     *circle(int);
-const char     *climb(int);
 const char     *command(const PLANE *);
-const char     *default_game(void);
-const char     *delayb(int);
-const char     *descend(int);
-const char     *ex_it(int);
 PLANE	       *findplane(int);
-const char     *ignore(int);
-const char     *left(int);
-const char     *mark(int);
 PLANE	       *newplane(void);
-const char     *okay_game(const char *);
-const char     *rel_dir(int);
-const char     *right(int);
-const char     *setalt(int);
-const char     *setplane(int);
-const char     *setrelalt(int);
-const char     *timestr(int);
-const char     *to_dir(int);
-const char     *turn(int);
-const char     *unmark(int);

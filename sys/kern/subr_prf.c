@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prf.c,v 1.116 2008/02/19 07:46:51 dogcow Exp $	*/
+/*	$NetBSD: subr_prf.c,v 1.171 2018/06/03 15:26:03 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1988, 1991, 1993
@@ -37,13 +37,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.116 2008/02/19 07:46:51 dogcow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.171 2018/06/03 15:26:03 jakllsch Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 #include "opt_kgdb.h"
-#include "opt_multiprocessor.h"
 #include "opt_dump.h"
+#include "opt_rnd_printf.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/stdint.h>
@@ -58,41 +60,32 @@ __KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.116 2008/02/19 07:46:51 dogcow Exp $"
 #include <sys/file.h>
 #include <sys/tty.h>
 #include <sys/tprintf.h>
+#include <sys/spldebug.h>
 #include <sys/syslog.h>
-#include <sys/malloc.h>
 #include <sys/kprintf.h>
 #include <sys/atomic.h>
+#include <sys/kernel.h>
 #include <sys/cpu.h>
+#include <sys/sha2.h>
+#include <sys/rndsource.h>
 
 #include <dev/cons.h>
 
 #include <net/if.h>
 
-#ifdef DDB
-#include <ddb/ddbvar.h>
-#include <machine/db_machdep.h>
-#include <ddb/db_command.h>
-#include <ddb/db_interface.h>
-#endif
-
 #ifdef IPKDB
 #include <ipkdb/ipkdb.h>
 #endif
 
-struct simplelock kprintf_slock = SIMPLELOCK_INITIALIZER;
-
-/*
- * note that stdarg.h and the ansi style va_start macro is used for both
- * ansi and traditional c complers.
- * XXX: this requires that stdarg.h define: va_alist and va_dcl
- */
-#include <machine/stdarg.h>
-
+static kmutex_t kprintf_mtx;
+static bool kprintf_inited = false;
 
 #ifdef KGDB
 #include <sys/kgdb.h>
 #endif
+
 #ifdef DDB
+#include <ddb/ddbvar.h>		/* db_panic */
 #include <ddb/db_output.h>	/* db_printf, db_putchar prototypes */
 #endif
 
@@ -100,6 +93,7 @@ struct simplelock kprintf_slock = SIMPLELOCK_INITIALIZER;
 /*
  * defines
  */
+#define KLOG_PRI	0x80000000
 
 
 /*
@@ -115,12 +109,22 @@ static void	 putchar(int, int, struct tty *);
 
 extern	struct tty *constty;	/* pointer to console "window" tty */
 extern	int log_open;	/* subr_log: is /dev/klog open? */
+extern	krndsource_t	rnd_printf_source;
 const	char *panicstr; /* arg to first call to panic (used as a flag
 			   to indicate that panic has already been called). */
 struct cpu_info *paniccpu;	/* cpu that first paniced */
 long	panicstart, panicend;	/* position in the msgbuf of the start and
 				   end of the formatted panicstr. */
 int	doing_shutdown;	/* set to indicate shutdown in progress */
+
+#ifdef RND_PRINTF
+static bool kprintf_inited_callout = false;
+static SHA512_CTX kprnd_sha;
+static uint8_t kprnd_accum[SHA512_DIGEST_LENGTH];
+static int kprnd_added;
+
+static struct callout kprnd_callout;
+#endif
 
 #ifndef	DUMP_ON_PANIC
 #define	DUMP_ON_PANIC	1
@@ -145,6 +149,82 @@ const char HEXDIGITS[] = "0123456789ABCDEF";
  * functions
  */
 
+#ifdef RND_PRINTF
+static void kprintf_rnd_get(size_t bytes, void *priv)
+{
+	if (kprnd_added)  {
+		KASSERT(kprintf_inited);
+		if (mutex_tryenter(&kprintf_mtx)) {
+			SHA512_Final(kprnd_accum, &kprnd_sha);
+			rnd_add_data(&rnd_printf_source,
+				     kprnd_accum, sizeof(kprnd_accum), 0);
+			kprnd_added = 0;
+			/* This, we must do, since we called _Final. */
+			SHA512_Init(&kprnd_sha);
+			/* This is optional but seems useful. */
+			SHA512_Update(&kprnd_sha, kprnd_accum,
+				      sizeof(kprnd_accum));
+			mutex_exit(&kprintf_mtx);
+		}
+	}
+}
+
+static void kprintf_rnd_callout(void *arg)
+{
+	kprintf_rnd_get(0, NULL);
+	callout_schedule(&kprnd_callout, hz);
+}
+
+#endif
+
+/*
+ * Locking is inited fairly early in MI bootstrap.  Before that
+ * prints are done unlocked.  But that doesn't really matter,
+ * since nothing can preempt us before interrupts are enabled.
+ */
+void
+kprintf_init(void)
+{
+
+	KASSERT(!kprintf_inited && cold); /* not foolproof, but ... */
+#ifdef RND_PRINTF
+	SHA512_Init(&kprnd_sha);
+#endif
+	mutex_init(&kprintf_mtx, MUTEX_DEFAULT, IPL_HIGH);
+	kprintf_inited = true;
+}
+
+#ifdef RND_PRINTF
+void
+kprintf_init_callout(void)
+{
+	KASSERT(!kprintf_inited_callout);
+	callout_init(&kprnd_callout, CALLOUT_MPSAFE);
+	callout_setfunc(&kprnd_callout, kprintf_rnd_callout, NULL);
+	callout_schedule(&kprnd_callout, hz);
+	kprintf_inited_callout = true;
+}
+#endif
+
+void
+kprintf_lock(void)
+{
+
+	if (__predict_true(kprintf_inited))
+		mutex_enter(&kprintf_mtx);
+}
+
+void
+kprintf_unlock(void)
+{
+
+	if (__predict_true(kprintf_inited)) {
+		/* assert kprintf wasn't somehow inited while we were in */
+		KASSERT(mutex_owned(&kprintf_mtx));
+		mutex_exit(&kprintf_mtx);
+	}
+}
+
 /*
  * twiddle: spin a little propellor on the console.
  */
@@ -154,77 +234,97 @@ twiddle(void)
 {
 	static const char twiddle_chars[] = "|/-\\";
 	static int pos;
-	int s;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	putchar(twiddle_chars[pos++ & 3], TOCONS, NULL);
 	putchar('\b', TOCONS, NULL);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 }
 
 /*
  * panic: handle an unresolvable fatal error
  *
  * prints "panic: <message>" and reboots.   if called twice (i.e. recursive
- * call) we avoid trying to sync the disk and just reboot (to avoid
- * recursive panics).
+ * call) we avoid trying to dump and just reboot (to avoid recursive panics).
  */
 
 void
 panic(const char *fmt, ...)
 {
+	va_list ap;
+
+	va_start(ap, fmt);
+	vpanic(fmt, ap);
+	va_end(ap);
+}
+
+void
+vpanic(const char *fmt, va_list ap)
+{
 	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci, *oci;
 	int bootopt;
-	va_list ap;
+	static char scratchstr[384]; /* stores panic message */
 
-	/*
-	 * Disable preemption.  If already panicing on another CPU, sit
-	 * here and spin until the system is rebooted.  Allow the CPU that
-	 * first paniced to panic again.
-	 */
-	crit_enter();
-	ci = curcpu();
-	oci = atomic_cas_ptr((void *)&paniccpu, NULL, ci);
-	if (oci != NULL && oci != ci) {
-		/* Give interrupts a chance to try and prevent deadlock. */
-		spl0();
-		for (;;) {
-			DELAY(10);
+	spldebug_stop();
+
+	if (lwp0.l_cpu && curlwp) {
+		/*
+		 * Disable preemption.  If already panicing on another CPU, sit
+		 * here and spin until the system is rebooted.  Allow the CPU that
+		 * first paniced to panic again.
+		 */
+		kpreempt_disable();
+		ci = curcpu();
+		oci = atomic_cas_ptr((void *)&paniccpu, NULL, ci);
+		if (oci != NULL && oci != ci) {
+			/* Give interrupts a chance to try and prevent deadlock. */
+			for (;;) {
+#ifndef _RUMPKERNEL /* XXXpooka: temporary build fix, see kern/40505 */
+				DELAY(10);
+#endif /* _RUMPKERNEL */
+			}
+		}
+
+		/*
+		 * Convert the current thread to a bound thread and prevent all
+		 * CPUs from scheduling unbound jobs.  Do so without taking any
+		 * locks.
+		 */
+		curlwp->l_pflag |= LP_BOUND;
+		for (CPU_INFO_FOREACH(cii, ci)) {
+			ci->ci_schedstate.spc_flags |= SPCF_OFFLINE;
 		}
 	}
 
-	/*
-	 * Convert the current thread to a bound thread and prevent all
-	 * CPUs from scheduling unbound jobs.  Do so without taking any
-	 * locks.
-	 */
-	curlwp->l_flag |= LW_BOUND;
-	for (CPU_INFO_FOREACH(cii, ci)) {
-		ci->ci_schedstate.spc_flags |= SPCF_OFFLINE;
-	}
+	bootopt = RB_AUTOBOOT | RB_NOSYNC;
+	if (!doing_shutdown) {
+		if (dumponpanic)
+			bootopt |= RB_DUMP;
+	} else
+		printf("Skipping crash dump on recursive panic\n");
 
-	bootopt = RB_AUTOBOOT;
-	if (dumponpanic)
-		bootopt |= RB_DUMP;
-	if (doing_shutdown)
-		bootopt |= RB_NOSYNC;
-	if (!panicstr)
-		panicstr = fmt;
 	doing_shutdown = 1;
 
-	if (msgbufenabled && msgbufp->msg_magic == MSG_MAGIC)
+	if (logenabled(msgbufp))
 		panicstart = msgbufp->msg_bufx;
 
-	va_start(ap, fmt);
 	printf("panic: ");
-	vprintf(fmt, ap);
-	printf("\n");
-	va_end(ap);
+	if (panicstr == NULL) {
+		/* first time in panic - store fmt first for precaution */
+		panicstr = fmt;
 
-	if (msgbufenabled && msgbufp->msg_magic == MSG_MAGIC)
+		vsnprintf(scratchstr, sizeof(scratchstr), fmt, ap);
+		printf("%s", scratchstr);
+		panicstr = scratchstr;
+	} else {
+		vprintf(fmt, ap);
+	}
+	printf("\n");
+
+	if (logenabled(msgbufp))
 		panicend = msgbufp->msg_bufx;
 
 #ifdef IPKDB
@@ -238,24 +338,7 @@ panic(const char *fmt, ...)
 		kdbpanic();
 #endif
 #ifdef DDB
-	if (db_onpanic == 1)
-		Debugger();
-	else if (db_onpanic >= 0) {
-		static int intrace = 0;
-
-		if (intrace == 0) {
-			intrace = 1;
-			printf("Begin traceback...\n");
-			db_stack_trace_print(
-			    (db_expr_t)(intptr_t)__builtin_frame_address(0),
-			    true, 65535, "", printf);
-			printf("End traceback...\n");
-			intrace = 0;
-		} else
-			printf("Faulted in mid-traceback; aborting...");
-		if (db_onpanic == 2)
-			Debugger();
-	}
+	db_panic();
 #endif
 	cpu_reboot(bootopt, NULL);
 }
@@ -274,10 +357,9 @@ panic(const char *fmt, ...)
 void
 log(int level, const char *fmt, ...)
 {
-	int s;
 	va_list ap;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	klogpri(level);		/* log the level first */
 	va_start(ap, fmt);
@@ -289,28 +371,30 @@ log(int level, const char *fmt, ...)
 		va_end(ap);
 	}
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 
 	logwakeup();		/* wake up anyone waiting for log msgs */
 }
 
 /*
- * vlog: write to the log buffer [already have va_alist]
+ * vlog: write to the log buffer [already have va_list]
  */
 
 void
 vlog(int level, const char *fmt, va_list ap)
 {
-	int s;
+	va_list cap;
 
-	KPRINTF_MUTEX_ENTER(s);
+	va_copy(cap, ap);
+	kprintf_lock();
 
 	klogpri(level);		/* log the level first */
 	kprintf(fmt, TOLOG, NULL, NULL, ap);
 	if (!log_open)
-		kprintf(fmt, TOCONS, NULL, NULL, ap);
+		kprintf(fmt, TOCONS, NULL, NULL, cap);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
+	va_end(cap);
 
 	logwakeup();		/* wake up anyone waiting for log msgs */
 }
@@ -322,11 +406,10 @@ vlog(int level, const char *fmt, va_list ap)
 void
 logpri(int level)
 {
-	int s;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 	klogpri(level);
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 }
 
 /*
@@ -335,14 +418,9 @@ logpri(int level)
 void
 klogpri(int level)
 {
-	char *p;
-	char snbuf[KPRINTF_BUFSIZE];
+	KASSERT((level & KLOG_PRI) == 0);
 
-	putchar('<', TOLOG, NULL);
-	snprintf(snbuf, sizeof(snbuf), "%d", level);
-	for (p = snbuf ; *p ; p++)
-		putchar(*p, TOLOG, NULL);
-	putchar('>', TOLOG, NULL);
+	putchar(level | KLOG_PRI, TOLOG, NULL);
 }
 
 /*
@@ -352,10 +430,9 @@ klogpri(int level)
 void
 addlog(const char *fmt, ...)
 {
-	int s;
 	va_list ap;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	va_start(ap, fmt);
 	kprintf(fmt, TOLOG, NULL, NULL, ap);
@@ -366,25 +443,17 @@ addlog(const char *fmt, ...)
 		va_end(ap);
 	}
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 
 	logwakeup();
 }
 
-
-/*
- * putchar: print a single character on console or user terminal.
- *
- * => if console, then the last MSGBUFS chars are saved in msgbuf
- *	for inspection later (e.g. dmesg/syslog)
- * => we must already be in the mutex!
- */
 static void
-putchar(int c, int flags, struct tty *tp)
+putone(int c, int flags, struct tty *tp)
 {
-
 	if (panicstr)
 		constty = NULL;
+
 	if ((flags & TOCONS) && tp == NULL && constty) {
 		tp = constty;
 		flags |= TOTTY;
@@ -398,10 +467,118 @@ putchar(int c, int flags, struct tty *tp)
 	    	logputchar(c);
 	if ((flags & TOCONS) && constty == NULL && c != '\0')
 		(*v_putc)(c);
-#ifdef DDB
-	if (flags & TODDB)
-		db_putchar(c);
+}
+
+static void
+putlogpri(int level)
+{
+	char *p;
+	char snbuf[KPRINTF_BUFSIZE];
+
+	putone('<', TOLOG, NULL);
+	snprintf(snbuf, sizeof(snbuf), "%d", level);
+	for (p = snbuf ; *p ; p++)
+		putone(*p, TOLOG, NULL);
+	putone('>', TOLOG, NULL);
+}
+
+#ifndef KLOG_NOTIMESTAMP
+static int needtstamp = 1;
+int log_ts_prec = 7;
+
+static void
+addtstamp(int flags, struct tty *tp)
+{
+	char buf[64];
+	struct timespec ts;
+	int n, prec;
+	long fsec;
+
+	prec = log_ts_prec;
+	if (prec < 0) {
+		prec = 0;
+		log_ts_prec = prec;
+	} else if (prec > 9) {
+		prec = 9;
+		log_ts_prec = prec;
+	}
+
+	getnanouptime(&ts);
+
+	for (n = prec, fsec = ts.tv_nsec; n < 8; n++)
+		fsec /= 10;
+	if (n < 9)
+		fsec = (fsec / 10) + ((fsec % 10) >= 5);
+
+	n = snprintf(buf, sizeof(buf), "[% 4jd.%.*ld] ",
+	    (intmax_t)ts.tv_sec, prec, fsec);
+
+	for (int i = 0; i < n; i++)
+		putone(buf[i], flags, tp);
+}
 #endif
+
+/*
+ * putchar: print a single character on console or user terminal.
+ *
+ * => if console, then the last MSGBUFS chars are saved in msgbuf
+ *	for inspection later (e.g. dmesg/syslog)
+ * => we must already be in the mutex!
+ */
+static void
+putchar(int c, int flags, struct tty *tp)
+{
+	if (c & KLOG_PRI) {
+		putlogpri(c & ~KLOG_PRI);
+		return;
+	}
+
+#ifndef KLOG_NOTIMESTAMP
+	if (c != '\0' && c != '\n' && needtstamp) {
+		addtstamp(flags, tp);
+		needtstamp = 0;
+	}
+
+	if (c == '\n')
+		needtstamp = 1;
+#endif
+	putone(c, flags, tp);
+
+#ifdef DDB
+	if (flags & TODDB) {
+		db_putchar(c);
+		return;
+	}
+#endif
+
+#ifdef RND_PRINTF
+	if (__predict_true(kprintf_inited)) {
+		static uint8_t rbuf[SHA512_BLOCK_LENGTH];
+		static int cursor;
+
+		rbuf[cursor] = c;
+		if (cursor == sizeof(rbuf) - 1) {
+			SHA512_Update(&kprnd_sha, rbuf, sizeof(rbuf));
+			kprnd_added++;
+			cursor = 0;
+		} else {
+			cursor++;
+		}
+	}
+#endif
+}
+
+/*
+ * tablefull: warn that a system table is full
+ */
+
+void
+tablefull(const char *tab, const char *hint)
+{
+	if (hint)
+		log(LOG_ERR, "%s: table is full - %s\n", tab, hint);
+	else
+		log(LOG_ERR, "%s: table is full\n", tab);
 }
 
 
@@ -419,7 +596,7 @@ uprintf(const char *fmt, ...)
 	struct proc *p = curproc;
 	va_list ap;
 
-	/* mutex_enter(&proclist_mutex); XXXSMP */
+	/* mutex_enter(proc_lock); XXXSMP */
 
 	if (p->p_lflag & PL_CONTROLT && p->p_session->s_ttyvp) {
 		/* No mutex needed; going to process TTY. */
@@ -428,7 +605,7 @@ uprintf(const char *fmt, ...)
 		va_end(ap);
 	}
 
-	/* mutex_exit(&proclist_mutex); XXXSMP */
+	/* mutex_exit(proc_lock); XXXSMP */
 }
 
 void
@@ -467,12 +644,12 @@ tprintf_open(struct proc *p)
 
 	cookie = NULL;
 
-	/* mutex_enter(&proclist_mutex); XXXSMP */
+	mutex_enter(proc_lock);
 	if (p->p_lflag & PL_CONTROLT && p->p_session->s_ttyvp) {
-		SESSHOLD(p->p_session);
+		proc_sesshold(p->p_session);
 		cookie = (tpr_t)p->p_session;
 	}
-	/* mutex_exit(&proclist_mutex) XXXSMP */
+	mutex_exit(proc_lock);
 
 	return cookie;
 }
@@ -485,8 +662,11 @@ void
 tprintf_close(tpr_t sess)
 {
 
-	if (sess)
-		SESSRELE((struct session *) sess);
+	if (sess) {
+		mutex_enter(proc_lock);
+		/* Releases proc_lock. */
+		proc_sessrele((struct session *)sess);
+	}
 }
 
 /*
@@ -500,24 +680,24 @@ tprintf(tpr_t tpr, const char *fmt, ...)
 {
 	struct session *sess = (struct session *)tpr;
 	struct tty *tp = NULL;
-	int s, flags = TOLOG;
+	int flags = TOLOG;
 	va_list ap;
 
-	/* mutex_enter(&proclist_mutex); XXXSMP */
+	/* mutex_enter(proc_lock); XXXSMP */
 	if (sess && sess->s_ttyvp && ttycheckoutq(sess->s_ttyp, 0)) {
 		flags |= TOTTY;
 		tp = sess->s_ttyp;
 	}
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	klogpri(LOG_INFO);
 	va_start(ap, fmt);
 	kprintf(fmt, flags, tp, NULL, ap);
 	va_end(ap);
 
-	KPRINTF_MUTEX_EXIT(s);
-	/* mutex_exit(&proclist_mutex);	XXXSMP */
+	kprintf_unlock();
+	/* mutex_exit(proc_lock);	XXXSMP */
 
 	logwakeup();
 }
@@ -561,17 +741,20 @@ db_printf(const char *fmt, ...)
 		va_start(ap, fmt);
 		kprintf(fmt, TOLOG, NULL, NULL, ap);
 		va_end(ap);
-	};
+	}
 }
 
 void
 db_vprintf(const char *fmt, va_list ap)
 {
+	va_list cap;
 
+	va_copy(cap, ap);
 	/* No mutex needed; DDB pauses all processors. */
 	kprintf(fmt, TODDB, NULL, NULL, ap);
 	if (db_tee_msgbuf)
-		kprintf(fmt, TOLOG, NULL, NULL, ap);
+		kprintf(fmt, TOLOG, NULL, NULL, cap);
+	va_end(cap);
 }
 
 #endif /* DDB */
@@ -600,19 +783,19 @@ kprintf_internal(const char *fmt, int oflags, void *vp, char *sbuf, ...)
 static void
 aprint_normal_internal(const char *prefix, const char *fmt, va_list ap)
 {
-	int s, flags = TOLOG;
+	int flags = TOLOG;
 
 	if ((boothowto & (AB_SILENT|AB_QUIET)) == 0 ||
 	    (boothowto & AB_VERBOSE) != 0)
 		flags |= TOCONS;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	if (prefix)
 		kprintf_internal("%s: ", flags, NULL, NULL, prefix);
 	kprintf(fmt, flags, NULL, NULL, ap);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 
 	if (!panicstr)
 		logwakeup();
@@ -659,14 +842,14 @@ static int aprint_error_count;
 int
 aprint_get_error_count(void)
 {
-	int count, s;
+	int count;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	count = aprint_error_count;
 	aprint_error_count = 0;
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 
 	return (count);
 }
@@ -674,21 +857,22 @@ aprint_get_error_count(void)
 static void
 aprint_error_internal(const char *prefix, const char *fmt, va_list ap)
 {
-	int s, flags = TOLOG;
+	int flags = TOLOG;
 
 	if ((boothowto & (AB_SILENT|AB_QUIET)) == 0 ||
 	    (boothowto & AB_VERBOSE) != 0)
 		flags |= TOCONS;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	aprint_error_count++;
 
 	if (prefix)
 		kprintf_internal("%s: ", flags, NULL, NULL, prefix);
+	kprintf_internal("autoconfiguration error: ", TOLOG, NULL, NULL);
 	kprintf(fmt, flags, NULL, NULL, ap);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 
 	if (!panicstr)
 		logwakeup();
@@ -731,18 +915,16 @@ aprint_error_ifnet(struct ifnet *ifp, const char *fmt, ...)
 static void
 aprint_naive_internal(const char *prefix, const char *fmt, va_list ap)
 {
-	int s;
-
 	if ((boothowto & (AB_QUIET|AB_SILENT|AB_VERBOSE)) != AB_QUIET)
 		return;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	if (prefix)
 		kprintf_internal("%s: ", TOCONS, NULL, NULL, prefix);
 	kprintf(fmt, TOCONS, NULL, NULL, ap);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 }
 
 void
@@ -782,18 +964,18 @@ aprint_naive_ifnet(struct ifnet *ifp, const char *fmt, ...)
 static void
 aprint_verbose_internal(const char *prefix, const char *fmt, va_list ap)
 {
-	int s, flags = TOLOG;
+	int flags = TOLOG;
 
 	if (boothowto & AB_VERBOSE)
 		flags |= TOCONS;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	if (prefix)
 		kprintf_internal("%s: ", flags, NULL, NULL, prefix);
 	kprintf(fmt, flags, NULL, NULL, ap);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 
 	if (!panicstr)
 		logwakeup();
@@ -835,18 +1017,16 @@ aprint_verbose_ifnet(struct ifnet *ifp, const char *fmt, ...)
 static void
 aprint_debug_internal(const char *prefix, const char *fmt, va_list ap)
 {
-	int s;
-
 	if ((boothowto & AB_DEBUG) == 0)
 		return;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	if (prefix)
 		kprintf_internal("%s: ", TOCONS | TOLOG, NULL, NULL, prefix);
 	kprintf(fmt, TOCONS | TOLOG, NULL, NULL, ap);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 }
 
 void
@@ -879,6 +1059,20 @@ aprint_debug_ifnet(struct ifnet *ifp, const char *fmt, ...)
 	va_end(ap);
 }
 
+void
+printf_tolog(const char *fmt, ...)
+{
+	va_list ap;
+
+	kprintf_lock();
+
+	va_start(ap, fmt);
+	kprintf(fmt, TOLOG, NULL, NULL, ap);
+	va_end(ap);
+
+	kprintf_unlock();
+}
+
 /*
  * printf_nolog: Like printf(), but does not send message to the log.
  */
@@ -887,15 +1081,14 @@ void
 printf_nolog(const char *fmt, ...)
 {
 	va_list ap;
-	int s;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	va_start(ap, fmt);
 	kprintf(fmt, TOCONS, NULL, NULL, ap);
 	va_end(ap);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 }
 
 /*
@@ -909,15 +1102,14 @@ void
 printf(const char *fmt, ...)
 {
 	va_list ap;
-	int s;
 
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	va_start(ap, fmt);
 	kprintf(fmt, TOCONS | TOLOG, NULL, NULL, ap);
 	va_end(ap);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 
 	if (!panicstr)
 		logwakeup();
@@ -925,52 +1117,20 @@ printf(const char *fmt, ...)
 
 /*
  * vprintf: print a message to the console and the log [already have
- *	va_alist]
+ *	va_list]
  */
 
 void
 vprintf(const char *fmt, va_list ap)
 {
-	int s;
-
-	KPRINTF_MUTEX_ENTER(s);
+	kprintf_lock();
 
 	kprintf(fmt, TOCONS | TOLOG, NULL, NULL, ap);
 
-	KPRINTF_MUTEX_EXIT(s);
+	kprintf_unlock();
 
 	if (!panicstr)
 		logwakeup();
-}
-
-/*
- * sprintf: print a message to a buffer
- */
-int
-sprintf(char *bf, const char *fmt, ...)
-{
-	int retval;
-	va_list ap;
-
-	va_start(ap, fmt);
-	retval = kprintf(fmt, TOBUFONLY, NULL, bf, ap);
-	va_end(ap);
-	*(bf + retval) = 0;	/* null terminate */
-	return(retval);
-}
-
-/*
- * vsprintf: print a message to a buffer [already have va_alist]
- */
-
-int
-vsprintf(char *bf, const char *fmt, va_list ap)
-{
-	int retval;
-
-	retval = kprintf(fmt, TOBUFONLY, NULL, bf, ap);
-	*(bf + retval) = 0;	/* null terminate */
-	return (retval);
 }
 
 /*
@@ -981,20 +1141,16 @@ snprintf(char *bf, size_t size, const char *fmt, ...)
 {
 	int retval;
 	va_list ap;
-	char *p;
 
-	if (size < 1)
-		return (-1);
-	p = bf + size - 1;
 	va_start(ap, fmt);
-	retval = kprintf(fmt, TOBUFONLY, &p, bf, ap);
+	retval = vsnprintf(bf, size, fmt, ap);
 	va_end(ap);
-	*(p) = 0;	/* null terminate */
-	return(retval);
+
+	return retval;
 }
 
 /*
- * vsnprintf: print a message to a buffer [already have va_alist]
+ * vsnprintf: print a message to a buffer [already have va_list]
  */
 int
 vsnprintf(char *bf, size_t size, const char *fmt, va_list ap)
@@ -1002,12 +1158,16 @@ vsnprintf(char *bf, size_t size, const char *fmt, va_list ap)
 	int retval;
 	char *p;
 
-	if (size < 1)
-		return (-1);
-	p = bf + size - 1;
+	p = bf + size;
 	retval = kprintf(fmt, TOBUFONLY, &p, bf, ap);
-	*(p) = 0;	/* null terminate */
-	return(retval);
+	if (bf && size > 0) {
+		/* nul terminate */
+		if (size <= (size_t)retval)
+			bf[size - 1] = '\0';
+		else
+			bf[retval] = '\0';
+	}
+	return retval;
 }
 
 /*
@@ -1065,14 +1225,23 @@ vsnprintf(char *bf, size_t size, const char *fmt, va_list ap)
 
 #define KPRINTF_PUTCHAR(C) {						\
 	if (oflags == TOBUFONLY) {					\
-		if ((vp != NULL) && (sbuf == tailp)) {			\
-			ret += 1;		/* indicate error */	\
-			goto overflow;					\
-		}							\
-		*sbuf++ = (C);						\
+		if (sbuf && ((vp == NULL) || (sbuf < tailp))) 		\
+			*sbuf++ = (C);					\
 	} else {							\
-		putchar((C), oflags, (struct tty *)vp);			\
+		putchar((C), oflags, vp);				\
 	}								\
+}
+
+void
+device_printf(device_t dev, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	printf("%s: ", device_xname(dev));
+	vprintf(fmt, ap);
+	va_end(ap);
+	return;
 }
 
 /*
@@ -1100,9 +1269,10 @@ kprintf(const char *fmt0, int oflags, void *vp, char *sbuf, va_list ap)
 	char bf[KPRINTF_BUFSIZE]; /* space for %c, %[diouxX] */
 	char *tailp;		/* tail pointer for snprintf */
 
-	tailp = NULL;	/* XXX: shutup gcc */
 	if (oflags == TOBUFONLY && (vp != NULL))
 		tailp = *(char **)vp;
+	else
+		tailp = NULL;
 
 	cp = NULL;	/* XXX: shutup gcc */
 	size = 0;	/* XXX: shutup gcc */
@@ -1116,9 +1286,9 @@ kprintf(const char *fmt0, int oflags, void *vp, char *sbuf, va_list ap)
 	 * Scan the format for conversions (`%' character).
 	 */
 	for (;;) {
-		while (*fmt != '%' && *fmt) {
+		for (; *fmt != '%' && *fmt; fmt++) {
 			ret++;
-			KPRINTF_PUTCHAR(*fmt++);
+			KPRINTF_PUTCHAR(*fmt);
 		}
 		if (*fmt == 0)
 			goto done;
@@ -1431,8 +1601,8 @@ number:			if ((dprec = prec) >= 0)
 			KPRINTF_PUTCHAR('0');
 
 		/* the string or number proper */
-		while (size--)
-			KPRINTF_PUTCHAR(*cp++);
+		for (; size--; cp++)
+			KPRINTF_PUTCHAR(*cp);
 		/* left-adjusting padding (always blank) */
 		if (flags & LADJUST) {
 			n = width - realsz;
@@ -1445,7 +1615,13 @@ done:
 	if ((oflags == TOBUFONLY) && (vp != NULL))
 		*(char **)vp = sbuf;
 	(*v_flush)();
-overflow:
-	return (ret);
-	/* NOTREACHED */
+
+#ifdef RND_PRINTF
+	if (!cold) {
+		struct timespec ts;
+		(void)nanotime(&ts);
+		SHA512_Update(&kprnd_sha, (char *)&ts, sizeof(ts));
+	}
+#endif
+	return ret;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: time.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
+/*	$NetBSD: time.c,v 1.4 2016/08/04 16:22:40 scole Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000
@@ -45,6 +45,7 @@
 //#include <time.h>
 #include <sys/time.h>
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
 
 #include "bootstrap.h"
 #include "libski.h"
@@ -174,4 +175,10 @@ time(time_t *tloc)
 	ssc((u_int64_t) &time, 0, 0, 0, SSC_GET_RTC);
 
 	return *tloc = EfiTimeToUnixTime(&time);
+}
+
+time_t
+getsecs(void)
+{
+    return time(0);
 }

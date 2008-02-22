@@ -1,4 +1,4 @@
-.\"	$NetBSD: time.1,v 1.18 2003/08/07 11:16:15 agc Exp $
+.\"	$NetBSD: time.1,v 1.28 2017/07/15 14:40:36 wiz Exp $
 .\"
 .\" Copyright (c) 1980, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)time.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd June 6, 1993
+.Dd July 15, 2017
 .Dt TIME 1
 .Os
 .Sh NAME
@@ -37,8 +37,9 @@
 .Nd time command execution
 .Sh SYNOPSIS
 .Nm
-.Op Fl lp
-.Ar utility
+.Op Fl clp
+.Op Fl f Ar fmt
+.Ar command
 .Op Ar argument ...
 .Sh DESCRIPTION
 The
@@ -46,27 +47,80 @@ The
 utility
 executes and
 times
-.Ar utility .
-After the
-.Ar utility
-finishes,
+.Ar command .
+After the command finishes,
 .Nm
-writes the total time elapsed,
-the time consumed by system overhead,
-and the time used to execute
-.Ar utility
+writes the total elapsed time (wall clock time),
+.Pq Dq real ,
+the CPU time spent executing
+.Ar command
+at user level
+.Pq Dq user ,
+and the CPU time spent executing in the operating system kernel
+.Pq Dq sys ,
 to the standard error stream.
 Times are reported in seconds.
 .Pp
 Available options:
 .Bl -tag -width Ds
+.It Fl c
+Displays information in the format used by default the
+.Nm
+builtin of
+.Xr csh 1
+uses (%Uu %Ss %E %P %X+%Dk %I+%Oio %Fpf+%Ww).
+.It Fl f
+Specify a time format using the
+.Xr csh 1
+.Nm
+builtin syntax.
+The following sequences may be used in the format string:
+.Pp
+.Bl -tag -width 4n -compact
+.It \&%U
+The time the process spent in user mode in cpu seconds.
+.It \&%S
+The time the process spent in kernel mode in cpu seconds.
+.It \&%E
+The elapsed (wall clock) time in seconds.
+.It \&%P
+The CPU percentage computed as (%U + %S) / %E.
+.It \&%W
+Number of times the process was swapped.
+.It \&%X
+The average amount in (shared) text space used in Kbytes.
+.It \&%D
+The average amount in (unshared) data/stack space used in Kbytes.
+.It \&%K
+The total space used (%X + %D) in Kbytes.
+.It \&%M
+The maximum memory the process had in use at any time in Kbytes.
+.It \&%F
+The number of major page faults (page needed to be brought from disk).
+.It \&%R
+The number of minor page faults.
+.It \&%I
+The number of input operations.
+.It \&%O
+The number of output operations.
+.It \&%r
+The number of socket messages received.
+.It \&%s
+The number of socket messages sent.
+.It \&%k
+The number of signals received.
+.It \&%w
+The number of voluntary context switches (waits).
+.It \&%c
+The number of involuntary context switches.
+.El
 .It Fl l
 Lists resource utilization information.
 The contents of the
-.Ar utility
-process'
+.Ar command
+process's
 .Em rusage
-structure are printed, see below.
+structure are printed; see below.
 .It Fl p
 The output is formatted as specified by
 .St -p1003.2-92 .
@@ -76,7 +130,7 @@ Some shells, such as
 .Xr csh 1
 and
 .Xr ksh 1 ,
-have their own and syntactically different builtin version of
+have their own and syntactically different built-in version of
 .Nm .
 The utility described here
 is available as
@@ -86,7 +140,7 @@ to users of these shells.
 If the
 .Fl l
 option is given, the following resource usage
-informations are displayed
+information is displayed
 in addition to the timing information:
 .Bl -item -offset indent -compact
 .It
@@ -118,6 +172,14 @@ voluntary context switches
 .It
 involuntary context switches
 .El
+Resource usage is the total for the execution of
+.Ar command
+and any child processes it spawns, as per
+.Xr wait4 2 .
+.Sh FILES
+.Bl -tag -width Xsys/resource.hX -compact
+.It Aq sys/resource.h
+.El
 .Sh EXIT STATUS
 The
 .Nm
@@ -129,26 +191,24 @@ An error occurred in the
 utility.
 .It 126
 The
-.Ar utility
+.Ar command
 was found but could not be invoked.
 .It 127
 The
-.Ar utility
+.Ar command
 could not be found.
 .El
 .Pp
 Otherwise, the exit status of
 .Nm
 will be that of
-.Ar utility .
-.Sh FILES
-.Bl -tag -width \*[Lt]sys/resource.h\*[Gt] -compact
-.It \*[Lt]sys/resource.h\*[Gt]
-.El
+.Ar command .
 .Sh SEE ALSO
 .Xr csh 1 ,
 .Xr ksh 1 ,
-.Xr getrusage 2
+.Xr clock_gettime 2 ,
+.Xr getrusage 2 ,
+.Xr wait4 2
 .Sh STANDARDS
 The
 .Nm

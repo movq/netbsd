@@ -18,7 +18,6 @@ base-crypto-root base-sys-root
 base-crypto-shlib base-sys-usr
 base-cxx-usr base-c-usr
 base-debug-bin base-sys-usr
-base-dev-lkm base-sys-usr
 base-dhclient-root base-sys-root
 base-dhcpd-bin base-sys-share
 base-dhcpd-bin base-sys-usr
@@ -38,13 +37,13 @@ base-hesiod-bin base-sys-usr
 base-htmldoc-share base-sys-share
 base-i18n-root base-sys-usr
 base-i18n-shlib base-i18n-root
-base-ipf-lkm base-sys-usr
 base-isdn-bin base-sys-usr
 base-isdn-examples base-sys-share
 base-krb5-bin base-sys-usr
 base-krb5-examples base-sys-share
 base-krb5-root base-sys-root
 base-krb5-shlib base-sys-usr
+base-libsaslc-examples base-sys-share
 base-locale-Pig base-locale-share
 base-locale-bg base-locale-share
 base-locale-bin base-sys-usr
@@ -95,7 +94,6 @@ base-man-bin base-sys-usr
 base-man-share base-sys-share
 base-miscfs-examples base-sys-share
 base-miscfs-root base-sys-root
-base-net-lkm base-sys-usr
 base-net-shlib base-sys-usr
 base-netutil-bin base-sys-usr
 base-netutil-examples base-sys-share
@@ -115,7 +113,6 @@ base-postfix-examples base-sys-share
 base-postfix-root base-sys-root
 base-postfix-usr base-sys-usr
 base-ppp-bin base-sys-usr
-base-ppp-lkm base-sys-usr
 base-psd-share base-sys-share
 base-rcs-bin base-sys-usr
 base-reference-share base-termcap-share
@@ -139,7 +136,6 @@ base-smm-share base-sys-share
 base-sup-bin base-sys-usr
 base-sup-examples base-sys-share
 base-sys-examples base-sys-share
-base-sys-lkm base-sys-usr
 base-sys-share base-sys-root
 base-sys-shlib base-sys-usr
 base-sys-usr base-sys-root
@@ -169,6 +165,7 @@ base-texinfo_locale-tr base-locale-tr
 base-texinfo_locale-zh base-locale-zh
 base-timed-bin base-sys-usr
 base-tn3270-bin base-sys-usr
+base-tpm-bin base-sys-usr
 base-usd-share base-sys-share
 base-util-bin base-sys-usr
 base-util-root base-sys-root
@@ -186,7 +183,6 @@ base-util_locale-id base-locale-id
 base-util_locale-it base-locale-it
 base-util_locale-ja base-locale-ja
 base-util_locale-sv base-locale-sv
-base-vfs-lkm base-sys-usr
 base-x11-root base-sys-root
 comp-c-bin base-sys-usr
 comp-c-catman base-man-share
@@ -270,6 +266,11 @@ comp-sys-man base-man-share
 comp-sys-root base-sys-root
 comp-sysutil-catman base-man-share
 comp-sysutil-man base-man-share
+comp-tpm-catman	base-man-share
+comp-tpm-htmlman	base-man-share
+comp-tpm-debug	base-sys-usr
+comp-tpm-lib	base-sys-usr
+comp-tpm-man	base-man-share
 comp-util-bin base-sys-usr
 comp-util-catman base-man-share
 comp-util-man base-man-share
@@ -292,6 +293,8 @@ etc-games-scores base-games-root
 etc-ipf-rc base-sys-root
 etc-isdn-rc base-sys-root
 etc-krb5-rc base-sys-root
+etc-libsaslc-etc base-sys-root
+etc-libsaslc-postfix base-sys-root
 etc-lpr-etc base-sys-root
 etc-lpr-log base-sys-root
 etc-lpr-rc base-sys-root
@@ -461,6 +464,9 @@ man-timed-catman base-man-share
 man-timed-man base-man-share
 man-tn3270-catman base-man-share
 man-tn3270-man base-man-share
+man-tpm-catman	base-man-share
+man-tpm-htmlman	base-man-share
+man-tpm-man	base-man-share
 man-util-catman base-man-share
 man-util-info base-texinfo-share
 man-util-man base-man-share
@@ -472,6 +478,7 @@ misc-dhcpd-examples base-dhcpd-examples
 misc-fstab-examples base-fstab-examples
 misc-isdn-examples base-isdn-examples
 misc-krb5-examples base-krb5-examples
+misc-libsaslc-examples base-libsaslc-examples
 misc-netutil-examples base-netutil-examples
 misc-ntp-htmldoc base-man-share
 misc-postfix-examples base-postfix-examples

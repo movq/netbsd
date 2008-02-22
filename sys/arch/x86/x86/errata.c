@@ -1,4 +1,4 @@
-/*	$NetBSD: errata.c,v 1.13 2007/11/14 17:55:00 ad Exp $	*/
+/*	$NetBSD: errata.c,v 1.23 2016/01/05 10:20:22 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: errata.c,v 1.13 2007/11/14 17:55:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: errata.c,v 1.23 2016/01/05 10:20:22 hannken Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -76,6 +69,8 @@ typedef struct errata {
 typedef enum cpurev {
 	BH_E4, CH_CG, CH_D0, DH_CG, DH_D0, DH_E3, DH_E6, JH_E1,
 	JH_E6, SH_B0, SH_B3, SH_C0, SH_CG, SH_D0, SH_E4, SH_E5,
+	DR_BA, DR_B2, DR_B3, RB_C2, RB_C3, BL_C2, BL_C3, DA_C2,
+	DA_C3, HY_D0, HY_D1, HY_D1_G34R1,  PH_E0, LN_B0,
 	OINK
 } cpurev_t;
 
@@ -90,6 +85,11 @@ static const u_int cpurevs[] = {
 	SH_CG, 0x0000f4a, SH_CG, 0x0000f5a, SH_CG, 0x0000f7a,
 	SH_D0, 0x0010f40, SH_D0, 0x0010f50, SH_D0, 0x0010f70,
 	SH_E4, 0x0020f51, SH_E4, 0x0020f71, SH_E5, 0x0020f42,
+	DR_BA, 0x0100f2a, DR_B2, 0x0100f22, DR_B3, 0x0100f23,
+	RB_C2, 0x0100f42, RB_C3, 0x0100f43, BL_C2, 0x0100f52,
+	BL_C3, 0x0100f53, DA_C2, 0x0100f62, DA_C3, 0x0100f63,
+	HY_D0, 0x0100f80, HY_D1, 0x0100f81, HY_D1_G34R1, 0x0100f91,
+	PH_E0, 0x0100fa0, LN_B0, 0x0300f10,
 	OINK
 };
 
@@ -127,6 +127,19 @@ static const uint8_t x86_errata_set8[] = {
 	DH_D0, DH_D0, DH_E3, DH_E3, DH_E6, DH_E6, JH_E1, JH_E6,
 	JH_E6, SH_B0, SH_B3, SH_C0, SH_C0, SH_CG, SH_CG, SH_CG, 
 	SH_D0, SH_D0, SH_D0, SH_E4, SH_E4, SH_E5, OINK
+};
+
+static const uint8_t x86_errata_set9[] = {
+	DR_BA, DR_B2, OINK
+};
+
+static const uint8_t x86_errata_set10[] = {
+	DR_BA, DR_B2, DR_B3, OINK
+};
+
+static const uint8_t x86_errata_set11[] = {
+	DR_BA, DR_B2, DR_B3, RB_C2, RB_C3, BL_C2, BL_C3, DA_C2,
+	DA_C3, HY_D0, HY_D1, HY_D1_G34R1,  PH_E0, LN_B0, OINK
 };
 
 static bool x86_errata_setmsr(struct cpu_info *, errata_t *);
@@ -230,6 +243,48 @@ static errata_t errata[] = {
 		122, FALSE, MSR_HWCR, x86_errata_set4,
 		x86_errata_setmsr, HWCR_FFDIS
 	},
+	/*
+	 * 254: Internal Resource Livelock Involving Cached TLB Reload
+	 */
+	{
+		254, FALSE, MSR_BU_CFG, x86_errata_set9,
+		x86_errata_testmsr, BU_CFG_ERRATA_254
+	},
+	/*
+	 * 261: Processor May Stall Entering Stop-Grant Due to Pending Data
+	 * Cache Scrub
+	 */
+	{
+		261, FALSE, MSR_DC_CFG, x86_errata_set10,
+		x86_errata_testmsr, DC_CFG_ERRATA_261
+	},
+	/*
+	 * 298: L2 Eviction May Occur During Processor Operation To Set
+	 * Accessed or Dirty Bit
+	 */
+	{
+		298, FALSE, MSR_HWCR, x86_errata_set9,
+		x86_errata_testmsr, HWCR_TLBCACHEDIS
+	},
+	{
+		298, FALSE, MSR_BU_CFG, x86_errata_set9,
+		x86_errata_testmsr, BU_CFG_ERRATA_298
+	},
+	/*
+	 * 309: Processor Core May Execute Incorrect Instructions on
+	 * Concurrent L2 and Northbridge Response
+	 */
+	{
+		309, FALSE, MSR_BU_CFG, x86_errata_set9,
+		x86_errata_testmsr, BU_CFG_ERRATA_309
+	},
+	/*
+	 * 721: Processor May Incorrectly Update Stack Pointer
+	 */
+	{
+		721, FALSE, MSR_DE_CFG, x86_errata_set11,
+		x86_errata_setmsr, DE_CFG_ERRATA_721
+	},
 };
 
 static bool 
@@ -239,7 +294,7 @@ x86_errata_testmsr(struct cpu_info *ci, errata_t *e)
 
 	(void)ci;
 
-	val = rdmsr_locked(e->e_data1, OPTERON_MSR_PASSCODE);
+	val = rdmsr_locked(e->e_data1);
 	if ((val & e->e_data2) != 0)
 		return FALSE;
 
@@ -254,12 +309,12 @@ x86_errata_setmsr(struct cpu_info *ci, errata_t *e)
 
 	(void)ci;
 
-	val = rdmsr_locked(e->e_data1, OPTERON_MSR_PASSCODE);
+	val = rdmsr_locked(e->e_data1);
 	if ((val & e->e_data2) != 0)
 		return FALSE;
-	wrmsr_locked(e->e_data1, OPTERON_MSR_PASSCODE, val | e->e_data2);
-	aprint_debug("%s: erratum %d patched\n",
-	    ci->ci_dev->dv_xname, e->e_num);
+	wrmsr_locked(e->e_data1, val | e->e_data2);
+	aprint_debug_dev(ci->ci_dev, "erratum %d patched\n",
+	    e->e_num);
 
 	return FALSE;
 }
@@ -274,6 +329,11 @@ x86_errata(void)
 	int i, j, upgrade;
 	static int again;
 
+	/* don't run if we are under a hypervisor */
+	if (cpu_feature[1] & CPUID2_RAZ)
+		return;
+
+	/* only for AMD */
 	if (cpu_vendor != CPUVENDOR_AMD)
 		return;
 
@@ -288,7 +348,7 @@ x86_errata(void)
 			break;
 	}
 
-	ex = errata + sizeof(errata) / sizeof(errata[0]);
+	ex = errata + __arraycount(errata);
 	for (upgrade = 0, e = errata; e < ex; e++) {
 		if (e->e_reported)
 			continue;
@@ -300,24 +360,24 @@ x86_errata(void)
 				continue;
 		}
 
-		aprint_debug("%s: testing for erratum %d\n",
-		    ci->ci_dev->dv_xname, e->e_num);
+		aprint_debug_dev(ci->ci_dev, "testing for erratum %d\n",
+		    e->e_num);
 
 		if (e->e_act == NULL)
 			e->e_reported = TRUE;
 		else if ((*e->e_act)(ci, e) == FALSE)
 			continue;
 
-		aprint_debug("%s: erratum %d present\n",
-		    ci->ci_dev->dv_xname, e->e_num);
+		aprint_verbose_dev(ci->ci_dev, "erratum %d present\n",
+		    e->e_num);
 		upgrade = 1;
 	}
 
 	if (upgrade && !again) {
 		again = 1;
-		aprint_normal("%s: WARNING: AMD errata present, BIOS upgrade "
-		    "may be\n", ci->ci_dev->dv_xname);
-		aprint_normal("%s: WARNING: necessary to ensure reliable "
-		    "operation\n", ci->ci_dev->dv_xname);
+		aprint_normal_dev(ci->ci_dev, "WARNING: errata present,"
+		    " BIOS upgrade may be\n");
+		aprint_normal_dev(ci->ci_dev, "WARNING: necessary to ensure"
+		    " reliable operation\n");
 	}
 }

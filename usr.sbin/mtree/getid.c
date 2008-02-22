@@ -1,4 +1,4 @@
-/*	$NetBSD: getid.c,v 1.6 2007/12/12 22:59:58 lukem Exp $	*/
+/*	$NetBSD: getid.c,v 1.10 2014/10/27 21:46:45 christos Exp $	*/
 /*	from: NetBSD: getpwent.c,v 1.48 2000/10/03 03:22:26 enami Exp */
 /*	from: NetBSD: getgrent.c,v 1.41 2002/01/12 23:51:30 lukem Exp */
 
@@ -46,13 +46,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,7 +65,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: getid.c,v 1.6 2007/12/12 22:59:58 lukem Exp $");
+__RCSID("$NetBSD: getid.c,v 1.10 2014/10/27 21:46:45 christos Exp $");
 
 #include <sys/param.h>
 
@@ -213,7 +206,12 @@ grstart(void)
 	}
 	if (grfile[0] == '\0')			/* sanity check */
 		return 0;
-	return (_gr_fp = fopen(grfile, "r")) ? 1 : 0;
+
+	_gr_fp = fopen(grfile, "r");
+	if (_gr_fp != NULL)
+		return 1;
+	warn("Can't open `%s'", grfile);
+	return 0;
 }
 
 
@@ -237,6 +235,9 @@ grscan(int search, gid_t gid, const char *name)
 				;
 			continue;
 		}
+		/* skip comments */
+		if (grline[0] == '#')
+			continue;
 		if (grmatchline(search, gid, name))
 			return 1;
 	}
@@ -354,7 +355,11 @@ pwstart(void)
 	}
 	if (pwfile[0] == '\0')			/* sanity check */
 		return 0;
-	return (_pw_fp = fopen(pwfile, "r")) ? 1 : 0;
+	_pw_fp = fopen(pwfile, "r");
+	if (_pw_fp != NULL)
+		return 1;
+	warn("Can't open `%s'", pwfile);
+	return 0;
 }
 
 
@@ -378,6 +383,9 @@ pwscan(int search, uid_t uid, const char *name)
 				;
 			continue;
 		}
+		/* skip comments */
+		if (pwline[0] == '#')
+			continue;
 		if (pwmatchline(search, uid, name))
 			return 1;
 	}

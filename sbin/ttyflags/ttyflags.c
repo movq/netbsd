@@ -1,4 +1,4 @@
-/* $NetBSD: ttyflags.c,v 1.16 2007/01/17 21:59:49 hubertf Exp $ */
+/* $NetBSD: ttyflags.c,v 1.19 2014/05/04 20:43:30 mrg Exp $ */
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -36,12 +36,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1994 Christopher G. Demetriou\n\
-	All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1994\
+ Christopher G. Demetriou.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: ttyflags.c,v 1.16 2007/01/17 21:59:49 hubertf Exp $");
+__RCSID("$NetBSD: ttyflags.c,v 1.19 2014/05/04 20:43:30 mrg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -58,12 +58,12 @@ __RCSID("$NetBSD: ttyflags.c,v 1.16 2007/01/17 21:59:49 hubertf Exp $");
 #include <ttyent.h>
 #include <unistd.h>
 
-int change_all(void);
-int change_ttyflags(struct ttyent *);
-int change_ttys(char **);
-void usage(void);
+static int change_all(void);
+static int change_ttyflags(struct ttyent *);
+static int change_ttys(char **);
+__dead static void usage(void);
 
-int nflag, vflag;
+static int nflag, vflag;
 
 /*
  * Ttyflags sets the device-specific tty flags, based on the contents
@@ -116,7 +116,7 @@ main(int argc, char *argv[])
 /*
  * Change all /etc/ttys entries' flags.
  */
-int
+static int
 change_all(void)
 {
 	struct ttyent *tep;
@@ -132,7 +132,7 @@ change_all(void)
 /*
  * Change the specified ttys' flags.
  */
-int
+static int
 change_ttys(char **ttylist)
 {
 	struct ttyent *tep;
@@ -159,7 +159,7 @@ change_ttys(char **ttylist)
  * Actually do the work; find out what the new flags value should be,
  * open the device, and change the flags.
  */
-int
+static int
 change_ttyflags(struct ttyent *tep)
 {
 	int fd, flags, rval, st, sep;
@@ -214,7 +214,7 @@ change_ttyflags(struct ttyent *tep)
 		return (0);
 
 	/* Open the device NON-BLOCKING, set the flags, and close it. */
-	if ((fd = open(path, O_RDONLY | O_NONBLOCK, 0)) == -1) {
+	if ((fd = open(path, O_RDWR | O_NONBLOCK, 0)) == -1) {
 		if (!(errno == ENXIO ||
 		      (errno == ENOENT && (st & TTY_ON) == 0)))
 			rval = 1;
@@ -237,7 +237,7 @@ change_ttyflags(struct ttyent *tep)
 /*
  * Print usage information when a bogus set of arguments is given.
  */
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: ttyflags [-v] [-a | tty ... ]\n");

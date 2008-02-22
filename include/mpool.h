@@ -1,4 +1,4 @@
-/*	$NetBSD: mpool.h,v 1.12 2005/12/26 19:01:47 perry Exp $	*/
+/*	$NetBSD: mpool.h,v 1.16 2016/09/24 21:18:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -49,24 +49,25 @@
 
 /* The BKT structures are the elements of the queues. */
 typedef struct _bkt {
-	CIRCLEQ_ENTRY(_bkt) hq;		/* hash queue */
-	CIRCLEQ_ENTRY(_bkt) q;		/* lru queue */
+	TAILQ_ENTRY(_bkt) hq;		/* hash queue */
+	TAILQ_ENTRY(_bkt) q;		/* lru queue */
 	void    *page;			/* page */
 	pgno_t   pgno;			/* page number */
 
 #define	MPOOL_DIRTY	0x01		/* page needs to be written */
 #define	MPOOL_PINNED	0x02		/* page is pinned into memory */
+#define	MPOOL_INUSE	0x04		/* page address is valid */
 	uint8_t flags;			/* flags */
 } BKT;
 
 typedef struct MPOOL {
-	CIRCLEQ_HEAD(_lqh, _bkt) lqh;	/* lru queue head */
+	TAILQ_HEAD(_lqh, _bkt) lqh;	/* lru queue head */
 					/* hash queue array */
-	CIRCLEQ_HEAD(_hqh, _bkt) hqh[HASHSIZE];
+	TAILQ_HEAD(_hqh, _bkt) hqh[HASHSIZE];
 	pgno_t	curcache;		/* current number of cached pages */
 	pgno_t	maxcache;		/* max number of cached pages */
 	pgno_t	npages;			/* number of pages in the file */
-	u_long	pagesize;		/* file page size */
+	unsigned long	pagesize;		/* file page size */
 	int	fd;			/* file descriptor */
 					/* page in conversion routine */
 	void    (*pgin)(void *, pgno_t, void *);
@@ -74,25 +75,35 @@ typedef struct MPOOL {
 	void    (*pgout)(void *, pgno_t, void *);
 	void	*pgcookie;		/* cookie for page in/out routines */
 #ifdef STATISTICS
-	u_long	cachehit;
-	u_long	cachemiss;
-	u_long	pagealloc;
-	u_long	pageflush;
-	u_long	pageget;
-	u_long	pagenew;
-	u_long	pageput;
-	u_long	pageread;
-	u_long	pagewrite;
+	unsigned long	cachehit;
+	unsigned long	cachemiss;
+	unsigned long	pagealloc;
+	unsigned long	pageflush;
+	unsigned long	pageget;
+	unsigned long	pagenew;
+	unsigned long	pageput;
+	unsigned long	pageread;
+	unsigned long	pagewrite;
 #endif
 } MPOOL;
+
+/* flags for get/put */
+#define	MPOOL_IGNOREPIN		0x01	/* Ignore if the page is pinned. */
+/* flags for newf */
+#define	MPOOL_PAGE_REQUEST	0x01	/* Allocate a new page with a
+					   specific page number. */
+#define	MPOOL_PAGE_NEXT		0x02	/* Allocate a new page with the next
+					   page number. */
 
 __BEGIN_DECLS
 MPOOL	*mpool_open(void *, int, pgno_t, pgno_t);
 void	 mpool_filter(MPOOL *, void (*)(void *, pgno_t, void *),
 	    void (*)(void *, pgno_t, void *), void *);
 void	*mpool_new(MPOOL *, pgno_t *);
-void	*mpool_get(MPOOL *, pgno_t, u_int);
-int	 mpool_put(MPOOL *, void *, u_int);
+void	*mpool_newf(MPOOL *, pgno_t *, unsigned int);
+int	 mpool_delete(MPOOL *, void *);
+void	*mpool_get(MPOOL *, pgno_t, unsigned int);
+int	 mpool_put(MPOOL *, void *, unsigned int);
 int	 mpool_sync(MPOOL *);
 int	 mpool_close(MPOOL *);
 #ifdef STATISTICS

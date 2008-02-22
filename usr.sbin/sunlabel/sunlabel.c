@@ -1,4 +1,4 @@
-/* $NetBSD: sunlabel.c,v 1.21 2007/12/18 07:33:54 dogcow Exp $ */
+/* $NetBSD: sunlabel.c,v 1.25 2017/05/04 16:29:08 sevan Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: sunlabel.c,v 1.21 2007/12/18 07:33:54 dogcow Exp $");
+__RCSID("$NetBSD: sunlabel.c,v 1.25 2017/05/04 16:29:08 sevan Exp $");
 #endif
 
 #include <stdio.h>
@@ -194,25 +187,23 @@ static int print_int(struct field *, int);
 static void chval_int(const char *, struct field *);
 static void update_spc(void);
 
-int  main(int, char **);
-
 /* The fields themselves. */
 static struct field fields[] = 
 {
-	{"ascii", &label.asciilabel[0], print_ascii, chval_ascii, 0},
-	{"rpm", &label.rpm, print_int, chval_int, 0},
-	{"pcyl", &label.pcyl, print_int, chval_int, 0},
-	{"apc", &label.apc, print_int, chval_int, 0},
-	{"obs1", &label.obs1, print_int, chval_int, 0},
-	{"obs2", &label.obs2, print_int, chval_int, 0},
-	{"intrlv", &label.intrlv, print_int, chval_int, 0},
-	{"ncyl", &label.ncyl, print_int, chval_int, 0},
-	{"acyl", &label.acyl, print_int, chval_int, 0},
-	{"nhead", &label.nhead, print_int, chval_int, update_spc},
-	{"nsect", &label.nsect, print_int, chval_int, update_spc},
-	{"obs3", &label.obs3, print_int, chval_int, 0},
-	{"obs4", &label.obs4, print_int, chval_int, 0},
-	{NULL, NULL, NULL, NULL, 0}
+	{"ascii", &label.asciilabel[0], print_ascii, chval_ascii, 0, 0 },
+	{"rpm", &label.rpm, print_int, chval_int, 0, 0 },
+	{"pcyl", &label.pcyl, print_int, chval_int, 0, 0 },
+	{"apc", &label.apc, print_int, chval_int, 0, 0 },
+	{"obs1", &label.obs1, print_int, chval_int, 0, 0 },
+	{"obs2", &label.obs2, print_int, chval_int, 0, 0 },
+	{"intrlv", &label.intrlv, print_int, chval_int, 0, 0 },
+	{"ncyl", &label.ncyl, print_int, chval_int, 0, 0 },
+	{"acyl", &label.acyl, print_int, chval_int, 0, 0 },
+	{"nhead", &label.nhead, print_int, chval_int, update_spc, 0 },
+	{"nsect", &label.nsect, print_int, chval_int, update_spc, 0 },
+	{"obs3", &label.obs3, print_int, chval_int, 0, 0 },
+	{"obs4", &label.obs4, print_int, chval_int, 0, 0 },
+	{NULL, NULL, NULL, NULL, 0, 0 }
 };
 
 /*
@@ -900,7 +891,7 @@ chvalue(const char *str)
 		cp++;
 	n = cp - str;
 	for (i = 0; fields[i].tag; i++) {
-		if ((n == fields[i].taglen) && !memcmp(str, fields[i].tag, n)) {
+		if (((int)n == fields[i].taglen) && !memcmp(str, fields[i].tag, n)) {
 			(*fields[i].chval) (cp, &fields[i]);
 			if (fields[i].changed)
 				(*fields[i].changed)();
@@ -933,7 +924,6 @@ static int
 print_ascii(struct field *f, int sofar)
 {
 	printf("%s: %.128s\n", f->tag, (char *)f->loc);
-	sofar = 0;
 	return 0;
 }
 
@@ -1098,7 +1088,7 @@ print_part(int all)
 		if (ce[i] <= ce[i - 1])
 			ce[i] = ce[i - 1] + 1;
 
-	if (ce[n - 1] > ncols) {
+	if ((size_t)ce[n - 1] > ncols) {
 		ce[n - 1] = ncols;
 		for (i = n - 1; (i > 0) && (ce[i] <= ce[i - 1]); i--)
 			ce[i - 1] = ce[i] - 1;
@@ -1137,7 +1127,7 @@ print_part(int all)
 		err(1, "Can't allocate memory");
 
 	for (i = 0; i <= r; i++) {
-		for (j = 0; j < ncols; j++)
+		for (j = 0; (size_t)j < ncols; j++)
 			line[j] = ' ';
 		for (j = 0; j < NPART; j++) {
 			if (row[j] != i)

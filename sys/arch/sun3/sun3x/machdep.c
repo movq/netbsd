@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.110 2007/10/17 19:57:47 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.135 2014/03/24 20:06:33 christos Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -35,50 +36,13 @@
  *	from: Utah Hdr: machdep.c 1.74 92/12/20
  *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	from: Utah Hdr: machdep.c 1.74 92/12/20
- *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.110 2007/10/17 19:57:47 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.135 2014/03/24 20:06:33 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,13 +59,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.110 2007/10/17 19:57:47 garbled Exp $"
 #include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/mount.h>
-#include <sys/user.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/vnode.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
+#include <sys/cpu.h>
 #ifdef	KGDB
 #include <sys/kgdb.h>
 #endif
@@ -111,14 +77,17 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.110 2007/10/17 19:57:47 garbled Exp $"
 #include <sys/sysctl.h>
 
 #include <dev/cons.h>
+#include <dev/mm.h>
 
 #include <machine/cpu.h>
 #include <machine/dvma.h>
 #include <machine/idprom.h>
 #include <machine/kcore.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
+#include <machine/mon.h>
 
 #if defined(DDB)
 #include <machine/db_machdep.h>
@@ -135,25 +104,20 @@ extern char kernel_text[];
 /* Defined by the linker */
 extern char etext[];
 
-/* Our exported CPU info; we can have only one. */  
+/* kernel_arch specific values required by module(9) */
+const vaddr_t kernbase = KERNBASE3X;
+const vaddr_t kern_end = KERN_END3X;
+
+/* Our exported CPU info; we can have only one. */
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map = NULL;  
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-int	physmem;
 int	fputype;
 void *	msgbufaddr;
 
 /* Virtual page frame for /dev/mem (see mem.c) */
 vaddr_t vmmap;
-
-/*
- * safepri is a safe priority for sleep to set for a spin-wait
- * during autoconfiguration or after a panic.
- */
-int	safepri = PSL_LOWIPL;
 
 u_char cpu_machine_id = 0;
 const char *cpu_string = NULL;
@@ -171,7 +135,7 @@ static void initcpu(void);
  * to use the console for output immediately (via PROM)
  * but can not use it for input until after this point.
  */
-void 
+void
 consinit(void)
 {
 
@@ -181,12 +145,12 @@ consinit(void)
 	 */
 	cninit();
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	{
 		extern int nsym;
 		extern char *ssym, *esym;
 
-		ksyms_init(nsym, ssym, esym);
+		ksyms_addsyms_elf(nsym, ssym, esym);
 	}
 #endif	/* DDB */
 
@@ -214,7 +178,7 @@ consinit(void)
  * kernel memory allocator is ready for use, but before
  * the creation of processes 1,2, and mountroot, etc.
  */
-void 
+void
 cpu_startup(void)
 {
 	char *v;
@@ -228,7 +192,7 @@ cpu_startup(void)
 	 * Its mapping was prepared in pmap_bootstrap().
 	 * Also, offset some to avoid PROM scribbles.
 	 */
-	v = (char *)KERNBASE;
+	v = (char *)KERNBASE3X;
 	msgbufaddr = v + MSGBUFOFF;
 	initmsgbuf(msgbufaddr, MSGBUFSIZE);
 
@@ -250,25 +214,12 @@ cpu_startup(void)
 		panic("startup: alloc dumppage");
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -293,46 +244,10 @@ cpu_startup(void)
 }
 
 /*
- * Set registers on exec.
- */
-void 
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct trapframe *tf = (struct trapframe *)l->l_md.md_regs;
-
-	tf->tf_sr = PSL_USERSET;
-	tf->tf_pc = pack->ep_entry & ~1;
-	tf->tf_regs[D0] = 0;
-	tf->tf_regs[D1] = 0;
-	tf->tf_regs[D2] = 0;
-	tf->tf_regs[D3] = 0;
-	tf->tf_regs[D4] = 0;
-	tf->tf_regs[D5] = 0;
-	tf->tf_regs[D6] = 0;
-	tf->tf_regs[D7] = 0;
-	tf->tf_regs[A0] = 0;
-	tf->tf_regs[A1] = 0;
-	tf->tf_regs[A2] = (int)l->l_proc->p_psstr;
-	tf->tf_regs[A3] = 0;
-	tf->tf_regs[A4] = 0;
-	tf->tf_regs[A5] = 0;
-	tf->tf_regs[A6] = 0;
-	tf->tf_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-
-	l->l_md.md_flags = 0;
-}
-
-/*
  * Info for CTL_HW
  */
 char	machine[16] = MACHINE;		/* from <machine/param.h> */
 char	kernel_arch[16] = "sun3x";	/* XXX needs a sysctl node */
-char	cpu_model[120];
 
 /*
  * XXX - Should empirically estimate the divisor...
@@ -341,7 +256,7 @@ char	cpu_model[120];
  */
 int delay_divisor = 62;		/* assume the fastest (33 MHz) */
 
-void 
+void
 identifycpu(void)
 {
 	u_char machtype;
@@ -374,9 +289,9 @@ identifycpu(void)
 
 	/* Other stuff? (VAC, mc6888x version, etc.) */
 	/* Note: miniroot cares about the kernel_arch part. */
-	sprintf(cpu_model, "%s %s", kernel_arch, cpu_string);
+	cpu_setmodel("%s %s", kernel_arch, cpu_string);
 
-	printf("Model: %s\n", cpu_model);
+	printf("Model: %s\n", cpu_getmodel());
 }
 
 /*
@@ -455,7 +370,7 @@ reboot_sync(void)
 /*
  * Common part of the BSD and SunOS reboot system calls.
  */
-__dead void 
+__dead void
 cpu_reboot(int howto, char *user_boot_string)
 {
 	/* Note: this string MUST be static! */
@@ -491,6 +406,8 @@ cpu_reboot(int howto, char *user_boot_string)
 
 	/* run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
 	haltsys:
@@ -546,26 +463,16 @@ long	dumplo = 0; 		/* blocks */
  * If there is extra space, put dump at the end to
  * reduce the chance that swapping trashes it.
  */
-void 
+void
 cpu_dumpconf(void)
 {
-	const struct bdevsw *bdev;
 	int devblks;	/* size of dump device in blocks */
 	int dumpblks;	/* size of dump image in blocks */
-	int (*getsize)(dev_t);
 
 	if (dumpdev == NODEV)
 		return;
 
-	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL) {
-		dumpdev = NODEV;
-		return;
-	}
-	getsize = bdev->d_psize;
-	if (getsize == NULL)
-		return;
-	devblks = (*getsize)(dumpdev);
+	devblks = bdev_size(dumpdev);
 	if (devblks <= ctod(1))
 		return;
 	devblks &= ~(ctod(1) - 1);
@@ -599,7 +506,7 @@ struct pcb dumppcb;
  *   pagemap (2*PAGE_SIZE)
  *   physical memory...
  */
-void 
+void
 dumpsys(void)
 {
 	const struct bdevsw *dsw;
@@ -626,20 +533,20 @@ dumpsys(void)
 	if (dumpsize == 0)
 		cpu_dumpconf();
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
-		    minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n",
+		    major(dumpdev), minor(dumpdev));
 		return;
 	}
 	savectx(&dumppcb);
 
-	psize = (*(dsw->d_psize))(dumpdev);
+	psize = bdev_size(dumpdev);
 	if (psize == -1) {
 		printf("dump area unavailable\n");
 		return;
 	}
 
-	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
-	    minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n",
+	    major(dumpdev), minor(dumpdev), dumplo);
 
 	/*
 	 * Prepare the dump header
@@ -661,7 +568,7 @@ dumpsys(void)
 	/* Fill in cpu_kcore_hdr_t part. */
 	strncpy(chdr_p->name, kernel_arch, sizeof(chdr_p->name));
 	chdr_p->page_size = PAGE_SIZE;
-	chdr_p->kernbase = KERNBASE;
+	chdr_p->kernbase = KERNBASE3X;
 
 	/* Fill in the sun3x_kcore_hdr part. */
 	pmap_kcore_hdr(sh);
@@ -688,10 +595,10 @@ dumpsys(void)
 
 			/* Print pages left after every 16. */
 			if ((todo & 0xf) == 0)
-				printf("\r%4d", todo);
+				printf_nolog("\r%4d", todo);
 
 			/* Make a temporary mapping for the page. */
-			pmap_kenter_pa(vmmap, paddr | PMAP_NC, VM_PROT_READ);
+			pmap_kenter_pa(vmmap, paddr | PMAP_NC, VM_PROT_READ, 0);
 			pmap_update(pmap_kernel());
 			error = (*dsw->d_dump)(dumpdev, blkno, vaddr,
 					       PAGE_SIZE);
@@ -711,7 +618,7 @@ fail:
 	printf(" dump error=%d\n", error);
 }
 
-static void 
+static void
 initcpu(void)
 {
 	/* XXX: Enable RAM parity/ECC checking? */
@@ -737,8 +644,60 @@ initcpu(void)
  * Determine if the given exec package refers to something which we
  * understand and, if so, set up the vmcmds for it.
  */
-int 
+int
 cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	return ENOEXEC;
 }
+
+int
+mm_md_physacc(paddr_t pa, vm_prot_t prot)
+{
+
+	return pmap_pa_exists(pa) ? 0 : EFAULT;
+}
+
+bool
+mm_md_direct_mapped_phys(paddr_t paddr, vaddr_t *vaddr)
+{
+	extern paddr_t avail_start;
+
+	if (paddr >= avail_start)
+		return false;
+	*vaddr = KERNBASE3X + paddr;
+	return true;
+}
+
+/*
+ * Allow access to the PROM mapping similiar to uvm_kernacc().
+ */
+int
+mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
+{
+
+	if ((vaddr_t)ptr < SUN3X_PROM_BASE || (vaddr_t)ptr > SUN3X_MONEND) {
+		*handled = false;
+		return 0;
+	}
+
+	*handled = true;
+	/* Read in the PROM itself is OK. */
+	if ((prot & VM_PROT_WRITE) == 0)
+		return 0;
+
+	/* PROM data page is OK for read/write. */
+	if ((vaddr_t)ptr >= SUN3X_MONDATA &&
+	    (vaddr_t)ptr < SUN3X_MONDATA + PAGE_SIZE)
+		return 0;
+	return EFAULT;
+}
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif

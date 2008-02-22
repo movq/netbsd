@@ -1,4 +1,4 @@
-/*	$NetBSD: histedit.c,v 1.41 2008/02/13 12:57:16 joerg Exp $	*/
+/*	$NetBSD: histedit.c,v 1.52 2017/06/28 13:46:06 kre Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)histedit.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: histedit.c,v 1.41 2008/02/13 12:57:16 joerg Exp $");
+__RCSID("$NetBSD: histedit.c,v 1.52 2017/06/28 13:46:06 kre Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,11 +53,13 @@ __RCSID("$NetBSD: histedit.c,v 1.41 2008/02/13 12:57:16 joerg Exp $");
 #include "parser.h"
 #include "var.h"
 #include "options.h"
+#include "builtins.h"
 #include "main.h"
 #include "output.h"
 #include "mystring.h"
 #include "myhistedit.h"
 #include "error.h"
+#include "alias.h"
 #ifndef SMALL
 #include "eval.h"
 #include "memalloc.h"
@@ -132,8 +134,10 @@ histedit(void)
 			if (el != NULL) {
 				if (hist)
 					el_set(el, EL_HIST, history, hist);
-				el_set(el, EL_PROMPT, getprompt);
+
+				set_prompt_lit(lookupvar("PSlit"));
 				el_set(el, EL_SIGNAL, 1);
+				el_set(el, EL_ALIAS_TEXT, alias_text, NULL);
 				el_set(el, EL_ADDFN, "rl-complete",
 				    "ReadLine compatible completion function",
 				    _el_fn_complete);
@@ -155,7 +159,7 @@ bad:
 				el_set(el, EL_EDITOR, "emacs");
 			el_set(el, EL_BIND, "^I", 
 			    tabcomplete ? "rl-complete" : "ed-insert", NULL);
-			el_source(el, NULL);
+			el_source(el, lookupvar("EDITRC"));
 		}
 	} else {
 		INTOFF;
@@ -171,6 +175,33 @@ bad:
 	}
 }
 
+void
+set_prompt_lit(const char *lit_ch)
+{
+	wchar_t wc;
+
+	if (!(iflag && editing && el))
+		return;
+
+	if (lit_ch == NULL) {
+		el_set(el, EL_PROMPT, getprompt);
+		return;
+	}
+
+	mbtowc(&wc, NULL, 1);		/* state init */
+
+	if (mbtowc(&wc, lit_ch, strlen(lit_ch)) <= 0)
+		el_set(el, EL_PROMPT, getprompt);
+	else
+		el_set(el, EL_PROMPT_ESC, getprompt, (int)wc);
+}
+
+void
+set_editrc(const char *fname)
+{
+	if (iflag && editing && el)
+		el_source(el, fname);
+}
 
 void
 sethistsize(const char *hs)
@@ -198,9 +229,7 @@ setterm(const char *term)
 }
 
 int
-inputrc(argc, argv)
-	int argc;
-	char **argv;
+inputrc(int argc, char **argv)
 {
 	if (argc != 2) {
 		out2str("usage: inputrc file\n");
@@ -223,22 +252,21 @@ inputrc(argc, argv)
  *  the Korn shell fc command.  Oh well...
  */
 int
-histcmd(int argc, char **argv)
+histcmd(volatile int argc, char ** volatile argv)
 {
 	int ch;
 	const char * volatile editor = NULL;
 	HistEvent he;
-	int lflg = 0;
-	volatile int nflg = 0, rflg = 0, sflg = 0;
+	volatile int lflg = 0, nflg = 0, rflg = 0, sflg = 0;
 	int i, retval;
 	const char *firststr, *laststr;
 	int first, last, direction;
-	char *pat = NULL, *repl;	/* ksh "fc old=new" crap */
+	char * volatile pat = NULL, * volatile repl;	/* ksh "fc old=new" crap */
 	static int active = 0;
 	struct jmploc jmploc;
 	struct jmploc *volatile savehandler;
 	char editfile[MAXPATHLEN + 1];
-	FILE *efp;
+	FILE * volatile efp;
 #ifdef __GNUC__
 	repl = NULL;	/* XXX gcc4 */
 	efp = NULL;	/* XXX gcc4 */
@@ -289,6 +317,7 @@ histcmd(int argc, char **argv)
 		 * Catch interrupts to reset active counter and
 		 * cleanup temp files.
 		 */
+		savehandler = handler;
 		if (setjmp(jmploc.loc)) {
 			active = 0;
 			if (*editfile)
@@ -296,7 +325,6 @@ histcmd(int argc, char **argv)
 			handler = savehandler;
 			longjmp(handler->loc, 1);
 		}
-		savehandler = handler;
 		handler = &jmploc;
 		if (++active > MAXHISTLOOPS) {
 			active = 0;
@@ -433,10 +461,12 @@ histcmd(int argc, char **argv)
 	}
 	if (editor) {
 		char *editcmd;
+		size_t cmdlen;
 
 		fclose(efp);
-		editcmd = stalloc(strlen(editor) + strlen(editfile) + 2);
-		sprintf(editcmd, "%s %s", editor, editfile);
+		cmdlen = strlen(editor) + strlen(editfile) + 2;
+		editcmd = stalloc(cmdlen);
+		snprintf(editcmd, cmdlen, "%s %s", editor, editfile);
 		evalstring(editcmd, 0);	/* XXX - should use no JC command */
 		INTON;
 		readcmdfile(editfile);	/* XXX - should read back - quick tst */

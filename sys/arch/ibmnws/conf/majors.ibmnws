@@ -1,4 +1,4 @@
-#	$NetBSD: majors.ibmnws,v 1.12 2007/12/31 15:31:57 ad Exp $
+#	$NetBSD: majors.ibmnws,v 1.14 2011/06/30 20:09:31 wiz Exp $
 #
 # Device majors for ibmnws
 #
@@ -26,7 +26,6 @@ device-major	filedesc	char 22
 device-major	bpf		char 23			bpfilter
 device-major	md		char 24  block 17	md
 
-device-major	lkm		char 28			lkm
 
 device-major	tun		char 40			tun
 device-major	vnd		char 41  block 14	vnd
@@ -59,6 +58,6 @@ device-major	ksyms		char 76			ksyms
 
 device-major	nsmb		char 98			nsmb
 
-# Majors up to 143 are reserved for machine-dependant drivers.
+# Majors up to 143 are reserved for machine-dependent drivers.
 # New machine-independent driver majors are assigned in 
 # sys/conf/majors.

@@ -1,4 +1,4 @@
-/*	$NetBSD: gtsc.c,v 1.37 2007/12/03 15:33:11 ad Exp $ */
+/*	$NetBSD: gtsc.c,v 1.41 2012/10/27 17:17:29 chs Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -66,13 +66,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gtsc.c,v 1.37 2007/12/03 15:33:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gtsc.c,v 1.41 2012/10/27 17:17:29 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/intr.h>
+#include <machine/cpu.h>
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
@@ -87,8 +88,8 @@ __KERNEL_RCSID(0, "$NetBSD: gtsc.c,v 1.37 2007/12/03 15:33:11 ad Exp $");
 #include <amiga/dev/zbusvar.h>
 #include <amiga/dev/gvpbusvar.h>
 
-void gtscattach(struct device *, struct device *, void *);
-int gtscmatch(struct device *, struct cfdata *, void *);
+void gtscattach(device_t, device_t, void *);
+int gtscmatch(device_t, cfdata_t, void *);
 
 void gtsc_enintr(struct sbic_softc *);
 void gtsc_dmastop(struct sbic_softc *);
@@ -109,15 +110,15 @@ int gtsc_clock_override = 0;
 int gtsc_debug = 0;
 #endif
 
-CFATTACH_DECL(gtsc, sizeof(struct sbic_softc),
+CFATTACH_DECL_NEW(gtsc, sizeof(struct sbic_softc),
     gtscmatch, gtscattach, NULL, NULL);
 
 int
-gtscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+gtscmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct gvpbus_args *gap;
 
-	gap = auxp;
+	gap = aux;
 	if (gap->flags & GVP_SCSI)
 		return(1);
 	return(0);
@@ -127,23 +128,27 @@ gtscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
  * attach all devices on our board.
  */
 void
-gtscattach(struct device *pdp, struct device *dp, void *auxp)
+gtscattach(device_t parent, device_t self, void *aux)
 {
 	volatile struct sdmac *rp;
 	struct gvpbus_args *gap;
-	struct sbic_softc *sc = (struct sbic_softc *)dp;
+	struct sbic_softc *sc = device_private(self);
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
 
-	gap = auxp;
+	gap = aux;
+	sc->sc_dev = self;
 	sc->sc_cregs = rp = gap->zargs.va;
 
 	/*
 	 * disable ints and reset bank register
 	 */
 	rp->CNTR = 0;
-	if ((gap->flags & GVP_NOBANK) == 0)
+	amiga_membarrier();
+	if ((gap->flags & GVP_NOBANK) == 0) {
 		rp->bank = 0;
+		amiga_membarrier();
+	}
 
 	sc->sc_dmago =  gtsc_dmago;
 	sc->sc_enintr = gtsc_enintr;
@@ -196,6 +201,7 @@ gtscattach(struct device *pdp, struct device *dp, void *auxp)
 
 	sc->sc_sbic.sbic_asr_p = (volatile unsigned char *)rp + 0x61;
 	sc->sc_sbic.sbic_value_p = (volatile unsigned char *)rp + 0x63;
+	amiga_membarrier();
 
 	sc->sc_clkfreq = gtsc_clock_override ? gtsc_clock_override :
 	    ((gap->flags & GVP_14MHZ) ? 143 : 72);
@@ -205,7 +211,7 @@ gtscattach(struct device *pdp, struct device *dp, void *auxp)
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = &sc->sc_dev;
+	adapt->adapt_dev = self;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -233,7 +239,7 @@ gtscattach(struct device *pdp, struct device *dp, void *auxp)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(dp, chan, scsiprint);
+	config_found(self, chan, scsiprint);
 }
 
 void
@@ -245,6 +251,7 @@ gtsc_enintr(struct sbic_softc *dev)
 
 	dev->sc_flags |= SBICF_INTR;
 	sdp->CNTR = GVP_CNTR_INTEN;
+	amiga_membarrier();
 }
 
 int
@@ -266,6 +273,7 @@ gtsc_dmago(struct sbic_softc *dev, char *addr, int count, int flags)
 #endif
 	dev->sc_flags |= SBICF_INTR;
 	sdp->CNTR = dev->sc_dmacmd;
+	amiga_membarrier();
 	if((u_int)dev->sc_cur->dc_addr & dev->sc_dmamask) {
 #if 1
 		printf("gtsc_dmago: pa %p->%lx dmacmd %x",
@@ -276,10 +284,14 @@ gtsc_dmago(struct sbic_softc *dev, char *addr, int count, int flags)
 		sdp->ACR = 0x00f80000;	/***********************************/
 	} else
 		sdp->ACR = (u_int) dev->sc_cur->dc_addr;
-	if (dev->gtsc_bankmask)
+	amiga_membarrier();
+	if (dev->gtsc_bankmask) {
 		sdp->bank =
 		    dev->gtsc_bankmask & (((u_int)dev->sc_cur->dc_addr) >> 18);
+		amiga_membarrier();
+	}
 	sdp->ST_DMA = 1;
+	amiga_membarrier();
 
 	/*
 	 * restrict transfer count to maximum
@@ -311,7 +323,9 @@ gtsc_dmastop(struct sbic_softc *dev)
 		 */
 		s = splbio();
 		sdp->CNTR &= ~GVP_CNTR_INT_P;
+		amiga_membarrier();
 		sdp->SP_DMA = 1;
+		amiga_membarrier();
 		dev->sc_dmacmd = 0;
 		splx(s);
 	}
@@ -326,11 +340,12 @@ gtsc_dmaintr(void *arg)
 
 	sdp = dev->sc_cregs;
 	stat = sdp->CNTR;
+	amiga_membarrier();
 	if ((stat & GVP_CNTR_INT_P) == 0)
 		return (0);
 #ifdef DEBUG
 	if (gtsc_debug & DDB_FOLLOW)
-		printf("%s: dmaintr 0x%x\n", dev->sc_dev.dv_xname, stat);
+		printf("%s: dmaintr 0x%x\n", device_xname(dev->sc_dev), stat);
 #endif
 	if (dev->sc_flags & SBICF_INTR)
 		if (sbicintr(dev))
@@ -356,14 +371,21 @@ gtsc_dmanext(struct sbic_softc *dev)
 	 * clear possible interrupt and stop DMA
 	 */
 	sdp->CNTR &= ~GVP_CNTR_INT_P;
+	amiga_membarrier();
 	sdp->SP_DMA = 1;
+	amiga_membarrier();
 
 	sdp->CNTR = dev->sc_dmacmd;
+	amiga_membarrier();
 	sdp->ACR = (u_int) dev->sc_cur->dc_addr;
-	if (dev->gtsc_bankmask)
+	amiga_membarrier();
+	if (dev->gtsc_bankmask) {
 		sdp->bank =
 		    dev->gtsc_bankmask & ((u_int)dev->sc_cur->dc_addr >> 18);
+		amiga_membarrier();
+	}
 	sdp->ST_DMA = 1;
+	amiga_membarrier();
 
 	dev->sc_tcnt = dev->sc_cur->dc_count << 1;
 	if (dev->sc_tcnt > gtsc_maxdma)
@@ -380,10 +402,13 @@ void
 gtsc_dump(void)
 {
 	extern struct cfdriver gtsc_cd;
+	struct sbic_softc *sc;
 	int i;
 
-	for (i = 0; i < gtsc_cd.cd_ndevs; ++i)
-		if (gtsc_cd.cd_devs[i])
-			sbic_dump(gtsc_cd.cd_devs[i]);
+	for (i = 0; i < gtsc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&gtsc_cd, i);
+		if (sc != NULL)
+			sbic_dump(sc);
+	}
 }
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: file2swp.c,v 1.2 2002/03/22 21:29:23 leo Exp $	*/
+/*	$NetBSD: file2swp.c,v 1.9 2016/03/12 02:17:05 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
 #include "cread.h"
 
 char		*Infile = "minifs.gz";
-const char	version[] = "$Revision: 1.2 $";
+const char	version[] = "$Revision: 1.9 $";
 
 extern const char	*program_name;
 
@@ -55,7 +48,7 @@ static int	readdisklabel PROTO((disk_t *, u_int32_t *, u_int32_t *));
 static void	usage PROTO((void)) NORETURN;
 
 static void
-usage()
+usage(void)
 {
 	eprintf("Usage: %s [OPTIONS] DISK\n"
 		"where OPTIONS are:\n"
@@ -77,20 +70,18 @@ usage()
 }
 
 int
-main(argc, argv)
-	int		argc;
-	char		**argv;
+main(int argc, char **argv)
 {
 	extern int	optind;
 	extern char	*optarg;
 
 	disk_t		*dd;
-	int		rv, c, i, fd;
+	int		rv, c, fd;
 	u_int32_t	currblk;
 	u_int32_t	start, end;
 	char		buf[AHDI_BSIZE];
 
-	i = rv = 0;
+	rv = 0;
 	init_toslib(*argv);
 
 	while ((c = getopt(argc, argv, "Vf:ho:w")) != -1) {
@@ -135,7 +126,7 @@ main(argc, argv)
 	  case 'y':
 	  case 'Y':
 		currblk = start;
-		while(c = read(fd, buf, sizeof(buf)) > 0) {
+		while ((c = read(fd, buf, sizeof(buf))) > 0) {
 		    if (disk_write(dd, currblk, 1, buf) < 0) {
 			eprintf("Error writing to swap partition\n");
 			xexit(1);
@@ -159,9 +150,7 @@ main(argc, argv)
 }
 
 static int
-check_bsdlabel(dd, offset, start, end)
-	disk_t	*dd;
-	u_int32_t	offset, *start, *end;
+check_bsdlabel(disk_t *dd, u_int32_t offset, u_int32_t *start, u_int32_t *end)
 {
 	struct disklabel	dl;
 	int					err;
@@ -185,9 +174,7 @@ check_bsdlabel(dd, offset, start, end)
 }
 
 static int
-readdisklabel(dd, start, end)
-	disk_t		*dd;
-	u_int32_t	*start, *end;
+readdisklabel(disk_t *dd, u_int32_t *start, u_int32_t *end)
 {
 	ptable_t		pt;
 	int				err, i;

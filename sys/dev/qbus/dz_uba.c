@@ -1,4 +1,4 @@
-/*	$NetBSD: dz_uba.c,v 1.26 2007/10/19 12:01:08 ad Exp $ */
+/*	$NetBSD: dz_uba.c,v 1.29 2017/05/22 17:22:29 ragge Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden. All rights reserved.
  * Copyright (c) 1996  Ken C. Wellsch.  All rights reserved.
@@ -11,11 +11,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
+ * 3. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -31,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dz_uba.c,v 1.26 2007/10/19 12:01:08 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dz_uba.c,v 1.29 2017/05/22 17:22:29 ragge Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,20 +54,17 @@ __KERNEL_RCSID(0, "$NetBSD: dz_uba.c,v 1.26 2007/10/19 12:01:08 ad Exp $");
 
 #include "ioconf.h"
 
-static	int	dz_uba_match(struct device *, struct cfdata *, void *);
-static	void	dz_uba_attach(struct device *, struct device *, void *);
+static	int	dz_uba_match(device_t, cfdata_t, void *);
+static	void	dz_uba_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(dz_uba, sizeof(struct dz_softc),
+CFATTACH_DECL_NEW(dz_uba, sizeof(struct dz_softc),
     dz_uba_match, dz_uba_attach, NULL, NULL);
 
 /* Autoconfig handles: setup the controller to interrupt, */
 /* then complete the housecleaning for full operation */
 
 static int
-dz_uba_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+dz_uba_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct uba_attach_args *ua = aux;
 	bus_space_tag_t	iot = ua->ua_iot;
@@ -110,13 +103,12 @@ dz_uba_match(parent, cf, aux)
 }
 
 static void
-dz_uba_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+dz_uba_attach(device_t parent, device_t self, void *aux)
 {
 	struct dz_softc *sc = device_private(self);
 	struct uba_attach_args *ua = aux;
 
+	sc->sc_dev = self;
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_ioh = ua->ua_ioh;
 

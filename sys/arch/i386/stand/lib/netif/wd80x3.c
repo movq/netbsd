@@ -1,4 +1,4 @@
-/*	$NetBSD: wd80x3.c,v 1.8 2005/12/26 19:24:00 perry Exp $	*/
+/*	$NetBSD: wd80x3.c,v 1.10 2008/12/14 18:46:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,7 +73,7 @@
 #define	WD_BASEMEM BASEMEM
 
 #ifndef _STANDALONE
-extern int mapio __P((void));
+extern int mapio(void);
 #endif
 
 u_char eth_myaddr[6];
@@ -93,7 +86,7 @@ static struct btinfo_netif bi_netif;
 #endif
 
 const char *
-we_params()
+we_params(void)
 {
 	const char *typestr;
 
@@ -102,19 +95,19 @@ we_params()
 	we_type = inb(WD_BASEREG + WE_CARD_ID);
 	switch (we_type) {
 #ifdef SUPPORT_WD80X3
-	case WE_TYPE_WD8003S: 
-		typestr = "WD8003S"; 
+	case WE_TYPE_WD8003S:
+		typestr = "WD8003S";
 		break;
 	case WE_TYPE_WD8003E:
 		typestr = "WD8003E";
 		break;
-	case WE_TYPE_WD8003EB: 
+	case WE_TYPE_WD8003EB:
 		typestr = "WD8003EB";
 		break;
 	case WE_TYPE_WD8003W:
 		typestr = "WD8003W";
 		break;
-	case WE_TYPE_WD8013EBT: 
+	case WE_TYPE_WD8013EBT:
 		typestr = "WD8013EBT";
 		dp8390_memsize = 16384;
 		we_is16bit = 1;
@@ -187,7 +180,7 @@ we_params()
 #endif
 	default:
 		/* Not one we recognize. */
-		return (NULL);
+		return NULL;
 	}
 
 	/*
@@ -212,12 +205,11 @@ we_params()
 	}
 #endif
 
-	return (typestr);
+	return typestr;
 }
 
 int
-EtherInit(myadr)
-	unsigned char *myadr;
+EtherInit(unsigned char *myadr)
 {
 	const char *typestr;
 	uint8_t x;
@@ -231,7 +223,7 @@ EtherInit(myadr)
 #ifndef _STANDALONE
 	if (mapio()) {
 		printf("no IO access\n");
-		return(0);
+		return 0;
 	}
 #endif
 
@@ -239,7 +231,7 @@ EtherInit(myadr)
 		x += inb(WD_BASEREG + WE_PROM + i);
 
 	if (x != WE_ROM_CHECKSUM_TOTAL)
-		return(0);
+		return 0;
 
 	/* reset the ethernet card */
 	outb(WD_BASEREG + WE_MSR, WE_MSR_RST);
@@ -249,13 +241,13 @@ EtherInit(myadr)
 
 	typestr = we_params();
 	if (!typestr)
-		return(0);
+		return 0;
 
 	printf("Using %s board, port 0x%x, iomem 0x%x, iosiz %d\n",
 	       typestr, WD_BASEREG, WD_BASEMEM, dp8390_memsize);
 
 	/* get ethernet address */
-	for(i = 0; i < 6; i++)
+	for (i = 0; i < 6; i++)
 		eth_myaddr[i] = myadr[i]= inb(WD_BASEREG + WE_PROM + i);
 
 	/*
@@ -307,7 +299,7 @@ EtherInit(myadr)
 	dp8390_dcr_reg = ED_DCR_FT1 | ED_DCR_LS | (we_is16bit ? ED_DCR_WTS : 0);
 
 	if (dp8390_config())
-		return(0);
+		return 0;
 
 #ifdef _STANDALONE
 	strncpy(bi_netif.ifname, "we", sizeof(bi_netif.ifname));
@@ -316,7 +308,7 @@ EtherInit(myadr)
 
 	BI_ADD(&bi_netif, BTINFO_NETIF, sizeof(bi_netif));
 #endif
-	return(1);
+	return 1;
 }
 
 /*

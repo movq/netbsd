@@ -1,4 +1,4 @@
-/*	$NetBSD: ixpsip.c,v 1.10 2005/12/11 12:16:51 christos Exp $ */
+/*	$NetBSD: ixpsip.c,v 1.14 2012/10/27 17:17:39 chs Exp $ */
 
 /*
  * Copyright (c) 2002
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixpsip.c,v 1.10 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixpsip.c,v 1.14 2012/10/27 17:17:39 chs Exp $");
 
 /*
  * Slow peripheral bus of ixp12x0 Processor
@@ -45,32 +39,31 @@ __KERNEL_RCSID(0, "$NetBSD: ixpsip.c,v 1.10 2005/12/11 12:16:51 christos Exp $")
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/ixp12x0/ixp12x0var.h>
 #include <arm/ixp12x0/ixpsipvar.h>
 
 #include "locators.h"
 
-static int	ixpsip_match(struct device *, struct cfdata *, void *);
-static void	ixpsip_attach(struct device *, struct device *, void *);
-static int	ixpsip_search(struct device *, struct cfdata *,
-			      const int *, void *);
+static int	ixpsip_match(device_t, cfdata_t, void *);
+static void	ixpsip_attach(device_t, device_t, void *);
+static int	ixpsip_search(device_t, cfdata_t, const int *, void *);
 static int	ixpsip_print(void *, const char *);
 
-CFATTACH_DECL(ixpsip, sizeof(struct ixpsip_softc),
+CFATTACH_DECL_NEW(ixpsip, sizeof(struct ixpsip_softc),
     ixpsip_match, ixpsip_attach, NULL, NULL);
 
 int
-ixpsip_match(struct device *parent, struct cfdata *cf, void *aux)
+ixpsip_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (1);
 }
 
 void
-ixpsip_attach(struct device *parent, struct device *self, void *aux)
+ixpsip_attach(device_t parent, device_t self, void *aux)
 {
-	struct ixpsip_softc *sc = (void *) self;
+	struct ixpsip_softc *sc = device_private(self);
 	sc->sc_iot = &ixp12x0_bs_tag;
 
 	printf("\n");
@@ -82,13 +75,9 @@ ixpsip_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-ixpsip_search(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+ixpsip_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct ixpsip_softc *sc = (struct ixpsip_softc *)parent;
+	struct ixpsip_softc *sc = device_private(parent);
 	struct ixpsip_attach_args sa;
 
 	sa.sa_iot = sc->sc_iot;
@@ -103,11 +92,9 @@ ixpsip_search(parent, cf, ldesc, aux)
 }
 
 static int
-ixpsip_print(aux, name)
-	void *aux;
-	const char *name;
+ixpsip_print(void *aux, const char *name)
 {
-        struct ixpsip_attach_args *sa = (struct ixpsip_attach_args*)aux;
+        struct ixpsip_attach_args *sa = aux;
 
 	if (sa->sa_size)
 		aprint_normal(" addr 0x%lx", sa->sa_addr);

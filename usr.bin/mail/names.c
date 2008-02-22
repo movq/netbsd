@@ -1,4 +1,4 @@
-/*	$NetBSD: names.c,v 1.27 2007/10/29 23:20:38 christos Exp $	*/
+/*	$NetBSD: names.c,v 1.33 2017/11/09 20:27:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)names.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: names.c,v 1.27 2007/10/29 23:20:38 christos Exp $");
+__RCSID("$NetBSD: names.c,v 1.33 2017/11/09 20:27:50 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -254,6 +254,9 @@ outof(struct name *names, FILE *fo, struct header *hp)
 	int ispipe;
 	char tempname[PATHSIZE];
 
+	if (value("expandaddr") == NULL)
+		return names;
+
 	begin = names;
 	np = names;
 	(void)time(&now);
@@ -266,8 +269,16 @@ outof(struct name *names, FILE *fo, struct header *hp)
 		ispipe = np->n_name[0] == '|';
 		if (ispipe)
 			fname = np->n_name+1;
-		else
+		else {
 			fname = expand(np->n_name);
+			if (fname == NULL) {
+				warnx("Filename expansion of %s failed",
+				    np->n_name);
+				senderr++;
+				goto cant;
+			}
+		}
+
 
 		/*
 		 * See if we have copied the complete message out yet.
@@ -278,14 +289,14 @@ outof(struct name *names, FILE *fo, struct header *hp)
 			(void)snprintf(tempname, sizeof(tempname),
 			    "%s/mail.ReXXXXXXXXXXXX", tmpdir);
 			if ((fd = mkstemp(tempname)) == -1 ||
-			    (fout = Fdopen(fd, "a")) == NULL) {
+			    (fout = Fdopen(fd, "aef")) == NULL) {
 				if (fd != -1)
 					(void)close(fd);
 				warn("%s", tempname);
 				senderr++;
 				goto cant;
 			}
-			image = open(tempname, O_RDWR);
+			image = open(tempname, O_RDWR | O_CLOEXEC);
 			(void)unlink(tempname);
 			if (image < 0) {
 				warn("%s", tempname);
@@ -293,7 +304,6 @@ outof(struct name *names, FILE *fo, struct header *hp)
 				(void)Fclose(fout);
 				goto cant;
 			}
-			(void)fcntl(image, F_SETFD, FD_CLOEXEC);
 			(void)fprintf(fout, "From %s %s", myname, date);
 #ifdef MIME_SUPPORT
 			(void)puthead(hp, fout, GTO|GSUBJECT|GCC|GMISC|GMIME|GNL);
@@ -347,7 +357,7 @@ outof(struct name *names, FILE *fo, struct header *hp)
 			free_child(pid);
 		} else {
 			int f;
-			if ((fout = Fopen(fname, "a")) == NULL) {
+			if ((fout = Fopen(fname, "aef")) == NULL) {
 				warn("%s", fname);
 				senderr++;
 				goto cant;
@@ -356,7 +366,7 @@ outof(struct name *names, FILE *fo, struct header *hp)
 				warn("dup");
 				fin = NULL;
 			} else
-				fin = Fdopen(f, "r");
+				fin = Fdopen(f, "ref");
 			if (fin == NULL) {
 				(void)fprintf(stderr, "Can't reopen image\n");
 				(void)Fclose(fout);
@@ -525,7 +535,7 @@ count(struct name *np)
  * Return an error if the name list won't fit.
  */
 PUBLIC const char **
-unpack(struct name *np)
+unpack(struct name *smopts, struct name *np)
 {
 	const char **ap, **begin;
 	struct name *n;
@@ -533,14 +543,14 @@ unpack(struct name *np)
 
 	n = np;
 	if ((t = count(n)) == 0)
-		errx(1, "No names to unpack");
+		errx(EXIT_FAILURE, "No names to unpack");
 	/*
 	 * Compute the number of extra arguments we will need.
 	 * We need at least two extra -- one for "mail" and one for
 	 * the terminating 0 pointer.  Additional spots may be needed
 	 * to pass along -f to the host mailer.
 	 */
-	extra = 2;
+	extra = 3 + count(smopts);
 	extra++;
 	metoo = value(ENAME_METOO) != NULL;
 	if (metoo)
@@ -556,6 +566,10 @@ unpack(struct name *np)
 		*ap++ = "-m";
 	if (verbose)
 		*ap++ = "-v";
+	for (/*EMPTY*/; smopts != NULL; smopts = smopts->n_flink)
+		if ((smopts->n_type & GDEL) == 0)
+			*ap++ = smopts->n_name;
+	*ap++ = "--";
 	for (/*EMPTY*/; n != NULL; n = n->n_flink)
 		if ((n->n_type & GDEL) == 0)
 			*ap++ = n->n_name;

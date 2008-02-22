@@ -1,9 +1,11 @@
-$NetBSD: README,v 1.2 2002/04/08 16:12:18 sakamoto Exp $
+$NetBSD: README,v 1.4 2011/02/25 10:06:24 kiyohara Exp $
 
 contents
 	boot:	     NetBSD/bebox booter.
-	elf2pef:     Convert ELF image to PEF image.
+	elf2pef:     Convert ELF image to PEF image.  Integrated to
+		     powerpc's mkbootimage.  Obsolete.
 	mkbootimage: Make bootable BeOS DR8 filesystem(a.k.a. obfs) image.
+		     Integrated to powerpc's mkbootimage.  Obsolete.
 
 
 boot:
@@ -19,32 +21,20 @@ boot:
 
 	if change CPPFLAGS after make, use 'make cleandir' before 'make'.
 
-	boot can read/exec kernel on ffs(floppy disk), cd9660(floppy disk),
-	attached image by elf2pef.
-
-
-elf2pef:
-	to convert
-		elf2pef boot boot.pef
-
-	if you want to attach kernel file into booter,
-		elf2pef boot boot.pef netbsd
-	of course can attach gzipped kernel file
-		elf2pef boot boot.pef netbsd.gz
-
-
-mkbootimage:
-	to make bootable floppy disk image
-		mkbootimage boot.pef image
-	or, to make direct bootable floppy
-		mkbootimage boot.pef > /dev/rfd0a
+	boot can read/exec kernel on ffs(floppy/ide/scsi) or attached
+	in-kernel image by powerpc's mkbootimage.
 
 
 Example of making bootable floppy disk:
-	% cd /sys/arch/bebox/stand
+	% cd sys/arch/bebox/stand
 	% $(TOOLDIR)/bin/nbmake-bebox
-	% gzip -c ../compile/GENERIC/netbsd > /tmp/netbsd.gz
-	% elf2pef/elf2pef boot/boot /tmp/boot.pef /tmp/netbsd.gz
-	[insert formatted floppy disk]
-	% mkbootimage/mkbootimage /tmp/boot.pef > /dev/rfd0a
 
+	% nbpowerpc-mkbootimage -I -m bebox -b boot/boot /tmp/fd.img
+
+	Or 
+
+	% nbpowerpc-mkbootimage -m bebox -b boot/boot \
+	      -k ../compile/INSTALL/netbsd /tmp/fd.img
+
+	[insert formatted floppy disk]
+	% dd if=/tmp/fd.img of=/dev/rfd0a

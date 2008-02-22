@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.13 2008/01/26 14:35:24 tsutsui Exp $	*/
+/*	$NetBSD: boot.c,v 1.20 2014/03/26 16:16:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -93,7 +86,7 @@
  * contain a zero.  We therefore start from one.
  */
 
-char           *kernelnames[] = {
+const char *kernelnames[] = {
 	"placekeeper",
 	"netbsd.sgimips",
 	"netbsd",
@@ -105,10 +98,9 @@ char           *kernelnames[] = {
 	NULL
 };
 
-extern const struct arcbios_fv *ARCBIOS;
-static int      debug = 0;
+static int debug = 0;
 
-int             main(int, char **);
+int main(int, char **);
 
 /* Storage must be static. */
 struct btinfo_symtab bi_syms;
@@ -140,9 +132,8 @@ main(int argc, char **argv)
 
 	/* print a banner */
 	printf("\n");
-	printf("NetBSD/sgimips " NETBSD_VERS " Bootstrap, Revision %s\n",
-	       bootprog_rev);
-	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
+	printf("%s " NETBSD_VERS " Bootstrap, Revision %s\n",
+	    bootprog_name, bootprog_rev);
 	printf("\n");
 
 	memset(marks, 0, sizeof marks);
@@ -151,7 +142,6 @@ main(int argc, char **argv)
 	bi_init(bootinfo);
 
 	/* Parse arguments, if present.  */
-
 	while ((ch = getopt(argc, argv, "v")) != -1) {
 		switch (ch) {
 		case 'v':
@@ -166,27 +156,30 @@ main(int argc, char **argv)
 	 * If argv[0] contains the string "cdrom(", we're probably doing an
 	 * install.  The bootpath will therefore be partition 0 of whatever
 	 * device we've booted from.  Derive the install kernel name from
-	 * the bootloader name ("ip32boot", "ip22boot", or "aoutboot").
+	 * the bootloader name ("ip3xboot", "ip2xboot", or "aoutboot").
 	 */
 
-	if (strstr(argv[0], "cdrom("))
-	{
+	if (strstr(argv[0], "cdrom(")) {
+		char *ep =
 		strcpy(bootfile, argv[0]);
-		i = (strrchr(bootfile, ')') - bootfile);
-		bootfile[i-1] = '0';
+		ep = strrchr(bootfile, ')');
+		i =  ep - bootfile;
+		bootfile[i - 1] = '0';
 		if (strstr(bootfile, "ip3x"))
-			sprintf( (strrchr(bootfile, ')') + 1), "ip3x");
+			kernel = "ip3x";
 		else
-			sprintf( (strrchr(bootfile, ')') + 1), "ip2x");
-		if ( (loadfile(bootfile, marks, LOAD_KERNEL)) >= 0 )
+			kernel = "ip2x";
+		strcpy(ep + 1, kernel);
+		if ((loadfile(bootfile, marks, LOAD_KERNEL)) >= 0)
 			goto finish;
 	}
 
-	bootpath = ARCBIOS->GetEnvironmentVariable("OSLoadPartition");
+	bootpath = arcbios_GetEnvironmentVariable("OSLoadPartition");
 
 	if (bootpath == NULL) {
 		/* XXX need to actually do the fixup */
-		printf("\nPlease set the OSLoadPartition environment variable.\n");
+		printf("\nPlease set the OSLoadPartition "
+		    "environment variable.\n");
 		return 0;
 	}
 
@@ -194,7 +187,7 @@ main(int argc, char **argv)
 	 * Grab OSLoadFilename from ARCS.
 	 */
 
-	kernel = ARCBIOS->GetEnvironmentVariable("OSLoadFilename");
+	kernel = arcbios_GetEnvironmentVariable("OSLoadFilename");
 
 	/*
 	 * argv[1] is assumed to contain the name of the kernel to boot,
@@ -230,7 +223,6 @@ main(int argc, char **argv)
 				break;
 			i++;
 		}
-
 	}
 
 	if (win < 0) {
@@ -239,7 +231,7 @@ main(int argc, char **argv)
 	}
 
 finish:
-	strlcpy(bi_bpath.bootpath, kernel, BTINFO_BOOTPATH_LEN);
+	strlcpy(bi_bpath.bootpath, bootfile, BTINFO_BOOTPATH_LEN);
 	bi_add(&bi_bpath, BTINFO_BOOTPATH, sizeof(bi_bpath));
 
 	bi_syms.nsym = marks[MARK_NSYM];
@@ -256,5 +248,5 @@ finish:
 	(*entry)(argc, argv, BOOTINFO_MAGIC, bootinfo);
 
 	printf("Kernel returned!  Halting...\n");
-	return (0);
+	return 0;
 }

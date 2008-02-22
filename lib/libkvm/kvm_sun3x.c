@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_sun3x.c,v 1.8 2003/05/16 10:24:56 wiz Exp $	*/
+/*	$NetBSD: kvm_sun3x.c,v 1.12 2011/09/14 12:37:55 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_sparc.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_sun3x.c,v 1.8 2003/05/16 10:24:56 wiz Exp $");
+__RCSID("$NetBSD: kvm_sun3x.c,v 1.12 2011/09/14 12:37:55 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,7 +44,7 @@ __RCSID("$NetBSD: kvm_sun3x.c,v 1.8 2003/05/16 10:24:56 wiz Exp $");
  * Note: This file has to build on ALL m68k machines,
  * so do NOT include any <machine / *.h> files here.
  */
-
+#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/kcore.h>
 
@@ -66,10 +59,10 @@ __RCSID("$NetBSD: kvm_sun3x.c,v 1.8 2003/05/16 10:24:56 wiz Exp $");
 #include "kvm_private.h"
 #include "kvm_m68k.h"
 
-int   _kvm_sun3x_initvtop __P((kvm_t *));
-void  _kvm_sun3x_freevtop __P((kvm_t *));
-int	  _kvm_sun3x_kvatop   __P((kvm_t *, u_long, u_long *));
-off_t _kvm_sun3x_pa2off   __P((kvm_t *, u_long));
+int   _kvm_sun3x_initvtop(kvm_t *);
+void  _kvm_sun3x_freevtop(kvm_t *);
+int   _kvm_sun3x_kvatop  (kvm_t *, vaddr_t, paddr_t *);
+off_t _kvm_sun3x_pa2off  (kvm_t *, paddr_t);
 
 struct kvm_ops _kvm_ops_sun3x = {
 	_kvm_sun3x_initvtop,
@@ -89,15 +82,13 @@ struct kvm_ops _kvm_ops_sun3x = {
  * into crash dump files.  Nothing to do here.
  */
 int
-_kvm_sun3x_initvtop(kd)
-	kvm_t *kd;
+_kvm_sun3x_initvtop(kvm_t *kd)
 {
-	return (0);
+	return 0;
 }
 
 void
-_kvm_sun3x_freevtop(kd)
-	kvm_t *kd;
+_kvm_sun3x_freevtop(kvm_t *kd)
 {
 }
 
@@ -108,10 +99,7 @@ _kvm_sun3x_freevtop(kd)
  * physical address.  This routine is used only for crash dumps.
  */
 int
-_kvm_sun3x_kvatop(kd, va, pap)
-	kvm_t *kd;
-	u_long va;
-	u_long *pap;
+_kvm_sun3x_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pap)
 {
 	cpu_kcore_hdr_t *h = kd->cpu_data;
 	struct sun3x_kcore_hdr *s = &h->un._sun3x;
@@ -168,9 +156,7 @@ done:
  * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
-_kvm_sun3x_pa2off(kd, pa)
-	kvm_t	*kd;
-	u_long	pa;
+_kvm_sun3x_pa2off(kvm_t *kd, paddr_t pa)
 {
 	off_t		off;
 	phys_ram_seg_t	*rsp;

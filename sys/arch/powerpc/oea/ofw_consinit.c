@@ -1,4 +1,4 @@
-/* $NetBSD: ofw_consinit.c,v 1.6 2007/11/26 19:58:31 garbled Exp $ */
+/* $NetBSD: ofw_consinit.c,v 1.17 2016/02/14 18:12:30 dholland Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,15 +30,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_consinit.c,v 1.6 2007/11/26 19:58:31 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_consinit.c,v 1.17 2016/02/14 18:12:30 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
 #include <sys/tty.h>
 
+#include <prop/proplib.h>
+
 #include <machine/autoconf.h>
 #include <machine/trap.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <powerpc/ofw_cons.h>
 
@@ -54,8 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofw_consinit.c,v 1.6 2007/11/26 19:58:31 garbled Exp
 
 #include <dev/wscons/wsksymvar.h>
 #include <dev/wscons/wscons_callbacks.h>
-
-#include <machine/stdarg.h>
 
 #include "akbd.h"
 #include "adbkbd.h"
@@ -95,7 +88,7 @@ extern struct consdev consdev_zs;
 #include <dev/ic/pckbcvar.h>
 #endif
 
-extern int console_node, console_instance;
+int console_node = 0, console_instance = 0;
 
 int chosen, stdin, stdout;
 int ofkbd_ihandle;
@@ -126,6 +119,7 @@ void ofprint(const char *blah, ...)
 
 	va_start(va, blah);
 	len = vsnprintf(buf, sizeof(buf), blah, va);
+	va_end(va);
 	OF_write(console_instance, buf, len);
 }
 
@@ -142,7 +136,7 @@ cninit(void)
 	ofwoea_bootstrap_console();
 
 	OFPRINTF("console node: %08x\n", console_node);
- 
+
 	if (console_node == -1)
 		goto nocons;
 
@@ -157,6 +151,7 @@ cninit(void)
 
 #ifdef PMAC_G5
 		/* The MMU hasn't been initialized yet, use failsafe for now */
+		extern struct consdev failsafe_cons;
 		cp = &failsafe_cons;
 		cn_tab = cp;
 		(*cp->cn_probe)(cp);
@@ -226,9 +221,9 @@ cninit_kd(void)
 		return;
 	}
 
-#if NAKBD > 0
 	memset(name, 0, sizeof(name));
 	OF_getprop(OF_parent(node), "name", name, sizeof(name));
+#if NAKBD > 0
 	if (strcmp(name, "adb") == 0) {
 		printf("console keyboard type: ADB\n");
 		akbd_cnattach();
@@ -236,8 +231,6 @@ cninit_kd(void)
 	}
 #endif
 #if NADBKBD > 0
-	memset(name, 0, sizeof(name));
-	OF_getprop(OF_parent(node), "name", name, sizeof(name));
 	if (strcmp(name, "adb") == 0) {
 		printf("console keyboard type: ADB\n");
 		adbkbd_cnattach();
@@ -245,12 +238,10 @@ cninit_kd(void)
 	}
 #endif
 #if NPCKBC > 0
-	memset(name, 0, sizeof(name));
-	OF_getprop(OF_parent(node), "name", name, sizeof(name));
-	if (strcmp(name, "keyboard") == 0) {
+	if (strcmp(name, "isa") == 0) {
 		printf("console keyboard type: PC Keyboard\n");
 		pckbc_cnattach(&genppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT);
+		    PCKBC_KBD_SLOT, 0);
 		goto kbd_found;
 	}
 #endif
@@ -261,15 +252,15 @@ cninit_kd(void)
 	 * This is not enough, we have a few more problems:
 	 *
 	 *	(1) The stupid Macintosh firmware uses a
-	 *	    `psuedo-hid' (no typo) or `pseudo-hid',  
-	 *	    which apparently merges all keyboards 
-	 *	    input into a single input stream.  
-	 *	    Because of this, we can't actually 
-	 *	    determine which controller or keyboard 
+	 *	    `psuedo-hid' (no typo) or `pseudo-hid',
+	 *	    which apparently merges all keyboards
+	 *	    input into a single input stream.
+	 *	    Because of this, we can't actually
+	 *	    determine which controller or keyboard
 	 *	    is really the console keyboard!
 	 *
 	 *	(2) Even if we could, the keyboard can be USB,
-	 *	    and this requires a lot of the kernel to 
+	 *	    and this requires a lot of the kernel to
 	 *	    be running in order for it to work.
 	 *
 	 *      (3) If the keyboard is behind isa, we don't have enough
@@ -278,9 +269,9 @@ cninit_kd(void)
 	 * So, what we do is this:
 	 *
 	 *	(1) First check for OpenFirmware implementation
-	 *	    that will not let us distinguish between 
-	 *	    USB and ADB. In that situation, try attaching 
-	 *	    anything as we can, and hope things get better 
+	 *	    that will not let us distinguish between
+	 *	    USB and ADB. In that situation, try attaching
+	 *	    anything as we can, and hope things get better
 	 *	    at autoconfiguration time.
 	 *
 	 *	(2) Assume the keyboard is USB.
@@ -295,20 +286,33 @@ cninit_kd(void)
 	 */
 
 	/*
-	 * stdin is /pseudo-hid/keyboard.  There is no 
+	 * stdin is /pseudo-hid/keyboard.  There is no
 	 * `adb-kbd-ihandle or `usb-kbd-ihandles methods
 	 * available. Try attaching as ADB.
+	 * But only if ADB support is actually present.
 	 *
 	 * XXX This must be called before pmap_bootstrap().
 	 */
 	if (strcmp(name, "pseudo-hid") == 0) {
-		printf("console keyboard type: unknown, assuming ADB\n");
+		int adb_node;
+
+		adb_node = OF_finddevice("/pci/mac-io/via-pmu/adb");
+		if (adb_node > 0) {
+			printf("ADB support found\n");
 #if NAKBD > 0
-		akbd_cnattach();
+			akbd_cnattach();
 #endif
 #if NADBKBD > 0
-		adbkbd_cnattach();
+			adbkbd_cnattach();
 #endif
+		} else {
+			/* must be USB */
+			printf("No ADB support present, assuming USB "
+			       "keyboard\n");
+#if NUKBD > 0
+			ukbd_cnattach();
+#endif
+		}
 		goto kbd_found;
 	}
 
@@ -375,7 +379,7 @@ cninit_kd(void)
 	return;
 
 kbd_found:;
-#if NAKBD + NUKBD + NADBKBD > 0
+#if NAKBD + NUKBD + NADBKBD + NPCKBC > 0
 	/*
 	 * XXX This is a little gross, but we don't get to call
 	 * XXX wskbd_cnattach() twice.
@@ -407,7 +411,7 @@ ofkbd_cngetc(dev_t dev)
  * Bootstrap console support functions
  */
 
-static int 
+static int
 ofwbootcons_cngetc(dev_t dev)
 {
 	unsigned char ch = '\0';
@@ -457,7 +461,7 @@ ofwoea_bootstrap_console(void)
 	node = OF_instance_to_package(stdout);
 	console_node = node;
 	console_instance = stdout;
-	
+
 	return;
 nocons:
 	panic("No /chosen could be found!\n");

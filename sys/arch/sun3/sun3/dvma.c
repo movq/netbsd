@@ -1,4 +1,4 @@
-/*	$NetBSD: dvma.c,v 1.33 2007/03/04 06:00:54 christos Exp $	*/
+/*	$NetBSD: dvma.c,v 1.41 2017/06/01 02:45:07 chs Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.33 2007/03/04 06:00:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.41 2017/06/01 02:45:07 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.33 2007/03/04 06:00:54 christos Exp $");
 #include <sys/extent.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/exec.h>
 
@@ -76,7 +68,7 @@ vsize_t dvma_segmap_size = 6 * NBSG;
 /* Using phys_map to manage DVMA scratch-memory pages. */
 /* Note: Could use separate pagemap for obio if needed. */
 
-void 
+void
 dvma_init(void)
 {
 	vaddr_t segmap_addr;
@@ -90,10 +82,9 @@ dvma_init(void)
 	 * dvma_extent manages things handled in interrupt
 	 * context.
 	 */
-	phys_map = uvm_map_create(pmap_kernel(),
-	    DVMA_MAP_BASE, DVMA_MAP_END, 0);
-	if (phys_map == NULL)
-		panic("unable to create DVMA map");
+	phys_map = kmem_alloc(sizeof(struct vm_map), KM_SLEEP);
+	uvm_map_setup(phys_map, DVMA_MAP_BASE, DVMA_MAP_END, 0);
+	phys_map->pmap = pmap_kernel();
 
 	/*
 	 * Reserve the DVMA space used for segment remapping.
@@ -110,7 +101,7 @@ dvma_init(void)
 	 * into DVMA space for the purpose of data transfer.
 	 */
 	dvma_extent = extent_create("dvma", segmap_addr,
-	    segmap_addr + (dvma_segmap_size - 1), M_DEVBUF,
+	    segmap_addr + (dvma_segmap_size - 1),
 	    NULL, 0, EX_NOCOALESCE|EX_NOWAIT);
 }
 
@@ -137,7 +128,7 @@ dvma_malloc(size_t bytes)
 /*
  * Free pages from dvma_malloc()
  */
-void 
+void
 dvma_free(void *addr, size_t size)
 {
 	vsize_t sz = m68k_round_page(size);
@@ -150,7 +141,7 @@ dvma_free(void *addr, size_t size)
  * would be used by some OTHER bus-master besides the CPU.
  * (Examples: on-board ie/le, VME xy board).
  */
-u_long 
+u_long
 dvma_kvtopa(void *kva, int bustype)
 {
 	u_long addr, mask;
@@ -191,7 +182,7 @@ dvma_mapin(void *kva, int len, int canwait /* ignored */)
 	seg_len = (vsize_t)len;
 	seg_off = seg_kva & SEGOFSET;
 	seg_kva -= seg_off;
-	seg_len = m68k_round_seg(seg_len + seg_off);
+	seg_len = sun3_round_seg(seg_len + seg_off);
 
 	s = splvm();
 
@@ -239,13 +230,13 @@ dvma_mapin(void *kva, int len, int canwait /* ignored */)
  * This IS safe to call at interrupt time.
  * (Typically called at SPLBIO)
  */
-void 
+void
 dvma_mapout(void *dma, int len)
 {
 	vaddr_t seg_dma;
 	vsize_t seg_len, seg_off;
 	vaddr_t v, x;
-	int sme;
+	int sme __diagused;
 	int s;
 
 	/* Get seg-aligned address and length. */
@@ -253,7 +244,7 @@ dvma_mapout(void *dma, int len)
 	seg_len = (vsize_t)len;
 	seg_off = seg_dma & SEGOFSET;
 	seg_dma -= seg_off;
-	seg_len = m68k_round_seg(seg_len + seg_off);
+	seg_len = sun3_round_seg(seg_len + seg_off);
 
 	s = splvm();
 
@@ -282,7 +273,7 @@ dvma_mapout(void *dma, int len)
 	splx(s);
 }
 
-int 
+int
 _bus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs,
     int nsegs, bus_size_t size, int flags)
 {
@@ -298,7 +289,7 @@ _bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	vsize_t off, sgsize;
 	paddr_t pa;
 	pmap_t pmap;
-	int error, rv, s;
+	int error, rv __diagused, s;
 
 	/*
 	 * Make sure that on error condition we return "no valid mappings".
@@ -356,13 +347,13 @@ _bus_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	return 0;
 }
 
-void 
+void
 _bus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 {
 	bus_dma_segment_t *segs;
 	vaddr_t dva;
 	vsize_t sgsize;
-	int error, s;
+	int error __diagused, s;
 
 #ifdef DIAGNOSTIC
 	if (map->dm_nsegs != 1)

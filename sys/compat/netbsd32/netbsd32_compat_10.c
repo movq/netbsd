@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_10.c,v 1.22 2007/12/20 23:03:00 dsl Exp $	*/
+/*	$NetBSD: netbsd32_compat_10.c,v 1.25 2015/12/03 10:38:21 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1994 Adam Glass and Charles M. Hannum.  All rights reserved.
@@ -31,10 +31,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_10.c,v 1.22 2007/12/20 23:03:00 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_10.c,v 1.25 2015/12/03 10:38:21 pgoyette Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sysv.h"
+#include "opt_compat_netbsd.h"
 #endif
 
 #include <sys/param.h>
@@ -42,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_10.c,v 1.22 2007/12/20 23:03:00 dsl 
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/sem.h>
-#include <sys/malloc.h>
 
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
@@ -51,9 +51,10 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_10.c,v 1.22 2007/12/20 23:03:00 dsl 
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/sys/shm.h>
 
-#if defined(SYSVSEM) || !defined(_KERNEL)
+#if defined(COMPAT_10)
+#if defined(SYSVSEM)
 int
-compat_10_netbsd32_sys_semsys(struct lwp *l, const struct compat_10_netbsd32_sys_semsys_args *uap, register_t *retval)
+compat_10_netbsd32_semsys(struct lwp *l, const struct compat_10_netbsd32_semsys_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) which;
@@ -62,7 +63,7 @@ compat_10_netbsd32_sys_semsys(struct lwp *l, const struct compat_10_netbsd32_sys
 		syscallarg(int) a4;
 		syscallarg(int) a5;
 	} */
-	struct netbsd32___semctl14_args /* {
+	struct compat_50_netbsd32___semctl14_args /* {
 		syscallarg(int) semid;
 		syscallarg(int) semnum;
 		syscallarg(int) cmd;
@@ -113,9 +114,9 @@ compat_10_netbsd32_sys_semsys(struct lwp *l, const struct compat_10_netbsd32_sys
 }
 #endif
 
-#if defined(SYSVSHM) || !defined(_KERNEL)
+#if defined(SYSVSHM)
 int
-compat_10_netbsd32_sys_shmsys(struct lwp *l, const struct compat_10_netbsd32_sys_shmsys_args *uap, register_t *retval)
+compat_10_netbsd32_shmsys(struct lwp *l, const struct compat_10_netbsd32_shmsys_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) which;
@@ -131,7 +132,7 @@ compat_10_netbsd32_sys_shmsys(struct lwp *l, const struct compat_10_netbsd32_sys
 	struct compat_14_sys_shmctl_args /* {
 		syscallarg(int) shmid;
 		syscallarg(int) cmd;
-		syscallarg(struct shmid_ds *) buf;
+		syscallarg(struct shmid_ds50 *) buf;
 	} */ shmctl_args;
 	struct sys_shmdt_args /* {
 		syscallarg(void *) shmaddr;
@@ -171,9 +172,9 @@ compat_10_netbsd32_sys_shmsys(struct lwp *l, const struct compat_10_netbsd32_sys
 }
 #endif
 
-#if defined(SYSVMSG) || !defined(_KERNEL)
+#if defined(SYSVMSG)
 int
-compat_10_netbsd32_sys_msgsys(struct lwp *l, const struct compat_10_netbsd32_sys_msgsys_args *uap, register_t *retval)
+compat_10_netbsd32_msgsys(struct lwp *l, const struct compat_10_netbsd32_msgsys_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) which;
@@ -238,3 +239,4 @@ compat_10_netbsd32_sys_msgsys(struct lwp *l, const struct compat_10_netbsd32_sys
 	}
 }
 #endif
+#endif /* COMPAT_10 */

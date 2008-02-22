@@ -1,7 +1,7 @@
-/* $NetBSD: pckbd.c,v 1.20 2008/02/21 01:42:20 joerg Exp $ */
+/* $NetBSD: pckbd.c,v 1.33 2017/06/11 03:55:56 nat Exp $ */
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbd.c,v 1.20 2008/02/21 01:42:20 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbd.c,v 1.33 2017/06/11 03:55:56 nat Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -107,22 +100,25 @@ struct pckbd_internal {
 	pckbport_tag_t t_kbctag;
 	pckbport_slot_t t_kbcslot;
 
+	int t_translating;
+
 	int t_lastchar;
 	int t_extended0;
 	int t_extended1;
+	int t_releasing;
 
 	struct pckbd_softc *t_sc; /* back pointer */
 };
 
 struct pckbd_softc {
-        struct  device sc_dev;
+        device_t sc_dev;
 
 	struct pckbd_internal *id;
 	int sc_enabled;
 
 	int sc_ledstate;
 
-	struct device *sc_wskbddev;
+	device_t sc_wskbddev;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int rawkbd;
 #endif
@@ -130,10 +126,10 @@ struct pckbd_softc {
 
 static int pckbd_is_console(pckbport_tag_t, pckbport_slot_t);
 
-int pckbdprobe(struct device *, struct cfdata *, void *);
-void pckbdattach(struct device *, struct device *, void *);
+int pckbdprobe(device_t, cfdata_t, void *);
+void pckbdattach(device_t, device_t, void *);
 
-CFATTACH_DECL(pckbd, sizeof(struct pckbd_softc),
+CFATTACH_DECL_NEW(pckbd, sizeof(struct pckbd_softc),
     pckbdprobe, pckbdattach, NULL, NULL);
 
 int	pckbd_enable(void *, int);
@@ -174,7 +170,9 @@ void	*pckbd_bell_fn_arg;
 
 void	pckbd_bell(u_int, u_int, u_int, int);
 
-int	pckbd_set_xtscancode(pckbport_tag_t, pckbport_slot_t);
+int	pckbd_scancode_translate(struct pckbd_internal *, int);
+int	pckbd_set_xtscancode(pckbport_tag_t, pckbport_slot_t,
+	    struct pckbd_internal *);
 int	pckbd_init(struct pckbd_internal *, pckbport_tag_t, pckbport_slot_t,
 			int);
 void	pckbd_input(void *, int);
@@ -186,9 +184,10 @@ static int	pckbd_led_decode(int);
 struct pckbd_internal pckbd_consdata;
 
 int
-pckbd_set_xtscancode(pckbport_tag_t kbctag, pckbport_slot_t kbcslot)
+pckbd_set_xtscancode(pckbport_tag_t kbctag, pckbport_slot_t kbcslot,
+    struct pckbd_internal *id)
 {
-	int res;
+	int xt, res = 0;
 	u_char cmd[2];
 
 	/*
@@ -199,21 +198,21 @@ pckbd_set_xtscancode(pckbport_tag_t kbctag, pckbport_slot_t kbcslot)
 	 * known to not work on some PS/2 machines.  We try desperately to deal
 	 * with this by checking the (lack of a) translate bit in the 8042 and
 	 * attempting to set the keyboard to XT mode.  If this all fails, well,
-	 * tough luck.
+	 * tough luck.  If the PCKBC_CANT_TRANSLATE pckbc flag was set, we
+	 * enable software translation.
 	 *
 	 * XXX It would perhaps be a better choice to just use AT scan codes
 	 * and not bother with this.
 	 */
-	if (pckbport_xt_translation(kbctag, kbcslot, 1)) {
+	xt = pckbport_xt_translation(kbctag, kbcslot, 1);
+	if (xt == 1) {
 		/* The 8042 is translating for us; use AT codes. */
 		cmd[0] = KBC_SETTABLE;
 		cmd[1] = 2;
 		res = pckbport_poll_cmd(kbctag, kbcslot, cmd, 2, 0, 0, 0);
 		if (res) {
 			u_char cmdb[1];
-#ifdef DEBUG
-			printf("pckbd: error setting scanset 2\n");
-#endif
+			aprint_debug("pckbd: error setting scanset 2\n");
 			/*
 			 * XXX at least one keyboard is reported to lock up
 			 * if a "set table" is attempted, thus the "reset".
@@ -225,15 +224,21 @@ pckbd_set_xtscancode(pckbport_tag_t kbctag, pckbport_slot_t kbcslot)
 			pckbport_flush(kbctag, kbcslot);
 			res = 0;
 		}
+		if (id != NULL)
+			id->t_translating = 1;
+	} else if (xt == -1) {
+		/* Software translation required */
+		if (id != NULL)
+			id->t_translating = 0;
 	} else {
 		/* Stupid 8042; set keyboard to XT codes. */
 		cmd[0] = KBC_SETTABLE;
 		cmd[1] = 1;
 		res = pckbport_poll_cmd(kbctag, kbcslot, cmd, 2, 0, 0, 0);
-#ifdef DEBUG
 		if (res)
-			printf("pckbd: error setting scanset 1\n");
-#endif
+			aprint_debug("pckbd: error setting scanset 1\n");
+		if (id != NULL)
+			id->t_translating = 1;
 	}
 	return res;
 }
@@ -247,7 +252,7 @@ pckbd_is_console(pckbport_tag_t tag, pckbport_slot_t slot)
 }
 
 static bool
-pckbd_suspend(device_t dv)
+pckbd_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct pckbd_softc *sc = device_private(dv);
 	u_char cmd[1];
@@ -270,7 +275,7 @@ pckbd_suspend(device_t dv)
 }
 
 static bool
-pckbd_resume(device_t dv)
+pckbd_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct pckbd_softc *sc = device_private(dv);
 	u_char cmd[1], resp[1];
@@ -282,13 +287,10 @@ pckbd_resume(device_t dv)
 	cmd[0] = KBC_RESET;
 	res = pckbport_poll_cmd(sc->id->t_kbctag,
 	    sc->id->t_kbcslot, cmd, 1, 1, resp, 1);
-#ifdef DEBUG
 	if (res)
-		printf("pckbdprobe: reset error %d\n", res);
-#endif
+		aprint_debug("%s: reset error %d\n", __func__, res);
 	if (resp[0] != KBR_RSTDONE)
-		printf("pckbdprobe: reset response 0x%x\n",
-		    resp[0]);
+		printf("%s: reset response 0x%x\n", __func__, resp[0]);
 
 	pckbport_flush(sc->id->t_kbctag, sc->id->t_kbcslot);
 
@@ -301,7 +303,7 @@ pckbd_resume(device_t dv)
  * these are both bad jokes
  */
 int
-pckbdprobe(struct device *parent, struct cfdata *cf, void *aux)
+pckbdprobe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pckbport_attach_args *pa = aux;
 	int res;
@@ -324,9 +326,7 @@ pckbdprobe(struct device *parent, struct cfdata *cf, void *aux)
 	cmd[0] = KBC_RESET;
 	res = pckbport_poll_cmd(pa->pa_tag, pa->pa_slot, cmd, 1, 1, resp, 1);
 	if (res) {
-#ifdef DEBUG
-		printf("pckbdprobe: reset error %d\n", res);
-#endif
+		aprint_debug("pckbdprobe: reset error %d\n", res);
 		/*
 		 * There is probably no keyboard connected.
 		 * Let the probe succeed if the keyboard is used
@@ -346,14 +346,14 @@ pckbdprobe(struct device *parent, struct cfdata *cf, void *aux)
 	 */
 	pckbport_flush(pa->pa_tag, pa->pa_slot);
 
-	if (pckbd_set_xtscancode(pa->pa_tag, pa->pa_slot))
+	if (pckbd_set_xtscancode(pa->pa_tag, pa->pa_slot, NULL))
 		return 0;
 
 	return 2;
 }
 
 void
-pckbdattach(struct device *parent, struct device *self, void *aux)
+pckbdattach(device_t parent, device_t self, void *aux)
 {
 	struct pckbd_softc *sc = device_private(self);
 	struct pckbport_attach_args *pa = aux;
@@ -364,6 +364,7 @@ pckbdattach(struct device *parent, struct device *self, void *aux)
 	aprint_naive("\n");
 	aprint_normal("\n");
 
+	sc->sc_dev = self;
 	isconsole = pckbd_is_console(pa->pa_tag, pa->pa_slot);
 
 	if (isconsole) {
@@ -392,7 +393,7 @@ pckbdattach(struct device *parent, struct device *self, void *aux)
 	sc->id->t_sc = sc;
 
 	pckbport_set_inputhandler(sc->id->t_kbctag, sc->id->t_kbcslot,
-			       pckbd_input, sc, sc->sc_dev.dv_xname);
+			       pckbd_input, sc, device_xname(sc->sc_dev));
 
 	a.console = isconsole;
 
@@ -408,7 +409,7 @@ pckbdattach(struct device *parent, struct device *self, void *aux)
 	 * Attach the wskbd, saving a handle to it.
 	 * XXX XXX XXX
 	 */
-	sc->sc_wskbddev = config_found(self, &a, wskbddevprint);
+	sc->sc_wskbddev = config_found_ia(self, "wskbddev", &a, wskbddevprint);
 }
 
 int
@@ -420,9 +421,7 @@ pckbd_enable(void *v, int on)
 
 	if (on) {
 		if (sc->sc_enabled) {
-#ifdef DIAGNOSTIC
-			printf("pckbd_enable: bad enable\n");
-#endif
+			aprint_debug("pckbd_enable: bad enable\n");
 			return EBUSY;
 		}
 
@@ -437,7 +436,7 @@ pckbd_enable(void *v, int on)
 		}
 
 		res = pckbd_set_xtscancode(sc->id->t_kbctag,
-					   sc->id->t_kbcslot);
+					   sc->id->t_kbcslot, sc->id);
 		if (res)
 			return res;
 
@@ -462,21 +461,406 @@ pckbd_enable(void *v, int on)
 	return 0;
 }
 
+const u_int8_t pckbd_xtbl[] = {
+/* 0x00 */
+	0,
+	0x43,		/* F9 */
+	0x89,		/* SunStop */
+	0x3f,		/* F5 */
+	0x3d,		/* F3 */
+	0x3b,		/* F1 */
+	0x3c,		/* F2 */
+	0x58,		/* F12 */
+	0,
+	0x44,		/* F10 */
+	0x42,		/* F8 */
+	0x40,		/* F6 */
+	0x3e,		/* F4 */
+	0x0f,		/* Tab */
+	0x29,		/* ` ~ */
+	0,
+/* 0x10 */
+	0,
+	0x38,		/* Left Alt */
+	0x2a,		/* Left Shift */
+	0,
+	0x1d,		/* Left Ctrl */
+	0x10,		/* q */
+	0x02,		/* 1 ! */
+	0,
+	0,
+	0,
+	0x2c,		/* z */
+	0x1f,		/* s */
+	0x1e,		/* a */
+	0x11,		/* w */
+	0x03,		/* 2 @ */
+	0,
+/* 0x20 */	
+	0,
+	0x2e,		/* c */
+	0x2d,		/* x */
+	0x20,		/* d */
+	0x12,		/* e */
+	0x05,		/* 4 $ */
+	0x04,		/* 3 # */
+	0,
+	0,
+	0x39,		/* Space */
+	0x2f,		/* v */
+	0x21,		/* f */
+	0x14,		/* t */
+	0x13,		/* r */
+	0x06,		/* 5 % */
+	0,
+/* 0x30 */
+	0,
+	0x31,		/* n */
+	0x30,		/* b */
+	0x23,		/* h */
+	0x22,		/* g */
+	0x15,		/* y */
+	0x07,		/* 6 ^ */
+	0,
+	0,
+	0,
+	0x32,		/* m */
+	0x24,		/* j */
+	0x16,		/* u */
+	0x08,		/* 7 & */
+	0x09,		/* 8 * */
+	0,
+/* 0x40 */
+	0,
+	0x33,		/* , < */
+	0x25,		/* k */
+	0x17,		/* i */
+	0x18,		/* o */
+	0x0b,		/* 0 ) */
+	0x0a,		/* 9 ( */
+	0,
+	0,
+	0x34,		/* . > */
+	0x35,		/* / ? */
+	0x26,		/* l */
+	0x27,		/* ; : */
+	0x19,		/* p */
+	0x0c,		/* - _ */
+	0,
+/* 0x50 */
+	0,
+	0,
+	0x28,		/* ' " */
+	0,
+	0x1a,		/* [ { */
+	0x0d,		/* = + */
+	0,
+	0,
+	0x3a,		/* Caps Lock */
+	0x36,		/* Right Shift */
+	0x1c,		/* Return */
+	0x1b,		/* ] } */
+	0,
+	0x2b,		/* \ | */
+	0,
+	0,
+/* 0x60 */
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0x0e,		/* Back Space */
+	0,
+	0,
+	0x4f,		/* KP 1 */
+	0,
+	0x4b,		/* KP 4 */
+	0x47,		/* KP 7 */
+	0,
+	0,
+	0,
+/* 0x70 */
+	0x52,		/* KP 0 */
+	0x53,		/* KP . */
+	0x50,		/* KP 2 */
+	0x4c,		/* KP 5 */
+	0x4d,		/* KP 6 */
+	0x48,		/* KP 8 */
+	0x01,		/* Escape */
+	0x45,		/* Num Lock */
+	0x57,		/* F11 */
+	0x4e,		/* KP + */
+	0x51,		/* KP 3 */
+	0x4a,		/* KP - */
+	0x37,		/* KP * */
+	0x49,		/* KP 9 */
+	0x46,		/* Scroll Lock */
+	0,
+/* 0x80 */
+	0,
+	0,
+	0,
+	0x41,		/* F7 (produced as an actual 8 bit code) */
+	0,		/* Alt-Print Screen */
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+/* 0x90 */
+	0xdb,		/* Left Meta */
+	0x88,		/* SunHelp */
+	0x8a,		/* SunAgain */
+	0x8c,		/* SunUndo */
+	0x8e,		/* SunCopy */
+	0x90,		/* SunPaste */
+	0x92,		/* SunCut */
+	0x8b,		/* SunProps */
+	0x8d,		/* SunFront */
+	0x8f,		/* SunOpen */
+	0x91		/* SunFind */
+};
+
+const u_int8_t pckbd_xtbl_ext[] = {
+/* 0x00 */
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+/* 0x10 */
+	0,
+	0x38,		/* Right Alt */
+	0,		/* E0 12, to be ignored */
+	0,
+	0x1d,		/* Right Ctrl */
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+/* 0x20 */
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0xdd,		/* Compose */
+/* 0x30 */
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+/* 0x40 */
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0xb5,		/* KP / */
+	0,
+	0,
+	0,
+	0,
+	0,
+/* 0x50 */
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0x1c,		/* KP Return */
+	0,
+	0,
+	0,
+	0,
+	0,
+/* 0x60 */
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0x4f,		/* End */
+	0,
+	0x4b,		/* Left */
+	0x47,		/* Home */
+	0,
+	0,
+	0,
+/* 0x70 */
+	0x52,		/* Insert */
+	0x53,		/* Delete */
+	0x50,		/* Down */
+	0,
+	0x4d,		/* Right */
+	0x48,		/* Up */
+	0,
+	0,
+	0,
+	0,
+	0x51,		/* Page Down */
+	0,
+	0x37,		/* Print Screen */
+	0x49,		/* Page Up */
+	0x46,		/* Ctrl-Break */
+	0
+};
+
+/*
+ * Translate scan codes from set 2 to set 1
+ */
+int
+pckbd_scancode_translate(struct pckbd_internal *id, int datain)
+{
+	if (id->t_translating != 0)
+		return datain;
+
+	if (datain == KBR_BREAK) {
+		id->t_releasing = 0x80;	/* next keycode is a release */
+		return 0;	/* consume scancode */
+	}
+
+	/*
+	 * Handle extended sequences
+	 */
+	if (datain == KBR_EXTENDED0 || datain == KBR_EXTENDED1)
+		return datain;
+
+	/*
+	 * Convert BREAK sequence (14 77 -> 1D 45)
+	 */
+	if (id->t_extended1 == 2 && datain == 0x14)
+		return 0x1d | id->t_releasing;
+	else if (id->t_extended1 == 1 && datain == 0x77)
+		return 0x45 | id->t_releasing;
+
+	if (id->t_extended0 != 0) {
+		if (datain >= sizeof pckbd_xtbl_ext)
+			datain = 0;
+		else
+			datain = pckbd_xtbl_ext[datain];
+	} else {
+		if (datain >= sizeof pckbd_xtbl)
+			datain = 0;
+		else
+			datain = pckbd_xtbl[datain];
+	}
+
+	/* 
+	 * If we are mapping in the range 128-254, then make this
+	 * an extended keycode, as table 1 codes are limited to
+	 * the range 0-127 (the top bit is used for key up/break).
+	 */
+	if (datain > 0x7f) {
+		datain &= 0x7f;
+		id->t_extended0 = 0x80;
+	}
+		
+	if (datain == 0) {
+		/*
+		 * We don't know how to translate this scan code, but
+		 * we can't silently eat it either (because there might
+		 * have been an extended byte transmitted already).
+		 * Hopefully this value will be harmless to the upper
+		 * layers.
+		 */
+		return 0xff;
+	}
+	return datain | id->t_releasing;
+}
+
 static int
 pckbd_decode(struct pckbd_internal *id, int datain, u_int *type, int *dataout)
 {
 	int key;
+	int releasing;
 
 	if (datain == KBR_EXTENDED0) {
-		id->t_extended0 = 1;
+		id->t_extended0 = 0x80;
 		return 0;
 	} else if (datain == KBR_EXTENDED1) {
 		id->t_extended1 = 2;
 		return 0;
 	}
 
- 	/* map extended keys to (unused) codes 128-254 */
-	key = (datain & 0x7f) | (id->t_extended0 ? 0x80 : 0);
+	releasing = datain & 0x80;
+	datain &= 0x7f;
+
+	if (id->t_extended0 == 0x80) {
+		switch (datain) {
+		case 0x2a:
+		case 0x36:
+			id->t_extended0 = 0;
+			return 0;
+		default:
+			break;
+		}
+	}
+
+	/* map extended keys to (unused) codes 128-254 */
+	key = datain | id->t_extended0;
 	id->t_extended0 = 0;
 
 	/*
@@ -494,7 +878,14 @@ pckbd_decode(struct pckbd_internal *id, int datain, u_int *type, int *dataout)
 		id->t_extended1 = 0;
 	}
 
-	if (datain & 0x80) {
+	if (id->t_translating != 0) {
+		id->t_releasing = releasing;
+	} else {
+		/* id->t_releasing computed in pckbd_scancode_translate() */
+	}
+
+	if (id->t_releasing) {
+		id->t_releasing = 0;
 		id->t_lastchar = 0;
 		*type = WSCONS_EVENT_KEY_UP;
 	} else {
@@ -520,7 +911,7 @@ pckbd_init(struct pckbd_internal *t, pckbport_tag_t kbctag,
 	t->t_kbctag = kbctag;
 	t->t_kbcslot = kbcslot;
 
-	return pckbd_set_xtscancode(kbctag, kbcslot);
+	return pckbd_set_xtscancode(kbctag, kbcslot, t);
 }
 
 static int
@@ -579,6 +970,10 @@ pckbd_input(void *vsc, int data)
 	int key;
 	u_int type;
 
+	data = pckbd_scancode_translate(sc->id, data);
+	if (data == 0)
+		return;
+
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	if (sc->rawkbd) {
 		u_char d = data;
@@ -615,6 +1010,7 @@ pckbd_ioctl(void *v, u_long cmd, void *data, int flag,
 	case WSKBDIO_GETLEDS:
 		*(int *)data = pckbd_led_decode(sc->sc_ledstate);
 		return 0;
+#if 0
 	case WSKBDIO_COMPLEXBELL:
 #define d ((struct wskbd_bell_data *)data)
 		/*
@@ -624,6 +1020,7 @@ pckbd_ioctl(void *v, u_long cmd, void *data, int flag,
 		pckbd_bell(d->pitch, d->period, d->volume, 0);
 #undef d
 		return 0;
+#endif
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	case WSKBDIO_SETMODE:
 		sc->rawkbd = (*(int *)data == WSKBD_RAW);
@@ -685,7 +1082,7 @@ pckbd_cnattach(pckbport_tag_t kbctag, int kbcslot)
 
 	wskbd_cnattach(&pckbd_consops, &pckbd_consdata, &pckbd_keymapdata);
 
-	return 0;
+	return res;
 }
 
 /* ARGSUSED */
@@ -697,7 +1094,14 @@ pckbd_cngetc(void *v, u_int *type, int *data)
 
 	for (;;) {
 		val = pckbport_poll_data(t->t_kbctag, t->t_kbcslot);
-		if ((val != -1) && pckbd_decode(t, val, type, data))
+		if (val == -1)
+			continue;
+
+		val = pckbd_scancode_translate(t, val);
+		if (val == 0)
+			continue;
+
+		if (pckbd_decode(t, val, type, data))
 			return;
 	}
 }
@@ -706,14 +1110,6 @@ void
 pckbd_cnpollc(void *v, int on)
 {
 	struct pckbd_internal *t = v;
-
-	if (on) {
-		u_char cmd[1];
-
-		cmd[0] = KBC_ENABLE;
-		(void)pckbport_poll_cmd(t->t_kbctag, t->t_kbcslot, cmd,
-		    1, 0, 0, 0);
-	}
 
 	pckbport_set_poll(t->t_kbctag, t->t_kbcslot, on);
 }

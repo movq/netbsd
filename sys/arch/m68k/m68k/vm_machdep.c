@@ -1,6 +1,7 @@
-/*	$NetBSD: vm_machdep.c,v 1.26 2007/10/17 19:55:12 garbled Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.39 2013/10/25 20:53:02 martin Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,65 +37,23 @@
  *
  *	@(#)vm_machdep.c	8.6 (Berkeley) 1/12/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: vm_machdep.c 1.21 91/04/06$
- *
- *	@(#)vm_machdep.c	8.6 (Berkeley) 1/12/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.26 2007/10/17 19:55:12 garbled Exp $");
-
-#include "opt_coredump.h"
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.39 2013/10/25 20:53:02 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/cpu.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/exec.h>
 
 #include <machine/frame.h>
-#include <machine/cpu.h>
 #include <machine/pte.h>
-#include <machine/reg.h>
+#include <machine/pcb.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -127,10 +86,12 @@ void
 cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
     void (*func)(void *), void *arg)
 {
-	struct pcb *pcb = &l2->l_addr->u_pcb;
+	struct pcb *pcb1, *pcb2;
 	struct trapframe *tf;
 	struct switchframe *sf;
-	extern struct pcb *curpcb;
+
+	pcb1 = lwp_getpcb(l1);
+	pcb2 = lwp_getpcb(l2);
 
 	l2->l_md.md_flags = l1->l_md.md_flags;
 
@@ -138,17 +99,16 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	if (l1 == curlwp) {
 		/* Sync the PCB before we copy it. */
 		savectx(curpcb);
+	} else {
+		KASSERT(l1 == &lwp0);
 	}
-#ifdef DIAGNOSTIC
-	else if (l1 != &lwp0)
-		panic("cpu_lwp_fork: curlwp");
-#endif
-	*pcb = l1->l_addr->u_pcb;
+
+	*pcb2 = *pcb1;
 
 	/*
 	 * Copy the trap frame.
 	 */
-	tf = (struct trapframe *)((u_int)l2->l_addr + USPACE) - 1;
+	tf = (struct trapframe *)(uvm_lwp_getuarea(l2) + USPACE) - 1;
 	l2->l_md.md_regs = (int *)tf;
 	*tf = *(struct trapframe *)l1->l_md.md_regs;
 
@@ -160,24 +120,11 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 
 	sf = (struct switchframe *)tf - 1;
 	sf->sf_pc = (u_int)lwp_trampoline;
-	pcb->pcb_regs[6] = (int)func;		/* A2 */
-	pcb->pcb_regs[7] = (int)arg;		/* A3 */
-	pcb->pcb_regs[8] = (int)l2;		/* A4 */
-	pcb->pcb_regs[11] = (int)sf;		/* SSP */
-	pcb->pcb_ps = PSL_LOWIPL;		/* start kthreads at IPL 0 */
-}
-
-void
-cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
-{
-	struct pcb *pcb = &l->l_addr->u_pcb;
-	struct trapframe *tf = (struct trapframe *)l->l_md.md_regs;
-	struct switchframe *sf = (struct switchframe *)tf - 1;
-
-	sf->sf_pc = (u_int)lwp_trampoline;
-	pcb->pcb_regs[6] = (int)func;		/* A2 */
-	pcb->pcb_regs[7] = (int)arg;		/* A3 */
-	pcb->pcb_regs[11] = (int)sf;		/* SSP */
+	pcb2->pcb_regs[6] = (int)func;		/* A2 */
+	pcb2->pcb_regs[7] = (int)arg;		/* A3 */
+	pcb2->pcb_regs[8] = (int)l2;		/* A4 */
+	pcb2->pcb_regs[11] = (int)sf;		/* SSP */
+	pcb2->pcb_ps = PSL_LOWIPL;		/* start kthreads at IPL 0 */
 }
 
 void
@@ -194,69 +141,15 @@ cpu_lwp_free2(struct lwp *l)
 	/* Nothing to do */
 }
 
-#ifdef COREDUMP
-/*
- * Dump the machine specific header information at the start of a core dump.
- */
-struct md_core {
-	struct reg intreg;
-	struct fpreg freg;
-};
-
-int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
-{
-	struct md_core md_core;
-	struct coreseg cseg;
-	int error;
-
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
-		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
-		chdr->c_cpusize = sizeof(md_core);
-		chdr->c_nseg++;
-		return 0;
-	}
-
-	/* Save integer registers. */
-	error = process_read_regs(l, &md_core.intreg);
-	if (error)
-		return error;
-
-	if (fputype) {
-		/* Save floating point registers. */
-		error = process_read_fpregs(l, &md_core.freg);
-		if (error)
-			return error;
-	} else {
-		/* Make sure these are clear. */
-		memset((void *)&md_core.freg, 0, sizeof(md_core.freg));
-	}
-
-	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
-	cseg.c_addr = 0;
-	cseg.c_size = chdr->c_cpusize;
-
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
-	if (error)
-		return error;
-
-	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
-	    sizeof(md_core));
-}
-#endif
-
 /*
  * Map a user I/O request into kernel virtual address space.
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().
  */
-void
+int
 vmapbuf(struct buf *bp, vsize_t len)
 {
-	struct pmap *upmap, *kpmap;
+	struct pmap *upmap, *kpmap __unused;
 	vaddr_t uva;		/* User VA (map from) */
 	vaddr_t kva;		/* Kernel VA (new to) */
 	paddr_t pa; 		/* physical address */
@@ -280,13 +173,15 @@ vmapbuf(struct buf *bp, vsize_t len)
 		pmap_enter(kpmap, kva, pa, VM_PROT_READ | VM_PROT_WRITE,
 		    PMAP_WIRED);
 #else
-		pmap_kenter_pa(kva, pa, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(kva, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
 #endif
 		uva += PAGE_SIZE;
 		kva += PAGE_SIZE;
 		len -= PAGE_SIZE;
 	} while (len);
 	pmap_update(kpmap);
+
+	return 0;
 }
 
 /*
@@ -366,3 +261,4 @@ kvtop(void *addr)
 }
 
 #endif
+

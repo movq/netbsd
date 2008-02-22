@@ -1,4 +1,4 @@
-$NetBSD: version,v 1.5 2005/12/11 12:17:47 christos Exp $
+$NetBSD: version,v 1.17 2017/10/07 10:32:56 maxv Exp $
 
 NOTE ANY CHANGES YOU MAKE TO THE BOOTBLOCKS HERE.  The format of this
 file is important - make sure the entries are appended on end, last item
@@ -36,3 +36,16 @@ is taken as the current.
 	Keep MBR's existing BPB and partition table when installing bootxx.
 3.2:	Add support for passing boot wedge information to the kernel.
 3.3:	Add support for cd9660 file system.
+5.0:	Support for boot menu, modules.
+5.1:	Change boot messages to replace build date with kernel version.
+5.2:	Support for multiboot.
+5.3:	Autoload kernel module for root file system.
+5.4:	The VESA VBE mode number is now passed to the kernel so it can be
+	restored on ACPI resume.
+5.5:	Adjust stack and heap areas to not overlap.
+5.6:	GUID Partition Table support.
+5.7:	Recognize 64-bit LBA from bootxx.
+5.8:	Support for splash images.
+5.9:	VESA VBE/DDC EDID support.
+5.10:	Support for using raw file-system images as memory disks.
+5.11:	Support for booting KASLR amd64 kernels.

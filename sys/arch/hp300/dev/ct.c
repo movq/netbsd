@@ -1,4 +1,4 @@
-/*	$NetBSD: ct.c,v 1.52 2008/01/02 11:48:24 ad Exp $	*/
+/*	$NetBSD: ct.c,v 1.61 2014/07/25 08:10:33 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -82,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.52 2008/01/02 11:48:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.61 2014/07/25 08:10:33 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,7 +98,7 @@ __KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.52 2008/01/02 11:48:24 ad Exp $");
 #define EOFS	128
 
 struct	ct_softc {
-	struct	device sc_dev;
+	device_t sc_dev;
 	int	sc_slave;		/* HP-IB slave ID */
 	int	sc_punit;		/* physical unit */
 	struct	ct_iocmd sc_ioc;
@@ -146,10 +139,10 @@ struct	ct_softc {
 #define CTF_CANSTREAM	0x200
 #define	CTF_WRTTN	0x400
 
-static int	ctmatch(struct device *, struct cfdata *, void *);
-static void	ctattach(struct device *, struct device *, void *);
+static int	ctmatch(device_t, cfdata_t, void *);
+static void	ctattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ct, sizeof(struct ct_softc),
+CFATTACH_DECL_NEW(ct, sizeof(struct ct_softc),
     ctmatch, ctattach, NULL, NULL);
 
 static dev_type_open(ctopen);
@@ -160,15 +153,32 @@ static dev_type_ioctl(ctioctl);
 static dev_type_strategy(ctstrategy);
 
 const struct bdevsw ct_bdevsw = {
-	ctopen, ctclose, ctstrategy, ctioctl, nodump, nosize, D_TAPE
+	.d_open = ctopen,
+	.d_close = ctclose,
+	.d_strategy = ctstrategy,
+	.d_ioctl = ctioctl,
+	.d_dump = nodump,
+	.d_psize = nosize,
+	.d_discard = nodiscard,
+	.d_flag = D_TAPE
 };
 
 const struct cdevsw ct_cdevsw = {
-	ctopen, ctclose, ctread, ctwrite, ctioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_TAPE
+	.d_open = ctopen,
+	.d_close = ctclose,
+	.d_read = ctread,
+	.d_write = ctwrite,
+	.d_ioctl = ctioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TAPE
 };
 
-static int	ctident(struct device *, struct ct_softc *,
+static int	ctident(device_t, struct ct_softc *,
 		    struct hpibbus_attach_args *);
 
 static void	ctreset(struct ct_softc *);
@@ -195,7 +205,7 @@ static const struct ctinfo {
 	{ CT9145ID,	0,	"9145"	},
 	{ CT35401ID,	0,	"35401A"},
 };
-static const int nctinfo = sizeof(ctinfo) / sizeof(ctinfo[0]);
+static const int nctinfo = __arraycount(ctinfo);
 
 #define	CT_NOREW	4
 #define	CT_STREAM	8
@@ -209,7 +219,7 @@ int ctdebug = 0;
 #endif
 
 static int
-ctmatch(struct device *parent, struct cfdata *match, void *aux)
+ctmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct hpibbus_attach_args *ha = aux;
 
@@ -217,14 +227,14 @@ ctmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-ctattach(struct device *parent, struct device *self, void *aux)
+ctattach(device_t parent, device_t self, void *aux)
 {
-	struct ct_softc *sc = (struct ct_softc *)self;
+	struct ct_softc *sc = device_private(self);
 	struct hpibbus_attach_args *ha = aux;
 
+	sc->sc_dev = self;
 	if (ctident(parent, sc, ha) == 0) {
-		printf("\n%s: didn't respond to describe command!\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error(": didn't respond to describe command!\n");
 		return;
 	}
 
@@ -245,8 +255,7 @@ ctattach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-ctident(struct device *parent, struct ct_softc *sc,
-    struct hpibbus_attach_args *ha)
+ctident(device_t parent, struct ct_softc *sc, struct hpibbus_attach_args *ha)
 {
 	struct ct_describe desc;
 	u_char stat, cmd[3];
@@ -310,7 +319,7 @@ ctident(struct device *parent, struct ct_softc *sc,
 	if (sc != NULL) {
 		sc->sc_type = type;
 		sc->sc_flags = canstream ? CTF_CANSTREAM : 0;
-		printf(": %s %stape\n", ctinfo[id].desc,
+		aprint_normal(": %s %stape\n", ctinfo[id].desc,
 		    canstream ? "streaming " : "");
 	}
 
@@ -321,9 +330,9 @@ static void
 ctreset(struct ct_softc *sc)
 {
 	int ctlr, slave;
-	u_char stat;
+	uint8_t stat;
 
-	ctlr = device_unit(device_parent(&sc->sc_dev));
+	ctlr = device_unit(device_parent(sc->sc_dev));
 	slave = sc->sc_slave;
 
 	sc->sc_clear.unit = C_SUNIT(sc->sc_punit);
@@ -364,18 +373,20 @@ static int
 ctopen(dev_t dev, int flag, int type, struct lwp *l)
 {
 	struct ct_softc *sc;
-	u_char stat;
+	uint8_t stat;
 	int cc, ctlr, slave;
 
-	if (UNIT(dev) >= ct_cd.cd_ndevs ||
-	    (sc = ct_cd.cd_devs[UNIT(dev)]) == NULL ||
-	    (sc->sc_flags & CTF_ALIVE) == 0)
+	sc = device_lookup_private(&ct_cd, UNIT(dev));
+	if (sc == NULL)
+		return ENXIO;
+
+	if ((sc->sc_flags & CTF_ALIVE) == 0)
 		return ENXIO;
 
 	if (sc->sc_flags & CTF_OPEN)
 		return EBUSY;
 
-	ctlr = device_unit(device_parent(&sc->sc_dev));
+	ctlr = device_unit(device_parent(sc->sc_dev));
 	slave = sc->sc_slave;
 
 	sc->sc_soptc.unit = C_SUNIT(sc->sc_punit);
@@ -409,7 +420,7 @@ ctopen(dev_t dev, int flag, int type, struct lwp *l)
 static int
 ctclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
-	struct ct_softc *sc = ct_cd.cd_devs[UNIT(dev)];
+	struct ct_softc *sc = device_lookup_private(&ct_cd,UNIT(dev));
 
 	if ((sc->sc_flags & (CTF_WRT|CTF_WRTTN)) == (CTF_WRT|CTF_WRTTN) &&
 	    (sc->sc_flags & CTF_EOT) == 0 ) { /* XXX return error if EOT ?? */
@@ -422,8 +433,8 @@ ctclose(dev_t dev, int flag, int fmt, struct lwp *l)
 #ifdef DEBUG
 		if(ctdebug & CT_BSF)
 			printf("%s: ctclose backup eofs prt %d blk %d\n",
-			       sc->sc_dev.dv_xname, sc->sc_eofp,
-			       sc->sc_eofs[sc->sc_eofp]);
+			    device_xname(sc->sc_dev), sc->sc_eofp,
+			    sc->sc_eofs[sc->sc_eofp]);
 #endif
 	}
 	if ((minor(dev) & CT_NOREW) == 0)
@@ -440,7 +451,7 @@ ctclose(dev_t dev, int flag, int fmt, struct lwp *l)
 static void
 ctcommand(dev_t dev, int cmd, int cnt)
 {
-	struct ct_softc *sc = ct_cd.cd_devs[UNIT(dev)];
+	struct ct_softc *sc = device_lookup_private(&ct_cd,UNIT(dev));
 	struct buf *bp = &sc->sc_bufstore;
 	struct buf *nbp = 0;
 
@@ -475,7 +486,7 @@ ctcommand(dev_t dev, int cmd, int cnt)
 #ifdef DEBUG
 			if (ctdebug & CT_BSF)
 				printf("%s: backup eof pos %d blk %d\n",
-				    sc->sc_dev.dv_xname, sc->sc_eofp,
+				    device_xname(sc->sc_dev), sc->sc_eofp,
 				    sc->sc_eofs[sc->sc_eofp]);
 #endif
 		}
@@ -491,14 +502,13 @@ ctcommand(dev_t dev, int cmd, int cnt)
 static void
 ctstrategy(struct buf *bp)
 {
-	int s, unit;
+	int s;
 	struct ct_softc *sc;
 
-	unit = UNIT(bp->b_dev);
-	sc = ct_cd.cd_devs[unit];
+	sc = device_lookup_private(&ct_cd, UNIT(bp->b_dev));
 
 	s = splbio();
-	BUFQ_PUT(sc->sc_tab, bp);
+	bufq_put(sc->sc_tab, bp);
 	if (sc->sc_active == 0) {
 		sc->sc_active = 1;
 		ctustart(sc);
@@ -511,10 +521,10 @@ ctustart(struct ct_softc *sc)
 {
 	struct buf *bp;
 
-	bp = BUFQ_PEEK(sc->sc_tab);
+	bp = bufq_peek(sc->sc_tab);
 	sc->sc_addr = bp->b_data;
 	sc->sc_resid = bp->b_bcount;
-	if (hpibreq(device_parent(&sc->sc_dev), &sc->sc_hq))
+	if (hpibreq(device_parent(sc->sc_dev), &sc->sc_hq))
 		ctstart(sc);
 }
 
@@ -525,10 +535,10 @@ ctstart(void *arg)
 	struct buf *bp;
 	int i, ctlr, slave;
 
-	ctlr = device_unit(device_parent(&sc->sc_dev));
+	ctlr = device_unit(device_parent(sc->sc_dev));
 	slave = sc->sc_slave;
 
-	bp = BUFQ_PEEK(sc->sc_tab);
+	bp = bufq_peek(sc->sc_tab);
 	if ((sc->sc_flags & CTF_CMD) && sc->sc_bp == bp) {
 		switch(sc->sc_cmd) {
 		case MTFSF:
@@ -569,7 +579,7 @@ ctstart(void *arg)
 #ifdef DEBUG
 			if(ctdebug & CT_BSF)
 				printf("%s: clearing eofs\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 #endif
 			for (i=0; i<EOFS; i++)
 				sc->sc_eofs[i] = 0;
@@ -638,9 +648,9 @@ ctgo(void *arg)
 	struct buf *bp;
 	int rw;
 
-	bp = BUFQ_PEEK(sc->sc_tab);
+	bp = bufq_peek(sc->sc_tab);
 	rw = bp->b_flags & B_READ;
-	hpibgo(device_unit(device_parent(&sc->sc_dev)), sc->sc_slave, C_EXEC,
+	hpibgo(device_unit(device_parent(sc->sc_dev)), sc->sc_slave, C_EXEC,
 	    sc->sc_addr, sc->sc_resid, rw, rw != 0);
 }
 
@@ -723,16 +733,15 @@ ctintr(void *arg)
 {
 	struct ct_softc *sc = arg;
 	struct buf *bp;
-	u_char stat;
-	int ctlr, slave, unit;
+	uint8_t stat;
+	int ctlr, slave;
 
-	ctlr = device_unit(device_parent(&sc->sc_dev));
+	ctlr = device_unit(device_parent(sc->sc_dev));
 	slave = sc->sc_slave;
-	unit = device_unit(&sc->sc_dev);
 
-	bp = BUFQ_PEEK(sc->sc_tab);
+	bp = bufq_peek(sc->sc_tab);
 	if (bp == NULL) {
-		printf("%s: bp == NULL\n", sc->sc_dev.dv_xname);
+		printf("%s: bp == NULL\n", device_xname(sc->sc_dev));
 		return;
 	}
 	if (sc->sc_flags & CTF_IO) {
@@ -785,21 +794,21 @@ ctintr(void *arg)
 			if (sc->sc_stat.c_aef & 0x5800) {
 				if (sc->sc_stat.c_aef & 0x4000)
 					tprintf(sc->sc_tpr,
-						"%s: uninitialized media\n",
-						sc->sc_dev.dv_xname);
+					    "%s: uninitialized media\n",
+					    device_xname(sc->sc_dev));
 				if (sc->sc_stat.c_aef & 0x1000)
 					tprintf(sc->sc_tpr,
-						"%s: not ready\n",
-						sc->sc_dev.dv_xname);
+					    "%s: not ready\n",
+					    device_xname(sc->sc_dev));
 				if (sc->sc_stat.c_aef & 0x0800)
 					tprintf(sc->sc_tpr,
-						"%s: write protect\n",
-						sc->sc_dev.dv_xname);
+					    "%s: write protect\n",
+					    device_xname(sc->sc_dev));
 			} else {
 				printf("%s err: v%d u%d ru%d bn%ld, ",
-				       sc->sc_dev.dv_xname,
-				       (sc->sc_stat.c_vu>>4)&0xF,
-				       sc->sc_stat.c_vu&0xF,
+				    device_xname(sc->sc_dev),
+				       (sc->sc_stat.c_vu >> 4) & 0xF,
+				       sc->sc_stat.c_vu & 0xF,
 				       sc->sc_stat.c_pend,
 				       sc->sc_stat.c_blk);
 				printf("R0x%x F0x%x A0x%x I0x%x\n",
@@ -810,7 +819,7 @@ ctintr(void *arg)
 			}
 		} else
 			printf("%s: request status failed\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 		bp->b_error = EIO;
 		goto done;
 	} else
@@ -864,10 +873,10 @@ static void
 ctdone(struct ct_softc *sc, struct buf *bp)
 {
 
-	(void)BUFQ_GET(sc->sc_tab);
+	(void)bufq_get(sc->sc_tab);
 	biodone(bp);
-	hpibfree(device_parent(&sc->sc_dev), &sc->sc_hq);
-	if (BUFQ_PEEK(sc->sc_tab) == NULL) {
+	hpibfree(device_parent(sc->sc_dev), &sc->sc_hq);
+	if (bufq_peek(sc->sc_tab) == NULL) {
 		sc->sc_active = 0;
 		return;
 	}
@@ -947,7 +956,7 @@ ctaddeof(struct ct_softc *sc)
 #ifdef DEBUG
 	if (ctdebug & CT_BSF)
 		printf("%s: add eof pos %d blk %d\n",
-		       sc->sc_dev.dv_xname, sc->sc_eofp,
+		       device_xname(sc->sc_dev), sc->sc_eofp,
 		       sc->sc_eofs[sc->sc_eofp]);
 #endif
 }

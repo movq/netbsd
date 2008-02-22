@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380reg.h,v 1.19 2005/12/11 12:16:54 christos Exp $	*/
+/*	$NetBSD: ncr5380reg.h,v 1.23 2011/06/05 06:33:42 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -157,7 +152,7 @@
 #define	INTR_DMA	3
 
 struct	ncr_softc {
-	struct	device		sc_dev;
+	device_t		sc_dev;
 	struct	scsipi_channel	sc_channel;
 	struct	scsipi_adapter	sc_adapter;
 
@@ -196,19 +191,19 @@ typedef struct	req_q {
     struct req_q	*link;	    /* next linked command to execute       */
     struct scsipi_xfer	*xs;	    /* request from high-level driver       */
     u_short		dr_flag;    /* driver state			    */
-    u_char		phase;	    /* current SCSI phase		    */
-    u_char		msgout;	    /* message to send when requested       */
-    u_char		targ_id;    /* target for command		    */
-    u_char		targ_lun;   /* lun for command			    */
-    u_char		status;	    /* returned status byte		    */
-    u_char		message;    /* returned message byte		    */
-    u_char		*bounceb;   /* allocated bounce buffer		    */
-    u_char		*bouncerp;  /* bounce read-pointer		    */
+    uint8_t		phase;	    /* current SCSI phase		    */
+    uint8_t		msgout;	    /* message to send when requested       */
+    uint8_t		targ_id;    /* target for command		    */
+    uint8_t		targ_lun;   /* lun for command			    */
+    uint8_t		status;	    /* returned status byte		    */
+    uint8_t		message;    /* returned message byte		    */
+    uint8_t		*bounceb;   /* allocated bounce buffer		    */
+    uint8_t		*bouncerp;  /* bounce read-pointer		    */
     struct dma_chain	dm_chain[MAXDMAIO];
     struct dma_chain	*dm_cur;    /* current DMA-request		    */
     struct dma_chain	*dm_last;   /* last DMA-request			    */
     long		xdata_len;  /* length of transfer		    */
-    u_char		*xdata_ptr; /* virtual address of transfer	    */
+    uint8_t		*xdata_ptr; /* virtual address of transfer	    */
     struct scsipi_generic xcmd;	    /* command to execute		    */
     int                 xcmd_len;   /* command length                       */
 } SC_REQ;
@@ -230,38 +225,38 @@ static SC_REQ	*connected = NULL;	/* Command currently connected	*/
 /*
  * Function decls:
  */
-static void ack_message __P((void));
-static int  check_autosense __P((SC_REQ *, int));
-static int  check_intr __P((struct ncr_softc *));
-static int  dma_ready __P((void));
-static void finish_req __P((SC_REQ *));
-static int  handle_message __P((SC_REQ *, u_int));
-static int  information_transfer __P((struct ncr_softc *));
-static void nack_message __P((SC_REQ *, u_char));
-static void ncr_aprint __P((struct ncr_softc *, const char *, ...));
-static void ncr_ctrl_intr __P((struct ncr_softc *));
-static void ncr_dma_intr __P((struct ncr_softc *));
-static void ncr_tprint __P((SC_REQ *, const char *, ...));
-static int  reach_msg_out __P((struct ncr_softc *, u_long));
-static void reselect __P((struct ncr_softc *));
-static void run_main __P((struct ncr_softc *));
-static int  scsi_dmaok __P((SC_REQ *));
-static void scsi_main __P((struct ncr_softc *));
-static void scsi_reset_verbose __P((struct ncr_softc *, const char *));
-static int  scsi_select __P((SC_REQ *, int));
-static void show_data_sense __P((struct scsipi_xfer *));
-static void show_phase __P((SC_REQ *, int));
-static void show_request __P((SC_REQ *, const char *));
-static void show_signals __P((u_char, u_char));
-static void transfer_dma __P((SC_REQ *, u_int, int));
-static int  transfer_pio __P((u_char *, u_char *, u_long *, int));
-static int  wait_req_false __P((void));
-static int  wait_req_true __P((void));
+static void ack_message(void);
+static int  check_autosense(SC_REQ *, int);
+static int  check_intr(struct ncr_softc *);
+static int  dma_ready(void);
+static void finish_req(SC_REQ *);
+static int  handle_message(SC_REQ *, u_int);
+static int  information_transfer(struct ncr_softc *);
+static void nack_message(SC_REQ *, uint8_t);
+static void ncr_aprint(struct ncr_softc *, const char *, ...);
+static void ncr_ctrl_intr(struct ncr_softc *);
+static void ncr_dma_intr(struct ncr_softc *);
+static void ncr_tprint(SC_REQ *, const char *, ...);
+static int  reach_msg_out(struct ncr_softc *, u_long);
+static void reselect(struct ncr_softc *);
+static void run_main(struct ncr_softc *);
+static int  scsi_dmaok(SC_REQ *);
+static void scsi_main(struct ncr_softc *);
+static void scsi_reset_verbose(struct ncr_softc *, const char *);
+static int  scsi_select(SC_REQ *, int);
+static void show_data_sense(struct scsipi_xfer *);
+static void show_phase(SC_REQ *, int);
+static void show_request(SC_REQ *, const char *);
+static void show_signals(uint8_t, uint8_t);
+static void transfer_dma(SC_REQ *, u_int, int);
+static int  transfer_pio(uint8_t *, uint8_t *, u_long *, int);
+static int  wait_req_false(void);
+static int  wait_req_true(void);
 
 	/*
 	 * You might want to call these from the debugger...
 	 */
-       void scsi_show __P((void));
-       void scsi_reset __P((void));
+       void scsi_show(void);
+       void scsi_reset(void);
 
 #endif /* _NCR5380REG_H */

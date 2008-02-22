@@ -1,4 +1,4 @@
-/*	$NetBSD: fpsetmask.S,v 1.3 2002/06/12 19:17:22 fvdl Exp $	*/
+/*	$NetBSD: fpsetmask.S,v 1.6 2014/05/22 15:01:56 uebayasi Exp $	*/
 
 /*
  * Written by Frank van der Linden at Wasabi Systems for NetBSD.
@@ -20,22 +20,30 @@ ENTRY(_fpsetmask)
 #else
 ENTRY(fpsetmask)
 #endif
-	fnstcw	-4(%rsp)
-	stmxcsr	-8(%rsp)
-	andl	$63,%edi
 	notl	%edi
+	andl	$0x0000003f,%edi
 
-	movl	-4(%rsp),%edx
-	movl	%edx,%eax
-	andl	%edi,%edx
+	fnstcw	-4(%rsp)
+	movl	-4(%rsp), %edx
+	movl	%edx, %eax
+	andl	$0xffffffc0, %edx
+	orl	%edi, %edx
 	movl	%edx,-4(%rsp)
-
-	movl	-8(%rsp),%edx
-	roll	$7,%edi
-	andl	%edi,%edx
-	movl	%edx,-8(%rsp)
-
 	fldcw	-4(%rsp)
-	ldmxcsr	-8(%rsp)
-	andl	$63,%eax
+
+	stmxcsr	-4(%rsp)
+	movl	-4(%rsp), %edx
+	andl	$0xffffe07f, %edx
+	sall	$7, %edi
+	orl	%edi, %edx
+	movl	%edx,-4(%rsp)
+	ldmxcsr	-4(%rsp)
+
+	notl	%eax
+	andl	$0x0000003f, %eax
 	ret
+#ifdef WEAK_ALIAS
+END(_fpsetmask)
+#else
+END(fpsetmask)
+#endif

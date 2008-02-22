@@ -1,6 +1,7 @@
-/*    $NetBSD: compat_16_machdep.c,v 1.11 2007/12/20 23:02:40 dsl Exp $   */
+/*    $NetBSD: compat_16_machdep.c,v 1.16 2011/12/22 15:47:15 tsutsui Exp $   */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -35,49 +36,13 @@
  *	from: Utah Hdr: machdep.c 1.74 92/12/20
  *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	from: Utah Hdr: machdep.c 1.74 92/12/20
- *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.11 2007/12/20 23:02:40 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.16 2011/12/22 15:47:15 tsutsui Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
+#endif
 
 #define __M68K_SIGNAL_PRIVATE
 
@@ -85,7 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.11 2007/12/20 23:02:40 dsl E
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/ras.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
@@ -104,8 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.11 2007/12/20 23:02:40 dsl E
 #include <machine/frame.h>
 
 extern  short exframesize[];
-void	m68881_save(struct fpframe *);
-void	m68881_restore(struct fpframe *);
 
 #ifdef DEBUG
 extern int sigdebug;
@@ -232,9 +194,9 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	native_sigset_to_sigset13(mask, &kf.sf_sc.__sc_mask13);
 #endif
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&kf, fp, sizeof(kf));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 #ifdef DEBUG
@@ -398,7 +360,7 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 	frame->f_pc = scp->sc_pc;
 	frame->f_sr = scp->sc_ps;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	if (scp->sc_onstack & SS_ONSTACK)
@@ -409,7 +371,7 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 	/* Restore signal mask. */
 	(void) sigprocmask1(l, SIG_SETMASK, &scp->sc_mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 #ifdef DEBUG
 	if ((sigdebug & SDB_FPSTATE) && *(char *)&tstate.ss_fpstate)

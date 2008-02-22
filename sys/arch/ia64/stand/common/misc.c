@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.3 2007/03/04 06:00:03 christos Exp $	*/
+/*	$NetBSD: misc.c,v 1.8 2017/12/10 02:32:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -30,7 +30,11 @@
 /* __FBSDID("$FreeBSD: src/sys/boot/common/misc.c,v 1.8.4.1 2004/09/03 19:25:40 iedowse Exp $"); */
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
 #include <bootstrap.h>
+
+
+#define	min(A, B)	(((A) < (B)) ? (A) : (B))
 
 /*
  * Concatenate the (argc) elements of (argv) into a single string, and return
@@ -101,7 +105,7 @@ kern_bzero(vaddr_t dest, size_t len)
 	char buf[256];
 	size_t chunk, resid;
 
-	bzero(buf, sizeof(buf));
+	memset(buf, 0, sizeof(buf));
 	resid = len;
 	while (resid > 0) {
 		chunk = min(sizeof(buf), resid);
@@ -162,6 +166,7 @@ alloc_pread(int fd, off_t off, size_t len)
 	return (buf);
 }
 
+#if 0
 /*
  * Display a region in traditional hexdump format.
  */
@@ -171,7 +176,7 @@ hexdump(void *region, size_t len)
     void *	line;
     int		x, c;
     char	lbuf[80];
-#define emit(fmt, args...)	{sprintf(lbuf, fmt , ## args); pager_output(lbuf);}
+#define emit(fmt, args...)	{snprintf(lbuf, sizeof(lbuf), fmt , ## args); pager_output(lbuf);}
 
     pager_open();
     for (line = region; line < (region + len); line += 16) {
@@ -201,6 +206,7 @@ hexdump(void *region, size_t len)
     }
     pager_close();
 }
+#endif
 
 void
 dev_cleanup(void)

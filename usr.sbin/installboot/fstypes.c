@@ -1,4 +1,4 @@
-/*	$NetBSD: fstypes.c,v 1.10 2006/10/22 21:06:19 christos Exp $	*/
+/*	$NetBSD: fstypes.c,v 1.13 2010/01/14 16:27:49 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,8 +34,8 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: fstypes.c,v 1.10 2006/10/22 21:06:19 christos Exp $");
+#if !defined(__lint)
+__RCSID("$NetBSD: fstypes.c,v 1.13 2010/01/14 16:27:49 tsutsui Exp $");
 #endif	/* !__lint */
 
 #include <sys/types.h>
@@ -102,7 +95,7 @@ hardcode_stage2(ib_params *params, uint32_t *maxblk, ib_block *blocks)
 
 	for (i = 0; i < nblk; i++) {
 		blocks[i].block = params->s2start +
-		    i * (params->fstype->blocksize / 512);
+		    i * (params->fstype->blocksize / params->sectorsize);
 		blocks[i].blocksize = params->fstype->blocksize;
 	}
 	*maxblk = nblk;

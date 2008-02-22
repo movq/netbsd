@@ -1,9 +1,8 @@
-/*	$NetBSD: sigcode.S,v 1.3 2005/12/11 12:18:09 christos Exp $	*/
+/*	$NetBSD: sigcode.S,v 1.5 2016/07/27 09:32:35 skrll Exp $	*/
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_ultrix.h"
 #include "opt_compat_linux.h"
-#include "opt_compat_irix.h"
 
 #include <mips/signal.h>
 #include <sys/syscall.h>
@@ -13,11 +12,11 @@
 #ifdef COMPAT_LINUX
 #include <compat/linux/linux_syscall.h>
 #endif
-#ifdef COMPAT_IRIX
-#include <compat/irix/irix_syscall.h>
-#endif
 
 #include <mips/asm.h>
+
+RCSID("$NetBSD: sigcode.S,v 1.5 2016/07/27 09:32:35 skrll Exp $")
+
 #include "assym.h"
 
 	.set	noreorder

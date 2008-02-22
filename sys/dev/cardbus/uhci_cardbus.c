@@ -1,4 +1,4 @@
-/*	$NetBSD: uhci_cardbus.c,v 1.6 2007/10/19 11:59:40 ad Exp $	*/
+/*	$NetBSD: uhci_cardbus.c,v 1.25 2018/04/09 16:21:10 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1998-2005 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhci_cardbus.c,v 1.6 2007/10/19 11:59:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhci_cardbus.c,v 1.25 2018/04/09 16:21:10 jakllsch Exp $");
 
 #include "ehci_cardbus.h"
 
@@ -70,142 +63,117 @@ struct uhci_cardbus_softc {
 	cardbus_chipset_tag_t	sc_cc;
 	cardbus_function_tag_t	sc_cf;
 	cardbus_devfunc_t	sc_ct;
-	cardbustag_t		sc_tag;
+	pcitag_t		sc_tag;
 	void 			*sc_ih;		/* interrupt vectoring */
 };
 
-static int	uhci_cardbus_match(struct device *, struct cfdata *, void *);
-static void	uhci_cardbus_attach(struct device *, struct device *, void *);
-static int	uhci_cardbus_detach(device_ptr_t, int);
+static int	uhci_cardbus_match(device_t, cfdata_t, void *);
+static void	uhci_cardbus_attach(device_t, device_t, void *);
+static int	uhci_cardbus_detach(device_t, int);
 
-CFATTACH_DECL(uhci_cardbus, sizeof(struct uhci_cardbus_softc),
-    uhci_cardbus_match, uhci_cardbus_attach, uhci_cardbus_detach, uhci_activate);
-
-#define CARDBUS_INTERFACE_UHCI	PCI_INTERFACE_UHCI
-#define CARDBUS_CBIO		PCI_CBIO
-#define cardbus_findvendor	pci_findvendor
-#define cardbus_devinfo		pci_devinfo
+CFATTACH_DECL_NEW(uhci_cardbus, sizeof(struct uhci_cardbus_softc),
+    uhci_cardbus_match, uhci_cardbus_attach, uhci_cardbus_detach,
+    uhci_activate);
 
 static int
-uhci_cardbus_match(struct device *parent,
-    struct cfdata *match, void *aux)
+uhci_cardbus_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct cardbus_attach_args *ca = (struct cardbus_attach_args *)aux;
 
-	if (CARDBUS_CLASS(ca->ca_class) == CARDBUS_CLASS_SERIALBUS &&
-	    CARDBUS_SUBCLASS(ca->ca_class) == CARDBUS_SUBCLASS_SERIALBUS_USB &&
-	    CARDBUS_INTERFACE(ca->ca_class) == CARDBUS_INTERFACE_UHCI)
-		return (1);
+	if (PCI_CLASS(ca->ca_class) == PCI_CLASS_SERIALBUS &&
+	    PCI_SUBCLASS(ca->ca_class) == PCI_SUBCLASS_SERIALBUS_USB &&
+	    PCI_INTERFACE(ca->ca_class) == PCI_INTERFACE_UHCI)
+		return 1;
 
-	return (0);
+	return 0;
 }
 
 static void
-uhci_cardbus_attach(struct device *parent, struct device *self,
-    void *aux)
+uhci_cardbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct uhci_cardbus_softc *sc = device_private(self);
 	struct cardbus_attach_args *ca = (struct cardbus_attach_args *)aux;
 	cardbus_devfunc_t ct = ca->ca_ct;
 	cardbus_chipset_tag_t cc = ct->ct_cc;
 	cardbus_function_tag_t cf = ct->ct_cf;
-	cardbustag_t tag = ca->ca_tag;
-	cardbusreg_t csr;
-	const char *vendor;
-	const char *devname = sc->sc.sc_bus.bdev.dv_xname;
+	pcitag_t tag = ca->ca_tag;
+	pcireg_t csr;
+	const char *devname = device_xname(self);
 	char devinfo[256];
-	usbd_status r;
 
-	cardbus_devinfo(ca->ca_id, ca->ca_class, 0, devinfo, sizeof(devinfo));
-	printf(": %s (rev. 0x%02x)\n", devinfo, CARDBUS_REVISION(ca->ca_class));
+	sc->sc.sc_dev = self;
+	sc->sc.sc_bus.ub_hcpriv = sc;
+
+	pci_devinfo(ca->ca_id, ca->ca_class, 0, devinfo, sizeof(devinfo));
+	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(ca->ca_class));
 
 	/* Map I/O registers */
-	if (Cardbus_mapreg_map(ct, CARDBUS_CBIO, CARDBUS_MAPREG_TYPE_IO, 0,
+	if (Cardbus_mapreg_map(ct, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0,
 			   &sc->sc.iot, &sc->sc.ioh, NULL, &sc->sc.sc_size)) {
-		printf("%s: can't map i/o space\n", devname);
+		aprint_error("%s: can't map i/o space\n", devname);
 		return;
 	}
-
-	/* Disable interrupts, so we don't get any spurious ones. */
-	bus_space_write_2(sc->sc.iot, sc->sc.ioh, UHCI_INTR, 0);
 
 	sc->sc_cc = cc;
 	sc->sc_cf = cf;
 	sc->sc_ct = ct;
 	sc->sc_tag = tag;
-	sc->sc.sc_bus.dmatag = ca->ca_dmat;
-
-#if rbus
-#else
-XXX	(ct->ct_cf->cardbus_io_open)(cc, 0, iob, iob + 0x40);
-#endif
-	(ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_IO_ENABLE);
-	(ct->ct_cf->cardbus_ctrl)(cc, CARDBUS_BM_ENABLE);
+	sc->sc.sc_bus.ub_dmatag = ca->ca_dmat;
 
 	/* Enable the device. */
-	csr = cardbus_conf_read(cc, cf, tag, CARDBUS_COMMAND_STATUS_REG);
-	cardbus_conf_write(cc, cf, tag, CARDBUS_COMMAND_STATUS_REG,
-		       csr | CARDBUS_COMMAND_MASTER_ENABLE
-			   | CARDBUS_COMMAND_IO_ENABLE);
+	csr = Cardbus_conf_read(ct, tag, PCI_COMMAND_STATUS_REG);
+	Cardbus_conf_write(ct, tag, PCI_COMMAND_STATUS_REG,
+		       csr | PCI_COMMAND_MASTER_ENABLE | PCI_COMMAND_IO_ENABLE);
+
+	/* Disable interrupts, so we don't get any spurious ones. */
+	bus_space_write_2(sc->sc.iot, sc->sc.ioh, UHCI_INTR, 0);
 
 	/* Map and establish the interrupt. */
-	sc->sc_ih = cardbus_intr_establish(cc, cf, ca->ca_intrline,
-					   IPL_USB, uhci_intr, sc);
+	sc->sc_ih = Cardbus_intr_establish(ct, IPL_USB, uhci_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n", devname);
+		aprint_error("%s: couldn't establish interrupt\n", devname);
 		return;
 	}
-	printf("%s: interrupting at %d\n", devname, ca->ca_intrline);
 
 	/* Set LEGSUP register to its default value. */
-	cardbus_conf_write(cc, cf, tag, PCI_LEGSUP, PCI_LEGSUP_USBPIRQDEN);
+	Cardbus_conf_write(ct, tag, PCI_LEGSUP, PCI_LEGSUP_USBPIRQDEN);
 
-	switch(cardbus_conf_read(cc, cf, tag, PCI_USBREV) & PCI_USBREV_MASK) {
+	switch(Cardbus_conf_read(ct, tag, PCI_USBREV) & PCI_USBREV_MASK) {
 	case PCI_USBREV_PRE_1_0:
-		sc->sc.sc_bus.usbrev = USBREV_PRE_1_0;
+		sc->sc.sc_bus.ub_revision = USBREV_PRE_1_0;
 		break;
 	case PCI_USBREV_1_0:
-		sc->sc.sc_bus.usbrev = USBREV_1_0;
+		sc->sc.sc_bus.ub_revision = USBREV_1_0;
 		break;
 	case PCI_USBREV_1_1:
-		sc->sc.sc_bus.usbrev = USBREV_1_1;
+		sc->sc.sc_bus.ub_revision = USBREV_1_1;
 		break;
 	default:
-		sc->sc.sc_bus.usbrev = USBREV_UNKNOWN;
+		sc->sc.sc_bus.ub_revision = USBREV_UNKNOWN;
 		break;
 	}
 
-	/* Figure out vendor for root hub descriptor. */
-	vendor = cardbus_findvendor(ca->ca_id);
-	sc->sc.sc_id_vendor = CARDBUS_VENDOR(ca->ca_id);
-	if (vendor)
-		strlcpy(sc->sc.sc_vendor, vendor, sizeof(sc->sc.sc_vendor));
-	else
-		snprintf(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
-		    "vendor 0x%04x", CARDBUS_VENDOR(ca->ca_id));
-
-	r = uhci_init(&sc->sc);
-	if (r != USBD_NORMAL_COMPLETION) {
-		printf("%s: init failed, error=%d\n", devname, r);
+	int err = uhci_init(&sc->sc);
+	if (err) {
+		aprint_error("%s: init failed, error=%d\n", devname, err);
 
 		/* Avoid spurious interrupts. */
-		cardbus_intr_disestablish(sc->sc_cc, sc->sc_cf, sc->sc_ih);
+		Cardbus_intr_disestablish(ct, sc->sc_ih);
 		sc->sc_ih = NULL;
 
 		return;
 	}
 
 #if NEHCI_CARDBUS > 0
-	usb_cardbus_add(&sc->sc_cardbus, ca, &sc->sc.sc_bus);
+	usb_cardbus_add(&sc->sc_cardbus, ca, self);
 #endif
 
 	/* Attach usb device. */
-	sc->sc.sc_child = config_found((void *)sc, &sc->sc.sc_bus,
-				       usbctlprint);
+	sc->sc.sc_child = config_found(self, &sc->sc.sc_bus, usbctlprint);
 }
 
 static int
-uhci_cardbus_detach(device_ptr_t self, int flags)
+uhci_cardbus_detach(device_t self, int flags)
 {
 	struct uhci_cardbus_softc *sc = device_private(self);
 	struct cardbus_devfunc *ct = sc->sc_ct;
@@ -213,18 +181,18 @@ uhci_cardbus_detach(device_ptr_t self, int flags)
 
 	rv = uhci_detach(&sc->sc, flags);
 	if (rv)
-		return (rv);
+		return rv;
 	if (sc->sc_ih != NULL) {
-		cardbus_intr_disestablish(sc->sc_cc, sc->sc_cf, sc->sc_ih);
+		Cardbus_intr_disestablish(ct, sc->sc_ih);
 		sc->sc_ih = NULL;
 	}
 	if (sc->sc.sc_size) {
-		Cardbus_mapreg_unmap(ct, CARDBUS_CBIO, sc->sc.iot,
+		Cardbus_mapreg_unmap(ct, PCI_CBIO, sc->sc.iot,
 		    sc->sc.ioh, sc->sc.sc_size);
 		sc->sc.sc_size = 0;
 	}
 #if NEHCI_CARDBUS > 0
 	usb_cardbus_rem(&sc->sc_cardbus);
 #endif
-	return (0);
+	return 0;
 }

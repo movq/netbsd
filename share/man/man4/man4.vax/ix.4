@@ -1,4 +1,4 @@
-.\"	$NetBSD: ix.4,v 1.15 2003/08/07 10:31:13 agc Exp $
+.\"	$NetBSD: ix.4,v 1.20 2017/08/01 11:11:17 wiz Exp $
 .\"
 .\" Copyright (c) 1986, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     from: @(#)ix.4	8.1 (Berkeley) 6/5/93
 .\"
-.Dd June 5, 1993
+.Dd February 17, 2017
 .Dt IX 4 vax
 .Os
 .Sh NAME
@@ -55,7 +55,7 @@ A program to load the image is provided in
 .Pa /usr/src/new/np100 .
 The sequence of commands would be:
 .Bd -literal -offset indent
-# ./npload np.image [/dev/np\*[Lt]board #\*[Gt] if other than np00]
+# ./npload np.image [/dev/np<board #> if other than np00]
 # sleep 10
 # ifconfig ix0 ...
 .Ed
@@ -94,26 +94,22 @@ Or, you may not have allowed enough time between loading the board
 and issuing the request to begin
 .Ux
 network operation.
-.Pp
 .It ix%d: can't initialize.
 The interface was unable to obtain UNIBUS resources required for operation.
-.Pp
 .It ix%d: failed to reinitialize DLA module.
 The interface got sick after attempting to reprogram its physical
-Ethernet address.  Try reloading the firmware.
+Ethernet address.
+Try reloading the firmware.
 The attempt is made only when this interfaces is not the first
 one configured for
 .Tn XNS .
-.Pp
 .It ix%d: can't handle af%d.
 The interface was handed
 a message with addresses formatted in an unsuitable address
 family; the packet was dropped.
-.Pp
 .It ix%d: stray xmit interrupt, npreq=%x.
 This may happen if the board is reloaded while network processes are still
 running.
-.Pp
 .It ixrint: cqe error %x, %x, %x.
 This will result if an
 .Xr ifconfig 8
@@ -123,7 +119,6 @@ After 100 such errors are logged, the
 .Ux
 network driver will
 shut itself down, saying:
-.Pp
 .It ixrint: shutting down unix dla.
 The recourse is to reload the firmware and allow more time.
 .El
@@ -131,7 +126,7 @@ The recourse is to reload the firmware and allow more time.
 .Xr arp 4 ,
 .Xr inet 4 ,
 .Xr netintro 4 ,
-.Xr np 4
+.Xr vax/np 4
 .Sh HISTORY
 The
 .Nm

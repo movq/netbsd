@@ -1,4 +1,4 @@
-/* $NetBSD: g2rtc.c,v 1.2 2008/01/06 10:33:24 he Exp $ */
+/* $NetBSD: g2rtc.c,v 1.8 2016/10/09 14:41:47 christos Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,15 +27,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: g2rtc.c,v 1.2 2008/01/06 10:33:24 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: g2rtc.c,v 1.8 2016/10/09 14:41:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <dev/clock_subr.h>
 
-#include <machine/bus.h>
 #include <dreamcast/dev/g2/g2busvar.h>
 
 
@@ -50,39 +43,33 @@ __KERNEL_RCSID(0, "$NetBSD: g2rtc.c,v 1.2 2008/01/06 10:33:24 he Exp $");
 #define G2RTC_REG_SIZE	12
 
 /* Offset by 20 years, 5 of them are leap */
-#define G2RTC_OFFSET	(20 * SECYR + 5 * SECDAY)
+#define G2RTC_OFFSET	(20 * SECS_PER_COMMON_YEAR + 5 * SECS_PER_DAY)
 
 struct g2rtc_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	bus_space_tag_t sc_bt;
 	bus_space_handle_t sc_bh;
+	struct todr_chip_handle sc_tch;
 };
 
 /* autoconf glue */
-static int g2rtc_match(struct device *, struct cfdata *, void *);
-static void g2rtc_attach(struct device *, struct device *, void *);
+static int g2rtc_match(device_t, cfdata_t, void *);
+static void g2rtc_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(g2rtc, sizeof(struct g2rtc_softc),
-	      g2rtc_match, g2rtc_attach, NULL, NULL);
+CFATTACH_DECL_NEW(g2rtc, sizeof(struct g2rtc_softc),
+    g2rtc_match, g2rtc_attach, NULL, NULL);
 
 
 /* todr(9) methods */
-static int g2rtc_todr_gettime(todr_chip_handle_t, volatile struct timeval *);
-static int g2rtc_todr_settime(todr_chip_handle_t, volatile struct timeval *);
-
-static struct todr_chip_handle g2rtc_todr_handle = {
-	.cookie       = NULL,	/* set on attach */
-	.todr_gettime = g2rtc_todr_gettime,
-	.todr_settime = g2rtc_todr_settime,
-};
-
+static int g2rtc_todr_gettime(todr_chip_handle_t, struct timeval *);
+static int g2rtc_todr_settime(todr_chip_handle_t, struct timeval *);
 
 static inline uint32_t g2rtc_read(bus_space_tag_t, bus_space_handle_t);
 
 
 static int
-g2rtc_match(struct device *parent, struct cfdata *cf, void *aux)
+g2rtc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	static int g2rtc_matched = 0;
 
@@ -95,22 +82,26 @@ g2rtc_match(struct device *parent, struct cfdata *cf, void *aux)
 
 
 static void
-g2rtc_attach(struct device *parent, struct device *self, void *aux)
+g2rtc_attach(device_t parent, device_t self, void *aux)
 {
-	struct g2rtc_softc *sc = (void *)self;
+	struct g2rtc_softc *sc = device_private(self);
 	struct g2bus_attach_args *ga = aux;
+	todr_chip_handle_t tch;
 
+	sc->sc_dev = self;
 	sc->sc_bt = ga->ga_memt;
 	if (bus_space_map(sc->sc_bt, G2RTC_REG_BASE, G2RTC_REG_SIZE, 0,
-			  &sc->sc_bh) != 0)
-	{
+	    &sc->sc_bh) != 0) {
 		printf(": unable to map registers\n");
 		return;
 	}
 	printf(": time-of-day clock\n");
 
-	g2rtc_todr_handle.cookie = sc;
-	todr_attach(&g2rtc_todr_handle);
+	tch = &sc->sc_tch;
+	tch->cookie = sc;
+	tch->todr_gettime = g2rtc_todr_gettime;
+	tch->todr_settime = g2rtc_todr_settime;
+	todr_attach(tch);
 }
 
 
@@ -119,7 +110,7 @@ g2rtc_read(bus_space_tag_t bt, bus_space_handle_t bh)
 {
 	
 	return ((bus_space_read_4(bt, bh, 0) & 0xffff) << 16)
-		| (bus_space_read_4(bt, bh, 4) & 0xffff);
+	    | (bus_space_read_4(bt, bh, 4) & 0xffff);
 }
 
 
@@ -128,7 +119,7 @@ g2rtc_read(bus_space_tag_t bt, bus_space_handle_t bh)
  * Return 0 on success; an error number otherwise.
  */
 static int
-g2rtc_todr_gettime(todr_chip_handle_t handle, volatile struct timeval *tv)
+g2rtc_todr_gettime(todr_chip_handle_t handle, struct timeval *tv)
 {
 	struct g2rtc_softc *sc = handle->cookie;
 	uint32_t new, old;
@@ -158,7 +149,7 @@ g2rtc_todr_gettime(todr_chip_handle_t handle, volatile struct timeval *tv)
  * Return 0 on success; an error number otherwise.
  */
 static int
-g2rtc_todr_settime(todr_chip_handle_t handle, volatile struct timeval *tv)
+g2rtc_todr_settime(todr_chip_handle_t handle, struct timeval *tv)
 {
 	struct g2rtc_softc *sc = handle->cookie;
 	uint32_t secs;
@@ -180,5 +171,4 @@ g2rtc_todr_settime(todr_chip_handle_t handle, volatile struct timeval *tv)
 	}
 
 	return EIO;
-
 }

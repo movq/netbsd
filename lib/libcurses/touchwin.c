@@ -1,4 +1,4 @@
-/*	$NetBSD: touchwin.c,v 1.24 2007/05/28 15:01:58 blymn Exp $	*/
+/*	$NetBSD: touchwin.c,v 1.30 2017/01/06 13:53:18 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,12 +34,28 @@
 #if 0
 static char sccsid[] = "@(#)touchwin.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: touchwin.c,v 1.24 2007/05/28 15:01:58 blymn Exp $");
+__RCSID("$NetBSD: touchwin.c,v 1.30 2017/01/06 13:53:18 roy Exp $");
 #endif
 #endif				/* not lint */
 
 #include "curses.h"
 #include "curses_private.h"
+
+static int _cursesi_touchline_force(WINDOW *, int, int, int, int);
+
+/*
+ * __sync --
+ *	To be called after each window change.
+ */
+void
+__sync(WINDOW *win)
+{
+
+	if (win->flags & __IMMEDOK)
+		wrefresh(win);
+	if (win->flags & __SYNCOK)
+		wsyncup(win);
+}
 
 /*
  * is_linetouched --
@@ -51,7 +67,7 @@ is_linetouched(WINDOW *win, int line)
 	if (line > win->maxy)
 		return FALSE;
 
-	return ((win->lines[line]->flags & __ISDIRTY) != 0);
+	return (win->alines[line]->flags & __ISDIRTY) != 0;
 }
 
 /*
@@ -157,22 +173,23 @@ wtouchln(WINDOW *win, int line, int n, int changed)
 		line = win->maxy - n;
 	for (y = line; y < line + n; y++) {
 		if (changed == 1)
-			__touchline(win, y, 0, (int) win->maxx - 1);
+			_cursesi_touchline_force(win, y, 0,
+			    (int) win->maxx - 1, 1);
 		else {
-			wlp = win->lines[y];
+			wlp = win->alines[y];
 			if (*wlp->firstchp >= win->ch_off &&
 			    *wlp->firstchp < win->maxx + win->ch_off)
 				*wlp->firstchp = win->maxx + win->ch_off;
 			if (*wlp->lastchp >= win->ch_off &&
 			    *wlp->lastchp < win->maxx + win->ch_off)
 				*wlp->lastchp = win->ch_off;
-			wlp->flags &= ~__ISDIRTY;
+			wlp->flags &= ~(__ISDIRTY | __ISFORCED);
 		}
 	}
 
 	return OK;
 }
-		
+
 int
 __touchwin(WINDOW *win)
 {
@@ -184,30 +201,70 @@ __touchwin(WINDOW *win)
 	maxy = win->maxy;
 	for (y = 0; y < maxy; y++)
 		__touchline(win, y, 0, (int) win->maxx - 1);
-	return (OK);
+	return OK;
 }
 
 int
 __touchline(WINDOW *win, int y, int sx, int ex)
 {
+
+	return _cursesi_touchline_force(win, y, sx, ex, 0);
+}
+
+/*
+ * Touch line y on window win starting from column sx and ending at
+ * column ex.  If force is 1 then we mark this line as a forced update
+ * which will bypass screen optimisation in the refresh code to rewrite
+ * this line unconditionally (even if refresh thinks the screen matches
+ * what is in the virtscr)
+ */
+static int
+_cursesi_touchline_force(WINDOW *win, int y, int sx, int ex, int force)
+{
+
 #ifdef DEBUG
-	__CTRACE(__CTRACE_LINE, "__touchline: (%p, %d, %d, %d)\n",
-	    win, y, sx, ex);
+	__CTRACE(__CTRACE_LINE, "__touchline: (%p, %d, %d, %d, %d)\n",
+	    win, y, sx, ex, force);
 	__CTRACE(__CTRACE_LINE, "__touchline: first = %d, last = %d\n",
-	    *win->lines[y]->firstchp, *win->lines[y]->lastchp);
+	    *win->alines[y]->firstchp, *win->alines[y]->lastchp);
 #endif
 	sx += win->ch_off;
 	ex += win->ch_off;
-	if (!(win->lines[y]->flags & __ISDIRTY))
-		win->lines[y]->flags |= __ISDIRTY;
+	win->alines[y]->flags |= __ISDIRTY;
+	if (force == 1)
+		win->alines[y]->flags |= __ISFORCED;
 	/* firstchp/lastchp are shared between parent window and sub-window. */
-	if (*win->lines[y]->firstchp > sx)
-		*win->lines[y]->firstchp = sx;
-	if (*win->lines[y]->lastchp < ex)
-		*win->lines[y]->lastchp = ex;
+	if (*win->alines[y]->firstchp > sx)
+		*win->alines[y]->firstchp = sx;
+	if (*win->alines[y]->lastchp < ex)
+		*win->alines[y]->lastchp = ex;
 #ifdef DEBUG
 	__CTRACE(__CTRACE_LINE, "__touchline: first = %d, last = %d\n",
-	    *win->lines[y]->firstchp, *win->lines[y]->lastchp);
+	    *win->alines[y]->firstchp, *win->alines[y]->lastchp);
 #endif
-	return (OK);
+	return OK;
+}
+
+void
+wsyncup(WINDOW *win)
+{
+
+	do {
+		__touchwin(win);
+		win = win->orig;
+	} while (win);
+}
+
+void
+wsyncdown(WINDOW *win)
+{
+	WINDOW *w = win->orig;
+
+	while (w) {
+		if (is_wintouched(w)) {
+			__touchwin(win);
+			break;
+		}
+		w = w->orig;
+	}
 }

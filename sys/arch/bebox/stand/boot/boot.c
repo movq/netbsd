@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.16 2005/12/11 12:17:04 christos Exp $	*/
+/*	$NetBSD: boot.c,v 1.27 2014/08/08 19:45:48 joerg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,17 +32,25 @@
  */
 
 #include <lib/libsa/stand.h>
-#include <loadfile.h>
+#include <lib/libsa/loadfile.h>
+#include <lib/libkern/libkern.h>
 #include <sys/boot_flag.h>
 #include <sys/reboot.h>
 #include <machine/bootinfo.h>
+#include <machine/cpu.h>
+
 #include "boot.h"
+#include "sdvar.h"
+#include "wdvar.h"
 
 char *names[] = {
-	"in()",
-	"fd(0,1,0)netbsd", "fd(0,1,0)netbsd.gz",
-	"fd(0,1,0)netbsd.old", "fd(0,1,0)netbsd.old.gz",
-	"fd(0,1,0)onetbsd", "fd(0,1,0)onetbsd.gz"
+	"/dev/disk/scsi/000/0_0:/netbsd",
+	"/dev/disk/ide/0/master/0_0:/netbsd",
+	"/dev/disk/floppy:netbsd",	"/dev/disk/floppy:netbsd.gz",
+	"/dev/disk/scsi/000/0_0:/onetbsd",
+	"/dev/disk/ide/0/master/0_0:/onetbsd",
+	"/dev/disk/floppy:onetbsd",	"/dev/disk/floppy:onetbsd.gz"
+	"in",
 };
 #define	NUMNAMES (sizeof (names) / sizeof (names[0]))
 
@@ -53,22 +61,26 @@ char nametmp[NAMELEN];
 struct btinfo_memory btinfo_memory;
 struct btinfo_console btinfo_console;
 struct btinfo_clock btinfo_clock;
+struct btinfo_rootdevice btinfo_rootdevice;
 
-extern char bootprog_name[], bootprog_rev[], bootprog_maker[], bootprog_date[];
+extern char bootprog_name[], bootprog_rev[];
 
-void exec_kernel __P((char *, void *));
+void main(void);
+void exec_kernel(char *, void *);
 
 void
-main()
+main(void)
 {
 	int n = 0;
 	int addr, speed;
 	char *name, *cnname;
-	void *p, *bootinfo;
+	void *bootinfo;
 
 	if (whichCPU() == 1)
 		cpu1();
 	resetCPU1();
+
+	scanPCI();
 
 	/*
 	 * console init
@@ -103,24 +115,24 @@ main()
 	btinfo_clock.common.type = BTINFO_CLOCK;
 	btinfo_clock.ticks_per_sec = TICKS_PER_SEC;
 
-	p = bootinfo;
-	memcpy(p, (void *)&btinfo_memory, sizeof (btinfo_memory));
-	p += sizeof (btinfo_memory);
-	memcpy(p, (void *)&btinfo_console, sizeof (btinfo_console));
-	p += sizeof (btinfo_console);
-	memcpy(p, (void *)&btinfo_clock, sizeof (btinfo_clock));
-
-	/*
-	 * attached kernel check
-	 */
-	init_in();
-
 	runCPU1((void *)start_CPU1);
 	wait_for(&CPU1_alive);
 
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 	printf(">> Memory: %d k\n", btinfo_memory.memsize / 1024);
+
+	/*
+	 * attached kernel check and copy.
+	 */
+	init_in();
+
+	printf("\n");
+
+	/* Initialize siop@pci0 dev 12 func 0 */
+	siop_init(0, 12, 0);
+
+	/* Initialize wdc@isa port 0x1f0 */
+	wdc_init(0x1f0);
 
 	for (;;) {
 		name = names[n++];
@@ -135,20 +147,17 @@ main()
  * Exec kernel
  */
 void
-exec_kernel(name, bootinfo)
-	char *name;
-	void *bootinfo;
+exec_kernel(char *name, void *bootinfo)
 {
-	int howto = 0;
+	int howto = 0, i;
 	char c, *ptr;
 	u_long marks[MARK_MAX];
+	void *p;
 #ifdef DBMONITOR
 	int go_monitor;
-	extern int db_monitor __P((void));
-#endif /* DBMONITOR */
-	extern int tgets __P((char *buf));
 
 ret:
+#endif /* DBMONITOR */
 	printf("\nBoot: ");
 	memset(namebuf, 0, sizeof (namebuf));
 	(void)tgets(namebuf);
@@ -194,7 +203,38 @@ next:
 		}
 #endif /* DBMONITOR */
 
-		printf("start=0x%x\n\n", marks[MARK_ENTRY]);
+		p = bootinfo;
+
+		/*
+		 * root device
+		 */
+		btinfo_rootdevice.common.next = sizeof (btinfo_rootdevice);
+		btinfo_rootdevice.common.type = BTINFO_ROOTDEVICE;
+		strncpy(btinfo_rootdevice.rootdevice, name,
+		    sizeof (btinfo_rootdevice.rootdevice));
+		i = 0;
+		while (btinfo_rootdevice.rootdevice[i] != '\0') {
+			if (btinfo_rootdevice.rootdevice[i] == ':')
+				break;
+			i++;
+		}
+		if (btinfo_rootdevice.rootdevice[i] == ':') {
+			/* It is NOT in-kernel. */
+
+			btinfo_rootdevice.rootdevice[i] = '\0';
+
+			memcpy(p, (void *)&btinfo_rootdevice,
+			    sizeof (btinfo_rootdevice));
+			p += sizeof (btinfo_rootdevice);
+		}
+
+		memcpy(p, (void *)&btinfo_memory, sizeof (btinfo_memory));
+		p += sizeof (btinfo_memory);
+		memcpy(p, (void *)&btinfo_console, sizeof (btinfo_console));
+		p += sizeof (btinfo_console);
+		memcpy(p, (void *)&btinfo_clock, sizeof (btinfo_clock));
+
+		printf("start=0x%lx\n\n", marks[MARK_ENTRY]);
 		delay(1000);
 		__syncicache((void *)marks[MARK_ENTRY],
 			(u_int)marks[MARK_SYM] - (u_int)marks[MARK_ENTRY]);
@@ -206,4 +246,12 @@ next:
 		    bootinfo,
 		    (void *)marks[MARK_ENTRY]);
 	}
+}
+
+void
+_rtt(void)
+{
+
+	/* XXXX */
+	__unreachable();
 }

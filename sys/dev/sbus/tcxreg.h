@@ -1,4 +1,4 @@
-/*	$NetBSD: tcxreg.h,v 1.3 2005/12/11 12:23:44 christos Exp $ */
+/*	$NetBSD: tcxreg.h,v 1.6 2014/07/16 17:58:35 macallan Exp $ */
 /*
  *  Copyright (c) 1996 The NetBSD Foundation, Inc.
  *  All rights reserved.
@@ -14,13 +14,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. All advertising materials mentioning features or use of this software
- *     must display the following acknowledgement:
- *         This product includes software developed by the NetBSD
- *         Foundation, Inc. and its contributors.
- *  4. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,21 +29,43 @@
  */
 
 /*
+ * differences between S24 and tcx, as far as this driver is concerned:
+ * - S24 has 4MB VRAM, 24bit + 2bit control planes, no expansion possible
+ * - tcx has 1MB VRAM, 8bit, no control planes, may have a VSIMM that bumps
+ *   VRAM to 2MB
+ * - tcx can apply ROPs to STIP operations, unlike S24
+ * - tcx has a Bt458 DAC, just like CG6. S24 has an AT&T 20C567
+ * - the chip itself seems to be (almost) the same, just with different DACs
+ *   and VRAM configuration
+ */
+
+/*
  * A TCX is composed of numerous groups of control registers, all with TLAs:
  *	DHC - ???
  *	TEC - transform engine control?
  *	THC - TEC Hardware Configuration
  *	ROM - a 128Kbyte ROM with who knows what in it.
- *	STIP - ???
- *	RSTIP - Raw ???
- *	BLIT - ???
- *	RBLIT - Raw ???
+ *	STIP - stipple engine, doesn't write attribute bits
+ *	RSTIP - stipple engine, writes attribute bits
+ *	BLIT - blit engine, doesn't copy attribute bits
+ *	RBLIT - blit engine, does copy attribute bits
  *	ALT - ???
  *	colormap - see below
  *	frame buffer memory (video RAM)
  *	possible other stuff
  *
+ *	RSTIP and RBLIT are set to size zero on my SS4's tcx, they work anyway
+ *	though. No sense using them since tcx has only the lower 8bit planes,
+ *	with no control planes, so there is no actual difference to STIP and
+ *	BLIT ops, and things like qemu and temlib may not actually implement
+ *	them.
+ *	The hardware cursor registers in the THC range are cut off by the size
+ *	attribute but seem to exist, although the parts that display the cursor
+ *	( the DAC's overlay support ) only exist on the S24.
+ * 	At this point I wouldn't be surprised if 8bit tcx actually supports
+ *	the DFB24 and RDFB32 ranges, with the upper planes returning garbage.
  */
+
 #define TCX_REG_DFB8	0
 #define TCX_REG_DFB24	1
 #define TCX_REG_STIP	2
@@ -67,27 +82,45 @@
 
 #define TCX_NREG	13
 
+/*
+ * The S24 provides the framebuffer RAM mapped in three ways:
+ * 26 bits used per pixel, in 32-bit words; the low-order 24 bits are
+ * blue, green, and red values, and the other two bits select the
+ * display modes, per pixel);
+ * 24 bits per pixel, in 32-bit words; the high-order byte reads as
+ * zero, and is ignored on writes (so the mode bits cannot be altered);
+ * 8 bits per pixel, unpadded; writes to this space do not modify the
+ * other 18 bits.
+ */
+#define TCX_CTL_8_MAPPED	0x00000000	/* 8 bits, uses color map */
+#define TCX_CTL_24_MAPPED	0x01000000	/* 24 bits, uses color map */
+#define TCX_CTL_24_LEVEL	0x03000000	/* 24 bits, ignores color map */
+#define TCX_CTL_PIXELMASK	0x00FFFFFF	/* mask for index/level */
+/*
+ * The DAC actually supports other bits, for example to select between the
+ * red and green plane for 8bit output. Not useful here since we can only
+ * access the red plane as 8bit framebuffer.
+ */
 
 /*
  * The layout of the THC.
  */
-struct tcx_thc {
-	u_int	thc_config;
-	u_int	thc_xxx1[31];
-	u_int	thc_sensebus;
-	u_int	thc_xxx2[3];
-	u_int	thc_delay;
-	u_int	thc_strapping;
-	u_int	thc_xxx3[1];
-	u_int	thc_linecount;
-	u_int	thc_xxx4[478];
-	u_int	thc_hcmisc;
-	u_int	thc_xxx5[56];
-	u_int	thc_cursoraddr;
-	u_int	thc_cursorAdata[32];
-	u_int	thc_cursorBdata[32];
 
-};
+#define THC_CONFIG	0x00000000
+#define THC_SENSEBUS	0x00000080
+#define THC_DELAY	0x00000090
+#define THC_STRAPPING	0x00000094
+#define THC_LINECOUNTER	0x0000009c
+#define THC_HSYNC_START	0x000000a0
+#define THC_HSYNC_END	0x000000a4
+#define THC_HDISP_START	0x000000a8
+#define THC_HDISP_VSYNC	0x000000ac
+#define THC_HDISP_END	0x000000b0
+#define THC_MISC	0x00000818
+#define THC_CURSOR_POS	0x000008fc
+#define THC_CURSOR_1	0x00000900 /* bitmap bit 1 */
+#define THC_CURSOR_0	0x00000980 /* bitmap bit 0 */
+
 /* bits in thc_config ??? */
 #define THC_CFG_FBID		0xf0000000	/* id mask */
 #define THC_CFG_FBID_SHIFT	28
@@ -148,3 +181,15 @@ struct tcx_tec {
 	u_int	tec_vde;	/* */
 };
 
+/* DAC registers */
+#define DAC_ADDRESS	0x00000000
+#define DAC_FB_LUT	0x00000004	/* palette / gamma table */
+#define DAC_CONTROL_1	0x00000008
+#define DAC_CURSOR_LUT	0x0000000c	/* cursor sprite colours */
+#define DAC_CONTROL_2	0x00000018
+
+#define DAC_C1_ID		0
+#define DAC_C1_REVISION		1
+#define DAC_C1_READ_MASK	4
+#define DAC_C1_BLINK_MASK	5
+#define DAC_C1_CONTROL_0	6

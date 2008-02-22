@@ -1,4 +1,4 @@
-#	$NetBSD: dot.cshrc,v 1.16 2006/08/31 22:33:14 hubertf Exp $
+#	$NetBSD: dot.cshrc,v 1.27 2018/03/01 06:12:09 snj Exp $
 
 alias	h	history
 alias	j	jobs -l
@@ -20,8 +20,12 @@ alias	tset	'set noglob histchars=""; eval `\tset -s \!*`; unset noglob histchars
 
 setenv BLOCKSIZE 1k
 
+# Uncomment the following line(s) to install binary packages
+# from ftp.NetBSD.org via pkg_add.  (See also pkg_install.conf)
+#setenv PKG_PATH "http://cdn.NetBSD.org/pub/pkgsrc/packages/NetBSD/`uname -p`/`uname -r|cut -f '1 2' -d.|cut -f 1 -d_`/All"
+
 set history=1000
-set path=(/sbin /usr/sbin /bin /usr/bin /usr/pkg/sbin /usr/pkg/bin /usr/X11R6/bin /usr/local/sbin /usr/local/bin)
+set path=(/sbin /usr/sbin /bin /usr/bin /usr/pkg/sbin /usr/pkg/bin /usr/X11R7/bin /usr/local/sbin /usr/local/bin)
 
 # directory stuff: cdpath/cd/back
 set cdpath=(/usr/src/{sys,bin,sbin,usr.{bin,sbin},lib,libexec,share,local,games,gnu/{usr.{bin,sbin},libexec,lib,games}})

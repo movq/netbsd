@@ -1,4 +1,4 @@
-/*	$NetBSD: iodesc.h,v 1.1 2006/01/21 10:32:23 dsl Exp $	*/
+/*	$NetBSD: iodesc.h,v 1.3 2009/01/13 11:47:32 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +33,9 @@
 #define _IODESC_H
 
 /* An alternative to the definition in sys/lib/libsa/iodesc.h */
+
+typedef	time_t	satime_t;
+typedef	time_t	saseconds_t;
 
 struct addrinfo;
 struct iodesc {

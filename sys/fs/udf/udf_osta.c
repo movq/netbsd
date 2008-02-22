@@ -1,7 +1,10 @@
-/* $NetBSD: udf_osta.c,v 1.5 2007/12/11 12:05:27 lukem Exp $ */
+/* $NetBSD: udf_osta.c,v 1.10 2013/08/05 17:02:54 joerg Exp $ */
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udf_osta.c,v 1.5 2007/12/11 12:05:27 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_osta.c,v 1.10 2013/08/05 17:02:54 joerg Exp $");
 
 /*
  * Various routines from the OSTA 2.01 specs.  Copyrights are included with
@@ -12,6 +15,9 @@ __KERNEL_RCSID(0, "$NetBSD: udf_osta.c,v 1.5 2007/12/11 12:05:27 lukem Exp $");
 
 #include "udf_osta.h"
 
+#ifndef _KERNEL
+#include <ctype.h>
+#endif
 
 /*****************************************************************************/
 /***********************************************************************
@@ -170,9 +176,7 @@ static unsigned short crc_table[256] = {
 };
 
 unsigned short
-udf_cksum(s, n)
-	unsigned char *s;
-	int n;
+udf_cksum(unsigned char *s, int n)
 {
 	unsigned short crc=0;
 
@@ -183,9 +187,7 @@ udf_cksum(s, n)
 
 /* UNICODE Checksum */
 unsigned short
-udf_unicode_cksum(s, n)
-	unsigned short *s;
-	int n;
+udf_unicode_cksum(unsigned short *s, int n)
 {
 	unsigned short crc=0;
 
@@ -199,10 +201,31 @@ udf_unicode_cksum(s, n)
 	return crc;
 }
 
+
+/*
+  * Calculates a 16-bit checksum of the Implementation Use
+  * Extended Attribute header or Application Use Extended Attribute
+  * header. The fields AttributeType through ImplementationIdentifier
+  * (or ApplicationIdentifier) inclusively represent the
+  * data covered by the checksum (48 bytes).
+  *
+  */
+uint16_t udf_ea_cksum(uint8_t *data) {
+        uint16_t checksum = 0;
+        int      count;
+
+        for (count = 0; count < 48; count++) {
+               checksum += *data++;
+        }
+
+        return checksum;
+}
+
+
 #ifdef MAIN
 unsigned char bytes[] = { 0x70, 0x6A, 0x77 };
 
-main()
+main(void)
 {
 	unsigned short x;
 	x = cksum(bytes, sizeof bytes);
@@ -262,7 +285,7 @@ int IsIllegal(unicode_t ch);
 
 /* #include <stdio.h> */
 static int UnicodeIsPrint(unicode_t ch) {
-	return (ch >=' ') && (ch < 127);
+	return (ch >=' ') && (ch != 127);
 }
 
 
@@ -275,9 +298,11 @@ int UnicodeLength(unicode_t *string) {
 }
 
 
-static int isprint(unsigned char c) {
+#ifdef _KERNEL
+static int isprint(int c) {
 	return (c >= ' ') && (c != 127);
 }
+#endif
 
 
 /***********************************************************************

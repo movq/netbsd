@@ -1,7 +1,11 @@
-/* $NetBSD: tfb.c,v 1.53 2007/10/19 12:01:20 ad Exp $ */
+/* $NetBSD: tfb.c,v 1.62 2018/01/24 05:35:58 riastradh Exp $ */
 
-/*
- * Copyright (c) 1998, 1999 Tohru Nishimura.  All rights reserved.
+/*-
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tohru Nishimura.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,27 +15,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tfb.c,v 1.53 2007/10/19 12:01:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tfb.c,v 1.62 2018/01/24 05:35:58 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,8 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: tfb.c,v 1.53 2007/10/19 12:01:20 ad Exp $");
 #include <dev/ic/bt463reg.h>
 #include <dev/ic/bt431reg.h>
 
-#include <uvm/uvm_extern.h>
-
 #if defined(pmax)
 #define	machine_btop(x) mips_btop(MIPS_KSEG1_TO_PHYS(x))
 #endif
@@ -66,32 +63,32 @@ __KERNEL_RCSID(0, "$NetBSD: tfb.c,v 1.53 2007/10/19 12:01:20 ad Exp $");
 
 /*
  * struct bt463reg {
- * 	u_int8_t	bt_lo;
+ * 	uint8_t		bt_lo;
  * 	unsigned : 24;
- * 	u_int8_t	bt_hi;
+ * 	uint8_t		bt_hi;
  * 	unsigned : 24;
- * 	u_int8_t	bt_reg;
+ * 	uint8_t		bt_reg;
  * 	unsigned : 24;
- * 	u_int8_t	bt_cmap;
+ * 	uint8_t		bt_cmap;
  * };
  *
  * N.B. a pair of Bt431s are located adjascently.
  * 	struct bt431twin {
  *		struct {
- *			u_int8_t u0;	for sprite mask
- *			u_int8_t u1;	for sprite image
+ *			uint8_t u0;	for sprite mask
+ *			uint8_t u1;	for sprite image
  *			unsigned :16;
  *		} bt_lo;
  *		...
  *
  * struct bt431reg {
- * 	u_int16_t	bt_lo;
+ * 	uint16_t	bt_lo;
  * 	unsigned : 16;
- * 	u_int16_t	bt_hi;
+ * 	uint16_t	bt_hi;
  * 	unsigned : 16;
- * 	u_int16_t	bt_ram;
+ * 	uint16_t	bt_ram;
  * 	unsigned : 16;
- * 	u_int16_t	bt_ctl;
+ * 	uint16_t	bt_ctl;
  * };
  */
 
@@ -106,7 +103,7 @@ __KERNEL_RCSID(0, "$NetBSD: tfb.c,v 1.53 2007/10/19 12:01:20 ad Exp $");
 #define	bt_ctl	0xc
 
 #define	REGWRITE32(p,i,v) do {					\
-	*(volatile u_int32_t *)((p) + (i)) = (v); tc_wmb();	\
+	*(volatile uint32_t *)((p) + (i)) = (v); tc_wmb();	\
     } while (0)
 
 #define	SELECT463(p,r) do {					\
@@ -125,9 +122,9 @@ __KERNEL_RCSID(0, "$NetBSD: tfb.c,v 1.53 2007/10/19 12:01:20 ad Exp $");
 
 struct hwcmap256 {
 #define	CMAP_SIZE	256	/* R/G/B entries */
-	u_int8_t r[CMAP_SIZE];
-	u_int8_t g[CMAP_SIZE];
-	u_int8_t b[CMAP_SIZE];
+	uint8_t r[CMAP_SIZE];
+	uint8_t g[CMAP_SIZE];
+	uint8_t b[CMAP_SIZE];
 };
 
 struct hwcursor64 {
@@ -136,13 +133,12 @@ struct hwcursor64 {
 	struct wsdisplay_curpos cc_size;
 	struct wsdisplay_curpos cc_magic;
 #define	CURSOR_MAX_SIZE	64
-	u_int8_t cc_color[6];
-	u_int64_t cc_image[CURSOR_MAX_SIZE];
-	u_int64_t cc_mask[CURSOR_MAX_SIZE];
+	uint8_t cc_color[6];
+	uint64_t cc_image[CURSOR_MAX_SIZE];
+	uint64_t cc_mask[CURSOR_MAX_SIZE];
 };
 
 struct tfb_softc {
-	struct device sc_dev;
 	vaddr_t sc_vaddr;
 	size_t sc_size;
 	struct rasops_info *sc_ri;
@@ -176,10 +172,10 @@ struct tfb_softc {
 #define	TX_CTL_SEG_ENA	0x10
 #define	TX_CTL_SEG	0x0f
 
-static int  tfbmatch(struct device *, struct cfdata *, void *);
-static void tfbattach(struct device *, struct device *, void *);
+static int  tfbmatch(device_t, cfdata_t, void *);
+static void tfbattach(device_t, device_t, void *);
 
-CFATTACH_DECL(tfb, sizeof(struct tfb_softc),
+CFATTACH_DECL_NEW(tfb, sizeof(struct tfb_softc),
     tfbmatch, tfbattach, NULL, NULL);
 
 static void tfb_common_init(struct rasops_info *);
@@ -231,7 +227,7 @@ static int  get_cursor(struct tfb_softc *, struct wsdisplay_cursor *);
 static void set_curpos(struct tfb_softc *, struct wsdisplay_curpos *);
 
 /* bit order reverse */
-static const u_int8_t flip[256] = {
+static const uint8_t flip[256] = {
 	0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0,
 	0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0,
 	0x08, 0x88, 0x48, 0xc8, 0x28, 0xa8, 0x68, 0xe8,
@@ -267,7 +263,7 @@ static const u_int8_t flip[256] = {
 };
 
 static int
-tfbmatch(struct device *parent, struct cfdata *match, void *aux)
+tfbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -280,7 +276,7 @@ tfbmatch(struct device *parent, struct cfdata *match, void *aux)
 
 
 static void
-tfbattach(struct device *parent, struct device *self, void *aux)
+tfbattach(device_t parent, device_t self, void *aux)
 {
 	struct tfb_softc *sc = device_private(self);
 	struct tc_attach_args *ta = aux;
@@ -291,16 +287,16 @@ tfbattach(struct device *parent, struct device *self, void *aux)
 	console = (ta->ta_addr == tfb_consaddr);
 	if (console) {
 		sc->sc_ri = ri = &tfb_console_ri;
+		ri->ri_flg &= ~RI_NO_AUTO;
 		sc->nscreens = 1;
 	}
 	else {
-		MALLOC(ri, struct rasops_info *, sizeof(struct rasops_info),
-			M_DEVBUF, M_NOWAIT);
+		ri = malloc(sizeof(struct rasops_info),
+			M_DEVBUF, M_NOWAIT|M_ZERO);
 		if (ri == NULL) {
 			printf(": can't alloc memory\n");
 			return;
 		}
-		memset(ri, 0, sizeof(struct rasops_info));
 
 		ri->ri_hw = (void *)ta->ta_addr;
 		tfb_common_init(ri);
@@ -317,8 +313,8 @@ tfbattach(struct device *parent, struct device *self, void *aux)
 
 	tc_intr_establish(parent, ta->ta_cookie, IPL_TTY, tfbintr, sc);
 
-	*(u_int8_t *)((char *)ri->ri_hw + TX_CONTROL) &= ~0x40;
-	*(u_int8_t *)((char *)ri->ri_hw + TX_CONTROL) |= 0x40;
+	*(uint8_t *)((char *)ri->ri_hw + TX_CONTROL) &= ~0x40;
+	*(uint8_t *)((char *)ri->ri_hw + TX_CONTROL) |= 0x40;
 
 	waa.console = console;
 	waa.scrdata = &tfb_screenlist;
@@ -340,6 +336,8 @@ tfb_common_init(struct rasops_info *ri)
 	tfbhwinit(base);
 
 	ri->ri_flg = RI_CENTER;
+	if (ri == &tfb_console_ri)
+		ri->ri_flg |= RI_NO_AUTO;
 	ri->ri_depth = 8;
 	ri->ri_width = 1280;
 	ri->ri_height = 1024;
@@ -352,10 +350,10 @@ tfb_common_init(struct rasops_info *ri)
 	wsfont_init();
 	/* prefer 12 pixel wide font */
 	cookie = wsfont_find(NULL, 12, 0, 0, WSDISPLAY_FONTORDER_L2R,
-	    WSDISPLAY_FONTORDER_L2R);
+	    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0)
 		cookie = wsfont_find(NULL, 0, 0, 0, WSDISPLAY_FONTORDER_L2R,
-		    WSDISPLAY_FONTORDER_L2R);
+		    WSDISPLAY_FONTORDER_L2R, WSFONT_FIND_BITMAP);
 	if (cookie <= 0) {
 		printf("tfb: font table is empty\n");
 		return;
@@ -380,7 +378,7 @@ static void
 tfb_cmap_init(struct tfb_softc *sc)
 {
 	struct hwcmap256 *cm;
-	const u_int8_t *p;
+	const uint8_t *p;
 	int index;
 
 	cm = &sc->sc_cmap;
@@ -545,7 +543,7 @@ tfbintr(void *arg)
 	int v;
 
 	base = (void *)sc->sc_ri->ri_hw;
-	*(u_int8_t *)(base + TX_CONTROL) &= ~0x40;
+	*(uint8_t *)(base + TX_CONTROL) &= ~0x40;
 	if (sc->sc_changed == 0)
 		goto done;
 
@@ -561,7 +559,7 @@ tfbintr(void *arg)
 	}
 	if (v & (WSDISPLAY_CURSOR_DOPOS | WSDISPLAY_CURSOR_DOHOT)) {
 		int x, y;
-		u_int32_t twin;
+		uint32_t twin;
 
 		x = sc->sc_cursor.cc_pos.x - sc->sc_cursor.cc_hot.x;
 		y = sc->sc_cursor.cc_pos.y - sc->sc_cursor.cc_hot.y;
@@ -576,7 +574,7 @@ tfbintr(void *arg)
 		REGWRITE32(curs, bt_ctl, TWIN_HI(y));
 	}
 	if (v & WSDISPLAY_CURSOR_DOCMAP) {
-		u_int8_t *cp = sc->sc_cursor.cc_color;
+		uint8_t *cp = sc->sc_cursor.cc_color;
 
 		SELECT463(vdac, BT463_IREG_CURSOR_COLOR_0);
 		REGWRITE32(vdac, bt_reg, cp[1]);
@@ -596,11 +594,11 @@ tfbintr(void *arg)
 		REGWRITE32(vdac, bt_reg, cp[5]);
 	}
 	if (v & WSDISPLAY_CURSOR_DOSHAPE) {
-		u_int8_t *ip, *mp, img, msk;
+		uint8_t *ip, *mp, img, msk;
 		int bcnt;
 
-		ip = (u_int8_t *)sc->sc_cursor.cc_image;
-		mp = (u_int8_t *)sc->sc_cursor.cc_mask;
+		ip = (uint8_t *)sc->sc_cursor.cc_image;
+		mp = (uint8_t *)sc->sc_cursor.cc_mask;
 		bcnt = 0;
 		SELECT431(curs, BT431_REG_CRAM_BASE);
 
@@ -639,8 +637,8 @@ tfbintr(void *arg)
 	}
 	sc->sc_changed = 0;
 done:
-	*(u_int8_t *)(base + TX_CONTROL) &= ~0x40;	/* !? Eeeh !? */
-	*(u_int8_t *)(base + TX_CONTROL) |= 0x40;
+	*(uint8_t *)(base + TX_CONTROL) &= ~0x40;	/* !? Eeeh !? */
+	*(uint8_t *)(base + TX_CONTROL) |= 0x40;
 	return (1);
 }
 
@@ -648,7 +646,7 @@ static void
 tfbhwinit(void *tfbbase)
 {
 	char *vdac, *curs;
-	const u_int8_t *p;
+	const uint8_t *p;
 	int i;
 
 	vdac = (char *)tfbbase + TX_BT463_OFFSET;
@@ -670,7 +668,7 @@ tfbhwinit(void *tfbbase)
 
 #if 0 /* XXX ULTRIX does initialize 16 entry window type here XXX */
   {
-	static u_int32_t windowtype[BT463_IREG_WINDOW_TYPE_TABLE] = {
+	static uint32_t windowtype[BT463_IREG_WINDOW_TYPE_TABLE] = {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	};
 
@@ -779,7 +777,7 @@ set_cursor(struct tfb_softc *sc, struct wsdisplay_cursor *p)
 	if (v & WSDISPLAY_CURSOR_DOCMAP) {
 		index = p->cmap.index;
 		count = p->cmap.count;
-		if (index >= 2 || (index + count) > 2)
+		if (index >= 2 || count > 2 - index)
 			return (EINVAL);
 		error = copyin(p->cmap.red, &r[index], count);
 		if (error)

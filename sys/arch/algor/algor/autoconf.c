@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.16 2007/02/22 04:49:02 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.22 2012/10/27 17:17:24 chs Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,26 +30,26 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2007/02/22 04:49:02 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.22 2012/10/27 17:17:24 chs Exp $");
 
 #include "opt_algor_p4032.h"
 #include "opt_algor_p5064.h"
 #include "opt_algor_p6032.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
-#include <sys/reboot.h>
 #include <sys/device.h>
+#include <sys/intr.h>
+#include <sys/reboot.h>
+#include <sys/systm.h>
 
 #include <dev/pci/pcivar.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
 
-#include <machine/bus.h>
-#include <machine/autoconf.h>
-#include <machine/intr.h>
+#include <algor/autoconf.h>
 
 #ifdef ALGOR_P4032
 #include <algor/algor/algor_p4032var.h>
@@ -84,7 +77,7 @@ void
 cpu_rootconf(void)
 {
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 #if defined(ALGOR_P4032)
@@ -101,9 +94,9 @@ cpu_rootconf(void)
 #endif
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
-	struct device *pdev;
+	device_t pdev;
 
 	/*
 	 * We don't ever know the boot device.  But that's because the
@@ -122,9 +115,9 @@ device_register(struct device *dev, void *aux)
 			    algor_ethaddr, ETHER_ADDR_LEN);
 			KASSERT(pd != NULL);
 			if (prop_dictionary_set(device_properties(dev),
-						"mac-addr", pd) == false) {
+						"mac-address", pd) == false) {
 				printf("WARNING: unable to set mac-addr "
-				    "property for %s\n", dev->dv_xname);
+				    "property for %s\n", device_xname(dev));
 			}
 			prop_object_release(pd);
 #if defined(ALGOR_P4032)

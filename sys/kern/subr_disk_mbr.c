@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk_mbr.c,v 1.31 2008/01/02 11:48:53 ad Exp $	*/
+/*	$NetBSD: subr_disk_mbr.c,v 1.49 2018/01/21 16:55:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -38,9 +38,9 @@
  * If we don't find a label searching the MBR, we look at the start of the
  * disk, if that fails then a label is faked up from the MBR.
  *
- * If there isn't a disklabel or anything in the MBR then partition a
- * is set to cover the whole disk.
- * Useful for files that contain single filesystems (etc).
+ * If there isn't a disklabel or anything in the MBR then the disc is searched
+ * for ecma-167/iso9660/udf style partition indicators.
+ * Useful for media or files that contain single filesystems (etc).
  *
  * This code will read host endian netbsd labels from little endian MBR.
  *
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk_mbr.c,v 1.31 2008/01/02 11:48:53 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk_mbr.c,v 1.49 2018/01/21 16:55:25 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,18 +63,32 @@ __KERNEL_RCSID(0, "$NetBSD: subr_disk_mbr.c,v 1.31 2008/01/02 11:48:53 ad Exp $"
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 #include <sys/syslog.h>
+#include <sys/vnode.h>
+#include <sys/fcntl.h>
+#include <sys/conf.h>
+#include <sys/cdio.h>
+#include <sys/dkbad.h>
+#include <fs/udf/ecma167-udf.h>
 
+#include <sys/kauth.h>
+
+#ifdef _KERNEL_OPT
 #include "opt_mbr.h"
+#endif /* _KERNEL_OPT */
 
 typedef struct mbr_partition mbr_partition_t;
 
 /*
- * We allocate a buffer 2 sectors large, and look in both....
+ * We allocate a buffer 3 sectors large, and look in all....
  * That means we find labels written by other ports with different offsets.
  * LABELSECTOR and LABELOFFSET are only used if the disk doesn't have a label.
  */
-#if LABELSECTOR > 1 || LABELOFFSET > 512
+#define SCANBLOCKS 3
+#define DISKLABEL_SIZE 404
+#if LABELSECTOR*DEV_BSIZE + LABELOFFSET > SCANBLOCKS*DEV_BSIZE - DISKLABEL_SIZE
+#if _MACHINE != ews4800mips /* XXX: fail silently, ews4800mips LABELSECTOR */
 #error Invalid LABELSECTOR or LABELOFFSET
+#endif
 #endif
 
 #define MBR_LABELSECTOR	1
@@ -102,6 +116,10 @@ typedef struct mbr_args {
 static int validate_label(mbr_args_t *, uint);
 static int look_netbsd_part(mbr_args_t *, mbr_partition_t *, int, uint);
 static int write_netbsd_label(mbr_args_t *, mbr_partition_t *, int, uint);
+
+#ifdef DISKLABEL_EI
+static void swap_disklabel(struct disklabel *, struct disklabel *);
+#endif
 
 static int
 read_sector(mbr_args_t *a, uint sector, int count)
@@ -144,6 +162,15 @@ scan_mbr(mbr_args_t *a, int (*actn)(mbr_args_t *, mbr_partition_t *, int, uint))
 		/* Note: Magic number is little-endian. */
 		mbr = (void *)a->bp->b_data;
 		if (mbr->mbr_magic != htole16(MBR_MAGIC))
+			return SCAN_CONTINUE;
+
+		/*
+		 * If this is a protective MBR, bail now.
+		 */
+		if (mbr->mbr_parts[0].mbrp_type == MBR_PTYPE_PMBR
+		    && mbr->mbr_parts[1].mbrp_type == MBR_PTYPE_UNUSED
+		    && mbr->mbr_parts[2].mbrp_type == MBR_PTYPE_UNUSED
+		    && mbr->mbr_parts[3].mbrp_type == MBR_PTYPE_UNUSED)
 			return SCAN_CONTINUE;
 
 		/* Copy data out of buffer so action can use bp */
@@ -226,6 +253,134 @@ scan_mbr(mbr_args_t *a, int (*actn)(mbr_args_t *, mbr_partition_t *, int, uint))
 	return SCAN_CONTINUE;
 }
 
+
+static void
+scan_iso_vrs_session(mbr_args_t *a, uint32_t first_sector,
+	int *is_iso9660, int *is_udf)
+{
+	struct vrs_desc *vrsd;
+	uint64_t vrs;
+	int sector_size;
+	int blks, inc;
+
+	sector_size = a->lp->d_secsize;
+	blks = sector_size / DEV_BSIZE;
+	inc  = MAX(1, 2048 / sector_size);
+
+	/* by definition */
+	vrs = ((32*1024 + sector_size - 1) / sector_size)
+	        + first_sector;
+
+	/* read first vrs sector */
+	if (read_sector(a, vrs * blks, 1))
+		return;
+
+	/* skip all CD001 records */
+	vrsd = a->bp->b_data;
+	/* printf("vrsd->identifier = `%s`\n", vrsd->identifier); */
+	while (memcmp(vrsd->identifier, "CD001", 5) == 0) {
+		/* for sure */
+		*is_iso9660 = first_sector;
+
+		vrs += inc;
+		if (read_sector(a, vrs * blks, 1))
+			return;
+	}
+
+	/* search for BEA01 */
+	vrsd = a->bp->b_data;
+	/* printf("vrsd->identifier = `%s`\n", vrsd->identifier); */
+	if (memcmp(vrsd->identifier, "BEA01", 5))
+		return;
+
+	/* read successor */
+	vrs += inc;
+	if (read_sector(a, vrs * blks, 1))
+		return;
+
+	/* check for NSR[23] */
+	vrsd = a->bp->b_data;
+	/* printf("vrsd->identifier = `%s`\n", vrsd->identifier); */
+	if (memcmp(vrsd->identifier, "NSR0", 4))
+		return;
+
+	*is_udf = first_sector;
+}
+
+
+/*
+ * Scan for ISO Volume Recognition Sequences
+ */
+
+static int
+scan_iso_vrs(mbr_args_t *a)
+{
+	struct mmc_discinfo  di;
+	struct mmc_trackinfo ti;
+	dev_t dev;
+	uint64_t sector;
+	int is_iso9660, is_udf;
+	int tracknr, sessionnr;
+	int new_session, error;
+
+	is_iso9660 = is_udf = -1;
+
+	/* parse all sessions of disc if we're on a SCSI MMC device */
+	if (a->lp->d_flags & D_SCSI_MMC) {
+		/* get disc info */
+		dev = a->bp->b_dev;
+		error = bdev_ioctl(dev, MMCGETDISCINFO, &di, FKIOCTL, curlwp);
+		if (error)
+			return SCAN_CONTINUE;
+
+		/* go trough all (data) tracks */
+		sessionnr = -1;
+		for (tracknr = di.first_track;
+		    tracknr <= di.first_track_last_session; tracknr++)
+		{
+			ti.tracknr = tracknr;
+			error = bdev_ioctl(dev, MMCGETTRACKINFO, &ti,
+					FKIOCTL, curlwp);
+			if (error)
+				return SCAN_CONTINUE;
+			new_session = (ti.sessionnr != sessionnr);
+			sessionnr = ti.sessionnr;
+			if (new_session) {
+				if (ti.flags & MMC_TRACKINFO_BLANK)
+					continue;
+				if (!(ti.flags & MMC_TRACKINFO_DATA))
+					continue;
+				sector = ti.track_start;
+				scan_iso_vrs_session(a, sector,
+					&is_iso9660, &is_udf);
+			}
+		}
+	} else {
+		/* try start of disc */
+		sector = 0;
+		scan_iso_vrs_session(a, sector, &is_iso9660, &is_udf);
+	}
+
+	if ((is_iso9660 < 0) && (is_udf < 0))
+		return SCAN_CONTINUE;
+
+	strncpy(a->lp->d_typename, "iso partition", 16);
+
+	/* adjust session information for iso9660 partition */
+	if (is_iso9660 >= 0) {
+		/* set 'a' partition to iso9660 */
+		a->lp->d_partitions[0].p_offset = 0;
+		a->lp->d_partitions[0].p_size   = a->lp->d_secperunit;
+		a->lp->d_partitions[0].p_cdsession = is_iso9660;
+		a->lp->d_partitions[0].p_fstype = FS_ISO9660;
+	}
+
+	/* UDF doesn't care about the cd session specified here */
+
+	return SCAN_FOUND;
+}
+
+
 /*
  * Attempt to read a disk label from a device
  * using the indicated strategy routine.
@@ -245,7 +400,6 @@ const char *
 readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
     struct cpu_disklabel *osdep)
 {
-	struct dkbad *bdp;
 	int rval;
 	int i;
 	mbr_args_t a;
@@ -277,8 +431,12 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 	lp->d_partitions[0].p_size = lp->d_partitions[RAW_PART].p_size;
 	lp->d_partitions[0].p_fstype = FS_BSDFFS;
 
-	/* get a buffer and initialize it */
-	a.bp = geteblk(2 * (int)lp->d_secsize);
+	/*
+	 * Get a buffer big enough to read a disklabel in and initialize it
+	 * make it three sectors long for the validate_label(); see comment at
+	 * start of file.
+	 */
+	a.bp = geteblk(SCANBLOCKS * (int)lp->d_secsize);
 	a.bp->b_dev = dev;
 
 	if (osdep)
@@ -296,6 +454,9 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 		rval = validate_label(&a, 0);
 	}
 
+	if (rval == SCAN_CONTINUE) {
+		rval = scan_iso_vrs(&a);
+	}
 #if 0
 	/*
 	 * Save sector where we found the label for the 'don't overwrite
@@ -306,8 +467,9 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 #endif
 
 	/* Obtain bad sector table if requested and present */
+#ifdef __HAVE_DISKLABEL_DKBAD
 	if (rval == SCAN_FOUND && osdep && (lp->d_flags & D_BADSECT)) {
-		struct dkbad *db;
+		struct dkbad *bdp, *db;
 		int blkno;
 
 		bdp = &osdep->bad;
@@ -337,6 +499,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 		} while (a.bp->b_error && (i += 2) < 10 &&
 			i < lp->d_nsectors);
 	}
+#endif /* __HAVE_DISKLABEL_DKBAD */
 
 	brelse(a.bp, 0);
 	if (rval == SCAN_ERROR || rval == SCAN_CONTINUE)
@@ -406,15 +569,26 @@ look_netbsd_part(mbr_args_t *a, mbr_partition_t *dp, int slot, uint ext_base)
 }
 
 
+#ifdef DISKLABEL_EI
+/*
+ * - For read, convert a label to the native byte order.
+ * - For update or write, if a label already exists, keep its byte order.
+ *   Otherwise, write a new label in the native byte order.
+ */
+#endif
 static int
 validate_label(mbr_args_t *a, uint label_sector)
 {
 	struct disklabel *dlp;
 	char *dlp_lim, *dlp_byte;
 	int error;
+#ifdef DISKLABEL_EI
+	int swapped = 0;
+	uint16_t npartitions;
+#endif
 
 	/* Next, dig out disk label */
-	if (read_sector(a, label_sector, 2)) {
+	if (read_sector(a, label_sector, SCANBLOCKS)) {
 		a->msg = "disk label read failed";
 		return SCAN_ERROR;
 	}
@@ -430,11 +604,11 @@ validate_label(mbr_args_t *a, uint label_sector)
 	 */
 	dlp = (void *)a->bp->b_data;
 	dlp_lim = (char *)a->bp->b_data + a->bp->b_bcount - sizeof *dlp;
-	for (;; dlp = (void *)((char *)dlp + sizeof(long))) {
+	for (;; dlp = (void *)((char *)dlp + sizeof(uint32_t))) {
 		if ((char *)dlp > dlp_lim) {
 			if (a->action != WRITE_LABEL)
 				return SCAN_CONTINUE;
-			/* Write at arch. dependant default location */
+			/* Write at arch. dependent default location */
 			dlp_byte = (char *)a->bp->b_data + LABELOFFSET;
 			if (label_sector)
 				dlp_byte += MBR_LABELSECTOR * a->lp->d_secsize;
@@ -444,8 +618,31 @@ validate_label(mbr_args_t *a, uint label_sector)
 			break;
 		}
 		if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC)
+#ifdef DISKLABEL_EI
+		{
+			if (bswap32(dlp->d_magic)  != DISKMAGIC ||
+			    bswap32(dlp->d_magic2) != DISKMAGIC)
+				continue;
+
+			/*
+			 * The label is in the other byte order. We need to
+			 * checksum before swapping the byte order.
+			 */
+			npartitions = bswap16(dlp->d_npartitions);
+			if (npartitions > MAXPARTITIONS ||
+			    dkcksum_sized(dlp, npartitions) != 0)
+				goto corrupted;
+
+			swapped = 1;
+		}
+#else
 			continue;
-		if (dlp->d_npartitions > MAXPARTITIONS || dkcksum(dlp) != 0) {
+#endif
+		else if (dlp->d_npartitions > MAXPARTITIONS ||
+			 dkcksum(dlp) != 0) {
+#ifdef DISKLABEL_EI
+corrupted:
+#endif
 			a->msg = "disk label corrupted";
 			continue;
 		}
@@ -454,7 +651,14 @@ validate_label(mbr_args_t *a, uint label_sector)
 
 	switch (a->action) {
 	case READ_LABEL:
+#ifdef DISKLABEL_EI
+		if (swapped)
+			swap_disklabel(a->lp, dlp);
+		else
+			*a->lp = *dlp;
+#else
 		*a->lp = *dlp;
+#endif
 		if ((a->msg = convertdisklabel(a->lp, a->strat, a->bp,
 		                              a->secperunit)) != NULL)
 			return SCAN_ERROR;
@@ -462,7 +666,15 @@ validate_label(mbr_args_t *a, uint label_sector)
 		return SCAN_FOUND;
 	case UPDATE_LABEL:
 	case WRITE_LABEL:
+#ifdef DISKLABEL_EI
+		/* DO NOT swap a->lp itself for later references. */
+		if (swapped)
+			swap_disklabel(dlp, a->lp);
+		else
+			*dlp = *a->lp;
+#else
 		*dlp = *a->lp;
+#endif
 		a->bp->b_oflags &= ~BO_DONE;
 		a->bp->b_flags &= ~B_READ;
 		a->bp->b_flags |= B_WRITE;
@@ -504,7 +716,7 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
 	}
 
 	if (nlp->d_magic != DISKMAGIC || nlp->d_magic2 != DISKMAGIC ||
-	    dkcksum(nlp) != 0)
+	    nlp->d_npartitions > MAXPARTITIONS || dkcksum(nlp) != 0)
 		return (EINVAL);
 
 	/* XXX missing check if other dos partitions will be overwritten */
@@ -512,7 +724,7 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
 	while (openmask != 0) {
 		i = ffs(openmask) - 1;
 		openmask &= ~(1 << i);
-		if (i > nlp->d_npartitions)
+		if (i >= nlp->d_npartitions)
 			return (EBUSY);
 		opp = &olp->d_partitions[i];
 		npp = &nlp->d_partitions[i];
@@ -548,7 +760,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 	a.strat = strat;
 
 	/* get a buffer and initialize it */
-	a.bp = geteblk(2 * (int)lp->d_secsize);
+	a.bp = geteblk(SCANBLOCKS * (int)lp->d_secsize);
 	a.bp->b_dev = dev;
 
 	/* osdep => we expect an mbr with label in netbsd ptn */
@@ -579,3 +791,83 @@ write_netbsd_label(mbr_args_t *a, mbr_partition_t *dp, int slot, uint ext_base)
 
 	return validate_label(a, ptn_base);
 }
+
+#ifdef DISKLABEL_EI
+/*
+ * from sh3/disksubr.c with modifications:
+ *	- update d_checksum properly
+ *	- replace memcpy(9) by memmove(9) as a precaution
+ */
+static void
+swap_disklabel(struct disklabel *nlp, struct disklabel *olp)
+{
+	int i;
+	uint16_t npartitions;
+
+#define	SWAP16(x)	nlp->x = bswap16(olp->x)
+#define	SWAP32(x)	nlp->x = bswap32(olp->x)
+
+	SWAP32(d_magic);
+	SWAP16(d_type);
+	SWAP16(d_subtype);
+	/* Do not need to swap char strings. */
+	memmove(nlp->d_typename, olp->d_typename, sizeof(nlp->d_typename));
+
+	/* XXX What should we do for d_un (an union of char and pointers) ? */
+	memmove(nlp->d_packname, olp->d_packname, sizeof(nlp->d_packname));
+
+	SWAP32(d_secsize);
+	SWAP32(d_nsectors);
+	SWAP32(d_ntracks);
+	SWAP32(d_ncylinders);
+	SWAP32(d_secpercyl);
+	SWAP32(d_secperunit);
+
+	SWAP16(d_sparespertrack);
+	SWAP16(d_sparespercyl);
+
+	SWAP32(d_acylinders);
+
+	SWAP16(d_rpm);
+	SWAP16(d_interleave);
+	SWAP16(d_trackskew);
+	SWAP16(d_cylskew);
+	SWAP32(d_headswitch);
+	SWAP32(d_trkseek);
+	SWAP32(d_flags);
+	for (i = 0; i < NDDATA; i++)
+		SWAP32(d_drivedata[i]);
+	for (i = 0; i < NSPARE; i++)
+		SWAP32(d_spare[i]);
+	SWAP32(d_magic2);
+	/* d_checksum is updated later. */
+
+	SWAP16(d_npartitions);
+	SWAP32(d_bbsize);
+	SWAP32(d_sbsize);
+	for (i = 0; i < MAXPARTITIONS; i++) {
+		SWAP32(d_partitions[i].p_size);
+		SWAP32(d_partitions[i].p_offset);
+		SWAP32(d_partitions[i].p_fsize);
+		/* p_fstype and p_frag is uint8_t, so no need to swap. */
+		nlp->d_partitions[i].p_fstype = olp->d_partitions[i].p_fstype;
+		nlp->d_partitions[i].p_frag = olp->d_partitions[i].p_frag;
+		SWAP16(d_partitions[i].p_cpg);
+	}
+
+#undef SWAP16
+#undef SWAP32
+
+	/* Update checksum in the target endian. */
+	nlp->d_checksum = 0;
+	npartitions = nlp->d_magic == DISKMAGIC ?
+	    nlp->d_npartitions : olp->d_npartitions;
+	/*
+	 * npartitions can be larger than MAXPARTITIONS when the label was not
+	 * validated by setdisklabel. If so, the label is intentionally(?)
+	 * corrupted and checksum should be meaningless.
+	 */
+	if (npartitions <= MAXPARTITIONS)
+		nlp->d_checksum = dkcksum_sized(nlp, npartitions);
+}
+#endif /* DISKLABEL_EI */

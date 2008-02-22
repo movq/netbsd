@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.16 2005/08/04 00:20:12 christos Exp $	*/
+/*	$NetBSD: hash.c,v 1.20 2013/11/14 00:27:05 sjg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: hash.c,v 1.16 2005/08/04 00:20:12 christos Exp $";
+static char rcsid[] = "$NetBSD: hash.c,v 1.20 2013/11/14 00:27:05 sjg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)hash.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: hash.c,v 1.16 2005/08/04 00:20:12 christos Exp $");
+__RCSID("$NetBSD: hash.c,v 1.20 2013/11/14 00:27:05 sjg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -148,7 +148,7 @@ Hash_InitTable(Hash_Table *t, int numBuckets)
 	t->numEntries = 0;
 	t->size = i;
 	t->mask = i - 1;
-	t->bucketPtr = hp = emalloc(sizeof(*hp) * i);
+	t->bucketPtr = hp = bmake_malloc(sizeof(*hp) * i);
 	while (--i >= 0)
 		*hp++ = NULL;
 }
@@ -221,13 +221,16 @@ Hash_FindEntry(Hash_Table *t, const char *key)
 	unsigned h;
 	const char *p;
 
+	if (t == NULL || t->bucketPtr == NULL) {
+	    return NULL;
+	}
 	for (h = 0, p = key; *p;)
 		h = (h << 5) - h + *p++;
 	p = key;
 	for (e = t->bucketPtr[h & t->mask]; e != NULL; e = e->next)
 		if (e->namehash == h && strcmp(e->name, p) == 0)
 			return (e);
-	return (NULL);
+	return NULL;
 }
 
 /*
@@ -287,11 +290,11 @@ Hash_CreateEntry(Hash_Table *t, const char *key, Boolean *newPtr)
 	 */
 	if (t->numEntries >= rebuildLimit * t->size)
 		RebuildTable(t);
-	e = emalloc(sizeof(*e) + keylen);
+	e = bmake_malloc(sizeof(*e) + keylen);
 	hp = &t->bucketPtr[h & t->mask];
 	e->next = *hp;
 	*hp = e;
-	e->clientData = NULL;
+	Hash_SetValue(e, NULL);
 	e->namehash = h;
 	(void)strcpy(e->name, p);
 	t->numEntries++;
@@ -411,7 +414,7 @@ Hash_EnumNext(Hash_Search *searchPtr)
 	 */
 	while (e == NULL) {
 		if (searchPtr->nextIndex >= t->size)
-			return (NULL);
+			return NULL;
 		e = t->bucketPtr[searchPtr->nextIndex++];
 	}
 	searchPtr->hashEntryPtr = e;
@@ -448,7 +451,7 @@ RebuildTable(Hash_Table *t)
 	i <<= 1;
 	t->size = i;
 	t->mask = mask = i - 1;
-	t->bucketPtr = hp = emalloc(sizeof(*hp) * i);
+	t->bucketPtr = hp = bmake_malloc(sizeof(*hp) * i);
 	while (--i >= 0)
 		*hp++ = NULL;
 	for (hp = oldhp, i = oldsize; --i >= 0;) {

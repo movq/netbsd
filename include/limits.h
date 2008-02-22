@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.26 2007/09/21 01:41:43 rmind Exp $	*/
+/*	$NetBSD: limits.h,v 1.40 2016/08/04 06:43:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -42,6 +42,7 @@
 #define	_POSIX_AIO_MAX		1
 #define	_POSIX_ARG_MAX		4096
 #define	_POSIX_CHILD_MAX	25
+#define	_POSIX_HOST_NAME_MAX	255
 #define	_POSIX_LINK_MAX		8
 #define	_POSIX_LOGIN_NAME_MAX	9
 #define	_POSIX_MAX_CANON	255
@@ -57,12 +58,47 @@
 #define	_POSIX_SSIZE_MAX	32767
 #define	_POSIX_STREAM_MAX	8
 #define	_POSIX_SYMLINK_MAX	255
+#define	_POSIX_SYMLOOP_MAX	8
+
+/*
+ * We have not implemented these yet
+ *
+ * _POSIX_THREAD_ATTR_STACKADDR
+ * _POSIX_THREAD_ATTR_STACKSIZE
+ * _POSIX_THREAD_CPUTIME
+ * _POSIX_THREAD_PRIORITY_SCHEDULING
+ * _POSIX_THREAD_PRIO_INHERIT
+ * _POSIX_THREAD_PRIO_PROTECT
+ * _POSIX_THREAD_PROCESS_SHARED
+ * _POSIX_THREAD_SAFE_FUNCTIONS
+ * _POSIX_THREAD_SPORADIC_SERVER
+ */
+
+/*
+ * The following 3 are defined in 
+ * Open Group Base Specifications Issue 7
+ */
 #define	_POSIX_THREAD_DESTRUCTOR_ITERATIONS	4
-#define	_POSIX_THREAD_KEYS_MAX	128
+#define	_POSIX_THREAD_KEYS_MAX			128
 #define	_POSIX_THREAD_THREADS_MAX		64
+
+/*
+ * These are the correct names, defined in terms of the above
+ * except for PTHREAD_KEYS_MAX which is bigger than standard 
+ * mandated minimum value _POSIX_THREAD_KEYS_MAX.
+ */
+#define	PTHREAD_DESTRUCTOR_ITERATIONS 	_POSIX_THREAD_DESTRUCTOR_ITERATIONS
+#define	PTHREAD_KEYS_MAX		256
+/* Not yet: PTHREAD_STACK_MIN */
+#define	PTHREAD_THREADS_MAX		_POSIX_THREAD_THREADS_MAX
+
 #define	_POSIX_TIMER_MAX	32
+#define	_POSIX_SEM_NSEMS_MAX	256
+#define	_POSIX_SIGQUEUE_MAX	32
+#define	_POSIX_REALTIME_SIGNALS	200112L
+#define	_POSIX_DELAYTIMER_MAX	32
 #define	_POSIX_TTY_NAME_MAX	9
-#define	_POSIX_TZNAME_MAX	3
+#define	_POSIX_TZNAME_MAX	6
 
 #define	_POSIX2_BC_BASE_MAX	99
 #define	_POSIX2_BC_DIM_MAX	2048
@@ -106,7 +142,27 @@
 
 #endif /* _POSIX_C_SOURCE || _XOPEN_SOURCE || _NETBSD_SOURCE */
 
+#define MB_LEN_MAX		32	/* Allow ISO/IEC 2022 */
+
+/*
+ * X/Open Extended API set 2 (a.k.a. C063)
+ * This hides unimplemented functions from GNU configure until
+ * we are done implementing them.
+ */
+#if !defined(_INCOMPLETE_XOPEN_C063)
+#define __stub_fexecve
+#endif
+
 #include <machine/limits.h>
+
+#ifdef __CHAR_UNSIGNED__
+# define CHAR_MIN     0
+# define CHAR_MAX     UCHAR_MAX
+#else
+# define CHAR_MIN     SCHAR_MIN
+# define CHAR_MAX     SCHAR_MAX
+#endif
+
 #include <sys/syslimits.h>
 
 #endif /* !_LIMITS_H_ */

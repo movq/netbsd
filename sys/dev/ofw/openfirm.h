@@ -1,4 +1,4 @@
-/*	$NetBSD: openfirm.h,v 1.26 2007/12/25 18:33:40 perry Exp $	*/
+/*	$NetBSD: openfirm.h,v 1.36 2017/07/03 00:47:34 jmcneill Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -65,44 +65,54 @@ struct ofbus_attach_args {
 	int		oba_unit;
 };
 
+struct of_compat_data {
+	const char *compat;
+	uintptr_t data;
+};
 
 /*
  * Functions and variables provided by machine-dependent code.
  */
 extern char *OF_buf;
 
-int	OF_peer(int);
-int	OF_child(int);
-int	OF_parent(int);
-int	OF_instance_to_package(int);
-int	OF_getproplen(int, const char *);
-int	OF_getprop(int, const char *, void *, int);
-int	OF_nextprop(int, const char *, void *);
-int	OF_setprop(int, const char *, const void *, int);
-int	OF_finddevice(const char *);
-int	OF_instance_to_path(int, char *, int);
-int	OF_package_to_path(int, char *, int);
-int	OF_call_method_1(const char *, int, int, ...);
-int	OF_call_method(const char *, int, int, int, ...);
-int	OF_open(const char *);
-void	OF_close(int);
-int	OF_read(int, void *, int);
-int	OF_write(int, const void *, int);
-int	OF_seek(int, u_quad_t);
-void	*OF_claim(void *, u_int, u_int);
-void	OF_release(void *, u_int);
-int	OF_milliseconds(void);
 void	OF_boot(const char *) __dead;
+int	OF_call_method(const char *, int, int, int, ...);
+int	OF_call_method_1(const char *, int, int, ...);
+int	OF_child(int);
+void	*OF_claim(void *, u_int, u_int);
+void	OF_close(int);
 void	OF_enter(void);
 void	OF_exit(void) __dead;
+int	OF_finddevice(const char *);
+int	OF_getprop(int, const char *, void *, int);
+int	OF_getproplen(int, const char *);
+int	OF_instance_to_package(int);
+int	OF_instance_to_path(int, char *, int);
 int	OF_interpret(const char *, int, int, ...);
+int	OF_milliseconds(void);
+int	OF_nextprop(int, const char *, void *);
+int	OF_open(const char *);
+int	OF_package_to_path(int, char *, int);
+int	OF_parent(int);
+int	OF_peer(int);
+void	OF_quiesce(void);
+int	OF_read(int, void *, int);
+void	OF_release(void *, u_int);
+int	OF_seek(int, u_quad_t);
 void	(*OF_set_callback(void(*)(void *)))(void *);
+int	OF_setprop(int, const char *, const void *, int);
+int	OF_write(int, const void *, int);
+
 int	openfirmware(void *);
 
 /*
  * Functions and variables provided by machine-independent code.
  */
 int	of_compatible(int, const char * const *);
+int	of_match_compatible(int, const char * const *);
+int	of_match_compat_data(int, const struct of_compat_data *);
+const struct of_compat_data *
+	of_search_compatible(int, const struct of_compat_data *);
 int	of_decode_int(const unsigned char *);
 int	of_packagename(int, char *, int);
 int	of_find_firstchild_byname(int, const char *);
@@ -113,5 +123,12 @@ boolean_t	of_to_dataprop(prop_dictionary_t, int, const char *,
     const char *);
 
 int	*of_network_decode_media(int, int *, int *);
+char	*of_get_mode_string(char *, int);
+
+void	of_enter_i2c_devs(prop_dictionary_t, int, size_t, int);
+
+bool	of_hasprop(int, const char *);
+#define of_getprop_bool	of_hasprop
+int	of_getprop_uint32(int, const char *, uint32_t *);
 
 #endif /*_OPENFIRM_H_*/

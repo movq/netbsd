@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_mskanji.c,v 1.12 2007/03/05 16:57:06 tnozaki Exp $	*/
+/*	$NetBSD: citrus_mskanji.c,v 1.14 2013/05/28 16:57:56 joerg Exp $	*/
 
 /*-
  * Copyright (c)2002 Citrus Project,
@@ -62,7 +62,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_mskanji.c,v 1.12 2007/03/05 16:57:06 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_mskanji.c,v 1.14 2013/05/28 16:57:56 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -71,7 +71,6 @@ __RCSID("$NetBSD: citrus_mskanji.c,v 1.12 2007/03/05 16:57:06 tnozaki Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <wchar.h>
 #include <sys/types.h>
 #include <limits.h>
@@ -108,8 +107,10 @@ typedef struct {
 		_MSKanjiState	s_mbrtowc;
 		_MSKanjiState	s_mbtowc;
 		_MSKanjiState	s_mbsrtowcs;
+		_MSKanjiState	s_mbsnrtowcs;
 		_MSKanjiState	s_wcrtomb;
 		_MSKanjiState	s_wcsrtombs;
+		_MSKanjiState	s_wcsnrtombs;
 		_MSKanjiState	s_wctomb;
 	} states;
 } _MSKanjiCTypeInfo;

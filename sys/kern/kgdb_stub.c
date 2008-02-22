@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_stub.c,v 1.22 2005/12/07 05:53:24 thorpej Exp $	*/
+/*	$NetBSD: kgdb_stub.c,v 1.29 2015/06/26 14:26:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -45,8 +45,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.22 2005/12/07 05:53:24 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.29 2015/06/26 14:26:38 christos Exp $");
 
+#include "opt_ddb.h"
 #include "opt_kgdb.h"
 
 #include <sys/param.h>
@@ -69,7 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.22 2005/12/07 05:53:24 thorpej Exp $
 #define KGDB_DEVRATE 19200
 #endif
 
-int kgdb_dev = KGDB_DEV;	/* remote debugging device (NODEV if none) */
+dev_t kgdb_dev = KGDB_DEV;	/* remote debugging device (NODEV if none) */
 int kgdb_rate = KGDB_DEVRATE;	/* remote debugging baud rate */
 int kgdb_active = 0;		/* remote debugging active if != 0 */
 int kgdb_debug_init = 0;	/* != 0 waits for remote at system init */
@@ -84,15 +85,38 @@ static void *kgdb_ioarg;
 static u_char buffer[KGDB_BUFLEN];
 static kgdb_reg_t gdb_regs[KGDB_NUMREGS];
 
-#define GETC()	((*kgdb_getc)(kgdb_ioarg))
-#define PUTC(c)	((*kgdb_putc)(kgdb_ioarg, c))
+#define GETC()	kgdb_waitc(kgdb_ioarg)
+#define PUTC(c)	(*kgdb_putc)(kgdb_ioarg, c)
+
+static int
+kgdb_waitc(void *arg)
+{
+	int c;
+	while ((c = (*kgdb_getc)(arg)) == -1)
+		continue;
+	return c;
+}
 
 /*
  * db_trap_callback can be hooked by MD port code to handle special
  * cases such as disabling hardware watchdogs while in kgdb.  Name
  * is shared with DDB.
  */
+#ifdef DDB
+extern void (*db_trap_callback)(int);
+#else
 void (*db_trap_callback)(int);
+#endif
+
+void kgdb_voidop(void);
+
+__weak_alias(kgdb_entry_notice, kgdb_voidop);
+
+void
+kgdb_voidop(void)
+{
+	return;
+}
 
 /*
  * This little routine exists simply so that bcopy() can be debugged.
@@ -289,6 +313,7 @@ kgdb_recv(u_char *bp, int maxlen)
 			break;
 		}
 		DPRINTF((" Bad(wanted %x, off by %d)- ", tmpcsum, csum));
+		__USE(tmpcsum);
 		PUTC(KGDB_BADP);
 	} while (1);
 	DPRINTF(("kgdb_recv: %s\n", bp));
@@ -321,14 +346,17 @@ kgdb_trap(int type, db_regs_t *regs)
 	size_t len;
 	u_char *p;
 
-	if (kgdb_dev < 0 || kgdb_getc == NULL) {
+	kgdb_entry_notice(type, regs);
+
+	if (kgdb_dev == NODEV || kgdb_getc == NULL) {
 		/* not debugging */
 		return (0);
 	}
 
 	db_clear_single_step(regs);
 
-	if (db_trap_callback) db_trap_callback(1);
+	if (db_trap_callback)
+		db_trap_callback(1);
 
 	/* Detect and recover from unexpected traps. */
 	if (kgdb_recover != 0) {
@@ -361,7 +389,8 @@ kgdb_trap(int type, db_regs_t *regs)
 	if (kgdb_active == 0) {
 		if (!IS_BREAKPOINT_TRAP(type, 0)) {
 			/* No debugger active -- let trap handle this. */
-			if (db_trap_callback) db_trap_callback(0);
+			if (db_trap_callback)
+				db_trap_callback(0);
 			return (0);
 		}
 		/* Make the PC point at the breakpoint... */
@@ -445,9 +474,9 @@ kgdb_trap(int type, db_regs_t *regs)
 				kgdb_send("E05");
 				continue;
 			}
-			db_read_bytes(addr, (size_t)len,
-					(char *)buffer + sizeof(buffer) / 2);
-			mem2hex(buffer, buffer + sizeof(buffer) / 2, len);
+			char *ptr = (char *)buffer + sizeof(buffer) / 2;
+			db_read_bytes(addr, len, ptr);
+			mem2hex(buffer, ptr, len);
 			kgdb_send(buffer);
 			continue;
 
@@ -476,7 +505,7 @@ kgdb_trap(int type, db_regs_t *regs)
 				kgdb_send("E0A");
 				continue;
 			}
-			db_write_bytes(addr, (size_t)len, (char *)buffer);
+			db_write_bytes(addr, len, (char *)buffer);
 			kgdb_send("OK");
 			continue;
 
@@ -523,7 +552,14 @@ kgdb_trap(int type, db_regs_t *regs)
 		}
 	}
  out:
-	if (db_trap_callback) db_trap_callback(0);
+	if (db_trap_callback)
+		db_trap_callback(0);
 	kgdb_recover = 0;
 	return (1);
+}
+
+int
+kgdb_disconnected(void)
+{
+	return 1;
 }

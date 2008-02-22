@@ -1,4 +1,4 @@
-/* $NetBSD: sbscnvar.h,v 1.3 2006/03/07 14:01:41 he Exp $ */
+/* $NetBSD: sbscnvar.h,v 1.8 2015/04/13 21:18:42 riastradh Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -64,16 +64,15 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rnd.h"
-#if NRND > 0 && defined(RND_SBSCN)
-#include <sys/rnd.h>
+#ifdef RND_SBSCN
+#include <sys/rndsource.h>
 #endif
 
 #include <sys/callout.h>
 
-#define	SBSCN_CHAN(x)		((minor(x) & 0x00001) >> 0)
-#define	SBSCN_UNIT(x)		((minor(x) & 0x7fffe) >> 1)
-#define	SBSCN_DIALOUT(x)	((minor(x) & 0x80000) != 0)
+#define	SBSCN_CHAN(x)		(TTUNIT(x) & 1)
+#define	SBSCN_UNIT(x)		(TTUNIT(x) >> 1)
+#define	SBSCN_DIALOUT(x)	TTDIALOUT(x)
 
 #define	SBSCN_TOLERANCE	30	/* baud rate tolerance, in 0.1% units */
 
@@ -156,16 +155,16 @@ struct sbscn_channel {
 	u_char		ch_i_dcd_pin, ch_i_cts_pin, ch_i_dsr_pin, ch_i_ri_pin;
 	u_char		ch_o_dtr_pin, ch_o_rts_pin;
 
-#if NRND > 0 && defined(RND_SBSCN)
-	rndsource_element_t  ch_rnd_source;
+#ifdef RND_SBSCN
+	krndsource_t  ch_rnd_source;
 #endif
 };
 
 struct sbscn_softc {
-	struct device	sc_dev;		/* base device */
+	device_t	sc_dev;		/* base device */
 
 	/* shared data structures */
-	u_long	sc_addr;	/* phys addr of DUART XXX bus_space */
+	u_long		sc_addr;	/* phys addr of DUART XXX bus_space */
 
 	struct sbscn_channel sc_channels[2];
 };

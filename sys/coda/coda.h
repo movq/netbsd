@@ -1,4 +1,4 @@
-/* $NetBSD: coda.h,v 1.14 2007/03/04 06:01:11 christos Exp $ */
+/* $NetBSD: coda.h,v 1.20 2018/04/19 21:50:07 christos Exp $ */
 
 /*
 
@@ -39,9 +39,15 @@ Mellon the rights to redistribute these changes without encumbrance.
 #ifndef _CODA_HEADER_
 #define _CODA_HEADER_
 
-#if defined(__NetBSD__) && defined(_KERNEL_OPT)
-/* pull in optional CODA_COMPAT_5 flag */
+#if defined(__NetBSD__)
+#include <sys/ioccom.h>
+#if defined(_KERNEL_OPT)
+/* pull in optional CODA_COMPAT_5 flag and NVCODA. */
 #include "opt_coda_compat.h"
+#include <vcoda.h>
+#else
+#define NVCODA 4
+#endif
 #endif
 
 /* Catch new _KERNEL defn for NetBSD and DJGPP/__CYGWIN32__ */
@@ -202,13 +208,13 @@ typedef struct {
     u_long Unique;
 } CodaFid;
 
-static inline ino_t coda_f2i(CodaFid *fid)
+static __inline ino_t coda_f2i(CodaFid *fid)
 {
 	if (!fid) return 0;
 	return (fid->Unique + (fid->Vnode<<10) + (fid->Volume<<20));
 }
 
-static inline char * coda_f2s(CodaFid *fid)
+static __inline char * coda_f2s(CodaFid *fid)
 {
   static char fid_str [35];
   snprintf (fid_str, 35, "[%lx.%lx.%lx]", fid->Volume,
@@ -216,7 +222,7 @@ static inline char * coda_f2s(CodaFid *fid)
   return fid_str;
 }
 
-static inline int coda_fid_eq (CodaFid *fid1, CodaFid *fid2)
+static __inline int coda_fid_eq (CodaFid *fid1, CodaFid *fid2)
 {
   return (fid1->Volume == fid2->Volume &&
 	  fid1->Vnode == fid2->Vnode &&
@@ -235,13 +241,13 @@ typedef struct {
 } CodaFid;
 
 
-static inline ino_t coda_f2i(CodaFid *fid)
+static __inline ino_t coda_f2i(CodaFid *fid)
 {
 	if (!fid) return 0;
 	return (fid->opaque[1] + (fid->opaque[2]<<10) + (fid->opaque[3]<<20));
 }
 
-static inline char * coda_f2s(CodaFid *fid)
+static __inline char * coda_f2s(CodaFid *fid)
 {
   static char fid_str [35];
   snprintf (fid_str, 35, "[%x.%x.%x.%x]", fid->opaque[0],
@@ -249,7 +255,7 @@ static inline char * coda_f2s(CodaFid *fid)
   return fid_str;
 }
 
-static inline int coda_fid_eq (CodaFid *fid1, CodaFid *fid2)
+static __inline int coda_fid_eq (CodaFid *fid1, CodaFid *fid2)
 {
   return (fid1->opaque[0] == fid2->opaque[0] &&
 	  fid1->opaque[1] == fid2->opaque[1] &&
@@ -272,7 +278,7 @@ struct coda_vattr {
 	short		va_nlink;	/* number of references to file */
 	uid_t		va_uid;		/* owner user id */
 	gid_t		va_gid;		/* owner group id */
-	long		va_fileid;	/* file id */
+	u_long		va_fileid;	/* file id */
 	u_quad_t	va_size;	/* file size in bytes */
 	long		va_blocksize;	/* blocksize preferred for i/o */
 	struct timespec	va_atime;	/* time of last access */
@@ -793,8 +799,8 @@ union coda_downcalls {
 #define PIOCPARM_MASK 0x0000ffff
 struct ViceIoctl {
         void *in, *out;		/* Data to be transferred in, or out */
-        short in_size;          /* Size of input buffer <= 2K */
-        short out_size;         /* Maximum size of output buffer, <= 2K */
+        unsigned short in_size; /* Size of input buffer <= 8K */
+        unsigned short out_size;/* Maximum size of output buffer, <= 8K */
 };
 
 struct PioctlData {

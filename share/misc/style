@@ -1,4 +1,4 @@
-/* $NetBSD: style,v 1.42 2008/02/16 14:22:16 apb Exp $ */
+/* $NetBSD: style,v 1.53 2016/05/23 11:41:06 salazar Exp $ */
 
 /*
  * The revision control tag appears first, with a blank line after it.
@@ -25,11 +25,12 @@
  * source file per program contains a __COPYRIGHT() section.
  * Historic Berkeley code may also have an __SCCSID() section.
  * Only one instance of each of these macros can occur in each file.
+ * Don't use newlines in the identifiers.
  */
 #include <sys/cdefs.h>
-__COPYRIGHT("@(#) Copyright (c) 2000\n\
-	The NetBSD Foundation, inc. All rights reserved.\n");
-__RCSID("$NetBSD: style,v 1.42 2008/02/16 14:22:16 apb Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2008\
+ The NetBSD Foundation, inc. All rights reserved.");
+__RCSID("$NetBSD: style,v 1.53 2016/05/23 11:41:06 salazar Exp $");
 
 /*
  * VERY important single-line comments look like this.
@@ -76,7 +77,12 @@ __RCSID("$NetBSD: style,v 1.42 2008/02/16 14:22:16 apb Exp $");
 /*
  * Kernel include files come first.
  */
-#include <sys/types.h>		/* Non-local includes in brackets. */
+#include <sys/param.h>		/* <sys/param.h> first, */
+#include <sys/types.h>		/*   <sys/types.h> next, */
+#include <sys/ioctl.h>		/*   and then the rest, */
+#include <sys/socket.h>		/*   sorted lexicographically.  */
+#include <sys/stat.h>
+#include <sys/wait.h>		/* Non-local includes in brackets.  */
 
 /*
  * If it's a network program, put the network include files next.
@@ -90,7 +96,7 @@ __RCSID("$NetBSD: style,v 1.42 2008/02/16 14:22:16 apb Exp $");
 
 /*
  * Then there's a blank line, followed by the /usr include files.
- * The /usr include files should be sorted!
+ * The /usr include files should be sorted lexicographically!
  */
 #include <assert.h>
 #include <errno.h>
@@ -109,7 +115,7 @@ __RCSID("$NetBSD: style,v 1.42 2008/02/16 14:22:16 apb Exp $");
 
 /*
  * ANSI function declarations for private functions (i.e. functions not used
- * elsewhere) and the main() function go at the top of the source module. 
+ * elsewhere) and the main() function go at the top of the source module.
  * Don't associate a name with the types.  I.e. use:
  *	void function(int);
  * Use your discretion on indenting between the return type and the name, and
@@ -120,8 +126,7 @@ __RCSID("$NetBSD: style,v 1.42 2008/02/16 14:22:16 apb Exp $");
 static char *function(int, int, float, int);
 static int dirinfo(const char *, struct stat *, struct dirent *,
 		   struct statfs *, int *, char **[]);
-static void usage(void);
-int main(int, char *[]);
+static void usage(void) __dead;	/* declare functions that don't return dead */
 
 /*
  * Macros are capitalized, parenthesized, and should avoid side-effects.
@@ -334,7 +339,10 @@ function(int a1, int a2, float fl, int a4)
 	 * Function prototypes should go in the include file "extern.h".
 	 * If a line overflows reuse the type keyword.
 	 *
-	 * DO NOT initialize variables in the declarations.
+	 * Avoid initializing variables in the declarations; move
+	 * declarations next to their first use, and initialize
+	 * opportunistically. This avoids over-initialization and
+	 * accidental bugs caused by declaration reordering.
 	 */
 	extern u_char one;
 	extern char two;
@@ -354,15 +362,28 @@ function(int a1, int a2, float fl, int a4)
 	 * not:
 	 *	!(p = f())
 	 *
+	 * The notable exception here is variadic functions. Since our
+	 * code is designed to compile and work on different environments
+	 * where we don't have control over the NULL definition (on NetBSD
+	 * it is defined as ((void *)0), but on other systems it can be
+	 * defined as (0) and both definitions are valid under ANSI C), it
+	 * it advised to cast NULL to a pointer on variadic functions,
+	 * because on machines where sizeof(pointer) != sizeof(int) and in
+	 * the absence of a prototype in scope, passing an un-casted NULL,
+	 * will result in passing an int on the stack instead of a pointer.
+	 *
 	 * Don't use `!' for tests unless it's a boolean.
 	 * E.g. use "if (*p == '\0')", not "if (!*p)".
 	 *
 	 * Routines returning ``void *'' should not have their return
 	 * values cast to more specific pointer types.
 	 *
+	 * Prefer sizeof(*var) over sizeof(type) because if type changes,
+	 * the change needs to be done in one place.
+	 *
 	 * Use err/warn(3), don't roll your own!
 	 */
-	if ((four = malloc(sizeof(struct foo))) == NULL)
+	if ((four = malloc(sizeof(*four))) == NULL)
 		err(1, NULL);
 	if ((six = (int *)overflow()) == NULL)
 		errx(1, "Number overflowed.");
@@ -393,7 +414,7 @@ dirinfo(const char *p, struct stat *sb, struct dirent *de, struct statfs *sf,
 		err(1, "Unable to stat %s", p);
 
 	/*
-	 * To printf quantities that might be larger that "long", include
+	 * To printf quantities that might be larger than "long", include
 	 * <inttypes.h>, cast quantities to intmax_t or uintmax_t and use
 	 * PRI?MAX constants.
 	 */
@@ -417,7 +438,7 @@ dirinfo(const char *p, struct stat *sb, struct dirent *de, struct statfs *sf,
 /*
  * Functions that support variable numbers of arguments should look like this.
  * (With the #include <stdarg.h> appearing at the top of the file with the
- * other include files).
+ * other include files.)
  */
 #include <stdarg.h>
 
@@ -428,7 +449,7 @@ vaf(const char *fmt, ...)
 
 	va_start(ap, fmt);
 	STUFF;
-	va_end(ap);	
+	va_end(ap);
 				/* No return needed for void functions. */
 }
 

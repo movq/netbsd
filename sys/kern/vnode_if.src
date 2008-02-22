@@ -1,4 +1,4 @@
-#	$NetBSD: vnode_if.src,v 1.57 2008/01/25 14:32:15 ad Exp $
+#	$NetBSD: vnode_if.src,v 1.77 2017/07/12 09:31:07 hannken Exp $
 #
 # Copyright (c) 1992, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -11,11 +11,7 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the University of
-#	California, Berkeley and its contributors.
-# 4. Neither the name of the University nor the names of its contributors
+# 3. Neither the name of the University nor the names of its contributors
 #    may be used to endorse or promote products derived from this software
 #    without specific prior written permission.
 #
@@ -54,59 +50,56 @@
 # parameter, the flags required for the initial namei() call are listed.
 # Additional flags may be added to the namei() call, but these are required.
 #     
+
+#
+#% bwrite     vp      = = =
+#
+vop_bwrite {
+	IN struct vnode *vp;
+	IN struct buf *bp;
+};
  
 #
 #% lookup     dvp     L L L
-#% lookup     vpp     - L -
+#% lookup     vpp     - U -
 #
-# XXX - the lookup locking protocol defies simple description.
 #    Note especially that *vpp may equal dvp.
 #
 #    More details:
-#     There are three types of lookups: ".", ".." (ISDOTDOT), and other.
-#     On successful lookup of ".", a reference is added to dvp, and it
-#          is returned in *vpp.
-#     To look up ISDOTDOT, dvp is unlocked, the ".." node is locked, and
-#          then dvp is relocked.  This preserves the protocol of always
-#          locking nodes from root ("/") downward and prevents deadlock.
-#     Other lookups find the named node (creating the vnode if needed) and
-#          return it, locked, in *vpp.
+#     All lookups find the named node (creating the vnode if needed) and
+#          return it, referenced and unlocked, in *vpp.
 #     On failure, *vpp is NULL, and *dvp is left locked.
-#	
-#     *vpp is always locked on return if the operation succeeds.
-#          Typically, if *vpp == dvp, you need to release twice, but
-#          unlock only once.
-#
-#     See sys/sys/namei.h for a description of the SAVENAME and SAVESTART
-#          flags.
 #
 vop_lookup {
-	IN struct vnode *dvp;
-	INOUT WILLMAKE struct vnode **vpp;
+	VERSION 2
+	IN LOCKED=YES struct vnode *dvp;
+	OUT WILLMAKE struct vnode **vpp;
 	IN struct componentname *cnp;
 };
 
 #
-#% create     dvp     L U U
-#% create     vpp     - L -
+#% create     dvp     L L L
+#% create     vpp     - U -
 #
 #! create cnp	CREATE, LOCKPARENT
 #
 vop_create {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	VERSION 3
+	IN LOCKED=YES struct vnode *dvp;
 	OUT WILLMAKE struct vnode **vpp;
 	IN struct componentname *cnp;
 	IN struct vattr *vap;
 };
 
 #
-#% mknod      dvp     L U U
-#% mknod      vpp     - L -
+#% mknod      dvp     L L L
+#% mknod      vpp     - U -
 #
 #! mknod cnp	CREATE, LOCKPARENT
 #
 vop_mknod {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	VERSION 3
+	IN LOCKED=YES struct vnode *dvp;
 	OUT WILLMAKE struct vnode **vpp;
 	IN struct componentname *cnp;
 	IN struct vattr *vap;
@@ -140,10 +133,10 @@ vop_access {
 };
 
 #
-#% getattr    vp      = = =
+#% getattr    vp      L L L
 #
 vop_getattr {
-	IN struct vnode *vp;
+	IN LOCKED=YES struct vnode *vp;
 	IN struct vattr *vap;
 	IN kauth_cred_t cred;
 };
@@ -178,9 +171,28 @@ vop_write {
 };
 
 #
+#% fallocate  vp      L L L
+#
+vop_fallocate {
+	IN LOCKED=YES struct vnode *vp;
+	IN off_t pos;
+	IN off_t len;
+};
+
+#
+#% fdiscard   vp      L L L
+#
+vop_fdiscard {
+	IN LOCKED=YES struct vnode *vp;
+	IN off_t pos;
+	IN off_t len;
+};
+
+#
 #% ioctl      vp      U U U
 #
 vop_ioctl {
+	FSTRANS=NO
 	IN LOCKED=NO struct vnode *vp;
 	IN u_long command;
 	IN void *data;
@@ -192,6 +204,7 @@ vop_ioctl {
 #% fcntl      vp      U U U
 #
 vop_fcntl {
+	FSTRANS=NO
 	IN LOCKED=NO struct vnode *vp;
 	IN u_int command;
 	IN void *data;
@@ -219,6 +232,7 @@ vop_kqfilter {
 #% revoke     vp      U U U
 #
 vop_revoke {
+	FSTRANS=NO
 	IN LOCKED=NO struct vnode *vp;
 	IN int flags;
 };
@@ -255,25 +269,27 @@ vop_seek {
 };
 
 #
-#% remove     dvp     L U U
+#% remove     dvp     L L L
 #% remove     vp      L U U
 #
 #! remove cnp	DELETE, LOCKPARENT | LOCKLEAF
 #
 vop_remove {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	VERSION 2
+	IN LOCKED=YES struct vnode *dvp;
 	IN LOCKED=YES WILLPUT struct vnode *vp;
 	IN struct componentname *cnp;
 };
 
 #
-#% link               dvp     L U U
+#% link               dvp     L L L
 #% link               vp      U U U
 #
 #! link	 cnp	CREATE, LOCKPARENT
 #
 vop_link {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	VERSION 2
+	IN LOCKED=YES struct vnode *dvp;
 	IN LOCKED=NO struct vnode *vp;
 	IN struct componentname *cnp;
 };
@@ -284,10 +300,8 @@ vop_link {
 #% rename     tdvp    L U U
 #% rename     tvp     X U U
 #
-#! rename fcnp	DELETE,	LOCKPARENT | SAVESTART
-#! rename tcnp	RENAME, LOCKPARENT | LOCKLEAF | NOCACHE | SAVESTART
-#
-# XXX the vop_rename routines should REALLY NOT be depending on SAVESTART!
+#! rename fcnp	DELETE,	LOCKPARENT
+#! rename tcnp	RENAME, LOCKPARENT | LOCKLEAF | NOCACHE
 #
 vop_rename {
 	IN LOCKED=NO WILLRELE struct vnode *fdvp;
@@ -299,38 +313,41 @@ vop_rename {
 };
 
 #
-#% mkdir      dvp     L U U
-#% mkdir      vpp     - L - 
+#% mkdir      dvp     L L L
+#% mkdir      vpp     - U - 
 #
 #! mkdir cnp	CREATE, LOCKPARENT
 #
 vop_mkdir {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	VERSION 3
+	IN LOCKED=YES struct vnode *dvp;
 	OUT WILLMAKE struct vnode **vpp;
 	IN struct componentname *cnp;
 	IN struct vattr *vap;
 };
 
 #
-#% rmdir      dvp     L U U
+#% rmdir      dvp     L L L
 #% rmdir      vp      L U U
 #
 #! rmdir cnp	DELETE, LOCKPARENT | LOCKLEAF
 #
 vop_rmdir {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	VERSION 2
+	IN LOCKED=YES struct vnode *dvp;
 	IN LOCKED=YES WILLPUT struct vnode *vp;
 	IN struct componentname *cnp;
 };
 
 #
-#% symlink    dvp     L U U
-#% symlink    vpp     - L -
+#% symlink    dvp     L L L
+#% symlink    vpp     - U -
 #
 #! symlink cnp	CREATE, LOCKPARENT
 #
 vop_symlink {
-	IN LOCKED=YES WILLPUT struct vnode *dvp;
+	VERSION 3
+	IN LOCKED=YES struct vnode *dvp;
 	OUT WILLMAKE struct vnode **vpp;
 	IN struct componentname *cnp;
 	IN struct vattr *vap;
@@ -369,24 +386,28 @@ vop_abortop {
 };
 
 #
-#% inactive   vp      L U U  
+#% inactive   vp      L L L
 #
 vop_inactive {
-	IN LOCKED=YES WILLUNLOCK struct vnode *vp;
+	VERSION 2
+	IN LOCKED=YES struct vnode *vp;
 	INOUT bool *recycle;
 };
 
 #
-#% reclaim    vp      U U U
+#% reclaim    vp      L U U
 #
 vop_reclaim {
-	IN LOCKED=NO struct vnode *vp;
+	VERSION 2
+	FSTRANS=NO
+	IN LOCKED=YES struct vnode *vp;
 };
 
 #
 #% lock               vp      U L U
 #
 vop_lock {
+	FSTRANS=LOCK
 	IN LOCKED=NO struct vnode *vp;
 	IN int flags;
 };
@@ -395,8 +416,8 @@ vop_lock {
 #% unlock     vp      L U L
 #
 vop_unlock {
+	FSTRANS=UNLOCK
 	IN LOCKED=YES struct vnode *vp;
-	IN int flags;
 };
 
 #
@@ -430,6 +451,7 @@ vop_print {
 #% islocked   vp      = = =
 #
 vop_islocked {
+	FSTRANS=NO
 	IN struct vnode *vp;
 };
 
@@ -446,6 +468,7 @@ vop_pathconf {
 #% advlock    vp      U U U
 #
 vop_advlock {
+	FSTRANS=NO
 	IN LOCKED=NO struct vnode *vp;
 	IN void *id;
 	IN int op;
@@ -467,16 +490,10 @@ vop_whiteout {
 };
 
 #
-# Needs work: no vp?
-#
-#vop_bwrite {
-#	IN struct buf *bp;
-#};
-
-#
 #% getpages	vp = = =
 #
 vop_getpages {
+	FSTRANS=NO
 	IN struct vnode *vp;
 	IN voff_t offset;
 	IN struct vm_page **m;
@@ -491,6 +508,7 @@ vop_getpages {
 #% putpages	vp = = =
 #
 vop_putpages {
+	FSTRANS=NO
 	IN struct vnode *vp;
 	IN voff_t offlo;
 	IN voff_t offhi;
@@ -526,6 +544,7 @@ vop_listextattr {
 	IN int attrnamespace;
 	INOUT struct uio *uio;
 	OUT size_t *size;
+	IN int flag;
 	IN kauth_cred_t cred;
 };
 

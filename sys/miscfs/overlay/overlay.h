@@ -1,4 +1,4 @@
-/*	$NetBSD: overlay.h,v 1.7 2005/12/11 12:24:51 christos Exp $	*/
+/*	$NetBSD: overlay.h,v 1.9 2017/04/11 07:51:37 hannken Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -86,7 +86,6 @@ struct overlay_args {
 struct overlay_mount {
 	struct	layer_mount	lm;	/* generic layerfs mount stuff */
 };
-#define	ovm_vfs			lm.layerm_vfs
 #define	ovm_rootvp		lm.layerm_rootvp
 #define	ovm_export		lm.layerm_export
 #define	ovm_flags		lm.layerm_flags
@@ -122,9 +121,5 @@ extern struct vnode *layer_checkvp(struct vnode *vp, char *fil, int lno);
 
 extern int (**overlay_vnodeop_p)(void *);
 extern struct vfsops overlay_vfsops;
-
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_overlay_setup);
-#endif /* SYSCTL_SETUP_PROTO */
 
 #endif /* _KERNEL */

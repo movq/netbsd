@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_select.c,v 1.14 2007/12/20 23:03:02 dsl Exp $	*/
+/*	$NetBSD: netbsd32_select.c,v 1.19 2010/04/23 15:19:20 rmind Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,11 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_select.c,v 1.14 2007/12/20 23:03:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_select.c,v 1.19 2010/04/23 15:19:20 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/time.h>
 #include <sys/vnode.h>
@@ -53,7 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_select.c,v 1.14 2007/12/20 23:03:02 dsl Exp
 #include <compat/netbsd32/netbsd32_conv.h>
 
 int
-netbsd32_select(struct lwp *l, const struct netbsd32_select_args *uap, register_t *retval)
+netbsd32___select50(struct lwp *l,
+    const struct netbsd32___select50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) nd;
@@ -64,22 +62,24 @@ netbsd32_select(struct lwp *l, const struct netbsd32_select_args *uap, register_
 	} */
 	int error;
 	struct netbsd32_timeval tv32;
-	struct timeval atv, *tv = NULL;
+	struct timespec ats, *ts = NULL;
 
 	if (SCARG_P32(uap, tv)) {
 		error = copyin(SCARG_P32(uap, tv), &tv32, sizeof(tv32));
 		if (error != 0)
 			return error;
-		netbsd32_to_timeval(&tv32, &atv);
-		tv = &atv;
+		ats.tv_sec = tv32.tv_sec;
+		ats.tv_nsec = tv32.tv_usec * 1000;
+		ts = &ats;
 	}
 
-	return selcommon(l, retval, SCARG(uap, nd), SCARG_P32(uap, in),
-	    SCARG_P32(uap, ou), SCARG_P32(uap, ex), tv, NULL);
+	return selcommon(retval, SCARG(uap, nd), SCARG_P32(uap, in),
+	    SCARG_P32(uap, ou), SCARG_P32(uap, ex), ts, NULL);
 }
 
 int
-netbsd32_pselect(struct lwp *l, const struct netbsd32_pselect_args *uap, register_t *retval)
+netbsd32___pselect50(struct lwp *l,
+    const struct netbsd32___pselect50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) nd;
@@ -91,18 +91,15 @@ netbsd32_pselect(struct lwp *l, const struct netbsd32_pselect_args *uap, registe
 	} */
 	int error;
 	struct netbsd32_timespec ts32;
-	struct timespec ts;
-	struct timeval atv, *tv = NULL;
+	struct timespec ats, *ts = NULL;
 	sigset_t amask, *mask = NULL;
 
 	if (SCARG_P32(uap, ts)) {
 		error = copyin(SCARG_P32(uap, ts), &ts32, sizeof(ts32));
 		if (error != 0)
 			return error;
-		netbsd32_to_timespec(&ts32, &ts);
-		atv.tv_sec = ts.tv_sec;
-		atv.tv_usec = ts.tv_nsec / 1000;
-		tv = &atv;
+		netbsd32_to_timespec(&ts32, &ats);
+		ts = &ats;
 	}
 	if (SCARG_P32(uap, mask)) {
 		error = copyin(SCARG_P32(uap, mask), &amask, sizeof(amask));
@@ -111,12 +108,13 @@ netbsd32_pselect(struct lwp *l, const struct netbsd32_pselect_args *uap, registe
 		mask = &amask;
 	}
 
-	return selcommon(l, retval, SCARG(uap, nd), SCARG_P32(uap, in),
-	    SCARG_P32(uap, ou), SCARG_P32(uap, ex), tv, mask);
+	return selcommon(retval, SCARG(uap, nd), SCARG_P32(uap, in),
+	    SCARG_P32(uap, ou), SCARG_P32(uap, ex), ts, mask);
 }
 
 int
-netbsd32_pollts(struct lwp *l, const struct netbsd32_pollts_args *uap, register_t *retval)
+netbsd32___pollts50(struct lwp *l, const struct netbsd32___pollts50_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(struct netbsd32_pollfdp_t) fds;
@@ -126,18 +124,15 @@ netbsd32_pollts(struct lwp *l, const struct netbsd32_pollts_args *uap, register_
 	} */
 	int error;
 	struct netbsd32_timespec ts32;
-	struct timespec ts;
-	struct timeval atv, *tv = NULL;
+	struct timespec ats, *ts = NULL;
 	sigset_t amask, *mask = NULL;
 
 	if (SCARG_P32(uap, ts)) {
 		error = copyin(SCARG_P32(uap, ts), &ts32, sizeof(ts32));
 		if (error != 0)
 			return error;
-		netbsd32_to_timespec(&ts32, &ts);
-		atv.tv_sec = ts.tv_sec;
-		atv.tv_usec = ts.tv_nsec / 1000;
-		tv = &atv;
+		netbsd32_to_timespec(&ts32, &ats);
+		ts = &ats;
 	}
 	if (NETBSD32PTR64( SCARG(uap, mask))) {
 		error = copyin(SCARG_P32(uap, mask), &amask, sizeof(amask));
@@ -146,6 +141,6 @@ netbsd32_pollts(struct lwp *l, const struct netbsd32_pollts_args *uap, register_
 		mask = &amask;
 	}
 
-	return pollcommon(l, retval, SCARG_P32(uap, fds),
-	    SCARG(uap, nfds), tv, mask);
+	return pollcommon(retval, SCARG_P32(uap, fds),
+	    SCARG(uap, nfds), ts, mask);
 }

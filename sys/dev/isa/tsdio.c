@@ -1,4 +1,4 @@
-/*	$NetBSD: tsdio.c,v 1.4 2007/10/19 12:00:23 ad Exp $	*/
+/*	$NetBSD: tsdio.c,v 1.11 2012/10/27 17:18:25 chs Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsdio.c,v 1.4 2007/10/19 12:00:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsdio.c,v 1.11 2012/10/27 17:18:25 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,19 +44,16 @@ __KERNEL_RCSID(0, "$NetBSD: tsdio.c,v 1.4 2007/10/19 12:00:23 ad Exp $");
 #include <dev/isa/isadmavar.h>
 #include <dev/isa/tsdiovar.h>
 
-int	tsdio_probe(struct device *, struct cfdata *, void *);
-void	tsdio_attach(struct device *, struct device *, void *);
-int	tsdio_search(struct device *, struct cfdata *, const int *, void *);
+int	tsdio_probe(device_t, cfdata_t, void *);
+void	tsdio_attach(device_t, device_t, void *);
+int	tsdio_search(device_t, cfdata_t, const int *, void *);
 int	tsdio_print(void *, const char *);
 
-CFATTACH_DECL(tsdio, sizeof(struct tsdio_softc),
+CFATTACH_DECL_NEW(tsdio, sizeof(struct tsdio_softc),
     tsdio_probe, tsdio_attach, NULL, NULL);
 
 int
-tsdio_probe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+tsdio_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -111,11 +101,9 @@ tsdio_probe(parent, cf, aux)
 }
 
 void
-tsdio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+tsdio_attach(device_t parent, device_t self, void *aux)
 {
-	struct tsdio_softc *sc = (struct tsdio_softc *) self;
+	struct tsdio_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 
 	sc->sc_iot = ia->ia_iot;
@@ -127,7 +115,7 @@ tsdio_attach(parent, self, aux)
 	 */
 	if (bus_space_map(sc->sc_iot, ia->ia_io[0].ir_addr, 8,
 	    0, &sc->sc_ioh)) {
-		aprint_error("%s: unable to map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map i/o space\n");
 		return;
 	}
 
@@ -138,13 +126,9 @@ tsdio_attach(parent, self, aux)
 }
 
 int
-tsdio_search(parent, cf, l, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *l;
-	void *aux;
+tsdio_search(device_t parent, cfdata_t cf, const int *l, void *aux)
 {
-	struct tsdio_softc *sc = (struct tsdio_softc *)parent;
+	struct tsdio_softc *sc = device_private(parent);
 	struct tsdio_attach_args sa;
 
 	sa.ta_iot = sc->sc_iot;
@@ -157,9 +141,7 @@ tsdio_search(parent, cf, l, aux)
 }
 
 int
-tsdio_print(aux, name)
-	void *aux;
-	const char *name;
+tsdio_print(void *aux, const char *name)
 {
 
 	return (UNCONF);

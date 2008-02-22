@@ -1,7 +1,7 @@
-/*	$NetBSD: fsdb.c,v 1.36 2006/10/16 03:10:59 christos Exp $	*/
+/*	$NetBSD: fsdb.c,v 1.50 2017/08/04 07:19:35 mrg Exp $	*/
 
 /*-
- * Copyright (c) 1996 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 2017 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsdb.c,v 1.36 2006/10/16 03:10:59 christos Exp $");
+__RCSID("$NetBSD: fsdb.c,v 1.50 2017/08/04 07:19:35 mrg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -68,7 +61,14 @@ __RCSID("$NetBSD: fsdb.c,v 1.36 2006/10/16 03:10:59 christos Exp $");
 #include "fsck.h"
 #include "extern.h"
 
-static void usage(void);
+/* Used to keep state for "saveblks" command.  */
+struct wrinfo {
+	off_t size;
+	off_t written_size;
+	int fd;
+};
+
+__dead static void usage(void);
 static int cmdloop(void);
 static char *prompt(EditLine *);
 static int scannames(struct inodesc *);
@@ -76,12 +76,12 @@ static int dolookup(char *);
 static int chinumfunc(struct inodesc *);
 static int chnamefunc(struct inodesc *);
 static int dotime(char *, int32_t *, int32_t *);
-static void print_blks32(int32_t *buf, int size, uint64_t *blknum);
-static void print_blks64(int64_t *buf, int size, uint64_t *blknum);
+static void print_blks32(int32_t *buf, int size, uint64_t *blknum, struct wrinfo *wrp);
+static void print_blks64(int64_t *buf, int size, uint64_t *blknum, struct wrinfo *wrp);
 static void print_indirblks32(uint32_t blk, int ind_level,
-    uint64_t *blknum);
+    uint64_t *blknum, struct wrinfo *wrp);
 static void print_indirblks64(uint64_t blk, int ind_level,
-    uint64_t *blknum);
+    uint64_t *blknum, struct wrinfo *wrp);
 static int compare_blk32(uint32_t *, uint32_t);
 static int compare_blk64(uint64_t *, uint64_t);
 static int founddatablk(uint64_t);
@@ -92,7 +92,6 @@ static int find_indirblks32(uint32_t blk, int ind_level,
 static int find_indirblks64(uint64_t blk, int ind_level,
 						uint64_t *blknum);
 
-int     returntosingle = 0;
 union dinode *curinode;
 ino_t   curinum;
 
@@ -137,7 +136,7 @@ main(int argc, char *argv[])
 	if (fsys == NULL)
 		usage();
 	endian = 0;
-	if (setup(fsys) <= 0)
+	if (setup(fsys, fsys) <= 0)
 		errx(1, "cannot set up file system `%s'", fsys);
 	printf("Editing file system `%s'\nLast Mounted on %s\n", fsys,
 	    sblock->fs_fsmnt);
@@ -147,7 +146,7 @@ main(int argc, char *argv[])
 	sblock->fs_clean = 0;	/* mark it dirty */
 	sbdirty();
 	markclean = 0;
-	ckfini();
+	ckfini(1);
 	printf("*** FILE SYSTEM MARKED DIRTY\n");
 	printf("*** BE SURE TO RUN FSCK TO CLEAN UP ANY DAMAGE\n");
 	printf("*** IF IT WAS MOUNTED, RE-MOUNT WITH -u -o reload\n");
@@ -155,9 +154,6 @@ main(int argc, char *argv[])
 }
 
 #define CMDFUNC(func) static int func (int argc, char *argv[])
-#define CMDFUNCSTART(func) static int func(argc, argv)		\
-				int argc;			\
-				char *argv[];
 
 CMDFUNC(helpfn);
 CMDFUNC(focus);			/* focus on inode */
@@ -202,6 +198,7 @@ static struct cmdtable cmds[] = {
 	{"linkcount", "Set link count to COUNT", 2, 2, linkcount},
 	{"ls", "List current inode as directory", 1, 1, ls},
 	{"blks", "List current inode's data blocks", 1, 1, blks},
+	{"saveblks", "Save current inode's data blocks", 2, 2, blks},
 	{"findblk", "Find inode owning disk block(s)", 2, 33, findblk},
 	{"rm", "Remove NAME from current inode directory", 2, 2, rm},
 	{"del", "Remove NAME from current inode directory", 2, 2, rm},
@@ -262,8 +259,8 @@ cmdloop(void)
 	HistEvent he;
 	EditLine *elptr;
 
-	curinode = ginode(ROOTINO);
-	curinum = ROOTINO;
+	curinode = ginode(UFS_ROOTINO);
+	curinum = UFS_ROOTINO;
 	printactive();
 
 	hist = history_init();
@@ -288,8 +285,7 @@ cmdloop(void)
 		         * el_parse returns -1 to signal that it's not been
 		         * handled internally.
 		         */
-			if (el_parse(elptr, cmd_argc,
-				     (const char **)cmd_argv) != -1)
+			if (el_parse(elptr, cmd_argc, (void *)cmd_argv) != -1)
 				continue;
 			known = 0;
 			for (cmdp = cmds; cmdp->cmd; cmdp++) {
@@ -325,9 +321,9 @@ cmdloop(void)
 static ino_t ocurrent;
 
 #define GETINUM(ac,inum)    inum = strtoull(argv[ac], &cp, 0); \
-    if (inum < ROOTINO || inum >= maxino || cp == argv[ac] || *cp != '\0' ) { \
+    if (inum < UFS_ROOTINO || inum >= maxino || cp == argv[ac] || *cp != '\0' ) { \
 	printf("inode %llu out of range; range is [%llu,%llu]\n", \
-	   (unsigned long long)inum, (unsigned long long)ROOTINO, \
+	   (unsigned long long)inum, (unsigned long long)UFS_ROOTINO, \
 	   (unsigned long long)maxino); \
 	return 1; \
     }
@@ -335,7 +331,7 @@ static ino_t ocurrent;
 /*
  * Focus on given inode number
  */
-CMDFUNCSTART(focus)
+CMDFUNC(focus)
 {
 	ino_t   inum;
 	char   *cp;
@@ -348,7 +344,7 @@ CMDFUNCSTART(focus)
 	return 0;
 }
 
-CMDFUNCSTART(back)
+CMDFUNC(back)
 {
 	curinum = ocurrent;
 	curinode = ginode(curinum);
@@ -356,7 +352,7 @@ CMDFUNCSTART(back)
 	return 0;
 }
 
-CMDFUNCSTART(zapi)
+CMDFUNC(zapi)
 {
 	ino_t   inum;
 	union dinode *dp;
@@ -371,18 +367,18 @@ CMDFUNCSTART(zapi)
 	return 0;
 }
 
-CMDFUNCSTART(active)
+CMDFUNC(active)
 {
 	printactive();
 	return 0;
 }
 
-CMDFUNCSTART(quit)
+CMDFUNC(quit)
 {
 	return -1;
 }
 
-CMDFUNCSTART(uplink)
+CMDFUNC(uplink)
 {
 	int16_t nlink;
 
@@ -397,7 +393,7 @@ CMDFUNCSTART(uplink)
 	return 0;
 }
 
-CMDFUNCSTART(downlink)
+CMDFUNC(downlink)
 {
 	int16_t nlink;
 
@@ -444,7 +440,7 @@ scannames(struct inodesc *idesc)
 	return (KEEPON);
 }
 
-CMDFUNCSTART(ls)
+CMDFUNC(ls)
 {
 	struct inodesc idesc;
 	checkactivedir();	/* let it go on anyway */
@@ -460,10 +456,22 @@ CMDFUNCSTART(ls)
 	return 0;
 }
 
-CMDFUNCSTART(blks)
+CMDFUNC(blks)
 {
 	uint64_t blkno = 0;
 	int i, type;
+	struct wrinfo wrinfo, *wrp = NULL;
+
+	if (strcmp(argv[0], "saveblks") == 0) {
+		wrinfo.fd = open(argv[1], O_WRONLY | O_TRUNC | O_CREAT, 0644);
+		if (wrinfo.fd == -1) {
+			warn("unable to create file %s", argv[1]);
+			return 0;
+		}
+		wrinfo.size = DIP(curinode, size);
+		wrinfo.written_size = 0;
+		wrp = &wrinfo;
+	}
 	if (!curinode) {
 		warnx("no current inode");
 		return 0;
@@ -483,25 +491,25 @@ CMDFUNCSTART(blks)
 	}
 	printf("Direct blocks:\n");
 	if (is_ufs2)
-		print_blks64(curinode->dp2.di_db, NDADDR, &blkno);
+		print_blks64(curinode->dp2.di_db, UFS_NDADDR, &blkno, wrp);
 	else
-		print_blks32(curinode->dp1.di_db, NDADDR, &blkno);
+		print_blks32(curinode->dp1.di_db, UFS_NDADDR, &blkno, wrp);
 
 	if (is_ufs2) {
-		for (i = 0; i < NIADDR; i++)
+		for (i = 0; i < UFS_NIADDR; i++)
 			print_indirblks64(iswap64(curinode->dp2.di_ib[i]), i,
-			    &blkno);
+			    &blkno, wrp);
 	} else {
-		for (i = 0; i < NIADDR; i++)
+		for (i = 0; i < UFS_NIADDR; i++)
 			print_indirblks32(iswap32(curinode->dp1.di_ib[i]), i,
-			    &blkno);
+			    &blkno, wrp);
 	}
 	return 0;
 }
 
 static int findblk_numtofind;
 static int wantedblksize;
-CMDFUNCSTART(findblk)
+CMDFUNC(findblk)
 {
 	ino_t   inum, inosused;
 	uint32_t *wantedblk32 = NULL;
@@ -520,7 +528,7 @@ CMDFUNCSTART(findblk)
 		memset(wantedblk64, 0, sizeof(uint64_t) * wantedblksize);
 		for (i = 1; i < argc; i++)
 			wantedblk64[i - 1] =
-			    dbtofsb(sblock, strtoull(argv[i], NULL, 0)); 
+			    FFS_DBTOFSB(sblock, strtoull(argv[i], NULL, 0)); 
 	} else {
 		wantedblk32 = malloc(sizeof(uint32_t) * wantedblksize);
 		if (wantedblk32 == NULL) {
@@ -530,7 +538,7 @@ CMDFUNCSTART(findblk)
 		memset(wantedblk32, 0, sizeof(uint32_t) * wantedblksize);
 		for (i = 1; i < argc; i++)
 			wantedblk32[i - 1] =
-			    dbtofsb(sblock, strtoull(argv[i], NULL, 0)); 
+			    FFS_DBTOFSB(sblock, strtoull(argv[i], NULL, 0)); 
 	}
 	findblk_numtofind = wantedblksize;
 	for (c = 0; c < sblock->fs_ncg; c++) {
@@ -544,19 +552,19 @@ CMDFUNCSTART(findblk)
 		else
 			inosused = sblock->fs_ipg;
 		for (; inosused > 0; inum++, inosused--) {
-			if (inum < ROOTINO)
+			if (inum < UFS_ROOTINO)
 				continue;
 			if (is_ufs2 ? compare_blk64(wantedblk64,
 			        ino_to_fsba(sblock, inum)) :
 			    compare_blk32(wantedblk32,
 			        ino_to_fsba(sblock, inum))) {
 				printf("block %llu: inode block (%llu-%llu)\n",
-				    (unsigned long long)fsbtodb(sblock,
+				    (unsigned long long)FFS_FSBTODB(sblock,
 					ino_to_fsba(sblock, inum)),
 				    (unsigned long long)
-				    (inum / INOPB(sblock)) * INOPB(sblock),
+				    (inum / FFS_INOPB(sblock)) * FFS_INOPB(sblock),
 				    (unsigned long long)
-				    (inum / INOPB(sblock) + 1) * INOPB(sblock));
+				    (inum / FFS_INOPB(sblock) + 1) * FFS_INOPB(sblock));
 				findblk_numtofind--;
 				if (findblk_numtofind == 0)
 					goto end;
@@ -573,7 +581,7 @@ CMDFUNCSTART(findblk)
 				{
 				uint64_t size = iswap64(DIP(curinode, size));
 				if (size > 0 &&
-				    size < sblock->fs_maxsymlinklen &&
+				    size < (uint64_t)sblock->fs_maxsymlinklen &&
 				    DIP(curinode, blocks) == 0)
 					continue;
 				else
@@ -583,12 +591,12 @@ CMDFUNCSTART(findblk)
 				continue;
 			}
 			if (is_ufs2 ?
-			    find_blks64(curinode->dp2.di_db, NDADDR,
+			    find_blks64(curinode->dp2.di_db, UFS_NDADDR,
 				wantedblk64) : 
-			    find_blks32(curinode->dp1.di_db, NDADDR,
+			    find_blks32(curinode->dp1.di_db, UFS_NDADDR,
 				wantedblk32))
 				goto end;
-			for (i = 0; i < NIADDR; i++) {
+			for (i = 0; i < UFS_NIADDR; i++) {
 				if (is_ufs2 ?
 				    compare_blk64(wantedblk64,
 					iswap64(curinode->dp2.di_ib[i])) :
@@ -651,7 +659,7 @@ static int
 founddatablk(uint64_t blk)
 {
 	printf("%llu: data block of inode %llu\n",
-	    (unsigned long long)fsbtodb(sblock, blk),
+	    (unsigned long long)FFS_FSBTODB(sblock, blk),
 	    (unsigned long long)curinum);
 	findblk_numtofind--;
 	if (findblk_numtofind == 0)
@@ -679,9 +687,9 @@ find_indirblks32(uint32_t blk, int ind_level, uint32_t *wantedblk)
 {
 #define MAXNINDIR	(MAXBSIZE / sizeof(uint32_t))
 	uint32_t idblk[MAXNINDIR];
-	int i;
+	size_t i;
 
-	bread(fsreadfd, (char *)idblk, fsbtodb(sblock, blk),
+	bread(fsreadfd, (char *)idblk, FFS_FSBTODB(sblock, blk),
 	    (int)sblock->fs_bsize);
 	if (ind_level <= 0) {
 		if (find_blks32(idblk,
@@ -725,9 +733,9 @@ find_indirblks64(uint64_t blk, int ind_level, uint64_t *wantedblk)
 {
 #define MAXNINDIR	(MAXBSIZE / sizeof(uint64_t))
 	uint64_t idblk[MAXNINDIR];
-	int i;
+	size_t i;
 
-	bread(fsreadfd, (char *)idblk, fsbtodb(sblock, blk),
+	bread(fsreadfd, (char *)idblk, FFS_FSBTODB(sblock, blk),
 	    (int)sblock->fs_bsize);
 	if (ind_level <= 0) {
 		if (find_blks64(idblk,
@@ -740,7 +748,7 @@ find_indirblks64(uint64_t blk, int ind_level, uint64_t *wantedblk)
 				if (founddatablk(iswap64(idblk[i])))
 					return 1;
 			}
-			if(idblk[i] != 0)
+			if (idblk[i] != 0)
 				if (find_indirblks64(iswap64(idblk[i]),
 				    ind_level, wantedblk))
 				return 1;
@@ -750,20 +758,46 @@ find_indirblks64(uint64_t blk, int ind_level, uint64_t *wantedblk)
 	return 0;
 }
 
+static int
+writefileblk(struct wrinfo *wrp, uint64_t blk)
+{
+	char buf[MAXBSIZE];
+	long long size;
+
+	size = wrp->size - wrp->written_size;
+	if (size > sblock->fs_bsize)
+		size = sblock->fs_bsize;
+	if (size > (long long)sizeof buf) {
+		warnx("sblock->fs_bsize > MAX_BSIZE");
+		return -1;
+	}
+
+	if (bread(fsreadfd, buf, FFS_FSBTODB(sblock, blk), size) != 0)
+		return -1;
+	if (write(wrp->fd, buf, size) != size)
+		return -1;
+	wrp->written_size += size;
+	return 0;
+}
+
 
 #define CHARS_PER_LINES 70
 
 static void
-print_blks32(int32_t *buf, int size, uint64_t *blknum)
+print_blks32(int32_t *buf, int size, uint64_t *blknum, struct wrinfo *wrp)
 {
 	int chars;
 	char prbuf[CHARS_PER_LINES+1];
 	int blk;
  
 	chars = 0;
-	for(blk = 0; blk < size; blk++, (*blknum)++) {
+	for (blk = 0; blk < size; blk++, (*blknum)++) {
 		if (buf[blk] == 0)
 			continue;
+		if (wrp && writefileblk(wrp, iswap32(buf[blk])) != 0) {
+			warn("unable to write block %d", iswap32(buf[blk]));
+			return;
+		}
 		snprintf(prbuf, CHARS_PER_LINES, "%d ", iswap32(buf[blk]));
 		if ((chars + strlen(prbuf)) > CHARS_PER_LINES) {
 			printf("\n");
@@ -778,16 +812,21 @@ print_blks32(int32_t *buf, int size, uint64_t *blknum)
 }
 
 static void
-print_blks64(int64_t *buf, int size, uint64_t *blknum)
+print_blks64(int64_t *buf, int size, uint64_t *blknum, struct wrinfo *wrp)
 {
 	int chars;
 	char prbuf[CHARS_PER_LINES+1];
 	int blk;
  
 	chars = 0;
-	for(blk = 0; blk < size; blk++, (*blknum)++) {
+	for (blk = 0; blk < size; blk++, (*blknum)++) {
 		if (buf[blk] == 0)
 			continue;
+		if (wrp && writefileblk(wrp, iswap64(buf[blk])) != 0) {
+			warn("unable to write block %lld",
+			     (long long)iswap64(buf[blk]));
+			return;
+		}
 		snprintf(prbuf, CHARS_PER_LINES, "%lld ",
 		    (long long)iswap64(buf[blk]));
 		if ((chars + strlen(prbuf)) > CHARS_PER_LINES) {
@@ -805,7 +844,7 @@ print_blks64(int64_t *buf, int size, uint64_t *blknum)
 #undef CHARS_PER_LINES
 
 static void
-print_indirblks32(uint32_t blk, int ind_level, uint64_t *blknum)
+print_indirblks32(uint32_t blk, int ind_level, uint64_t *blknum, struct wrinfo *wrp)
 {
 #define MAXNINDIR	(MAXBSIZE / sizeof(int32_t))
 	const int ptrperblk_shift = sblock->fs_bshift - 2;
@@ -820,20 +859,21 @@ print_indirblks32(uint32_t blk, int ind_level, uint64_t *blknum)
  
 	printf("Indirect block %lld (level %d):\n", (long long)blk,
 	    ind_level+1);
-	bread(fsreadfd, (char *)idblk, fsbtodb(sblock, blk),
+	bread(fsreadfd, (char *)idblk, FFS_FSBTODB(sblock, blk),
 	    (int)sblock->fs_bsize);
 	if (ind_level <= 0) {
-		print_blks32(idblk, ptrperblk, blknum);
+		print_blks32(idblk, ptrperblk, blknum, wrp);
 	} else {
 		ind_level--;
 		for (i = 0; i < ptrperblk; i++)
-			print_indirblks32(iswap32(idblk[i]), ind_level, blknum);
+			print_indirblks32(iswap32(idblk[i]), ind_level, blknum,
+				wrp);
 	}
 #undef MAXNINDIR
 }
 
 static void
-print_indirblks64(uint64_t blk, int ind_level, uint64_t *blknum)
+print_indirblks64(uint64_t blk, int ind_level, uint64_t *blknum, struct wrinfo *wrp)
 {
 #define MAXNINDIR	(MAXBSIZE / sizeof(int64_t))
 	const int ptrperblk_shift = sblock->fs_bshift - 3;
@@ -848,14 +888,15 @@ print_indirblks64(uint64_t blk, int ind_level, uint64_t *blknum)
  
 	printf("Indirect block %lld (level %d):\n", (long long)blk,
 	    ind_level+1);
-	bread(fsreadfd, (char *)idblk, fsbtodb(sblock, blk),
+	bread(fsreadfd, (char *)idblk, FFS_FSBTODB(sblock, blk),
 	    (int)sblock->fs_bsize);
 	if (ind_level <= 0) {
-		print_blks64(idblk, ptrperblk, blknum);
+		print_blks64(idblk, ptrperblk, blknum, wrp);
 	} else {
 		ind_level--;
 		for (i = 0; i < ptrperblk; i++)
-			print_indirblks64(iswap64(idblk[i]), ind_level, blknum);
+			print_indirblks64(iswap64(idblk[i]), ind_level, blknum,
+				wrp);
 	}
 #undef MAXNINDIR
 }
@@ -883,7 +924,7 @@ dolookup(char *name)
 	}
 }
 
-CMDFUNCSTART(focusname)
+CMDFUNC(focusname)
 {
 	char   *p, *val;
 
@@ -893,8 +934,8 @@ CMDFUNCSTART(focusname)
 	ocurrent = curinum;
 
 	if (argv[1][0] == '/') {
-		curinum = ROOTINO;
-		curinode = ginode(ROOTINO);
+		curinum = UFS_ROOTINO;
+		curinode = ginode(UFS_ROOTINO);
 	} else {
 		if (!checkactivedir())
 			return 1;
@@ -913,7 +954,7 @@ CMDFUNCSTART(focusname)
 	return 0;
 }
 
-CMDFUNCSTART(ln)
+CMDFUNC(ln)
 {
 	ino_t   inum;
 	int     rval;
@@ -933,7 +974,7 @@ CMDFUNCSTART(ln)
 	return rval;
 }
 
-CMDFUNCSTART(rm)
+CMDFUNC(rm)
 {
 	int     rval;
 
@@ -963,7 +1004,7 @@ chinumfunc(struct inodesc *idesc)
 	return KEEPON;
 }
 
-CMDFUNCSTART(chinum)
+CMDFUNC(chinum)
 {
 	char   *cp;
 	ino_t   inum;
@@ -1002,7 +1043,7 @@ chnamefunc(struct inodesc *idesc)
 	if (slotcount++ == desired) {
 		/* will name fit? */
 		testdir.d_namlen = strlen(idesc->id_name);
-		if (DIRSIZ(NEWDIRFMT, &testdir, 0) <= iswap16(dirp->d_reclen)) {
+		if (UFS_DIRSIZ(UFS_NEWDIRFMT, &testdir, 0) <= iswap16(dirp->d_reclen)) {
 			dirp->d_namlen = testdir.d_namlen;
 			strlcpy(dirp->d_name, idesc->id_name,
 			    sizeof(dirp->d_name));
@@ -1013,7 +1054,7 @@ chnamefunc(struct inodesc *idesc)
 	return KEEPON;
 }
 
-CMDFUNCSTART(chname)
+CMDFUNC(chname)
 {
 	int     rval;
 	char   *cp;
@@ -1058,7 +1099,7 @@ static struct typemap {
 	{ "fifo", IFIFO },
 };
 
-CMDFUNCSTART(newtype)
+CMDFUNC(newtype)
 {
 	int     type;
 	uint16_t mode;
@@ -1088,7 +1129,7 @@ CMDFUNCSTART(newtype)
 	return 0;
 }
 
-CMDFUNCSTART(chmode)
+CMDFUNC(chmode)
 {
 	long    modebits;
 	char   *cp;
@@ -1109,7 +1150,7 @@ CMDFUNCSTART(chmode)
 	return 0;
 }
 
-CMDFUNCSTART(chlen)
+CMDFUNC(chlen)
 {
 	long    len;
 	char   *cp;
@@ -1128,7 +1169,7 @@ CMDFUNCSTART(chlen)
 	return 0;
 }
 
-CMDFUNCSTART(chaflags)
+CMDFUNC(chaflags)
 {
 	u_long  flags;
 	char   *cp;
@@ -1152,7 +1193,7 @@ CMDFUNCSTART(chaflags)
 	return 0;
 }
 
-CMDFUNCSTART(chgen)
+CMDFUNC(chgen)
 {
 	long    gen;
 	char   *cp;
@@ -1175,7 +1216,7 @@ CMDFUNCSTART(chgen)
 	return 0;
 }
 
-CMDFUNCSTART(linkcount)
+CMDFUNC(linkcount)
 {
 	int     lcnt;
 	char   *cp;
@@ -1198,7 +1239,7 @@ CMDFUNCSTART(linkcount)
 	return 0;
 }
 
-CMDFUNCSTART(chowner)
+CMDFUNC(chowner)
 {
 	unsigned long uid;
 	char   *cp;
@@ -1226,7 +1267,7 @@ CMDFUNCSTART(chowner)
 	return 0;
 }
 
-CMDFUNCSTART(chgroup)
+CMDFUNC(chgroup)
 {
 	unsigned long gid;
 	char   *cp;
@@ -1244,7 +1285,7 @@ CMDFUNCSTART(chgroup)
 			return 1;
 		}
 	}
-	if (sblock->fs_old_inodefmt < FS_44INODEFMT)
+	if (!is_ufs2 && sblock->fs_old_inodefmt < FS_44INODEFMT)
 		curinode->dp1.di_ogid = iswap32(gid);
 	else
 		DIP_SET(curinode, gid, iswap32(gid));
@@ -1307,7 +1348,7 @@ badformat:
 	return 0;
 }
 
-CMDFUNCSTART(chmtime)
+CMDFUNC(chmtime)
 {
 	int32_t rsec, nsec;
 
@@ -1320,7 +1361,7 @@ CMDFUNCSTART(chmtime)
 	return 0;
 }
 
-CMDFUNCSTART(chatime)
+CMDFUNC(chatime)
 {
 	int32_t rsec, nsec;
 
@@ -1333,7 +1374,7 @@ CMDFUNCSTART(chatime)
 	return 0;
 }
 
-CMDFUNCSTART(chctime)
+CMDFUNC(chctime)
 {
 	int32_t rsec, nsec;
 

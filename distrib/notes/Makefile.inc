@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.40 2007/12/11 20:57:19 jnemeth Exp $
+#	$NetBSD: Makefile.inc,v 1.43 2015/05/20 05:19:19 snj Exp $
 #
 
 # Ross Harvey <ross@NetBSD.org>
@@ -20,7 +20,7 @@ TOCS=	${TARG}.PostScript.toc ${TARG}.ASCII.toc ${TARG}.HTML.toc \
 	${TARG}.more.toc
 SRCS=	${MAIN} whatis ${COMMON}/contents hardware xfer prep \
 	${.CURDIR}/install ${COMMON}/postinstall upgrade \
-	${COMMON}/legal.common legal ${COMMON}/netboot \
+	${COMMON}/legal.common ${COMMON}/netboot \
 	${COMMON}/sysinst \
 	${.CURDIR}/../Makefile.inc ${MERGED_SRCS}
 
@@ -51,9 +51,12 @@ TOC.html=	${TOCS:M*.HTML.*}
 TOC.more=	${TOCS:M*.more.*}
 .endif
 
+REMOVE_CREATION_DATE= ${TOOL_SED} -e '/^%%CreationDate:/d'
 
 ${TARG}.ps: ${SRCS} ${TOC.ps} ${DISTRIBVERDEP}
-	${TOOL_GROFF} ${ARGS_PS}   -mdoc      ${MAIN} > $@
+	${TOOL_GROFF} ${ARGS_PS}   -mdoc      ${MAIN} \
+	    ${${MKREPRO:Uno} == "yes":? | ${REMOVE_CREATION_DATE} :} \
+	    > $@
 
 ${TARG}.pdf: ${TARG}.ps
 	ps2pdf ${TARG}.ps $@
@@ -74,7 +77,7 @@ ${TARG}.more: ${SRCS} ${TOC.more} ${DISTRIBVERDEP}
 #
 
 TOCPROC=	   2>&1 >/dev/null |\
-           sed -n '/^\.Ti/{s/ \([A-Za-z]\)/ "\1/; s/ *$$/"/; p; }'
+           ${TOOL_SED} -n '/^\.Ti/{s/ \([A-Za-z]\)/ "\1/; s/ *$$/"/; p; }'
 
 ${TARG}.PostScript.toc: ${SRCS}
 	${TOOL_GROFF} -dTOC=1 ${ARGS_PS} -mdoc ${MAIN} ${TOCPROC} > $@.tmp

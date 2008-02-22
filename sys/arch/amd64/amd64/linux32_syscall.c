@@ -1,22 +1,21 @@
-/*	$NetBSD: linux32_syscall.c,v 1.20 2008/02/06 22:12:41 dsl Exp $ */
+/*	$NetBSD: linux32_syscall.c,v 1.32 2015/03/07 18:41:40 christos Exp $ */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_syscall.c,v 1.20 2008/02/06 22:12:41 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_syscall.c,v 1.32 2015/03/07 18:41:40 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/syscallvar.h>
 
 #include <machine/cpu.h>
 #include <machine/psl.h>
 #include <machine/userret.h>
 
-#include <compat/linux32/arch/amd64/linux32_errno.h>
+#include <compat/linux32/linux32_syscall.h>
+#include <compat/linux32/common/linux32_errno.h>
 
 void linux32_syscall_intern(struct proc *);
 void linux32_syscall(struct trapframe *);
@@ -25,13 +24,11 @@ void
 linux32_syscall_intern(struct proc *p)
 {
 
-	p->p_trace_enabled = trace_is_enabled(p);
 	p->p_md.md_syscall = linux32_syscall;
 }
 
 void
-linux32_syscall(frame)
-	struct trapframe *frame;
+linux32_syscall(struct trapframe *frame)
 {
 	const struct sysent *callp;
 	struct proc *p;
@@ -47,13 +44,12 @@ linux32_syscall(frame)
 	p = l->l_proc;
 
 	code = frame->tf_rax;
-	uvmexp.syscalls++;
 
 	LWP_CACHE_CREDS(l, p);
 
 	callp = p->p_emul->e_sysent;
 
-	code &= (SYS_NSYSENT - 1);
+	code &= (LINUX32_SYS_NSYSENT - 1);
 	callp += code;
 
 	/*
@@ -67,25 +63,22 @@ linux32_syscall(frame)
 	args[4] = frame->tf_rdi & 0xffffffff;
 	args[5] = frame->tf_rbp & 0xffffffff;
 
-	KERNEL_LOCK(1, l);
-
-	if (__predict_false(p->p_trace_enabled)) {
+	if (__predict_false(p->p_trace_enabled || KDTRACE_ENTRY(callp->sy_return))) {
 		narg = callp->sy_narg;
 		if (__predict_false(narg > __arraycount(args)))
-			panic("impossible syscall narg, code %d, narg %zd",
+			panic("impossible syscall narg, code %d, narg %zu",
 			    code, narg);
 		for (i = 0; i < narg; i++)
 			args64[i] = args[i] & 0xffffffff;
-		if ((error = trace_enter(code, args64, narg)) != 0)
+		if ((error = trace_enter(code, callp, args64)) != 0)
 			goto out;
 	}
 
 	rval[0] = 0;
 	rval[1] = 0;
 
-	error = (*callp->sy_call)(l, args, rval);
+	error = sy_call(callp, l, args, rval);
 out:
-	KERNEL_UNLOCK_LAST(l);
 	switch (error) {
 	case 0:
 		frame->tf_rax = rval[0];
@@ -109,7 +102,11 @@ out:
 		break;
 	}
 
-	if (__predict_false(p->p_trace_enabled))
-		trace_exit(code, rval, error);
+	if (__predict_false(p->p_trace_enabled || KDTRACE_ENTRY(callp->sy_return))) {
+		narg = callp->sy_narg;
+		for (i = 0; i < narg; i++)
+			args64[i] = args[i] & 0xffffffff;
+		trace_exit(code, callp, args64, rval, error);
+	}
 	userret(l);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: sbd.c,v 1.1 2005/12/29 15:20:08 tsutsui Exp $	*/
+/*	$NetBSD: sbd.c,v 1.4 2015/06/23 21:00:23 matt Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbd.c,v 1.1 2005/12/29 15:20:08 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbd.c,v 1.4 2015/06/23 21:00:23 matt Exp $");
 
 /* System board */
 #include "opt_sbd.h"
@@ -46,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: sbd.c,v 1.1 2005/12/29 15:20:08 tsutsui Exp $");
 #include <sys/systm.h>
 
 #include <uvm/uvm_extern.h>
+
+#include <mips/locore.h>
 
 #include <machine/sbdvar.h>
 #include <machine/sbd.h>
@@ -160,15 +155,15 @@ sbd_memcluster_check(void)
 	phys_ram_seg_t *p;
 	paddr_t start;
 	size_t size;
-	int i, j;
+	size_t i, j;
 
 	/* Very slow */
 	for (i = 1; i < mem_cluster_cnt; i++) {
 		p = &mem_clusters[i];
 		start = p->start;
 		size = p->size;
-		printf("[%d] %#lx-%#lx, %#x (%dMB)\n", i, start, start + size,
-		    size, size >>20);
+		printf("[%u] %#"PRIxPADDR"-%#"PRIxPADDR", %#x (%uMB)\n",
+		    i, start, start + size, size, size >>20);
 		m = (uint32_t *)MIPS_PHYS_TO_KSEG1(start);
 		mend = (uint32_t *)MIPS_PHYS_TO_KSEG1(start + size);
 		for (; m < mend; m++) {

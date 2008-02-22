@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt_pci.c,v 1.20 2007/10/19 12:00:43 ad Exp $	*/
+/*	$NetBSD: dpt_pci.c,v 1.27 2014/03/29 19:28:24 christos Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran <ad@NetBSD.org>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt_pci.c,v 1.20 2007/10/19 12:00:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt_pci.c,v 1.27 2014/03/29 19:28:24 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,15 +56,14 @@ __KERNEL_RCSID(0, "$NetBSD: dpt_pci.c,v 1.20 2007/10/19 12:00:43 ad Exp $");
 #define	PCI_CBMA	0x14	/* Configuration base memory address */
 #define	PCI_CBIO	0x10	/* Configuration base I/O address */
 
-static int	dpt_pci_match(struct device *, struct cfdata *, void *);
-static void	dpt_pci_attach(struct device *, struct device *, void *);
+static int	dpt_pci_match(device_t, cfdata_t, void *);
+static void	dpt_pci_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(dpt_pci, sizeof(struct dpt_softc),
+CFATTACH_DECL_NEW(dpt_pci, sizeof(struct dpt_softc),
     dpt_pci_match, dpt_pci_attach, NULL, NULL);
 
 static int
-dpt_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+dpt_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -78,7 +77,7 @@ dpt_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-dpt_pci_attach(struct device *parent, struct device *self, void *aux)
+dpt_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct dpt_softc *sc;
@@ -87,10 +86,12 @@ dpt_pci_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_handle_t ioh;
 	const char *intrstr;
 	pcireg_t csr;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	aprint_naive(": Storage controller\n");
 
-	sc = (struct dpt_softc *)self;
+	sc = device_private(self);
+	sc->sc_dev = self;
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
 	aprint_normal(": ");
@@ -119,20 +120,19 @@ dpt_pci_attach(struct device *parent, struct device *self, void *aux)
 		aprint_error("can't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, dpt_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error("can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 
 	/* Read the EATA configuration. */
 	if (dpt_readcfg(sc)) {
-		aprint_error("%s: readcfg failed - see dpt(4)\n",
-		    sc->sc_dv.dv_xname);
+		aprint_error_dev(sc->sc_dev, "readcfg failed - see dpt(4)\n");
 		return;
 	}
 

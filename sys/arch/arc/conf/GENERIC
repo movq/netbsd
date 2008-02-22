@@ -1,7 +1,7 @@
-# $NetBSD: GENERIC,v 1.152 2007/12/31 15:31:48 ad Exp $
+# $NetBSD: GENERIC,v 1.189 2018/01/23 14:47:54 sevan Exp $
 #
 # GENERIC machine description file
-# 
+#
 # This machine description file is used to generate the default NetBSD
 # kernel.  The generic kernel does not include all options, subsystems
 # and device drivers, but should be useful for most applications.
@@ -18,11 +18,11 @@
 # of each device driver in this file see the section 4 man page for the
 # device.
 
-include		"arch/arc/conf/std.arc"
+include 	"arch/arc/conf/std.arc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.152 $"
+#ident		"GENERIC-$Revision: 1.189 $"
 
 maxusers	32		# estimated number of users
 
@@ -39,6 +39,9 @@ options 	PLATFORM_NEC_RAX94		# NEC RISCstation 2200 PCI
 options 	PLATFORM_NEC_RD94		# NEC RISCstation 2250
 options 	PLATFORM_SNI_RM200PCI
 
+# CPU related options
+makeoptions	CPUFLAGS="-march=mips3 -mabi=32"
+
 # Standard system options
 
 options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
@@ -49,23 +52,19 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
-options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
-
-options 	LKM		# loadable kernel modules
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-# Enable experimental buffer queue strategy for better responsiveness under 
-# high disk I/O load. Use it with caution - it's not proven to be stable yet.
+# Alternate buffer queue strategies for better responsiveness under high
+# disk I/O load.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
 
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC		# cheap kernel consistency checks
 #options 	DEBUG			# expensive debugging checks/support
-#options 	KMEMSTATS		# kernel memory statistics (vmstat -m)
 options 	DDB			# in-kernel debugger
 #options 	DDB_HISTORY_SIZE=100	# enable history editing in DDB
 #options 	KGDB			# remote gdb
@@ -74,20 +73,9 @@ options 	DDB			# in-kernel debugger
 #makeoptions	DEBUG="-g"		# compile full symbol table
 
 # Compatibility options
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options 	COMPAT_10	# NetBSD 1.0,
-options 	COMPAT_11	# NetBSD 1.1,
-options 	COMPAT_12	# NetBSD 1.2,
-options 	COMPAT_13	# NetBSD 1.3,
-options 	COMPAT_14	# NetBSD 1.4,
-options 	COMPAT_15	# NetBSD 1.5,
-options 	COMPAT_16	# NetBSD 1.6,
-options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_43	# and 4.3BSD
+include 	"conf/compat_netbsd10.config"
+
 options 	COMPAT_386BSD_MBRPART # recognize old partition ID
-options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # mipsel specific
 options 	COMPAT_ULTRIX	# Ultrix binary compatibility
@@ -106,44 +94,42 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system 	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
 #file-system	CODA		# Coda File System; also needs vcoda (below)
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-options 	QUOTA		# FFS quotas
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
-options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
 				# immutable) behave as system flags.
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	UFS_EXTATTR	# Extended attribute support for UFS1
 
 # Networking options
 #options 	GATEWAY		# IP packet forwarding
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
-#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-#options 	ISO,TPIP	# OSI networking
-#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
 options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
-options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -160,6 +146,10 @@ options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	ALTQ_RIO	# RED with IN/OUT
 #options 	ALTQ_WFQ	# Weighted Fair Queueing
 
+# JIT compiler for bpfilter
+#options	SLJIT
+#options	BPFJIT
+
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
 #options 	EISAVERBOSE	# verbose EISA device autoconfig messages
@@ -170,6 +160,7 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 
 # wscons terminal emulation
 options 	WSEMUL_VT100	# VT100 emulation
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 # Kernel root file system and dump configuration.
 options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM
@@ -298,8 +289,11 @@ ubsec*	at pci? dev ? function ?	# Broadcom 5501/5601/580x/582x
 #vga*	 	at pci? dev ? function ?
 tga*		at pci? dev ? function ?	# DEC ZLXp-E[123] Graphics
 
+# PCI SCSI controllers
+adv*		at pci? dev ? function ?	# AdvanSys 1200[A,B], 9xx[U,UA]
 ahc*		at pci? dev ? function ?	# Adaptec [23]94x, aic78x0 SCSI
 iha*		at pci? dev ? function ?	# Initio INIC-940/950 SCSI
+njs*		at pci? dev ? function ?	# Workbit NinjaSCSI-32
 pcscp*		at pci? dev ? function ?	# AMD Am53c974 PCscsi-PCI SCSI
 siop*		at pci? dev ? function ?	# NCR/Symbios 53c8xx SCSI
 esiop*		at pci? dev ? function ?	# NCR/Symbios 53c875/95/1010
@@ -312,9 +306,9 @@ trm*		at pci? dev ? function ?	# Tekram DC-395/315 SCSI
 pciide* 	at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
 acardide*	at pci? dev ? function ?	# Acard IDE controllers
 #aceride* 	at pci? dev ? function ?	# Acer Lab IDE controllers
-artsata*	at pci? dev ? function ?	# Intel i31244 SATA controller
+#artsata*	at pci? dev ? function ?	# Intel i31244 SATA controller
 cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
-cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
+#cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
 hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
 optiide* 	at pci? dev ? function ?	# Opti IDE controllers
 pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
@@ -322,25 +316,59 @@ pdcsata* 	at pci? dev ? function ?	# Promise SATA150 controllers
 satalink*	at pci? dev ? function ?	# SiI SATALink controllers
 #siside* 	at pci? dev ? function ?	# SiS IDE controllers
 slide*  	at pci? dev ? function ?	# Symphony Labs IDE controllers
-#viaide* 	at pci? dev ? function ?	# VIA/AMD/Nvidia IDE controllers
+viaide* 	at pci? dev ? function ?	# VIA/AMD/Nvidia IDE controllers
 
+# PCI network devices
+#an*		at pci? dev ? function ?	# Aironet PC4500/PC4800 (802.11)
+bge*		at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
+#en*		at pci? dev ? function ?	# ENI/Adaptec ATM
+ep*		at pci? dev ? function ?	# 3Com 3c59x
 epic*		at pci? dev ? function ?	# SMC EPIC/100 Ethernet
+#esh*		at pci? dev ? function ?	# Essential HIPPI card
 ex*		at pci? dev ? function ?	# 3Com 90x[BC]
+#fpa*		at pci? dev ? function ?	# DEC DEFPA FDDI
 fxp*		at pci? dev ? function ?	# Intel EtherExpress PRO
+gsip*		at pci? dev ? function ?	# NS83820 Gigabit Ethernet
+#hme*		at pci? dev ? function ?	# Sun STP2002-STQ
+#le*		at pci? dev ? function ?	# PCnet-PCI Ethernet
+#lmc*		at pci? dev ? function ?	# Lan Media Corp SSI/HSSI/DS3
+#mtd*		at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
 ne*		at pci? dev ? function ?	# NE2000-compatible
+#ntwoc*		at pci? dev ? function ?	# Riscom/N2 PCI Sync Serial
 pcn*		at pci? dev ? function ?	# AMD PCnet-PCI Ethernet
+re*		at pci? dev ? function ?	# Realtek 8139C+/8169/8110S
 rtk*		at pci? dev ? function ?	# Realtek 8129/8139
+sf*		at pci? dev ? function ?	# Adaptec AIC-6915 Ethernet
 sip*		at pci? dev ? function ?	# SiS 900/DP83815 Ethernet
+#skc*		at pci? dev ? function ?	# SysKonnect SK9821
+#sk*		at skc?				# SysKonnect SK9821
+ste*		at pci? dev ? function ?	# Sundance ST-201 Ethernet
+#stge*		at pci? dev ? function ?	# Sundance/Tamarack TC9021
+#ti*		at pci? dev ? function ?	# Alteon ACEnic gigabit Ethernet
+tl*		at pci? dev ? function ?	# ThunderLAN-based Ethernet
 tlp*		at pci? dev ? function ?	# DECchip 21x4x and clones
+vge*		at pci? dev ? function ?	# VIA VT612X Gigabit Ethernet
+vr*		at pci? dev ? function ?        # VIA Rhine Fast Ethernet
+#wi*		at pci? dev ? function ?	# Intersil Prism Mini-PCI
+wm*		at pci? dev ? function ?	# Intel 82543/82544 gigabit
 
 #### MII/PHY support
-
+acphy*		at mii? phy ?		# Altima AC101 and AMD Am79c874 PHYs
+amhphy* 	at mii? phy ?		# AMD 79c901 Ethernet PHYs
 bmtphy*		at mii? phy ?		# Broadcom BCM5201 and BCM5202 PHYs
+brgphy* 	at mii? phy ?		# Broadcom BCM5400-family PHYs
+ciphy*		at mii? phy ?		# Cicada CS8201 Gig-E PHYs
+dmphy*		at mii? phy ?		# Davicom DM9101 PHYs
 exphy*		at mii? phy ?		# 3Com internal PHYs
+#gentbi* 	at mii? phy ?		# Generic Ten-Bit 1000BASE-[CLS]X PHYs
+glxtphy* 	at mii? phy ?		# Level One LXT-1000 PHYs
+gphyter* 	at mii? phy ?		# NS83861 Gig-E PHY
 icsphy*		at mii? phy ?		# Integrated Circuit Systems ICS189x
+ikphy*		at mii? phy ?		# Intel 82563 PHYs
 inphy*		at mii? phy ?		# Intel 82555 PHYs
 iophy*		at mii? phy ?		# Intel 82553 PHYs
 lxtphy*		at mii? phy ?		# Level One LXT-970 PHYs
+makphy* 	at mii? phy ?		# Marvell Semiconductor 88E1000 PHYs
 nsphy*		at mii? phy ?		# NS83840 PHYs
 nsphyter*	at mii? phy ?		# NS83843 PHYs
 qsphy*		at mii? phy ?		# Quality Semiconductor QS6612 PHYs
@@ -348,6 +376,7 @@ sqphy*		at mii? phy ?		# Seeq 80220/80221/80223 PHYs
 tlphy*		at mii? phy ?		# ThunderLAN PHYs
 tqphy*		at mii? phy ?		# TDK Semiconductor PHYs
 ukphy*		at mii? phy ?		# generic unknown PHYs
+#urlphy* 	at mii? phy ?		# Realtek RTL8150L internal PHYs
 
 # SCSI bus support
 scsibus*	at scsi?
@@ -402,9 +431,9 @@ pseudo-device 	crypto			# /dev/crypto device
 pseudo-device	swcrypto		# software crypto implementation
 
 # disk/mass storage pseudo-devices
-pseudo-device	ccd		4	# concatenated/striped disk devices
-#pseudo-device	cgd		4	# cryptographic disk devices
-pseudo-device	raid		8	# RAIDframe disk driver
+pseudo-device	ccd			# concatenated/striped disk devices
+#pseudo-device	cgd			# cryptographic disk devices
+pseudo-device	raid			# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
@@ -414,16 +443,17 @@ pseudo-device	raid		8	# RAIDframe disk driver
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		4	# file system snapshot device
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
+pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
 #pseudo-device	carp			# Common Address Redundancy Protocol
 pseudo-device	ipfilter		# IP filter (firewall) and NAT
-pseudo-device	loop		1	# network loopback
+pseudo-device	loop			# network loopback
 pseudo-device	ppp			# Point-to-Point Protocol
 pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
 pseudo-device	sl			# Serial Line IP
@@ -439,16 +469,20 @@ pseudo-device	bridge			# simple inter-network bridging
 #options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-#pseudo-device	sequencer	1	# MIDI sequencer
+#pseudo-device	sequencer		# MIDI sequencer
 # rnd works; RND_COM does not on port arc yet.
-pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-#pseudo-device	vcoda		4	# coda minicache <-> venus comm.
+#pseudo-device	vcoda			# coda minicache <-> venus comm.
 
 # mouse & keyboard multiplexor pseudo-devices
 #pseudo-device	wsmux
@@ -459,15 +493,12 @@ pseudo-device	ksyms			# /dev/ksyms
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec		1
+#pseudo-device	veriexec
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel
 # code size.
 #
-#options VERIFIED_EXEC_FP_RMD160
 #options VERIFIED_EXEC_FP_SHA256
 #options VERIFIED_EXEC_FP_SHA384
 #options VERIFIED_EXEC_FP_SHA512
-#options VERIFIED_EXEC_FP_SHA1
-#options VERIFIED_EXEC_FP_MD5

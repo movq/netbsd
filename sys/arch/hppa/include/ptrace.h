@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.h,v 1.2 2007/11/22 11:58:48 skrll Exp $	*/
+/*	$NetBSD: ptrace.h,v 1.8 2017/04/12 18:17:59 kamil Exp $	*/
 
 /*	$OpenBSD: ptrace.h,v 1.2 1998/12/01 03:05:44 mickey Exp $	*/
 
@@ -14,22 +14,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Michael Shalayeff.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+ * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /*
@@ -40,10 +36,27 @@
 #define	PT_SETREGS	(PT_FIRSTMACH + 2)
 #define	PT_GETFPREGS	(PT_FIRSTMACH + 3)
 #define	PT_SETFPREGS	(PT_FIRSTMACH + 4)
+#define	PT_SETSTEP	(PT_FIRSTMACH + 5)
+#define	PT_CLEARSTEP	(PT_FIRSTMACH + 6)
 
 #define PT_MACHDEP_STRINGS \
 	"PT_STEP", \
 	"PT_GETREGS", \
 	"PT_SETREGS", \
 	"PT_GETFPREGS", \
-	"PT_SETFPREGS",
+	"PT_SETFPREGS", \
+	"PT_SETSTEP", \
+	"PT_CLEARSTEP",
+
+#include <machine/reg.h>
+#define PTRACE_REG_PC(r)	(r)->r_pcoqh
+#define PTRACE_REG_SET_PC(r, v)	do {	\
+	(r)->r_pcoqh = (v);		\
+	(r)->r_pcoqt = (v) + 4;		\
+    } while (/*CONSTCOND*/0)
+#define PTRACE_REG_SP(r)	(r)->r_regs[30]
+#define PTRACE_REG_INTRV(r)	(r)->r_regs[28]
+
+#define PTRACE_BREAKPOINT	((const uint8_t[]) { 0x00, 0x01, 0x00, 0x04 })
+#define PTRACE_BREAKPOINT_ASM	__asm __volatile("break	%0, %1" :: "i" (HPPA_BREAK_KERNEL), "i" (HPPA_BREAK_SS) : "memory")
+#define PTRACE_BREAKPOINT_SIZE	4

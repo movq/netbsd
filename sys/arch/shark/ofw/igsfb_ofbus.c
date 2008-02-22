@@ -1,4 +1,4 @@
-/*	$NetBSD: igsfb_ofbus.c,v 1.7 2007/10/28 18:01:55 jmmv Exp $ */
+/*	$NetBSD: igsfb_ofbus.c,v 1.17 2017/01/22 17:27:31 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2006 Michael Lorenz
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igsfb_ofbus.c,v 1.7 2007/10/28 18:01:55 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igsfb_ofbus.c,v 1.17 2017/01/22 17:27:31 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,10 +39,12 @@ __KERNEL_RCSID(0, "$NetBSD: igsfb_ofbus.c,v 1.7 2007/10/28 18:01:55 jmmv Exp $")
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
+#include <uvm/uvm.h>
 
-#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/ofw.h>
+#include <machine/pmap.h>
 
 #include <dev/isa/isavar.h>
 
@@ -65,17 +65,19 @@ static int igsfb_ofbus_phandle = 0;
 
 
 
-static int	igsfb_ofbus_match(struct device *, struct cfdata *, void *);
-static void	igsfb_ofbus_attach(struct device *, struct device *, void *);
+static int	igsfb_ofbus_match(device_t, cfdata_t, void *);
+static void	igsfb_ofbus_attach(device_t, device_t, void *);
 static int	igsfb_setup_dc(struct igsfb_devconfig *);
+static paddr_t	igsfb_ofbus_mmap(void *, void *, off_t, int);
 
-CFATTACH_DECL(igsfb_ofbus, sizeof(struct igsfb_softc),
+CFATTACH_DECL_NEW(igsfb_ofbus, sizeof(struct igsfb_softc),
     igsfb_ofbus_match, igsfb_ofbus_attach, NULL, NULL);
     
-static const char const *compat_strings[] = { "igs,cyperpro2010", NULL };
+static const char * const compat_strings[] = { "igs,cyperpro2010", NULL };
 
 vaddr_t igsfb_mem_vaddr = 0, igsfb_mmio_vaddr = 0;
 paddr_t igsfb_mem_paddr;
+extern paddr_t isa_io_physaddr;
 struct bus_space igsfb_memt, igsfb_iot;
 
 #if (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
@@ -90,6 +92,7 @@ igsfb_ofbus_cnattach(bus_space_tag_t iot, bus_space_tag_t memt)
 	int chosen_phandle, igs_node;
 	int stdout_ihandle, stdout_phandle;
 	uint32_t regs[16];
+	char mode_buffer[64];
 
 	stdout_phandle = 0;
 
@@ -108,8 +111,8 @@ igsfb_ofbus_cnattach(bus_space_tag_t iot, bus_space_tag_t memt)
 		return ENXIO;
 
 	igsfb_mem_paddr = be32toh(regs[13]);
-	/* 4MB VRAM */
-	igsfb_mem_vaddr = ofw_map(igsfb_mem_paddr, 0x00400000, 0);
+	/* 4MB VRAM aperture, bufferable and cacheable */
+	igsfb_mem_vaddr = ofw_map(igsfb_mem_paddr, 0x00400000, L2_B);
 	/* MMIO registers */
 	igsfb_mmio_vaddr = ofw_map(igsfb_mem_paddr + IGS_MEM_MMIO_SELECT,
 	    0x00100000, 0);
@@ -130,14 +133,27 @@ igsfb_ofbus_cnattach(bus_space_tag_t iot, bus_space_tag_t memt)
 	stdout_ihandle = of_decode_int((void *)&stdout_ihandle);
 	stdout_phandle = OF_instance_to_package(stdout_ihandle);
 
-	if (stdout_phandle != igs_node)
+	if (stdout_phandle != igs_node) {
+		/*
+		 * If we aren't the boot console, the CyberPro probably
+		 * hasn't been brought up yet.  Bring it up now, it's
+		 * still early enough to do so.
+		 */
+		const int handle = OF_open("/vlbus/display");
+		if (handle != -1)
+			OF_close(handle);
 		return ENXIO;
+	}
 
 	/* ok, now setup and attach the console */
 	dc = &igsfb_console_dc;
 	ret = igsfb_setup_dc(dc);
 	if (ret)
 		return ret;
+
+	if (of_get_mode_string(mode_buffer, sizeof(mode_buffer))) {
+		strcpy(dc->dc_modestring, mode_buffer);
+	}	
 
 	ret = igsfb_cnattach_subr(dc);
 	if (ret)
@@ -165,7 +181,7 @@ igsfb_setup_dc(struct igsfb_devconfig *dc)
 	dc->dc_iot = &igsfb_iot;
 	dc->dc_iobase = 0;
 	dc->dc_ioflags = 0;
-
+	dc->dc_mmap = igsfb_ofbus_mmap;
 	if (bus_space_map(dc->dc_iot,
 			  dc->dc_iobase + IGS_REG_BASE, IGS_REG_SIZE,
 			  dc->dc_ioflags,
@@ -189,7 +205,7 @@ igsfb_ofbus_is_console(int phandle)
 
 
 static int
-igsfb_ofbus_match(struct device *parent, struct cfdata *match, void *aux)
+igsfb_ofbus_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 
@@ -199,15 +215,15 @@ igsfb_ofbus_match(struct device *parent, struct cfdata *match, void *aux)
 	return 10;	/* beat vga etc. */
 }
 
-
 static void
-igsfb_ofbus_attach(struct device *parent, struct device *self, void *aux)
+igsfb_ofbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct igsfb_softc *sc = (struct igsfb_softc *)self;
+	struct igsfb_softc *sc = device_private(self);
 	struct ofbus_attach_args *oba = aux;
 	uint32_t regs[16];
 	int isconsole, ret;
-
+	
+	sc->sc_dev = self;
 	if (igsfb_ofbus_is_console(oba->oba_phandle)) {
 		isconsole = 1;
 		sc->sc_dc = &igsfb_console_dc;
@@ -230,4 +246,33 @@ igsfb_ofbus_attach(struct device *parent, struct device *self, void *aux)
 	printf(": IGS CyberPro 2010 at 0x%08x\n", (uint32_t)igsfb_mem_paddr);
 
 	igsfb_attach_subr(sc, isconsole);
+}
+
+static paddr_t
+igsfb_ofbus_mmap(void *v, void *vs, off_t offset, int prot)
+{
+
+#ifdef PCI_MAGIC_IO_RANGE
+	/* access to IO ports */
+	if ((offset >= PCI_MAGIC_IO_RANGE) &&
+	    (offset < (PCI_MAGIC_IO_RANGE + 0x10000))) {
+		paddr_t pa;
+
+		pa = isa_io_physaddr + offset - PCI_MAGIC_IO_RANGE;
+		return arm_btop(pa);
+	}
+#endif
+	/*
+	 * we also need to allow mapping of the whole aperture, including MMIO 	
+	 * registers on CyberPro at its physical address
+	 */
+	if ((offset >= igsfb_mem_paddr) && 
+	    (offset < (igsfb_mem_paddr + 0x00800000))) {
+		return (arm_btop(offset) | ARM32_MMAP_WRITECOMBINE);
+	}
+	if ((offset >= (igsfb_mem_paddr + 0x00800000)) && 
+	    (offset < (igsfb_mem_paddr + 0x01000000)))
+		return arm_btop(offset);
+
+	return -1;
 }

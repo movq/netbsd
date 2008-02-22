@@ -1,4 +1,4 @@
-.\"	$NetBSD: ndp.8,v 1.22 2006/03/05 23:47:08 rpaulo Exp $
+.\"	$NetBSD: ndp.8,v 1.29 2018/02/14 10:13:25 wiz Exp $
 .\"	$KAME: ndp.8,v 1.33 2005/10/19 14:57:42 suz Exp $
 .\"
 .\" Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -28,7 +28,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd March 5, 2006
+.Dd February 14, 2018
 .Dt NDP 8
 .Os
 .\"
@@ -78,6 +78,13 @@ The
 command manipulates the address mapping table
 used by the Neighbor Discovery Protocol (NDP).
 .Bl -tag -width Ds
+.It Fl A Ar wait
+Repeat
+.Fl a
+.Pq dump NDP entries
+every
+.Ar wait
+seconds.
 .It Fl a
 Dump the currently existing NDP entries.
 The following information will be printed:
@@ -100,20 +107,20 @@ in which case it will never expire.
 State of the neighbor cache entry, as a single letter:
 .Pp
 .Bl -tag -width indent -compact
-.It N
-Nostate
-.It W
-Waitdelete
+.It D
+Delay
 .It I
 Incomplete
+.It N
+Nostate
+.It P
+Probe
 .It R
 Reachable
 .It S
 Stale
-.It D
-Delay
-.It P
-Probe
+.It W
+Waitdelete
 .It ?
 Unknown state (should never happen).
 .El
@@ -124,13 +131,6 @@ They are: Router, proxy neighbor advertisement
 The field could be followed by a decimal number,
 which means the number of NS probes the node has sent during the current state.
 .El
-.It Fl A Ar wait
-Repeat
-.Fl a
-.Pq dump NDP entries
-every
-.Ar wait
-seconds.
 .It Fl c
 Erase all the NDP entries.
 .It Fl d
@@ -172,26 +172,39 @@ in this case.
 .\"
 .Pp
 .Bl -tag -width Ds -compact
-.It Xo
-.Ic nud
-.Xc
+.It Ic nud
 Turn on or off NUD (Neighbor Unreachability Detection) on the
 interface.
 NUD is usually turned on by default.
-.It Xo
-.Ic accept_rtadv
-.Xc
+.It Ic accept_rtadv
 Specify whether or not to accept Router Advertisement messages
 received on the
 .Ar interface .
-Note that the kernel does not accept Router Advertisement messages
-unless the
+Note that the kernel does not accept Router Advertisement messages,
+even if the flag
+.Ic accept_rtadv
+is on, unless either the
 .Li net.inet6.ip6.accept_rtadv
-variable is non-0, even if the flag is on.
+variable is non-0, or the flag
+.Ic override_rtadv
+is on.
 This flag is set to 1 by default.
-.It Xo
-.Ic prefer_source
-.Xc
+.It Ic auto_linklocal
+Specify whether or not to perform automatic link-local address configuration on
+.Ar interface .
+This flag is set by
+.Li net.inet6.ip6.auto_linklocal
+sysctl variable.
+.It Ic override_rtadv
+Specify whether or not to override the
+.Li net.inet6.ip6.accept_rtadv
+variable.
+If the flag is on, then it will suffice to set the flag
+.Ic accept_rtadv
+to make the kernel accept Router Advertisement messages on the
+.Ar interface .
+This flag is set to 0 by default.
+.It Ic prefer_source
 Prefer addresses on the
 .Ar interface
 as candidates of the source address for outgoing packets.
@@ -200,12 +213,13 @@ For more details about the entire algorithm of source address
 selection, see the
 .Pa IMPLEMENTATION
 file supplied with the KAME kit.
-.It Xo
-.Ic disabled
-.Xc
+.It Ic disabled
 Disable IPv6 operation on the interface.
 When disabled, the interface discards any IPv6 packets
-received on or being sent to the interface.
+received on or being sent to the interface and any IPv6 addresses
+on the interface are marked as
+.Dq tentative .
+When the disabled flag is cleared, DAD will be performed.
 In the sending case, an error of ENETDOWN will be returned to the
 application.
 This flag is typically set automatically in the kernel as a result of
@@ -213,36 +227,30 @@ a certain failure of Duplicate Address Detection.
 While the flag can be set or cleared by hand with the
 .Nm
 command, it is not generally advisable to modify this flag manually.
-.It Xo
-.Ic basereachable=(number)
-.Xc
+.It Ic basereachable=(number)
 Specify the BaseReachbleTimer on the interface in millisecond.
-.It Xo
-.Ic retrans=(number)
-.Xc
+.It Ic retrans=(number)
 Specify the RetransTimer on the interface in millisecond.
-.It Xo
-.Ic curhlim=(number)
-.Xc
+.It Ic curhlim=(number)
 Specify the Cur Hop Limit on the interface.
 .El
 .It Fl n
 Do not try to resolve numeric addresses to hostnames.
-.It Fl p
-Show prefix list.
 .It Fl P
 Flush all the entries in the prefix list.
-.It Fl r
-Show default router list.
+.It Fl p
+Show prefix list.
 .It Fl R
 Flush all the entries in the default router list.
+.It Fl r
+Show default router list.
 .It Fl s
 Register an NDP entry for a node.
 The entry will be permanent unless the word
-.Li temp
+.Cm temp
 is given in the command.
 If the word
-.Li proxy
+.Cm proxy
 is given, this system will act as a proxy NDP server,
 responding to requests for
 .Ar hostname
@@ -255,7 +263,7 @@ Most useful when used with
 .Fl A .
 .El
 .\"
-.Sh RETURN VALUES
+.Sh EXIT STATUS
 The
 .Nm
 command will exit with 0 on success, and non-zero on errors.

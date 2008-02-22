@@ -1,4 +1,4 @@
-/*	$NetBSD: cgtwo.c,v 1.53 2007/03/04 06:00:43 christos Exp $ */
+/*	$NetBSD: cgtwo.c,v 1.57 2014/07/25 08:10:34 dholland Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgtwo.c,v 1.53 2007/03/04 06:00:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgtwo.c,v 1.57 2014/07/25 08:10:34 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,7 +76,6 @@ __KERNEL_RCSID(0, "$NetBSD: cgtwo.c,v 1.53 2007/03/04 06:00:43 christos Exp $");
 
 /* per-display variables */
 struct cgtwo_softc {
-	struct	device sc_dev;		/* base device */
 	struct	fbdevice sc_fb;		/* frame buffer device */
 	vme_addr_t		sc_paddr;
 	vme_chipset_tag_t	sc_ct;
@@ -89,13 +88,13 @@ struct cgtwo_softc {
 };
 
 /* autoconfiguration driver */
-static int	cgtwomatch(struct device *, struct cfdata *, void *);
-static void	cgtwoattach(struct device *, struct device *, void *);
-static void	cgtwounblank(struct device *);
+static int	cgtwomatch(device_t, cfdata_t, void *);
+static void	cgtwoattach(device_t, device_t, void *);
+static void	cgtwounblank(device_t);
 int		cgtwogetcmap(struct cgtwo_softc *, struct fbcmap *);
 int		cgtwoputcmap(struct cgtwo_softc *, struct fbcmap *);
 
-CFATTACH_DECL(cgtwo, sizeof(struct cgtwo_softc),
+CFATTACH_DECL_NEW(cgtwo, sizeof(struct cgtwo_softc),
     cgtwomatch, cgtwoattach, NULL, NULL);
 
 extern struct cfdriver cgtwo_cd;
@@ -105,8 +104,18 @@ dev_type_ioctl(cgtwoioctl);
 dev_type_mmap(cgtwommap);
 
 const struct cdevsw cgtwo_cdevsw = {
-	cgtwoopen, nullclose, noread, nowrite, cgtwoioctl,
-	nostop, notty, nopoll, cgtwommap, nokqfilter,
+	.d_open = cgtwoopen,
+	.d_close = nullclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = cgtwoioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = cgtwommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 /* frame buffer generic driver */
@@ -119,7 +128,7 @@ static struct fbdriver cgtwofbdriver = {
  * Match a cgtwo.
  */
 static int
-cgtwomatch(struct device *parent, struct cfdata *cf, void *aux)
+cgtwomatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct vme_attach_args	*va = aux;
 	vme_chipset_tag_t	ct = va->va_vct;
@@ -143,7 +152,7 @@ cgtwomatch(struct device *parent, struct cfdata *cf, void *aux)
  * Attach a display.  We need to notice if it is the console, too.
  */
 static void
-cgtwoattach(struct device *parent, struct device *self, void *aux)
+cgtwoattach(device_t parent, device_t self, void *aux)
 {
 	struct vme_attach_args	*va = aux;
 	vme_chipset_tag_t	ct = va->va_vct;
@@ -151,16 +160,16 @@ cgtwoattach(struct device *parent, struct device *self, void *aux)
 	bus_space_handle_t	bh;
 	vme_am_t		mod;
 	vme_mapresc_t resc;
-	struct cgtwo_softc *sc = (struct cgtwo_softc *)self;
+	struct cgtwo_softc *sc = device_private(self);
 	struct fbdevice *fb = &sc->sc_fb;
 	struct eeprom *eep = (struct eeprom *)eeprom_va;
 	int isconsole = 0;
 
 	sc->sc_ct = ct;
 	fb->fb_driver = &cgtwofbdriver;
-	fb->fb_device = &sc->sc_dev;
+	fb->fb_device = self;
 	fb->fb_type.fb_type = FBTYPE_SUN2COLOR;
-	fb->fb_flags = device_cfdata(&sc->sc_dev)->cf_flags;
+	fb->fb_flags = device_cfdata(self)->cf_flags;
 
 	fb->fb_type.fb_depth = 8;
 	fb_setsize_eeprom(fb, fb->fb_type.fb_depth, 1152, 900);
@@ -225,7 +234,7 @@ cgtwoopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	int unit = minor(dev);
 
-	if (unit >= cgtwo_cd.cd_ndevs || cgtwo_cd.cd_devs[unit] == NULL)
+	if (device_lookup(&cgtwo_cd, unit) == NULL)
 		return (ENXIO);
 	return (0);
 }
@@ -233,7 +242,8 @@ cgtwoopen(dev_t dev, int flags, int mode, struct lwp *l)
 int
 cgtwoioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
-	register struct cgtwo_softc *sc = cgtwo_cd.cd_devs[minor(dev)];
+	register struct cgtwo_softc *sc = device_lookup_private(&cgtwo_cd,
+								minor(dev));
 	register struct fbgattr *fba;
 
 	switch (cmd) {
@@ -278,9 +288,9 @@ cgtwoioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
  * Undo the effect of an FBIOSVIDEO that turns the video off.
  */
 static void
-cgtwounblank(struct device *dev)
+cgtwounblank(device_t dev)
 {
-	struct cgtwo_softc *sc = (struct cgtwo_softc *)dev;
+	struct cgtwo_softc *sc = device_private(dev);
 	sc->sc_reg->video_enab = 1;
 }
 
@@ -375,7 +385,8 @@ cgtwommap(dev_t dev, off_t off, int prot)
 	extern int sparc_vme_mmap_cookie(vme_addr_t, vme_am_t,
 					 bus_space_handle_t *);
 
-	register struct cgtwo_softc *sc = cgtwo_cd.cd_devs[minor(dev)];
+	register struct cgtwo_softc *sc = device_lookup_private(&cgtwo_cd,
+								minor(dev));
 	vme_am_t mod;
 	bus_space_handle_t bh;
 

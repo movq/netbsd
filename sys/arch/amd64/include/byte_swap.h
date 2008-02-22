@@ -1,7 +1,7 @@
-/*	$NetBSD: byte_swap.h,v 1.4 2006/01/30 22:46:35 dsl Exp $	*/
+/*	$NetBSD: byte_swap.h,v 1.7 2010/01/14 02:06:04 joerg Exp $	*/
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2010 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,9 +36,20 @@
 #ifndef _AMD64_BYTE_SWAP_H_
 #define	_AMD64_BYTE_SWAP_H_
 
+#ifdef __x86_64__
+
 #ifdef  __GNUC__
 #include <sys/types.h>
 __BEGIN_DECLS
+
+#define	__BYTE_SWAP_U64_VARIABLE __byte_swap_u64_variable
+static __inline uint64_t __byte_swap_u64_variable(uint64_t);
+static __inline uint64_t
+__byte_swap_u64_variable(uint64_t x)
+{
+	__asm volatile ( "bswap %1" : "=r" (x) : "0" (x));
+	return (x);
+}
 
 #define	__BYTE_SWAP_U32_VARIABLE __byte_swap_u32_variable
 static __inline uint32_t __byte_swap_u32_variable(uint32_t);
@@ -67,5 +71,11 @@ __byte_swap_u16_variable(uint16_t x)
 
 __END_DECLS
 #endif
+
+#else	/*	__x86_64__	*/
+
+#include <i386/byte_swap.h>
+
+#endif	/*	__x86_64__	*/
 
 #endif /* !_AMD64_BYTE_SWAP_H_ */

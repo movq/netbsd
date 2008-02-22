@@ -1,4 +1,4 @@
-/*	$NetBSD: rz.c,v 1.22 2006/01/25 18:28:27 christos Exp $	*/
+/*	$NetBSD: rz.c,v 1.27 2017/06/22 16:46:53 flxd Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -37,7 +37,6 @@
 #include <lib/libsa/stand.h>
 #include <lib/libkern/libkern.h>
 #include <machine/dec_prom.h>
-#include <machine/stdarg.h>
 
 #include <sys/param.h>
 #include <sys/disklabel.h>
@@ -57,13 +56,8 @@ struct	rz_softc {
 };
 
 int
-rzstrategy(devdata, rw, bn, reqcnt, addr, cnt)
-	void *devdata;
-	int rw;
-	daddr_t bn;
-	size_t reqcnt;
-	void *addr;
-	size_t *cnt;	/* out: number of bytes transfered */
+rzstrategy(void *devdata, int rw, daddr_t bn, size_t reqcnt, void *addr, size_t *cnt)
+	/* cnt:	 out: number of bytes transfered */
 {
 	struct rz_softc *sc = (struct rz_softc *)devdata;
 	int part = sc->sc_part;
@@ -115,7 +109,7 @@ rzopen(struct open_file *f, ...)
 	int i;
 	char *msg;
 	char buf[DEV_BSIZE];
-	int cnt;
+	size_t cnt;
 	static char device[] = "rz(0,0,0)";
 	va_list ap;
 
@@ -129,11 +123,11 @@ rzopen(struct open_file *f, ...)
 		return (ENXIO);
 	device[5] = '0' + unit;
 	/* NOTE: only support reads for now */
-	/* Another NOTE: bootinit on the TurboChannel doesn't look at
+	/* Another NOTE: bootinit on the TURBOchannel doesn't look at
 	   the device string - it's provided for compatibility with
 	   the DS3100 PROMs.   As a consequence, it may be possible to
 	   boot from some other drive with these bootblocks on the 3100,
-	   but will not be possible on any TurboChannel machine. */
+	   but will not be possible on any TURBOchannel machine. */
 
 	if (callv == &callvec)
 		i = prom_open(device, 0);
@@ -182,8 +176,7 @@ rzopen(struct open_file *f, ...)
 
 #ifndef LIBSA_NO_DEV_CLOSE
 int
-rzclose(f)
-	struct open_file *f;
+rzclose(struct open_file *f)
 {
 	if (callv == &callvec)
 		prom_close(((struct rz_softc *)f->f_devdata)->sc_fd);

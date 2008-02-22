@@ -1,4 +1,4 @@
-/*	$NetBSD: copystr.S,v 1.8 2002/10/13 14:54:48 bjh21 Exp $	*/
+/*	$NetBSD: copystr.S,v 1.12 2018/01/24 09:04:44 skrll Exp $	*/
 
 /*
  * Copyright (c) 1995 Mark Brinicombe.
@@ -39,24 +39,20 @@
  */
 
 #include "opt_multiprocessor.h"
+#include "opt_cpuoptions.h"
 	
 #include "assym.h"
+
 #include <machine/asm.h>
 
-RCSID("$NetBSD: copystr.S,v 1.8 2002/10/13 14:54:48 bjh21 Exp $")
+#include <arm/locore.h>
+
+RCSID("$NetBSD: copystr.S,v 1.12 2018/01/24 09:04:44 skrll Exp $")
 
 #include <sys/errno.h>
 
 	.text
 	.align	0
-#ifdef MULTIPROCESSOR
-.Lcpu_info:
-	.word	_C_LABEL(cpu_info)
-#else
-.Lcurpcb:
-	.word	_C_LABEL(curpcb)
-#endif
-
 /*
  * r0 - from
  * r1 - to
@@ -66,7 +62,7 @@ RCSID("$NetBSD: copystr.S,v 1.8 2002/10/13 14:54:48 bjh21 Exp $")
  * Copy string from r0 to r1
  */
 ENTRY(copystr)
-	stmfd	sp!, {r4-r5}			/* stack is 8 byte aligned */
+	push	{r4-r5}			/* stack is 8 byte aligned */
 	teq	r2, #0x00000000
 	mov	r5, #0x00000000
 	moveq	r0, #ENAMETOOLONG
@@ -86,17 +82,12 @@ ENTRY(copystr)
 2:	teq	r3, #0x00000000
 	strne	r5, [r3]
 
-	ldmfd	sp!, {r4-r5}			/* stack is 8 byte aligned */
-	mov	pc, lr
+	pop	{r4-r5}			/* stack is 8 byte aligned */
+	RET
+END(copystr)
 
-#ifdef __PROG32
-#define SAVE_REGS	stmfd	sp!, {r4-r6}
-#define RESTORE_REGS	ldmfd	sp!, {r4-r6}
-#else
-/* Need to save R14_svc because it'll get trampled if we take a page fault. */
-#define SAVE_REGS	stmfd	sp!, {r4-r6, r14}
-#define RESTORE_REGS	ldmfd	sp!, {r4-r6, r14}
-#endif
+#define SAVE_REGS	push	{r3-r6}
+#define RESTORE_REGS	pop	{r3-r6}
 
 /*
  * r0 - user space address
@@ -114,18 +105,7 @@ ENTRY(copyinstr)
 	moveq	r0, #ENAMETOOLONG
 	beq	2f
 
-#ifdef MULTIPROCESSOR
-	/* XXX Probably not appropriate for non-Hydra SMPs */
-	stmfd	sp!, {r0-r3, r14}
-	bl	_C_LABEL(cpu_number)
-	ldr	r4, .Lcpu_info
-	ldr	r4, [r4, r0, lsl #2]
-	ldr	r4, [r4, #CI_CURPCB]
-	ldmfd	sp!, {r0-r3, r14}
-#else
-	ldr	r4, .Lcurpcb
-	ldr	r4, [r4]
-#endif
+	GET_CURPCB(r4)
 
 #ifdef DIAGNOSTIC
 	teq	r4, #0x00000000
@@ -153,7 +133,8 @@ ENTRY(copyinstr)
 	strne	r6, [r3]
 
 	RESTORE_REGS
-	mov	pc, lr
+	RET
+END(copyinstr)
 
 /*
  * r0 - kernel space address
@@ -171,18 +152,7 @@ ENTRY(copyoutstr)
 	moveq	r0, #ENAMETOOLONG
 	beq	2f
 
-#ifdef MULTIPROCESSOR
-	/* XXX Probably not appropriate for non-Hydra SMPs */
-	stmfd	sp!, {r0-r3, r14}
-	bl	_C_LABEL(cpu_number)
-	ldr	r4, .Lcpu_info
-	ldr	r4, [r4, r0, lsl #2]
-	ldr	r4, [r4, #CI_CURPCB]
-	ldmfd	sp!, {r0-r3, r14}
-#else
-	ldr	r4, .Lcurpcb
-	ldr	r4, [r4]
-#endif
+	GET_CURPCB(r4)
 
 #ifdef DIAGNOSTIC
 	teq	r4, #0x00000000
@@ -210,24 +180,25 @@ ENTRY(copyoutstr)
 	strne	r6, [r3]
 
 	RESTORE_REGS
-	mov	pc, lr
+	RET
 
 /* A fault occurred during the copy */
 .Lcopystrfault:
 	mov	r1, #0x00000000
 	str	r1, [r4, #PCB_ONFAULT]
 	RESTORE_REGS
-	mov	pc, lr
+	RET
 
 #ifdef DIAGNOSTIC
 .Lcopystrpcbfault:
 	mov	r2, r1
 	mov	r1, r0
-	adr	r0, Lcopystrpcbfaulttext
+	adr	r0, .Lcopystrpcbfaulttext
 	bic	sp, sp, #7			/* align stack to 8 bytes */
 	b	_C_LABEL(panic)
 
-Lcopystrpcbfaulttext:
+.Lcopystrpcbfaulttext:
 	.asciz	"No valid PCB during copyinoutstr() addr1=%08x addr2=%08x\n"
 	.align	0
 #endif
+END(copyoutstr)

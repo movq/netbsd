@@ -1,7 +1,7 @@
-/*	$NetBSD: pthread_barrier.c,v 1.16 2007/11/19 15:14:12 ad Exp $	*/
+/*	$NetBSD: pthread_barrier.c,v 1.20 2016/07/03 14:24:58 christos Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2003, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2003, 2006, 2007, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_barrier.c,v 1.16 2007/11/19 15:14:12 ad Exp $");
+__RCSID("$NetBSD: pthread_barrier.c,v 1.20 2016/07/03 14:24:58 christos Exp $");
 
 #include <errno.h>
 
@@ -46,102 +39,42 @@ __RCSID("$NetBSD: pthread_barrier.c,v 1.16 2007/11/19 15:14:12 ad Exp $");
 
 int
 pthread_barrier_init(pthread_barrier_t *barrier,
-    const pthread_barrierattr_t *attr, unsigned int count)
+		     const pthread_barrierattr_t *attr, unsigned int count)
 {
-	pthread_t self;
-
-#ifdef ERRORCHECK
-	if ((barrier == NULL) ||
-	    (attr && (attr->ptba_magic != _PT_BARRIERATTR_MAGIC)))
+	
+	if (attr != NULL && attr->ptba_magic != _PT_BARRIERATTR_MAGIC)
 		return EINVAL;
-#endif
-
 	if (count == 0)
 		return EINVAL;
 
-	if (barrier->ptb_magic == _PT_BARRIER_MAGIC) {
-		self = pthread__self();
-
-		/*
-		 * We're simply reinitializing the barrier to a
-		 * new count.
-		 */
-		pthread__spinlock(self, &barrier->ptb_lock);
-
-		if (barrier->ptb_magic != _PT_BARRIER_MAGIC) {
-			pthread__spinunlock(self, &barrier->ptb_lock);
-			return EINVAL;
-		}
-
-		if (!PTQ_EMPTY(&barrier->ptb_waiters)) {
-			pthread__spinunlock(self, &barrier->ptb_lock);
-			return EBUSY;
-		}
-
-		barrier->ptb_initcount = count;
-		barrier->ptb_curcount = 0;
-		barrier->ptb_generation = 0;
-
-		pthread__spinunlock(self, &barrier->ptb_lock);
-
-		return 0;
-	}
-
 	barrier->ptb_magic = _PT_BARRIER_MAGIC;
-	pthread_lockinit(&barrier->ptb_lock);
 	PTQ_INIT(&barrier->ptb_waiters);
 	barrier->ptb_initcount = count;
 	barrier->ptb_curcount = 0;
 	barrier->ptb_generation = 0;
-
 	return 0;
 }
-
 
 int
 pthread_barrier_destroy(pthread_barrier_t *barrier)
 {
-	pthread_t self;
 
-#ifdef ERRORCHECK
-	if ((barrier == NULL) || (barrier->ptb_magic != _PT_BARRIER_MAGIC))
+	if (barrier->ptb_magic != _PT_BARRIER_MAGIC)
 		return EINVAL;
-#endif
-
-	self = pthread__self();
-	pthread__spinlock(self, &barrier->ptb_lock);
-
-	if (barrier->ptb_magic != _PT_BARRIER_MAGIC) {
-		pthread__spinunlock(self, &barrier->ptb_lock);
-		return EINVAL;
-	}
-
-	if (!PTQ_EMPTY(&barrier->ptb_waiters)) {
-		pthread__spinunlock(self, &barrier->ptb_lock);
+	if (barrier->ptb_curcount != 0)
 		return EBUSY;
-	}
-
-	barrier->ptb_magic = _PT_BARRIER_DEAD;
-
-	pthread__spinunlock(self, &barrier->ptb_lock);
-
 	return 0;
 }
-
 
 int
 pthread_barrier_wait(pthread_barrier_t *barrier)
 {
+	pthread_mutex_t *interlock;
 	pthread_t self;
 	unsigned int gen;
 
-#ifdef ERRORCHECK
-	if ((barrier == NULL) || (barrier->ptb_magic != _PT_BARRIER_MAGIC))
+	if (barrier->ptb_magic != _PT_BARRIER_MAGIC)
 		return EINVAL;
-#endif
-	self = pthread__self();
-
-	pthread__spinlock(self, &barrier->ptb_lock);
 
 	/*
 	 * A single arbitrary thread is supposed to return
@@ -153,57 +86,75 @@ pthread_barrier_wait(pthread_barrier_t *barrier)
 	 * that this final thread does not actually need to block,
 	 * but instead is responsible for waking everyone else up.
 	 */
+	self = pthread__self();
+	interlock = pthread__hashlock(barrier);
+	pthread_mutex_lock(interlock);
 	if (barrier->ptb_curcount + 1 == barrier->ptb_initcount) {
 		barrier->ptb_generation++;
-		pthread__unpark_all(self, &barrier->ptb_lock,
-		    &barrier->ptb_waiters);
+		barrier->ptb_curcount = 0;
+		pthread__unpark_all(&barrier->ptb_waiters, self,
+		    interlock);
+		pthread_mutex_unlock(interlock);
 		return PTHREAD_BARRIER_SERIAL_THREAD;
 	}
-
 	barrier->ptb_curcount++;
 	gen = barrier->ptb_generation;
-	while (gen == barrier->ptb_generation) {
+	for (;;) {
 		PTQ_INSERT_TAIL(&barrier->ptb_waiters, self, pt_sleep);
-		self->pt_sleeponq = 1;
 		self->pt_sleepobj = &barrier->ptb_waiters;
-		pthread__spinunlock(self, &barrier->ptb_lock);
-		(void)pthread__park(self, &barrier->ptb_lock,
-		    &barrier->ptb_waiters, NULL, 0,
-		    &barrier->ptb_waiters);
-		pthread__spinlock(self, &barrier->ptb_lock);
+		(void)pthread__park(self, interlock, &barrier->ptb_waiters,
+		    NULL, 0, __UNVOLATILE(&interlock->ptm_waiters));
+		if (__predict_true(gen != barrier->ptb_generation)) {
+			break;
+		}
+		pthread_mutex_lock(interlock);
+		if (gen != barrier->ptb_generation) {
+			pthread_mutex_unlock(interlock);
+			break;
+		}
 	}
-	pthread__spinunlock(self, &barrier->ptb_lock);
 
 	return 0;
 }
 
+#ifdef _PTHREAD_PSHARED
+int
+pthread_barrierattr_getpshared(const pthread_barrierattr_t * __restrict attr,
+    int * __restrict pshared)
+{
+
+	*pshared = PTHREAD_PROCESS_PRIVATE;
+	return 0;
+}
+
+int
+pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared)
+{
+
+	switch(pshared) {
+	case PTHREAD_PROCESS_PRIVATE:
+		return 0;
+	case PTHREAD_PROCESS_SHARED:
+		return ENOSYS;
+	}
+	return EINVAL;
+}
+#endif
 
 int
 pthread_barrierattr_init(pthread_barrierattr_t *attr)
 {
 
-#ifdef ERRORCHECK
-	if (attr == NULL)
-		return EINVAL;
-#endif
-
 	attr->ptba_magic = _PT_BARRIERATTR_MAGIC;
-
 	return 0;
 }
-
 
 int
 pthread_barrierattr_destroy(pthread_barrierattr_t *attr)
 {
 
-#ifdef ERRORCHECK
-	if ((attr == NULL) ||
-	    (attr->ptba_magic != _PT_BARRIERATTR_MAGIC))
+	if (attr->ptba_magic != _PT_BARRIERATTR_MAGIC)
 		return EINVAL;
-#endif
-
 	attr->ptba_magic = _PT_BARRIERATTR_DEAD;
-
 	return 0;
 }

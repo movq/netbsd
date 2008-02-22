@@ -1,4 +1,4 @@
-/*	$NetBSD: tcpdchk.c,v 1.11 2003/07/13 12:07:16 itojun Exp $	*/
+/*	$NetBSD: tcpdchk.c,v 1.13 2018/01/23 21:06:26 sevan Exp $	*/
 
  /*
   * tcpdchk - examine all tcpd access control rules and inetd.conf entries
@@ -21,7 +21,7 @@
 #if 0
 static char sccsid[] = "@(#) tcpdchk.c 1.8 97/02/12 02:13:25";
 #else
-__RCSID("$NetBSD: tcpdchk.c,v 1.11 2003/07/13 12:07:16 itojun Exp $");
+__RCSID("$NetBSD: tcpdchk.c,v 1.13 2018/01/23 21:06:26 sevan Exp $");
 #endif
 #endif
 
@@ -65,33 +65,31 @@ __RCSID("$NetBSD: tcpdchk.c,v 1.11 2003/07/13 12:07:16 itojun Exp $");
  /*
   * Stolen from hosts_access.c...
   */
-static char sep[] = ", \t\n";
+static const char sep[] = ", \t\n";
 
 #define	BUFLEN 2048
 
 int     resident = 0;
 int     hosts_access_verbose = 0;
-char   *hosts_allow_table = HOSTS_ALLOW;
-char   *hosts_deny_table = HOSTS_DENY;
+const char *hosts_allow_table = HOSTS_ALLOW;
+const char *hosts_deny_table = HOSTS_DENY;
 extern jmp_buf tcpd_buf;
 
  /*
   * Local stuff.
   */
-static void usage __P((void));
-static void parse_table __P((char *, struct request_info *));
-static void print_list __P((char *, char *));
-static void check_daemon_list __P((char *));
-static void check_client_list __P((char *));
-static void check_daemon __P((char *));
-static void check_user __P((char *));
+static void usage(void);
+static void parse_table(const char *, struct request_info *);
+static void print_list(char *, char *);
+static void check_daemon_list(char *);
+static void check_client_list(char *);
+static void check_daemon(char *);
+static void check_user(char *);
 #ifdef INET6
-static int check_inet_addr __P((char *));
+static int check_inet_addr(char *);
 #endif
-static int check_host __P((char *));
-static int reserved_name __P((char *));
-
-int main __P((int, char **));
+static int check_host(char *);
+static int reserved_name(char *);
 
 #define PERMIT	1
 #define DENY	0
@@ -104,9 +102,8 @@ static char *myname;
 static int allow_check;
 static char *inetcf;
 
-int     main(argc, argv)
-int     argc;
-char  **argv;
+int
+main(int argc, char **argv)
 {
     struct request_info request;
     struct stat st;
@@ -195,7 +192,8 @@ char  **argv;
 
 /* usage - explain */
 
-static void usage()
+static void
+usage(void)
 {
     fprintf(stderr, "usage: %s [-a] [-d] [-i inet_conf] [-v]\n", myname);
     fprintf(stderr, "	-a: report rules with implicit \"ALLOW\" at end\n");
@@ -207,22 +205,16 @@ static void usage()
 
 /* parse_table - like table_match(), but examines _all_ entries */
 
-static void parse_table(table, request)
-char   *table;
-struct request_info *request;
+static void
+parse_table(const char *table, struct request_info *request)
 {
     FILE   *fp;
-    int     real_verdict;
+    volatile int     real_verdict;
     char    sv_list[BUFLEN];		/* becomes list of daemons */
     char   *cl_list;			/* becomes list of requests */
     char   *sh_cmd;			/* becomes optional shell command */
     int     verdict;
-    struct tcpd_context saved_context;
-#ifdef __GNUC__
-    /* XXX hack to avoid gcc warnings */
-    (void) &real_verdict;
-    (void) &saved_context;
-#endif
+    volatile struct tcpd_context saved_context;
 
     saved_context = tcpd_context;		/* stupid compilers */
 
@@ -287,9 +279,7 @@ struct request_info *request;
 
 /* print_list - pretty-print a list */
 
-static void print_list(title, list)
-char   *title;
-char   *list;
+static void print_list(char *title, char *list)
 {
     char    buf[BUFLEN];
     char   *cp;
@@ -309,8 +299,7 @@ char   *list;
 
 /* check_daemon_list - criticize daemon list */
 
-static void check_daemon_list(list)
-char   *list;
+static void check_daemon_list(char *list)
 {
     char    buf[BUFLEN];
     char   *cp;
@@ -337,8 +326,7 @@ char   *list;
 
 /* check_client_list - criticize client list */
 
-static void check_client_list(list)
-char   *list;
+static void check_client_list(char *list)
 {
     char    buf[BUFLEN];
     char   *cp;
@@ -376,8 +364,7 @@ char   *list;
 
 /* check_daemon - criticize daemon pattern */
 
-static void check_daemon(pat)
-char   *pat;
+static void check_daemon(char *pat)
 {
     if (pat[0] == '@') {
 	tcpd_warn("%s: daemon name begins with \"@\"", pat);
@@ -408,8 +395,7 @@ char   *pat;
 
 /* check_user - criticize user pattern */
 
-static void check_user(pat)
-char   *pat;
+static void check_user(char *pat)
 {
     if (pat[0] == '@') {			/* @netgroup */
 	tcpd_warn("%s: user name begins with \"@\"", pat);
@@ -429,8 +415,7 @@ char   *pat;
 }
 
 #ifdef INET6
-static int check_inet_addr(pat)
-char	*pat;
+static int check_inet_addr(char *pat)
 {
 	struct addrinfo *res;
 
@@ -444,8 +429,7 @@ char	*pat;
 #endif
 
 /* check_host - criticize host pattern */
-static int check_host(pat)
-char   *pat;
+static int check_host(char *pat)
 {
     char   *mask;
     int     addr_count = 1;
@@ -508,8 +492,7 @@ char   *pat;
 
 /* reserved_name - determine if name is reserved */
 
-static int reserved_name(pat)
-char   *pat;
+static int reserved_name(char *pat)
 {
     return (STR_EQ(pat, unknown)
 	    || STR_EQ(pat, "KNOWN")

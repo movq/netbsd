@@ -1,4 +1,4 @@
-/*	$NetBSD: herror.c,v 1.6 2007/03/30 20:23:04 ghen Exp $	*/
+/*	$NetBSD: herror.c,v 1.10 2015/02/24 17:56:20 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -12,11 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- * 	This product includes software developed by the University of
- * 	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  * 
@@ -53,9 +49,10 @@
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #ifdef notdef
-static const char rcsid[] = "Id: herror.c,v 1.3.18.1 2005/04/27 05:01:09 sra Exp";
+static const char sccsid[] = "@(#)herror.c	8.1 (Berkeley) 6/4/93";
+static const char rcsid[] = "Id: herror.c,v 1.4 2005/04/27 04:56:41 sra Exp";
 #else
-__RCSID("$NetBSD: herror.c,v 1.6 2007/03/30 20:23:04 ghen Exp $");
+__RCSID("$NetBSD: herror.c,v 1.10 2015/02/24 17:56:20 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -113,14 +110,14 @@ herror(const char *s) {
 		v->iov_len = 2;
 		v++;
 	}
-	DE_CONST(hstrerror(h_errno), t);
+	DE_CONST(hstrerror(*__h_errno()), t);
 	v->iov_base = t;
 	v->iov_len = strlen(v->iov_base);
 	v++;
 	DE_CONST("\n", t);
 	v->iov_base = t;
 	v->iov_len = 1;
-	writev(STDERR_FILENO, iov, (v - iov) + 1);
+	(void)writev(STDERR_FILENO, iov, (int)((v - iov) + 1));
 }
 
 /*%

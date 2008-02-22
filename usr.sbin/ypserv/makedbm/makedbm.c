@@ -1,4 +1,4 @@
-/*	$NetBSD: makedbm.c,v 1.21 2005/06/20 00:08:35 lukem Exp $	*/
+/*	$NetBSD: makedbm.c,v 1.25 2011/08/30 21:10:28 joerg Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: makedbm.c,v 1.21 2005/06/20 00:08:35 lukem Exp $");
+__RCSID("$NetBSD: makedbm.c,v 1.25 2011/08/30 21:10:28 joerg Exp $");
 #endif
 
 #include <sys/param.h>
@@ -42,7 +37,6 @@ __RCSID("$NetBSD: makedbm.c,v 1.21 2005/06/20 00:08:35 lukem Exp $");
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,13 +50,12 @@ __RCSID("$NetBSD: makedbm.c,v 1.21 2005/06/20 00:08:35 lukem Exp $");
 #include "ypdb.h"
 #include "ypdef.h"
 
-int	main(int, char *[]);
-void	usage(void);
-int	add_record(DBM *, char *, char *, int);
-char	*file_date(char *);
-void	list_database(char *);
-void	create_database(char *, char *, char *, char *, char *, char *,
-			int, int, int);
+__dead static void	usage(void);
+static int	add_record(DBM *, const char *, const char *, int);
+static char	*file_date(char *);
+static void	list_database(char *);
+static void	create_database(char *, char *, char *, char *, char *,
+			        char *, int, int, int);
 
 int
 main(int argc, char *argv[])
@@ -149,13 +142,13 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-int
-add_record(DBM *db, char *str1, char *str2, int check)
+static int
+add_record(DBM *db, const char *str1, const char *str2, int check)
 {
 	datum key, val;
 	int status;
 
-	key.dptr = str1;
+	key.dptr = __UNCONST(str1);
 	key.dsize = strlen(str1);
 
 	if (check) {
@@ -164,7 +157,7 @@ add_record(DBM *db, char *str1, char *str2, int check)
 		if (val.dptr != NULL)
 			return 0;	/* already there */
 	}
-	val.dptr = str2;
+	val.dptr = __UNCONST(str2);
 	val.dsize = strlen(str2);
 	status = ypdb_store(db, key, val, YPDB_INSERT);
 
@@ -175,7 +168,7 @@ add_record(DBM *db, char *str1, char *str2, int check)
 	return 0;
 }
 
-char *
+static char *
 file_date(char *filename)
 {
 	struct stat finfo;
@@ -196,13 +189,13 @@ file_date(char *filename)
 	return datestr;
 }
 
-void
+static void
 list_database(char *database)
 {
 	DBM *db;
 	datum key, val;
 
-	db = ypdb_open(database, O_RDONLY, 0444);
+	db = ypdb_open(database);
 	if (db == NULL)
 		err(1, "can't open database `%s'", database);
 
@@ -226,7 +219,7 @@ list_database(char *database)
 	ypdb_close(db);
 }
 
-void
+static void
 create_database(char *infile, char *database, char *yp_input_file,
 		char *yp_output_file, char *yp_master_name,
 		char *yp_domain_name, int bflag, int lflag, int sflag)
@@ -237,14 +230,12 @@ create_database(char *infile, char *database, char *yp_input_file,
 	size_t len;
 	char *p, *k, *v, *slash;
 	DBM *new_db;
-	static char mapname[] = "ypdbXXXXXX";
+	static const char template[] = "ypdbXXXXXX";
 	char db_mapname[MAXPATHLEN + 1], db_outfile[MAXPATHLEN + 1];
-	char db_tempname[MAXPATHLEN + 1];
 	char empty_str[] = "";
 
 	memset(db_mapname, 0, sizeof(db_mapname));
 	memset(db_outfile, 0, sizeof(db_outfile));
-	memset(db_tempname, 0, sizeof(db_tempname));
 
 	if (strcmp(infile, "-") == 0)
 		data_file = stdin;
@@ -267,19 +258,16 @@ create_database(char *infile, char *database, char *yp_input_file,
 
 	/* NOTE: database is now directory where map goes ! */
 
-	if (strlen(database) + strlen(mapname) + strlen(YPDB_SUFFIX) >
+	if (strlen(database) + strlen(template) + strlen(YPDB_SUFFIX) >
 	    (sizeof(db_mapname) - 1))
 		errx(1, "directory name `%s' too long", database);
 
-	snprintf(db_tempname, sizeof(db_tempname), "%s%s",
-	    database, mapname);
-	mktemp(db_tempname);	/* OK */
 	snprintf(db_mapname, sizeof(db_mapname), "%s%s",
-	    db_tempname, YPDB_SUFFIX);
+	    database, template);
 
-	new_db = ypdb_open(db_tempname, O_RDWR | O_CREAT | O_EXCL, 0644);
+	new_db = ypdb_mktemp(db_mapname);
 	if (new_db == NULL)
-		err(1, "can't create temp database `%s'", db_tempname);
+		err(1, "can't create temp database `%s'", db_mapname);
 
 	for (;
 	    (p = fparseln(data_file, &len, &line_no, NULL, FPARSELN_UNESCALL));
@@ -357,7 +345,7 @@ bad_record:
 	}
 }
 
-void
+static void
 usage(void)
 {
 

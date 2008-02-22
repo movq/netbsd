@@ -1,4 +1,4 @@
-/*	$NetBSD: if_we_pnpbus.c,v 1.2 2007/10/17 19:56:52 garbled Exp $	*/
+/*	$NetBSD: if_we_pnpbus.c,v 1.9 2012/10/27 17:18:08 chs Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.2 2007/10/17 19:56:52 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.9 2012/10/27 17:18:08 chs Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -74,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.2 2007/10/17 19:56:52 garbled Exp
 
 #include <net/if_ether.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/isa_machdep.h>
 #include <machine/residual.h>
@@ -86,10 +79,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.2 2007/10/17 19:56:52 garbled Exp
 
 #include <prep/pnpbus/pnpbusvar.h>
 
-int	we_pnpbus_probe(struct device *, struct cfdata *, void *);
-void	we_pnpbus_attach(struct device *, struct device *, void *);
+int	we_pnpbus_probe(device_t, cfdata_t, void *);
+void	we_pnpbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(we_pnpbus, sizeof(struct we_softc),
+CFATTACH_DECL_NEW(we_pnpbus, sizeof(struct we_softc),
     we_pnpbus_probe, we_pnpbus_attach, NULL, NULL);
 
 extern struct cfdriver we_cd;
@@ -131,7 +124,7 @@ do { \
 } while (0)
 
 int
-we_pnpbus_probe(struct device *parent, struct cfdata *cf, void *aux)
+we_pnpbus_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pnpbus_dev_attach_args *pna = aux;
 	int ret = 0;
@@ -149,9 +142,9 @@ we_pnpbus_probe(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-we_pnpbus_attach(struct device *parent, struct device *self, void *aux)
+we_pnpbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct we_softc *wsc = (struct we_softc *)self;
+	struct we_softc *wsc = device_private(self);
 	struct dp8390_softc *sc = &wsc->sc_dp8390;
 	struct pnpbus_dev_attach_args *pna = aux;
 	struct pnpbus_irq *irq;
@@ -160,6 +153,8 @@ we_pnpbus_attach(struct device *parent, struct device *self, void *aux)
 	bus_size_t memsize = 0x4000;
 	const char *typestr;
 	int memfound = 0, i, irqnum;
+
+	sc->sc_dev = self;
 
 	nict = asict = pna->pna_iot;
 	memt = pna->pna_memt;
@@ -245,13 +240,13 @@ we_pnpbus_attach(struct device *parent, struct device *self, void *aux)
 		/* some cards think they are level.  force them to edge */
 		if (irq->flags & 0x0c)
 			irq->flags = 0x01;
-		if (!LEGAL_IRQ(irqnum))
+		if (!LEGAL_HWIRQ_P(irqnum))
 			continue;
 		if (irqnum < 2)
 			continue;
 		break;
 	}
-	wsc->sc_ih = pnpbus_intr_establish(i, IPL_NET, dp8390_intr, sc,
+	wsc->sc_ih = pnpbus_intr_establish(i, IPL_NET, IST_PNP, dp8390_intr, sc,
 	    &pna->pna_res);
 	if (wsc->sc_ih == NULL)
 		aprint_error("%s: can't establish interrupt\n",
@@ -259,12 +254,7 @@ we_pnpbus_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static const char *
-we_params(asict, asich, typep, memsizep, flagp, is790p)
-	bus_space_tag_t asict;
-	bus_space_handle_t asich;
-	u_int8_t *typep, *flagp;
-	bus_size_t *memsizep;
-	int *is790p;
+we_params(bus_space_tag_t asict, bus_space_handle_t asich, u_int8_t *typep, bus_size_t *memsizep, u_int8_t *flagp, int *is790p)
 {
 	const char *typestr;
 	bus_size_t memsize;

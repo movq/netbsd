@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.32 2007/11/20 17:13:04 ad Exp $	*/
+/*	$NetBSD: zs.c,v 1.39 2015/02/18 16:47:58 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.32 2007/11/20 17:13:04 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.39 2015/02/18 16:47:58 macallan Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -76,6 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.32 2007/11/20 17:13:04 ad Exp $");
 #include <dev/arcbios/arcbios.h>
 #include <dev/arcbios/arcbiosvar.h>
 
+#include "ioconf.h"
+
 /*
  * Some warts needed by z8530tty.c -
  * The default parity REALLY needs to be the same as the PROM uses,
@@ -99,10 +94,10 @@ int zs_def_cflag = (CREAD | CS8 | HUPCL);
 
 /* The layout of this is hardware-dependent (padding, order). */
 struct zschan {
-	u_char   pad1[3];
-	volatile u_char	zc_csr;		/* ctrl,status, and indirect access */
-	u_char   pad2[3];
-	volatile u_char	zc_data;	/* data */
+	uint8_t pad1[3];
+	volatile uint8_t zc_csr;	/* ctrl,status, and indirect access */
+	uint8_t pad2[3];
+	volatile uint8_t zc_data;	/* data */
 };
 
 struct zsdevice {
@@ -132,7 +127,12 @@ struct consdev zs_cn = {
 	zscninit,
 	zscngetc,
 	zscnputc,
-	zscnpollc
+	zscnpollc,
+	NULL,
+	NULL,
+	NULL,
+	NODEV,
+	CN_NORMAL
 };
 
 /* Flags from cninit() */
@@ -143,7 +143,7 @@ static int zs_conschan = -1;
 static int zs_defspeed = ZS_DEFSPEED;
 static volatile int zssoftpending;
 
-static u_char zs_init_reg[16] = {
+static uint8_t zs_init_reg[16] = {
 	0,				/* 0: CMD (reset, etc.) */
 	0,				/* 1: No interrupts yet. */
 	ZSHARD_PRI,			/* 2: IVECT */
@@ -168,14 +168,12 @@ static u_char zs_init_reg[16] = {
  ****************************************************************/
 
 /* Definition of the driver for autoconfig. */
-static int	zs_hpc_match (struct device *, struct cfdata *, void *);
-static void	zs_hpc_attach (struct device *, struct device *, void *);
-static int	zs_print (void *, const char *name);
+static int	zs_hpc_match(device_t, cfdata_t, void *);
+static void	zs_hpc_attach(device_t, device_t, void *);
+static int	zs_print(void *, const char *name);
 
-CFATTACH_DECL(zsc_hpc, sizeof(struct zsc_softc),
+CFATTACH_DECL_NEW(zsc_hpc, sizeof(struct zsc_softc),
     zs_hpc_match, zs_hpc_attach, NULL, NULL);
-
-extern struct	cfdriver zsc_cd;
 
 static int	zshard (void *);
 void		zssoft (void *);
@@ -188,7 +186,7 @@ void		zs_putc (void *, int);
  * Is the zs chip present?
  */
 static int
-zs_hpc_match(struct device *parent, struct cfdata *cf, void *aux)
+zs_hpc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct hpc_attach_args *ha = aux;
 
@@ -205,9 +203,9 @@ zs_hpc_match(struct device *parent, struct cfdata *cf, void *aux)
  * not set up the keyboard as ttya, etc.
  */
 static void
-zs_hpc_attach(struct device *parent, struct device *self, void *aux)
+zs_hpc_attach(device_t parent, device_t self, void *aux)
 {
-	struct zsc_softc *zsc = (void *) self;
+	struct zsc_softc *zsc = device_private(self);
 	struct hpc_attach_args *haa = aux;
 	struct zsc_attach_args zsc_args;
 	struct zs_chanstate *cs;
@@ -215,18 +213,20 @@ zs_hpc_attach(struct device *parent, struct device *self, void *aux)
 	int    zs_unit, channel, err, s;
 	const char  *promconsdev;
 
-	promconsdev = ARCBIOS->GetEnvironmentVariable("ConsoleOut");
+	promconsdev = arcbios_GetEnvironmentVariable("ConsoleOut");
 
+	zsc->zsc_dev = self;
 	zsc->zsc_bustag = haa->ha_st;
 	if ((err = bus_space_subregion(haa->ha_st, haa->ha_sh,
 				       haa->ha_devoff, 0x10,
 				       &zsc->zsc_base)) != 0) {
-		printf(": unable to map 85c30 registers, error = %d\n", err);
+		aprint_error(": unable to map 85c30 registers, error = %d\n",
+		    err);
 		return;
 	}
 
-	zs_unit = device_unit(&zsc->zsc_dev);
-	printf("\n");
+	zs_unit = device_unit(self);
+	aprint_normal("\n");
 
 	/*
 	 * Initialize software state for each channel.
@@ -254,7 +254,7 @@ zs_hpc_attach(struct device *parent, struct device *self, void *aux)
 					zs_chan_offset[channel],
 					sizeof(struct zschan),
 					&ch->cs_regs) != 0) {
-			printf(": cannot map regs\n");
+			aprint_error_dev(self, "cannot map regs\n");
 			return;
 		}
 		ch->cs_bustag = zsc->zsc_bustag;
@@ -316,7 +316,7 @@ zs_hpc_attach(struct device *parent, struct device *self, void *aux)
 		 */
 		if (!config_found(self, (void *)&zsc_args, zs_print)) {
 			/* No sub-driver.  Just reset it. */
-			u_char reset = (channel == 0) ?
+			uint8_t reset = (channel == 0) ?
 				ZSWR9_A_RESET : ZSWR9_B_RESET;
 
 			s = splhigh();
@@ -330,7 +330,7 @@ zs_hpc_attach(struct device *parent, struct device *self, void *aux)
 	cpu_intr_establish(haa->ha_irq, IPL_TTY, zshard, NULL);
 
 	evcnt_attach_dynamic(&zsc->zsc_intrcnt, EVCNT_TYPE_INTR, NULL,
-			     self->dv_xname, "intr");
+			     device_xname(self), "intr");
 
 	/*
 	 * Set the master interrupt enable and interrupt vector.
@@ -371,7 +371,7 @@ zshard(void *arg)
 
 	rval = 0;
 	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
-		zsc = zsc_cd.cd_devs[unit];
+		zsc = device_lookup_private(&zsc_cd, unit);
 		if (zsc == NULL)
 			continue;
 
@@ -415,7 +415,7 @@ zssoft(void *arg)
 	/* Make sure we call the tty layer at spltty. */
 	s = spltty();
 	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
-		zsc = zsc_cd.cd_devs[unit];
+		zsc = device_lookup_private(&zsc_cd, unit);
 		if (zsc == NULL)
 			continue;
 		(void) zsc_intr_soft(zsc);
@@ -444,7 +444,7 @@ zs_get_speed(struct zs_chanstate *cs)
 int
 zs_set_speed(struct zs_chanstate *cs, int bps)
 {
-	int tconst, real_bps;
+	int tconst;
 
 #if 0
 	while (!(zs_read_csr(cs) & ZSRR0_TX_READY))
@@ -464,11 +464,11 @@ zs_set_speed(struct zs_chanstate *cs, int bps)
 	if (tconst < 0)
 		return (EINVAL);
 
+#if 0
 	/* Convert back to make sure we can do it. */
-	real_bps = TCONST_TO_BPS(cs->cs_brg_clk, tconst);
+	int real_bps = TCONST_TO_BPS(cs->cs_brg_clk, tconst);
 
 	/* XXX - Allow some tolerance here? */
-#if 0
 	if (real_bps != bps)
 		return (EINVAL);
 #endif
@@ -524,67 +524,75 @@ zs_set_modes(struct zs_chanstate *cs, int cflag)
  * Read or write the chip with suitable delays.
  */
 
-u_char
-zs_read_reg(struct zs_chanstate *cs, u_char reg)
+uint8_t
+zs_read_reg(struct zs_chanstate *cs, uint8_t reg)
 {
-	u_char val;
+	uint8_t val;
 	struct zs_channel *zsc = (struct zs_channel *)cs;
 
-	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs, ZS_REG_CSR, reg);
+	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs,
+	    (ZS_REG_CSR << 2) + 3, reg);
 	ZS_DELAY();
-	val = bus_space_read_1(zsc->cs_bustag, zsc->cs_regs, ZS_REG_CSR);
+	val = bus_space_read_1(zsc->cs_bustag, zsc->cs_regs,
+	    (ZS_REG_CSR << 2) + 3);
 	ZS_DELAY();
 	return val;
 }
 
 void
-zs_write_reg(struct zs_chanstate *cs, u_char reg, u_char val)
+zs_write_reg(struct zs_chanstate *cs, uint8_t reg, uint8_t val)
 {
 	struct zs_channel *zsc = (struct zs_channel *)cs;
 
-	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs, ZS_REG_CSR, reg);
+	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs,
+	    (ZS_REG_CSR << 2) + 3, reg);
 	ZS_DELAY();
-	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs, ZS_REG_CSR, val);
+	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs,
+	    (ZS_REG_CSR << 2) + 3, val);
 	ZS_DELAY();
 }
 
-u_char
+uint8_t
 zs_read_csr(struct zs_chanstate *cs)
 {
 	struct zs_channel *zsc = (struct zs_channel *)cs;
-	register u_char val;
+	uint8_t val;
 
-	val = bus_space_read_1(zsc->cs_bustag, zsc->cs_regs, ZS_REG_CSR);
+	val = bus_space_read_1(zsc->cs_bustag, zsc->cs_regs,
+	    (ZS_REG_CSR << 2) + 3);
 	ZS_DELAY();
 	return val;
 }
 
 void
-zs_write_csr(struct zs_chanstate *cs, u_char val)
+zs_write_csr(struct zs_chanstate *cs, uint8_t val)
 {
 	struct zs_channel *zsc = (struct zs_channel *)cs;
 
-	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs, ZS_REG_CSR, val);
+	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs,
+	    (ZS_REG_CSR << 2) + 3, val);
 	ZS_DELAY();
 }
 
-u_char
+uint8_t
 zs_read_data(struct zs_chanstate *cs)
 {
 	struct zs_channel *zsc = (struct zs_channel *)cs;
-	register u_char val;
+	uint8_t val;
 
-	val = bus_space_read_1(zsc->cs_bustag, zsc->cs_regs, ZS_REG_DATA);
+	val = bus_space_read_1(zsc->cs_bustag, zsc->cs_regs,
+	    (ZS_REG_DATA << 2) + 3);
 	ZS_DELAY();
 	return val;
 }
 
 void
-zs_write_data(struct zs_chanstate *cs, u_char val)
+zs_write_data(struct zs_chanstate *cs, uint8_t val)
 {
 	struct zs_channel *zsc = (struct zs_channel *)cs;
 
-	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs, ZS_REG_DATA, val);
+	bus_space_write_1(zsc->cs_bustag, zsc->cs_regs,
+	    (ZS_REG_DATA << 2) + 3, val);
 	ZS_DELAY();
 }
 
@@ -730,7 +738,7 @@ zscninit(struct consdev *cn)
 	extern const struct cdevsw zstty_cdevsw;
 	const char* consdev;
 
-	if ((consdev = ARCBIOS->GetEnvironmentVariable("ConsoleOut")) == NULL)
+	if ((consdev = arcbios_GetEnvironmentVariable("ConsoleOut")) == NULL)
 		panic("zscninit without valid ARCS ConsoleOut setting!");
 
 	if (strlen(consdev) != 9 ||

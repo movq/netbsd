@@ -1,4 +1,4 @@
-/*	$NetBSD: cac_eisa.c,v 1.18 2007/10/19 11:59:41 ad Exp $	*/
+/*	$NetBSD: cac_eisa.c,v 1.25 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,12 +61,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.18 2007/10/19 11:59:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.25 2016/09/27 03:33:32 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-
+#include <sys/module.h>
 #include <sys/bus.h>
 #include <sys/intr.h>
 
@@ -83,12 +76,14 @@ __KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.18 2007/10/19 11:59:41 ad Exp $");
 #include <dev/ic/cacreg.h>
 #include <dev/ic/cacvar.h>
 
+#include "ioconf.h"
+
 #define CAC_EISA_SLOT_OFFSET		0x0c88
 #define CAC_EISA_IOSIZE			0x0017
 #define CAC_EISA_IOCONF			0x38
 
-static void	cac_eisa_attach(struct device *, struct device *, void *);
-static int	cac_eisa_match(struct device *, struct cfdata *, void *);
+static void	cac_eisa_attach(device_t, device_t, void *);
+static int	cac_eisa_match(device_t, cfdata_t, void *);
 
 static struct	cac_ccb *cac_eisa_l0_completed(struct cac_softc *);
 static int	cac_eisa_l0_fifo_full(struct cac_softc *);
@@ -96,8 +91,8 @@ static void	cac_eisa_l0_intr_enable(struct cac_softc *, int);
 static int	cac_eisa_l0_intr_pending(struct cac_softc *);
 static void	cac_eisa_l0_submit(struct cac_softc *, struct cac_ccb *);
 
-CFATTACH_DECL(cac_eisa, sizeof(struct cac_softc),
-    cac_eisa_match, cac_eisa_attach, NULL, NULL);
+CFATTACH_DECL3_NEW(cac_eisa, sizeof(struct cac_softc),
+    cac_eisa_match, cac_eisa_attach, NULL, NULL, cac_rescan, NULL, 0);
 
 static const struct cac_linkage cac_eisa_l0 = {
 	cac_eisa_l0_completed,
@@ -120,8 +115,7 @@ static struct cac_eisa_type {
 };
 
 static int
-cac_eisa_match(struct device *parent, struct cfdata *match,
-    void *aux)
+cac_eisa_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct eisa_attach_args *ea;
 	int i;
@@ -136,7 +130,7 @@ cac_eisa_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-cac_eisa_attach(struct device *parent, struct device *self, void *aux)
+cac_eisa_attach(device_t parent, device_t self, void *aux)
 {
 	struct eisa_attach_args *ea;
 	bus_space_handle_t ioh;
@@ -146,6 +140,7 @@ cac_eisa_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_tag_t iot;
 	const char *intrstr;
 	int irq, i;
+	char intrbuf[EISA_INTRSTR_LEN];
 
 	ea = aux;
 	sc = device_private(self);
@@ -154,10 +149,11 @@ cac_eisa_attach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(iot, EISA_SLOT_ADDR(ea->ea_slot) +
 	    CAC_EISA_SLOT_OFFSET, CAC_EISA_IOSIZE, 0, &ioh)) {
-		printf("can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
+	sc->sc_dev = self;
 	sc->sc_iot = iot;
 	sc->sc_ioh = ioh;
 	sc->sc_dmat = ea->ea_dmat;
@@ -179,22 +175,22 @@ cac_eisa_attach(struct device *parent, struct device *self, void *aux)
 		irq = 15;
 		break;
 	default:
-		printf("controller on invalid IRQ\n");
+		aprint_error(": controller on invalid IRQ\n");
 		return;
 	}
 
 	if (eisa_intr_map(ec, irq, &ih)) {
-		printf("can't map interrupt (%d)\n", irq);
+		aprint_error(": can't map interrupt (%d)\n", irq);
 		return;
 	}
 
-	intrstr = eisa_intr_string(ec, ih);
+	intrstr = eisa_intr_string(ec, ih, intrbuf, sizeof(intrbuf));
 	if ((sc->sc_ih = eisa_intr_establish(ec, ih, IST_LEVEL, IPL_BIO,
 	    cac_intr, sc)) == NULL) {
-		printf("can't establish interrupt");
+		aprint_error(": can't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 
@@ -205,7 +201,7 @@ cac_eisa_attach(struct device *parent, struct device *self, void *aux)
 		if (strcmp(ea->ea_idstring, cac_eisa_type[i].ct_prodstr) == 0)
 			break;
 
-	printf(": Compaq %s\n", cac_eisa_type[i].ct_typestr);
+	aprint_normal(": Compaq %s\n", cac_eisa_type[i].ct_typestr);
 	memcpy(&sc->sc_cl, cac_eisa_type[i].ct_linkage, sizeof(sc->sc_cl));
 	cac_init(sc, intrstr, 0);
 }
@@ -298,4 +294,45 @@ cac_eisa_l0_intr_enable(struct cac_softc *sc, int state)
 		cac_outb(sc, CAC_EISAREG_SYSTEM_MASK, CAC_INTR_ENABLE);
 	} else
 		cac_outb(sc, CAC_EISAREG_SYSTEM_MASK, CAC_INTR_DISABLE);
+}
+
+MODULE(MODULE_CLASS_DRIVER, cac_eisa, "cac");	/* No eisa module yet! */
+
+#ifdef _MODULE
+/*
+ * XXX Don't allow ioconf.c to redefine the "struct cfdriver cac_cd"
+ * XXX it will be defined in the common-code module
+ */
+#undef  CFDRIVER_DECL
+#define CFDRIVER_DECL(name, class, attr)
+#include "ioconf.c"
+#endif
+ 
+static int
+cac_eisa_modcmd(modcmd_t cmd, void *opaque)
+{
+	int error = 0;
+ 
+#ifdef _MODULE
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		/* 
+		 * We skip over the first entry in cfdriver[] array
+		 * since the cfdriver is attached by the common
+		 * (non-attachment-specific) code.
+		 */
+		error = config_init_component(&cfdriver_ioconf_cac_eisa[1],
+		    cfattach_ioconf_cac_eisa, cfdata_ioconf_cac_eisa);
+		break;
+	case MODULE_CMD_FINI:
+		error = config_fini_component(&cfdriver_ioconf_cac_eisa[1],  
+		    cfattach_ioconf_cac_eisa, cfdata_ioconf_cac_eisa);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+#endif
+
+	return error;
 }

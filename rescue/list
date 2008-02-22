@@ -1,10 +1,11 @@
-#	$NetBSD: list,v 1.32 2007/12/31 15:31:41 ad Exp $
+#	$NetBSD: list,v 1.49 2018/04/11 00:26:38 rin Exp $
 
 SRCDIRS	bin
 
 PROG	cat
 PROG	chio
 PROG	chmod
+PROG	cgdconfig
 PROG	cp
 PROG	csh
 PROG	date
@@ -45,6 +46,7 @@ PROG	atactl
 PROG	badsect
 PROG	brconfig
 PROG	ccdconfig
+PROG	chown		chgrp
 PROG	clri
 PROG	disklabel
 PROG	dkctl
@@ -59,12 +61,14 @@ PROG	fsck_lfs
 PROG	fsck_msdos
 PROG	fsdb
 PROG	fsirand
+PROG	gpt
 PROG	ifconfig
 PROG	init		init.bak
 PROG	lmcconfig
 PROG	mbrlabel
 PROG	mknod
 PROG	modload
+PROG	modstat
 PROG	modunload
 PROG	mount
 PROG	mount_ados
@@ -81,9 +85,10 @@ PROG	mount_nfs
 PROG	mount_ntfs
 PROG	mount_null
 PROG	mount_overlay
-PROG	mount_portal
 PROG	mount_procfs
 PROG	mount_smbfs
+SPECIAL	mount_smbfs	srcdir	external/bsd/smbfs/sbin/mount_smbfs
+LIBS	${SMB_LIBDIR}/libsmb.a
 PROG	mount_tmpfs
 PROG	mount_umap
 PROG	mount_union
@@ -123,24 +128,24 @@ PROG	gzip		gunzip gzcat zcat
 PROG	kdump
 PROG	ktrace
 PROG	ktruss
+PROG	progress
 
-PROG	ldd
-SPECIAL ldd		srcdir	usr.bin/ldd/${LDD_CMD}
+PROG	ekermit
+SPECIAL	ekermit		srcdir	external/bsd/ekermit/bin/ekermit
 
 PROG	less		more
-SPECIAL	less		srcdir	usr.bin/less/less
+SPECIAL	less		srcdir	external/bsd/less/bin/less
 
 PROG	vi		ex
-SPECIAL vi        	srcdir  usr.bin/vi/build
+SPECIAL vi        	srcdir  external/bsd/nvi/usr.bin/nvi
 
 SRCDIRS	usr.sbin
 
-PROG	chown		chgrp
 PROG	chroot
 PROG	dumpfs
 PROG	dumplfs
 PROG	installboot
-PROG	vnconfig
+PROG	vnconfig	vndconfig
 
 SRCDIRS	games
 
@@ -150,6 +155,5 @@ SRCDIRS	libexec
 
 PROG	lfs_cleanerd
 
-
 LIBS	liboverride.o
-LIBS	-lbz2 -lcrypt -ledit -lipsec -lkvm -ll -lm -lrmt -lcurses -ltermcap -lutil -lz -levent -lprop
+LIBS	-lbz2 -llzma -lcrypt -ledit -lipsec -lkvm -ll -lm -lrmt -lcurses -lterminfo -lutil -lz -levent -lprop

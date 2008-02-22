@@ -1,4 +1,4 @@
-/*	$NetBSD: curses_private.h,v 1.41 2007/12/08 18:38:11 jdc Exp $	*/
+/*	$NetBSD: curses_private.h,v 1.62 2017/01/31 09:17:53 roy Exp $	*/
 
 /*-
  * Copyright (c) 1998-2000 Brett Lymn
@@ -35,43 +35,17 @@
  * - Add a compiler variable HAVE_WCHAR for wide character only code
  * - Add a pointer to liked list of non-spacing characters in __ldata
  *   and the macro to access the width field in the attribute field
- * - Add a circular input character buffer in __screen to handle wide
- *   character input (used in get_wch())
+ * - Add a circular input character buffer in __screen to handle
+ *   wide-character input (used in get_wch())
  */
 
+#include <term.h>
 #include <termios.h>
 
 /* Private structure definitions for curses. */
 
 /* Termcap capabilities. */
-extern char	__tc_am, __tc_bs, __tc_cc, __tc_da, __tc_eo,
-		__tc_hc, __tc_hl, __tc_in, __tc_mi, __tc_ms,
-		__tc_nc, __tc_ns, __tc_os, __tc_ul, __tc_ut,
-		__tc_xb, __tc_xn, __tc_xt, __tc_xs, __tc_xx;
-extern char	__CA;
-extern int	__tc_pa, __tc_Co, __tc_NC;
-extern char	*__tc_ac, *__tc_AB, *__tc_ae, *__tc_AF, *__tc_AL,
-		*__tc_al, *__tc_as, *__tc_bc, *__tc_bl, *__tc_bt,
-		*__tc_cd, *__tc_ce, *__tc_cl, *__tc_cm, *__tc_cr,
-		*__tc_cs, *__tc_dc, *__tc_DL, *__tc_dl, *__tc_dm,
-		*__tc_DO, *__tc_do, *__tc_eA, *__tc_ed, *__tc_ei,
-		*__tc_ho, *__tc_Ic, *__tc_ic, *__tc_im, *__tc_Ip,
-		*__tc_ip, *__tc_k0, *__tc_k1, *__tc_k2, *__tc_k3,
-		*__tc_k4, *__tc_k5, *__tc_k6, *__tc_k7, *__tc_k8,
-		*__tc_k9, *__tc_kd, *__tc_ke, *__tc_kh, *__tc_kl,
-		*__tc_kr, *__tc_ks, *__tc_ku, *__tc_LE, *__tc_ll,
-		*__tc_ma, *__tc_mb, *__tc_md, *__tc_me, *__tc_mh,
-		*__tc_mk, *__tc_mm, *__tc_mo, *__tc_mp, *__tc_mr,
-		*__tc_nd, *__tc_nl, *__tc_oc, *__tc_op,
-		*__tc_rc, *__tc_RI, *__tc_Sb, *__tc_sc, *__tc_se,
-		*__tc_SF, *__tc_Sf, *__tc_sf, *__tc_so, *__tc_sp,
-		*__tc_SR, *__tc_sr, *__tc_ta, *__tc_te, *__tc_ti,
-		*__tc_uc, *__tc_ue, *__tc_UP, *__tc_up, *__tc_us,
-		*__tc_vb, *__tc_ve, *__tc_vi, *__tc_vs;
-
 #ifdef HAVE_WCHAR
-extern char *__tc_Xh, *__tc_Xl, *__tc_Xo, *__tc_Xr, *__tc_Xt,
-		*__tc_Xv;
 /*
  * Add a list of non-spacing characters to each spacing
  * character in a singly linked list
@@ -83,7 +57,7 @@ typedef struct nschar_t {
 #endif /* HAVE_WCHAR */
 
 /*
- * A window an array of __LINE structures pointed to by the 'lines' pointer.
+ * A window is an array of __LINE structures pointed to by the 'lines' pointer.
  * A line is an array of __LDATA structures pointed to by the 'line' pointer.
  *
  * IMPORTANT: the __LDATA structure must NOT induce any padding, so if new
@@ -125,6 +99,7 @@ struct __line {
 #endif
 #define	__ISDIRTY	0x01		/* Line is dirty. */
 #define __ISPASTEOL	0x02		/* Cursor is past end of line */
+#define __ISFORCED	0x04		/* Force update, no optimisation */
 	unsigned int flags;
 	unsigned int hash;		/* Hash value for the line. */
 	int *firstchp, *lastchp;	/* First and last chngd columns ptrs */
@@ -139,7 +114,7 @@ struct __window {		/* Window structure. */
 	int maxy, maxx;			/* Maximum values for curx, cury. */
 	int reqy, reqx;			/* Size requested when created */
 	int ch_off;			/* x offset for firstch/lastch. */
-	__LINE **lines;			/* Array of pointers to the lines */
+	__LINE **alines;		/* Array of pointers to the lines */
 	__LINE  *lspace;		/* line space (for cleanup) */
 	__LDATA *wspace;		/* window space (for cleanup) */
 
@@ -155,6 +130,9 @@ struct __window {		/* Window structure. */
 #define	__NOTIMEOUT	0x00020000	/* Wait indefinitely for func keys */
 #define __IDCHAR	0x00040000	/* insert/delete char sequences */
 #define __ISPAD		0x00080000	/* "window" is a pad */
+#define __ISDERWIN	0x00100000	/* "window" is derived from parent */
+#define __IMMEDOK	0x00200000	/* refreshed when changed */
+#define __SYNCOK	0x00400000	/* sync when changed */
 	unsigned int flags;
 	int	delay;			/* delay for getch() */
 	attr_t	wattr;			/* Character attributes */
@@ -165,9 +143,13 @@ struct __window {		/* Window structure. */
 	int	pbegy, pbegx,
 		sbegy, sbegx,
 		smaxy, smaxx;		/* Saved prefresh() values */
+	int	dery, derx;		/* derived window coordinates
+					   - top left corner of source 
+					   relative to parent win */
 #ifdef HAVE_WCHAR
 	nschar_t *bnsp;			/* Background non-spacing char list */
 #endif /* HAVE_WCHAR */
+	FILE	*fp;			/* for window formatted printf */
 };
 
 /* Set of attributes unset by 'me' - 'mb', 'md', 'mh', 'mk', 'mp' and 'mr'. */
@@ -201,11 +183,34 @@ struct __pair {
 };
 
 /* Maximum colours */
-#define	MAX_COLORS	64
+#define	MAX_COLORS	256
 /* Maximum colour pairs - determined by number of colour bits in attr_t */
 #define	MAX_PAIRS	PAIR_NUMBER(__COLOR)
 
 typedef struct keymap keymap_t;
+
+/* POSIX allows up to 8 columns in a label. */
+#define	MAX_SLK_COLS	8
+#ifdef HAVE_WCHAR
+#define	MAX_SLK_LABEL	sizeof(wchar_t) * MAX_SLK_COLS
+#else
+#define	MAX_SLK_LABEL	MAX_SLK_COLS
+#endif
+struct __slk_label {
+	char	*text;
+	int	 justify;
+#define	SLK_JUSTIFY_LEFT	0
+#define	SLK_JUSTIFY_CENTER	1
+#define	SLK_JUSTIFY_RIGHT	2
+	char	 label[MAX_SLK_LABEL + 1];
+	int	 x;
+};
+
+#define	MAX_RIPS	5
+struct __ripoff {
+	int	nlines;
+	WINDOW	*win;
+};
 
 /* this is the encapsulation of the terminal definition, one for
  * each terminal that curses talks to.
@@ -219,6 +224,12 @@ struct __screen {
 	int      lx, ly;        /* loop parameters for refresh */
 	int	 COLS;		/* Columns on the screen. */
 	int	 LINES;		/* Lines on the screen. */
+	int	 nripped;	/* Number of ripofflines. */
+	struct __ripoff ripped[MAX_RIPS];	/* ripofflines. */
+	int	 ESCDELAY;	/* Delay between keys in esc seq's. */
+#define	ESCDELAY_DEFAULT	300 /* milliseconds. */
+	int	 TABSIZE;	/* Size of a tab. */
+#define	TABSIZE_DEFAULT		8   /* spaces. */
 	int	 COLORS;	/* Maximum colors on the screen */
 	int	 COLOR_PAIRS;	/* Maximum color pairs on the screen */
 	int	 My_term;	/* Use Def_term regardless. */
@@ -226,40 +237,6 @@ struct __screen {
 	char	 NONL;		/* Term can't hack LF doing a CR. */
 	char	 UPPERCASE;	/* Terminal is uppercase only. */
 
-        /* BEWARE!!! The order of the following terminal capabilities */
-        /* (tc_foo) is important - do not update without fixing the zap */
-        /* function in setterm.c */
-	char	tc_am, tc_bs, tc_cc, tc_da, tc_eo, tc_hc, tc_hl, tc_in, tc_mi,
-		tc_ms, tc_nc, tc_ns, tc_os, tc_ul, tc_ut, tc_xb, tc_xn, tc_xt,
-		tc_xs, tc_xx;
-	int     flag_count;
-	int	tc_pa, tc_Co, tc_NC;
-	int     int_count;
-	char	*tc_AB, *tc_ac, *tc_ae, *tc_AF, *tc_AL,
-		*tc_al, *tc_as, *tc_bc, *tc_bl, *tc_bt,
-		*tc_cd, *tc_ce, *tc_cl, *tc_cm, *tc_cr,
-		*tc_cs, *tc_dc, *tc_DL, *tc_dl, *tc_dm,
-		*tc_DO, *tc_do, *tc_eA, *tc_ed, *tc_ei,
-		*tc_ho, *tc_Ic, *tc_ic, *tc_im, *tc_Ip,
-		*tc_ip, *tc_k0, *tc_k1, *tc_k2, *tc_k3,
-		*tc_k4, *tc_k5, *tc_k6, *tc_k7, *tc_k8,
-		*tc_k9, *tc_kd, *tc_ke, *tc_kh, *tc_kl,
-		*tc_kr, *tc_ks, *tc_ku, *tc_LE, *tc_ll,
-		*tc_ma, *tc_mb, *tc_md, *tc_me, *tc_mh,
-		*tc_mk, *tc_mm, *tc_mo, *tc_mp, *tc_mr,
-		*tc_nd, *tc_nl, *tc_oc, *tc_op, *tc_pc,
-		*tc_rc, *tc_RI, *tc_Sb, *tc_sc, *tc_se,
-		*tc_SF, *tc_Sf, *tc_sf, *tc_so, *tc_sp,
-		*tc_SR, *tc_sr, *tc_ta, *tc_te, *tc_ti,
-		*tc_uc, *tc_ue, *tc_UP, *tc_up, *tc_us,
-#ifndef HAVE_WCHAR
-		*tc_vb, *tc_ve, *tc_vi, *tc_vs;
-#else
-		*tc_vb, *tc_ve, *tc_vi, *tc_vs, *tc_Xh,
-		*tc_Xl, *tc_Xo, *tc_Xr, *tc_Xt, *tc_Xv;
-#endif /* HAVE_WCHAR */
-	char CA;
-	int str_count;
 	chtype acs_char[NUM_ACS];
 #ifdef HAVE_WCHAR
 	cchar_t wacs_char[ NUM_ACS ];
@@ -280,7 +257,7 @@ struct __screen {
 	attr_t mask_me;
 	attr_t mask_ue;
 	attr_t mask_se;
-	struct tinfo *cursesi_genbuf;
+	TERMINAL *term;
 	int old_mode; /* old cursor visibility state for terminal */
 	keymap_t *base_keymap;
 	int echoit;
@@ -298,14 +275,27 @@ struct __screen {
 	char *stdbuf;
 	unsigned int len;
 	int meta_state;
-	char pad_char;
-	char ttytype[128];
+	char padchar;
 	int endwin;
 	int notty;
 	int half_delay;
 	int resized;
 	wchar_t *unget_list;
 	int unget_len, unget_pos;
+	int filtered;
+	int checkfd;
+
+	/* soft label key */
+	bool		 is_term_slk;
+	WINDOW		*slk_window;
+	int		 slk_format;
+#define	SLK_FMT_3_2_3	0
+#define	SLK_FMT_4_4	1
+	int		 slk_nlabels;
+	int		 slk_label_len;
+	bool		 slk_hidden;
+	struct __slk_label *slk_labels;
+
 #ifdef HAVE_WCHAR
 #define MB_LEN_MAX 8
 #define MAX_CBUF_SIZE MB_LEN_MAX
@@ -339,25 +329,28 @@ extern SCREEN   *_cursesi_screen;       /* The current screen in use */
 #define __CTRACE_LINE		0x00000200
 #define __CTRACE_ATTR		0x00000400
 #define __CTRACE_ERASE		0x00000800
+#define __CTRACE_FILEIO		0x00001000
 #define __CTRACE_ALL		0x7fffffff
 void	 __CTRACE_init(void);
 void	 __CTRACE(int, const char *, ...) __attribute__((__format__(__printf__, 2, 3)));
 #endif
 
 /* Private functions. */
-void     __cputchar_args(char, void *);
+int     __cputchar_args(int, void *);
 void     _cursesi_free_keymap(keymap_t *);
 int      _cursesi_gettmode(SCREEN *);
 void     _cursesi_reset_acs(SCREEN *);
-int	_cursesi_addbyte(WINDOW *, __LINE **, int *, int *, int , attr_t);
-int	_cursesi_addwchar(WINDOW *, __LINE **, int *, int *, const cchar_t *);
+int	_cursesi_addbyte(WINDOW *, __LINE **, int *, int *, int , attr_t, int);
+int	_cursesi_addwchar(WINDOW *, __LINE **, int *, int *, const cchar_t *,
+			  int);
+int	_cursesi_waddbytes(WINDOW *, const char *, int, attr_t, int);
 #ifdef HAVE_WCHAR
 void     _cursesi_reset_wacs(SCREEN *);
 #endif /* HAVE_WCHAR */
 void     _cursesi_resetterm(SCREEN *);
 int      _cursesi_setterm(char *, SCREEN *);
 int	 __delay(void);
-u_int	 __hash_more(const void *, size_t, u_int);
+unsigned int	 __hash_more(const void *, size_t, unsigned int);
 #define	__hash(s, len)	__hash_more((s), (len), 0u)
 void	 __id_subwins(WINDOW *);
 void	 __init_getch(SCREEN *);
@@ -365,19 +358,18 @@ void	 __init_acs(SCREEN *);
 #ifdef HAVE_WCHAR
 void	 __init_get_wch(SCREEN *);
 void	 __init_wacs(SCREEN *);
-void	__cputwchar_args( wchar_t, void * );
+int	__cputwchar_args( wchar_t, void * );
 int     _cursesi_copy_nsp(nschar_t *, struct __ldata *);
 void	__cursesi_free_nsp(nschar_t *);
 void	__cursesi_win_free_nsp(WINDOW *);
 void	__cursesi_putnsp(nschar_t *, const int, const int);
+void	__cursesi_chtype_to_cchar(chtype, cchar_t *);
 #endif /* HAVE_WCHAR */
 int	 __unget(wint_t);
-char	*__longname(char *, char *);	/* Original BSD version */
 int	 __mvcur(int, int, int, int, int);
 WINDOW  *__newwin(SCREEN *, int, int, int, int, int);
 int	 __nodelay(void);
 int	 __notimeout(void);
-char	*__parse_cap(const char *, ...);
 void	 __restartwin(void);
 void	 __restore_colors(void);
 void     __restore_cursor_vis(void);
@@ -385,26 +377,31 @@ void     __restore_meta_state(void);
 void	 __restore_termios(void);
 void	 __restore_stophandler(void);
 void	 __restore_winchhandler(void);
+int	 __ripoffscreen(SCREEN *, int *);
+void	 __ripoffresize(SCREEN *);
+int	 __rippedlines(const SCREEN *);
 void	 __save_termios(void);
 void	 __set_color(WINDOW *win, attr_t attr);
 void	 __set_stophandler(void);
 void	 __set_winchhandler(void);
 void	 __set_subwin(WINDOW *, WINDOW *);
+int	 __slk_init(SCREEN *);
+void	 __slk_free(SCREEN *);
+int	 __slk_resize(SCREEN *, int cols);
+int	 __slk_noutrefresh(SCREEN *);
 void	 __startwin(SCREEN *);
 void	 __stop_signal_handler(int);
 int	 __stopwin(void);
 void	 __swflags(WINDOW *);
+void	 __sync(WINDOW *);
 int	 __timeout(int);
 int	 __touchline(WINDOW *, int, int, int);
 int	 __touchwin(WINDOW *);
-char	*__tscroll(const char *, int, int);
+int	 __unripoffline(int (*)(WINDOW *, int));
 void	 __unsetattr(int);
 void	 __unset_color(WINDOW *win);
 int	 __waddch(WINDOW *, __LDATA *);
 int	 __wgetnstr(WINDOW *, char *, int);
-#ifdef HAVE_WCHAR
-int  __wgetn_wstr(WINDOW *, wchar_t *, int);
-#endif /* HAVE_WCHAR */
 void	 __winch_signal_handler(int);
 
 /* Private #defines. */

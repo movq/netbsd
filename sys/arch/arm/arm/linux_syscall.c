@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_syscall.c,v 1.20 2008/02/06 22:12:39 dsl Exp $	*/
+/*	$NetBSD: linux_syscall.c,v 1.27 2015/03/07 18:52:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,7 +69,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.20 2008/02/06 22:12:39 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.27 2015/03/07 18:52:46 christos Exp $");
 
 #include <sys/device.h>
 #include <sys/errno.h>
@@ -84,25 +77,25 @@ __KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.20 2008/02/06 22:12:39 dsl Exp $
 #include <sys/reboot.h>
 #include <sys/signalvar.h>
 #include <sys/systm.h>
-#include <sys/user.h>
+#include <sys/syscallvar.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
-#include <machine/frame.h>
-#include <machine/pcb.h>
 #include <arm/swi.h>
+#include <arm/locore.h>
 
 #include <compat/linux/common/linux_errno.h>
 #include <compat/linux/linux_syscall.h>
 
 /* ARMLinux has some system calls of its very own. */
 #define LINUX_ARM_NR_BASE	0x9f0000
+#define LINUX_EARM_NR_BASE	0x0f0000
 #define LINUX_SYS_ARMBASE	0x000180 /* Must agree with syscalls.master */
 
 void linux_syscall_intern(struct proc *);
-void linux_syscall_plain(struct trapframe *, struct lwp *, u_int32_t);
-void linux_syscall_fancy(struct trapframe *, struct lwp *, u_int32_t);
+void linux_syscall_plain(struct trapframe *, struct lwp *, uint32_t);
+void linux_syscall_fancy(struct trapframe *, struct lwp *, uint32_t);
 
 void
 linux_syscall_intern(struct proc *p)
@@ -115,7 +108,7 @@ linux_syscall_intern(struct proc *p)
 }
 
 void
-linux_syscall_plain(trapframe_t *frame, struct lwp *l, u_int32_t insn)
+linux_syscall_plain(trapframe_t *frame, struct lwp *l, uint32_t insn)
 {
 	const struct sysent *callp;
 	struct proc *p = l->l_proc;
@@ -123,9 +116,15 @@ linux_syscall_plain(trapframe_t *frame, struct lwp *l, u_int32_t insn)
 	register_t *args, rval[2];
 
 	code = insn & 0x00ffffff;
-	/* Remap ARM-specific syscalls onto the end of the standard range. */
-	if (code > LINUX_ARM_NR_BASE)
-		code = code - LINUX_ARM_NR_BASE + LINUX_SYS_ARMBASE;
+	if (code == 0) {	/* EABI */
+		code = frame->tf_r7;
+		if (code > LINUX_EARM_NR_BASE)
+			code = code - LINUX_EARM_NR_BASE + LINUX_SYS_ARMBASE;
+	} else {
+		/* Remap ARM-specific syscalls onto the end of the standard range. */
+		if (code > LINUX_ARM_NR_BASE)
+			code = code - LINUX_ARM_NR_BASE + LINUX_SYS_ARMBASE;
+	}
 	code &= LINUX_SYS_NSYSENT - 1;
 
 	/* Linux passes all arguments in order in registers, which is nice. */
@@ -134,7 +133,7 @@ linux_syscall_plain(trapframe_t *frame, struct lwp *l, u_int32_t insn)
 
 	rval[0] = 0;
 	rval[1] = 0;
-	error = (*callp->sy_call)(l, args, rval);
+	error = sy_call(callp, l, args, rval);
 
 	switch (error) {
 	case 0:
@@ -160,7 +159,7 @@ linux_syscall_plain(trapframe_t *frame, struct lwp *l, u_int32_t insn)
 }
 
 void
-linux_syscall_fancy(trapframe_t *frame, struct lwp *l, u_int32_t insn)
+linux_syscall_fancy(trapframe_t *frame, struct lwp *l, uint32_t insn)
 {
 	const struct sysent *callp;
 	struct proc *p = l->l_proc;
@@ -168,21 +167,27 @@ linux_syscall_fancy(trapframe_t *frame, struct lwp *l, u_int32_t insn)
 	register_t *args, rval[2];
 
 	code = insn & 0x00ffffff;
-	/* Remap ARM-specific syscalls onto the end of the standard range. */
-	if (code > LINUX_ARM_NR_BASE)
-		code = code - LINUX_ARM_NR_BASE + LINUX_SYS_ARMBASE;
+	if (code == 0) {	/* EABI */
+		code = frame->tf_r7;
+		if (code > LINUX_EARM_NR_BASE)
+			code = code - LINUX_EARM_NR_BASE + LINUX_SYS_ARMBASE;
+	} else {
+		/* Remap ARM-specific syscalls onto the end of the standard range. */
+		if (code > LINUX_ARM_NR_BASE)
+			code = code - LINUX_ARM_NR_BASE + LINUX_SYS_ARMBASE;
+	}
 	code &= LINUX_SYS_NSYSENT - 1;
 
 	/* Linux passes all arguments in order in registers, which is nice. */
 	args = &frame->tf_r0;
 	callp = p->p_emul->e_sysent + code;
 
-	if ((error = trace_enter(code, args, callp->sy_narg)) != 0)
+	if ((error = trace_enter(code, callp, args)) != 0)
 		goto out;
 
 	rval[0] = 0;
 	rval[1] = 0;
-	error = (*callp->sy_call)(l, args, rval);
+	error = sy_call(callp, l, args, rval);
 out:
 	switch (error) {
 	case 0:
@@ -204,7 +209,7 @@ out:
 		break;
 	}
 
-	trace_exit(code, rval, error);
+	trace_exit(code, callp, args, rval, error);
 
 	userret(l);
 }

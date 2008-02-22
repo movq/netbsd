@@ -1,6 +1,6 @@
-/*	$NetBSD: magmareg.h,v 1.12 2007/03/04 06:02:41 christos Exp $	*/
-/* magmareg.h
- *
+/*	$NetBSD: magmareg.h,v 1.18 2014/11/15 19:18:19 christos Exp $	*/
+
+/*-
  *  Copyright (c) 1998 Iain Hibbert
  *  All rights reserved.
  *
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Iain Hibbert
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +23,6 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
  */
 
 #ifdef MAGMA_DEBUG
@@ -46,7 +40,7 @@
  *    |   |   |   |   |   |   |   |
  *    |   |   |   |   +---+---+---+---> port number
  *    |   |   |   |
- *    |   |   |   +-------------------> dialout (on tty ports)
+ *    |   |   |   +-------------------> unused
  *    |   |   |
  *    |   |   +-----------------------> unused
  *    |   |
@@ -60,10 +54,10 @@
 #define MAGMA_MAX_CD1400	4
 #define MAGMA_MAX_CD1190	2
 
-#define MAGMA_CARD(x)	((minor(x) >> 6) & 0x03)
-#define MAGMA_PORT(x)	(minor(x) & 0x0f)
+#define MAGMA_CARD(x)	((TTUNIT(x) >> 6) & 0x03)
+#define MAGMA_PORT(x)	(TTUNIT(x) & 0x0f)
 
-#define MTTY_DIALOUT(x) (minor(x) & 0x10)
+#define MTTY_DIALOUT(x) TTDIALOUT(x)
 
 /*
  * Supported Card Types
@@ -103,8 +97,7 @@ struct cd1190 {
 
 /* software state for each card */
 struct magma_softc {
-	struct device	ms_dev;		/* required. must be first in softc */
-	struct sbusdev	ms_sd;		/* sbus device */
+	device_t	ms_dev;		/* required. must be first in softc */
 	struct evcnt	ms_intrcnt;	/* statistics */
 
 	/* cd1400 chip info */
@@ -157,7 +150,7 @@ struct mtty_port {
 #define MTTYF_RING_OVERFLOW	(1<<5)
 
 struct mtty_softc {
-	struct device ms_dev;		/* device info */
+	device_t ms_dev;		/* device info */
 	int ms_nports;			/* tty ports */
 	struct mtty_port ms_port[MAGMA_MAX_TTY];
 };
@@ -189,7 +182,6 @@ struct mbpp_port {
 #define MBPPF_WAKEUP	(1<<4)
 
 struct mbpp_softc {
-	struct device ms_dev;		/* device info */
 	int ms_nports;			/* parallel ports */
 	struct mbpp_port ms_port[MAGMA_MAX_BPP];
 };
@@ -209,19 +201,19 @@ __inline u_char cd1400_read_reg(struct cd1400 *, int);
 __inline void cd1400_write_reg(struct cd1400 *, int, u_char);
 void cd1400_enable_transmitter(struct cd1400 *, int);
 
-int magma_match(struct device *, struct cfdata *, void *);
-void magma_attach(struct device *, struct device *, void *);
+int magma_match(device_t, cfdata_t, void *);
+void magma_attach(device_t, device_t, void *);
 int magma_hard(void *);
 void magma_soft(void *);
 
-int mtty_match(struct device *, struct cfdata *, void *);
-void mtty_attach(struct device *, struct device *, void *);
+int mtty_match(device_t, cfdata_t, void *);
+void mtty_attach(device_t, device_t, void *);
 int mtty_modem_control(struct mtty_port *, int, int);
 int mtty_param(struct tty *, struct termios *);
 void mtty_start(struct tty *);
 
-int mbpp_match(struct device *, struct cfdata *, void *);
-void mbpp_attach(struct device *, struct device *, void *);
+int mbpp_match(device_t, cfdata_t, void *);
+void mbpp_attach(device_t, device_t, void *);
 void mbpp_timeout(void *);
 void mbpp_start(void *);
 int mbpp_send(struct mbpp_port *, void *, int);

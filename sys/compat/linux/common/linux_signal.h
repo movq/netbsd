@@ -1,4 +1,4 @@
-/* 	$NetBSD: linux_signal.h,v 1.27 2007/12/04 18:40:17 dsl Exp $	*/
+/* 	$NetBSD: linux_signal.h,v 1.32 2017/01/02 20:10:44 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,7 +46,14 @@
 #include <compat/linux/arch/arm/linux_signal.h>
 #elif defined(__amd64__)
 #include <compat/linux/arch/amd64/linux_signal.h>
+#else
+typedef void linux_sigset_t;
 #endif
+
+typedef struct {
+	linux_sigset_t *ss;
+	size_t ss_len;
+} linux_sized_sigset_t;
 
 #ifdef _KERNEL
 extern const int native_to_linux_signo[];
@@ -98,6 +98,9 @@ void native_to_linux_sigaction(struct linux_sigaction *,
 
 void native_to_linux_sigaltstack(struct linux_sigaltstack *,
     const struct sigaltstack *);
+
+int native_to_linux_si_code(int);
+int native_to_linux_si_status(int, int);
 
 __END_DECLS
 #endif /* !_KERNEL */

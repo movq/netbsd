@@ -1,4 +1,4 @@
-/*	$NetBSD: sun3x.c,v 1.9 2005/12/24 20:07:41 perry Exp $	*/
+/*	$NetBSD: sun3x.c,v 1.12 2009/12/11 18:45:05 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,12 +38,6 @@
 /* Avoid conflicts on these: */
 #define get_pte sun3x_get_pte
 #define set_pte sun3x_set_pte
-
-/*
- * We need to get the sun3x NBSG definition, even if we're
- * building this with a different sun68k target.
- */
-#include <arch/sun3/include/param.h>
 
 #include <sys/param.h>
 #include <machine/mon.h>
@@ -80,6 +67,7 @@ void set_iommupte(vaddr_t, paddr_t);
 
 u_int	get_pte(vaddr_t);
 void	set_pte(vaddr_t, paddr_t);
+void	dvma3x_init(void);
 char *	dvma3x_alloc(int);
 void	dvma3x_free(char *, int);
 char *	dvma3x_mapin(char *, int);

@@ -1,4 +1,30 @@
-/*	$NetBSD: kern_ntptime.c,v 1.46 2008/01/20 18:09:11 joerg Exp $	*/
+/*	$NetBSD: kern_ntptime.c,v 1.57 2015/11/23 23:45:44 joerg Exp $	*/
+
+/*-
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*-
  ***********************************************************************
@@ -34,10 +60,11 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("$FreeBSD: src/sys/kern/kern_ntptime.c,v 1.59 2005/05/28 14:34:41 rwatson Exp $"); */
-__KERNEL_RCSID(0, "$NetBSD: kern_ntptime.c,v 1.46 2008/01/20 18:09:11 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ntptime.c,v 1.57 2015/11/23 23:45:44 joerg Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_ntp.h"
-#include "opt_compat_netbsd.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/resourcevar.h>
@@ -46,16 +73,13 @@ __KERNEL_RCSID(0, "$NetBSD: kern_ntptime.c,v 1.46 2008/01/20 18:09:11 joerg Exp 
 #include <sys/proc.h>
 #include <sys/sysctl.h>
 #include <sys/timex.h>
-#ifdef COMPAT_30
-#include <compat/sys/timex.h>
-#endif
 #include <sys/vnode.h>
 #include <sys/kauth.h>
-
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
-
 #include <sys/cpu.h>
+
+#include <compat/sys/timex.h>
 
 /*
  * Single-precision macros for 64-bit machines
@@ -75,7 +99,7 @@ typedef int64_t l_fp;
 #define L_MPY(v, a)	((v) *= (a))
 #define L_CLR(v)	((v) = 0)
 #define L_ISNEG(v)	((v) < 0)
-#define L_LINT(v, a)	((v) = (int64_t)(a) << 32)
+#define L_LINT(v, a)	((v) = (int64_t)((uint64_t)(a) << 32))
 #define L_GINT(v)	((v) < 0 ? -(-(v) >> 32) : (v) >> 32)
 
 #ifdef NTP
@@ -158,7 +182,7 @@ static long time_constant;		/* poll interval (shift) (s) */
 static long time_precision = 1;		/* clock precision (ns) */
 static long time_maxerror = MAXPHASE / 1000; /* maximum error (us) */
 static long time_esterror = MAXPHASE / 1000; /* estimated error (us) */
-static long time_reftime;		/* time at last adjustment (s) */
+static time_t time_reftime;		/* time at last adjustment (s) */
 static l_fp time_offset;		/* time offset (ns) */
 static l_fp time_freq;			/* frequency offset (ns/s) */
 #endif /* NTP */
@@ -215,11 +239,14 @@ static void hardupdate(long offset);
 void
 ntp_gettime(struct ntptimeval *ntv)
 {
+
+	mutex_spin_enter(&timecounter_lock);
 	nanotime(&ntv->time);
 	ntv->maxerror = time_maxerror;
 	ntv->esterror = time_esterror;
 	ntv->tai = time_tai;
 	ntv->time_state = time_state;
+	mutex_spin_exit(&timecounter_lock);
 }
 
 /* ARGSUSED */
@@ -233,7 +260,7 @@ sys_ntp_adjtime(struct lwp *l, const struct sys_ntp_adjtime_args *uap, register_
 		syscallarg(struct timex *) tp;
 	} */
 	struct timex ntv;
-	int error = 0;
+	int error;
 
 	error = copyin((void *)SCARG(uap, tp), (void *)&ntv, sizeof(ntv));
 	if (error != 0)
@@ -258,7 +285,6 @@ ntp_adjtime1(struct timex *ntv)
 {
 	long freq;
 	int modes;
-	int s;
 
 	/*
 	 * Update selected clock variables - only the superuser can
@@ -269,11 +295,11 @@ ntp_adjtime1(struct timex *ntv)
 	 * the STA_PLL bit in the status word is cleared, the state and
 	 * status words are reset to the initial values at boot.
 	 */
+	mutex_spin_enter(&timecounter_lock);
 	modes = ntv->modes;
 	if (modes != 0)
 		/* We need to save the system time during shutdown */
 		time_adjusted |= 2;
-	s = splclock();
 	if (modes & MOD_MAXERROR)
 		time_maxerror = ntv->maxerror;
 	if (modes & MOD_ESTERROR)
@@ -374,7 +400,7 @@ ntp_adjtime1(struct timex *ntv)
 	ntv->jitcnt = pps_jitcnt;
 	ntv->stbcnt = pps_stbcnt;
 #endif /* PPS_SYNC */
-	splx(s);
+	mutex_spin_exit(&timecounter_lock);
 }
 #endif /* NTP */
 
@@ -391,6 +417,8 @@ ntp_update_second(int64_t *adjustment, time_t *newsec)
 {
 	int tickrate;
 	l_fp ftemp;		/* 32/64-bit temporary */
+
+	KASSERT(mutex_owned(&timecounter_lock));
 
 #ifdef NTP
 
@@ -584,6 +612,8 @@ hardupdate(long offset)
 	long mtemp;
 	l_fp ftemp;
 
+	KASSERT(mutex_owned(&timecounter_lock));
+
 	/*
 	 * Select how the phase is to be controlled and from which
 	 * source. If the PPS signal is present and enabled to
@@ -665,6 +695,8 @@ hardpps(struct timespec *tsp,		/* time at PPS */
 {
 	long u_sec, u_nsec, v_nsec; /* temps */
 	l_fp ftemp;
+
+	KASSERT(mutex_owned(&timecounter_lock));
 
 	/*
 	 * The signal is first processed by a range gate and frequency
@@ -847,8 +879,10 @@ hardpps(struct timespec *tsp,		/* time at PPS */
 
 #ifdef NTP
 int
-ntp_timestatus()
+ntp_timestatus(void)
 {
+	int rv;
+
 	/*
 	 * Status word error decode. If any of these conditions
 	 * occur, an error is returned, instead of the status
@@ -858,6 +892,7 @@ ntp_timestatus()
 	 *
 	 * Hardware or software error
 	 */
+	mutex_spin_enter(&timecounter_lock);
 	if ((time_status & (STA_UNSYNC | STA_CLOCKERR)) ||
 
 	/*
@@ -880,9 +915,12 @@ ntp_timestatus()
 	 */
 	    (time_status & STA_PPSFREQ &&
 	     time_status & (STA_PPSWANDER | STA_PPSERROR)))
-		return (TIME_ERROR);
+		rv = TIME_ERROR;
 	else
-		return (time_state);
+		rv = time_state;
+	mutex_spin_exit(&timecounter_lock);
+
+	return rv;
 }
 
 /*ARGSUSED*/
@@ -890,7 +928,7 @@ ntp_timestatus()
  * ntp_gettime() - NTP user application interface
  */
 int
-sys___ntp_gettime30(struct lwp *l, const struct sys___ntp_gettime30_args *uap, register_t *retval)
+sys___ntp_gettime50(struct lwp *l, const struct sys___ntp_gettime50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(struct ntptimeval *) ntvp;
@@ -909,33 +947,6 @@ sys___ntp_gettime30(struct lwp *l, const struct sys___ntp_gettime30_args *uap, r
 	}
 	return(error);
 }
-
-#ifdef COMPAT_30
-int
-compat_30_sys_ntp_gettime(struct lwp *l, const struct compat_30_sys_ntp_gettime_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(struct ntptimeval30 *) ontvp;
-	} */
-	struct ntptimeval ntv;
-	struct ntptimeval30 ontv;
-	int error = 0;
-
-	if (SCARG(uap, ntvp)) {
-		ntp_gettime(&ntv);
-		TIMESPEC_TO_TIMEVAL(&ontv.time, &ntv.time);
-		ontv.maxerror = ntv.maxerror;
-		ontv.esterror = ntv.esterror;
-
-		error = copyout((void *)&ontv, (void *)SCARG(uap, ntvp),
-				sizeof(ontv));
- 	}
-	if (!error)
-		*retval = ntp_timestatus();
-
-	return (error);
-}
-#endif
 
 /*
  * return information about kernel precision timekeeping
@@ -959,34 +970,10 @@ SYSCTL_SETUP(sysctl_kern_ntptime_setup, "sysctl kern.ntptime node setup")
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "kern", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_KERN, CTL_EOL);
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "ntptime",
 		       SYSCTL_DESCR("Kernel clock values for NTP"),
 		       sysctl_kern_ntptime, 0, NULL,
 		       sizeof(struct ntptimeval),
 		       CTL_KERN, KERN_NTPTIME, CTL_EOL);
 }
-#else /* !NTP */
-/* For some reason, raising SIGSYS (as sys_nosys would) is problematic. */
-
-int
-sys___ntp_gettime30(struct lwp *l, const struct sys___ntp_gettime30_args *uap, register_t *retval)
-{
-
-	return(ENOSYS);
-}
-
-#ifdef COMPAT_30
-int
-compat_30_sys_ntp_gettime(struct lwp *l, const struct compat_30_sys_ntp_gettime_args *uap, register_t *retval)
-{
-
- 	return(ENOSYS);
-}
-#endif
 #endif /* !NTP */

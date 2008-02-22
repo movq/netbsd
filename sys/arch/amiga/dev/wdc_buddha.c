@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_buddha.c,v 1.2 2007/08/21 06:51:09 is Exp $	*/
+/*	$NetBSD: wdc_buddha.c,v 1.10 2017/10/20 07:06:06 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,9 +34,9 @@
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <machine/cpu.h>
-#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/bswap.h>
 
@@ -66,15 +59,15 @@ struct wdc_buddha_softc {
 	volatile char *ba;
 };
 
-int	wdc_buddha_probe(struct device *, struct cfdata *, void *);
-void	wdc_buddha_attach(struct device *, struct device *, void *);
+int	wdc_buddha_probe(device_t, cfdata_t, void *);
+void	wdc_buddha_attach(device_t, device_t, void *);
 int	wdc_buddha_intr(void *);
 
-CFATTACH_DECL(wdc_buddha, sizeof(struct wdc_buddha_softc),
+CFATTACH_DECL_NEW(wdc_buddha, sizeof(struct wdc_buddha_softc),
     wdc_buddha_probe, wdc_buddha_attach, NULL, NULL);
 
 int
-wdc_buddha_probe(struct device *parent, struct cfdata *cfp, void *aux)
+wdc_buddha_probe(device_t parent, cfdata_t cfp, void *aux)
 {
 	struct zbus_args *zap;
 
@@ -91,14 +84,15 @@ wdc_buddha_probe(struct device *parent, struct cfdata *cfp, void *aux)
 }
 
 void
-wdc_buddha_attach(struct device *parent, struct device *self, void *aux)
+wdc_buddha_attach(device_t parent, device_t self, void *aux)
 {
 	struct wdc_buddha_softc *sc;
 	struct zbus_args *zap;
 	int nchannels;
 	int ch;
 
-	sc = (void *)self;
+	sc = device_private(self);
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	zap = aux;
 
 	sc->ba = zap->va;
@@ -108,18 +102,19 @@ wdc_buddha_attach(struct device *parent, struct device *self, void *aux)
 
 	nchannels = 2;
 	if (zap->prodid == 42) {
-		printf(": Catweasel Z2\n");
+		aprint_normal(": Catweasel Z2\n");
 		nchannels = 3;
 	} else if (zap->serno == 0) 
-		printf(": Buddha\n");
+		aprint_normal(": Buddha\n");
 	else
-		printf(": Buddha Flash\n");
+		aprint_normal(": Buddha Flash\n");
 
 	/* XXX pio mode setting not implemented yet. */
 	sc->sc_wdcdev.sc_atac.atac_cap = ATAC_CAP_DATA16;
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = nchannels;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -133,14 +128,6 @@ wdc_buddha_attach(struct device *parent, struct device *self, void *aux)
 
 		cp->ch_channel = ch;
 		cp->ch_atac = &sc->sc_wdcdev.sc_atac;
-		cp->ch_queue =
-		    malloc(sizeof(struct ata_queue), M_DEVBUF, M_NOWAIT);
-		if (cp->ch_queue == NULL) {
-			printf("%s: can't allocate memory for command queue\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
-			return;
-		}
-		cp->ch_ndrive = 2;
 
 		/*
 		 * XXX According to the Buddha docs, we should use a method
@@ -159,8 +146,7 @@ wdc_buddha_attach(struct device *parent, struct device *self, void *aux)
 		wdr->cmd_iot = &sc->sc_iot;
 		if (bus_space_map(wdr->cmd_iot, 0x210+ch*0x80, 8, 0,
 		    &wdr->cmd_baseioh)) {
-			printf("%s: couldn't map cmd registers\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+			aprint_error_dev(self, "couldn't map cmd registers\n");
 			return;
 		}
 
@@ -168,21 +154,20 @@ wdc_buddha_attach(struct device *parent, struct device *self, void *aux)
 		if (bus_space_map(wdr->ctl_iot, 0x250+ch*0x80, 2, 0,
 		    &wdr->ctl_ioh)) {
 			bus_space_unmap(wdr->cmd_iot, wdr->cmd_baseioh, 8);
-			printf("%s: couldn't map ctl registers\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+			aprint_error_dev(self, "couldn't map ctl registers\n");
 			return;
 		}
 
 		for (i = 0; i < WDC_NREG; i++) {
 			if (bus_space_subregion(wdr->cmd_iot, wdr->cmd_baseioh,
 			    i, i == 0 ? 4 : 1, &wdr->cmd_iohs[i]) != 0) {
-				printf("%s: couldn't subregion cmd regs\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+				aprint_error_dev(self,
+				    "couldn't subregion cmd regs\n");
 				return;
 			}
 		}
 
-		wdc_init_shadow_regs(cp);
+		wdc_init_shadow_regs(wdr);
 		wdcattach(cp);
 	}
 

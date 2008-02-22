@@ -117,6 +117,13 @@ An expression of the form `ipv6-addr/prefixlen\' is interpreted as
 masked IPv6 address match (with mask specified by numeric prefixlen),
 just like masked IPv4 address match (see above).
 Note that `prefixlen\' portion must always be specified.
+.IP \(bu
+A string that begins with a `/\' character is treated as a file
+name. A host name or address is matched if it matches any host name
+or address pattern listed in the named file. The file format is
+zero or more lines with zero or more host name or address patterns
+separated by whitespace.  A file name pattern can be used anywhere
+a host name or address pattern can be used.
 .SH WILDCARDS
 The access control language supports explicit wildcards:
 .IP ALL
@@ -356,7 +363,7 @@ in.tftpd: LOCAL, .my.domain
 .in +3
 .nf
 in.tftpd: ALL: spawn (/some/where/safe_finger -l @%h | \\
-	/usr/ucb/mail -s %d-%h root) \*[Am]
+	/usr/ucb/mail -s %d-%h root) &
 .fi
 .PP
 (The safe_finger command can be gotten from the tcp_wrappers package and
@@ -381,7 +388,7 @@ The result is an excellent early-warning system.
 An error is reported when a syntax error is found in a host access
 control rule; when the length of an access control rule exceeds the
 capacity of an internal buffer; when an access control rule is not
-terminated by a newline character; when the result of %\*[Lt]letter\*[Gt]
+terminated by a newline character; when the result of %<letter>
 expansion would overflow an internal buffer; when a system call fails
 that shouldn\'t.
 All problems are reported via the syslog daemon.
@@ -414,4 +421,4 @@ Eindhoven University of Technology
 Den Dolech 2, P.O. Box 513,
 5600 MB Eindhoven, The Netherlands
 .\" @(#) hosts_access.5 1.20 95/01/30 19:51:46
-.\"	$NetBSD: hosts_access.5,v 1.15 2003/09/07 16:22:22 wiz Exp $
+.\"	$NetBSD: hosts_access.5,v 1.17 2017/07/03 21:32:51 wiz Exp $

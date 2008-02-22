@@ -1,4 +1,4 @@
-/*	$NetBSD: colrm.c,v 1.7 2005/02/17 17:17:25 xtraeme Exp $	*/
+/*	$NetBSD: colrm.c,v 1.9 2011/08/30 21:35:09 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)colrm.c	8.2 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: colrm.c,v 1.7 2005/02/17 17:17:25 xtraeme Exp $");
+__RCSID("$NetBSD: colrm.c,v 1.9 2011/08/30 21:35:09 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -54,8 +54,8 @@ __RCSID("$NetBSD: colrm.c,v 1.7 2005/02/17 17:17:25 xtraeme Exp $");
 
 #define	TAB	8
 
-void	check(FILE *);
-void	usage(void);
+static void	check(FILE *);
+__dead static void	usage(void);
 
 int
 main(int argc, char *argv[])
@@ -120,7 +120,7 @@ main(int argc, char *argv[])
 	}
 }
 
-void
+static void
 check(FILE *stream)
 {
 	if (feof(stream))
@@ -129,8 +129,8 @@ check(FILE *stream)
 		err(1, "%s", stream == stdin ? "stdin" : "stdout");
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	(void)fprintf(stderr, "usage: colrm [start [stop]]\n");
 	exit(1);

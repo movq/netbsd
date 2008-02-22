@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.h,v 1.8 2008/02/10 18:50:55 ad Exp $	*/
+/*	$NetBSD: pthread_md.h,v 1.12 2011/01/25 19:12:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2007, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,17 +36,16 @@
 
 #include <sys/ucontext.h>
 
-static inline long
+static inline unsigned long
 pthread__sp(void)
 {
-	long ret;
+	unsigned long ret;
 	__asm("movq %%rsp, %0" : "=g" (ret));
 
 	return ret;
 }
 
 #define pthread__uc_sp(ucp) ((ucp)->uc_mcontext.__gregs[_REG_URSP])
-#define pthread__uc_pc(ucp) ((ucp)->uc_mcontext.__gregs[_REG_RIP])
 
 /*
  * Set initial, sane values for registers whose values aren't just
@@ -71,41 +63,35 @@ pthread__sp(void)
 	(ucp)->uc_mcontext.__gregs[_REG_SS] = 0x23,			\
 	(ucp)->uc_mcontext.__gregs[_REG_RFL] = 0x202;
 
-/*
- * Usable stack space below the ucontext_t. 
- * See comment in pthread_switch.S about STACK_SWITCH.
- */
-#define STACKSPACE	64	/* room for 8 long values */
-
-/*
- * Conversions between struct reg and struct mcontext. Used by
- * libpthread_dbg.
- */
-
-#define PTHREAD_UCONTEXT_TO_REG(reg, uc) \
-	memcpy(reg, (uc)->uc_mcontext.__gregs, _NGREG * sizeof (long));
-
-#define PTHREAD_REG_TO_UCONTEXT(uc, reg) do {				\
-	memcpy((uc)->uc_mcontext.__gregs, reg, _NGREG * sizeof (long)); \
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_CPU) & ~_UC_USER; 	\
-	} while (/*CONSTCOND*/0)
-
-
-#define PTHREAD_UCONTEXT_TO_FPREG(freg, uc)		       		\
-	(void)memcpy(&(freg)->fxstate,					\
-        (uc)->uc_mcontext.__fpregs, sizeof(struct fpreg))
-
-#define PTHREAD_FPREG_TO_UCONTEXT(uc, freg) do {       	       		\
-	(void)memcpy(							\
-        (uc)->uc_mcontext.__fpregs,					\
-	&(freg)->fxstate, sizeof(struct fpreg));			\
-	/*LINTED precision loss */					\
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_FPU) & ~_UC_USER;	\
-	} while (/*CONSTCOND*/0)
-
 #define	pthread__smt_pause()	__asm __volatile("rep; nop" ::: "memory")
 
 /* Don't need additional memory barriers. */
 #define	PTHREAD__ATOMIC_IS_MEMBAR
+
+static inline void *
+_atomic_cas_ptr(volatile void *ptr, void *old, void *new)
+{
+	volatile uintptr_t *cast = ptr;
+	void *ret;
+
+	__asm __volatile ("lock; cmpxchgq %2, %1"
+		: "=a" (ret), "=m" (*cast)
+		: "r" (new), "m" (*cast), "0" (old));
+
+	return ret;
+}
+
+static inline void *
+_atomic_cas_ptr_ni(volatile void *ptr, void *old, void *new)
+{
+	volatile uintptr_t *cast = ptr;
+	void *ret;
+
+	__asm __volatile ("cmpxchgq %2, %1"
+		: "=a" (ret), "=m" (*cast)
+		: "r" (new), "m" (*cast), "0" (old));
+
+	return ret;
+}
 
 #endif /* _LIB_PTHREAD_X86_64_MD_H */

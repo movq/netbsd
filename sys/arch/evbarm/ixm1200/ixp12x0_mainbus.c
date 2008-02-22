@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp12x0_mainbus.c,v 1.7 2005/12/11 12:17:09 christos Exp $ */
+/*	$NetBSD: ixp12x0_mainbus.c,v 1.10 2012/10/27 17:17:48 chs Exp $ */
 /*
  * Copyright (c) 2002
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_mainbus.c,v 1.7 2005/12/11 12:17:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_mainbus.c,v 1.10 2012/10/27 17:17:48 chs Exp $");
 
 /*
  * front-end for the ixp12x0 I/O Processor.
@@ -44,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_mainbus.c,v 1.7 2005/12/11 12:17:09 christos
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <evbarm/ixm1200/ixm1200reg.h>
 #include <evbarm/ixm1200/ixm1200var.h>
@@ -54,24 +48,26 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_mainbus.c,v 1.7 2005/12/11 12:17:09 christos
 
 #include "locators.h"
 
-static int	ixp12x0_mainbus_match(struct device *, struct cfdata *, void *);
-static void	ixp12x0_mainbus_attach(struct device *, struct device *, void *);
+static int	ixp12x0_mainbus_match(device_t, cfdata_t, void *);
+static void	ixp12x0_mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(ixpio_mainbus, sizeof(struct ixp12x0_softc),
+CFATTACH_DECL_NEW(ixpio_mainbus, sizeof(struct ixp12x0_softc),
     ixp12x0_mainbus_match, ixp12x0_mainbus_attach, NULL, NULL);
 
 extern struct bus_space ixp12x0_bs_tag;
 
 int
-ixp12x0_mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
+ixp12x0_mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (1);
 }
 
 void
-ixp12x0_mainbus_attach(struct device *parent, struct device *self, void *aux)
+ixp12x0_mainbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct ixp12x0_softc *sc = (void *) self;
+	struct ixp12x0_softc *sc = device_private(self);
+
+	sc->sc_dev = self;
 
 	/*
 	 * Initialize the interrupt part of our PCI chipset tag

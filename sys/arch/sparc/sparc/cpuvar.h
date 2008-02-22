@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuvar.h,v 1.74 2008/01/08 21:32:10 martin Exp $ */
+/*	$NetBSD: cpuvar.h,v 1.97 2018/01/17 07:38:20 mrg Exp $ */
 
 /*
  *  Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. All advertising materials mentioning features or use of this software
- *     must display the following acknowledgement:
- *         This product includes software developed by the NetBSD
- *         Foundation, Inc. and its contributors.
- *  4. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,6 +37,7 @@
 #include "opt_lockdebug.h"
 #include "opt_ddb.h"
 #include "opt_sparc_arch.h"
+#include "opt_modular.h"
 #endif
 
 #include <sys/device.h>
@@ -92,255 +86,6 @@ struct module_info {
 	void (*memerr)(unsigned, u_int, u_int, struct trapframe *);
 	void (*zero_page)(paddr_t);
 	void (*copy_page)(paddr_t, paddr_t);
-};
-
-/*
- * Message structure for Inter Processor Communication in MP systems
- */
-struct xpmsg {
-	volatile int tag;
-#define	XPMSG15_PAUSECPU	1
-#define	XPMSG_FUNC		4
-#define	XPMSG_FTRP		5
-
-	volatile union {
-		/*
-		 * Cross call: ask to run (*func)(arg0,arg1,arg2)
-		 * or (*trap)(arg0,arg1,arg2). `trap' should be the
-		 * address of a `fast trap' handler that executes in
-		 * the trap window (see locore.s).
-		 */
-		struct xpmsg_func {
-			int	(*func)(int, int, int);
-			void	(*trap)(int, int, int);
-			int	arg0;
-			int	arg1;
-			int	arg2;
-			int	retval;
-		} xpmsg_func;
-	} u;
-	volatile int	received;
-	volatile int	complete;
-};
-
-/*
- * This must be locked around all message transactions to ensure only
- * one CPU is generating them.
- */
-extern struct simplelock xpmsg_lock;
-
-#define LOCK_XPMSG()	simple_lock(&xpmsg_lock);
-#define UNLOCK_XPMSG()	simple_unlock(&xpmsg_lock);
-
-/*
- * The cpuinfo structure. This structure maintains information about one
- * currently installed CPU (there may be several of these if the machine
- * supports multiple CPUs, as on some Sun4m architectures). The information
- * in this structure supersedes the old "cpumod", "mmumod", and similar
- * fields.
- */
-
-struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
-
-	/* Scheduler flags */
-	int	ci_want_ast;
-	int	ci_want_resched;
-
-	/*
-	 * SPARC cpu_info structures live at two VAs: one global
-	 * VA (so each CPU can access any other CPU's cpu_info)
-	 * and an alias VA CPUINFO_VA which is the same on each
-	 * CPU and maps to that CPU's cpu_info.  Since the alias
-	 * CPUINFO_VA is how we locate our cpu_info, we have to
-	 * self-reference the global VA so that we can return it
-	 * in the curcpu() macro.
-	 */
-	struct cpu_info * volatile ci_self;
-
-	/* Primary Inter-processor message area */
-	struct xpmsg	msg;
-
-	int		ci_cpuid;	/* CPU index (see cpus[] array) */
-
-	/* Context administration */
-	int		*ctx_tbl;	/* [4m] SRMMU-edible context table */
-	paddr_t		ctx_tbl_pa;	/* [4m] ctx table physical address */
-
-	/* Cache information */
-	struct cacheinfo	cacheinfo;	/* see cache.h */
-
-	/* various flags to workaround anomalies in chips */
-	volatile int	flags;		/* see CPUFLG_xxx, below */
-
-	/* Per processor counter register (sun4m only) */
-	volatile struct counter_4m	*counterreg_4m;
-
-	/* Per processor interrupt mask register (sun4m only) */
-	volatile struct icr_pi	*intreg_4m;
-	/*
-	 * Send a IPI to (cpi).  For Ross cpus we need to read
-	 * the pending register to avoid a hardware bug.
-	 */
-#define raise_ipi(cpi,lvl)	do {			\
-	volatile int x;					\
-	(cpi)->intreg_4m->pi_set = PINTR_SINTRLEV(lvl);	\
-	x = (cpi)->intreg_4m->pi_pend;			\
-} while (0)
-
-	int		sun4_mmu3l;	/* [4]: 3-level MMU present */
-#if defined(SUN4_MMU3L)
-#define HASSUN4_MMU3L	(cpuinfo.sun4_mmu3l)
-#else
-#define HASSUN4_MMU3L	(0)
-#endif
-	int		ci_idepth;		/* Interrupt depth */
-
-	/*
-	 * The following pointers point to processes that are somehow
-	 * associated with this CPU--running on it, using its FPU,
-	 * etc.
-	 */
-	struct	lwp	*ci_curlwp;		/* CPU owner */
-	struct	lwp 	*fplwp;			/* FPU owner */
-
-	int		ci_mtx_count;
-	int		ci_mtx_oldspl;
-
-	/*
-	 * Idle PCB and Interrupt stack;
-	 */
-	void		*eintstack;		/* End of interrupt stack */
-#define INT_STACK_SIZE	(128 * 128)		/* 128 128-byte stack frames */
-	void		*redzone;		/* DEBUG: stack red zone */
-#define REDSIZE		(8*96)			/* some room for bouncing */
-
-	struct	pcb	*curpcb;		/* CPU's PCB & kernel stack */
-
-	/* locore defined: */
-	void	(*get_syncflt)(void);		/* Not C-callable */
-	int	(*get_asyncflt)(u_int *, u_int *);
-
-	/* Synchronous Fault Status; temporary storage */
-	struct {
-		int	sfsr;
-		int	sfva;
-	} syncfltdump;
-
-	/*
-	 * Cache handling functions.
-	 * Most cache flush function come in two flavours: one that
-	 * acts only on the CPU it executes on, and another that
-	 * uses inter-processor signals to flush the cache on
-	 * all processor modules.
-	 * The `ft_' versions are fast trap cache flush handlers.
-	 */
-	void	(*cache_flush)(void *, u_int);
-	void	(*vcache_flush_page)(int, int);
-	void	(*sp_vcache_flush_page)(int, int);
-	void	(*ft_vcache_flush_page)(int, int);
-	void	(*vcache_flush_segment)(int, int, int);
-	void	(*sp_vcache_flush_segment)(int, int, int);
-	void	(*ft_vcache_flush_segment)(int, int, int);
-	void	(*vcache_flush_region)(int, int);
-	void	(*sp_vcache_flush_region)(int, int);
-	void	(*ft_vcache_flush_region)(int, int);
-	void	(*vcache_flush_context)(int);
-	void	(*sp_vcache_flush_context)(int);
-	void	(*ft_vcache_flush_context)(int);
-
-	/* The are helpers for (*cache_flush)() */
-	void	(*sp_vcache_flush_range)(int, int, int);
-	void	(*ft_vcache_flush_range)(int, int, int);
-
-	void	(*pcache_flush_page)(paddr_t, int);
-	void	(*pure_vcache_flush)(void);
-	void	(*cache_flush_all)(void);
-
-	/* Support for hardware-assisted page clear/copy */
-	void	(*zero_page)(paddr_t);
-	void	(*copy_page)(paddr_t, paddr_t);
-
-	/* Virtual addresses for use in pmap copy_page/zero_page */
-	void *	vpage[2];
-	int	*vpage_pte[2];		/* pte location of vpage[] */
-
-	void	(*cache_enable)(void);
-
-	int	cpu_type;	/* Type: see CPUTYP_xxx below */
-
-	/* Inter-processor message area (high priority but used infrequently) */
-	struct xpmsg	msg_lev15;
-
-	/* CPU information */
-	int		node;		/* PROM node for this CPU */
-	int		mid;		/* Module ID for MP systems */
-	int		mbus;		/* 1 if CPU is on MBus */
-	int		mxcc;		/* 1 if a MBus-level MXCC is present */
-	const char	*cpu_name;	/* CPU model */
-	int		cpu_impl;	/* CPU implementation code */
-	int		cpu_vers;	/* CPU version code */
-	int		mmu_impl;	/* MMU implementation code */
-	int		mmu_vers;	/* MMU version code */
-	int		master;		/* 1 if this is bootup CPU */
-
-	vaddr_t		mailbox;	/* VA of CPU's mailbox */
-
-	int		mmu_ncontext;	/* Number of contexts supported */
-	int		mmu_nregion; 	/* Number of regions supported */
-	int		mmu_nsegment;	/* [4/4c] Segments */
-	int		mmu_npmeg;	/* [4/4c] Pmegs */
-
-/* XXX - we currently don't actually use the following */
-	int		arch;		/* Architecture: CPU_SUN4x */
-	int		class;		/* Class: SuperSPARC, microSPARC... */
-	int		classlvl;	/* Iteration in class: 1, 2, etc. */
-	int		classsublvl;	/* stepping in class (version) */
-
-	int		hz;		/* Clock speed */
-
-	/* FPU information */
-	int		fpupresent;	/* true if FPU is present */
-	int		fpuvers;	/* FPU revision */
-	const char	*fpu_name;	/* FPU model */
-	char		fpu_namebuf[32];/* Buffer for FPU name, if necessary */
-
-	/* XXX */
-	volatile void	*ci_ddb_regs;		/* DDB regs */
-
-	/*
-	 * The following are function pointers to do interesting CPU-dependent
-	 * things without having to do type-tests all the time
-	 */
-
-	/* bootup things: access to physical memory */
-	u_int	(*read_physmem)(u_int addr, int space);
-	void	(*write_physmem)(u_int addr, u_int data);
-	void	(*cache_tablewalks)(void);
-	void	(*mmu_enable)(void);
-	void	(*hotfix)(struct cpu_info *);
-
-
-#if 0
-	/* hardware-assisted block operation routines */
-	void		(*hwbcopy)(const void *from, void *to, size_t len);
-	void		(*hwbzero)(void *buf, size_t len);
-
-	/* routine to clear mbus-sbus buffers */
-	void		(*mbusflush)(void);
-#endif
-
-	/*
-	 * Memory error handler; parity errors, unhandled NMIs and other
-	 * unrecoverable faults end up here.
-	 */
-	void		(*memerr)(unsigned, u_int, u_int, struct trapframe *);
-	void		(*idlespin)(struct cpu_info *);
-	/* Module Control Registers */
-	/*bus_space_handle_t*/ long ci_mbusport;
-	/*bus_space_handle_t*/ long ci_mxccregs;
-
-	u_int	ci_tt;			/* Last trap (if tracing) */
 };
 
 /*
@@ -409,30 +154,25 @@ struct cpu_info {
 /*
  * CPU flags
  */
-#define CPUFLG_CACHEPAGETABLES	0x1	/* caching pagetables OK on Sun4m */
-#define CPUFLG_CACHEIOMMUTABLES	0x2	/* caching IOMMU translations OK */
-#define CPUFLG_CACHEDVMA	0x4	/* DVMA goes through cache */
-#define CPUFLG_SUN4CACHEBUG	0x8	/* trap page can't be cached */
-#define CPUFLG_CACHE_MANDATORY	0x10	/* if cache is on, don't use
-					   uncached access */
 #define CPUFLG_HATCHED		0x1000	/* CPU is alive */
 #define CPUFLG_PAUSED		0x2000	/* CPU is paused */
 #define CPUFLG_GOTMSG		0x4000	/* CPU got an lev13 IPI */
-#define CPUFLG_READY		0x8000	/* CPU available for IPI */
 
-
-#define CPU_INFO_ITERATOR		int
-#ifdef MULTIPROCESSOR
-#define CPU_INFO_FOREACH(cii, ci)	cii = 0; ci = cpus[cii], cii < sparc_ncpus; cii++
-#else
-#define	CPU_INFO_FOREACH(cii, ci)	(void)cii, ci = curcpu(); ci != NULL; ci = NULL
-#endif
 
 /*
- * Useful macros.
+ * Provide two forms of CPU_INFO_FOREACH.  One fast one for non-modular
+ * non-SMP kernels, and the other for everyone else.  Both work in the
+ * non-SMP case, just involving an extra indirection through cpus[0] for
+ * the portable version.
  */
-#define CPU_NOTREADY(cpi)	((cpi) == NULL || cpuinfo.mid == (cpi)->mid || \
-				    ((cpi)->flags & CPUFLG_READY) == 0)
+#if defined(MULTIPROCESSOR) || defined(MODULAR) || defined(_MODULE)
+#define	CPU_INFO_FOREACH(cii, cp)	cii = 0; (cp = cpus[cii]) && cp->eintstack && cii < sparc_ncpus; cii++
+#define CPU_INFO_ITERATOR		int
+#else
+#define CPU_INFO_FOREACH(cii, cp)	cp = curcpu(); cp != NULL; cp = NULL
+#define CPU_INFO_ITERATOR		int __unused
+#endif
+
 
 /*
  * Related function prototypes
@@ -440,14 +180,16 @@ struct cpu_info {
 void getcpuinfo (struct cpu_info *sc, int node);
 void mmu_install_tables (struct cpu_info *);
 void pmap_alloc_cpu (struct cpu_info *);
-void pmap_globalize_boot_cpu (struct cpu_info *);
 
 #define	CPUSET_ALL	0xffffffffU	/* xcall to all configured CPUs */
 
 #if defined(MULTIPROCESSOR)
-typedef int (*xcall_func_t)(int, int, int);
+void cpu_init_system(void);
+typedef void (*xcall_func_t)(int, int, int);
 typedef void (*xcall_trap_t)(int, int, int);
 void xcall(xcall_func_t, xcall_trap_t, int, int, int, u_int);
+/* from intr.c */
+void xcallintr(void *);
 /* Shorthand */
 #define XCALL0(f,cpuset)		\
 	xcall((xcall_func_t)f, NULL, 0, 0, 0, cpuset)
@@ -480,10 +222,17 @@ void xcall(xcall_func_t, xcall_trap_t, int, int, int, u_int);
 extern int bootmid;			/* Module ID of boot CPU */
 #define CPU_MID2CPUNO(mid)		((mid) != 0 ? (mid) - 8 : 0)
 
-extern struct cpu_info **cpus;
+extern struct cpu_info *cpus[];
+#ifdef MULTIPROCESSOR
 extern u_int cpu_ready_mask;		/* the set of CPUs marked as READY */
+#endif
 
-#define cpuinfo	(*(struct cpu_info *)CPUINFO_VA)
-
+#if defined(DDB) || defined(MULTIPROCESSOR)
+/*
+ * These are called by ddb mach functions.
+ */
+void cpu_debug_dump(void);
+void cpu_xcall_dump(void);
+#endif
 
 #endif	/* _sparc_cpuvar_h */

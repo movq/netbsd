@@ -1,4 +1,4 @@
-/*	$NetBSD: error.c,v 1.36 2008/02/15 17:26:06 matt Exp $	*/
+/*	$NetBSD: error.c,v 1.41 2017/07/24 12:35:12 kre Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)error.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: error.c,v 1.36 2008/02/15 17:26:06 matt Exp $");
+__RCSID("$NetBSD: error.c,v 1.41 2017/07/24 12:35:12 kre Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,6 +53,7 @@ __RCSID("$NetBSD: error.c,v 1.36 2008/02/15 17:26:06 matt Exp $");
 #include <string.h>
 
 #include "shell.h"
+#include "eval.h" /* for commandname */
 #include "main.h"
 #include "options.h"
 #include "output.h"
@@ -68,7 +69,6 @@ struct jmploc *handler;
 int exception;
 volatile int suppressint;
 volatile int intpending;
-const char *commandname;
 
 
 static void exverror(int, const char *, va_list) __dead;
@@ -120,7 +120,7 @@ onint(void)
 	/* NOTREACHED */
 }
 
-static void
+static __printflike(2, 0) void
 exvwarning(int sv_errno, const char *msg, va_list ap)
 {
 	/* Partially emulate line buffered output so that:
@@ -129,7 +129,8 @@ exvwarning(int sv_errno, const char *msg, va_list ap)
 	 *	printf '%d %d %d\n' 1 a 2
 	 * both generate sensible text when stdout and stderr are merged.
 	 */
-	if (output.nextc != output.buf && output.nextc[-1] == '\n')
+	if (output.buf != NULL && output.nextc != output.buf &&
+	    output.nextc[-1] == '\n')
 		flushout(&output);
 	if (commandname)
 		outfmt(&errout, "%s: ", commandname);
@@ -151,7 +152,7 @@ exvwarning(int sv_errno, const char *msg, va_list ap)
  * is not NULL then error prints an error message using printf style
  * formatting.  It then raises the error exception.
  */
-static void
+static __printflike(2, 0) void
 exverror(int cond, const char *msg, va_list ap)
 {
 	CLEAR_PENDING_INT;
@@ -159,11 +160,12 @@ exverror(int cond, const char *msg, va_list ap)
 
 #ifdef DEBUG
 	if (msg) {
-		TRACE(("exverror(%d, \"", cond));
-		TRACEV((msg, ap));
-		TRACE(("\") pid=%d\n", getpid()));
+		CTRACE(DBG_ERRS, ("exverror(%d, \"", cond));
+		CTRACEV(DBG_ERRS, (msg, ap));
+		CTRACE(DBG_ERRS, ("\") pid=%d\n", getpid()));
 	} else
-		TRACE(("exverror(%d, NULL) pid=%d\n", cond, getpid()));
+		CTRACE(DBG_ERRS, ("exverror(%d, NULL) pid=%d\n", cond,
+		    getpid()));
 #endif
 	if (msg)
 		exvwarning(-1, msg, ap);
@@ -179,6 +181,11 @@ error(const char *msg, ...)
 {
 	va_list ap;
 
+	/*
+	 * On error, we certainly never want exit(0)...
+	 */
+	if (exerrno == 0)
+		exerrno = 1;
 	va_start(ap, msg);
 	exverror(EXERROR, msg, ap);
 	/* NOTREACHED */

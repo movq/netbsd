@@ -1,4 +1,4 @@
-/*	$NetBSD: scoopreg.h,v 1.4 2007/10/17 19:58:34 garbled Exp $	*/
+/*	$NetBSD: scoopreg.h,v 1.6 2014/09/23 14:49:46 nonaka Exp $	*/
 /*	$OpenBSD: zaurus_scoopreg.h,v 1.7 2005/07/01 23:51:55 uwe Exp $	*/
 
 /*
@@ -61,12 +61,14 @@
 
 #define SCOOP0_LED_GREEN		1
 #define SCOOP0_JK_B_C3000		2
+#define SCOOP0_SWA_C860			2
 #define SCOOP0_CHARGE_OFF_C3000		3
+#define SCOOP0_SWB_C860			3
 #define SCOOP0_MUTE_L			4
 #define SCOOP0_MUTE_R			5
 #define SCOOP0_AKIN_PULLUP		6
 #define SCOOP0_CF_POWER_C3000		6
-#define SCOOP0_APM_ON			7
+#define SCOOP0_AMP_ON			7
 #define SCOOP0_LED_ORANGE_C3000		7
 #define SCOOP0_BACKLIGHT_CONT		8
 #define SCOOP0_JK_A_C3000		8

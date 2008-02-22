@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.20 2006/05/18 18:42:59 mrg Exp $	*/
+/*	$NetBSD: io.c,v 1.22 2009/08/25 06:56:52 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: io.c,v 1.20 2006/05/18 18:42:59 mrg Exp $");
+__RCSID("$NetBSD: io.c,v 1.22 2009/08/25 06:56:52 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,6 +52,15 @@ __RCSID("$NetBSD: io.c,v 1.20 2006/05/18 18:42:59 mrg Exp $");
 #include "hdr.h"
 #include "extern.h"
 
+static int next(void);
+static void rdesc(int);
+static void rdefault(void);
+static void rhints(void);
+static void rliq(void);
+static void rlocs(void);
+static int rnum(void);
+static void rtrav(void);
+static void rvoc(void);
 
 /* get command from user        */
 /* no prompt, usually           */
@@ -159,15 +168,15 @@ yesm(int x, int y, int z)
 }
 /* FILE *inbuf,*outbuf; */
 
-char   *inptr;			/* Pointer into virtual disk    */
+static char *inptr;		/* Pointer into virtual disk    */
 
-int     outsw = 0;		/* putting stuff to data file?  */
+static int outsw = 0;		/* putting stuff to data file?  */
 
-const char    iotape[] = "Ax3F'\003tt$8h\315qer*h\017nGKrX\207:!l";
-const char   *tape = iotape;		/* pointer to encryption tape   */
+static const char    iotape[] = "Ax3F'\003tt$8h\315qer*h\017nGKrX\207:!l";
+static const char   *tape = iotape;	/* pointer to encryption tape   */
 
 /* next virtual char, bump adr  */
-int
+static int
 next(void)
 {	
 	int     ch;
@@ -182,7 +191,7 @@ next(void)
 	return (ch);
 }
 
-char    breakch;		/* tell which char ended rnum   */
+static char breakch;		/* tell which char ended rnum   */
 
 /* "read" data from virtual file */
 void
@@ -194,7 +203,7 @@ rdata(void)
 	inptr = data_file;	/* Pointer to virtual data file */
 	srandom(SEED);		/* which is lightly encrypted.  */
 
-	clsses = 1;
+	classes = 1;
 	for (;;) {		/* read data sections           */
 		sect = next() - '0';	/* 1st digit of section number  */
 #ifdef VERBOSE
@@ -235,7 +244,7 @@ rdata(void)
 			rlocs();
 			break;
 		case 8:	/* action defaults              */
-			rdflt();
+			rdefault();
 			break;
 		case 9:	/* liquid assets                */
 			rliq();
@@ -259,10 +268,10 @@ rdata(void)
 	}
 }
 
-char    nbf[12];
+static char nbf[12];
 
 /* read initial location num    */
-int
+static int
 rnum(void)
 {	
 	char   *s;
@@ -277,10 +286,10 @@ rnum(void)
 	return (atoi(nbf));	/* convert it to integer        */
 }
 
-char   *seekhere;
+static char *seekhere;
 
 /* read description-format msgs */
-void
+static void
 rdesc(int sect)
 {
 	int     locc;
@@ -307,18 +316,18 @@ rdesc(int sect)
 				ptext[oldloc].txtlen = maystart - seekstart;
 				break;
 			case 6:/* random messages              */
-				if (oldloc >= RTXSIZ) 
+				if (oldloc >= RTXSIZE) 
 					errx(1,"Too many random msgs");
 				rtext[oldloc].seekadr = seekhere;
 				rtext[oldloc].txtlen = maystart - seekstart;
 				break;
 			case 10:	/* class messages               */
-				ctext[clsses].seekadr = seekhere;
-				ctext[clsses].txtlen = maystart - seekstart;
-				cval[clsses++] = oldloc;
+				ctext[classes].seekadr = seekhere;
+				ctext[classes].txtlen = maystart - seekstart;
+				cval[classes++] = oldloc;
 				break;
 			case 12:	/* magic messages               */
-				if (oldloc >= MAGSIZ)
+				if (oldloc >= MAGSIZE)
 					errx(1,"Too many magic msgs");
 				mtext[oldloc].seekadr = seekhere;
 				mtext[oldloc].txtlen = maystart - seekstart;
@@ -343,7 +352,7 @@ rdesc(int sect)
 }
 
 /* read travel table            */
-void
+static void
 rtrav(void)
 {	
 	int     locc;
@@ -424,7 +433,7 @@ twrite(int loq)
 #endif				/* DEBUG */
 
 /* read the vocabulary          */
-void
+static void
 rvoc(void)
 {
 	char   *s;
@@ -449,7 +458,7 @@ rvoc(void)
 }
 
 /* initial object locations     */
-void
+static void
 rlocs(void)
 {	
 	for (;;) {
@@ -464,18 +473,18 @@ rlocs(void)
 }
 
 /* default verb messages        */
-void
-rdflt(void)
+static void
+rdefault(void)
 {	
 	for (;;) {
 		if ((verb = rnum()) < 0)
 			break;
-		actspk[verb] = rnum();
+		actspeak[verb] = rnum();
 	}
 }
 
 /* liquid assets &c: cond bits  */
-void
+static void
 rliq(void)
 {	
 	int     bitnum;
@@ -493,18 +502,18 @@ rliq(void)
 	}
 }
 
-void
+static void
 rhints(void)
 {
 	int     hintnum, i;
-	hntmax = 0;
+	hintmax = 0;
 	for (;;) {
 		if ((hintnum = rnum()) < 0)
 			break;
 		for (i = 1; i < 5; i++)
 			hints[hintnum][i] = rnum();
-		if (hintnum > hntmax)
-			hntmax = hintnum;
+		if (hintnum > hintmax)
+			hintmax = hintnum;
 	}
 }
 

@@ -1,18 +1,17 @@
-#	$NetBSD: bsd.hostlib.mk,v 1.14 2004/06/10 00:29:58 lukem Exp $
+#	$NetBSD: bsd.hostlib.mk,v 1.20 2018/05/04 14:50:40 christos Exp $
 
-.include <bsd.init.mk>
+.include <bsd.hostinit.mk>
 .include <bsd.sys.mk>
 
 ##### Basic targets
-clean:		cleanlib
 
 ##### Default values
 CFLAGS+=	${COPTS}
-HOST_MKDEP?=	CC=${HOST_CC:Q} mkdep
-MKDEP_SUFFIXES?=	.o .lo
+MKDEP_SUFFIXES?=	.o .lo .d
 
 # Override these:
 MKDEP:=		${HOST_MKDEP}
+MKDEPCXX:=	${HOST_MKDEPCXX}
 
 .if ${TOOLCHAIN_MISSING} == "no" || defined(EXTERNAL_TOOLCHAIN)
 OBJHOSTMACHINE=	# set
@@ -30,7 +29,7 @@ OBJS+=		${SRCS:N*.h:N*.sh:R:S/$/.lo/g}
 .endif
 
 .if defined(OBJS) && !empty(OBJS)
-.NOPATH: ${OBJS} ${HOSTPROG} ${_YHLSRCS}
+.NOPATH: lib${HOSTLIB}.a ${OBJS} ${_YHLSRCS}
 
 ${OBJS}: ${DPSRCS}
 
@@ -44,9 +43,7 @@ lib${HOSTLIB}.a: ${OBJS} ${DPADD}
 
 realall: lib${HOSTLIB}.a
 
-cleanlib: .PHONY
-	rm -f a.out [Ee]rrs mklog core *.core \
-	    lib${HOSTLIB}.a ${OBJS} ${CLEANFILES}
+CLEANFILES+= a.out [Ee]rrs mklog core *.core lib${HOSTLIB}.a ${OBJS}
 
 beforedepend:
 CFLAGS:=	${HOST_CFLAGS}
@@ -55,5 +52,6 @@ CPPFLAGS:=	${HOST_CPPFLAGS}
 ##### Pull in related .mk logic
 .include <bsd.obj.mk>
 .include <bsd.dep.mk>
+.include <bsd.clean.mk>
 
 ${TARGETS}:	# ensure existence

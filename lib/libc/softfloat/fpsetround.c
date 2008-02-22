@@ -1,4 +1,4 @@
-/* $NetBSD: fpsetround.c,v 1.2 2002/01/13 21:45:53 thorpej Exp $ */
+/* $NetBSD: fpsetround.c,v 1.4 2013/01/10 08:16:10 matt Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpsetround.c,v 1.2 2002/01/13 21:45:53 thorpej Exp $");
+__RCSID("$NetBSD: fpsetround.c,v 1.4 2013/01/10 08:16:10 matt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -57,9 +50,11 @@ __weak_alias(fpsetround,_fpsetround)
 fp_rnd
 fpsetround(fp_rnd rnd_dir)
 {
-	fp_rnd old;
-
-	old = float_rounding_mode;
+#ifdef set_float_rounding_mode
+	return set_float_rounding_mode(rnd_dir);
+#else
+	const fp_rnd old = float_rounding_mode;
 	float_rounding_mode = rnd_dir;
 	return old;
+#endif
 }

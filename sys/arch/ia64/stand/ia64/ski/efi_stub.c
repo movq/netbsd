@@ -1,4 +1,4 @@
-/*	$NetBSD: efi_stub.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
+/*	$NetBSD: efi_stub.c,v 1.4 2012/12/27 20:21:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003,2004 Marcel Moolenaar
@@ -36,12 +36,13 @@
 #include <machine/bootinfo.h>
 #include <machine/efi.h>
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
 #include <bootstrap.h>
 
 #include "libski.h"
 
-extern void acpi_root;
-extern void sal_systab;
+extern char acpi_root[];
+extern char sal_systab[];
 
 extern void acpi_stub_init(void);
 extern void sal_stub_init(void);

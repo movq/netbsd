@@ -1,4 +1,4 @@
-/* $NetBSD: i82093var.h,v 1.4 2007/12/09 20:27:48 jmcneill Exp $ */
+/* $NetBSD: i82093var.h,v 1.16 2017/05/23 03:23:58 nonaka Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,10 +34,10 @@
 #ifndef _X86_I82093VAR_H_
 #define _X86_I82093VAR_H_
 
+#include <sys/device.h>
 #include <machine/apicvar.h>
 
-struct ioapic_pin 
-{
+struct ioapic_pin {
 	struct ioapic_pin	*ip_next;	/* next pin on this vector */
 	struct mp_intr_map 	*ip_map;
 	int			ip_vector;	/* IDT vector */
@@ -53,16 +46,16 @@ struct ioapic_pin
 };
 
 struct ioapic_softc {
+	device_t		sc_dev;
 	struct pic		sc_pic;
 	struct ioapic_softc	*sc_next;
-	int			sc_apicid;
 	int			sc_apic_vers;
 	int			sc_apic_vecbase; /* global int base if ACPI */
-	int			sc_apic_sz;	/* apic size*/
+	int			sc_apic_sz;	/* apic size */
 	int			sc_flags;
 	paddr_t			sc_pa;		/* PA of ioapic */
-	volatile u_int32_t	*sc_reg;	/* KVA of ioapic addr */
-	volatile u_int32_t	*sc_data;	/* KVA of ioapic data */
+	volatile uint32_t	*sc_reg;	/* KVA of ioapic addr */
+	volatile uint32_t	*sc_data;	/* KVA of ioapic data */
 	struct ioapic_pin	*sc_pins;	/* sc_apic_sz entries */
 };      
 
@@ -72,32 +65,44 @@ struct ioapic_softc {
  * ih&0x10000000 -> if 0, old-style isa irq; if 1, routed via ioapic.
  * (ih&0xff0000)>>16 -> ioapic id.
  * (ih&0x00ff00)>>8 -> ioapic pin.
+ *
+ * MSI/MSI-X:
+ * (ih&0x000ff80000000000)>>43 -> MSI/MSI-X device id.
+ * (ih&0x000007ff00000000)>>32 -> MSI/MSI-X vector id in a device.
  */
-
-#define APIC_INT_VIA_APIC	0x10000000
-#define APIC_INT_APIC_MASK	0x00ff0000
+#define MPSAFE_MASK		0x80000000ULL
+#define APIC_INT_VIA_APIC	0x10000000ULL
+#define APIC_INT_VIA_MSI	0x20000000ULL
+#define APIC_INT_APIC_MASK	0x00ff0000ULL
 #define APIC_INT_APIC_SHIFT	16
-#define APIC_INT_PIN_MASK	0x0000ff00
+#define APIC_INT_PIN_MASK	0x0000ff00ULL
 #define APIC_INT_PIN_SHIFT	8
 
-#define APIC_IRQ_APIC(x) ((x & APIC_INT_APIC_MASK) >> APIC_INT_APIC_SHIFT)
-#define APIC_IRQ_PIN(x) ((x & APIC_INT_PIN_MASK) >> APIC_INT_PIN_SHIFT)
-#define APIC_IRQ_ISLEGACY(x) (!((x) & APIC_INT_VIA_APIC))
-#define APIC_IRQ_LEGACY_IRQ(x) ((x) & 0xff)
+#define APIC_IRQ_APIC(x) (int)(((x) & APIC_INT_APIC_MASK) >> APIC_INT_APIC_SHIFT)
+#define APIC_IRQ_PIN(x) (int)(((x) & APIC_INT_PIN_MASK) >> APIC_INT_PIN_SHIFT)
+#define APIC_IRQ_ISLEGACY(x) (bool)(!((x) & APIC_INT_VIA_APIC))
+#define APIC_IRQ_LEGACY_IRQ(x) (int)((x) & 0xff)
 
-void *apic_intr_establish(int, int, int, int (*)(void *), void *); 
-void apic_intr_disestablish(void *);
+#define INT_VIA_MSI(x) (bool)(((x) & APIC_INT_VIA_MSI) != 0)
+
+#define MSI_INT_MSIX		0x1000000000000000ULL
+#define MSI_INT_DEV_MASK	0x000ff80000000000ULL
+#define MSI_INT_VEC_MASK	0x000007ff00000000ULL
+
+#define MSI_INT_IS_MSIX(x) (bool)((((x) & MSI_INT_MSIX) != 0))
+#define MSI_INT_MAKE_MSI(x) ((x) &= ~MSI_INT_MSIX)
+#define MSI_INT_MAKE_MSIX(x) ((x) |= MSI_INT_MSIX)
+#define MSI_INT_DEV(x) __SHIFTOUT((x), MSI_INT_DEV_MASK)
+#define MSI_INT_VEC(x) __SHIFTOUT((x), MSI_INT_VEC_MASK)
 
 void ioapic_print_redir(struct ioapic_softc *, const char *, int);
-void ioapic_format_redir(char *, const char *, int, u_int32_t, u_int32_t);
+void ioapic_format_redir(char *, const char *, int, uint32_t, uint32_t);
 struct ioapic_softc *ioapic_find(int);
 struct ioapic_softc *ioapic_find_bybase(int);
 
 void ioapic_enable(void);
 void ioapic_reenable(void);
-void lapic_vectorset(void); /* XXX */
 
-extern int ioapic_bsp_id;
 extern int nioapics;
 extern struct ioapic_softc *ioapics;
 

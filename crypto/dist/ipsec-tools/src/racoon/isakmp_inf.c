@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp_inf.c,v 1.24 2008/01/11 14:27:34 vanhu Exp $	*/
+/*	$NetBSD: isakmp_inf.c,v 1.53 2018/05/19 19:47:47 maxv Exp $	*/
 
 /* Id: isakmp_inf.c,v 1.44 2006/05/06 20:45:52 manubsd Exp */
 
@@ -107,11 +107,8 @@ static int isakmp_info_recv_r_u __P((struct ph1handle *,
 	struct isakmp_pl_ru *, u_int32_t));
 static int isakmp_info_recv_r_u_ack __P((struct ph1handle *,
 	struct isakmp_pl_ru *, u_int32_t));
-static void isakmp_info_send_r_u __P((void *));
+static void isakmp_info_send_r_u __P((struct sched *));
 #endif
-
-static void purge_isakmp_spi __P((int, isakmp_index *, size_t));
-static void info_recv_initialcontact __P((struct ph1handle *));
 
 /* %%%
  * Information Exchange
@@ -130,13 +127,12 @@ isakmp_info_recv(iph1, msg0)
 	int error = -1;
 	struct isakmp *isakmp;
 	struct isakmp_gen *gen;
-	struct isakmp_parse_t *pa, *pap;
+	struct isakmp_parse_t *pa;
 	void *p;
 	vchar_t *hash, *payload;
 	struct isakmp_gen *nd;
 	u_int8_t np;
 	int encrypted;
-	int flag;
 
 	plog(LLV_DEBUG, LOCATION, NULL, "receive Information.\n");
 
@@ -169,7 +165,8 @@ isakmp_info_recv(iph1, msg0)
 	if (msg->l < sizeof(*isakmp) + sizeof(*gen)) {
 		plog(LLV_ERROR, LOCATION, NULL, 
 			"ignore information because the "
-			"message is way too short - %d byte(s).\n", msg->l);
+			"message is way too short - %zu byte(s).\n",
+			msg->l);
 		goto end;
 	}
 
@@ -180,14 +177,15 @@ isakmp_info_recv(iph1, msg0)
 	if (encrypted) {
 		if (isakmp->np != ISAKMP_NPTYPE_HASH) {
 			plog(LLV_ERROR, LOCATION, NULL,
-			    "ignore information because the"
+			    "ignore information because the "
 			    "message has no hash payload.\n");
 			goto end;
 		}
 
-		if (iph1->status != PHASE1ST_ESTABLISHED) {
+		if (iph1->status != PHASE1ST_ESTABLISHED &&
+		    iph1->status != PHASE1ST_DYING) {
 			plog(LLV_ERROR, LOCATION, NULL,
-			    "ignore information because ISAKMP-SA"
+			    "ignore information because ISAKMP-SA "
 			    "has not been established yet.\n");
 			goto end;
 		}
@@ -196,7 +194,8 @@ isakmp_info_recv(iph1, msg0)
 		if (msg->l < sizeof(*isakmp) + ntohs(gen->len) + sizeof(*nd)) {
 			plog(LLV_ERROR, LOCATION, NULL, 
 				"ignore information because the "
-				"message is too short - %d byte(s).\n", msg->l);
+				"message is too short - %zu byte(s).\n",
+				msg->l);
 			goto end;
 		}
 
@@ -313,11 +312,8 @@ isakmp_info_recv(iph1, msg0)
 				"received unexpected payload type %s.\n",
 				s_isakmp_nptype(gen->np));
 		}
-		if(error < 0) {
+		if (error < 0)
 			break;
-		} else {
-			flag |= error;
-		}
 	}
     end:
 	if (msg != NULL)
@@ -326,6 +322,65 @@ isakmp_info_recv(iph1, msg0)
 		vfree(pbuf);
 	return error;
 }
+
+
+/*
+ * log unhandled / unallowed Notification payload
+ */
+int
+isakmp_log_notify(iph1, notify, exchange)
+	struct ph1handle *iph1;
+	struct isakmp_pl_n *notify;
+	const char *exchange;
+{
+	u_int type;
+	char *nraw, *ndata, *nhex;
+	size_t l;
+
+	type = ntohs(notify->type);
+	if (ntohs(notify->h.len) < sizeof(*notify) + notify->spi_size) {
+		plog(LLV_ERROR, LOCATION, iph1->remote,
+			"invalid spi_size in %s notification in %s.\n",
+			s_isakmp_notify_msg(type), exchange);
+		return -1;
+	}
+
+	plog(LLV_ERROR, LOCATION, iph1->remote,
+		"notification %s received in %s.\n",
+		s_isakmp_notify_msg(type), exchange);
+
+	nraw = ((char*) notify) + sizeof(*notify) + notify->spi_size;
+	l = ntohs(notify->h.len) - sizeof(*notify) - notify->spi_size;
+	if (l > 0) {
+		if (type >= ISAKMP_NTYPE_MINERROR &&
+		    type <= ISAKMP_NTYPE_MAXERROR) {
+			ndata = binsanitize(nraw, l);
+			if (ndata != NULL) {
+				plog(LLV_ERROR, LOCATION, iph1->remote,
+					"error message: '%s'.\n",
+					ndata);
+				racoon_free(ndata);
+			} else {
+				plog(LLV_ERROR, LOCATION, iph1->remote,
+					"Cannot allocate memory\n");
+			}
+		} else {
+			nhex = val2str(nraw, l);
+			if (nhex != NULL) {
+				plog(LLV_ERROR, LOCATION, iph1->remote,
+					"notification payload: %s.\n",
+					nhex);
+				racoon_free(nhex);
+			} else {
+				plog(LLV_ERROR, LOCATION, iph1->remote,
+					"Cannot allocate memory\n");
+			}
+		}
+	}
+
+	return 0;
+}
+
 
 /*
  * handling of Notification payload
@@ -338,14 +393,8 @@ isakmp_info_recv_n(iph1, notify, msgid, encrypted)
 	int encrypted;
 {
 	u_int type;
-	vchar_t *pbuf;
-	vchar_t *ndata;
-	char *nraw;
-	size_t l;
-	char *spi;
 
 	type = ntohs(notify->type);
-
 	switch (type) {
 	case ISAKMP_NTYPE_CONNECTED:
 	case ISAKMP_NTYPE_RESPONDER_LIFETIME:
@@ -357,8 +406,7 @@ isakmp_info_recv_n(iph1, notify, msgid, encrypted)
 		break;
 	case ISAKMP_NTYPE_INITIAL_CONTACT:
 		if (encrypted)
-			info_recv_initialcontact(iph1);
-			return 0;
+			return isakmp_info_recv_initialcontact(iph1, NULL);
 		break;
 #ifdef ENABLE_DPD
 	case ISAKMP_NTYPE_R_U_THERE:
@@ -372,76 +420,23 @@ isakmp_info_recv_n(iph1, notify, msgid, encrypted)
 				(struct isakmp_pl_ru *)notify, msgid);
 		break;
 #endif
-	default:
-	    {
-		/* XXX there is a potential of dos attack. */
-		if(type >= ISAKMP_NTYPE_MINERROR &&
-		   type <= ISAKMP_NTYPE_MAXERROR) {
-			if (msgid == 0) {
-				/* don't think this realy deletes ph1 ? */
-				plog(LLV_ERROR, LOCATION, iph1->remote,
-					"delete phase1 handle.\n");
-				return -1;
-			} else {
-				if (getph2bymsgid(iph1, msgid) == NULL) {
-					plog(LLV_ERROR, LOCATION, iph1->remote,
-						"fatal %s notify messsage, "
-						"phase1 should be deleted.\n",
-						s_isakmp_notify_msg(type));
-				} else {
-					plog(LLV_ERROR, LOCATION, iph1->remote,
-						"fatal %s notify messsage, "
-						"phase2 should be deleted.\n",
-						s_isakmp_notify_msg(type));
-				}
-			}
-		} else {
-			plog(LLV_ERROR, LOCATION, iph1->remote,
-				"unhandled notify message %s, "
-				"no phase2 handle found.\n",
-				s_isakmp_notify_msg(type));
-		}
-	    }
-	    break;
 	}
 
-	/* get spi if specified and allocate */
-	if(notify->spi_size > 0) {
-		if (ntohs(notify->h.len) < sizeof(*notify) + notify->spi_size) {
-			plog(LLV_ERROR, LOCATION, iph1->remote,
-				"invalid spi_size in notification payload.\n");
-			return -1;
-		}
-		spi = val2str((char *)(notify + 1), notify->spi_size);
+	/* If we receive a error notification we should delete the related
+	 * phase1 / phase2 handle, and send an event to racoonctl.
+	 * However, since phase1 error notifications are not encrypted and
+	 * can not be authenticated, it would allow a DoS attack possibility
+	 * to handle them.
+	 * Phase2 error notifications should be encrypted, so we could handle
+	 * those, but it needs implementing (the old code didn't implement
+	 * that either).
+	 * So we are good to just log the messages here.
+	 */
+	if (encrypted)
+		isakmp_log_notify(iph1, notify, "informational exchange");
+	else
+		isakmp_log_notify(iph1, notify, "unencrypted informational exchange");
 
-		plog(LLV_DEBUG, LOCATION, iph1->remote,
-			"notification message %d:%s, "
-			"doi=%d proto_id=%d spi=%s(size=%d).\n",
-			type, s_isakmp_notify_msg(type),
-			ntohl(notify->doi), notify->proto_id, spi, notify->spi_size);
-
-		racoon_free(spi);
-	}
-
-	/* Send the message data to the logs */
-	if(type >= ISAKMP_NTYPE_MINERROR &&
-	   type <= ISAKMP_NTYPE_MAXERROR) {
-		l = ntohs(notify->h.len) - sizeof(*notify) - notify->spi_size;
-		if (l > 0) {
-			nraw = (char*)notify;	
-			nraw += sizeof(*notify) + notify->spi_size;
-			if ((ndata = vmalloc(l)) != NULL) {
-				memcpy(ndata->v, nraw, ndata->l);
-				plog(LLV_ERROR, LOCATION, iph1->remote,
-				    "Message: '%s'.\n", 
-				    binsanitize(ndata->v, ndata->l));
-				vfree(ndata);
-			} else {
-				plog(LLV_ERROR, LOCATION, iph1->remote,
-				    "Cannot allocate memory\n");
-			}
-		}
-	}
 	return 0;
 }
 
@@ -456,10 +451,7 @@ isakmp_info_recv_d(iph1, delete, msgid, encrypted)
 	int encrypted;
 {
 	int tlen, num_spi;
-	vchar_t *pbuf;
-	int protected = 0;
 	struct ph1handle *del_ph1;
-	struct ph2handle *iph2;
 	union {
 		u_int32_t spi32;
 		u_int16_t spi16[2];
@@ -495,7 +487,7 @@ isakmp_info_recv_d(iph1, delete, msgid, encrypted)
 		"delete payload for protocol %s\n",
 		s_ipsecdoi_proto(delete->proto_id));
 
-	if(!iph1->rmconf->weak_phase1_check && !encrypted) {
+	if((iph1 == NULL || !iph1->rmconf->weak_phase1_check) && !encrypted) {
 		plog(LLV_WARNING, LOCATION, iph1->remote,
 			"Ignoring unencrypted delete payload "
 			"(check the weak_phase1_check option)\n");
@@ -515,15 +507,16 @@ isakmp_info_recv_d(iph1, delete, msgid, encrypted)
 		del_ph1=getph1byindex((isakmp_index *)(delete + 1));
 		if(del_ph1 != NULL){
 
-			EVT_PUSH(del_ph1->local, del_ph1->remote,
-					 EVTT_PEERPH1_NOPROP, NULL);
-			SCHED_KILL(del_ph1->scr);
+			evt_phase1(iph1, EVT_PHASE1_PEER_DELETED, NULL);
+			sched_cancel(&del_ph1->scr);
 
 			/*
-			 * Do not delete IPsec SAs when receiving an IKE delete notification.
-			 * Just delete the IKE SA.
+			 * Delete also IPsec-SAs if rekeying is enabled.
 			 */
-			isakmp_ph1expire(del_ph1);
+			if (ph1_rekey_enabled(del_ph1))
+				purge_remote(del_ph1);
+			else
+				isakmp_ph1expire(del_ph1);
 		}
 		break;
 
@@ -536,8 +529,6 @@ isakmp_info_recv_d(iph1, delete, msgid, encrypted)
 				delete->spi_size, delete->proto_id);
 			return 0;
 		}
-		EVT_PUSH(iph1->local, iph1->remote, 
-		    EVTT_PEER_DELETE, NULL);
 		purge_ipsec_spi(iph1->remote, delete->proto_id,
 		    (u_int32_t *)(delete + 1), num_spi);
 		break;
@@ -700,20 +691,11 @@ isakmp_info_send_nx(isakmp, remote, local, type, data)
 	vchar_t *data;
 {
 	struct ph1handle *iph1 = NULL;
-	struct remoteconf *rmconf;
 	vchar_t *payload = NULL;
 	int tlen;
 	int error = -1;
 	struct isakmp_pl_n *n;
 	int spisiz = 0;		/* see below */
-
-	/* search appropreate configuration */
-	rmconf = getrmconf(remote);
-	if (rmconf == NULL) {
-		plog(LLV_ERROR, LOCATION, remote,
-			"no configuration found for peer address.\n");
-		goto end;
-	}
 
 	/* add new entry to isakmp status table. */
 	iph1 = newph1();
@@ -723,27 +705,23 @@ isakmp_info_send_nx(isakmp, remote, local, type, data)
 	memcpy(&iph1->index.i_ck, &isakmp->i_ck, sizeof(cookie_t));
 	isakmp_newcookie((char *)&iph1->index.r_ck, remote, local);
 	iph1->status = PHASE1ST_START;
-	iph1->rmconf = rmconf;
 	iph1->side = INITIATOR;
 	iph1->version = isakmp->v;
 	iph1->flags = 0;
 	iph1->msgid = 0;	/* XXX */
 #ifdef ENABLE_HYBRID
-	if ((iph1->mode_cfg = isakmp_cfg_mkstate()) == NULL) {
-		error = -1;
+	if ((iph1->mode_cfg = isakmp_cfg_mkstate()) == NULL)
 		goto end;
-	}
 #endif
 #ifdef ENABLE_FRAG
 	iph1->frag = 0;
+	iph1->frag_last_index = 0;
 	iph1->frag_chain = NULL;
 #endif
 
 	/* copy remote address */
-	if (copy_ph1addresses(iph1, rmconf, remote, local) < 0) {
-		error = -1;
+	if (copy_ph1addresses(iph1, NULL, remote, local) < 0)
 		goto end;
-	}
 
 	tlen = sizeof(*n) + spisiz;
 	if (data)
@@ -752,7 +730,6 @@ isakmp_info_send_nx(isakmp, remote, local, type, data)
 	if (payload == NULL) { 
 		plog(LLV_ERROR, LOCATION, NULL,
 			"failed to get buffer to send.\n");
-		error = -1;
 		goto end;
 	}
 
@@ -920,28 +897,6 @@ isakmp_info_send_common(iph1, payload, np, flags)
 		delph2(iph2);
 		goto end;
 	}
-	switch (iph1->remote->sa_family) {
-	case AF_INET:
-#if (!defined(ENABLE_NATT)) || (defined(BROKEN_NATT))
-		((struct sockaddr_in *)iph2->dst)->sin_port = 0;
-		((struct sockaddr_in *)iph2->src)->sin_port = 0;
-#endif
-		break;
-#ifdef INET6
-	case AF_INET6:
-#if (!defined(ENABLE_NATT)) || (defined(BROKEN_NATT))
-		((struct sockaddr_in6 *)iph2->dst)->sin6_port = 0;
-		((struct sockaddr_in6 *)iph2->src)->sin6_port = 0;
-#endif
-		break;
-#endif
-	default:
-		plog(LLV_ERROR, LOCATION, NULL,
-			"invalid family: %d\n", iph1->remote->sa_family);
-		delph2(iph2);
-		goto end;
-	}
-	iph2->ph1 = iph1;
 	iph2->side = INITIATOR;
 	iph2->status = PHASE2ST_START;
 	iph2->msgid = isakmp_newmsgid2(iph1);
@@ -955,7 +910,7 @@ isakmp_info_send_common(iph1, payload, np, flags)
 		}
 
 		/* generate HASH(1) */
-		hash = oakley_compute_hash1(iph2->ph1, iph2->msgid, payload);
+		hash = oakley_compute_hash1(iph1, iph2->msgid, payload);
 		if (hash == NULL) {
 			delph2(iph2);
 			goto end;
@@ -1056,7 +1011,6 @@ end:
 	return error;
 
 err:
-	unbindph12(iph2);
 	remph2(iph2);
 	delph2(iph2);
 	goto end;
@@ -1116,33 +1070,6 @@ isakmp_add_pl_n(buf0, np_p, type, pr, data)
 	return buf;
 }
 
-static void
-purge_isakmp_spi(proto, spi, n)
-	int proto;
-	isakmp_index *spi;	/*network byteorder*/
-	size_t n;
-{
-	struct ph1handle *iph1;
-	size_t i;
-
-	for (i = 0; i < n; i++) {
-		iph1 = getph1byindex(&spi[i]);
-		if (!iph1)
-			continue;
-
-		plog(LLV_INFO, LOCATION, NULL,
-			"purged ISAKMP-SA proto_id=%s spi=%s.\n",
-			s_ipsecdoi_proto(proto),
-			isakmp_pindex(&spi[i], 0));
-
-		SCHED_KILL(iph1->sce);
-		iph1->status = PHASE1ST_EXPIRED;
-		iph1->sce = sched_new(1, isakmp_ph1delete_stub, iph1);
-	}
-}
-
-
-
 void
 purge_ipsec_spi(dst0, proto, spi, n)
 	struct sockaddr *dst0;
@@ -1159,6 +1086,7 @@ purge_ipsec_spi(dst0, proto, spi, n)
 	u_int64_t created;
 	size_t i;
 	caddr_t mhp[SADB_EXT_MAX + 1];
+	unsigned num_purged = 0;
 
 	plog(LLV_DEBUG2, LOCATION, NULL,
 		 "purge_ipsec_spi:\n");
@@ -1198,6 +1126,7 @@ purge_ipsec_spi(dst0, proto, spi, n)
 			msg = next;
 			continue;
 		}
+		pk_fixup_sa_addresses(mhp);
 		src = PFKEY_ADDR_SADDR(mhp[SADB_EXT_ADDRESS_SRC]);
 		dst = PFKEY_ADDR_SADDR(mhp[SADB_EXT_ADDRESS_DST]);
 		lt = (struct sadb_lifetime*)mhp[SADB_EXT_LIFETIME_HARD];
@@ -1211,16 +1140,16 @@ purge_ipsec_spi(dst0, proto, spi, n)
 			msg = next;
 			continue;
 		}
+
 		plog(LLV_DEBUG2, LOCATION, NULL, "src: %s\n", saddr2str(src));
 		plog(LLV_DEBUG2, LOCATION, NULL, "dst: %s\n", saddr2str(dst));
-
-
+		plog(LLV_DEBUG2, LOCATION, NULL, "spi: %u\n", ntohl(sa->sadb_sa_spi));
 
 		/* XXX n^2 algorithm, inefficient */
 
 		/* don't delete inbound SAs at the moment */
 		/* XXX should we remove SAs with opposite direction as well? */
-		if (CMPSADDR(dst0, dst)) {
+		if (cmpsaddr(dst0, dst) != CMPSADDR_MATCH) {
 			msg = next;
 			continue;
 		}
@@ -1245,7 +1174,6 @@ purge_ipsec_spi(dst0, proto, spi, n)
 			iph2 = getph2bysaidx(src, dst, proto, spi[i]);
 			if(iph2 != NULL){
 				delete_spd(iph2, created);
-				unbindph12(iph2);
 				remph2(iph2);
 				delph2(iph2);
 			}
@@ -1254,6 +1182,7 @@ purge_ipsec_spi(dst0, proto, spi, n)
 				"purged IPsec-SA proto_id=%s spi=%u.\n",
 				s_ipsecdoi_proto(proto),
 				ntohl(spi[i]));
+			num_purged++;
 		}
 
 		msg = next;
@@ -1261,18 +1190,22 @@ purge_ipsec_spi(dst0, proto, spi, n)
 
 	if (buf)
 		vfree(buf);
+
+	plog(LLV_DEBUG, LOCATION, NULL, "purged %u SAs.\n", num_purged);
 }
 
 /*
- * delete all phase2 sa relatived to the destination address.
+ * delete all phase2 sa relatived to the destination address
+ * (except the phase2 within which the INITIAL-CONTACT was received).
  * Don't delete Phase 1 handlers on INITIAL-CONTACT, and don't ignore
  * an INITIAL-CONTACT if we have contacted the peer.  This matches the
  * Sun IKE behavior, and makes rekeying work much better when the peer
  * restarts.
  */
-static void
-info_recv_initialcontact(iph1)
+int
+isakmp_info_recv_initialcontact(iph1, protectedph2)
 	struct ph1handle *iph1;
+	struct ph2handle *protectedph2;
 {
 	vchar_t *buf = NULL;
 	struct sadb_msg *msg, *next, *end;
@@ -1285,8 +1218,10 @@ info_recv_initialcontact(iph1)
 	char *loc, *rem;
 #endif
 
+	plog(LLV_INFO, LOCATION, iph1->remote, "received INITIAL-CONTACT\n");
+
 	if (f_local)
-		return;
+		return 0;
 
 #if 0
 	loc = racoon_strdup(saddrwop2str(iph1->local));
@@ -1335,7 +1270,7 @@ info_recv_initialcontact(iph1)
 
 	racoon_free(loc);
 	racoon_free(rem);
-	return;
+	return 0;
 
  the_hard_way:
 	racoon_free(loc);
@@ -1346,43 +1281,39 @@ info_recv_initialcontact(iph1)
 	if (buf == NULL) {
 		plog(LLV_DEBUG, LOCATION, NULL,
 			"pfkey_dump_sadb returned nothing.\n");
-		return;
+		return 0;
 	}
 
 	msg = (struct sadb_msg *)buf->v;
 	end = (struct sadb_msg *)(buf->v + buf->l);
 
-	while (msg < end) {
+	for (; msg < end; msg = next) {
 		if ((msg->sadb_msg_len << 3) < sizeof(*msg))
 			break;
+
 		next = (struct sadb_msg *)((caddr_t)msg + (msg->sadb_msg_len << 3));
-		if (msg->sadb_msg_type != SADB_DUMP) {
-			msg = next;
+		if (msg->sadb_msg_type != SADB_DUMP)
 			continue;
-		}
 
 		if (pfkey_align(msg, mhp) || pfkey_check(mhp)) {
 			plog(LLV_ERROR, LOCATION, NULL,
 				"pfkey_check (%s)\n", ipsec_strerror());
-			msg = next;
 			continue;
 		}
 
 		if (mhp[SADB_EXT_SA] == NULL
 		 || mhp[SADB_EXT_ADDRESS_SRC] == NULL
-		 || mhp[SADB_EXT_ADDRESS_DST] == NULL) {
-			msg = next;
+		 || mhp[SADB_EXT_ADDRESS_DST] == NULL)
 			continue;
-		}
+
 		sa = (struct sadb_sa *)mhp[SADB_EXT_SA];
+		pk_fixup_sa_addresses(mhp);
 		src = PFKEY_ADDR_SADDR(mhp[SADB_EXT_ADDRESS_SRC]);
 		dst = PFKEY_ADDR_SADDR(mhp[SADB_EXT_ADDRESS_DST]);
 
 		if (sa->sadb_sa_state != SADB_SASTATE_MATURE
-		 && sa->sadb_sa_state != SADB_SASTATE_DYING) {
-			msg = next;
+		 && sa->sadb_sa_state != SADB_SASTATE_DYING)
 			continue;
-		}
 
 		/*
 		 * RFC2407 4.6.3.3 INITIAL-CONTACT is the message that
@@ -1392,39 +1323,18 @@ info_recv_initialcontact(iph1)
 		 * racoon only deletes SA which is matched both the
 		 * source address and the destination accress.
 		 */
-#ifdef ENABLE_NATT
-		/* 
-		 * XXX RFC 3947 says that whe MUST NOT use IP+port to find old SAs
-		 * from this peer !
-		 */
-		if(iph1->natt_flags & NAT_DETECTED){
-			if (CMPSADDR(iph1->local, src) == 0 &&
-				CMPSADDR(iph1->remote, dst) == 0)
-				;
-			else if (CMPSADDR(iph1->remote, src) == 0 &&
-					 CMPSADDR(iph1->local, dst) == 0)
-				;
-			else {
-				msg = next;
-				continue;
-			}
-		} else
-#endif
-		/* If there is no NAT-T, we don't have to check addr + port...
-		 * XXX what about a configuration with a remote peers which is not
-		 * NATed, but which NATs some other peers ?
-		 * Here, the INITIAl-CONTACT would also flush all those NATed peers !!
-		 */
-		if (cmpsaddrwop(iph1->local, src) == 0 &&
-		    cmpsaddrwop(iph1->remote, dst) == 0)
-			;
-		else if (cmpsaddrwop(iph1->remote, src) == 0 &&
-		    cmpsaddrwop(iph1->local, dst) == 0)
-			;
-		else {
-			msg = next;
+
+		/*
+		 * Check that the IP and port match. But this is not optimal,
+		 * since NAT-T can make the peer have multiple different
+		 * ports. Correct thing to do is delete all entries with
+                 * same identity. -TT
+                 */
+		if ((cmpsaddr(iph1->local, src) != CMPSADDR_MATCH ||
+		     cmpsaddr(iph1->remote, dst) != CMPSADDR_MATCH) &&
+		    (cmpsaddr(iph1->local, dst) != CMPSADDR_MATCH ||
+		     cmpsaddr(iph1->remote, src) != CMPSADDR_MATCH))
 			continue;
-		}
 
 		/*
 		 * Make sure this is an SATYPE that we manage.
@@ -1436,10 +1346,8 @@ info_recv_initialcontact(iph1)
 			    msg->sadb_msg_satype)
 				break;
 		}
-		if (i == pfkey_nsatypes) {
-			msg = next;
+		if (i == pfkey_nsatypes)
 			continue;
-		}
 
 		plog(LLV_INFO, LOCATION, NULL,
 			"purging spi=%u.\n", ntohl(sa->sadb_sa_spi));
@@ -1454,54 +1362,15 @@ info_recv_initialcontact(iph1)
 		 */
 		proto_id = pfkey2ipsecdoi_proto(msg->sadb_msg_satype);
 		iph2 = getph2bysaidx(src, dst, proto_id, sa->sadb_sa_spi);
-		if (iph2) {
+		if (iph2 && iph2 != protectedph2) {
 			delete_spd(iph2, 0);
-			unbindph12(iph2);
 			remph2(iph2);
 			delph2(iph2);
 		}
-
-		msg = next;
 	}
 
 	vfree(buf);
-}
-
-void
-isakmp_check_notify(gen, iph1)
-	struct isakmp_gen *gen;		/* points to Notify payload */
-	struct ph1handle *iph1;
-{
-	struct isakmp_pl_n *notify = (struct isakmp_pl_n *)gen;
-
-	plog(LLV_DEBUG, LOCATION, iph1->remote,
-		"Notify Message received\n");
-
-	switch (ntohs(notify->type)) {
-	case ISAKMP_NTYPE_CONNECTED:
-	case ISAKMP_NTYPE_RESPONDER_LIFETIME:
-	case ISAKMP_NTYPE_REPLAY_STATUS:
-	case ISAKMP_NTYPE_HEARTBEAT:
-#ifdef ENABLE_HYBRID
-	case ISAKMP_NTYPE_UNITY_HEARTBEAT:
-#endif
-		plog(LLV_WARNING, LOCATION, iph1->remote,
-			"ignore %s notification.\n",
-			s_isakmp_notify_msg(ntohs(notify->type)));
-		break;
-	case ISAKMP_NTYPE_INITIAL_CONTACT:
-		plog(LLV_WARNING, LOCATION, iph1->remote,
-			"ignore INITIAL-CONTACT notification, "
-			"because it is only accepted after phase1.\n");
-		break;
-	default:
-		isakmp_info_send_n1(iph1, ISAKMP_NTYPE_INVALID_PAYLOAD_TYPE, NULL);
-		plog(LLV_ERROR, LOCATION, iph1->remote,
-			"received unknown notification type %s.\n",
-			s_isakmp_notify_msg(ntohs(notify->type)));
-	}
-
-	return;
+	return 0;
 }
 
 
@@ -1558,37 +1427,35 @@ isakmp_info_recv_r_u_ack (iph1, ru, msgid)
 	struct isakmp_pl_ru *ru;
 	u_int32_t msgid;
 {
+	u_int32_t seq;
 
 	plog(LLV_DEBUG, LOCATION, iph1->remote,
 		 "DPD R-U-There-Ack received\n");
 
-	/* XXX Maintain window of acceptable sequence numbers ?
-	 * => ru->data <= iph2->dpd_seq &&
-	 *    ru->data >= iph2->dpd_seq - iph2->dpd_fails ? */
-	if (ntohl(ru->data) != iph1->dpd_seq-1) {
+	seq = ntohl(ru->data);
+	if (seq <= iph1->dpd_last_ack || seq > iph1->dpd_seq) {
 		plog(LLV_ERROR, LOCATION, iph1->remote,
-			 "Wrong DPD sequence number (%d, %d expected).\n", 
-			 ntohl(ru->data), iph1->dpd_seq-1);
+			 "Wrong DPD sequence number (%d; last_ack=%d, seq=%d).\n", 
+			 seq, iph1->dpd_last_ack, iph1->dpd_seq);
 		return 0;
 	}
 
-	if (memcmp(ru->i_ck, iph1->index.i_ck, sizeof(cookie_t)) ||
-	    memcmp(ru->r_ck, iph1->index.r_ck, sizeof(cookie_t))) {
+	/* accept cookies in original or reversed order */
+	if ((memcmp(ru->i_ck, iph1->index.i_ck, sizeof(cookie_t)) ||
+	     memcmp(ru->r_ck, iph1->index.r_ck, sizeof(cookie_t))) &&
+	    (memcmp(ru->r_ck, iph1->index.i_ck, sizeof(cookie_t)) ||
+	     memcmp(ru->i_ck, iph1->index.r_ck, sizeof(cookie_t)))) {
 		plog(LLV_ERROR, LOCATION, iph1->remote,
 			 "Cookie mismatch in DPD ACK!.\n");
 		return 0;
 	}
 
 	iph1->dpd_fails = 0;
-
-	/* Useless ??? */
-	iph1->dpd_lastack = time(NULL);
-
-	SCHED_KILL(iph1->dpd_r_u);
-
+	iph1->dpd_last_ack = seq;
+	sched_cancel(&iph1->dpd_r_u);
 	isakmp_sched_r_u(iph1, 0);
 
-	plog(LLV_DEBUG, LOCATION, NULL, "received an R-U-THERE-ACK\n");
+	plog(LLV_DEBUG, LOCATION, iph1->remote, "received an R-U-THERE-ACK\n");
 
 	return 0;
 }
@@ -1600,10 +1467,10 @@ isakmp_info_recv_r_u_ack (iph1, ru, msgid)
  * send DPD R-U-THERE payload in Informational exchange.
  */
 static void
-isakmp_info_send_r_u(arg)
-	void *arg;
+isakmp_info_send_r_u(sc)
+	struct sched *sc;
 {
-	struct ph1handle *iph1 = arg;
+	struct ph1handle *iph1 = container_of(sc, struct ph1handle, dpd_r_u);
 
 	/* create R-U-THERE payload */
 	struct isakmp_pl_ru *ru;
@@ -1613,7 +1480,14 @@ isakmp_info_send_r_u(arg)
 
 	plog(LLV_DEBUG, LOCATION, iph1->remote, "DPD monitoring....\n");
 
-	iph1->dpd_r_u=NULL;
+	if (iph1->status == PHASE1ST_EXPIRED) {
+		/* This can happen after removing tunnels from the
+		 * config file and then reloading.
+		 * Such iph1 have rmconf=NULL, so return before the if
+		 * block below.
+		 */
+		return;
+	}
 
 	if (iph1->dpd_fails >= iph1->rmconf->dpd_maxfails) {
 
@@ -1621,7 +1495,8 @@ isakmp_info_send_r_u(arg)
 			"DPD: remote (ISAKMP-SA spi=%s) seems to be dead.\n",
 			isakmp_pindex(&iph1->index, 0));
 
-		EVT_PUSH(iph1->local, iph1->remote, EVTT_DPD_TIMEOUT, NULL);
+		script_hook(iph1, SCRIPT_PHASE1_DEAD);
+		evt_phase1(iph1, EVT_PHASE1_DPD_TIMEOUT, NULL);
 		purge_remote(iph1);
 
 		/* Do not reschedule here: phase1 is deleted,
@@ -1650,12 +1525,13 @@ isakmp_info_send_r_u(arg)
 	memcpy(ru->i_ck, iph1->index.i_ck, sizeof(cookie_t));
 	memcpy(ru->r_ck, iph1->index.r_ck, sizeof(cookie_t));
 
-	if (iph1->dpd_seq == 0){
+	if (iph1->dpd_seq == 0) {
 		/* generate a random seq which is not too big */
-		srand(time(NULL));
-		iph1->dpd_seq = rand() & 0x0fff;
+		iph1->dpd_seq = iph1->dpd_last_ack = rand() & 0x0fff;
 	}
 
+	iph1->dpd_seq++;
+	iph1->dpd_fails++;
 	ru->data = htonl(iph1->dpd_seq);
 
 	error = isakmp_info_send_common(iph1, payload, ISAKMP_NPTYPE_N, 0);
@@ -1663,12 +1539,6 @@ isakmp_info_send_r_u(arg)
 
 	plog(LLV_DEBUG, LOCATION, iph1->remote,
 		 "DPD R-U-There sent (%d)\n", error);
-
-	/* will be decreased if ACK received... */
-	iph1->dpd_fails++;
-
-	/* XXX should be increased only when ACKed ? */
-	iph1->dpd_seq++;
 
 	/* Reschedule the r_u_there with a short delay,
 	 * will be deleted/rescheduled if ACK received before */
@@ -1694,11 +1564,11 @@ isakmp_sched_r_u(iph1, retry)
 		return 0;
 
 	if(retry)
-		iph1->dpd_r_u = sched_new(iph1->rmconf->dpd_retry,
-								  isakmp_info_send_r_u, iph1);
+		sched_schedule(&iph1->dpd_r_u, iph1->rmconf->dpd_retry,
+			       isakmp_info_send_r_u);
 	else
-		iph1->dpd_r_u = sched_new(iph1->rmconf->dpd_interval,
-								  isakmp_info_send_r_u, iph1);
+		sched_schedule(&iph1->dpd_r_u, iph1->rmconf->dpd_interval,
+			       isakmp_info_send_r_u);
 
 	return 0;
 }

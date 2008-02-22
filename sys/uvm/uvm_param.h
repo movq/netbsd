@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_param.h,v 1.21 2006/08/04 22:42:36 he Exp $	*/
+/*	$NetBSD: uvm_param.h,v 1.37 2017/07/02 16:41:33 joerg Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -68,11 +68,11 @@
 #define	_VM_PARAM_
 
 #ifdef _KERNEL_OPT
+#include "opt_modular.h"
 #include "opt_uvm.h"
 #endif
 #ifdef _KERNEL
 #include <sys/types.h>
-#include <sys/lock.h>
 #include <machine/vmparam.h>
 #include <sys/resourcevar.h>
 #endif
@@ -135,10 +135,13 @@
  * If MIN_PAGE_SIZE and MAX_PAGE_SIZE are not equal, then we must use
  * non-constant PAGE_SIZE, et al for LKMs.
  */
-#if (MIN_PAGE_SIZE != MAX_PAGE_SIZE) && defined(_LKM)
+#if (MIN_PAGE_SIZE != MAX_PAGE_SIZE)
+#define	__uvmexp_pagesize
+#if defined(_LKM) || defined(_MODULE)
 #undef PAGE_SIZE
 #undef PAGE_MASK
 #undef PAGE_SHIFT
+#endif
 #endif
 
 /*
@@ -146,9 +149,12 @@
  * have ones that are compile-time constants.
  */
 #if !defined(PAGE_SIZE)
-#define	PAGE_SIZE	uvmexp.pagesize		/* size of page */
-#define	PAGE_MASK	uvmexp.pagemask		/* size of page - 1 */
-#define	PAGE_SHIFT	uvmexp.pageshift	/* bits to shift for pages */
+extern const int *const uvmexp_pagesize;
+extern const int *const uvmexp_pagemask;
+extern const int *const uvmexp_pageshift;
+#define	PAGE_SIZE	(*uvmexp_pagesize)	/* size of page */
+#define	PAGE_MASK	(*uvmexp_pagemask)	/* size of page - 1 */
+#define	PAGE_SHIFT	(*uvmexp_pageshift)	/* bits to shift for pages */
 #endif /* PAGE_SIZE */
 
 #endif /* _KERNEL */
@@ -169,8 +175,15 @@
 #define	VM_ANONMAX	11
 #define	VM_EXECMAX	12
 #define	VM_FILEMAX	13
+#define	VM_MINADDRESS	14
+#define	VM_MAXADDRESS	15
+#define	VM_PROC		16		/* process information */
+#define	VM_GUARD_SIZE	17		/* guard size for main thread */
+#define	VM_THREAD_GUARD_SIZE	18	/* default guard size for new threads */
 
-#define	VM_MAXID	14		/* number of valid vm ids */
+#define	VM_MAXID	17		/* number of valid vm ids */
+
+#define VM_PROC_MAP	1		/* struct kinfo_vmentry */
 
 #define	CTL_VM_NAMES { \
 	{ 0, 0 }, \
@@ -187,6 +200,11 @@
 	{ "anonmax", CTLTYPE_INT }, \
 	{ "execmax", CTLTYPE_INT }, \
 	{ "filemax", CTLTYPE_INT }, \
+	{ "minaddress", CTLTYPE_LONG }, \
+	{ "maxaddress", CTLTYPE_LONG }, \
+	{ "proc", CTLTYPE_STRUCT }, \
+	{ "guard_size", CTLTYPE_INT }, \
+	{ "thread_guard_size", CTLTYPE_INT }, \
 }
 
 #ifndef ASSEMBLER
@@ -196,7 +214,7 @@
  */
 #ifdef _KERNEL
 #define	atop(x)		(((paddr_t)(x)) >> PAGE_SHIFT)
-#define	ptoa(x)		((vaddr_t)((vaddr_t)(x) << PAGE_SHIFT))
+#define	ptoa(x)		(((paddr_t)(x)) << PAGE_SHIFT)
 
 /*
  * Round off or truncate to the nearest page.  These will work
@@ -205,46 +223,21 @@
 #define	round_page(x)	(((x) + PAGE_MASK) & ~PAGE_MASK)
 #define	trunc_page(x)	((x) & ~PAGE_MASK)
 
-/*
- * Set up the default mapping address (VM_DEFAULT_ADDRESS) according to:
- *
- * USE_TOPDOWN_VM:	a kernel option to enable on a per-kernel basis
- *			which only be used on ports that define...
- * __HAVE_TOPDOWN_VM:	a per-port option to offer the topdown option
- *
- * __USE_TOPDOWN_VM:	a per-port option to unconditionally use it
- *
- * if __USE_TOPDOWN_VM is defined, the port can specify a default vm
- * address, or we will use the topdown default from below.  If it is
- * NOT defined, then the port can offer topdown as an option, but it
- * MUST define the VM_DEFAULT_ADDRESS macro itself.
- */
-#if defined(USE_TOPDOWN_VM) || defined(__USE_TOPDOWN_VM)
-# if !defined(__HAVE_TOPDOWN_VM) && !defined(__USE_TOPDOWN_VM)
-#  error "Top down memory allocation not enabled for this system"
-# else /* !__HAVE_TOPDOWN_VM && !__USE_TOPDOWN_VM */
-#  define __USING_TOPDOWN_VM
-#  if !defined(VM_DEFAULT_ADDRESS)
-#   if !defined(__USE_TOPDOWN_VM)
-#    error "Top down memory allocation not configured for this system"
-#   else /* !__USE_TOPDOWN_VM */
-#    define VM_DEFAULT_ADDRESS(da, sz) \
-	trunc_page(VM_MAXUSER_ADDRESS - MAXSSIZ - (sz))
-#   endif /* !__USE_TOPDOWN_VM */
-#  endif /* !VM_DEFAULT_ADDRESS */
-# endif /* !__HAVE_TOPDOWN_VM && !__USE_TOPDOWN_VM */
-#endif /* USE_TOPDOWN_VM || __USE_TOPDOWN_VM */
+#ifndef VM_DEFAULT_ADDRESS_BOTTOMUP
+#define VM_DEFAULT_ADDRESS_BOTTOMUP(da, sz) \
+    round_page((vaddr_t)(da) + (vsize_t)maxdmap)
+#endif
 
-#if !defined(__USING_TOPDOWN_VM)
-# if defined(VM_DEFAULT_ADDRESS)
-#  error "Default vm address should not be defined here"
-# else /* VM_DEFAULT_ADDRESS */
-#  define VM_DEFAULT_ADDRESS(da, sz) round_page((vaddr_t)(da) + (vsize_t)maxdmap)
-# endif /* VM_DEFAULT_ADDRESS */
-#endif /* !__USING_TOPDOWN_VM */
+extern unsigned int user_stack_guard_size;
+extern unsigned int user_thread_stack_guard_size;
+#ifndef VM_DEFAULT_ADDRESS_TOPDOWN
+#define VM_DEFAULT_ADDRESS_TOPDOWN(da, sz) \
+    trunc_page(VM_MAXUSER_ADDRESS - MAXSSIZ - (sz) - user_stack_guard_size)
+#endif
 
 extern int		ubc_nwins;	/* number of UBC mapping windows */
 extern int		ubc_winshift;	/* shift for a UBC mapping window */
+extern u_int		uvm_emap_size;	/* size of emap */
 
 #else
 /* out-of-kernel versions of round_page and trunc_page */
@@ -255,5 +248,16 @@ extern int		ubc_winshift;	/* shift for a UBC mapping window */
 	((((vaddr_t)(x)) / vm_page_size) * vm_page_size)
 
 #endif /* _KERNEL */
+
+/*
+ * typedefs, necessary for standard UVM headers.
+ */
+
+typedef unsigned int uvm_flag_t;
+
+typedef int vm_inherit_t;	/* XXX: inheritance codes */
+typedef off_t voff_t;		/* XXX: offset within a uvm_object */
+typedef voff_t pgoff_t;		/* XXX: number of pages within a uvm object */
+
 #endif /* ASSEMBLER */
 #endif /* _VM_PARAM_ */

@@ -1,9 +1,9 @@
-/*	$NetBSD: uipc_syscalls_40.c,v 1.6 2007/12/05 22:51:28 dyoung Exp $	*/
+/*	$NetBSD: uipc_syscalls_40.c,v 1.16 2018/04/12 18:50:13 christos Exp $	*/
 
 /* written by Pavel Cahyna, 2006. Public domain. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls_40.c,v 1.6 2007/12/05 22:51:28 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls_40.c,v 1.16 2018/04/12 18:50:13 christos Exp $");
 
 /*
  * System call interface to the socket abstraction.
@@ -13,7 +13,6 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_syscalls_40.c,v 1.6 2007/12/05 22:51:28 dyoung 
 #include <sys/kernel.h>
 #include <sys/msg.h>
 #include <sys/sysctl.h>
-#include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/errno.h>
 
@@ -22,7 +21,6 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_syscalls_40.c,v 1.6 2007/12/05 22:51:28 dyoung 
 #include <compat/sys/socket.h>
 #include <compat/sys/sockio.h>
 
-#ifdef COMPAT_OIFREQ
 /*
  * Return interface configuration
  * of system.  List may be used
@@ -30,39 +28,65 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_syscalls_40.c,v 1.6 2007/12/05 22:51:28 dyoung 
  * other information.
  */
 /*ARGSUSED*/
-int
-compat_ifconf(u_long cmd, void *data)
+static int
+compat_ifconf(struct lwp *l, u_long cmd, void *data)
 {
 	struct oifconf *ifc = data;
 	struct ifnet *ifp;
-	struct ifaddr *ifa;
-	struct oifreq ifr, *ifrp;
-	int space, error = 0;
+	struct oifreq ifr, *ifrp = NULL;
+	int space = 0, error = 0;
 	const int sz = (int)sizeof(ifr);
+	const bool docopy = ifc->ifc_req != NULL;
+	int s;
+	int bound;
+	struct psref psref;
 
-	if ((ifrp = ifc->ifc_req) == NULL)
-		space = 0;
-	else
+	switch (cmd) {
+	case OSIOCGIFCONF:
+	case OOSIOCGIFCONF:
+		break;
+	default:
+		return ENOSYS;
+	}
+
+	if (docopy) {
 		space = ifc->ifc_len;
-	IFNET_FOREACH(ifp) {
+		ifrp = ifc->ifc_req;
+	}
+
+	bound = curlwp_bind();
+	s = pserialize_read_enter();
+	IFNET_READER_FOREACH(ifp) {
+		struct ifaddr *ifa;
+
+		if_acquire(ifp, &psref);
+		pserialize_read_exit(s);
+
 		(void)strncpy(ifr.ifr_name, ifp->if_xname,
 		    sizeof(ifr.ifr_name));
-		if (ifr.ifr_name[sizeof(ifr.ifr_name) - 1] != '\0')
-			return ENAMETOOLONG;
-		if (IFADDR_EMPTY(ifp)) {
+		if (ifr.ifr_name[sizeof(ifr.ifr_name) - 1] != '\0') {
+			error = ENAMETOOLONG;
+			goto release_exit;
+		}
+		if (IFADDR_READER_EMPTY(ifp)) {
 			memset(&ifr.ifr_addr, 0, sizeof(ifr.ifr_addr));
 			if (space >= sz) {
 				error = copyout(&ifr, ifrp, sz);
 				if (error != 0)
-					return (error);
+					goto release_exit;
 				ifrp++;
 			}
 			space -= sizeof(ifr);
-			continue;
+			goto next;
 		}
 
-		IFADDR_FOREACH(ifa, ifp) {
+		s = pserialize_read_enter();
+		IFADDR_READER_FOREACH(ifa, ifp) {
 			struct sockaddr *sa = ifa->ifa_addr;
+			struct psref psref_ifa;
+
+			ifa_acquire(ifa, &psref_ifa);
+			pserialize_read_exit(s);
 #ifdef COMPAT_OSOCK
 			if (cmd == OOSIOCGIFCONF) {
 				struct osockaddr *osa =
@@ -71,7 +95,7 @@ compat_ifconf(u_long cmd, void *data)
 				 * If it does not fit, we don't bother with it
 				 */
 				if (sa->sa_len > sizeof(*osa))
-					continue;
+					goto next_ifa;
 				memcpy(&ifr.ifr_addr, sa, sa->sa_len);
 				osa->sa_family = sa->sa_family;
 				if (space >= sz) {
@@ -101,15 +125,47 @@ compat_ifconf(u_long cmd, void *data)
 						 (char *)&ifrp->ifr_addr);
 				}
 			}
-			if (error != 0)
-				return (error);
+			if (error != 0) {
+				ifa_release(ifa, &psref_ifa);
+				goto release_exit;
+			}
 			space -= sz;
+
+#ifdef COMPAT_OSOCK
+		next_ifa:
+#endif
+			s = pserialize_read_enter();
+			ifa_release(ifa, &psref_ifa);
 		}
+		pserialize_read_exit(s);
+
+	next:
+		s = pserialize_read_enter();
+		if_release(ifp, &psref);
 	}
-	if (ifrp != NULL)
+	pserialize_read_exit(s);
+	curlwp_bindx(bound);
+
+	if (docopy)
 		ifc->ifc_len -= space;
 	else
 		ifc->ifc_len = -space;
 	return (0);
+
+release_exit:
+	if_release(ifp, &psref);
+	curlwp_bindx(bound);
+	return error;
 }
-#endif
+
+void
+uipc_syscalls_40_init(void)
+{
+	vec_compat_ifconf = compat_ifconf;
+}
+
+void
+uipc_syscalls_40_fini(void)
+{
+	vec_compat_ifconf = (void *)enosys;
+}

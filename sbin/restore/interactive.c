@@ -1,4 +1,4 @@
-/*	$NetBSD: interactive.c,v 1.25 2006/12/18 20:07:32 christos Exp $	*/
+/*	$NetBSD: interactive.c,v 1.27 2013/01/22 09:39:13 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)interactive.c	8.5 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: interactive.c,v 1.25 2006/12/18 20:07:32 christos Exp $");
+__RCSID("$NetBSD: interactive.c,v 1.27 2013/01/22 09:39:13 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -71,7 +71,7 @@ static char *nextarg = NULL;
 struct afile {
 	ino_t	fnum;		/* inode number of file */
 	char	*fname;		/* file name */
-	short	len;		/* name length */
+	size_t	len;		/* name length */
 	char	prefix;		/* prefix character */
 	char	postfix;	/* postfix character */
 };
@@ -135,7 +135,7 @@ loop:
 		ino = dirlookup(name);
 		if (ino == 0)
 			break;
-		if (ino == ROOTINO)
+		if (ino == UFS_ROOTINO)
 			dotflag = 1;
 		if (mflag)
 			pathcheck(name);
@@ -518,7 +518,7 @@ printlist(char *name, char *basename)
 	dp = pathsearch(name);
 	listp = NULL;
 	if (dp == NULL || (!dflag && TSTINO(dp->d_ino, dumpmap) == 0) ||
-	    (!vflag && dp->d_ino == WINO))
+	    (!vflag && dp->d_ino == UFS_WINO))
 		return;
 	if ((dirp = rst_opendir(name)) == NULL) {
 		entries = 1;
@@ -551,7 +551,7 @@ printlist(char *name, char *basename)
 		while ((dp = rst_readdir(dirp)) != NULL) {
 			if (!dflag && TSTINO(dp->d_ino, dumpmap) == 0)
 				continue;
-			if (!vflag && (dp->d_ino == WINO ||
+			if (!vflag && (dp->d_ino == UFS_WINO ||
 			     strcmp(dp->d_name, ".") == 0 ||
 			     strcmp(dp->d_name, "..") == 0))
 				continue;
@@ -650,14 +650,16 @@ static void
 formatf(struct afile *list, int nentry)
 {
 	struct afile *fp, *endlist;
-	int width, bigino, haveprefix, havepostfix;
-	int i, j, w, precision, columns, lines;
+	int haveprefix, havepostfix;
+	ino_t bigino;
+	size_t width, w;
+	int i, j, precision, columns, lines;
 
 	width = 0;
 	haveprefix = 0;
 	havepostfix = 0;
 	precision = 0;
-	bigino = ROOTINO;
+	bigino = UFS_ROOTINO;
 	endlist = &list[nentry];
 	for (fp = &list[0]; fp < endlist; fp++) {
 		if (bigino < fp->fnum)
@@ -726,7 +728,7 @@ glob_readdir(RST_DIR *dirp)
 	static struct dirent adirent;
 
 	while ((dp = rst_readdir(dirp)) != NULL) {
-		if (!vflag && dp->d_fileno == WINO)
+		if (!vflag && dp->d_fileno == UFS_WINO)
 			continue;
 		if (dflag || TSTINO(dp->d_fileno, dumpmap))
 			break;
@@ -749,7 +751,7 @@ glob_stat(const char *name, struct stat *stp)
 
 	dp = pathsearch(name);
 	if (dp == NULL || (!dflag && TSTINO(dp->d_fileno, dumpmap) == 0) ||
-	    (!vflag && dp->d_fileno == WINO))
+	    (!vflag && dp->d_fileno == UFS_WINO))
 		return (-1);
 	if (inodetype(dp->d_fileno) == NODE)
 		stp->st_mode = S_IFDIR;

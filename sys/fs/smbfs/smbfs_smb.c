@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_smb.c,v 1.35 2007/03/04 06:03:01 christos Exp $	*/
+/*	$NetBSD: smbfs_smb.c,v 1.47 2014/12/21 10:48:53 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_smb.c,v 1.35 2007/03/04 06:03:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_smb.c,v 1.47 2014/12/21 10:48:53 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,7 +116,7 @@ smbfs_getino(struct smbnode *dnp, const char *name, int nmlen)
 #endif
 	u_int32_t ino;
 
-	ino = dnp->n_ino + smbfs_hash(name, nmlen);
+	ino = dnp->n_ino + hash32_strn(name, nmlen, HASH32_STR_INIT);
 	if (ino <= 2)
 		ino += 3;
 	return ino;
@@ -272,13 +265,49 @@ smbfs_smb_statvfs(struct smb_share *ssp, struct statvfs *sbp,
 	return 0;
 }
 
+static int
+smbfs_smb_seteof(struct smbnode *np, int64_t newsize, struct smb_cred *scred)
+{
+	struct smb_t2rq *t2p;
+	struct smb_share *ssp = np->n_mount->sm_share;
+	struct mbchain *mbp;
+	int error;
+
+	error = smb_t2_alloc(SSTOCP(ssp), SMB_TRANS2_SET_FILE_INFORMATION,
+	    scred, &t2p);
+	if (error)
+		return error;
+	mbp = &t2p->t2_tparam;
+	mb_init(mbp);
+	mb_put_mem(mbp, (void *)&np->n_fid, 2, MB_MSYSTEM);
+	mb_put_uint16le(mbp, SMB_SET_FILE_END_OF_FILE_INFO);
+	mb_put_uint32le(mbp, 0);
+	mbp = &t2p->t2_tdata;
+	mb_init(mbp);
+	mb_put_int64le(mbp, newsize);
+	mb_put_uint32le(mbp, 0);			/* padding */
+	mb_put_uint16le(mbp, 0);
+	t2p->t2_maxpcount = 2;
+	t2p->t2_maxdcount = 0;
+	error = smb_t2_request(t2p);
+	smb_t2_done(t2p);
+	return error;
+}
+
 int
-smbfs_smb_setfsize(struct smbnode *np, int newsize, struct smb_cred *scred)
+smbfs_smb_setfsize(struct smbnode *np, u_quad_t newsize,
+		   struct smb_cred *scred)
 {
 	struct smb_share *ssp = np->n_mount->sm_share;
 	struct smb_rq *rqp;
 	struct mbchain *mbp;
 	int error;
+
+	if (newsize >= (1LL << 32)) {
+		if (!(SMB_CAPS(SSTOVC(ssp)) & SMB_CAP_LARGE_FILES))
+			return EFBIG;
+		return smbfs_smb_seteof(np, (int64_t)newsize, scred);
+	}
 
 	error = smb_rq_alloc(SSTOCP(ssp), SMB_COM_WRITE, scred, &rqp);
 	if (error)
@@ -401,7 +430,6 @@ smbfs_smb_setptime2(struct smbnode *np, struct timespec *mtime,
 /*
  * NT level. Specially for win9x
  */
-#if 0
 int
 smbfs_smb_setpattrNT(struct smbnode *np, u_short attr, struct timespec *mtime,
 	struct timespec *atime, struct smb_cred *scred)
@@ -413,13 +441,22 @@ smbfs_smb_setpattrNT(struct smbnode *np, u_short attr, struct timespec *mtime,
 	int64_t tm;
 	int error, tzoff;
 
+	/*
+	 * SMB_SET_FILE_BASIC_INFO isn't supported for
+	 * SMB_TRANS2_SET_PATH_INFORMATION,
+	 * so use SMB_SET_FILE_BASIC_INFORMATION instead,
+	 * but it requires SMB_CAP_INFOLEVEL_PASSTHRU capability.
+	 */
+	if ((SMB_CAPS(vcp) & SMB_CAP_INFOLEVEL_PASSTHRU) == 0)
+		return smbfs_smb_setptime2(np, mtime, atime, attr, scred);
+
 	error = smb_t2_alloc(SSTOCP(ssp), SMB_TRANS2_SET_PATH_INFORMATION,
 	    scred, &t2p);
 	if (error)
 		return error;
 	mbp = &t2p->t2_tparam;
 	mb_init(mbp);
-	mb_put_uint16le(mbp, SMB_SET_FILE_BASIC_INFO);
+	mb_put_uint16le(mbp, SMB_SET_FILE_BASIC_INFORMATION);
 	mb_put_uint32le(mbp, 0);		/* MBZ */
 	error = smbfs_fullpath(mbp, vcp, np, NULL, 0);
 	if (error) {
@@ -442,13 +479,13 @@ smbfs_smb_setpattrNT(struct smbnode *np, u_short attr, struct timespec *mtime,
 	mb_put_int64le(mbp, tm);
 	mb_put_int64le(mbp, tm);		/* change time */
 	mb_put_uint32le(mbp, attr);		/* attr */
-	t2p->t2_maxpcount = 24;
-	t2p->t2_maxdcount = 56;
+	mb_put_uint32le(mbp, 0);		/* padding */
+	t2p->t2_maxpcount = 2;
+	t2p->t2_maxdcount = 0;
 	error = smb_t2_request(t2p);
 	smb_t2_done(t2p);
 	return error;
 }
-#endif
 
 /*
  * Set file atime and mtime. Doesn't supported by core dialect.
@@ -488,7 +525,7 @@ smbfs_smb_setftime(struct smbnode *np, struct timespec *mtime,
 	smb_rq_bstart(rqp);
 	smb_rq_bend(rqp);
 	error = smb_rq_simple(rqp);
-	SMBSDEBUG("%d\n", error);
+	SMBSDEBUG(("%d\n", error));
 	smb_rq_done(rqp);
 	return error;
 }
@@ -531,9 +568,8 @@ smbfs_smb_setfattrNT(struct smbnode *np, u_int16_t attr, struct timespec *mtime,
 		tm = 0;
 	mb_put_int64le(mbp, tm);
 	mb_put_int64le(mbp, tm);		/* change time */
-	mb_put_uint16le(mbp, attr);
-	mb_put_uint32le(mbp, 0);			/* padding */
-	mb_put_uint16le(mbp, 0);
+	mb_put_uint32le(mbp, attr);		/* attr */
+	mb_put_uint32le(mbp, 0);		/* padding */
 	t2p->t2_maxpcount = 2;
 	t2p->t2_maxdcount = 0;
 	error = smb_t2_request(t2p);
@@ -660,7 +696,7 @@ smbfs_smb_create(struct smbnode *dnp, const char *name, int nmlen,
 			smb_rq_getreply(rqp, &mdp);
 			md_get_uint8(mdp, &wc);
 			if (wc == 1)
-				md_get_uint16le(mdp, &fid);
+				md_get_uint16(mdp, &fid);
 			else
 				error = EBADRPC;
 		}
@@ -742,7 +778,7 @@ smbfs_smb_move(struct smbnode *src, struct smbnode *tdnp,
 	struct mbchain *mbp;
 	int error;
 
-	error = smb_rq_alloc(rqp, SSTOCP(ssp), SMB_COM_MOVE, scred, &rqp);
+	error = smb_rq_alloc(SSTOCP(ssp), SMB_COM_MOVE, scred, &rqp);
 	if (error)
 		return error;
 	smb_rq_getrequest(rqp, &mbp);
@@ -1093,7 +1129,7 @@ static int
 smbfs_findopenLM2(struct smbfs_fctx *ctx, struct smbnode *dnp,
     const char *wildcard, int wclen, int attr, struct smb_cred *scred)
 {
-	ctx->f_name = malloc(SMB_MAXFNAMELEN, M_SMBFSDATA, M_WAITOK);
+	ctx->f_name = malloc(SMB_MAXNAMLEN * 2, M_SMBFSDATA, M_WAITOK);
 	if (ctx->f_name == NULL)
 		return ENOMEM;
 	ctx->f_infolevel = SMB_DIALECT(SSTOVC(ctx->f_ssp)) < SMB_DIALECT_NTLM0_12 ?
@@ -1176,7 +1212,7 @@ smbfs_findnextLM2(struct smbfs_fctx *ctx, int limit)
 		return EINVAL;
 #endif
 	}
-	nmlen = min(size, SMB_MAXFNAMELEN);
+	nmlen = min(size, SMB_MAXNAMLEN * 2);
 	cp = ctx->f_name;
 	error = md_get_mem(mbp, cp, nmlen, MB_MSYSTEM);
 	if (error)
@@ -1207,7 +1243,7 @@ smbfs_findnextLM2(struct smbfs_fctx *ctx, int limit)
 			ctx->f_rname = malloc(nmlen + 1, M_SMBFSDATA, M_WAITOK);
 			ctx->f_rnamelen = nmlen;
 		}
-		bcopy(ctx->f_name, ctx->f_rname, nmlen);
+		memcpy(ctx->f_rname, ctx->f_name, nmlen);
 		ctx->f_rname[nmlen] = 0;
 		ctx->f_flags |= SMBFS_RDD_GOTRNAME;
 	}
@@ -1280,7 +1316,7 @@ smbfs_findnext(struct smbfs_fctx *ctx, int limit, struct smb_cred *scred)
 			continue;
 		break;
 	}
-	smbfs_fname_tolocal(SSTOVC(ctx->f_ssp), ctx->f_name, ctx->f_nmlen,
+	smbfs_fname_tolocal(SSTOVC(ctx->f_ssp), ctx->f_name, &ctx->f_nmlen,
 	    ctx->f_dnp->n_mount->sm_caseopt);
 	ctx->f_attr.fa_ino = smbfs_getino(ctx->f_dnp, ctx->f_name, ctx->f_nmlen);
 	return 0;
@@ -1308,7 +1344,7 @@ smbfs_smb_lookup(struct smbnode *dnp, const char *name, int nmlen,
 	int error;
 
 	if (dnp == NULL || (dnp->n_ino == 2 && name == NULL)) {
-		bzero(fap, sizeof(*fap));
+		memset(fap, 0, sizeof(*fap));
 		fap->fa_attr = SMB_FA_DIR;
 		fap->fa_ino = 2;
 		return 0;
@@ -1393,8 +1429,6 @@ smbfs_smb_ntcreatex(struct smbnode *np, int accmode,
 	mb_put_uint8(mbp, 0);		/* Security tracking mode flags */
 	smb_rq_wend(rqp);
 	smb_rq_bstart(rqp);
-	smb_rq_bend(rqp);
-	mbp->mb_count = 0;
 
 	error = smbfs_fullpath(mbp, SSTOVC(ssp), np, NULL, 0);
 	if (error)
@@ -1406,6 +1440,7 @@ smbfs_smb_ntcreatex(struct smbnode *np, int accmode,
 	flen = mbp->mb_count;
 	SMBRQ_PUTLE16(nmlen, flen);
 
+	smb_rq_bend(rqp);
 	error = smb_rq_simple(rqp);
 	if (error)
 		goto bad;

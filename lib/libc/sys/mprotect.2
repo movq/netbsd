@@ -1,4 +1,4 @@
-.\"	$NetBSD: mprotect.2,v 1.19 2006/10/13 20:51:05 wiz Exp $
+.\"	$NetBSD: mprotect.2,v 1.26 2017/05/14 12:30:37 wiz Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)mprotect.2	8.1 (Berkeley) 6/9/93
 .\"
-.Dd October 7, 2006
+.Dd April 27, 2017
 .Dt MPROTECT 2
 .Os
 .Sh NAME
@@ -56,7 +56,7 @@ argument by
 .Tn OR Ns 'ing
 the following values:
 .Pp
-.Bl -tag -width MAP_FIXEDX
+.Bl -tag -width MAP_FIXEDX -offset indent
 .It Dv PROT_EXEC
 Pages may be executed.
 .It Dv PROT_READ
@@ -64,7 +64,7 @@ Pages may be read.
 .It Dv PROT_WRITE
 Pages may be written.
 .It Dv PROT_NONE
-No permissions.
+Placeholder when requesting no access permission.
 .El
 .Sh RETURN VALUES
 Upon successful completion,
@@ -75,15 +75,24 @@ is set to indicate the error.
 .Sh ERRORS
 .Bl -tag -width Er
 .It Bq Er EACCES
-A memory protection violation occurred, or the
-.Dv PROT_EXECUTE
-flag was attempted on pages which belong to a filesystem mounted with the
-.Dv NOEXEC flag.
+A memory protection violation occurred.
+.Pp
+The
+.Dv PROT_EXEC
+flag was attempted on pages which belong to a file system mounted with the
+.Dv NOEXEC
+flag.
+.Pp
+The new protection is less restrictive than the protection originally
+set with
+.Xr mmap 2 .
+.Pp
+PAX mprotect restrictions prohibit the requested protection.
 .It Bq Er EINVAL
 An invalid memory range, or invalid parameters were provided.
 .It Bq Er ENOMEM
 A resource shortage occurred while internally calling
-.Fn uvm_map_protect .
+.Xr uvm_map_protect 9 .
 .El
 .Sh SEE ALSO
 .Xr madvise 2 ,

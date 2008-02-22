@@ -1,4 +1,4 @@
-/*	$NetBSD: bufcache.h,v 1.9 2007/12/28 21:44:32 ad Exp $	*/
+/*	$NetBSD: bufcache.h,v 1.14 2018/03/30 12:56:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -99,7 +92,6 @@ struct ubuf {
  * These flags are kept in b_flags.
  */
 #define	B_AGE		0x00000001	/* Move to age queue when I/O done. */
-#define	B_NEEDCOMMIT	0x00000002	/* Needs committing to stable storage */
 #define	B_BUSY		0x00000010	/* I/O in progress. */
 #define	B_DELWRI	0x00000080	/* Delay I/O until buffer reused. */
 #define	B_DONE		0x00000200	/* I/O completed. */
@@ -123,10 +115,10 @@ void bufrehash(int);
 void bufstats(void);
 void buf_destroy(struct ubuf *);
 void bremfree(struct ubuf *);
-struct ubuf *incore(struct uvnode *, int);
+struct ubuf *incore(struct uvnode *, daddr_t);
 struct ubuf *getblk(struct uvnode *, daddr_t, int);
 void bwrite(struct ubuf *);
 void brelse(struct ubuf *, int);
-int bread(struct uvnode *, daddr_t, int, void *, struct ubuf **);
+int bread(struct uvnode *, daddr_t, int, int, struct ubuf **);
 void reassignbuf(struct ubuf *, struct uvnode *);
 void dump_free_lists(void);

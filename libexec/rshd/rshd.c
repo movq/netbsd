@@ -1,4 +1,4 @@
-/*	$NetBSD: rshd.c,v 1.45 2007/12/15 19:44:46 perry Exp $	*/
+/*	$NetBSD: rshd.c,v 1.51 2017/10/07 19:23:02 ryo Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.
@@ -64,12 +64,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1989, 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1989, 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)rshd.c	8.2 (Berkeley) 4/6/94";
 #else
-__RCSID("$NetBSD: rshd.c,v 1.45 2007/12/15 19:44:46 perry Exp $");
+__RCSID("$NetBSD: rshd.c,v 1.51 2017/10/07 19:23:02 ryo Exp $");
 #endif
 #endif /* not lint */
 
@@ -132,24 +132,24 @@ static int pam_err;
 #define PAM_END
 #endif
 
-int	keepalive = 1;
-int	check_all;
-int	log_success;		/* If TRUE, log all successful accesses */
-int	sent_null;
+static int	keepalive = 1;
+static int	check_all;
+static int	log_success;		/* If TRUE, log all successful accesses */
+static int	sent_null;
 
-void	 doit(struct sockaddr *) __dead;
-void	 rshd_errx(int, const char *, ...)
-     __attribute__((__noreturn__, __format__(__printf__, 2, 3)));
-void	 getstr(char *, int, const char *);
-int	 local_domain(char *);
-char	*topdomain(char *);
-void	 usage(void);
-int	 main(int, char *[]);
+__dead static void	 doit(struct sockaddr *, struct sockaddr *);
+__dead static void	 rshd_errx(int, const char *, ...) __printflike(2, 3);
+static void	 getstr(char *, int, const char *);
+static int	 local_domain(char *);
+static char	*topdomain(char *);
+__dead static void	 usage(void);
 
 #define	OPTIONS	"aLln"
 extern int __check_rhosts_file;
 extern char *__rcmd_errstr;	/* syslog hook from libc/net/rcmd.c. */
+#ifdef USE_PAM
 static const char incorrect[] = "Login incorrect.";
+#endif
 
 int
 main(int argc, char *argv[])
@@ -157,7 +157,9 @@ main(int argc, char *argv[])
 	struct linger linger;
 	int ch, on = 1;
 	socklen_t fromlen;
+	socklen_t locallen;
 	struct sockaddr_storage from;
+	struct sockaddr_storage local;
 	struct protoent *proto;
 
 	openlog("rshd", LOG_PID, LOG_DAEMON);
@@ -187,8 +189,14 @@ main(int argc, char *argv[])
 	argv += optind;
 
 	fromlen = sizeof(from); /* xxx */
+	locallen = sizeof(local); /* xxx */
 	if (getpeername(STDIN_FILENO, (struct sockaddr *)&from, &fromlen) < 0) {
 		syslog(LOG_ERR, "getpeername: %m");
+		return EXIT_FAILURE;
+	}
+	if (getsockname(STDIN_FILENO, (struct sockaddr *)&local,
+	    &locallen) < 0) {
+		syslog(LOG_ERR, "getsockname: %m");
 		return EXIT_FAILURE;
 	}
 #if 0
@@ -234,19 +242,13 @@ main(int argc, char *argv[])
 	proto = getprotobyname("tcp");
 	(void)setsockopt(STDIN_FILENO, proto->p_proto, TCP_NODELAY, &on,
 	    sizeof(on));
-	doit((struct sockaddr *)&from);
+	doit((struct sockaddr *)&from, (struct sockaddr *)&local);
 }
 
-char	username[20] = "USER=";
-char	homedir[64] = "HOME=";
-char	shell[64] = "SHELL=";
-char	path[100] = "PATH=";
-char	*envinit[] =
-	    {homedir, shell, path, username, 0};
-char	**environ;
+extern char	**environ;
 
-void
-doit(struct sockaddr *fromp)
+static void
+doit(struct sockaddr *fromp, struct sockaddr *localp)
 {
 	struct passwd *pwd, pwres;
 	in_port_t port;
@@ -309,7 +311,8 @@ doit(struct sockaddr *fromp)
 
 	u_char optbuf[BUFSIZ/3];
 	socklen_t optsize = sizeof(optbuf);
-	int ipproto, i;
+	int ipproto;
+	unsigned int i;
 	struct protoent *ip;
 
 	if ((ip = getprotobyname("ip")) != NULL)
@@ -363,7 +366,7 @@ doit(struct sockaddr *fromp)
 	(void) alarm(0);
 	if (port != 0) {
 		int lport = IPPORT_RESERVED - 1;
-		s = rresvport_af(&lport, af);
+		s = rresvport_af_addr(&lport, af, localp);
 		if (s < 0) {
 			syslog(LOG_ERR, "can't get stderr port: %m");
 			exit(EXIT_FAILURE);
@@ -464,7 +467,7 @@ doit(struct sockaddr *fromp)
 	}
 
 	if ((pam_err = pam_set_item(pamh, PAM_RUSER, remuser)) != PAM_SUCCESS ||
-	    (pam_err = pam_set_item(pamh, PAM_RHOST, hostname) != PAM_SUCCESS)){
+	    (pam_err = pam_set_item(pamh, PAM_RHOST, hostname)) != PAM_SUCCESS){
 		syslog(LOG_ERR|LOG_AUTH, "pam_set_item(): %s",
 		    pam_strerror(pamh, pam_err));
 		rshd_errx(EXIT_FAILURE, incorrect);
@@ -670,11 +673,14 @@ doit(struct sockaddr *fromp)
 		}
 	}
 #endif
+{
+	static char *envinit[] = { NULL };
 	environ = envinit;
-	(void)strlcat(homedir, pwd->pw_dir, sizeof(homedir));
-	(void)strlcat(path, _PATH_DEFPATH, sizeof(path));
-	(void)strlcat(shell, pwd->pw_shell, sizeof(shell));
-	(void)strlcat(username, pwd->pw_name, sizeof(username));
+}
+	setenv("PATH", _PATH_DEFPATH, 1);
+	setenv("HOME", pwd->pw_dir, 1);
+	setenv("SHELL", pwd->pw_shell, 1);
+	setenv("USER", pwd->pw_name, 1);
 #endif
 
 	cp = strrchr(pwd->pw_shell, '/');
@@ -716,7 +722,7 @@ badlogin:
 
 #include <stdarg.h>
 
-void
+static void
 rshd_errx(int error, const char *fmt, ...)
 {
 	va_list ap;
@@ -736,7 +742,7 @@ rshd_errx(int error, const char *fmt, ...)
 	exit(error);
 }
 
-void
+static void
 getstr(char *buf, int cnt, const char *err)
 {
 	char c;
@@ -758,7 +764,7 @@ getstr(char *buf, int cnt, const char *err)
  * assume that the host is local, as it will be
  * interpreted as such.
  */
-int
+static int
 local_domain(char *h)
 {
 	char localhost[MAXHOSTNAMELEN + 1];
@@ -774,7 +780,7 @@ local_domain(char *h)
 	return (0);
 }
 
-char *
+static char *
 topdomain(char *h)
 {
 	char *p, *maybe = NULL;
@@ -790,7 +796,7 @@ topdomain(char *h)
 	return (maybe);
 }
 
-void
+static void
 usage(void)
 {
 

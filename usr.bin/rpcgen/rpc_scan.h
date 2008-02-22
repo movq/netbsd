@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_scan.h,v 1.7 2003/10/27 00:12:43 lukem Exp $	*/
+/*	$NetBSD: rpc_scan.h,v 1.10 2015/05/09 21:44:47 christos Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -70,9 +70,11 @@ enum tok_kind {
 	TOK_INT,
 	TOK_SHORT,
 	TOK_LONG,
+	TOK_HYPER,
 	TOK_UNSIGNED,
 	TOK_FLOAT,
 	TOK_DOUBLE,
+	TOK_QUAD,
 	TOK_OPAQUE,
 	TOK_CHAR,
 	TOK_STRING,
@@ -89,7 +91,7 @@ typedef enum tok_kind tok_kind;
  */
 struct token {
 	tok_kind kind;
-	char *str;
+	const char *str;
 };
 typedef struct token token;
 
@@ -97,10 +99,10 @@ typedef struct token token;
 /*
  * routine interface 
  */
-void scan __P((tok_kind, token *));
-void scan2 __P((tok_kind, tok_kind, token *));
-void scan3 __P((tok_kind, tok_kind, tok_kind, token *));
-void scan_num __P((token *));
-void peek __P((token *));
-int peekscan __P((tok_kind, token *));
-void get_token __P((token *));
+void scan(tok_kind, token *);
+void scan2(tok_kind, tok_kind, token *);
+void scan3(tok_kind, tok_kind, tok_kind, token *);
+void scan_num(token *);
+void peek(token *);
+int peekscan(tok_kind, token *);
+void get_token(token *);

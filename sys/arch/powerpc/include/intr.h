@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.3 2007/12/03 15:34:12 ad Exp $ */
+/*	$NetBSD: intr.h,v 1.13 2018/04/19 21:50:07 christos Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -29,35 +26,57 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _LOCORE
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.h,v 1.3 2007/12/03 15:34:12 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.h,v 1.13 2018/04/19 21:50:07 christos Exp $");
+#endif
 
-#ifndef POWERPC_INTR_MACHDEP_H
-#define POWERPC_INTR_MACHDEP_H
+#ifndef _POWERPC_INTR_MACHDEP_H_
+#define _POWERPC_INTR_MACHDEP_H_
 
-void *intr_establish(int, int, int, int (*)(void *), void *);
-void intr_disestablish(void *);
-const char *intr_typename(int);
-void genppc_cpu_configure(void);
+#define	__HAVE_FAST_SOFTINTS	1
+
 
 /* Interrupt priority `levels'. */
-#define	IPL_NONE	0	/* nothing */
-#define	IPL_SOFTCLOCK	1	/* timeouts */
-#define	IPL_SOFTBIO	2	/* block I/O */
-#define	IPL_SOFTNET	3	/* protocol stacks */
-#define	IPL_SOFTSERIAL	4	/* serial */
-#define	IPL_VM		5	/* memory allocation */
-#define	IPL_SCHED	6
-#define	IPL_HIGH	7	/* everything */
-#define	NIPL		8
+#define	IPL_NONE		0	/* nothing */
+#define	IPL_SOFTCLOCK		1	/* timeouts */
+#define	IPL_SOFTBIO		2	/* block I/O */
+#define	IPL_SOFTNET		3	/* protocol stacks */
+#define	IPL_SOFTSERIAL		4	/* serial */
+#define	IPL_VM			5	/* memory allocation */
+#define	IPL_SCHED		6
+#define	IPL_HIGH		7	/* everything */
+#define	NIPL			8
 
 /* Interrupt sharing types. */
-#define	IST_NONE	0	/* none */
-#define	IST_PULSE	1	/* pulsed */
-#define	IST_EDGE	2	/* edge-triggered */
-#define	IST_LEVEL	3	/* level-triggered */
+#define	IST_NONE		0	/* none */
+#define	IST_PULSE		1	/* pulsed */
+#define	IST_EDGE		2	/* falling edge triggered */
+#define	IST_LEVEL		3	/* low level triggered */
 
-#ifndef _LOCORE
+#define IST_EDGE_FALLING	IST_EDGE
+#define IST_EDGE_RISING		4	/* rising edge triggered */
+#define IST_LEVEL_LOW		IST_LEVEL
+#define IST_LEVEL_HIGH		5	/* high level triggered */
+
+#if !defined(_LOCORE)
+void *	intr_establish(int, int, int, int (*)(void *), void *);
+void *	intr_establish_xname(int, int, int, int (*)(void *), void *,
+	    const char *);
+void	intr_disestablish(void *);
+const char *
+	intr_typename(int);
+
+int	splraise(int);
+int	spllower(int);
+void	splx(int);
+
+#if !defined(_MODULE)
+
+#include <powerpc/softint.h>
+
+void	genppc_cpu_configure(void);
+
 /*
  * Interrupt handler chains.  intr_establish() inserts a handler into
  * the list.  The handler is called with its (single) argument.
@@ -66,28 +85,36 @@ struct intrhand {
 	int	(*ih_fun)(void *);
 	void	*ih_arg;
 	struct	intrhand *ih_next;
-	int	ih_level;
-	int	ih_irq;
+	int	ih_ipl;
+	int	ih_virq;
+	char	ih_xname[INTRDEVNAMEBUF];
 };
 
-int splraise(int);
-int spllower(int);
-void splx(int);
-void softintr(int);
+void softint_fast_dispatch(struct lwp *, int);
 
-extern int imask[];
+#define softint_init_md		powerpc_softint_init_md
+#define softint_trigger		powerpc_softint_trigger
 
-/* Soft interrupt masks. */
-#define SIR_CLOCK	27
-#define SIR_BIO		28
-#define SIR_NET		29
-#define SIR_SERIAL	30
-#define SPL_CLOCK	31
+#ifdef __IMASK_T
+typedef __IMASK_T imask_t;
+#else
+typedef uint32_t imask_t;
+#endif
 
-#define setsoftclock()	softintr(SIR_CLOCK)
-#define setsoftbio()	softintr(SIR_BIO)
-#define setsoftnet()	softintr(SIR_NET)
-#define setsoftserial()	softintr(SIR_SERIAL)
+extern imask_t imask[];
+
+#define NVIRQ		(sizeof(imask_t)*8)	/* 32 virtual IRQs */
+#ifndef NIRQ
+#define NIRQ		128	/* up to 128 HW IRQs */
+#endif
+
+#define HWIRQ_MAX       (NVIRQ - 1)
+#define HWIRQ_MASK     	(~(imask_t)0 >> 1)
+
+#define	PIC_VIRQ_TO_MASK(v)	__BIT(HWIRQ_MAX - (v))
+#define PIC_VIRQ_MS_PENDING(p)	__builtin_clz(p)
+
+#endif /* !_MODULE */
 
 #define spl0()		spllower(0)
 
@@ -96,22 +123,22 @@ typedef struct {
 	ipl_t _ipl;
 } ipl_cookie_t;
 
-static inline ipl_cookie_t
+static __inline ipl_cookie_t
 makeiplcookie(ipl_t ipl)
 {
 
 	return (ipl_cookie_t){._ipl = ipl};
 }
 
-static inline int
+static __inline int
 splraiseipl(ipl_cookie_t icookie)
 {
 
-	return splraise(imask[icookie._ipl]);
+	return splraise(icookie._ipl);
 }
 
 #include <sys/spl.h>
 
 #endif /* _LOCORE */
 
-#endif /* POWERPC_INTR_MACHDEP_H */
+#endif /* _POWERPC_INTR_MACHDEP_H_ */

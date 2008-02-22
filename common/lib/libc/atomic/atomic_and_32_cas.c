@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_and_32_cas.c,v 1.3 2007/11/28 16:59:09 ad Exp $	*/
+/*	$NetBSD: atomic_and_32_cas.c,v 1.10 2014/06/23 21:53:45 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,8 +33,15 @@
 
 #include <sys/atomic.h>
 
-void
-atomic_and_32(volatile uint32_t *addr, uint32_t val)
+uint32_t fetch_and_and_4(volatile uint32_t *, uint32_t, ...)
+#if defined(_LIBC) || defined(_HARDKERNEL)
+    asm("__sync_fetch_and_and_4");	/* C runtime internal */
+#else
+    ;
+#endif
+
+uint32_t
+fetch_and_and_4(volatile uint32_t *addr, uint32_t val, ...)
 {
 	uint32_t old, new;
 
@@ -49,10 +49,20 @@ atomic_and_32(volatile uint32_t *addr, uint32_t val)
 		old = *addr;
 		new = old & val;
 	} while (atomic_cas_32(addr, old, new) != old);
+	return old;
 }
+
+void
+atomic_and_32(volatile uint32_t *addr, uint32_t val)
+{
+	(void) fetch_and_and_4(addr, val);
+}
+
+__strong_alias(__atomic_fetch_and_4,__sync_fetch_and_and_4)
 
 #undef atomic_and_32
 atomic_op_alias(atomic_and_32,_atomic_and_32)
+
 #undef atomic_and_uint
 atomic_op_alias(atomic_and_uint,_atomic_and_32)
 __strong_alias(_atomic_and_uint,_atomic_and_32)

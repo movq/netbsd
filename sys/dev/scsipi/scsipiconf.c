@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipiconf.c,v 1.35 2007/07/09 21:01:22 ad Exp $	*/
+/*	$NetBSD: scsipiconf.c,v 1.44 2017/04/11 14:32:43 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,11 +48,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsipiconf.c,v 1.35 2007/07/09 21:01:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsipiconf.c,v 1.44 2017/04/11 14:32:43 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
+#include <sys/module.h>
 #include <sys/device.h>
 #include <sys/proc.h>
 
@@ -67,7 +61,31 @@ __KERNEL_RCSID(0, "$NetBSD: scsipiconf.c,v 1.35 2007/07/09 21:01:22 ad Exp $");
 #include <dev/scsipi/scsipiconf.h>
 #include <dev/scsipi/scsipi_base.h>
 
-#define	STRVIS_ISWHITE(x) ((x) == ' ' || (x) == '\0' || (x) == (u_char)'\377')
+
+/* Function pointers and stub routines for scsiverbose module */
+int (*scsipi_print_sense)(struct scsipi_xfer *, int) = scsipi_print_sense_stub;
+void (*scsipi_print_sense_data)(struct scsi_sense_data *, int) =
+		scsipi_print_sense_data_stub;
+
+int scsi_verbose_loaded = 0; 
+
+int
+scsipi_print_sense_stub(struct scsipi_xfer * xs, int verbosity)
+{
+	scsipi_load_verbose();
+	if (scsi_verbose_loaded)
+		return scsipi_print_sense(xs, verbosity);
+	else
+		return 0;
+}
+
+void
+scsipi_print_sense_data_stub(struct scsi_sense_data *sense, int verbosity)
+{
+	scsipi_load_verbose();
+	if (scsi_verbose_loaded)
+		scsipi_print_sense_data(sense, verbosity);
+}
 
 int
 scsipi_command(struct scsipi_periph *periph, struct scsipi_generic *cmd,
@@ -75,13 +93,31 @@ scsipi_command(struct scsipi_periph *periph, struct scsipi_generic *cmd,
     struct buf *bp, int flags)
 {
 	struct scsipi_xfer *xs;
+	int rc;
 
-	xs = scsipi_make_xs(periph, cmd, cmdlen, data_addr, datalen, retries,
+	/*
+	 * execute unlocked to allow waiting for memory
+	 */
+	xs = scsipi_make_xs_unlocked(periph, cmd, cmdlen, data_addr, datalen, retries,
 	    timeout, bp, flags);
 	if (!xs)
 		return (ENOMEM);
 
-	return (scsipi_execute_xs(xs));
+	mutex_enter(chan_mtx(periph->periph_channel));
+	rc = scsipi_execute_xs(xs);
+	mutex_exit(chan_mtx(periph->periph_channel));
+
+	return rc;
+}
+
+/* 
+ * Load the scsiverbose module
+ */   
+void
+scsipi_load_verbose(void)
+{
+	if (scsi_verbose_loaded == 0)
+		module_autoload("scsiverbose", MODULE_CLASS_MISC);
 }
 
 /*
@@ -111,8 +147,19 @@ scsipi_alloc_periph(int malloc_flag)
 
 	TAILQ_INIT(&periph->periph_xferq);
 	callout_init(&periph->periph_callout, 0);
+	cv_init(&periph->periph_cv, "periph");
 
 	return periph;
+}
+
+/*
+ * cleanup and free scsipi_periph structure
+ */
+void
+scsipi_free_periph(struct scsipi_periph *periph)
+{
+	cv_destroy(&periph->periph_cv);
+	free(periph, M_DEVBUF);
 }
 
 /*
@@ -228,43 +275,4 @@ scsipi_dtype(int type)
 		break;
 	}
 	return (dtype);
-}
-
-void
-scsipi_strvis(u_char *dst, int dlen, const u_char *src, int slen)
-{
-
-	/* Trim leading and trailing blanks and NULs. */
-	while (slen > 0 && STRVIS_ISWHITE(src[0]))
-		++src, --slen;
-	while (slen > 0 && STRVIS_ISWHITE(src[slen - 1]))
-		--slen;
-
-	while (slen > 0) {
-		if (*src < 0x20 || *src >= 0x80) {
-			/* non-printable characters */
-			dlen -= 4;
-			if (dlen < 1)
-				break;
-			*dst++ = '\\';
-			*dst++ = ((*src & 0300) >> 6) + '0';
-			*dst++ = ((*src & 0070) >> 3) + '0';
-			*dst++ = ((*src & 0007) >> 0) + '0';
-		} else if (*src == '\\') {
-			/* quote characters */
-			dlen -= 2;
-			if (dlen < 1)
-				break;
-			*dst++ = '\\';
-			*dst++ = '\\';
-		} else {
-			/* normal characters */
-			if (--dlen < 1)
-				break;
-			*dst++ = *src;
-		}
-		++src, --slen;
-	}
-
-	*dst++ = 0;
 }

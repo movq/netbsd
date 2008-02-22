@@ -1,8 +1,12 @@
-#	$NetBSD: Makefile,v 1.1 2007/06/09 11:20:54 kiyohara Exp $
+#	$NetBSD: Makefile,v 1.3 2018/05/31 05:27:46 mrg Exp $
 
 NOMAN=	# defined
 
-FILES=	zyd-zd1211 zyd-zd1211b zd1211-licence
+.include <bsd.own.mk>
+
+.if ${MKFIRMWARE} != "no"
+FILES=	zyd-zd1211 zyd-zd1211b zd1211-license
+.endif
 
 # XXX
 includes:

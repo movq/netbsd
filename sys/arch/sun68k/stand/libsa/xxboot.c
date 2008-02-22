@@ -1,4 +1,4 @@
-/*	$NetBSD: xxboot.c,v 1.5 2005/12/11 12:19:29 christos Exp $ */
+/*	$NetBSD: xxboot.c,v 1.7 2016/06/11 06:49:46 dholland Exp $ */
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -133,7 +133,7 @@ xxboot_main(const char *boot_type)
 	just_ask:
 		file = kernelnames[0];
 		printf("filename? [%s]: ", file);
-		gets(line);
+		kgets(line, sizeof(line));
 		if (line[0])
 			file = line;
 
@@ -151,6 +151,6 @@ gotit:
 		printf("relocating program...");
 		entry = sun2_map_mem_run(entry);
 	}
-	printf("starting program at 0x%x\n", entry);
+	printf("starting program at 0x%x\n", (u_int)entry);
 	chain_to(entry);
 }

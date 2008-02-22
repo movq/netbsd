@@ -1,4 +1,4 @@
-/*	$NetBSD: main1.c,v 1.17 2006/11/08 18:31:15 christos Exp $	*/
+/*	$NetBSD: main1.c,v 1.26 2016/12/24 17:43:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: main1.c,v 1.17 2006/11/08 18:31:15 christos Exp $");
+__RCSID("$NetBSD: main1.c,v 1.26 2016/12/24 17:43:45 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -47,6 +47,7 @@ __RCSID("$NetBSD: main1.c,v 1.17 2006/11/08 18:31:15 christos Exp $");
 #include <unistd.h>
 #include <errno.h>
 #include <limits.h>
+#include <signal.h>
 
 #include "lint1.h"
 
@@ -105,6 +106,10 @@ int	tflag;
 
 /* Enable C9X extensions */
 int	Sflag;
+
+/* Picky flag */
+int	Pflag;
+
 /*
  * Complain about functions and external variables used and not defined,
  * or defined and not used.
@@ -119,9 +124,48 @@ int	zflag = 1;
 
 err_set	msgset;
 
+sig_atomic_t fpe;
+
 static	void	usage(void);
 
-int main(int, char *[]);
+static const char builtins[] =
+    "int __builtin_isinf(long double);\n"
+    "int __builtin_isnan(long double);\n"
+    "int __builtin_copysign(long double, long double);\n"
+;
+static size_t builtinlen = sizeof(builtins) - 1;
+
+static FILE *
+bltin(void)
+{
+#if HAVE_NBTOOL_CONFIG_H
+	char template[] = "/tmp/lint.XXXXXX";
+	int fd;
+	FILE *fp;
+	if ((fd = mkstemp(template)) == -1)
+		return NULL;
+	(void)unlink(template);
+	if ((fp = fdopen(fd, "r+")) == NULL) {
+		close(fd);
+		return NULL;
+	}
+	if (fwrite(builtins, 1, builtinlen, fp) != builtinlen) {
+		fclose(fp);
+		return NULL;
+	}
+	rewind(fp);
+	return fp;
+#else
+	return fmemopen(__UNCONST(builtins), builtinlen, "r");
+#endif
+}
+
+/*ARGSUSED*/
+static void
+sigfpe(int s)
+{
+	fpe = 1;
+}
 
 int
 main(int argc, char *argv[])
@@ -132,7 +176,7 @@ main(int argc, char *argv[])
 	setprogname(argv[0]);
 
 	ERR_ZERO(&msgset);
-	while ((c = getopt(argc, argv, "abcdeghmprstuvwyzFSX:")) != -1) {
+	while ((c = getopt(argc, argv, "abcdeghmprstuvwyzFPR:SX:")) != -1) {
 		switch (c) {
 		case 'a':	aflag++;	break;
 		case 'b':	bflag = 1;	break;
@@ -143,6 +187,7 @@ main(int argc, char *argv[])
 		case 'g':	gflag = 1;	break;
 		case 'h':	hflag = 1;	break;
 		case 'p':	pflag = 1;	break;
+		case 'P':	Pflag = 1;	break;
 		case 'r':	rflag = 1;	break;
 		case 's':	sflag = 1;	break;
 		case 'S':	Sflag = 1;	break;
@@ -157,6 +202,10 @@ main(int argc, char *argv[])
 			msglist();
 			return(0);
 
+		case 'R':	
+			fnaddreplsrcdir(optarg);
+			break;
+
 		case 'X':
 			for (ptr = strtok(optarg, ","); ptr;
 			    ptr = strtok(NULL, ",")) {
@@ -165,7 +214,7 @@ main(int argc, char *argv[])
 
 				errno = 0;
 				msg = strtol(ptr, &eptr, 0);
-				if ((msg == LONG_MIN || msg == LONG_MAX) &&
+				if ((msg == TARG_LONG_MIN || msg == TARG_LONG_MAX) &&
 				    errno == ERANGE)
 				    err(1, "invalid error message id '%s'",
 					ptr);
@@ -188,9 +237,6 @@ main(int argc, char *argv[])
 	if (argc != 2)
 		usage();
 
-	/* open the input file */
-	if ((yyin = fopen(argv[0], "r")) == NULL)
-		err(1, "cannot open '%s'", argv[0]);
 
 	/* initialize output */
 	outopen(argv[1]);
@@ -198,17 +244,27 @@ main(int argc, char *argv[])
 	if (yflag)
 		yydebug = 1;
 
+	(void)signal(SIGFPE, sigfpe);
 	initmem();
 	initdecl();
 	initscan();
 	initmtab();
 
+	if ((yyin = bltin()) == NULL)
+		err(1, "cannot open builtins");
 	yyparse();
+	fclose(yyin);
+
+	/* open the input file */
+	if ((yyin = fopen(argv[0], "r")) == NULL)
+		err(1, "cannot open '%s'", argv[0]);
+	yyparse();
+	fclose(yyin);
 
 	/* Following warnings cannot be suppressed by LINTED */
-	nowarn = 0;
+	lwarn = LWARN_ALL;
 #ifdef DEBUG
-	printf("%s, %d: nowarn = 0\n", curr_pos.p_file, curr_pos.p_line);
+	printf("%s, %d: lwarn = %d\n", curr_pos.p_file, curr_pos.p_line, lwarn);
 #endif
 
 	chkglsyms();

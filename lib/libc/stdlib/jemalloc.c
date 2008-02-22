@@ -1,4 +1,4 @@
-/*	$NetBSD: jemalloc.c,v 1.16 2007/12/04 17:43:51 christos Exp $	*/
+/*	$NetBSD: jemalloc.c,v 1.44 2017/12/01 22:47:06 mrg Exp $	*/
 
 /*-
  * Copyright (C) 2006,2007 Jason Evans <jasone@FreeBSD.org>.
@@ -118,7 +118,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("$FreeBSD: src/lib/libc/stdlib/malloc.c,v 1.147 2007/06/15 22:00:16 jasone Exp $"); */ 
-__RCSID("$NetBSD: jemalloc.c,v 1.16 2007/12/04 17:43:51 christos Exp $");
+__RCSID("$NetBSD: jemalloc.c,v 1.44 2017/12/01 22:47:06 mrg Exp $");
 
 #ifdef __FreeBSD__
 #include "libc_private.h"
@@ -143,8 +143,8 @@ __RCSID("$NetBSD: jemalloc.c,v 1.16 2007/12/04 17:43:51 christos Exp $");
 #ifdef __FreeBSD__
 #include <machine/atomic.h>
 #include <machine/cpufunc.h>
-#endif
 #include <machine/vmparam.h>
+#endif
 
 #include <errno.h>
 #include <limits.h>
@@ -163,27 +163,7 @@ __RCSID("$NetBSD: jemalloc.c,v 1.16 2007/12/04 17:43:51 christos Exp $");
 #  include <reentrant.h>
 #  include "extern.h"
 
-#define STRERROR_R(a, b, c)	__strerror_r(a, b, c);
-/*
- * A non localized version of strerror, that avoids bringing in
- * stdio and the locale code. All the malloc messages are in English
- * so why bother?
- */
-static int
-__strerror_r(int e, char *s, size_t l)
-{
-	int rval;
-	size_t slen;
-
-	if (e >= 0 && e < sys_nerr) {
-		slen = strlcpy(s, sys_errlist[e], l);
-		rval = 0;
-	} else {
-		slen = snprintf_ss(s, l, "Unknown error %u", e);
-		rval = EINVAL;
-	}
-	return slen >= l ? ERANGE : rval;
-}
+#define STRERROR_R(a, b, c)	strerror_r_ss(a, b, c);
 #endif
 
 #ifdef __FreeBSD__
@@ -216,6 +196,14 @@ __strerror_r(int e, char *s, size_t l)
 #define	STRERROR_BUF		64
 
 /* Minimum alignment of allocations is 2^QUANTUM_2POW_MIN bytes. */
+
+/*
+ * If you touch the TINY_MIN_2POW definition for any architecture, please
+ * make sure to adjust the corresponding definition for JEMALLOC_TINY_MIN_2POW
+ * in the gcc 4.8 tree in dist/gcc/tree-ssa-ccp.c and verify that a native
+ * gcc is still buildable!
+ */
+
 #ifdef __i386__
 #  define QUANTUM_2POW_MIN	4
 #  define SIZEOF_PTR_2POW	2
@@ -225,32 +213,49 @@ __strerror_r(int e, char *s, size_t l)
 #  define QUANTUM_2POW_MIN	4
 #  define SIZEOF_PTR_2POW	3
 #endif
+#ifdef __aarch64__
+#  define QUANTUM_2POW_MIN	4
+#  define SIZEOF_PTR_2POW	3
+#  define NO_TLS
+#endif
 #ifdef __alpha__
 #  define QUANTUM_2POW_MIN	4
 #  define SIZEOF_PTR_2POW	3
+#  define TINY_MIN_2POW		3
 #  define NO_TLS
 #endif
 #ifdef __sparc64__
 #  define QUANTUM_2POW_MIN	4
 #  define SIZEOF_PTR_2POW	3
+#  define TINY_MIN_2POW		3
 #  define NO_TLS
 #endif
 #ifdef __amd64__
 #  define QUANTUM_2POW_MIN	4
 #  define SIZEOF_PTR_2POW	3
+#  define TINY_MIN_2POW		3
 #endif
 #ifdef __arm__
 #  define QUANTUM_2POW_MIN	3
 #  define SIZEOF_PTR_2POW	2
 #  define USE_BRK
+#  ifdef __ARM_EABI__
+#    define TINY_MIN_2POW	3
+#  endif
 #  define NO_TLS
 #endif
 #ifdef __powerpc__
 #  define QUANTUM_2POW_MIN	4
 #  define SIZEOF_PTR_2POW	2
 #  define USE_BRK
+#  define TINY_MIN_2POW		3
 #endif
 #if defined(__sparc__) && !defined(__sparc64__)
+#  define QUANTUM_2POW_MIN	4
+#  define SIZEOF_PTR_2POW	2
+#  define USE_BRK
+#endif
+#ifdef __or1k__
 #  define QUANTUM_2POW_MIN	4
 #  define SIZEOF_PTR_2POW	2
 #  define USE_BRK
@@ -270,14 +275,20 @@ __strerror_r(int e, char *s, size_t l)
 #  define SIZEOF_PTR_2POW	2
 #  define USE_BRK
 #endif
-#ifdef __mips__
+#if defined(__mips__) || defined(__riscv__)
+#  ifdef _LP64
+#    define SIZEOF_PTR_2POW	3
+#    define TINY_MIN_2POW	3
+#  else
+#    define SIZEOF_PTR_2POW	2
+#  endif
 #  define QUANTUM_2POW_MIN	4
-#  define SIZEOF_PTR_2POW	2
 #  define USE_BRK
 #endif
 #ifdef __hppa__                                                                                                                                         
-#  define QUANTUM_2POW_MIN     4                                                                                                                        
-#  define SIZEOF_PTR_2POW      2                                                                                                                        
+#  define QUANTUM_2POW_MIN	4                                                                                                                        
+#  define TINY_MIN_2POW		4
+#  define SIZEOF_PTR_2POW	2                                                                                                                        
 #  define USE_BRK                                                                                                                                       
 #endif           
 
@@ -286,11 +297,6 @@ __strerror_r(int e, char *s, size_t l)
 /* sizeof(int) == (1 << SIZEOF_INT_2POW). */
 #ifndef SIZEOF_INT_2POW
 #  define SIZEOF_INT_2POW	2
-#endif
-
-/* We can't use TLS in non-PIC programs, since TLS relies on loader magic. */
-#if (!defined(PIC) && !defined(NO_TLS))
-#  define NO_TLS
 #endif
 
 /*
@@ -308,7 +314,9 @@ __strerror_r(int e, char *s, size_t l)
 #define	CACHELINE		((size_t)(1 << CACHELINE_2POW))
 
 /* Smallest size class to support. */
-#define	TINY_MIN_2POW		1
+#ifndef TINY_MIN_2POW
+#define	TINY_MIN_2POW		2
+#endif
 
 /*
  * Maximum size class that is a multiple of the quantum, but not (necessarily)
@@ -319,20 +327,25 @@ __strerror_r(int e, char *s, size_t l)
 #define	SMALL_MAX_DEFAULT	(1 << SMALL_MAX_2POW_DEFAULT)
 
 /*
- * Maximum desired run header overhead.  Runs are sized as small as possible
- * such that this setting is still honored, without violating other constraints.
- * The goal is to make runs as small as possible without exceeding a per run
- * external fragmentation threshold.
+ * RUN_MAX_OVRHD indicates maximum desired run header overhead.  Runs are sized
+ * as small as possible such that this setting is still honored, without
+ * violating other constraints.  The goal is to make runs as small as possible
+ * without exceeding a per run external fragmentation threshold.
  *
- * Note that it is possible to set this low enough that it cannot be honored
- * for some/all object sizes, since there is one bit of header overhead per
- * object (plus a constant).  In such cases, this constraint is relaxed.
+ * We use binary fixed point math for overhead computations, where the binary
+ * point is implicitly RUN_BFP bits to the left.
  *
- * RUN_MAX_OVRHD_RELAX specifies the maximum number of bits per region of
- * overhead for which RUN_MAX_OVRHD is relaxed.
+ * Note that it is possible to set RUN_MAX_OVRHD low enough that it cannot be
+ * honored for some/all object sizes, since there is one bit of header overhead
+ * per object (plus a constant).  This constraint is relaxed (ignored) for runs
+ * that are so small that the per-region overhead is greater than:
+ *
+ *   (RUN_MAX_OVRHD / (reg_size << (3+RUN_BFP))
  */
-#define RUN_MAX_OVRHD		0.015
-#define RUN_MAX_OVRHD_RELAX	1.5
+#define RUN_BFP			12
+/*                              \/   Implicit binary fixed point. */
+#define RUN_MAX_OVRHD		0x0000003dU
+#define RUN_MAX_OVRHD_RELAX	0x00001800U
 
 /* Put a cap on small object run size.  This overrides RUN_MAX_OVRHD. */
 #define RUN_MAX_SMALL_2POW	15
@@ -360,8 +373,10 @@ static malloc_mutex_t init_lock = {_SPINLOCK_INITIALIZER};
 /* Set to true once the allocator has been initialized. */
 static bool malloc_initialized = false;
 
+#ifdef _REENTRANT
 /* Used to avoid initialization races. */
 static mutex_t init_lock = MUTEX_INITIALIZER;
+#endif
 #endif
 
 /******************************************************************************/
@@ -672,8 +687,10 @@ static size_t		arena_maxclass; /* Max size class for arenas. */
  * Chunks.
  */
 
+#ifdef _REENTRANT
 /* Protects chunk-related data structures. */
 static malloc_mutex_t	chunks_mtx;
+#endif
 
 /* Tree of chunks that are stand-alone huge allocations. */
 static chunk_tree_t	huge;
@@ -724,7 +741,9 @@ static void		*base_pages;
 static void		*base_next_addr;
 static void		*base_past_addr; /* Addr immediately past base_pages. */
 static chunk_node_t	*base_chunk_nodes; /* LIFO cache of chunk nodes. */
+#ifdef _REENTRANT
 static malloc_mutex_t	base_mtx;
+#endif
 #ifdef MALLOC_STATS
 static size_t		base_mapped;
 #endif
@@ -741,20 +760,62 @@ static size_t		base_mapped;
 static arena_t		**arenas;
 static unsigned		narenas;
 static unsigned		next_arena;
+#ifdef _REENTRANT
 static malloc_mutex_t	arenas_mtx; /* Protects arenas initialization. */
+#endif
 
-#ifndef NO_TLS
 /*
  * Map of pthread_self() --> arenas[???], used for selecting an arena to use
  * for allocations.
  */
-static __thread arena_t	*arenas_map;
-#define	get_arenas_map()	(arenas_map)
-#define	set_arenas_map(x)	(arenas_map = x)
+#ifndef NO_TLS
+static __thread arena_t	**arenas_map;
 #else
-static thread_key_t arenas_map_key;
-#define	get_arenas_map()	thr_getspecific(arenas_map_key)
-#define	set_arenas_map(x)	thr_setspecific(arenas_map_key, x)
+static arena_t	**arenas_map;
+#endif
+
+#if !defined(NO_TLS) || !defined(_REENTRANT)
+# define	get_arenas_map()	(arenas_map)
+# define	set_arenas_map(x)	(arenas_map = x)
+#else
+
+static thread_key_t arenas_map_key = -1;
+
+static inline arena_t **
+get_arenas_map(void)
+{
+	if (!__isthreaded)
+		return arenas_map;
+
+	if (arenas_map_key == -1) {
+		(void)thr_keycreate(&arenas_map_key, NULL);
+		if (arenas_map != NULL) {
+			thr_setspecific(arenas_map_key, arenas_map);
+			arenas_map = NULL;
+		}
+	}
+
+	return thr_getspecific(arenas_map_key);
+}
+
+static __inline void
+set_arenas_map(arena_t **a)
+{
+	if (!__isthreaded) {
+		arenas_map = a;
+		return;
+	}
+
+	if (arenas_map_key == -1) {
+		(void)thr_keycreate(&arenas_map_key, NULL);
+		if (arenas_map != NULL) {
+			_DIAGASSERT(arenas_map == a);
+			arenas_map = NULL;
+		}
+	}
+
+	thr_setspecific(arenas_map_key, a);
+}
 #endif
 
 #ifdef MALLOC_STATS
@@ -811,7 +872,7 @@ static void	wrtmessage(const char *p1, const char *p2, const char *p3,
 #ifdef MALLOC_STATS
 static void	malloc_printf(const char *format, ...);
 #endif
-static char	*umax2s(uintmax_t x, char *s);
+static char	*size_t2s(size_t x, char *s);
 static bool	base_pages_alloc(size_t minsize);
 static void	*base_alloc(size_t size);
 static chunk_node_t *base_chunk_node_alloc(void);
@@ -824,7 +885,6 @@ static void	*pages_map_align(void *addr, size_t size, int align);
 static void	pages_unmap(void *addr, size_t size);
 static void	*chunk_alloc(size_t size);
 static void	chunk_dealloc(void *chunk, size_t size);
-static arena_t	*choose_arena_hard(void);
 static void	arena_run_split(arena_t *arena, arena_run_t *run, size_t size);
 static arena_chunk_t *arena_chunk_alloc(arena_t *arena);
 static void	arena_chunk_dealloc(arena_t *arena, arena_chunk_t *chunk);
@@ -974,19 +1034,19 @@ malloc_printf(const char *format, ...)
 
 /*
  * We don't want to depend on vsnprintf() for production builds, since that can
- * cause unnecessary bloat for static binaries.  umax2s() provides minimal
+ * cause unnecessary bloat for static binaries.  size_t2s() provides minimal
  * integer printing functionality, so that malloc_printf() use can be limited to
  * MALLOC_STATS code.
  */
 #define UMAX2S_BUFSIZE	21
 static char *
-umax2s(uintmax_t x, char *s)
+size_t2s(size_t x, char *s)
 {
 	unsigned i;
 
 	/* Make sure UMAX2S_BUFSIZE is large enough. */
 	/* LINTED */
-	assert(sizeof(uintmax_t) <= 8);
+	assert(sizeof(size_t) <= 8);
 
 	i = UMAX2S_BUFSIZE - 1;
 	s[i] = '\0';
@@ -1030,7 +1090,8 @@ base_pages_alloc(size_t minsize)
 			 */
 			incr = (intptr_t)chunksize
 			    - (intptr_t)CHUNK_ADDR2OFFSET(brk_cur);
-			if (incr < minsize)
+			assert(incr >= 0);
+			if ((size_t)incr < minsize)
 				incr += csize;
 
 			brk_prev = sbrk(incr);
@@ -1365,7 +1426,7 @@ chunk_alloc(size_t size)
 			 */
 			incr = (intptr_t)size
 			    - (intptr_t)CHUNK_ADDR2OFFSET(brk_cur);
-			if (incr == size) {
+			if (incr == (intptr_t)size) {
 				ret = brk_cur;
 			} else {
 				ret = (void *)((intptr_t)brk_cur + incr);
@@ -1523,66 +1584,54 @@ chunk_dealloc(void *chunk, size_t size)
  */
 
 /*
- * Choose an arena based on a per-thread value (fast-path code, calls slow-path
- * code if necessary).
+ * Choose an arena based on a per-thread and (optimistically) per-CPU value.
+ *
+ * We maintain at least one block of arenas.  Usually there are more.
+ * The blocks are $ncpu arenas in size.  Whole blocks are 'hashed'
+ * amongst threads.  To accomplish this, next_arena advances only in
+ * ncpu steps.
  */
+static __noinline arena_t *
+choose_arena_hard(void)
+{
+	unsigned i, curcpu;
+	arena_t **map;
+
+	/* Initialize the current block of arenas and advance to next. */
+	malloc_mutex_lock(&arenas_mtx);
+	assert(next_arena % ncpus == 0);
+	assert(narenas % ncpus == 0);
+	map = &arenas[next_arena];
+	set_arenas_map(map);
+	for (i = 0; i < ncpus; i++) {
+		if (arenas[next_arena] == NULL)
+			arenas_extend(next_arena);
+		next_arena = (next_arena + 1) % narenas;
+	}
+	malloc_mutex_unlock(&arenas_mtx);
+
+	/*
+	 * If we were unable to allocate an arena above, then default to
+	 * the first arena, which is always present.
+	 */
+	curcpu = thr_curcpu();
+	if (map[curcpu] != NULL)
+		return map[curcpu];
+	return arenas[0];
+}
+
 static inline arena_t *
 choose_arena(void)
 {
-	arena_t *ret;
+	unsigned curcpu;
+	arena_t **map;
 
-	/*
-	 * We can only use TLS if this is a PIC library, since for the static
-	 * library version, libc's malloc is used by TLS allocation, which
-	 * introduces a bootstrapping issue.
-	 */
-	if (__isthreaded == false) {
-	    /*
-	     * Avoid the overhead of TLS for single-threaded operation.  If the
-	     * app switches to threaded mode, the initial thread may end up
-	     * being assigned to some other arena, but this one-time switch
-	     * shouldn't cause significant issues.
-	     */
-	    return (arenas[0]);
-	}
+	map = get_arenas_map();
+	curcpu = thr_curcpu();
+	if (__predict_true(map != NULL && map[curcpu] != NULL))
+		return map[curcpu];
 
-	ret = get_arenas_map();
-	if (ret == NULL)
-		ret = choose_arena_hard();
-
-	assert(ret != NULL);
-	return (ret);
-}
-
-/*
- * Choose an arena based on a per-thread value (slow-path code only, called
- * only by choose_arena()).
- */
-static arena_t *
-choose_arena_hard(void)
-{
-	arena_t *ret;
-
-	assert(__isthreaded);
-
-	/* Assign one of the arenas to this thread, in a round-robin fashion. */
-	malloc_mutex_lock(&arenas_mtx);
-	ret = arenas[next_arena];
-	if (ret == NULL)
-		ret = arenas_extend(next_arena);
-	if (ret == NULL) {
-		/*
-		 * Make sure that this function never returns NULL, so that
-		 * choose_arena() doesn't have to check for a NULL return
-		 * value.
-		 */
-		ret = arenas[0];
-	}
-	next_arena = (next_arena + 1) % narenas;
-	malloc_mutex_unlock(&arenas_mtx);
-	set_arenas_map(ret);
-
-	return (ret);
+        return choose_arena_hard();
 }
 
 #ifndef lint
@@ -1592,6 +1641,11 @@ arena_chunk_comp(arena_chunk_t *a, arena_chunk_t *b)
 
 	assert(a != NULL);
 	assert(b != NULL);
+
+	if (a->max_frun_npages < b->max_frun_npages)
+		return -1;
+	if (a->max_frun_npages > b->max_frun_npages)
+		return 1;
 
 	if ((uintptr_t)a < (uintptr_t)b)
 		return (-1);
@@ -1844,9 +1898,6 @@ arena_chunk_alloc(arena_t *arena)
 
 		chunk->arena = arena;
 
-		/* LINTED */
-		RB_INSERT(arena_chunk_tree_s, &arena->chunks, chunk);
-
 		/*
 		 * Claim that no pages are in use, since the header is merely
 		 * overhead.
@@ -1866,6 +1917,8 @@ arena_chunk_alloc(arena_t *arena)
 		chunk->map[chunk_npages - 1].npages = chunk_npages -
 		    arena_chunk_header_npages;
 		chunk->map[chunk_npages - 1].pos = POS_FREE;
+
+		RB_INSERT(arena_chunk_tree_s, &arena->chunks, chunk);
 	}
 
 	return (chunk);
@@ -1902,30 +1955,44 @@ arena_chunk_dealloc(arena_t *arena, arena_chunk_t *chunk)
 static arena_run_t *
 arena_run_alloc(arena_t *arena, size_t size)
 {
-	arena_chunk_t *chunk;
+	arena_chunk_t *chunk, *chunk_tmp;
 	arena_run_t *run;
-	unsigned need_npages, limit_pages, compl_need_npages;
+	unsigned need_npages;
 
 	assert(size <= (chunksize - (arena_chunk_header_npages <<
 	    pagesize_2pow)));
 	assert((size & pagesize_mask) == 0);
 
 	/*
-	 * Search through arena's chunks in address order for a free run that is
-	 * large enough.  Look for the first fit.
+	 * Search through the arena chunk tree for a large enough free run.
+	 * Tree order ensures that any exact fit is picked immediately or
+	 * otherwise the lowest address of the next size.
 	 */
 	need_npages = (unsigned)(size >> pagesize_2pow);
-	limit_pages = chunk_npages - arena_chunk_header_npages;
-	compl_need_npages = limit_pages - need_npages;
 	/* LINTED */
-	RB_FOREACH(chunk, arena_chunk_tree_s, &arena->chunks) {
+	for (;;) {
+		chunk_tmp = RB_ROOT(&arena->chunks);
+		chunk = NULL;
+		while (chunk_tmp) {
+			if (chunk_tmp->max_frun_npages == need_npages) {
+				chunk = chunk_tmp;
+				break;
+			}
+			if (chunk_tmp->max_frun_npages < need_npages) {
+				chunk_tmp = RB_RIGHT(chunk_tmp, link);
+				continue;
+			}
+			chunk = chunk_tmp;
+			chunk_tmp = RB_LEFT(chunk, link);
+		}
+		if (chunk == NULL)
+			break;
 		/*
-		 * Avoid searching this chunk if there are not enough
-		 * contiguous free pages for there to possibly be a large
-		 * enough free run.
+		 * At this point, the chunk must have a cached run size large
+		 * enough to fit the allocation.
 		 */
-		if (chunk->pages_used <= compl_need_npages &&
-		    need_npages <= chunk->max_frun_npages) {
+		assert(need_npages <= chunk->max_frun_npages);
+		{
 			arena_chunk_map_t *mapelm;
 			unsigned i;
 			unsigned max_frun_npages = 0;
@@ -1963,7 +2030,9 @@ arena_run_alloc(arena_t *arena, size_t size)
 			 * chunk->min_frun_ind was already reset above (if
 			 * necessary).
 			 */
+			RB_REMOVE(arena_chunk_tree_s, &arena->chunks, chunk);
 			chunk->max_frun_npages = max_frun_npages;
+			RB_INSERT(arena_chunk_tree_s, &arena->chunks, chunk);
 		}
 	}
 
@@ -2046,8 +2115,11 @@ arena_run_dalloc(arena_t *arena, arena_run_t *run, size_t size)
 		assert(chunk->map[run_ind + run_pages - 1].pos == POS_FREE);
 	}
 
-	if (chunk->map[run_ind].npages > chunk->max_frun_npages)
+	if (chunk->map[run_ind].npages > chunk->max_frun_npages) {
+		RB_REMOVE(arena_chunk_tree_s, &arena->chunks, chunk);
 		chunk->max_frun_npages = chunk->map[run_ind].npages;
+		RB_INSERT(arena_chunk_tree_s, &arena->chunks, chunk);
+	}
 	if (run_ind < chunk->min_frun_ind)
 		chunk->min_frun_ind = run_ind;
 
@@ -2155,7 +2227,6 @@ arena_bin_run_size_calc(arena_bin_t *bin, size_t min_run_size)
 	size_t try_run_size, good_run_size;
 	unsigned good_nregs, good_mask_nelms, good_reg0_offset;
 	unsigned try_nregs, try_mask_nelms, try_reg0_offset;
-	float max_ovrhd = RUN_MAX_OVRHD;
 
 	assert(min_run_size >= pagesize);
 	assert(min_run_size <= arena_maxclass);
@@ -2173,7 +2244,7 @@ arena_bin_run_size_calc(arena_bin_t *bin, size_t min_run_size)
 	 */
 	try_run_size = min_run_size;
 	try_nregs = (unsigned)(((try_run_size - sizeof(arena_run_t)) /
-	    bin->reg_size) + 1); /* Counter-act the first line of the loop. */
+	    bin->reg_size) + 1); /* Counter-act try_nregs-- in loop. */
 	do {
 		try_nregs--;
 		try_mask_nelms = (try_nregs >> (SIZEOF_INT_2POW + 3)) +
@@ -2207,9 +2278,8 @@ arena_bin_run_size_calc(arena_bin_t *bin, size_t min_run_size)
 		} while (sizeof(arena_run_t) + (sizeof(unsigned) *
 		    (try_mask_nelms - 1)) > try_reg0_offset);
 	} while (try_run_size <= arena_maxclass && try_run_size <= RUN_MAX_SMALL
-	    && max_ovrhd > RUN_MAX_OVRHD_RELAX / ((float)(bin->reg_size << 3))
-	    && ((float)(try_reg0_offset)) / ((float)(try_run_size)) >
-	    max_ovrhd);
+	    && RUN_MAX_OVRHD * (bin->reg_size << 3) > RUN_MAX_OVRHD_RELAX
+	    && (try_reg0_offset << RUN_BFP) > RUN_MAX_OVRHD * try_run_size);
 
 	assert(sizeof(arena_run_t) + (sizeof(unsigned) * (good_mask_nelms - 1))
 	    <= good_reg0_offset);
@@ -2868,25 +2938,38 @@ huge_ralloc(void *ptr, size_t size, size_t oldsize)
 			/* size_t wrap-around */
 			return (NULL);
 		}
+
+		/*
+		 * Remove the old region from the tree now.  If mremap()
+		 * returns the region to the system, other thread may
+		 * map it for same huge allocation and insert it to the
+		 * tree before we acquire the mutex lock again.
+		 */
+		malloc_mutex_lock(&chunks_mtx);
+		key.chunk = __DECONST(void *, ptr);
+		/* LINTED */
+		node = RB_FIND(chunk_tree_s, &huge, &key);
+		assert(node != NULL);
+		assert(node->chunk == ptr);
+		assert(node->size == oldcsize);
+		RB_REMOVE(chunk_tree_s, &huge, node);
+		malloc_mutex_unlock(&chunks_mtx);
+
 		newptr = mremap(ptr, oldcsize, NULL, newcsize,
 		    MAP_ALIGNED(chunksize_2pow));
-		if (newptr != MAP_FAILED) {
+		if (newptr == MAP_FAILED) {
+			/* We still own the old region. */
+			malloc_mutex_lock(&chunks_mtx);
+			RB_INSERT(chunk_tree_s, &huge, node);
+			malloc_mutex_unlock(&chunks_mtx);
+		} else {
 			assert(CHUNK_ADDR2BASE(newptr) == newptr);
 
-			/* update tree */
+			/* Insert new or resized old region. */
 			malloc_mutex_lock(&chunks_mtx);
-			key.chunk = __DECONST(void *, ptr);
-			/* LINTED */
-			node = RB_FIND(chunk_tree_s, &huge, &key);
-			assert(node != NULL);
-			assert(node->chunk == ptr);
-			assert(node->size == oldcsize);
 			node->size = newcsize;
-			if (ptr != newptr) {
-				RB_REMOVE(chunk_tree_s, &huge, node);
-				node->chunk = newptr;
-				RB_INSERT(chunk_tree_s, &huge, node);
-			}
+			node->chunk = newptr;
+			RB_INSERT(chunk_tree_s, &huge, node);
 #ifdef MALLOC_STATS
 			huge_nralloc++;
 			huge_allocated += newcsize - oldcsize;
@@ -3214,16 +3297,17 @@ malloc_print_stats(void)
 		    opt_xmalloc ? "X" : "x",
 		    opt_zero ? "Z\n" : "z\n");
 
-		_malloc_message("CPUs: ", umax2s(ncpus, s), "\n", "");
-		_malloc_message("Max arenas: ", umax2s(narenas, s), "\n", "");
-		_malloc_message("Pointer size: ", umax2s(sizeof(void *), s),
+		_malloc_message("CPUs: ", size_t2s(ncpus, s), "\n", "");
+		_malloc_message("Max arenas: ", size_t2s(narenas, s), "\n", "");
+		_malloc_message("Pointer size: ", size_t2s(sizeof(void *), s),
 		    "\n", "");
-		_malloc_message("Quantum size: ", umax2s(quantum, s), "\n", "");
-		_malloc_message("Max small size: ", umax2s(small_max, s), "\n",
+		_malloc_message("Quantum size: ", size_t2s(quantum, s), "\n", "");
+		_malloc_message("Max small size: ", size_t2s(small_max, s), "\n",
 		    "");
 
-		_malloc_message("Chunk size: ", umax2s(chunksize, s), "", "");
-		_malloc_message(" (2^", umax2s(opt_chunk_2pow, s), ")\n", "");
+		_malloc_message("Chunk size: ", size_t2s(chunksize, s), "", "");
+		_malloc_message(" (2^", size_t2s((size_t)opt_chunk_2pow, s),
+		    ")\n", "");
 
 #ifdef MALLOC_STATS
 		{
@@ -3321,6 +3405,7 @@ malloc_init_hard(void)
 	ssize_t linklen;
 	char buf[PATH_MAX + 1];
 	const char *opts = "";
+	int serrno;
 
 	malloc_mutex_lock(&init_lock);
 	if (malloc_initialized) {
@@ -3332,6 +3417,7 @@ malloc_init_hard(void)
 		return (false);
 	}
 
+	serrno = errno;
 	/* Get number of CPUs. */
 	{
 		int mib[2];
@@ -3382,8 +3468,8 @@ malloc_init_hard(void)
 			}
 			break;
 		case 1:
-			if (issetugid() == 0 && (opts =
-			    getenv("MALLOC_OPTIONS")) != NULL) {
+			if ((opts = getenv("MALLOC_OPTIONS")) != NULL &&
+			    issetugid() == 0) {
 				/*
 				 * Do nothing; opts is already initialized to
 				 * the value of the MALLOC_OPTIONS environment
@@ -3443,14 +3529,8 @@ malloc_init_hard(void)
 					opt_chunk_2pow--;
 				break;
 			case 'K':
-				/*
-				 * There must be fewer pages in a chunk than
-				 * can be recorded by the pos field of
-				 * arena_chunk_map_t, in order to make POS_FREE
-				 * special.
-				 */
-				if (opt_chunk_2pow - pagesize_2pow
-				    < (sizeof(uint32_t) << 3) - 1)
+				if (opt_chunk_2pow + 1 <
+				    (int)(sizeof(size_t) << 3))
 					opt_chunk_2pow++;
 				break;
 			case 'n':
@@ -3517,6 +3597,7 @@ malloc_init_hard(void)
 			}
 		}
 	}
+	errno = serrno;
 
 	/* Take care to call atexit() only once. */
 	if (opt_print_stats) {
@@ -3614,11 +3695,6 @@ malloc_init_hard(void)
 		 */
 		opt_narenas_lshift += 2;
 	}
-
-#ifdef NO_TLS
-	/* Initialize arena key. */
-	(void)thr_keycreate(&arenas_map_key, NULL);
-#endif
 
 	/* Determine how many arenas to use. */
 	narenas = ncpus;
@@ -3914,7 +3990,6 @@ _malloc_prefork(void)
 		if (arenas[i] != NULL)
 			malloc_mutex_lock(&arenas[i]->mtx);
 	}
-	malloc_mutex_unlock(&arenas_mtx);
 
 	malloc_mutex_lock(&base_mtx);
 
@@ -3932,7 +4007,6 @@ _malloc_postfork(void)
 
 	malloc_mutex_unlock(&base_mtx);
 
-	malloc_mutex_lock(&arenas_mtx);
 	for (i = 0; i < narenas; i++) {
 		if (arenas[i] != NULL)
 			malloc_mutex_unlock(&arenas[i]->mtx);

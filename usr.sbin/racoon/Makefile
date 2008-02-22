@@ -1,6 +1,7 @@
-# $NetBSD: Makefile,v 1.18 2007/05/28 12:06:39 tls Exp $
+# $NetBSD: Makefile,v 1.35 2018/04/01 23:00:40 christos Exp $
 
-WARNS=	0	# Will be fixed later
+WARNS?=	0	# XXX third-party program, many issues
+NOCLANGERROR=	# defined
 
 .include <bsd.own.mk>
 
@@ -26,10 +27,13 @@ DIST=	${NETBSDSRCDIR}/crypto/dist/ipsec-tools
 CPPFLAGS+= -I${DIST}/src/racoon -I${DIST}/src/racoon/missing
 CPPFLAGS+= -I${DIST}/src/libipsec
 CPPFLAGS+= -I${NETBSDSRCDIR}/lib/libipsec -I.
-CPPFLAGS+= -DIPSEC_DEBUG -DHAVE_CONFIG_H
+CPPFLAGS+= -DIPSEC_DEBUG -DHAVE_CONFIG_H -DENABLE_WILDCARD_MATCH
 CPPFLAGS+= -DADMINPORTDIR=\"/var/run\"
 CPPFLAGS+= -DSYSCONFDIR=\"/etc/racoon\"
-CPPFLAGS+= -DSADB_X_EALG_AESCBC=SADB_X_EALG_AES
+.if ${HAVE_OPENSSL} < 11
+CPPFLAGS+= -DHAVE_OPENSSL_RC5_H
+CPPFLAGS+= -DOPENSSL_API_COMPAT=0x10100000L
+.endif
 
 LDADD+= -ll -ly -lipsec -lutil
 DPADD+= ${LIBL} ${LIBY} ${LIBCRYPTO} ${LIBUTIL}
@@ -46,25 +50,22 @@ DPADD+=	${LIBPAM} ${PAM_STATIC_DPADD}
 .endif
 .if (${USE_KERBEROS} != "no")
 CPPFLAGS+=-DHAVE_GSSAPI
-LDADD+= -lgssapi -lkrb5 -lcom_err -lroken -lasn1
-DPADD+= ${LIBGSSAPI} ${LIBKRB5} ${LIBCOM_ERR} ${LIBROKEN} ${LIBASN1}
+LDADD+= -lgssapi -lheimntlm ${LIBKRB5_LDADD}
+DPADD+= ${LIBGSSAPI} ${LIBHEIMNTLM} ${LIBKRB5_DPADD}
 .endif
-.if (${MKCRYPTO_IDEA} != "no")
 CPPFLAGS+=-DHAVE_OPENSSL_IDEA_H
-LDADD+= -lcrypto_idea
-LDADD+= ${LIBCRYPTO_IDEA}
-.endif
-.if (${MKCRYPTO_RC5} != "no")
-CPPFLAGS+=-DHAVE_OPENSSL_RC5_H
-LDADD+= -lcrypto_rc5
-LDADD+= ${LIBCRYPTO_RC5}
-.endif
 .if (${USE_INET6} != "no")
 CPPFLAGS+=-DINET6
 .endif
 
 LDADD+= -lcrypto -lcrypt
 DPADD+= ${LIBIPSEC} ${LIBCRYPT}
+
+#CPPFLAGS+= -DDEBUG_RECORD_MALLOCATION
+#SRCS+= debugrm.c
+
+#CFLAGS+=-fsanitize=address
+#LDFLAGS+=-fsanitize=address
 
 .PATH:  ${NETBSDSRCDIR}/lib/libipsec ${DIST}/src/racoon
 

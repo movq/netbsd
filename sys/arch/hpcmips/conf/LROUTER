@@ -1,11 +1,11 @@
 #
-# 	$NetBSD: LROUTER,v 1.36 2008/01/30 13:31:03 tsutsui Exp $
+# 	$NetBSD: LROUTER,v 1.56 2017/09/14 07:58:41 mrg Exp $
 # 	From: NetBSD: MPC303,v 1.4 2001/11/21 11:28:09 uch Exp
 #
 # Kernel configuration file for LASER5 L-Router
 #
 
-include		"arch/hpcmips/conf/std.hpcmips"
+include 	"arch/hpcmips/conf/std.hpcmips"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
@@ -21,6 +21,7 @@ options 	VR4122			# NEC VR4122
 
 # Standard system options
 options 	DDB			# in-kernel debugger
+pseudo-device	ksyms
 #options 	DDB_ONPANIC=0		# don't enter debugger on panic
 #options 	KGDB			# remote debugger
 options 	DIAGNOSTIC		# extra kernel debugging checks
@@ -68,15 +69,15 @@ file-system 	MSDOSFS		# MS-DOS file system
 file-system 	KERNFS		# /kern (kernel informational filesystem)
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION
 file-system	PTYFS		# /dev/pts/N support
 
 options 	NFSSERVER	# Sun NFS-compatible filesystem (server)
-options 	SOFTDEP		# FFS soft updates support.
-#options 	QUOTA		# UFS quotas
+options 	WAPBL		# File system journaling support
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -84,21 +85,20 @@ options 	SOFTDEP		# FFS soft updates support.
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
-#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# Multicast routing support
 #options 	PIM		# Protocol Independent Multicast
-#options 	ISO		# OSI networking
-#options 	TPIP		# TPIP
-#options 	EON		# OSI tunneling over IP
+options 	IPFILTER_LOG	# ipmon(8) log support
+options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
+
+# JIT compiler for bpfilter
+#options	SLJIT
+#options	BPFJIT
 
 # NetBSD backwards compatibility
-options 	COMPAT_43
-options 	COMPAT_16
-options 	COMPAT_20
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+include 	"conf/compat_netbsd16.config"
 
 options 	NFS_BOOT_DHCP
 
@@ -165,16 +165,15 @@ cd*	at atapibus? drive ? flags 0x0ff0 # ATAPI CD-ROM drives
 sd*	at atapibus? drive ? flags 0x0ff0 # ATAPI disk drives
 st*	at atapibus? drive ? flags 0x0ff0 # ATAPI tape drives
 
-pseudo-device	loop		1	# network loopback
+pseudo-device	loop			# network loopback
 pseudo-device	ppp			# serial-line IP ports
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	bpfilter		# packet filter ports
 pseudo-device	ipfilter		# IP filter, NAT
 
 pseudo-device	vnd			# virtual disk ick
-#pseudo-device	ccd		4	# concatenated disks
-#pseudo-device	fss		4	# file system snapshot device
-pseudo-device	rnd			# /dev/random and in-kernel generator
+#pseudo-device	ccd			# concatenated disks
+#pseudo-device	fss			# file system snapshot device
 pseudo-device	clockctl		# user control of clock subsystem
 
 #pseudo-device	biconsdev	1	# build-in console device
@@ -183,9 +182,9 @@ pseudo-device	clockctl		# user control of clock subsystem
 #options 	MEMORY_DISK_IS_ROOT	# force root on memory disk
 #options 	MEMORY_DISK_SERVER=0	# no userspace memory disk support
 #options 	MEMORY_DISK_DYNAMIC	# fs image don't exist in data section.
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	md			# memory disk device (ramdisk)
 
-#pseudo-device	raid		4	# RAIDframe disk driver
+#pseudo-device	raid			# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 
 # for IPv6

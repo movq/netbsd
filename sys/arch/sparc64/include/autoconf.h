@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.27 2008/02/12 17:30:58 joerg Exp $ */
+/*	$NetBSD: autoconf.h,v 1.33 2017/09/11 19:25:07 palle Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,9 +73,12 @@
  * Autoconfiguration information.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/promlib.h>
-#include <dev/sbus/sbusvar.h>
+
+/* Machine banner name and model name */
+extern char machine_banner[100];
+extern char machine_model[100];
 
 /* This is used to map device classes to IPLs */
 struct intrmap {
@@ -131,15 +127,13 @@ struct mainbus_attach_args {
  * its aux pointer to point to a pointer to the name (the address of
  * a romaux structure suffices, for instance). (OBSOLETE)
  */
-struct device;
-struct cfdata;
-int	matchbyname(struct device *, struct cfdata *cf, void *aux);
+int	matchbyname(device_t, cfdata_t, void *);
 
 /*
  * `clockfreq' produces a printable representation of a clock frequency
  * (this is just a frill).
  */
-char	*clockfreq(long freq);
+char	*clockfreq(uint64_t);
 
 /* Kernel initialization routine. */
 void	bootstrap(void *, void *, void *, void *, void *);

@@ -1,7 +1,7 @@
-/*	$NetBSD: timevar.h,v 1.20 2008/01/20 18:09:13 joerg Exp $	*/
+/*	$NetBSD: timevar.h,v 1.38 2018/04/19 21:19:07 christos Exp $	*/
 
 /*
- *  Copyright (c) 2005 The NetBSD Foundation.
+ *  Copyright (c) 2005, 2008 The NetBSD Foundation.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -12,9 +12,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,20 +77,24 @@ struct 	ptimer {
 		} pt_nonreal;
 	} pt_data;
 	struct	sigevent pt_ev;
-	struct	itimerval pt_time;
+	struct	itimerspec pt_time;
 	struct	ksiginfo pt_info;
 	int	pt_overruns;	/* Overruns currently accumulating */
 	int	pt_poverruns;	/* Overruns associated w/ a delivery */
 	int	pt_type;
 	int	pt_entry;
+	int	pt_queued;
 	struct proc *pt_proc;
+	TAILQ_ENTRY(ptimer) pt_chain;
 };
 
 #define pt_ch	pt_data.pt_ch
 #define pt_list	pt_data.pt_nonreal.pt_list
 #define pt_active	pt_data.pt_nonreal.pt_active
 
-#define	TIMER_MAX	32	/* See ptimers->pts_fired if you enlarge this */
+#define	TIMER_MIN	4	/* [0..3] are reserved for setitimer(2) */
+				/* REAL=0,VIRTUAL=1,PROF=2,MONOTONIC=3 */
+#define	TIMER_MAX	36	/* 32 is minimum user timers per POSIX */
 #define	TIMERS_ALL	0
 #define	TIMERS_POSIX	1
 
@@ -103,7 +104,6 @@ struct	ptimers {
 	struct ptlist pts_virtual;
 	struct ptlist pts_prof;
 	struct ptimer *pts_timers[TIMER_MAX];
-	int pts_fired;
 };
 
 /*
@@ -146,40 +146,60 @@ void	getnanotime(struct timespec *);
 void	getmicrotime(struct timeval *);
 
 /* Other functions */
-int	adjtime1(const struct timeval *, struct timeval *, struct proc *);
+int	ts2timo(clockid_t, int, struct timespec *, int *, struct timespec *);
+void	adjtime1(const struct timeval *, struct timeval *, struct proc *);
+int	clock_getres1(clockid_t, struct timespec *);
+int	clock_gettime1(clockid_t, struct timespec *);
 int	clock_settime1(struct proc *, clockid_t, const struct timespec *, bool);
+void	clock_timeleft(clockid_t, struct timespec *, struct timespec *);
 int	dogetitimer(struct proc *, int, struct itimerval *);
 int	dosetitimer(struct proc *, int, struct itimerval *);
 int	dotimer_gettime(int, struct proc *, struct itimerspec *);
 int	dotimer_settime(int, struct itimerspec *, struct itimerspec *, int,
 	    struct proc *);
-int	hzto(struct timeval *);
+int	tshzto(const struct timespec *);
+int	tshztoup(const struct timespec *);
+int	tvhzto(const struct timeval *);
 void	inittimecounter(void);
-int	itimerdecr(struct ptimer *, int);
-void	itimerfire(struct ptimer *);
 int	itimerfix(struct timeval *);
 int	itimespecfix(struct timespec *);
 int	ppsratecheck(struct timeval *, int *, int);
 int	ratecheck(struct timeval *, const struct timeval *);
 void	realtimerexpire(void *);
 int	settime(struct proc *p, struct timespec *);
-int	nanosleep1(struct lwp *l, struct timespec *, struct timespec *);
+int	nanosleep1(struct lwp *, clockid_t, int, struct timespec *,
+	    struct timespec *);
 int	settimeofday1(const struct timeval *, bool,
 	    const void *, struct lwp *, bool);
 int	timer_create1(timer_t *, clockid_t, struct sigevent *, copyin_t,
 	    struct lwp *);
-void	timer_gettime(struct ptimer *, struct itimerval *);
+void	timer_gettime(struct ptimer *, struct itimerspec *);
 void	timer_settime(struct ptimer *);
-void	timers_alloc(struct proc *);
+struct	ptimers *timers_alloc(struct proc *);
 void	timers_free(struct proc *, int);
-int	tstohz(struct timespec *);
-int	tvtohz(struct timeval *);
-int	inittimeleft(struct timeval *, struct timeval *);
-int	gettimeleft(struct timeval *, struct timeval *);
+void	timer_tick(struct lwp *, bool);
+int	tstohz(const struct timespec *);
+int	tvtohz(const struct timeval *);
+int	inittimeleft(struct timespec *, struct timespec *);
+int	gettimeleft(struct timespec *, struct timespec *);
 void	timerupcall(struct lwp *);
 void	time_init(void);
+void	time_init2(void);
+bool	time_wraps(struct timespec *, struct timespec *);
 
-extern time_t time_second;	/* current second in the epoch */
-extern time_t time_uptime;	/* system uptime in seconds */
+extern volatile time_t time_second;	/* current second in the epoch */
+extern volatile time_t time_uptime;	/* system uptime in seconds */
+
+static __inline time_t time_mono_to_wall(time_t t)
+{
+
+	return t - time_uptime + time_second;
+}
+
+static __inline time_t time_wall_to_mono(time_t t)
+{
+
+	return t - time_second + time_uptime;
+}
 
 #endif /* !_SYS_TIMEVAR_H_ */

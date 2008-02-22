@@ -1,4 +1,4 @@
-/*	$NetBSD: drsc.c,v 1.28 2005/12/11 12:16:28 christos Exp $ */
+/*	$NetBSD: drsc.c,v 1.33 2014/03/22 01:52:44 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Ignatios Souvatzis
@@ -59,14 +59,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drsc.c,v 1.28 2005/12/11 12:16:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drsc.c,v 1.33 2014/03/22 01:52:44 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -78,11 +76,12 @@ __KERNEL_RCSID(0, "$NetBSD: drsc.c,v 1.28 2005/12/11 12:16:28 christos Exp $");
 #include <amiga/dev/siopreg.h>
 #include <amiga/dev/siopvar.h>
 #include <amiga/amiga/drcustom.h>
+#include <m68k/include/asm_single.h>
 
 #include <machine/cpu.h>	/* is_xxx(), */
 
-void drscattach(struct device *, struct device *, void *);
-int drscmatch(struct device *, struct cfdata *, void *);
+void drscattach(device_t, device_t, void *);
+int drscmatch(device_t, cfdata_t, void *);
 int drsc_dmaintr(struct siop_softc *);
 #ifdef DEBUG
 void drsc_dump(void);
@@ -91,7 +90,7 @@ void drsc_dump(void);
 #ifdef DEBUG
 #endif
 
-CFATTACH_DECL(drsc, sizeof(struct siop_softc),
+CFATTACH_DECL_NEW(drsc, sizeof(struct siop_softc),
     drscmatch, drscattach, NULL, NULL);
 
 static struct siop_softc *drsc_softc;
@@ -100,12 +99,12 @@ static struct siop_softc *drsc_softc;
  * One of us is on every DraCo motherboard,
  */
 int
-drscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+drscmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	static int drsc_matched = 0;
 
 	/* Allow only one instance. */
-	if (!is_draco() || !matchname(auxp, "drsc") || drsc_matched)
+	if (!is_draco() || !matchname(aux, "drsc") || drsc_matched)
 		return (0);
 
 	drsc_matched = 1;
@@ -113,18 +112,16 @@ drscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 }
 
 void
-drscattach(struct device *pdp, struct device *dp, void *auxp)
+drscattach(device_t parent, device_t self, void *aux)
 {
-	struct siop_softc *sc = (struct siop_softc *)dp;
-	struct zbus_args *zap;
+	struct siop_softc *sc = device_private(self);
 	siop_regmap_p rp;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
 
 	printf("\n");
 
-	zap = auxp;
-
+	sc->sc_dev = self;
 	sc->sc_siopp = rp = (siop_regmap_p)(DRCCADDR+PAGE_SIZE*DRSCSIPG);
 
 	/*
@@ -133,13 +130,14 @@ drscattach(struct device *pdp, struct device *dp, void *auxp)
 	sc->sc_clock_freq = 50;		/* Clock = 50MHz */
 	sc->sc_ctest7 = 0x02;
 
-	alloc_sicallback();
+	sc->sc_siop_si = softint_establish(SOFTINT_BIO,
+	    (void (*)(void *))siopintr, sc);
 
 	/*
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = &sc->sc_dev;
+	adapt->adapt_dev = self;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -172,15 +170,15 @@ drscattach(struct device *pdp, struct device *dp, void *auxp)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(dp, chan, scsiprint);
+	config_found(self, chan, scsiprint);
 }
 
 /*
  * Level 4 interrupt processing for the MacroSystem DraCo mainboard
  * SCSI.  Because the level 4 interrupt is above splbio, the
- * interrupt status is saved and an sicallback to the level 2 interrupt
- * handler scheduled.  This way, the actual processing of the interrupt
- * can be deferred until splbio is unblocked.
+ * interrupt status is saved and a softint scheduled.  This way,
+ * the actual processing of the interrupt can be deferred until
+ * splbio is unblocked.
  */
 
 void
@@ -221,10 +219,10 @@ drsc_handler(void)
 	single_inst_bclr_b(*draco_intpen, DRIRQ_SCSI);
 #ifdef DEBUG
 	if (*draco_intpen & DRIRQ_SCSI)
-		printf("%s: intpen still 0x%x\n", sc->sc_dev.dv_xname,
+		printf("%s: intpen still 0x%x\n", device_xname(sc->sc_dev),
 		    *draco_intpen);
 #endif
-	add_sicallback((sifunc_t)siopintr, sc, NULL);
+	softint_schedule(sc->sc_siop_si);
 #endif
 	return;
 }
@@ -234,10 +232,13 @@ void
 drsc_dump(void)
 {
 	extern struct cfdriver drsc_cd;
+	struct siop_softc *sc;
 	int i;
 
-	for (i = 0; i < drsc_cd.cd_ndevs; ++i)
-		if (drsc_cd.cd_devs[i])
-			siop_dump(drsc_cd.cd_devs[i]);
+	for (i = 0; i < drsc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&drsc_cd, i);
+		if (sc != NULL)
+			siop_dump(sc);
+	}
 }
 #endif

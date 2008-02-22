@@ -1,4 +1,4 @@
-/*	$NetBSD: _lwp.c,v 1.2 2005/06/12 05:21:25 lukem Exp $	*/
+/*	$NetBSD: _lwp.c,v 1.5 2011/02/24 04:28:42 joerg Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: _lwp.c,v 1.2 2005/06/12 05:21:25 lukem Exp $");
+__RCSID("$NetBSD: _lwp.c,v 1.5 2011/02/24 04:28:42 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -54,6 +47,8 @@ _lwp_makecontext(ucontext_t *u, void (*start)(void *),
 {
 	caddr_t sp;
 	__greg_t *gr;
+	__greg_t *gp;
+	__greg_t fp;
 
 	getcontext(u);
 	gr = u->uc_mcontext.__gregs;
@@ -63,9 +58,16 @@ _lwp_makecontext(ucontext_t *u, void (*start)(void *),
 	u->uc_stack.ss_size = stack_size;
 	sp = stack_base + HPPA_FRAME_SIZE;
 
-	gr[_REG_PCOQH] = (__greg_t) start;
-	gr[_REG_PCOQT] = (__greg_t) start + 4;
+	fp = (__greg_t)start;
+	if (fp & 2) {
+		gp = (__greg_t *)(fp & ~3);
+		fp = gp[0];
+		gr[_REG_R19] = gp[1];
+	}
+	gr[_REG_PCOQH] = fp | HPPA_PC_PRIV_USER;
+	gr[_REG_PCOQT] = (fp + 4) | HPPA_PC_PRIV_USER;
 	gr[_REG_RP] = (__greg_t) _lwp_exit;
 	gr[_REG_ARG0] = (__greg_t) arg;
 	gr[_REG_SP] = (__greg_t) sp;
+	gr[_REG_CR27] = (__greg_t) private;
 }

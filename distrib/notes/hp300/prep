@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep,v 1.21 2007/12/14 21:15:58 pavel Exp $
+.\"	$NetBSD: prep,v 1.24 2009/04/23 01:56:49 snj Exp $
 .
 There are two installation tools available.
 The traditional miniroot
@@ -95,7 +95,7 @@ You may need to first create the device nodes for your disk, as
 .Tn HP-UX
 was never very good about populating
 .Pa /dev/rdsk
-propertly.
+properly.
 .(disp
 .No # Ic "mknod /dev/dsk/IDs0 b 0 0xSCID00"
 .No # Ic "mknod /dev/rdsk/IDs0 c 4 0xSCID00"
@@ -138,7 +138,7 @@ Geometry may be calculated from an HP-UX
 .Pa /etc/disktab
 entry, but note that HP-UX geometry is based
 on 1024 byte sectors, while
-.Nx 's
+.Nx Ns 's
 is based on 512 byte sectors.
 You should have all partitions start on cylinder boundaries.
 .Pp
@@ -180,18 +180,10 @@ partition is defined as the
 or the
 .Sq raw partition . )
 .Pp
-Here is a table of recommended partition sizes for a full install:
-.Bl -column -offset indent Partition Suggested Needed
-.It Partition Ta Suggested Ta Needed
-.It /\ (root) Ta "25 MB"   Ta "15 MB"
-.It /usr      Ta "150 MB"  Ta "100 MB"
-.It /var      Ta "20 MB"   Ta "5 MB"
-.It swap      Ta Em "2-3 *RAM" Ta 6 MB
-.El
-.Pp
 .(Note
-You will need at least a 6 MB swap partition if you are unable to netboot
-the installer, as the miniroot is temporarily placed in this partition.
+You will need at least a 6 MB swap partition (although 2-3*RAM is
+recommended) if you are unable to netboot the installer, as the miniroot
+is temporarily placed in this partition.
 .Note)
 .Pp
 Here is an example disklabel from a 7959B HP-IB hard drive:
@@ -305,7 +297,7 @@ instead of the bootstrap program.
 The only quirk is that you should place it at the offset of the swap
 partition you calculated above in the disklabel.
 In the example disklabel above, the offset is 38178 sectors of 512 bytes.
-Therfore, the
+Therefore, the
 .Xr dd 1
 command would be something like:
 .(disp
@@ -376,7 +368,7 @@ The second green LED should light up.
 Reset the machine.
 .br
 Press the reset button.
-For a 4XXs, ther's a small plunger on the back of
+For a 4XXs, there's a small plunger on the back of
 the machine (near the top).
 For a 4XXt or 4XXdl, there's a white button
 on the front, behind the silly door.
@@ -386,7 +378,7 @@ back of the machine.
 Press
 .Key RETURN
 to get the Domain boot prompt
-.No ( Li \*> No ) .
+.No ( Li \*[Gt] No ) .
 .br
 You can type
 .Key H
@@ -396,7 +388,7 @@ Type the following sequence of commands to convert to
 .Sq Li "HP-UX Compatible Boot Mode" .
 .br
 .(disp
-.No "\*>" Ic "CF"
+.No "\*[Gt]" Ic "CF"
 .No "Type [key] RETURN ?" Ic 2
 .No "Type [key] RETURN ?" Ic 2
 .No "Type T or P  RETURN ?" Ic P
@@ -423,7 +415,7 @@ start loading the same OS you previously booted.
 At any time after it recognizes the keyboard, while it is doing its self
 test or searching for a bootable system, you can hit reset to return it to
 a cold-boot configuration.
-On HIL keybaords, this is
+On HIL keyboards, this is
 .Key control-shift-break ,
 where
 .Key break
@@ -569,7 +561,7 @@ code 16, unit numbers might be something like the following:
 You will need to place a disklabel on the disk.
 .Pp
 .(disp
-.No "sys_inst\*>" Ic disklabel
+.No "sys_inst\*[Gt]" Ic disklabel
 .disp)
 .(Note
 It may be worth selecting the
@@ -639,23 +631,23 @@ disk.
 Boot from the miniroot file system.
 .Pp
 .(disp
-.No "sys_inst\*>" Ic boot
+.No "sys_inst\*[Gt]" Ic boot
 .disp)
 .Pp
 Enter the disk from which to boot.
 The kernel in the miniroot file system will be booted into single-user mode.
 .
-.Ss2 Chosing a kernel location
+.Ss2 Choosing a kernel location
 .
 Once the bootstrap program
 .Li SYS_UBOOT
 has started, it will pause and let you chose a kernel location, name, and
 options:
 .(disp
-\*>\*> NetBSD/hp300 Primary Boot, Revision 1.13
-\*>\*> (gregm@mcgarry, Mon Apr 15 08:46:32 NZST 2002)
-\*>\*> HP 9000/425e SPU
-\*>\*> Enter "reset" to reset system.
+\*[Gt]\*[Gt] NetBSD/hp300 Primary Boot, Revision 1.13
+\*[Gt]\*[Gt] (gregm@mcgarry, Mon Apr 15 08:46:32 NZST 2002)
+\*[Gt]\*[Gt] HP 9000/425e SPU
+\*[Gt]\*[Gt] Enter "reset" to reset system.
 Boot: [[[le0a:]netbsd][-a][-c][-d][-s][-v][-q]] :-
 .disp)
 .Pp

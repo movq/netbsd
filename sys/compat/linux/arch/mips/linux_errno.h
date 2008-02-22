@@ -1,4 +1,4 @@
-/* $NetBSD: linux_errno.h,v 1.5 2005/12/11 12:20:16 christos Exp $ */
+/* $NetBSD: linux_errno.h,v 1.7 2013/12/17 22:14:24 njoly Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -147,7 +140,17 @@
 /* linux/include/asm-mips/errno.h states theses are Linux extensions */
 #define LINUX_ENOMEDIUM		159
 #define LINUX_EMEDIUMTYPE	160
+#define LINUX_ENOKEY		161
+#define LINUX_EKEYEXPIRED	162
+#define LINUX_EKEYREVOKED	163
+#define LINUX_EKEYREJECTED	164
+#define LINUX_EOWNERDEAD	165
+#define LINUX_ENOTRECOVERABLE	166
+#define LINUX_ERFKILL		167
+#define LINUX_EHWPOISON		168
+
 #define LINUX_EDQUOT		1133
+
 /* Biggest errno */
 #define LINUX_EMAXERRNO		1133
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: fingerd.c,v 1.23 2006/05/09 20:18:06 mrg Exp $	*/
+/*	$NetBSD: fingerd.c,v 1.27 2012/03/15 02:02:21 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,16 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)fingerd.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fingerd.c,v 1.23 2006/05/09 20:18:06 mrg Exp $");
+__RCSID("$NetBSD: fingerd.c,v 1.27 2012/03/15 02:02:21 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,8 +58,7 @@ __RCSID("$NetBSD: fingerd.c,v 1.23 2006/05/09 20:18:06 mrg Exp $");
 #include <string.h>
 #include "pathnames.h"
 
-void err(const char *, ...);
-int main(int, char *[]);
+__dead static void my_err(const char *, ...) __printflike(1, 2);
 
 int
 main(int argc, char *argv[])
@@ -73,13 +71,17 @@ main(int argc, char *argv[])
 	socklen_t sval;
 #define	ENTRIES	50
 	char **ap, *av[ENTRIES + 1], **comp, line[1024], *prog, *s;
+#if 0
+	const char *av[ENTRIES + 1], **comp;
+	const char *prog;
+#endif
 	char hostbuf[MAXHOSTNAMELEN];
 
-	prog = _PATH_FINGER;
+	prog = __UNCONST(_PATH_FINGER);
 	logging = no_forward = user_required = short_list = 0;
 	openlog("fingerd", LOG_PID, LOG_DAEMON);
 	opterr = 0;
-	while ((ch = getopt(argc, argv, "gsluShmpP:8")) != -1)
+	while ((ch = getopt(argc, argv, "gsluShmpP:8")) != -1) {
 		switch (ch) {
 		case 'l':
 			logging = 1;
@@ -95,33 +97,36 @@ main(int argc, char *argv[])
 			break;
 		case 'S':
 			short_list = 1;
-			av[ac++] = "-s";
+			av[ac++] = __UNCONST("-s");
 			break;
 		case 'h':
-			av[ac++] = "-h";
+			av[ac++] = __UNCONST("-h");
 			break;
 		case 'm':
-			av[ac++] = "-m";
+			av[ac++] = __UNCONST("-m");
 			break;
 		case 'p':
-			av[ac++] = "-p";
+			av[ac++] = __UNCONST("-p");
 			break;
 		case 'g':
-			av[ac++] = "-g";
+			av[ac++] = __UNCONST("-g");
 			break;
 		case '8':
-			av[ac++] = "-8";
+			av[ac++] = __UNCONST("-8");
 			break;
 		case '?':
 		default:
-			err("illegal option -- %c", optopt);
+			my_err("illegal option -- %c", optopt);
 		}
+		if (ac >= ENTRIES)
+			my_err("Too many options provided");
+	}
 
 
 	if (logging) {
 		sval = sizeof(ss);
 		if (getpeername(0, (struct sockaddr *)&ss, &sval) < 0)
-			err("getpeername: %s", strerror(errno));
+			my_err("getpeername: %s", strerror(errno));
 		(void)getnameinfo((struct sockaddr *)&ss, sval,
 				hostbuf, sizeof(hostbuf), NULL, 0, 0);
 		lp = hostbuf;
@@ -143,7 +148,9 @@ main(int argc, char *argv[])
 			syslog(LOG_NOTICE, "query from %s: %s", lp, line);
 	}
 
-	av[ac++] = "--";
+	if (ac >= ENTRIES)
+		my_err("Too many options provided");
+	av[ac++] = __UNCONST("--");
 	comp = &av[1];
 	for (lp = line, ap = &av[ac]; ac < ENTRIES;) {
 		if ((*ap = strtok(lp, " \t\r\n")) == NULL)
@@ -163,7 +170,7 @@ main(int argc, char *argv[])
 		/* RFC1196: "/[Ww]" == "-l" */
 		if ((*ap)[0] == '/' && ((*ap)[1] == 'W' || (*ap)[1] == 'w')) {
 			if (!short_list) {
-				av[1] = "-l";
+				av[1] = __UNCONST("-l");
 				comp = &av[0];
 			}
 		} else {
@@ -187,7 +194,7 @@ main(int argc, char *argv[])
 	}
 
 	if (pipe(p) < 0)
-		err("pipe: %s", strerror(errno));
+		my_err("pipe: %s", strerror(errno));
 
 	switch(fork()) {
 	case 0:
@@ -197,14 +204,14 @@ main(int argc, char *argv[])
 			(void) close(p[1]);
 		}
 		execv(prog, comp);
-		err("execv: %s: %s", prog, strerror(errno));
+		my_err("execv: %s: %s", prog, strerror(errno));
 		_exit(1);
 	case -1:
-		err("fork: %s", strerror(errno));
+		my_err("fork: %s", strerror(errno));
 	}
 	(void) close(p[1]);
 	if (!(fp = fdopen(p[0], "r")))
-		err("fdopen: %s", strerror(errno));
+		my_err("fdopen: %s", strerror(errno));
 	while ((ch = getc(fp)) != EOF) {
 		if (ch == '\n')
 			putchar('\r');
@@ -213,8 +220,8 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-void
-err(const char *fmt, ...)
+static void
+my_err(const char *fmt, ...)
 {
 	va_list ap;
 

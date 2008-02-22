@@ -1,4 +1,4 @@
-/*	$NetBSD: nslm7xvar.h,v 1.23 2007/11/16 08:00:14 xtraeme Exp $ */
+/*	$NetBSD: nslm7xvar.h,v 1.34 2018/02/08 09:05:19 dholland Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,8 @@
 
 #ifndef _DEV_ISA_NSLM7XVAR_H_
 #define _DEV_ISA_NSLM7XVAR_H_
+
+#include <dev/sysmon/sysmonvar.h>
 
 /*
  * National Semiconductor LM78/79/81 registers.
@@ -82,8 +77,8 @@
  *
  * Several models exists.  The W83781D is mostly compatible with the
  * LM78, but has two extra temperatures.  Later models add extra
- * voltage sensors, fans and bigger fan divisors to accomodate slow
- * running fans.  To accomodate the extra sensors some models have
+ * voltage sensors, fans and bigger fan divisors to accommodate slow
+ * running fans.  To accommodate the extra sensors some models have
  * different memory banks.
  */
 
@@ -91,15 +86,18 @@
 #define WB_PIN		0x4b	/* Pin Control */
 #define WB_BANKSEL	0x4e	/* Bank Select */
 #define WB_VENDID	0x4f	/* Vendor ID */
+#define WB_NCT6102_VENDID 0xfe	/* Vendor ID for NCT610[246] */
 
 /* Bank 0 regs */
 #define WB_BANK0_CHIPID	0x58	/* Chip ID */
+#define WB_BANK0_RESVD1	0x59	/* Resvd, bits 6-4 select temp sensor mode */
 #define WB_BANK0_FAN45	0x5c	/* Fan 4/5 Divisor Control (W83791D only) */
 #define WB_BANK0_VBAT	0x5d	/* VBAT Monitor Control */
 #define WB_BANK0_FAN4	0xba	/* Fan 4 reading (W83791D only) */
 #define WB_BANK0_FAN5	0xbb	/* Fan 5 reading (W83791D only) */
 
 #define WB_BANK0_CONFIG	0x18	/* VRM & OVT Config (W83627THF/W83637HF) */
+#define WB_BANK0_NCT6102_CHIPID	0xff /* Chip ID for NCT610[246] */
 
 /* Bank 1 registers */
 #define WB_BANK1_T2H	0x50	/* Temperature 2 High Byte */
@@ -155,13 +153,10 @@
 #define WB_VREF			3600
 #define WB_W83627EHF_VREF	2048
 
-#define WB_MAX_SENSORS		19
+#define WB_MAX_SENSORS		36
 
 struct lm_softc {
-	struct	device sc_dev;
-
-	bus_space_tag_t	lm_iot;
-	bus_space_handle_t lm_ioh;
+	device_t sc_dev;
 
 	callout_t sc_callout;
 
@@ -172,11 +167,12 @@ struct lm_softc {
 	void (*refresh_sensor_data)(struct lm_softc *);
 
 	uint8_t (*lm_readreg)(struct lm_softc *, int);
-	void (*lm_writereg)(struct lm_softc *, int, int);
+	void (*lm_writereg)(struct lm_softc *, int, uint8_t);
 
-	struct lm_sensor *lm_sensors;
+	const struct lm_sensor *lm_sensors;
 	uint8_t	chipid;
 	uint8_t	vrm9;
+	uint16_t sioid;
 };
 
 struct lm_sensor {
@@ -188,8 +184,15 @@ struct lm_sensor {
 	int rfact;
 };
 
+struct wb_product {
+	uint16_t id; /* WB_CHIPID(8b) or WBSIO_ID(16b) or WB_VENDID(16b) */
+	const char *str;
+	const struct lm_sensor *sensors;
+	void (*extattach)(struct lm_softc *);
+};
+
+int 	lm_match(struct lm_softc *);
 void 	lm_attach(struct lm_softc *);
 void	lm_detach(struct lm_softc *);
-int 	lm_probe(bus_space_tag_t, bus_space_handle_t);
 
 #endif /* _DEV_ISA_NSLM7XVAR_H_ */

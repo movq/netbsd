@@ -1,4 +1,4 @@
-/*	$NetBSD: i80312var.h,v 1.9 2005/12/11 12:16:51 christos Exp $	*/
+/*	$NetBSD: i80312var.h,v 1.11 2012/10/14 14:20:57 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -38,12 +38,12 @@
 #ifndef _ARM_XSCALE_I80312VAR_H_
 #define	_ARM_XSCALE_I80312VAR_H_
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 
 struct i80312_softc {
-	struct device sc_dev;		/* generic device glue */
+	device_t sc_dev;		/* generic device glue */
 
 	int sc_is_host;			/* indicates if we're a host or
 					   plugged into another host */

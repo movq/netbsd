@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.6 2005/04/25 17:21:31 matt Exp $
+# $NetBSD: Makefile,v 1.12 2018/02/04 03:19:53 christos Exp $
 # Copyright 2002 FreeBSD, Inc.
 # All rights reserved.
 #
@@ -29,11 +29,14 @@ LIB=	pam_ksu
 SRCS=	pam_ksu.c
 MAN=	pam_ksu.8
 
-LIBDPLIBS=	krb5	${LIB_ROOT_DIR}/libkrb5 \
-		asn1	${LIB_ROOT_DIR}/libasn1 \
-		roken	${LIB_ROOT_DIR}/libroken \
-		com_err	${LIB_ROOT_DIR}/libcom_err \
-		crypt	${LIB_ROOT_DIR}/libcrypt \
-		crypto	${LIB_ROOT_DIR}/libcrypto
+LIBDPLIBS+= \
+	krb5	${NETBSDSRCDIR}/crypto/external/bsd/heimdal/lib/libkrb5 \
+	asn1	${NETBSDSRCDIR}/crypto/external/bsd/heimdal/lib/libasn1 \
+	roken	${NETBSDSRCDIR}/crypto/external/bsd/heimdal/lib/libroken \
+	com_err	${NETBSDSRCDIR}/crypto/external/bsd/heimdal/lib/libcom_err \
+	crypt	${.CURDIR}/../../../libcrypt \
+	crypto	${NETBSDSRCDIR}/crypto/external/bsd/${EXTERNAL_OPENSSL_SUBDIR}/lib/libcrypto
+
+CWARNFLAGS.clang=	-Wno-format-security
 
 .include "${.CURDIR}/../mod.mk"

@@ -1,6 +1,7 @@
-/*	$NetBSD: locore.s,v 1.99 2007/10/17 19:55:48 garbled Exp $	*/
+/*	$NetBSD: locore.s,v 1.114 2014/03/15 12:04:22 tsutsui Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,45 +37,6 @@
  *
  *	@(#)locore.s	8.6 (Berkeley) 5/27/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: locore.s 1.66 92/12/22$
- *
- *	@(#)locore.s	8.6 (Berkeley) 5/27/94
- */
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_svr4.h"
@@ -83,6 +45,7 @@
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
+#include "opt_m68k_arch.h"
 
 #include "assym.h"
 #include <machine/asm.h>
@@ -589,7 +552,7 @@ Lstart1:
 /*
  * configure kernel and lwp0 VA space so we can get going
  */
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	RELOC(esym,%a0)			| end of static kernel text/data syms
 	movl	%a0@,%d2
 	jne	Lstart2
@@ -610,9 +573,8 @@ Lstart2:
  * Enable the MMU.
  * Since the kernel is mapped logical == physical, we just turn it on.
  */
-	RELOC(Sysseg, %a0)		| system segment table addr
-	movl	%a0@,%d1		| read value (a KVA)
-	addl	%a5,%d1			| convert to PA
+	RELOC(Sysseg_pa, %a0)		| system segment table addr
+	movl	%a0@,%d1		| read value (a PA)
 	RELOC(mmutype, %a0)
 	cmpl	#MMU_68040,%a0@		| 68040?
 	jne	Lmotommu1		| no, skip
@@ -652,6 +614,7 @@ Lnot060cache:
 	movc	%d0,%cacr		| turn on both caches
 	jmp	Lenab1
 Lmotommu2:
+	pflusha
 	movl	#0x82c0aa00,%sp@-	| value to load TC with
 	pmove	%sp@,%tc		| load it
 
@@ -664,18 +627,14 @@ Lenab1:
 	movl	%d0,_ASM_LABEL(bug_vbr)
 	movl	#_C_LABEL(vectab),%d0	| get our VBR address
 	movc	%d0,%vbr
-/* select the software page size now */
 	lea	_ASM_LABEL(tmpstk),%sp	| temporary stack
-	jbsr	_C_LABEL(uvm_setpagesize)  | select software page size
-/* set kernel stack, user SP, and initial pcb */
-	movl	_C_LABEL(proc0paddr),%a1 | get lwp0 pcb addr
+/* call final pmap setup */
+	jbsr	_C_LABEL(pmap_bootstrap_finalize)
+/* set kernel stack, user SP */
+	movl	_C_LABEL(lwp0uarea),%a1	| get lwp0 uarea
 	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
-	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.p_addr
-	movl	%a2,_C_LABEL(curlwp)	|   and curlwp so that
-	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
-	movl	%a1,_C_LABEL(curpcb)	| lwp0 is running
 	tstl	_C_LABEL(fputype)	| Have an FPU?
 	jeq	Lenab2			| No, skip.
 	clrl	%a1@(PCB_FPCTX)		| ensure null FP context
@@ -694,7 +653,7 @@ Ltbia040:
 Lenab3:
 /*
  * final setup for C code:
- * Create a fake exception frame so that cpu_fork() can copy it.
+ * Create a fake exception frame so that cpu_lwp_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -747,177 +706,13 @@ Lmemc040berr:
 
 /*
  * Trap/interrupt vector routines
- */ 
+ */
 #include <m68k/m68k/trap_subr.s>
 
-#if defined(M68040) || defined(M68060)
-ENTRY_NOPROFILE(addrerr4060)
-	clrl	%sp@-			| stack adjust count
-	moveml	#0xFFFF,%sp@-		| save user registers
-	movl	%usp,%a0		| save the user SP
-	movl	%a0,%sp@(FR_SP)		|   in the savearea
-	movl	%sp@(FR_HW+8),%sp@-
-	clrl	%sp@-			| dummy code
-	movl	#T_ADDRERR,%sp@-	| mark address error
-	jra	_ASM_LABEL(faultstkadj)	| and deal with it
-#endif
-
-#if defined(M68060)
-ENTRY_NOPROFILE(buserr60)
-	clrl	%sp@-			| stack adjust count
-	moveml	#0xFFFF,%sp@-		| save user registers
-	movl	%usp,%a0		| save the user SP
-	movl	%a0,%sp@(FR_SP)		|   in the savearea
-	movel	%sp@(FR_HW+12),%d0	| FSLW
-	btst	#2,%d0			| branch prediction error?
-	jeq	Lnobpe			
-	movc	%cacr,%d2
-	orl	#IC60_CABC,%d2		| clear all branch cache entries
-	movc	%d2,%cacr
-	movl	%d0,%d1
-	andl	#0x7ffd,%d1
-	jeq	_ASM_LABEL(faultstkadjnotrap2)
-Lnobpe:
-| we need to adjust for misaligned addresses
-	movl	%sp@(FR_HW+8),%d1	| grab VA
-	btst	#27,%d0			| check for mis-aligned access
-	jeq	Lberr3			| no, skip
-	addl	#28,%d1			| yes, get into next page
-					| operand case: 3,
-					| instruction case: 4+12+12
-	andl	#PG_FRAME,%d1		| and truncate
-Lberr3:
-	movl	%d1,%sp@-
-	movl	%d0,%sp@-		| code is FSLW now.
-	andw	#0x1f80,%d0 
-	jeq	Lberr60			| it is a bus error
-	movl	#T_MMUFLT,%sp@-		| show that we are an MMU fault
-	jra	_ASM_LABEL(faultstkadj)	| and deal with it
-Lberr60:
-	tstl	_C_LABEL(nofault)	| catch bus error?
-	jeq	Lisberr			| no, handle as usual
-	movl	_C_LABEL(nofault),%sp@-	| yes,
-	jbsr	_C_LABEL(longjmp)	|  longjmp(nofault)
-	/* NOTREACHED */
-#endif
-#if defined(M68040)
-ENTRY_NOPROFILE(buserr40)
-	clrl	%sp@-			| stack adjust count
-	moveml	#0xFFFF,%sp@-		| save user registers
-	movl	%usp,%a0		| save the user SP
-	movl	%a0,%sp@(FR_SP)		|   in the savearea
-	movl	%sp@(FR_HW+20),%d1	| get fault address
-	moveq	#0,%d0
-	movw	%sp@(FR_HW+12),%d0	| get SSW
-	btst	#11,%d0			| check for mis-aligned
-	jeq	Lbe1stpg		| no skip
-	addl	#3,%d1			| get into next page
-	andl	#PG_FRAME,%d1		| and truncate
-Lbe1stpg:
-	movl	%d1,%sp@-		| pass fault address.
-	movl	%d0,%sp@-		| pass SSW as code
-	btst	#10,%d0			| test ATC
-	jeq	Lberr40			| it is a bus error
-	movl	#T_MMUFLT,%sp@-		| show that we are an MMU fault
-	jra	_ASM_LABEL(faultstkadj)	| and deal with it
-Lberr40:
-	tstl	_C_LABEL(nofault)	| catch bus error?
-	jeq	Lisberr			| no, handle as usual
-	movl	_C_LABEL(nofault),%sp@-	| yes,
-	jbsr	_C_LABEL(longjmp)	|  longjmp(nofault)
-	/* NOTREACHED */
-#endif
-
-#if defined(M68020) || defined(M68030)
-ENTRY_NOPROFILE(busaddrerr2030)
-	clrl	%sp@-			| stack adjust count
-	moveml	#0xFFFF,%sp@-		| save user registers
-	movl	%usp,%a0		| save the user SP
-	movl	%a0,%sp@(FR_SP)		|   in the savearea
-	moveq	#0,%d0
-	movw	%sp@(FR_HW+10),%d0	| grab SSW for fault processing
-	btst	#12,%d0			| RB set?
-	jeq	LbeX0			| no, test RC
-	bset	#14,%d0			| yes, must set FB
-	movw	%d0,%sp@(FR_HW+10)	| for hardware too
-LbeX0:
-	btst	#13,%d0			| RC set?
-	jeq	LbeX1			| no, skip
-	bset	#15,%d0			| yes, must set FC
-	movw	%d0,%sp@(FR_HW+10)	| for hardware too
-LbeX1:
-	btst	#8,%d0			| data fault?
-	jeq	Lbe0			| no, check for hard cases
-	movl	%sp@(FR_HW+16),%d1	| fault address is as given in frame
-	jra	Lbe10			| thats it
-Lbe0:
-	btst	#4,%sp@(FR_HW+6)	| long (type B) stack frame?
-	jne	Lbe4			| yes, go handle
-	movl	%sp@(FR_HW+2),%d1	| no, can use save PC
-	btst	#14,%d0			| FB set?
-	jeq	Lbe3			| no, try FC
-	addql	#4,%d1			| yes, adjust address
-	jra	Lbe10			| done
-Lbe3:
-	btst	#15,%d0			| FC set?
-	jeq	Lbe10			| no, done
-	addql	#2,%d1			| yes, adjust address
-	jra	Lbe10			| done
-Lbe4:
-	movl	%sp@(FR_HW+36),%d1	| long format, use stage B address
-	btst	#15,%d0			| FC set?
-	jeq	Lbe10			| no, all done
-	subql	#2,%d1			| yes, adjust address
-Lbe10:
-	movl	%d1,%sp@-		| push fault VA
-	movl	%d0,%sp@-		| and padded SSW
-	movw	%sp@(FR_HW+8+6),%d0	| get frame format/vector offset
-	andw	#0x0FFF,%d0		| clear out frame format
-	cmpw	#12,%d0			| address error vector?
-	jeq	Lisaerr			| yes, go to it
-	movl	%d1,%a0			| fault address
-	movl	%sp@,%d0		| function code from ssw
-	btst	#8,%d0			| data fault?
-	jne	Lbe10a
-	movql	#1,%d0			| user program access FC
-					| (we dont separate data/program)
-	btst	#5,%sp@(FR_HW+8)	| supervisor mode?
-	jeq	Lbe10a			| if no, done
-	movql	#5,%d0			| else supervisor program access
-Lbe10a:
-	ptestr	%d0,%a0@,#7		| do a table search
-	pmove	%psr,%sp@		| save result
-	movb	%sp@,%d1
-	btst	#2,%d1			| invalid (incl. limit viol. and berr)?
-	jeq	Lmightnotbemerr		| no -> wp check
-	btst	#7,%d1			| is it MMU table berr?
-	jne	Lisberr1		| yes, needs not be fast.
-Lismerr:
-	movl	#T_MMUFLT,%sp@-		| show that we are an MMU fault
-	jra	_ASM_LABEL(faultstkadj)	| and deal with it
-Lmightnotbemerr:
-	btst	#3,%d1			| write protect bit set?
-	jeq	Lisberr1		| no: must be bus error
-	movl	%sp@,%d0		| ssw into low word of d0
-	andw	#0xc0,%d0		| Write protect is set on page:
-	cmpw	#0x40,%d0		| was it read cycle?
-	jne	Lismerr			| no, was not WPE, must be MMU fault
-	jra	Lisberr1		| real bus err needs not be fast.
-Lisaerr:
-	movl	#T_ADDRERR,%sp@-	| mark address error
-	jra	_ASM_LABEL(faultstkadj)	| and deal with it
-Lisberr1:
-	clrw	%sp@			| re-clear pad word
-	tstl	_C_LABEL(nofault)	| catch bus error?
-	jeq	Lisberr			| no, handle as usual
-	movl	_C_LABEL(nofault),%sp@-	| yes,
-	jbsr	_C_LABEL(longjmp)	|  longjmp(nofault)
-	/* NOTREACHED */
-#endif /* M68020 || M68030 */
-
-Lisberr:				| also used by M68040/60
-	movl	#T_BUSERR,%sp@-		| mark bus error
-	jra	_ASM_LABEL(faultstkadj)	| and deal with it
+/*
+ * Use common m68k bus error and address error handlers.
+ */
+#include <m68k/m68k/busaddrerr.s>
 
 /*
  * FP exceptions.
@@ -974,7 +769,7 @@ ENTRY_NOPROFILE(fpfault)
 #if defined(M68040) || defined(M68060)
 	/* always null state frame on 68040, 68060 */
 	cmpl	#FPU_68040,_C_LABEL(fputype)
-	jle	Lfptnull
+	jge	Lfptnull
 #endif
 	tstb	%a0@		| null state frame?
 	jeq	Lfptnull	| yes, safe
@@ -1155,9 +950,6 @@ Lbrkpt3:
  * intrhand_vectored is the entry point for vectored interrupts.
  */
 
-#define INTERRUPT_SAVEREG	moveml  #0xC0C0,%sp@-
-#define INTERRUPT_RESTOREREG	moveml  %sp@+,#0x0303
-
 ENTRY_NOPROFILE(intrhand_autovec)
 	addql	#1,_C_LABEL(interrupt_depth)
 	INTERRUPT_SAVEREG
@@ -1246,7 +1038,7 @@ Laststkadj:
 
 /*
  * Primitives
- */ 
+ */
 
 /*
  * Use common m68k support routines.
@@ -1304,16 +1096,6 @@ ENTRY(ecacheoff)
 ENTRY_NOPROFILE(getsp)
 	movl	%sp,%d0			| get current SP
 	addql	#4,%d0			| compensate for return address
-	movl	%d0,%a0
-	rts
-
-ENTRY_NOPROFILE(getsfc)
-	movc	%sfc,%d0
-	movl	%d0,%a0
-	rts
-
-ENTRY_NOPROFILE(getdfc)
-	movc	%dfc,%d0
 	movl	%d0,%a0
 	rts
 
@@ -1395,66 +1177,6 @@ L_delay:
 	subl	%d1,%d0
 	jgt	L_delay
 	rts
-
-/*
- * Save and restore 68881 state.
- */
-ENTRY(m68881_save)
-	movl	%sp@(4),%a0		| save area pointer
-	fsave	%a0@			| save state
-#if defined(M68020) || defined(M68030) || defined(M68040)
-#if defined(M68060)
-	cmpl	#FPU_68060,_C_LABEL(fputype)
-	jeq	Lm68060fpsave
-#endif
-Lm68881fpsave:  
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS)	| save FP general registers
-	fmovem	%fpcr/%fpsr/%fpi,%a0@(FPF_FPCR) | save FP control registers
-Lm68881sdone:
-	rts
-#endif
-#if defined(M68060)
-Lm68060fpsave:
-	tstb	%a0@(2)			| null state frame?
-	jeq	Lm68060sdone		| yes, all done
-	fmovem	%fp0-%fp7,%a0@(FPF_REGS)	| save FP general registers
-	fmovem	%fpcr,%a0@(FPF_FPCR)	| save FP control registers
-	fmovem	%fpsr,%a0@(FPF_FPSR)           
-	fmovem	%fpi,%a0@(FPF_FPI)
-Lm68060sdone:   
-        rts
-#endif  
-
-ENTRY(m68881_restore)
-	movl	%sp@(4),%a0		| save area pointer
-#if defined(M68020) || defined(M68030) || defined(M68040)
-#if defined(M68060)
-	cmpl	#FPU_68060,_C_LABEL(fputype)
-	jeq	Lm68060fprestore
-#endif
-Lm68881fprestore:
-	tstb	%a0@			| null state frame?
-	jeq	Lm68881rdone		| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr/%fpsr/%fpi | restore FP control registers
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7	| restore FP general registers
-Lm68881rdone:
-	frestore %a0@			| restore state
-	rts
-#endif
-#if defined(M68060)
-Lm68060fprestore:
-	tstb	%a0@(2)			| null state frame?
-	jeq	Lm68060fprdone		| yes, easy
-	fmovem	%a0@(FPF_FPCR),%fpcr	| restore FP control registers
-	fmovem	%a0@(FPF_FPSR),%fpsr
-	fmovem	%a0@(FPF_FPI),%fpi
-	fmovem	%a0@(FPF_REGS),%fp0-%fp7 | restore FP general registers
-Lm68060fprdone:
-	frestore %a0@			| restore state
-	rts
-#endif
 
 /*
  * Handle the nitty-gritty of rebooting the machine.
@@ -1550,9 +1272,6 @@ GLOBAL(bootctrllun)
 	.long	0
 GLOBAL(bootaddr)
 	.long	0
-
-GLOBAL(proc0paddr)
-	.long	0		| KVA of proc0 u-area
 
 GLOBAL(intiobase)
 	.long	0		| KVA of base of internal IO space

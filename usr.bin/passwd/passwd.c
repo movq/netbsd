@@ -1,4 +1,4 @@
-/*	$NetBSD: passwd.c,v 1.27 2008/01/25 19:36:27 christos Exp $	*/
+/*	$NetBSD: passwd.c,v 1.32 2017/10/12 05:00:23 ryo Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)passwd.c    8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: passwd.c,v 1.27 2008/01/25 19:36:27 christos Exp $");
+__RCSID("$NetBSD: passwd.c,v 1.32 2017/10/12 05:00:23 ryo Exp $");
 #endif
 #endif /* not lint */
 
@@ -79,7 +79,7 @@ static const struct pw_module_s {
 	/* default -- use whatever PAM decides */
 	{ NULL, NULL, 0, NULL, pwpam_process },
 
-	{ 0 }
+	{ NULL, NULL, 0, NULL, NULL }
 };
 
 static const struct pw_module_s *personality;
@@ -200,12 +200,12 @@ static struct pw_module_s {
 	const char *argv0;
 	const char *args;
 	const char *usage;
-	int (*pw_init) __P((const char *));
-	int (*pw_arg) __P((char, const char *));
-	int (*pw_arg_end) __P((void));
-	void (*pw_end) __P((void));
+	int (*pw_init)(const char *);
+	int (*pw_arg)(char, const char *);
+	int (*pw_arg_end)(void);
+	void (*pw_end)(void);
 
-	int (*pw_chpw) __P((const char*));
+	int (*pw_chpw)(const char*);
 	int invalid;
 #define	INIT_INVALID 1
 #define ARG_INVALID 2
@@ -231,7 +231,7 @@ static struct pw_module_s {
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 };
  
-static void
+static void __attribute__((__noreturn__))
 usage(void)
 {
 	int i;
@@ -250,7 +250,7 @@ main(int argc, char **argv)
 	int ch;
 	char *username;
 	char optstring[64];  /* if we ever get more than 64 args, shoot me. */
-	const char *curopt, *optopt;
+	const char *curopt, *oopt;
 	int i, j;
 	int valid;
 	int use_always;
@@ -306,15 +306,15 @@ main(int argc, char **argv)
 
 		curopt = pw_modules[i].args;
 		while (*curopt != '\0') {
-			if ((optopt = strchr(optstring, *curopt)) == NULL) {
+			if ((oopt = strchr(optstring, *curopt)) == NULL) {
 				optstring[j++] = *curopt;
 				if (curopt[1] == ':') {
 					curopt++;
 					optstring[j++] = *curopt;
 				}
 				optstring[j] = '\0';
-			} else if ((optopt[1] == ':' && curopt[1] != ':') ||
-			    (optopt[1] != ':' && curopt[1] == ':')) {
+			} else if ((oopt[1] == ':' && curopt[1] != ':') ||
+			    (oopt[1] != ':' && curopt[1] == ':')) {
 				errx(1, "NetBSD ERROR!  Different password "
 				    "modules have two different ideas about "
 				    "%c argument format.", curopt[0]);
@@ -329,8 +329,8 @@ main(int argc, char **argv)
 		for (i = 0; pw_modules[i].pw_init != NULL; i++) {
 			if (pw_modules[i].invalid)
 				continue;
-			if ((optopt = strchr(pw_modules[i].args, ch)) != NULL) {
-				j = (optopt[1] == ':') ?
+			if ((oopt = strchr(pw_modules[i].args, ch)) != NULL) {
+				j = (oopt[1] == ':') ?
 				    ! (*pw_modules[i].pw_arg)(ch, optarg) :
 				    ! (*pw_modules[i].pw_arg)(ch, NULL);
 				if (j != 0)

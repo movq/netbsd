@@ -1,7 +1,8 @@
-.\"     $NetBSD: magma.4,v 1.8 2003/05/06 19:05:36 wiz Exp $
+.\"     $NetBSD: magma.4,v 1.12 2017/07/03 21:30:59 wiz Exp $
 .\"
 .\" Copyright (c) 1998 Iain Hibbert
 .\" All rights reserved.
+.\"
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
 .\" are met:
@@ -10,11 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by Iain Hibbert
-.\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,6 +25,7 @@
 .\"
 .Dd April 21, 1998
 .Dt MAGMA 4 sparc
+.Os
 .Sh NAME
 .Nm magma
 .Nd
@@ -53,13 +50,13 @@ The device minor numbers for this driver are encoded as follows:
     | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |
     +---+---+---+---+---+---+---+---+
       |   |   |   |   |   |   |   |
-      |   |   |   |   +---+---+---+---\*[Gt] port number
+      |   |   |   |   +---+---+---+---> port number
       |   |   |   |
-      |   |   |   +-------------------\*[Gt] dial-out (on tty ports)
+      |   |   |   +-------------------> dial-out (on tty ports)
       |   |   |
-      |   |   +-----------------------\*[Gt] unused
+      |   |   +-----------------------> unused
       |   |
-      +---+---------------------------\*[Gt] card number
+      +---+---------------------------> card number
 .Ed
 .Pp
 Up to four cards are supported in the system.
@@ -106,8 +103,7 @@ Cyclades Cyclom device driver written
 by Andrew Herbert and Timo Rossi.
 .Sh AUTHORS
 The driver was written by
-.An Iain Hibbert
-.Aq plunky@skate.demon.co.uk .
+.An Iain Hibbert .
 .Sh TO DO
 CD1190 parallel support.
 .Pp

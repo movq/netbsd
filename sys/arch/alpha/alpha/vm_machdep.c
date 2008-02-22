@@ -1,21 +1,21 @@
-/* $NetBSD: vm_machdep.c,v 1.96 2007/10/17 19:52:56 garbled Exp $ */
+/* $NetBSD: vm_machdep.c,v 1.114 2018/03/19 10:31:56 martin Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,8 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.96 2007/10/17 19:52:56 garbled Exp $");
-#include "opt_coredump.h"
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.114 2018/03/19 10:31:56 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,66 +37,20 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.96 2007/10/17 19:52:56 garbled Exp 
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/exec.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <machine/cpu.h>
 #include <machine/alpha.h>
 #include <machine/pmap.h>
 #include <machine/reg.h>
 
-#ifdef COREDUMP
-/*
- * Dump the machine specific header information at the start of a core dump.
- */
-int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
-{
-	int error;
-	struct md_coredump cpustate;
-	struct coreseg cseg;
-
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
-		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
-		chdr->c_cpusize = sizeof(cpustate);
-		chdr->c_nseg++;
-		return 0;
-	}
-
-	cpustate.md_tf = *l->l_md.md_tf;
-	cpustate.md_tf.tf_regs[FRAME_SP] = alpha_pal_rdusp();	/* XXX */
-	if (l->l_md.md_flags & MDP_FPUSED) {
-		if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-			fpusave_proc(l, 1);
-		cpustate.md_fpstate = l->l_addr->u_pcb.pcb_fp;
-	} else
-		memset(&cpustate.md_fpstate, 0, sizeof(cpustate.md_fpstate));
-
-	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
-	cseg.c_addr = 0;
-	cseg.c_size = chdr->c_cpusize;
-
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
-	if (error)
-		return error;
-
-	return coredump_write(iocookie, UIO_SYSSPACE, &cpustate,
-	    sizeof(cpustate));
-}
-#endif
-
 void
 cpu_lwp_free(struct lwp *l, int proc)
 {
-
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-		fpusave_proc(l, 0);
+	(void) l;
 }
 
 void
@@ -107,16 +60,16 @@ cpu_lwp_free2(struct lwp *l)
 }
 
 /*
- * Finish a fork operation, with process p2 nearly set up.
+ * Finish a fork operation, with thread l2 nearly set up.
  * Copy and update the pcb and trap frame, making the child ready to run.
- * 
+ *
  * Rig the child's kernel stack so that it will start out in
- * lwp_trampoline() and call child_return() with p2 as an
- * argument. This causes the newly-created child process to go
+ * lwp_trampoline() and call child_return() with l2 as an
+ * argument. This causes the newly-created child thread to go
  * directly to user level with an apparent return value of 0 from
  * fork(), while the parent process returns normally.
  *
- * p1 is the process being forked; if p1 == &proc0, we are creating
+ * l1 is the thread being forked; if l1 == &lwp0, we are creating
  * a kernel thread, and the return path and argument are specified with
  * `func' and `arg'.
  *
@@ -128,35 +81,32 @@ void
 cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
     void (*func)(void *), void *arg)
 {
-	struct user *up = l2->l_addr;
+	struct pcb *pcb1, *pcb2;
+	extern void lwp_trampoline(void);
+
+	pcb1 = lwp_getpcb(l1);
+	pcb2 = lwp_getpcb(l2);
 
 	l2->l_md.md_tf = l1->l_md.md_tf;
-	l2->l_md.md_flags = l1->l_md.md_flags & (MDP_FPUSED | MDP_FP_C);
+	l2->l_md.md_flags = l1->l_md.md_flags & MDLWP_FP_C;
 	l2->l_md.md_astpending = 0;
 
 	/*
 	 * Cache the physical address of the pcb, so we can
 	 * swap to it easily.
 	 */
-	l2->l_md.md_pcbpaddr = (void *)vtophys((vaddr_t)&up->u_pcb);
-
-	/*
-	 * Copy floating point state from the FP chip to the PCB
-	 * if this process has state stored there.
-	 */
-	if (l1->l_addr->u_pcb.pcb_fpcpu != NULL)
-		fpusave_proc(l1, 1);
+	l2->l_md.md_pcbpaddr = (void *)vtophys((vaddr_t)pcb2);
 
 	/*
 	 * Copy pcb and user stack pointer from proc p1 to p2.
 	 * If specificed, give the child a different stack.
+	 * Floating point state from the FP chip has already been saved.
 	 */
-	l2->l_addr->u_pcb = l1->l_addr->u_pcb;
+	*pcb2 = *pcb1;
 	if (stack != NULL)
-		l2->l_addr->u_pcb.pcb_hw.apcb_usp = (u_long)stack + stacksize;
+		pcb2->pcb_hw.apcb_usp = (u_long)stack + stacksize;
 	else
-		l2->l_addr->u_pcb.pcb_hw.apcb_usp = alpha_pal_rdusp();
-	simple_lock_init(&l2->l_addr->u_pcb.pcb_fpcpu_slock);
+		pcb2->pcb_hw.apcb_usp = alpha_pal_rdusp();
 
 	/*
 	 * Arrange for a non-local goto when the new process
@@ -183,7 +133,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 		 * will be to right address, with correct registers.
 		 */
 		l2tf = l2->l_md.md_tf = (struct trapframe *)
-		    ((char *)l2->l_addr + USPACE - sizeof(struct trapframe));
+		    (uvm_lwp_getuarea(l2) + USPACE - sizeof(struct trapframe));
 		memcpy(l2->l_md.md_tf, l1->l_md.md_tf,
 		    sizeof(struct trapframe));
 
@@ -194,59 +144,19 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 		l2tf->tf_regs[FRAME_A3] = 0;		/* no error */
 		l2tf->tf_regs[FRAME_A4] = 1;		/* is child */
 
-		cpu_setfunc(l2, func, arg);
+		pcb2->pcb_hw.apcb_ksp =
+		    (uint64_t)l2->l_md.md_tf;
+		pcb2->pcb_context[0] =
+		    (uint64_t)func;			/* s0: pc */
+		pcb2->pcb_context[1] =
+		    (uint64_t)exception_return;		/* s1: ra */
+		pcb2->pcb_context[2] =
+		    (uint64_t)arg;			/* s2: arg */
+		pcb2->pcb_context[3] =
+		    (uint64_t)l2;			/* s3: lwp */
+		pcb2->pcb_context[7] =
+		    (uint64_t)lwp_trampoline;		/* ra: assembly magic */
 	}
-}
-
-void
-cpu_setfunc(l, func, arg)
-	struct lwp *l;
-	void (*func) __P((void *));
-	void *arg;
-{
-	struct user *up = l->l_addr;
-
-	up->u_pcb.pcb_hw.apcb_ksp =
-	    (u_int64_t)l->l_md.md_tf;
-	up->u_pcb.pcb_context[0] =
-	    (u_int64_t)func;			/* s0: pc */
-	up->u_pcb.pcb_context[1] =
-	    (u_int64_t)exception_return;	/* s1: ra */
-	up->u_pcb.pcb_context[2] =
-	    (u_int64_t)arg;			/* s2: arg */
-	up->u_pcb.pcb_context[3] =
-	    (u_int64_t)l;			/* s3: lwp */
-	up->u_pcb.pcb_context[7] =
-	    (u_int64_t)lwp_trampoline;		/* ra: assembly magic */
-}	
-
-/*
- * Finish a swapin operation.
- *
- * We need to cache the physical address of the PCB, so we can
- * swap context to it easily.
- */
-void
-cpu_swapin(struct lwp *l)
-{
-	struct user *up = l->l_addr;
-
-	l->l_md.md_pcbpaddr = (void *)vtophys((vaddr_t)&up->u_pcb);
-}
-
-/*
- * cpu_swapout is called immediately before a process's 'struct user'
- * and kernel stack are unwired (which are in turn done immediately
- * before it's P_INMEM flag is cleared).  If the process is the
- * current owner of the floating point unit, the FP state has to be
- * saved, so that it goes out with the pcb, which is in the user area.
- */
-void
-cpu_swapout(struct lwp *l)
-{
-
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-		fpusave_proc(l, 1);
 }
 
 /*
@@ -254,7 +164,7 @@ cpu_swapout(struct lwp *l)
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().
  */
-void
+int
 vmapbuf(struct buf *bp, vsize_t len)
 {
 	vaddr_t faddr, taddr, off;
@@ -281,6 +191,8 @@ vmapbuf(struct buf *bp, vsize_t len)
 		taddr += PAGE_SIZE;
 	}
 	pmap_update(vm_map_pmap(phys_map));
+
+	return 0;
 }
 
 /*
@@ -302,3 +214,55 @@ vunmapbuf(struct buf *bp, vsize_t len)
 	bp->b_data = bp->b_saveaddr;
 	bp->b_saveaddr = NULL;
 }
+
+#ifdef __HAVE_CPU_UAREA_ROUTINES
+void *
+cpu_uarea_alloc(bool system)
+{
+	struct pglist pglist;
+	int error;
+
+	/*
+	 * Allocate a new physically contiguous uarea which can be
+	 * direct-mapped.
+	 */
+	error = uvm_pglistalloc(USPACE, 0, ptoa(physmem), 0, 0, &pglist, 1, 1);
+	if (error)
+		return NULL;
+
+	/*
+	 * Get the physical address from the first page.
+	 */
+	const struct vm_page * const pg = TAILQ_FIRST(&pglist);
+	KASSERT(pg != NULL);
+	const paddr_t pa = VM_PAGE_TO_PHYS(pg);
+
+	/*
+	 * We need to return a direct-mapped VA for the pa.
+	 */
+
+	return (void *)PMAP_MAP_POOLPAGE(pa);
+}
+
+/*
+ * Return true if we freed it, false if we didn't.
+ */
+bool
+cpu_uarea_free(void *vva)
+{
+	vaddr_t va = (vaddr_t) vva;
+	if (va >= VM_MIN_KERNEL_ADDRESS && va < VM_MAX_KERNEL_ADDRESS)
+		return false;
+
+	/*
+	 * Since the pages are physically contiguous, the vm_page structure
+	 * will be as well.
+	 */
+	struct vm_page *pg = PHYS_TO_VM_PAGE(PMAP_UNMAP_POOLPAGE(va));
+	KASSERT(pg != NULL);
+	for (size_t i = 0; i < UPAGES; i++, pg++) {
+		uvm_pagefree(pg);
+	}
+	return true;
+}
+#endif /* __HAVE_CPU_UAREA_ROUTINES */

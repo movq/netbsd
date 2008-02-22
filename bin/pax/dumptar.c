@@ -1,4 +1,4 @@
-/*	$NetBSD: dumptar.c,v 1.1 2004/06/16 14:28:21 christos Exp $	*/
+/*	$NetBSD: dumptar.c,v 1.3 2016/05/30 17:34:35 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,8 +30,12 @@
  */
 
 #include <stdio.h>
-#include <err.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include <fcntl.h>
+#include <err.h>
+#include <assert.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
 
@@ -46,20 +43,25 @@
 
 #define ussum(a) 1
 
+/*
+ * Ensure null termination.
+ */
 static char *
 buf(const char *p, size_t s)
 {
 	static char buf[1024];
-	(void)snprintf(buf, sizeof(buf), "%s", p);
+
+	assert(s < sizeof(buf));
+	memcpy(buf, p, s);
 	buf[s] = '\0';
 	return buf;
 }
 
-int
+static int
 intarg(const char *p, size_t s)
 {
 	char *ep, *b = buf(p, s);
-	int r = (int)strtol(p, &ep, 8);
+	int r = (int)strtol(b, &ep, 8);
 	return r;
 }
 

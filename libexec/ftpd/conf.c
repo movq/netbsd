@@ -1,7 +1,7 @@
-/*	$NetBSD: conf.c,v 1.58 2006/12/17 20:04:09 christos Exp $	*/
+/*	$NetBSD: conf.c,v 1.64 2012/11/04 20:46:46 christos Exp $	*/
 
 /*-
- * Copyright (c) 1997-2005 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997-2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: conf.c,v 1.58 2006/12/17 20:04:09 christos Exp $");
+__RCSID("$NetBSD: conf.c,v 1.64 2012/11/04 20:46:46 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -49,6 +42,7 @@ __RCSID("$NetBSD: conf.c,v 1.58 2006/12/17 20:04:09 christos Exp $");
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <pwd.h>
 #include <glob.h>
 #include <netdb.h>
 #include <signal.h>
@@ -379,27 +373,27 @@ parse_conf(const char *findclass)
 
 		} else if (strcasecmp(word, "mmapsize") == 0) {
 			curclass.mmapsize = 0;
-			CONF_LL(mmapsize, arg, 0, LLTMAX);
+			CONF_LL(mmapsize, arg, 0, SSIZE_MAX);
 
 		} else if (strcasecmp(word, "readsize") == 0) {
 			curclass.readsize = 0;
-			CONF_LL(readsize, arg, 0, LLTMAX);
+			CONF_LL(readsize, arg, 0, SSIZE_MAX);
 
 		} else if (strcasecmp(word, "writesize") == 0) {
 			curclass.writesize = 0;
-			CONF_LL(writesize, arg, 0, LLTMAX);
+			CONF_LL(writesize, arg, 0, SSIZE_MAX);
 
 		} else if (strcasecmp(word, "recvbufsize") == 0) {
 			curclass.recvbufsize = 0;
-			CONF_LL(recvbufsize, arg, 0, LLTMAX);
+			CONF_LL(recvbufsize, arg, 0, INT_MAX);
 
 		} else if (strcasecmp(word, "sendbufsize") == 0) {
 			curclass.sendbufsize = 0;
-			CONF_LL(sendbufsize, arg, 0, LLTMAX);
+			CONF_LL(sendbufsize, arg, 0, INT_MAX);
 
 		} else if (strcasecmp(word, "sendlowat") == 0) {
 			curclass.sendlowat = 0;
-			CONF_LL(sendlowat, arg, 0, LLTMAX);
+			CONF_LL(sendlowat, arg, 0, INT_MAX);
 
 		} else if (strcasecmp(word, "modify") == 0) {
 			CONF_FLAG(modify);
@@ -475,7 +469,7 @@ parse_conf(const char *findclass)
 			REASSIGN(template, EMPTYSTR(arg) ? NULL : ftpd_strdup(arg));
 
 		} else if (strcasecmp(word, "umask") == 0) {
-			u_long fumask;
+			unsigned long fumask;
 
 			curclass.umask = DEFAULT_UMASK;
 			if (none || EMPTYSTR(arg))
@@ -810,14 +804,15 @@ filetypematch(char *types, int mode)
  * routine doesn't need to be re-entrant unless we start using a
  * multi-threaded ftpd, and that's not likely for a while...
  */
-char **
+const char **
 do_conversion(const char *fname)
 {
 	struct ftpconv	*cp;
 	struct stat	 st;
 	int		 o_errno;
 	char		*base = NULL;
-	char		*cmd, *p, *lp, **argv;
+	char		*cmd, *p, *lp;
+	char	       **argv;
 	StringList	*sl;
 
 	o_errno = errno;
@@ -869,7 +864,7 @@ do_conversion(const char *fname)
 	argv = sl->sl_str;
 	free(cmd);
 	free(sl);
-	return(argv);
+	return (void *)(intptr_t)argv;
 
  cleanup_do_conv:
 	if (sl)
@@ -891,28 +886,36 @@ void
 count_users(void)
 {
 	char	fn[MAXPATHLEN];
-	int	fd, i, last;
-	size_t	count;
+	int	fd;
+	size_t	i, last, count;
+	ssize_t	scount;
 	pid_t  *pids, mypid;
 	struct stat sb;
+	struct flock fl;
 
 	(void)strlcpy(fn, _PATH_CLASSPIDS, sizeof(fn));
 	(void)strlcat(fn, curclass.classname, sizeof(fn));
 	pids = NULL;
 	connections = 1;
+	fl.l_start = 0;
+	fl.l_len = 0;
+	fl.l_pid = 0;
+	fl.l_type = F_WRLCK;
+	fl.l_whence = SEEK_SET;
 
 	if ((fd = open(fn, O_RDWR | O_CREAT, 0600)) == -1)
 		return;
-	if (lockf(fd, F_TLOCK, 0) == -1)
+	if (fcntl(fd, F_SETLK, &fl) == -1)
 		goto cleanup_count;
 	if (fstat(fd, &sb) == -1)
 		goto cleanup_count;
 	if ((pids = malloc(sb.st_size + sizeof(pid_t))) == NULL)
 		goto cleanup_count;
-	count = read(fd, pids, sb.st_size);
-	if ((ssize_t)count == -1 || count != sb.st_size)
+/* XXX: implement a better read loop */
+	scount = read(fd, pids, sb.st_size);
+	if (scount == -1 || scount != sb.st_size || scount < 0)
 		goto cleanup_count;
-	count /= sizeof(pid_t);
+	count = (size_t)scount / sizeof(pid_t);
 	mypid = getpid();
 	last = 0;
 	for (i = 0; i < count; i++) {
@@ -937,13 +940,15 @@ count_users(void)
 	count = (last + 1) * sizeof(pid_t);
 	if (lseek(fd, 0, SEEK_SET) == -1)
 		goto cleanup_count;
-	if (write(fd, pids, count) == -1)
+/* XXX: implement a better write loop */
+	scount = write(fd, pids, count);
+	if (scount == -1 || (size_t)scount != count)
 		goto cleanup_count;
 	(void)ftruncate(fd, count);
 
  cleanup_count:
-	if (lseek(fd, 0, SEEK_SET) != -1)
-		(void)lockf(fd, F_ULOCK, 0);
+	fl.l_type = F_UNLCK;
+	(void)fcntl(fd, F_SETLK, &fl);
 	close(fd);
 	REASSIGN(pids, NULL);
 }

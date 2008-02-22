@@ -1,4 +1,4 @@
-/*	$NetBSD: emac3reg.h,v 1.1 2001/10/16 15:38:33 uch Exp $	*/
+/*	$NetBSD: emac3reg.h,v 1.3 2014/03/31 11:25:49 martin Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.

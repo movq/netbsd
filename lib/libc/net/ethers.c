@@ -1,4 +1,4 @@
-/*	$NetBSD: ethers.c,v 1.21 2006/10/15 10:55:01 martin Exp $	*/
+/*	$NetBSD: ethers.c,v 1.25 2014/09/18 13:58:20 christos Exp $	*/
 
 /* 
  * ethers(3N) a la Sun.
@@ -9,7 +9,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: ethers.c,v 1.21 2006/10/15 10:55:01 martin Exp $");
+__RCSID("$NetBSD: ethers.c,v 1.25 2014/09/18 13:58:20 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -44,8 +44,7 @@ __weak_alias(ether_ntohost,_ether_ntohost)
 #endif
 
 char *
-ether_ntoa(e)
-	const struct ether_addr *e;
+ether_ntoa(const struct ether_addr *e)
 {
 	static char a[18];
 
@@ -59,8 +58,7 @@ ether_ntoa(e)
 }
 
 struct ether_addr *
-ether_aton(s)
-	const char *s;
+ether_aton(const char *s)
 {
 	static struct ether_addr n;
 	u_int i[6];
@@ -81,39 +79,35 @@ ether_aton(s)
 }
 
 int
-ether_ntohost(hostname, e)
-	char *hostname;
-	const struct ether_addr *e;
+ether_ntohost(char *hostname, const struct ether_addr *e)
 {
 	FILE *f; 
 	char *p;
-	size_t len;
 	struct ether_addr try;
-#ifdef YP
-	char trybuf[sizeof "xx:xx:xx:xx:xx:xx"];
-	int trylen;
-#endif
 
 	_DIAGASSERT(hostname != NULL);
 	_DIAGASSERT(e != NULL);
 
 #ifdef YP
+	char trybuf[sizeof "xx:xx:xx:xx:xx:xx"];
+	int trylen;
 	trylen = snprintf(trybuf, sizeof trybuf, "%x:%x:%x:%x:%x:%x", 
 	    e->ether_addr_octet[0], e->ether_addr_octet[1],
 	    e->ether_addr_octet[2], e->ether_addr_octet[3],
 	    e->ether_addr_octet[4], e->ether_addr_octet[5]);
 #endif
 
-	f = fopen(_PATH_ETHERS, "r");
+	f = fopen(_PATH_ETHERS, "re");
 	if (f == NULL)
 		return -1;
-	while ((p = fgetln(f, &len)) != NULL) {
-		if (p[len - 1] != '\n')
-			continue;		/* skip lines w/o \n */
-		p[--len] = '\0';
+	for (p = NULL;;) {
+		free(p);
+		p = fparseln(f, NULL, NULL, NULL, FPARSELN_UNESCALL);
+		if (p == NULL)
+			break;
 #ifdef YP
 		/* A + in the file means try YP now.  */
-		if (len == 1 && *p == '+') {
+		if (strcmp(p, "+") == 0) {
 			char *ypbuf, *ypdom;
 			int ypbuflen;
 
@@ -122,53 +116,52 @@ ether_ntohost(hostname, e)
 			if (yp_match(ypdom, "ethers.byaddr", trybuf,
 			    trylen, &ypbuf, &ypbuflen))
 				continue;
-			if (ether_line(ypbuf, &try, hostname) == 0) {
-				free(ypbuf);
-				(void)fclose(f);
-				return 0;
-			}
+			ypbuflen = ether_line(ypbuf, &try, hostname);
 			free(ypbuf);
+			if (ypbuflen == 0)
+				goto done;
 			continue;
 		}
 #endif
 		if (ether_line(p, &try, hostname) == 0 &&
-		    memcmp(&try, e, sizeof try) == 0) {
-			(void)fclose(f);
-			return 0;
-		}     
+		    memcmp(&try, e, sizeof try) == 0)
+			goto done;
 	}
+	free(p);
 	(void)fclose(f);
 	errno = ENOENT;
 	return -1;
+done:
+	free(p);
+	(void)fclose(f);
+	return 0;
 }
 
 int
-ether_hostton(hostname, e)
-	const char *hostname;
-	struct ether_addr *e;
+ether_hostton(const char *hostname, struct ether_addr *e)
 {
 	FILE *f;
 	char *p;
-	size_t len;
 	char try[MAXHOSTNAMELEN + 1];
 #ifdef YP
-	int hostlen = strlen(hostname);
+	int hostlen = (int)strlen(hostname);
 #endif
 
 	_DIAGASSERT(hostname != NULL);
 	_DIAGASSERT(e != NULL);
 
-	f = fopen(_PATH_ETHERS, "r");
-	if (f==NULL)
+	f = fopen(_PATH_ETHERS, "re");
+	if (f == NULL)
 		return -1;
 
-	while ((p = fgetln(f, &len)) != NULL) {
-		if (p[len - 1] != '\n')
-			continue;		/* skip lines w/o \n */
-		p[--len] = '\0';
+	for (p = NULL;;) {
+		free(p);
+		p = fparseln(f, NULL, NULL, NULL, FPARSELN_UNESCALL);
+		if (p == NULL)
+			break;
 #ifdef YP
 		/* A + in the file means try YP now.  */
-		if (len == 1 && *p == '+') {
+		if (strcmp(p, "+") == 0) {
 			char *ypbuf, *ypdom;
 			int ypbuflen;
 
@@ -177,30 +170,28 @@ ether_hostton(hostname, e)
 			if (yp_match(ypdom, "ethers.byname", hostname, hostlen,
 			    &ypbuf, &ypbuflen))
 				continue;
-			if (ether_line(ypbuf, e, try) == 0) {
-				free(ypbuf);
-				(void)fclose(f);
-				return 0;
-			}
+			ypbuflen = ether_line(ypbuf, e, try);
 			free(ypbuf);
+			if (ypbuflen == 0)
+				goto done;
 			continue;
 		}
 #endif
-		if (ether_line(p, e, try) == 0 && strcmp(hostname, try) == 0) {
-			(void)fclose(f);
-			return 0;
-		}
+		if (ether_line(p, e, try) == 0 && strcmp(hostname, try) == 0)
+			goto done;
 	}
+	free(p);
 	(void)fclose(f);
 	errno = ENOENT;
 	return -1;
+done:
+	free(p);
+	(void)fclose(f);
+	return 0;
 }
 
 int
-ether_line(l, e, hostname)
-	const char *l;
-	struct ether_addr *e;
-	char *hostname;
+ether_line(const char *l, struct ether_addr *e, char *hostname)
 {
 	u_int i[6];
 

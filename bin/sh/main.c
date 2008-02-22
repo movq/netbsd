@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.50 2005/10/10 21:14:42 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.73 2018/01/23 22:12:52 sevan Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.7 (Berkeley) 7/19/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.50 2005/10/10 21:14:42 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.73 2018/01/23 22:12:52 sevan Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,6 +51,7 @@ __RCSID("$NetBSD: main.c,v 1.50 2005/10/10 21:14:42 christos Exp $");
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <locale.h>
 #include <fcntl.h>
 
@@ -59,6 +60,7 @@ __RCSID("$NetBSD: main.c,v 1.50 2005/10/10 21:14:42 christos Exp $");
 #include "main.h"
 #include "mail.h"
 #include "options.h"
+#include "builtins.h"
 #include "output.h"
 #include "parser.h"
 #include "nodes.h"
@@ -75,21 +77,19 @@ __RCSID("$NetBSD: main.c,v 1.50 2005/10/10 21:14:42 christos Exp $");
 #include "mystring.h"
 #include "exec.h"
 #include "cd.h"
+#include "redir.h"
 
 #define PROFILE 0
 
 int rootpid;
 int rootshell;
-STATIC union node *curcmd;
-STATIC union node *prevcmd;
+int max_user_fd;
 #if PROFILE
 short profile_buf[16384];
 extern int etext();
 #endif
 
 STATIC void read_profile(const char *);
-STATIC char *find_dot_file(char *);
-int main(int, char **);
 
 /*
  * Main routine.  We initialize things, parse the arguments, execute
@@ -106,9 +106,19 @@ main(int argc, char **argv)
 	struct stackmark smark;
 	volatile int state;
 	char *shinit;
+	uid_t uid;
+	gid_t gid;
+
+	uid = getuid();
+	gid = getgid();
+
+	max_user_fd = fcntl(0, F_MAXFD);
+	if (max_user_fd < 2)
+		max_user_fd = 2;
 
 	setlocale(LC_ALL, "");
 
+	posix = getenv("POSIXLY_CORRECT") != NULL;
 #if PROFILE
 	monitor(4, etext, profile_buf, sizeof profile_buf, 50);
 #endif
@@ -144,11 +154,7 @@ main(int argc, char **argv)
 				exitshell(exitstatus);
 		}
 		reset();
-		if (exception == EXINT
-#if ATTY
-		 && (! attyset() || equal(termval(), "emacs"))
-#endif
-		 ) {
+		if (exception == EXINT) {
 			out2c('\n');
 			flushout(&errout);
 		}
@@ -165,11 +171,14 @@ main(int argc, char **argv)
 	}
 	handler = &jmploc;
 #ifdef DEBUG
-#if DEBUG == 2
-	debug = 1;
+#if DEBUG >= 2
+	debug = 1;	/* this may be reset by procargs() later */
 #endif
 	opentrace();
 	trputs("Shell args:  ");  trargs(argv);
+#if DEBUG >= 3
+	set_debug(((DEBUG)==3 ? "_@" : "++"), 1);
+#endif
 #endif
 	rootpid = getpid();
 	rootshell = 1;
@@ -177,6 +186,18 @@ main(int argc, char **argv)
 	initpwd();
 	setstackmark(&smark);
 	procargs(argc, argv);
+
+	/*
+	 * Limit bogus system(3) or popen(3) calls in setuid binaries,
+	 * by requiring the -p flag
+	 */
+	if (!pflag && (uid != geteuid() || gid != getegid())) {
+		setuid(uid);
+		setgid(gid);
+		/* PS1 might need to be changed accordingly. */
+		choose_ps1();
+	}
+
 	if (argv[0] && argv[0][0] == '-') {
 		state = 1;
 		read_profile("/etc/profile");
@@ -186,7 +207,8 @@ state1:
 	}
 state2:
 	state = 3;
-	if (getuid() == geteuid() && getgid() == getegid()) {
+	if ((iflag || !posix) &&
+	    getuid() == geteuid() && getgid() == getegid()) {
 		if ((shinit = lookupvar("ENV")) != NULL && *shinit != '\0') {
 			state = 3;
 			read_profile(shinit);
@@ -194,6 +216,8 @@ state2:
 	}
 state3:
 	state = 4;
+	line_number = 1;	/* undo anything from profile files */
+
 	if (sflag == 0 || minusc) {
 		static int sigs[] =  {
 		    SIGINT, SIGQUIT, SIGHUP, 
@@ -203,7 +227,7 @@ state3:
 		    SIGPIPE
 		};
 #define SIGSSIZE (sizeof(sigs)/sizeof(sigs[0]))
-		int i;
+		size_t i;
 
 		for (i = 0; i < SIGSSIZE; i++)
 		    setsignal(sigs[i], 0);
@@ -236,8 +260,9 @@ cmdloop(int top)
 	struct stackmark smark;
 	int inter;
 	int numeof = 0;
+	enum skipstate skip;
 
-	TRACE(("cmdloop(%d) called\n", top));
+	CTRACE(DBG_ALWAYS, ("cmdloop(%d) called\n", top));
 	setstackmark(&smark);
 	for (;;) {
 		if (pendingsigs)
@@ -248,14 +273,17 @@ cmdloop(int top)
 			showjobs(out2, SHOW_CHANGED);
 			chkmail(0);
 			flushout(&errout);
+			nflag = 0;
 		}
 		n = parsecmd(inter);
-		/* showtree(n); DEBUG */
+		VXTRACE(DBG_PARSE|DBG_EVAL|DBG_CMDS,("cmdloop: "),showtree(n));
 		if (n == NEOF) {
 			if (!top || numeof >= 50)
 				break;
+			if (nflag)
+				break;
 			if (!stoppedjobs()) {
-				if (!Iflag)
+				if (!iflag || !Iflag)
 					break;
 				out2str("\nUse \"exit\" to leave shell.\n");
 			}
@@ -263,12 +291,22 @@ cmdloop(int top)
 		} else if (n != NULL && nflag == 0) {
 			job_warning = (job_warning == 2) ? 1 : 0;
 			numeof = 0;
-			evaltree(n, 0);
+			evaltree(n, EV_MORE);
 		}
 		popstackmark(&smark);
 		setstackmark(&smark);
-		if (evalskip == SKIPFILE) {
-			evalskip = 0;
+
+		/*
+		 * Any SKIP* can occur here!  SKIP(FUNC|BREAK|CONT) occur when
+		 * a dotcmd is in a loop or a function body and appropriate
+		 * built-ins occurs in file scope in the sourced file.  Values
+		 * other than SKIPFILE are reset by the appropriate eval*()
+		 * that contained the dotcmd() call.
+		 */
+		skip = current_skipstate();
+		if (skip != SKIPNONE) {
+			if (skip == SKIPFILE)
+				stop_skipping();
 			break;
 		}
 	}
@@ -332,60 +370,6 @@ readcmdfile(char *name)
 	popfile();
 }
 
-
-
-/*
- * Take commands from a file.  To be compatible we should do a path
- * search for the file, which is necessary to find sub-commands.
- */
-
-
-STATIC char *
-find_dot_file(char *basename)
-{
-	char *fullname;
-	const char *path = pathval();
-	struct stat statb;
-
-	/* don't try this for absolute or relative paths */
-	if (strchr(basename, '/'))
-		return basename;
-
-	while ((fullname = padvance(&path, basename)) != NULL) {
-		if ((stat(fullname, &statb) == 0) && S_ISREG(statb.st_mode)) {
-			/*
-			 * Don't bother freeing here, since it will
-			 * be freed by the caller.
-			 */
-			return fullname;
-		}
-		stunalloc(fullname);
-	}
-
-	/* not found in the PATH */
-	error("%s: not found", basename);
-	/* NOTREACHED */
-}
-
-int
-dotcmd(int argc, char **argv)
-{
-	exitstatus = 0;
-
-	if (argc >= 2) {		/* That's what SVR2 does */
-		char *fullname;
-		struct stackmark smark;
-
-		setstackmark(&smark);
-		fullname = find_dot_file(argv[1]);
-		setinputfile(fullname, 1);
-		commandname = fullname;
-		cmdloop(0);
-		popfile();
-		popstackmark(&smark);
-	}
-	return exitstatus;
-}
 
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.40 2008/01/02 17:23:31 yamt Exp $ */
+/*	$NetBSD: pmap.c,v 1.54 2018/05/09 01:04:01 christos Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,10 +31,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pmap.c,v 1.40 2008/01/02 17:23:31 yamt Exp $");
+__RCSID("$NetBSD: pmap.c,v 1.54 2018/05/09 01:04:01 christos Exp $");
 #endif
 
 #include <string.h>
+#include <util.h>
 
 #include "pmap.h"
 #include "main.h"
@@ -125,7 +119,7 @@ dump_vm_map(kvm_t *kd, struct kinfo_proc2 *proc,
 		printf(" vm_refcnt = %d,", D(vmspace, vmspace)->vm_refcnt);
 		printf(" vm_shm = %p,\n", D(vmspace, vmspace)->vm_shm);
 		printf("    vm_rssize = %d,", D(vmspace, vmspace)->vm_rssize);
-		printf(" vm_swrss = %d,", D(vmspace, vmspace)->vm_swrss);
+		printf(" vm_rssmax = %d,", D(vmspace, vmspace)->vm_rssmax);
 		printf(" vm_tsize = %d,", D(vmspace, vmspace)->vm_tsize);
 		printf(" vm_dsize = %d,\n", D(vmspace, vmspace)->vm_dsize);
 		printf("    vm_ssize = %d,", D(vmspace, vmspace)->vm_ssize);
@@ -133,8 +127,10 @@ dump_vm_map(kvm_t *kd, struct kinfo_proc2 *proc,
 		printf(" vm_daddr = %p,\n", D(vmspace, vmspace)->vm_daddr);
 		printf("    vm_maxsaddr = %p,",
 		       D(vmspace, vmspace)->vm_maxsaddr);
-		printf(" vm_minsaddr = %p }\n",
+		printf(" vm_minsaddr = %p,\n",
 		       D(vmspace, vmspace)->vm_minsaddr);
+		printf("    vm_aslr_delta_mmap = %#zx }\n",
+		       D(vmspace, vmspace)->vm_aslr_delta_mmap);
 	}
 
 	if (debug & PRINT_VM_MAP) {
@@ -143,16 +139,15 @@ dump_vm_map(kvm_t *kd, struct kinfo_proc2 *proc,
 		printf("%*s    lock = <struct lock>,", indent(2), "");
 		printf(" header = <struct vm_map_entry>,");
 		printf(" nentries = %d,\n", D(vm_map, vm_map)->nentries);
-		printf("%*s    size = %lx,", indent(2), "",
+		printf("%*s    size = %#"PRIxVSIZE",", indent(2), "",
 		       D(vm_map, vm_map)->size);
 		printf(" ref_count = %d,", D(vm_map, vm_map)->ref_count);
 		printf("%*s    hint = %p,", indent(2), "",
 		       D(vm_map, vm_map)->hint);
 		printf("%*s    first_free = %p,", indent(2), "",
 		       D(vm_map, vm_map)->first_free);
-		printf(" flags = %x <%s%s%s%s%s >,\n", D(vm_map, vm_map)->flags,
+		printf(" flags = %#x <%s%s%s%s%s >,\n", D(vm_map, vm_map)->flags,
 		       D(vm_map, vm_map)->flags & VM_MAP_PAGEABLE ? " PAGEABLE" : "",
-		       D(vm_map, vm_map)->flags & VM_MAP_INTRSAFE ? " INTRSAFE" : "",
 		       D(vm_map, vm_map)->flags & VM_MAP_WIREFUTURE ? " WIREFUTURE" : "",
 #ifdef VM_MAP_DYING
 		       D(vm_map, vm_map)->flags & VM_MAP_DYING ? " DYING" :
@@ -161,6 +156,10 @@ dump_vm_map(kvm_t *kd, struct kinfo_proc2 *proc,
 #ifdef VM_MAP_TOPDOWN
 		       D(vm_map, vm_map)->flags & VM_MAP_TOPDOWN ? " TOPDOWN" :
 #endif
+		       "",
+#ifdef VM_MAP_WANTVA
+		       D(vm_map, vm_map)->flags & VM_MAP_WANTVA ? " WANTVA" :
+#endif
 		       "");
 		printf("%*s    timestamp = %u }\n", indent(2), "",
 		     D(vm_map, vm_map)->timestamp);
@@ -168,11 +167,11 @@ dump_vm_map(kvm_t *kd, struct kinfo_proc2 *proc,
 	if (print_ddb) {
 		const char *name = mapname(P(vm_map));
 
-		printf("%*s%s %p: [0x%lx->0x%lx]\n", indent(2), "",
+		printf("%*s%s %p: [%#"PRIxVADDR"->%#"PRIxVADDR"]\n", indent(2), "",
 		       recurse < 2 ? "MAP" : "SUBMAP", P(vm_map),
 		       vm_map_min(D(vm_map, vm_map)),
 		       vm_map_max(D(vm_map, vm_map)));
-		printf("\t%*s#ent=%d, sz=%ld, ref=%d, version=%d, flags=0x%x\n",
+		printf("\t%*s#ent=%d, sz=%"PRIxVSIZE", ref=%d, version=%d, flags=%#x\n",
 		       indent(2), "", D(vm_map, vm_map)->nentries,
 		       D(vm_map, vm_map)->size, D(vm_map, vm_map)->ref_count,
 		       D(vm_map, vm_map)->timestamp, D(vm_map, vm_map)->flags);
@@ -291,30 +290,28 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 		       P(vm_map_entry));
 		printf(" prev = %p,", vme->prev);
 		printf(" next = %p,\n", vme->next);
-		printf("%*s    start = %lx,", indent(2), "", vme->start);
-		printf(" end = %lx,", vme->end);
+		printf("%*s    start = %#"PRIxVADDR",", indent(2), "", vme->start);
+		printf(" end = %#"PRIxVADDR",", vme->end);
 		printf(" object.uvm_obj/sub_map = %p,\n", vme->object.uvm_obj);
 		printf("%*s    offset = %" PRIx64 ",", indent(2), "",
 		       vme->offset);
-		printf(" etype = %x <%s%s%s%s >,", vme->etype,
+		printf(" etype = %#x <%s%s%s%s >,", vme->etype,
 		       UVM_ET_ISOBJ(vme) ? " OBJ" : "",
 		       UVM_ET_ISSUBMAP(vme) ? " SUBMAP" : "",
 		       UVM_ET_ISCOPYONWRITE(vme) ? " COW" : "",
 		       UVM_ET_ISNEEDSCOPY(vme) ? " NEEDSCOPY" : "");
-		printf(" protection = %x,\n", vme->protection);
-		printf("%*s    max_protection = %x,", indent(2), "",
+		printf(" protection = %#x,\n", vme->protection);
+		printf("%*s    max_protection = %#x,", indent(2), "",
 		       vme->max_protection);
 		printf(" inheritance = %d,", vme->inheritance);
 		printf(" wired_count = %d,\n", vme->wired_count);
-		printf("%*s    aref = { ar_pageoff = %x, ar_amap = %p },",
+		printf("%*s    aref = { ar_pageoff = %#x, ar_amap = %p },",
 		       indent(2), "", vme->aref.ar_pageoff, vme->aref.ar_amap);
 		printf(" advice = %d,\n", vme->advice);
-		printf("%*s    flags = %x <%s%s%s%s%s > }\n", indent(2), "",
+		printf("%*s    flags = %#x <%s%s%s > }\n", indent(2), "",
 		       vme->flags,
 		       vme->flags & UVM_MAP_KERNEL ? " KERNEL" : "",
-		       vme->flags & UVM_MAP_KMAPENT ? " KMAPENT" : "",
-		       vme->flags & UVM_MAP_FIRST ? " FIRST" : "",
-		       vme->flags & UVM_MAP_QUANTUM ? " QUANTUM" : "",
+		       vme->flags & UVM_MAP_STATIC ? " STATIC" : "",
 		       vme->flags & UVM_MAP_NOMERGE ? " NOMERGE" : "");
 	}
 
@@ -391,7 +388,7 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 	name = findname(kd, vmspace, vm_map_entry, vp, vfs, uvm_obj);
 
 	if (print_map) {
-		printf("%*s0x%lx 0x%lx %c%c%c %c%c%c %s %s %d %d %d",
+		printf("%*s%#"PRIxVADDR" %#"PRIxVADDR" %c%c%c %c%c%c %s %s %d %d %d",
 		       indent(2), "",
 		       vme->start, vme->end,
 		       (vme->protection & VM_PROT_READ) ? 'r' : '-',
@@ -406,7 +403,9 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 		       vme->advice);
 		if (verbose) {
 			if (inode)
-				printf(" %u,%u %llu", major(dev), minor(dev),
+				printf(" %llu,%llu %llu",
+				    (unsigned long long)major(dev),
+				    (unsigned long long)minor(dev),
 				    (unsigned long long)inode);
 			if (name[0])
 				printf(" %s", name);
@@ -415,7 +414,7 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 	}
 
 	if (print_maps) {
-		printf("%*s%0*lx-%0*lx %c%c%c%c %0*" PRIx64 " %02x:%02x %llu     %s\n",
+		printf("%*s%0*"PRIxVADDR"-%0*"PRIxVADDR" %c%c%c%c %0*" PRIx64 " %02llx:%02llx %llu     %s\n",
 		       indent(2), "",
 		       (int)sizeof(void *) * 2, vme->start,
 		       (int)sizeof(void *) * 2, vme->end,
@@ -425,12 +424,14 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 		       UVM_ET_ISCOPYONWRITE(vme) ? 'p' : 's',
 		       (int)sizeof(void *) * 2,
 		       vme->offset,
-		       major(dev), minor(dev), (unsigned long long)inode,
+		       (unsigned long long)major(dev),
+		       (unsigned long long)minor(dev),
+		       (unsigned long long)inode,
 		       (name[0] != ' ') || verbose ? name : "");
 	}
 
 	if (print_ddb) {
-		printf("%*s - %p: 0x%lx->0x%lx: obj=%p/0x%" PRIx64 ", amap=%p/%d\n",
+		printf("%*s - %p: %#"PRIxVADDR"->%#"PRIxVADDR": obj=%p/%#" PRIx64 ", amap=%p/%d\n",
 		       indent(2), "",
 		       P(vm_map_entry), vme->start, vme->end,
 		       vme->object.uvm_obj, vme->offset,
@@ -446,8 +447,9 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 		if (verbose) {
 			printf("\t%*s", indent(2), "");
 			if (inode)
-				printf("(dev=%u,%u ino=%llu [%s] [%p])\n",
-				    major(dev), minor(dev),
+				printf("(dev=%llu,%llu ino=%llu [%s] [%p])\n",
+				    (unsigned long long)major(dev),
+				    (unsigned long long)minor(dev),
 				    (unsigned long long)inode, name, P(vp));
 			else if (name[0] == ' ')
 				printf("(%s)\n", &name[2]);
@@ -482,8 +484,8 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 	if (print_all) {
 		sz = (size_t)((vme->end - vme->start) / 1024);
 		printf(A(vp) ?
-		       "%*s%0*lx-%0*lx %7luk %0*" PRIx64 " %c%c%c%c%c (%c%c%c) %d/%d/%d %02u:%02u %7llu - %s [%p]\n" :
-		       "%*s%0*lx-%0*lx %7luk %0*" PRIx64 " %c%c%c%c%c (%c%c%c) %d/%d/%d %02u:%02u %7llu - %s\n",
+		       "%*s%0*"PRIxVADDR"-%0*"PRIxVADDR" %7luk %0*" PRIx64 " %c%c%c%c%c (%c%c%c) %d/%d/%d %02llu:%02llu %7llu - %s [%p]\n" :
+		       "%*s%0*"PRIxVADDR"-%0*"PRIxVADDR" %7luk %0*" PRIx64 " %c%c%c%c%c (%c%c%c) %d/%d/%d %02llu:%02llu %7llu - %s\n",
 		       indent(2), "",
 		       (int)sizeof(void *) * 2,
 		       vme->start,
@@ -503,7 +505,9 @@ dump_vm_map_entry(kvm_t *kd, struct kinfo_proc2 *proc, struct kbit *vmspace,
 		       vme->inheritance,
 		       vme->wired_count,
 		       vme->advice,
-		       major(dev), minor(dev), (unsigned long long)inode,
+		       (unsigned long long)major(dev),
+		       (unsigned long long)minor(dev),
+		       (unsigned long long)inode,
 		       name, P(vp));
 	}
 
@@ -533,7 +537,8 @@ dump_amap(kvm_t *kd, struct kbit *amap)
 	int *am_slots;
 	int *am_bckptr;
 	int *am_ppref;
-	size_t i, r, l, e;
+	size_t l;
+	int i, r, e;
 
 	if (S(amap) == (size_t)-1) {
 		heapfound = 1;
@@ -542,7 +547,7 @@ dump_amap(kvm_t *kd, struct kbit *amap)
 	}
 
 	printf("%*s  amap %p = { am_ref = %d, "
-	       "am_flags = %x,\n"
+	       "am_flags = %#x,\n"
 	       "%*s      am_maxslot = %d, am_nslot = %d, am_nused = %d, "
 	       "am_slots = %p,\n"
 	       "%*s      am_bckptr = %p, am_anon = %p, am_ppref = %p }\n",
@@ -567,22 +572,23 @@ dump_amap(kvm_t *kd, struct kbit *amap)
 	 * Assume that sizeof(struct vm_anon *) >= sizeof(size_t) and
 	 * allocate that amount of space.
 	 */
-	l = sizeof(struct vm_anon *) * D(amap, amap)->am_maxslot;
-	am_anon = malloc(l);
+	am_anon = ecalloc(D(amap, amap)->am_maxslot, sizeof(*am_anon));
+	l = D(amap, amap)->am_maxslot * sizeof(*am_anon);
 	_KDEREF(kd, (u_long)D(amap, amap)->am_anon, am_anon, l);
 
-	l = sizeof(int) * D(amap, amap)->am_maxslot;
-	am_bckptr = malloc(l);
+	l = D(amap, amap)->am_maxslot * sizeof(*am_bckptr);
+	am_bckptr = ecalloc(D(amap, amap)->am_maxslot, sizeof(*am_bckptr));
 	_KDEREF(kd, (u_long)D(amap, amap)->am_bckptr, am_bckptr, l);
 
-	l = sizeof(int) * D(amap, amap)->am_maxslot;
-	am_slots = malloc(l);
+	l = D(amap, amap)->am_maxslot * sizeof(*am_slots);
+	am_slots = ecalloc(D(amap, amap)->am_maxslot, sizeof(*am_slots));
 	_KDEREF(kd, (u_long)D(amap, amap)->am_slots, am_slots, l);
 
 	if (D(amap, amap)->am_ppref != NULL &&
 	    D(amap, amap)->am_ppref != PPREF_NONE) {
-		l = sizeof(int) * D(amap, amap)->am_maxslot;
-		am_ppref = malloc(l);
+		am_ppref = ecalloc(
+		    D(amap, amap)->am_maxslot, sizeof(*am_ppref));
+		l = D(amap, amap)->am_maxslot * sizeof(*am_ppref);
 		_KDEREF(kd, (u_long)D(amap, amap)->am_ppref, am_ppref, l);
 	} else {
 		am_ppref = NULL;
@@ -630,7 +636,7 @@ dump_amap(kvm_t *kd, struct kbit *amap)
 			l--;
 		}
 
-		dump_vm_anon(kd, am_anon, (int)i);
+		dump_vm_anon(kd, am_anon, i);
 	}
 
 	free(am_anon);
@@ -658,7 +664,7 @@ dump_vm_anon(kvm_t *kd, struct vm_anon **alist, int i)
 		else
 			KDEREF(kd, anon);
 
-		printf(" = { an_ref = %d, an_page = %p, an_swslot = %d }",
+		printf(" = { an_ref = %"PRIuPTR", an_page = %p, an_swslot = %d }",
 		    D(anon, anon)->an_ref, D(anon, anon)->an_page,
 		    D(anon, anon)->an_swslot);
 	}
@@ -715,16 +721,23 @@ findname(kvm_t *kd, struct kbit *vmspace,
 			if (name != NULL)
 				snprintf(buf, sizeof(buf), "/dev/%s", name);
 			else
-				snprintf(buf, sizeof(buf), "  [ device %d,%d ]",
-					 major(dev), minor(dev));
+				snprintf(buf, sizeof(buf), "  [ device %llu,%llu ]",
+				     (unsigned long long)major(dev),
+				     (unsigned long long)minor(dev));
 			name = buf;
 		}
-		else if (UVM_OBJ_IS_AOBJ(D(uvm_obj, uvm_object))) 
-			name = "  [ uvm_aobj ]";
-		else if (UVM_OBJ_IS_UBCPAGER(D(uvm_obj, uvm_object)))
-			name = "  [ ubc_pager ]";
-		else if (UVM_OBJ_IS_VNODE(D(uvm_obj, uvm_object)))
-			name = "  [ ?VNODE? ]";
+		else if (UVM_OBJ_IS_AOBJ(D(uvm_obj, uvm_object))) {
+			snprintf(buf, sizeof(buf), "  [ uvm_aobj ]");
+			name = buf;
+		}
+		else if (UVM_OBJ_IS_UBCPAGER(D(uvm_obj, uvm_object))) {
+			snprintf(buf, sizeof(buf), "  [ ubc_pager ]");
+			name = buf;
+		}
+		else if (UVM_OBJ_IS_VNODE(D(uvm_obj, uvm_object))) {
+			snprintf(buf, sizeof(buf), "  [ ?VNODE? ]");
+			name = buf;
+		}
 		else {
 			snprintf(buf, sizeof(buf), "  [ ?? %p ?? ]",
 				 D(uvm_obj, uvm_object)->pgops);
@@ -735,14 +748,17 @@ findname(kvm_t *kd, struct kbit *vmspace,
 	else if ((char *)D(vmspace, vmspace)->vm_maxsaddr <=
 		 (char *)vme->start &&
 		 ((char *)D(vmspace, vmspace)->vm_maxsaddr + (size_t)maxssiz) >=
-		 (char *)vme->end)
-		name = "  [ stack ]";
+		 (char *)vme->end) {
+		snprintf(buf, sizeof(buf), "  [ stack ]");
+		name = buf;
+	}
 
 	else if (!heapfound &&
 		 (vme->protection & rwx) == rwx &&
 		 vme->start >= (u_long)D(vmspace, vmspace)->vm_daddr) {
 		heapfound = 1;
-		name = "  [ heap ]";
+		snprintf(buf, sizeof(buf), "  [ heap ]");
+		name = buf;
 	}
 
 	else if (UVM_ET_ISSUBMAP(vme)) {
@@ -751,8 +767,10 @@ findname(kvm_t *kd, struct kbit *vmspace,
 		name = buf;
 	}
 
-	else
-		name = "  [ anon ]";
+	else {
+		snprintf(buf, sizeof(buf), "  [ anon ]");
+		name = buf;
+	}
 
 	return (name);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: bha_isa.c,v 1.30 2007/10/19 12:00:15 ad Exp $	*/
+/*	$NetBSD: bha_isa.c,v 1.37 2016/07/14 04:19:27 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bha_isa.c,v 1.30 2007/10/19 12:00:15 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bha_isa.c,v 1.37 2016/07/14 04:19:27 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,20 +50,19 @@ __KERNEL_RCSID(0, "$NetBSD: bha_isa.c,v 1.30 2007/10/19 12:00:15 ad Exp $");
 
 #define	BHA_ISA_IOSIZE	4
 
-int	bha_isa_probe(struct device *, struct cfdata *, void *);
-void	bha_isa_attach(struct device *, struct device *, void *);
+int	bha_isa_probe(device_t, cfdata_t, void *);
+void	bha_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(bha_isa, sizeof(struct bha_softc),
+CFATTACH_DECL_NEW(bha_isa, sizeof(struct bha_softc),
     bha_isa_probe, bha_isa_attach, NULL, NULL);
 
 /*
  * Check the slots looking for a board we recognise
- * If we find one, note it's address (slot) and call
+ * If we find one, note its address (slot) and call
  * the actual probe routine to check it out.
  */
 int
-bha_isa_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+bha_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -125,11 +117,10 @@ bha_isa_probe(struct device *parent, struct cfdata *match,
  * Attach all the sub-devices we can find
  */
 void
-bha_isa_attach(struct device *parent, struct device *self,
-    void *aux)
+bha_isa_attach(device_t parent, device_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	struct bha_softc *sc = (void *)self;
+	struct bha_softc *sc = device_private(self);
 	bus_space_tag_t iot = ia->ia_iot;
 	bus_space_handle_t ioh;
 	struct bha_probe_data bpd;
@@ -138,8 +129,9 @@ bha_isa_attach(struct device *parent, struct device *self,
 
 	printf("\n");
 
+	sc->sc_dev = self;
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, BHA_ISA_IOSIZE, 0, &ioh)) {
-		printf("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "can't map i/o space\n");
 		return;
 	}
 
@@ -147,15 +139,15 @@ bha_isa_attach(struct device *parent, struct device *self,
 	sc->sc_ioh = ioh;
 	sc->sc_dmat = ia->ia_dmat;
 	if (!bha_probe_inquiry(iot, ioh, &bpd)) {
-		printf("%s: bha_isa_attach failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "bha_isa_attach failed\n");
 		return;
 	}
 
 	sc->sc_dmaflags = 0;
 	if (bpd.sc_drq != -1) {
 		if ((error = isa_dmacascade(ic, bpd.sc_drq)) != 0) {
-			printf("%s: unable to cascade DRQ, error = %d\n",
-			    sc->sc_dev.dv_xname, error);
+			aprint_error_dev(sc->sc_dev,
+			    " unable to cascade DRQ, error = %d\n", error);
 			return;
 		}
 	} else {
@@ -168,7 +160,7 @@ bha_isa_attach(struct device *parent, struct device *self,
 		(void) bha_info(sc);
 		if (strcmp(sc->sc_firmware, "3.37") < 0)
 		    printf("%s: buggy VLB controller, disabling 32-bit DMA\n",
-		        sc->sc_dev.dv_xname);
+		        device_xname(sc->sc_dev));
 		else
 			sc->sc_dmaflags = ISABUS_DMA_32BIT;
 	}
@@ -176,8 +168,7 @@ bha_isa_attach(struct device *parent, struct device *self,
 	sc->sc_ih = isa_intr_establish(ic, bpd.sc_irq, IST_EDGE, IPL_BIO,
 	    bha_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt\n");
 		return;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ucontext.h,v 1.2 2005/12/11 12:20:29 christos Exp $	*/
+/*	$NetBSD: ucontext.h,v 1.6 2012/05/21 14:15:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,6 +53,10 @@ struct __ucontext32 {
 #endif
 };
 
+#ifdef __UCONTEXT32_SIZE
+__CTASSERT(sizeof(ucontext32_t) == __UCONTEXT32_SIZE);
+#endif
+
 #endif /* COMPAT_NETBSD32 && _KERNEL */
 
 #ifdef _KERNEL
@@ -67,6 +64,7 @@ struct __ucontext32 {
 struct lwp;
 void	getucontext32(struct lwp *, ucontext32_t *);
 int	setucontext32(struct lwp *, const ucontext32_t *);
+int	cpu_mcontext32_validate(struct lwp *, const mcontext32_t *);
 void	cpu_getmcontext32(struct lwp *, mcontext32_t *, unsigned int *);
 int	cpu_setmcontext32(struct lwp *, const mcontext32_t *, unsigned int);
 #endif /* COMPAT_NETBSD32 */

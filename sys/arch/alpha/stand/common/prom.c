@@ -1,4 +1,4 @@
-/* $NetBSD: prom.c,v 1.11 2002/07/30 20:36:42 nathanw Exp $ */
+/* $NetBSD: prom.c,v 1.15 2016/10/13 16:18:20 flxd Exp $ */
 
 /*  
  * Mach Operating System
@@ -43,7 +43,7 @@ static int test_getchar(int *);
 static void putonechar(int c);
 
 void
-init_prom_calls()
+init_prom_calls(void)
 {
 	extern struct prom_vec prom_dispatch_v;
 	struct rpb *r;
@@ -57,14 +57,13 @@ init_prom_calls()
 	prom_dispatch_v.routine = c->crb_v_dispatch->entry_va;
 
 	/* Look for console tty. */
-	prom_getenv(PROM_E_TTY_DEV, buf, 4);
+	prom_getenv(PROM_E_TTY_DEV, buf, sizeof(buf));
 	console = buf[0] - '0';
 }
 
 #if !defined(NO_GETCHAR) || !defined(NO_PUTCHAR_HALT)
 static int
-test_getchar(xc)
-	int *xc;
+test_getchar(int *xc)
 {
 	prom_return_t ret;
 
@@ -76,7 +75,7 @@ test_getchar(xc)
 
 #if !defined(NO_GETCHAR)
 int
-getchar()
+getchar(void)
 {
 	int c;
 
@@ -91,8 +90,7 @@ getchar()
 #endif
 
 static void
-putonechar(c)
-	int c;
+putonechar(int c)
 {
 	prom_return_t ret;
 	char cbuf = c;
@@ -103,8 +101,7 @@ putonechar(c)
 }
 
 void
-putchar(c)
-	int c;
+putchar(int c)
 {
 #if !defined(NO_PUTCHAR_HALT)
 	int typed_c;
@@ -123,9 +120,7 @@ putchar(c)
 }
 
 int
-prom_getenv(id, buf, len)
-	int id, len;
-	char *buf;
+prom_getenv(int id, char *buf, int len)
 {
 	/* 
 	 * On at least some systems, the GETENV call requires a

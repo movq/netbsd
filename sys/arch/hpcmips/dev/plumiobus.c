@@ -1,4 +1,4 @@
-/*	$NetBSD: plumiobus.c,v 1.12 2005/12/11 12:17:33 christos Exp $ */
+/*	$NetBSD: plumiobus.c,v 1.14 2012/10/27 17:17:53 chs Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plumiobus.c,v 1.12 2005/12/11 12:17:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plumiobus.c,v 1.14 2012/10/27 17:17:53 chs Exp $");
 
 #define PLUMIOBUSDEBUG
 
@@ -67,11 +60,10 @@ int	plumiobus_debug = 0;
 #define DPRINTFN(n, arg)
 #endif
 
-int plumiobus_match(struct device *, struct cfdata *, void *);
-void plumiobus_attach(struct device *, struct device *, void *);
+int plumiobus_match(device_t, cfdata_t, void *);
+void plumiobus_attach(device_t, device_t, void *);
 int plumiobus_print(void *, const char *);
-int plumiobus_search(struct device *, struct cfdata *,
-		     const int *, void *);
+int plumiobus_search(device_t, cfdata_t , const int *, void *);
 
 struct plumisa_resource {
 	int		pr_irq;
@@ -80,7 +72,6 @@ struct plumisa_resource {
 };
 
 struct plumiobus_softc {
-	struct	device		sc_dev;
 	plum_chipset_tag_t	sc_pc;
 	bus_space_tag_t		sc_regt;
 	bus_space_handle_t	sc_regh;
@@ -89,7 +80,7 @@ struct plumiobus_softc {
 	struct plumisa_resource	sc_isa[PLUM_IOBUS_IO5CSMAX];
 };
 
-CFATTACH_DECL(plumiobus, sizeof(struct plumiobus_softc),
+CFATTACH_DECL_NEW(plumiobus, sizeof(struct plumiobus_softc),
     plumiobus_match, plumiobus_attach, NULL, NULL);
 
 bus_space_tag_t __plumiobus_subregion(bus_space_tag_t, bus_addr_t,
@@ -99,17 +90,17 @@ void plumiobus_dump(struct plumiobus_softc *);
 #endif 
 
 int
-plumiobus_match(struct device *parent, struct cfdata *cf, void *aux)
+plumiobus_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (1);
 }
 
 void
-plumiobus_attach(struct device *parent, struct device *self, void *aux)
+plumiobus_attach(device_t parent, device_t self, void *aux)
 {
 	struct plum_attach_args *pa = aux;
-	struct plumiobus_softc *sc = (void*)self;
+	struct plumiobus_softc *sc = device_private(self);
 	struct plumisa_resource *pr;
 
 	sc->sc_pc	= pa->pa_pc;
@@ -193,10 +184,9 @@ __plumiobus_subregion(bus_space_tag_t t, bus_addr_t ofs, bus_size_t size)
 }
 
 int
-plumiobus_search(struct device *parent, struct cfdata *cf,
-		 const int *ldesc, void *aux)
+plumiobus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct plumiobus_softc *sc = (void*)parent;
+	struct plumiobus_softc *sc = device_private(parent);
 	struct plumiobus_attach_args pba;
 	int slot;
 	

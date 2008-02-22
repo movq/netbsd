@@ -1,4 +1,4 @@
-/* $NetBSD: tc_dma_3000_500.c,v 1.13 2001/07/19 06:40:03 thorpej Exp $ */
+/* $NetBSD: tc_dma_3000_500.c,v 1.20 2017/06/22 16:46:52 flxd Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: tc_dma_3000_500.c,v 1.13 2001/07/19 06:40:03 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tc_dma_3000_500.c,v 1.20 2017/06/22 16:46:52 flxd Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,10 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: tc_dma_3000_500.c,v 1.13 2001/07/19 06:40:03 thorpej
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/tc/tcvar.h>
 #include <alpha/tc/tc_sgmap.h>
@@ -87,8 +78,7 @@ struct tc_dma_slot_info {
 struct tc_dma_slot_info *tc_dma_slot_info;
 
 void
-tc_dma_init_3000_500(nslots)
-	int nslots;
+tc_dma_init_3000_500(int nslots)
 {
 	extern struct alpha_bus_dma_tag tc_dmat_direct;
 	size_t sisize;
@@ -111,28 +101,25 @@ tc_dma_init_3000_500(nslots)
  * Return the DMA tag for the given slot.
  */
 bus_dma_tag_t
-tc_dma_get_tag_3000_500(slot)
-	int slot;
+tc_dma_get_tag_3000_500(int slot)
 {
 
 	return (&tc_dma_slot_info[slot].tdsi_dmat);
 }
 
 /*
- * Create a TurboChannel SGMAP-mapped DMA map.
+ * Create a TURBOchannel SGMAP-mapped DMA map.
  */
 int
-tc_bus_dmamap_create_sgmap(t, size, nsegments, maxsegsz, boundary,
-    flags, dmamp)
-	bus_dma_tag_t t;
-	bus_size_t size;
-	int nsegments;
-	bus_size_t maxsegsz;
-	bus_size_t boundary;
-	int flags;
-	bus_dmamap_t *dmamp;
+tc_bus_dmamap_create_sgmap(
+	bus_dma_tag_t t,
+	bus_size_t size,
+	int nsegments,
+	bus_size_t maxsegsz,
+	bus_size_t boundary,
+	int flags,
+	bus_dmamap_t *dmamp)
 {
-	bus_dmamap_t map;
 	int error;
 
 	error = _bus_dmamap_create(t, size, nsegments, maxsegsz,
@@ -140,7 +127,7 @@ tc_bus_dmamap_create_sgmap(t, size, nsegments, maxsegsz, boundary,
 	if (error)
 		return (error);
 
-	map = *dmamp;
+	(void)*dmamp;
 
 	/* XXX BUS_DMA_ALLOCNOW */
 
@@ -148,12 +135,10 @@ tc_bus_dmamap_create_sgmap(t, size, nsegments, maxsegsz, boundary,
 }
 
 /*
- * Destroy a TurboChannel SGMAP-mapped DMA map.
+ * Destroy a TURBOchannel SGMAP-mapped DMA map.
  */
 void
-tc_bus_dmamap_destroy_sgmap(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
+tc_bus_dmamap_destroy_sgmap(bus_dma_tag_t t, bus_dmamap_t map)
 {
 
 	KASSERT(map->dm_mapsize == 0);
@@ -162,16 +147,10 @@ tc_bus_dmamap_destroy_sgmap(t, map)
 }
 
 /*
- * Load a TurboChannel SGMAP-mapped DMA map with a linear buffer.
+ * Load a TURBOchannel SGMAP-mapped DMA map with a linear buffer.
  */
 int
-tc_bus_dmamap_load_sgmap(t, map, buf, buflen, p, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	void *buf;
-	bus_size_t buflen;
-	struct proc *p;
-	int flags;
+tc_bus_dmamap_load_sgmap(bus_dma_tag_t t, bus_dmamap_t map, void *buf, bus_size_t buflen, struct proc *p, int flags)
 {
 	struct tc_dma_slot_info *tdsi = t->_cookie;
 
@@ -180,14 +159,10 @@ tc_bus_dmamap_load_sgmap(t, map, buf, buflen, p, flags)
 }
 
 /*
- * Load a TurboChannel SGMAP-mapped DMA map with an mbuf chain.
+ * Load a TURBOchannel SGMAP-mapped DMA map with an mbuf chain.
  */
 int
-tc_bus_dmamap_load_mbuf_sgmap(t, map, m, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct mbuf *m;
-	int flags;
+tc_bus_dmamap_load_mbuf_sgmap(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m, int flags)
 {
 	struct tc_dma_slot_info *tdsi = t->_cookie;
 
@@ -195,14 +170,10 @@ tc_bus_dmamap_load_mbuf_sgmap(t, map, m, flags)
 }
 
 /*
- * Load a TurboChannel SGMAP-mapped DMA map with a uio.
+ * Load a TURBOchannel SGMAP-mapped DMA map with a uio.
  */
 int
-tc_bus_dmamap_load_uio_sgmap(t, map, uio, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct uio *uio;
-	int flags;
+tc_bus_dmamap_load_uio_sgmap(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio, int flags)
 {
 	struct tc_dma_slot_info *tdsi = t->_cookie;
 
@@ -210,16 +181,10 @@ tc_bus_dmamap_load_uio_sgmap(t, map, uio, flags)
 }
 
 /*
- * Load a TurboChannel SGMAP-mapped DMA map with raw memory.
+ * Load a TURBOchannel SGMAP-mapped DMA map with raw memory.
  */
 int
-tc_bus_dmamap_load_raw_sgmap(t, map, segs, nsegs, size, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	bus_size_t size;
-	int flags;
+tc_bus_dmamap_load_raw_sgmap(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs, int nsegs, bus_size_t size, int flags)
 {
 	struct tc_dma_slot_info *tdsi = t->_cookie;
 
@@ -228,12 +193,10 @@ tc_bus_dmamap_load_raw_sgmap(t, map, segs, nsegs, size, flags)
 }
 
 /*
- * Unload a TurboChannel SGMAP-mapped DMA map.
+ * Unload a TURBOchannel SGMAP-mapped DMA map.
  */
 void
-tc_bus_dmamap_unload_sgmap(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
+tc_bus_dmamap_unload_sgmap(bus_dma_tag_t t, bus_dmamap_t map)
 {
 	struct tc_dma_slot_info *tdsi = t->_cookie;
 

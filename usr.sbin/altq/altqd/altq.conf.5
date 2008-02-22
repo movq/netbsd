@@ -1,4 +1,4 @@
-.\"	$NetBSD: altq.conf.5,v 1.11 2007/04/13 18:17:38 plunky Exp $
+.\"	$NetBSD: altq.conf.5,v 1.16 2017/07/03 21:35:29 wiz Exp $
 .\"	$KAME: altq.conf.5,v 1.15 2002/11/17 02:51:49 kjc Exp $
 .\"
 .\" Copyright (C) 2000
@@ -25,7 +25,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd October 12, 2006
+.Dd September 10, 2008
 .Dt ALTQ.CONF 5
 .Os
 .\"
@@ -178,10 +178,10 @@ Filter matching is performed from a filter with a larger ruleno.
 Default is 0.
 .El
 .Pp
-.Ar filter_value
+.Ar filter_values
 should be in the following format:
 .Bl -tag -width filter -offset indent
-.Ar filter_values :
+.It Ar filter_values :
 .Ad dst_addr Op Cm netmask Ar mask
 .Ar dport
 .Ad src_addr Op Cm netmask Ar mask
@@ -722,6 +722,8 @@ specifies a hashing policy by IP destination address.
 specifies a hashing policy by IP addresses and ports.
 .Cm srcport
 specifies a hashing policy by IP source port number.
+.Cm srcaddr
+specifies a hashing policy by IP source address.
 Default is
 .Cm dstaddr
 .El
@@ -1238,7 +1240,7 @@ class cbq vx0 csl_class tcp_class pbandwidth  10   red
 #
 # sample filter6 command
 #
-                filter6 vx0 csl_class ::0 0 d000:a:0:123::/64 80 6
+                filter6 vx0 csl_class ::0 0 2001:db8:0:123::/64 80 6
 .Ed
 .Ss HFSC Example
 .Bd -literal
@@ -1328,14 +1330,14 @@ interface fxp0
 # a simple dropper
 # discard all packets from 192.168.0.83
 #
-conditioner fxp0 dropper \*[Lt]drop\*[Gt]
+conditioner fxp0 dropper <drop>
         filter fxp0 dropper 0 0 192.168.0.83 0 0
 
 #
 # EF conditioner
 # mark EF to all packets from 192.168.0.117
 #
-conditioner pvc1 ef_cdnr \*[Lt]tbmeter 6M 64K \*[Lt]mark 0xb8\*[Gt]\*[Lt]drop\*[Gt]\*[Gt]
+conditioner pvc1 ef_cdnr <tbmeter 6M 64K <mark 0xb8><drop>>
         filter fxp0 ef_cdnr 0 0 192.168.0.117 0 0
 
 #
@@ -1345,7 +1347,7 @@ conditioner pvc1 ef_cdnr \*[Lt]tbmeter 6M 64K \*[Lt]mark 0xb8\*[Gt]\*[Lt]drop\*[
 #       AF12 (medium drop precedence): more than 3Mbps and less than 10Mbps
 #       AF13 (high drop precedence):   more than 10Mbps
 #
-conditioner fxp0 af1x_cdnr \*[Lt]trtcm 3M 32K 10M 64K \*[Lt]mark 0x28\*[Gt]\*[Lt]mark 0x30\*[Gt]\*[Lt]mark 0x38\*[Gt]\*[Gt]
+conditioner fxp0 af1x_cdnr <trtcm 3M 32K 10M 64K <mark 0x28><mark 0x30><mark 0x38>>
         filter fxp0 af1x_cdnr 0 0 192.168.0.178 0 0
 .Ed
 .Sh SEE ALSO

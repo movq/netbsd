@@ -1,4 +1,4 @@
-/*	$NetBSD: plumicu.c,v 1.10 2005/12/24 23:24:00 perry Exp $ */
+/*	$NetBSD: plumicu.c,v 1.12 2012/10/27 17:17:52 chs Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plumicu.c,v 1.10 2005/12/24 23:24:00 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plumicu.c,v 1.12 2012/10/27 17:17:52 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,8 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: plumicu.c,v 1.10 2005/12/24 23:24:00 perry Exp $");
 #define	DPRINTF(arg)
 #endif
 
-int plumicu_match(struct device *, struct cfdata *, void *);
-void plumicu_attach(struct device *, struct device *, void *);
+int plumicu_match(device_t, cfdata_t, void *);
+void plumicu_attach(device_t, device_t, void *);
 int plumicu_intr(void *);
 
 static inline void plum_di(plum_chipset_tag_t);
@@ -149,7 +142,6 @@ struct plum_intr_entry {
 };
 
 struct plumicu_softc {
-	struct	device		sc_dev;
 	plum_chipset_tag_t	sc_pc;
 	bus_space_tag_t		sc_regt;
 	bus_space_handle_t	sc_regh;
@@ -158,7 +150,7 @@ struct plumicu_softc {
 	struct plum_intr_entry  sc_intr[PLUM_INTR_MAX];
 };
 
-CFATTACH_DECL(plumicu, sizeof(struct plumicu_softc),
+CFATTACH_DECL_NEW(plumicu, sizeof(struct plumicu_softc),
     plumicu_match, plumicu_attach, NULL, NULL);
 
 #ifdef PLUMICUDEBUG
@@ -166,17 +158,17 @@ void plumicu_dump(struct plumicu_softc *);
 #endif
 
 int
-plumicu_match(struct device *parent, struct cfdata *cf, void *aux)
+plumicu_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (2); /* 1st attach group */
 }
 
 void
-plumicu_attach(struct device *parent, struct device *self, void *aux)
+plumicu_attach(device_t parent, device_t self, void *aux)
 {
 	struct plum_attach_args *pa = aux;
-	struct plumicu_softc *sc = (void*)self;
+	struct plumicu_softc *sc = device_private(self);
 	const struct plum_intr_ctrl *pic;
 	bus_space_tag_t regt;
 	bus_space_handle_t regh;

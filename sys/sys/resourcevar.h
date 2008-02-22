@@ -1,4 +1,4 @@
-/*	$NetBSD: resourcevar.h,v 1.41 2007/12/26 16:01:38 ad Exp $	*/
+/*	$NetBSD: resourcevar.h,v 1.57 2018/05/07 21:03:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -34,11 +34,25 @@
 #ifndef	_SYS_RESOURCEVAR_H_
 #define	_SYS_RESOURCEVAR_H_
 
+#if !defined(_KERNEL) && !defined(_KMEMUSER)
+#error "not supposed to be exposed to userland"
+#endif
+
 #include <sys/mutex.h>
+#include <sys/resource.h>
 
 /*
  * Kernel per-process accounting / statistics
  */
+struct uprof {				/* profile arguments */
+	char *	pr_base;		/* buffer base */
+	size_t  pr_size;		/* buffer size */
+	u_long	pr_off;			/* pc offset */
+	u_int   pr_scale;		/* pc scaling */
+	u_long	pr_addr;		/* temp storage for addr until AST */
+	u_long	pr_ticks;		/* temp storage for ticks until AST */
+};
+
 struct pstats {
 #define	pstat_startzero	p_ru
 	struct	rusage p_ru;		/* stats for this proc */
@@ -46,73 +60,40 @@ struct pstats {
 #define	pstat_endzero	pstat_startcopy
 
 #define	pstat_startcopy	p_timer
-	struct	itimerval p_timer[3];	/* virtual-time timers */
-
-	struct uprof {			/* profile arguments */
-		char *	pr_base;	/* buffer base */
-		size_t  pr_size;	/* buffer size */
-		u_long	pr_off;		/* pc offset */
-		u_int   pr_scale;	/* pc scaling */
-		u_long	pr_addr;	/* temp storage for addr until AST */
-		u_long	pr_ticks;	/* temp storage for ticks until AST */
-	} p_prof;
+	struct	itimerspec p_timer[3];	/* virtual-time timers */
+	struct	uprof p_prof;			/* profile arguments */
 #define	pstat_endcopy	p_start
 	struct	timeval p_start;	/* starting time */
 };
 
+#ifdef _KERNEL
+
 /*
- * Kernel shareable process resource limits.  Because this structure
- * is moderately large but changes infrequently, it is normally
- * shared copy-on-write after forks.  If a group of processes
- * ("threads") share modifications, the PL_SHAREMOD flag is set,
- * and a copy must be made for the child of a new fork that isn't
- * sharing modifications to the limits.
+ * Process resource limits.  Since this structure is moderately large,
+ * but changes infrequently, it is shared copy-on-write after forks.
  *
- * The PL_xxx flags are never cleared, once either is set p->p_limit
- * will never be changed again.
+ * When a separate copy is created, then 'pl_writeable' is set to true,
+ * and 'pl_sv_limit' is pointed to the old proc_t::p_limit structure.
  */
 struct plimit {
-	struct	rlimit pl_rlimit[RLIM_NLIMITS];
-	char	*pl_corename;
-#define	PL_SHAREMOD	0x01		/* modifications are shared */
-#define	PL_WRITEABLE	0x02		/* private to this process */
-	int	pl_flags;
-	int	pl_refcnt;		/* number of references */
-	kmutex_t pl_lock;		/* mutex for pl_refcnt */
-	struct plimit *pl_sv_limit;	/* saved when PL_WRITEABLE set */
+	struct rlimit	pl_rlimit[RLIM_NLIMITS];
+	char *		pl_corename;
+	size_t		pl_cnlen;
+	u_int		pl_refcnt;
+	bool		pl_writeable;
+	kmutex_t	pl_lock;
+	struct plimit *	pl_sv_limit;
 };
 
 /* add user profiling from AST XXXSMP */
-#define	ADDUPROF(p)							\
+#define	ADDUPROF(l)							\
 	do {								\
-		struct proc *_p = l->l_proc;				\
-		addupc_task(l,						\
-		    (_p)->p_stats->p_prof.pr_addr,			\
-		    (_p)->p_stats->p_prof.pr_ticks);			\
-		(_p)->p_stats->p_prof.pr_ticks = 0;			\
+		struct proc *_p = (l)->l_proc;				\
+		addupc_task((l),					\
+		    _p->p_stats->p_prof.pr_addr,			\
+		    _p->p_stats->p_prof.pr_ticks);			\
+		_p->p_stats->p_prof.pr_ticks = 0;			\
 	} while (/* CONSTCOND */ 0)
-
-#ifdef _KERNEL
-/*
- * Structure associated with user caching.
- */
-struct uidinfo {
-	LIST_ENTRY(uidinfo) ui_hash;
-	uid_t	ui_uid;
-	long	ui_proccnt;	/* Number of processes */
-	long	ui_lockcnt;	/* Number of locks */
-	rlim_t	ui_sbsize;	/* socket buffer size */
-	kmutex_t ui_lock;	/* mutex for everything */
-
-};
-#define	UIHASH(uid)	(&uihashtbl[(uid) & uihash])
-
-extern LIST_HEAD(uihashhead, uidinfo) *uihashtbl;
-extern u_long uihash;		/* size of hash table - 1 */
-int       chgproccnt(uid_t, int);
-int       chgsbsize(struct uidinfo *, u_long *, u_long, rlim_t);
-struct uidinfo *uid_find(uid_t);
-void	uid_init(void);
 
 extern char defcorename[];
 
@@ -122,21 +103,28 @@ extern uid_t security_setidcore_owner;
 extern gid_t security_setidcore_group;
 extern mode_t security_setidcore_mode;
 
-void	 addupc_intr(struct lwp *, u_long);
-void	 addupc_task(struct lwp *, u_long, u_int);
-void	 calcru(struct proc *, struct timeval *, struct timeval *,
+void	addupc_intr(struct lwp *, u_long);
+void	addupc_task(struct lwp *, u_long, u_int);
+void	calcru(struct proc *, struct timeval *, struct timeval *,
 	    struct timeval *, struct timeval *);
 
-struct plimit *lim_copy(struct plimit *lim);
-void lim_addref(struct plimit *lim);
-void lim_privatise(struct proc *p, bool set_shared);
-void limfree(struct plimit *);
+struct plimit *lim_copy(struct plimit *);
+void	lim_addref(struct plimit *);
+void	lim_privatise(struct proc *);
+void	lim_setcorename(struct proc *, char *, size_t);
+void	lim_free(struct plimit *);
 
 void	resource_init(void);
+void	ruspace(struct proc *);
 void	ruadd(struct rusage *, struct rusage *);
+void	rulwps(proc_t *, struct rusage *);
 struct	pstats *pstatscopy(struct pstats *);
-void 	pstatsfree(struct pstats *);
+void	pstatsfree(struct pstats *);
 extern rlim_t maxdmap;
 extern rlim_t maxsmap;
+
+int	getrusage1(struct proc *, int, struct rusage *);
+
 #endif
+
 #endif	/* !_SYS_RESOURCEVAR_H_ */

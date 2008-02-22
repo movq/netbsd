@@ -1,4 +1,4 @@
-#	$NetBSD: files.newsmips,v 1.26 2008/02/20 21:43:34 drochner Exp $
+#	$NetBSD: files.newsmips,v 1.30 2014/07/20 10:22:54 alnsn Exp $
 
 # NEWSMIPS-specific configuration info
 
@@ -96,7 +96,13 @@ file arch/newsmips/newsmips/mainbus.c
 file arch/newsmips/newsmips/cpu_cons.c
 file dev/cons.c
 
-file arch/mips/mips/softintr.c
+file dev/bus_dma/bus_dmamem_common.c
+
+#
+# Stack-less Just-In-Time compiler
+#
+
+include	"external/bsd/sljit/conf/files.sljit"
 
 #
 # Machine-independent SCSI driver.

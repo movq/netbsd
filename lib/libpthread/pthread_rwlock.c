@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_rwlock.c,v 1.27 2008/02/10 18:50:55 ad Exp $ */
+/*	$NetBSD: pthread_rwlock.c,v 1.34 2016/07/03 14:24:58 christos Exp $ */
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,17 +30,28 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_rwlock.c,v 1.27 2008/02/10 18:50:55 ad Exp $");
+__RCSID("$NetBSD: pthread_rwlock.c,v 1.34 2016/07/03 14:24:58 christos Exp $");
 
+#include <sys/types.h>
+#include <sys/lwpctl.h>
+
+#include <time.h>
 #include <errno.h>
 #include <stddef.h>
 
 #include "pthread.h"
 #include "pthread_int.h"
+#include "reentrant.h"
 
 #define	_RW_LOCKED		0
 #define	_RW_WANT_WRITE		1
 #define	_RW_WANT_READ		2
+
+#if __GNUC_PREREQ__(3, 0)
+#define	NOINLINE		__attribute ((noinline))
+#else
+#define	NOINLINE		/* nothing */
+#endif
 
 static int pthread__rwlock_wrlock(pthread_rwlock_t *, const struct timespec *);
 static int pthread__rwlock_rdlock(pthread_rwlock_t *, const struct timespec *);
@@ -58,9 +62,9 @@ int	_pthread_rwlock_rdheld_np(pthread_rwlock_t *);
 int	_pthread_rwlock_wrheld_np(pthread_rwlock_t *);
 
 #ifndef lint
-__weak_alias(pthread_rwlock_held_np,_pthread_rwlock_held_np);
-__weak_alias(pthread_rwlock_rdheld_np,_pthread_rwlock_rdheld_np);
-__weak_alias(pthread_rwlock_wrheld_np,_pthread_rwlock_wrheld_np);
+__weak_alias(pthread_rwlock_held_np,_pthread_rwlock_held_np)
+__weak_alias(pthread_rwlock_rdheld_np,_pthread_rwlock_rdheld_np)
+__weak_alias(pthread_rwlock_wrheld_np,_pthread_rwlock_wrheld_np)
 #endif
 
 __strong_alias(__libc_rwlock_init,pthread_rwlock_init)
@@ -83,11 +87,12 @@ int
 pthread_rwlock_init(pthread_rwlock_t *ptr,
 	    const pthread_rwlockattr_t *attr)
 {
+	if (__predict_false(__uselibcstub))
+		return __libc_rwlock_init_stub(ptr, attr);
 
 	if (attr && (attr->ptra_magic != _PT_RWLOCKATTR_MAGIC))
 		return EINVAL;
 	ptr->ptr_magic = _PT_RWLOCK_MAGIC;
-	pthread_lockinit(&ptr->ptr_interlock);
 	PTQ_INIT(&ptr->ptr_rblocked);
 	PTQ_INIT(&ptr->ptr_wblocked);
 	ptr->ptr_nreaders = 0;
@@ -100,6 +105,8 @@ pthread_rwlock_init(pthread_rwlock_t *ptr,
 int
 pthread_rwlock_destroy(pthread_rwlock_t *ptr)
 {
+	if (__predict_false(__uselibcstub))
+		return __libc_rwlock_destroy_stub(ptr);
 
 	if ((ptr->ptr_magic != _PT_RWLOCK_MAGIC) ||
 	    (!PTQ_EMPTY(&ptr->ptr_rblocked)) ||
@@ -112,14 +119,38 @@ pthread_rwlock_destroy(pthread_rwlock_t *ptr)
 	return 0;
 }
 
+/* We want function call overhead. */
+NOINLINE static void
+pthread__rwlock_pause(void)
+{
+
+	pthread__smt_pause();
+}
+
+NOINLINE static int
+pthread__rwlock_spin(uintptr_t owner)
+{
+	pthread_t thread;
+	unsigned int i;
+
+	thread = (pthread_t)(owner & RW_THREAD);
+	if (thread == NULL || (owner & ~RW_THREAD) != RW_WRITE_LOCKED)
+		return 0;
+	if (thread->pt_lwpctl->lc_curcpu == LWPCTL_CPU_NONE ||
+	    thread->pt_blocking)
+		return 0;
+	for (i = 128; i != 0; i--)
+		pthread__rwlock_pause();
+	return 1;
+}
+
 static int
 pthread__rwlock_rdlock(pthread_rwlock_t *ptr, const struct timespec *ts)
 {
 	uintptr_t owner, next;
+	pthread_mutex_t *interlock;
 	pthread_t self;
 	int error;
-	
-	self = pthread__self();
 
 #ifdef ERRORCHECK
 	if (ptr->ptr_magic != _PT_RWLOCK_MAGIC)
@@ -148,14 +179,25 @@ pthread__rwlock_rdlock(pthread_rwlock_t *ptr, const struct timespec *ts)
 			continue;
 		}
 
+		self = pthread__self();
 		if ((owner & RW_THREAD) == (uintptr_t)self)
 			return EDEADLK;
+
+		/* If held write locked and no waiters, spin. */
+		if (pthread__rwlock_spin(owner)) {
+			while (pthread__rwlock_spin(owner)) {
+				owner = (uintptr_t)ptr->ptr_owner;
+			}
+			next = owner;
+			continue;
+		}
 
 		/*
 		 * Grab the interlock.  Once we have that, we
 		 * can adjust the waiter bits and sleep queue.
 		 */
-		pthread__spinlock(self, &ptr->ptr_interlock);
+		interlock = pthread__hashlock(ptr);
+		pthread_mutex_lock(interlock);
 
 		/*
 		 * Mark the rwlock as having waiters.  If the set fails,
@@ -163,7 +205,7 @@ pthread__rwlock_rdlock(pthread_rwlock_t *ptr, const struct timespec *ts)
 		 */
 		next = rw_cas(ptr, owner, owner | RW_HAS_WAITERS);
 		if (owner != next) {
-			pthread__spinunlock(self, &ptr->ptr_interlock);
+			pthread_mutex_unlock(interlock);
 			continue;
 		}
 
@@ -171,13 +213,10 @@ pthread__rwlock_rdlock(pthread_rwlock_t *ptr, const struct timespec *ts)
 	    	PTQ_INSERT_HEAD(&ptr->ptr_rblocked, self, pt_sleep);
 	    	ptr->ptr_nreaders++;
 		self->pt_rwlocked = _RW_WANT_READ;
-		self->pt_sleeponq = 1;
 		self->pt_sleepobj = &ptr->ptr_rblocked;
 		self->pt_early = pthread__rwlock_early;
-		pthread__spinunlock(self, &ptr->ptr_interlock);
-
-		error = pthread__park(self, &ptr->ptr_interlock,
-		    &ptr->ptr_rblocked, ts, 0, &ptr->ptr_rblocked);
+		error = pthread__park(self, interlock, &ptr->ptr_rblocked,
+		    ts, 0, &ptr->ptr_rblocked);
 
 		/* Did we get the lock? */
 		if (self->pt_rwlocked == _RW_LOCKED) {
@@ -199,6 +238,9 @@ int
 pthread_rwlock_tryrdlock(pthread_rwlock_t *ptr)
 {
 	uintptr_t owner, next;
+
+	if (__predict_false(__uselibcstub))
+		return __libc_rwlock_tryrdlock_stub(ptr);
 
 #ifdef ERRORCHECK
 	if (ptr->ptr_magic != _PT_RWLOCK_MAGIC)
@@ -228,6 +270,7 @@ static int
 pthread__rwlock_wrlock(pthread_rwlock_t *ptr, const struct timespec *ts)
 {
 	uintptr_t owner, next;
+	pthread_mutex_t *interlock;
 	pthread_t self;
 	int error;
 
@@ -264,11 +307,21 @@ pthread__rwlock_wrlock(pthread_rwlock_t *ptr, const struct timespec *ts)
 		if ((owner & RW_THREAD) == (uintptr_t)self)
 			return EDEADLK;
 
+		/* If held write locked and no waiters, spin. */
+		if (pthread__rwlock_spin(owner)) {
+			while (pthread__rwlock_spin(owner)) {
+				owner = (uintptr_t)ptr->ptr_owner;
+			}
+			next = owner;
+			continue;
+		}
+
 		/*
 		 * Grab the interlock.  Once we have that, we
 		 * can adjust the waiter bits and sleep queue.
 		 */
-		pthread__spinlock(self, &ptr->ptr_interlock);
+		interlock = pthread__hashlock(ptr);
+		pthread_mutex_lock(interlock);
 
 		/*
 		 * Mark the rwlock as having waiters.  If the set fails,
@@ -277,20 +330,17 @@ pthread__rwlock_wrlock(pthread_rwlock_t *ptr, const struct timespec *ts)
 		next = rw_cas(ptr, owner,
 		    owner | RW_HAS_WAITERS | RW_WRITE_WANTED);
 		if (owner != next) {
-			pthread__spinunlock(self, &ptr->ptr_interlock);
+			pthread_mutex_unlock(interlock);
 			continue;
 		}
 
 		/* The waiters bit is set - it's safe to sleep. */
 	    	PTQ_INSERT_TAIL(&ptr->ptr_wblocked, self, pt_sleep);
 		self->pt_rwlocked = _RW_WANT_WRITE;
-		self->pt_sleeponq = 1;
 		self->pt_sleepobj = &ptr->ptr_wblocked;
 		self->pt_early = pthread__rwlock_early;
-		pthread__spinunlock(self, &ptr->ptr_interlock);
-
-		error = pthread__park(self, &ptr->ptr_interlock,
-		    &ptr->ptr_wblocked, ts, 0, &ptr->ptr_wblocked);
+		error = pthread__park(self, interlock, &ptr->ptr_wblocked,
+		    ts, 0, &ptr->ptr_wblocked);
 
 		/* Did we get the lock? */
 		if (self->pt_rwlocked == _RW_LOCKED) {
@@ -313,6 +363,9 @@ pthread_rwlock_trywrlock(pthread_rwlock_t *ptr)
 {
 	uintptr_t owner, next;
 	pthread_t self;
+
+	if (__predict_false(__uselibcstub))
+		return __libc_rwlock_trywrlock_stub(ptr);
 
 #ifdef ERRORCHECK
 	if (ptr->ptr_magic != _PT_RWLOCK_MAGIC)
@@ -338,6 +391,8 @@ pthread_rwlock_trywrlock(pthread_rwlock_t *ptr)
 int
 pthread_rwlock_rdlock(pthread_rwlock_t *ptr)
 {
+	if (__predict_false(__uselibcstub))
+		return __libc_rwlock_rdlock_stub(ptr);
 
 	return pthread__rwlock_rdlock(ptr, NULL);
 }
@@ -346,7 +401,6 @@ int
 pthread_rwlock_timedrdlock(pthread_rwlock_t *ptr,
 			   const struct timespec *abs_timeout)
 {
-
 	if (abs_timeout == NULL)
 		return EINVAL;
 	if ((abs_timeout->tv_nsec >= 1000000000) ||
@@ -360,6 +414,8 @@ pthread_rwlock_timedrdlock(pthread_rwlock_t *ptr,
 int
 pthread_rwlock_wrlock(pthread_rwlock_t *ptr)
 {
+	if (__predict_false(__uselibcstub))
+		return __libc_rwlock_wrlock_stub(ptr);
 
 	return pthread__rwlock_wrlock(ptr, NULL);
 }
@@ -368,7 +424,6 @@ int
 pthread_rwlock_timedwrlock(pthread_rwlock_t *ptr,
 			   const struct timespec *abs_timeout)
 {
-
 	if (abs_timeout == NULL)
 		return EINVAL;
 	if ((abs_timeout->tv_nsec >= 1000000000) ||
@@ -384,7 +439,11 @@ int
 pthread_rwlock_unlock(pthread_rwlock_t *ptr)
 {
 	uintptr_t owner, decr, new, next;
+	pthread_mutex_t *interlock;
 	pthread_t self, thread;
+
+	if (__predict_false(__uselibcstub))
+		return __libc_rwlock_unlock_stub(ptr);
 
 #ifdef ERRORCHECK
 	if ((ptr == NULL) || (ptr->ptr_magic != _PT_RWLOCK_MAGIC))
@@ -400,9 +459,9 @@ pthread_rwlock_unlock(pthread_rwlock_t *ptr)
 	 * bits, we can use a subtract to clear them, which makes
 	 * the read-release and write-release path similar.
 	 */
-	self = pthread__self();
 	owner = (uintptr_t)ptr->ptr_owner;
 	if ((owner & RW_WRITE_LOCKED) != 0) {
+		self = pthread__self();
 		decr = (uintptr_t)self | RW_WRITE_LOCKED;
 		if ((owner & RW_THREAD) != (uintptr_t)self) {
 			return EPERM;
@@ -435,10 +494,11 @@ pthread_rwlock_unlock(pthread_rwlock_t *ptr)
 		 * the waiter bits.  We must check to see if there are
 		 * still waiters before proceeding.
 		 */
-		pthread__spinlock(self, &ptr->ptr_interlock);
+		interlock = pthread__hashlock(ptr);
+		pthread_mutex_lock(interlock);
 		owner = (uintptr_t)ptr->ptr_owner;
 		if ((owner & RW_HAS_WAITERS) == 0) {
-			pthread__spinunlock(self, &ptr->ptr_interlock);
+			pthread_mutex_unlock(interlock);
 			next = owner;
 			continue;
 		}
@@ -447,6 +507,7 @@ pthread_rwlock_unlock(pthread_rwlock_t *ptr)
 		 * Give the lock away.  SUSv3 dictates that we must give
 		 * preference to writers.
 		 */
+		self = pthread__self();
 		if ((thread = PTQ_FIRST(&ptr->ptr_wblocked)) != NULL) {
 			new = (uintptr_t)thread | RW_WRITE_LOCKED;
 
@@ -462,10 +523,9 @@ pthread_rwlock_unlock(pthread_rwlock_t *ptr)
 			(void)atomic_swap_ptr(&ptr->ptr_owner, (void *)new);
 
 			/* Wake the writer. */
-			PTQ_REMOVE(&ptr->ptr_wblocked, thread, pt_sleep);
 			thread->pt_rwlocked = _RW_LOCKED;
-			pthread__unpark(self, &ptr->ptr_interlock,
-			    &ptr->ptr_wblocked, thread);
+			pthread__unpark(&ptr->ptr_wblocked, self,
+			    interlock);
 		} else {
 			new = 0;
 			PTQ_FOREACH(thread, &ptr->ptr_rblocked, pt_sleep) {
@@ -489,9 +549,10 @@ pthread_rwlock_unlock(pthread_rwlock_t *ptr)
 
 			/* Wake up all sleeping readers. */
 			ptr->ptr_nreaders = 0;
-			pthread__unpark_all(self, &ptr->ptr_interlock,
-			    &ptr->ptr_rblocked);
+			pthread__unpark_all(&ptr->ptr_rblocked, self,
+			    interlock);
 		}
+		pthread_mutex_unlock(interlock);
 
 		return 0;
 	}
@@ -556,6 +617,8 @@ _pthread_rwlock_held_np(pthread_rwlock_t *ptr)
 {
 	uintptr_t owner = (uintptr_t)ptr->ptr_owner;
 
+	if ((owner & RW_WRITE_LOCKED) != 0)
+		return (owner & RW_THREAD) == (uintptr_t)pthread__self();
 	return (owner & RW_THREAD) != 0;
 }
 
@@ -575,6 +638,29 @@ _pthread_rwlock_wrheld_np(pthread_rwlock_t *ptr)
 	return (owner & (RW_THREAD | RW_WRITE_LOCKED)) ==
 	    ((uintptr_t)pthread__self() | RW_WRITE_LOCKED);
 }
+
+#ifdef _PTHREAD_PSHARED
+int
+pthread_rwlockattr_getpshared(const pthread_rwlockattr_t * __restrict attr,
+    int * __restrict pshared)
+{
+	*pshared = PTHREAD_PROCESS_PRIVATE;
+	return 0;
+}
+
+int
+pthread_rwlockattr_setpshared(pthread_rwlockattr_t *attr, int pshared)
+{
+
+	switch(pshared) {
+	case PTHREAD_PROCESS_PRIVATE:
+		return 0;
+	case PTHREAD_PROCESS_SHARED:
+		return ENOSYS;
+	}
+	return EINVAL;
+}
+#endif
 
 int
 pthread_rwlockattr_init(pthread_rwlockattr_t *attr)

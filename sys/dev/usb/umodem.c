@@ -1,4 +1,4 @@
-/*	$NetBSD: umodem.c,v 1.56 2007/03/13 13:51:56 drochner Exp $	*/
+/*	$NetBSD: umodem.c,v 1.69 2016/07/07 06:55:42 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.56 2007/03/13 13:51:56 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.69 2016/07/07 06:55:42 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,68 +71,78 @@ __KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.56 2007/03/13 13:51:56 drochner Exp $")
 #include <dev/usb/umodemvar.h>
 
 Static struct ucom_methods umodem_methods = {
-	umodem_get_status,
-	umodem_set,
-	umodem_param,
-	umodem_ioctl,
-	umodem_open,
-	umodem_close,
-	NULL,
-	NULL,
+	.ucom_get_status = umodem_get_status,
+	.ucom_set = umodem_set,
+	.ucom_param = umodem_param,
+	.ucom_ioctl = umodem_ioctl,
+	.ucom_open = umodem_open,
+	.ucom_close = umodem_close,
+	.ucom_read = NULL,
+	.ucom_write = NULL,
 };
 
-USB_DECLARE_DRIVER(umodem);
+int	umodem_match(device_t, cfdata_t, void *);
+void	umodem_attach(device_t, device_t, void *);
+int	umodem_detach(device_t, int);
+int	umodem_activate(device_t, enum devact);
 
-USB_MATCH(umodem)
+extern struct cfdriver umodem_cd;
+
+CFATTACH_DECL_NEW(umodem, sizeof(struct umodem_softc), umodem_match,
+    umodem_attach, umodem_detach, umodem_activate);
+
+int
+umodem_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_IFMATCH_START(umodem, uaa);
+	struct usbif_attach_arg *uiaa = aux;
 	usb_interface_descriptor_t *id;
 	int cm, acm;
 
-	if (uaa->class != UICLASS_CDC ||
-	    uaa->subclass != UISUBCLASS_ABSTRACT_CONTROL_MODEL ||
-	    uaa->proto != UIPROTO_CDC_AT)
-		return (UMATCH_NONE);
+	if (uiaa->uiaa_class != UICLASS_CDC ||
+	    uiaa->uiaa_subclass != UISUBCLASS_ABSTRACT_CONTROL_MODEL ||
+	    !(uiaa->uiaa_proto == UIPROTO_CDC_NOCLASS || uiaa->uiaa_proto == UIPROTO_CDC_AT))
+		return UMATCH_NONE;
 
-	id = usbd_get_interface_descriptor(uaa->iface);
-	if (umodem_get_caps(uaa->device, &cm, &acm, id) == -1)
-		return (UMATCH_NONE);
+	id = usbd_get_interface_descriptor(uiaa->uiaa_iface);
+	if (umodem_get_caps(uiaa->uiaa_device, &cm, &acm, id) == -1)
+		return UMATCH_NONE;
 
-	return (UMATCH_IFACECLASS_IFACESUBCLASS_IFACEPROTO);
+	return UMATCH_IFACECLASS_IFACESUBCLASS_IFACEPROTO;
 }
-
-USB_ATTACH(umodem)
+//
+void
+umodem_attach(device_t parent, device_t self, void *aux)
 {
-	USB_IFATTACH_START(umodem, sc, uaa);
-	struct ucom_attach_args uca;
+	struct umodem_softc *sc = device_private(self);
+	struct usbif_attach_arg *uiaa = aux;
+	struct ucom_attach_args ucaa;
 
-	uca.portno = UCOM_UNK_PORTNO;
-	uca.methods = &umodem_methods;
-	uca.info = NULL;
+	ucaa.ucaa_portno = UCOM_UNK_PORTNO;
+	ucaa.ucaa_methods = &umodem_methods;
+	ucaa.ucaa_info = NULL;
 
-	if (umodem_common_attach(self, sc, uaa, &uca))
-		USB_ATTACH_ERROR_RETURN;
-	USB_ATTACH_SUCCESS_RETURN;
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler");
+
+	if (umodem_common_attach(self, sc, uiaa, &ucaa))
+		return;
+	return;
 }
 
-#ifdef __strong_alias
-__strong_alias(umodem_activate,umodem_common_activate)
-#else
 int
-umodem_activate(device_ptr_t self, enum devact act)
+umodem_activate(device_t self, enum devact act)
 {
-	struct umodem_softc *sc = (struct umodem_softc *)self;
+	struct umodem_softc *sc = device_private(self);
 
 	return umodem_common_activate(sc, act);
 }
-#endif
 
-USB_DETACH(umodem)
+int
+umodem_detach(device_t self, int flags)
 {
-	USB_DETACH_START(umodem, sc);
-#ifdef __FreeBSD__
-	int flags = 0;
-#endif
+	struct umodem_softc *sc = device_private(self);
+
+	pmf_device_deregister(self);
 
 	return umodem_common_detach(sc, flags);
 }

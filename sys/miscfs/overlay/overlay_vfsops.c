@@ -1,4 +1,4 @@
-/*	$NetBSD: overlay_vfsops.c,v 1.48 2008/01/28 14:31:19 dholland Exp $	*/
+/*	$NetBSD: overlay_vfsops.c,v 1.67 2017/04/11 07:51:37 hannken Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 National Aeronautics & Space Administration
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.48 2008/01/28 14:31:19 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.67 2017/04/11 07:51:37 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,11 +84,15 @@ __KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.48 2008/01/28 14:31:19 dholland
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
-#include <sys/malloc.h>
+#include <sys/module.h>
 #include <miscfs/overlay/overlay.h>
 #include <miscfs/genfs/layer_extern.h>
 
+MODULE(MODULE_CLASS_VFS, overlay, "layerfs");
+
 VFS_PROTOS(ov);
+
+static struct sysctllog *overlay_sysctl_log;
 
 #define	NOVERLAYNODECACHE	16
 
@@ -109,6 +113,8 @@ ov_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	printf("ov_mount(mp = %p)\n", mp);
 #endif
 
+	if (args == NULL)
+		return EINVAL;
 	if (*data_len < sizeof *args)
 		return EINVAL;
 
@@ -131,20 +137,18 @@ ov_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 * Find lower node
 	 */
 	lowerrootvp = mp->mnt_vnodecovered;
-	if ((error = vget(lowerrootvp, LK_EXCLUSIVE | LK_RETRY)))
+	vref(lowerrootvp);
+	if ((error = vn_lock(lowerrootvp, LK_EXCLUSIVE | LK_RETRY))) {
+		vrele(lowerrootvp);
 		return (error);
+	}
 
 	/*
 	 * First cut at fixing up upper mount point
 	 */
-	nmp = (struct overlay_mount *) malloc(sizeof(struct overlay_mount),
-				M_UFSMNT, M_WAITOK);	/* XXX */
-	memset(nmp, 0, sizeof(struct overlay_mount));
+	nmp = kmem_zalloc(sizeof(struct overlay_mount), KM_SLEEP);
 
 	mp->mnt_data = nmp;
-	nmp->ovm_vfs = lowerrootvp->v_mount;
-	if (nmp->ovm_vfs->mnt_flag & MNT_LOCAL)
-		mp->mnt_flag |= MNT_LOCAL;
 
 	/*
 	 * Make sure that the mount point is sufficiently initialized
@@ -155,43 +159,44 @@ ov_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	nmp->ovm_size = sizeof (struct overlay_node);
 	nmp->ovm_tag = VT_OVERLAY;
 	nmp->ovm_bypass = layer_bypass;
-	nmp->ovm_alloc = layer_node_alloc;	/* the default alloc is fine */
 	nmp->ovm_vnodeop_p = overlay_vnodeop_p;
-	mutex_init(&nmp->ovm_hashlock, MUTEX_DEFAULT, IPL_NONE);
-	nmp->ovm_node_hashtbl = hashinit(NOVERLAYNODECACHE, HASH_LIST, M_CACHE,
-	    M_WAITOK, &nmp->ovm_node_hash);
 
 	/*
 	 * Fix up overlay node for root vnode
 	 */
+	VOP_UNLOCK(lowerrootvp);
 	error = layer_node_create(mp, lowerrootvp, &vp);
 	/*
 	 * Make sure the fixup worked
 	 */
 	if (error) {
-		vput(lowerrootvp);
-		free(nmp, M_UFSMNT);	/* XXX */
-		return (error);
+		vrele(lowerrootvp);
+		kmem_free(nmp, sizeof(struct overlay_mount));
+		return error;
 	}
-	/*
-	 * Unlock the node
-	 */
-	VOP_UNLOCK(vp, 0);
 
 	/*
 	 * Keep a held reference to the root vnode.
 	 * It is vrele'd in ov_unmount.
 	 */
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	vp->v_vflag |= VV_ROOT;
 	nmp->ovm_rootvp = vp;
+	VOP_UNLOCK(vp);
 
 	error = set_statvfs_info(path, UIO_USERSPACE, args->la.target,
 	    UIO_USERSPACE, mp->mnt_op->vfs_name, mp, l);
+	if (error)
+		return error;
+
+	mp->mnt_lower = lowerrootvp->v_mount;
+	if (mp->mnt_lower->mnt_flag & MNT_LOCAL)
+		mp->mnt_flag |= MNT_LOCAL;
 #ifdef OVERLAYFS_DIAGNOSTIC
 	printf("ov_mount: lower %s, alias at %s\n",
 	    mp->mnt_stat.f_mntfromname, mp->mnt_stat.f_mntonname);
 #endif
-	return error;
+	return 0;
 }
 
 /*
@@ -201,6 +206,7 @@ int
 ov_unmount(struct mount *mp, int mntflags)
 {
 	struct vnode *overlay_rootvp = MOUNTTOOVERLAYMOUNT(mp)->ovm_rootvp;
+	struct overlay_mount *omp;
 	int error;
 	int flags = 0;
 
@@ -226,24 +232,10 @@ ov_unmount(struct mount *mp, int mntflags)
 	/*
 	 * Finally, throw away the overlay_mount structure
 	 */
-	mutex_destroy(&((struct overlay_mount *)mp->mnt_data)->ovm_hashlock);
-	free(mp->mnt_data, M_UFSMNT);	/* XXX */
-	mp->mnt_data = 0;
+	omp = mp->mnt_data;
+	kmem_free(omp, sizeof(struct overlay_mount));
+	mp->mnt_data = NULL;
 	return 0;
-}
-
-SYSCTL_SETUP(sysctl_vfs_overlay_setup, "sysctl vfs.overlay subtree setup")
-{
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "overlay",
-		       SYSCTL_DESCR("Overlay file system"),
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_CREATE, CTL_EOL);
 }
 
 extern const struct vnodeopv_desc overlay_vnodeop_opv_desc;
@@ -254,29 +246,56 @@ const struct vnodeopv_desc * const ov_vnodeopv_descs[] = {
 };
 
 struct vfsops overlay_vfsops = {
-	MOUNT_OVERLAY,
-	sizeof (struct overlay_args),
-	ov_mount,
-	layerfs_start,
-	ov_unmount,
-	layerfs_root,
-	layerfs_quotactl,
-	layerfs_statvfs,
-	layerfs_sync,
-	layerfs_vget,
-	layerfs_fhtovp,
-	layerfs_vptofh,
-	layerfs_init,
-	NULL,
-	layerfs_done,
-	NULL,				/* vfs_mountroot */
-	layerfs_snapshot,
-	vfs_stdextattrctl,
-	(void *)eopnotsupp,		/* vfs_suspendctl */
-	layerfs_renamelock_enter,
-	layerfs_renamelock_exit,
-	ov_vnodeopv_descs,
-	0,
-	{ NULL, NULL },
+	.vfs_name = MOUNT_OVERLAY,
+	.vfs_min_mount_data = sizeof (struct overlay_args),
+	.vfs_mount = ov_mount,
+	.vfs_start = layerfs_start,
+	.vfs_unmount = ov_unmount,
+	.vfs_root = layerfs_root,
+	.vfs_quotactl = layerfs_quotactl,
+	.vfs_statvfs = layerfs_statvfs,
+	.vfs_sync = layerfs_sync,
+	.vfs_loadvnode = layerfs_loadvnode,
+	.vfs_vget = layerfs_vget,
+	.vfs_fhtovp = layerfs_fhtovp,
+	.vfs_vptofh = layerfs_vptofh,
+	.vfs_init = layerfs_init,
+	.vfs_done = layerfs_done,
+	.vfs_snapshot = layerfs_snapshot,
+	.vfs_extattrctl = vfs_stdextattrctl,
+	.vfs_suspendctl = layerfs_suspendctl,
+	.vfs_renamelock_enter = layerfs_renamelock_enter,
+	.vfs_renamelock_exit = layerfs_renamelock_exit,
+	.vfs_fsync = (void *)eopnotsupp,
+	.vfs_opv_descs = ov_vnodeopv_descs
 };
-VFS_ATTACH(overlay_vfsops);
+
+static int
+overlay_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&overlay_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&overlay_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT, CTLTYPE_NODE, "overlay",
+			       SYSCTL_DESCR("Overlay file system"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, CTL_CREATE, CTL_EOL);
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&overlay_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&overlay_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}

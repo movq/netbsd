@@ -1,4 +1,4 @@
-/*	$NetBSD: iomd.c,v 1.15 2006/08/05 18:22:57 bjh21 Exp $	*/
+/*	$NetBSD: iomd.c,v 1.21 2012/10/10 22:00:22 skrll Exp $	*/
 
 /*
  * Copyright (c) 1996-1997 Mark Brinicombe.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iomd.c,v 1.15 2006/08/05 18:22:57 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iomd.c,v 1.21 2012/10/10 22:00:22 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: iomd.c,v 1.15 2006/08/05 18:22:57 bjh21 Exp $");
 #include <sys/conf.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
 #include <arm/iomd/iomdreg.h>
@@ -74,28 +74,26 @@ __KERNEL_RCSID(0, "$NetBSD: iomd.c,v 1.15 2006/08/05 18:22:57 bjh21 Exp $");
  */
 
 struct iomd_softc {
-	struct device 		sc_dev;	/* device node */
+	device_t 		sc_dev;	/* device node */
 	bus_space_tag_t		sc_iot;	/* bus tag */
 	bus_space_handle_t	sc_ioh;	/* bus handle */
 	int			sc_id;	/* IOMD id */
 };
 
-static int iomdmatch(struct device *parent, struct cfdata *cf,
-                             void *aux);
-static void iomdattach(struct device *parent, struct device *self,
-                             void *aux);
+static int iomdmatch(device_t parent, cfdata_t cf, void *aux);
+static void iomdattach(device_t parent, device_t self, void *aux);
 static int iomdprint(void *aux, const char *iomdbus);
 
-CFATTACH_DECL(iomd, sizeof(struct iomd_softc),
+CFATTACH_DECL_NEW(iomd, sizeof(struct iomd_softc),
     iomdmatch, iomdattach, NULL, NULL);
 
 extern struct bus_space iomd_bs_tag;
 
 int       iomd_found;
-u_int32_t iomd_base = IOMD_BASE;
+uint32_t iomd_base = IOMD_BASE;
 
 /* following flag is used in iomd_irq.s ... has to be cleaned up one day ! */
-u_int32_t arm7500_ioc_found = 0;
+uint32_t arm7500_ioc_found = 0;
 
 
 /* Declare prototypes */
@@ -115,13 +113,13 @@ iomdprint(void *aux, const char *name)
 }
 
 /*
- * int iomdmatch(struct device *parent, struct cfdata *cf, void *aux)
+ * int iomdmatch(device_t parent, cfdata_t cf, void *aux)
  *
  * Just return ok for this if it is device 0
  */ 
  
 static int
-iomdmatch(struct device *parent, struct cfdata *cf, void *aux)
+iomdmatch(device_t parent, cfdata_t cf, void *aux)
 {
 
 	if (iomd_found)
@@ -131,16 +129,16 @@ iomdmatch(struct device *parent, struct cfdata *cf, void *aux)
 
 
 /*
- * void iomdattach(struct device *parent, struct device *dev, void *aux)
+ * void iomdattach(device_t parent, device_t dev, void *aux)
  *
  * Map the IOMD and identify it.
  * Then configure the child devices based on the IOMD ID.
  */
   
 static void
-iomdattach(struct device *parent, struct device *self, void *aux)
+iomdattach(device_t parent, device_t self, void *aux)
 {
-	struct iomd_softc *sc = (struct iomd_softc *)self;
+	struct iomd_softc *sc = device_private(self);
 /*	struct mainbus_attach_args *mb = aux;*/
 	int refresh;
 #if 0
@@ -153,90 +151,91 @@ iomdattach(struct device *parent, struct device *self, void *aux)
 	/* There can be only 1 IOMD. */
 	iomd_found = 1;
 
+	sc->sc_dev = self;
 	iot = sc->sc_iot = &iomd_bs_tag;
 
 	/* Map the IOMD */
 	if (bus_space_map(iot, (int) iomd_base, IOMD_SIZE, 0, &ioh))
-		panic("%s: Cannot map registers", self->dv_xname);
+		panic("%s: Cannot map registers", device_xname(self));
 
 	sc->sc_ioh = ioh;
 
 	/* Get the ID */
 	sc->sc_id = bus_space_read_1(iot, ioh, IOMD_ID0)
 		  | (bus_space_read_1(iot, ioh, IOMD_ID1) << 8);
-	printf(": ");
+	aprint_normal(": ");
 
 	/* Identify it and get the DRAM refresh rate */
 	switch (sc->sc_id) {
 	case ARM7500_IOC_ID:
-		printf("ARM7500 IOMD ");
+		aprint_normal("ARM7500 IOMD ");
 		refresh = bus_space_read_1(iot, ioh, IOMD_REFCR) & 0x0f;
 		arm7500_ioc_found = 1;
 		break;
 	case ARM7500FE_IOC_ID:
-		printf("ARM7500FE IOMD ");
+		aprint_normal("ARM7500FE IOMD ");
 		refresh = bus_space_read_1(iot, ioh, IOMD_REFCR) & 0x0f;
 		arm7500_ioc_found = 1;
 		break;
 	case RPC600_IOMD_ID:
-		printf("IOMD20 ");
+		aprint_normal("IOMD20 ");
 		refresh = bus_space_read_1(iot, ioh, IOMD_VREFCR) & 0x09;
 		arm7500_ioc_found = 0;
 		break;
 	default:
-		printf("Unknown IOMD ID=%04x ", sc->sc_id);
+		aprint_normal("Unknown IOMD ID=%04x ", sc->sc_id);
 		refresh = -1;
 		arm7500_ioc_found = 0;		/* just in case */
 		break;
 	}
-	printf("version %d\n", bus_space_read_1(iot, ioh, IOMD_VERSION));
+	aprint_normal("version %d\n", bus_space_read_1(iot, ioh, IOMD_VERSION));
 
 	/* Report the DRAM refresh rate */
-	printf("%s: ", self->dv_xname);
-	printf("DRAM refresh=");
+	aprint_normal("%s: ", device_xname(self));
+	aprint_normal("DRAM refresh=");
 	switch (refresh) {
 	case 0x0:
-		printf("off");
+		aprint_normal("off");
 		break;
 	case 0x1:
-		printf("16us");
+		aprint_normal("16us");
 		break;
 	case 0x2:
-		printf("32us");
+		aprint_normal("32us");
 		break;
 	case 0x4:
-		printf("64us");
+		aprint_normal("64us");
 		break;
 	case 0x8:
-		printf("128us");
+		aprint_normal("128us");
 		break;
 	default:
-		printf("unknown [%02x]", refresh);
+		aprint_normal("unknown [%02x]", refresh);
 		break;
 	}
 
-	printf("\n");
+	aprint_normal("\n");
 #if 0
 	/*
 	 * No point in reporting this as it may get changed when devices are
 	 * attached
 	 */
 	tmp = bus_space_read_1(iot, ioh, IOMD_IOTCR);
-	printf("%s: I/O timings: combo %c, NPCCS1/2 %c", self->dv_xname,
+	aprint_normal("%s: I/O timings: combo %c, NPCCS1/2 %c", device_xname(self),
 	    'A' + ((tmp >>2) & 3), 'A' + (tmp & 3));
 	tmp = bus_space_read_1(iot, ioh, IOMD_ECTCR);
-	printf(", EASI ");
+	aprint_normal(", EASI ");
 	for (i = 0; i < 8; i++, tmp >>= 1)
-		printf("%c", 'A' + ((tmp & 1) << 2));
+		aprint_normal("%c", 'A' + ((tmp & 1) << 2));
 	tmp = bus_space_read_1(iot, ioh, IOMD_DMATCR);
-	printf(", DMA ");
+	aprint_normal(", DMA ");
 	for (i = 0; i < 4; i++, tmp >>= 2)
-		printf("%c", 'A' + (tmp & 3));	
-	printf("\n");
+		aprint_normal("%c", 'A' + (tmp & 3));	
+	aprint_normal("\n");
 #endif
 
 	/* Set up the external DMA channels */
-	/* XXX - this should be machine dependant not IOMD dependant */
+	/* XXX - this should be machine dependent not IOMD dependent */
 	switch (sc->sc_id) {
 	case ARM7500_IOC_ID:
 	case ARM7500FE_IOC_ID:
@@ -258,7 +257,7 @@ iomdattach(struct device *parent, struct device *self, void *aux)
 
 	/* Attach kbd device when configured */
 	if (bus_space_subregion(iot, ioh, IOMD_KBDDAT, 8, &ia.ia_kbd.ka_ioh))
-		panic("%s: Cannot map kbd registers", self->dv_xname);
+		panic("%s: Cannot map kbd registers", device_xname(self));
 	ia.ia_kbd.ka_name = "kbd";
 	ia.ia_kbd.ka_iot = iot;
 	ia.ia_kbd.ka_rxirq = IRQ_KBDRX;
@@ -268,7 +267,7 @@ iomdattach(struct device *parent, struct device *self, void *aux)
 	/* Attach iic device */
 
 	if (bus_space_subregion(iot, ioh, IOMD_IOCR, 4, &ia.ia_iic.ia_ioh))
-		panic("%s: Cannot map iic registers", self->dv_xname);
+		panic("%s: Cannot map iic registers", device_xname(self));
 	ia.ia_iic.ia_name = "iic";
 	ia.ia_iic.ia_iot = iot;
 	ia.ia_iic.ia_irq = -1;
@@ -281,7 +280,7 @@ iomdattach(struct device *parent, struct device *self, void *aux)
 
 		if (bus_space_subregion(iot, ioh, IOMD_MSDATA, 8,
 			&ia.ia_opms.pa_ioh))
-			panic("%s: Cannot map opms registers", self->dv_xname);
+			panic("%s: Cannot map opms registers", device_xname(self));
 		ia.ia_opms.pa_name = "opms";
 		ia.ia_opms.pa_iot = iot;
 		ia.ia_opms.pa_irq = IRQ_MSDRX;
@@ -292,10 +291,10 @@ iomdattach(struct device *parent, struct device *self, void *aux)
 
 		if (bus_space_subregion(iot, ioh, IOMD_MOUSEX, 8,
 			&ia.ia_qms.qa_ioh))
-			panic("%s: Cannot map qms registers", self->dv_xname);
+			panic("%s: Cannot map qms registers", device_xname(self));
 
 		if (bus_space_map(iot, IO_MOUSE_BUTTONS, 4, 0, &ia.ia_qms.qa_ioh_but))
-			panic("%s: Cannot map registers", self->dv_xname);
+			panic("%s: Cannot map registers", device_xname(self));
 		ia.ia_qms.qa_name = "qms";
 		ia.ia_qms.qa_iot = iot;
 		ia.ia_qms.qa_irq = IRQ_VSYNC;

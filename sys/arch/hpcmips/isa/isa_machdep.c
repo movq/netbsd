@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.33 2008/01/04 22:13:56 ad Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.39 2012/10/27 17:17:54 chs Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.33 2008/01/04 22:13:56 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.39 2012/10/27 17:17:54 chs Exp $");
 
 #include "opt_vr41xx.h"
 
@@ -92,17 +85,16 @@ int vrisa_debug = VRISADEBUG_CONF;
 #define INTR_NIRQS	16
 
 int	vrisabprint(void *, const char *);
-int	vrisabmatch(struct device *, struct cfdata *, void *);
-void	vrisabattach(struct device *, struct device *, void *);
+int	vrisabmatch(device_t, cfdata_t, void *);
+void	vrisabattach(device_t, device_t, void *);
 
 struct vrisab_softc {
-	struct device sc_dev;
 	hpcio_chip_t sc_hc;
 	int sc_intr_map[INTR_NIRQS]; /* ISA <-> GIU inerrupt line mapping */
 	struct hpcmips_isa_chipset sc_isa_ic;
 };
 
-CFATTACH_DECL(vrisab, sizeof(struct vrisab_softc),
+CFATTACH_DECL_NEW(vrisab, sizeof(struct vrisab_softc),
     vrisabmatch, vrisabattach, NULL, NULL);
 
 #ifdef DEBUG_FIND_PCIC
@@ -120,7 +112,7 @@ static void __find_comport(void);
 #endif
 
 int
-vrisabmatch(struct device *parent, struct cfdata *match, void *aux)
+vrisabmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct hpcio_attach_args *haa = aux;
 	platid_mask_t mask;
@@ -140,10 +132,10 @@ vrisabmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-vrisabattach(struct device *parent, struct device *self, void *aux)
+vrisabattach(device_t parent, device_t self, void *aux)
 {
 	struct hpcio_attach_args *haa = aux;
-	struct vrisab_softc *sc = (void*)self;
+	struct vrisab_softc *sc = device_private(self);
 	struct isabus_attach_args iba;
 	struct bus_space_tag_hpcmips *iot, *memt;
 	bus_addr_t offset;
@@ -157,7 +149,7 @@ vrisabattach(struct device *parent, struct device *self, void *aux)
 
 	/* Allocate ISA memory space */
 	memt = hpcmips_alloc_bus_space_tag();
-	offset = device_cfdata(&sc->sc_dev)->cf_loc[VRISABIFCF_ISAMEMOFFSET];
+	offset = device_cfdata(self)->cf_loc[VRISABIFCF_ISAMEMOFFSET];
 	hpcmips_init_bus_space(memt,
 	    (struct bus_space_tag_hpcmips *)haa->haa_iot, "ISA mem",
 	    VR_ISA_MEM_BASE + offset, VR_ISA_MEM_SIZE - offset);
@@ -165,7 +157,7 @@ vrisabattach(struct device *parent, struct device *self, void *aux)
 
 	/* Allocate ISA port space */
 	iot = hpcmips_alloc_bus_space_tag();
-	offset = device_cfdata(&sc->sc_dev)->cf_loc[VRISABIFCF_ISAPORTOFFSET];
+	offset = device_cfdata(self)->cf_loc[VRISABIFCF_ISAPORTOFFSET];
 	hpcmips_init_bus_space(iot,
 	    (struct bus_space_tag_hpcmips *)haa->haa_iot, "ISA port",
 	    VR_ISA_PORT_BASE + offset, VR_ISA_PORT_SIZE - offset);
@@ -200,10 +192,15 @@ vrisabprint(void *aux, const char *pnp)
 }
 
 void
-isa_attach_hook(struct device *parent, struct device *self,
+isa_attach_hook(device_t parent, device_t self,
     struct isabus_attach_args *iba)
 {
 
+}
+
+void
+isa_detach_hook(isa_chipset_tag_t ic, device_t self)
+{
 }
 
 const struct evcnt *
@@ -266,9 +263,7 @@ isa_intr_establish(isa_chipset_tag_t ic, int intr, int type, int level,
 }
 
 void
-isa_intr_disestablish(ic, arg)
-	isa_chipset_tag_t ic;
-	void *arg;
+isa_intr_disestablish(isa_chipset_tag_t ic, void *arg)
 {
 	struct vrisab_softc *sc = ic->ic_sc;
 	/* Call Vr routine */
@@ -353,7 +348,7 @@ probe_com(u_int32_t port_addr)
 }
 
 static void
-__find_comport()
+__find_comport(void)
 {
 	int found;
 	u_int32_t port, step;

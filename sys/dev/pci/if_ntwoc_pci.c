@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ntwoc_pci.c,v 1.20 2007/10/19 12:00:47 ad Exp $	*/
+/*	$NetBSD: if_ntwoc_pci.c,v 1.30 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1998 Vixie Enterprises
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ntwoc_pci.c,v 1.20 2007/10/19 12:00:47 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ntwoc_pci.c,v 1.30 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,7 +88,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ntwoc_pci.c,v 1.20 2007/10/19 12:00:47 ad Exp $")
 #endif
 
 #if __NetBSD_Version__ >= 104160000
-static	void ntwoc_pci_config_interrupts(struct device *);
+static	void ntwoc_pci_config_interrupts(device_t);
 #else
 #define	SCA_BASECLOCK	16000000
 #endif
@@ -96,12 +96,12 @@ static	void ntwoc_pci_config_interrupts(struct device *);
 /*
  * Card specific config register location
  */
-#define PCI_CBMA_ASIC	0x10	/* Configuration Base Memory Address */
-#define PCI_CBMA_SCA	0x18
+#define PCI_CBMA_ASIC PCI_BAR(0)	/* Configuration Base Memory Address */
+#define PCI_CBMA_SCA PCI_BAR(2)
 
 struct ntwoc_pci_softc {
 	/* Generic device stuff */
-	struct device sc_dev;		/* Common to all devices */
+	device_t sc_dev;		/* Common to all devices */
 
 	/* PCI chipset glue */
 	pci_intr_handle_t *sc_ih;	/* Interrupt handler */
@@ -113,8 +113,8 @@ struct ntwoc_pci_softc {
 	struct sca_softc sc_sca;	/* the SCA itself */
 };
 
-static  int ntwoc_pci_match(struct device *, struct cfdata *, void *);
-static  void ntwoc_pci_attach(struct device *, struct device *, void *);
+static  int ntwoc_pci_match(device_t, cfdata_t, void *);
+static  void ntwoc_pci_attach(device_t, device_t, void *);
 
 static	int ntwoc_pci_alloc_dma(struct sca_softc *);
 static	void ntwoc_pci_clock_callback(void *, int, int);
@@ -125,7 +125,7 @@ static	int ntwoc_pci_intr(void *);
 static	void ntwoc_pci_setup_dma(struct sca_softc *);
 static	void ntwoc_pci_shutdown(void *sc);
 
-CFATTACH_DECL(ntwoc_pci, sizeof(struct ntwoc_pci_softc),
+CFATTACH_DECL_NEW(ntwoc_pci, sizeof(struct ntwoc_pci_softc),
     ntwoc_pci_match, ntwoc_pci_attach, NULL, NULL);
 
 /*
@@ -175,8 +175,7 @@ ntwoc_pci_sca_read_2(struct sca_softc *sc, u_int reg)
 
 
 static int
-ntwoc_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ntwoc_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -188,9 +187,9 @@ ntwoc_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
+ntwoc_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct ntwoc_pci_softc *sc = (void *)self;
+	struct ntwoc_pci_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct sca_softc *sca = &sc->sc_sca;
 	pci_intr_handle_t ih;
@@ -201,17 +200,18 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	u_int16_t db0, db1;
 	u_int32_t flags;
 	u_int numports;
+	char intrbuf[PCI_INTRSTR_LEN];
 
-	printf(": N2 Serial Interface\n");
-	flags = device_cfdata(&sc->sc_dev)->cf_flags;
+	aprint_naive("\n");
+	aprint_normal(": N2 Serial Interface\n");
+	flags = device_cfdata(self)->cf_flags;
 
 	/*
 	 * Map in the ASIC configuration space
 	 */
 	if (pci_mapreg_map(pa, PCI_CBMA_ASIC, PCI_MAPREG_TYPE_MEM, 0,
 			   &sc->sc_asic_iot, &sc->sc_asic_ioh, NULL, NULL)) {
-		printf("%s: Can't map register space (ASIC)\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "Can't map register space (ASIC)\n");
 		return;
 	}
 	/*
@@ -219,8 +219,7 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	if (pci_mapreg_map(pa, PCI_CBMA_SCA, PCI_MAPREG_TYPE_MEM, 0,
 			   &sca->sc_iot, &sca->sc_ioh, NULL, NULL)) {
-		printf("%s: Can't map register space (SCA)\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "Can't map register space (SCA)\n");
 		return;
 	}
 
@@ -234,21 +233,20 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish the interrupt
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pa->pa_pc, ih);
+	intrstr = pci_intr_string(pa->pa_pc, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_NET, ntwoc_pci_intr,
 	    sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Perform total black magic.  This is not only extremely
@@ -294,7 +292,7 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	frontend_cr = bus_space_read_2(sca->sc_iot, sca->sc_ioh, NTWOC_FECR);
 	NTWO_DPRINTF(("%s: frontend_cr = 0x%04x\n",
-		      sc->sc_dev.dv_xname, frontend_cr));
+		      device_xname(self), frontend_cr));
 
 	db0 = (frontend_cr & NTWOC_FECR_ID0) >> NTWOC_FECR_ID0_SHIFT;
 	db1 = (frontend_cr & NTWOC_FECR_ID1) >> NTWOC_FECR_ID1_SHIFT;
@@ -303,7 +301,7 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * Port 1 HAS to be present.  If it isn't, don't attach anything.
 	 */
 	if (db0 == NTWOC_FE_ID_NONE) {
-		printf("%s: no ports available\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "no ports available\n");
 		return;
 	}
 
@@ -315,12 +313,12 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (db1 != NTWOC_FE_ID_NONE)
 		numports++;
 
-	printf("%s: %d port%s\n", sc->sc_dev.dv_xname, numports,
+	aprint_normal_dev(self, "%d port%s\n", numports,
 	       (numports > 1 ? "s" : ""));
-	printf("%s: port 0 interface card: %s\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(self, "port 0 interface card: %s\n",
 	       ntwoc_pci_db_names[db0]);
 	if (numports > 1)
-		printf("%s: port 1 interface card: %s\n", sc->sc_dev.dv_xname,
+		aprint_normal_dev(self, "port 1 interface card: %s\n",
 		       ntwoc_pci_db_names[db1]);
 
 	/*
@@ -337,7 +335,7 @@ ntwoc_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * on the number of ports we passed in, the size of each
 	 * buffer, and the number of buffers per port.
 	 */
-	sca->sc_parent = &sc->sc_dev;
+	sca->sc_parent = self;
 	sca->sc_read_1 = ntwoc_pci_sca_read_1;
 	sca->sc_read_2 = ntwoc_pci_sca_read_2;
 	sca->sc_write_1 = ntwoc_pci_sca_write_1;
@@ -726,12 +724,11 @@ ntwoc_pci_setup_dma(struct sca_softc *sc)
 
 #if __NetBSD_Version__ >= 104160000
 static void
-ntwoc_pci_config_interrupts(self)
-	struct device *self;
+ntwoc_pci_config_interrupts(device_t self)
 {
 	struct ntwoc_pci_softc *sc;
 
-	sc = (void *)self;
+	sc = device_private(self);
 	sca_get_base_clock(&sc->sc_sca);
 	sca_print_clock_info(&sc->sc_sca);
 }

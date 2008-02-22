@@ -1,4 +1,4 @@
-/*	$NetBSD: apbus_subr.c,v 1.7 2005/12/11 12:18:24 christos Exp $	*/
+/*	$NetBSD: apbus_subr.c,v 1.9 2014/03/24 20:05:20 christos Exp $	*/
 
 /*-
  * Copyright (C) 1999 SHIMIZU Ryo.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apbus_subr.c,v 1.7 2005/12/11 12:18:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apbus_subr.c,v 1.9 2014/03/24 20:05:20 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +62,7 @@ apbus_lookupdev(char *devname)
 
 	/* search apbus_dev named 'devname' */
 	while (dp) {
-		if (strcmp(devname,dp->apbd_name) == 0)
+		if (strcmp(devname, dp->apbd_name) == 0)
 			return dp;
 
 		dp = dp->apbd_link;
@@ -74,14 +74,10 @@ apbus_lookupdev(char *devname)
 static void
 apctl_dump(struct apbus_ctl *apctl)
 {
-	unsigned int *p;
-
 	if (!apctl)
 		return;
 
 	printf("	apbus_ctl dump (%p)\n", apctl);
-
-	p = (void *)apctl;
 
 	printf("	Num:		%d\n", apctl->apbc_ctlno);
 	printf("	HWaddr:		0x%08x\n", apctl->apbc_hwbase);

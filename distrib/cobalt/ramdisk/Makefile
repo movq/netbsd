@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.1 2008/02/02 14:06:48 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.12 2017/07/18 23:12:24 christos Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 IMAGE=		ramdisk.fs
-IMAGESIZE=	2560k
-MAKEFS_FLAGS=	-f 15
+IMAGESIZE=	3600k
+MAKEFS_FLAGS+=	-f 15
 
 WARNS=		1
 DBG=		-Os -mmemcpy
@@ -19,9 +19,8 @@ MAKEDEVTARGETS=	minimal
 IMAGEDEPENDS=	${CRUNCHBIN} \
 		dot.profile \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
-		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \
-		${NETBSDSRCDIR}/distrib/common/services \
-		${NETBSDSRCDIR}/distrib/common/termcap.mini
+		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
+		${DISTRIBDIR}/common/services
 SMALLPROG_INET6=1
 
 # Use stubs to eliminate some large stuff from libc
@@ -30,6 +29,7 @@ HACKSRC=	${DISTRIBDIR}/utils/libhack
 ${CRUNCHBIN}:	libhack.o
 
 .include "${DISTRIBDIR}/common/Makefile.crunch"
+.include "${DISTRIBDIR}/common/Makefile.dhcpcd"
 .include "${DISTRIBDIR}/common/Makefile.makedev"
 .include "${DISTRIBDIR}/common/Makefile.image"
 

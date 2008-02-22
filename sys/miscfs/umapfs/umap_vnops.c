@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_vnops.c,v 1.43 2006/12/09 16:11:52 chs Exp $	*/
+/*	$NetBSD: umap_vnops.c,v 1.60 2017/06/04 08:02:26 hannken Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umap_vnops.c,v 1.43 2006/12/09 16:11:52 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umap_vnops.c,v 1.60 2017/06/04 08:02:26 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,13 +47,21 @@ __KERNEL_RCSID(0, "$NetBSD: umap_vnops.c,v 1.43 2006/12/09 16:11:52 chs Exp $");
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/namei.h>
-#include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/kauth.h>
 
 #include <miscfs/umapfs/umap.h>
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/layer_extern.h>
+
+/*
+ * Note: If the LAYERFS_MBYPASSDEBUG flag is set, it is possible
+ * that the debug printing will bomb out, because kauth routines
+ * do not handle NOCRED or FSCRED like other credentials and end
+ * up dereferencing an inappropriate pointer.
+ *
+ * That should be fixed in kauth rather than here.
+ */
 
 int	umap_lookup(void *);
 int	umap_getattr(void *);
@@ -77,19 +85,17 @@ const struct vnodeopv_entry_desc umap_vnodeop_entries[] = {
 	{ &vop_print_desc,	umap_print },
 	{ &vop_rename_desc,	umap_rename },
 
-	{ &vop_lock_desc,	layer_lock },
-	{ &vop_unlock_desc,	layer_unlock },
-	{ &vop_islocked_desc,	layer_islocked },
 	{ &vop_fsync_desc,	layer_fsync },
 	{ &vop_inactive_desc,	layer_inactive },
 	{ &vop_reclaim_desc,	layer_reclaim },
 	{ &vop_open_desc,	layer_open },
+	{ &vop_close_desc,	layer_close },
 	{ &vop_setattr_desc,	layer_setattr },
 	{ &vop_access_desc,	layer_access },
 	{ &vop_remove_desc,	layer_remove },
+	{ &vop_revoke_desc,	layer_revoke },
 	{ &vop_rmdir_desc,	layer_rmdir },
 
-	{ &vop_bwrite_desc,	layer_bwrite },
 	{ &vop_bmap_desc,	layer_bmap },
 	{ &vop_getpages_desc,	layer_getpages },
 	{ &vop_putpages_desc,	layer_putpages },
@@ -104,8 +110,7 @@ const struct vnodeopv_desc umapfs_vnodeop_opv_desc =
  * See layer_vnops.c:layer_bypass for more details.
  */
 int
-umap_bypass(v)
-	void *v;
+umap_bypass(void *v)
 {
 	struct vop_generic_args /* {
 		struct vnodeop_desc *a_desc;
@@ -116,7 +121,7 @@ umap_bypass(v)
 	kauth_cred_t savecredp = 0, savecompcredp = 0;
 	kauth_cred_t compcredp = 0;
 	struct vnode **this_vp_p;
-	int error, error1;
+	int error;
 	struct vnode *old_vps[VDESC_MAX_VPS], *vp0;
 	struct vnode **vps_p[VDESC_MAX_VPS];
 	struct vnode ***vppp;
@@ -124,7 +129,7 @@ umap_bypass(v)
 	int reles, i, flags;
 	struct componentname **compnamepp = 0;
 
-#ifdef SAFETY
+#ifdef DIAGNOSTIC
 	/*
 	 * We require at least one vp.
 	 */
@@ -171,7 +176,7 @@ umap_bypass(v)
 			 * that.  (This should go away in the future.)
 			 */
 			if (reles & VDESC_VP0_WILLRELE)
-				VREF(*this_vp_p);
+				vref(*this_vp_p);
 		}
 
 	}
@@ -188,7 +193,7 @@ umap_bypass(v)
 		/* Save old values */
 
 		savecredp = *credpp;
-		if (savecredp != NOCRED)
+		if (savecredp != NOCRED && savecredp != FSCRED)
 			*credpp = kauth_cred_dup(savecredp);
 		credp = *credpp;
 
@@ -217,7 +222,7 @@ umap_bypass(v)
 		    descp->vdesc_componentname_offset, ap);
 
 		savecompcredp = (*compnamepp)->cn_cred;
-		if (savecompcredp != NOCRED)
+		if (savecompcredp != NOCRED && savecompcredp != FSCRED)
 			(*compnamepp)->cn_cred = kauth_cred_dup(savecompcredp);
 		compcredp = (*compnamepp)->cn_cred;
 
@@ -253,8 +258,6 @@ umap_bypass(v)
 			break;   /* bail out at end of list */
 		if (old_vps[i]) {
 			*(vps_p[i]) = old_vps[i];
-			if (reles & VDESC_VP0_WILLUNLOCK)
-				LAYERFS_UPPERUNLOCK(*(vps_p[i]), 0, error1);
 			if (reles & VDESC_VP0_WILLRELE)
 				vrele(*(vps_p[i]));
 		}
@@ -265,35 +268,22 @@ umap_bypass(v)
 	 * (Assumes that the lower layer always returns
 	 * a VREF'ed vpp unless it gets an error.)
 	 */
-	if (descp->vdesc_vpp_offset != VDESC_NO_OFFSET &&
-	    !(descp->vdesc_flags & VDESC_NOMAP_VPP) &&
-	    !error) {
-		/*
-		 * XXX - even though some ops have vpp returned vp's,
-		 * several ops actually vrele this before returning.
-		 * We must avoid these ops.
-		 * (This should go away when these ops are regularized.)
-		 */
-		if (descp->vdesc_flags & VDESC_VPP_WILLRELE)
-			goto out;
+	if (descp->vdesc_vpp_offset != VDESC_NO_OFFSET && !error) {
 		vppp = VOPARG_OFFSETTO(struct vnode***,
 				 descp->vdesc_vpp_offset, ap);
 		/*
-		 * Only vop_lookup, vop_create, vop_makedir, vop_bmap,
-		 * vop_mknod, and vop_symlink return vpp's. vop_bmap
-		 * doesn't call bypass as the lower vpp is fine (we're just
-		 * going to do i/o on it). vop_lookup doesn't call bypass
+		 * Only vop_lookup, vop_create, vop_makedir, vop_mknod
+		 * and vop_symlink return vpp's. vop_lookup doesn't call bypass
 		 * as a lookup on "." would generate a locking error.
-		 * So all the calls which get us here have a locked vpp. :-)
+		 * So all the calls which get us here have a unlocked vpp. :-)
 		 */
 		error = layer_node_create(old_vps[0]->v_mount, **vppp, *vppp);
 		if (error) {
-			vput(**vppp);
+			vrele(**vppp);
 			**vppp = NULL;
 		}
 	}
 
- out:
 	/*
 	 * Free duplicate cred structure and restore old one.
 	 */
@@ -303,7 +293,7 @@ umap_bypass(v)
 			printf("umap_bypass: returning-user was %d\n",
 			    kauth_cred_geteuid(credp));
 
-		if (savecredp != NOCRED && credpp) {
+		if (savecredp != NOCRED && savecredp != FSCRED && credpp) {
 			kauth_cred_free(credp);
 			*credpp = savecredp;
 			if ((flags & LAYERFS_MBYPASSDEBUG) && credpp &&
@@ -319,7 +309,7 @@ umap_bypass(v)
 			printf("umap_bypass: returning-component-user was %d\n",
 			    kauth_cred_geteuid(compcredp));
 
-		if (savecompcredp != NOCRED) {
+		if (savecompcredp != NOCRED && savecompcredp != FSCRED) {
 			kauth_cred_free(compcredp);
 			(*compnamepp)->cn_cred = savecompcredp;
 			if ((flags & LAYERFS_MBYPASSDEBUG) && savecompcredp &&
@@ -337,10 +327,9 @@ umap_bypass(v)
  * See layer_vnops.c:layer_bypass for more details.
  */
 int
-umap_lookup(v)
-	void *v;
+umap_lookup(void *v)
 {
-	struct vop_lookup_args /* {
+	struct vop_lookup_v2_args /* {
 		struct vnodeop_desc *a_desc;
 		struct vnode * a_dvp;
 		struct vnode ** a_vpp;
@@ -405,12 +394,12 @@ umap_lookup(v)
 	/* Do locking fixup as appropriate. See layer_lookup() for info */
 	if (ldvp == vp) {
 		*ap->a_vpp = dvp;
-		VREF(dvp);
+		vref(dvp);
 		vrele(vp);
 	} else if (vp != NULL) {
 		error = layer_node_create(mp, vp, ap->a_vpp);
 		if (error) {
-			vput(vp);
+			vrele(vp);
 		}
 	}
 
@@ -422,7 +411,7 @@ umap_lookup(v)
 		printf("umap_lookup: returning-component-user was %d\n",
 			    kauth_cred_geteuid(compcredp));
 
-	if (savecompcredp != NOCRED) {
+	if (savecompcredp != NOCRED && savecompcredp != FSCRED) {
 		if (compcredp)
 			kauth_cred_free(compcredp);
 		cnp->cn_cred = savecompcredp;
@@ -439,8 +428,7 @@ umap_lookup(v)
  *  We handle getattr to change the fsid.
  */
 int
-umap_getattr(v)
-	void *v;
+umap_getattr(void *v)
 {
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
@@ -514,8 +502,7 @@ umap_getattr(v)
 }
 
 int
-umap_print(v)
-	void *v;
+umap_print(void *v)
 {
 	struct vop_print_args /* {
 		struct vnode *a_vp;
@@ -527,8 +514,7 @@ umap_print(v)
 }
 
 int
-umap_rename(v)
-	void *v;
+umap_rename(void *v)
 {
 	struct vop_rename_args  /* {
 		struct vnode *a_fdvp;

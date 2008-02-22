@@ -1,4 +1,4 @@
-/*	$NetBSD: memecc.c,v 1.9 2005/11/14 03:30:49 uwe Exp $	*/
+/*	$NetBSD: memecc.c,v 1.17 2018/01/10 01:49:05 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,18 +34,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: memecc.c,v 1.9 2005/11/14 03:30:49 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: memecc.c,v 1.17 2018/01/10 01:49:05 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <sparc/sparc/memeccreg.h>
 
 struct memecc_softc {
-	struct device		sc_dev;		/* base device */
 	bus_space_tag_t		sc_bt;
 	bus_space_handle_t	sc_bh;
 };
@@ -60,17 +52,17 @@ struct memecc_softc {
 struct memecc_softc *memecc_sc;
 
 /* autoconfiguration driver */
-static void	memecc_attach(struct device *, struct device *, void *);
-static int	memecc_match(struct device *, struct cfdata *, void *);
+static void	memecc_attach(device_t, device_t, void *);
+static int	memecc_match(device_t, cfdata_t, void *);
 static int	memecc_error(void);
 
-int	(*memerr_handler)(void);
+extern int (*memerr_handler)(void);
 
-CFATTACH_DECL(eccmemctl, sizeof(struct memecc_softc),
+CFATTACH_DECL_NEW(eccmemctl, sizeof(struct memecc_softc),
     memecc_match, memecc_attach, NULL, NULL);
 
 int
-memecc_match(struct device *parent, struct cfdata *cf, void *aux)
+memecc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -81,15 +73,18 @@ memecc_match(struct device *parent, struct cfdata *cf, void *aux)
  * Attach the device.
  */
 void
-memecc_attach(struct device *parent, struct device *self, void *aux)
+memecc_attach(device_t parent, device_t self, void *aux)
 {
-	struct memecc_softc *sc = (struct memecc_softc *)self;
+	struct memecc_softc *sc = device_private(self);
 	struct mainbus_attach_args *ma = aux;
-	int node;
 	uint32_t reg;
 
+	if (memerr_handler) {
+		printf("%s: already attached\n", __func__);
+		return;
+	}
+
 	sc->sc_bt = ma->ma_bustag;
-	node = ma->ma_node;
 
 	/*
 	 * Map registers
@@ -119,7 +114,7 @@ memecc_attach(struct device *parent, struct device *self, void *aux)
 }
 
 /*
- * Called if the MEMORY ERROR bit is set after a level 25 interrupt.
+ * Called if the MEMORY ERROR bit is set after a level 15 interrupt.
  */
 int
 memecc_error(void)
@@ -131,10 +126,10 @@ memecc_error(void)
 	efsr = bus_space_read_4(memecc_sc->sc_bt, bh, ECC_FSR_REG);
 	efar0 = bus_space_read_4(memecc_sc->sc_bt, bh, ECC_AFR0_REG);
 	efar1 = bus_space_read_4(memecc_sc->sc_bt, bh, ECC_AFR1_REG);
-	printf("memory error:\n\tEFSR: %s\n",
-		bitmask_snprintf(efsr, ECC_FSR_BITS, bits, sizeof(bits)));
-	printf("\tMBus transaction: %s\n",
-		bitmask_snprintf(efar0, ECC_AFR_BITS, bits, sizeof(bits)));
+	snprintb(bits, sizeof(bits), ECC_FSR_BITS, efsr);
+	printf("memory error:\n\tEFSR: %s\n", bits);
+	snprintb(bits, sizeof(bits), ECC_AFR_BITS, efar0);
+	printf("\tMBus transaction: %s\n", bits);
 	printf("\taddress: 0x%x%x\n", efar0 & ECC_AFR_PAH, efar1);
 	printf("\tmodule location: %s\n",
 		prom_pa_location(efar1, efar0 & ECC_AFR_PAH));

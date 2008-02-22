@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.27 2007/12/03 15:33:26 ad Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.31 2012/10/27 17:17:43 chs Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -26,16 +26,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.27 2007/12/03 15:33:26 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.31 2012/10/27 17:17:43 chs Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/cpu.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-
-#include <machine/cpu.h>
-#include <machine/intr.h>
+#include <sys/intr.h>
+#include <sys/systm.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/ata/atavar.h>
@@ -51,7 +50,7 @@ cpu_configure(void)
 
 	(void)splhigh();
 
-	icu_init();
+	intr_init();
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
@@ -69,13 +68,13 @@ cpu_rootconf(void)
 {
 
 	printf("boot device: %s\n",
-	    booted_device ? booted_device->dv_xname : "<unknown>");
+	    booted_device ? device_xname(booted_device) : "<unknown>");
 
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
 
 	if (booted_device != NULL)

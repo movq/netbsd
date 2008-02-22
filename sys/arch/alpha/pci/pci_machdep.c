@@ -1,21 +1,21 @@
-/* $NetBSD: pci_machdep.c,v 1.15 2001/07/16 00:55:17 elric Exp $ */
+/* $NetBSD: pci_machdep.c,v 1.23 2014/10/17 18:31:07 uebayasi Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.15 2001/07/16 00:55:17 elric Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.23 2014/10/17 18:31:07 uebayasi Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -41,8 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.15 2001/07/16 00:55:17 elric Exp $
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/pci/pcireg.h>
@@ -61,18 +59,20 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.15 2001/07/16 00:55:17 elric Exp $
 #include <dev/pci/tgavar.h>
 #endif
 
+#include <machine/rpb.h>
+
 void
-pci_display_console(iot, memt, pc, bus, device, function)
-	bus_space_tag_t iot, memt;
-	pci_chipset_tag_t pc;
-	int bus, device, function;
+pci_display_console(bus_space_tag_t iot, bus_space_tag_t memt, pci_chipset_tag_t pc, int bus, int device, int function)
 {
+#if NVGA_PCI || NTGA
 	pcitag_t tag;
 	pcireg_t id, class;
 	int match, nmatch;
-	int (*fn) __P((bus_space_tag_t, bus_space_tag_t, pci_chipset_tag_t,
-	    int, int, int));
+#endif
+	int (*fn)(bus_space_tag_t, bus_space_tag_t, pci_chipset_tag_t,
+	    int, int, int);
 
+#if NVGA_PCI || NTGA
 	tag = pci_make_tag(pc, bus, device, function);
 	id = pci_conf_read(pc, tag, PCI_ID_REG);
 	if (id == 0 || id == 0xffffffff)
@@ -80,7 +80,8 @@ pci_display_console(iot, memt, pc, bus, device, function)
 		    bus, device, function);
 	class = pci_conf_read(pc, tag, PCI_CLASS_REG);
 
-	nmatch = match = 0; /* XXX really only if we've got FBs configured */
+	match = 0;
+#endif
 	fn = NULL;
 
 #if NVGA_PCI
@@ -105,4 +106,21 @@ pci_display_console(iot, memt, pc, bus, device, function)
 	else
 		panic("pci_display_console: unconfigured device at %d/%d/%d",
 		    bus, device, function);
+}
+
+void
+device_pci_register(device_t dev, void *aux)
+{
+	struct pci_attach_args *pa = aux;
+	struct ctb *ctb;
+	prop_dictionary_t dict;
+
+	/* set properties for PCI framebuffers */
+	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
+	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_DISPLAY &&
+	    ctb->ctb_term_type == CTB_GRAPHICS) {
+		/* XXX should consider multiple displays? */
+		dict = device_properties(dev);
+		prop_dictionary_set_bool(dict, "is_console", true);
+	}
 }

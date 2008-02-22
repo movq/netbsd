@@ -1,4 +1,4 @@
-/* $NetBSD: s3c2xx0var.h,v 1.4 2005/12/11 12:16:51 christos Exp $ */
+/* $NetBSD: s3c2xx0var.h,v 1.7 2012/01/30 03:28:33 nisimura Exp $ */
 
 /*
  * Copyright (c) 2002 Fujitsu Component Limited
@@ -35,10 +35,11 @@
 #ifndef _ARM_S3C2XX0VAR_H_
 #define _ARM_S3C2XX0VAR_H_
 
-#include <machine/bus.h>
+#include <sys/bus.h>
+#include <sys/device.h>
 
 struct s3c2xx0_softc {
-	struct device   	sc_dev;
+	device_t		sc_dev;
 
 	bus_space_tag_t  	sc_iot;
 
@@ -47,6 +48,7 @@ struct s3c2xx0_softc {
 	bus_space_handle_t	sc_clkman_ioh; 	/* Clock manager */
 	bus_space_handle_t	sc_gpio_ioh;  	/* GPIO */
 	bus_space_handle_t	sc_rtc_ioh; 	/* real time clock */
+	bus_space_handle_t      sc_dmach;       /* DMA Controller */
 
 	bus_dma_tag_t  		sc_dmat;
 

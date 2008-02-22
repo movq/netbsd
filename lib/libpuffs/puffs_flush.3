@@ -1,4 +1,4 @@
-.\"	$NetBSD: puffs_flush.3,v 1.6 2007/12/01 19:54:01 wiz Exp $
+.\"	$NetBSD: puffs_flush.3,v 1.8 2009/02/20 14:26:56 pooka Exp $
 .\"
 .\" Copyright (c) 2007 Antti Kantee.  All rights reserved.
 .\"
@@ -34,31 +34,30 @@
 .Sh SYNOPSIS
 .In puffs.h
 .Ft int
-.Fn puffs_inval_namecache_dir "struct puffs_usermount *pu" "void *cookie"
+.Fo puffs_inval_namecache_dir
+.Fa "struct puffs_usermount *pu" "puffs_cookie_t cookie"
+.Fc
 .Ft int
 .Fn puffs_inval_namecache_all "struct puffs_usermount *pu"
 .Ft int
-.Fn puffs_inval_pagecache_node "struct puffs_usermount *pu" "void *cookie"
+.Fo puffs_inval_pagecache_node
+.Fa "struct puffs_usermount *pu" "puffs_cookie_t cookie"
+.Fc
 .Ft int
 .Fo puffs_inval_pagecache_node_range
-.Fa "struct puffs_usermount *pu" "void *cookie" "off_t start" "off_t end"
+.Fa "struct puffs_usermount *pu" "puffs_cookie_t cookie" "off_t start"
+.Fa "off_t end"
 .Fc
 .Ft int
-.Fn puffs_flush_pagecache_node "struct puffs_usermount *pu" "void *cookie"
+.Fo puffs_flush_pagecache_node
+.Fa "struct puffs_usermount *pu" "puffs_cookie_t cookie"
+.Fc
 .Ft int
 .Fo puffs_flush_pagecache_node_range
-.Fa "struct puffs_usermount *pu" "void *cookie" "off_t start" "off_t end"
+.Fa "struct puffs_usermount *pu" "puffs_cookie_t cookie" "off_t start"
+.Fa "off_t end"
 .Fc
 .Sh DESCRIPTION
-.Em IMPORTANT NOTE!
-This document describes interfaces which are not yet guaranteed to be
-stable.
-In case you update your system sources, please recompile everything
-and fix compilation errors.
-If your sources are out-of-sync, incorrect operation may result.
-The interfaces in this document will most likely be hugely simplified
-in later versions or made transparent to the implementation.
-.Pp
 These routines are used inform the kernel that any information it might
 have cached is no longer valid.
 .Fn puffs_inval_namecache_dir

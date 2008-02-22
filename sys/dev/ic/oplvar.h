@@ -1,7 +1,7 @@
-/*	$NetBSD: oplvar.h,v 1.13 2006/06/30 13:56:25 chap Exp $	*/
+/*	$NetBSD: oplvar.h,v 1.17 2012/04/09 10:18:16 plunky Exp $	*/
 
 /*
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,15 +41,16 @@ struct opl_voice {
 };
 
 struct opl_softc {
-	struct midi_softc mididev;
+	device_t dev;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
+	kmutex_t *lock;
 	int	offs;
 	int	model;
 #define OPL_2 2
 #define OPL_3 3
 	struct	midisyn syn;
-	struct	device *sc_mididev;
+	device_t sc_mididev;
 
 	struct opl_voice voices[OPL3_NVOICE];
 	u_int8_t pan[MIDI_MAX_CHANS];

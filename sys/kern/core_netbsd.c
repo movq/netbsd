@@ -1,4 +1,4 @@
-/*	$NetBSD: core_netbsd.c,v 1.14 2006/11/01 10:17:58 yamt Exp $	*/
+/*	$NetBSD: core_netbsd.c,v 1.23 2017/01/06 22:53:17 kamil Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -19,12 +19,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor,
- *	Washington University, the University of California, Berkeley and
- *	its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,7 +45,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: core_netbsd.c,v 1.14 2006/11/01 10:17:58 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: core_netbsd.c,v 1.23 2017/01/06 22:53:17 kamil Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_coredump.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,52 +67,38 @@ __KERNEL_RCSID(0, "$NetBSD: core_netbsd.c,v 1.14 2006/11/01 10:17:58 yamt Exp $"
 #include COREINC
 #endif
 
+#ifdef COREDUMP
+
 struct coredump_state {
+	struct coredump_iostate *iocookie;
 	struct CORENAME(core) core;
 };
 
-static int	CORENAME(coredump_countsegs_netbsd)(struct proc *, void *,
-		    struct uvm_coredump_state *);
-static int	CORENAME(coredump_writesegs_netbsd)(struct proc *, void *,
-		    struct uvm_coredump_state *);
+static int	CORENAME(coredump_writesegs_netbsd)(struct uvm_coredump_state *);
 
 int
-CORENAME(coredump_netbsd)(struct lwp *l, void *iocookie)
+CORENAME(coredump_netbsd)(struct lwp *l, struct coredump_iostate *iocookie)
 {
 	struct coredump_state cs;
 	struct proc *p = l->l_proc;
 	struct vmspace *vm = p->p_vmspace;
 	int error;
 
-
+	cs.iocookie = iocookie;
 	cs.core.c_midmag = 0;
 	strncpy(cs.core.c_name, p->p_comm, MAXCOMLEN);
 	cs.core.c_nseg = 0;
-	cs.core.c_signo = p->p_sigctx.ps_signo;
-	cs.core.c_ucode = p->p_sigctx.ps_code;
+	cs.core.c_signo = p->p_sigctx.ps_info._signo;
+	cs.core.c_ucode = p->p_sigctx.ps_info._code;
 	cs.core.c_cpusize = 0;
 	cs.core.c_tsize = (u_long)ctob(vm->vm_tsize);
 	cs.core.c_dsize = (u_long)ctob(vm->vm_dsize);
 	cs.core.c_ssize = (u_long)round_page(ctob(vm->vm_ssize));
 
-#if 0
-	/*
-	 * XXX
-	 * It would be nice if we at least dumped the signal state (and made it
-	 * available at run time to the debugger, as well), but this code
-	 * hasn't actually had any effect for a long time, since we don't dump
-	 * the user area.  For now, it's dead.
-	 */
-	memcpy(&p->p_addr->u_kproc.kp_proc, p, sizeof(struct proc));
-	fill_eproc(p, &p->p_addr->u_kproc.kp_eproc);
-#endif
 	error = CORENAME(cpu_coredump)(l, NULL, &cs.core);
 	if (error)
 		return (error);
-	error = uvm_coredump_walkmap(p, NULL,
-	    CORENAME(coredump_countsegs_netbsd), &cs);
-	if (error)
-		return (error);
+	cs.core.c_nseg = uvm_coredump_count_segs(p);
 
 	/* First write out the core header. */
 	error = coredump_write(iocookie, UIO_SYSSPACE, &cs.core,
@@ -127,32 +112,16 @@ CORENAME(coredump_netbsd)(struct lwp *l, void *iocookie)
 		return (error);
 
 	/* Finally, the address space dump */
-	return uvm_coredump_walkmap(p, iocookie,
-	    CORENAME(coredump_writesegs_netbsd), &cs);
+	return uvm_coredump_walkmap(p, CORENAME(coredump_writesegs_netbsd),
+	    &cs);
 }
 
 static int
-CORENAME(coredump_countsegs_netbsd)(struct proc *p, void *iocookie,
-    struct uvm_coredump_state *us)
-{
-	struct coredump_state *cs = us->cookie;
-
-	if (us->start != us->realend)
-		cs->core.c_nseg++;
-
-	return (0);
-}
-
-static int
-CORENAME(coredump_writesegs_netbsd)(struct proc *p, void *iocookie,
-    struct uvm_coredump_state *us)
+CORENAME(coredump_writesegs_netbsd)(struct uvm_coredump_state *us)
 {
 	struct coredump_state *cs = us->cookie;
 	struct CORENAME(coreseg) cseg;
 	int flag, error;
-
-	if (us->start == us->realend)
-		return (0);
 
 	if (us->flags & UVM_COREDUMP_STACK)
 		flag = CORE_STACK;
@@ -164,13 +133,29 @@ CORENAME(coredump_writesegs_netbsd)(struct proc *p, void *iocookie,
 	 */
 	CORE_SETMAGIC(cseg, CORESEGMAGIC, CORE_GETMID(cs->core), flag);
 	cseg.c_addr = us->start;
-	cseg.c_size = us->end - us->start;
 
-	error = coredump_write(iocookie, UIO_SYSSPACE,
+	if (us->start == us->realend)
+		/* Not really wanted, but counted... */
+		cseg.c_size = 0;
+	else
+		cseg.c_size = us->end - us->start;
+
+	error = coredump_write(cs->iocookie, UIO_SYSSPACE,
 	    &cseg, cs->core.c_seghdrsize);
 	if (error)
 		return (error);
 
-	return coredump_write(iocookie, UIO_USERSPACE,
+	return coredump_write(cs->iocookie, UIO_USERSPACE,
 	    (void *)(vaddr_t)us->start, cseg.c_size);
 }
+
+#else	/* COREDUMP */
+
+int
+CORENAME(coredump_netbsd)(struct lwp *l, struct coredump_iostate *cookie)
+{
+
+	return ENOSYS;
+}
+
+#endif	/* COREDUMP */

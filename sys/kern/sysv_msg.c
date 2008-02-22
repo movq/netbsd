@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_msg.c,v 1.55 2008/01/07 16:12:54 ad Exp $	*/
+/*	$NetBSD: sysv_msg.c,v 1.72 2018/03/30 22:54:37 maya Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2006, 2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,9 +50,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_msg.c,v 1.55 2008/01/07 16:12:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_msg.c,v 1.72 2018/03/30 22:54:37 maya Exp $");
 
-#define SYSVMSG
+#ifdef _KERNEL_OPT
+#include "opt_sysv.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -94,8 +89,12 @@ static kcondvar_t msg_realloc_cv;
 
 static void msg_freehdr(struct __msg *);
 
+extern int kern_has_sysvmsg;
+
+SYSCTL_SETUP_PROTO(sysctl_ipc_msg_setup);
+
 void
-msginit(void)
+msginit(struct sysctllog **clog)
 {
 	int i, sz;
 	vaddr_t v;
@@ -123,16 +122,16 @@ msginit(void)
 	    ALIGN(msginfo.msgseg * sizeof(struct msgmap)) +
 	    ALIGN(msginfo.msgtql * sizeof(struct __msg)) +
 	    ALIGN(msginfo.msgmni * sizeof(kmsq_t));
-	v = uvm_km_alloc(kernel_map, round_page(sz), 0,
-	    UVM_KMF_WIRED|UVM_KMF_ZERO);
+	sz = round_page(sz);
+	v = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_WIRED|UVM_KMF_ZERO);
 	if (v == 0)
 		panic("sysv_msg: cannot allocate memory");
 	msgpool = (void *)v;
-	msgmaps = (void *)(ALIGN(msgpool) + msginfo.msgmax);
-	msghdrs = (void *)(ALIGN(msgmaps) +
-	    msginfo.msgseg * sizeof(struct msgmap));
-	msqs = (void *)(ALIGN(msghdrs) +
-	    msginfo.msgtql * sizeof(struct __msg));
+	msgmaps = (void *)((uintptr_t)msgpool + ALIGN(msginfo.msgmax));
+	msghdrs = (void *)((uintptr_t)msgmaps +
+	    ALIGN(msginfo.msgseg * sizeof(struct msgmap)));
+	msqs = (void *)((uintptr_t)msghdrs +
+	    ALIGN(msginfo.msgtql * sizeof(struct __msg)));
 
 	for (i = 0; i < (msginfo.msgseg - 1); i++)
 		msgmaps[i].next = i + 1;
@@ -161,6 +160,48 @@ msginit(void)
 	mutex_init(&msgmutex, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&msg_realloc_cv, "msgrealc");
 	msg_realloc_state = false;
+
+	kern_has_sysvmsg = 1;
+
+#ifdef _MODULE
+	if (clog)
+		sysctl_ipc_msg_setup(clog);
+#endif
+}
+
+int
+msgfini(void)
+{
+	int i, sz;
+	vaddr_t v = (vaddr_t)msgpool;
+
+	mutex_enter(&msgmutex);
+	for (i = 0; i < msginfo.msgmni; i++) {
+		if (msqs[i].msq_u.msg_qbytes != 0) {
+			mutex_exit(&msgmutex);
+			return 1; /* queue not available, prevent unload! */
+		}
+	}
+/*
+ * Destroy all condvars and free the memory we're using
+ */
+	for (i = 0; i < msginfo.msgmni; i++) {
+		cv_destroy(&msqs[i].msq_cv);
+	}
+	sz = ALIGN(msginfo.msgmax) +
+	    ALIGN(msginfo.msgseg * sizeof(struct msgmap)) +
+	    ALIGN(msginfo.msgtql * sizeof(struct __msg)) +
+	    ALIGN(msginfo.msgmni * sizeof(kmsq_t));
+	sz = round_page(sz);
+	uvm_km_free(kernel_map, v, sz, UVM_KMF_WIRED);
+
+	cv_destroy(&msg_realloc_cv);
+	mutex_exit(&msgmutex);
+	mutex_destroy(&msgmutex);
+
+	kern_has_sysvmsg = 0;
+
+	return 0;
 }
 
 static int
@@ -183,8 +224,8 @@ msgrealloc(int newmsgmni, int newmsgseg)
 	    ALIGN(newmsgseg * sizeof(struct msgmap)) +
 	    ALIGN(msginfo.msgtql * sizeof(struct __msg)) +
 	    ALIGN(newmsgmni * sizeof(kmsq_t));
-	v = uvm_km_alloc(kernel_map, round_page(sz), 0,
-	    UVM_KMF_WIRED|UVM_KMF_ZERO);
+	sz = round_page(sz);
+	v = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_WIRED|UVM_KMF_ZERO);
 	if (v == 0)
 		return ENOMEM;
 
@@ -225,11 +266,11 @@ msgrealloc(int newmsgmni, int newmsgseg)
 	}
 
 	new_msgpool = (void *)v;
-	new_msgmaps = (void *)(ALIGN(new_msgpool) + newmsgmax);
-	new_msghdrs = (void *)(ALIGN(new_msgmaps) +
-	    newmsgseg * sizeof(struct msgmap));
-	new_msqs = (void *)(ALIGN(new_msghdrs) +
-	    msginfo.msgtql * sizeof(struct __msg));
+	new_msgmaps = (void *)((uintptr_t)new_msgpool + ALIGN(newmsgmax));
+	new_msghdrs = (void *)((uintptr_t)new_msgmaps +
+	    ALIGN(newmsgseg * sizeof(struct msgmap)));
+	new_msqs = (void *)((uintptr_t)new_msghdrs +
+	    ALIGN(msginfo.msgtql * sizeof(struct __msg)));
 
 	/* Initialize the structures */
 	for (i = 0; i < (newmsgseg - 1); i++)
@@ -254,7 +295,7 @@ msgrealloc(int newmsgmni, int newmsgseg)
 	}
 
 	/*
-	 * Copy all message queue identifiers, mesage headers and buffer
+	 * Copy all message queue identifiers, message headers and buffer
 	 * pools to the new memory location.
 	 */
 	for (msqid = 0; msqid < msginfo.msgmni; msqid++) {
@@ -274,8 +315,8 @@ msgrealloc(int newmsgmni, int newmsgseg)
 		memcpy(nmptr, mptr, sizeof(struct msqid_ds));
 
 		/*
-		 * Go through the message headers, and and copy each
-		 * one by taking the new ones, and thus defragmenting.
+		 * Go through the message headers, and copy each one
+		 * by taking the new ones, and thus defragmenting.
 		 */
 		nmsghdr = pmsghdr = NULL;
 		msghdr = mptr->_msg_first;
@@ -346,6 +387,7 @@ msgrealloc(int newmsgmni, int newmsgseg)
 	    ALIGN(msginfo.msgseg * sizeof(struct msgmap)) +
 	    ALIGN(msginfo.msgtql * sizeof(struct __msg)) +
 	    ALIGN(msginfo.msgmni * sizeof(kmsq_t));
+	sz = round_page(sz);
 
 	for (i = 0; i < msginfo.msgmni; i++)
 		cv_destroy(&msqs[i].msq_cv);
@@ -399,7 +441,8 @@ msg_freehdr(struct __msg *msghdr)
 }
 
 int
-sys___msgctl13(struct lwp *l, const struct sys___msgctl13_args *uap, register_t *retval)
+sys___msgctl50(struct lwp *l, const struct sys___msgctl50_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int) msqid;
@@ -492,8 +535,10 @@ msgctl1(struct lwp *l, int msqid, int cmd, struct msqid_ds *msqbuf)
 		if ((error = ipcperm(cred, &msqptr->msg_perm, IPC_M)))
 			break;
 		if (msqbuf->msg_qbytes > msqptr->msg_qbytes &&
-		    kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL) != 0) {
+		    kauth_authorize_system(cred, KAUTH_SYSTEM_SYSVIPC,
+		    KAUTH_REQ_SYSTEM_SYSVIPC_MSGQ_OVERSIZE,
+		    KAUTH_ARG(msqbuf->msg_qbytes),
+		    KAUTH_ARG(msqptr->msg_qbytes), NULL) != 0) {
 			error = EPERM;
 			break;
 		}
@@ -657,8 +702,12 @@ msgsnd1(struct lwp *l, int msqidr, const char *user_msgp, size_t msgsz,
 	kmsq_t *msq;
 	short next;
 
-	MSG_PRINTF(("call to msgsnd(%d, %p, %lld, %d)\n", msqid, user_msgp,
-	    (long long)msgsz, msgflg));
+	MSG_PRINTF(("call to msgsnd(%d, %p, %lld, %d)\n", msqidr,
+	     user_msgp, (long long)msgsz, msgflg));
+
+	if ((ssize_t)msgsz < 0)
+		return EINVAL;
+
 restart:
 	msqid = IPCID_TO_IX(msqidr);
 
@@ -858,6 +907,7 @@ restart:
 		msqptr->msg_perm.mode &= ~MSG_LOCKED;
 		cv_broadcast(&msq->msq_cv);
 		MSG_PRINTF(("mtype (%ld) < 1\n", msghdr->msg_type));
+		error = EINVAL;
 		goto unlock;
 	}
 
@@ -962,8 +1012,12 @@ msgrcv1(struct lwp *l, int msqidr, char *user_msgp, size_t msgsz, long msgtyp,
 	kmsq_t *msq;
 	short next;
 
-	MSG_PRINTF(("call to msgrcv(%d, %p, %lld, %ld, %d)\n", msqid,
+	MSG_PRINTF(("call to msgrcv(%d, %p, %lld, %ld, %d)\n", msqidr,
 	    user_msgp, (long long)msgsz, msgtyp, msgflg));
+
+	if ((ssize_t)msgsz < 0)
+		return EINVAL;
+
 restart:
 	msqid = IPCID_TO_IX(msqidr);
 
@@ -1172,7 +1226,7 @@ restart:
 		else
 			tlen = msgsz - len;
 		mutex_exit(&msgmutex);
-		error = (*put_type)(&msgpool[next * msginfo.msgssz],
+		error = copyout(&msgpool[next * msginfo.msgssz],
 		    user_msgp, tlen);
 		mutex_enter(&msgmutex);
 		if (error != 0) {
@@ -1245,11 +1299,6 @@ SYSCTL_SETUP(sysctl_ipc_msg_setup, "sysctl kern.ipc subtree setup")
 {
 	const struct sysctlnode *node = NULL;
 
-	sysctl_createv(clog, 0, NULL, NULL,
-		CTLFLAG_PERMANENT,
-		CTLTYPE_NODE, "kern", NULL,
-		NULL, 0, NULL, 0,
-		CTL_KERN, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, &node,
 		CTLFLAG_PERMANENT,
 		CTLTYPE_NODE, "ipc",

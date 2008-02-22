@@ -1,4 +1,4 @@
-/* 	$NetBSD: initfini.c,v 1.3 2008/02/10 18:45:41 ad Exp $	 */
+/* 	$NetBSD: initfini.c,v 1.14 2017/06/17 15:26:44 joerg Exp $	 */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,22 +30,88 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: initfini.c,v 1.3 2008/02/10 18:45:41 ad Exp $");
+__RCSID("$NetBSD: initfini.c,v 1.14 2017/06/17 15:26:44 joerg Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"
 #endif
 
-static void	__libc_init(void) __attribute__((__constructor__, __used__));
+#include <sys/param.h>
+#include <sys/exec.h>
+#include <sys/tls.h>
+#include <stdbool.h>
+
+void	_libc_init(void) __attribute__((__constructor__, __used__));
 
 void	__guard_setup(void);
 void	__libc_thr_init(void);
 void	__libc_atomic_init(void);
+void	__libc_atexit_init(void);
+void	__libc_env_init(void);
 
-/* LINTED used */
-static void
-__libc_init(void)
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+__dso_hidden void	__libc_static_tls_setup(void);
+#endif
+
+#ifdef __weak_alias
+__weak_alias(_dlauxinfo,___dlauxinfo)
+static void *__libc_dlauxinfo;
+
+void *___dlauxinfo(void) __pure;
+__weakref_visible void * real_dlauxinfo(void) __weak_reference(_dlauxinfo);
+
+void *
+___dlauxinfo(void)
 {
+	return __libc_dlauxinfo;
+}
+#endif
+
+static bool libc_initialised;
+
+void _libc_init(void);
+
+/*
+ * Declare as common symbol to allow new libc with older binaries to
+ * not trigger an undefined reference.
+ */
+struct ps_strings *__ps_strings;
+
+/*
+ * _libc_init is called twice.  One call comes explicitly from crt0.o
+ * (for newer versions) and the other is via global constructor handling.
+ *
+ * In static binaries the explicit call is first; in dynamically linked
+ * binaries the global constructors of libc are called from ld.elf_so
+ * before crt0.o is reached.
+ *
+ * Note that __ps_strings is set by crt0.o. So in the dynamic case, it
+ * hasn't been set yet when we get here, and __libc_dlauxinfo is not
+ * (ever) assigned. But this is ok because __libc_dlauxinfo is only
+ * used in static binaries, because it's there to substitute for the
+ * dynamic linker. In static binaries __ps_strings will have been set
+ * up when we get here and we get a valid __libc_dlauxinfo.
+ *
+ * This code causes problems for Emacs because Emacs's undump
+ * mechanism saves the __ps_strings value from the startup execution;
+ * then running the resulting binary it gets here before crt0 has
+ * assigned the current execution's value to __ps_strings, and in an
+ * environment with ASLR this can cause the assignment of
+ * __libc_dlauxinfo to receive SIGSEGV.
+ */
+void __section(".text.startup")
+_libc_init(void)
+{
+
+	if (libc_initialised)
+		return;
+
+	libc_initialised = 1;
+
+	/* Only initialize _dlauxinfo for static binaries. */
+	if (__ps_strings != NULL && real_dlauxinfo == ___dlauxinfo)
+		__libc_dlauxinfo = __ps_strings->ps_argvstr +
+		    __ps_strings->ps_nargvstr + __ps_strings->ps_nenvstr + 2;
 
 	/* For -fstack-protector */
 	__guard_setup();
@@ -60,6 +119,17 @@ __libc_init(void)
 	/* Atomic operations */
 	__libc_atomic_init();
 
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	/* Initialize TLS for statically linked programs. */
+	__libc_static_tls_setup();
+#endif
+
 	/* Threads */
 	__libc_thr_init();
+
+	/* Initialize the atexit mutexes */
+	__libc_atexit_init();
+
+	/* Initialize environment memory RB tree. */
+	__libc_env_init();
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofctl.c,v 1.7 2007/08/05 13:52:44 jmmv Exp $	*/
+/*	$NetBSD: ofctl.c,v 1.14 2018/05/28 12:42:45 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,9 +32,9 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 2006, 2007\n"
-"The NetBSD Foundation, Inc.  All rights reserved.\n");
-__RCSID("$NetBSD: ofctl.c,v 1.7 2007/08/05 13:52:44 jmmv Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2006, 2007\
+ The NetBSD Foundation, Inc.  All rights reserved.");
+__RCSID("$NetBSD: ofctl.c,v 1.14 2018/05/28 12:42:45 wiz Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -58,13 +55,14 @@ __RCSID("$NetBSD: ofctl.c,v 1.7 2007/08/05 13:52:44 jmmv Exp $");
 
 static void oflist(int, const char *, int, void *, size_t);
 static void ofprop(int);
-static void ofgetprop(int, char *);
+static void ofgetprop(int, const char *);
 #if 0
 static int isstrprint(const char *, size_t, int);
 #endif
 
 static int lflag;
 static int pflag;
+static int vflag;
 
 struct of_node {
 	TAILQ_ENTRY(of_node) of_sibling;
@@ -94,11 +92,13 @@ int OF_parent(int);
 int OF_child(int);
 int OF_peer(int);
 int OF_finddevice(const char *);
-int OF_getproplen(int, char *);
-int OF_getprop(int, char *, void *, size_t);
-int OF_nextprop(int, char *, void *);
+int OF_getproplen(int, const char *);
+int OF_getprop(int, const char *, void *, size_t);
+int OF_nextprop(int, const char *, void *);
 
-struct of_prop *of_tree_getprop(int, char *);
+struct of_prop *of_tree_getprop(int, const char *);
+
+static int of_fd = -1;
 
 static void
 of_tree_mkprop(struct of_node *node, prop_dictionary_t propdict,
@@ -307,7 +307,10 @@ of_proplib_init(const char *file)
 		err(1, "OFIOCGETNEXT(%d, %#x)", fd, rootid);
 
 	dict = of_proplib_tree_fill(fd, rootid);
-	close(fd);
+
+	/* keep the device open for the benefit of OF_finddevice */
+	of_fd = fd;
+
 	return dict;
 }
 
@@ -389,22 +392,26 @@ OF_peer(int peerid)
 int
 OF_finddevice(const char *name)
 {
-#if 0
 	struct ofiocdesc ofio;
 	
 	ofio.of_nodeid = 0;
-	ofio.of_name = argv[optind++];
-	ofio.of_namelen = strlen(ofio.of_name);
+	ofio.of_name = __UNCONST(name);
+	ofio.of_namelen = strlen(name);
 	ofio.of_buf = NULL;
 	ofio.of_buflen = 0;
-	if (ioctl(of_fd, OFIOCFINDDEVICE, &ofio) < 0)
-		err(1, "OFIOCFINDDEVICE(%d, \"%s\")", of_fd, ofio.of_name);
-#endif
-	return 0;
+	if (ioctl(of_fd, OFIOCFINDDEVICE, &ofio) < 0) {
+		if (errno == ENOENT) {
+			err(1, "OF node '%s' not found", name);
+		} else {
+			err(1, "OFIOCFINDDEVICE(%d, \"%s\")", of_fd, name);
+		}
+	}
+
+	return ofio.of_nodeid;
 }
 
 struct of_prop *
-of_tree_getprop(int nodeid, char *name)
+of_tree_getprop(int nodeid, const char *name)
 {
 	struct of_node *node;
 	struct of_prop *prop;
@@ -434,14 +441,14 @@ of_tree_getprop(int nodeid, char *name)
 }
 
 int
-OF_getproplen(int nodeid, char *name)
+OF_getproplen(int nodeid, const char *name)
 {
 	struct of_prop *prop = of_tree_getprop(nodeid, name);
-	return (prop != NULL) ? prop->prop_length : -1;
+	return (prop != NULL) ? (int)prop->prop_length : -1;
 }
 
 int
-OF_getprop(int nodeid, char *name, void *buf, size_t len)
+OF_getprop(int nodeid, const char *name, void *buf, size_t len)
 {
 	struct of_prop *prop = of_tree_getprop(nodeid, name);
 	if (prop == NULL)
@@ -453,7 +460,7 @@ OF_getprop(int nodeid, char *name, void *buf, size_t len)
 }
 
 int
-OF_nextprop(int nodeid, char *name, void *nextname)
+OF_nextprop(int nodeid, const char *name, void *nextname)
 {
 	struct of_prop *prop = of_tree_getprop(nodeid, name);
 	if (prop == NULL)
@@ -494,10 +501,11 @@ main(int argc, char **argv)
 	const char *propfilein = NULL;
 	const char *propfileout = NULL;
 
-	while ((c = getopt(argc, argv, "f:lpr:w:")) != EOF) {
+	while ((c = getopt(argc, argv, "f:lpr:vw:")) != EOF) {
 		switch (c) {
 		case 'l': lflag++; break;
 		case 'p': pflag++; break;
+		case 'v': vflag++; break;
 		case 'f': file = optarg; break;
 		case 'r': propfilein = optarg; break;
 		case 'w': propfileout = optarg; break;
@@ -505,7 +513,7 @@ main(int argc, char **argv)
 		}
 	}
 	if (errflag)
-		errx(1, "usage: ofctl [-pl] [-f file] [-r propfile] [-w propfile] [node...]");
+		errx(1, "usage: ofctl [-lpv] [-f file] [-r propfile] [-w propfile] [node...]");
 
 	if (propfilein != NULL) {
 		of_proplib = prop_dictionary_internalize_from_file(propfilein);
@@ -532,12 +540,19 @@ main(int argc, char **argv)
 			device_type[len] = '\0';
 		oflist(phandle, device_type, 0, of_buf, sizeof(of_buf));
 	} else {
-#if 0
-		pandle = OF_finddevice(argv[optind++]);
+		phandle = OF_finddevice(argv[optind++]);
+		device_type[0] = '\0';
+		len = OF_getprop(phandle, "device_type", device_type,
+		    sizeof(device_type));
+		if (len <= 0)
+			len = OF_getprop(phandle, "name", device_type,
+			    sizeof(device_type));
+		if (len >= 0)
+			device_type[len] = '\0';
 
 		if (argc == optind) {
 			if (lflag)
-				oflist(phandle, 0, of_buf, sizeof(of_buf));
+				oflist(phandle, device_type, 0, of_buf, sizeof(of_buf));
 			else
 				ofprop(phandle);
 		} else {
@@ -545,9 +560,6 @@ main(int argc, char **argv)
 				ofgetprop(phandle, argv[optind]);
 			}
 		}
-#else
-		printf("%s: OF_finddevice not yet implemented\n", argv[optind]);
-#endif
 	}
 	exit(0);
 }
@@ -567,7 +579,8 @@ ofname(int node, char *buf, size_t buflen)
 	int len;
 
 	len = OF_getprop(node, "name", name, sizeof(name));
-	assert(len > 0);
+	if (len <= 0)
+		name[0] = '\0';
 	off += snprintf(buf + off, buflen - off, "/%s", name);
 
 	reglen = OF_getprop(node, "reg", reg_buf, sizeof(reg_buf));
@@ -683,7 +696,7 @@ oflist(int node, const char *parent_device_type, int depth,
 	int len;
 	while (node != 0) {
 		int child;
-		if (pflag == 0) {
+		if (pflag == 0 && vflag == 0) {
 			len = ofname(node, of_buf, of_buflen-1);
 			printf("%08x: %*s%s", node, depth * 2, "",
 			    (char *) of_buf);
@@ -900,7 +913,7 @@ static const struct {
 };
 
 static void
-ofgetprop(int node, char *name)
+ofgetprop(int node, const char *name)
 {
 	u_int8_t of_buf[4097];
 	int len;

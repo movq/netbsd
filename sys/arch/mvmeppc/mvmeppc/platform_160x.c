@@ -1,4 +1,4 @@
-/*	$NetBSD: platform_160x.c,v 1.6 2007/10/17 19:55:51 garbled Exp $	*/
+/*	$NetBSD: platform_160x.c,v 1.9 2014/03/26 17:44:36 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: platform_160x.c,v 1.6 2007/10/17 19:55:51 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: platform_160x.c,v 1.9 2014/03/26 17:44:36 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -52,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: platform_160x.c,v 1.6 2007/10/17 19:55:51 garbled Ex
 
 static int	p160x_match(struct platform *);
 static void	p160x_pci_intr_fixup(int, int, int *);
-static void	p160x_cpu_setup(struct device *);
+static void	p160x_cpu_setup(device_t);
 static void	p160x_reset(void);
 static void	p160x_pic_setup(void);
 
@@ -111,8 +104,8 @@ p160x_match(struct platform *p)
 	for (cp = &bid.pwa[sizeof(bid.pwa) - 1]; *cp == ' '; cp--)
 		*cp = '\0';
 
-	sprintf(p160x_model, "%s, Serial: %s, PWA: %s", bid.id,
-	    bid.serial, bid.pwa);
+	snprintf(p160x_model, sizeof(p160x_model),
+	    "%s, Serial: %s, PWA: %s", bid.id, bid.serial, bid.pwa);
 	p->model = p160x_model;
 
 	speed[3] = '\0';
@@ -139,7 +132,7 @@ p160x_pci_intr_fixup(int bus, int dev, int *line)
 }
 
 static void
-p160x_cpu_setup(struct device *dev)
+p160x_cpu_setup(device_t dev)
 {
 }
 

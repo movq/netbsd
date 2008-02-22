@@ -1,4 +1,4 @@
-/*	$NetBSD: aurateconv.c,v 1.17 2006/11/16 01:32:44 christos Exp $	*/
+/*	$NetBSD: aurateconv.c,v 1.22 2017/08/07 13:30:51 isaki Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aurateconv.c,v 1.17 2006/11/16 01:32:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aurateconv.c,v 1.22 2017/08/07 13:30:51 isaki Exp $");
 
 #include <sys/systm.h>
 #include <sys/types.h>
@@ -72,8 +65,11 @@ typedef struct aurateconv {
 	int32_t	next[AUDIO_MAX_CHANNELS];
 } aurateconv_t;
 
-static int aurateconv_fetch_to(stream_fetcher_t *, audio_stream_t *, int);
+static int aurateconv_fetch_to(struct audio_softc *, stream_fetcher_t *,
+			       audio_stream_t *, int);
 static void aurateconv_dtor(stream_filter_t *);
+static int aurateconv_slinear8_LE(aurateconv_t *, audio_stream_t *,
+				   int, int, int);
 static int aurateconv_slinear16_LE(aurateconv_t *, audio_stream_t *,
 				   int, int, int);
 static int aurateconv_slinear24_LE(aurateconv_t *, audio_stream_t *,
@@ -124,8 +120,9 @@ aurateconv(struct audio_softc *sc, const audio_params_t *from,
 	}
 	if ((from->encoding != AUDIO_ENCODING_SLINEAR_LE
 	     && from->encoding != AUDIO_ENCODING_SLINEAR_BE)
-	    || (from->precision != 16 && from->precision != 24 && from->precision != 32)) {
-		printf("%s: encoding/precision must be SLINEAR_LE 16/24/32bit, "
+	    || (from->precision != 8 && from->precision != 16 &&
+			 from->precision != 24 && from->precision != 32)) {
+		printf("%s: encoding/precision must be SLINEAR_LE 8/16/24/32bit, "
 		       "or SLINEAR_BE 16/24/32bit", __func__);
 		return NULL;
 	}
@@ -167,7 +164,8 @@ aurateconv_dtor(struct stream_filter *this)
 }
 
 static int
-aurateconv_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
+aurateconv_fetch_to(struct audio_softc *sc, stream_fetcher_t *self,
+		    audio_stream_t *dst, int max_used)
 {
 	aurateconv_t *this;
 	int m, err, frame_dst, frame_src;
@@ -186,7 +184,7 @@ aurateconv_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
 	if (m <= 0)
 		m = frame_src;
 
-	if ((err = this->base.prev->fetch_to(this->base.prev, this->base.src, m)))
+	if ((err = this->base.prev->fetch_to(sc, this->base.prev, this->base.src, m)))
 	    return err;
 	m = (dst->end - dst->start) / frame_dst * frame_dst;
 	m = min(m, max_used);
@@ -194,6 +192,9 @@ aurateconv_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
 	switch (this->from.encoding) {
 	case AUDIO_ENCODING_SLINEAR_LE:
 		switch (this->from.precision) {
+		case 8:
+			return aurateconv_slinear8_LE(this, dst, m,
+						       frame_src, frame_dst);
 		case 16:
 			return aurateconv_slinear16_LE(this, dst, m,
 						       frame_src, frame_dst);
@@ -292,7 +293,7 @@ aurateconv_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
 #define READ_Sn(BITS, EN, V, STREAM, RP, PAR)	\
 	do { \
 		int j; \
-		for (j = 0; j < (PAR)->channels; j++) { \
+		for (j = 0; j < (int)(PAR)->channels; j++) { \
 			(V)[j] = READ_S##BITS##EN(RP); \
 			RP = audio_stream_add_outp(STREAM, RP, (BITS) / NBBY); \
 		} \
@@ -304,7 +305,7 @@ aurateconv_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
 			WP = audio_stream_add_inp(STREAM, WP, (BITS) / NBBY); \
 		} else if (from->channels <= to->channels) { \
 			int j; \
-			for (j = 0; j < (FROM)->channels; j++) { \
+			for (j = 0; j < (int)(FROM)->channels; j++) { \
 				WRITE_S##BITS##EN(WP, (V)[j]); \
 				WP = audio_stream_add_inp(STREAM, WP, (BITS) / NBBY); \
 			} \
@@ -313,13 +314,13 @@ aurateconv_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
 				WP = audio_stream_add_inp(STREAM, WP, (BITS) / NBBY); \
 				j++; \
 			} \
-			for (; j < (TO)->channels; j++) { \
+			for (; j < (int)(TO)->channels; j++) { \
 				WRITE_S##BITS##EN(WP, 0); \
 				WP = audio_stream_add_inp(STREAM, WP, (BITS) / NBBY); \
 			} \
-		} else {	/* from->channels < to->channels */ \
+		} else {	/* from->channels > to->channels */ \
 			int j; \
-			for (j = 0; j < (TO)->channels; j++) { \
+			for (j = 0; j < (int)(TO)->channels; j++) { \
 				WRITE_S##BITS##EN(WP, (V)[j]); \
 				WP = audio_stream_add_inp(STREAM, WP, (BITS) / NBBY); \
 			} \
@@ -380,7 +381,7 @@ aurateconv_slinear##BITS##_##EN (aurateconv_t *this, audio_stream_t *dst, \
 				READ_Sn(BITS, EN, next, src, r, from); \
 			} \
 			c256 = this->count * 256 / to->sample_rate; \
-			for (i = 0; i < from->channels; i++) \
+			for (i = 0; i < (int)from->channels; i++) \
 				v[i] = (c256 * next[i] + (256 - c256) * prev[i]) >> 8; \
 			WRITE_Sn(BITS, EN, v, dst, w, from, to); \
 			this->count += from->sample_rate; \
@@ -451,7 +452,7 @@ aurateconv_slinear32_##EN (aurateconv_t *this, audio_stream_t *dst, \
 				used_src -= frame_src; \
 			} \
 			c256 = this->count * 256 / to->sample_rate; \
-			for (i = 0; i < from->channels; i++) \
+			for (i = 0; i < (int)from->channels; i++) \
 				v[i] = (int32_t)((c256 * next[i] + (INT64_C(256) - c256) * prev[i]) >> 8) & mask; \
 			WRITE_Sn(32, EN, v, dst, w, from, to); \
 			used_dst += frame_dst; \
@@ -463,6 +464,7 @@ aurateconv_slinear32_##EN (aurateconv_t *this, audio_stream_t *dst, \
 	return 0; \
 }
 
+AURATECONV_SLINEAR(8, LE)
 AURATECONV_SLINEAR(16, LE)
 AURATECONV_SLINEAR(24, LE)
 AURATECONV_SLINEAR32(LE)

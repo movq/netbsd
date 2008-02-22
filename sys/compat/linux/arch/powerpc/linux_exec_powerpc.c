@@ -1,4 +1,4 @@
-/* $NetBSD: linux_exec_powerpc.c,v 1.20 2006/07/23 22:06:09 ad Exp $ */
+/* $NetBSD: linux_exec_powerpc.c,v 1.24 2012/02/21 18:10:00 rjs Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,20 +41,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_powerpc.c,v 1.20 2006/07/23 22:06:09 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_powerpc.c,v 1.24 2012/02/21 18:10:00 rjs Exp $");
 
-#if defined (__alpha__)
-#define ELFSIZE 64
-#elif defined (__powerpc__)
 #define ELFSIZE 32
-#else
-#error Unified linux_elf_{32|64}copyargs not tested for this platform
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
@@ -76,12 +62,9 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_powerpc.c,v 1.20 2006/07/23 22:06:09 ad E
  * Alpha and PowerPC specific linux copyargs function.
  */
 int
-ELFNAME2(linux,copyargs)(l, pack, arginfo, stackp, argp)
-	struct lwp *l;
-	struct exec_package *pack;
-	struct ps_strings *arginfo;
-	char **stackp;
-	void *argp;
+ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
+			 struct ps_strings *arginfo, char **stackp,
+			 void *argp)
 {
 	size_t len;
 	AuxInfo ai[LINUX_ELF_AUX_ENTRIES], *a;
@@ -179,8 +162,7 @@ ELFNAME2(linux,copyargs)(l, pack, arginfo, stackp, argp)
 		a->a_v = LINUX_ELF_HWCAP;
 		a++;
 
-		free((char *)ap, M_TEMP);
-		pack->ep_emul_arg = NULL;
+		exec_free_emul_arg(pack);
 	}
 
 	a->a_type = AT_NULL;

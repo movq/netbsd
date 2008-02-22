@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2007/05/28 12:06:25 tls Exp $
+#	$NetBSD: Makefile,v 1.4 2009/04/14 22:15:19 lukem Exp $
 
 USE_FORT?= yes	# data-driven bugs?
 

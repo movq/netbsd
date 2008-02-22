@@ -1,4 +1,4 @@
-/*	$NetBSD: smdk2410_lcd.c,v 1.3 2007/03/04 05:59:45 christos Exp $ */
+/*	$NetBSD: smdk2410_lcd.c,v 1.10 2014/07/25 08:10:33 dholland Exp $ */
 
 /*
  * Copyright (c) 2004  Genetec Corporation.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smdk2410_lcd.c,v 1.3 2007/03/04 05:59:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smdk2410_lcd.c,v 1.10 2014/07/25 08:10:33 dholland Exp $");
 
 /*
  * LCD driver for Samsung SMDK2410.
@@ -54,16 +54,17 @@ __KERNEL_RCSID(0, "$NetBSD: smdk2410_lcd.c,v 1.3 2007/03/04 05:59:45 christos Ex
 #include <dev/wscons/wsdisplayvar.h> 
 #include <dev/wscons/wscons_callbacks.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <arm/s3c2xx0/s3c24x0var.h>
 #include <arm/s3c2xx0/s3c24x0reg.h>
 #include <arm/s3c2xx0/s3c2410reg.h>
 #include <arm/s3c2xx0/s3c24x0_lcd.h>
 
+#include "locators.h"
 #include "wsdisplay.h"
 
-int	lcd_match(struct device *, struct cfdata *, void *);
-void	lcd_attach(struct device *, struct device *, void *);
+int	lcd_match(device_t, cfdata_t, void *);
+void	lcd_attach(device_t, device_t, void *);
 
 #ifdef LCD_DEBUG
 void draw_test_pattern(struct s3c24x0_lcd_softc *,
@@ -159,17 +160,27 @@ dev_type_close(lcdclose);
 dev_type_ioctl(lcdioctl);
 dev_type_mmap(lcdmmap);
 const struct cdevsw lcd_cdevsw = {
-	lcdopen, lcdclose, noread, nowrite, lcdioctl,
-	nostop, notty, nopoll, lcdmmap, nokqfilter, D_TTY
+	.d_open = lcdopen,
+	.d_close = lcdclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = lcdioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = lcdmmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 #endif /* NWSDISPLAY */
 
-CFATTACH_DECL(lcd_ssio, sizeof (struct s3c24x0_lcd_softc),  lcd_match,
+CFATTACH_DECL_NEW(lcd_ssio, sizeof (struct s3c24x0_lcd_softc),  lcd_match,
     lcd_attach, NULL, NULL);
 
 int
-lcd_match(struct device *parent, struct cfdata *cf, void *aux)
+lcd_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct s3c2xx0_attach_args *sa = aux;
 
@@ -211,9 +222,9 @@ static const struct s3c24x0_lcd_panel_info samsung_LTS350Q1 =
 };
 
 void
-lcd_attach(struct device *parent, struct device *self, void *aux)
+lcd_attach(device_t parent, device_t self, void *aux)
 {
-	struct s3c24x0_lcd_softc *sc = (struct s3c24x0_lcd_softc *)self;
+	struct s3c24x0_lcd_softc *sc = device_private(self);
 	bus_space_tag_t iot =  s3c2xx0_softc->sc_iot;
 	bus_space_handle_t gpio_ioh = s3c2xx0_softc->sc_gpio_ioh;
 #if NWSDISPLAY > 0
@@ -223,6 +234,7 @@ lcd_attach(struct device *parent, struct device *self, void *aux)
 #endif
 
 
+	sc->sc_dev = self;
 	aprint_normal( "\n" );
 
 	/* setup GPIO ports for LCD */
@@ -274,7 +286,8 @@ lcdclose( dev_t dev, int fflag, int devtype, struct proc *p )
 paddr_t
 lcdmmap( dev_t dev, off_t offset, int size )
 {
-	struct s3c24x0_lcd_softc *sc = device_lookup(&lcd_cd, minor(dev));
+	struct s3c24x0_lcd_softc *sc =
+		device_lookup_private(&lcd_cd, minor(dev));
 	struct s3c24x0_lcd_screen *scr = sc->active;
 
 	return bus_dmamem_mmap(sc->dma_tag, scr->segs, scr->nsegs,

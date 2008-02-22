@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.4 2007/09/20 19:42:53 christos Exp $	*/
+/*	$NetBSD: expand.c,v 1.6 2013/05/06 08:02:20 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: expand.c,v 1.4 2007/09/20 19:42:53 christos Exp $");
+__RCSID("$NetBSD: expand.c,v 1.6 2013/05/06 08:02:20 skrll Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -98,7 +91,7 @@ expand(char *buf, const char *execname, int what, size_t bl)
 	case 3:	/* OSNAME */
 	case 4:	/* OSREL */
 	case 5:	/* PLATFORM */
-		len = sizeof(name);	
+		len = sizeof(name);
 		if (sysctl(mib[what - 3], 2, name, &len, NULL, 0) == -1) {
 			xwarn("sysctl");
 			return 0;
@@ -114,7 +107,7 @@ expand(char *buf, const char *execname, int what, size_t bl)
 
 	return bp - buf;
 }
-		
+
 
 size_t
 _rtld_expand_path(char *buf, size_t bufsize, const char *execname,

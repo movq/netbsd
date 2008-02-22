@@ -1,4 +1,4 @@
-/*	$NetBSD: btpin.c,v 1.3 2007/04/14 09:28:39 plunky Exp $	*/
+/*	$NetBSD: btpin.c,v 1.7 2017/12/21 09:04:34 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,39 +32,40 @@
  */
 
 #include <sys/cdefs.h>
-__COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc\n"
-	    "All rights reserved.\n");
-__RCSID("$NetBSD: btpin.c,v 1.3 2007/04/14 09:28:39 plunky Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.  All rights reserved.");
+__RCSID("$NetBSD: btpin.c,v 1.7 2017/12/21 09:04:34 plunky Exp $");
 
 #include <sys/types.h>
 #include <sys/un.h>
 #include <bluetooth.h>
 #include <err.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 
-int  main(int, char *[]);
-void usage(void);
+__dead static void usage(void);
 
 int
 main(int ac, char *av[])
 {
 	bthcid_pin_response_t rp;
 	struct sockaddr_un un;
+	struct sockaddr_bt bt;
 	char *pin = NULL;
-	int ch, s, len;
+	int ch, s, len, pair;
 
 	memset(&rp, 0, sizeof(rp));
 	len = -1;
+	pair = 0;
 
 	memset(&un, 0, sizeof(un));
 	un.sun_len = sizeof(un);
 	un.sun_family = AF_LOCAL;
 	strlcpy(un.sun_path, BTHCID_SOCKET_NAME, sizeof(un.sun_path));
 
-	while ((ch = getopt(ac, av, "a:d:l:p:rs:")) != EOF) {
+	while ((ch = getopt(ac, av, "a:d:l:Pp:rs:")) != -1) {
 		switch (ch) {
 		case 'a':
 			if (!bt_aton(optarg, &rp.raddr)) {
@@ -89,6 +90,10 @@ main(int ac, char *av[])
 			if (len < 1 || len > HCI_PIN_SIZE)
 				errx(EXIT_FAILURE, "Invalid PIN length");
 
+			break;
+
+		case 'P':
+			pair++;
 			break;
 
 		case 'p':
@@ -132,25 +137,57 @@ main(int ac, char *av[])
 	}
 
 	s = socket(PF_LOCAL, SOCK_STREAM, 0);
-	if (s < 0)
+	if (s == -1)
 		err(EXIT_FAILURE, "socket");
 
-	if (connect(s, (struct sockaddr *)&un, sizeof(un)) < 0)
+	if (connect(s, (struct sockaddr *)&un, sizeof(un)) == -1)
 		err(EXIT_FAILURE, "connect(\"%s\")", un.sun_path);
 	
 	if (send(s, &rp, sizeof(rp), 0) != sizeof(rp))
 		err(EXIT_FAILURE, "send");
 
 	close(s);
+
+	if (pair == 0) 
+		exit(EXIT_SUCCESS);
+
+	s = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
+	if (s == -1)
+		err(EXIT_FAILURE, "socket");
+
+	ch = L2CAP_LM_AUTH;
+	if (setsockopt(s, BTPROTO_L2CAP, SO_L2CAP_LM, &ch, sizeof(ch)) == -1)
+		err(EXIT_FAILURE, "SO_L2CAP_LM");
+
+	memset(&bt, 0, sizeof(bt));
+	bt.bt_len = sizeof(bt);
+	bt.bt_family = AF_BLUETOOTH;
+	bdaddr_copy(&bt.bt_bdaddr, &rp.laddr);
+	if (bind(s, (struct sockaddr *)&bt, sizeof(bt)) == -1)
+		err(EXIT_FAILURE, "bind");
+
+	fprintf(stdout, "Pairing.. ");
+	fflush(stdout);
+
+	bt.bt_psm = L2CAP_PSM_SDP;
+	bdaddr_copy(&bt.bt_bdaddr, &rp.raddr);
+	if (connect(s, (struct sockaddr *)&bt, sizeof(bt)) == -1) {
+		fprintf(stdout, "failed (%s)\n", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+
+	close(s);
+	fprintf(stdout, "done\n");
+
 	exit(EXIT_SUCCESS);
 }
 
-void
+static void
 usage(void)
 {
 
 	fprintf(stderr,
-		"usage: %s [-d device] [-s socket] {-p pin | -r [-l len]} -a addr\n"
+		"usage: %s [-P] [-d device] [-s socket] {-p pin | -r [-l len]} -a addr\n"
 		"", getprogname());
 
 	exit(EXIT_FAILURE);

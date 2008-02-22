@@ -4,14 +4,13 @@ dnl Id: configure.ac,v 1.77 2006/07/20 19:19:27 manubsd Exp
 AC_PREREQ(2.52)
 AC_INIT(ipsec-tools, CVS)
 AC_CONFIG_SRCDIR([configure.ac])
-AM_CONFIG_HEADER(config.h)
+AC_CONFIG_HEADERS(config.h)
 
 AM_INIT_AUTOMAKE(dist-bzip2)
 
 AC_ENABLE_SHARED(no)
 
 AC_PROG_CC
-AM_PROG_CC_STDC
 AC_HEADER_STDC
 AC_PROG_LIBTOOL
 AC_PROG_YACC
@@ -106,13 +105,21 @@ case "$host_os" in
     ;;
 esac
 
+AH_TEMPLATE(ENABLE_WILDCARD_MATCH, [Enable wildcard matching in pre-shared-key file])
+AC_ARG_ENABLE([wildcard-match],
+[--enable-wildcard-match	Enable wildcard matching in pre-shared-key file],
+[case "${enableval}" in
+(yes)	AC_DEFINE(ENABLE_WILDCARD_MATCH);;
+(no)	;;
+(*)	AC_MSG_ERROR(bad value ${enableval} for --enable-wildcard-match);;
+esac],[])
 ### Some basic toolchain checks
 
 # Checks for header files.
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
 AC_CHECK_HEADERS(limits.h sys/time.h unistd.h stdarg.h varargs.h)
-AC_CHECK_HEADERS(shadow.h)
+AC_CHECK_HEADERS(shadow.h strings.h)
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -200,19 +207,19 @@ AC_MSG_RESULT(${crypto_dir-default})
 
 if test "x$crypto_dir" != "x"; then
 	LIBS="$LIBS -L${crypto_dir}/lib"
-	CPPFLAGS="-I${crypto_dir}/include $CPPLAGS"
+	CPPFLAGS="-I${crypto_dir}/include $CPPFLAGS"
 fi
 AC_MSG_CHECKING(openssl version)
 
 AC_TRY_COMPILE(
 [#include <openssl/opensslv.h>
 ],
-[#if OPENSSL_VERSION_NUMBER < 0x0090602fL
+[#if OPENSSL_VERSION_NUMBER < 0x0090813fL
 #error OpenSSL version is too old ...
 #endif],
 [AC_MSG_RESULT([ok])],
 [AC_MSG_RESULT(too old)
-AC_MSG_ERROR([OpenSSL version must be 0.9.6 or higher. Aborting.])
+AC_MSG_ERROR([OpenSSL version must be 0.9.8s or higher. Aborting.])
 ])
 
 AC_CHECK_HEADERS(openssl/engine.h)
@@ -242,7 +249,7 @@ AC_CHECK_HEADER(openssl/sha2.h, [], [
 	    CRYPTOBJS="$CRYPTOBJS sha2.o"
 	])
 
-	CPPFLAGS_ADD="$CPPFLAGS_ADD -I./\${top_srcdir}/src/racoon/missing"
+	CPPFLAGS_ADD="$CPPFLAGS_ADD -I\${top_srcdir}/src/racoon/missing"
 ])
 AC_SUBST(CRYPTOBJS)
 
@@ -556,16 +563,6 @@ if test "x$enable_dpd" = "xyes"; then
 fi
 AC_MSG_RESULT($enable_dpd)
 
-AC_MSG_CHECKING(if --enable-fastquit option is specified)
-AC_ARG_ENABLE(fastquit,
-        [  --enable-fastquit            enable new faster code to flush SAs when stopping racoon],
-        [], [enable_fastquit=no])
-if test "x$enable_fastquit" = "xyes"; then
-	AC_DEFINE([ENABLE_FASTQUIT], [], [Enable fast SA flush code])
-fi
-AC_MSG_RESULT($enable_fastquit)
-
-
 AC_MSG_CHECKING(if --enable-samode-unspec option is specified)
 AC_ARG_ENABLE(samode-unspec,
         [  --enable-samode-unspec  enable to use unspecified a mode of SA],
@@ -793,6 +790,16 @@ if test "$enable_security_context" = "yes"; then
 		fi
 	fi
 fi
+
+RACOON_PATH_LIBS([clock_gettime], [rt])
+
+AC_MSG_CHECKING(for monotonic system clock)
+AC_TRY_COMPILE(
+	[#include <time.h>],
+	[clock_gettime(CLOCK_MONOTONIC, NULL);],
+	[AC_DEFINE([HAVE_CLOCK_MONOTONIC], [], [Have a monotonic clock])
+	 AC_MSG_RESULT(yes)],
+	[AC_MSG_RESULT(no)])
 
 CFLAGS="$CFLAGS $CFLAGS_ADD"
 CPPFLAGS="$CPPFLAGS $CPPFLAGS_ADD"

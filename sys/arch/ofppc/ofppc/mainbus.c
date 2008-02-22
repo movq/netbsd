@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.21 2008/02/13 21:12:32 garbled Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.30 2014/12/31 18:43:18 phx Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.21 2008/02/13 21:12:32 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.30 2014/12/31 18:43:18 phx Exp $");
 
 #include "opt_interrupt.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -49,17 +43,19 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.21 2008/02/13 21:12:32 garbled Exp $")
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_pci.h>
 #include <arch/powerpc/pic/picvar.h>
+#ifdef MULTIPROCESSOR
+#include <arch/powerpc/pic/ipivar.h>
+#endif
 #include <machine/pci_machdep.h>
 #include <machine/autoconf.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
 
+int	mainbus_match(device_t, cfdata_t, void *);
+void	mainbus_attach(device_t, device_t, void *);
 
-int	mainbus_match(struct device *, struct cfdata *, void *);
-void	mainbus_attach(struct device *, struct device *, void *);
-
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
 int mainbus_found = 0;
@@ -87,7 +83,7 @@ init_prepivr(int node)
 		aprint_error("Incorrectly identified i8259 as prepivr\n");
 		return setup_i8259();
 	}
-	prep_intr_reg = (vaddr_t)mapiodev(ivr, sizeof(uint32_t));
+	prep_intr_reg = (vaddr_t)mapiodev(ivr, sizeof(uint32_t), false);
 	prep_intr_reg_off = 0; /* hack */
 	if (!prep_intr_reg)
 		panic("startup: no room for interrupt register");
@@ -104,10 +100,15 @@ init_openpic(int node)
 		uint32_t pci_hi, pci_mid, pci_lo;
 		uint32_t host;
 		uint32_t size_hi, size_lo;
-	} ranges[6], *rp = ranges;
-	unsigned char *baseaddr = NULL;
+	} ranges[6];
 	uint32_t reg[12];
 	int parent, len;
+#if defined(PIC_OPENPIC) || defined(PIC_DISTOPENPIC)
+	unsigned char *baseaddr;
+#endif
+#ifdef PIC_OPENPIC
+	struct ranges *rp = ranges;
+#endif
 #ifdef PIC_DISTOPENPIC
 	unsigned char *isu[OPENPIC_MAX_ISUS];
 	int i, j;
@@ -129,17 +130,25 @@ init_openpic(int node)
 		    (aadr.phys_hi & OFW_PCI_PHYS_HI_SPACEMASK) &&
 		    (aadr.size_lo + aadr.phys_lo <= (rp->size_lo+rp->host))) {
 			baseaddr = (unsigned char *)mapiodev(
-			    rp->host | aadr.phys_lo, aadr.size_lo);
+			    rp->host | aadr.phys_lo, aadr.size_lo, false);
 			aprint_normal("Found openpic at %08x\n",
 			    rp->host | aadr.phys_lo);
 			setup_openpic(baseaddr, 0);
+#ifdef MULTIPROCESSOR
+			setup_openpic_ipi();
+			ipiops.ppc_establish_ipi(IST_LEVEL, IPL_HIGH, NULL);
+			for (i=1; i < ncpu; i++) {
+				aprint_verbose("Enabling interrupts "
+				    "for cpu%d\n", i);
+				openpic_set_priority(i, 0);
+			}
+#endif
 			return TRUE;
 		}
 		rp++;
 		len -= sizeof(ranges[0]);
 	}
 #endif
-	rp = 0; /* satisfy -Wall */
 	return FALSE;
  noaadr:
 	/* this isn't a PCI-attached openpic */
@@ -147,11 +156,19 @@ init_openpic(int node)
 	if (len < sizeof(int)*2)
 		return FALSE;
 
-	if (len == sizeof(int)*2) {	
-		baseaddr = (unsigned char *)mapiodev(reg[0], reg[1]);
+	if (len == sizeof(int)*2) {
 		aprint_verbose("Found openpic at %08x\n", reg[0]);
 #ifdef PIC_OPENPIC
+		baseaddr = (unsigned char *)mapiodev(reg[0], reg[1], false);
 		(void)setup_openpic(baseaddr, 0);
+#ifdef MULTIPROCESSOR
+		setup_openpic_ipi();
+		ipiops.ppc_establish_ipi(IST_LEVEL, IPL_HIGH, NULL);
+		for (i=1; i < ncpu; i++) {
+			aprint_verbose("Enabling interrupts for cpu%d\n", i);
+			openpic_set_priority(i, 0);
+		}
+#endif
 		return TRUE;
 #else
 		aprint_error("No openpic support compiled into kernel!");
@@ -166,16 +183,24 @@ init_openpic(int node)
 		return FALSE;
 	if (i > OPENPIC_MAX_ISUS)
 		aprint_error("Increase OPENPIC_MAX_ISUS to %d\n", i);
-	
-	baseaddr = (unsigned char *)mapiodev(reg[0], 0x40000);
+
+	baseaddr = (unsigned char *)mapiodev(reg[0], 0x40000, false);
 	aprint_verbose("Found openpic at %08x\n", reg[0]);
 
 	for (j=0; j < i; j++) {
 		isu[j] = (unsigned char *)mapiodev(reg[(j+1)*2],
-		    reg[(j+1)*2+1]);
+		    reg[(j+1)*2+1], false);
 		isumap[j] = reg[(j+1)*2+1];
 	}
 	(void)setup_distributed_openpic(baseaddr, i, (void **)isu, isumap);
+#ifdef MULTIPROCESSOR
+	setup_openpic_ipi();
+	ipiops.ppc_establish_ipi(IST_LEVEL, IPL_HIGH, NULL);
+	for (i=1; i < ncpu; i++) {
+		aprint_verbose("Enabling interrupts for cpu%d\n", i);
+		openpic_set_priority(i, 0);
+	}
+#endif
 	return TRUE;
 #endif
 	aprint_error("PIC support not present or PIC error\n");
@@ -187,7 +212,7 @@ init_openpic(int node)
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
+mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	if (mainbus_found)
 		return 0;
@@ -198,11 +223,11 @@ mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
  * Attach the mainbus.
  */
 void
-mainbus_attach(struct device *parent, struct device *self, void *aux)
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct ofbus_attach_args oba;
 	struct confargs ca;
-	int node, i;
+	int node, rtnode, i;
 	u_int32_t reg[4];
 	char name[32];
 
@@ -210,6 +235,21 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_normal("\n");
 
+	/* Find rtas first */
+	rtnode = OF_finddevice("/rtas");
+	if (rtnode != -1) {
+		memset(name, 0, sizeof(name));
+		if (OF_getprop(rtnode, "name", name, sizeof(name)) != -1) {
+			ca.ca_name = name;
+			ca.ca_node = rtnode;
+			ca.ca_nreg = OF_getprop(rtnode, "reg", reg,
+			    sizeof(reg));
+			ca.ca_reg  = reg;
+			config_found(self, &ca, NULL);
+		}
+	}
+
+	/* Now find CPU's */
 	for (i = 0; i < CPU_MAXNUM; i++) {
 		ca.ca_name = "cpu";
 		ca.ca_reg = reg;
@@ -224,18 +264,37 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 		config_found(self, &oba, NULL);
 	}
 
+	if (strcmp(model_name, "Pegasos2") == 0) {
+		/*
+		 * Configure to System Controller MV64361.
+		 * And skip other devices.  These attached from it.
+		 */
+		ca.ca_name = "gt";
+
+		config_found(self, &ca, NULL);
+
+		goto config_fin;
+	}
+
 	/* this primarily searches for pci bridges on the root bus */
 	for (node = OF_child(OF_finddevice("/")); node; node = OF_peer(node)) {
 		memset(name, 0, sizeof(name));
 		if (OF_getprop(node, "name", name, sizeof(name)) == -1)
+			continue;
+		/* skip rtas */
+		if (node == rtnode)
 			continue;
 
 		ca.ca_name = name;
 		ca.ca_node = node;
 		ca.ca_nreg = OF_getprop(node, "reg", reg, sizeof(reg));
 		ca.ca_reg  = reg;
+
 		config_found(self, &ca, NULL);
 	}
+
+config_fin:
+	pic_finish_setup();
 }
 
 void
@@ -288,7 +347,7 @@ init_ofppc_interrupt(void)
 	}
 	if (isa_cascade) {
 		primary_pic = 1;
-		intr_establish(16, IST_LEVEL, IPL_NONE, pic_handle_intr,
+		intr_establish(16, IST_LEVEL, IPL_HIGH, pic_handle_intr,
 		    isa_pic);
 	}
 }

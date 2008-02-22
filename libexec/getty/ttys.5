@@ -1,4 +1,4 @@
-.\"	$NetBSD: ttys.5,v 1.17 2006/10/06 22:07:44 elad Exp $
+.\"	$NetBSD: ttys.5,v 1.20 2015/02/12 07:32:09 aymeric Exp $
 .\"
 .\" Copyright (c) 1985, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     from: @(#)ttys.5	8.1 (Berkeley) 6/4/93
 .\"
-.Dd October 7, 2006
+.Dd April 5, 2012
 .Dt TTYS 5
 .Os
 .Sh NAME
@@ -76,7 +76,7 @@ and can contain multiple words if quoted.
 .Pp
 The third field is the type of terminal usually connected to that
 tty line, normally the one found in the
-.Xr termcap 5
+.Xr terminfo 5
 data base file.
 The environment variable
 .Dv TERM
@@ -199,7 +199,7 @@ program must be run for changes in those flags to take effect on the devices.
 # root login on console at 1200 baud
 console	"/usr/libexec/getty std.1200"	vt100	on secure
 # dialup at 1200 baud, no root logins
-ttyd0	"/usr/libexec/getty d1200"	dialup	on	# 555-1234
+tty00	"/usr/libexec/getty d1200"	dialup	on	# 555-1234
 # Mike's terminal: hp2621
 ttyh0	"/usr/libexec/getty std.9600"	hp2621-nl	on	# 457 Evans
 # John's terminal: vt100
@@ -216,7 +216,7 @@ ttyp1	none	network	off
 .Xr ttyslot 3 ,
 .Xr tty 4 ,
 .Xr gettytab 5 ,
-.Xr termcap 5 ,
+.Xr terminfo 5 ,
 .Xr getty 8 ,
 .Xr init 8 ,
 .Xr ttyflags 8

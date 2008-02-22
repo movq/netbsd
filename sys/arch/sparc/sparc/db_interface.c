@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.78 2008/01/30 14:11:33 ad Exp $ */
+/*	$NetBSD: db_interface.c,v 1.94 2017/07/21 20:56:10 nakayama Exp $ */
 
 /*
  * Mach Operating System
@@ -33,29 +33,32 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.78 2008/01/30 14:11:33 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.94 2017/07/21 20:56:10 nakayama Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_multiprocessor.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/cpu.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
-#include <sys/simplelock.h>
+#include <sys/lwp.h>
 
 #include <dev/cons.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <machine/db_machdep.h>
 
 #include <ddb/db_access.h>
 #include <ddb/ddbvar.h>
 
-#if defined(DDB)
+#if defined(DDB) || defined(_KMEMUSER)
+#include <ddb/db_user.h>
 #include <ddb/db_command.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_variables.h>
@@ -65,9 +68,13 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.78 2008/01/30 14:11:33 ad Exp $")
 #endif
 
 #include <machine/instr.h>
+#if defined(_KERNEL)
 #include <machine/promlib.h>
+#endif
 #include <machine/ctlreg.h>
 #include <machine/pmap.h>
+
+#if defined(_KERNEL)
 #include <sparc/sparc/asm.h>
 
 #include "fb.h"
@@ -104,8 +111,7 @@ db_write_bytes(vaddr_t addr, size_t size, const char *data)
 	}
 
 }
-
-db_regs_t *ddb_regp;
+#endif
 
 #if defined(DDB)
 
@@ -120,91 +126,27 @@ cpu_Debugger(void)
 	sparc_noop();	/* Force this function to allocate a stack frame */
 }
 
-static long nil;
+#endif /* DDB */
 
-/*
- * Machine register set.
- */
-#define dbreg(xx) (long *)offsetof(db_regs_t, db_tf.tf_ ## xx)
-#define dbregfr(xx) (long *)offsetof(db_regs_t, db_fr.fr_ ## xx)
-
-static int db_sparc_regop(const struct db_variable *, db_expr_t *, int);
-
-const struct db_variable db_regs[] = {
-	{ "psr",	dbreg(psr),		db_sparc_regop, },
-	{ "pc",		dbreg(pc),		db_sparc_regop, },
-	{ "npc",	dbreg(npc),		db_sparc_regop, },
-	{ "y",		dbreg(y),		db_sparc_regop, },
-	{ "wim",	dbreg(global[0]),	db_sparc_regop, }, /* see reg.h */
-	{ "g0",		&nil,			FCN_NULL, 	},
-	{ "g1",		dbreg(global[1]),	db_sparc_regop, },
-	{ "g2",		dbreg(global[2]),	db_sparc_regop, },
-	{ "g3",		dbreg(global[3]),	db_sparc_regop, },
-	{ "g4",		dbreg(global[4]),	db_sparc_regop, },
-	{ "g5",		dbreg(global[5]),	db_sparc_regop, },
-	{ "g6",		dbreg(global[6]),	db_sparc_regop, },
-	{ "g7",		dbreg(global[7]),	db_sparc_regop, },
-	{ "o0",		dbreg(out[0]),		db_sparc_regop, },
-	{ "o1",		dbreg(out[1]),		db_sparc_regop, },
-	{ "o2",		dbreg(out[2]),		db_sparc_regop, },
-	{ "o3",		dbreg(out[3]),		db_sparc_regop, },
-	{ "o4",		dbreg(out[4]),		db_sparc_regop, },
-	{ "o5",		dbreg(out[5]),		db_sparc_regop, },
-	{ "o6",		dbreg(out[6]),		db_sparc_regop, },
-	{ "o7",		dbreg(out[7]),		db_sparc_regop, },
-	{ "l0",		dbregfr(local[0]),	db_sparc_regop, },
-	{ "l1",		dbregfr(local[1]),	db_sparc_regop, },
-	{ "l2",		dbregfr(local[2]),	db_sparc_regop, },
-	{ "l3",		dbregfr(local[3]),	db_sparc_regop, },
-	{ "l4",		dbregfr(local[4]),	db_sparc_regop, },
-	{ "l5",		dbregfr(local[5]),	db_sparc_regop, },
-	{ "l6",		dbregfr(local[6]),	db_sparc_regop, },
-	{ "l7",		dbregfr(local[7]),	db_sparc_regop, },
-	{ "i0",		dbregfr(arg[0]),	db_sparc_regop, },
-	{ "i1",		dbregfr(arg[1]),	db_sparc_regop, },
-	{ "i2",		dbregfr(arg[2]),	db_sparc_regop, },
-	{ "i3",		dbregfr(arg[3]),	db_sparc_regop, },
-	{ "i4",		dbregfr(arg[4]),	db_sparc_regop, },
-	{ "i5",		dbregfr(arg[5]),	db_sparc_regop, },
-	{ "i6",		dbregfr(arg[6]),	db_sparc_regop, },
-	{ "i7",		dbregfr(arg[7]),	db_sparc_regop, },
-};
-const struct db_variable * const db_eregs =
-    db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
-
-static int
-db_sparc_regop (const struct db_variable *vp, db_expr_t *val, int opcode)
-{
-	db_expr_t *regaddr =
-	    (db_expr_t *)(((uint8_t *)DDB_REGS) + ((size_t)vp->valuep));
-
-	switch (opcode) {
-	case DB_VAR_GET:
-		*val = *regaddr;
-		break;
-	case DB_VAR_SET:
-		*regaddr = *val;
-		break;
-	default:
-		panic("db_sparc_regop: unknown op %d", opcode);
-	}
-	return 0;
-}
+#if defined(DDB) || defined(_KMEMUSER)
 
 int	db_active = 0;
 
 extern char *trap_type[];
 
+#ifdef _KERNEL
 void kdb_kbd_trap(struct trapframe *);
 void db_prom_cmd(db_expr_t, bool, db_expr_t, const char *);
+void db_page_cmd(db_expr_t, bool, db_expr_t, const char *);
 void db_proc_cmd(db_expr_t, bool, db_expr_t, const char *);
 void db_dump_pcb(db_expr_t, bool, db_expr_t, const char *);
-void db_uvmhistdump(db_expr_t, bool, db_expr_t, const char *);
+#endif
 #ifdef MULTIPROCESSOR
 void db_cpu_cmd(db_expr_t, bool, db_expr_t, const char *);
+void db_xcall_cmd(db_expr_t, bool, db_expr_t, const char *);
 #endif
-void db_page_cmd(db_expr_t, bool, db_expr_t, const char *);
 
+#ifdef _KERNEL
 /*
  * Received keyboard interrupt sequence.
  */
@@ -216,6 +158,7 @@ kdb_kbd_trap(struct trapframe *tf)
 		kdb_trap(-1, tf);
 	}
 }
+#endif
 
 /* struct cpu_info of CPU being investigated */
 struct cpu_info *ddb_cpuinfo;
@@ -240,9 +183,6 @@ db_suspend_others(void)
 {
 	int cpu_me = cpu_number();
 	int win;
-
-	if (cpus == NULL)
-		return 1;
 
 	__cpu_simple_lock(&db_lock);
 	if (ddb_cpu == NOCPU)
@@ -282,6 +222,7 @@ ddb_suspend(struct trapframe *tf)
 }
 #endif /* MULTIPROCESSOR */
 
+#if defined(DDB)
 /*
  *  kdb_trap - field a TRACE or BPT trap
  */
@@ -346,7 +287,9 @@ kdb_trap(int type, struct trapframe *tf)
 
 	return (1);
 }
+#endif /* DDB */
 
+#ifdef _KERNEL
 void
 db_proc_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 {
@@ -377,10 +320,10 @@ db_proc_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	db_printf("maxsaddr:%p ssiz:%d pg or %llxB\n",
 		  p->p_vmspace->vm_maxsaddr, p->p_vmspace->vm_ssize,
 		  (unsigned long long)ctob(p->p_vmspace->vm_ssize));
-	db_printf("profile timer: %ld sec %ld usec\n",
+	db_printf("profile timer: %lld sec %ld nsec\n",
 		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_sec,
-		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_usec);
-	db_printf("pcb: %p\n", &l->l_addr->u_pcb);
+		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_nsec);
+	db_printf("pcb: %p\n", lwp_getpcb(l));
 	return;
 }
 
@@ -396,10 +339,10 @@ db_dump_pcb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	else
 		pcb = curcpu()->curpcb;
 
+	snprintb(bits, sizeof(bits), PSR_BITS, pcb->pcb_psr);
 	db_printf("pcb@%p sp:%p pc:%p psr:%s onfault:%p\nfull windows:\n",
 		  pcb, (void *)(long)pcb->pcb_sp, (void *)(long)pcb->pcb_pc,
-		  bitmask_snprintf(pcb->pcb_psr, PSR_BITS, bits, sizeof(bits)),
-		  (void *)pcb->pcb_onfault);
+		  bits, (void *)pcb->pcb_onfault);
 
 	for (i=0; i<pcb->pcb_nsaved; i++) {
 		db_printf("win %d: at %llx local, in\n", i,
@@ -446,9 +389,9 @@ db_page_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	db_printf("pa %llx pg %p\n", (unsigned long long)addr,
 	    PHYS_TO_VM_PAGE(addr));
 }
+#endif
 
 #if defined(MULTIPROCESSOR)
-extern void cpu_debug_dump(void); /* XXX */
 
 void
 db_cpu_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
@@ -483,33 +426,36 @@ db_cpu_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	ddb_cpuinfo = ci;
 }
 
-#endif /* MULTIPROCESSOR */
-
-#include <uvm/uvm.h>
-
-#ifdef UVMHIST
-extern void uvmhist_dump(struct uvm_history *);
-#endif
-extern struct uvm_history_head uvm_histories;
-
 void
-db_uvmhistdump(db_expr_t addr, bool have_addr, db_expr_t count,
-	       const char *modif)
+db_xcall_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 {
-
-	uvmhist_dump(uvm_histories.lh_first);
+	cpu_xcall_dump();
 }
 
+#endif /* MULTIPROCESSOR */
+
 const struct db_command db_machine_command_table[] = {
-	{ DDB_ADD_CMD("prom",	db_prom_cmd,	0,	NULL,NULL,NULL) },
-	{ DDB_ADD_CMD("proc",	db_proc_cmd,	0,	NULL,NULL,NULL) },
-	{ DDB_ADD_CMD("pcb",	db_dump_pcb,	0,	NULL,NULL,NULL) },
-	{ DDB_ADD_CMD("page",	db_page_cmd,	0,	NULL,NULL,NULL) },
-	{ DDB_ADD_CMD("uvmdump",	db_uvmhistdump,	0,	NULL,NULL,NULL) },
-#ifdef MULTIPROCESSOR
-	{ DDB_ADD_CMD("cpu",	db_cpu_cmd,	0,	NULL,NULL,NULL) },
+#ifdef _KERNEL
+	{ DDB_ADD_CMD("prom",	db_prom_cmd,	0,
+	  "Enter the Sun PROM monitor.",NULL,NULL) },
+	{ DDB_ADD_CMD("page",	db_page_cmd,	0,
+	  "Display the address of a struct vm_page given a physical address",
+	   "pa", "   pa:\tphysical address to look up") },
+	{ DDB_ADD_CMD("proc",	db_proc_cmd,	0,
+	  "Display some information about an LWP",
+	  "[addr]","   addr:\tstruct lwp address (curlwp otherwise)") },
+	{ DDB_ADD_CMD("pcb",	db_dump_pcb,	0,
+	  "Display information about a struct pcb",
+	  "[address]",
+	  "   address:\tthe struct pcb to print (curpcb otherwise)") },
 #endif
-	{ DDB_ADD_CMD(NULL,     NULL,           0,NULL,NULL,NULL) }
+#ifdef MULTIPROCESSOR
+	{ DDB_ADD_CMD("cpu",	db_cpu_cmd,	0,
+	  "switch to another cpu's registers", "cpu-no", NULL) },
+	{ DDB_ADD_CMD("xcall",	db_xcall_cmd,	0,
+	  "show xcall information on all cpus", NULL, NULL) },
+#endif
+	{ DDB_ADD_CMD(NULL,     NULL,           0,	NULL,NULL,NULL) }
 };
 #endif /* DDB */
 
@@ -562,7 +508,12 @@ db_branch_taken(int inst, db_addr_t pc, db_regs_t *regs)
 
       default:
 	/* not a branch */
+#ifdef _KERNEL
 	panic("branch_taken() on non-branch");
+#else
+	printf("branch_taken() on non-branch\n");
+	return 0;
+#endif
     }
 }
 

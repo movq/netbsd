@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_mmap.h,v 1.3 2005/12/11 12:20:12 christos Exp $	*/
+/*	$NetBSD: linux_mmap.h,v 1.5 2015/03/14 08:32:07 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,8 +36,9 @@
 
 /* LINUX_MAP_SHARED/PRIVATE defined in common/linux_mmap.h */
 
-#define LINUX_MAP_ANON		0x0010
-#define LINUX_MAP_FIXED		0x0100
+#define LINUX_MAP_ANON		0x00010
+#define LINUX_MAP_FIXED		0x00100
+#define LINUX_MAP_LOCKED	0x08000
 
 /* the following flags are silently ignored */
 
@@ -55,7 +49,6 @@
 #define LINUX_MAP_GROWSDOWN	0x01000
 #define LINUX_MAP_DENYWRITE	0x02000
 #define	LINUX_MAP_EXECUTABLE	0x04000
-#define LINUX_MAP_LOCKED	0x08000
 
 #define LINUX_MAP_NORESERVE	0x10000
 

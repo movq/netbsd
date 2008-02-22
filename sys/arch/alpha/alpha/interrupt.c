@@ -1,4 +1,4 @@
-/* $NetBSD: interrupt.c,v 1.76 2007/12/03 15:33:04 ad Exp $ */
+/* $NetBSD: interrupt.c,v 1.81 2016/01/17 10:44:57 martin Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,17 +34,17 @@
  * All rights reserved.
  *
  * Authors: Keith Bostic, Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -72,7 +65,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.76 2007/12/03 15:33:04 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.81 2016/01/17 10:44:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,11 +78,9 @@ __KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.76 2007/12/03 15:33:04 ad Exp $");
 #include <sys/intr.h>
 #include <sys/device.h>
 #include <sys/cpu.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/atomic.h>
 
 #include <machine/cpuvar.h>
-#include <machine/atomic.h>
 #include <machine/autoconf.h>
 #include <machine/reg.h>
 #include <machine/rpb.h>
@@ -187,7 +178,7 @@ scb_free(u_long vec)
 	    (vec & (SCB_VECSIZE - 1)) != 0)
 		panic("scb_free: bad vector 0x%lx", vec);
 
-	idx = SCB_VECTOIDX(vec - SCB_IOVECBASE); 
+	idx = SCB_VECTOIDX(vec - SCB_IOVECBASE);
 
 	if (scb_iovectab[idx].scb_func == scb_stray)
 		panic("scb_free: vector 0x%lx is empty", vec);
@@ -208,7 +199,7 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 	switch (a0) {
 	case ALPHA_INTR_XPROC:	/* interprocessor interrupt */
 #if defined(MULTIPROCESSOR)
-		atomic_add_ulong(&ci->ci_intrdepth, 1);
+		atomic_inc_ulong(&ci->ci_intrdepth);
 
 		alpha_ipi_process(ci, framep);
 
@@ -220,7 +211,7 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 		    hwrpb->rpb_txrdy != 0)
 			cpu_iccb_receive();
 
-		atomic_sub_ulong(&ci->ci_intrdepth, 1);
+		atomic_dec_ulong(&ci->ci_intrdepth);
 #else
 		printf("WARNING: received interprocessor interrupt!\n");
 #endif /* MULTIPROCESSOR */
@@ -234,7 +225,7 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 		 * time would be counted as interrupt time.
 		 */
 		sc->sc_evcnt_clock.ev_count++;
-		uvmexp.intrs++;
+		ci->ci_data.cpu_nintr++;
 		if (platform.clockintr) {
 			/*
 			 * Call hardclock().  This will also call
@@ -254,14 +245,14 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 		break;
 
 	case ALPHA_INTR_ERROR:	/* Machine Check or Correctable Error */
-		atomic_add_ulong(&ci->ci_intrdepth, 1);
+		atomic_inc_ulong(&ci->ci_intrdepth);
 		a0 = alpha_pal_rdmces();
 		if (platform.mcheck_handler != NULL &&
 		    (void *)framep->tf_regs[FRAME_PC] != XentArith)
 			(*platform.mcheck_handler)(a0, framep, a1, a2);
 		else
 			machine_check(a0, framep, a1, a2);
-		atomic_sub_ulong(&ci->ci_intrdepth, 1);
+		atomic_dec_ulong(&ci->ci_intrdepth);
 		break;
 
 	case ALPHA_INTR_DEVICE:	/* I/O device interrupt */
@@ -272,19 +263,19 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 
 		KDASSERT(a1 >= SCB_IOVECBASE && a1 < SCB_SIZE);
 
-		atomic_add_ulong(&sc->sc_evcnt_device.ev_count, 1);
-		atomic_add_ulong(&ci->ci_intrdepth, 1);
+		atomic_inc_ulong(&sc->sc_evcnt_device.ev_count);
+		atomic_inc_ulong(&ci->ci_intrdepth);
 
 		if (!mpsafe) {
 			KERNEL_LOCK(1, NULL);
 		}
-		uvmexp.intrs++;
+		ci->ci_data.cpu_nintr++;
 		scb = &scb_iovectab[idx];
 		(*scb->scb_func)(scb->scb_arg, a1);
 		if (!mpsafe)
 			KERNEL_UNLOCK_ONE(NULL);
 
-		atomic_sub_ulong(&ci->ci_intrdepth, 1);
+		atomic_dec_ulong(&ci->ci_intrdepth);
 		break;
 	    }
 
@@ -347,7 +338,7 @@ machine_check(unsigned long mces, struct trapframe *framep,
 
 	/* Processor correctable errors. */
 	if (mces & ALPHA_MCES_PCE)
-		printf("Warning: received processor correctable error.\n"); 
+		printf("Warning: received processor correctable error.\n");
 
 	/* Clear pending machine checks and correctable errors */
 	alpha_pal_wrmces(mces);
@@ -371,7 +362,7 @@ fatal:
 	printf("    code    = 0x%lx\n", *(unsigned long *)(param + 0x10));
 	printf("    curlwp = %p\n", curlwp);
 	if (curlwp != NULL)
-		printf("        pid = %d.%d, comm = %s\n", 
+		printf("        pid = %d.%d, comm = %s\n",
 		    curproc->p_pid, curlwp->l_lid,
 		    curproc->p_comm);
 	printf("\n");
@@ -402,20 +393,20 @@ badaddr_read(void *addr, size_t size, void *rptr)
 	/* Read from the test address, and make sure the read happens. */
 	alpha_mb();
 	switch (size) {
-	case sizeof (u_int8_t):
-		rcpt = *(volatile u_int8_t *)addr;
+	case sizeof (uint8_t):
+		rcpt = *(volatile uint8_t *)addr;
 		break;
 
-	case sizeof (u_int16_t):
-		rcpt = *(volatile u_int16_t *)addr;
+	case sizeof (uint16_t):
+		rcpt = *(volatile uint16_t *)addr;
 		break;
 
-	case sizeof (u_int32_t):
-		rcpt = *(volatile u_int32_t *)addr;
+	case sizeof (uint32_t):
+		rcpt = *(volatile uint32_t *)addr;
 		break;
 
-	case sizeof (u_int64_t):
-		rcpt = *(volatile u_int64_t *)addr;
+	case sizeof (uint64_t):
+		rcpt = *(volatile uint64_t *)addr;
 		break;
 
 	default:
@@ -438,20 +429,20 @@ badaddr_read(void *addr, size_t size, void *rptr)
 	 */
 	if (rptr && rv == 0) {
 		switch (size) {
-		case sizeof (u_int8_t):
-			*(volatile u_int8_t *)rptr = rcpt;
+		case sizeof (uint8_t):
+			*(volatile uint8_t *)rptr = rcpt;
 			break;
 
-		case sizeof (u_int16_t):
-			*(volatile u_int16_t *)rptr = rcpt;
+		case sizeof (uint16_t):
+			*(volatile uint16_t *)rptr = rcpt;
 			break;
 
-		case sizeof (u_int32_t):
-			*(volatile u_int32_t *)rptr = rcpt;
+		case sizeof (uint32_t):
+			*(volatile uint32_t *)rptr = rcpt;
 			break;
 
-		case sizeof (u_int64_t):
-			*(volatile u_int64_t *)rptr = rcpt;
+		case sizeof (uint64_t):
+			*(volatile uint64_t *)rptr = rcpt;
 			break;
 		}
 	}
@@ -502,7 +493,7 @@ softint_trigger(uintptr_t machdep)
 {
 
 	/* XXX Needs to be per-CPU */
-	atomic_setbits_ulong(&ssir, 1 << (x))
+	atomic_or_ulong(&ssir, 1 << (x))
 }
 #endif
 
@@ -527,8 +518,12 @@ rlprintf(struct timeval *t, const char *fmt, ...)
 	va_list ap;
 	static const struct timeval msgperiod[1] = {{ 5, 0 }};
 
-	if (ratecheck(t, msgperiod))
-		vprintf(fmt, ap);
+	if (!ratecheck(t, msgperiod))
+		return;
+
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
 }
 
 const static uint8_t ipl2psl_table[] = {

@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.h,v 1.12 2007/12/25 18:33:34 perry Exp $	*/
+/*	$NetBSD: bootinfo.h,v 1.29 2018/04/13 11:24:34 nonaka Exp $	*/
 
 /*
  * Copyright (c) 1997
@@ -26,13 +26,6 @@
  *
  */
 
-#ifndef _LOCORE
-
-struct btinfo_common {
-	int len;
-	int type;
-};
-
 #define BTINFO_BOOTPATH		0
 #define BTINFO_ROOTDEVICE	1
 #define BTINFO_BOOTDISK		3
@@ -42,6 +35,23 @@ struct btinfo_common {
 #define BTINFO_SYMTAB		8
 #define BTINFO_MEMMAP		9
 #define	BTINFO_BOOTWEDGE	10
+#define BTINFO_MODULELIST	11
+#define BTINFO_FRAMEBUFFER	12
+#define BTINFO_USERCONFCOMMANDS	13
+#define BTINFO_EFI		14
+#define BTINFO_EFIMEMMAP	15
+#define BTINFO_PREKERN		16
+
+#define BTINFO_STR "bootpath", "rootdevice", "bootdisk", "netif", \
+    "console", "biosgeom", "symtab", "memmap", "bootwedge", "modulelist", \
+    "framebuffer", "userconfcommands", "efi", "efimemmap", "prekern",
+
+#ifndef _LOCORE
+
+struct btinfo_common {
+	int len;
+	int type;
+};
 
 struct btinfo_bootpath {
 	struct btinfo_common common;
@@ -110,6 +120,10 @@ struct bi_memmap_entry {
 #define	BIM_Reserved	2	/* in use or reserved by the system */
 #define	BIM_ACPI	3	/* ACPI Reclaim memory */
 #define	BIM_NVS		4	/* ACPI NVS memory */
+#define	BIM_Unusable	5	/* errors have been detected */
+#define	BIM_Disabled	6	/* not enabled */
+#define	BIM_PMEM	7	/* Persistent memory */
+#define	BIM_PRAM	12	/* legacy NVDIMM (OEM defined) */
 
 struct btinfo_memmap {
 	struct btinfo_common common;
@@ -154,7 +168,7 @@ struct bi_biosgeom_entry {
 	unsigned int	cksum;			/* MBR checksum */
 	int		res0, res1, res2, res3;	/* future expansion; 0 now */
 #endif
-	struct mbr_partition dosparts[MBR_PART_COUNT]; /* MBR itself */
+	struct mbr_partition mbrparts[MBR_PART_COUNT]; /* MBR itself */
 } __packed;
 
 struct btinfo_biosgeom {
@@ -163,11 +177,81 @@ struct btinfo_biosgeom {
 	struct bi_biosgeom_entry disk[1]; /* var len */
 };
 
+struct bi_modulelist_entry {
+	char path[80];
+	int type;
+	int len;
+	uint32_t base;
+};
+#define	BI_MODULE_NONE		0x00
+#define	BI_MODULE_ELF		0x01
+#define	BI_MODULE_IMAGE		0x02
+#define BI_MODULE_RND		0x03
+#define BI_MODULE_FS		0x04
+
+struct btinfo_modulelist {
+	struct btinfo_common common;
+	int num;
+	uint32_t endpa;
+	/* bi_modulelist_entry list follows */
+};
+
+struct btinfo_framebuffer {
+	struct btinfo_common common;
+	uint64_t physaddr;
+	uint32_t flags;
+	uint32_t width;
+	uint32_t height;
+	uint16_t stride;
+	uint8_t depth;
+	uint8_t rnum;
+	uint8_t gnum;
+	uint8_t bnum;
+	uint8_t rpos;
+	uint8_t gpos;
+	uint8_t bpos;
+	uint16_t vbemode;
+	uint8_t reserved[14];
+};
+
+struct bi_userconfcommand {
+	char text[80];
+};
+
+struct btinfo_userconfcommands {
+	struct btinfo_common common;
+	int num;
+	/* bi_userconfcommand list follows */
+};
+
+/* EFI Information */
+struct btinfo_efi {
+	struct btinfo_common common;
+	uint64_t systblpa;	/* Physical address of the EFI System Table */
+	uint32_t flags;
+#define BI_EFI_32BIT	__BIT(0)	/* 32bit UEFI */
+	uint8_t reserved[12];
+};
+
+struct btinfo_prekern {
+	struct btinfo_common common;
+	uint32_t kernpa_start;
+	uint32_t kernpa_end;
+};
+
+struct btinfo_efimemmap {
+	struct btinfo_common common;
+	uint32_t num;		/* number of memory descriptor */
+	uint32_t version;	/* version of memory descriptor */
+	uint32_t size;		/* size of memory descriptor */
+	uint8_t memmap[1];	/* whole memory descriptors */
+};
+
 #endif /* _LOCORE */
 
 #ifdef _KERNEL
 
-#define BOOTINFO_MAXSIZE 4096
+#define BOOTINFO_MAXSIZE 8192
 
 #ifndef _LOCORE
 /*
@@ -184,7 +268,10 @@ struct bootinfo {
 	uint8_t		bi_data[BOOTINFO_MAXSIZE - sizeof(uint32_t)];
 };
 
+extern struct bootinfo bootinfo;
+
 void *lookup_bootinfo(int);
+void  aprint_bootinfo(void);
 #endif /* _LOCORE */
 
 #endif /* _KERNEL */

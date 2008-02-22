@@ -1,4 +1,4 @@
-/* $NetBSD: auvar.h,v 1.9 2007/02/21 22:59:47 thorpej Exp $ */
+/* $NetBSD: auvar.h,v 1.12 2015/06/09 22:50:50 matt Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -69,6 +69,8 @@
 #ifndef _MIPS_ALCHEMY_AUVAR_H_
 #define	_MIPS_ALCHEMY_AUVAR_H_
 
+#include <mips/cpuregs.h>
+
 #include "opt_alchemy.h"
 
 struct au_dev {
@@ -81,7 +83,7 @@ struct au_chipdep {
 	const char	*name;
 	bus_addr_t	icus[2];	/* in case it ever changes */
 	struct au_dev	*devices;
-	const char	**irqnames;
+	const char	* const *irqnames;
 };
 
 struct au_chipdep	*au_chipdep(void);
@@ -104,7 +106,7 @@ void	*au_intr_establish(int, int, int, int, int (*)(void *), void *);
 void	au_intr_disestablish(void *);
 void	au_intr_enable(int);
 void	au_intr_disable(int);
-void	au_iointr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+void	au_iointr(int, vaddr_t, uint32_t);
 
 void	au_cpureg_bus_mem_init(bus_space_tag_t, void *);
 

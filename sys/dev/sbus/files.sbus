@@ -1,4 +1,4 @@
-#	$NetBSD: files.sbus,v 1.31 2007/08/26 00:39:39 macallan Exp $
+#	$NetBSD: files.sbus,v 1.42 2016/02/11 02:23:44 macallan Exp $
 #
 # Config file and device description for machine-independent SBUS code.
 # Included by ports that need it.
@@ -115,17 +115,19 @@ attach	cgthree at sbus with cgthree_sbus
 file	dev/sbus/cgthree_sbus.c		cgthree_sbus
 
 # framebuffer devices implemented only on SBus
-device	tcx: bt_dac, fb, rasops8, rasops24
+device	tcx: fb, rasops8, wsemuldisplaydev, vcons
 attach	tcx at sbus
 file	dev/sbus/tcx.c			tcx needs-flag
 
-device	zx: fb, rasops32
+device	zx: fb, rasops32, wsemuldisplaydev, vcons
 attach	zx at sbus
 file	dev/sbus/zx.c			zx
 
 # Tadpole 3GX/3GS (P9100 -- P Nine One Zero Zero -> pnozz)
 defflag	opt_pnozz.h	PNOZZ_DEBUG
-device	pnozz: fb, rasops8, bt_dac, wsemuldisplaydev, vcons
+defflag opt_pnozz.h	PNOZZ_EMUL_CG3
+defflag opt_pnozz.h	PNOZZ_USE_LATCH
+device	pnozz: fb, rasops8, bt_dac, wsemuldisplaydev, vcons, glyphcache
 attach	pnozz at sbus
 file	dev/sbus/p9100.c		pnozz needs-flag
 
@@ -142,7 +144,20 @@ file	dev/sbus/genfb_sbus.c	genfb_sbus
 
 # Fujitsu AG-10e
 defflag	opt_agten.h	AGTEN_DEBUG
-device	agten: fb, rasops8, bt_dac, wsemuldisplaydev, vcons
+device	agten: fb, rasops8, bt_dac, wsemuldisplaydev, vcons, glyphcache
 attach	agten at sbus
 file	dev/sbus/agten.c		agten needs-flag
 file	dev/ic/i128.c			agten
+
+# Sun CG12 / Matrox SG3
+defflag opt_cgtwelve.h	CG12_DEBUG CG12_COLOR CG12_SHADOW
+device	cgtwelve: fb, rasops1, rasops8, wsemuldisplaydev, vcons
+attach	cgtwelve at sbus
+file	dev/sbus/cgtwelve.c		cgtwelve
+
+# SSB MGX
+defflag 	opt_mgx.h	MGX_DEBUG
+defparam	opt_mgx.h	MGX_DEPTH=8
+device	mgx: fb, rasops8, rasops32, wsemuldisplaydev, vcons, glyphcache
+attach	mgx at sbus
+file	dev/sbus/mgx.c			mgx

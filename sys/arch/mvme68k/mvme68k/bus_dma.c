@@ -1,4 +1,4 @@
-/* $NetBSD: bus_dma.c,v 1.34 2008/01/12 09:54:29 tsutsui Exp $	*/
+/* $NetBSD: bus_dma.c,v 1.37 2010/11/12 13:18:58 uebayasi Exp $	*/
 
 /*
  * This file was taken from from next68k/dev/bus_dma.c, which was originally
@@ -23,13 +23,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.34 2008/01/12 09:54:29 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.37 2010/11/12 13:18:58 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.34 2008/01/12 09:54:29 tsutsui Exp $")
 #include <sys/mbuf.h>
 #include <sys/kcore.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <machine/cpu.h>
 #include <machine/pmap.h>
@@ -579,9 +572,9 @@ _bus_dmamem_alloc_common(bus_dma_tag_t t, bus_addr_t low, bus_addr_t high,
 	segs[curseg].ds_addr = segs[curseg]._ds_cpuaddr = lastaddr;
 	segs[curseg].ds_len = PAGE_SIZE;
 	segs[curseg]._ds_flags = 0;
-	m = m->pageq.tqe_next;
+	m = m->pageq.queue.tqe_next;
 
-	for (; m != NULL; m = m->pageq.tqe_next) {
+	for (; m != NULL; m = m->pageq.queue.tqe_next) {
 		if (curseg > nsegs) {
 #ifdef DIAGNOSTIC
 			printf("%s: too many segments\n", __func__);
@@ -673,7 +666,7 @@ _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
 		    addr < (segs[curseg]._ds_cpuaddr + segs[curseg].ds_len);
 		    addr += PAGE_SIZE) {
 			m = PHYS_TO_VM_PAGE(addr);
-			TAILQ_INSERT_TAIL(&mlist, m, pageq);
+			TAILQ_INSERT_TAIL(&mlist, m, pageq.queue);
 		}
 	}
 

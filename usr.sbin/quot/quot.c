@@ -1,4 +1,4 @@
-/*	$NetBSD: quot.c,v 1.27 2007/07/17 22:00:46 christos Exp $	*/
+/*	$NetBSD: quot.c,v 1.34 2016/07/28 08:24:58 martin Exp $	*/
 
 /*
  * Copyright (C) 1991, 1994 Wolfgang Solfrank.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: quot.c,v 1.27 2007/07/17 22:00:46 christos Exp $");
+__RCSID("$NetBSD: quot.c,v 1.34 2016/07/28 08:24:58 martin Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -55,7 +55,7 @@ __RCSID("$NetBSD: quot.c,v 1.27 2007/07/17 22:00:46 christos Exp $");
 static char estimate;
 static char count;
 static char unused;
-static void (*func) __P((int, struct fs *, char *));
+static void (*func)(int, struct fs *, const char *);
 static long blocksize;
 static char *header;
 
@@ -87,29 +87,25 @@ union dinode {
 	(dp)->dp1.di_##field : (dp)->dp2.di_##field)
 
 
-static	int		cmpusers __P((const void *, const void *));
-static	void		dofsizes __P((int, struct fs *, char *));
-static	void		donames __P((int, struct fs *, char *));
-static	void		douser __P((int, struct fs *, char *));
-static	union dinode  *get_inode __P((int, struct fs*, ino_t));
-static	void		ffs_oldfscompat __P((struct fs *));
-static	void		initfsizes __P((void));
-static	void		inituser __P((void));
-static	int		isfree __P((struct fs *, union dinode *));
-	int		main __P((int, char **));
-	void		quot __P((char *, char *));
-static	void		usage __P((void));
-static	struct user    *user __P((uid_t));
-static	void		uses __P((uid_t, daddr_t, time_t));
-static	void		usrrehash __P((void));
-static	int		virtualblocks __P((struct fs *, union dinode *));
+static	int		cmpusers(const void *, const void *);
+static	void		dofsizes(int, struct fs *, const char *);
+static	void		donames(int, struct fs *, const char *);
+static	void		douser(int, struct fs *, const char *);
+static	union dinode  *get_inode(int, struct fs *, ino_t);
+static	void		ffs_oldfscompat(struct fs *);
+static	void		initfsizes(void);
+static	void		inituser(void);
+static	int		isfree(struct fs *, union dinode *);
+static	void		quot(const char *, const char *);
+static	void		usage(void) __attribute__((__noreturn__));
+static	struct user    *user(uid_t);
+static	void		uses(uid_t, daddr_t, time_t);
+static	void		usrrehash(void);
+static	int		virtualblocks(struct fs *, union dinode *);
 
 
 static union dinode *
-get_inode(fd, super, ino)
-	int fd;
-	struct fs *super;
-	ino_t ino;
+get_inode(int fd, struct fs *super, ino_t ino)
 {
 	static char *ipbuf;
 	static ino_t last;
@@ -130,7 +126,7 @@ get_inode(fd, super, ino)
 		if (lseek(fd,
 		    (off_t)ino_to_fsba(super, last) << super->fs_fshift,
 		    0) < 0 ||
-		    read(fd, ipbuf, INOSZ(super)) != INOSZ(super))
+		    read(fd, ipbuf, INOSZ(super)) != (ssize_t)INOSZ(super))
 			errx(1, "read inodes");
 	}
 
@@ -142,22 +138,20 @@ get_inode(fd, super, ino)
 }
 
 #ifdef	COMPAT
-#define	actualblocks(fs, dp)	(DIP(fs, dp, blocks) / 2)
+#define	actualblocks(fs, dp)	(int)(DIP(fs, dp, blocks) / 2)
 #else
-#define	actualblocks(fs, dp)	(DIP(fs, dp, blocks))
+#define	actualblocks(fs, dp)	(int)(DIP(fs, dp, blocks))
 #endif
 
 static int
-virtualblocks(super, dp)
-	struct fs *super;
-	union dinode *dp;
+virtualblocks(struct fs *super, union dinode *dp)
 {
 	off_t nblk, sz;
 	
 	sz = DIP(super, dp, size);
 #ifdef	COMPAT
-	if (lblkno(super, sz) >= NDADDR) {
-		nblk = blkroundup(super, sz);
+	if (ffs_lblkno(super, sz) >= UFS_NDADDR) {
+		nblk = ffs_blkroundup(super, sz);
 		if (sz == nblk)
 			nblk += super->fs_bsize;
 	}
@@ -165,17 +159,17 @@ virtualblocks(super, dp)
 	return sz / 1024;
 #else	/* COMPAT */
 	
-	if (lblkno(super, sz) >= NDADDR) {
-		nblk = blkroundup(super, sz);
-		sz = lblkno(super, nblk);
-		sz = howmany(sz - NDADDR, NINDIR(super));
+	if (ffs_lblkno(super, sz) >= UFS_NDADDR) {
+		nblk = ffs_blkroundup(super, sz);
+		sz = ffs_lblkno(super, nblk);
+		sz = howmany(sz - UFS_NDADDR, FFS_NINDIR(super));
 		while (sz > 0) {
 			nblk += sz * super->fs_bsize;
 			/* One block on this level is in the inode itself */
-			sz = howmany(sz - 1, NINDIR(super));
+			sz = howmany(sz - 1, FFS_NINDIR(super));
 		}
 	} else
-		nblk = fragroundup(super, sz);
+		nblk = ffs_fragroundup(super, sz);
 	
 	return nblk / DEV_BSIZE;
 #endif	/* COMPAT */
@@ -213,16 +207,15 @@ static struct user {
 static int nusers;
 
 static void
-inituser()
+inituser(void)
 {
 	int i;
 	struct user *usr;
 	
 	if (!nusers) {
 		nusers = 8;
-		if (!(users =
-		    (struct user *)calloc(nusers, sizeof(struct user))))
-			errx(1, "allocate users");
+		if (!(users = calloc(nusers, sizeof(*users))))
+			err(1, "allocate users");
 	} else {
 		for (usr = users, i = nusers; --i >= 0; usr++) {
 			usr->space = usr->spc30 = usr->spc60 = usr->spc90 = 0;
@@ -232,7 +225,7 @@ inituser()
 }
 
 static void
-usrrehash()
+usrrehash(void)
 {
 	int i;
 	struct user *usr, *usrn;
@@ -240,8 +233,8 @@ usrrehash()
 	
 	svusr = users;
 	nusers <<= 1;
-	if (!(users = (struct user *)calloc(nusers, sizeof(struct user))))
-		errx(1, "allocate users");
+	if (!(users = calloc(nusers, sizeof(*users))))
+		err(1, "allocate users");
 	for (usr = svusr, i = nusers >> 1; --i >= 0; usr++) {
 		for (usrn = users + (usr->uid&(nusers - 1));
 		     usrn->name;
@@ -254,31 +247,24 @@ usrrehash()
 }
 
 static struct user *
-user(uid)
-	uid_t uid;
+user(uid_t uid)
 {
 	struct user *usr;
 	int i;
 	struct passwd *pwd;
 	
-	while (1) {
-		for (usr = users + (uid&(nusers - 1)), i = nusers;
+	for (;;) {
+		for (usr = users + (uid & (nusers - 1)), i = nusers;
 		     --i >= 0;
 		     usr--) {
 			if (!usr->name) {
 				usr->uid = uid;
 				
-				if (!(pwd = getpwuid(uid))) {
-					if ((usr->name =
-					    (char *)malloc(7)) != NULL)
-						sprintf(usr->name, "#%d", uid);
-				} else {
-					if ((usr->name =
-					    (char *)malloc(
-						strlen(pwd->pw_name) + 1))
-					    != NULL)
-						strcpy(usr->name, pwd->pw_name);
-				}
+				if (!(pwd = getpwuid(uid)))
+					asprintf(&usr->name, "#%u", uid);
+				else
+					asprintf(&usr->name, "%s",
+					    pwd->pw_name);
 				if (!usr->name)
 					errx(1, "allocate users");
 				return usr;
@@ -296,7 +282,7 @@ static int
 cmpusers(u1, u2)
 	const void *u1, *u2;
 {
-	return ((struct user *)u2)->space - ((struct user *)u1)->space;
+	return ((const struct user *)u2)->space - ((const struct user *)u1)->space;
 }
 
 #define	sortusers(users)	(qsort((users), nusers, sizeof(struct user), \
@@ -353,10 +339,7 @@ initfsizes()
 }
 
 static void
-dofsizes(fd, super, name)
-	int fd;
-	struct fs *super;
-	char *name;
+dofsizes(int fd, struct fs *super, const char *name)
 {
 	ino_t inode, maxino;
 	union dinode *dp;
@@ -366,8 +349,8 @@ dofsizes(fd, super, name)
 	
 	maxino = super->fs_ncg * super->fs_ipg - 1;
 #ifdef	COMPAT
-	if (!(fsizes = (struct fsizes *)malloc(sizeof(struct fsizes))))
-		errx(1, "alloc fsize structure");
+	if (!(fsizes = malloc(sizeof(*fsizes))))
+		err(1, "alloc fsize structure");
 #endif	/* COMPAT */
 	for (inode = 0; inode < maxino; inode++) {
 		errno = 0;
@@ -397,9 +380,8 @@ dofsizes(fd, super, name)
 					break;
 			}
 			if (!fp || ksz < fp->fsz_first) {
-				if (!(fp = (struct fsizes *)
-				      malloc(sizeof(struct fsizes))))
-					errx(1, "alloc fsize structure");
+				if (!(fp = malloc(sizeof(*fp))))
+					err(1, "alloc fsize structure");
 				fp->fsz_next = *fsp;
 				*fsp = fp;
 				fp->fsz_first = (ksz / FSZCNT) * FSZCNT;
@@ -428,10 +410,7 @@ dofsizes(fd, super, name)
 }
 
 static void
-douser(fd, super, name)
-	int fd;
-	struct fs *super;
-	char *name;
+douser(int fd, struct fs *super, const char *name)
 {
 	ino_t inode, maxino;
 	struct user *usr, *usrs;
@@ -449,9 +428,9 @@ douser(fd, super, name)
 		else if (errno)
 			errx(1, "%s", name);
 	}
-	if (!(usrs = (struct user *)malloc(nusers * sizeof(struct user))))
+	if (!(usrs = calloc(nusers, sizeof(*usrs))))
 		errx(1, "allocate users");
-	memmove(usrs, users, nusers * sizeof(struct user));
+	memmove(usrs, users, nusers * sizeof(*usrs));
 	sortusers(usrs);
 	for (usr = usrs, n = nusers; --n >= 0 && usr->count; usr++) {
 		printf("%5lld", SIZE(usr->space));
@@ -468,13 +447,13 @@ douser(fd, super, name)
 }
 
 static void
-donames(fd, super, name)
-	int fd;
-	struct fs *super;
-	char *name;
+donames(int fd, struct fs *super, const char *name)
 {
 	int c;
-	ino_t inode, inode1;
+	ino_t inode;
+#ifdef COMPAT
+	ino_t inode1 = -1;
+#endif
 	ino_t maxino;
 	union dinode *dp;
 	
@@ -483,9 +462,8 @@ donames(fd, super, name)
 	while ((c = getchar()) != EOF && (c < '0' || c > '9'))
 		while ((c = getchar()) != EOF && c != '\n');
 	ungetc(c, stdin);
-	inode1 = -1;
 	while (scanf("%" SCNu64, &inode) == 1) {
-		if (inode < 0 || inode > maxino) {
+		if (inode > maxino) {
 #ifndef	COMPAT
 			warnx("invalid inode %" PRIu64, inode);
 #endif
@@ -507,12 +485,15 @@ donames(fd, super, name)
 				c = getchar();
 			}
 			putchar('\n');
+#ifdef COMPAT
 			inode1 = inode;
+#endif
 		} else {
 			if (errno)
 				errx(1, "%s", name);
 			/* skip this line */
-			while ((c = getchar()) != EOF && c != '\n');
+			while ((c = getchar()) != EOF && c != '\n')
+				continue;
 		}
 		if (c == EOF)
 			break;
@@ -520,12 +501,13 @@ donames(fd, super, name)
 }
 
 static void
-usage()
+usage(void)
 {
+	const char *p = getprogname();
 #ifdef	COMPAT
-	fprintf(stderr, "usage: quot [-nfcvha] [filesystem ...]\n");
+	fprintf(stderr, "Usage: %s [-nfcvha] [<filesystem> ...]\n", p);
 #else	/* COMPAT */
-	fprintf(stderr, "usage: quot [ -acfhknv ] [ filesystem ... ]\n");
+	fprintf(stderr, "Usage: %s [ -acfhknv ] [<filesystem> ... ]\n", p);
 #endif	/* COMPAT */
 	exit(1);
 }
@@ -535,17 +517,17 @@ usage()
  * Stolen from <sys/lib/libsa/ufs.c>
  */
 static void
-ffs_oldfscompat(fs)
-	struct fs *fs;
+ffs_oldfscompat(struct fs *fs)
 {
 	int i;
 
-	if (fs->fs_old_inodefmt < FS_44INODEFMT) {
+	if (fs->fs_magic == FS_UFS1_MAGIC &&
+	    fs->fs_old_inodefmt < FS_44INODEFMT) {
 		quad_t sizepb = fs->fs_bsize;
 
-		fs->fs_maxfilesize = fs->fs_bsize * NDADDR - 1;
-		for (i = 0; i < NIADDR; i++) {
-			sizepb *= NINDIR(fs);
+		fs->fs_maxfilesize = fs->fs_bsize * UFS_NDADDR - 1;
+		for (i = 0; i < UFS_NIADDR; i++) {
+			sizepb *= FFS_NINDIR(fs);
 			fs->fs_maxfilesize += sizepb;
 		}
 		fs->fs_qbmask = ~fs->fs_bmask;
@@ -560,9 +542,8 @@ static int sblock_try[] = SBLOCKSEARCH;
 static char superblock[SBLOCKSIZE];
 
 
-void
-quot(name, mp)
-	char *name, *mp;
+static void
+quot(const char *name, const char *mp)
 {
 	int fd, i;
 	struct fs *fs;
@@ -603,7 +584,7 @@ quot(name, mp)
 		}
 
 		if (fs->fs_bsize > MAXBSIZE ||
-		    fs->fs_bsize < sizeof(struct fs))
+		    (size_t)fs->fs_bsize < sizeof(struct fs))
 			continue;
 		break;
 	}
@@ -618,9 +599,7 @@ quot(name, mp)
 }
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	char all = 0;
 	struct statvfs *mp;
@@ -670,7 +649,8 @@ main(argc, argv)
 			    sizeof(mp->f_fstypename))) {
 				if ((nm =
 				    strrchr(mp->f_mntfromname, '/')) != NULL) {
-					sprintf(dev, "/dev/r%s", nm + 1);
+					snprintf(dev, sizeof(dev), "/dev/r%s",
+					    nm + 1);
 					nm = dev;
 				} else
 					nm = mp->f_mntfromname;

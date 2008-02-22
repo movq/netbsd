@@ -1,4 +1,4 @@
-#	$NetBSD: files.cardbus,v 1.34 2006/09/07 14:22:07 itohy Exp $
+#	$NetBSD: files.cardbus,v 1.38 2013/03/30 02:38:59 christos Exp $
 #
 # files.cardbus
 #
@@ -57,6 +57,12 @@ file	dev/cardbus/if_ral_cardbus.c	ral_cardbus
 #
 attach	tlp at cardbus with tlp_cardbus
 file	dev/cardbus/if_tlp_cardbus.c	tlp_cardbus
+
+#
+# Broadcom BCM43xx wireless
+#
+attach	bwi at cardbus with bwi_cardbus
+file	dev/cardbus/if_bwi_cardbus.c	bwi_cardbus
 
 #
 # OHCI USB controller
@@ -121,6 +127,12 @@ attach	ath at cardbus with ath_cardbus
 file	dev/cardbus/if_ath_cardbus.c	ath_cardbus
 
 #
+# Atheros AR9k Wireless LAN
+#
+attach	athn at cardbus with athn_cardbus
+file	dev/cardbus/if_athn_cardbus.c	athn_cardbus
+
+#
 # Workbit NinjaSCSI-32 controllers
 #
 attach	njs at cardbus with njs_cardbus
@@ -131,3 +143,15 @@ file	dev/cardbus/njs_cardbus.c	njs_cardbus
 #
 attach	njata at cardbus with njata_cardbus
 file	dev/cardbus/njata_cardbus.c	njata_cardbus
+
+#
+# Silicon Image SteelVine SATA-II controllers
+#
+attach	siisata at cardbus with siisata_cardbus
+file	dev/cardbus/siisata_cardbus.c	siisata_cardbus
+
+#
+# SD Host Controller
+#
+attach	sdhc at cardbus with sdhc_cardbus
+file	dev/cardbus/sdhc_cardbus.c	sdhc_cardbus

@@ -1,4 +1,4 @@
-/*	$NetBSD: dzkbd.c,v 1.20 2007/12/03 15:34:31 ad Exp $	*/
+/*	$NetBSD: dzkbd.c,v 1.27 2015/01/02 21:32:26 jklos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dzkbd.c,v 1.20 2007/12/03 15:34:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dzkbd.c,v 1.27 2015/01/02 21:32:26 jklos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,22 +79,20 @@ struct dzkbd_internal {
 struct dzkbd_internal dzkbd_console_internal;
 
 struct dzkbd_softc {
-	struct device dzkbd_dev;	/* required first: base device */
-
 	struct dzkbd_internal *sc_itl;
 
 	int sc_enabled;
 	int kbd_type;
 
-	struct device *sc_wskbddev;
+	device_t sc_wskbddev;
 };
 
 static int	dzkbd_input(void *, int);
 
-static int	dzkbd_match(struct device *, struct cfdata *, void *);
-static void	dzkbd_attach(struct device *, struct device *, void *);
+static int	dzkbd_match(device_t, cfdata_t, void *);
+static void	dzkbd_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(dzkbd, sizeof(struct dzkbd_softc),
+CFATTACH_DECL_NEW(dzkbd, sizeof(struct dzkbd_softc),
     dzkbd_match, dzkbd_attach, NULL, NULL);
 
 static int	dzkbd_enable(void *, int);
@@ -130,7 +128,7 @@ const struct wskbd_mapdata dzkbd_keymapdata = {
  * kbd_match: how is this dz line configured?
  */
 static int
-dzkbd_match(struct device *parent, struct cfdata *cf, void *aux)
+dzkbd_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct dzkm_attach_args *daa = aux;
 
@@ -146,7 +144,7 @@ dzkbd_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-dzkbd_attach(struct device *parent, struct device *self, void *aux)
+dzkbd_attach(device_t parent, device_t self, void *aux)
 {
 	struct dz_softc *dz = device_private(parent);
 	struct dzkbd_softc *dzkbd = device_private(self);
@@ -196,8 +194,7 @@ dzkbd_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-dzkbd_cnattach(ls)
-	struct dz_linestate *ls;
+dzkbd_cnattach(struct dz_linestate *ls)
 {
 
 	dzkbd_console_internal.dzi_ks.attmt.sendchar = dzkbd_sendchar;
@@ -212,9 +209,7 @@ dzkbd_cnattach(ls)
 }
 
 static int
-dzkbd_enable(v, on)
-	void *v;
-	int on;
+dzkbd_enable(void *v, int on)
 {
 	struct dzkbd_softc *sc = v;
 
@@ -223,9 +218,7 @@ dzkbd_enable(v, on)
 }
 
 static int
-dzkbd_sendchar(v, c)
-	void *v;
-	u_char c;
+dzkbd_sendchar(void *v, u_char c)
 {
 	struct dz_linestate *ls = v;
 	int s;
@@ -237,23 +230,18 @@ dzkbd_sendchar(v, c)
 }
 
 static void
-dzkbd_cngetc(v, type, data)
-	void *v;
-	u_int *type;
-	int *data;
+dzkbd_cngetc(void *v, u_int *type, int *data)
 {
 	struct dzkbd_internal *dzi = v;
 	int c;
 
 	do {
 		c = dzgetc(dzi->dzi_ls);
-	} while (!lk201_decode(&dzi->dzi_ks, c, type, data));
+	} while (!lk201_decode(&dzi->dzi_ks, 0, c, type, data) == LKD_NODATA);
 }
 
 static void
-dzkbd_cnpollc(v, on)
-	void *v;
-        int on;
+dzkbd_cnpollc(void *v, int on)
 {
 #if 0
 	struct dzkbd_internal *dzi = v;
@@ -261,9 +249,7 @@ dzkbd_cnpollc(v, on)
 }
 
 static void
-dzkbd_set_leds(v, leds)
-	void *v;
-	int leds;
+dzkbd_set_leds(void *v, int leds)
 {
 	struct dzkbd_softc *sc = (struct dzkbd_softc *)v;
 
@@ -272,12 +258,7 @@ dzkbd_set_leds(v, leds)
 }
 
 static int
-dzkbd_ioctl(v, cmd, data, flag, l)
-	void *v;
-	u_long cmd;
-	void *data;
-	int flag;
-	struct lwp *l;
+dzkbd_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct dzkbd_softc *sc = (struct dzkbd_softc *)v;
 
@@ -308,19 +289,20 @@ dzkbd_ioctl(v, cmd, data, flag, l)
 }
 
 static int
-dzkbd_input(v, data)
-	void *v;
-	int data;
+dzkbd_input(void *v, int data)
 {
 	struct dzkbd_softc *sc = (struct dzkbd_softc *)v;
 	u_int type;
 	int val;
+	int decode;
 
-	if (sc->sc_enabled == 0)
-		return(0);
+	do {
+		decode = lk201_decode(&sc->sc_itl->dzi_ks, 1,
+		    data, &type, &val);
+		if (decode != LKD_NODATA)
+			wskbd_input(sc->sc_wskbddev, type, val);
+	} while (decode == LKD_MORE);
 
-	if (lk201_decode(&sc->sc_itl->dzi_ks, data, &type, &val))
-		wskbd_input(sc->sc_wskbddev, type, val);
 	return(1);
 }
 

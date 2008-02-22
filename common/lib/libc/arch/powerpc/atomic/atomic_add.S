@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_add.S,v 1.4 2008/02/13 03:55:54 dogcow Exp $	*/
+/*	$NetBSD: atomic_add.S,v 1.8 2014/03/07 07:17:54 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,37 +31,43 @@
 
 #include "atomic_op_asm.h"
 
+__RCSID("$NetBSD: atomic_add.S,v 1.8 2014/03/07 07:17:54 matt Exp $")
+
 	.text
+ATOMIC_OP_32(add)
+ATOMIC_OP_32_NV(add)
 
-ENTRY_NOPROFILE(_atomic_add_32)
-1:	lwarx	%r10,0,%r3
-	add	%r10,%r10,%r4
-	stwcx.	%r10,0,%r3
-	bne-	1b
-	blr
-ATOMIC_OP_ALIAS(atomic_add_32,_atomic_add_32)
 ATOMIC_OP_ALIAS(atomic_add_int,_atomic_add_32)
-STRONG_ALIAS(_atomic_add_int,_atomic_add_32)
-#if !defined(_LP64)
-ATOMIC_OP_ALIAS(atomic_add_long,_atomic_add_32)
-STRONG_ALIAS(_atomic_add_long,_atomic_add_32)
-ATOMIC_OP_ALIAS(atomic_add_ptr,_atomic_add_32)
-STRONG_ALIAS(_atomic_add_ptr,_atomic_add_32)
-#endif
-
-ENTRY_NOPROFILE(_atomic_add_32_nv)
-1:	lwarx	%r10,0,%r3
-	add	%r10,%r10,%r4
-	stwcx.	%r10,0,%r3
-	bne-	1b
-	mr	%r3,%r10
-	blr
-ATOMIC_OP_ALIAS(atomic_add_32_nv,_atomic_add_32_nv)
 ATOMIC_OP_ALIAS(atomic_add_int_nv,_atomic_add_32_nv)
+
+STRONG_ALIAS(_atomic_add_int,_atomic_add_32)
 STRONG_ALIAS(_atomic_add_int_nv,_atomic_add_32_nv)
-#if !defined(_LP64)
+
+#ifdef _LP64
+ATOMIC_OP_64(add)
+ATOMIC_OP_64_NV(add)
+
+ATOMIC_OP_ALIAS(atomic_add_long,_atomic_add_64)
+ATOMIC_OP_ALIAS(atomic_add_long_nv,_atomic_add_64_nv)
+
+ATOMIC_OP_ALIAS(atomic_add_ptr,_atomic_add_64)
+ATOMIC_OP_ALIAS(atomic_add_ptr_nv,_atomic_add_64_nv)
+
+STRONG_ALIAS(_atomic_add_long,_atomic_add_64)
+STRONG_ALIAS(_atomic_add_long_nv,_atomic_add_64_nv)
+
+STRONG_ALIAS(_atomic_add_ptr,_atomic_add_64)
+STRONG_ALIAS(_atomic_add_ptr_nv,_atomic_add_64_nv)
+#else
+ATOMIC_OP_ALIAS(atomic_add_long,_atomic_add_32)
 ATOMIC_OP_ALIAS(atomic_add_long_nv,_atomic_add_32_nv)
-STRONG_ALIAS(_atomic_add_long_nv,_atomic_add_32_nv)
+
+ATOMIC_OP_ALIAS(atomic_add_ptr,_atomic_add_32)
 ATOMIC_OP_ALIAS(atomic_add_ptr_nv,_atomic_add_32_nv)
+
+STRONG_ALIAS(_atomic_add_long,_atomic_add_32)
+STRONG_ALIAS(_atomic_add_long_nv,_atomic_add_32_nv)
+
+STRONG_ALIAS(_atomic_add_ptr,_atomic_add_32)
 STRONG_ALIAS(_atomic_add_ptr_nv,_atomic_add_32_nv)
 #endif

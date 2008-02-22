@@ -1,4 +1,4 @@
-.\"	$NetBSD: irdaattach.8,v 1.5 2003/02/25 10:36:10 wiz Exp $
+.\"	$NetBSD: irdaattach.8,v 1.8 2017/10/23 01:07:27 wiz Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,8 @@
 .Dt IRDAATTACH 8
 .Os
 .Sh NAME
-.Nm irdaattach
+.Nm irdaattach ,
+.Nm irda
 .Nd attach serial lines to IrDA frame driver
 .Sh SYNOPSIS
 .Nm
@@ -52,7 +46,8 @@ The following operands are supported by
 .Nm :
 .Bl -tag -width Ar
 .It Fl d Ar dongle
-Sets the dongle type.  The following dongles are supported:
+Sets the dongle type.
+The following dongles are supported:
 .Bl -tag -width actisys+
 .It none
 No dongle
@@ -76,15 +71,17 @@ The default is
 Print the name of the IrDA frame device that should be used to
 access the frames.
 .It Fl H
-Turn on DTR/CTS flow control.  By default, no flow control is done.
+Turn on DTR/CTS flow control.
+By default, no flow control is done.
 .It Fl h
-Turn on RTS/CTS flow control.  By default, no flow control is done.
+Turn on RTS/CTS flow control.
+By default, no flow control is done.
 .It Fl l
 Turn on the CLOCAL flag, making it possible to run SLIP on a cable
-without modem control signals (e.g. DTR, DSR, DCD).
+without modem control signals (e.g., DTR, DSR, DCD).
 .It Fl m
-Maintain modem control signals after closing the line.  Specifically,
-this disables HUPCL.
+Maintain modem control signals after closing the line.
+Specifically, this disables HUPCL.
 .It Fl n
 Do not detach from invoking tty.
 .It Fl p

@@ -1,15 +1,18 @@
-/*	$NetBSD: util.c,v 1.44 2008/02/15 21:29:50 christos Exp $	*/
+/*	$NetBSD: util.c,v 1.54 2013/11/26 13:44:41 joerg Exp $	*/
 
 /*
  * Missing stuff from OS's
  */
+#if defined(__MINT__) || defined(__linux__)
+#include <signal.h>
+#endif
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: util.c,v 1.44 2008/02/15 21:29:50 christos Exp $";
+static char rcsid[] = "$NetBSD: util.c,v 1.54 2013/11/26 13:44:41 joerg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.44 2008/02/15 21:29:50 christos Exp $");
+__RCSID("$NetBSD: util.c,v 1.54 2013/11/26 13:44:41 joerg Exp $");
 #endif
 #endif
 
@@ -18,6 +21,7 @@ __RCSID("$NetBSD: util.c,v 1.44 2008/02/15 21:29:50 christos Exp $");
 #include <errno.h>
 #include <stdio.h>
 #include <time.h>
+#include <signal.h>
 
 #include "make.h"
 
@@ -38,85 +42,124 @@ strerror(int e)
 }
 #endif
 
-#if !defined(MAKE_NATIVE) && !defined(HAVE_STRDUP)
-#include <string.h>
-
-/* strdup
- *
- * Make a duplicate of a string.
- * For systems which lack this function.
- */
-char *
-strdup(const char *str)
-{
-    size_t len;
-    char *p;
-
-    if (str == NULL)
-	return NULL;
-    len = strlen(str) + 1;
-    p = emalloc(len);
-
-    return memcpy(p, str, len);
-}
-#endif
-
-#if !defined(HAVE_EMALLOC) && !defined(HAVE_STRNDUP)
-#include <string.h>
-
-/* strndup
- *
- * Make a duplicate of a string, up to a maximum length.
- * For systems which lack this function.
- */
-char *
-strndup(const char *str, size_t maxlen)
-{
-    size_t len;
-    char *p;
-
-    if (str == NULL)
-	return NULL;
-    len = strlen(str);
-    if (len > maxlen)
-	len = maxlen;
-    p = emalloc(len + 1);
-
-    memcpy(p, str, len);
-    p[len] = '\0';
-    return p;
-}
-#endif
-
 #if !defined(MAKE_NATIVE) && !defined(HAVE_SETENV)
-int
-setenv(const char *name, const char *value, int dum)
+extern char **environ;
+
+static char *
+findenv(const char *name, int *offset)
 {
-    char *p;
-    int len = strlen(name) + strlen(value) + 2; /* = \0 */
-    char *ptr = emalloc(len);
+	size_t i, len;
+	char *p, *q;
 
-    (void) dum;
-
-    if (ptr == NULL)
-	return -1;
-
-    p = ptr;
-
-    while (*name)
-	*p++ = *name++;
-
-    *p++ = '=';
-
-    while (*value)
-	*p++ = *value++;
-
-    *p = '\0';
-
-    len = putenv(ptr);
-/*    free(ptr); */
-    return len;
+	len = strlen(name);
+	for (i = 0; (q = environ[i]); i++) {
+		p = strchr(q, '=');
+		if (p == NULL || p - q != len)
+			continue;
+		if (strncmp(name, q, len) == 0) {
+			*offset = i;
+			return q + len + 1;
+		}
+	}
+	*offset = i;
+	return NULL;
 }
+
+char *
+getenv(const char *name)
+{
+    int offset;
+
+    return(findenv(name, &offset));
+}
+
+int
+unsetenv(const char *name)
+{
+	char **p;
+	int offset;
+
+	if (name == NULL || *name == '\0' || strchr(name, '=') != NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	while (findenv(name, &offset))	{ /* if set multiple times */
+		for (p = &environ[offset];; ++p)
+			if (!(*p = *(p + 1)))
+				break;
+	}
+	return 0;
+}
+
+int
+setenv(const char *name, const char *value, int rewrite)
+{
+	char *c, **newenv;
+	const char *cc;
+	size_t l_value, size;
+	int offset;
+
+	if (name == NULL || value == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (*value == '=')			/* no `=' in value */
+		++value;
+	l_value = strlen(value);
+
+	/* find if already exists */
+	if ((c = findenv(name, &offset))) {
+		if (!rewrite)
+			return 0;
+		if (strlen(c) >= l_value)	/* old larger; copy over */
+			goto copy;
+	} else {					/* create new slot */
+		size = sizeof(char *) * (offset + 2);
+		if (savedEnv == environ) {		/* just increase size */
+			if ((newenv = realloc(savedEnv, size)) == NULL)
+				return -1;
+			savedEnv = newenv;
+		} else {				/* get new space */
+			/*
+			 * We don't free here because we don't know if
+			 * the first allocation is valid on all OS's
+			 */
+			if ((savedEnv = malloc(size)) == NULL)
+				return -1;
+			(void)memcpy(savedEnv, environ, size - sizeof(char *));
+		}
+		environ = savedEnv;
+		environ[offset + 1] = NULL;
+	}
+	for (cc = name; *cc && *cc != '='; ++cc)	/* no `=' in name */
+		continue;
+	size = cc - name;
+	/* name + `=' + value */
+	if ((environ[offset] = malloc(size + l_value + 2)) == NULL)
+		return -1;
+	c = environ[offset];
+	(void)memcpy(c, name, size);
+	c += size;
+	*c++ = '=';
+copy:
+	(void)memcpy(c, value, l_value + 1);
+	return 0;
+}
+
+#ifdef TEST
+int
+main(int argc, char *argv[])
+{
+	setenv(argv[1], argv[2], 0);
+	printf("%s\n", getenv(argv[1]));
+	unsetenv(argv[1]);
+	printf("%s\n", getenv(argv[1]));
+	return 0;
+}
+#endif
+
 #endif
 
 #if defined(__hpux__) || defined(__hpux)
@@ -200,24 +243,6 @@ random(void)
 }
 #endif
 
-/* turn into bsd signals */
-void (*
-signal(int s, void (*a)(int)))(int)
-{
-    struct sigvec osv, sv;
-
-    (void)sigvector(s, NULL, &osv);
-    sv = osv;
-    sv.sv_handler = a;
-#ifdef SV_BSDSIG
-    sv.sv_flags = SV_BSDSIG;
-#endif
-
-    if (sigvector(s, &sv, NULL) == -1)
-        return (BADSIG);
-    return (osv.sv_handler);
-}
-
 #if !defined(__hpux__) && !defined(__hpux)
 int
 utimes(char *file, struct timeval tvp[2])
@@ -255,7 +280,7 @@ getwd(char *pathname)
     if (stat("/", &st_root) == -1) {
 	(void)sprintf(pathname,
 			"getwd: Cannot stat \"/\" (%s)", strerror(errno));
-	return (NULL);
+	return NULL;
     }
     pathbuf[MAXPATHLEN - 1] = '\0';
     pathptr = &pathbuf[MAXPATHLEN - 1];
@@ -266,7 +291,7 @@ getwd(char *pathname)
     if (lstat(".", &st_cur) == -1) {
 	(void)sprintf(pathname,
 			"getwd: Cannot stat \".\" (%s)", strerror(errno));
-	return (NULL);
+	return NULL;
     }
     nextpathptr = strrcpy(nextpathptr, "../");
 
@@ -285,13 +310,13 @@ getwd(char *pathname)
 	    (void)sprintf(pathname,
 			    "getwd: Cannot stat directory \"%s\" (%s)",
 			    nextpathptr, strerror(errno));
-	    return (NULL);
+	    return NULL;
 	}
 	if ((dp = opendir(nextpathptr)) == NULL) {
 	    (void)sprintf(pathname,
 			    "getwd: Cannot open directory \"%s\" (%s)",
 			    nextpathptr, strerror(errno));
-	    return (NULL);
+	    return NULL;
 	}
 
 	/* look in the parent for the entry with the same inode */
@@ -315,7 +340,7 @@ getwd(char *pathname)
 			"getwd: Cannot stat \"%s\" (%s)",
 			d->d_name, strerror(errno));
 		    (void)closedir(dp);
-		    return (NULL);
+		    return NULL;
 		}
 		/* check if we found it yet */
 		if (st_next.st_ino == st_cur.st_ino &&
@@ -327,7 +352,7 @@ getwd(char *pathname)
 	    (void)sprintf(pathname,
 		"getwd: Cannot find \".\" in \"..\"");
 	    (void)closedir(dp);
-	    return (NULL);
+	    return NULL;
 	}
 	st_cur = st_dotdot;
 	pathptr = strrcpy(pathptr, d->d_name);
@@ -339,12 +364,9 @@ getwd(char *pathname)
 } /* end getwd */
 #endif /* __hpux */
 
-#if defined(sun) && defined(__svr4__)
-#include <signal.h>
-
-/* turn into bsd signals */
+/* force posix signals */
 void (*
-signal(int s, void (*a)(int)))(int)
+bmake_signal(int s, void (*a)(int)))(int)
 {
     struct sigaction sa, osa;
 
@@ -357,7 +379,6 @@ signal(int s, void (*a)(int)))(int)
     else
 	return osa.sa_handler;
 }
-#endif
 
 #if !defined(MAKE_NATIVE) && !defined(HAVE_VSNPRINTF)
 #include <stdarg.h>
@@ -455,10 +476,10 @@ strftime(char *buf, size_t len, const char *fmt, const struct tm *tm)
 			s = snprintf(buf, len, "%s", months[tm->tm_mon]);
 			break;
 		case 'd':
-			s = snprintf(buf, len, "%s", tm->tm_mday);
+			s = snprintf(buf, len, "%02d", tm->tm_mday);
 			break;
 		case 'Y':
-			s = snprintf(buf, len, "%s", 1900 + tm->tm_year);
+			s = snprintf(buf, len, "%d", 1900 + tm->tm_year);
 			break;
 		default:
 			s = snprintf(buf, len, "Unsupported format %c",

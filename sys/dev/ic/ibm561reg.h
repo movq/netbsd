@@ -1,4 +1,4 @@
-/* $NetBSD: ibm561reg.h,v 1.4 2007/08/28 00:21:04 macallan Exp $ */
+/* $NetBSD: ibm561reg.h,v 1.6 2012/10/20 13:29:53 macallan Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -162,7 +155,7 @@
 #define IBM561_CURSOR_LUT		0x0a10
 	/*
 	 * four blocks of 4, transparent, 1, 2, 3 each 
-	 * cursor orimary, cursor blink, xhair primary, xhair blink 
+	 * cursor primary, cursor blink, xhair primary, xhair blink 
 	 */
 
 #define IBM561_CURSOR_BITMAP		0x2000

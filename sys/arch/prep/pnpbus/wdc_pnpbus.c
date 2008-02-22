@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_pnpbus.c,v 1.6 2007/03/20 05:58:40 garbled Exp $	*/
+/*	$NetBSD: wdc_pnpbus.c,v 1.15 2017/10/20 07:06:07 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_pnpbus.c,v 1.6 2007/03/20 05:58:40 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_pnpbus.c,v 1.15 2017/10/20 07:06:07 jdolecek Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: wdc_pnpbus.c,v 1.6 2007/03/20 05:58:40 garbled Exp $
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/isa_machdep.h>
 #include <machine/residual.h>
@@ -62,19 +55,18 @@ struct wdc_pnpbus_softc {
 	struct	wdc_softc sc_wdcdev;
 	struct	ata_channel *sc_chanlist[1];
 	struct	ata_channel sc_channel;
-	struct	ata_queue sc_chqueue;
 	struct	wdc_regs sc_wdc_regs;
 	void	*sc_ih;
 };
 
-static int	wdc_pnpbus_probe(struct device *, struct cfdata *, void *);
-static void	wdc_pnpbus_attach(struct device *, struct device *, void *);
+static int	wdc_pnpbus_probe(device_t, cfdata_t, void *);
+static void	wdc_pnpbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(wdc_pnpbus, sizeof(struct wdc_pnpbus_softc),
+CFATTACH_DECL_NEW(wdc_pnpbus, sizeof(struct wdc_pnpbus_softc),
     wdc_pnpbus_probe, wdc_pnpbus_attach, NULL, NULL);
 
 static int
-wdc_pnpbus_probe(struct device *parent, struct cfdata *match, void *aux)
+wdc_pnpbus_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct pnpbus_dev_attach_args *pna = aux;
 	int ret = 0;
@@ -103,13 +95,14 @@ wdc_pnpbus_probe(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-wdc_pnpbus_attach(struct device *parent, struct device *self, void *aux)
+wdc_pnpbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_pnpbus_softc *sc = (void *)self;
+	struct wdc_pnpbus_softc *sc = device_private(self);
 	struct wdc_regs *wdr;
 	struct pnpbus_dev_attach_args *pna = aux;
 	int cmd_iobase, cmd_len, aux_iobase, aux_len, i;
 
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_wdcdev.regs = wdr = &sc->sc_wdc_regs;
 
 	wdr->cmd_iot = pna->pna_iot;
@@ -119,8 +112,7 @@ wdc_pnpbus_attach(struct device *parent, struct device *self, void *aux)
 
 	if (pnpbus_io_map(&pna->pna_res, 0, &wdr->cmd_iot, &wdr->cmd_baseioh) ||
 	    pnpbus_io_map(&pna->pna_res, 1, &wdr->ctl_iot, &wdr->ctl_ioh)) {
-		aprint_error("%s: couldn't map registers\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map registers\n");
 	}
 
 	for (i = 0; i < cmd_len; i++) {
@@ -137,7 +129,7 @@ wdc_pnpbus_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_wdcdev.cap |= WDC_CAPABILITY_PREATA;
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
-	if (device_cfdata(&sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
+	if (device_cfdata(sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
 	    WDC_OPTIONS_32)
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA32;
 
@@ -145,14 +137,14 @@ wdc_pnpbus_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_chanlist[0] = &sc->sc_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->sc_chanlist;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->sc_channel.ch_channel = 0;
 	sc->sc_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
-	sc->sc_channel.ch_queue = &sc->sc_chqueue;
-	sc->sc_channel.ch_ndrive = 2;
-	wdc_init_shadow_regs(&sc->sc_channel);
 
-	sc->sc_ih = pnpbus_intr_establish(0, IPL_BIO, wdcintr, &sc->sc_channel,
-	    &pna->pna_res);
+	wdc_init_shadow_regs(wdr);
+
+	sc->sc_ih = pnpbus_intr_establish(0, IPL_BIO, IST_PNP,
+	    wdcintr, &sc->sc_channel, &pna->pna_res);
 
 	aprint_normal("\n");
 	wdcattach(&sc->sc_channel);

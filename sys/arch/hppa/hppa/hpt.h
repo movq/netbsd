@@ -1,4 +1,4 @@
-/*	$NetBSD: hpt.h,v 1.2 2002/08/11 22:29:08 fredette Exp $	*/
+/*	$NetBSD: hpt.h,v 1.5 2009/11/03 05:07:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,22 +43,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Michael Shalayeff.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+ * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
  * Copyright 1996 1995 by Open Software Foundation, Inc.   
@@ -115,33 +104,9 @@
  *	Pmap header for hppa.
  */
 
-/* Predeclare struct hpt_entry. */
-struct hpt_entry;
-
 /*
- * keep it at 32 bytes for the cache overall satisfaction
- * also, align commonly used pairs on double-word boundary
- */
-struct pv_entry {
-	struct pv_entry	*pv_next;	/* list of mappings of a given PA */
-	pmap_t		pv_pmap;	/* back link to pmap */
-	u_int		pv_va;		/* virtual page number */
-	u_int		pv_space;	/* copy of space id from pmap */
-	u_int		pv_tlbpage;	/* physical page (for TLB load) */
-	u_int		pv_tlbprot;	/* TLB format protection */
-	struct pv_entry *pv_hash;	/* VTOP hash bucket list */
-	struct hpt_entry *pv_hpt;	/* pointer to HPT entry */
-};
-
-/*
- * If HPT is defined, we cache the last miss for each bucket using a
- * structure defined for the 7100 hardware TLB walker. On non-7100s, this
- * acts as a software cache that cuts down on the number of times we have
- * to search the hash chain. (thereby reducing the number of instructions
- * and cache misses incurred during the TLB miss).
+ * HPT structure as used in the 7100LC/7300LC hardware TLB walker.
  *
- * The pv_entry pointer is the address of the associated hash bucket
- * list for fast tlbmiss search.
  */
 struct hpt_entry {
 	u_int	hpt_valid:1,	/* Valid bit */
@@ -149,39 +114,5 @@ struct hpt_entry {
 		hpt_space:16;	/* Space ID */
 	u_int	hpt_tlbprot;	/* prot/access rights (for TLB load) */
 	u_int	hpt_tlbpage;	/* physical page (<<5 for TLB load) */
-	struct pv_entry	*hpt_entry;	/* Pointer to associated hash list */
+	struct pv_entry	*hpt_next;	/* Pointer to associated hash list */
 };
-
-/*
- * This structure contains information for a single physical page.
- */
-struct pv_head {
-
-	/* The struct pv_entry chain for this physical page. */
-	struct pv_entry	*pv_head_pvs;
-
-	/*
-	 * This word has three fields:
-	 *
-	 * The least significant bit is a page-referenced bit.
-	 *
-	 * The next least significant bit is a page-dirty bit.
-	 *
-	 * The remaining bits are the struct pv_entry * of any
-	 * mapping currently in the TLB/cache as writable.
-	 * This address is shifted to the right by two bits.
-	 * (I.e., mask off the referenced and dirty bits to
-	 * recover the pointer.)
-	 */
-	u_int	pv_head_writable_dirty_ref;
-#define PV_HEAD_DIRTY_POS	30
-#define PV_HEAD_DIRTY		(1 << (31 - PV_HEAD_DIRTY_POS))
-#define PV_HEAD_REF_POS		31
-#define PV_HEAD_REF		(1 << (31 - PV_HEAD_REF_POS))
-#define PV_HEAD_WRITABLE_POS	29
-};
-
-#define	HPPA_MAX_PID	0xfffa
-#define	HPPA_PID_KERNEL	2
-
-#define	KERNEL_ACCESS_ID 1

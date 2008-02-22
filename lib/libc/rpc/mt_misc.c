@@ -1,4 +1,4 @@
-/*	$NetBSD: mt_misc.c,v 1.5 2006/01/26 12:37:11 kleink Exp $	*/
+/*	$NetBSD: mt_misc.c,v 1.9 2012/03/20 17:14:50 matt Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: mt_misc.c,v 1.5 2006/01/26 12:37:11 kleink Exp $");
+__RCSID("$NetBSD: mt_misc.c,v 1.9 2012/03/20 17:14:50 matt Exp $");
 #endif
 
 #include	"namespace.h"
@@ -119,19 +112,19 @@ __rpc_createerr_setup(void)
 #endif /* _REENTRANT */
 
 struct rpc_createerr*
-__rpc_createerr()
+__rpc_createerr(void)
 {
 #ifdef _REENTRANT
 	struct rpc_createerr *rce_addr = 0;
-	extern int __isthreaded;
 
 	if (__isthreaded == 0)
 		return (&rpc_createerr);
 	thr_once(&rce_once, __rpc_createerr_setup);
 	rce_addr = thr_getspecific(rce_key);
 	if (rce_addr == NULL) {
-		rce_addr = (struct rpc_createerr *)
-		    malloc(sizeof (struct rpc_createerr));
+		rce_addr = malloc(sizeof(*rce_addr));
+		if (rce_addr == NULL)
+			return &rpc_createerr;
 		thr_setspecific(rce_key, (void *) rce_addr);
 		memset(rce_addr, 0, sizeof (struct rpc_createerr));
 	}
@@ -141,4 +134,3 @@ __rpc_createerr()
 	return &rpc_createerr;
 #endif
 }
-

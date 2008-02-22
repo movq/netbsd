@@ -1,6 +1,6 @@
-.\" $NetBSD: midi.4,v 1.27 2006/07/02 01:34:33 wiz Exp $
+.\" $NetBSD: midi.4,v 1.32 2017/07/03 21:30:58 wiz Exp $
 .\"
-.\" Copyright (c) 1999-2006 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1999-2017 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd May 6, 2006
+.Dd April 28, 2017
 .Dt MIDI 4
 .Os
 .Sh NAME
@@ -268,7 +261,7 @@ bytes will be read, but if a
 of
 size
 .Va m
-\*[Lt]
+<
 .Va n
 is issued, fewer than
 .Va m
@@ -283,13 +276,13 @@ access can be used to receive bulk dumps from synthesizers, download
 bulk data to them, and so on.
 Simple patching of one device to another can be
 done at the command line, as with
-.Dl $ cat -u 0\*[Lt]\*[Gt]/dev/rmidi0 1\*[Gt]\*[Am]0
+.Dl $ cat -u 0<>/dev/rmidi0 1>&0
 which will loop all messages received on the input stream of
 .Pa rmidi0
 input stream  back to its output
 stream in real time.
 However, an attempt to record and play back music with
-.Dl $ cat /dev/rmidiN \*[Gt]foo; cat foo \*[Gt]/dev/rmidiN
+.Dl $ cat /dev/rmidiN >foo; cat foo >/dev/rmidiN
 will be disappointing.
 The file
 .Pa foo
@@ -347,7 +340,7 @@ device.
 These rules support end-to-end Active Sensing behavior in simple cases
 without special action in an application.
 For example, in
-.Dl $ cat -u /dev/rmidi0 \*[Gt]/dev/rmidi1
+.Dl $ cat -u /dev/rmidi0 >/dev/rmidi1
 if the input stream to
 .Pa rmidi0
 is lost, the
@@ -388,7 +381,7 @@ sequencer.
 Reads and writes of
 .Pa /dev/music
 pass eight-byte event structures defined in
-.Aq Pa sys/midiio.h
+.In sys/midiio.h
 (which see for their documentation and examples of use).
 Some events correspond to
 .Tn MIDI
@@ -415,7 +408,7 @@ an underlying output stream according to its
 .Va device
 index.
 Therefore
-.Dl $ cat /dev/music \*[Gt]foo; cat foo \*[Gt]/dev/music
+.Dl $ cat /dev/music >foo; cat foo >/dev/music
 can be expected to capture and reproduce an input performance including
 timing.
 .Pp
@@ -600,18 +593,19 @@ device would violate
 protocol.
 .Sh SEE ALSO
 .Xr midiplay 1 ,
+.Xr midirecord 1 ,
 .Xr ioctl 2 ,
 .Xr ossaudio 3 ,
 .Xr audio 4 ,
 .Xr mpu 4 ,
 .Xr opl 4 ,
 .Xr umidi 4
-.br
+.Pp
 For ports using the ISA bus:
 .Xr cms 4 ,
 .Xr pcppi 4 ,
 .Xr sb 4
-.br
+.Pp
 For ports using the PCI bus:
 .Xr autri 4 ,
 .Xr clcs 4 ,
@@ -629,16 +623,16 @@ Some
 sequencer events and
 .Xr ioctl 2
 operations are unimplemented, as
-.Aq Pa sys/midiio.h
+.In sys/midiio.h
 notes.
 .Pp
 .Tn OSS
 source-compatible sequencer macros should be added to
-.Aq Pa sys/soundcard.h ,
+.In sys/soundcard.h ,
 implemented with the
 .Nx
 ones in
-.Aq Pa sys/midiio.h ,
+.In sys/midiio.h ,
 so sources written for OSS can be easily compiled.
 .Pp
 The sequencer blocks (or returns

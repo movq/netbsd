@@ -1,4 +1,4 @@
-.\"	$NetBSD: reboot.8,v 1.24 2008/02/09 04:31:43 dholland Exp $
+.\"	$NetBSD: reboot.8,v 1.30 2016/09/12 05:43:15 sevan Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)reboot.8	8.1 (Berkeley) 6/9/93
 .\"
-.Dd February 8, 2008
+.Dd September 12, 2016
 .Dt REBOOT 8
 .Os
 .Sh NAME
@@ -39,11 +39,11 @@
 .Nd restarting, powering down and stopping the system
 .Sh SYNOPSIS
 .Nm halt
-.Op Fl dlnpq
+.Op Fl dlnpqvxz
 .Nm poweroff
-.Op Fl dlnq
+.Op Fl dlnqvxz
 .Nm
-.Op Fl dlnq
+.Op Fl dlnqvxz
 .Op Ar arg ...
 .Sh DESCRIPTION
 The
@@ -74,13 +74,34 @@ before halting or restarting.
 .It Fl n
 Do not flush the file system cache.
 This option should be used with extreme caution.
-It can be used if a disk or the processor is on fire.
+It can be used if a disk or a processor is on fire.
 .It Fl p
 Attempt to powerdown the system.
 If the powerdown fails, or the system does not support
 software powerdown, the system will halt.
 This option is only valid for
 .Nm halt .
+.It Fl v
+To enable verbose messages on the console, pass the
+.Xr boothowto 9
+flag
+.Dv AB_VERBOSE
+to
+.Xr reboot 2 .
+.It Fl x
+To enable debugging messages on the console, pass the
+.Xr boothowto 9
+flag
+.Dv AB_DEBUG
+to
+.Xr reboot 2 .
+.It Fl z
+To silence some shutdown messages on the console, pass the
+.Xr boothowto 9
+flag
+.Dv AB_SILENT
+to
+.Xr reboot 2 .
 .It Fl q
 Do not give processes a chance to shut down before halting or restarting.
 This option should not normally be used.
@@ -105,13 +126,14 @@ users advance warning of their impending doom.
 .Xr utmp 5 ,
 .Xr boot 8 ,
 .Xr init 8 ,
+.Xr rescue 8 ,
 .Xr shutdown 8 ,
 .Xr sync 8
 .Sh HISTORY
 A
 .Nm
 command appeared in
-.At v6 .
+.Bx 4.0 .
 .Pp
 The
 .Nm poweroff
@@ -127,10 +149,12 @@ However, nothing can defend against deliberate attempts to evade this.
 .Pp
 This command will stop the system without running any
 .Xr shutdown 8
-scripts.  Amongst other things, this means that swapping will not be
+scripts.
+Amongst other things, this means that swapping will not be
 disabled so that
 .Xr raid 4
-can shutdown cleanly.  You should normally use
+can shutdown cleanly.
+You should normally use
 .Xr shutdown 8
 unless you are running in single user mode.
 .Sh BUGS

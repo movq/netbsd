@@ -1,4 +1,4 @@
-/* $NetBSD: psm.c,v 1.6 2007/10/17 19:57:29 garbled Exp $ */
+/* $NetBSD: psm.c,v 1.11 2016/07/07 06:55:38 msaitoh Exp $ */
 /*
  * Copyright (c) 2006 Itronix Inc.
  * All rights reserved.
@@ -36,7 +36,7 @@
  * time with APM at this point, and some of sysmon seems "lacking".
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: psm.c,v 1.6 2007/10/17 19:57:29 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: psm.c,v 1.11 2016/07/07 06:55:38 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: psm.c,v 1.6 2007/10/17 19:57:29 garbled Exp $");
 #include <sys/kauth.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/ebus/ebusreg.h>
@@ -60,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: psm.c,v 1.6 2007/10/17 19:57:29 garbled Exp $");
 #include <sparc64/dev/psmreg.h>
 
 struct psm_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	bus_space_tag_t		sc_memt;
 	bus_space_handle_t	sc_memh;
 
@@ -120,15 +120,15 @@ STATIC int psm_ecmd_rd8(struct psm_softc *, uint8_t *, uint8_t, uint8_t,
     uint8_t);
 STATIC int psm_ecmd_wr8(struct psm_softc *, uint8_t, uint8_t, uint8_t,
     uint8_t);
-STATIC int psm_match(struct device *, struct cfdata *, void *);
-STATIC void psm_attach(struct device *, struct device *, void *);
+STATIC int psm_match(device_t, cfdata_t, void *);
+STATIC void psm_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(psm, sizeof(struct psm_softc),
+CFATTACH_DECL_NEW(psm, sizeof(struct psm_softc),
     psm_match, psm_attach, NULL, NULL);
 
 
 int
-psm_match(struct device *parent, struct cfdata *cf, void *aux)
+psm_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ebus_attach_args *ea = aux;
 
@@ -138,18 +138,19 @@ psm_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-psm_attach(struct device *parent, struct device *self, void *aux)
+psm_attach(device_t parent, device_t self, void *aux)
 {
-	struct psm_softc	*sc = (struct psm_softc *)self;
+	struct psm_softc	*sc = device_private(self);
 	struct ebus_attach_args	*ea = aux;
 	bus_addr_t		devaddr;
-	char			*xname;
+	const char		*xname;
 
-	xname = sc->sc_dev.dv_xname;
 
+	sc->sc_dev = self;
 	sc->sc_memt = ea->ea_bustag;
 	devaddr = EBUS_ADDR_FROM_REG(&ea->ea_reg[0]);
 
+	xname = device_xname(sc->sc_dev);
 	if (bus_space_map(sc->sc_memt, devaddr, ea->ea_reg[0].size,
 		0, &sc->sc_memh) != 0) {
 		printf(": unable to map device registers\n");
@@ -165,9 +166,8 @@ psm_attach(struct device *parent, struct device *self, void *aux)
 	psm_sysmon_setup(sc);
 
 	if (kthread_create(PRI_NONE, 0, NULL, psm_event_thread, sc,
-	    &sc->sc_thread, "%s", sc->sc_dev.dv_xname) != 0) {
-		printf("%s: unable to create event kthread\n",
-		    sc->sc_dev.dv_xname);
+	    &sc->sc_thread, "%s", xname) != 0) {
+		aprint_error_dev(sc->sc_dev, "unable to create event kthread\n");
 	}
 
 	/*
@@ -176,7 +176,7 @@ psm_attach(struct device *parent, struct device *self, void *aux)
 	(void) bus_intr_establish(sc->sc_memt, ea->ea_intr[0], IPL_HIGH,
 	    psm_intr, sc);
 	evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-	    sc->sc_dev.dv_xname, "intr");
+	    xname, "intr");
 }
 
 /*
@@ -185,7 +185,7 @@ psm_attach(struct device *parent, struct device *self, void *aux)
 void
 psm_sysmon_setup(struct psm_softc *sc)
 {
-	const char	*xname	= sc->sc_dev.dv_xname;
+	const char	*xname	= device_xname(sc->sc_dev);
 
 
 	/*
@@ -272,8 +272,7 @@ psm_init(struct psm_softc *sc)
 	/* make sure that UPS battery is reasonable */
 	if (psm_misc_rd(sc, PSM_MISC_UPS, &batt) || (batt > PSM_MAX_BATTERIES))
 		if (psm_misc_wr(sc, PSM_MISC_UPS, batt))
-			printf("%s: cannot set UPS battery",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev, "cannot set UPS battery");
 
 	return (0);
 }
@@ -334,7 +333,7 @@ psm_ecmd_rd16(struct psm_softc *sc, uint16_t *data, uint8_t iar, uint8_t mode,
     uint8_t addr)
 {
 	uint8_t	cmr = PSM_CMR_DATA(mode, PSM_L_16, PSM_D_RD, addr);
-	int	x, rc, retr = CMD_RETRIES; 
+	int	x, rc, retr = CMD_RETRIES;
 
 	x = splhigh();
 
@@ -368,7 +367,7 @@ psm_ecmd_rd8(struct psm_softc *sc, uint8_t *data, uint8_t iar, uint8_t mode,
     uint8_t addr)
 {
 	uint8_t	cmr = PSM_CMR_DATA(mode, PSM_L_8, PSM_D_RD, addr);
-	int	x, rc, retr = CMD_RETRIES; 
+	int	x, rc, retr = CMD_RETRIES;
 
 	x = splhigh();
 

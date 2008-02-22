@@ -1,4 +1,4 @@
-/*	$NetBSD: Locore.c,v 1.23 2006/09/18 10:19:00 sanjayl Exp $	*/
+/*	$NetBSD: Locore.c,v 1.31 2018/06/06 23:50:29 uwe Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,10 +31,10 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/param.h>
 #include <lib/libsa/stand.h>
 
 #include <machine/cpu.h>
-#include <machine/stdarg.h>
 
 #include "openfirm.h"
 
@@ -43,6 +43,13 @@ static int (*openfirmware)(void *);
 static void startup(void *, int, int (*)(void *), char *, int)
 		__attribute__((__used__));
 static void setup(void);
+
+#ifdef HEAP_VARIABLE
+#ifndef HEAP_SIZE
+#define HEAP_SIZE 0x20000
+#endif
+char *heapspace;
+#endif
 
 static int stack[8192/4 + 4] __attribute__((__used__));
 
@@ -70,6 +77,13 @@ __asm(
 "	mtmsr	%r0		\n"
 "	isync			\n"
 "				\n"
+"				\n" /* test for 601 */
+"	mfspr	%r0,287		\n" /* mfpvbr %r0 PVR = 287 */
+"	srwi	%r0,%r0,0x10	\n"
+"	cmpi	0,1,%r0,0x02	\n" /* 601 CPU = 0x0001 */
+"	blt	1f		\n" /* skip over non-601 BAT setup */
+	/* non PPC 601 BATs */
+"	li	%r0,0		\n"
 "	mtibatu	0,%r0		\n"
 "	mtibatu	1,%r0		\n"
 "	mtibatu	2,%r0		\n"
@@ -79,13 +93,48 @@ __asm(
 "	mtdbatu	2,%r0		\n"
 "	mtdbatu	3,%r0		\n"
 "				\n"
-"	li	%r9,0x12	\n" 	/* BATL(0, BAT_M, BAT_PP_RW) */
+"	li	%r9,0x12	\n"	/* BATL(0, BAT_M, BAT_PP_RW) */
 "	mtibatl	0,%r9		\n"
 "	mtdbatl	0,%r9		\n"
 "	li	%r9,0x1ffe	\n"	/* BATU(0, BAT_BL_256M, BAT_Vs) */
 "	mtibatu	0,%r9		\n"
 "	mtdbatu	0,%r9		\n"
-"	isync			\n"
+"	b	2f		\n"
+
+	/* PPC 601 BATs */
+"1:	li	%r0,0		\n"
+"	mtibatu	0,%r0		\n"
+"	mtibatu	1,%r0		\n"
+"	mtibatu	2,%r0		\n"
+"	mtibatu	3,%r0		\n"
+"				\n"
+"	li	%r9,0x7f	\n"
+"	mtibatl	0,%r9		\n"
+"	li	%r9,0x1a	\n"
+"	mtibatu	0,%r9		\n"
+"				\n"
+"	lis	%r9,0x80	\n"
+"	addi	%r9,%r9,0x7f	\n"
+"	mtibatl	1,%r9		\n"
+"	lis	%r9,0x80	\n"
+"	addi	%r9,%r9,0x1a	\n"
+"	mtibatu	1,%r9		\n"
+"				\n"
+"	lis	%r9,0x100	\n"
+"	addi	%r9,%r9,0x7f	\n"
+"	mtibatl	2,%r9		\n"
+"	lis	%r9,0x100	\n"
+"	addi	%r9,%r9,0x1a	\n"
+"	mtibatu	2,%r9		\n"
+"				\n"
+"	lis	%r9,0x180	\n"
+"	addi	%r9,%r9,0x7f	\n"
+"	mtibatl	3,%r9		\n"
+"	lis	%r9,0x180	\n"
+"	addi	%r9,%r9,0x1a	\n"
+"	mtibatu	3,%r9		\n"
+"				\n"
+"2:	isync			\n"
 "				\n"
 "	mtmsr	%r8		\n"
 "	isync			\n"
@@ -129,6 +178,24 @@ startup(void *vpd, int res, int (*openfirm)(void *), char *arg, int argl)
 	main();
 	OF_exit();
 }
+
+#if 0
+void
+OF_enter(void)
+{
+	static struct {
+		const char *name;
+		int nargs;
+		int nreturns;
+	} args = {
+		"enter",
+		0,
+		0
+	};
+
+	openfirmware(&args);
+}
+#endif	/* OF_enter */
 
 __dead void
 OF_exit(void)
@@ -580,6 +647,15 @@ setup(void)
 	    OF_getprop(chosen, "stdout", &stdout, sizeof(stdout)) !=
 	    sizeof(stdout))
 		OF_exit();
+
+#ifdef HEAP_VARIABLE
+	heapspace = OF_claim(0, HEAP_SIZE, NBPG);
+	if (heapspace == (char *)-1) {
+		panic("Failed to allocate heap");
+	}
+
+	setheap(heapspace, heapspace + HEAP_SIZE);
+#endif	/* HEAP_VARIABLE */
 }
 
 void

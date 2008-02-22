@@ -1,4 +1,4 @@
-/*	$NetBSD: get.c,v 1.3 1997/10/16 23:24:38 lukem Exp $	*/
+/*	$NetBSD: get.c,v 1.7 2016/06/08 01:11:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "port.h"
 #ifndef lint
-__RCSID("$NetBSD: get.c,v 1.3 1997/10/16 23:24:38 lukem Exp $");
+__RCSID("$NetBSD: get.c,v 1.7 2016/06/08 01:11:49 christos Exp $");
 #endif
 
 #include "os.h"
@@ -39,67 +34,57 @@ __RCSID("$NetBSD: get.c,v 1.3 1997/10/16 23:24:38 lukem Exp $");
 #include "mopdef.h"
 
 u_char
-mopGetChar(pkt, index)
-	u_char *pkt;
-	int    *index;
+mopGetChar(const u_char *pkt, int *idx)
 {
         u_char ret;
 
-	ret = pkt[*index];
-	*index = *index + 1;
+	ret = pkt[*idx];
+	*idx = *idx + 1;
 	return(ret);
 }
 
 u_short
-mopGetShort(pkt, index)
-	u_char *pkt;
-	int    *index;
+mopGetShort(const u_char *pkt, int *idx)
 {
         u_short ret;
 	
-	ret = pkt[*index] + pkt[*index+1]*256;
-	*index = *index + 2;
+	ret = pkt[*idx] + pkt[*idx+1]*256;
+	*idx = *idx + 2;
 	return(ret);
 }
 
 u_int32_t
-mopGetLong(pkt, index)
-	u_char *pkt;
-	int    *index;
+mopGetLong(const u_char *pkt, int *idx)
 {
         u_int32_t ret;
 	
-	ret = pkt[*index] +
-	      pkt[*index+1]*0x100 +
-	      pkt[*index+2]*0x10000 +
-	      pkt[*index+3]*0x1000000;
-	*index = *index + 4;
+	ret = pkt[*idx] +
+	      pkt[*idx+1]*0x100 +
+	      pkt[*idx+2]*0x10000 +
+	      pkt[*idx+3]*0x1000000;
+	*idx = *idx + 4;
 	return(ret);
 }
 
 void
-mopGetMulti(pkt, index, dest, size)
-	u_char *pkt,*dest;
-	int    *index,size;
+mopGetMulti(const u_char *pkt, int *idx, u_char *dest, int size)
 {
 	int i;
 
 	for (i = 0; i < size; i++) {
-	  dest[i] = pkt[*index+i];
+	  dest[i] = pkt[*idx+i];
 	}  
-	*index = *index + size;
+	*idx = *idx + size;
 
 }
 
 int
-mopGetTrans(pkt, trans)
-	u_char	*pkt;
-	int	 trans;
+mopGetTrans(const u_char *pkt, int trans)
 {
-	u_short	*ptype;
+	const u_short	*ptype;
 	
 	if (trans == 0) {
-		ptype = (u_short *)(pkt+12);
+		ptype = (const u_short *)(pkt+12);
 		if (ntohs(*ptype) < 1600) {
 			trans = TRANS_8023;
 		} else {
@@ -110,35 +95,31 @@ mopGetTrans(pkt, trans)
 }
 
 void
-mopGetHeader(pkt, index, dst, src, proto, len, trans)
-	u_char	*pkt, **dst, **src;
-	int	*index, *len, trans;
-	u_short	*proto;
+mopGetHeader(const u_char *pkt, int *idx, const u_char **dst, const u_char **src,
+	     u_short *proto, int *len, int trans)
 {
 	*dst = pkt;
 	*src = pkt + 6;
-	*index = *index + 12;
+	*idx = *idx + 12;
 
 	switch(trans) {
 	case TRANS_ETHER:
-		*proto = (u_short)(pkt[*index]*256 + pkt[*index+1]);
-		*index = *index + 2;
-		*len   = (int)(pkt[*index+1]*256 + pkt[*index]);
-		*index = *index + 2;
+		*proto = (u_short)(pkt[*idx]*256 + pkt[*idx+1]);
+		*idx = *idx + 2;
+		*len   = (int)(pkt[*idx+1]*256 + pkt[*idx]);
+		*idx = *idx + 2;
 		break;
 	case TRANS_8023:
-		*len   = (int)(pkt[*index]*256 + pkt[*index+1]);
-		*index = *index + 8;
-		*proto = (u_short)(pkt[*index]*256 + pkt[*index+1]);
-		*index = *index + 2;
+		*len   = (int)(pkt[*idx]*256 + pkt[*idx+1]);
+		*idx = *idx + 8;
+		*proto = (u_short)(pkt[*idx]*256 + pkt[*idx+1]);
+		*idx = *idx + 2;
 		break;
 	}
 }
 
 u_short
-mopGetLength(pkt, trans)
-	u_char	*pkt;
-	int	 trans;
+mopGetLength(const u_char *pkt, int trans)
 {
 	switch(trans) {
 	case TRANS_ETHER:

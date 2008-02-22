@@ -1,4 +1,4 @@
-/*	$NetBSD: twavar.h,v 1.7 2007/03/04 06:02:26 christos Exp $ */
+/*	$NetBSD: twavar.h,v 1.12 2012/10/27 17:18:35 chs Exp $ */
 /*	$wasabi: twavar.h,v 1.12 2006/05/01 15:16:59 simonb Exp $	*/
 
 /*-
@@ -42,19 +42,20 @@
 #include "locators.h"
 
 struct twa_callbacks {
-	void	(*tcb_openings)(struct device *, int);
+	void	(*tcb_openings)(device_t, int);
 };
 
 struct twa_drive {
 	uint32_t	td_id;
 	uint64_t	td_size;
-	struct device	*td_dev;
+	int		td_openings;
+	device_t	td_dev;
 	const struct twa_callbacks *td_callbacks;
 };
 
 /* Per-controller structure. */
 struct twa_softc {
-	struct device		twa_dv;
+	device_t		twa_dv;
 	bus_space_tag_t		twa_bus_iot;	/* bus space tag */
 	bus_space_handle_t	twa_bus_ioh;	/* bus space handle */
 	bus_dma_tag_t		twa_dma_tag;	/* data buffer DMA tag */
@@ -75,7 +76,7 @@ struct twa_softc {
 	struct twa_request	*twa_req_buf;
 	struct twa_command_packet *twa_cmd_pkt_buf;
 
-	struct twa_drive	sc_units[TWA_MAX_UNITS];
+	struct twa_drive	*sc_units;
 	/* AEN handler fields. */
 	struct tw_cl_event_packet *twa_aen_queue[TWA_Q_LENGTH];/* circular queue of AENs from firmware */
 	uint16_t		working_srl;	/* driver & firmware negotiated srl */
@@ -102,10 +103,11 @@ struct twa_softc {
 						 * for synchronization between
 						 * ioctl calls
 						 */
-	int			sc_openings;
 	int			sc_nunits;
 
 	struct twa_request      *sc_twa_request;
+	uint32_t		sc_product_id;
+	unsigned		sc_quirks;
 };
 
 
@@ -138,10 +140,14 @@ struct twa_softc {
 #define TWA_STATE_OPEN			(1<<2)	/* control device is open */
 #define TWA_STATE_SIMQ_FROZEN		(1<<3)	/* simq frozen */
 #define TWA_STATE_REQUEST_WAIT		(1<<4)
+#define TWA_STATE_IN_RESET		(1<<5)	/* controller being reset */
 
 /* Possible values of sc->twa_ioctl_lock.lock. */
 #define TWA_LOCK_FREE		0x0	/* lock is free */
 #define TWA_LOCK_HELD		0x1	/* lock is held */
+
+/* Possible values of sc->sc_quirks. */
+#define TWA_QUIRK_QUEUEFULL_BUG	0x1
 
 /* Driver's request packet. */
 struct twa_request {

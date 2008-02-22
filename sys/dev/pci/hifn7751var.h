@@ -1,4 +1,4 @@
-/*	$NetBSD: hifn7751var.h,v 1.7 2005/12/11 12:22:49 christos Exp $	*/
+/*	$NetBSD: hifn7751var.h,v 1.12 2015/04/14 20:32:36 riastradh Exp $	*/
 /*	$OpenBSD: hifn7751var.h,v 1.18 2000/06/02 22:36:45 deraadt Exp $	*/
 
 /*
@@ -44,6 +44,8 @@
 #define __DEV_PCI_HIFN7751VAR_H__
 
 #ifdef _KERNEL
+
+#include <sys/rndsource.h>
 
 /*
  *  Some configurable values for the driver
@@ -137,13 +139,16 @@ struct hifn_session {
  * Holds data specific to a single HIFN board.
  */
 struct hifn_softc {
-	struct device	sc_dv;		/* generic device */
+	device_t	sc_dv;		/* generic device */
 	void *		sc_ih;		/* interrupt handler cookie */
 	u_int32_t	sc_dmaier;
 	u_int32_t	sc_drammodel;	/* 1=dram, 0=sram */
 
 	bus_space_handle_t	sc_sh0, sc_sh1;
 	bus_space_tag_t		sc_st0, sc_st1;
+#ifdef __NetBSD__
+	bus_size_t		sc_iosz0, sc_iosz1;
+#endif
 	bus_dma_tag_t		sc_dmat;
 
 	struct hifn_dma *sc_dma;
@@ -168,9 +173,9 @@ struct hifn_softc {
 
 	struct callout		sc_rngto;	/* rng timeout */
 	struct callout		sc_tickto;	/* led-clear timeout */
-	rndsource_element_t	sc_rnd_source;
-	int			sc_rngfirst;
+	krndsource_t	sc_rnd_source;
 	int			sc_rnghz;
+	int			sc_rng_need;	/* how many bytes wanted */
 	int			sc_c_busy;	/* command ring busy */
 	int			sc_s_busy;	/* source data ring busy */
 	int			sc_d_busy;	/* destination data ring busy */
@@ -184,6 +189,7 @@ struct hifn_softc {
 	pcitag_t sc_pci_tag;
 	bus_size_t sc_waw_lastreg;
 	int sc_waw_lastgroup;
+	kmutex_t		sc_mtx;
 };
 
 #define WRITE_REG_0(sc,reg,val)		hifn_write_4((sc), 0, (reg), (val))

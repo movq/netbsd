@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_swap_64_cas.c,v 1.4 2007/11/29 01:02:45 ad Exp $	*/
+/*	$NetBSD: atomic_swap_64_cas.c,v 1.9 2014/06/28 20:18:55 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,8 +47,11 @@ atomic_swap_64(volatile uint64_t *addr, uint64_t new)
 	return (old);
 }
 
+crt_alias(__atomic_exchange_8,_atomic_swap_8)
+
 #undef atomic_swap_64
 atomic_op_alias(atomic_swap_64,_atomic_swap_64)
+crt_alias(__sync_lock_test_and_set_8,_atomic_swap_64)
 #if defined(_LP64)
 #undef atomic_swap_ulong
 atomic_op_alias(atomic_swap_ulong,_atomic_swap_64)

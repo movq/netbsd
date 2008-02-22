@@ -1,4 +1,4 @@
-/* $Id: arbus.c,v 1.10 2006/09/04 05:17:26 gdamore Exp $ */
+/* $Id: arbus.c,v 1.15 2011/07/10 06:26:02 matt Exp $ */
 /*
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
  * Copyright (c) 2006 Garrett D'Amore.
@@ -41,26 +41,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arbus.c,v 1.10 2006/09/04 05:17:26 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arbus.c,v 1.15 2011/07/10 06:26:02 matt Exp $");
 
 #include "locators.h"
+#define	_MIPS_BUS_DMA_PRIVATE
+
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/bus.h>
 #include <sys/device.h>
 #include <sys/extent.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
+#include <sys/systm.h>
 
-#define	_MIPS_BUS_DMA_PRIVATE
-#include <machine/bus.h>
-#include <mips/atheros/include/ar5312reg.h>
-#include <mips/atheros/include/ar531xvar.h>
+#include <mips/atheros/include/platform.h>
 #include <mips/atheros/include/arbusvar.h>
 
-static int arbus_match(struct device *, struct cfdata *, void *);
-static void arbus_attach(struct device *, struct device *, void *);
+static int arbus_match(device_t, cfdata_t, void *);
+static void arbus_attach(device_t, device_t, void *);
 static int arbus_print(void *, const char *);
 static void arbus_bus_mem_init(bus_space_tag_t, void *);
-static void arbus_dma_init(struct device *, bus_dma_tag_t);
 
 struct arbus_intrhand {
 	int		ih_cirq;
@@ -68,22 +67,30 @@ struct arbus_intrhand {
 	void		*ih_cookie;
 };
 
-CFATTACH_DECL(arbus, sizeof(struct device), arbus_match, arbus_attach,
-    NULL, NULL);
+CFATTACH_DECL_NEW(arbus, 0, arbus_match, arbus_attach, NULL, NULL);
 
 struct mips_bus_space	arbus_mbst;
-struct mips_bus_dma_tag	arbus_mdt;
+#if _BYTE_ORDER == _BIG_ENDIAN
+struct mips_bus_space	arbus_mbst_le;
+#endif
+struct mips_bus_dma_tag	arbus_mdt = {
+	._dmamap_ops = _BUS_DMAMAP_OPS_INITIALIZER,
+	._dmamem_ops = _BUS_DMAMEM_OPS_INITIALIZER,
+	._dmatag_ops = _BUS_DMATAG_OPS_INITIALIZER,
+};
 
 void
 arbus_init(void)
 {
-	static int done = 0;
+	static bool done = false;
 	if (done)
 		return;
-	done++;
+	done = true;
 
 	arbus_bus_mem_init(&arbus_mbst, NULL);
-	arbus_dma_init(NULL, &arbus_mdt);
+#if _BYTE_ORDER == _BIG_ENDIAN
+	arbusle_bus_mem_init(&arbus_mbst_le, NULL);
+#endif
 }
 
 /* this primarily exists so we can get to the console... */
@@ -102,37 +109,41 @@ arbus_get_bus_dma_tag(void)
 }
 
 int
-arbus_match(struct device *parent, struct cfdata *match, void *aux)
+arbus_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return 1;
 }
 
 void
-arbus_attach(struct device *parent, struct device *self, void *aux)
+arbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct arbus_attach_args aa;
-	const struct ar531x_device *devices;
-	int i;
-
-	printf("\n");
-	int locs[ARBUSCF_NLOCS];
+	aprint_normal("\n");
 
 	arbus_init();
 
-	for (i = 0, devices = ar531x_get_devices(); devices[i].name; i++) {
-
-		aa.aa_name = devices[i].name;
-		aa.aa_size = devices[i].size;
+	for (const struct atheros_device *adv = platformsw->apsw_devices;
+	     adv->adv_name;
+	     adv++) {
+		struct arbus_attach_args aa;
+		aa.aa_name = adv->adv_name;
+		aa.aa_addr = adv->adv_addr;
+		aa.aa_size = adv->adv_size;
 		aa.aa_dmat = &arbus_mdt;
 		aa.aa_bst = &arbus_mbst;
-		aa.aa_cirq = devices[i].cirq;
-		aa.aa_mirq = devices[i].mirq;
-		aa.aa_addr = devices[i].addr;
+#if _BYTE_ORDER == _BIG_ENDIAN
+		aa.aa_bst_le = &arbus_mbst_le;
+#else
+		aa.aa_bst_le = &arbus_mbst;
+#endif
+		aa.aa_cirq = adv->adv_cirq;
+		aa.aa_mirq = adv->adv_mirq;
 
-		locs[ARBUSCF_ADDR] = aa.aa_addr;
+		const int locs[ARBUSCF_NLOCS] = {
+			[ARBUSCF_ADDR] = aa.aa_addr,
+		};
 
-		if (ar531x_enable_device(&devices[i]) != 0) {
+		if (atheros_enable_device(adv) != 0) {
 			continue;
 		}
 
@@ -150,7 +161,7 @@ arbus_print(void *aux, const char *pnp)
 		aprint_normal("%s at %s", aa->aa_name, pnp);
 
 	if (aa->aa_addr)
-		aprint_normal(" addr 0x%lx", aa->aa_addr);
+		aprint_normal(" addr 0x%" PRIxBUSADDR, aa->aa_addr);
 
 	if (aa->aa_cirq >= 0)
 		aprint_normal(" cpu irq %d", aa->aa_cirq);
@@ -164,9 +175,8 @@ arbus_print(void *aux, const char *pnp)
 void *
 arbus_intr_establish(int cirq, int mirq, int (*handler)(void *), void *arg)
 {
-	struct arbus_intrhand	*ih;
 
-	ih = malloc(sizeof(*ih), M_DEVBUF, M_NOWAIT);
+	struct arbus_intrhand * const ih = kmem_zalloc(sizeof(*ih), KM_NOSLEEP);
 	if (ih == NULL)
 		return NULL;
 
@@ -175,15 +185,15 @@ arbus_intr_establish(int cirq, int mirq, int (*handler)(void *), void *arg)
 
 	if (mirq >= 0) {
 		ih->ih_mirq = mirq;
-		ih->ih_cookie = ar531x_misc_intr_establish(mirq, handler, arg);
+		ih->ih_cookie = atheros_misc_intr_establish(mirq, handler, arg);
 	} else if (cirq >= 0) {
 		ih->ih_cirq = cirq;
-		ih->ih_cookie = ar531x_cpu_intr_establish(cirq, handler, arg);
+		ih->ih_cookie = atheros_cpu_intr_establish(cirq, handler, arg);
 	} else
 		return ih;
 
 	if (ih->ih_cookie == NULL) {
-		free(ih, M_DEVBUF);
+		kmem_free(ih, sizeof(*ih));
 		return NULL;
 	}
 	return ih;
@@ -192,38 +202,12 @@ arbus_intr_establish(int cirq, int mirq, int (*handler)(void *), void *arg)
 void
 arbus_intr_disestablish(void *arg)
 {
-	struct arbus_intrhand	*ih = arg;
+	struct arbus_intrhand * const ih = arg;
 	if (ih->ih_mirq >= 0)
-		ar531x_misc_intr_disestablish(ih->ih_cookie);
+		atheros_misc_intr_disestablish(ih->ih_cookie);
 	else if (ih->ih_cirq >= 0)
-		ar531x_cpu_intr_disestablish(ih->ih_cookie);
-	free(ih, M_DEVBUF);
-}
-
-
-void
-arbus_dma_init(struct device *sc, bus_dma_tag_t pdt)
-{
-	bus_dma_tag_t	t;
-
-	t = pdt;
-	t->_cookie = sc;
-	t->_wbase = 0;
-	t->_physbase = 0;
-	t->_wsize = MIPS_KSEG1_START - MIPS_KSEG0_START;
-	t->_dmamap_create = _bus_dmamap_create;
-	t->_dmamap_destroy = _bus_dmamap_destroy;
-	t->_dmamap_load = _bus_dmamap_load;
-	t->_dmamap_load_mbuf = _bus_dmamap_load_mbuf;
-	t->_dmamap_load_uio = _bus_dmamap_load_uio;
-	t->_dmamap_load_raw = _bus_dmamap_load_raw;
-	t->_dmamap_unload = _bus_dmamap_unload;
-	t->_dmamap_sync = _bus_dmamap_sync;
-	t->_dmamem_alloc = _bus_dmamem_alloc;
-	t->_dmamem_free = _bus_dmamem_free;
-	t->_dmamem_map = _bus_dmamem_map;
-	t->_dmamem_unmap = _bus_dmamem_unmap;
-	t->_dmamem_mmap = _bus_dmamem_mmap;
+		atheros_cpu_intr_disestablish(ih->ih_cookie);
+	kmem_free(ih, sizeof(*ih));
 }
 
 /*

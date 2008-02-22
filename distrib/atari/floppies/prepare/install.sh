@@ -1,5 +1,5 @@
 #!/bin/sh
-#	$NetBSD: install.sh,v 1.1.1.1 2002/04/12 21:11:46 leo Exp $
+#	$NetBSD: install.sh,v 1.3 2016/09/18 18:24:00 christos Exp $
 #
 # Copyright (c) 1996 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,25 +44,28 @@ MODE="install"
 #	md_makerootwritable()	- make root writable (at least /tmp)
 
 # we need to make sure .'s below work if this directory is not in $PATH
-# dirname may not be available but expr is
-Mydir=`expr $0 : '^\(.*\)/[^/]*$'`
-Mydir=`cd ${Mydir:-.}; pwd`
+case $0 in
+*/*)	Mydir=${0%/*};;
+*)	Mydir=.;;
+esac
+Mydir=$(cd "${Mydir}" && pwd)
 
 #
 # Sub-parts
 #
 getresp() {
 	read resp
-	if [ "X$resp" = "X" ]; then
+	if [ -z "$resp" ]; then
 		resp=$1
 	fi
 }
 
 isin() {
 # test the first argument against the remaining ones, return succes on a match
-	_a=$1; shift
+	local a=$1
+	shift
 	while [ $# != 0 ]; do
-		if [ "$_a" = "$1" ]; then return 0; fi
+		if [ "$a" = "$1" ]; then return 0; fi
 		shift
 	done
 	return 1

@@ -1,4 +1,4 @@
-/*	$NetBSD: pfil.h,v 1.28 2006/02/16 20:17:20 perry Exp $	*/
+/*	$NetBSD: pfil.h,v 1.33 2017/01/16 09:28:40 ryo Exp $	*/
 
 /*
  * Copyright (c) 1996 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,32 +29,22 @@
 #ifndef _NET_PFIL_H_
 #define _NET_PFIL_H_
 
-#ifdef _KERNEL_OPT
-#include "opt_pfil_hooks.h"
-#endif
-
 #include <sys/queue.h>
-#include <net/dlt.h>
-#include <sys/null.h>
 
 struct mbuf;
 struct ifnet;
+struct ifaddr;
 
 /*
  * The packet filter hooks are designed for anything to call them to
  * possibly intercept the packet.
  */
-struct packet_filter_hook {
-        TAILQ_ENTRY(packet_filter_hook) pfil_link;
-	int	(*pfil_func)(void *, struct mbuf **, struct ifnet *, int);
-	void	*pfil_arg;
-	int	pfil_flags;
-};
+typedef int (*pfil_func_t)(void *, struct mbuf **, struct ifnet *, int);
+typedef void (*pfil_ifunc_t)(void *, unsigned long, void *);
 
 #define PFIL_IN		0x00000001
 #define PFIL_OUT	0x00000002
 #define PFIL_ALL	(PFIL_IN|PFIL_OUT)
-#define PFIL_WAITOK	0x00000004
 #define PFIL_IFADDR	0x00000008
 #define PFIL_IFNET	0x00000010
 
@@ -64,75 +52,31 @@ struct packet_filter_hook {
 #define	PFIL_IFNET_ATTACH	0
 #define	PFIL_IFNET_DETACH	1
 
-typedef	TAILQ_HEAD(pfil_list, packet_filter_hook) pfil_list_t;
-
 #define	PFIL_TYPE_AF		1	/* key is AF_* type */
-#define	PFIL_TYPE_IFNET		2	/* key is ifnet pointer */
+#define	PFIL_TYPE_IFNET		2	/* key is ifnet or ifaddr pointer */
 
-struct pfil_head {
-	pfil_list_t	ph_in;
-	pfil_list_t	ph_out;
-	pfil_list_t	ph_ifaddr;
-	pfil_list_t	ph_ifnetevent; /* XXX naming collision */
-	int		ph_type;
-	union {
-		u_long		phu_val;
-		void		*phu_ptr;
-	} ph_un;
-#define	ph_af		ph_un.phu_val
-#define	ph_ifnet	ph_un.phu_ptr
-	LIST_ENTRY(pfil_head) ph_list;
-};
-typedef struct pfil_head pfil_head_t;
+typedef struct pfil_head	pfil_head_t;
 
 #ifdef _KERNEL
 
-int	pfil_run_hooks(struct pfil_head *, struct mbuf **, struct ifnet *,
-	    int);
+void	pfil_init(void);
+int	pfil_run_hooks(pfil_head_t *, struct mbuf **, struct ifnet *, int);
+void	pfil_run_addrhooks(pfil_head_t *, unsigned long, struct ifaddr *);
+void	pfil_run_ifhooks(pfil_head_t *, unsigned long, struct ifnet *);
 
-int	pfil_add_hook(int (*func)(void *, struct mbuf **,
-	    struct ifnet *, int), void *, int, struct pfil_head *);
-int	pfil_remove_hook(int (*func)(void *, struct mbuf **,
-	    struct ifnet *, int), void *, int, struct pfil_head *);
+int	pfil_add_hook(pfil_func_t, void *, int, pfil_head_t *);
+int	pfil_remove_hook(pfil_func_t, void *, int, pfil_head_t *);
 
-int	pfil_head_register(struct pfil_head *);
-int	pfil_head_unregister(struct pfil_head *);
+int	pfil_add_ihook(pfil_ifunc_t, void *, int, pfil_head_t *);
+int	pfil_remove_ihook(pfil_ifunc_t, void *, int, pfil_head_t *);
 
-struct pfil_head *pfil_head_get(int, u_long);
+pfil_head_t *	pfil_head_create(int, void *);
+void		pfil_head_destroy(pfil_head_t *);
+pfil_head_t *	pfil_head_get(int, void *);
 
-static __inline struct packet_filter_hook *
-pfil_hook_get(int dir, struct pfil_head *ph)
-{
+/* Packet filtering hook for interfaces (in sys/net/if.c module). */
+extern pfil_head_t *if_pfil;
 
-	if (dir == PFIL_IN)
-		return (TAILQ_FIRST(&ph->ph_in));
-	else if (dir == PFIL_OUT)
-		return (TAILQ_FIRST(&ph->ph_out));
-	else if (dir == PFIL_IFADDR)
-		return (TAILQ_FIRST(&ph->ph_ifaddr));
-	else if (dir == PFIL_IFNET)
-		return (TAILQ_FIRST(&ph->ph_ifnetevent));
-	else
-		return (NULL);
-}
-
-#endif /* _KERNEL */
-
-/* XXX */
-#if defined(_KERNEL_OPT)
-#include "ipfilter.h"
-#endif
-
-#if NIPFILTER > 0
-#ifdef PFIL_HOOKS
-#undef PFIL_HOOKS
-#endif
-#define PFIL_HOOKS
-#endif /* NIPFILTER */
-
-#ifdef _KERNEL
-/* in sys/net/if.c */
-extern struct pfil_head if_pfil; /* packet filtering hook for interfaces */
 #endif /* _KERNEL */
 
 #endif /* !_NET_PFIL_H_ */

@@ -1,7 +1,6 @@
-/*	$NetBSD: natm_pcb.c,v 1.9 2005/12/11 12:25:16 christos Exp $	*/
+/*	$NetBSD: natm_pcb.c,v 1.17 2016/04/11 08:56:16 ozaki-r Exp $	*/
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -38,21 +31,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: natm_pcb.c,v 1.9 2005/12/11 12:25:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: natm_pcb.c,v 1.17 2016/04/11 08:56:16 ozaki-r Exp $");
 
 #include "opt_ddb.h"
 
 #include <sys/param.h>
+#include <sys/kmem.h>
 #include <sys/systm.h>
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/protosw.h>
 #include <sys/domain.h>
 #include <sys/mbuf.h>
-#include <sys/malloc.h>
 
 #include <net/if.h>
-#include <net/radix.h>
 #include <net/route.h>
 
 #include <netinet/in.h>
@@ -63,21 +55,13 @@ __KERNEL_RCSID(0, "$NetBSD: natm_pcb.c,v 1.9 2005/12/11 12:25:16 christos Exp $"
  * npcb_alloc: allocate a npcb [in the free state]
  */
 
-struct natmpcb *npcb_alloc(wait)
-
-int wait;
-
+struct natmpcb *
+npcb_alloc(bool wait)
 {
   struct natmpcb *npcb;
 
-  MALLOC(npcb, struct natmpcb *, sizeof(*npcb), M_PCB, wait);
-
-#ifdef DIAGNOSTIC
-  if (wait == M_WAITOK && npcb == NULL) panic("npcb_alloc: malloc didn't wait");
-#endif
-
+  npcb = kmem_intr_zalloc(sizeof(*npcb), wait ? KM_SLEEP : KM_NOSLEEP);
   if (npcb) {
-    bzero(npcb, sizeof(*npcb));
     npcb->npcb_flags = NPCB_FREE;
   }
   return(npcb);
@@ -88,11 +72,8 @@ int wait;
  * npcb_free: free a npcb
  */
 
-void npcb_free(npcb, op)
-
-struct natmpcb *npcb;
-int op;
-
+void
+npcb_free(struct natmpcb *npcb, int op)
 {
   int s = splnet();
 
@@ -102,9 +83,9 @@ int op;
   }
   if (op == NPCB_DESTROY) {
     if (npcb->npcb_inq) {
-      npcb->npcb_flags = NPCB_DRAIN;	/* flag for distruction */
+      npcb->npcb_flags = NPCB_DRAIN;	/* flag for destruction */
     } else {
-      FREE(npcb, M_PCB);		/* kill it! */
+      kmem_intr_free(npcb, sizeof(*npcb));
     }
   }
 
@@ -117,13 +98,9 @@ int op;
  *   returns npcb if ok
  */
 
-struct natmpcb *npcb_add(npcb, ifp, vci, vpi)
-
-struct natmpcb *npcb;
-struct ifnet *ifp;
-u_int16_t vci;
-u_int8_t vpi;
-
+struct natmpcb *
+npcb_add(struct natmpcb *npcb, struct ifnet *ifp,
+	u_int16_t vci, u_int8_t vpi)
 {
   struct natmpcb *cpcb = NULL;		/* current pcb */
   int s = splnet();
@@ -153,7 +130,7 @@ u_int8_t vpi;
    */
 
   if (npcb == NULL) {
-    cpcb = npcb_alloc(M_NOWAIT);	/* could be called from lower half */
+    cpcb = npcb_alloc(false);	/* could be called from lower half */
     if (cpcb == NULL)
       goto done;			/* fail */
   } else {
@@ -177,9 +154,9 @@ done:
 
 #ifdef DDB
 
-int npcb_dump __P((void));
+int npcb_dump(void);
 
-int npcb_dump()
+int npcb_dump(void)
 
 {
   struct natmpcb *cpcb;

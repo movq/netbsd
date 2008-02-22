@@ -1,4 +1,4 @@
-/*	$NetBSD: hci_link.c,v 1.16 2007/11/10 23:12:22 plunky Exp $	*/
+/*	$NetBSD: hci_link.c,v 1.24 2014/05/20 18:25:54 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hci_link.c,v 1.16 2007/11/10 23:12:22 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hci_link.c,v 1.24 2014/05/20 18:25:54 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -77,12 +77,9 @@ hci_acl_open(struct hci_unit *unit, bdaddr_t *bdaddr)
 
 	link = hci_link_lookup_bdaddr(unit, bdaddr, HCI_LINK_ACL);
 	if (link == NULL) {
-		link = hci_link_alloc(unit);
+		link = hci_link_alloc(unit, bdaddr, HCI_LINK_ACL);
 		if (link == NULL)
 			return NULL;
-
-		link->hl_type = HCI_LINK_ACL;
-		bdaddr_copy(&link->hl_bdaddr, bdaddr);
 	}
 
 	switch(link->hl_state) {
@@ -110,6 +107,7 @@ hci_acl_open(struct hci_unit *unit, bdaddr_t *bdaddr)
 			return NULL;
 		}
 
+		link->hl_flags |= HCI_LINK_CREATE_CON;
 		link->hl_state = HCI_LINK_WAIT_CONNECT;
 		break;
 
@@ -164,9 +162,8 @@ hci_acl_close(struct hci_link *link, int err)
 /*
  * Incoming ACL connection.
  *
- * For now, we accept all connections but it would be better to check
- * the L2CAP listen list and only accept when there is a listener
- * available.
+ * Check the L2CAP listeners list and only accept when there is a
+ * potential listener available.
  *
  * There should not be a link to the same bdaddr already, we check
  * anyway though its left unhandled for now.
@@ -175,16 +172,32 @@ struct hci_link *
 hci_acl_newconn(struct hci_unit *unit, bdaddr_t *bdaddr)
 {
 	struct hci_link *link;
+	struct l2cap_channel *chan;
+
+	LIST_FOREACH(chan, &l2cap_listen_list, lc_ncid) {
+		if (bdaddr_same(&unit->hci_bdaddr, &chan->lc_laddr.bt_bdaddr)
+		    || bdaddr_any(&chan->lc_laddr.bt_bdaddr))
+			break;
+	}
+
+	if (chan == NULL) {
+		DPRINTF("%s: rejecting connection (no listeners)\n",
+		    device_xname(unit->hci_dev));
+
+		return NULL;
+	}
 
 	link = hci_link_lookup_bdaddr(unit, bdaddr, HCI_LINK_ACL);
-	if (link != NULL)
-		return NULL;
+	if (link != NULL) {
+		DPRINTF("%s: rejecting connection (link exists)\n",
+		    device_xname(unit->hci_dev));
 
-	link = hci_link_alloc(unit);
+		return NULL;
+	}
+
+	link = hci_link_alloc(unit, bdaddr, HCI_LINK_ACL);
 	if (link != NULL) {
 		link->hl_state = HCI_LINK_WAIT_CONNECT;
-		link->hl_type = HCI_LINK_ACL;
-		bdaddr_copy(&link->hl_bdaddr, bdaddr);
 
 		if (hci_acl_expiry > 0)
 			callout_schedule(&link->hl_expire, hci_acl_expiry * hz);
@@ -198,9 +211,9 @@ hci_acl_timeout(void *arg)
 {
 	struct hci_link *link = arg;
 	hci_discon_cp cp;
-	int s, err;
+	int err;
 
-	s = splsoftnet();
+	mutex_enter(bt_lock);
 	callout_ack(&link->hl_expire);
 
 	if (link->hl_refcnt > 0)
@@ -237,7 +250,7 @@ hci_acl_timeout(void *arg)
 	}
 
 out:
-	splx(s);
+	mutex_exit(bt_lock);
 }
 
 /*
@@ -419,28 +432,21 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 	KASSERT(m != NULL);
 	KASSERT(unit != NULL);
 
-	KASSERT(m->m_pkthdr.len >= sizeof(hdr));
+	if (m->m_pkthdr.len < sizeof(hdr))
+		goto bad;
+		
 	m_copydata(m, 0, sizeof(hdr), &hdr);
 	m_adj(m, sizeof(hdr));
 
-#ifdef DIAGNOSTIC
-	if (hdr.type != HCI_ACL_DATA_PKT) {
-		aprint_error_dev(unit->hci_dev, "bad ACL packet type\n");
-		goto bad;
-	}
-
-	if (m->m_pkthdr.len != le16toh(hdr.length)) {
-		aprint_error_dev(unit->hci_dev,
-		    "bad ACL packet length (%d != %d)\n",
-		    m->m_pkthdr.len, le16toh(hdr.length));
-		goto bad;
-	}
-#endif
+	KASSERT(hdr.type == HCI_ACL_DATA_PKT);
 
 	hdr.length = le16toh(hdr.length);
 	hdr.con_handle = le16toh(hdr.con_handle);
 	handle = HCI_CON_HANDLE(hdr.con_handle);
 	pb = HCI_PB_FLAG(hdr.con_handle);
+
+	if (m->m_pkthdr.len != hdr.length)
+		goto bad;
 
 	link = hci_link_lookup_handle(unit, handle);
 	if (link == NULL) {
@@ -454,10 +460,16 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 		 * for, just get rid of it. This may happen, if a USB dongle
 		 * is plugged into a self powered hub and does not reset when
 		 * the system is shut down.
+		 *
+		 * This can cause a problem with some Broadcom controllers
+		 * which emit empty ACL packets during connection setup, so
+		 * only disconnect where data is present.
 		 */
-		cp.con_handle = htole16(handle);
-		cp.reason = 0x13; /* "Remote User Terminated Connection" */
-		hci_send_cmd(unit, HCI_CMD_DISCONNECT, &cp, sizeof(cp));
+		if (hdr.length > 0) {
+			cp.con_handle = htole16(handle);
+			cp.reason = 0x13;/*"Remote User Terminated Connection"*/
+			hci_send_cmd(unit, HCI_CMD_DISCONNECT, &cp, sizeof(cp));
+		}
 		goto bad;
 	}
 
@@ -467,10 +479,8 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 			aprint_error_dev(unit->hci_dev,
 			    "dropped incomplete ACL packet\n");
 
-		if (m->m_pkthdr.len < sizeof(l2cap_hdr_t)) {
-			aprint_error_dev(unit->hci_dev, "short ACL packet\n");
+		if (m->m_pkthdr.len < sizeof(l2cap_hdr_t))
 			goto bad;
-		}
 
 		link->hl_rxp = m;
 		got = m->m_pkthdr.len;
@@ -491,7 +501,9 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 		break;
 
 	default:
-		aprint_error_dev(unit->hci_dev, "unknown packet type\n");
+		DPRINTF("%s: unknown packet type\n",
+		    device_xname(unit->hci_dev));
+
 		goto bad;
 	}
 
@@ -785,14 +797,11 @@ hci_sco_newconn(struct hci_unit *unit, bdaddr_t *bdaddr)
 		bdaddr_copy(&new->sp_laddr, &unit->hci_bdaddr);
 		bdaddr_copy(&new->sp_raddr, bdaddr);
 
-		sco = hci_link_alloc(unit);
+		sco = hci_link_alloc(unit, bdaddr, HCI_LINK_SCO);
 		if (sco == NULL) {
-			sco_detach(&new);
+			sco_detach_pcb(&new);
 			return NULL;
 		}
-
-		sco->hl_type = HCI_LINK_SCO;
-		bdaddr_copy(&sco->hl_bdaddr, bdaddr);
 
 		sco->hl_link = hci_acl_open(unit, bdaddr);
 		KASSERT(sco->hl_link == acl);
@@ -821,27 +830,19 @@ hci_sco_recv(struct mbuf *m, struct hci_unit *unit)
 	KASSERT(m != NULL);
 	KASSERT(unit != NULL);
 
-	KASSERT(m->m_pkthdr.len >= sizeof(hdr));
+	if (m->m_pkthdr.len < sizeof(hdr))
+		goto bad;
+
 	m_copydata(m, 0, sizeof(hdr), &hdr);
 	m_adj(m, sizeof(hdr));
 
-#ifdef DIAGNOSTIC
-	if (hdr.type != HCI_SCO_DATA_PKT) {
-		aprint_error_dev(unit->hci_dev, "bad SCO packet type\n");
-		goto bad;
-	}
-
-	if (m->m_pkthdr.len != hdr.length) {
-		aprint_error_dev(unit->hci_dev,
-		    "bad SCO packet length (%d != %d)\n",
-		    m->m_pkthdr.len, hdr.length);
-
-		goto bad;
-	}
-#endif
+	KASSERT(hdr.type == HCI_SCO_DATA_PKT);
 
 	hdr.con_handle = le16toh(hdr.con_handle);
 	handle = HCI_CON_HANDLE(hdr.con_handle);
+
+	if (m->m_pkthdr.len != hdr.length)
+		goto bad;
 
 	link = hci_link_lookup_handle(unit, handle);
 	if (link == NULL || link->hl_type == HCI_LINK_ACL) {
@@ -882,7 +883,7 @@ hci_sco_complete(struct hci_link *link, int num)
  */
 
 struct hci_link *
-hci_link_alloc(struct hci_unit *unit)
+hci_link_alloc(struct hci_unit *unit, bdaddr_t *bdaddr, uint8_t type)
 {
 	struct hci_link *link;
 
@@ -893,7 +894,9 @@ hci_link_alloc(struct hci_unit *unit)
 		return NULL;
 
 	link->hl_unit = unit;
+	link->hl_type = type;
 	link->hl_state = HCI_LINK_CLOSED;
+	bdaddr_copy(&link->hl_bdaddr, bdaddr);
 
 	/* init ACL portion */
 	callout_init(&link->hl_expire, 0);
@@ -909,7 +912,7 @@ hci_link_alloc(struct hci_unit *unit)
 	MBUFQ_INIT(&link->hl_data);
 
 	/* attach to unit */
-	TAILQ_INSERT_HEAD(&unit->hci_links, link, hl_next);
+	TAILQ_INSERT_TAIL(&unit->hci_links, link, hl_next);
 	return link;
 }
 
@@ -1014,7 +1017,7 @@ hci_link_free(struct hci_link *link, int err)
  * handle (ie new links)
  */
 struct hci_link *
-hci_link_lookup_bdaddr(struct hci_unit *unit, bdaddr_t *bdaddr, uint16_t type)
+hci_link_lookup_bdaddr(struct hci_unit *unit, bdaddr_t *bdaddr, uint8_t type)
 {
 	struct hci_link *link;
 

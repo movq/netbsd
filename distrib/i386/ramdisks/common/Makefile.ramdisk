@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.ramdisk,v 1.4 2008/02/01 13:43:12 tsutsui Exp $
+#	$NetBSD: Makefile.ramdisk,v 1.13 2018/03/13 02:22:43 mrg Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -11,8 +11,10 @@ WARNS=		1
 DBG=		-Os
 
 CRUNCHBIN=	ramdiskbin
-LISTS=		${I386COMMON}/list.ramdisk
-LISTS+=		${.CURDIR}/list
+
+# Use ${.CURDIR}/list only if LISTS was not already defined by the caller.
+LISTS?=		${.CURDIR}/list
+LISTS+=		${I386COMMON}/list.ramdisk
 MTREECONF=	${DISTRIBDIR}/common/mtree.common
 IMAGEENDIAN=	le
 IMAGEDEPENDS+= 	${CRUNCHBIN} \
@@ -22,15 +24,17 @@ IMAGEDEPENDS+= 	${CRUNCHBIN} \
 		${DESTDIR}/usr/mdec/mbr \
 		${DESTDIR}/usr/mdec/mbr_ext \
 		${DESTDIR}/usr/mdec/mbr_bootsel \
+		${DESTDIR}/usr/mdec/gptmbr.bin \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
-		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \
-		${NETBSDSRCDIR}/distrib/common/services \
-		${NETBSDSRCDIR}/distrib/common/termcap.mini
+		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
+		${DISTRIBDIR}/common/services
 PARSELISTENV+=	BOOTMODEL=${BOOTMODEL:Q}
 
 # This propogates through to the link of ramdiskbin
 # The map file is useful when trying to prune the image
-CRUNCHENV += LDFLAGS='-Wl,-Map,${CRUNCHBIN}.map,--cref'
+LDFLAGS+=	-Wl,-Map,${CRUNCHBIN}.map,--cref
+CRUNCHENV+=	LDFLAGS=${LDFLAGS:Q}
+CLEANFILES+=	${CRUNCHBIN}.map
 
 .if defined(USE_SYSINST)
 .if ${USE_SYSINST} != yes

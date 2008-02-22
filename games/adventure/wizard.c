@@ -1,4 +1,4 @@
-/*	$NetBSD: wizard.c,v 1.12 2005/07/01 00:03:36 jmc Exp $	*/
+/*	$NetBSD: wizard.c,v 1.16 2012/10/12 15:41:10 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)wizard.c	8.1 (Berkeley) 6/2/93";
 #else
-__RCSID("$NetBSD: wizard.c,v 1.12 2005/07/01 00:03:36 jmc Exp $");
+__RCSID("$NetBSD: wizard.c,v 1.16 2012/10/12 15:41:10 dholland Exp $");
 #endif
 #endif				/* not lint */
 
@@ -51,6 +51,8 @@ __RCSID("$NetBSD: wizard.c,v 1.12 2005/07/01 00:03:36 jmc Exp $");
 #include <time.h>
 #include "hdr.h"
 #include "extern.h"
+
+static int wizard(void);
 
 void
 datime(int *d, int *t)
@@ -71,13 +73,13 @@ datime(int *d, int *t)
 }				/* pretty painless              */
 
 
-char    magic[6];
+static char magic[6];
 
 void
 poof(void)
 {
 	strcpy(magic, DECR('d', 'w', 'a', 'r', 'f'));
-	latncy = 45;
+	latency = 45;
 }
 
 int
@@ -89,13 +91,13 @@ Start(void)
 	delay = (d - saveday) * 1440 + (t - savet);	/* good for about a
 							 * month     */
 
-	if (delay >= latncy) {
+	if (delay >= latency) {
 		saved = -1;
 		return (FALSE);
 	}
 	printf("This adventure was suspended a mere %d minute%s ago.",
 	    delay, delay == 1 ? "" : "s");
-	if (delay <= latncy / 3) {
+	if (delay <= latency / 3) {
 		mspeak(2);
 		exit(0);
 	}
@@ -109,7 +111,7 @@ Start(void)
 }
 
 /* not as complex as advent/10 (for now)        */
-int
+static int
 wizard(void)
 {	
 	char   *word, *x;
@@ -128,19 +130,19 @@ wizard(void)
 void
 ciao(void)
 {
-	char   *c;
-	char    fname[80];
+	char fname[80];
+	size_t pos;
 
 	printf("What would you like to call the saved version?\n");
 	/* XXX - should use fgetln to avoid arbitrary limit */
-	for (c = fname; c < fname + sizeof fname - 1; c++) {
+	for (pos = 0; pos < sizeof(fname) - 1; pos++) {
 		int ch;
 		ch = getchar();
 		if (ch == '\n' || ch == EOF)
 			break;
-		*c = ch;
+		fname[pos] = ch;
 	}
-	*c = 0;
+	fname[pos] = '\0';
 	if (save(fname) != 0)
 		return;		/* Save failed */
 	printf("To resume, say \"adventure %s\".\n", fname);

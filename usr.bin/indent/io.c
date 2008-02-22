@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.13 2003/10/16 06:51:22 itojun Exp $	*/
+/*	$NetBSD: io.c,v 1.17 2016/02/25 13:23:27 ginsbach Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -68,7 +68,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: io.c,v 1.13 2003/10/16 06:51:22 itojun Exp $");
+__RCSID("$NetBSD: io.c,v 1.17 2016/02/25 13:23:27 ginsbach Exp $");
 #endif
 #endif				/* not lint */
 
@@ -130,7 +130,7 @@ dump_line(void)
 			n_real_blanklines = 0;
 			if (ps.ind_level == 0)
 				ps.ind_stmt = 0;	/* this is a class A
-							 * kludge. dont do
+							 * kludge. don't do
 							 * additional statement
 							 * indentation if we are
 							 * at bracket level 0 */
@@ -265,7 +265,7 @@ dump_line(void)
 								target = ((target - 1) & ~7) + 9, com_st++;
 							else
 								target = 1;
-					if (cur_col > target) {	/* if comment cant fit
+					if (cur_col > target) {	/* if comment can't fit
 								 * on this line, put it
 								 * on next line */
 						putc('\n', output);
@@ -393,7 +393,7 @@ fill_buffer(void)
 	char   *n;
 
 	if (bp_save != 0) {	/* there is a partly filled input buffer left */
-		buf_ptr = bp_save;	/* dont read anything, just switch
+		buf_ptr = bp_save;	/* don't read anything, just switch
 					 * buffers */
 		buf_end = be_save;
 		bp_save = be_save = 0;
@@ -516,9 +516,11 @@ pad_output(int current, int target)
 		if (current >= target)
 			return (current);	/* line is already long enough */
 		curr = current;
-		while ((tcur = ((curr - 1) & tabmask) + tabsize + 1) <= target) {
-			putc('\t', output);
-			curr = tcur;
+		if (use_tabs) {
+			while ((tcur = ((curr - 1) & tabmask) + tabsize + 1) <= target) {
+				putc('\t', output);
+				curr = tcur;
+			}
 		}
 		while (curr++ < target)
 			putc(' ', output);	/* pad with final blanks */
@@ -585,7 +587,7 @@ count_spaces(int current, char *buffer)
 int     found_err;
 
 void
-diag(int level, char *msg,...)
+diag(int level, const char *msg, ...)
 {
 	va_list ap;
 
@@ -642,9 +644,9 @@ chfont(struct fstate *of, struct fstate *nf, char *s)
 
 
 void
-parsefont(struct fstate *f, char *s0)
+parsefont(struct fstate *f, const char *s0)
 {
-	char   *s = s0;
+	const char *s = s0;
 	int     sizedelta = 0;
 	memset(f, 0, sizeof *f);
 	while (*s) {
@@ -666,8 +668,7 @@ parsefont(struct fstate *f, char *s0)
 						if (*s == '-')
 							sizedelta--;
 						else {
-							fprintf(stderr, "indent: bad font specification: %s\n", s0);
-							exit(1);
+							errx(1, "bad font specification: %s", s0);
 						}
 		s++;
 	}

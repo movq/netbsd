@@ -1,4 +1,4 @@
-/*	$NetBSD: btnmgr.c,v 1.22 2007/10/19 11:59:42 ad Exp $	*/
+/*	$NetBSD: btnmgr.c,v 1.29 2016/09/06 06:27:17 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btnmgr.c,v 1.22 2007/10/19 11:59:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btnmgr.c,v 1.29 2016/09/06 06:27:17 skrll Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_btnmgr.h"
@@ -74,24 +74,23 @@ int	btnmgr_debug = BTNMGRDEBUG_CONF;
 #endif
 
 struct btnmgr_softc {
-	struct device sc_dev;
 	config_hook_tag	sc_hook_tag;
 	int sc_enabled;
-	struct device *sc_wskbddev;
+	device_t sc_wskbddev;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int sc_rawkbd;
 #endif
 };
 
-int btnmgrmatch(struct device *, struct cfdata *, void *);
-void btnmgrattach(struct device *, struct device *, void *);
+int btnmgrmatch(device_t, cfdata_t, void *);
+void btnmgrattach(device_t, device_t, void *);
 const char *btnmgr_name(long);
 static int btnmgr_hook(void *, int, long, void *);
 
 /*
  * global/static data
  */
-CFATTACH_DECL(btnmgr, sizeof(struct btnmgr_softc),
+CFATTACH_DECL_NEW(btnmgr, sizeof(struct btnmgr_softc),
     btnmgrmatch, btnmgrattach, NULL, NULL);
 
 #ifdef notyet
@@ -102,8 +101,18 @@ dev_type_write(btnmgrwrite);
 dev_type_ioctl(btnmgrioctl);
 
 const struct cdevsw btnmgr_cdevsw = {
-	btnmgropen, btnmgrclose, btnmgrread, btnmgrwrite, btnmgrioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	.d_open = btnmgropen,
+	.d_close = btnmgrclose,
+	.d_read = btnmgrread,
+	.d_write = btnmgrwrite,
+	.d_ioctl = btnmgrioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 #endif /* notyet */
 
@@ -173,7 +182,7 @@ struct wskbd_mapdata btnmgr_keymapdata = {
  *  function bodies
  */
 int
-btnmgrmatch(struct device *parent, struct cfdata *match, void *aux)
+btnmgrmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -184,8 +193,8 @@ btnmgrmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-btnmgrattach(struct device *parent,
-	     struct device *self, void *aux)
+btnmgrattach(device_t parent,
+	     device_t self, void *aux)
 {
 	int id;
 	struct btnmgr_softc *sc = device_private(self);
@@ -196,7 +205,7 @@ btnmgrattach(struct device *parent,
 	/*
 	 * install button event listener
 	 */
-	for (id = 0; id <= n_button_config; id++)
+	for (id = 0; id < n_button_config; id++)
 		if (button_config[id].name != NULL)
 			sc->sc_hook_tag = config_hook(CONFIG_HOOK_BUTTONEVENT,
 			    id, CONFIG_HOOK_SHARE,
@@ -211,6 +220,9 @@ btnmgrattach(struct device *parent,
 	wa.accesscookie = sc;
 
 	sc->sc_wskbddev = config_found(self, &wa, wskbddevprint);
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 static int

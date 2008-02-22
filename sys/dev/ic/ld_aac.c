@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_aac.c,v 1.17 2007/10/19 11:59:55 ad Exp $	*/
+/*	$NetBSD: ld_aac.c,v 1.30 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.17 2007/10/19 11:59:55 ad Exp $");
-
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.30 2016/09/27 03:33:32 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,74 +41,68 @@ __KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.17 2007/10/19 11:59:55 ad Exp $");
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/module.h>
 
 #include <sys/bus.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/ldvar.h>
 
 #include <dev/ic/aacreg.h>
 #include <dev/ic/aacvar.h>
 
+#include "ioconf.h"
+
 struct ld_aac_softc {
 	struct	ld_softc sc_ld;
 	int	sc_hwunit;
 };
 
-static void	ld_aac_attach(struct device *, struct device *, void *);
+static void	ld_aac_attach(device_t, device_t, void *);
 static void	ld_aac_intr(struct aac_ccb *);
-static int	ld_aac_dobio(struct ld_aac_softc *, void *, int, int, int,
+static int	ld_aac_dobio(struct ld_aac_softc *, void *, int, daddr_t, int,
 			     struct buf *);
 static int	ld_aac_dump(struct ld_softc *, void *, int, int);
-static int	ld_aac_match(struct device *, struct cfdata *, void *);
+static int	ld_aac_match(device_t, cfdata_t, void *);
 static int	ld_aac_start(struct ld_softc *, struct buf *);
 
-CFATTACH_DECL(ld_aac, sizeof(struct ld_aac_softc),
+CFATTACH_DECL_NEW(ld_aac, sizeof(struct ld_aac_softc),
     ld_aac_match, ld_aac_attach, NULL, NULL);
 
 static int
-ld_aac_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ld_aac_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return (1);
 }
 
 static void
-ld_aac_attach(struct device *parent, struct device *self, void *aux)
+ld_aac_attach(device_t parent, device_t self, void *aux)
 {
-	struct aac_attach_args *aaca;
-	struct aac_drive *hdr;
-	struct ld_aac_softc *sc;
-	struct ld_softc *ld;
-	struct aac_softc *aac;
+	struct aac_attach_args *aaca = aux;
+	struct ld_aac_softc *sc = device_private(self);
+	struct ld_softc *ld = &sc->sc_ld;
+	struct aac_softc *aac = device_private(parent);
+	struct aac_drive *hdr = &aac->sc_hdr[aaca->aaca_unit];
 
-	aaca = aux;
-	aac = (struct aac_softc *)parent;
-	sc = (struct ld_aac_softc *)self;
-	ld = &sc->sc_ld;
-	hdr = &aac->sc_hdr[aaca->aaca_unit];
+	ld->sc_dv = self;
 
 	sc->sc_hwunit = aaca->aaca_unit;
 	ld->sc_flags = LDF_ENABLED;
 	ld->sc_maxxfer = AAC_MAX_XFER(aac);
 	ld->sc_secperunit = hdr->hd_size;
 	ld->sc_secsize = AAC_SECTOR_SIZE;
-	ld->sc_maxqueuecnt = (aac->sc_max_fibs - AAC_NCCBS_RESERVE) / aac->sc_nunits;
+	ld->sc_maxqueuecnt =
+	    (aac->sc_max_fibs - AAC_NCCBS_RESERVE) / aac->sc_nunits;
 	ld->sc_start = ld_aac_start;
 	ld->sc_dump = ld_aac_dump;
 
 	aprint_normal(": %s\n",
 	    aac_describe_code(aac_container_types, hdr->hd_devtype));
-	ldattach(ld);
+	ldattach(ld, BUFQ_DISK_DEFAULT_STRAT);
 }
 
 static int
-ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, int blkno,
+ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, daddr_t blkno,
 	     int dowrite, struct buf *bp)
 {
 	struct aac_blockread_response *brr;
@@ -130,7 +115,7 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, int blkno,
 	u_int16_t size;
 	int s, rv, i;
 
-	aac = (struct aac_softc *)device_parent(&sc->sc_ld.sc_dv);
+	aac = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	/*
 	 * Allocate a command control block and map the data transfer.
@@ -156,7 +141,37 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, int blkno,
 	    AAC_FIBSTATE_REXPECTED | AAC_FIBSTATE_NORM |
 	    AAC_FIBSTATE_ASYNC | AAC_FIBSTATE_FAST_RESPONSE );
 
-	if ((aac->sc_quirks & AAC_QUIRK_SG_64BIT) == 0) {
+	if (aac->sc_quirks & AAC_QUIRK_RAW_IO) {
+		struct aac_raw_io *raw;
+		struct aac_sg_entryraw *sge;
+		struct aac_sg_tableraw *sgt;
+
+		raw = (struct aac_raw_io *)&fib->data[0];
+		fib->Header.Command = htole16(RawIo);
+		raw->BlockNumber = htole64(blkno);
+		raw->ByteCount = htole32(datasize);
+		raw->ContainerId = htole16(sc->sc_hwunit);
+		raw->BpTotal = 0;
+		raw->BpComplete = 0;
+		size = sizeof(struct aac_raw_io);
+		sgt = &raw->SgMapRaw;
+		raw->Flags = (dowrite ? 0 : 1);
+
+		xfer = ac->ac_dmamap_xfer;
+		sgt->SgCount = xfer->dm_nsegs;
+		sge = sgt->SgEntryRaw;
+
+		for (i = 0; i < xfer->dm_nsegs; i++, sge++) {
+			sge->SgAddress = htole64(xfer->dm_segs[i].ds_addr);
+			sge->SgByteCount = htole32(xfer->dm_segs[i].ds_len);
+			sge->Next = 0;
+			sge->Prev = 0;
+			sge->Flags = 0;
+		}
+		size += xfer->dm_nsegs * sizeof(struct aac_sg_entryraw);
+		size = sizeof(fib->Header) + size;
+		fib->Header.Size = htole16(size);
+	} else if ((aac->sc_quirks & AAC_QUIRK_SG_64BIT) == 0) {
 		struct aac_blockread *br;
 		struct aac_blockwrite *bw;
 		struct aac_sg_entry *sge;
@@ -193,13 +208,13 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, int blkno,
 			sge->SgAddress = htole32(xfer->dm_segs[i].ds_addr);
 			sge->SgByteCount = htole32(xfer->dm_segs[i].ds_len);
 			AAC_DPRINTF(AAC_D_IO,
-			    ("#%d va %p pa %lx len %lx\n", i, data,
-			    (u_long)xfer->dm_segs[i].ds_addr,
-			    (u_long)xfer->dm_segs[i].ds_len));
+			    ("#%d va %p pa %" PRIxPADDR " len %zx\n",
+			    i, data, xfer->dm_segs[i].ds_addr,
+			    xfer->dm_segs[i].ds_len));
 		}
 
 		size += xfer->dm_nsegs * sizeof(struct aac_sg_entry);
-		size = htole16(sizeof(fib->Header) + size);
+		size = sizeof(fib->Header) + size;
 		fib->Header.Size = htole16(size);
 	} else {
 		struct aac_blockread64 *br;
@@ -246,12 +261,12 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, int blkno,
 			sge->SgAddress = htole64(xfer->dm_segs[i].ds_addr);
 			sge->SgByteCount = htole32(xfer->dm_segs[i].ds_len);
 			AAC_DPRINTF(AAC_D_IO,
-			    ("#%d va %p pa %lx len %lx\n", i, data,
-			    (u_int64_t)xfer->dm_segs[i].ds_addr,
-			    (u_long)xfer->dm_segs[i].ds_len));
+			    ("#%d va %p pa %" PRIxPADDR " len %zx\n",
+			    i, data, xfer->dm_segs[i].ds_addr,
+			    xfer->dm_segs[i].ds_len));
 		}
 		size += xfer->dm_nsegs * sizeof(struct aac_sg_entry64);
-		size = htole16(sizeof(fib->Header) + size);
+		size = sizeof(fib->Header) + size;
 		fib->Header.Size = htole16(size);
 	}
 
@@ -278,15 +293,15 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, int blkno,
 			}
 
 			if (status != ST_OK) {
-				printf("%s: I/O error: %s\n",
-				    sc->sc_ld.sc_dv.dv_xname,
+				aprint_error_dev(sc->sc_ld.sc_dv,
+				    "I/O error: %s\n",
 				    aac_describe_code(aac_command_status_table,
 				    status));
 				rv = EIO;
 			}
 		}
 	} else {
-		ac->ac_device = (struct device *)sc;
+		ac->ac_device = sc->sc_ld.sc_dv;
 		ac->ac_context = bp;
 		ac->ac_intr = ld_aac_intr;
 		aac_ccb_enqueue(aac, ac);
@@ -315,8 +330,8 @@ ld_aac_intr(struct aac_ccb *ac)
 	u_int32_t status;
 
 	bp = ac->ac_context;
-	sc = (struct ld_aac_softc *)ac->ac_device;
-	aac = (struct aac_softc *)device_parent(&sc->sc_ld.sc_dv);
+	sc = device_private(ac->ac_device);
+	aac = device_private(device_parent(ac->ac_device));
 
 	if ((bp->b_flags & B_READ) != 0) {
 		brr = (struct aac_blockread_response *)&ac->ac_fib->data[0];
@@ -333,7 +348,7 @@ ld_aac_intr(struct aac_ccb *ac)
 		bp->b_error = EIO;
 		bp->b_resid = bp->b_bcount;
 
-		printf("%s: I/O error: %s\n", sc->sc_ld.sc_dv.dv_xname,
+		aprint_error_dev(sc->sc_ld.sc_dv, "I/O error: %s\n",
 		    aac_describe_code(aac_command_status_table, status));
 	} else
 		bp->b_resid = 0;
@@ -348,3 +363,47 @@ ld_aac_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 	return (ld_aac_dobio((struct ld_aac_softc *)ld, data,
 	    blkcnt * ld->sc_secsize, blkno, 1, NULL));
 }
+
+MODULE(MODULE_CLASS_DRIVER, ld_aac, "ld,aac");
+
+#ifdef _MODULE
+/*
+ * XXX Don't allow ioconf.c to redefine the "struct cfdriver ld_cd"
+ * XXX it will be defined in the common-code module
+ */
+#undef  CFDRIVER_DECL
+#define CFDRIVER_DECL(name, class, attr)
+#include "ioconf.c" 
+#endif
+
+static int
+ld_aac_modcmd(modcmd_t cmd, void *opaque)
+{
+#ifdef _MODULE
+	/*
+	 * We ignore the cfdriver_vec[] that ioconf provides, since
+	 * the cfdrivers are attached already.
+	 */
+	static struct cfdriver * const no_cfdriver_vec[] = { NULL };
+#endif
+	int error = 0;
+
+#ifdef _MODULE
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = config_init_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_aac, cfdata_ioconf_ld_aac);
+		break;
+	case MODULE_CMD_FINI:
+		error = config_fini_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_aac, cfdata_ioconf_ld_aac);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+#endif
+
+	return error;
+}
+

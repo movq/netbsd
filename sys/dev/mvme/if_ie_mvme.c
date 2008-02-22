@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_mvme.c,v 1.11 2007/10/19 12:00:36 ad Exp $	*/
+/*	$NetBSD: if_ie_mvme.c,v 1.20 2014/03/25 15:52:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie_mvme.c,v 1.11 2007/10/19 12:00:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie_mvme.c,v 1.20 2014/03/25 15:52:33 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,8 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie_mvme.c,v 1.11 2007/10/19 12:00:36 ad Exp $");
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <machine/autoconf.h>
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -67,8 +58,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie_mvme.c,v 1.11 2007/10/19 12:00:36 ad Exp $");
 #include <dev/mvme/pcctworeg.h>
 
 
-int ie_pcctwo_match(struct device *, struct cfdata *, void *);
-void ie_pcctwo_attach(struct device *, struct device *, void *);
+int ie_pcctwo_match(device_t, cfdata_t, void *);
+void ie_pcctwo_attach(device_t, device_t, void *);
 
 struct ie_pcctwo_softc {
 	struct ie_softc ps_ie;
@@ -77,7 +68,7 @@ struct ie_pcctwo_softc {
 	struct evcnt ps_evcnt;
 };
 
-CFATTACH_DECL(ie_pcctwo, sizeof(struct ie_pcctwo_softc),
+CFATTACH_DECL_NEW(ie_pcctwo, sizeof(struct ie_pcctwo_softc),
     ie_pcctwo_match, ie_pcctwo_attach, NULL, NULL);
 
 extern struct cfdriver ie_cd;
@@ -100,9 +91,7 @@ static void ie_write_24(struct ie_softc *, int, int);
  * i82596 Support Routines for MVME1[67][27] and MVME187 Boards
  */
 static void
-ie_reset(sc, why)
-	struct ie_softc *sc;
-	int why;
+ie_reset(struct ie_softc *sc, int why)
 {
 	struct ie_pcctwo_softc *ps;
 	u_int32_t scp_addr;
@@ -139,14 +128,9 @@ ie_reset(sc, why)
 
 /* ARGSUSED */
 static int
-ie_intrhook(sc, when)
-	struct ie_softc *sc;
-	int when;
+ie_intrhook(struct ie_softc *sc, int when)
 {
-	struct ie_pcctwo_softc *ps;
 	u_int8_t reg;
-
-	ps = (struct ie_pcctwo_softc *) sc;
 
 	if (when == INTR_EXIT) {
 		reg = pcc2_reg_read(sys_pcctwo, PCC2REG_ETH_ICSR);
@@ -158,8 +142,7 @@ ie_intrhook(sc, when)
 
 /* ARGSUSED */
 static void
-ie_hwinit(sc)
-	struct ie_softc *sc;
+ie_hwinit(struct ie_softc *sc)
 {
 	u_int8_t reg;
 
@@ -170,9 +153,7 @@ ie_hwinit(sc)
 
 /* ARGSUSED */
 static void
-ie_atten(sc, reason)
-	struct ie_softc *sc;
-	int reason;
+ie_atten(struct ie_softc *sc, int reason)
 {
 	struct ie_pcctwo_softc *ps;
 
@@ -181,11 +162,7 @@ ie_atten(sc, reason)
 }
 
 static void
-ie_copyin(sc, dst, offset, size)
-	struct ie_softc *sc;
-	void *dst;
-	int offset;
-	size_t size;
+ie_copyin(struct ie_softc *sc, void *dst, int offset, size_t size)
 {
 	if (size == 0)		/* This *can* happen! */
 		return;
@@ -199,11 +176,7 @@ ie_copyin(sc, dst, offset, size)
 }
 
 static void
-ie_copyout(sc, src, offset, size)
-	struct ie_softc *sc;
-	const void *src;
-	int offset;
-	size_t size;
+ie_copyout(struct ie_softc *sc, const void *src, int offset, size_t size)
 {
 	if (size == 0)		/* This *can* happen! */
 		return;
@@ -217,29 +190,21 @@ ie_copyout(sc, src, offset, size)
 }
 
 static u_int16_t
-ie_read_16(sc, offset)
-	struct ie_softc *sc;
-	int offset;
+ie_read_16(struct ie_softc *sc, int offset)
 {
 
 	return (bus_space_read_2(sc->bt, sc->bh, offset));
 }
 
 static void
-ie_write_16(sc, offset, value)
-	struct ie_softc *sc;
-	int offset;
-	u_int16_t value;
+ie_write_16(struct ie_softc *sc, int offset, u_int16_t value)
 {
 
 	bus_space_write_2(sc->bt, sc->bh, offset, value);
 }
 
 static void
-ie_write_24(sc, offset, addr)
-	struct ie_softc *sc;
-	int offset;
-	int addr;
+ie_write_24(struct ie_softc *sc, int offset, int addr)
 {
 
 	addr += (int) sc->sc_iobase;
@@ -250,14 +215,11 @@ ie_write_24(sc, offset, addr)
 
 /* ARGSUSED */
 int
-ie_pcctwo_match(parent, cf, args)
-	struct device *parent;
-	struct cfdata *cf;
-	void *args;
+ie_pcctwo_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pcctwo_attach_args *pa;
 
-	pa = args;
+	pa = aux;
 
 	if (strcmp(pa->pa_name, ie_cd.cd_name))
 		return (0);
@@ -269,10 +231,7 @@ ie_pcctwo_match(parent, cf, args)
 
 /* ARGSUSED */
 void
-ie_pcctwo_attach(parent, self, args)
-	struct device *parent;
-	struct device *self;
-	void *args;
+ie_pcctwo_attach(device_t parent, device_t self, void *aux)
 {
 	struct pcctwo_attach_args *pa;
 	struct ie_pcctwo_softc *ps;
@@ -280,9 +239,10 @@ ie_pcctwo_attach(parent, self, args)
 	bus_dma_segment_t seg;
 	int rseg;
 
-	pa = (struct pcctwo_attach_args *) args;
+	pa = aux;
 	ps = device_private(self);
-	sc = device_private(self);
+	sc = &ps->ps_ie;
+	sc->sc_dev = self;
 
 	/* Map the MPU controller registers in PCCTWO space */
 	ps->ps_bust = pa->pa_bust;
@@ -293,12 +253,12 @@ ie_pcctwo_attach(parent, self, args)
 	if (bus_dmamem_alloc(pa->pa_dmat, ether_data_buff_size, PAGE_SIZE, 0,
 		&seg, 1, &rseg,
 		BUS_DMA_NOWAIT | BUS_DMA_ONBOARD_RAM | BUS_DMA_24BIT) != 0) {
-		printf("%s: Failed to allocate ether buffer\n", self->dv_xname);
+		aprint_error_dev(self, "Failed to allocate ether buffer\n");
 		return;
 	}
 	if (bus_dmamem_map(pa->pa_dmat, &seg, rseg, ether_data_buff_size,
 	    (void **) & sc->sc_maddr, BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) {
-		printf("%s: Failed to map ether buffer\n", self->dv_xname);
+		aprint_error_dev(self, "Failed to map ether buffer\n");
 		bus_dmamem_free(pa->pa_dmat, &seg, rseg);
 		return;
 	}
@@ -346,7 +306,7 @@ ie_pcctwo_attach(parent, self, args)
 
 	/* Register the event counter */
 	evcnt_attach_dynamic(&ps->ps_evcnt, EVCNT_TYPE_INTR,
-	    pcctwointr_evcnt(pa->pa_ipl), "ether", sc->sc_dev.dv_xname);
+	    pcctwointr_evcnt(pa->pa_ipl), "ether", device_xname(self));
 
 	/* Finally, hook the hardware interrupt */
 	pcctwointr_establish(PCCTWOV_LANC_IRQ, i82586_intr, pa->pa_ipl, sc,

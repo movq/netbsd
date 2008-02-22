@@ -1,4 +1,4 @@
-/*	$NetBSD: ninjascsi32var.h,v 1.4 2007/11/06 11:35:35 itohy Exp $	*/
+/*	$NetBSD: ninjascsi32var.h,v 1.7 2012/10/27 17:18:22 chs Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -125,7 +118,7 @@ struct njsc32_cmd {
 #define NJSC32_MAX_XFER	((NJSC32_NUM_SG - 1) << PGSHIFT)
 
 struct njsc32_softc {
-	struct device	sc_dev;
+	device_t		sc_dev;
 
 	/* device spec */
 	njsc32_model_t		sc_model;
@@ -216,7 +209,7 @@ struct njsc32_softc {
 	int	sc_sync_max;
 
 	/* for scsipi layer */
-	struct device		*sc_scsi;
+	device_t		sc_scsi;
 	struct scsipi_adapter	sc_adapter;
 	struct scsipi_channel	sc_channel;
 

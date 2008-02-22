@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_subr.c,v 1.14 2007/06/30 09:37:57 pooka Exp $	*/
+/*	$NetBSD: smbfs_subr.c,v 1.19 2014/11/17 02:23:33 christos Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_subr.c,v 1.14 2007/06/30 09:37:57 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_subr.c,v 1.19 2014/11/17 02:23:33 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: smbfs_subr.c,v 1.14 2007/06/30 09:37:57 pooka Exp $"
 #include <sys/time.h>
 #include <sys/vnode.h>
 #include <sys/sysctl.h>
+#include <sys/clock.h>
 #include <netsmb/iconv.h>
 
 #include <netsmb/smb.h>
@@ -145,7 +146,7 @@ smb_time_local2NT(struct timespec *tsp, int tzoff, int64_t *nsec)
 	u_long seconds;
 
 	smb_time_local2server(tsp, 0, &seconds);
-	*nsec = (((int64_t)(seconds) & ~1) + DIFF1970TO1601) * (int64_t)10000000;
+	*nsec = ((int64_t)seconds + DIFF1970TO1601) * (int64_t)10000000;
 }
 
 void
@@ -176,12 +177,12 @@ smb_time_unix2dos(struct timespec *tsp, int tzoff, u_int16_t *ddp,
 		if (days != lastday) {
 			lastday = days;
 			for (year = 1970;; year++) {
-				inc = year & 0x03 ? 365 : 366;
+ 				inc = days_per_year(year);
 				if (days < inc)
 					break;
 				days -= inc;
 			}
-			months = year & 0x03 ? regyear : leapyear;
+ 			months = is_leap_year(year) ? leapyear : regyear;
 			for (month = 0; days >= months[month]; month++)
 				;
 			if (month > 0)
@@ -268,11 +269,11 @@ smb_fphelp(struct mbchain *mbp, struct smb_vc *vcp, struct smbnode *np,
 	struct smbnode **npp = smp->sm_npstack;
 	int i, error = 0;
 
-/*	simple_lock(&smp->sm_npslock);*/
+/*	mutex_enter(&smp->sm_npslock);*/
 	i = 0;
 	while (np->n_parent) {
 		if (i++ == SMBFS_MAXPATHCOMP) {
-/*			simple_unlock(&smp->sm_npslock);*/
+/*			mutex_exit(&smp->sm_npslock);*/
 			return ENAMETOOLONG;
 		}
 		*npp++ = np;
@@ -287,7 +288,7 @@ smb_fphelp(struct mbchain *mbp, struct smb_vc *vcp, struct smbnode *np,
 		if (error)
 			break;
 	}
-/*	simple_unlock(&smp->sm_npslock);*/
+/*	mutex_exit(&smp->sm_npslock);*/
 	return error;
 }
 
@@ -318,14 +319,36 @@ smbfs_fullpath(struct mbchain *mbp, struct smb_vc *vcp, struct smbnode *dnp,
 }
 
 int
-smbfs_fname_tolocal(struct smb_vc *vcp, char *name, int nmlen,
+smbfs_fname_tolocal(struct smb_vc *vcp, char *name, int *nmlen,
     int caseopt)
 {
-/*	if (caseopt & SMB_CS_UPPER)
+	int error = 0;
+	size_t ilen, olen;
+	const char *ibuf;
+	char *obuf, *outbuf;
+
+#ifdef notyet
+	if (caseopt & SMB_CS_UPPER)
 		iconv_convmem(vcp->vc_toupper, name, name, nmlen);
 	else if (caseopt & SMB_CS_LOWER)
-		iconv_convmem(vcp->vc_tolower, name, name, nmlen);*/
-	if (vcp->vc_tolocal)
-		iconv_convmem(vcp->vc_tolocal, name, name, nmlen);
-	return 0;
+		iconv_convmem(vcp->vc_tolower, name, name, nmlen);
+#endif
+	if (vcp->vc_tolocal) {
+		const size_t buflen = SMB_MAXNAMLEN * 2;
+
+		outbuf = malloc(buflen, M_SMBTEMP, M_WAITOK);
+		if (outbuf == NULL)
+			return ENOMEM;
+		ilen = *nmlen;
+		olen = buflen;
+		ibuf = name;
+		obuf = outbuf;
+		error = iconv_conv(vcp->vc_tolocal, &ibuf, &ilen, &obuf, &olen);
+		if (!error) {
+			*nmlen = buflen - olen;
+			memcpy(name, outbuf, *nmlen);
+		}
+		free(outbuf, M_SMBTEMP);
+	}
+	return error;
 }

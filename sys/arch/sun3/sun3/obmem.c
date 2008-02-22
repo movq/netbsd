@@ -1,4 +1,4 @@
-/*	$NetBSD: obmem.c,v 1.24 2007/11/30 13:22:37 tsutsui Exp $	*/
+/*	$NetBSD: obmem.c,v 1.27 2013/09/07 15:56:11 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obmem.c,v 1.24 2007/11/30 13:22:37 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obmem.c,v 1.27 2013/09/07 15:56:11 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,16 +47,16 @@ __KERNEL_RCSID(0, "$NetBSD: obmem.c,v 1.24 2007/11/30 13:22:37 tsutsui Exp $");
 #include <machine/bus.h>
 #include <sun3/sun3/obmem.h>
 
-static int  obmem_match(struct device *, struct cfdata *, void *);
-static void obmem_attach(struct device *, struct device *, void *);
+static int  obmem_match(device_t, cfdata_t, void *);
+static void obmem_attach(device_t, device_t, void *);
 
 struct obmem_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 	bus_space_tag_t	sc_bustag;
 	bus_dma_tag_t	sc_dmatag;
 };
 
-CFATTACH_DECL(obmem, sizeof(struct obmem_softc),
+CFATTACH_DECL_NEW(obmem, sizeof(struct obmem_softc),
     obmem_match, obmem_attach, NULL, NULL);
 
 static int obmem_attached;
@@ -86,8 +79,8 @@ static struct sun68k_bus_space_tag obmem_space_tag = {
 	NULL				/* bus_space_poke_N */
 };
 
-static int 
-obmem_match(struct device *parent, struct cfdata *cf, void *aux)
+static int
+obmem_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -103,16 +96,17 @@ obmem_match(struct device *parent, struct cfdata *cf, void *aux)
 	return 1;
 }
 
-static void 
-obmem_attach(struct device *parent, struct device *self, void *aux)
+static void
+obmem_attach(device_t parent, device_t self, void *aux)
 {
 	struct confargs *ca = aux;
-	struct obmem_softc *sc = (void *)self;
+	struct obmem_softc *sc = device_private(self);
 	struct confargs obma;
 
 	obmem_attached = 1;
+	sc->sc_dev = self;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	sc->sc_bustag = ca->ca_bustag;
 	sc->sc_dmatag = ca->ca_dmatag;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gfevar.h,v 1.8 2007/03/04 06:02:14 christos Exp $	*/
+/*	$NetBSD: if_gfevar.h,v 1.13 2015/04/14 20:32:36 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2002 Allegro Networks, Inc., Wasabi Systems, Inc.
@@ -36,6 +36,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef _IF_GFEVAR_H_
+#define _IF_GFEVAR_H_
+
+#include <sys/rndsource.h>
 
 #define	GE_RXDESC_MEMSIZE		(1 * PAGE_SIZE)
 #define	GE_RXDESC_MAX			64
@@ -84,7 +88,7 @@ struct gfe_txqueue {
  */
 
 struct gfe_rxbuf {
-	uint8_t	rb_data[GE_RXBUF_SIZE];
+	uint8_t	rxb_data[GE_RXBUF_SIZE];
 };
 
 struct gfe_rxqueue {
@@ -114,17 +118,22 @@ enum gfe_rxprio {
 	GE_RXPRIO_LO=0
 };
 
+struct gfec_softc {
+	device_t sc_dev;		/* must be first */
+
+	bus_space_tag_t sc_iot;
+	bus_space_handle_t sc_ioh;	/* subregion for ethernet */
+
+	kmutex_t sc_mtx;
+};
+
 struct gfe_softc {
-	struct device sc_dev;		/* must be first */
+	device_t sc_dev;		/* must be first */
 	struct ethercom sc_ec;		/* common ethernet glue */
 	struct callout sc_co;		/* resource recovery */
 	mii_data_t sc_mii;		/* mii interface */
 
-	/*
-	 *
-	 */
-	bus_space_tag_t sc_gt_memt;
-	bus_space_handle_t sc_gt_memh;
+	bus_space_tag_t sc_memt;
 	bus_space_handle_t sc_memh;	/* subregion for ethernet */
 	bus_dma_tag_t sc_dmat;
 	int sc_macno;			/* which mac? 0, 1, or 2 */
@@ -159,4 +168,7 @@ struct gfe_softc {
 	 * Receive related members
 	 */
 	struct gfe_rxqueue sc_rxq[4];	/* Hi/MedHi/MedLo/Lo receive queues */
+
+	krndsource_t sc_rnd_source;
 };
+#endif	/* _IF_GFEVAR_H_ */

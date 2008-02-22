@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_twe.c,v 1.29 2007/10/19 12:00:51 ad Exp $	*/
+/*	$NetBSD: ld_twe.c,v 1.40 2017/02/27 21:32:33 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,9 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.29 2007/10/19 12:00:51 ad Exp $");
-
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.40 2017/02/27 21:32:33 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,37 +46,35 @@ __KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.29 2007/10/19 12:00:51 ad Exp $");
 #include <sys/dkio.h>
 #include <sys/disk.h>
 #include <sys/proc.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
-
+#include <sys/module.h>
 #include <sys/bus.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/ldvar.h>
 
 #include <dev/pci/twereg.h>
 #include <dev/pci/twevar.h>
 
+#include "ioconf.h"
+
 struct ld_twe_softc {
 	struct	ld_softc sc_ld;
 	int	sc_hwunit;
 };
 
-static void	ld_twe_attach(struct device *, struct device *, void *);
-static int	ld_twe_detach(struct device *, int);
+static void	ld_twe_attach(device_t, device_t, void *);
+static int	ld_twe_detach(device_t, int);
 static int	ld_twe_dobio(struct ld_twe_softc *, void *, int, int, int,
 			     struct buf *);
 static int	ld_twe_dump(struct ld_softc *, void *, int, int);
-static int	ld_twe_flush(struct ld_softc *);
+static int	ld_twe_flush(struct ld_softc *, bool);
+static int	ld_twe_ioctl(struct ld_softc *, u_long, void *, int32_t, bool);
 static void	ld_twe_handler(struct twe_ccb *, int);
-static int	ld_twe_match(struct device *, struct cfdata *, void *);
+static int	ld_twe_match(device_t, cfdata_t, void *);
 static int	ld_twe_start(struct ld_softc *, struct buf *);
 
-static void	ld_twe_adjqparam(struct device *, int);
+static void	ld_twe_adjqparam(device_t, int);
 
-CFATTACH_DECL(ld_twe, sizeof(struct ld_twe_softc),
+CFATTACH_DECL_NEW(ld_twe, sizeof(struct ld_twe_softc),
     ld_twe_match, ld_twe_attach, ld_twe_detach, NULL);
 
 static const struct twe_callbacks ld_twe_callbacks = {
@@ -93,31 +82,26 @@ static const struct twe_callbacks ld_twe_callbacks = {
 };
 
 static int
-ld_twe_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ld_twe_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return (1);
 }
 
 static void
-ld_twe_attach(struct device *parent, struct device *self, void *aux)
+ld_twe_attach(device_t parent, device_t self, void *aux)
 {
-	struct twe_attach_args *twea;
-	struct ld_twe_softc *sc;
-	struct ld_softc *ld;
-	struct twe_softc *twe;
-	struct twe_drive *td;
+	struct twe_attach_args *twea = aux;
+	struct ld_twe_softc *sc = device_private(self);
+	struct ld_softc *ld = &sc->sc_ld;
+	struct twe_softc *twe = device_private(parent);
+	struct twe_drive *td = &twe->sc_units[twea->twea_unit];
 	const char *typestr, *stripestr, *statstr;
 	char unktype[16], stripebuf[32], unkstat[32];
 	int error;
 	uint8_t status;
 
-	sc = (struct ld_twe_softc *)self;
-	ld = &sc->sc_ld;
-	twe = (struct twe_softc *)parent;
-	twea = aux;
-	td = &twe->sc_units[twea->twea_unit];
+	ld->sc_dv = self;
 
 	twe_register_callbacks(twe, twea->twea_unit, &ld_twe_callbacks);
 
@@ -129,7 +113,7 @@ ld_twe_attach(struct device *parent, struct device *self, void *aux)
 	ld->sc_maxqueuecnt = twe->sc_openings;
 	ld->sc_start = ld_twe_start;
 	ld->sc_dump = ld_twe_dump;
-	ld->sc_flush = ld_twe_flush;
+	ld->sc_ioctl = ld_twe_ioctl;
 
 	typestr = twe_describe_code(twe_table_unittype, td->td_type);
 	if (typestr == NULL) {
@@ -167,17 +151,19 @@ ld_twe_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	aprint_normal(": %s%s, status: %s\n", stripebuf, typestr, statstr);
-	ldattach(ld);
+	ldattach(ld, BUFQ_DISK_DEFAULT_STRAT);
 }
 
 static int
-ld_twe_detach(struct device *self, int flags)
+ld_twe_detach(device_t self, int flags)
 {
+	struct ld_twe_softc *sc = device_private(self);
+	struct ld_softc *ld = &sc->sc_ld;
 	int rv;
 
-	if ((rv = ldbegindetach((struct ld_softc *)self, flags)) != 0)
+	if ((rv = ldbegindetach(ld, flags)) != 0)
 		return (rv);
-	ldenddetach((struct ld_softc *)self);
+	ldenddetach(ld);
 
 	return (0);
 }
@@ -191,7 +177,7 @@ ld_twe_dobio(struct ld_twe_softc *sc, void *data, int datasize, int blkno,
 	struct twe_softc *twe;
 	int s, rv, flags;
 
-	twe = (struct twe_softc *)device_parent(&sc->sc_ld.sc_dv);
+	twe = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	flags = (dowrite ? TWE_CCB_DATA_OUT : TWE_CCB_DATA_IN);
 	if ((ccb = twe_ccb_alloc(twe, flags)) == NULL)
@@ -231,7 +217,7 @@ ld_twe_dobio(struct ld_twe_softc *sc, void *data, int datasize, int blkno,
 	} else {
 		ccb->ccb_tx.tx_handler = ld_twe_handler;
 		ccb->ccb_tx.tx_context = bp;
-		ccb->ccb_tx.tx_dv = (struct device *)sc;
+		ccb->ccb_tx.tx_dv = sc->sc_ld.sc_dv;
 		twe_ccb_enqueue(twe, ccb);
 		rv = 0;
 	}
@@ -257,8 +243,8 @@ ld_twe_handler(struct twe_ccb *ccb, int error)
 
 	tx = &ccb->ccb_tx;
 	bp = tx->tx_context;
-	sc = (struct ld_twe_softc *)tx->tx_dv;
-	twe = (struct twe_softc *)device_parent(&sc->sc_ld.sc_dv);
+	sc = device_private(tx->tx_dv);
+	twe = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	twe_ccb_unmap(twe, ccb);
 	twe_ccb_free(twe, ccb);
@@ -281,10 +267,10 @@ ld_twe_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 }
 
 static int
-ld_twe_flush(struct ld_softc *ld)
+ld_twe_flush(struct ld_softc *ld, bool poll)
 {
 	struct ld_twe_softc *sc = (void *) ld;
-	struct twe_softc *twe = (void *) device_parent(&ld->sc_dv);
+	struct twe_softc *twe = device_private(device_parent(ld->sc_dv));
 	struct twe_ccb *ccb;
 	struct twe_cmd *tc;
 	int s, rv;
@@ -294,9 +280,6 @@ ld_twe_flush(struct ld_softc *ld)
 
 	ccb->ccb_data = NULL;
 	ccb->ccb_datasize = 0;
-	ccb->ccb_tx.tx_handler = twe_ccb_wait_handler;
-	ccb->ccb_tx.tx_context = NULL;
-	ccb->ccb_tx.tx_dv = &ld->sc_dv;
 
 	tc = ccb->ccb_cmd;
 	tc->tc_size = 2;
@@ -304,21 +287,101 @@ ld_twe_flush(struct ld_softc *ld)
 	tc->tc_unit = sc->sc_hwunit;
 	tc->tc_count = 0;
 
-	rv = 0;
-	twe_ccb_enqueue(twe, ccb);
-	s = splbio();
-	while ((ccb->ccb_flags & TWE_CCB_COMPLETE) == 0)
-		if ((rv = tsleep(ccb, PRIBIO, "tweflush", 60 * hz)) != 0)
-			break;
-	twe_ccb_free(twe, ccb);
-	splx(s);
+	if (poll) {
+		/*
+		 * Polled commands must not sit on the software queue.  Wait
+		 * up to 2 seconds for the command to complete.
+		 */
+		s = splbio();
+		rv = twe_ccb_poll(twe, ccb, 2000);
+		twe_ccb_unmap(twe, ccb);
+		twe_ccb_free(twe, ccb);
+		splx(s);
+	} else {
+		ccb->ccb_tx.tx_handler = twe_ccb_wait_handler;
+		ccb->ccb_tx.tx_context = NULL;
+		ccb->ccb_tx.tx_dv = ld->sc_dv;
+		twe_ccb_enqueue(twe, ccb);
+
+		rv = 0;
+		s = splbio();
+		while ((ccb->ccb_flags & TWE_CCB_COMPLETE) == 0)
+			if ((rv = tsleep(ccb, PRIBIO, "tweflush",
+			    60 * hz)) != 0)
+				break;
+		twe_ccb_free(twe, ccb);
+		splx(s);
+	}
 
 	return (rv);
 }
 
-static void
-ld_twe_adjqparam(struct device *self, int openings)
+static int
+ld_twe_ioctl(struct ld_softc *ld, u_long cmd, void *addr, int32_t flag, bool poll)
 {
+        int error;
 
-	ldadjqparam((struct ld_softc *)self, openings);
+        switch (cmd) {
+        case DIOCCACHESYNC:
+		error = ld_twe_flush(ld, poll);
+		break;
+
+	default:
+		error = EPASSTHROUGH;
+		break;
+	}
+
+	return error;
+}
+
+static void
+ld_twe_adjqparam(device_t self, int openings)
+{
+	struct ld_twe_softc *sc = device_private(self);
+	struct ld_softc *ld = &sc->sc_ld;
+
+	ldadjqparam(ld, openings);
+}
+
+MODULE(MODULE_CLASS_DRIVER, ld_twe, "ld,twe");
+
+#ifdef _MODULE
+/*
+ * XXX Don't allow ioconf.c to redefine the "struct cfdriver ld_cd"
+ * XXX it will be defined in the common-code module
+ */
+#undef  CFDRIVER_DECL 
+#define CFDRIVER_DECL(name, class, attr)
+#include "ioconf.c"
+#endif
+
+static int
+ld_twe_modcmd(modcmd_t cmd, void *opaque)
+{
+#ifdef _MODULE
+	/*
+	 * We ignore the cfdriver_vec[] that ioconf provides, since
+	 * the cfdrivers are attached already.
+	 */
+	static struct cfdriver * const no_cfdriver_vec[] = { NULL };
+#endif
+	int error = 0;
+
+#ifdef _MODULE
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = config_init_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_twe, cfdata_ioconf_ld_twe);
+		break;
+	case MODULE_CMD_FINI:
+		error = config_fini_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_twe, cfdata_ioconf_ld_twe);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+#endif
+
+	return error;
 }

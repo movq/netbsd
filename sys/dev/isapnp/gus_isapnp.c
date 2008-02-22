@@ -1,7 +1,7 @@
-/*	$NetBSD: gus_isapnp.c,v 1.31 2007/10/19 12:00:31 ad Exp $	*/
+/*	$NetBSD: gus_isapnp.c,v 1.38 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*
- * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 1999, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Author: Kari Mettinen
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,27 +29,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gus_isapnp.c,v 1.31 2007/10/19 12:00:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gus_isapnp.c,v 1.38 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include "guspnp.h"
 #if NGUSPNP > 0
 
 #include <sys/param.h>
-#include <sys/fcntl.h>
-#include <sys/vnode.h>
-#include <sys/poll.h>
-#include <sys/malloc.h>
-#include <sys/select.h>
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/proc.h>
-
 #include <sys/bus.h>
-
 #include <sys/audioio.h>
+
 #include <dev/audio_if.h>
 #include <dev/audiovar.h>
 #include <dev/mulaw.h>
@@ -68,13 +55,12 @@ __KERNEL_RCSID(0, "$NetBSD: gus_isapnp.c,v 1.31 2007/10/19 12:00:31 ad Exp $");
 #include <dev/isapnp/isapnpvar.h>
 #include <dev/isapnp/isapnpdevs.h>
 
-
 #include <dev/ic/interwavevar.h>
 #include <dev/ic/interwavereg.h>
 
 
-int	gus_isapnp_match(struct device *, struct cfdata *, void *);
-void	gus_isapnp_attach(struct device *, struct device *, void *);
+int	gus_isapnp_match(device_t, cfdata_t, void *);
+void	gus_isapnp_attach(device_t, device_t, void *);
 static int     gus_isapnp_open(void *, int);
 
 static const struct audio_hw_if guspnp_hw_if = {
@@ -105,10 +91,10 @@ static const struct audio_hw_if guspnp_hw_if = {
 	NULL,			/* trigger_output */
 	NULL,			/* trigger_input */
 	NULL,			/* dev_ioctl */
-	NULL,			/* powerstate */
+	iw_get_locks,
 };
 
-CFATTACH_DECL(guspnp, sizeof(struct iw_softc),
+CFATTACH_DECL_NEW(guspnp, sizeof(struct iw_softc),
     gus_isapnp_match, gus_isapnp_attach, NULL, NULL);
 
 extern struct cfdriver guspnp_cd;
@@ -126,8 +112,7 @@ extern struct cfdriver guspnp_cd;
 static int gus_0 = 1;		/* XXX what's this */
 
 int
-gus_isapnp_match(struct device *parent, struct cfdata *match,
-    void *aux)
+gus_isapnp_match(device_t parent, cfdata_t match, void *aux)
 {
 	int pri, variant;
 
@@ -142,26 +127,26 @@ gus_isapnp_match(struct device *parent, struct cfdata *match,
  * pseudo-device driver.
  */
 void
-gus_isapnp_attach(struct device *parent, struct device *self,
-    void *aux)
+gus_isapnp_attach(device_t parent, device_t self, void *aux)
 {
 	struct iw_softc *sc;
 	struct isapnp_attach_args *ipa;
 
 	sc = device_private(self);
 	ipa = aux;
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	if (!gus_0)
 		return;
 	gus_0 = 0;
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: error in region allocation\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "error in region allocation\n");
 		return;
 	}
 
+	sc->sc_dev = self;
 	sc->sc_iot = ipa->ipa_iot;
 
 	/* handle is the region base */
@@ -188,14 +173,14 @@ gus_isapnp_attach(struct device *parent, struct device *self,
 		sc->sc_play_maxsize = isa_dmamaxsize(sc->sc_ic,
 		    sc->sc_playdrq);
 		if (isa_drq_alloc(sc->sc_ic, sc->sc_playdrq) != 0) {
-			printf("%s: can't reserve drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_playdrq);
+			aprint_error_dev(self, "can't reserve drq %d\n",
+			    sc->sc_playdrq);
 			return;
 		}
 		if (isa_dmamap_create(sc->sc_ic, sc->sc_playdrq,
 		    sc->sc_play_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-			printf("%s: can't create map for drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_playdrq);
+			aprint_error_dev(self, "can't create map for drq %d\n",
+			    sc->sc_playdrq);
 			return;
 		}
 	}
@@ -203,14 +188,14 @@ gus_isapnp_attach(struct device *parent, struct device *self,
 		sc->sc_rec_maxsize = isa_dmamaxsize(sc->sc_ic,
 		    sc->sc_recdrq);
 		if (isa_drq_alloc(sc->sc_ic, sc->sc_recdrq) != 0) {
-			printf("%s: can't reserve drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_recdrq);
+			aprint_error_dev(self, "can't reserve drq %d\n",
+			    sc->sc_recdrq);
 			return;
 		}
 		if (isa_dmamap_create(sc->sc_ic, sc->sc_recdrq,
 		    sc->sc_rec_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-			printf("%s: can't create map for drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_recdrq);
+			aprint_error_dev(self, "can't create map for drq %d\n",
+			    sc->sc_recdrq);
 			return;
 		}
 	}
@@ -222,8 +207,7 @@ gus_isapnp_attach(struct device *parent, struct device *self,
 	sc->iw_cd = &guspnp_cd;
 	sc->iw_hw_if = &guspnp_hw_if;
 
-	printf("%s: %s %s", sc->sc_dev.dv_xname, ipa->ipa_devident,
-	       ipa->ipa_devclass);
+	aprint_normal_dev(self, "%s %s", ipa->ipa_devident, ipa->ipa_devclass);
 
 	iwattach(sc);
 }

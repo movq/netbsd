@@ -1,4 +1,4 @@
-#	$NetBSD: files.isa,v 1.155 2007/12/31 01:52:34 wiz Exp $
+#	$NetBSD: files.isa,v 1.169 2018/01/02 00:25:35 christos Exp $
 #
 # Config file and device description for machine-independent ISA code.
 # Included by ports that need it.  Requires that the SCSI files be
@@ -13,6 +13,7 @@ device	isa {[port = -1], [size = 0],
 	     [irq = -1], [drq = -1], [drq2 = -1]}
 attach	isa at isabus
 file	dev/isa/isa.c			isa			needs-flag
+file	dev/isa/isa_stub.c		isa
 
 file	dev/isa/isabusprint.c		isabus
 
@@ -198,8 +199,8 @@ attach	ntwoc at isa with ntwoc_isa
 file	dev/isa/if_ntwoc_isa.c          ntwoc_isa
 
 
-# Allied Telesis MB8695-based boards
-# (Allied Telesis AT1700)
+# Allied Telesis MB86965-based boards
+# (Allied Telesis AT1700/RE2000)
 # device in sys/conf/files
 attach	ate at isa with ate_isa
 file	dev/isa/if_ate.c		ate_isa
@@ -217,12 +218,6 @@ file	dev/isa/if_tscs_isa.c		tscs_isa
 # device in sys/conf/files
 attach	fmv at isa with fmv_isa
 file	dev/isa/if_fmv_isa.c		fmv_isa
-
-# HP Lan Ethernet controllers
-# XXX currently broken
-#device hp: ether, ifnet, arp
-#attach	hp at isa
-#file	dev/isa/if_hp.c			hp
 
 # Intel i82595-based boards.
 # (Intel EtherExpress PRO)
@@ -396,6 +391,11 @@ device	ega: wsemuldisplaydev, pcdisplayops
 attach	ega at isa
 file	dev/isa/ega.c			ega			needs-flag
 
+# IDEC Supervision/16 image capture board
+device	isv
+attach	isv at isa with isv_isa
+file	dev/isa/isv.c			isv
+
 # generic PC graphics adapter (MGA, CGA, ...)
 device	pcdisplay: wsemuldisplaydev, pcdisplayops
 attach	pcdisplay at isa
@@ -433,9 +433,10 @@ file	dev/isa/radiotrack2.c		rtii
 device	pcppi {}
 attach	pcppi at isa
 file	dev/isa/pcppi.c			pcppi			needs-flag
-device	spkr
-attach	spkr at pcppi
-file	dev/isa/spkr.c			spkr			needs-flag
+
+attach	spkr at pcppi with spkr_pcppi
+file	dev/isa/spkr_pcppi.c		spkr_pcppi
+
 attach	midi at pcppi with midi_pcppi: midisyn
 file	dev/isa/midi_pcppi.c		midi_pcppi
 
@@ -447,19 +448,32 @@ file	dev/isa/attimer_isa.c		attimer_isa
 # Environmental monitors
 #
 
-# SMSC LPC47B397 temp/fanspeed monitor
+# SMSC LPC47B397 Super I/O with hardware monitor
 device	smsc: sysmon_envsys
 attach	smsc at isa with smsc
 file	dev/isa/smsc.c			smsc			needs-flag
 
+# Winbond LPC Super I/O
+device	wbsio { }: gpiobus, sysmon_wdog
+attach	wbsio at isa
+file	dev/isa/wbsio.c			wbsio
+
 # LM78 temp/fanspeed monitor
 attach	lm at isa with lm_isa
+attach	lm at wbsio with lm_wbsio
+file	dev/isa/lm_isa_common.c		lm_isa | lm_wbsio
 file	dev/isa/lm_isa.c		lm_isa
+file	dev/isa/lm_wbsio.c		lm_wbsio
 
-# IT8705F/8712F SIS950 hardware monitor
+# iTE Super I/O with hardware monitor
 device	itesio: sysmon_envsys, sysmon_wdog
 attach	itesio at isa with itesio
 file	dev/isa/itesio_isa.c		itesio
+
+# Fintek Super I/O with hardware monitor
+device	finsio: sysmon_envsys
+attach	finsio at isa with finsio
+file	dev/isa/finsio_isa.c 		finsio
 
 # Abit uGuru hardware monitor
 attach	ug at isa with ug_isa
@@ -511,10 +525,18 @@ device toaster
 attach toaster at tsdio
 file	dev/isa/toaster.c		toaster
 
+# Trusted Platform Module
+attach tpm at isa with tpm_isa
+file   dev/isa/tpm_isa.c		tpm_isa	needs-flag
+
+# Soekris GPIO & LEDs driver
+device	soekrisgpio: gpiobus
+attach	soekrisgpio at isa
+file	dev/isa/soekrisgpio.c		soekrisgpio
+
 #
 # ISA Plug 'n Play autoconfiguration glue.
 # THIS MUST COME AFTER ALL MI ISA DEVICES ARE DEFINED.  This is because
 # ISA PnP devices often use `device' declarations listed in this file.
 #
 include	"dev/isapnp/files.isapnp"
-

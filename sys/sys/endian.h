@@ -1,4 +1,4 @@
-/*	$NetBSD: endian.h,v 1.26 2007/07/20 15:07:15 christos Exp $	*/
+/*	$NetBSD: endian.h,v 1.30 2016/02/27 21:37:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1991, 1993
@@ -65,10 +65,10 @@ typedef __in_port_t	in_port_t;
 #endif
 
 __BEGIN_DECLS
-uint32_t htonl(uint32_t) __attribute__((__const__));
-uint16_t htons(uint16_t) __attribute__((__const__));
-uint32_t ntohl(uint32_t) __attribute__((__const__));
-uint16_t ntohs(uint16_t) __attribute__((__const__));
+uint32_t htonl(uint32_t) __constfunc;
+uint16_t htons(uint16_t) __constfunc;
+uint32_t ntohl(uint32_t) __constfunc;
+uint16_t ntohs(uint16_t) __constfunc;
 __END_DECLS
 
 #endif /* !_LOCORE */
@@ -122,15 +122,15 @@ __END_DECLS
 
 #else	/* LITTLE_ENDIAN || !defined(__lint__) */
 
-#define	ntohl(x)	bswap32((uint32_t)(x))
-#define	ntohs(x)	bswap16((uint16_t)(x))
-#define	htonl(x)	bswap32((uint32_t)(x))
-#define	htons(x)	bswap16((uint16_t)(x))
+#define	ntohl(x)	bswap32(__CAST(uint32_t, (x)))
+#define	ntohs(x)	bswap16(__CAST(uint16_t, (x)))
+#define	htonl(x)	bswap32(__CAST(uint32_t, (x)))
+#define	htons(x)	bswap16(__CAST(uint16_t, (x)))
 
-#define	NTOHL(x)	(x) = ntohl((uint32_t)(x))
-#define	NTOHS(x)	(x) = ntohs((uint16_t)(x))
-#define	HTONL(x)	(x) = htonl((uint32_t)(x))
-#define	HTONS(x)	(x) = htons((uint16_t)(x))
+#define	NTOHL(x)	(x) = ntohl(__CAST(uint32_t, (x)))
+#define	NTOHS(x)	(x) = ntohs(__CAST(uint16_t, (x)))
+#define	HTONL(x)	(x) = htonl(__CAST(uint32_t, (x)))
+#define	HTONS(x)	(x) = htons(__CAST(uint16_t, (x)))
 #endif	/* LITTLE_ENDIAN || !defined(__lint__) */
 
 /*
@@ -142,32 +142,32 @@ __END_DECLS
 #define htobe16(x)	(x)
 #define htobe32(x)	(x)
 #define htobe64(x)	(x)
-#define htole16(x)	bswap16((uint16_t)(x))
-#define htole32(x)	bswap32((uint32_t)(x))
-#define htole64(x)	bswap64((uint64_t)(x))
+#define htole16(x)	bswap16(__CAST(uint16_t, (x)))
+#define htole32(x)	bswap32(__CAST(uint32_t, (x)))
+#define htole64(x)	bswap64(__CAST(uint64_t, (x)))
 
-#define HTOBE16(x)	(void) (x)
-#define HTOBE32(x)	(void) (x)
-#define HTOBE64(x)	(void) (x)
-#define HTOLE16(x)	(x) = bswap16((uint16_t)(x))
-#define HTOLE32(x)	(x) = bswap32((uint32_t)(x))
-#define HTOLE64(x)	(x) = bswap64((uint64_t)(x))
+#define HTOBE16(x)	__CAST(void, (x))
+#define HTOBE32(x)	__CAST(void, (x))
+#define HTOBE64(x)	__CAST(void, (x))
+#define HTOLE16(x)	(x) = bswap16(__CAST(uint16_t, (x)))
+#define HTOLE32(x)	(x) = bswap32(__CAST(uint32_t, (x)))
+#define HTOLE64(x)	(x) = bswap64(__CAST(uint64_t, (x)))
 
 #else	/* LITTLE_ENDIAN */
 
-#define htobe16(x)	bswap16((uint16_t)(x))
-#define htobe32(x)	bswap32((uint32_t)(x))
-#define htobe64(x)	bswap64((uint64_t)(x))
+#define htobe16(x)	bswap16(__CAST(uint16_t, (x)))
+#define htobe32(x)	bswap32(__CAST(uint32_t, (x)))
+#define htobe64(x)	bswap64(__CAST(uint64_t, (x)))
 #define htole16(x)	(x)
 #define htole32(x)	(x)
 #define htole64(x)	(x)
 
-#define HTOBE16(x)	(x) = bswap16((uint16_t)(x))
-#define HTOBE32(x)	(x) = bswap32((uint32_t)(x))
-#define HTOBE64(x)	(x) = bswap64((uint64_t)(x))
-#define HTOLE16(x)	(void) (x)
-#define HTOLE32(x)	(void) (x)
-#define HTOLE64(x)	(void) (x)
+#define HTOBE16(x)	(x) = bswap16(__CAST(uint16_t, (x)))
+#define HTOBE32(x)	(x) = bswap32(__CAST(uint32_t, (x)))
+#define HTOBE64(x)	(x) = bswap64(__CAST(uint64_t, (x)))
+#define HTOLE16(x)	__CAST(void, (x))
+#define HTOLE32(x)	__CAST(void, (x))
+#define HTOLE64(x)	__CAST(void, (x))
 
 #endif	/* LITTLE_ENDIAN */
 
@@ -193,7 +193,7 @@ __END_DECLS
 #if __GNUC_PREREQ__(2, 95)
 
 #define __GEN_ENDIAN_ENC(bits, endian) \
-static __inline __unused void \
+static __inline void __unused \
 endian ## bits ## enc(void *dst, uint ## bits ## _t u) \
 { \
 	u = hto ## endian ## bits (u); \
@@ -209,7 +209,7 @@ __GEN_ENDIAN_ENC(64, le)
 #undef __GEN_ENDIAN_ENC
 
 #define __GEN_ENDIAN_DEC(bits, endian) \
-static __inline __unused uint ## bits ## _t \
+static __inline uint ## bits ## _t __unused \
 endian ## bits ## dec(const void *buf) \
 { \
 	uint ## bits ## _t u; \
@@ -230,91 +230,91 @@ __GEN_ENDIAN_DEC(64, le)
 static __inline void __unused
 be16enc(void *buf, uint16_t u)
 {
-	uint8_t *p = (uint8_t *)buf;
+	uint8_t *p = __CAST(uint8_t *, buf);
 
-	p[0] = (uint8_t)(((unsigned)u >> 8) & 0xff);
-	p[1] = (uint8_t)(u & 0xff);
+	p[0] = __CAST(uint8_t, ((__CAST(unsigned, u) >> 8) & 0xff));
+	p[1] = __CAST(uint8_t, (u & 0xff));
 }
 
 static __inline void __unused
 le16enc(void *buf, uint16_t u)
 {
-	uint8_t *p = (uint8_t *)buf;
+	uint8_t *p = __CAST(uint8_t *, buf);
 
-	p[0] = (uint8_t)(u & 0xff);
-	p[1] = (uint8_t)(((unsigned)u >> 8) & 0xff);
+	p[0] = __CAST(uint8_t, (u & 0xff));
+	p[1] = __CAST(uint8_t, ((__CAST(unsigned, u) >> 8) & 0xff));
 }
 
 static __inline uint16_t __unused
 be16dec(const void *buf)
 {
-	const uint8_t *p = (const uint8_t *)buf;
+	const uint8_t *p = __CAST(const uint8_t *, buf);
 
-	return (uint16_t)((p[0] << 8) | p[1]);
+	return ((__CAST(uint16_t, p[0]) << 8) | p[1]);
 }
 
 static __inline uint16_t __unused
 le16dec(const void *buf)
 {
-	const uint8_t *p = (const uint8_t *)buf;
+	const uint8_t *p = __CAST(const uint8_t *, buf);
 
-	return (uint16_t)((p[1] << 8) | p[0]);
+	return (p[0] | (__CAST(uint16_t, p[1]) << 8));
 }
 
 static __inline void __unused
 be32enc(void *buf, uint32_t u)
 {
-	uint8_t *p = (uint8_t *)buf;
+	uint8_t *p = __CAST(uint8_t *, buf);
 
-	p[0] = (uint8_t)((u >> 24) & 0xff);
-	p[1] = (uint8_t)((u >> 16) & 0xff);
-	p[2] = (uint8_t)((u >> 8) & 0xff);
-	p[3] = (uint8_t)(u & 0xff);
+	p[0] = __CAST(uint8_t, ((u >> 24) & 0xff));
+	p[1] = __CAST(uint8_t, ((u >> 16) & 0xff));
+	p[2] = __CAST(uint8_t, ((u >> 8) & 0xff));
+	p[3] = __CAST(uint8_t, (u & 0xff));
 }
 
 static __inline void __unused
 le32enc(void *buf, uint32_t u)
 {
-	uint8_t *p = (uint8_t *)buf;
+	uint8_t *p = __CAST(uint8_t *, buf);
 
-	p[0] = (uint8_t)(u & 0xff);
-	p[1] = (uint8_t)((u >> 8) & 0xff);
-	p[2] = (uint8_t)((u >> 16) & 0xff);
-	p[3] = (uint8_t)((u >> 24) & 0xff);
+	p[0] = __CAST(uint8_t, (u & 0xff));
+	p[1] = __CAST(uint8_t, ((u >> 8) & 0xff));
+	p[2] = __CAST(uint8_t, ((u >> 16) & 0xff));
+	p[3] = __CAST(uint8_t, ((u >> 24) & 0xff));
 }
 
 static __inline uint32_t __unused
 be32dec(const void *buf)
 {
-	const uint8_t *p = (const uint8_t *)buf;
+	const uint8_t *p = __CAST(const uint8_t *, buf);
 
-	return ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]);
+	return ((__CAST(uint32_t, be16dec(p)) << 16) | be16dec(p + 2));
 }
 
 static __inline uint32_t __unused
 le32dec(const void *buf)
 {
-	const uint8_t *p = (const uint8_t *)buf;
+	const uint8_t *p = __CAST(const uint8_t *, buf);
 
-	return ((p[3] << 24) | (p[2] << 16) | (p[1] << 8) | p[0]);
+	return (le16dec(p) | (__CAST(uint32_t, le16dec(p + 2)) << 16));
 }
 
 static __inline void __unused
 be64enc(void *buf, uint64_t u)
 {
-	uint8_t *p = (uint8_t *)buf;
+	uint8_t *p = __CAST(uint8_t *, buf);
 
-	be32enc(p, (uint32_t)(u >> 32));
-	be32enc(p + 4, (uint32_t)(u & 0xffffffffULL));
+	be32enc(p, __CAST(uint32_t, (u >> 32)));
+	be32enc(p + 4, __CAST(uint32_t, (u & 0xffffffffULL)));
 }
 
 static __inline void __unused
 le64enc(void *buf, uint64_t u)
 {
-	uint8_t *p = (uint8_t *)buf;
+	uint8_t *p = __CAST(uint8_t *, buf);
 
-	le32enc(p, (uint32_t)(u & 0xffffffffULL));
-	le32enc(p + 4, (uint32_t)(u >> 32));
+	le32enc(p, __CAST(uint32_t, (u & 0xffffffffULL)));
+	le32enc(p + 4, __CAST(uint32_t, (u >> 32)));
 }
 
 static __inline uint64_t __unused
@@ -322,7 +322,7 @@ be64dec(const void *buf)
 {
 	const uint8_t *p = (const uint8_t *)buf;
 
-	return (((uint64_t)be32dec(p) << 32) | be32dec(p + 4));
+	return ((__CAST(uint64_t, be32dec(p)) << 32) | be32dec(p + 4));
 }
 
 static __inline uint64_t __unused
@@ -330,7 +330,7 @@ le64dec(const void *buf)
 {
 	const uint8_t *p = (const uint8_t *)buf;
 
-	return (le32dec(p) | ((uint64_t)le32dec(p + 4) << 32));
+	return (le32dec(p) | (__CAST(uint64_t, le32dec(p + 4)) << 32));
 }
 
 #endif	/* GCC >= 2.95 */

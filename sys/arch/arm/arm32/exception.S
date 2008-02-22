@@ -1,4 +1,4 @@
-/*	$NetBSD: exception.S,v 1.15 2008/01/19 13:11:09 chris Exp $	*/
+/*	$NetBSD: exception.S,v 1.24 2017/07/07 00:34:09 chs Exp $	*/
 
 /*
  * Copyright (c) 1994-1997 Mark Brinicombe.
@@ -45,10 +45,13 @@
  * Based on kate/display/abort.s
  */
 
-#include <machine/asm.h>
-#include <machine/cpu.h>
-#include <machine/frame.h>
 #include "assym.h"
+
+#include <arm/asm.h>
+
+#include <arm/locore.h>
+
+	RCSID("$NetBSD: exception.S,v 1.24 2017/07/07 00:34:09 chs Exp $")
 
 	.text	
 	.align	0
@@ -60,21 +63,22 @@ AST_ALIGNMENT_FAULT_LOCALS
  *
  *	Handler for Reset exception.
  */
-ASENTRY_NP(reset_entry)
-	adr	r0, Lreset_panicmsg
+ARM_ASENTRY_NP(reset_entry)
+	adr	r0, .Lreset_panicmsg
 	mov	r1, lr
 	bl	_C_LABEL(panic)
 	/* NOTREACHED */
-Lreset_panicmsg:
+.Lreset_panicmsg:
 	.asciz	"Reset vector called, LR = 0x%08x"
 	.balign	4
+ASEND(reset_entry)
 
 /*
  * swi_entry
  *
  *	Handler for the Software Interrupt exception.
  */
-ASENTRY_NP(swi_entry)
+ARM_ASENTRY_NP(swi_entry)
 	PUSHFRAME
 	ENABLE_ALIGNMENT_FAULTS
 
@@ -84,44 +88,53 @@ ASENTRY_NP(swi_entry)
 	DO_AST_AND_RESTORE_ALIGNMENT_FAULTS
 	PULLFRAME
 	movs	pc, lr			/* Exit */
+ASEND(swi_entry)
 
 /*
  * prefetch_abort_entry:
  *
  *	Handler for the Prefetch Abort exception.
  */
-ASENTRY_NP(prefetch_abort_entry)
+ARM_ASENTRY_NP(prefetch_abort_entry)
 #ifdef __XSCALE__
 	nop				/* Make absolutely sure any pending */
 	nop				/* imprecise aborts have occurred. */
 #endif
         sub     lr, lr, #0x00000004     /* Adjust the lr */
 
+#ifdef _ARM_ARCH_7
+	/*
+	 * After taking a Data Abort exception, the state of the exclusive
+	 * monitors is UNKNOWN. Therefore ARM strongly recommends that the
+	 * abort handling software performs a CLREX instruction
+	 */
+	clrex
+#endif
 	PUSHFRAMEINSVC
 	ENABLE_ALIGNMENT_FAULTS
 
-	ldr	r1, Lprefetch_abort_handler_address
-	adr	lr, exception_exit
+	ldr	r1, .Lprefetch_abort_handler_address
+	adr	lr, .Lexception_exit
  	mov	r0, sp			/* pass the stack pointer as r0 */
 	ldr	pc, [r1]
 
-Lprefetch_abort_handler_address:
-	.word	_C_LABEL(prefetch_abort_handler_address)
-
-	.data
-	.global	_C_LABEL(prefetch_abort_handler_address)
-
-_C_LABEL(prefetch_abort_handler_address):
-	.word	abortprefetch
-
-	.text
-abortprefetch:
-        adr     r0, abortprefetchmsg
+.Labortprefetch:
+        adr     r0, .Labortprefetchmsg
 	b	_C_LABEL(panic)
 
-abortprefetchmsg:
+.Lprefetch_abort_handler_address:
+	.word	_C_LABEL(prefetch_abort_handler_address)
+
+.Labortprefetchmsg:
         .asciz  "abortprefetch"
         .align  0
+ASEND(prefetch_abort_entry)
+
+	.data
+	.p2align 2
+	.global	_C_LABEL(prefetch_abort_handler_address)
+_C_LABEL(prefetch_abort_handler_address):
+	.word	.Labortprefetch
 
 /*
  * data_abort_entry:
@@ -135,31 +148,41 @@ ASENTRY_NP(data_abort_entry)
 #endif
         sub     lr, lr, #0x00000008     /* Adjust the lr */
 
+#ifdef _ARM_ARCH_7
+	/*
+	 * After taking a Data Abort exception, the state of the exclusive
+	 * monitors is UNKNOWN. Therefore ARM strongly recommends that the
+	 * abort handling software performs a CLREX instruction
+	 */
+	clrex
+#endif
 	PUSHFRAMEINSVC			/* Push trap frame and switch */
 					/* to SVC32 mode */
 	ENABLE_ALIGNMENT_FAULTS
 
-	ldr	r1, Ldata_abort_handler_address
-	adr	lr, exception_exit
+	ldr	r1, .Ldata_abort_handler_address
+	adr	lr, .Lexception_exit
 	mov	r0, sp			/* pass the stack pointer as r0 */
 	ldr	pc, [r1]
 
-Ldata_abort_handler_address:
+.Ldata_abort_handler_address:
 	.word	_C_LABEL(data_abort_handler_address)
 
 	.data
+	.p2align 2
 	.global	_C_LABEL(data_abort_handler_address)
 _C_LABEL(data_abort_handler_address):
-	.word	abortdata
+	.word	.Labortdata
 
 	.text
-abortdata:
-        adr     r0, abortdatamsg
+.Labortdata:
+        adr     r0, .Labortdatamsg
 	b	_C_LABEL(panic)
 
-abortdatamsg:
+.Labortdatamsg:
         .asciz  "abortdata"
         .align  0
+ASEND(data_abort_entry)
 
 /*
  * address_exception_entry:
@@ -171,13 +194,23 @@ abortdatamsg:
  *	it like a Data Abort.
  */
 ASENTRY_NP(address_exception_entry)
-	mrs	r1, cpsr_all
-	mrs	r2, spsr_all
+#ifdef _ARM_ARCH_7
+	/*
+	 * After taking a Data Abort exception, the state of the exclusive
+	 * monitors is UNKNOWN. Therefore ARM strongly recommends that the
+	 * abort handling software performs a CLREX instruction
+	 */
+	clrex
+#endif
+	push	{r0-r3,ip,lr}
+	mrs	r1, cpsr
+	mrs	r2, spsr
 	mov	r3, lr
-	adr	r0, Laddress_exception_msg
+	adr	r0, .Laddress_exception_msg
 	bl	_C_LABEL(printf)	/* XXX CLOBBERS LR!! */
-	b	data_abort_entry
-Laddress_exception_msg:
+	pop	{r0-r3,ip,lr}
+	b	_ASM_LABEL(data_abort_entry)
+.Laddress_exception_msg:
 	.asciz	"Address Exception CPSR=0x%08x SPSR=0x%08x LR=0x%08x\n"
 	.balign	4
 
@@ -196,9 +229,10 @@ Laddress_exception_msg:
  * followed by ENABLE_ALIGNMENT_FAULTS.
  */
 
-exception_exit:
+.Lexception_exit:
 	DO_AST_AND_RESTORE_ALIGNMENT_FAULTS
 	PULLFRAMEFROMSVCANDEXIT
+ASEND(address_exception_entry)
 
 /*
  * undefined_entry:
@@ -210,16 +244,12 @@ exception_exit:
  *	look like direct entry from the vector.
  */
 ASENTRY_NP(undefined_entry)
-	stmfd	sp!, {r0, r1}
-	ldr	r0, Lundefined_handler_indirection
-	ldr	r1, [sp], #0x0004
-	str	r1, [r0, #0x0000]
-	ldr	r1, [sp], #0x0004
-	str	r1, [r0, #0x0004]
-	ldmia	r0, {r0, r1, pc}
-
-Lundefined_handler_indirection:
-	.word	Lundefined_handler_indirection_data
+	str	r0, [sp, #-8]!
+	GET_CURCPU(r0)
+	ldr	r0, [r0, #CI_UNDEFSAVE+8]
+	str	r0, [sp, #4]
+	pop	{r0, pc}
+ASEND(undefined_entry)
 
 /*
  * assembly bounce code for calling the kernel
@@ -228,26 +258,12 @@ Lundefined_handler_indirection:
  */
 
 ENTRY_NP(undefinedinstruction_bounce)
-	PUSHFRAMEINSVC
+	PUSHXXXREGSANDSWITCH
+	PUSHDTRACEGAP
+	PUSHTRAPFRAME(r2)
 	ENABLE_ALIGNMENT_FAULTS
 
 	mov	r0, sp
-	adr	lr, exception_exit
+	adr	lr, .Lexception_exit
 	b	_C_LABEL(undefinedinstruction)
-
-	.data
-	.align	0
-
-/*
- * Indirection data
- * 2 words use for preserving r0 and r1
- * 3rd word contains the undefined handler address.
- */
-
-Lundefined_handler_indirection_data:
-	.word	0
-	.word	0
-
-	.global	_C_LABEL(undefined_handler_address)
-_C_LABEL(undefined_handler_address):
-	.word	_C_LABEL(undefinedinstruction_bounce)
+END(undefinedinstruction_bounce)

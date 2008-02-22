@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_raid.c,v 1.24 2008/01/02 11:48:36 ad Exp $	*/
+/*	$NetBSD: ata_raid.c,v 1.40 2018/06/22 09:06:04 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.24 2008/01/02 11:48:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.40 2018/06/22 09:06:04 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.24 2008/01/02 11:48:36 ad Exp $");
 #include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/proc.h>
+#include <sys/module.h>
 
 #include <miscfs/specfs/specdev.h>
 
@@ -64,6 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.24 2008/01/02 11:48:36 ad Exp $");
 #include <dev/ata/ata_raidvar.h>
 
 #include "locators.h"
+#include "ioconf.h"
 
 #ifdef ATA_RAID_DEBUG
 #define	DPRINTF(x)	printf x
@@ -71,20 +73,21 @@ __KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.24 2008/01/02 11:48:36 ad Exp $");
 #define	DPRINTF(x)	/* nothing */
 #endif
 
-void		ataraidattach(int);
-
-static int	ataraid_match(struct device *, struct cfdata *, void *);
-static void	ataraid_attach(struct device *, struct device *, void *);
+static int	ataraid_match(device_t, cfdata_t, void *);
+static void	ataraid_attach(device_t, device_t, void *);
+static int	ataraid_rescan(device_t, const char *, const int *);
 static int	ataraid_print(void *, const char *);
 
-static int	ata_raid_finalize(struct device *);
+static int	ata_raid_finalize(device_t);
+
+static int	finalize_done;
 
 ataraid_array_info_list_t ataraid_array_info_list =
     TAILQ_HEAD_INITIALIZER(ataraid_array_info_list);
 u_int ataraid_array_info_count;
 
-CFATTACH_DECL(ataraid, sizeof(struct device),
-    ataraid_match, ataraid_attach, NULL, NULL);
+CFATTACH_DECL3_NEW(ataraid, 0,
+    ataraid_match, ataraid_attach, NULL, NULL, ataraid_rescan, NULL, 0);
 
 /*
  * ataraidattach:
@@ -99,8 +102,26 @@ ataraidattach(int count)
 	 * Register a finalizer which will be used to actually configure
 	 * the logical disks configured by ataraid.
 	 */
+	finalize_done = 0;
 	if (config_finalize_register(NULL, ata_raid_finalize) != 0)
-		printf("WARNING: unable to register ATA RAID finalizer\n");
+		aprint_normal("WARNING: "
+		    "unable to register ATA RAID finalizer\n");
+}
+
+/*
+ * Use the config_finalizer to rescan for new devices, since the
+ * ld_ataraid driver might not be immediately available.
+ */
+
+/* ARGSUSED */
+static int
+ataraid_rescan(device_t self, const char *attr, const int *flags)
+{
+
+	finalize_done = 0;
+	(void)ata_raid_finalize(self);
+
+	return 0;
 }
 
 /*
@@ -115,9 +136,12 @@ ata_raid_type_name(u_int type)
 		"Promise",
 		"Adaptec",
 		"VIA V-RAID",
+		"nVidia",
+		"JMicron",
+		"Intel MatrixRAID"
 	};
 
-	if (type < sizeof(ata_raid_type_names) / sizeof(ata_raid_type_names[0]))
+	if (type < __arraycount(ata_raid_type_names))
 		return (ata_raid_type_names[type]);
 
 	return (NULL);
@@ -129,7 +153,7 @@ ata_raid_type_name(u_int type)
  *	Autoconfiguration finalizer for ATA RAID.
  */
 static int
-ata_raid_finalize(struct device *self)
+ata_raid_finalize(device_t self)
 {
 	static struct cfdata ataraid_cfdata = {
 		.cf_name = "ataraid",
@@ -137,28 +161,16 @@ ata_raid_finalize(struct device *self)
 		.cf_unit = 0,
 		.cf_fstate = FSTATE_STAR,
 	};
-	extern struct cfdriver ataraid_cd;
-	static int done_once;
-	int error;
 
 	/*
-	 * Since we only handle real hardware, we only need to be
-	 * called once.
+	 * Only run once for each instantiation
 	 */
-	if (done_once)
-		return (0);
-	done_once = 1;
+	if (finalize_done)
+		return 0;
+	finalize_done = 1;
 
 	if (TAILQ_EMPTY(&ataraid_array_info_list))
 		goto out;
-
-	error = config_cfattach_attach(ataraid_cd.cd_name, &ataraid_ca);
-	if (error) {
-		printf("%s: unable to register cfattach, error = %d\n",
-		    ataraid_cd.cd_name, error);
-		(void) config_cfdriver_detach(&ataraid_cd);
-		goto out;
-	}
 
 	if (config_attach_pseudo(&ataraid_cfdata) == NULL)
 		printf("%s: unable to attach an instance\n",
@@ -174,8 +186,7 @@ ata_raid_finalize(struct device *self)
  *	Autoconfiguration glue: match routine.
  */
 static int
-ataraid_match(struct device *parent, struct cfdata *cf,
-    void *aux)
+ataraid_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	/* pseudo-device; always present */
@@ -188,8 +199,7 @@ ataraid_match(struct device *parent, struct cfdata *cf,
  *	Autoconfiguration glue: attach routine.  We attach the children.
  */
 static void
-ataraid_attach(struct device *parent, struct device *self,
-    void *aux)
+ataraid_attach(device_t parent, device_t self, void *aux)
 {
 	struct ataraid_array_info *aai;
 	int locs[ATARAIDCF_NLOCS];
@@ -198,8 +208,8 @@ ataraid_attach(struct device *parent, struct device *self,
 	 * We're a pseudo-device, so we get to announce our own
 	 * presence.
 	 */
-	aprint_normal("%s: found %u RAID volume%s\n",
-	    self->dv_xname, ataraid_array_info_count,
+	aprint_normal_dev(self, "found %u RAID volume%s\n",
+	    ataraid_array_info_count,
 	    ataraid_array_info_count == 1 ? "" : "s");
 
 	TAILQ_FOREACH(aai, &ataraid_array_info_list, aai_list) {
@@ -234,15 +244,21 @@ ataraid_print(void *aux, const char *pnp)
  *	Called via autoconfiguration callback.
  */
 void
-ata_raid_check_component(struct device *self)
+ata_raid_check_component(device_t self)
 {
-	struct wd_softc *sc = (void *) self;
+	struct wd_softc *sc = device_private(self);
 
 	if (ata_raid_read_config_adaptec(sc) == 0)
 		return;
 	if (ata_raid_read_config_promise(sc) == 0)
 		return;
 	if (ata_raid_read_config_via(sc) == 0)
+		return;
+	if (ata_raid_read_config_nvidia(sc) == 0)
+		return;
+	if (ata_raid_read_config_jmicron(sc) == 0)
+		return;
+	if (ata_raid_read_config_intel(sc) == 0)
 		return;
 }
 
@@ -261,13 +277,9 @@ ata_raid_get_array_info(u_int type, u_int arrayno)
 	aai = malloc(sizeof(*aai), M_DEVBUF, M_WAITOK | M_ZERO);
 	aai->aai_type = type;
 	aai->aai_arrayno = arrayno;
+	aai->aai_curdisk = 0;
 
 	ataraid_array_info_count++;
-
-	if (TAILQ_EMPTY(&ataraid_array_info_list)) {
-		TAILQ_INSERT_TAIL(&ataraid_array_info_list, aai, aai_list);
-		goto out;
-	}
 
 	/* Sort it into the list: type first, then array number. */
 	TAILQ_FOREACH(laai, &ataraid_array_info_list, aai_list) {
@@ -294,16 +306,73 @@ ata_raid_config_block_rw(struct vnode *vp, daddr_t blkno, void *tbuf,
 	struct buf *bp;
 	int error;
 
-	bp = getiobuf(vp, NULL);
+	bp = getiobuf(vp, false);
 	bp->b_blkno = blkno;
 	bp->b_bcount = bp->b_resid = size;
 	bp->b_flags = bflags;
 	bp->b_proc = curproc;
 	bp->b_data = tbuf;
+	SET(bp->b_cflags, BC_BUSY);	/* mark buffer busy */
 
 	VOP_STRATEGY(vp, bp);
 	error = biowait(bp);
 
 	putiobuf(bp);
 	return (error);
+}
+
+MODULE(MODULE_CLASS_DRIVER, ataraid, "");
+ 
+#ifdef _MODULE
+CFDRIVER_DECL(ataraid, DV_DISK, NULL);
+#endif
+ 
+static int
+ataraid_modcmd(modcmd_t cmd, void *arg)
+{
+        int error = 0; 
+   
+        switch (cmd) {
+        case MODULE_CMD_INIT:
+#ifdef _MODULE
+		error = config_cfdriver_attach(&ataraid_cd);
+		if (error) 
+			break;
+#endif
+
+		error = config_cfattach_attach(ataraid_cd.cd_name, &ataraid_ca);
+		if (error) {
+#ifdef _MODULE
+			config_cfdriver_detach(&ataraid_cd);
+#endif
+			aprint_error("%s: unable to register cfattach for \n"
+			    "%s, error %d", __func__, ataraid_cd.cd_name,
+			    error);
+			break;
+		}
+		break;
+	case MODULE_CMD_FINI:
+		error = config_cfattach_detach(ataraid_cd.cd_name, &ataraid_ca);
+		if (error) {
+			aprint_error("%s: failed to detach %s cfattach, "
+			    "error %d\n", __func__, ataraid_cd.cd_name, error);
+			break;
+		}
+#ifdef _MODULE
+		error = config_cfdriver_detach(&ataraid_cd);
+		if (error) {
+			(void)config_cfattach_attach(ataraid_cd.cd_name,
+			    &ataraid_ca);
+			aprint_error("%s: failed to detach %s cfdriver, "
+			    "error %d\n", __func__, ataraid_cd.cd_name, error);
+			break;
+		}
+#endif
+		break;
+	case MODULE_CMD_STAT:
+	default:
+		error = ENOTTY;
+	}
+
+	return error;
 }

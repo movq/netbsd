@@ -1,4 +1,4 @@
-/*	$NetBSD: mlx_eisa.c,v 1.19 2007/10/19 11:59:42 ad Exp $	*/
+/*	$NetBSD: mlx_eisa.c,v 1.26 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,12 +34,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mlx_eisa.c,v 1.19 2007/10/19 11:59:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mlx_eisa.c,v 1.26 2016/09/27 03:33:32 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-
+#include <sys/module.h>
 #include <sys/bus.h>
 #include <sys/intr.h>
 
@@ -56,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: mlx_eisa.c,v 1.19 2007/10/19 11:59:42 ad Exp $");
 #include <dev/ic/mlxreg.h>
 #include <dev/ic/mlxio.h>
 #include <dev/ic/mlxvar.h>
+
+#include "ioconf.h"
 
 #define	MLX_EISA_SLOT_OFFSET		0x0c80
 #define	MLX_EISA_IOSIZE			(0x0ce0 - MLX_EISA_SLOT_OFFSET)
@@ -70,8 +65,9 @@ __KERNEL_RCSID(0, "$NetBSD: mlx_eisa.c,v 1.19 2007/10/19 11:59:42 ad Exp $");
 #define	MLX_EISA_CFG09			(0x0c94 - MLX_EISA_SLOT_OFFSET)
 #define	MLX_EISA_CFG10			(0x0c95 - MLX_EISA_SLOT_OFFSET)
 
-static void	mlx_eisa_attach(struct device *, struct device *, void *);
-static int	mlx_eisa_match(struct device *, struct cfdata *, void *);
+static void	mlx_eisa_attach(device_t, device_t, void *);
+static int	mlx_eisa_match(device_t, cfdata_t, void *);
+static int	mlx_eisa_rescan(device_t, const char *, const int *);
 
 static int	mlx_v1_submit(struct mlx_softc *, struct mlx_ccb *);
 static int	mlx_v1_findcomplete(struct mlx_softc *, u_int *, u_int *);
@@ -81,8 +77,8 @@ static int	mlx_v1_fw_handshake(struct mlx_softc *, int *, int *, int *);
 static int	mlx_v1_reset(struct mlx_softc *);
 #endif
 
-CFATTACH_DECL(mlx_eisa, sizeof(struct mlx_softc),
-    mlx_eisa_match, mlx_eisa_attach, NULL, NULL);
+CFATTACH_DECL3_NEW(mlx_eisa, sizeof(struct mlx_softc),
+    mlx_eisa_match, mlx_eisa_attach, NULL, NULL, mlx_eisa_rescan, NULL, 0);
 
 static struct mlx_eisa_prod {
 	const char	*mp_idstr;
@@ -99,7 +95,7 @@ static struct mlx_eisa_prod {
 };
 
 static int
-mlx_eisa_match(struct device *parent, struct cfdata *match,
+mlx_eisa_match(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct eisa_attach_args *ea;
@@ -115,7 +111,7 @@ mlx_eisa_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-mlx_eisa_attach(struct device *parent, struct device *self, void *aux)
+mlx_eisa_attach(device_t parent, device_t self, void *aux)
 {
 	struct eisa_attach_args *ea;
 	bus_space_handle_t ioh;
@@ -125,6 +121,7 @@ mlx_eisa_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_tag_t iot;
 	const char *intrstr;
 	int irq, i, icfg;
+	char intrbuf[EISA_INTRSTR_LEN];
 
 	ea = aux;
 	mlx = device_private(self);
@@ -133,10 +130,11 @@ mlx_eisa_attach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(iot, EISA_SLOT_ADDR(ea->ea_slot) +
 	    MLX_EISA_SLOT_OFFSET, MLX_EISA_IOSIZE, 0, &ioh)) {
-		printf("can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
+	mlx->mlx_dv = self;
 	mlx->mlx_iot = iot;
 	mlx->mlx_ioh = ioh;
 	mlx->mlx_dmat = ea->ea_dmat;
@@ -160,24 +158,24 @@ mlx_eisa_attach(struct device *parent, struct device *self, void *aux)
 		irq = 15;
 		break;
 	default:
-		printf("controller on invalid IRQ\n");
+		aprint_error(": controller on invalid IRQ\n");
 		return;
 	}
 
 	if (eisa_intr_map(ec, irq, &ih)) {
-		printf("can't map interrupt (%d)\n", irq);
+		aprint_error(": can't map interrupt (%d)\n", irq);
 		return;
 	}
 
-	intrstr = eisa_intr_string(ec, ih);
+	intrstr = eisa_intr_string(ec, ih, intrbuf, sizeof(intrbuf));
 	mlx->mlx_ih = eisa_intr_establish(ec, ih,
 	    ((icfg & 0x08) != 0 ? IST_LEVEL : IST_EDGE),
 	    IPL_BIO, mlx_intr, mlx);
 	if (mlx->mlx_ih == NULL) {
-		printf("can't establish interrupt");
+		aprint_error(": can't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_normal(" at %s", intrstr);
+		aprint_normal("\n");
 		return;
 	}
 
@@ -196,8 +194,15 @@ mlx_eisa_attach(struct device *parent, struct device *self, void *aux)
 	mlx->mlx_reset = mlx_v1_reset;
 #endif
 
-	printf(": Mylex RAID\n");
+	aprint_normal(": Mylex RAID\n");
 	mlx_init(mlx, intrstr);
+}
+
+static int
+mlx_eisa_rescan(device_t self, const char *attr, const int *flag)
+{
+
+	return mlx_configure(device_private(self), 1);
 }
 
 /*
@@ -358,3 +363,44 @@ mlx_v1_reset(struct mlx_softc *mlx)
 	return (0);
 }
 #endif	/* MLX_RESET */
+
+MODULE(MODULE_CLASS_DRIVER, mlx_eisa, "mlx");   /* No eisa module yet! */
+            
+#ifdef _MODULE
+/*              
+ * XXX Don't allow ioconf.c to redefine the "struct cfdriver cac_cd"
+ * XXX it will be defined in the common-code module
+ */
+#undef  CFDRIVER_DECL
+#define CFDRIVER_DECL(name, class, attr)
+#include "ioconf.c"
+#endif 
+
+static int
+mlx_eisa_modcmd(modcmd_t cmd, void *opaque)
+{
+	int error = 0;
+
+#ifdef _MODULE
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		/*
+		 * We skip over the first entry in cfdriver[] array
+		 * since the cfdriver is attached by the common
+		 * (non-attachment-specific) code.
+		 */
+		error = config_init_component(&cfdriver_ioconf_mlx_eisa[1],
+		    cfattach_ioconf_mlx_eisa, cfdata_ioconf_mlx_eisa);
+		break;
+	case MODULE_CMD_FINI:
+		error = config_fini_component(&cfdriver_ioconf_mlx_eisa[1],
+		    cfattach_ioconf_mlx_eisa, cfdata_ioconf_mlx_eisa);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+#endif
+
+	return error;
+}

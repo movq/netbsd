@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.c,v 1.36 2007/12/17 22:06:00 christos Exp $	*/
+/*	$NetBSD: lex.c,v 1.45 2018/02/04 09:01:12 mrg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,19 +34,20 @@
 #if 0
 static char sccsid[] = "@(#)lex.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: lex.c,v 1.36 2007/12/17 22:06:00 christos Exp $");
+__RCSID("$NetBSD: lex.c,v 1.45 2018/02/04 09:01:12 mrg Exp $");
 #endif
 #endif /* not lint */
 
 #include <assert.h>
+#include <util.h>
 
 #include "rcv.h"
-#include <util.h>
 #include "extern.h"
 #ifdef USE_EDITLINE
 #include "complete.h"
 #endif
 #include "format.h"
+#include "sig.h"
 #include "thread.h"
 
 /*
@@ -57,8 +58,129 @@ __RCSID("$NetBSD: lex.c,v 1.36 2007/12/17 22:06:00 christos Exp $");
 
 static const char *prompt = DEFAULT_PROMPT;
 static int	*msgvec;
-static int	reset_on_stop;		/* do a reset() if stopped */
+static int	inithdr;		/* Am printing startup headers. */
+static jmp_buf	jmpbuf;			/* The reset jmpbuf */
+static int	reset_on_stop;		/* To do job control longjmp. */
 
+#ifdef DEBUG_FILE_LEAK
+struct glue {
+	struct  glue *next;
+	int     niobs;
+	FILE    *iobs;
+};
+extern struct glue __sglue;
+
+static int open_fd_cnt;
+static int open_fp_cnt;
+
+static int
+file_count(void)
+{
+	struct glue *gp;
+	FILE *fp;
+	int n;
+	int cnt;
+
+	cnt = 0;
+	for (gp = &__sglue; gp; gp = gp->next) {
+		for (fp = gp->iobs, n = gp->niobs; --n >= 0; fp++)
+			if (fp->_flags)
+				cnt++;
+	}
+	return cnt;
+}
+
+static int
+fds_count(void)
+{
+	int maxfd;
+	int cnt;
+	int fd;
+
+	maxfd = fcntl(0, F_MAXFD);
+	if (maxfd == -1) {
+		warn("fcntl");
+		return -1;
+	}
+
+	cnt = 0;
+	for (fd = 0; fd <= maxfd; fd++) {
+		struct stat sb;
+
+		if (fstat(fd, &sb) != -1)
+			cnt++;
+		else if (errno != EBADF
+#ifdef BROKEN_CLONE_STAT /* see PRs 37878 and 37550 */
+		    && errno != EOPNOTSUPP
+#endif
+			)
+			warn("fstat(%d): errno=%d", fd, errno);
+	}
+	return cnt;
+}
+
+static void
+file_leak_init(void)
+{
+	open_fd_cnt = fds_count();
+	open_fp_cnt = file_count();
+}
+
+static void
+file_leak_check(void)
+{
+	if (open_fp_cnt != file_count() ||
+	    open_fd_cnt != fds_count()) {
+		(void)printf("FILE LEAK WARNING: "
+		    "fp-count: %d (%d)  "
+		    "fd-count: %d (%d)  max-fd: %d\n",
+		    file_count(), open_fp_cnt,
+		    fds_count(), open_fd_cnt,
+		    fcntl(0, F_MAXFD));
+	}
+}
+#endif /* DEBUG_FILE_LEAK */
+
+static void
+update_mailname(const char *name)
+{
+	char tbuf[PATHSIZE];
+	size_t l;
+
+	/* Don't realpath(3) if it's only an update request */
+	if (name != NULL && realpath(name, mailname) == NULL) {
+		warn("Can't canonicalize `%s'", name);
+		return;
+	}
+
+	if (getfold(tbuf, sizeof(tbuf)) >= 0) {
+		l = strlen(tbuf);
+		if (l < sizeof(tbuf) - 1)
+			tbuf[l++] = '/';
+		if (strncmp(tbuf, mailname, l) == 0) {
+			char const *sep = "", *cp = mailname + l;
+
+			l = strlen(cp);
+			if (l >= sizeof(displayname)) {
+				cp += l;
+				cp -= sizeof(displayname) - 5;
+				sep = "...";
+			}
+			(void)snprintf(displayname, sizeof(displayname),
+			    "+%s%s", sep, cp);
+			return;
+		}
+	}
+
+	l = strlen(mailname);
+	if (l < sizeof(displayname))
+		strcpy(displayname, mailname);
+	else {
+		l -= sizeof(displayname) - 4 - sizeof(displayname) / 3;
+		(void)snprintf(displayname, sizeof(displayname), "%.*s...%s",
+			(int)sizeof(displayname) / 3, mailname, mailname + l);
+	}
+}
 
 /*
  * Set the size of the message vector used to construct argument
@@ -92,10 +214,10 @@ setfile(const char *name)
 	if ((name = expand(name)) == NULL)
 		return -1;
 
-	if ((ibuf = Fopen(name, "r")) == NULL) {
+	if ((ibuf = Fopen(name, "ref")) == NULL) {
 		if (!isedit && errno == ENOENT)
 			goto nomail;
-		warn("%s", name);
+		warn("Can't open `%s'", name);
 		return -1;
 	}
 
@@ -129,9 +251,10 @@ setfile(const char *name)
 	 * the message[] data structure.
 	 */
 
-	holdsigs();
+	sig_check();
+	sig_hold();
 	if (shudclob)
-		quit();
+		quit(jmpbuf);
 
 	/*
 	 * Copy the messages into /tmp
@@ -150,18 +273,15 @@ setfile(const char *name)
 	shudclob = 1;
 	edit = isedit;
 	(void)strcpy(prevfile, mailname);
-	if (name != mailname)
-		(void)strcpy(mailname, name);
+	update_mailname(name != mailname ? name : NULL);
 	mailsize = fsize(ibuf);
 	(void)snprintf(tempname, sizeof(tempname),
 	    "%s/mail.RxXXXXXXXXXX", tmpdir);
 	if ((fd = mkstemp(tempname)) == -1 ||
-	    (otf = fdopen(fd, "w")) == NULL)
-		err(1, "%s", tempname);
-	(void)fcntl(fileno(otf), F_SETFD, FD_CLOEXEC);
-	if ((itf = fopen(tempname, "r")) == NULL)
-		err(1, "%s", tempname);
-	(void)fcntl(fileno(itf), F_SETFD, FD_CLOEXEC);
+	    (otf = fdopen(fd, "wef")) == NULL)
+		err(EXIT_FAILURE, "Can't create tmp file `%s'", tempname);
+	if ((itf = fopen(tempname, "ref")) == NULL)
+		err(EXIT_FAILURE, "Can't create tmp file `%s'", tempname);
 	(void)rm(tempname);
 	setptr(ibuf, (off_t)0);
 	setmsize(get_abs_msgCount());
@@ -172,7 +292,8 @@ setfile(const char *name)
 	 */
 	mailsize = ftell(ibuf);
 	(void)Fclose(ibuf);
-	relsesigs();
+	sig_release();
+	sig_check();
 	sawcom = 0;
 	if (!edit && get_abs_msgCount() == 0) {
 nomail:
@@ -196,10 +317,11 @@ incfile(void)
 
 	omsgCount = get_abs_msgCount();
 
-	ibuf = Fopen(mailname, "r");
+	ibuf = Fopen(mailname, "ref");
 	if (ibuf == NULL)
 		return -1;
-	holdsigs();
+	sig_check();
+	sig_hold();
 	newsize = fsize(ibuf);
 	if (newsize == 0 ||		/* mail box is now empty??? */
 	    newsize < mailsize) {	/* mail box has shrunk??? */
@@ -216,7 +338,8 @@ incfile(void)
 	rval = get_abs_msgCount() - omsgCount;
  done:
 	(void)Fclose(ibuf);
-	relsesigs();
+	sig_release();
+	sig_check();
 	return rval;
 }
 
@@ -245,29 +368,6 @@ comment_char(char *line)
 }
 
 /*
- * When we wake up after ^Z, reprint the prompt.
- */
-static void
-stop(int s)
-{
-	sig_t old_action = signal(s, SIG_DFL);
-	sigset_t nset;
-
-	(void)sigemptyset(&nset);
-	(void)sigaddset(&nset, s);
-	(void)sigprocmask(SIG_UNBLOCK, &nset, NULL);
-	(void)kill(0, s);
-	(void)sigprocmask(SIG_BLOCK, &nset, NULL);
-	(void)signal(s, old_action);
-	if (reset_on_stop) {
-		reset_on_stop = 0;
-		reset(0);
-	}
-}
-
-
-
-/*
  * Signal handler is hooked by setup_piping().
  * Respond to a broken pipe signal --
  * probably caused by quitting more.
@@ -275,10 +375,11 @@ stop(int s)
 static jmp_buf	pipestop;
 
 /*ARGSUSED*/
-static void
-brokpipe(int signo __unused)
+__dead static void
+lex_brokpipe(int signo)
 {
-	longjmp(pipestop, 1);
+
+	longjmp(pipestop, signo);
 }
 
 /*
@@ -331,18 +432,50 @@ shellpr(char *cp)
 	return NULL;
 }
 
+static int
+do_paging(const char *cmd, int c_pipe)
+{
+	char *cp, *p;
+
+	if (value(ENAME_PAGER_OFF) != NULL)
+		return 0;
+
+	if (c_pipe & C_PIPE_PAGER)
+		return 1;
+
+	if (c_pipe & C_PIPE_CRT && value(ENAME_CRT) != NULL)
+		return 1;
+
+	if ((cp = value(ENAME_PAGE_ALSO)) == NULL)
+		return 0;
+
+	if ((p = strcasestr(cp, cmd)) == NULL)
+		return 0;
+
+	if (p != cp && p[-1] != ',' && !is_WSP(p[-1]))
+		return 0;
+
+	p += strlen(cmd);
+
+	return (*p == '\0' || *p == ',' || is_WSP(*p));
+}
+
 /*
  * Setup any pipe or redirection that the command line indicates.
  * If none, then setup the pager unless "pager-off" is defined.
  */
 static FILE *fp_stop = NULL;
 static int oldfd1 = -1;
+static sig_t old_sigpipe;
+
 static int
-setup_piping(char *cmdline, int c_pipe)
+setup_piping(const char *cmd, char *cmdline, int c_pipe)
 {
 	FILE *fout;
 	FILE *last_file;
 	char *cp;
+
+	sig_check();
 
 	last_file = last_registered_file(0);
 
@@ -354,7 +487,7 @@ setup_piping(char *cmdline, int c_pipe)
 		cp++;
 
 		if (c == '|') {
-			if ((fout = Popen(cp, "w")) == NULL) {
+			if ((fout = Popen(cp, "we")) == NULL) {
 				warn("Popen: %s", cp);
 				return -1;
 			}
@@ -362,7 +495,7 @@ setup_piping(char *cmdline, int c_pipe)
 		else {
 			const char *mode;
 			assert(c == '>');
-			mode = *cp == '>' ? "a" : "w";
+			mode = *cp == '>' ? "ae" : "we";
 			if (*cp == '>')
 				cp++;
 
@@ -374,21 +507,20 @@ setup_piping(char *cmdline, int c_pipe)
 		}
 
 	}
-	else if (value(ENAME_PAGER_OFF) == NULL && (c_pipe & C_PIPE_PAGER ||
-		(c_pipe & C_PIPE_CRT && value(ENAME_CRT) != NULL))) {
+	else if (do_paging(cmd, c_pipe)) {
 		const char *pager;
 		pager = value(ENAME_PAGER);
 		if (pager == NULL || *pager == '\0')
 			pager = _PATH_MORE;
 
-		if ((fout = Popen(pager, "w")) == NULL) {
+		if ((fout = Popen(pager, "we")) == NULL) {
 			warn("Popen: %s", pager);
 			return -1;
 		}
 	}
 
 	if (fout) {
-		(void)signal(SIGPIPE, brokpipe);
+		old_sigpipe = sig_signal(SIGPIPE, lex_brokpipe);
 		(void)fflush(stdout);
 		if ((oldfd1 = dup(STDOUT_FILENO)) == -1)
 			err(EXIT_FAILURE, "dup failed");
@@ -405,19 +537,26 @@ setup_piping(char *cmdline, int c_pipe)
 static void
 close_piping(void)
 {
+	sigset_t oset;
+	struct sigaction osa;
+
 	if (oldfd1 != -1) {
 		(void)fflush(stdout);
 		if (fileno(stdout) != oldfd1 &&
 		    dup2(oldfd1, STDOUT_FILENO) == -1)
 			err(EXIT_FAILURE, "dup2 failed");
 
-		(void)signal(SIGPIPE, SIG_IGN);
+		(void)sig_ignore(SIGPIPE, &osa, &oset);
+
 		close_top_files(fp_stop);
 		fp_stop = NULL;
 		(void)close(oldfd1);
 		oldfd1 = -1;
-		(void)signal(SIGPIPE, SIG_DFL);
+
+		(void)sig_signal(SIGPIPE, old_sigpipe);
+		(void)sig_restore(SIGPIPE, &osa, &oset);
 	}
+	sig_check();
 }
 
 /*
@@ -484,10 +623,11 @@ execute(char linebuf[], enum execute_contxt_e contxt)
 {
 	char *word;
 	char *arglist[MAXARGC];
-	const struct cmd *com = NULL;
+	const struct cmd * volatile com = NULL;
 	char *volatile cp;
+	int retval;
 	int c;
-	int e = 1;
+	volatile int e = 1;
 
 	/*
 	 * Strip the white space away from the beginning
@@ -563,10 +703,12 @@ execute(char linebuf[], enum execute_contxt_e contxt)
 	}
 
 	if (!sourcing && com->c_pipe && value(ENAME_INTERACTIVE) != NULL) {
+
+		sig_check();
 		if (setjmp(pipestop))
 			goto out;
 
-		if (setup_piping(cp, com->c_pipe) == -1)
+		if (setup_piping(com->c_name, cp, com->c_pipe) == -1)
 			goto out;
 	}
 	switch (com->c_argtype & ARGTYPE_MASK) {
@@ -619,8 +761,7 @@ execute(char linebuf[], enum execute_contxt_e contxt)
 		/*
 		 * A vector of strings, in shell style.
 		 */
-		if ((c = getrawlist(cp, arglist,
-				sizeof(arglist) / sizeof(*arglist))) < 0)
+		if ((c = getrawlist(cp, arglist, (int)__arraycount(arglist))) < 0)
 			break;
 		if (c < com->c_minargs) {
 			(void)printf("%s requires at least %d arg(s)\n",
@@ -644,7 +785,7 @@ execute(char linebuf[], enum execute_contxt_e contxt)
 		break;
 
 	default:
-		errx(1, "Unknown argtype");
+		errx(EXIT_FAILURE, "Unknown argtype");
 	}
 
 out:
@@ -654,39 +795,38 @@ out:
 	 * Exit the current source file on
 	 * error.
 	 */
+	retval = 0;
 	if (e) {
 		if (e < 0)
-			return 1;
-		if (loading)
-			return 1;
-		if (sourcing)
+			retval = 1;
+		else if (loading)
+			retval = 1;
+		else if (sourcing)
 			(void)unstack();
-		return 0;
 	}
-	if (com == NULL)
-		return 0;
-	if (contxt != ec_autoprint && com->c_argtype & P &&
-	    value(ENAME_AUTOPRINT) != NULL && (dot->m_flag & MDELETED) == 0)
-		(void)execute(__UNCONST("print ."), ec_autoprint);
-	if (!sourcing && (com->c_argtype & T) == 0)
-		sawcom = 1;
-	return 0;
+	else if (com != NULL) {
+		if (contxt != ec_autoprint && com->c_argtype & P &&
+		    value(ENAME_AUTOPRINT) != NULL &&
+		    (dot->m_flag & MDELETED) == 0)
+			(void)execute(__UNCONST("print ."), ec_autoprint);
+		if (!sourcing && (com->c_argtype & T) == 0)
+			sawcom = 1;
+	}
+	sig_check();
+	return retval;
 }
-
 
 /*
  * The following gets called on receipt of an interrupt.  This is
  * to abort printout of a command, mainly.
- * Dispatching here when command() is inactive crashes rcv.
+ * Dispatching here when commands() is inactive crashes rcv.
  * Close all open files except 0, 1, 2, and the temporary.
  * Also, unstack all source files.
  */
-static int	inithdr;	/* am printing startup headers */
-
-/*ARGSUSED*/
-static void
-intr(int s __unused)
+__dead static void
+lex_intr(int signo)
 {
+
 	noreset = 0;
 	if (!inithdr)
 		sawcom++;
@@ -702,18 +842,35 @@ intr(int s __unused)
 		image = -1;
 	}
 	(void)fprintf(stderr, "Interrupt\n");
-	reset(0);
+	longjmp(jmpbuf, signo);
 }
 
 /*
  * Branch here on hangup signal and simulate "exit".
  */
 /*ARGSUSED*/
-static void
-hangup(int s __unused)
+__dead static void
+lex_hangup(int s __unused)
 {
+
 	/* nothing to do? */
-	exit(1);
+	exit(EXIT_FAILURE);
+}
+
+/*
+ * When we wake up after ^Z, reprint the prompt.
+ *
+ * NOTE: EditLine deals with the prompt and job control, so with it
+ * this does nothing, i.e., reset_on_stop == 0.
+ */
+static void
+lex_stop(int signo)
+{
+
+	if (reset_on_stop) {
+		reset_on_stop = 0;
+		longjmp(jmpbuf, signo);
+	}
 }
 
 /*
@@ -727,18 +884,27 @@ commands(void)
 	char linebuf[LINESIZE];
 	int eofloop;
 
+#ifdef DEBUG_FILE_LEAK
+	file_leak_init();
+#endif
+
 	if (!sourcing) {
-		if (signal(SIGINT, SIG_IGN) != SIG_IGN)
-			(void)signal(SIGINT, intr);
-		if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
-			(void)signal(SIGHUP, hangup);
-		(void)signal(SIGTSTP, stop);
-		(void)signal(SIGTTOU, stop);
-		(void)signal(SIGTTIN, stop);
+		sig_check();
+
+		sig_hold();
+		(void)sig_signal(SIGINT,  lex_intr);
+		(void)sig_signal(SIGHUP,  lex_hangup);
+		(void)sig_signal(SIGTSTP, lex_stop);
+		(void)sig_signal(SIGTTOU, lex_stop);
+		(void)sig_signal(SIGTTIN, lex_stop);
+		sig_release();
 	}
-	setexit();	/* defined as (void)setjmp(srbuf) in def.h */
+
+	(void)setjmp(jmpbuf);	/* "reset" location if we got an interrupt */
+
 	eofloop = 0;	/* initialize this after a possible longjmp */
 	for (;;) {
+		sig_check();
 		(void)fflush(stdout);
 		sreset();
 		/*
@@ -751,82 +917,83 @@ commands(void)
 			prompt = smsgprintf(prompt, dot);
 			if ((value(ENAME_AUTOINC) != NULL) && (incfile() > 0))
 				(void)printf("New mail has arrived.\n");
-			reset_on_stop = 1;
+
 #ifndef USE_EDITLINE
+			reset_on_stop = 1;	/* enable job control longjmp */
 			(void)printf("%s", prompt);
 #endif
 		}
+#ifdef DEBUG_FILE_LEAK
+		file_leak_check();
+#endif
 		/*
 		 * Read a line of commands from the current input
 		 * and handle end of file specially.
 		 */
 		n = 0;
 		for (;;) {
+			sig_check();
 #ifdef USE_EDITLINE
 			if (!sourcing) {
 				char *line;
-				if ((line = my_gets(&elm.command, prompt, NULL)) == NULL) {
+
+				line = my_gets(&elm.command, prompt, NULL);
+				if (line == NULL) {
 					if (n == 0)
 						n = -1;
 					break;
 				}
 				(void)strlcpy(linebuf, line, sizeof(linebuf));
-				setscreensize();	/* so we can resize a window */
 			}
 			else {
-				if (mail_readline(input, &linebuf[n], LINESIZE - n) < 0) {
+				if (readline(input, &linebuf[n], LINESIZE - n, 0) < 0) {
 					if (n == 0)
 						n = -1;
 					break;
 				}
 			}
 #else /* USE_EDITLINE */
-			if (mail_readline(input, &linebuf[n], LINESIZE - n) < 0) {
+			if (readline(input, &linebuf[n], LINESIZE - n, reset_on_stop) < 0) {
 				if (n == 0)
 					n = -1;
 				break;
 			}
 #endif /* USE_EDITLINE */
+			if (!sourcing)
+				setscreensize(); /* so we can resize window */
 
 			if (sourcing) {  /* allow comments in source files */
 				char *ptr;
 				if ((ptr = comment_char(linebuf)) != NULL)
 					*ptr = '\0';
 			}
-			if ((n = strlen(linebuf)) == 0)
+			if ((n = (int)strlen(linebuf)) == 0)
 				break;
 			n--;
 			if (linebuf[n] != '\\')
 				break;
 			linebuf[n++] = ' ';
 		}
-		reset_on_stop = 0;
+#ifndef USE_EDITLINE
+		sig_check();
+		reset_on_stop = 0;	/* disable job control longjmp */
+#endif
 		if (n < 0) {
-				/* eof */
+			char *p;
+
+			/* eof */
 			if (loading)
 				break;
 			if (sourcing) {
 				(void)unstack();
 				continue;
 			}
-#ifdef USE_EDITLINE
-			{
-				char *p;
-				if (value(ENAME_INTERACTIVE) != NULL &&
-				    (p = value(ENAME_IGNOREEOF)) != NULL &&
-				    ++eofloop < (*p == '\0' ? 25 : atoi(p))) {
-					(void)printf("Use \"quit\" to quit.\n");
-					continue;
-				}
-			}
-#else
 			if (value(ENAME_INTERACTIVE) != NULL &&
-			    value(ENAME_IGNOREEOF) != NULL &&
-			    ++eofloop < 25) {
+			    (p = value(ENAME_IGNOREEOF)) != NULL &&
+			    ++eofloop < (*p == '\0' ? 25 : atoi(p))) {
 				(void)printf("Use \"quit\" to quit.\n");
 				continue;
 			}
-#endif
 			break;
 		}
 		eofloop = 0;
@@ -844,8 +1011,6 @@ newfileinfo(int omsgCount)
 {
 	struct message *mp;
 	int d, n, s, t, u, mdot;
-	char fname[PATHSIZE];
-	char *ename;
 
 	/*
 	 * Figure out where to set the 'dot'.  Use the first new or
@@ -889,23 +1054,11 @@ newfileinfo(int omsgCount)
 		if (mp->m_flag & MTAGGED)
 			t++;
 	}
-	ename = mailname;
-	if (getfold(fname, sizeof(fname)) >= 0) {
-		char zname[PATHSIZE];
-		size_t l;
-		l = strlen(fname);
-		if (l < sizeof(fname) - 1)
-			fname[l++] = '/';
-		if (strncmp(fname, mailname, l) == 0) {
-			(void)snprintf(zname, sizeof(zname), "+%s",
-			    mailname + l);
-			ename = zname;
-		}
-	}
 	/*
 	 * Display the statistics.
 	 */
-	(void)printf("\"%s\": ", ename);
+	update_mailname(NULL);
+	(void)printf("\"%s\": ", displayname);
 	{
 		int cnt = get_abs_msgCount();
 		(void)printf("%d message%s", cnt, cnt == 1 ? "" : "s");
@@ -968,7 +1121,7 @@ load(const char *name)
 {
 	FILE *in, *oldin;
 
-	if ((in = Fopen(name, "r")) == NULL)
+	if ((in = Fopen(name, "ref")) == NULL)
 		return;
 	oldin = input;
 	input = in;

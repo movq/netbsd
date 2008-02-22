@@ -1,4 +1,4 @@
-/* $NetBSD: moused.c,v 1.16 2007/01/16 17:32:05 hubertf Exp $ */
+/* $NetBSD: moused.c,v 1.25 2014/10/18 08:33:31 snj Exp $ */
 /**
  ** Copyright (c) 1995 Michael Smith, All rights reserved.
  **
@@ -48,7 +48,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: moused.c,v 1.16 2007/01/16 17:32:05 hubertf Exp $");
+__RCSID("$NetBSD: moused.c,v 1.25 2014/10/18 08:33:31 snj Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -70,6 +70,7 @@ __RCSID("$NetBSD: moused.c,v 1.16 2007/01/16 17:32:05 hubertf Exp $");
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>
+#include <stdint.h>
 #include <sys/un.h>
 #include <poll.h>
 #include <unistd.h>
@@ -111,7 +112,7 @@ __RCSID("$NetBSD: moused.c,v 1.16 2007/01/16 17:32:05 hubertf Exp $");
 
 /* symbol table entry */
 typedef struct {
-    char *name;
+    const char *name;
     int val;
     int val2;
 } symtab_t;
@@ -119,11 +120,11 @@ typedef struct {
 /* serial PnP ID string */
 typedef struct {
     int revision;	/* PnP revision, 100 for 1.00 */
-    char *eisaid;	/* EISA ID including mfr ID and product ID */
-    char *serial;	/* serial No, optional */
-    char *class;	/* device class, optional */
-    char *compat;	/* list of compatible drivers, optional */
-    char *description;	/* product description, optional */
+    const char *eisaid;	/* EISA ID including mfr ID and product ID */
+    const char *serial;	/* serial No, optional */
+    const char *class;	/* device class, optional */
+    const char *compat;	/* list of compatible drivers, optional */
+    const char *description;	/* product description, optional */
     int neisaid;	/* length of the above fields... */
     int nserial;
     int nclass;
@@ -133,27 +134,27 @@ typedef struct {
 
 /* global variables */
 
-int	dbg = 0;
-int	nodaemon = FALSE;
-int	background = FALSE;
-int	identify = ID_NONE;
-char	*pidfile = "/var/run/moused.pid";
+static int	dbg = 0;
+static int	nodaemon = FALSE;
+static int	background = FALSE;
+static int	identify = ID_NONE;
+static const char *pidfile = "/var/run/moused.pid";
 
 /* local variables */
 
 /* interface (the table must be ordered by MOUSE_IF_XXX in mouse.h) */
 static symtab_t rifs[] = {
-    { "serial",		MOUSE_IF_SERIAL },
-    { "bus",		MOUSE_IF_BUS },
-    { "inport",		MOUSE_IF_INPORT },
-    { "ps/2",		MOUSE_IF_PS2 },
-    { "sysmouse",	MOUSE_IF_SYSMOUSE },
-    { "usb",		MOUSE_IF_USB },
-    { NULL,		MOUSE_IF_UNKNOWN },
+    { "serial",		MOUSE_IF_SERIAL, 0 },
+    { "bus",		MOUSE_IF_BUS, 0 },
+    { "inport",		MOUSE_IF_INPORT, 0 },
+    { "ps/2",		MOUSE_IF_PS2, 0 },
+    { "sysmouse",	MOUSE_IF_SYSMOUSE, 0 },
+    { "usb",		MOUSE_IF_USB, 0 },
+    { NULL,		MOUSE_IF_UNKNOWN, 0 },
 };
 
 /* types (the table must be ordered by MOUSE_PROTO_XXX in mouse.h) */
-static char *rnames[] = {
+static const char *rnames[] = {
     "microsoft",
     "mousesystems",
     "logitech",
@@ -177,20 +178,20 @@ static char *rnames[] = {
 
 /* models */
 static symtab_t	rmodels[] = {
-    { "NetScroll",		MOUSE_MODEL_NETSCROLL },
-    { "NetMouse/NetScroll Optical", MOUSE_MODEL_NET },
-    { "GlidePoint",		MOUSE_MODEL_GLIDEPOINT },
-    { "ThinkingMouse",		MOUSE_MODEL_THINK },
-    { "IntelliMouse",		MOUSE_MODEL_INTELLI },
-    { "EasyScroll/SmartScroll",	MOUSE_MODEL_EASYSCROLL },
-    { "MouseMan+",		MOUSE_MODEL_MOUSEMANPLUS },
-    { "Kidspad",		MOUSE_MODEL_KIDSPAD },
-    { "VersaPad",		MOUSE_MODEL_VERSAPAD },
-    { "IntelliMouse Explorer",	MOUSE_MODEL_EXPLORER },
-    { "4D Mouse",		MOUSE_MODEL_4D },
-    { "4D+ Mouse",		MOUSE_MODEL_4DPLUS },
-    { "generic",		MOUSE_MODEL_GENERIC },
-    { NULL, 			MOUSE_MODEL_UNKNOWN },
+    { "NetScroll",		MOUSE_MODEL_NETSCROLL, 0 },
+    { "NetMouse/NetScroll Optical", MOUSE_MODEL_NET, 0 },
+    { "GlidePoint",		MOUSE_MODEL_GLIDEPOINT, 0 },
+    { "ThinkingMouse",		MOUSE_MODEL_THINK, 0 },
+    { "IntelliMouse",		MOUSE_MODEL_INTELLI, 0 },
+    { "EasyScroll/SmartScroll",	MOUSE_MODEL_EASYSCROLL, 0 },
+    { "MouseMan+",		MOUSE_MODEL_MOUSEMANPLUS, 0 },
+    { "Kidspad",		MOUSE_MODEL_KIDSPAD, 0 },
+    { "VersaPad",		MOUSE_MODEL_VERSAPAD, 0 },
+    { "IntelliMouse Explorer",	MOUSE_MODEL_EXPLORER, 0 },
+    { "4D Mouse",		MOUSE_MODEL_4D, 0 },
+    { "4D+ Mouse",		MOUSE_MODEL_4DPLUS, 0 },
+    { "generic",		MOUSE_MODEL_GENERIC, 0 },
+    { NULL, 			MOUSE_MODEL_UNKNOWN, 0 },
 };
 
 /* PnP EISA/product IDs */
@@ -357,23 +358,23 @@ static struct rodentparam {
     float accelx;		/* Acceleration in the X axis */
     float accely;		/* Acceleration in the Y axis */
 } rodent = { 
-    flags : 0, 
-    portname : NULL,
-    rtype : MOUSE_PROTO_UNKNOWN,
-    level : -1,
-    baudrate : 1200, 
-    rate : 0,
-    resolution : MOUSE_RES_UNKNOWN, 
-    zmap: { 0, 0, 0, 0 },
-    wmode: 0,
-    mfd : -1,
-    cfd : -1,
-    mremsfd : -1,
-    mremcfd : -1,
-    clickthreshold : DFLT_CLICKTHRESHOLD,
-    button2timeout : DFLT_BUTTON2TIMEOUT,
-    accelx : 1.0,
-    accely : 1.0,
+    .flags = 0, 
+    .portname = NULL,
+    .rtype = MOUSE_PROTO_UNKNOWN,
+    .level = -1,
+    .baudrate = 1200, 
+    .rate = 0,
+    .resolution = MOUSE_RES_UNKNOWN, 
+    .zmap = { 0, 0, 0, 0 },
+    .wmode = 0,
+    .mfd = -1,
+    .cfd = -1,
+    .mremsfd = -1,
+    .mremcfd = -1,
+    .clickthreshold = DFLT_CLICKTHRESHOLD,
+    .button2timeout = DFLT_BUTTON2TIMEOUT,
+    .accelx = 1.0,
+    .accely = 1.0,
 };
 
 /* button status */
@@ -437,15 +438,15 @@ static jmp_buf env;
 
 /* function prototypes */
 
-static void	moused(char *);
-static void	hup(int sig);
-static void	cleanup(int sig);
-static void	usage(void);
+static void	moused(const char *);
+__dead static void	hup(int sig);
+__dead static void	cleanup(int sig);
+__dead static void	usage(void);
 
 static int	r_identify(void);
-static char	*r_if(int type);
-static char	*r_name(int type);
-static char	*r_model(int model);
+static const char *r_if(int type);
+static const char *r_name(int type);
+static const char *r_model(int model);
 static void	r_init(void);
 static int	r_protocol(u_char b, mousestatus_t *act);
 static int	r_statetrans(mousestatus_t *a1, mousestatus_t *a2, int trans);
@@ -461,14 +462,14 @@ static int	pnpgets(char *buf);
 static int	pnpparse(pnpid_t *id, char *buf, int len);
 static symtab_t	*pnpproto(pnpid_t *id);
 
-static symtab_t	*gettoken(symtab_t *tab, char *s, int len);
-static char	*gettokenname(symtab_t *tab, int val);
+static symtab_t	*gettoken(symtab_t *tab, const char *s, int len);
+static const char *gettokenname(symtab_t *tab, int val);
 
 static void wsev(int ty, int val);
 
 static int kidspad(u_char rxc, mousestatus_t *act);
 
-static void
+__printflike(1, 2) static void
 debug(const char *fmt, ...)
 {
 	va_list ap;
@@ -479,7 +480,7 @@ debug(const char *fmt, ...)
 	va_end(ap);
 }
 
-static void
+__dead __printflike(2, 3) static void
 logerr(int e, const char *fmt, ...)
 {
 	va_list ap;
@@ -496,7 +497,7 @@ logerr(int e, const char *fmt, ...)
 	va_end(ap);
 }
 
-static void
+__printflike(1, 2) static void
 logwarn(const char *fmt, ...)
 {
 	va_list ap;
@@ -512,7 +513,7 @@ logwarn(const char *fmt, ...)
 	va_end(ap);
 }
 
-static void
+__printflike(1, 2) static void
 logwarnx(const char *fmt, ...)
 {
 	va_list ap;
@@ -531,7 +532,7 @@ main(int argc, char *argv[])
     int c;
     int	i;
     int	j;
-    char *ctldev = "/dev/wsmuxctl0";
+    const char * volatile ctldev = "/dev/wsmuxctl0";
 
     for (i = 0; i < MOUSE_MAXBUTTON; ++i)
 	mstate[i] = &bstate[i];
@@ -851,7 +852,7 @@ wsev(int ty, int val)
 }
 
 static void
-moused(char *wsm)
+moused(const char *wsm)
 {
     mousestatus_t action0;		/* original mouse action */
     mousestatus_t action;		/* interrim buffer */
@@ -892,7 +893,7 @@ moused(char *wsm)
 	bstate[i].count = 0;
 	bstate[i].tv = mouse_button_state_tv;
     }
-    for (i = 0; i < sizeof(zstate)/sizeof(zstate[0]); ++i) {
+    for (i = 0; i < (int)(sizeof(zstate)/sizeof(zstate[0])); ++i) {
 	zstate[i].count = 0;
 	zstate[i].tv = mouse_button_state_tv;
     }
@@ -1180,27 +1181,27 @@ r_identify(void)
     return rodent.rtype;
 }
 
-static char *
+static const char *
 r_if(int iftype)
 {
-    char *s;
+    const char *s;
 
     s = gettokenname(rifs, iftype);
     return (s == NULL) ? "unknown" : s;
 }
 
-static char *
+static const char *
 r_name(int type)
 {
     return ((type == MOUSE_PROTO_UNKNOWN) 
-	|| (type > sizeof(rnames)/sizeof(rnames[0]) - 1))
+	|| (type > (int)(sizeof(rnames)/sizeof(rnames[0]) - 1)))
 	? "unknown" : rnames[type];
 }
 
-static char *
+static const char *
 r_model(int model)
 {
-    char *s;
+    const char *s;
 
     s = gettokenname(rmodels, model);
     return (s == NULL) ? "unknown" : s;
@@ -1211,7 +1212,7 @@ r_init(void)
 {
     unsigned char buf[16];	/* scrach buffer */
     struct pollfd set[1];
-    char *s;
+    const char *s;
     char c;
     int i;
 
@@ -1298,7 +1299,7 @@ r_init(void)
 	 * Initialize Hitachi PUMA Plus - Model 1212E to desired settings.
 	 * The tablet must be configured to be in MM mode, NO parity,
 	 * Binary Format.  xf86Info.sampleRate controls the sensativity
-	 * of the tablet.  We only use this tablet for it's 4-button puck
+	 * of the tablet.  We only use this tablet for its 4-button puck
 	 * so we don't run in "Absolute Mode"
 	 */
 	write(rodent.mfd, "z8", 2);	/* Set Parity = "NONE" */
@@ -1513,7 +1514,7 @@ r_protocol(u_char rBuf, mousestatus_t *act)
 
     debug("received char 0x%x",(int)rBuf);
     if (rodent.rtype == MOUSE_PROTO_KIDSPAD)
-	return kidspad(rBuf, act) ;
+	return kidspad(rBuf, act);
 
     /*
      * Hack for resyncing: We check here for a package that is:
@@ -2044,7 +2045,7 @@ r_installmap(char *arg)
 	    return FALSE;
 	lbutton = atoi(s);
 
-	arg = skipspace(++arg);
+	arg = skipspace(arg + 1);
 	s = arg;
 	while (isdigit((unsigned char)*arg))
 	    ++arg;
@@ -2152,7 +2153,7 @@ r_timestamp(mousestatus_t *act)
     tv2.tv_sec = rodent.clickthreshold/1000;
     tv2.tv_usec = (rodent.clickthreshold%1000)*1000;
     timersub(&tv1, &tv2, &tv); 
-    debug("tv:  %ld %ld", tv.tv_sec, tv.tv_usec);
+    debug("tv:  %jd %jd", (intmax_t)tv.tv_sec, (intmax_t)tv.tv_usec);
 
     /* 3 button emulation timeout */
     tv2.tv_sec = rodent.button2timeout/1000;
@@ -2164,8 +2165,9 @@ r_timestamp(mousestatus_t *act)
         if (mask & 1) {
             if (act->button & button) {
                 /* the button is down */
-    		debug("  :  %ld %ld", 
-		    bstate[i].tv.tv_sec, bstate[i].tv.tv_usec);
+    		debug("  :  %jd %jd", 
+		    (intmax_t)bstate[i].tv.tv_sec,
+		    (intmax_t)bstate[i].tv.tv_usec);
 		if (timercmp(&tv, &bstate[i].tv, >)) {
                     bstate[i].count = 1;
                 } else {
@@ -2241,7 +2243,7 @@ static void
 setmousespeed(int old, int new, unsigned cflag)
 {
 	struct termios tty;
-	char *c;
+	const char *c;
 
 	if (tcgetattr(rodent.mfd, &tty) < 0)
 	{
@@ -2713,7 +2715,7 @@ pnpproto(pnpid_t *id)
 /* name/val mapping */
 
 static symtab_t *
-gettoken(symtab_t *tab, char *s, int len)
+gettoken(symtab_t *tab, const char *s, int len)
 {
     int i;
 
@@ -2724,7 +2726,7 @@ gettoken(symtab_t *tab, char *s, int len)
     return &tab[i];
 }
 
-static char *
+static const char *
 gettokenname(symtab_t *tab, int val)
 {
     int i;
@@ -2761,67 +2763,66 @@ we store the last coordinates sent when the pen went out of the tablet,
 
 typedef enum {
     S_IDLE, S_PROXY, S_FIRST, S_DOWN, S_UP
-} k_status ;
+} k_status;
 
 static int
 kidspad(u_char rxc, mousestatus_t *act)
 {
     static int buf[5];
-    static int buflen = 0, b_prev = 0 , x_prev = -1, y_prev = -1 ;
-    static k_status status = S_IDLE ;
-    static struct timeval old, now ;
+    static int buflen = 0, b_prev = 0 , x_prev = -1, y_prev = -1;
+    static k_status status = S_IDLE;
+    static struct timeval now;
 
-    int x, y ;
+    int x, y;
 
     if (buflen > 0 && (rxc & 0x80) ) {
 	fprintf(stderr, "invalid code %d 0x%x\n", buflen, rxc);
-	buflen = 0 ;
+	buflen = 0;
     }
     if (buflen == 0 && (rxc & 0xb8) != 0xb8 ) {
 	fprintf(stderr, "invalid code 0 0x%x\n", rxc);
-	return 0 ; /* invalid code, no action */
+	return 0; /* invalid code, no action */
     }
-    buf[buflen++] = rxc ;
+    buf[buflen++] = rxc;
     if (buflen < 5)
-	return 0 ;
+	return 0;
 
-    buflen = 0 ; /* for next time... */
+    buflen = 0; /* for next time... */
 
-    x = buf[1]+128*(buf[2] - 7) ;
-    if (x < 0) x = 0 ;
-    y = 28*128 - (buf[3] + 128* (buf[4] - 7)) ;
-    if (y < 0) y = 0 ;
+    x = buf[1]+128*(buf[2] - 7);
+    if (x < 0) x = 0;
+    y = 28*128 - (buf[3] + 128* (buf[4] - 7));
+    if (y < 0) y = 0;
 
-    x /= 8 ;
-    y /= 8 ;
+    x /= 8;
+    y /= 8;
 
-    act->flags = 0 ;
-    act->obutton = act->button ;
-    act->dx = act->dy = act->dz = 0 ;
+    act->flags = 0;
+    act->obutton = act->button;
+    act->dx = act->dy = act->dz = 0;
     gettimeofday(&now, NULL);
     if ( buf[0] & 0x40 ) /* pen went out of reach */
-	status = S_IDLE ;
+	status = S_IDLE;
     else if (status == S_IDLE) { /* pen is newly near the tablet */
-	act->flags |= MOUSE_POSCHANGED ; /* force update */
-	status = S_PROXY ;
-	x_prev = x ;
-	y_prev = y ;
+	act->flags |= MOUSE_POSCHANGED; /* force update */
+	status = S_PROXY;
+	x_prev = x;
+	y_prev = y;
     }
-    old = now ;
-    act->dx = x - x_prev ;
-    act->dy = y - y_prev ;
+    act->dx = x - x_prev;
+    act->dy = y - y_prev;
     if (act->dx || act->dy)
-	act->flags |= MOUSE_POSCHANGED ;
-    x_prev = x ;
-    y_prev = y ;
+	act->flags |= MOUSE_POSCHANGED;
+    x_prev = x;
+    y_prev = y;
     if (b_prev != 0 && b_prev != buf[0]) { /* possibly record button change */
-	act->button = 0 ;
+	act->button = 0;
 	if ( buf[0] & 0x01 ) /* tip pressed */
-	    act->button |= MOUSE_BUTTON1DOWN ;
+	    act->button |= MOUSE_BUTTON1DOWN;
 	if ( buf[0] & 0x02 ) /* button pressed */
-	    act->button |= MOUSE_BUTTON2DOWN ;
-	act->flags |= MOUSE_BUTTONSCHANGED ;
+	    act->button |= MOUSE_BUTTON2DOWN;
+	act->flags |= MOUSE_BUTTONSCHANGED;
     }
-    b_prev = buf[0] ;
-    return act->flags ;
+    b_prev = buf[0];
+    return act->flags;
 }

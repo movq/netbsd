@@ -1,4 +1,4 @@
-/* $NetBSD: haltwo.c,v 1.14 2007/10/17 19:57:04 garbled Exp $ */
+/* $NetBSD: haltwo.c,v 1.23 2017/06/01 02:45:07 chs Exp $ */
 
 /*
  * Copyright (c) 2003 Ilpo Ruotsalainen
@@ -30,20 +30,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: haltwo.c,v 1.14 2007/10/17 19:57:04 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: haltwo.c,v 1.23 2017/06/01 02:45:07 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/audioio.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <dev/audio_if.h>
 #include <dev/auconv.h>
 #include <dev/mulaw.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/sysconf.h>
 
 #include <sgimips/hpc/hpcvar.h>
@@ -68,13 +68,15 @@ static int haltwo_getdev(void *, struct audio_device *);
 static int haltwo_set_port(void *, mixer_ctrl_t *);
 static int haltwo_get_port(void *, mixer_ctrl_t *);
 static int haltwo_query_devinfo(void *, mixer_devinfo_t *);
-static void *haltwo_malloc(void *, int, size_t, struct malloc_type *, int);
-static void haltwo_free(void *, void *, struct malloc_type *);
+static void *haltwo_malloc(void *, int, size_t);
+static void haltwo_free(void *, void *, size_t);
 static int haltwo_get_props(void *);
 static int haltwo_trigger_output(void *, void *, void *, int, void (*)(void *),
 	void *, const audio_params_t *);
 static int haltwo_trigger_input(void *, void *, void *, int, void (*)(void *),
 	void *, const audio_params_t *);
+static void haltwo_get_locks(void *, kmutex_t **, kmutex_t **);
+static bool haltwo_shutdown(device_t, int);
 
 static const struct audio_hw_if haltwo_hw_if = {
 	NULL, /* open */
@@ -103,7 +105,8 @@ static const struct audio_hw_if haltwo_hw_if = {
 	haltwo_get_props,
 	haltwo_trigger_output,
 	haltwo_trigger_input,
-	NULL  /* dev_ioctl */
+	NULL, /* dev_ioctl */
+	haltwo_get_locks,
 };
 
 static const struct audio_device haltwo_device = {
@@ -112,11 +115,11 @@ static const struct audio_device haltwo_device = {
 	"haltwo"
 };
 
-static int  haltwo_match(struct device *, struct cfdata *, void *);
-static void haltwo_attach(struct device *, struct device *, void *);
+static int  haltwo_match(device_t, cfdata_t, void *);
+static void haltwo_attach(device_t, device_t, void *);
 static int  haltwo_intr(void *);
 
-CFATTACH_DECL(haltwo, sizeof(struct haltwo_softc),
+CFATTACH_DECL_NEW(haltwo, sizeof(struct haltwo_softc),
     haltwo_match, haltwo_attach, NULL, NULL);
 
 #define haltwo_write(sc,type,off,val) \
@@ -258,7 +261,7 @@ haltwo_setup_dma(struct haltwo_softc *sc, struct haltwo_codec *codec,
 }
 
 static int
-haltwo_match(struct device *parent, struct cfdata *cf, void *aux)
+haltwo_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct hpc_attach_args *haa;
 	uint32_t rev;
@@ -268,12 +271,12 @@ haltwo_match(struct device *parent, struct cfdata *cf, void *aux)
 		return 0;
 
 	if ( platform.badaddr((void *)(vaddr_t)(haa->ha_sh + haa->ha_devoff),
-	    sizeof(u_int32_t)) )
+	    sizeof(uint32_t)) )
 		return 0;
 
 	if ( platform.badaddr(
 	    (void *)(vaddr_t)(haa->ha_sh + haa->ha_devoff + HAL2_REG_CTL_REV),
-	    sizeof(u_int32_t)) )
+	    sizeof(uint32_t)) )
 		return 0;
 
 	rev = *(uint32_t *)MIPS_PHYS_TO_KSEG1(haa->ha_sh + haa->ha_devoff +
@@ -287,16 +290,20 @@ haltwo_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-haltwo_attach(struct device *parent, struct device *self, void *aux)
+haltwo_attach(device_t parent, device_t self, void *aux)
 {
 	struct haltwo_softc *sc;
 	struct hpc_attach_args *haa;
 	uint32_t rev;
 
-	sc = (void *)self;
+	sc = device_private(self);
 	haa = aux;
+	sc->sc_dev = self;
 	sc->sc_st = haa->ha_st;
 	sc->sc_dma_tag = haa->ha_dmat;
+
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
 
 	if (bus_space_subregion(haa->ha_st, haa->ha_sh, haa->ha_devoff,
 	    HPC3_PBUS_CH0_DEVREGS_SIZE, &sc->sc_ctl_sh)) {
@@ -355,7 +362,11 @@ haltwo_attach(struct device *parent, struct device *self, void *aux)
 	haltwo_write(sc, vol, HAL2_REG_VOL_LEFT, sc->sc_vol_left);
 	haltwo_write(sc, vol, HAL2_REG_VOL_RIGHT, sc->sc_vol_right);
 
-	audio_attach_mi(&haltwo_hw_if, sc, &sc->sc_dev);
+	audio_attach_mi(&haltwo_hw_if, sc, self);
+
+	if (!pmf_device_register1(self, NULL, NULL, haltwo_shutdown))
+		aprint_error_dev(self,
+		    "couldn't establish power handler\n");
 }
 
 static int
@@ -366,6 +377,9 @@ haltwo_intr(void *v)
 
 	sc = v;
 	ret = 0;
+
+	mutex_spin_enter(&sc->sc_intr_lock);
+
 	if (bus_space_read_4(sc->sc_st, sc->sc_dma_sh, HPC3_PBUS_CH0_CTL)
 	    & HPC3_PBUS_DMACTL_IRQ) {
 		sc->sc_dac.intr(sc->sc_dac.intr_arg);
@@ -373,6 +387,8 @@ haltwo_intr(void *v)
 		ret = 1;
 	} else
 		DPRINTF(("haltwo_intr: Huh?\n"));
+
+	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return ret;
 }
@@ -603,6 +619,7 @@ haltwo_query_devinfo(void *v, mixer_devinfo_t *dev)
 		dev->prev = dev->next = AUDIO_MIXER_LAST;
 		strcpy(dev->label.name, AudioNmaster);
 		dev->un.v.num_channels = 2;
+		dev->un.v.delta = 16;
 		strcpy(dev->un.v.units.name, AudioNvolume);
 		break;
 
@@ -630,26 +647,25 @@ haltwo_alloc_dmamem(struct haltwo_softc *sc, size_t size,
 	p->size = size;
 
 	/* XXX Check align/boundary XXX */
-	/* XXX Pass flags and use them instead BUS_DMA_NOWAIT? XXX */
 	err = bus_dmamem_alloc(sc->sc_dma_tag, p->size, 0, 0, p->dma_segs,
-	    HALTWO_MAX_DMASEGS, &p->dma_segcount, BUS_DMA_NOWAIT);
+	    HALTWO_MAX_DMASEGS, &p->dma_segcount, BUS_DMA_WAITOK);
 	if (err)
 		goto out;
 
 	/* XXX BUS_DMA_COHERENT? XXX */
 	err = bus_dmamem_map(sc->sc_dma_tag, p->dma_segs, p->dma_segcount,
-	    p->size, &p->kern_addr, BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
+	    p->size, &p->kern_addr, BUS_DMA_WAITOK | BUS_DMA_COHERENT);
 	if (err)
 		goto out_free;
 
 	/* XXX Just guessing ... XXX */
 	err = bus_dmamap_create(sc->sc_dma_tag, p->size, HALTWO_MAX_DMASEGS,
-	    PAGE_SIZE, 0, BUS_DMA_NOWAIT, &p->dma_map);
+	    PAGE_SIZE, 0, BUS_DMA_WAITOK, &p->dma_map);
 	if (err)
 		goto out_free;
 
 	err = bus_dmamap_load(sc->sc_dma_tag, p->dma_map, p->kern_addr,
-	    p->size, NULL, BUS_DMA_NOWAIT);
+	    p->size, NULL, BUS_DMA_WAITOK);
 	if (err)
 		goto out_destroy;
 
@@ -666,21 +682,17 @@ out:
 }
 
 static void *
-haltwo_malloc(void *v, int direction, size_t size, struct malloc_type *type,
-		int flags)
+haltwo_malloc(void *v, int direction, size_t size)
 {
 	struct haltwo_softc *sc;
 	struct haltwo_dmabuf *p;
 
 	DPRINTF(("haltwo_malloc size = %d\n", size));
 	sc = v;
-	p = malloc(sizeof(struct haltwo_dmabuf), type, flags);
-	if (!p)
-		return 0;
-
+	p = kmem_alloc(sizeof(*p), KM_SLEEP);
 	if (haltwo_alloc_dmamem(sc, size, p)) {
-		free(p, type);
-		return 0;
+		kmem_free(p, sizeof(*p));
+		return NULL;
 	}
 
 	p->next = sc->sc_dma_bufs;
@@ -690,7 +702,7 @@ haltwo_malloc(void *v, int direction, size_t size, struct malloc_type *type,
 }
 
 static void
-haltwo_free(void *v, void *addr, struct malloc_type *type)
+haltwo_free(void *v, void *addr, size_t size)
 {
 	struct haltwo_softc *sc;
 	struct haltwo_dmabuf *p, **pp;
@@ -699,7 +711,7 @@ haltwo_free(void *v, void *addr, struct malloc_type *type)
 	for (pp = &sc->sc_dma_bufs; (p = *pp) != NULL; pp = &p->next) {
 		if (p->kern_addr == addr) {
 			*pp = p->next;
-			free(p, type);
+			kmem_free(p, sizeof(*p));
 			return;
 		}
 	}
@@ -806,4 +818,29 @@ haltwo_trigger_input(void *v, void *start, void *end, int blksize,
 #endif
 
 	return ENXIO;
+}
+
+static void
+haltwo_get_locks(void *v, kmutex_t **intr, kmutex_t **thread)
+{
+	struct haltwo_softc *sc;
+
+	DPRINTF(("haltwo_get_locks\n"));
+	sc = v;
+
+	*intr = &sc->sc_intr_lock;
+	*thread = &sc->sc_lock;
+}
+
+bool
+haltwo_shutdown(device_t self, int howto)
+{
+	struct haltwo_softc *sc;
+
+	sc = device_private(self);
+	haltwo_write(sc, ctl, HAL2_REG_CTL_ISR, 0);
+	haltwo_write(sc, ctl, HAL2_REG_CTL_ISR,
+	    HAL2_ISR_GLOBAL_RESET_N | HAL2_ISR_CODEC_RESET_N);
+
+	return true;
 }

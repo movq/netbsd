@@ -1,4 +1,4 @@
-/* $NetBSD: piixpmreg.h,v 1.4 2006/06/26 17:33:40 drochner Exp $ */
+/* $NetBSD: piixpmreg.h,v 1.7 2014/03/18 18:20:42 riastradh Exp $ */
 /*	$OpenBSD: piixreg.h,v 1.3 2006/01/03 22:39:03 grange Exp $	*/
 
 /*
@@ -30,6 +30,7 @@
 
 /* PCI configuration registers */
 #define PIIX_PM_BASE	0x40		/* Power management base address */
+#define PIIX_PM_BASE_CSB5_RESET	0x10		/* CSB5 PM reset */
 #define PIIX_DEVACTA	0x54		/* Device activity A (function 3) */
 #define PIIX_DEVACTB	0x58		/* Device activity B (function 3) */
 #define PIIX_PMREGMISC	0x80		/* Misc. Power management */
@@ -73,5 +74,18 @@
 /* Misc */
 #define PIIX_PM_SIZE	0x38		/* Power management I/O space size */
 #define PIIX_SMB_SIZE	0x10		/* SMBus I/O space size */
+
+#define PIIXPM_INDIRECTIO_BASE	0xcd6
+#define PIIXPM_INDIRECTIO_SIZE	2 
+#define PIIXPM_INDIRECTIO_INDEX	0
+#define PIIXPM_INDIRECTIO_DATA	1
+ 
+#define SB800_PM_SMBUS0EN_LO	0x2c
+#define SB800_PM_SMBUS0EN_HI	0x2d
+#define SB800_PM_SMBUS0SEL	0x2e 
+#define SB800_PM_SMBUS0SELEN	0x2f 
+                                      
+#define SB800_PM_SMBUS0EN_ENABLE 0x0001
+#define SB800_PM_SMBUS0EN_BADDR	0xffe0
 
 #endif	/* !_DEV_PCI_PIIXREG_H_ */

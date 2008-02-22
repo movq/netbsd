@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.7 2008/01/27 20:26:56 christos Exp $
+# $NetBSD: Makefile.inc,v 1.18 2017/05/06 19:52:25 christos Exp $
 # Copyright 1998 Juniper Networks, Inc.
 # All rights reserved.
 #
@@ -25,9 +25,20 @@
 #
 # $FreeBSD: src/lib/libpam/Makefile.inc,v 1.15 2004/03/15 13:23:20 des Exp $
 
+# This needs to be before bsd.init.mk
+.if defined(BSD_MK_COMPAT_FILE)
+.include <${BSD_MK_COMPAT_FILE}>
+.endif
+
 USE_FORT?= yes	# network client software *and* authentication software
 
-CPPFLAGS+= -DOPENPAM_MODULES_DIR=\"/usr/lib/security\"
+.if defined(MLIBDIR)
+MODLIBDIR=/usr/lib/${MLIBDIR}/security
+.else
+MODLIBDIR=/usr/lib/security
+.endif
+
+CPPFLAGS+= -DOPENPAM_MODULES_DIRECTORY=\"${MODLIBDIR}\"
 # No debugging
 #CPPFLAGS+= -DDEBUG
 
@@ -37,5 +48,8 @@ CSHLIBFLAGS+= -DNO_STATIC_MODULES
 
 # Define the shared library version here.  libpam and the modules share a
 # version, and we need these variables early for module install rules.
-SHLIB_MAJOR=	0
-SHLIB_MINOR=	0
+SHLIB_MAJOR=	4
+SHLIB_MINOR=	1
+
+# openpam requires the files to be owned by root
+BINOWN=        root

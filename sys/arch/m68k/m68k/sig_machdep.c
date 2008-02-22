@@ -1,6 +1,7 @@
-/*	$NetBSD: sig_machdep.c,v 1.36 2007/10/17 19:55:12 garbled Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.49 2012/05/21 14:15:18 martin Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -35,58 +36,20 @@
  *	from: Utah Hdr: machdep.c 1.74 92/12/20
  *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	from: Utah Hdr: machdep.c 1.74 92/12/20
- *	from: @(#)machdep.c	8.10 (Berkeley) 4/20/94
- */
+
+#include "opt_m68k_arch.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.36 2007/10/17 19:55:12 garbled Exp $");
-
-#include "opt_compat_netbsd.h"
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.49 2012/05/21 14:15:18 martin Exp $");
 
 #define __M68K_SIGNAL_PRIVATE
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/cpu.h>
 #include <sys/pool.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/ras.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
@@ -95,16 +58,14 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.36 2007/10/17 19:55:12 garbled Exp
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
-#include <machine/cpu.h>
-#include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/frame.h>
 
 #include <m68k/m68k.h>
+#include <m68k/fpreg.h>
 
 extern short exframesize[];
 struct fpframe m68k_cached_fpu_idle_frame;
-void	m68881_save(struct fpframe *);
-void	m68881_restore(struct fpframe *);
 
 #ifdef DEBUG
 int sigdebug = 0;
@@ -133,6 +94,23 @@ int sigpid = 0;
 #define FPFRAME_IS_NULL(fp) \
 	    (((struct fpframe060 *)(fp))->fpf6_frmfmt == FPF6_FMT_NULL)
 #endif
+
+/* convert 68881 %fpsr code into siginfo ksi_code */
+u_int
+fpsr2siginfocode(u_int fpsr)
+{
+	if (fpsr & FPSR_DZ)
+		return FPE_FLTDIV;
+	if (fpsr & FPSR_UNFL)
+		return FPE_FLTUND;
+	if (fpsr & FPSR_OVFL)
+		return FPE_FLTOVF;
+	if (fpsr & FPSR_OPERR)
+		return FPE_FLTINV;
+	if (fpsr & (FPSR_INEX1|FPSR_INEX2))
+		return FPE_FLTRES;
+	return 0;
+}
 
 void *
 getframe(struct lwp *l, int sig, int *onstack)
@@ -168,7 +146,7 @@ buildcontext(struct lwp *l, void *catcher, void *fp)
 	frame->f_pc = (int)catcher;
 }
 
-static void
+void
 sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
@@ -180,18 +158,6 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
 	fp--;
-
-	/* Build stack frame for signal trampoline. */
-	switch (ps->sa_sigdesc[sig].sd_vers) {
-	case 0:		/* handled by sendsig_sigcontext */
-	case 1:		/* handled by sendsig_sigcontext */
-	default:	/* unknown version */
-		printf("nsendsig: bad version %d\n",
-		    ps->sa_sigdesc[sig].sd_vers);
-		sigexit(l, SIGILL);
-	case 2:
-		break;
-	}
 
 	kf.sf_ra = (int)ps->sa_sigdesc[sig].sd_tramp;
 	kf.sf_signum = sig;
@@ -205,10 +171,10 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	    ? _UC_SETSTACK : _UC_CLRSTACK;
 	memset(&kf.sf_uc.uc_stack, 0, sizeof(kf.sf_uc.uc_stack));
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	cpu_getmcontext(l, &kf.sf_uc.uc_mcontext, &kf.sf_uc.uc_flags);
 	error = copyout(&kf, fp, sizeof(kf));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -224,18 +190,6 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
-}
-
-void
-sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
-{
-
-#ifdef COMPAT_16
-	if (curproc->p_sigacts->sa_sigdesc[ksi->ksi_signo].sd_vers < 2)
-		sendsig_sigcontext(ksi, mask);
-	else
-#endif
-		sendsig_siginfo(ksi, mask);
 }
 
 void
@@ -272,6 +226,9 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, u_int *flags)
 
 	*flags |= _UC_CPU;
 
+	mcp->_mc_tlsbase = (uintptr_t)l->l_private;
+	*flags |= _UC_TLSBASE;
+
 	/* Save exception frame information. */
 	mcp->__mc_pad.__mc_frame.__mcf_format = format;
 	if (format >= FMT4) {
@@ -286,7 +243,8 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, u_int *flags)
 
 	if (fputype != FPU_NONE) {
 		/* Save FPU context. */
-		struct fpframe *fpf = &l->l_addr->u_pcb.pcb_fpregs;
+		struct pcb *pcb = lwp_getpcb(l);
+		struct fpframe *fpf = &pcb->pcb_fpregs;
 
 		/*
 		 * If we're dealing with the current lwp, we need to
@@ -312,17 +270,29 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, u_int *flags)
 }
 
 int
+cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
+{
+	const __greg_t *gr = mcp->__gregs;
+
+	if ((gr[_REG_PS] & (PSL_MBZ|PSL_IPL|PSL_S)) != 0)
+		return EINVAL;
+	return 0;
+}
+
+int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, u_int flags)
 {
 	const __greg_t *gr = mcp->__gregs;
 	struct frame *frame = (struct frame *)l->l_md.md_regs;
 	unsigned int format = mcp->__mc_pad.__mc_frame.__mcf_format;
-	int sz;
+	int sz, error;
 
 	/* Validate the supplied context */
-	if (((flags & _UC_CPU) != 0 &&
-	     (gr[_REG_PS] & (PSL_MBZ|PSL_IPL|PSL_S)) != 0))
-		return (EINVAL);
+	if ((flags & _UC_CPU) != 0) {
+		error = cpu_mcontext_validate(l, mcp);
+		if (error)
+			return error;
+	}
 
 	/* Restore exception frame information if necessary. */
 	if ((flags & _UC_M68K_UC_USER) == 0 && format >= FMT4) {
@@ -374,7 +344,8 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, u_int flags)
 
 	if (fputype != FPU_NONE) {
 		const __fpregset_t *fpr = &mcp->__fpregs;
-		struct fpframe *fpf = &l->l_addr->u_pcb.pcb_fpregs;
+		struct pcb *pcb = lwp_getpcb(l);
+		struct fpframe *fpf = &pcb->pcb_fpregs;
 
 		switch (flags & (_UC_FPU | _UC_M68K_UC_USER)) {
 		case _UC_FPU:
@@ -430,12 +401,15 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, u_int flags)
 			m68881_restore(fpf);
 	}
 
-	mutex_enter(&l->l_proc->p_smutex);
+	if ((flags & _UC_TLSBASE) != 0)
+		lwp_setprivate(l, (void *)(uintptr_t)mcp->_mc_tlsbase);
+
+	mutex_enter(l->l_proc->p_lock);
 	if (flags & _UC_SETSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	if (flags & _UC_CLRSTACK)
 		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	mutex_exit(&l->l_proc->p_smutex);
+	mutex_exit(l->l_proc->p_lock);
 
 	return 0;
 }

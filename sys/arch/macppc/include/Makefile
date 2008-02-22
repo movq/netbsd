@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.19 2005/12/11 12:18:06 christos Exp $
+#	$NetBSD: Makefile,v 1.22 2015/12/21 17:02:33 christos Exp $
 
 INCSDIR= /usr/include/macppc
 
@@ -7,8 +7,10 @@ INCSDIR= /usr/include/macppc
 INCS=	adbsys.h apmvar.h autoconf.h \
 	disklabel.h \
 	grfioctl.h \
+	fenv.h \
 	intr.h \
 	keyboard.h \
+	sljit_machdep.h \
 	vmparam.h
 
 .include "../../powerpc/include/Makefile"

@@ -1,4 +1,4 @@
-.\" $NetBSD: cgdconfig.8,v 1.23 2007/02/23 20:00:04 rumble Exp $
+.\" $NetBSD: cgdconfig.8,v 1.40 2018/05/09 20:23:35 kre Exp $
 .\"
 .\" Copyright (c) 2002, The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd February 23, 2007
+.Dd May 9, 2018
 .Dt CGDCONFIG 8
 .Os
 .Sh NAME
@@ -42,21 +35,17 @@
 .Nd configuration utility for the cryptographic disk driver
 .Sh SYNOPSIS
 .Nm
-.Op Fl nv
+.Op Fl enpv
 .Op Fl V Ar vmeth
 .Ar cgd dev
 .Op Ar paramsfile
 .Nm
 .Fl C
-.Op Fl nv
-.Op Fl f Ar configfile
-.Nm
-.Fl U
-.Op Fl nv
+.Op Fl enpv
 .Op Fl f Ar configfile
 .Nm
 .Fl G
-.Op Fl nv
+.Op Fl enpv
 .Op Fl i Ar ivmeth
 .Op Fl k Ar kgmeth
 .Op Fl o Ar outfile
@@ -70,6 +59,10 @@
 .Ar alg
 .Op Ar keylen
 .Nm
+.Fl l
+.Op Fl v Ns Op Cm v
+.Op Ar cgd
+.Nm
 .Fl s
 .Op Fl nv
 .Op Fl i Ar ivmeth
@@ -77,6 +70,10 @@
 .Ar dev
 .Ar alg
 .Op Ar keylen
+.Nm
+.Fl U
+.Op Fl nv
+.Op Fl f Ar configfile
 .Nm
 .Fl u
 .Op Fl nv
@@ -92,6 +89,8 @@ The options are as follows:
 .Bl -tag -width configfilexxxx
 .It Fl C
 Configure all the devices listed in the cgd configuration file.
+.It Fl e
+Echo the passphase.
 .It Fl f Ar configfile
 Specify the configuration file explicitly, rather than using the default
 configuration file
@@ -100,20 +99,40 @@ configuration file
 Generate a new paramsfile (to stdout) using the values from
 .Ar paramsfile
 which will generate the same key.
-This may need to prompt for multiple passphrases.
+This may need to obtain multiple passphrases.
 .It Fl g
 Generate a paramsfile (to stdout).
 .It Fl i Ar ivmeth
-Specify the IV method (default: encblkno).
+Specify the IV method (default: encblkno1).
 .It Fl k Ar kgmeth
 Specify the key generation method (default: pkcs5_pbkdf2/sha1).
+.It Fl l Op Ar cgd
+List state of all devices or just the one
+.Ar cgd
+device.
+The verbosity level affects the output.
+.It Fl n
+Do not actually configure or unconfigure a cryptographic disk
+device, but instead report the steps that would be taken.
 .It Fl o Ar outfile
 When generating a
 .Ar paramsfile ,
 store it in
 .Ar outfile .
+If
+.Fl o
+is not given, any paramsfile content is written to standard output.
+.It Fl p
+Read all passphrases from stdin rather than
+.Pa /dev/tty .
+Passphrases are separated by newlines.
+Users of this flag must be able to predict the order in which passphrases
+are prompted.
+If this flag is specified then verification errors will cause the device
+in question to be unconfigured rather than prompting for the passphrase
+again.
 .It Fl s
-Read the key from stdin.
+Read the key (nb: not the passphrase) from stdin.
 .It Fl U
 Unconfigure all the devices listed in the cgd configuration file.
 .It Fl u
@@ -165,7 +184,8 @@ a disk volume with meaningless data prior to use.
 .It urandomkey
 The method simply reads
 .Pa /dev/urandom
-and uses the resulting bits as the key.  This is similar to the
+and uses the resulting bits as the key.
+This is similar to the
 .Pa randomkey
 method, but it guarantees that cgdconfig will not stall waiting for
 hard-random bits (useful when configuring a cgd for swap at boot time).
@@ -173,6 +193,10 @@ Note, however, that some or all of the bits used to generate the
 key may be obtained from a pseudo-random number generator,
 which may not be as secure as the entropy based hard-random
 number generator.
+.It shell_cmd
+This method executes a shell command via
+.Xr popen 3
+and reads the key from stdout.
 .El
 .Ss Verification Method
 The verification method is how
@@ -181,7 +205,7 @@ determines if the generated key is correct.
 If the newly configured disk fails to verify, then
 .Nm
 will regenerate the key and re-configure the device.
-It only makes sense to specify a verification method if at least of the
+It only makes sense to specify a verification method if at least one of the
 key generation methods is error prone, e.g., uses a user-entered passphrase.
 The following verification methods are supported:
 .Pp
@@ -190,6 +214,10 @@ The following verification methods are supported:
 perform no verification.
 .It disklabel
 scan for a valid disklabel.
+.It mbr
+scan for a valid Master Boot Record.
+.It gpt
+scan for a valid GUID partition table.
 .It ffs
 scan for a valid FFS file system.
 .It re-enter
@@ -290,6 +318,9 @@ The keygen statement's statement block may contain the following statements:
 .It key Ar string
 The key.
 Only used for the storedkey key generation method.
+.It cmd Ar string
+The command to execute.
+Only used for the shell_cmd key generation method.
 .It iterations Ar integer
 The number of iterations.
 Only used for pkcs5_pbkdf2/sha1 and pkcs5_pbkdf2.
@@ -307,7 +338,7 @@ cgd configuration file.
 .Sh EXAMPLES
 To set up and configure a cgd that uses AES with a 192 bit key
 in CBC mode with the IV Method
-.Sq encblkno
+.Sq encblkno1
 (encrypted block number):
 .Bd -literal
 	# cgdconfig -g -o /etc/cgd/wd0e aes-cbc 192
@@ -323,22 +354,29 @@ when we configure the first time to set up the disk.
 Here is the
 sequence of commands that is recommended:
 .Bd -literal
-             # cgdconfig -g -o /etc/cgd/wd0e -V disklabel aes-cbc
-             # cgdconfig -V re-enter cgd0 /dev/wd0e
-             /dev/wd0e's passphrase:
-             re-enter device's passphrase:
-             # disklabel -e -I cgd0
-             # cgdconfig -u cgd0
-             # cgdconfig cgd0 /dev/wd0e
-             /dev/wd0e's passphrase:
+	# cgdconfig -g -o /etc/cgd/wd0e -V disklabel aes-cbc
+	# cgdconfig -V re-enter cgd0 /dev/wd0e
+	/dev/wd0e's passphrase:
+	re-enter device's passphrase:
+	# disklabel -e -I cgd0
+	# cgdconfig -u cgd0
+	# cgdconfig cgd0 /dev/wd0e
+	/dev/wd0e's passphrase:
+.Ed
+.Pp
+To scrub data from a disk before setting up a cgd:
+.Bd -literal
+	# cgdconfig -s cgd0 /dev/sd0e aes-cbc 256 < /dev/urandom
+	# dd if=/dev/zero of=/dev/rcgd0d bs=32k progress=512
+	# cgdconfig -u cgd0
 .Ed
 .Pp
 To create a new parameters file that will generate the same key as an old
 parameters file:
 .Bd -literal
-             # cgdconfig -G -o newparamsfile oldparamsfile
-             old file's passphrase:
-             new file's passphrase:
+	# cgdconfig -G -o newparamsfile oldparamsfile
+	old file's passphrase:
+	new file's passphrase:
 .Ed
 .Pp
 To configure a cgd that uses Blowfish with a 200 bit key that it
@@ -350,12 +388,12 @@ reads from stdin:
 An example parameters file which uses PKCS#5 PBKDF2:
 .Bd -literal
 	algorithm aes-cbc;
-	iv-method encblkno;
+	iv-method encblkno1;
 	keylength 128;
 	verify_method none;
 	keygen pkcs5_pbkdf2/sha1 {
 		iterations 39361;
-		salt AAAAgMoHiYonye6Kog \\
+		salt AAAAgMoHiYonye6Kog \e
 		     dYJAobCHE=;
 	};
 .Ed
@@ -363,10 +401,10 @@ An example parameters file which uses PKCS#5 PBKDF2:
 An example parameters file which stores its key locally:
 .Bd -literal
 	algorithm       aes-cbc;
-	iv-method       encblkno;
+	iv-method       encblkno1;
 	keylength       256;
 	verify_method   none;
-	keygen storedkey key AAABAK3QO6d7xzLfrXTdsgg4 \\
+	keygen storedkey key AAABAK3QO6d7xzLfrXTdsgg4 \e
 			     ly2TdxkFqOkYYcbyUKu/f60L;
 .Ed
 .Pp
@@ -383,19 +421,25 @@ An example
 	cgd1		/dev/sd0h	/usr/local/etc/cgd/sd0h
 .Ed
 .Pp
-Note that this will store the parameters file as
+Note the first entry will store the parameters file as
 .Pa /etc/cgd/wd0e .
 And use the entered passphrase to generate the key.
+.Pp
+Although not required, the partition type
+.Ar cgd
+should be used in the disklabel or GPT type field for the cgd partition.
 .Sh DIAGNOSTICS
 .Bl -diag
 .It "cgdconfig: could not calibrate pkcs5_pbkdf2"
-An error greater than 5% in calibration occured.
+An error greater than 5% in calibration occurred.
 This could be the result of dynamic processor frequency scaling technology.
 Ensure that the processor clock frequency remains static throughout the
 program's execution.
 .El
 .Sh SEE ALSO
-.Xr cgd 4
+.Xr cgd 4 ,
+.Xr disklabel 8 ,
+.Xr gpt 8
 .Pp
 .Dq PKCS #5 v2.0: Password-Based Cryptography Standard ,
 RSA Laboratories, March 25, 1999.
@@ -405,8 +449,4 @@ The
 utility appeared in
 .Nx 2.0 .
 .Sh BUGS
-Since
-.Nm
-uses
-.Xr getpass 3
-to read in the passphrase, it is limited to 128 characters.
+Pass phrases are limited to 1023 bytes.

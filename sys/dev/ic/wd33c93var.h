@@ -1,4 +1,4 @@
-/*	$NetBSD: wd33c93var.h,v 1.7 2007/05/21 19:25:55 rumble Exp $	*/
+/*	$NetBSD: wd33c93var.h,v 1.11 2012/07/28 23:04:45 matt Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -112,17 +112,17 @@ struct wd33c93_tinfo {
 	u_char	period;			/* Period suggestion */
 	u_char	offset;			/* Offset suggestion */
 	struct wd33c93_linfo *lun[SBIC_NLUN]; /* LUN list for this target */
-} tinfo_t;
+};
 
 /* Look up a lun in a tinfo */
 #define TINFO_LUN(t, l) 	((t)->lun[(l)])
 
 struct wd33c93_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 
 	struct scsipi_channel sc_channel; /* proto for sub devices */
 	struct scsipi_adapter sc_adapter;
-	struct device *sc_child;	/* attached scsibus, if any */
+	device_t sc_child;	/* attached scsibus, if any */
 	struct callout sc_watchdog;
 	void	*sc_driver;		/* driver specific field */
 
@@ -131,7 +131,8 @@ struct wd33c93_softc {
 
 	/* WD33c93 registers */
 	bus_space_tag_t 	sc_regt;
-	bus_space_handle_t 	sc_regh;
+	bus_space_handle_t 	sc_asr_regh;
+	bus_space_handle_t 	sc_data_regh;
 
 
 	/* Data about the current nexus (updated for every cmd switch) */

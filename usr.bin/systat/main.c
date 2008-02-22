@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.41 2007/12/31 00:22:15 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.53 2017/11/22 02:52:42 snj Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -31,18 +31,21 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: main.c,v 1.41 2007/12/31 00:22:15 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.53 2017/11/22 02:52:42 snj Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <sys/sysctl.h>
+#include <sys/ioctl.h>
 
 #include <ctype.h>
 #include <err.h>
+#include <errno.h>
 #include <limits.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -51,21 +54,10 @@ __RCSID("$NetBSD: main.c,v 1.41 2007/12/31 00:22:15 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <termios.h>
-#include <sys/ioctl.h>
 
 #include "systat.h"
 #include "extern.h"
 
-static struct nlist namelist[] = {
-#define X_FIRST		0
-#define	X_HZ		0
-	{ .n_name = "_hz" },
-#define	X_STATHZ		1
-	{ .n_name = "_stathz" },
-#define	X_MAXSLP		2
-	{ .n_name = "_maxslp" },
-	{ .n_name = NULL }
-};
 static int     dellave;
 
 kvm_t *kd;
@@ -74,7 +66,7 @@ char	*nlistf = NULL;
 sig_t	sigtstpdfl;
 double avenrun[3];
 int     col;
-int	naptime = 5;
+double	naptime = 5;
 int     verbose = 1;                    /* to report kvm read errs */
 int     hz, stathz, maxslp;
 char    c;
@@ -92,8 +84,7 @@ static	WINDOW *wload;			/* one line window for load average */
 static void (*sv_stop_handler)(int);
 
 static void stop(int);
-static void usage(void);
-int main(int, char **);
+__dead static void usage(void);
 
 gid_t egid; /* XXX needed by initiostat() and initkre() */
 
@@ -102,11 +93,16 @@ main(int argc, char **argv)
 {
 	int ch;
 	char errbuf[_POSIX2_LINE_MAX];
+	const char *all;
+	struct clockinfo clk;
+	size_t len;
+	int bflag = 0;
 
+	all = "all";
 	egid = getegid();
 	(void)setegid(getgid());
 
-	while ((ch = getopt(argc, argv, "M:N:nw:t:")) != -1)
+	while ((ch = getopt(argc, argv, "M:N:bnw:t:")) != -1)
 		switch(ch) {
 		case 'M':
 			memf = optarg;
@@ -114,16 +110,19 @@ main(int argc, char **argv)
 		case 'N':
 			nlistf = optarg;
 			break;
+		case 'b':
+			bflag = !bflag;
+			break;
 		case 'n':
 			nflag = !nflag;
-			break;
-		case 'w':
-			if ((naptime = atoi(optarg)) <= 0)
-				errx(1, "interval <= 0.");
 			break;
 		case 't':
 			if ((turns = atoi(optarg)) <= 0)
 				errx(1, "turns <= 0.");
+			break;
+		case 'w':
+			if ((naptime = strtod(optarg, NULL)) <= 0)
+				errx(1, "interval <= 0.");
 			break;
 		case '?':
 		default:
@@ -138,7 +137,7 @@ main(int argc, char **argv)
 		int modefound = 0;
 
 		if (isdigit((unsigned char)argv[0][0])) {
-			naptime = atoi(argv[0]);
+			naptime = strtod(argv[0], NULL);
 			if (naptime <= 0)
 				naptime = 5;
 			continue;
@@ -151,7 +150,7 @@ main(int argc, char **argv)
 				break;
 			}
 
-			if(strstr("all",argv[0]) == "all"){
+			if (strstr(all, argv[0]) == all) {
 				allcounter=0;
 				allflag=1;
 			}
@@ -183,13 +182,6 @@ main(int argc, char **argv)
 	if (nlistf == NULL && memf == NULL)
 		(void)setegid(getgid());
 
-	if (kvm_nlist(kd, namelist)) {
-		if (nlistf)
-			errx(1, "%s: no namelist", nlistf);
-		else
-			errx(1, "no namelist");
-	}
-
 	signal(SIGINT, die);
 	signal(SIGQUIT, die);
 	signal(SIGTERM, die);
@@ -220,9 +212,17 @@ main(int argc, char **argv)
 	}
 	gethostname(hostname, sizeof (hostname));
 	hostname[sizeof(hostname) - 1] = '\0';
-	NREAD(X_HZ, &hz, sizeof hz);
-	NREAD(X_STATHZ, &stathz, sizeof stathz);
-	NREAD(X_MAXSLP, &maxslp, sizeof maxslp);
+
+	len = sizeof(clk);
+	if (sysctlbyname("kern.clockrate", &clk, &len, NULL, 0))
+		error("can't get \"kern.clockrate\": %s", strerror(errno));
+	hz = clk.hz;
+	stathz = clk.stathz;
+
+	len = sizeof(maxslp);
+	if (sysctlbyname("vm.maxslp", &maxslp, &len, NULL, 0))
+		error("can't get \"vm.maxslp\": %s", strerror(errno));
+
 	(*curmode->c_init)();
 	curmode->c_flags |= CF_INIT;
 	labels();
@@ -230,16 +230,19 @@ main(int argc, char **argv)
 	dellave = 0.0;
 
 	display(0);
-	noecho();
-	cbreak();
-	keyboard();
+	if (!bflag) {
+		noecho();
+		cbreak();
+		keyboard();
+	} else
+		die(0);
 	/*NOTREACHED*/
 }
 
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: systat [-n] [-M core] [-N system] [-w wait] "
+	fprintf(stderr, "usage: systat [-bn] [-M core] [-N system] [-w wait] "
 		"[-t turns]\n\t\t[display] [refresh-interval]\n");
 	exit(1);
 }
@@ -263,8 +266,14 @@ labels(void)
 void
 display(int signo)
 {
+	static int skip;
 	int j;
 	struct mode *p;
+	int ms_delay;
+
+	if (signo == SIGALRM && skip-- > 0)
+		/* Don't display on this timeout */
+		return;
 
 	/* Get the load average over the last minute. */
 	(void)getloadavg(avenrun, sizeof(avenrun) / sizeof(avenrun[0]));
@@ -304,9 +313,17 @@ display(int signo)
 			allcounter=0;
 		} else
 			allcounter++;
-       }
+	}
 
-	timeout(naptime * 1000);
+	/* curses timeout() uses VTIME, limited to 255 1/10th secs */
+	ms_delay = naptime * 1000;
+	if (ms_delay < 25500) {
+		timeout(ms_delay);
+		skip = 0;
+	} else {
+		skip = ms_delay / 25500;
+		timeout(ms_delay / (skip + 1));
+	}
 }
 
 void
@@ -370,6 +387,13 @@ error(const char *fmt, ...)
 		fprintf(stderr, "\n");
 	}
 	va_end(ap);
+}
+
+void
+clearerror(void)
+{
+
+	error("%s", "");
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_internal.h,v 1.4 2004/05/28 14:39:07 christos Exp $	*/
+/*	$NetBSD: rpc_internal.h,v 1.8 2015/11/07 23:09:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,37 +33,36 @@
  * These are not exported interfaces.
  */
 
-bool_t __xdrrec_getrec __P((XDR *, enum xprt_stat *, bool_t));
-bool_t __xdrrec_setnonblock __P((XDR *, int));
-void __xprt_unregister_unlocked __P((SVCXPRT *));
-bool_t __svc_clean_idle __P((fd_set *, int, bool_t));
+bool_t __xdrrec_getrec(XDR *, enum xprt_stat *, bool_t);
+bool_t __xdrrec_setnonblock(XDR *, int);
+void __xprt_unregister_unlocked(SVCXPRT *);
+bool_t __svc_clean_idle(fd_set *, int, bool_t);
 
-bool_t __xdrrec_getrec __P((XDR *, enum xprt_stat *, bool_t));
-bool_t __xdrrec_setnonblock __P((XDR *, int));
+u_int __rpc_get_a_size(int);
+int __rpc_dtbsize(void);
+struct netconfig *__rpcgettp(int);
+int  __rpc_get_default_domain(char **);
 
-u_int __rpc_get_a_size __P((int));
-int __rpc_dtbsize __P((void));
-struct netconfig * __rpcgettp __P((int));
-int  __rpc_get_default_domain __P((char **));
+char *__rpc_taddr2uaddr_af(int, const struct netbuf *);
+struct netbuf *__rpc_uaddr2taddr_af(int, const char *);
+int __rpc_fixup_addr(struct netbuf *, const struct netbuf *);
+int __rpc_sockinfo2netid(struct __rpc_sockinfo *, const char **);
+int __rpc_seman2socktype(int);
+int __rpc_socktype2seman(int);
+void *rpc_nullproc(CLIENT *);
+int __rpc_sockisbound(int);
 
-char *__rpc_taddr2uaddr_af __P((int, const struct netbuf *));
-struct netbuf *__rpc_uaddr2taddr_af __P((int, const char *));
-int __rpc_fixup_addr __P((struct netbuf *, const struct netbuf *));
-int __rpc_sockinfo2netid __P((struct __rpc_sockinfo *, const char **));
-int __rpc_seman2socktype __P((int));
-int __rpc_socktype2seman __P((int));
-void *rpc_nullproc __P((CLIENT *));
-int __rpc_sockisbound __P((int));
+struct netbuf *__rpcb_findaddr(rpcprog_t, rpcvers_t, const struct netconfig *,
+    const char *, CLIENT **);
+bool_t __rpc_control(int, void *);
 
-struct netbuf *__rpcb_findaddr __P((rpcprog_t, rpcvers_t,
-				    const struct netconfig *,
-				    const char *, CLIENT **));
-bool_t __rpc_control __P((int,void *));
+char *_get_next_token(char *, int);
 
-char *_get_next_token __P((char *, int));
-
-u_int32_t __rpc_getxid __P((void));
+u_int32_t __rpc_getxid(void);
 #define __RPC_GETXID()	(__rpc_getxid())
 
 extern SVCXPRT **__svc_xports;
 extern int __svc_maxrec;
+extern int __svc_flags;
+
+int __clnt_sigfillset(sigset_t *);

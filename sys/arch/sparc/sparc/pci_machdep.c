@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.13 2006/07/02 10:14:15 jdc Exp $ */
+/*	$NetBSD: pci_machdep.c,v 1.21 2015/10/02 05:22:52 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.13 2006/07/02 10:14:15 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.21 2015/10/02 05:22:52 msaitoh Exp $");
 
 #if defined(DEBUG) && !defined(SPARC_PCI_DEBUG)
 #define SPARC_PCI_DEBUG
@@ -64,7 +64,7 @@ int sparc_pci_debug = 0;
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 
 #include <machine/ctlreg.h>
@@ -100,29 +100,43 @@ int sparc_pci_debug = 0;
  * Probably we can do some forth hacking in boot loader's prompatch
  * (that's what it was introduced for), but for now it's way more
  * simple to just hardcode it here.
+ * XXX: Unknown mappings for PCI slots set to line 8.
  */
 
 struct mspcic_pci_intr_wiring {
 	u_int		mpiw_bus;
 	u_int		mpiw_device;
 	u_int		mpiw_function;
-	pci_intr_line_t	mpiw_line;
+	pci_intr_line_t	mpiw_line[4];	/* Int A (0) - Int D (3) */
 };
 
 static struct mspcic_pci_intr_wiring krups_pci_intr_wiring[] = {
-	{ 0, 0, 1,    1 },	/* ethernet */
-	{ 0, 1, 0,    2 },	/* vga */
+	{ 0, 0, 1,    { 1, 0, 0, 0 } },	/* ethernet */
+	{ 0, 1, 0,    { 2, 0, 0, 0 } },	/* vga */
 };
 
 static struct mspcic_pci_intr_wiring espresso_pci_intr_wiring[] = {
-	{ 0,  0, 1,    1 },	/* ethernet */
-	{ 0,  1, 0,    2 },	/* vga */
-	{ 0,  2, 0,    6 },	/* pci slot1 */
-	{ 0,  3, 0,    7 },	/* pci slot2 */
-	{ 0,  7, 0,    4 },	/* isa */
-	{ 0, 16, 0,    5 },	/* eide */
-/*	{ 0, 17, 0,    ? },	   power management */
-	{ 0, 20, 0,    4 },	/* usb */
+	{ 0,  0, 1,    { 1, 0, 0, 0 } },	/* ethernet */
+	{ 0,  1, 0,    { 2, 0, 0, 0 } },	/* vga */
+	{ 0,  2, 0,    { 6, 7, 8, 8 } },	/* pci slot1 */
+	{ 0,  2, 1,    { 6, 7, 8, 8 } },	/* pci slot1 */
+	{ 0,  2, 2,    { 6, 7, 8, 8 } },	/* pci slot1 */
+	{ 0,  2, 3,    { 6, 7, 8, 8 } },	/* pci slot1 */
+	{ 0,  2, 4,    { 6, 7, 8, 8 } },	/* pci slot1 */
+	{ 0,  2, 5,    { 6, 7, 8, 8 } },	/* pci slot1 */
+	{ 0,  2, 6,    { 6, 7, 8, 8 } },	/* pci slot1 */
+	{ 0,  2, 7,    { 6, 7, 8, 8 } },	/* pci slot1 */
+	{ 0,  3, 0,    { 7, 8, 8, 8 } },	/* pci slot2 */
+	{ 0,  3, 1,    { 7, 8, 8, 8 } },	/* pci slot2 */
+	{ 0,  3, 2,    { 7, 8, 8, 8 } },	/* pci slot2 */
+	{ 0,  3, 3,    { 7, 8, 8, 8 } },	/* pci slot2 */
+	{ 0,  3, 4,    { 7, 8, 8, 8 } },	/* pci slot2 */
+	{ 0,  3, 5,    { 7, 8, 8, 8 } },	/* pci slot2 */
+	{ 0,  3, 6,    { 7, 8, 8, 8 } },	/* pci slot2 */
+	{ 0,  3, 7,    { 7, 8, 8, 8 } },	/* pci slot2 */
+	{ 0,  7, 0,    { 4, 0, 0, 0 } },	/* isa */
+	{ 0, 16, 0,    { 5, 0, 0, 0 } },	/* eide */
+	{ 0, 20, 0,    { 5, 0, 0, 0 } },	/* usb */
 };
 
 struct mspcic_known_model {
@@ -146,12 +160,16 @@ static int wiring_map_size;
 
 
 void
-pci_attach_hook(struct device *parent, struct device *self,
+pci_attach_hook(device_t parent, device_t self,
 		struct pcibus_attach_args *pba)
 {
 	struct mspcic_known_model *p;
 	char buf[32];
 	char *model;
+
+	/* We only need to run once (root PCI bus is 0) */
+	if (pba->pba_bus != 0)
+		return;
 
 	model = prom_getpropstringA(prom_findroot(), "model",
 				    buf, sizeof(buf));
@@ -193,7 +211,6 @@ pci_make_tag(pci_chipset_tag_t pc, int b, int d, int f)
 
 	memset(name, 0, sizeof(name));
 #endif
-
 	tag = PCITAG_CREATE(-1, b, d, f);
 	if (b >= 256 || d >= 32 || f >= 8) {
 		printf("pci_make_tag: bad request %d/%d/%d\n", b, d, f);
@@ -211,6 +228,9 @@ pci_make_tag(pci_chipset_tag_t pc, int b, int d, int f)
 	for (node = OF_child(sc->sc_node); node != 0; node = OF_peer(node)) {
 		struct ofw_pci_register reg;
 		uint32_t busrange[2];
+		int class;
+		pcireg_t busdata;
+		pcitag_t bustag;
 
 #ifdef SPARC_PCI_DEBUG
 		if (sparc_pci_debug & SPDB_PROBE) {
@@ -245,25 +265,49 @@ pci_make_tag(pci_chipset_tag_t pc, int b, int d, int f)
 		 * that gets more complicated.
 		 */
 		len = OF_getproplen(node, "reg");
-		if (len < sizeof(reg))
-			continue;
-		if (OF_getprop(node, "reg", (void *)&reg, sizeof(reg)) != len)
-			panic("pci_probe_bus: OF_getprop len botch");
+		OF_getprop(node, "reg", (void *)&reg, sizeof(reg));
 
-		if (b != OFW_PCI_PHYS_HI_BUS(reg.phys_hi))
-			continue;
-		if (d != OFW_PCI_PHYS_HI_DEVICE(reg.phys_hi))
-			continue;
-		if (f != OFW_PCI_PHYS_HI_FUNCTION(reg.phys_hi))
-			continue;
+		/*
+		 * Check for (OFW unconfigured) bridges that we fixed up.
+		 * We'll set this top-level bridge's node in the tag,
+		 * so that we can use it later for interrupt wiring.
+		 */
+		if (b > 0) {
+			len = OF_getproplen(node, "class-code");
+			if (!len)
+				continue;
+			OF_getprop(node, "class-code", &class, len);
+			if (IS_PCI_BRIDGE(class)) {
+				bustag = PCITAG_CREATE(node,
+				    OFW_PCI_PHYS_HI_BUS(reg.phys_hi),
+				    OFW_PCI_PHYS_HI_DEVICE(reg.phys_hi),
+				    OFW_PCI_PHYS_HI_FUNCTION(reg.phys_hi));
+				busdata = pci_conf_read(NULL, bustag,
+				    PCI_BRIDGE_BUS_REG);
+				if (b != ((busdata >> 8) & 0xff))
+					continue;
+
+#ifdef SPARC_PCI_DEBUG
+				if (sparc_pci_debug & SPDB_PROBE) {
+					OF_getprop(node, "name", &name,
+					    sizeof(name));
+					printf("> matched device behind node "
+					    "%x %s (bus %d)\n", node, name, b);
+				}
+#endif
+			} else
+				continue;
+		} else {
+			if (b != OFW_PCI_PHYS_HI_BUS(reg.phys_hi))
+				continue;
+			if (d != OFW_PCI_PHYS_HI_DEVICE(reg.phys_hi))
+				continue;
+			if (f != OFW_PCI_PHYS_HI_FUNCTION(reg.phys_hi))
+				continue;
+		}
 
 		/* Got a match */
 		tag = PCITAG_CREATE(node, b, d, f);
-
-		/* Enable all the different spaces for this device */
-		pci_conf_write(pc, tag, PCI_COMMAND_STATUS_REG,
-			PCI_COMMAND_MASTER_ENABLE
-			| PCI_COMMAND_MEM_ENABLE | PCI_COMMAND_IO_ENABLE);
 		DPRINTF(SPDB_PROBE, ("> found node %x %s\n", node, name));
 		return tag;
 	}
@@ -303,14 +347,15 @@ pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 #ifdef DIAGNOSTIC
 	if (reg & 0x3)
 		panic("pci_conf_read: reg %x unaligned", reg);
-	if (reg & ~0xff)
-		panic("pci_conf_read: reg %x out of range", reg);
 #endif
 
 	if (PCITAG_NODE(tag) == -1) {
 		DPRINTF(SPDB_CONF, ("\n"));
 		return ~0;
 	}
+
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return ~0;
 
 	mode1_addr = PCITAG_OFFSET(tag) | reg;
 	mode1_data_reg_pa = PCI_MODE1_DATA_REG_PA
@@ -340,14 +385,15 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 #ifdef DIAGNOSTIC
 	if (reg & 0x3)
 		panic("pci_conf_write: reg %x unaligned", reg);
-	if (reg & ~0xff)
-		panic("pci_conf_write: reg %x out of range", reg);
 #endif
 
 	if (PCITAG_NODE(tag) == -1) {
 		DPRINTF(SPDB_CONF, ("\n"));
 		return;
 	}
+
+	if ((unsigned int)reg >= PCI_CONF_SIZE)
+		return;
 
 	mode1_addr = PCITAG_OFFSET(tag) | reg;
 	mode1_data_reg_pa = PCI_MODE1_DATA_REG_PA
@@ -366,24 +412,77 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
  */
 
 int
-pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
-	int i;
+	int i, node;
+	pcitag_t tag;
+	pcireg_t val;
+	pci_intr_pin_t pin;
 
 	DPRINTF(SPDB_INTMAP,
 		("pci_intr_map(%d/%d/%d) -> ",
 		 pa->pa_bus, pa->pa_device, pa->pa_function));
 
+	tag = pci_make_tag(pa->pa_pc, pa->pa_bus, pa->pa_device,
+	    pa->pa_function);
+	node = PCITAG_NODE(tag);
+	val = pci_conf_read(NULL, tag, PCI_INTERRUPT_REG);
+	pin = PCI_INTERRUPT_PIN(val);
+
+	/*
+	 * Pin should be A(1) to D(4) - use values 0 to 3 respectively to
+	 * represent them.  Built-in devices might show pin 0, so assume
+	 * pin A for those - the static wiring map has the correct line.
+	 */
+	if (pin)
+		pin -= 1;
+
 	for (i = 0; i < wiring_map_size; ++i) {
 		struct mspcic_pci_intr_wiring *w = &wiring_map[i];
 
+		/* Device on PCI bus 0 */
 		if (pa->pa_bus == w->mpiw_bus
 		    && pa->pa_device == w->mpiw_device
 		    && pa->pa_function == w->mpiw_function)
 		{
-			DPRINTF(SPDB_INTMAP, ("line %d\n", w->mpiw_line));
-			*ihp = w->mpiw_line;
+			if (w->mpiw_line[pin] > 7) {
+				DPRINTF(SPDB_INTMAP, ("not mapped\n"));
+				return -1;
+			}
+			DPRINTF(SPDB_INTMAP, ("pin %c line %d\n", 'A' + pin,
+			    w->mpiw_line[pin]));
+			*ihp = w->mpiw_line[pin];
 			return 0;
+		/* Device on other PCI bus - find top-level bridge device */
+		} else if (pa->pa_bus) {
+			struct ofw_pci_register reg;
+
+			OF_getprop(node, "reg", (void *)&reg, sizeof(reg));
+			if (OFW_PCI_PHYS_HI_BUS(reg.phys_hi) == w->mpiw_bus
+			    && OFW_PCI_PHYS_HI_DEVICE(reg.phys_hi)
+			    == w->mpiw_device
+			    && OFW_PCI_PHYS_HI_FUNCTION(reg.phys_hi)
+			    == w->mpiw_function) {
+				int j;
+
+				/* PCI bridge interrupt swizzle */
+				for (j = 0; j < PCI_INTERRUPT_LINE(val); j++)
+					pin = (pin + (pa->pa_device % 4)) % 4;
+
+				if (w->mpiw_line[pin] > 7) {
+					DPRINTF(SPDB_INTMAP, ("pin %c "
+					    "not mapped\n", pin));
+					return -1;
+				}
+				DPRINTF(SPDB_INTMAP, ("pin %c line %d "
+				    "via bridge (%d/%d/%d) depth %d\n",
+				    'A' + pin, w->mpiw_line[pin],
+				    w->mpiw_bus, w->mpiw_device,
+				    w->mpiw_function,
+				    PCI_INTERRUPT_LINE(val)));
+				*ihp = w->mpiw_line[pin];
+				return 0;
+			}
 		}
 	}
 
@@ -393,14 +492,14 @@ pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 
 
 const char *
-pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
+pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih, char *buf,
+    size_t len)
 {
-	static char str[16];
 	int pil;
 
 	pil = mspcic_assigned_interrupt(ih);
-	sprintf(str, "line %d (pil %d)", ih, pil);
-	return str;
+	snprintf(buf, len, "line %d (pil %d)", ih, pil);
+	return buf;
 }
 
 
@@ -412,6 +511,18 @@ pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 	return NULL;
 }
 
+int
+pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
+		 int attr, uint64_t data)
+{
+
+	switch (attr) {
+	case PCI_INTR_MPSAFE:
+		return 0;
+	default:
+		return ENODEV;
+	}
+}
 
 void *
 pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih,

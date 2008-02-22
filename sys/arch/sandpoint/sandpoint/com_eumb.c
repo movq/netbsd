@@ -1,4 +1,4 @@
-/* $NetBSD: com_eumb.c,v 1.2 2007/10/17 19:56:58 garbled Exp $ */
+/* $NetBSD: com_eumb.c,v 1.8 2011/12/29 10:27:36 phx Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_eumb.c,v 1.2 2007/10/17 19:56:58 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_eumb.c,v 1.8 2011/12/29 10:27:36 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/tty.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/ic/comreg.h>
@@ -53,52 +46,53 @@ __KERNEL_RCSID(0, "$NetBSD: com_eumb.c,v 1.2 2007/10/17 19:56:58 garbled Exp $")
 #include <sandpoint/sandpoint/eumbvar.h>
 #include "locators.h"
 
-static int  com_eumb_match(struct device *, struct cfdata *, void *);
-static void com_eumb_attach(struct device *, struct device *, void *);
+static int  com_eumb_match(device_t, cfdata_t , void *);
+static void com_eumb_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(com_eumb, sizeof(struct com_softc),
+CFATTACH_DECL_NEW(com_eumb, sizeof(struct com_softc),
     com_eumb_match, com_eumb_attach, NULL, NULL);
 
 static int found;
 static struct com_regs cnregs;
 
 /*
- * There are two different UART configurations, single 4-wire UART
- * and dual 2-wire.  DCR register selects one of the two operating
- * mode.  A certain group of NAS boxes uses the 2nd UART as system
- * console while the 1st to communicate power management satellite
- * processor. "unit" locator helps to reverse the two.  Default is a
- * single 4-wire UART as console.
+ * There are two different UART configurations: single 4-wire UART
+ * and dual 2-wire.  The DCR register selects one of the two operating
+ * modes.  A certain group of NAS boxes uses the 2nd UART as system
+ * console while using the 1st to communicate with the power management
+ * satellite processor. The "unit" locator helps to reverse the two.
+ * Default is a single 4-wire UART as console.
  */
 int
-com_eumb_match(struct device *parent, struct cfdata *cf, void *aux)
+com_eumb_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct eumb_attach_args *eaa = aux;
 	int unit = eaa->eumb_unit;
 
 	if (unit == EUMBCF_UNIT_DEFAULT && found == 0)
-		return (1);
+		return 1;
 	if (unit == 0 || unit == 1)
-		return (1);
-	return (0);
+		return 1;
+	return 0;
 }
 
 void
-com_eumb_attach(struct device *parent, struct device *self, void *aux)
+com_eumb_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_softc *sc = (struct com_softc *)self;
+	struct com_softc *sc = device_private(self);
 	struct eumb_attach_args *eaa = aux;
 	int comaddr, epicirq;
 	bus_space_handle_t ioh;
 	extern u_long ticks_per_sec;
 
+	sc->sc_dev = self;
 	found = 1;
 
 	comaddr = (eaa->eumb_unit == 1) ? 0x4600 : 0x4500;
-	if (comaddr == cnregs.cr_iobase)
+	if (com_is_console(eaa->eumb_bt, comaddr, &ioh)) {
+		cnregs.cr_ioh = ioh;
 		sc->sc_regs = cnregs;
-	else {
-		ioh = comaddr;
+	} else {
 		bus_space_map(eaa->eumb_bt, comaddr, COM_NPORTS, 0, &ioh);
 		COM_INIT_REGS(sc->sc_regs, eaa->eumb_bt, ioh, comaddr);
 	}
@@ -106,7 +100,10 @@ com_eumb_attach(struct device *parent, struct device *self, void *aux)
 	epicirq = (eaa->eumb_unit == 1) ? 25 : 24;
 
 	com_attach_subr(sc);
-	intr_establish(epicirq + 16, IST_LEVEL, IPL_SERIAL, comintr, sc);
+
+	intr_establish(epicirq + I8259_ICU, IST_LEVEL, IPL_SERIAL, comintr, sc);
+	aprint_normal_dev(self, "interrupting at irq %d\n",
+	    epicirq + I8259_ICU);
 }
 
 int
@@ -122,6 +119,5 @@ eumbcnattach(bus_space_tag_t tag,
 	cnregs.cr_iot = tag;
 	cnregs.cr_iobase = conaddr;
 	cnregs.cr_nports = COM_NPORTS;
-	/* cnregs.ioh is initialized by comcnattach */
 	return comcnattach1(&cnregs, conspeed, confreq, contype, conmode);
 }

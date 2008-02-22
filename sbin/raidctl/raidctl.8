@@ -1,4 +1,4 @@
-.\"     $NetBSD: raidctl.8,v 1.51 2007/12/14 07:24:01 explorer Exp $
+.\"     $NetBSD: raidctl.8,v 1.74 2018/01/18 00:32:49 mrg Exp $
 .\"
 .\" Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,7 +53,7 @@
 .\" any improvements or extensions that they make and grant Carnegie the
 .\" rights to redistribute these changes.
 .\"
-.Dd August 6, 2007
+.Dd January 6, 2016
 .Dt RAIDCTL 8
 .Os
 .Sh NAME
@@ -69,56 +62,69 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl v
-.Fl a Ar component Ar dev
+.Fl A Op yes | no | forceroot | softroot
+.Ar dev
 .Nm
 .Op Fl v
-.Fl A Op yes | no | root
-.Ar dev
+.Fl a Ar component Ar dev
 .Nm
 .Op Fl v
 .Fl B Ar dev
 .Nm
 .Op Fl v
-.Fl c Ar config_file Ar dev
-.Nm
-.Op Fl v
 .Fl C Ar config_file Ar dev
 .Nm
 .Op Fl v
-.Fl f Ar component Ar dev
+.Fl c Ar config_file Ar dev
 .Nm
 .Op Fl v
 .Fl F Ar component Ar dev
 .Nm
 .Op Fl v
-.Fl g Ar component Ar dev
+.Fl f Ar component Ar dev
 .Nm
 .Op Fl v
 .Fl G Ar dev
 .Nm
 .Op Fl v
-.Fl i Ar dev
+.Fl g Ar component Ar dev
 .Nm
 .Op Fl v
 .Fl I Ar serial_number Ar dev
 .Nm
 .Op Fl v
-.Fl p Ar dev
+.Fl i Ar dev
+.Nm
+.Op Fl v
+.Fl M
+.Oo yes | no | set
+.Ar params
+.Oc
+.Ar dev
+.Nm
+.Op Fl v
+.Fl m Ar dev
 .Nm
 .Op Fl v
 .Fl P Ar dev
 .Nm
 .Op Fl v
-.Fl r Ar component Ar dev
+.Fl p Ar dev
 .Nm
 .Op Fl v
 .Fl R Ar component Ar dev
 .Nm
 .Op Fl v
-.Fl s Ar dev
+.Fl r Ar component Ar dev
 .Nm
 .Op Fl v
 .Fl S Ar dev
+.Nm
+.Op Fl v
+.Fl s Ar dev
+.Nm
+.Op Fl v
+.Fl U Ar unit Ar dev
 .Nm
 .Op Fl v
 .Fl u Ar dev
@@ -140,16 +146,6 @@ The command-line options for
 .Nm
 are as follows:
 .Bl -tag -width indent
-.It Fl a Ar component Ar dev
-Add
-.Ar component
-as a hot spare for the device
-.Ar dev .
-Component labels (which identify the location of a given
-component within a particular RAID set) are automatically added to the
-hot spare after it has been used and are not required for
-.Ar component
-before it is used.
 .It Fl A Ic yes Ar dev
 Make the RAID set auto-configurable.
 The RAID set will be automatically configured at boot
@@ -160,7 +156,7 @@ Note that all components of the set must be of type
 in the disklabel.
 .It Fl A Ic no Ar dev
 Turn off auto-configuration for the RAID set.
-.It Fl A Ic root Ar dev
+.It Fl A Ic forceroot Ar dev
 Make the RAID set auto-configurable, and also mark the set as being
 eligible to be the root partition.
 A RAID set configured this way will
@@ -170,13 +166,43 @@ All components of the set must be of type
 .Dv RAID
 in the disklabel.
 Note that only certain architectures
-.Pq currently alpha, i386, pmax, sparc, sparc64, and vax
+.Pq currently alpha, amd64, i386, pmax, sandpoint, sparc, sparc64, and vax
 support booting a kernel directly from a RAID set.
+Please note that
+.Ic forceroot
+mode was referred to as
+.Ic root
+mode on earlier versions of
+.Nx .
+For compatibility reasons,
+.Ic root
+can be used as an alias for
+.Ic forceroot .
+.It Fl A Ic softroot Ar dev
+Like
+.Ic forceroot ,
+but only change the root device if the boot device is part of the RAID set.
+.It Fl a Ar component Ar dev
+Add
+.Ar component
+as a hot spare for the device
+.Ar dev .
+Component labels (which identify the location of a given
+component within a particular RAID set) are automatically added to the
+hot spare after it has been used and are not required for
+.Ar component
+before it is used.
 .It Fl B Ar dev
 Initiate a copyback of reconstructed data from a spare disk to
 its original disk.
 This is performed after a component has failed,
 and the failed drive has been reconstructed onto a spare drive.
+.It Fl C Ar config_file Ar dev
+As for
+.Fl c ,
+but forces the configuration to take place.
+Fatal errors due to uninitialized components are ignored.
+This is required the first time a RAID set is configured.
 .It Fl c Ar config_file Ar dev
 Configure the RAIDframe device
 .Ar dev
@@ -185,15 +211,6 @@ according to the configuration given in
 A description of the contents of
 .Ar config_file
 is given later.
-.It Fl C Ar config_file Ar dev
-As for
-.Fl c ,
-but forces the configuration to take place.
-This is required the first time a RAID set is configured.
-.It Fl f Ar component Ar dev
-This marks the specified
-.Ar component
-as having failed, but does not initiate a reconstruction of that component.
 .It Fl F Ar component Ar dev
 Fails the specified
 .Ar component
@@ -201,8 +218,10 @@ of the device, and immediately begin a reconstruction of the failed
 disk onto an available hot spare.
 This is one of the mechanisms used to start
 the reconstruction process if a component does have a hardware failure.
-.It Fl g Ar component Ar dev
-Get the component label for the specified component.
+.It Fl f Ar component Ar dev
+This marks the specified
+.Ar component
+as having failed, but does not initiate a reconstruction of that component.
 .It Fl G Ar dev
 Generate the configuration of the RAIDframe device in a format suitable for
 use with the
@@ -210,15 +229,8 @@ use with the
 or
 .Fl C
 options.
-.It Fl i Ar dev
-Initialize the RAID device.
-In particular, (re-)write the parity on the selected device.
-This
-.Em MUST
-be done for
-.Em all
-RAID sets before the RAID device is labeled and before
-file systems are created on the RAID device.
+.It Fl g Ar component Ar dev
+Get the component label for the specified component.
 .It Fl I Ar serial_number Ar dev
 Initialize the component labels on each component of the device.
 .Ar serial_number
@@ -229,20 +241,63 @@ different RAID sets.
 This step
 .Em MUST
 be performed when a new RAID set is created.
-.It Fl p Ar dev
-Check the status of the parity on the RAID set.
-Displays a status message,
-and returns successfully if the parity is up-to-date.
+.It Fl i Ar dev
+Initialize the RAID device.
+In particular, (re-)write the parity on the selected device.
+This
+.Em MUST
+be done for
+.Em all
+RAID sets before the RAID device is labeled and before
+file systems are created on the RAID device.
+.It Fl M Ic yes Ar dev
+.\"XXX should there be a section with more info on the parity map feature?
+Enable the use of a parity map on the RAID set; this is the default,
+and greatly reduces the time taken to check parity after unclean
+shutdowns at the cost of some very slight overhead during normal
+operation.
+Changes to this setting will take effect the next time the set is
+configured.
+Note that RAID-0 sets, having no parity, will not use a parity map in
+any case.
+.It Fl M Ic no Ar dev
+Disable the use of a parity map on the RAID set; doing this is not
+recommended.
+This will take effect the next time the set is configured.
+.It Fl M Ic set Ar cooldown Ar tickms Ar regions Ar dev
+Alter the parameters of the parity map; parameters to leave unchanged
+can be given as 0, and trailing zeroes may be omitted.
+.\"XXX should this explanation be deferred to another section as well?
+The RAID set is divided into
+.Ar regions
+regions; each region is marked dirty for at most
+.Ar cooldown
+intervals of
+.Ar tickms
+milliseconds each after a write to it, and at least
+.Ar cooldown
+\- 1 such intervals.
+Changes to
+.Ar regions
+take effect the next time is configured, while changes to the other
+parameters are applied immediately.
+The default parameters are expected to be reasonable for most workloads.
+.It Fl m Ar dev
+Display status information about the parity map on the RAID set, if any.
+If used with
+.Fl v
+then the current contents of the parity map will be output (in
+hexadecimal format) as well.
 .It Fl P Ar dev
 Check the status of the parity on the RAID set, and initialize
 (re-write) the parity if the parity is not known to be up-to-date.
 This is normally used after a system crash (and before a
 .Xr fsck 8 )
 to ensure the integrity of the parity.
-.It Fl r Ar component Ar dev
-Remove the spare disk specified by
-.Ar component
-from the set of available spare components.
+.It Fl p Ar dev
+Check the status of the parity on the RAID set.
+Displays a status message,
+and returns successfully if the parity is up-to-date.
 .It Fl R Ar component Ar dev
 Fails the specified
 .Ar component ,
@@ -250,16 +305,28 @@ if necessary, and immediately begins a reconstruction back to
 .Ar component .
 This is useful for reconstructing back onto a component after
 it has been replaced following a failure.
-.It Fl s Ar dev
-Display the status of the RAIDframe device for each of the components
-and spares.
+.It Fl r Ar component Ar dev
+Remove the spare disk specified by
+.Ar component
+from the set of available spare components.
 .It Fl S Ar dev
 Check the status of parity re-writing, component reconstruction, and
 component copyback.
 The output indicates the amount of progress
 achieved in each of these areas.
+.It Fl s Ar dev
+Display the status of the RAIDframe device for each of the components
+and spares.
+.It Fl U Ar unit Ar dev
+Set the
+.Dv last_unit
+field in all the raid components, so that the next time the raid
+will be autoconfigured it uses that
+.Ar unit .
 .It Fl u Ar dev
 Unconfigure the RAIDframe device.
+This does not remove any component labels or change any configuration
+settings (e.g. auto-configuration settings) for the RAID set.
 .It Fl v
 Be more verbose.
 For operations such as reconstructions, parity
@@ -297,17 +364,21 @@ and the configuration parameters associated with that section.
 The first section is the
 .Sq array
 section, and it specifies
-the number of rows, columns, and spare disks in the RAID set.
+the number of columns, and spare disks in the RAID set.
 For example:
+.Bd -literal -offset indent
+START array
+3 0
+.Ed
+.Pp
+indicates an array with 3 columns, and 0 spare disks.
+Old configurations specified a 3rd value in front of the
+number of columns and spare disks.
+This old value, if provided, must be specified as 1:
 .Bd -literal -offset indent
 START array
 1 3 0
 .Ed
-.Pp
-indicates an array with 1 row, 3 columns, and 0 spare disks.
-Note that although multi-dimensional arrays may be specified, they are
-.Em NOT
-supported in the driver.
 .Pp
 The second section, the
 .Sq disks
@@ -321,6 +392,7 @@ START disks
 .Ed
 .Pp
 specifies the three component disks to be used in the RAID device.
+Disk wedges may also be specified with the NAME=<wedge name> syntax.
 If any of the specified drives cannot be found when the RAID device is
 configured, then they will be marked as
 .Sq failed ,
@@ -483,7 +555,7 @@ each component will be given a
 A
 .Sq component label
 contains important information about the component, including a
-user-specified serial number, the row and column of that component in
+user-specified serial number, the column of that component in
 the RAID set, the redundancy level of the RAID set, a
 .Sq modification counter ,
 and whether the parity information (if any) on that
@@ -499,7 +571,7 @@ particular component label must be in agreement with the other
 component labels in the set.
 For example, the serial number,
 .Sq modification counter ,
-number of rows and number of columns must all be in agreement.
+and number of columns must all be in agreement.
 If any of these are different, then the component is
 not considered to be part of the set.
 See
@@ -515,8 +587,8 @@ device.
 To configure the device, a configuration file which looks something like:
 .Bd -literal -offset indent
 START array
-# numRow numCol numSpare
-1 3 1
+# numCol numSpare
+3 1
 
 START disks
 /dev/sd1e
@@ -549,8 +621,8 @@ in case one of the three main drives should fail.
 A RAID 0 set would be specified in a similar way:
 .Bd -literal -offset indent
 START array
-# numRow numCol numSpare
-1 4 0
+# numCol numSpare
+4 0
 
 START disks
 /dev/sd10e
@@ -579,8 +651,8 @@ since there is no way to recover data if any of the components fail.
 For a RAID 1 (mirror) set, the following configuration might be used:
 .Bd -literal -offset indent
 START array
-# numRow numCol numSpare
-1 2 0
+# numCol numSpare
+2 0
 
 START disks
 /dev/sd20e
@@ -706,8 +778,8 @@ to indicate that a particular component is not present.
 In the following:
 .Bd -literal -offset indent
 START array
-# numRow numCol numSpare
-1 2 0
+# numCol numSpare
+2 0
 
 START disks
 absent
@@ -737,7 +809,7 @@ the existing data mirrored, and normal operation resumed.
 .Pp
 The size of the resulting RAID set will depend on the number of data
 components in the set.
-Space is automatically reserved for the component labels, and 
+Space is automatically reserved for the component labels, and
 the actual amount of space used
 for data on a component will be rounded down to the largest possible
 multiple of the sectors per stripe unit (sectPerSU) value.
@@ -953,9 +1025,9 @@ in the configuration file.
 For example, the configuration file (in part) might now look like:
 .Bd -literal -offset indent
 START array
-1 3 0
+3 0
 
-START drives
+START disks
 /dev/sd1e
 /dev/sd4e
 /dev/sd3e
@@ -1104,9 +1176,9 @@ and
 fail (in that order) in a RAID set of the following configuration:
 .Bd -literal -offset indent
 START array
-1 4 0
+4 0
 
-START drives
+START disks
 /dev/sd1e
 /dev/sd2e
 /dev/sd3e
@@ -1124,10 +1196,10 @@ fifo 100
 then the following configuration (say "recover_raid0.conf")
 .Bd -literal -offset indent
 START array
-1 4 0
+4 0
 
-START drives
-/dev/sd6e
+START disks
+absent
 /dev/sd2e
 /dev/sd3e
 /dev/sd4e
@@ -1140,9 +1212,7 @@ START queue
 fifo 100
 .Ed
 .Pp
-(where
-.Pa /dev/sd6e
-has no physical device) can be used with
+can be used with
 .Bd -literal -offset indent
 raidctl -C recover_raid0.conf raid0
 .Ed
@@ -1166,8 +1236,8 @@ A RAID 0 set, for example, could be constructed from four RAID 5 sets.
 The following configuration file shows such a setup:
 .Bd -literal -offset indent
 START array
-# numRow numCol numSpare
-1 4 0
+# numCol numSpare
+4 0
 
 START disks
 /dev/raid1e
@@ -1219,7 +1289,7 @@ partition of such a RAID set being used for
 .Pa / .
 To use raid0a as the root file system, simply use:
 .Bd -literal -offset indent
-raidctl -A root raid0
+raidctl -A forceroot raid0
 .Ed
 .Pp
 To return raid0a to be just an auto-configuring set simply use the
@@ -1228,7 +1298,7 @@ arguments.
 .Pp
 Note that kernels can only be directly read from RAID 1 components on
 architectures that support that
-.Pq currently alpha, i386, pmax, sparc, sparc64, and vax .
+.Pq currently alpha, i386, pmax, sandpoint, sparc, sparc64, and vax .
 On those architectures, the
 .Dv FS_RAID
 file system is recognized by the bootblocks, and will properly load the
@@ -1403,7 +1473,7 @@ blocks (16K).
 Since there are 4 data sectors per stripe, the maximum
 data per stripe is 64 blocks (32K) or 128 blocks (64K).
 Again, empirical measurement will provide the best indicators of which
-values will yeild better performance.
+values will yield better performance.
 .Pp
 The parameters used for the file system are also critical to good performance.
 For
@@ -1430,49 +1500,41 @@ Configure the RAID set with:
 .Bd -literal -offset indent
 raidctl -C raid0.conf raid0
 .Ed
-.Pp
 .It
 Initialize the component labels with:
 .Bd -literal -offset indent
 raidctl -I 123456 raid0
 .Ed
-.Pp
 .It
 Initialize other important parts of the set with:
 .Bd -literal -offset indent
 raidctl -i raid0
 .Ed
-.Pp
 .It
 Get the default label for the RAID set:
 .Bd -literal -offset indent
-disklabel raid0 \*[Gt] /tmp/label
+disklabel raid0 > /tmp/label
 .Ed
-.Pp
 .It
 Edit the label:
 .Bd -literal -offset indent
 vi /tmp/label
 .Ed
-.Pp
 .It
 Put the new label on the RAID set:
 .Bd -literal -offset indent
 disklabel -R -r raid0 /tmp/label
 .Ed
-.Pp
 .It
 Create the file system:
 .Bd -literal -offset indent
 newfs /dev/rraid0e
 .Ed
-.Pp
 .It
 Mount the file system:
 .Bd -literal -offset indent
 mount /dev/raid0e /mnt
 .Ed
-.Pp
 .It
 Use:
 .Bd -literal -offset indent
@@ -1555,5 +1617,17 @@ component ever fail \(em it is better to use RAID 0 and get the
 additional space and speed, than it is to use parity, but
 not keep the parity correct.
 At least with RAID 0 there is no perception of increased data security.
+.Pp
+When replacing a failed component of a RAID set, it is a good
+idea to zero out the first 64 blocks of the new component to insure the
+RAIDframe driver doesn't erroneously detect a component label in the
+new component.
+This is particularly true on
+.Em RAID 1
+sets because there is at most one correct component label in a failed RAID
+1 installation, and the RAIDframe driver picks the component label with the
+highest serial number and modification value as the authoritative source
+for the failed RAID set when choosing which component label to use to
+configure the RAID set.
 .Sh BUGS
 Hot-spare removal is currently not available.

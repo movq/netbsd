@@ -1,4 +1,4 @@
-/*	$NetBSD: efi.c,v 1.3 2006/09/21 09:58:27 kochi Exp $	*/
+/*	$NetBSD: efi.c,v 1.5 2016/08/04 18:07:43 scole Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -32,6 +32,9 @@
 #include <efi.h>
 #include <efilib.h>
 #include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
+
+#include <machine/efilib.h>
 
 EFI_HANDLE		IH;
 EFI_SYSTEM_TABLE	*ST;

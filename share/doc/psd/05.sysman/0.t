@@ -1,4 +1,4 @@
-.\"	$NetBSD: 0.t,v 1.4 2005/12/26 20:04:46 perry Exp $
+.\"	$NetBSD: 0.t,v 1.6 2014/09/30 23:30:48 christos Exp $
 .\"
 .\" Copyright (c) 1983, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -78,15 +78,24 @@ network server processes.
 .AE
 .LP
 .bp +3
-.sy echo -n >toc
+.\" The second argument of .Sh is the page number the section is
+.\" expected to begin on. This is extracted into the table of contents
+.\" before we begin typesetting. If you have been editing the document
+.\" and want to check that the page numbers are still correct,
+.\" uncomment the following line and the .sy line two lines down, then
+.\" run groff with -U so .sy is allowed. Then check the output pagelog
+.\" file. If anyone knows how to change this to an assertion, so .sy
+.\" isn't needed and groff will complain if $2 isn't equal to the page
+.\" number, please go ahead.
+.\".sy echo 'have should-be heading' >pagelog
 .de Sh
-.sy echo >>toc '.L\\$1 "\\$2" \\n%'
+.\".sy echo >>pagelog '\\$2 \\n% "\\$3"'
 .ie \\$1=0 \{\
-\fB\\$2\fP
+\fB\\$3\fP
 .\}
 .el \{\
 .NH \\$1
-\\$2
+\\$3
 .LP
 .\}
 ..
@@ -97,9 +106,8 @@ network server processes.
 \\$1\\$2
 ..
 .de Fd
-.sy echo >>toc '.Nm \\$1 \\$2 "\\$3'
 ..
-.Sh 0 "Notation and Types
+.Sh 0 4 "Notation and Types
 .PP
 The notation used to describe system calls is a variant of a
 C language function call, consisting of a prototype call followed by
@@ -163,7 +171,7 @@ uint	unsigned int	/* System V compatibility */
 uint16_t	unsigned short	/* unsigned 16-bit integer */
 uint32_t	unsigned int	/* unsigned 32-bit integer */
 uint64_t	unsigned long long	/* unsigned 64-bit integer */
-uint8_t		unsigned char	/* unsigned 8-bit integer */
+uint8_t	unsigned char	/* unsigned 8-bit integer */
 ushort	unsigned short	/* System V compatibility */
 .TE
 .ft R

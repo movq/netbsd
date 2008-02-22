@@ -1,4 +1,4 @@
-/*	$NetBSD: nhpib.c,v 1.38 2007/12/05 12:03:08 tsutsui Exp $	*/
+/*	$NetBSD: nhpib.c,v 1.41 2014/03/24 19:42:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nhpib.c,v 1.38 2007/12/05 12:03:08 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nhpib.c,v 1.41 2014/03/24 19:42:58 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -143,7 +136,7 @@ static struct hpib_controller nhpib_controller = {
 };
 
 struct nhpib_softc {
-	struct device sc_dev;		/* generic device glue */
+	device_t sc_dev;		/* generic device glue */
 
 	bus_space_tag_t sc_bst;
 	bus_space_handle_t sc_bsh;
@@ -158,21 +151,21 @@ struct nhpib_softc {
 	struct callout sc_ppwatch_ch;
 };
 
-static int	nhpib_dio_match(struct device *, struct cfdata *, void *);
-static void	nhpib_dio_attach(struct device *, struct device *, void *);
-static int	nhpib_intio_match(struct device *, struct cfdata *, void *);
-static void	nhpib_intio_attach(struct device *, struct device *, void *);
+static int	nhpib_dio_match(device_t, cfdata_t, void *);
+static void	nhpib_dio_attach(device_t, device_t, void *);
+static int	nhpib_intio_match(device_t, cfdata_t, void *);
+static void	nhpib_intio_attach(device_t, device_t, void *);
 
 static void	nhpib_common_attach(struct nhpib_softc *, const char *);
 
-CFATTACH_DECL(nhpib_dio, sizeof(struct nhpib_softc),
+CFATTACH_DECL_NEW(nhpib_dio, sizeof(struct nhpib_softc),
     nhpib_dio_match, nhpib_dio_attach, NULL, NULL);
 
-CFATTACH_DECL(nhpib_intio, sizeof(struct nhpib_softc),
+CFATTACH_DECL_NEW(nhpib_intio, sizeof(struct nhpib_softc),
     nhpib_intio_match, nhpib_intio_attach, NULL, NULL);
 
 static int
-nhpib_intio_match(struct device *parent, struct cfdata *match, void *aux)
+nhpib_intio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct intio_attach_args *ia = aux;
 
@@ -183,7 +176,7 @@ nhpib_intio_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static int
-nhpib_dio_match(struct device *parent, struct cfdata *match, void *aux)
+nhpib_dio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct dio_attach_args *da = aux;
 
@@ -194,15 +187,16 @@ nhpib_dio_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-nhpib_intio_attach(struct device *parent, struct device *self, void *aux)
+nhpib_intio_attach(device_t parent, device_t self, void *aux)
 {
-	struct nhpib_softc *sc = (struct nhpib_softc *)self;
+	struct nhpib_softc *sc = device_private(self);
 	struct intio_attach_args *ia = aux;
 	bus_space_tag_t bst = ia->ia_bst;
 	const char *desc = "internal HP-IB";
 
+	sc->sc_dev = self;
 	if (bus_space_map(bst, ia->ia_iobase, INTIO_DEVSIZE, 0, &sc->sc_bsh)) {
-		printf(": can't map registers\n");
+		aprint_error(": can't map registers\n");
 		return;
 	}
 
@@ -217,18 +211,20 @@ nhpib_intio_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static void
-nhpib_dio_attach(struct device *parent, struct device *self, void *aux)
+nhpib_dio_attach(device_t parent, device_t self, void *aux)
 {
-	struct nhpib_softc *sc = (struct nhpib_softc *)self;
+	struct nhpib_softc *sc = device_private(self);
 	struct dio_attach_args *da = aux;
 	bus_space_tag_t bst = da->da_bst;
 	const char *desc = DIO_DEVICE_DESC_NHPIB;
 
+	sc->sc_dev = self;
 	if (bus_space_map(bst, da->da_addr, da->da_size, 0, &sc->sc_bsh)) {
-		printf(": can't map registers\n");
+		aprint_error(": can't map registers\n");
 		return;
 	}
 
+	sc->sc_dev = self;
 	sc->sc_bst = bst;
 	/* read address off switches */
 	sc->sc_myaddr = bus_space_read_1(sc->sc_bst, sc->sc_bsh, 5);
@@ -245,10 +241,9 @@ nhpib_common_attach(struct nhpib_softc *sc, const char *desc)
 {
 	struct hpibdev_attach_args ha;
 
-	printf(": %s\n", desc);
+	aprint_normal(": %s\n", desc);
 
-	sc->sc_regs = (struct nhpibdevice *)bus_space_vaddr(sc->sc_bst,
-	    sc->sc_bsh);
+	sc->sc_regs = bus_space_vaddr(sc->sc_bst, sc->sc_bsh);
 
 	callout_init(&sc->sc_read_ch, 0);
 	callout_init(&sc->sc_ppwatch_ch, 0);
@@ -257,14 +252,13 @@ nhpib_common_attach(struct nhpib_softc *sc, const char *desc)
 	ha.ha_type = sc->sc_type;			/* XXX */
 	ha.ha_ba = sc->sc_myaddr;
 	ha.ha_softcpp = &sc->sc_hpibbus;		/* XXX */
-	(void)config_found((void *)sc, &ha, hpibdevprint);
+	(void)config_found(sc->sc_dev, &ha, hpibdevprint);
 }
 
 static void
 nhpibreset(struct hpibbus_softc *hs)
 {
-	struct nhpib_softc *sc =
-	    (struct nhpib_softc *)device_parent(&hs->sc_dev);
+	struct nhpib_softc *sc = device_private(device_parent(hs->sc_dev));
 	struct nhpibdevice *hd = sc->sc_regs;
 
 	hd->hpib_acr = AUX_SSWRST;
@@ -301,8 +295,7 @@ nhpibifc(struct nhpibdevice *hd)
 static int
 nhpibsend(struct hpibbus_softc *hs, int slave, int sec, void *ptr, int origcnt)
 {
-	struct nhpib_softc *sc =
-	    (struct nhpib_softc *)device_parent(&hs->sc_dev);
+	struct nhpib_softc *sc = device_private(device_parent(hs->sc_dev));
 	struct nhpibdevice *hd = sc->sc_regs;
 	int cnt = origcnt;
 	char *addr = ptr;
@@ -357,8 +350,7 @@ senderror:
 static int
 nhpibrecv(struct hpibbus_softc *hs, int slave, int sec, void *ptr, int origcnt)
 {
-	struct nhpib_softc *sc =
-	    (struct nhpib_softc *)device_parent(&hs->sc_dev);
+	struct nhpib_softc *sc = device_private(device_parent(hs->sc_dev));
 	struct nhpibdevice *hd = sc->sc_regs;
 	int cnt = origcnt;
 	char *addr = ptr;
@@ -409,8 +401,7 @@ static void
 nhpibgo(struct hpibbus_softc *hs, int slave, int sec, void *ptr, int count,
     int rw, int timo)
 {
-	struct nhpib_softc *sc =
-	    (struct nhpib_softc *)device_parent(&hs->sc_dev);
+	struct nhpib_softc *sc = device_private(device_parent(hs->sc_dev));
 	struct nhpibdevice *hd = sc->sc_regs;
 	char *addr = ptr;
 
@@ -458,8 +449,7 @@ static void
 nhpibreadtimo(void *arg)
 {
 	struct hpibbus_softc *hs = arg;
-	struct nhpib_softc *sc =
-	    (struct nhpib_softc *)device_parent(&hs->sc_dev);
+	struct nhpib_softc *sc = device_private(device_parent(hs->sc_dev));
 	int s = splbio();
 
 	if (hs->sc_flags & HPIBF_IO) {
@@ -480,8 +470,7 @@ nhpibreadtimo(void *arg)
 static void
 nhpibdone(struct hpibbus_softc *hs)
 {
-	struct nhpib_softc *sc =
-	    (struct nhpib_softc *)device_parent(&hs->sc_dev);
+	struct nhpib_softc *sc = device_private(device_parent(hs->sc_dev));
 	struct nhpibdevice *hd = sc->sc_regs;
 	int cnt;
 
@@ -519,14 +508,11 @@ nhpibintr(void *arg)
 	int stat0;
 	int stat1;
 
-#ifdef lint
-	if (stat1 = unit)
-		return 1;
-#endif
 	if ((hd->hpib_ids & IDS_IR) == 0)
 		return 0;
 	stat0 = hd->hpib_mis;
 	stat1 = hd->hpib_lis;
+	__USE(stat1);
 
 	hq = TAILQ_FIRST(&hs->sc_queue);
 
@@ -552,7 +538,7 @@ nhpibintr(void *arg)
 #ifdef DEBUG
 		else
 			printf("%s: PPOLL intr bad status %x\n",
-			       hs->sc_dev.dv_xname, stat0);
+			    device_xname(hs->sc_dev), stat0);
 #endif
 	}
 	return 1;
@@ -561,8 +547,7 @@ nhpibintr(void *arg)
 static int
 nhpibppoll(struct hpibbus_softc *hs)
 {
-	struct nhpib_softc *sc =
-	    (struct nhpib_softc *)device_parent(&hs->sc_dev);
+	struct nhpib_softc *sc = device_private(device_parent(hs->sc_dev));
 	struct nhpibdevice *hd = sc->sc_regs;
 	int ppoll;
 
@@ -598,8 +583,7 @@ static void
 nhpibppwatch(void *arg)
 {
 	struct hpibbus_softc *hs = arg;
-	struct nhpib_softc *sc =
-	    (struct nhpib_softc *)device_parent(&hs->sc_dev);
+	struct nhpib_softc *sc = device_private(device_parent(hs->sc_dev));
 
 	if ((hs->sc_flags & HPIBF_PPOLL) == 0)
 		return;

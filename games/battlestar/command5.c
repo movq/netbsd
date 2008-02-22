@@ -1,4 +1,4 @@
-/*	$NetBSD: command5.c,v 1.3 2005/07/01 06:04:54 jmc Exp $	*/
+/*	$NetBSD: command5.c,v 1.5 2014/03/22 23:31:28 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,14 +34,14 @@
 #if 0
 static char sccsid[] = "@(#)com5.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: command5.c,v 1.3 2005/07/01 06:04:54 jmc Exp $");
+__RCSID("$NetBSD: command5.c,v 1.5 2014/03/22 23:31:28 dholland Exp $");
 #endif
 #endif				/* not lint */
 
 #include "extern.h"
 
 void
-kiss()
+kiss(void)
 {
 	while (wordtype[++wordnumber] != NOUNS && wordnumber <= wordcount)
 		continue;
@@ -186,10 +186,13 @@ zzz(void)
 {
 	int     oldtime;
 	int     n;
+	int zzztime;
+
+	zzztime = (3 * CYCLE) / 4;
 
 	oldtime = ourtime;
-	if ((snooze - ourtime) < (0.75 * CYCLE)) {
-		ourtime += 0.75 * CYCLE - (snooze - ourtime);
+	if ((snooze - ourtime) < zzztime) {
+		ourtime += zzztime - (snooze - ourtime);
 		printf("<zzz>");
 		for (n = 0; n < ourtime - oldtime; n++)
 			printf(".");

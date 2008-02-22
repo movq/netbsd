@@ -1,4 +1,4 @@
-/* $NetBSD: if_cs_isapnp.c,v 1.10 2007/10/19 12:00:31 ad Exp $ */
+/* $NetBSD: if_cs_isapnp.c,v 1.20 2016/07/14 04:00:45 msaitoh Exp $ */
 
 /*-
  * Copyright (c)2001 YAMAMOTO Takashi,
@@ -27,17 +27,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_isapnp.c,v 1.10 2007/10/19 12:00:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_isapnp.c,v 1.20 2016/07/14 04:00:45 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/socket.h>
-
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -55,19 +50,21 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_isapnp.c,v 1.10 2007/10/19 12:00:31 ad Exp $")
 #include <dev/isapnp/isapnpvar.h>
 #include <dev/isapnp/isapnpdevs.h>
 
-#define DEVNAME(sc) (sc)->sc_dev.dv_xname
+#define DEVNAME(sc) device_xname((sc)->sc_dev)
 
-int cs_isapnp_match(struct device *, struct cfdata *, void *);
-void cs_isapnp_attach(struct device *, struct device *, void *);
+static int cs_isapnp_match(device_t, cfdata_t, void *);
+static void cs_isapnp_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(cs_isapnp, sizeof(struct cs_softc),
+#ifdef notyet
+CFATTACH_DECL_NEW(cs_isapnp, sizeof(struct cs_softc_isa),
     cs_isapnp_match, cs_isapnp_attach, NULL, NULL);
+#else
+CFATTACH_DECL_NEW(cs_isapnp, sizeof(struct cs_softc),
+    cs_isapnp_match, cs_isapnp_attach, NULL, NULL);
+#endif
 
 int
-cs_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+cs_isapnp_match(device_t parent, cfdata_t match, void *aux)
 {
 	int pri, variant;
 
@@ -78,42 +75,46 @@ cs_isapnp_match(parent, match, aux)
 }
 
 void
-cs_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+cs_isapnp_attach(device_t parent, device_t self, void *aux)
 {
+#ifdef notyet
+	struct cs_softc_isa *isc = device_private(sc);
+	struct cs_softc *sc = &sc->sc_cs;
+#else
 	struct cs_softc *sc = device_private(self);
+#endif
 	struct isapnp_attach_args *ipa = aux;
 #ifdef notyet
-	struct cs_softc_isa *isc = (void *)sc;
 	int i;
 #endif
+
+	sc->sc_dev = self;
 
 	printf("\n");
 
 	if (ipa->ipa_nio != 1 || ipa->ipa_nirq != 1 || ipa->ipa_ndrq) {
-		printf("%s: unexpected resource requirements\n",
-			DEVNAME(sc));
+		aprint_error_dev(self, "unexpected resource requirements\n");
 		return;
 	}
 
 	if (ipa->ipa_io[0].length != CS8900_IOSIZE) {
-		printf("%s: unexpected io size\n", DEVNAME(sc));
+		aprint_error_dev(self, "unexpected io size\n");
 		return;
 	}
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: unable to allocate resources\n", DEVNAME(sc));
+		aprint_error_dev(self, "unable to allocate resources\n");
 		return;
 	}
 
-	printf("%s: %s %s\n", DEVNAME(sc), ipa->ipa_devident,
-		ipa->ipa_devclass);
+	aprint_normal_dev(self, "%s %s\n", ipa->ipa_devident,
+	    ipa->ipa_devclass);
 
 #ifdef notyet
 #ifdef DEBUG
-	printf("%s: nio=%u, nmem=%u, nmem32=%u, ndrq=%u, nirq=%u\n", DEVNAME(sc),
-		ipa->ipa_nio, ipa->ipa_nmem, ipa->ipa_nmem32, ipa->ipa_ndrq, ipa->ipa_nirq);
+	printf("%s: nio=%u, nmem=%u, nmem32=%u, ndrq=%u, nirq=%u\n",
+	    DEVNAME(sc), ipa->ipa_nio, ipa->ipa_nmem, ipa->ipa_nmem32,
+	    ipa->ipa_ndrq, ipa->ipa_nirq);
 #endif
 	isc->sc_ic = ipa->ipa_ic;
 	isc->sc_drq = -1;
@@ -130,19 +131,19 @@ cs_isapnp_attach(parent, self, aux)
 
 			id = CS_READ_PACKET_PAGE_MEM(sc, PKTPG_EISA_NUM);
 			if (id != EISA_NUM_CRYSTAL) {
-				printf("%s: unexpected id(%u)\n",
-					 DEVNAME(sc), id);
+				aprint_verbose_dev(self, "unexpected id(%u)\n",
+				    id);
 				continue;
 			}
-			printf("%s: correct id(%u) from mem=%u\n",
-				 DEVNAME(sc), id, (u_int)ipa->ipa_mem[i].h);
+			aprint_verbose_dev(self,"correct id(%u) from mem=%u\n",
+			    id, (u_int)ipa->ipa_mem[i].h);
 #endif
 
 			sc->sc_memt = ipa->ipa_memt;
 			sc->sc_memh = ipa->ipa_mem[i].h;
 			sc->sc_pktpgaddr = ipa->ipa_mem[i].base;
 			sc->sc_cfgflags |= CFGFLG_MEM_MODE;
-			printf("%s: memory mode\n", DEVNAME(sc));
+			aprint_normal_dev(self, "memory mode\n");
 			break;
 		}
 	}
@@ -151,13 +152,12 @@ cs_isapnp_attach(parent, self, aux)
 	sc->sc_ih = isa_intr_establish(ipa->ipa_ic, ipa->ipa_irq[0].num,
 		ipa->ipa_irq[0].type, IPL_NET, cs_intr, sc);
 	if (sc->sc_ih == 0) {
-		printf("%s: unable to establish interrupt\n",
-			DEVNAME(sc));
+		aprint_error_dev(self, "unable to establish interrupt\n");
 		goto fail;
 	}
 
 	if (cs_attach(sc, 0, 0, 0, 0)) {
-		printf("%s: unable to attach\n", DEVNAME(sc));
+		aprint_error_dev(self, "unable to attach\n");
 		goto fail;
 	}
 

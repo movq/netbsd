@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_socket.c,v 1.5 2007/12/20 23:02:58 dsl Exp $ */
+/*	$NetBSD: linux32_socket.c,v 1.29 2018/05/10 01:32:24 ozaki-r Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_socket.c,v 1.5 2007/12/20 23:02:58 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_socket.c,v 1.29 2018/05/10 01:32:24 ozaki-r Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -46,20 +46,40 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_socket.c,v 1.5 2007/12/20 23:02:58 dsl Exp $
 #include <sys/proc.h>
 #include <sys/ucred.h>
 #include <sys/swap.h>
+#include <sys/file.h>
+#include <sys/vnode.h>
+#include <sys/filedesc.h>
 
 #include <machine/types.h>
+
+#include <net/if.h>
+#include <net/if_dl.h>
+#include <net/if_types.h>
+#include <net/route.h>
+
+#include <netinet/in.h>
+#include <netinet/ip_mroute.h>
 
 #include <sys/syscallargs.h>
 
 #include <compat/netbsd32/netbsd32.h>
+#include <compat/netbsd32/netbsd32_ioctl.h>
 #include <compat/netbsd32/netbsd32_conv.h>
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 
+#include <compat/sys/socket.h>
+#include <compat/sys/sockio.h>
+
+#include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_misc.h>
 #include <compat/linux/common/linux_oldolduname.h>
+#include <compat/linux/common/linux_ioctl.h>
+#include <compat/linux/common/linux_sockio.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -67,7 +87,13 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_socket.c,v 1.5 2007/12/20 23:02:58 dsl Exp $
 #include <compat/linux32/common/linux32_machdep.h>
 #include <compat/linux32/common/linux32_sysctl.h>
 #include <compat/linux32/common/linux32_socketcall.h>
+#include <compat/linux32/common/linux32_sockio.h>
+#include <compat/linux32/common/linux32_ioctl.h>
 #include <compat/linux32/linux32_syscallargs.h>
+
+int linux32_getifname(struct lwp *, register_t *, void *);
+int linux32_getifconf(struct lwp *, register_t *, void *);
+int linux32_getifhwaddr(struct lwp *, register_t *, u_int, void *);
 
 int
 linux32_sys_socketpair(struct lwp *l, const struct linux32_sys_socketpair_args *uap, register_t *retval)
@@ -83,7 +109,7 @@ linux32_sys_socketpair(struct lwp *l, const struct linux32_sys_socketpair_args *
 	NETBSD32TO64_UAP(domain);
 	NETBSD32TO64_UAP(type);
 	NETBSD32TO64_UAP(protocol);
-	NETBSD32TOP_UAP(rsv, int)
+	NETBSD32TOP_UAP(rsv, int);
 
 	return linux_sys_socketpair(l, &ua, retval);
 }
@@ -206,7 +232,7 @@ linux32_sys_bind(struct lwp *l, const struct linux32_sys_bind_args *uap, registe
 	struct linux_sys_bind_args ua;
 
 	NETBSD32TO64_UAP(s);
-	NETBSD32TOP_UAP(name, struct osockaddr)
+	NETBSD32TOP_UAP(name, struct osockaddr);
 	NETBSD32TO64_UAP(namelen);
 
 	return linux_sys_bind(l, &ua, retval);
@@ -223,7 +249,7 @@ linux32_sys_connect(struct lwp *l, const struct linux32_sys_connect_args *uap, r
 	struct linux_sys_connect_args ua;
 
 	NETBSD32TO64_UAP(s);
-	NETBSD32TOP_UAP(name, struct osockaddr)
+	NETBSD32TOP_UAP(name, struct osockaddr);
 	NETBSD32TO64_UAP(namelen);
 
 #ifdef DEBUG_LINUX
@@ -245,7 +271,7 @@ linux32_sys_accept(struct lwp *l, const struct linux32_sys_accept_args *uap, reg
 	struct linux_sys_accept_args ua;
 
 	NETBSD32TO64_UAP(s);
-	NETBSD32TOP_UAP(name, struct osockaddr)
+	NETBSD32TOP_UAP(name, struct osockaddr);
 	NETBSD32TOP_UAP(anamelen, int);
 
 	return linux_sys_accept(l, &ua, retval);
@@ -262,7 +288,7 @@ linux32_sys_getpeername(struct lwp *l, const struct linux32_sys_getpeername_args
 	struct linux_sys_getpeername_args ua;
 
 	NETBSD32TO64_UAP(fdes);
-	NETBSD32TOP_UAP(asa, struct sockaddr)
+	NETBSD32TOP_UAP(asa, struct sockaddr);
 	NETBSD32TOP_UAP(alen, int);
 
 	return linux_sys_getpeername(l, &ua, retval);
@@ -279,7 +305,7 @@ linux32_sys_getsockname(struct lwp *l, const struct linux32_sys_getsockname_args
 	struct linux_sys_getsockname_args ua;
 
 	NETBSD32TO64_UAP(fdec);
-	NETBSD32TOP_UAP(asa, char)
+	NETBSD32TOP_UAP(asa, char);
 	NETBSD32TOP_UAP(alen, int);
 
 	return linux_sys_getsockname(l, &ua, retval);
@@ -359,4 +385,344 @@ linux32_sys_recv(struct lwp *l, const struct linux32_sys_recv_args *uap, registe
 	SCARG(&ua, fromlenaddr) = NULL;
 
 	return sys_recvfrom(l, &ua, retval);
+}
+
+int
+linux32_getifname(struct lwp *l, register_t *retval, void *data)
+{
+	struct ifnet *ifp;
+	struct linux32_ifreq ifr;
+	int error;
+	int s;
+
+	error = copyin(data, &ifr, sizeof(ifr));
+	if (error)
+		return error;
+
+	s = pserialize_read_enter();
+	ifp = if_byindex(ifr.ifr_ifru.ifru_ifindex);
+	if (ifp == NULL) {
+		pserialize_read_exit(s);
+		return ENODEV;
+	}
+
+	strncpy(ifr.ifr_name, ifp->if_xname, sizeof(ifr.ifr_name));
+	pserialize_read_exit(s);
+
+	return copyout(&ifr, data, sizeof(ifr));
+}
+
+int
+linux32_getifconf(struct lwp *l, register_t *retval, void *data)
+{
+	struct linux32_ifreq ifr, *ifrp = NULL;
+	struct linux32_ifconf ifc;
+	struct ifnet *ifp;
+	struct sockaddr *sa;
+	struct osockaddr *osa;
+	int space = 0, error;
+	const int sz = (int)sizeof(ifr);
+	bool docopy;
+	int s;
+	int bound;
+	struct psref psref;
+
+	error = copyin(data, &ifc, sizeof(ifc));
+	if (error)
+		return error;
+
+	docopy = NETBSD32PTR64(ifc.ifc_req) != NULL;
+	if (docopy) {
+		space = ifc.ifc_len;
+		ifrp = NETBSD32PTR64(ifc.ifc_req);
+	}
+
+	bound = curlwp_bind();
+	s = pserialize_read_enter();
+	IFNET_READER_FOREACH(ifp) {
+		struct ifaddr *ifa;
+		if_acquire(ifp, &psref);
+		pserialize_read_exit(s);
+
+		(void)strncpy(ifr.ifr_name, ifp->if_xname,
+		    sizeof(ifr.ifr_name));
+		if (ifr.ifr_name[sizeof(ifr.ifr_name) - 1] != '\0') {
+			error = ENAMETOOLONG;
+			goto release_exit;
+		}
+
+		s = pserialize_read_enter();
+		IFADDR_READER_FOREACH(ifa, ifp) {
+			struct psref psref_ifa;
+			ifa_acquire(ifa, &psref_ifa);
+			pserialize_read_exit(s);
+
+			sa = ifa->ifa_addr;
+			if (sa->sa_family != AF_INET ||
+			    sa->sa_len > sizeof(*osa))
+				goto next;
+			memcpy(&ifr.ifr_addr, sa, sa->sa_len);
+			osa = (struct osockaddr *)&ifr.ifr_addr;
+			osa->sa_family = sa->sa_family;
+			if (space >= sz) {
+				error = copyout(&ifr, ifrp, sz);
+				if (error != 0) {
+					ifa_release(ifa, &psref_ifa);
+					goto release_exit;
+				}
+				ifrp++;
+			}
+			space -= sz;
+		next:
+			s = pserialize_read_enter();
+			ifa_release(ifa, &psref_ifa);
+		}
+
+		KASSERT(pserialize_in_read_section());
+		if_release(ifp, &psref);
+	}
+	pserialize_read_exit(s);
+	curlwp_bindx(bound);
+
+	if (docopy)
+		ifc.ifc_len -= space;
+	else
+		ifc.ifc_len = -space;
+
+	return copyout(&ifc, data, sizeof(ifc));
+
+release_exit:
+	if_release(ifp, &psref);
+	curlwp_bindx(bound);
+	return error;
+}
+
+int
+linux32_getifhwaddr(struct lwp *l, register_t *retval, u_int fd,
+    void *data)
+{
+	struct linux32_ifreq lreq;
+	file_t *fp;
+	struct ifaddr *ifa;
+	struct ifnet *ifp;
+	struct sockaddr_dl *sadl;
+	int error, found;
+	int index, ifnum;
+	int s;
+
+	/*
+	 * We can't emulate this ioctl by calling sys_ioctl() to run
+	 * SIOCGIFCONF, because the user buffer is not of the right
+	 * type to take those results.  We can't use kernel buffers to
+	 * receive the results, as the implementation of sys_ioctl()
+	 * and ifconf() [which implements SIOCGIFCONF] use
+	 * copyin()/copyout() which will fail on kernel addresses.
+	 *
+	 * So, we must duplicate code from sys_ioctl() and ifconf().  Ugh.
+	 */
+
+	if ((fp = fd_getfile(fd)) == NULL)
+		return (EBADF);
+
+	KERNEL_LOCK(1, NULL);
+
+	if ((fp->f_flag & (FREAD | FWRITE)) == 0) {
+		error = EBADF;
+		goto out;
+	}
+
+	error = copyin(data, &lreq, sizeof(lreq));
+	if (error)
+		goto out;
+	lreq.ifr_name[LINUX32_IFNAMSIZ-1] = '\0';		/* just in case */
+
+	/*
+	 * Try real interface name first, then fake "ethX"
+	 */
+	found = 0;
+	s = pserialize_read_enter();
+	IFNET_READER_FOREACH(ifp) {
+		if (found)
+			break;
+		if (strcmp(lreq.ifr_name, ifp->if_xname))
+			/* not this interface */
+			continue;
+		found=1;
+		if (IFADDR_READER_EMPTY(ifp)) {
+			error = ENODEV;
+			goto out;
+		}
+		IFADDR_READER_FOREACH(ifa, ifp) {
+			sadl = satosdl(ifa->ifa_addr);
+			/* only return ethernet addresses */
+			/* XXX what about FDDI, etc. ? */
+			if (sadl->sdl_family != AF_LINK ||
+			    sadl->sdl_type != IFT_ETHER)
+				continue;
+			memcpy(&lreq.ifr_hwaddr.sa_data, CLLADDR(sadl),
+			       MIN(sadl->sdl_alen,
+				   sizeof(lreq.ifr_hwaddr.sa_data)));
+			lreq.ifr_hwaddr.sa_family =
+				sadl->sdl_family;
+			pserialize_read_exit(s);
+
+			error = copyout(&lreq, data, sizeof(lreq));
+			goto out;
+		}
+	}
+	pserialize_read_exit(s);
+
+	if (strncmp(lreq.ifr_name, "eth", 3) == 0) {
+		for (ifnum = 0, index = 3;
+		     index < LINUX32_IFNAMSIZ && lreq.ifr_name[index] != '\0';
+		     index++) {
+			ifnum *= 10;
+			ifnum += lreq.ifr_name[index] - '0';
+		}
+
+		error = EINVAL;			/* in case we don't find one */
+		s = pserialize_read_enter();
+		IFNET_READER_FOREACH(ifp) {
+			memcpy(lreq.ifr_name, ifp->if_xname,
+			       MIN(LINUX32_IFNAMSIZ, IFNAMSIZ));
+			IFADDR_READER_FOREACH(ifa, ifp) {
+				sadl = satosdl(ifa->ifa_addr);
+				/* only return ethernet addresses */
+				/* XXX what about FDDI, etc. ? */
+				if (sadl->sdl_family != AF_LINK ||
+				    sadl->sdl_type != IFT_ETHER)
+					continue;
+				if (ifnum--)
+					/* not the reqested iface */
+					continue;
+				memcpy(&lreq.ifr_hwaddr.sa_data,
+				       CLLADDR(sadl),
+				       MIN(sadl->sdl_alen,
+					   sizeof(lreq.ifr_hwaddr.sa_data)));
+				lreq.ifr_hwaddr.sa_family =
+					sadl->sdl_family;
+				pserialize_read_exit(s);
+
+				error = copyout(&lreq, data, sizeof(lreq));
+				goto out;
+			}
+		}
+		pserialize_read_exit(s);
+	} else {
+		/* unknown interface, not even an "eth*" name */
+		error = ENODEV;
+	}
+
+out:
+	KERNEL_UNLOCK_ONE(NULL);
+	fd_putfile(fd);
+	return error;
+}
+
+int
+linux32_ioctl_socket(struct lwp *l, const struct linux32_sys_ioctl_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) fd;
+		syscallarg(u_long) com;
+		syscallarg(void *) data;
+	} */
+	u_long com;
+	int error = 0, isdev = 0, dosys = 1;
+	struct netbsd32_ioctl_args ia;
+	file_t *fp;
+	struct vnode *vp;
+	int (*ioctlf)(file_t *, u_long, void *);
+	struct ioctl_pt pt;
+
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
+		return (EBADF);
+
+	if (fp->f_type == DTYPE_VNODE) {
+		vp = (struct vnode *)fp->f_data;
+		isdev = vp->v_type == VCHR;
+	}
+
+	/*
+	 * Don't try to interpret socket ioctl calls that are done
+	 * on a device filedescriptor, just pass them through, to
+	 * emulate Linux behaviour. Use PTIOCLINUX so that the
+	 * device will only handle these if it's prepared to do
+	 * so, to avoid unexpected things from happening.
+	 */
+	if (isdev) {
+		dosys = 0;
+		ioctlf = fp->f_ops->fo_ioctl;
+		pt.com = SCARG(uap, com);
+		pt.data = (void *)NETBSD32PTR64(SCARG(uap, data));
+		error = ioctlf(fp, PTIOCLINUX, &pt);
+		/*
+		 * XXX hack: if the function returns EJUSTRETURN,
+		 * it has stuffed a sysctl return value in pt.data.
+		 */
+		if (error == EJUSTRETURN) {
+			retval[0] = (register_t)pt.data;
+			error = 0;
+		}
+		goto out;
+	}
+
+	com = SCARG(uap, com);
+	retval[0] = 0;
+
+	switch (com) {
+	case LINUX_SIOCGIFNAME:
+		error = linux32_getifname(l, retval, SCARG_P32(uap, data));
+		dosys = 0;
+		break;
+	case LINUX_SIOCGIFCONF:
+		error = linux32_getifconf(l, retval, SCARG_P32(uap, data));
+		dosys = 0;
+		break;
+	case LINUX_SIOCGIFFLAGS:
+		SCARG(&ia, com) = OSIOCGIFFLAGS32;
+		break;
+	case LINUX_SIOCSIFFLAGS:
+		SCARG(&ia, com) = OSIOCSIFFLAGS32;
+		break;
+	case LINUX_SIOCGIFADDR:
+		SCARG(&ia, com) = OOSIOCGIFADDR32;
+		break;
+	case LINUX_SIOCGIFDSTADDR:
+		SCARG(&ia, com) = OOSIOCGIFDSTADDR32;
+		break;
+	case LINUX_SIOCGIFBRDADDR:
+		SCARG(&ia, com) = OOSIOCGIFBRDADDR32;
+		break;
+	case LINUX_SIOCGIFNETMASK:
+		SCARG(&ia, com) = OOSIOCGIFNETMASK32;
+		break;
+	case LINUX_SIOCGIFMTU:
+		SCARG(&ia, com) = OSIOCGIFMTU32;
+		break;
+	case LINUX_SIOCADDMULTI:
+		SCARG(&ia, com) = OSIOCADDMULTI32;
+		break;
+	case LINUX_SIOCDELMULTI:
+		SCARG(&ia, com) = OSIOCDELMULTI32;
+		break;
+	case LINUX_SIOCGIFHWADDR:
+		error = linux32_getifhwaddr(l, retval, SCARG(uap, fd),
+		    SCARG_P32(uap, data));
+		dosys = 0;
+		break;
+	default:
+		error = EINVAL;
+	}
+
+ out:
+ 	fd_putfile(SCARG(uap, fd));
+
+	if (error == 0 && dosys) {
+		SCARG(&ia, fd) = SCARG(uap, fd);
+		SCARG(&ia, data) = SCARG(uap, data);
+		error = netbsd32_ioctl(curlwp, &ia, retval);
+	}
+
+	return error;
 }

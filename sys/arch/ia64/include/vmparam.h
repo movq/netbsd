@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.2 2006/07/03 17:01:45 cherry Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.10 2017/04/08 18:05:36 scole Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -37,8 +37,6 @@
 #ifndef _VMPARAM_H_
 #define _VMPARAM_H_
 
-#include <sys/tree.h>
-
 #define	USRSTACK	VM_MAX_ADDRESS /* XXX: Revisit vm address space. */
 
 /*
@@ -63,7 +61,7 @@
 #define SGROWSIZ	(128UL*1024)		/* amount to grow stack */
 #endif
 
-
+#define	IA64_VM_MINKERN_REGION	4
 
 /*
  * PTEs for mapping user space into the kernel for phyio operations.
@@ -76,16 +74,66 @@
 /*
  * Manipulating region bits of an address.
  */
-#define IA64_RR_BASE(n)         (((u_int64_t) (n)) << 61)
+#define IA64_RR_BASE(n)         (((uint64_t) (n)) << 61)
 #define IA64_RR_MASK(x)         ((x) & ((1L << 61) - 1))
 
 #define IA64_PHYS_TO_RR6(x)     ((x) | IA64_RR_BASE(6))
 #define IA64_PHYS_TO_RR7(x)     ((x) | IA64_RR_BASE(7))
 
+/*
+ * The Itanium architecture defines that all implementations support at
+ * least 51 virtual address bits (i.e. IMPL_VA_MSB=50). The unimplemented
+ * bits are sign-extended from VA{IMPL_VA_MSB}. As such, there's a gap in
+ * the virtual address range, which extends at most from 0x0004000000000000
+ * to 0x1ffbffffffffffff. We define the top half of a region in terms of
+ * this worst-case gap.
+ */
+#define IA64_REGION_GAP_START   0x0004000000000000
+#define IA64_REGION_GAP_EXTEND  0x1ffc000000000000
+
+/*
+ * Parameters for Pre-Boot Virtual Memory (PBVM).
+ * The kernel, its modules and metadata are loaded in the PBVM by the loader.
+ * The PBVM consists of pages for which the mapping is maintained in a page
+ * table. The page table is at least 1 EFI page large (i.e. 4KB), but can be
+ * larger to accommodate more PBVM. The maximum page table size is 1MB. With
+ * 8 bytes per page table entry, this means that the PBVM has at least 512
+ * pages and at most 128K pages.
+ * The GNU toolchain (in particular GNU ld) does not support an alignment
+ * larger than 64K. This means that we cannot guarantee page alignment for
+ * a page size that's larger than 64K. We do want to have text and data in
+ * different pages, which means that the maximum usable page size is 64KB.
+ * Consequently:
+ * The maximum total PBVM size is 8GB -- enough for a DVD image. A page table
+ * of a single EFI page (4KB) allows for 32MB of PBVM.
+ *
+ * The kernel is given the PA and size of the page table that provides the
+ * mapping of the PBVM. The page table itself is assumed to be mapped at a
+ * known virtual address and using a single translation wired into the CPU.
+ * As such, the page table is assumed to be a power of 2 and naturally aligned.
+ * The kernel also assumes that a good portion of the kernel text is mapped
+ * and wired into the CPU, but does not assume that the mapping covers the
+ * whole of PBVM.
+ */
+#define IA64_PBVM_RR            IA64_VM_MINKERN_REGION
+#define IA64_PBVM_BASE          \
+                (IA64_RR_BASE(IA64_PBVM_RR) + IA64_REGION_GAP_EXTEND)
+
+#define IA64_PBVM_PGTBL_MAXSZ   1048576
+#define IA64_PBVM_PGTBL         \
+                (IA64_RR_BASE(IA64_PBVM_RR + 1) - IA64_PBVM_PGTBL_MAXSZ)
+
+#define IA64_PBVM_PAGE_SHIFT    16      /* 64KB */
+#define IA64_PBVM_PAGE_SIZE     (1 << IA64_PBVM_PAGE_SHIFT)
+#define IA64_PBVM_PAGE_MASK     (IA64_PBVM_PAGE_SIZE - 1)
+  
 #define	IA64_ID_PAGE_SHIFT	28		/* 256M */
 #define	IA64_ID_PAGE_SIZE	(1 << IA64_ID_PAGE_SHIFT)
 #define	IA64_ID_PAGE_MASK	(IA64_ID_PAGE_SIZE-1)
 
+/* XXX freebsd uses
+#define IA64_BACKINGSTORE       (USRSTACK - (2 * MAXSSIZ) - PAGE_SIZE)
+*/
 #define	IA64_BACKINGSTORE	IA64_RR_BASE(4)
 
 #define	PAGE_SHIFT	14		/* 16K pages by default. */
@@ -98,35 +146,16 @@
 #define	VM_GATEWAY_SIZE		PAGE_SIZE
 #define	VM_MAXUSER_ADDRESS	(VM_MAX_ADDRESS + VM_GATEWAY_SIZE)
 #define	VM_MIN_KERNEL_ADDRESS	VM_MAXUSER_ADDRESS
+#define VM_INIT_KERNEL_ADDRESS  IA64_RR_BASE(IA64_VM_MINKERN_REGION + 1)
 #define VM_MAX_KERNEL_ADDRESS	((vaddr_t) (IA64_RR_BASE(6) - 1))
 
 #define VM_PHYSSEG_MAX		16		/* XXX: */
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
-#define	VM_PHYSSEG_NOADD			/* no more after vm_mem_init */
 
 #define	VM_NFREELIST		1 /* XXX: */
 #define	VM_FREELIST_DEFAULT	0 /* XXX: */
 
 /* virtual sizes (bytes) for various kernel submaps */
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)
-
-#ifndef _LOCORE
-/*
- * pmap-specific data store in the vm_page structure.
- */
-#define	__HAVE_VM_PAGE_MD
-struct vm_page_md {
-	TAILQ_HEAD(,pv_entry) pv_list;		/* pv_entry list */
-	int pv_list_count;
-	struct simplelock pv_slock;		/* lock on this head */
-	int pvh_attrs;				/* page attributes */
-};
-
-#define	VM_MDPAGE_INIT(pg)						\
-do {									\
-	TAILQ_INIT(&(pg)->mdpage.pv_list);				\
-	simple_lock_init(&(pg)->mdpage.pv_slock);			\
-} while (/*CONSTCOND*/0)
-#endif /*_LOCORE*/
 
 #endif /* _VMPARAM_H_ */

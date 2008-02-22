@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.45 2008/02/12 17:30:58 joerg Exp $ */
+/*	$NetBSD: autoconf.h,v 1.48 2012/10/27 17:18:11 chs Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,7 +73,7 @@
  * Autoconfiguration information.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/bsd_openprom.h>
 #include <machine/promlib.h>
 #include <dev/sbus/sbusvar.h>
@@ -157,9 +150,7 @@ int	obio_find_rom_map(bus_addr_t, int, bus_space_handle_t *);
  * its aux pointer to point to a pointer to the name (the address of
  * a romaux structure suffices, for instance). (OBSOLETE)
  */
-struct device;
-struct cfdata;
-int	matchbyname(struct device *, struct cfdata *cf, void *aux);
+int	matchbyname(device_t, cfdata_t, void *);
 
 /*
  * `clockfreq' produces a printable representation of a clock frequency
@@ -171,15 +162,14 @@ char	*clockfreq(int freq);
 struct bootpath {
 	char	name[16];	/* name of this node */
 	int	val[3];		/* up to three optional values */
-	struct device *dev;	/* device that recognised this component */
+	device_t dev;	/* device that recognised this component */
 };
 
 /* Parse a disk string into a dev_t, return device struct pointer */
-struct	device *parsedisk(char *, int, int, dev_t *);
+device_t parsedisk(char *, int, int, dev_t *);
 
 /* Establish a mountroot_hook, for benefit of floppy drive, mostly. */
-void	mountroot_hook_establish(void (*)(struct device *),
-				 struct device *);
+void	mountroot_hook_establish(void (*)(device_t), device_t);
 
 void	bootstrap(void);
 int	romgetcursoraddr(int **, int **);

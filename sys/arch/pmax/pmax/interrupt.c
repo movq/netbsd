@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupt.c,v 1.14 2008/01/06 13:28:17 ad Exp $	*/
+/*	$NetBSD: interrupt.c,v 1.19 2011/07/09 17:32:30 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,29 +30,32 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.14 2008/01/06 13:28:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.19 2011/07/09 17:32:30 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
-#include <sys/proc.h>
 #include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/proc.h>
 
-#include <uvm/uvm_extern.h>
-
+#include <mips/locore.h>
 #include <mips/psl.h>
+#include <mips/regnum.h>
 
-#include <machine/autoconf.h>
-#include <machine/sysconf.h>
-#include <machine/intr.h>
+#include <pmax/autoconf.h>
+#include <pmax/sysconf.h>
 
 struct evcnt pmax_clock_evcnt =
     EVCNT_INITIALIZER(EVCNT_TYPE_INTR, NULL, "clock", "intr");
+EVCNT_ATTACH_STATIC(pmax_clock_evcnt);
+#ifndef NOFPU
 struct evcnt pmax_fpu_evcnt =
     EVCNT_INITIALIZER(EVCNT_TYPE_INTR, NULL, "fpu", "intr");
+EVCNT_ATTACH_STATIC(pmax_fpu_evcnt);
+#endif
 struct evcnt pmax_memerr_evcnt =
     EVCNT_INITIALIZER(EVCNT_TYPE_INTR, NULL, "memerr", "intr");
-
-extern void MachFPInterrupt(unsigned, unsigned, unsigned, struct frame *);
+EVCNT_ATTACH_STATIC(pmax_memerr_evcnt);
 
 static const char * const intrnames[] = {
 	"serial0",
@@ -88,50 +84,29 @@ intr_init(void)
  * pmax uses standard mips1 convention, wiring FPU to hard interrupt 5.
  */
 void
-cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
+cpu_intr(int ppl, vaddr_t pc, uint32_t status)
 {
-	struct cpu_info *ci;
+	int ipl;
+	uint32_t pending;
 
-	ci = curcpu();
-	ci->ci_idepth++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
-	/* device interrupts */
-	if (ipending & (MIPS_INT_MASK_0|MIPS_INT_MASK_1|MIPS_INT_MASK_2|
-			MIPS_INT_MASK_3|MIPS_INT_MASK_4)) {
-		(*platform.iointr)(status, cause, pc, ipending);
-	}
-	/* FPU notification */
-	if (ipending & MIPS_INT_MASK_5) {
-		if (!USERMODE(status))
-			goto kerneltouchedFPU;
-		pmax_fpu_evcnt.ev_count++;
-#if !defined(SOFTFLOAT)
-		MachFPInterrupt(status, cause, pc, curlwp->l_md.md_regs);
+	while (ppl < (ipl = splintr(&pending))) {
+		/* device interrupts */
+		if (pending & (MIPS_INT_MASK_0|MIPS_INT_MASK_1|MIPS_INT_MASK_2|
+				MIPS_INT_MASK_3|MIPS_INT_MASK_4)) {
+			(*platform.iointr)(status, pc, pending);
+		}
+#if !defined(NOFPU)
+		/* FPU notification */
+		if (pending & MIPS_INT_MASK_5) {
+			if (!USERMODE(status))
+				panic("kernel used FPU: "
+				    "PC %#"PRIxVADDR", SR %#x", pc, status);
+
+			pmax_fpu_evcnt.ev_count++;
+			mips_fpu_intr(pc, curlwp->l_md.md_utf);
+		}
 #endif
 	}
-
-	ci->ci_idepth--;
-
-#ifdef notyet
-	/* For __HAVE_FAST_SOFTINTS */
-	ipending &= (MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0);
-	if (ipending == 0)
-		return;
-	_clrsoftintr(ipending);
-	mips_softint_dispatch(ipending);
-#endif
-
-	return;
-kerneltouchedFPU:
-	panic("kernel used FPU: PC %x, CR %x, SR %x", pc, cause, status);
-}
-
-const int *ipl2spl_table;
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._spl = ipl2spl_table[ipl]};
 }

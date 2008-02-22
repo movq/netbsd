@@ -1,4 +1,4 @@
-/*	$NetBSD: string.h,v 1.35 2007/10/19 15:58:53 christos Exp $	*/
+/*	$NetBSD: string.h,v 1.52 2018/02/20 02:35:24 kamil Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -74,22 +74,54 @@ int	 strerror_r(int, char *, size_t);
 #endif /* _POSIX_C_SOURCE >= 199506 || XOPEN_SOURCE >= 500 || ... */
 size_t	 strxfrm(char * __restrict, const char * __restrict, size_t);
 
-#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
+#if (_POSIX_C_SOURCE - 0 >= 200112L) || defined(_XOPEN_SOURCE) || \
+    defined(_NETBSD_SOURCE)
 void	*memccpy(void *, const void *, int, size_t);
 char	*strdup(const char *);
 #endif
 
+#if (_POSIX_C_SOURCE - 0 >= 200809L) || (_XOPEN_SOURCE - 0 >= 700) || \
+    defined(_NETBSD_SOURCE)
+char	*stpcpy(char * __restrict, const char * __restrict);
+char	*stpncpy(char * __restrict, const char * __restrict, size_t);
+char	*strndup(const char *, size_t);
+size_t	strnlen(const char *, size_t);
+#ifndef __STRSIGNAL_DECLARED
+#define __STRSIGNAL_DECLARED
+/* also in unistd.h */
+__aconst char *strsignal(int);
+#endif /* __STRSIGNAL_DECLARED */
+#endif
+__END_DECLS
+
 #if defined(_NETBSD_SOURCE)
 #include <strings.h>		/* for backwards-compatibilty */
+__BEGIN_DECLS
 void	*memmem(const void *, size_t, const void *, size_t);
 char	*strcasestr(const char *, const char *);
+char	*strchrnul(const char *, int);
 size_t	 strlcat(char *, const char *, size_t);
 size_t	 strlcpy(char *, const char *, size_t);
 char	*strsep(char **, const char *);
 char	*stresep(char **, const char *, int);
-char	*strndup(const char *, size_t);
-#endif
+char	*strnstr(const char *, const char *, size_t);
+void	*memrchr(const void *, int, size_t);
+void	*explicit_memset(void *, int, size_t);
+int	consttime_memequal(const void *, const void *, size_t);
 __END_DECLS
+#endif
+
+#if (_POSIX_C_SOURCE - 0) >= 200809L || defined(_NETBSD_SOURCE)
+#  ifndef __LOCALE_T_DECLARED
+typedef struct _locale		*locale_t;
+#  define __LOCALE_T_DECLARED
+#  endif
+__BEGIN_DECLS
+int	 strcoll_l(const char *, const char *, locale_t);
+size_t	 strxfrm_l(char * __restrict, const char * __restrict, size_t, locale_t);
+__aconst char *strerror_l(int, locale_t);
+__END_DECLS
+#endif /* _POSIX_C_SOURCE || _NETBSD_SOURCE */
 
 #if _FORTIFY_SOURCE > 0
 #include <ssp/string.h>

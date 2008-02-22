@@ -1,4 +1,4 @@
-# 	$NetBSD: Makefile.sparc,v 1.86 2008/02/12 22:27:27 joerg Exp $
+# 	$NetBSD: Makefile.sparc,v 1.95 2016/12/03 16:00:10 christos Exp $
 
 # Makefile for NetBSD
 #
@@ -33,8 +33,13 @@ GENASSYM_CONF=	${SPARC}/sparc/genassym.cf
 ##
 # work around GCC (egcs-2.91.66) bug which is liable
 # to use FPU registers as temporaries:
-CFLAGS+=	-mno-fpu
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+CFLAGS+=	${${ACTIVE_CC} == "gcc":? -mno-fpu :}
+CFLAGS+=	-Wa,-Av8
+CFLAGS+=	${${ACTIVE_CC} == "clang":? -Qunused-arguments :}
+AFLAGS+=	-x assembler-with-cpp
+AFLAGS+=	-Wa,-Av8
+AFLAGS+=	${${ACTIVE_CC} == "clang":? -Qunused-arguments :}
+COPTS.kern_timeout.c += -Wno-stack-protector
 
 ##
 ## (3) libkern and compat
@@ -58,12 +63,8 @@ amd7930intr.o bsd_fdintr.o lock_stubs.o: assym.h
 ##
 TEXTADDR?=	F0004000
 EXTRA_LINKFLAGS=	-X
-.if ${OBJECT_FMT} == "ELF"
-KERN_LDSCRIPT?= kern.ldscript
-LINKFORMAT=	-n -T ${SPARC}/conf/${KERN_LDSCRIPT}
-.else
-LINKFORMAT=	-N -p
-.endif
+KERNLDSCRIPT?= ${SPARC}/conf/kern.ldscript
+LINKFORMAT=	-n
 
 ##
 ## (6) port specific target dependencies

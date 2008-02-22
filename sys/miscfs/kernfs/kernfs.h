@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs.h,v 1.32 2006/12/28 05:49:05 alc Exp $	*/
+/*	$NetBSD: kernfs.h,v 1.40 2014/07/20 13:58:04 hannken Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -38,6 +38,8 @@
 
 #ifdef _KERNEL
 #include <sys/queue.h>
+#include <sys/tree.h>
+#include <sys/mutex.h>
 
 /*
  * The different types of node in a kernfs filesystem
@@ -53,10 +55,6 @@ typedef enum {
 	KFSavenrun,		/* loadavg */
 	KFSdevice,		/* device file (rootdev/rrootdev) */
 	KFSmsgbuf,		/* msgbuf */
-	KFSipsecsadir,	/* ipsec security association (top dir) */
-	KFSipsecspdir,	/* ipsec security policy (top dir) */
-	KFSipsecsa,		/* ipsec security association entry */
-	KFSipsecsp,		/* ipsec security policy entry */
 	KFSsubdir,		/* directory */
 	KFSlasttype,		/* last used type */
 	KFSmaxtype = (1<<6) - 1	/* last possible type */
@@ -94,9 +92,8 @@ struct kernfs_node {
 	kfstype		kfs_type;	/* type of kernfs node */
 	mode_t		kfs_mode;	/* mode bits for stat() */
 	long		kfs_fileno;	/* unique file id */
-	u_int32_t	kfs_value;	/* SA id or SP id (KFSint) */
 	const struct kern_target *kfs_kt;
-	void		*kfs_v;		/* pointer to secasvar/secpolicy/mbuf */
+	void		*kfs_v;		/* dynamic node private data */
 	long		kfs_cookie;	/* fileno cookie */
 };
 
@@ -118,27 +115,17 @@ struct kernfs_mount {
 #define	VTOKERN(vp)	((struct kernfs_node *)(vp)->v_data)
 #define KERNFSTOV(kfs)	((kfs)->kfs_vnode)
 
+#define KERNFS_MAXNAMLEN	255
+
 extern const struct kern_target kern_targets[];
 extern int nkern_targets;
 extern const int static_nkern_targets;
 extern int (**kernfs_vnodeop_p)(void *);
 extern struct vfsops kernfs_vfsops;
 extern dev_t rrootdev;
-
-struct secasvar;
-struct secpolicy;
+extern kmutex_t kfs_lock;
 
 int kernfs_root(struct mount *, struct vnode **);
-
-void kernfs_hashinit(void);
-void kernfs_hashreinit(void);
-void kernfs_hashdone(void);
-int kernfs_freevp(struct vnode *);
-int kernfs_allocvp(struct mount *, struct vnode **, kfstype,
-	const struct kern_target *, u_int32_t);
-
-void kernfs_revoke_sa(struct secasvar *);
-void kernfs_revoke_sp(struct secpolicy *);
 
 /*
  * Data types for the kernfs file operations.
@@ -195,8 +182,13 @@ kfstype kernfs_alloctype(int, const struct kernfs_fileop *);
 #define	KERNFS_ENTOPARENTDIR(dkt) &(dkt)->dkt_kt
 int kernfs_addentry(kernfs_parentdir_t *, kernfs_entry_t *);
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_kernfs_setup);
-#endif /* SYSCTL_SETUP_PROTO */
+#ifdef IPSEC
+__weak_extern(key_freesp)
+__weak_extern(key_getspbyid)
+__weak_extern(key_setdumpsa_spi)
+__weak_extern(key_setdumpsp)
+__weak_extern(satailq)
+__weak_extern(sptailq)
+#endif
 
 #endif /* _KERNEL */

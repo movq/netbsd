@@ -1,4 +1,4 @@
-/* $NetBSD: au_wired_space.c,v 1.5 2007/03/04 06:00:11 christos Exp $ */
+/* $NetBSD: au_wired_space.c,v 1.9 2012/01/27 18:52:58 para Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -46,13 +46,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: au_wired_space.c,v 1.5 2007/03/04 06:00:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: au_wired_space.c,v 1.9 2012/01/27 18:52:58 para Exp $");
 
 /*
  * This provides mappings for the upper I/O regions used on some
@@ -82,8 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: au_wired_space.c,v 1.5 2007/03/04 06:00:11 christos 
 #include <sys/malloc.h>
 #include <sys/endian.h>
 
-#include <machine/bus.h>
-#include <machine/locore.h>
+#include <sys/bus.h>
+#include <mips/locore.h>
 #include <machine/wired_map.h>
 #include <mips/alchemy/include/au_wired_space.h>
 
@@ -648,7 +641,7 @@ au_wired_space_init(bus_space_tag_t bst, const char *name,
 	c->c_size = size;
 
 	/* allocate extent manager */
-	c->c_extent = extent_create(name, start, start + size, M_DEVBUF,
+	c->c_extent = extent_create(name, start, start + size, 
 	    (void *)c->c_exstore, sizeof (c->c_exstore), EX_NOWAIT);
 	if (c->c_extent == NULL)
 		panic("au_wired_space_init: %s: cannot create extent", name);

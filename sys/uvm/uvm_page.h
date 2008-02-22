@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_page.h,v 1.50 2008/01/02 11:49:19 ad Exp $	*/
+/*	$NetBSD: uvm_page.h,v 1.83 2018/05/19 15:03:26 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -17,12 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Charles D. Cranor,
- *      Washington University, the University of California, Berkeley and
- *      its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -69,73 +64,111 @@
 #ifndef _UVM_UVM_PAGE_H_
 #define _UVM_UVM_PAGE_H_
 
-/*
- * uvm_page.h
- */
-
-/*
- *	Resident memory system definitions.
- */
-
-/*
- *	Management of resident (logical) pages.
- *
- *	A small structure is kept for each resident
- *	page, indexed by page number.  Each structure
- *	is an element of several lists:
- *
- *		A hash table bucket used to quickly
- *		perform object/offset lookups
- *
- *		A list of all pages for a given object,
- *		so they can be quickly deactivated at
- *		time of deallocation.
- *
- *		An ordered list of pages due for pageout.
- *
- *	In addition, the structure contains the object
- *	and offset to which this page belongs (for pageout),
- *	and sundry status bits.
- *
- *	Fields in this structure are locked either by the lock on the
- *	object that the page belongs to (O) or by the lock on the page
- *	queues (P) [or both].
- */
-
-/*
- * locking note: the mach version of this data structure had bit
- * fields for the flags, and the bit fields were divided into two
- * items (depending on who locked what).  some time, in BSD, the bit
- * fields were dumped and all the flags were lumped into one short.
- * that is fine for a single threaded uniprocessor OS, but bad if you
- * want to actual make use of locking (simple_lock's).  so, we've
- * separated things back out again.
- *
- * note the page structure has no lock of its own.
- */
-
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_pglist.h>
 
-struct vm_page {
-	TAILQ_ENTRY(vm_page)	pageq;		/* queue info for FIFO
-						 * queue or free list (P) */
-	TAILQ_ENTRY(vm_page)	hashq;		/* hash table links (O)*/
-	TAILQ_ENTRY(vm_page)	listq;		/* pages in same object (O)*/
+#include <sys/rbtree.h>
 
-	struct vm_anon		*uanon;		/* anon (O,P) */
-	struct uvm_object	*uobject;	/* object (O,P) */
-	voff_t			offset;		/* offset into object (O,P) */
-	uint16_t		flags;		/* object flags [O] */
-	uint16_t		loan_count;	/* number of active loans
-						 * to read: [O or P]
-						 * to modify: [O _and_ P] */
-	uint16_t		wire_count;	/* wired down map refs [P] */
-	uint16_t		pqflags;	/* page queue flags [P] */
+/*
+ * Management of resident (logical) pages.
+ *
+ * Each resident page has a vm_page structure, indexed by page number.
+ * There are several lists in the structure:
+ *
+ * - A red-black tree rooted with the containing object is used to
+ *   quickly perform object+offset lookups.
+ * - A list of all pages for a given object, for a quick deactivation
+ *   at a time of deallocation.
+ * - An ordered list of pages due for pageout.
+ *
+ * In addition, the structure contains the object and offset to which
+ * this page belongs (for pageout) and sundry status bits.
+ *
+ * Note that the page structure has no lock of its own.  The page is
+ * generally protected by its owner's lock (UVM object or amap/anon).
+ * It should be noted that UVM has to serialize pmap(9) operations on
+ * the managed pages, e.g. for pmap_enter() calls.  Hence, the lock
+ * order is as follows:
+ *
+ *	[vmpage-owner-lock] ->
+ *		any pmap locks (e.g. PV hash lock)
+ *
+ * Since the kernel is always self-consistent, no serialization is
+ * required for unmanaged mappings, e.g. for pmap_kenter_pa() calls.
+ *
+ * Field markings and the corresponding locks:
+ *
+ * f:	free page queue lock, uvm_fpageqlock
+ * o:	page owner (uvm_object::vmobjlock, vm_amap::am_lock, vm_anon::an_lock)
+ * p:	page queue lock, uvm_pageqlock
+ * o,p:	o|p for read, o&p for write
+ * w:	wired page queue or uvm_pglistalloc:
+ *	  => wired page queue: o&p to change, stable from wire to unwire
+ *		XXX What about concurrent or nested wire?
+ *	  => uvm_pglistalloc: owned by caller
+ * ?:	locked by pmap or assumed page owner's lock
+ *
+ * UVM and pmap(9) may use uvm_page_locked_p() to assert whether the
+ * page owner's lock is acquired.
+ *
+ * A page can have one of four identities:
+ *
+ * o free
+ *   => pageq.list is entry on global free page queue
+ *   => listq.list is entry on per-CPU free page queue
+ *   => uanon is unused (or (void *)0xdeadbeef for DEBUG)
+ *   => uobject is unused (or (void *)0xdeadbeef for DEBUG)
+ *   => PQ_FREE is set in pqflags
+ * o owned by a uvm_object
+ *   => pageq.queue is entry on wired page queue, if any
+ *   => listq.queue is entry on list of pages in object
+ *   => uanon is NULL or the vm_anon to which it has been O->A loaned
+ *   => uobject is owner
+ * o owned by a vm_anon
+ *   => pageq is unused (XXX correct?)
+ *   => listq is unused (XXX correct?)
+ *   => uanon is owner
+ *   => uobject is NULL
+ *   => PQ_ANON is set in pqflags
+ * o allocated by uvm_pglistalloc
+ *   => pageq.queue is entry on resulting pglist, owned by caller
+ *   => listq is unused (XXX correct?)
+ *   => uanon is unused
+ *   => uobject is unused
+ *
+ * The following transitions are allowed:
+ *
+ * - uvm_pagealloc: free -> owned by a uvm_object/vm_anon
+ * - uvm_pagefree: owned by a uvm_object/vm_anon -> free
+ * - uvm_pglistalloc: free -> allocated by uvm_pglistalloc
+ * - uvm_pglistfree: allocated by uvm_pglistalloc -> free
+ */
+
+struct vm_page {
+	struct rb_node		rb_node;	/* o: tree of pages in obj */
+
+	union {
+		TAILQ_ENTRY(vm_page) queue;	/* w: wired page queue
+						 * or uvm_pglistalloc output */
+		LIST_ENTRY(vm_page) list;	/* f: global free page queue */
+	} pageq;
+
+	union {
+		TAILQ_ENTRY(vm_page) queue;	/* o: pages in same object */
+		LIST_ENTRY(vm_page) list;	/* f: CPU free page queue */
+	} listq;
+
+	struct vm_anon		*uanon;		/* o,p: anon */
+	struct uvm_object	*uobject;	/* o,p: object */
+	voff_t			offset;		/* o,p: offset into object */
+	uint16_t		flags;		/* o: object flags */
+	uint16_t		loan_count;	/* o,p: num. active loans */
+	uint16_t		wire_count;	/* p: wired down map refs */
+	uint16_t		pqflags;	/* p: page queue flags */
 	paddr_t			phys_addr;	/* physical address of page */
 
 #ifdef __HAVE_VM_PAGE_MD
-	struct vm_page_md	mdpage;		/* pmap-specific data */
+	struct vm_page_md	mdpage;		/* ?: pmap-specific data */
 #endif
 
 #if defined(UVM_PAGE_TRKOWN)
@@ -147,35 +180,80 @@ struct vm_page {
 };
 
 /*
- * These are the flags defined for vm_page.
- */
-
-/*
- * locking rules:
- *   PG_ ==> locked by object lock
- *   PQ_ ==> lock by page queue lock
- *   PQ_FREE is locked by free queue lock and is mutex with all other PQs
+ * Overview of UVM page flags.
  *
- * PG_ZERO is used to indicate that a page has been pre-zero'd.  This flag
- * is only set when the page is on no queues, and is cleared when the page
- * is placed on the free list.
+ * Locking notes:
+ *
+ * PG_, struct vm_page::flags	=> locked by owner
+ * PQ_, struct vm_page::pqflags	=> locked by uvm_pageqlock
+ * PQ_FREE			=> additionally locked by uvm_fpageqlock
+ *
+ * Flag descriptions:
+ *
+ * PG_BUSY:
+ *	Page is long-term locked, usually because of I/O (transfer from the
+ *	page memory to the backing store) is in progress.  LWP attempting
+ *	to access the page shall set PG_WANTED and wait.
+ *
+ * PG_WANTED:
+ *	Indicates that the page, which is currently PG_BUSY, is wanted by
+ *	some other LWP.  The page owner (i.e. LWP which set PG_BUSY) is
+ *	responsible to clear both flags and wake up any waiters once it has
+ *	released the long-term lock (PG_BUSY).
+ *
+ * PG_RELEASED:
+ *	Indicates that the page, which is currently PG_BUSY, should be freed
+ *	after the release of long-term lock.  It is responsibility of the
+ *	owning LWP (i.e. which set PG_BUSY) to do it.
+ *
+ * PG_CLEAN:
+ *	Page has not been modified since it was loaded from the backing
+ *	store.  If this flag is not set, page is considered "dirty".
+ *	XXX: Currently it means that the page *might* be clean; will be
+ *	fixed with yamt-pagecache merge.
+ *
+ * PG_FAKE:
+ *	Page has been allocated, but not yet initialised.  The flag is used
+ *	to avoid overwriting of valid data, e.g. to prevent read from the
+ *	backing store when in-core data is newer.
+ *
+ * PG_TABLED:
+ *	Indicates that the page is currently in the object's offset queue,
+ *	and that it should be removed from it once the page is freed.  Used
+ *	diagnostic purposes.
+ *
+ * PG_PAGEOUT:
+ *	Indicates that the page is being paged-out in preparation for
+ *	being freed.
+ *
+ * PG_RDONLY:
+ *	Indicates that the page must be mapped read-only.
+ *
+ * PG_ZERO:
+ *	Indicates that the page has been pre-zeroed.  This flag is only
+ *	set when the page is not in the queues and is cleared when the
+ *	page is placed on the free list.
+ *
+ * PG_MARKER:
+ *	Dummy marker page.
  */
 
-#define	PG_BUSY		0x0001		/* page is locked */
-#define	PG_WANTED	0x0002		/* someone is waiting for page */
-#define	PG_TABLED	0x0004		/* page is in VP table  */
-#define	PG_CLEAN	0x0008		/* page has not been modified */
-#define	PG_PAGEOUT	0x0010		/* page to be freed for pagedaemon */
-#define PG_RELEASED	0x0020		/* page to be freed when unbusied */
-#define	PG_FAKE		0x0040		/* page is not yet initialized */
-#define	PG_RDONLY	0x0080		/* page must be mapped read-only */
-#define	PG_ZERO		0x0100		/* page is pre-zero'd */
+#define	PG_BUSY		0x0001
+#define	PG_WANTED	0x0002
+#define	PG_TABLED	0x0004
+#define	PG_CLEAN	0x0008
+#define	PG_PAGEOUT	0x0010
+#define	PG_RELEASED	0x0020
+#define	PG_FAKE		0x0040
+#define	PG_RDONLY	0x0080
+#define	PG_ZERO		0x0100
+#define	PG_MARKER	0x0200
 
 #define PG_PAGER1	0x1000		/* pager-specific flag */
 
 #define	UVM_PGFLAGBITS \
 	"\20\1BUSY\2WANTED\3TABLED\4CLEAN\5PAGEOUT\6RELEASED\7FAKE\10RDONLY" \
-	"\11ZERO\15PAGER1"
+	"\11ZERO\12MARKER\15PAGER1"
 
 #define PQ_FREE		0x0001		/* page is on free list */
 #define PQ_ANON		0x0002		/* page is part of an anon, rather
@@ -216,22 +294,6 @@ struct vm_page {
 #define VM_PSTRAT_BSEARCH	2
 #define VM_PSTRAT_BIGFIRST	3
 
-/*
- * vm_physseg: describes one segment of physical memory
- */
-struct vm_physseg {
-	paddr_t	start;			/* PF# of first page in segment */
-	paddr_t	end;			/* (PF# of last page in segment) + 1 */
-	paddr_t	avail_start;		/* PF# of first free page in segment */
-	paddr_t	avail_end;		/* (PF# of last free page in segment) +1  */
-	int	free_list;		/* which free list they belong on */
-	struct	vm_page *pgs;		/* vm_page structures (from start) */
-	struct	vm_page *lastpg;	/* vm_page structure for end */
-#ifdef __HAVE_PMAP_PHYSSEG
-	struct	pmap_physseg pmseg;	/* pmap specific (MD) data */
-#endif
-};
-
 #ifdef _KERNEL
 
 /*
@@ -239,13 +301,6 @@ struct vm_physseg {
  */
 
 extern bool vm_page_zero_enable;
-
-/*
- * physical memory config is stored in vm_physmem.
- */
-
-extern struct vm_physseg vm_physmem[VM_PHYSSEG_MAX];
-extern int vm_nphysseg;
 
 /*
  * prototypes: the following prototypes define the interface to pages
@@ -258,7 +313,6 @@ void uvm_page_own(struct vm_page *, const char *);
 #if !defined(PMAP_STEAL_MEMORY)
 bool uvm_page_physget(paddr_t *);
 #endif
-void uvm_page_rehash(void);
 void uvm_page_recolor(int);
 void uvm_pageidlezero(void);
 
@@ -272,28 +326,32 @@ void uvm_pagefree(struct vm_page *);
 void uvm_page_unbusy(struct vm_page **, int);
 struct vm_page *uvm_pagelookup(struct uvm_object *, voff_t);
 void uvm_pageunwire(struct vm_page *);
-void uvm_pagewait(struct vm_page *, int);
-void uvm_pagewake(struct vm_page *);
 void uvm_pagewire(struct vm_page *);
 void uvm_pagezero(struct vm_page *);
+bool uvm_pageismanaged(paddr_t);
+bool uvm_page_locked_p(struct vm_page *);
 
 int uvm_page_lookup_freelist(struct vm_page *);
 
-static struct vm_page *PHYS_TO_VM_PAGE(paddr_t);
-static int vm_physseg_find(paddr_t, int *);
+struct vm_page *uvm_phys_to_vm_page(paddr_t);
+paddr_t uvm_vm_page_to_phys(const struct vm_page *);
+
+#if defined(PMAP_DIRECT)
+int uvm_direct_process(struct vm_page **, u_int, voff_t, vsize_t,
+	    int (*)(void *, size_t, void *), void *);
+#endif
 
 /*
  * macros
  */
 
-#define UVM_PAGE_HASH_PENALTY	4	/* XXX: a guess */
+#define UVM_PAGE_TREE_PENALTY	4	/* XXX: a guess */
 
-#define uvm_pagehash(obj,off) \
-	(((unsigned long)obj+(unsigned long)atop(off)) & uvm.page_hashmask)
+#define VM_PAGE_TO_PHYS(entry)	uvm_vm_page_to_phys(entry)
 
-#define	UVM_PAGEZERO_TARGET	(uvmexp.free)
-
-#define VM_PAGE_TO_PHYS(entry)	((entry)->phys_addr)
+#ifdef __HAVE_VM_PAGE_MD
+#define	VM_PAGE_TO_MD(pg)	(&(pg)->mdpage)
+#endif
 
 /*
  * Compute the page color bucket for a given page.
@@ -301,110 +359,10 @@ static int vm_physseg_find(paddr_t, int *);
 #define	VM_PGCOLOR_BUCKET(pg) \
 	(atop(VM_PAGE_TO_PHYS((pg))) & uvmexp.colormask)
 
-/*
- * when VM_PHYSSEG_MAX is 1, we can simplify these functions
- */
-
-/*
- * vm_physseg_find: find vm_physseg structure that belongs to a PA
- */
-static __inline int
-vm_physseg_find(pframe, offp)
-	paddr_t pframe;
-	int	*offp;
-{
-#if VM_PHYSSEG_MAX == 1
-
-	/* 'contig' case */
-	if (pframe >= vm_physmem[0].start && pframe < vm_physmem[0].end) {
-		if (offp)
-			*offp = pframe - vm_physmem[0].start;
-		return(0);
-	}
-	return(-1);
-
-#elif (VM_PHYSSEG_STRAT == VM_PSTRAT_BSEARCH)
-	/* binary search for it */
-	u_int	start, len, try;
-
-	/*
-	 * if try is too large (thus target is less than try) we reduce
-	 * the length to trunc(len/2) [i.e. everything smaller than "try"]
-	 *
-	 * if the try is too small (thus target is greater than try) then
-	 * we set the new start to be (try + 1).   this means we need to
-	 * reduce the length to (round(len/2) - 1).
-	 *
-	 * note "adjust" below which takes advantage of the fact that
-	 *  (round(len/2) - 1) == trunc((len - 1) / 2)
-	 * for any value of len we may have
-	 */
-
-	for (start = 0, len = vm_nphysseg ; len != 0 ; len = len / 2) {
-		try = start + (len / 2);	/* try in the middle */
-
-		/* start past our try? */
-		if (pframe >= vm_physmem[try].start) {
-			/* was try correct? */
-			if (pframe < vm_physmem[try].end) {
-				if (offp)
-					*offp = pframe - vm_physmem[try].start;
-				return(try);            /* got it */
-			}
-			start = try + 1;	/* next time, start here */
-			len--;			/* "adjust" */
-		} else {
-			/*
-			 * pframe before try, just reduce length of
-			 * region, done in "for" loop
-			 */
-		}
-	}
-	return(-1);
-
-#else
-	/* linear search for it */
-	int	lcv;
-
-	for (lcv = 0; lcv < vm_nphysseg; lcv++) {
-		if (pframe >= vm_physmem[lcv].start &&
-		    pframe < vm_physmem[lcv].end) {
-			if (offp)
-				*offp = pframe - vm_physmem[lcv].start;
-			return(lcv);		   /* got it */
-		}
-	}
-	return(-1);
-
-#endif
-}
-
-
-/*
- * IS_VM_PHYSADDR: only used my mips/pmax/pica trap/pmap.
- */
-
-#define IS_VM_PHYSADDR(PA) (vm_physseg_find(atop(PA), NULL) != -1)
-
-/*
- * PHYS_TO_VM_PAGE: find vm_page for a PA.   used by MI code to get vm_pages
- * back from an I/O mapping (ugh!).   used in some MD code as well.
- */
-static __inline struct vm_page *
-PHYS_TO_VM_PAGE(pa)
-	paddr_t pa;
-{
-	paddr_t pf = atop(pa);
-	int	off;
-	int	psi;
-
-	psi = vm_physseg_find(pf, &off);
-	if (psi != -1)
-		return(&vm_physmem[psi].pgs[off]);
-	return(NULL);
-}
+#define	PHYS_TO_VM_PAGE(pa)	uvm_phys_to_vm_page(pa)
 
 #define VM_PAGE_IS_FREE(entry)  ((entry)->pqflags & PQ_FREE)
+#define	VM_FREE_PAGE_TO_CPU(pg)	((struct uvm_cpu *)((uintptr_t)pg->offset))
 
 #ifdef DEBUG
 void uvm_pagezerocheck(struct vm_page *);

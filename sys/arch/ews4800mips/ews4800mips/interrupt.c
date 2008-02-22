@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupt.c,v 1.3 2007/12/03 15:33:36 ad Exp $	*/
+/*	$NetBSD: interrupt.c,v 1.8 2011/02/20 07:55:20 matt Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,17 +30,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.3 2007/12/03 15:33:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.8 2011/02/20 07:55:20 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/intr.h>
-
-#include <uvm/uvm_extern.h>	/* uvmexp.intrs */
+#include <sys/cpu.h>
 
 #include <machine/sbdvar.h>
 
-const uint32_t *ipl_sr_bits;
-static void (*platform_intr)(uint32_t, uint32_t, uint32_t, uint32_t);
+static void (*platform_intr)(int, vaddr_t, uint32_t);
 
 void
 intr_init(void)
@@ -72,22 +63,9 @@ intr_disestablish(void *arg)
 }
 
 void
-cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
+cpu_intr(int ppl, vaddr_t pc, uint32_t status)
 {
-	struct cpu_info *ci;
+	curcpu()->ci_data.cpu_nintr++;
 
-	ci = curcpu();
-	uvmexp.intrs++;
-
-	ci->ci_idepth++;
-	(*platform_intr)(status, cause, pc, ipending);
-	ci->ci_idepth--;
-
-#ifdef __HAVE_FAST_SOFTINTS
-	ipending &= (MIPS_SOFT_INT_MASK_1 | MIPS_SOFT_INT_MASK_0);
-	if (ipending == 0)
-		return;
-	_clrsoftintr(ipending);
-	softintr_dispatch(ipending);
-#endif
+	(*platform_intr)(ppl, pc, status);
 }

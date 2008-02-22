@@ -1,4 +1,4 @@
-/* $NetBSD: pms.c,v 1.23 2008/01/28 22:29:00 jmcneill Exp $ */
+/* $NetBSD: pms.c,v 1.36 2017/08/13 08:49:27 christos Exp $ */
 
 /*-
  * Copyright (c) 2004 Kentaro Kurahone.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.23 2008/01/28 22:29:00 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.36 2017/08/13 08:49:27 christos Exp $");
 
 #include "opt_pms.h"
 
@@ -43,6 +43,12 @@ __KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.23 2008/01/28 22:29:00 jmcneill Exp $");
 #ifdef PMS_SYNAPTICS_TOUCHPAD
 #include <dev/pckbport/synapticsvar.h>
 #endif
+#ifdef PMS_ELANTECH_TOUCHPAD
+#include <dev/pckbport/elantechvar.h>
+#endif
+#ifdef PMS_ALPS_TOUCHPAD
+#include <dev/pckbport/alpsvar.h>
+#endif
 
 #include <dev/pckbport/pmsreg.h>
 #include <dev/pckbport/pmsvar.h>
@@ -58,38 +64,39 @@ int pmsdebug = 1;
 #define DPRINTF(x)
 #endif
 
-const enum pms_type tries[] = {
+static const enum pms_type tries[] = {
 	PMS_SCROLL5, PMS_SCROLL3, PMS_STANDARD, PMS_UNKNOWN
 };
 
-const struct pms_protocol pms_protocols[] = {
+static const struct pms_protocol pms_protocols[] = {
 	{ { 0, 0, 0 }, 0, "unknown protocol" },
 	{ { 0, 0, 0 }, 0, "no scroll wheel (3 buttons)" },
 	{ { 200, 100, 80 }, 3, "scroll wheel (3 buttons)" },
 	{ { 200, 200, 80 }, 4, "scroll wheel (5 buttons)" },
-	{ { 0, 0, 0 }, 0, "synaptics" }
+	{ { 0, 0, 0 }, 0, "synaptics" },
+	{ { 0, 0, 0 }, 0, "elantech" }
 };
 
 
-int pmsprobe(struct device *, struct cfdata *, void *);
-void pmsattach(struct device *, struct device *, void *);
-void pmsinput(void *, int);
+static int pmsprobe(device_t, cfdata_t, void *);
+static void pmsattach(device_t, device_t, void *);
+static void pmsinput(void *, int);
 
-CFATTACH_DECL(pms, sizeof(struct pms_softc),
+CFATTACH_DECL_NEW(pms, sizeof(struct pms_softc),
     pmsprobe, pmsattach, NULL, NULL);
 
 static int	pms_protocol(pckbport_tag_t, pckbport_slot_t);
 static void	do_enable(struct pms_softc *);
 static void	do_disable(struct pms_softc *);
 static void	pms_reset_thread(void*);
-int	pms_enable(void *);
-int	pms_ioctl(void *, u_long, void *, int, struct lwp *);
-void	pms_disable(void *);
+static int	pms_enable(void *);
+static int	pms_ioctl(void *, u_long, void *, int, struct lwp *);
+static void	pms_disable(void *);
 
-static bool	pms_suspend(device_t);
-static bool	pms_resume(device_t);
+static bool	pms_suspend(device_t, const pmf_qual_t *);
+static bool	pms_resume(device_t, const pmf_qual_t *);
 
-const struct wsmouse_accessops pms_accessops = {
+static const struct wsmouse_accessops pms_accessops = {
 	pms_enable,
 	pms_ioctl,
 	pms_disable,
@@ -129,8 +136,7 @@ pms_protocol(pckbport_tag_t tag, pckbport_slot_t slot)
 }
 
 int
-pmsprobe(struct device *parent, struct cfdata *match,
-    void *aux)
+pmsprobe(device_t parent, cfdata_t match, void *aux)
 {
 	struct pckbport_attach_args *pa = aux;
 	u_char cmd[1], resp[2];
@@ -146,9 +152,7 @@ pmsprobe(struct device *parent, struct cfdata *match,
 	cmd[0] = PMS_RESET;
 	res = pckbport_poll_cmd(pa->pa_tag, pa->pa_slot, cmd, 1, 2, resp, 1);
 	if (res) {
-#ifdef DEBUG
-		printf("pmsprobe: reset error %d\n", res);
-#endif
+		aprint_debug("pmsprobe: reset error %d\n", res);
 		return 0;
 	}
 	if (resp[0] != PMS_RSTDONE) {
@@ -158,17 +162,15 @@ pmsprobe(struct device *parent, struct cfdata *match,
 
 	/* get type number (0 = mouse) */
 	if (resp[1] != 0) {
-#ifdef DEBUG
-		printf("pmsprobe: type 0x%x\n", resp[1]);
-#endif
+		aprint_debug("pmsprobe: type 0x%x\n", resp[1]);
 		return 0;
 	}
 
 	return 10;
 }
 
-void
-pmsattach(struct device *parent, struct device *self, void *aux)
+static void
+pmsattach(device_t parent, device_t self, void *aux)
 {
 	struct pms_softc *sc = device_private(self);
 	struct pckbport_attach_args *pa = aux;
@@ -176,6 +178,7 @@ pmsattach(struct device *parent, struct device *self, void *aux)
 	u_char cmd[2], resp[2];
 	int res;
 
+	sc->sc_dev = self;
 	sc->sc_kbctag = pa->pa_tag;
 	sc->sc_kbcslot = pa->pa_slot;
 
@@ -188,12 +191,10 @@ pmsattach(struct device *parent, struct device *self, void *aux)
 	/* reset the device */
 	cmd[0] = PMS_RESET;
 	res = pckbport_poll_cmd(pa->pa_tag, pa->pa_slot, cmd, 1, 2, resp, 1);
-#ifdef DEBUG
 	if (res || resp[0] != PMS_RSTDONE || resp[1] != 0) {
-		aprint_error("pmsattach: reset error\n");
+		aprint_debug("pmsattach: reset error\n");
 		return;
 	}
-#endif
 	sc->inputstate = 0;
 	sc->buttons = 0;
 	sc->protocol = PMS_UNKNOWN;
@@ -204,9 +205,19 @@ pmsattach(struct device *parent, struct device *self, void *aux)
 		sc->protocol = PMS_SYNAPTICS;
 	} else
 #endif
+#ifdef PMS_ELANTECH_TOUCHPAD
+	if (pms_elantech_probe_init(sc) == 0) {
+		sc->protocol = PMS_ELANTECH;
+	} else
+#endif
+#ifdef PMS_ALPS_TOUCHPAD
+	if (pms_alps_probe_init(sc) == 0) {
+		sc->protocol = PMS_ALPS;
+	} else
+#endif
 		/* Install generic handler. */
 		pckbport_set_inputhandler(sc->sc_kbctag, sc->sc_kbcslot,
-		    pmsinput, sc, sc->sc_dev.dv_xname);
+		    pmsinput, sc, device_xname(sc->sc_dev));
 
 	a.accessops = &pms_accessops;
 	a.accesscookie = sc;
@@ -217,21 +228,18 @@ pmsattach(struct device *parent, struct device *self, void *aux)
 	 * here or in pmsintr, because if this fails pms_enable() will
 	 * never be called, so pmsinput() will never be called.
 	 */
-	sc->sc_wsmousedev = config_found(self, &a, wsmousedevprint);
+	sc->sc_wsmousedev = config_found_ia(self, "wsmousedev", &a, wsmousedevprint);
 
 	/* no interrupts until enabled */
 	cmd[0] = PMS_DEV_DISABLE;
-	res = pckbport_poll_cmd(pa->pa_tag, pa->pa_slot, cmd, 1, 0, 0, 0);
+	res = pckbport_poll_cmd(pa->pa_tag, pa->pa_slot, cmd, 1, 0, NULL, 0);
 	if (res)
 		aprint_error("pmsattach: disable error\n");
 	pckbport_slot_enable(sc->sc_kbctag, sc->sc_kbcslot, 0);
 
 	kthread_create(PRI_NONE, 0, NULL, pms_reset_thread, sc,
-	    &sc->sc_event_thread, sc->sc_dev.dv_xname);
+	    &sc->sc_event_thread, "%s", device_xname(sc->sc_dev));
 
-#ifndef PMS_DISABLE_POWERHOOK
-	sc->sc_suspended = 0;
-#endif
 	if (!pmf_device_register(self, pms_suspend, pms_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 }
@@ -250,6 +258,14 @@ do_enable(struct pms_softc *sc)
 #ifdef PMS_SYNAPTICS_TOUCHPAD
 	if (sc->protocol == PMS_SYNAPTICS)
 		pms_synaptics_enable(sc);
+#endif
+#ifdef PMS_ELANTECH_TOUCHPAD
+	if (sc->protocol == PMS_ELANTECH)
+		pms_elantech_enable(sc);
+#endif
+#ifdef PMS_ALPS_TOUCHPAD
+	if (sc->protocol == PMS_ALPS)
+		pms_alps_enable(sc);
 #endif
 
 	cmd[0] = PMS_DEV_ENABLE;
@@ -304,7 +320,7 @@ do_disable(struct pms_softc *sc)
 	pckbport_slot_enable(sc->sc_kbctag, sc->sc_kbcslot, 0);
 }
 
-int
+static int
 pms_enable(void *v)
 {
 	struct pms_softc *sc = v;
@@ -322,7 +338,7 @@ pms_enable(void *v)
 	return 0;
 }
 
-void
+static void
 pms_disable(void *v)
 {
 	struct pms_softc *sc = v;
@@ -336,7 +352,7 @@ pms_disable(void *v)
 }
 
 static bool
-pms_suspend(device_t dv)
+pms_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct pms_softc *sc = device_private(dv);
 
@@ -347,13 +363,29 @@ pms_suspend(device_t dv)
 }
 
 static bool
-pms_resume(device_t dv)
+pms_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct pms_softc *sc = device_private(dv);
 
 #ifdef PMS_SYNAPTICS_TOUCHPAD
 	if (sc->protocol == PMS_SYNAPTICS) {
 		pms_synaptics_resume(sc);
+		if (sc->sc_enabled) {
+			do_enable(sc);
+		}
+	} else
+#endif
+#ifdef PMS_ELANTECH_TOUCHPAD
+	if (sc->protocol == PMS_ELANTECH) {
+		pms_elantech_resume(sc);
+		if (sc->sc_enabled) {
+			do_enable(sc);
+		}
+	} else
+#endif
+#ifdef PMS_ALPS_TOUCHPAD
+	if (sc->protocol == PMS_ALPS) {
+		pms_alps_resume(sc);
 		if (sc->sc_enabled) {
 			do_enable(sc);
 		}
@@ -368,7 +400,7 @@ pms_resume(device_t dv)
 	return true;
 }
 
-int
+static int
 pms_ioctl(void *v, u_long cmd, void *data, int flag,
     struct lwp *l)
 {
@@ -419,8 +451,8 @@ pms_reset_thread(void *arg)
 		if (pmsdebug)
 #endif
 #if defined(PMSDEBUG) || defined(DIAGNOSTIC)
-			printf("%s: resetting mouse interface\n",
-			    sc->sc_dev.dv_xname);
+			aprint_debug_dev(sc->sc_dev,
+			    "resetting mouse interface\n");
 #endif
 		save_protocol = sc->protocol;
 		pms_disable(sc);
@@ -428,21 +460,20 @@ pms_reset_thread(void *arg)
 		res = pckbport_enqueue_cmd(sc->sc_kbctag, sc->sc_kbcslot, cmd,
 		    1, 2, 1, resp);
 		if (res) {
-			DPRINTF(("%s: reset error %d\n", sc->sc_dev.dv_xname,
-			    res));
+			DPRINTF(("%s: reset error %d\n",
+			    device_xname(sc->sc_dev), res));
 		}
 
-#ifdef PMS_SYNAPTICS_TOUCHPAD
-		/* For the synaptics case, leave the protocol alone. */
-		if (sc->protocol != PMS_SYNAPTICS)
-#endif
+		/* For the synaptics and elantech case, leave the protocol alone. */
+		if (sc->protocol != PMS_SYNAPTICS && sc->protocol != PMS_ELANTECH
+			&& sc->protocol != PMS_ALPS)
 			sc->protocol = PMS_UNKNOWN;
 
 		pms_enable(sc);
 		if (sc->protocol != save_protocol) {
 #if defined(PMSDEBUG) || defined(DIAGNOSTIC)
-			printf("%s: protocol change, sleeping and retrying\n",
-			    sc->sc_dev.dv_xname);
+			aprint_verbose_dev(sc->sc_dev,
+			    "protocol change, sleeping and retrying\n");
 #endif
 			pms_disable(sc);
 			cmd[0] = PMS_RESET;
@@ -450,7 +481,7 @@ pms_reset_thread(void *arg)
 			    sc->sc_kbcslot, cmd, 1, 2, 1, resp);
 			if (res) {
 				DPRINTF(("%s: reset error %d\n",
-				    sc->sc_dev.dv_xname, res));
+				    device_xname(sc->sc_dev), res));
 			}
 			tsleep(pms_reset_thread, PWAIT, "pmsreset", hz);
 			cmd[0] = PMS_RESET;
@@ -458,14 +489,14 @@ pms_reset_thread(void *arg)
 			    sc->sc_kbcslot, cmd, 1, 2, 1, resp);
 			if (res) {
 				DPRINTF(("%s: reset error %d\n",
-				    sc->sc_dev.dv_xname, res));
+				    device_xname(sc->sc_dev), res));
 			}
 			sc->protocol = PMS_UNKNOWN;	/* reprobe protocol */
 			pms_enable(sc);
 #if defined(PMSDEBUG) || defined(DIAGNOSTIC)
 			if (sc->protocol != save_protocol) {
 				printf("%s: protocol changed.\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			}
 #endif
 		}
@@ -479,7 +510,7 @@ pms_reset_thread(void *arg)
 #define PMS_4BUTMASK 0x10
 #define PMS_5BUTMASK 0x20
 
-void
+static void
 pmsinput(void *vsc, int data)
 {
 	struct pms_softc *sc = vsc;
@@ -488,7 +519,7 @@ pmsinput(void *vsc, int data)
 	int newbuttons = 0;
 
 	if (!sc->sc_enabled) {
-		/* Interrupts are not expected.	 Discard the byte. */
+		/* Interrupts are not expected. Discard the byte. */
 		return;
 	}
 
@@ -575,9 +606,9 @@ pmsinput(void *vsc, int data)
 			dz = sc->packet[3] & 0xf;
 			if (dz >= 8)
 				dz -= 16;
-                	if (sc->packet[3] & PMS_4BUTMASK)
+			if (sc->packet[3] & PMS_4BUTMASK)
 				newbuttons |= 0x8;
-                	if (sc->packet[3] & PMS_5BUTMASK)
+			if (sc->packet[3] & PMS_5BUTMASK)
 				newbuttons |= 0x10;
 		} else {
 			DPRINTF(("pmsinput: why am I looking at this byte?\n"));
@@ -642,4 +673,29 @@ pmsinput(void *vsc, int data)
 		wakeup(&sc->sc_enabled);
 		return;
 	}
+}
+
+int
+pms_sliced_command(pckbport_tag_t tag, pckbport_slot_t slot, u_char scmd)
+{
+	u_char cmd[2];
+	int i, err, ret = 0;
+
+	cmd[0] = PMS_SET_SCALE11;
+	ret = pckbport_poll_cmd(tag, slot, cmd, 1, 0, NULL, 0);
+
+	/*
+	 * Need to send 4 Set Resolution commands, with the argument
+	 * encoded in the bottom most 2 bits.
+	 */
+	for (i = 6; i >= 0; i -= 2) {
+		cmd[0] = PMS_SET_RES;
+		cmd[1] = (scmd >> i) & 3;
+		err = pckbport_poll_cmd(tag, slot, cmd, 2, 0, NULL, 0);
+		if (ret == 0 && err != 0) {
+			ret = err;
+		}
+	}
+
+	return ret;
 }

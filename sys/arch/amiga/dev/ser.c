@@ -1,4 +1,4 @@
-/*	$NetBSD: ser.c,v 1.77 2007/11/19 18:51:37 ad Exp $ */
+/*	$NetBSD: ser.c,v 1.83 2014/07/25 08:10:31 dholland Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -40,7 +40,7 @@
 #include "opt_kgdb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.77 2007/11/19 18:51:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.83 2014/07/25 08:10:31 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,7 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.77 2007/11/19 18:51:37 ad Exp $");
 #include <sys/tty.h>
 #include <sys/proc.h>
 #include <sys/file.h>
-#include <sys/malloc.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
@@ -68,15 +67,14 @@ __KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.77 2007/11/19 18:51:37 ad Exp $");
 #include "ser.h"
 #if NSER > 0
 
-void serattach(struct device *, struct device *, void *);
-int sermatch(struct device *, struct cfdata *, void *);
+void serattach(device_t, device_t, void *);
+int sermatch(device_t, cfdata_t, void *);
 
 struct ser_softc {
-	struct device dev;
 	struct tty *ser_tty;
 };
 
-CFATTACH_DECL(ser, sizeof(struct ser_softc),
+CFATTACH_DECL_NEW(ser, sizeof(struct ser_softc),
     sermatch, serattach, NULL, NULL);
 
 extern struct cfdriver ser_cd;
@@ -91,8 +89,18 @@ dev_type_tty(sertty);
 dev_type_poll(serpoll);
 
 const struct cdevsw ser_cdevsw = {
-	seropen, serclose, serread, serwrite, serioctl,
-	serstop, sertty, serpoll, nommap, ttykqfilter, D_TTY
+	.d_open = seropen,
+	.d_close = serclose,
+	.d_read = serread,
+	.d_write = serwrite,
+	.d_ioctl = serioctl,
+	.d_stop = serstop,
+	.d_tty = sertty,
+	.d_poll = serpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 #ifndef SEROBUF_SIZE
@@ -190,13 +198,13 @@ long	sermintcount[16];
 void	sermint(register int unit);
 
 int
-sermatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+sermatch(device_t parent, cfdata_t cf, void *aux)
 {
 	static int ser_matched = 0;
 	static int ser_matched_real = 0;
 
 	/* Allow only once instance. */
-	if (matchname("ser", (char *)auxp) == 0)
+	if (matchname("ser", (char *)aux) == 0)
 		return(0);
 
 	if (amiga_realconfig) {
@@ -217,15 +225,16 @@ sermatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 
 
 void
-serattach(struct device *pdp, struct device *dp, void *auxp)
+serattach(device_t parent, device_t self, void *aux)
 {
 	struct ser_softc *sc;
 	struct tty *tp;
 	u_short ir;
 
-	sc = (struct ser_softc *)dp;
+	sc = device_private(self);
 
 	ir = custom.intenar;
+	__USE(ir);
 	if (serconsole == 0)
 		DELAY(100000);
 
@@ -257,14 +266,14 @@ serattach(struct device *pdp, struct device *dp, void *auxp)
 	if (0 == serconsole)
 		serconsinit = 0;
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = (void (*) (struct tty *)) serstart;
 	tp->t_param = serparam;
 	tp->t_hwiflow = serhwiflow;
 	tty_attach(tp);
 	sc->ser_tty = ser_tty = tp;
 
-	if (dp)
+	if (self)
 		printf(": input fifo %d output fifo %d\n", SERIBUF_SIZE,
 		    SEROBUF_SIZE);
 }
@@ -281,11 +290,8 @@ seropen(dev_t dev, int flag, int mode, struct lwp *l)
 	error = 0;
 	unit = SERUNIT(dev);
 
-	if (unit >= ser_cd.cd_ndevs)
-		return (ENXIO);
-
-	sc = ser_cd.cd_devs[unit];
-	if (sc == 0)
+	sc = device_lookup_private(&ser_cd, unit);
+	if (sc == NULL)
 		return (ENXIO);
 
 	/* XXX com.c: insert KGDB check here */
@@ -372,7 +378,7 @@ serclose(dev_t dev, int flag, int mode, struct lwp *l)
 	struct ser_softc *sc;
 	struct tty *tp;
 
-	sc = ser_cd.cd_devs[0];
+	sc = device_lookup_private(&ser_cd, SERUNIT(dev));
 	tp = ser_tty;
 
 	/* XXX This is for cons.c, according to com.c */
@@ -422,11 +428,12 @@ ser_shutdown(struct ser_softc *sc)
 #if not_yet
 	if (tp != &ser_cons) {
 		remove_vbl_function(&ser_vbl_node);
-		ttyfree(tp);
+		tty_free(tp);
 		ser_tty = (struct tty *) NULL;
 	}
 #endif
 	ser_open_speed = tp->t_ispeed;
+	splx(s);
 	return;
 }
 

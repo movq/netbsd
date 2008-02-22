@@ -1,4 +1,4 @@
-/*	$NetBSD: altivec.h,v 1.11 2007/10/17 19:56:40 garbled Exp $	*/
+/*	$NetBSD: altivec.h,v 1.18 2018/04/19 21:50:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,15 +36,47 @@
 #define	VSCR_NJ		0x00010000	/* Non Java-IEEE-C9X FP mode */
 
 #ifdef _KERNEL
+#include <sys/pcu.h>
+#include <powerpc/mcontext.h>
 
-#define	ALTIVEC_SAVE	0
-#define	ALTIVEC_DISCARD	1
+struct lwp;
+struct vreg;
+struct trapframe;
 
-void enable_vec(void);
-void save_vec_cpu(void);
-void save_vec_lwp(struct lwp *, int /*discard*/);
-void vzeropage(paddr_t);
-void vcopypage(paddr_t, paddr_t);	/* dst, src */
+extern const pcu_ops_t vec_ops;
+
+bool	vec_used_p(struct lwp *);
+void	vec_mark_used(struct lwp *);
+
+void	vec_restore_from_mcontext(struct lwp *, const mcontext_t *);
+bool	vec_save_to_mcontext(struct lwp *, mcontext_t *, unsigned int *);
+
+int	vec_siginfo_code(const struct trapframe *);
+
+static __inline void
+vec_load(void)
+{
+	pcu_load(&vec_ops);
+}
+
+static __inline void
+vec_save(lwp_t *l)
+{
+	pcu_save(&vec_ops, l);
+}
+
+static __inline void
+vec_discard(lwp_t *l)
+{
+	pcu_discard(&vec_ops, l, false);
+}
+
+void	vec_load_from_vreg(const struct vreg *);
+void	vec_unload_to_vreg(struct vreg *);
+
+/* OEA only */
+void	vzeropage(paddr_t);
+void	vcopypage(paddr_t, paddr_t);	/* dst, src */
 #endif
 
 #endif	/* _POWERPC_ALTIVEC_H_ */

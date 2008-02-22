@@ -1,4 +1,4 @@
-/*	$NetBSD: clri.c,v 1.19 2005/01/20 15:50:47 xtraeme Exp $	*/
+/*	$NetBSD: clri.c,v 1.24 2015/08/30 05:23:17 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)clri.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: clri.c,v 1.19 2005/01/20 15:50:47 xtraeme Exp $");
+__RCSID("$NetBSD: clri.c,v 1.24 2015/08/30 05:23:17 mlelstv Exp $");
 #endif
 #endif /* not lint */
 
@@ -76,7 +76,7 @@ main(int argc, char *argv[])
 	struct ufs1_dinode *ip1;
 	struct ufs2_dinode *ip2;
 	int fd;
-	char *ibuf[MAXBSIZE];
+	void *ibuf;
 	int32_t generation;
 	off_t offset;
 	size_t bsize;
@@ -84,6 +84,7 @@ main(int argc, char *argv[])
 	char *fs, sblock[SBLOCKSIZE];
 	int needswap = 0, is_ufs2 = 0;
 	int i, imax;
+	long dev_bsize;
 
 	if (argc < 3) {
 		(void)fprintf(stderr, "usage: clri filesystem inode ...\n");
@@ -122,7 +123,7 @@ main(int argc, char *argv[])
 
 		/* check we haven't found an alternate */
 		if (is_ufs2 || sbp->fs_old_flags & FS_FLAGS_UPDATED) {
-			if (sblockloc != ufs_rw64(sbp->fs_sblockloc, needswap))
+			if ((uint64_t)sblockloc != ufs_rw64(sbp->fs_sblockloc, needswap))
 				continue;
 		} else {
 			if (sblockloc == SBLOCK_UFS2)
@@ -150,7 +151,15 @@ main(int argc, char *argv[])
 
 	if (needswap)
 		ffs_sb_swap(sbp, sbp);
+
+	/* compute disk block size from superblock parameters */
+	dev_bsize = sbp->fs_fsize / FFS_FSBTODB(sbp, 1);
+
 	bsize = sbp->fs_bsize;
+	ibuf = malloc(bsize);
+	if (ibuf == NULL) {
+		err(1, "malloc");
+	}
 
 	/* remaining arguments are inode numbers. */
 	while (*++argv) {
@@ -160,13 +169,13 @@ main(int argc, char *argv[])
 
 		/* read in the appropriate block. */
 		offset = ino_to_fsba(sbp, inonum);	/* inode to fs blk */
-		offset = fsbtodb(sbp, offset);		/* fs blk disk blk */
-		offset *= DEV_BSIZE;			/* disk blk to bytes */
+		offset = FFS_FSBTODB(sbp, offset);	/* fs blk disk blk */
+		offset *= dev_bsize;			/* disk blk to bytes */
 
 		/* seek and read the block */
 		if (lseek(fd, offset, SEEK_SET) < 0)
 			err(1, "%s", fs);
-		if (read(fd, ibuf, bsize) != bsize)
+		if ((size_t)read(fd, ibuf, bsize) != bsize)
 			err(1, "%s", fs);
 
 		/* get the inode within the block. */
@@ -189,10 +198,11 @@ main(int argc, char *argv[])
 		/* backup and write the block */
 		if (lseek(fd, offset, SEEK_SET) < 0)
 			err(1, "%s", fs);
-		if (write(fd, ibuf, bsize) != bsize)
+		if ((size_t)write(fd, ibuf, bsize) != bsize)
 			err(1, "%s", fs);
 		(void)fsync(fd);
 	}
+	free(ibuf);
 	(void)close(fd);
 	exit(0);
 }

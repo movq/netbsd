@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.h,v 1.10 2007/03/04 06:00:37 christos Exp $	*/
+/*	$NetBSD: ptrace.h,v 1.13 2017/04/08 00:25:49 kamil Exp $	*/
 
 #ifndef _POWERPC_PTRACE_H
 #define	_POWERPC_PTRACE_H
@@ -10,19 +10,28 @@
 #define	PT_SETFPREGS	(PT_FIRSTMACH + 4)
 #define	PT_GETVECREGS	(PT_FIRSTMACH + 5)
 #define	PT_SETVECREGS	(PT_FIRSTMACH + 6)
+#define	PT_SETSTEP	(PT_FIRSTMACH + 7)
+#define	PT_CLEARSTEP	(PT_FIRSTMACH + 8)
 
 #define	PT_MACHDEP_STRINGS				\
 	"PT_STEP",					\
 	"PT_GETREGS",		"PT_SETREGS",		\
 	"PT_GETFPREGS",		"PT_SETFPREGS",		\
-	"PT_GETVECREGS",	"PT_SETVECREGS",
+	"PT_GETVECREGS",	"PT_SETVECREGS",	\
+	"PT_SETSTEP",		"PT_CLEARSTEP",
+
+#include <machine/reg.h>
+#define PTRACE_REG_PC(r)	(r)->pc
+#define PTRACE_REG_SET_PC(r, v)	(r)->pc = (v)
+#define PTRACE_REG_SP(r)	(r)->fixreg[1]
+#define PTRACE_REG_INTRV(r)	(r)->fixreg[3]
 
 #ifdef _KERNEL
 #ifdef _KERNEL_OPT
 #include "opt_altivec.h"
 #endif
 
-#ifdef ALTIVEC
+#if defined(ALTIVEC) || defined(PPC_HAVE_SPE)
 
 /* We have machine-dependent process tracing requests.  */
 #define __HAVE_PTRACE_MACHDEP
@@ -58,7 +67,7 @@ int procfs_machdep_dovecregs(struct lwp *, struct lwp *,
 	struct pfsnode *, struct uio *);
 int procfs_machdep_validvecregs(struct lwp *, struct mount *);
 
-#endif /* ALTIVEC */
+#endif /* ALTIVEC || PPC_HAVE_SPE */
 #endif /* _KERNEL */
 
 #endif /* _POWERPC_PTRACE_H */

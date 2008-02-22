@@ -1,4 +1,4 @@
-/* $NetBSD: flash_vrip.c,v 1.5 2005/12/11 12:17:34 christos Exp $ */
+/* $NetBSD: flash_vrip.c,v 1.10 2014/07/25 08:10:33 dholland Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: flash_vrip.c,v 1.5 2005/12/11 12:17:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: flash_vrip.c,v 1.10 2014/07/25 08:10:33 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -65,8 +58,8 @@ int	flash_debug = 0;
 #define DPRINTF(x)
 #endif
 
-static int flash_probe(struct device *, struct cfdata *, void *);
-static void flash_attach(struct device *, struct device *, void *);
+static int flash_probe(device_t, cfdata_t, void *);
+static void flash_attach(device_t, device_t, void *);
 
 const static struct flashops * find_command_set(u_int8_t cmdset0,
 						u_int8_t cmdset1);
@@ -82,7 +75,7 @@ static int amd_write(struct flash_softc *, bus_size_t);
 
 extern struct cfdriver flash_cd;
 
-CFATTACH_DECL(flash_vrip, sizeof(struct flash_softc),
+CFATTACH_DECL_NEW(flash_vrip, sizeof(struct flash_softc),
 	      flash_probe, flash_attach, NULL, NULL);
 
 dev_type_open(flashopen);
@@ -91,8 +84,18 @@ dev_type_read(flashread);
 dev_type_write(flashwrite);
 
 const struct cdevsw flash_cdevsw = {
-	flashopen, flashclose, flashread, flashwrite, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	.d_open = flashopen,
+	.d_close = flashclose,
+	.d_read = flashread,
+	.d_write = flashwrite,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 static const struct flash_command_set {
@@ -177,7 +180,7 @@ probe_cfi(bus_space_tag_t iot, bus_space_handle_t ioh)
 }
 
 static int
-flash_probe(struct device *parent, struct cfdata *match, void *aux)
+flash_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct vrip_attach_args	*va = aux;
 	bus_space_handle_t	ioh;
@@ -204,9 +207,9 @@ detect:
 }
 
 static void
-flash_attach(struct device *parent, struct device *self, void *aux)
+flash_attach(device_t parent, device_t self, void *aux)
 {
-	struct flash_softc	*sc = (void *) self;
+	struct flash_softc	*sc = device_private(self);
 	struct vrip_attach_args	*va = aux;
 	int			i;
 	int			fence;
@@ -319,7 +322,8 @@ flashopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct flash_softc	*sc;
 
-	if ((sc = device_lookup(&flash_cd, minor(dev))) == NULL)
+	sc = device_lookup_private(&flash_cd, minor(dev));
+	if (sc == NULL)
 		return ENXIO;
 	if (sc->sc_status & FLASH_ST_BUSY)
 		return EBUSY;
@@ -332,7 +336,7 @@ flashclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct flash_softc	*sc;
 
-	sc = device_lookup(&flash_cd, minor(dev));
+	sc = device_lookup_private(&flash_cd, minor(dev));
 	sc->sc_status &= ~FLASH_ST_BUSY;
 	return 0;
 }
@@ -348,7 +352,7 @@ flashread(dev_t dev, struct uio *uio, int flag)
 	int			count;
 	int			error;
 
-	sc = device_lookup(&flash_cd, minor(dev));
+	sc = device_lookup_private(&flash_cd, minor(dev));
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
 
@@ -377,7 +381,7 @@ flashwrite(dev_t dev, struct uio *uio, int flag)
 	int			stat;
 	int			error;
 
-	sc = device_lookup(&flash_cd, minor(dev));
+	sc = device_lookup_private(&flash_cd, minor(dev));
 
 	if (sc->sc_size < uio->uio_offset + uio->uio_resid)
 		return ENOSPC;

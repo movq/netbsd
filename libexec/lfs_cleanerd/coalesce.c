@@ -1,4 +1,4 @@
-/*      $NetBSD: coalesce.c,v 1.14 2007/10/08 21:41:12 ad Exp $  */
+/*      $NetBSD: coalesce.c,v 1.33 2015/10/10 22:34:46 dholland Exp $  */
 
 /*-
  * Copyright (c) 2002, 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,6 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 
-#include <ufs/ufs/dinode.h>
 #include <ufs/lfs/lfs.h>
 
 #include <fcntl.h>
@@ -57,16 +49,23 @@
 #include <util.h>
 #include <errno.h>
 #include <err.h>
+#include <assert.h>
 
 #include <syslog.h>
 
 #include "bufcache.h"
 #include "vnode.h"
 #include "cleaner.h"
+#include "kernelops.h"
 
 extern int debug, do_mmap;
 
-int log2int(int n)
+/*
+ * XXX return the arg to just int when/if we don't need it for
+ * potentially huge block counts any more.
+ */
+static int
+log2int(intmax_t n)
 {
 	int log;
 
@@ -94,7 +93,7 @@ enum coalesce_returncodes {
 	COALESCE_MAXERROR
 };
 
-char *coalesce_return[] = {
+const char *coalesce_return[] = {
 	"Successfully coalesced",
 	"File not in use or inode not found",
 	"Not large enough to coalesce",
@@ -110,30 +109,43 @@ char *coalesce_return[] = {
 	"No such error"
 };
 
-static struct ufs1_dinode *
+static union lfs_dinode *
 get_dinode(struct clfs *fs, ino_t ino)
 {
 	IFILE *ifp;
 	daddr_t daddr;
 	struct ubuf *bp;
-	struct ufs1_dinode *dip, *r;
+	union lfs_dinode *dip, *r;
+	unsigned i;
 
 	lfs_ientry(&ifp, fs, ino, &bp);
-	daddr = ifp->if_daddr;
+	daddr = lfs_if_getdaddr(fs, ifp);
 	brelse(bp, 0);
 
 	if (daddr == 0x0)
 		return NULL;
 
-	bread(fs->clfs_devvp, daddr, fs->lfs_ibsize, NOCRED, &bp);
-	for (dip = (struct ufs1_dinode *)bp->b_data;
-	     dip < (struct ufs1_dinode *)(bp->b_data + fs->lfs_ibsize); dip++)
-		if (dip->di_inumber == ino) {
-			r = (struct ufs1_dinode *)malloc(sizeof(*r));
-			memcpy(r, dip, sizeof(*r));
+	bread(fs->clfs_devvp, daddr, lfs_sb_getibsize(fs), 0, &bp);
+	for (i = 0; i < LFS_INOPB(fs); i++) {
+		dip = DINO_IN_BLOCK(fs, bp->b_data, i);
+		if (lfs_dino_getinumber(fs, dip) == ino) {
+			r = malloc(sizeof(*r));
+			if (r == NULL)
+				break;
+			/*
+			 * Don't just assign the union, as if we're
+			 * 32-bit and it's the last inode in the block
+			 * that will run off the end of the buffer.
+			 */
+			if (fs->lfs_is64) {
+				r->u_64 = dip->u_64;
+			} else {
+				r->u_32 = dip->u_32;
+			}
 			brelse(bp, 0);
 			return r;
 		}
+	}
 	brelse(bp, 0);
 	return NULL;
 }
@@ -148,15 +160,15 @@ clean_inode(struct clfs *fs, ino_t ino)
 	BLOCK_INFO *bip = NULL, *tbip;
 	CLEANERINFO cip;
 	struct ubuf *bp;
-	struct ufs1_dinode *dip;
+	union lfs_dinode *dip;
 	struct clfs_seguse *sup;
 	struct lfs_fcntl_markv /* {
 		BLOCK_INFO *blkiov;
 		int blkcnt;
 	} */ lim;
 	daddr_t toff;
-	int i;
-	int nb, onb, noff;
+	int noff;
+	blkcnt_t i, nb, onb;
 	int retval;
 	int bps;
 
@@ -165,31 +177,54 @@ clean_inode(struct clfs *fs, ino_t ino)
 		return COALESCE_NOINODE;
 
 	/* Compute file block size, set up for bmapv */
-	onb = nb = lblkno(fs, dip->di_size);
+	onb = nb = lfs_lblkno(fs, lfs_dino_getsize(fs, dip));
 
 	/* XXX for now, don't do any file small enough to have fragments */
-	if (nb < NDADDR) {
+	if (nb < ULFS_NDADDR) {
 		free(dip);
 		return COALESCE_TOOSMALL;
 	}
 
 	/* Sanity checks */
-	if (dip->di_size < 0) {
-		dlog("ino %d, negative size (%" PRId64 ")", ino, dip->di_size);
+#if 0	/* di_size is uint64_t -- this is a noop */
+	if (lfs_dino_getsize(fs, dip) < 0) {
+		dlog("ino %d, negative size (%" PRId64 ")", ino,
+		     lfs_dino_getsize(fs, dip));
 		free(dip);
 		return COALESCE_BADSIZE;
 	}
-	if (nb > dip->di_blocks) {
-		dlog("ino %d, computed blocks %d > held blocks %d", ino, nb,
-		     dip->di_blocks);
+#endif
+	if (nb > lfs_dino_getblocks(fs, dip)) {
+		dlog("ino %ju, computed blocks %jd > held blocks %ju",
+		     (uintmax_t)ino, (intmax_t)nb,
+		     (uintmax_t)lfs_dino_getblocks(fs, dip));
 		free(dip);
 		return COALESCE_BADBLOCKSIZE;
 	}
 
+	/*
+	 * XXX: We should really coalesce really large files in
+	 * chunks, as there's substantial diminishing returns and
+	 * mallocing huge amounts of memory just to get those returns
+	 * is pretty silly. But that requires a big rework of this
+	 * code. (On the plus side though then we can stop worrying
+	 * about block counts > 2^31.)
+	 */
+
+	/* ugh, no DADDR_T_MAX */
+	__CTASSERT(sizeof(daddr_t) == sizeof(int64_t));
+	if (nb > INT64_MAX / sizeof(BLOCK_INFO)) {
+		syslog(LOG_WARNING, "ino %ju, %jd blocks: array too large\n",
+		       (uintmax_t)ino, (uintmax_t)nb);
+		free(dip);
+		return COALESCE_NOMEM;
+	}
+
 	bip = (BLOCK_INFO *)malloc(sizeof(BLOCK_INFO) * nb);
 	if (bip == NULL) {
-		syslog(LOG_WARNING, "ino %llu, %d blocks: %m",
-		    (unsigned long long)ino, nb);
+		syslog(LOG_WARNING, "ino %llu, %jd blocks: %s\n",
+		    (unsigned long long)ino, (intmax_t)nb,
+		    strerror(errno));
 		free(dip);
 		return COALESCE_NOMEM;
 	}
@@ -197,31 +232,45 @@ clean_inode(struct clfs *fs, ino_t ino)
 		memset(bip + i, 0, sizeof(BLOCK_INFO));
 		bip[i].bi_inode = ino;
 		bip[i].bi_lbn = i;
-		bip[i].bi_version = dip->di_gen;
+		bip[i].bi_version = lfs_dino_getgen(fs, dip);
 		/* Don't set the size, but let lfs_bmap fill it in */
+	}
+	/*
+	 * The kernel also contains this check; but as lim.blkcnt is
+	 * only 32 bits wide, we need to check ourselves too in case
+	 * we'd otherwise truncate a value > 2^31, as that might
+	 * succeed and create bizarre results.
+	 */
+	if (nb > LFS_MARKV_MAXBLKCNT) {
+		syslog(LOG_WARNING, "%s: coalesce: LFCNBMAPV: Too large\n",
+		       lfs_sb_getfsmnt(fs));
+		retval = COALESCE_BADBMAPV;
+		goto out;
 	}
 	lim.blkiov = bip;
 	lim.blkcnt = nb;
-	if (fcntl(fs->clfs_ifilefd, LFCNBMAPV, &lim) < 0) { 
+	if (kops.ko_fcntl(fs->clfs_ifilefd, LFCNBMAPV, &lim) < 0) { 
 		syslog(LOG_WARNING, "%s: coalesce: LFCNBMAPV: %m",
-		       fs->lfs_fsmnt);
+		       lfs_sb_getfsmnt(fs));
 		retval = COALESCE_BADBMAPV;
 		goto out;
 	}
 #if 0
 	for (i = 0; i < nb; i++) {
-		printf("bi_size = %d, bi_ino = %d, "
-		    "bi_lbn = %d, bi_daddr = %d\n",
-		    bip[i].bi_size, bip[i].bi_inode, bip[i].bi_lbn,
-		    bip[i].bi_daddr);
+		printf("bi_size = %d, bi_ino = %ju, "
+		    "bi_lbn = %jd, bi_daddr = %jd\n",
+		    bip[i].bi_size, (uintmax_t)bip[i].bi_inode,
+		    (intmax_t)bip[i].bi_lbn,
+		    (intmax_t)bip[i].bi_daddr);
 	}
 #endif
-	noff = toff = 0;
+	noff = 0;
+	toff = 0;
 	for (i = 1; i < nb; i++) {
-		if (bip[i].bi_daddr != bip[i - 1].bi_daddr + fs->lfs_frag)
+		if (bip[i].bi_daddr != bip[i - 1].bi_daddr + lfs_sb_getfrag(fs))
 			++noff;
-		toff += abs(bip[i].bi_daddr - bip[i - 1].bi_daddr
-		    - fs->lfs_frag) >> fs->lfs_fbshift;
+		toff += llabs(bip[i].bi_daddr - bip[i - 1].bi_daddr
+		    - lfs_sb_getfrag(fs)) >> lfs_sb_getfbshift(fs);
 	}
 
 	/*
@@ -232,19 +281,19 @@ clean_inode(struct clfs *fs, ino_t ino)
 	 * can have a break or two and it's okay.
 	 */
 	if (nb <= 1 || noff == 0 || noff < log2int(nb) ||
-	    segtod(fs, noff) * 2 < nb) {
+	    lfs_segtod(fs, noff) * 2 < nb) {
 		retval = COALESCE_NOTWORTHIT;
 		goto out;
 	} else if (debug)
 		syslog(LOG_DEBUG, "ino %llu total discontinuity "
-		    "%d (%lld) for %d blocks", (unsigned long long)ino,
-		    noff, (long long)toff, nb);
+		    "%d (%jd) for %jd blocks", (unsigned long long)ino,
+		    noff, (intmax_t)toff, (intmax_t)nb);
 
 	/* Search for blocks in active segments; don't move them. */
 	for (i = 0; i < nb; i++) {
 		if (bip[i].bi_daddr <= 0)
 			continue;
-		sup = &fs->clfs_segtab[dtosn(fs, bip[i].bi_daddr)];
+		sup = &fs->clfs_segtab[lfs_dtosn(fs, bip[i].bi_daddr)];
 		if (sup->flags & SEGUSE_ACTIVE)
 			bip[i].bi_daddr = LFS_UNUSED_DADDR; /* 0 */
 	}
@@ -276,41 +325,50 @@ clean_inode(struct clfs *fs, ino_t ino)
 	for (i = 0; i < nb; i++) {
 		bip[i].bi_bp = malloc(bip[i].bi_size);
 		if (bip[i].bi_bp == NULL) {
-			syslog(LOG_WARNING, "allocate block buffer size=%d: %m",
-			    bip[i].bi_size);
+			syslog(LOG_WARNING, "allocate block buffer size=%d: %s\n",
+			    bip[i].bi_size, strerror(errno));
 			retval = COALESCE_NOMEM;
 			goto out;
 		}
 
-		if (pread(fs->clfs_devfd, bip[i].bi_bp, bip[i].bi_size,
-			  fsbtob(fs, bip[i].bi_daddr)) < 0) {
+		if (kops.ko_pread(fs->clfs_devfd, bip[i].bi_bp, bip[i].bi_size,
+			  lfs_fsbtob(fs, bip[i].bi_daddr)) < 0) {
 			retval = COALESCE_EIO;
 			goto out;
 		}
 	}
 	if (debug)
-		syslog(LOG_DEBUG, "ino %llu markv %d blocks",
-		    (unsigned long long)ino, nb);
+		syslog(LOG_DEBUG, "ino %ju markv %jd blocks",
+		    (uintmax_t)ino, (intmax_t)nb);
 
 	/*
 	 * Write in segment-sized chunks.  If at any point we'd write more
 	 * than half of the available segments, sleep until that's not
 	 * true any more.
+	 *
+	 * XXX the pointer arithmetic in this loop is illegal; replace
+	 * TBIP with an integer (blkcnt_t) offset.
 	 */
-	bps = segtod(fs, 1);
+	bps = lfs_segtod(fs, 1);
 	for (tbip = bip; tbip < bip + nb; tbip += bps) {
 		do {
-			bread(fs->lfs_ivnode, 0, fs->lfs_bsize, NOCRED, &bp);
+			bread(fs->lfs_ivnode, 0, lfs_sb_getbsize(fs), 0, &bp);
 			cip = *(CLEANERINFO *)bp->b_data;
 			brelse(bp, B_INVAL);
 
-			if (cip.clean < 4) /* XXX magic number 4 */
-				fcntl(fs->clfs_ifilefd, LFCNSEGWAIT, NULL);
-		} while(cip.clean < 4);
+			if (lfs_ci_getclean(fs, &cip) < 4) /* XXX magic number 4 */
+				kops.ko_fcntl(fs->clfs_ifilefd,
+				    LFCNSEGWAIT, NULL);
+		} while (lfs_ci_getclean(fs, &cip) < 4);
 
+		/*
+		 * Note that although lim.blkcnt is 32 bits wide, bps
+		 * (which is blocks-per-segment) is < 2^32 so the
+		 * value assigned here is always in range.
+		 */
 		lim.blkiov = tbip;
 		lim.blkcnt = (tbip + bps < bip + nb ? bps : nb % bps);
-		if (fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim) < 0) {
+		if (kops.ko_fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim) < 0) {
 			retval = COALESCE_BADMARKV;
 			goto out;
 		}
@@ -341,8 +399,8 @@ int clean_all_inodes(struct clfs *fs)
 	memset(totals, 0, sizeof(totals));
 
 	fstat(fs->clfs_ifilefd, &st);
-	maxino = fs->lfs_ifpb * (st.st_size >> fs->lfs_bshift) -
-		fs->lfs_segtabsz - fs->lfs_cleansz;
+	maxino = lfs_sb_getifpb(fs) * (st.st_size >> lfs_sb_getbshift(fs)) -
+		lfs_sb_getsegtabsz(fs) - lfs_sb_getcleansz(fs);
 
 	for (i = 0; i < maxino; i++) {
 		r = clean_inode(fs, i);
@@ -385,14 +443,14 @@ fork_coalesce(struct clfs *fs)
 	 */
 	childpid = fork();
 	if (childpid < 0) {
-		syslog(LOG_ERR, "%s: fork to coaleasce: %m", fs->lfs_fsmnt);
+		syslog(LOG_ERR, "%s: fork to coaleasce: %m", lfs_sb_getfsmnt(fs));
 		return 0;
 	} else if (childpid == 0) {
 		syslog(LOG_NOTICE, "%s: new coalescing process, pid %d",
-		       fs->lfs_fsmnt, getpid());
+		       lfs_sb_getfsmnt(fs), getpid());
 		num = clean_all_inodes(fs);
 		syslog(LOG_NOTICE, "%s: coalesced %d discontiguous inodes",
-		       fs->lfs_fsmnt, num);
+		       lfs_sb_getfsmnt(fs), num);
 		exit(0);
 	}
 

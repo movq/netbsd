@@ -1,4 +1,4 @@
-/*	$NetBSD: bmtphy.c,v 1.24 2008/01/05 20:33:29 jdc Exp $	*/
+/*	$NetBSD: bmtphy.c,v 1.32 2016/07/07 06:55:41 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,11 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -73,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bmtphy.c,v 1.24 2008/01/05 20:33:29 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bmtphy.c,v 1.32 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,10 +79,10 @@ __KERNEL_RCSID(0, "$NetBSD: bmtphy.c,v 1.24 2008/01/05 20:33:29 jdc Exp $");
 
 #include <dev/mii/bmtphyreg.h>
 
-static int	bmtphymatch(struct device *, struct cfdata *, void *);
-static void	bmtphyattach(struct device *, struct device *, void *);
+static int	bmtphymatch(device_t, cfdata_t, void *);
+static void	bmtphyattach(device_t, device_t, void *);
 
-CFATTACH_DECL(bmtphy, sizeof(struct mii_softc),
+CFATTACH_DECL_NEW(bmtphy, sizeof(struct mii_softc),
     bmtphymatch, bmtphyattach, mii_phy_detach, mii_phy_activate);
 
 static int	bmtphy_service(struct mii_softc *, struct mii_data *, int);
@@ -126,8 +114,7 @@ static const struct mii_phydesc bmtphys[] = {
 };
 
 static int
-bmtphymatch(struct device *parent, struct cfdata *match,
-    void *aux)
+bmtphymatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
@@ -138,7 +125,7 @@ bmtphymatch(struct device *parent, struct cfdata *match,
 }
 
 static void
-bmtphyattach(struct device *parent, struct device *self, void *aux)
+bmtphyattach(device_t parent, device_t self, void *aux)
 {
 	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
@@ -149,6 +136,7 @@ bmtphyattach(struct device *parent, struct device *self, void *aux)
 	aprint_naive(": Media interface\n");
 	aprint_normal(": %s, rev. %d\n", mpd->mpd_name, MII_REV(ma->mii_id2));
 
+	sc->mii_dev = self;
 	sc->mii_mpd_model = MII_MODEL(ma->mii_id2);
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
@@ -163,17 +151,13 @@ bmtphyattach(struct device *parent, struct device *self, void *aux)
 	 * XXX Check AUX_STS_FX_MODE to set MIIF_HAVE_FIBER?
 	 */
 
-	sc->mii_capabilities =
-	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
-	aprint_normal("%s: ", sc->mii_dev.dv_xname);
+	sc->mii_capabilities = PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
+	aprint_normal_dev(self, "");
 	if ((sc->mii_capabilities & BMSR_MEDIAMASK) == 0)
 		aprint_error("no media present");
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
-
-	if (!pmf_device_register(self, NULL, mii_phy_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -262,7 +246,7 @@ bmtphy_status(struct mii_softc *sc)
 
 	if (bmcr & BMCR_AUTOEN) {
 		/*
-		 * The media status bits are only valid of autonegotiation
+		 * The media status bits are only valid if autonegotiation
 		 * has completed (or it's disabled).
 		 */
 		if ((bmsr & BMSR_ACOMP) == 0) {
@@ -280,11 +264,14 @@ bmtphy_status(struct mii_softc *sc)
 			mii->mii_media_active |= IFM_FDX;
 		else
 			mii->mii_media_active |= IFM_HDX;
+
+		if (mii->mii_media_active & IFM_FDX)
+			mii->mii_media_active |= mii_phy_flowstatus(sc);
 	} else
 		mii->mii_media_active = ife->ifm_media;
 }
 
-static void   
+static void
 bmtphy_reset(struct mii_softc *sc)
 {
 	u_int16_t data;
@@ -300,8 +287,7 @@ bmtphy_reset(struct mii_softc *sc)
 		data = PHY_READ(sc, MII_BMTPHY_AUX2);
 		PHY_WRITE(sc, MII_BMTPHY_AUX2, data | 0x0020);
 
-		/* Enable clocks across APD for
-		 * Auto-MDIX functionality */
+		/* Enable clocks across APD for Auto-MDIX functionality */
 		data = PHY_READ(sc, MII_BMTPHY_INTR);
 		PHY_WRITE(sc, MII_BMTPHY_INTR, data | 0x0004);
 
@@ -309,4 +295,4 @@ bmtphy_reset(struct mii_softc *sc)
 		data = PHY_READ(sc, 0x1f);
 		PHY_WRITE(sc, 0x1f, data & ~0x0080);
 	}
-}      
+}

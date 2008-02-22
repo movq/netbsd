@@ -1,4 +1,4 @@
-/* $NetBSD: nvram.h,v 1.4 2007/03/21 04:13:53 garbled Exp $ */
+/* $NetBSD: nvram.h,v 1.9 2015/09/07 03:49:45 dholland Exp $ */
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,6 +38,8 @@
 
 #ifndef _MACHINE_NVRAM_H
 #define _MACHINE_NVRAM_H
+
+#include <sys/ioccom.h>
 
 #if defined(_KERNEL)
 /* for the motorola machines */
@@ -180,7 +175,7 @@ typedef struct _HEADER {
 	uint32_t ConfigLastWriteDT[2]; /* last change to config area */
 	uint32_t ConfigCount;	/* count of entries in configuration */
 
-	/* OS Dependant temp area */
+	/* OS Dependent temp area */
 	void *OSAreaAddress;
 	uint32_t OSAreaLength;
 	uint32_t OSAreaLastWriteDT[2]; /* last change to OSArea */
@@ -206,7 +201,7 @@ struct pnviocdesc {
 
 #if defined(_KERNEL)
 struct prep_mk48txx_softc {
-	struct device   sc_dev;
+	device_t *sc_dev;
 	bus_space_tag_t sc_bst;	 /* bus tag & handle */
 	bus_space_handle_t sc_bsh;      /* */
 
@@ -227,8 +222,6 @@ struct prep_mk48txx_softc {
 };
 
 struct nvram_pnpbus_softc {
-	struct device sc_dev;		/* base device */ 
-
 	bus_space_tag_t sc_iot;		/* io space tag */
 	bus_space_tag_t sc_as;		/* addr line */
 	bus_space_handle_t sc_ash;

@@ -1,3 +1,4 @@
-/*	$NetBSD: dkcksum.h,v 1.3 2000/12/24 05:59:11 lukem Exp $	*/
+/*	$NetBSD: dkcksum.h,v 1.6 2013/05/03 16:05:12 matt Exp $	*/
 
-u_short	dkcksum(struct disklabel *);
+uint16_t	dkcksum(const struct disklabel *);
+uint16_t	dkcksum_sized(const struct disklabel *, size_t);

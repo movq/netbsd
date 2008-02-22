@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_powerpc64.c,v 1.2 2006/07/05 18:33:18 ross Exp $	*/
+/*	$NetBSD: kvm_powerpc64.c,v 1.6 2014/08/23 02:25:23 matt Exp $	*/
 
 /*
  * Copyright (c) 2005 Wasabi Systems, Inc.
@@ -71,6 +71,7 @@
 
 #include <sys/param.h>
 #include <sys/exec.h>
+#include <sys/types.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -89,9 +90,10 @@
 #include <powerpc/oea/bat.h>
 #include <powerpc/oea/pte.h>
 
+__RCSID("$NetBSD: kvm_powerpc64.c,v 1.6 2014/08/23 02:25:23 matt Exp $");
+
 void
-_kvm_freevtop(kd)
-	kvm_t *kd;
+_kvm_freevtop(kvm_t *kd)
 {
 	if (kd->vmst != 0)
 		free(kd->vmst);
@@ -99,8 +101,7 @@ _kvm_freevtop(kd)
 
 /*ARGSUSED*/
 int
-_kvm_initvtop(kd)
-	kvm_t *kd;
+_kvm_initvtop(kvm_t *kd)
 {
 
 	return 0;
@@ -114,22 +115,18 @@ _kvm_initvtop(kd)
  * Translate a KVA to a PA
  */
 int
-_kvm_kvatop(kd, va, pa)
-	kvm_t *kd;
-	u_long va;
-	u_long *pa;
+_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 {
-	cpu_kcore_hdr_t	*cpu_kh;
-	uint32_t	pvr;
 
 	if (ISALIVE(kd)) {
 		_kvm_err(kd, 0, "vatop called in live kernel!");
 		return 0;
 	}
 
-	cpu_kh = kd->cpu_data;
-
-	pvr = (cpu_kh->pvr >> 16);
+#if 0
+	cpu_kcore_hdr_t	*cpu_kh = kd->cpu_data;
+	uint32_t pvr = (cpu_kh->pvr >> 16);
+#endif
 
 
 	/* No hit -- no translation */
@@ -138,9 +135,7 @@ _kvm_kvatop(kd, va, pa)
 }
 
 off_t
-_kvm_pa2off(kd, pa)
-	kvm_t *kd;
-	u_long pa;
+_kvm_pa2off(kvm_t *kd, paddr_t pa)
 {
 	cpu_kcore_hdr_t	*cpu_kh;
 	phys_ram_seg_t	*ram;
@@ -169,8 +164,7 @@ _kvm_pa2off(kd, pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kd)
-	kvm_t	*kd;
+_kvm_mdopen(kvm_t *kd)
 {
 	uintptr_t max_uva;
 	extern struct ps_strings *__ps_strings;

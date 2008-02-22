@@ -1,5 +1,5 @@
-#	$NetBSD: Makefile,v 1.7 2007/11/12 15:18:07 jmmv Exp $
+#	$NetBSD: Makefile,v 1.9 2017/05/14 04:21:52 kamil Exp $
 
-SUBDIR= mkdir getdents posix_fadvise lseek
+SUBDIR= lseek
 
 .include <bsd.subdir.mk>

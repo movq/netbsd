@@ -1,47 +1,78 @@
-#	$NetBSD: Makefile,v 1.27 2007/09/20 12:26:51 drochner Exp $
+#	$NetBSD: Makefile,v 1.86 2018/05/01 19:59:46 christos Exp $
 
-.include <bsd.own.mk>
+.include <bsd.hostinit.mk>
 
 GCC_LANGUAGES=c c++ objc
 MODULE=			gcc4
-MKNATIVE_TARGET=	gcc4
-MKNATIVE_CONFIG_TARGET_LIBS=
-BINENV=		/usr/bin/env -i
 
-VAX_CONFIGURE_ARGS=
+GCCDIST=	${.CURDIR}/../../external/gpl3/${EXTERNAL_GCC_SUBDIR}/dist
+GNUHOSTDIST=	${GCCDIST}
 
-CONFIGURE_ARGS=	--target=${MACHINE_GNU_PLATFORM} --disable-nls \
-		--enable-long-long \
-		--disable-multilib \
-		--enable-threads \
-		${VAX_CONFIGURE_ARGS} \
+.if ${HAVE_GCC} == 5
+MKNATIVE=		${.CURDIR}/mknative-gcc.old
+.endif
+
+# Defaults
+CC_FOR_BUILD=		${HOST_CXX:Q}
+MKNATIVE?=		${.CURDIR}/mknative-gcc
+
+.if ${MACHINE_ARCH} == "x86_64" || ${MACHINE_ARCH} == "sparc64"
+MULTILIB_ARGS= --enable-multilib
+.else
+MULTILIB_ARGS= --disable-multilib
+.endif
+
+.if ${MKSOFTFLOAT} != "no" && ${MACHINE_CPU} != "m68k" \
+    && ${MACHINE_CPU} != "or1k" && ${MACHINE_CPU} != "sh3"
+SOFTFLOAT_ARGS=	-with-float=soft
+.endif
+
+.include "gcc-version.mk"
+
+COMMON_CONFIGURE_ARGS=	--target=${MACHINE_GNU_PLATFORM} \
+			--enable-long-long \
+			--enable-threads \
+			--with-bugurl=http://www.NetBSD.org/Misc/send-pr.html \
+			--with-pkgversion="NetBSD ${NETBSD_GCC_VERSION}" \
+			--with-system-zlib \
+			--disable-libstdcxx-dual-abi \
+			--enable-__cxa_atexit \
+			--enable-libstdcxx-time=rt \
+			--enable-libstdcxx-threads
+.if defined(GCC_CONFIG_ARCH.${MACHINE_ARCH})
+COMMON_CONFIGURE_ARGS+=	--with-arch=${GCC_CONFIG_ARCH.${MACHINE_ARCH}}
+.endif
+.if defined(GCC_CONFIG_TUNE.${MACHINE_ARCH})
+COMMON_CONFIGURE_ARGS+=	--with-tune=${GCC_CONFIG_TUNE.${MACHINE_ARCH}}
+.endif
+
+.if ${HAVE_GCC} >= 5
+# Turn on colour output only if GCC_COLORS env is set
+COMMON_CONFIGURE_ARGS+= --with-diagnostics-color=auto-if-env
+.endif
+
+CONFIGURE_ARGS=	${COMMON_CONFIGURE_ARGS}
+CONFIGURE_ARGS+= \
+		--with-sysroot=${DESTDIR} \
+		--with-mpc=${TOOLDIR} \
+		--with-mpfr=${TOOLDIR} \
+		--with-gmp=${TOOLDIR} \
+		--disable-nls \
+		${MULTILIB_ARGS} \
+		${SOFTFLOAT_ARGS} \
 		--program-transform-name="s,^,${MACHINE_GNU_PLATFORM}-," \
-		--enable-languages="${GCC_LANGUAGES}" \
-		--enable-__cxa_atexit
+		--enable-languages="${GCC_LANGUAGES}"
+
+GCC_CPPFLAGS=	-DNETBSD_TOOLS -DTARGET_SYSTEM_ROOT=0 \
+		-DTARGET_SYSTEM_ROOT_RELOCATABLE
 
 MAKE_ARGS=	MACHINE= MAKEINFO=${TOOL_MAKEINFO:Q} \
 		LIBGCC= LIBGCC1= LIBGCC1_TEST= LIBGCC2= INSTALL_LIBGCC= \
-		EXTRA_PARTS= CPPFLAGS=-DNETBSD_TOOLS \
+		EXTRA_PARTS= CPPFLAGS=${GCC_CPPFLAGS:Q} \
 		AR=${HOST_AR:Q} RANLIB=${HOST_RANLIB:Q}
 
-CONFIGURE_ENV+= gcc_cv_libc_provides_ssp=yes
-
-MKNATIVE_ENV=	${BINENV} ${CONFIGURE_ENV:NC*:NLD*} \
-			CC_FOR_BUILD=${HOST_CC:Q} \
-			CC=${CC:Q}' '${CCADDFLAGS:Q} \
-			CXX=${CXX:Q}' '${CCADDFLAGS:Q}' '${CXXADDFLAGS:Q} \
-			CPP=${CPP:Q}' '-I${DESTDIR}/usr/include \
-			CFLAGS= CPPFLAGS= CXXFLAGS= LDFLAGS= \
-			AS=${AS:Q} LD=${LD:Q} NM=${NM:Q} OBJDUMP=${OBJDUMP:Q} \
-			MSGFMT=${TOOLDIR}/bin/${_TOOL_PREFIX}msgfmt \
-			XGETTEXT=${TOOLDIR}/bin/${_TOOL_PREFIX}xgettext \
-			LIBS=-lintl \
-			ac_cv_prog_cc_cross=yes \
-			ac_cv_func_strcoll_works=yes \
-			gcc_cv_func_printf_ptr=yes \
-			gdb_cv_printf_has_long_double=yes \
-			gdb_cv_printf_has_long_long=yes \
-			gdb_cv_scanf_has_long_double=yes
+CONFIGURE_ENV+= gcc_cv_libc_provides_ssp=yes \
+		gcc_cv_as_sparc_gotdata_op=no
 
 ALL_TARGET=	all-gcc
 INSTALL_TARGET=	install-gcc
@@ -49,55 +80,151 @@ INSTALL_TARGET=	install-gcc
 .include "${.CURDIR}/../Makefile.gmakehost"
 BUILD_MAKE=${TOOL_GMAKE}
 
-CXXADDFLAGS=	${CPPFLAG_ISYSTEMXX} ${DESTDIR}/usr/include/g++
-CCADDFLAGS=	${CPPFLAG_ISYSTEM} ${DESTDIR}/usr/include -L${DESTDIR}/lib -L${DESTDIR}/usr/lib -B${DESTDIR}/usr/lib/
+#
+# mknative-gcc specific stuff
+#
 
+MKNATIVE_CONFIG_TARGET_LIBS=
+
+MKNATIVE_CONFIG_TARGET_LIBS+=	configure-target-libgcc
+MKNATIVE_CONFIG_TARGET_LIBS+=	configure-target-libgomp
+.if ${HAVE_GCC} == 6
+MKNATIVE_TARGET=	gcc6
+.elif ${HAVE_GCC} == 5
+MKNATIVE_TARGET=	gcc5
+.endif
+
+MKNATIVE_CONFIG_TARGET_LIBS+= \
+	configure-target-libstdc++-v3 \
+	configure-target-libobjc
+
+BINENV=		/usr/bin/env -i
+
+
+MKNATIVE_ENV=	${BINENV} ${CONFIGURE_ENV:NC*:NLD*} \
+			CC_FOR_BUILD=${CC_FOR_BUILD:Q} \
+			CXX_FOR_BUILD=${HOST_CXX:Q} \
+			CFLAGS_FOR_BUILD="-I${TOOLDIR}/include" \
+			CC=${CC:Q}' '${CCADDFLAGS:Q} \
+			CXX=${CXX:Q}' '${CCADDFLAGS:Q}' '${CXXADDFLAGS:Q} \
+			CPP=${CPP:Q}' '-I${DESTDIR}/usr/include \
+			CFLAGS= CPPFLAGS= CXXFLAGS= LDFLAGS= \
+			AS=${AS:Q} AWK=${TOOL_AWK:Q} LD=${LD:Q} \
+			MSGFMT=${TOOLDIR}/bin/${_TOOL_PREFIX}msgfmt \
+			NM=${NM:Q} OBJDUMP=${OBJDUMP:Q} \
+			XGETTEXT=${TOOLDIR}/bin/${_TOOL_PREFIX}xgettext \
+			ac_cv_prog_cc_cross=yes \
+			ac_cv_func_strcoll_works=yes \
+			ac_cv_func_elf_getshstrndx=no \
+			gcc_cv_func_printf_ptr=yes \
+			gcc_cv_libc_provides_ssp=yes \
+			gdb_cv_printf_has_long_double=yes \
+			gdb_cv_printf_has_long_long=yes \
+			gdb_cv_scanf_has_long_double=yes \
+			gcc_cv_as_sparc_gotdata_op=no
+
+CXXADDFLAGS=	--sysroot=${DESTDIR}
+CCADDFLAGS=	--sysroot=${DESTDIR} -L${DESTDIR}/lib -L${DESTDIR}/usr/lib -B${DESTDIR}/usr/lib/ -I${.OBJDIR}/.native/gcc/include
+
+# NEWCONFIGDIR can be set to a read-write location of the source tree
+# in case the version being used is not.
 NEWCONFIGDIR?=	${.CURDIR}/../..
-MKNATIVE?=	${.CURDIR}/mknative-gcc
 
 bootstrap-libgcc: .configure_done
 	@echo 'Creating files needed for libgcc by a native bootstrap build.'
-	@MAKE=${BUILD_MAKE:Q} ${HOST_SH} ${MKNATIVE} lib${MODULE} \
-		${.OBJDIR}/build ${NEWCONFIGDIR} ${MACHINE_GNU_PLATFORM}
+	(cd ${.OBJDIR}/build && ${BUILD_COMMAND} configure-target-libgcc)
+	@MAKE=${BUILD_MAKE:Q} ${HOST_SH} ${MKNATIVE} lib${MKNATIVE_TARGET}-bootstrap \
+		${.OBJDIR}/build ${NEWCONFIGDIR} ${NETBSDSRCDIR} \
+		${MACHINE_GNU_PLATFORM} ${DESTDIR} ${TOOLDIR}
+
+bootstrap-libstdc++: .configure_done
+	@echo 'Creating files needed for libstdc++ by a native bootstrap build.'
+	(cd ${.OBJDIR}/build && ${BUILD_COMMAND} configure-target-libstdc++-v3)
+	@MAKE=${BUILD_MAKE:Q} ${HOST_SH} ${MKNATIVE} libstdc++-bootstrap \
+		${.OBJDIR}/build ${NEWCONFIGDIR} ${NETBSDSRCDIR} \
+		${MACHINE_GNU_PLATFORM} ${DESTDIR} ${TOOLDIR}
 
 native-gcc: .native/.configure_done
 	@echo 'Extracting GNU GCC configury for a native toolchain.'
 	@MAKE=${BUILD_MAKE:Q} ${HOST_SH} ${MKNATIVE} ${MKNATIVE_TARGET} \
-		${.OBJDIR}/.native ${NEWCONFIGDIR} ${MACHINE_GNU_PLATFORM}
+		${.OBJDIR}/.native ${NEWCONFIGDIR} ${NETBSDSRCDIR} \
+		${MACHINE_GNU_PLATFORM} ${DESTDIR} ${TOOLDIR}
+
+NATIVE_CONFIGURE_ARGS=	${COMMON_CONFIGURE_ARGS}
+MPC=		${NETBSDSRCDIR}/external/lgpl3/mpc
+MPFR=		${NETBSDSRCDIR}/external/lgpl3/mpfr
+GMP=		${NETBSDSRCDIR}/external/lgpl3/gmp
+MPCOBJ!=	cd ${MPC}/lib/libmpc && ${PRINTOBJDIR}
+MPFROBJ!=	cd ${MPFR}/lib/libmpfr && ${PRINTOBJDIR}
+GMPOBJ!=	cd ${GMP}/lib/libgmp && ${PRINTOBJDIR}
+
+.include "../../external/lgpl3/gmp/Makefile.arch"
+
+NATIVE_CONFIGURE_ARGS+=	\
+			--with-mpc-lib=${MPCOBJ} \
+			--with-mpfr-lib=${MPFROBJ} \
+			--with-gmp-lib=${GMPOBJ} \
+			--with-mpc-include=${MPC}/dist/src \
+			--with-mpfr-include=${MPFR}/dist/src \
+			--with-gmp-include=${GMP}/lib/libgmp/arch/${GMP_MACHINE_ARCH}
+
+.if ${MACHINE_ARCH} != "vax"
+NATIVE_CONFIGURE_ARGS+= --enable-tls
+.endif
+.if !empty(MACHINE_ARCH:Mearm*)
+NATIVE_CONFIGURE_ARGS+=	--enable-initfini-array
+.endif
+
+.if ${MACHINE_ARCH} == "m68000"
+NATIVE_CONFIGURE_ARGS+= --disable-shared
+.endif
+
+.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
+EXTRA_GCC_TARGETS=	i386-builtin-types.inc
+.endif
+
+NATIVE_CONFIGURE_ARGS+=	\
+			--disable-multilib \
+			--disable-symvers \
+			--disable-libstdcxx-pch \
+			--disable-libstdcxx-dual-abi \
+			--build=`${GCCDIST}/config.guess` \
+			--host=${MACHINE_GNU_PLATFORM} \
+			--with-sysroot=${DESTDIR}
+MKENV_BUILD_MAKE=cd .native && ${MKNATIVE_ENV} ${BUILD_MAKE}
 
 .native/.configure_done: ${_GNU_CFGSRC} ${.CURDIR}/Makefile
 	mkdir .native 2>/dev/null || true
 	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
 		(cd .native && ${MKNATIVE_ENV} \
 			${HOST_SH} ${GNUHOSTDIST}/configure \
-			--enable-long-long \
-			--disable-multilib \
-			--enable-threads \
-			--disable-symvers \
-			${VAX_CONFIGURE_ARGS} \
-			--build=`${.CURDIR}/../../gnu/dist/${MODULE}/config.guess` \
-			--host=${MACHINE_GNU_PLATFORM} \
-			--target=${MACHINE_GNU_PLATFORM} \
-			--enable-__cxa_atexit) && \
-		(cd .native && ${MKNATIVE_ENV} ${BUILD_MAKE} all-build-libiberty)
-.if ${HAVE_GCC} == 4
+			${NATIVE_CONFIGURE_ARGS}) && \
+		(${MKENV_BUILD_MAKE} all-build-libiberty) && \
+		((${MKENV_BUILD_MAKE} all-libcpp) && \
+		 (${MKENV_BUILD_MAKE} all-libbacktrace) && \
+		 (${MKENV_BUILD_MAKE} all-libdecnumber) || true)
 	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
-		(cd .native && ${MKNATIVE_ENV} ${BUILD_MAKE} configure-gcc configure-libcpp) && \
-		(cd .native && ${MKNATIVE_ENV} ${BUILD_MAKE} configure-libiberty)
+		(${MKENV_BUILD_MAKE} configure-gcc configure-libcpp) && \
+		(${MKENV_BUILD_MAKE} configure-libiberty) && \
+		(${MKENV_BUILD_MAKE} configure-libdecnumber)
 	# edit Makefile so that maybe-all-gcc does not depend on all-gcc any more.
 		(cd .native && mv Makefile Makefile.config && \
-			sed -e 's/\(maybe-all-gcc:\) all-gcc/\1/' < Makefile.config > Makefile) && \
-		(cd .native/gcc && ${MKNATIVE_ENV} ${BUILD_MAKE} -e tree-check.h config.h)
-.else
+			${TOOL_SED} -e 's/\(maybe-all-gcc:\) all-gcc/\1/' \
+				    -e 's/\(maybe-all-target-libgcc:\) all-target-libgcc/\1/' \
+				< Makefile.config > Makefile)
 	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
-		(cd .native && ${MKNATIVE_ENV} ${BUILD_MAKE} all-libiberty) && \
-		(cd .native/gcc && ${MKNATIVE_ENV} ${BUILD_MAKE} tree-check.h config.h)
+		(cd .native/gcc && ${MKNATIVE_ENV} ${BUILD_MAKE} -e tree-check.h config.h multilib.h gcov-iov.h)
+	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
+		(cd .native/gcc && ${MKNATIVE_ENV} ${BUILD_MAKE} -e libgcc.mvars tconfig.h); \
+		(cd .native && touch gcc/cc1obj gcc/cc1plus gcc/f771 gcc/libgcc.a gcc/libgcc_s.so)
+.if defined(EXTRA_GCC_TARGETS)
+	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
+		(cd .native/gcc && ${MKNATIVE_ENV} ${BUILD_MAKE} -e ${EXTRA_GCC_TARGETS})
 .endif
+.for _lib in ${MKNATIVE_CONFIG_TARGET_LIBS}
 	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
-		(cd .native && touch gcc/cc1obj gcc/cc1plus gcc/f771 gcc/libgcc.a gcc/libgcc_s.so && \
-			${MKNATIVE_ENV} ${BUILD_MAKE} configure-target-libiberty \
-			${MKNATIVE_CONFIG_TARGET_LIBS} configure-target-libobjc \
-			configure-target-libstdc++-v3 \
+		(cd .native && ${MKNATIVE_ENV} ${BUILD_MAKE} \
+			${_lib} \
 			ALL_GCC_C= ALL_GCC_CXX= \
 			CC_FOR_TARGET=${CC:Q}' '${CCADDFLAGS:Q} \
 			CXX_FOR_TARGET=${CXX:Q}' '${CCADDFLAGS:Q}' '${CXXADDFLAGS:Q} \
@@ -105,6 +232,7 @@ native-gcc: .native/.configure_done
 			CPP=${CPP:Q}' '-I${DESTDIR}/usr/include \
 			ac_cv_prog_cc_cross=yes) && \
 	true
+.endfor
 	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
 		(cd .native/${MACHINE_GNU_PLATFORM}/libstdc++-v3/include && \
 			${MKNATIVE_ENV} ${BUILD_MAKE} \
@@ -113,9 +241,6 @@ native-gcc: .native/.configure_done
 			CPP=${CPP:Q}' '-I${DESTDIR}/usr/include \
 			all-local) && \
 	true
-	PATH=${TOOLDIR}/bin:$$PATH; export PATH; \
-		(cd .native/${MACHINE_GNU_PLATFORM}/libiberty && \
-			${MKNATIVE_ENV} ${BUILD_MAKE} needed-list)
 	@touch $@
 
 clean: clean.native

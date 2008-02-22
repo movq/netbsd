@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.66 2007/07/16 17:06:52 pooka Exp $	*/
+/*	$NetBSD: main.c,v 1.84 2017/02/08 16:11:40 rin Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/14/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.66 2007/07/16 17:06:52 pooka Exp $");
+__RCSID("$NetBSD: main.c,v 1.84 2017/02/08 16:11:40 rin Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,6 +55,7 @@ __RCSID("$NetBSD: main.c,v 1.66 2007/07/16 17:06:52 pooka Exp $");
 
 #include <ctype.h>
 #include <err.h>
+#include <errno.h>
 #include <fstab.h>
 #include <string.h>
 #include <time.h>
@@ -66,20 +67,26 @@ __RCSID("$NetBSD: main.c,v 1.66 2007/07/16 17:06:52 pooka Exp $");
 #include "fsck.h"
 #include "extern.h"
 #include "fsutil.h"
+#include "exitvalues.h"
+#include "snapshot.h"
 
-int	returntosingle;
 int	progress = 0;
+volatile sig_atomic_t	returntosingle = 0;
 
 static int	argtoi(int, const char *, const char *, int);
-static int	checkfilesys(const char *, char *, long, int);
-static void	usage(void);
+static int	checkfilesys(const char *, const char *, int);
+__dead static void	usage(void);
 
 int
 main(int argc, char *argv[])
 {
 	struct rlimit r;
 	int ch;
-	int ret = 0;
+	int ret = FSCK_EXIT_OK;
+	char *snap_backup = NULL;
+	int snap_internal = 0;
+
+	ckfinish = ckfini;
 
 	if (getrlimit(RLIMIT_DATA, &r) == 0) {
 		r.rlim_cur = r.rlim_max;
@@ -89,21 +96,30 @@ main(int argc, char *argv[])
 	skipclean = 1;
 	markclean = 1;
 	forceimage = 0;
+#ifndef NO_FFS_EI
 	endian = 0;
+#endif
+#ifndef NO_APPLE_UFS
 	isappleufs = 0;
-	while ((ch = getopt(argc, argv, "aB:b:c:dFfm:npPqy")) != -1) {
+#endif
+	while ((ch = getopt(argc, argv, "aB:b:c:dFfm:npPqUyx:X")) != -1) {
 		switch (ch) {
+#ifndef NO_APPLE_UFS
 		case 'a':
 			isappleufs = 1;
 			break;
+#endif
 
+#ifndef NO_FFS_EI
 		case 'B':
 			if (strcmp(optarg, "be") == 0)
 				endian = BIG_ENDIAN;
 			else if (strcmp(optarg, "le") == 0)
 				endian = LITTLE_ENDIAN;
-			else usage();
+			else
+				usage();
 			break;
+#endif
 
 		case 'b':
 			skipclean = 0;
@@ -116,7 +132,8 @@ main(int argc, char *argv[])
 			cvtlevel = argtoi('c', "conversion level", optarg, 10);
 			if (cvtlevel > 4) {
 				cvtlevel = 4;
-				warnx("Using maximum conversion level of %d\n",cvtlevel);
+				warnx("Using maximum conversion level of %d",
+				    cvtlevel);
 			}
 			break;
 		
@@ -135,7 +152,8 @@ main(int argc, char *argv[])
 		case 'm':
 			lfmode = argtoi('m', "mode", optarg, 8);
 			if (lfmode &~ 07777)
-				errx(EEXIT, "bad mode to -m: %o", lfmode);
+				errx(FSCK_EXIT_USAGE, "bad mode to -m: %o",
+				    lfmode);
 			printf("** lost+found creation mode %o\n", lfmode);
 			break;
 
@@ -155,16 +173,36 @@ main(int argc, char *argv[])
 		case 'q':
 			quiet++;
 			break;
+#ifndef SMALL
+		case 'U':
+			Uflag++;
+			break;
+#endif
 
 		case 'y':
 			yflag++;
 			nflag = 0;
+			break;
+		case 'x':
+			snap_backup = optarg;
+			break;
+		case 'X':
+			snap_internal = 1;
 			break;
 
 		default:
 			usage();
 		}
 	}
+
+	if (snap_backup || snap_internal) {
+		if (!nflag || yflag) {
+			warnx("Cannot use -x or -X without -n");
+			snap_backup = NULL;
+			snap_internal = 0;
+		}
+	}
+			
 
 	argc -= optind;
 	argv += optind;
@@ -188,19 +226,41 @@ main(int argc, char *argv[])
 	signal(SIGINFO, infohandler);
 
 	while (argc-- > 0) {
-		const char *path = blockcheck(*argv);
+		int nret;
+		char *path;
+
+		if (!forceimage)
+			path = strdup(blockcheck(*argv));
+		else
+			path = strdup(*argv);
 
 		if (path == NULL)
 			pfatal("Can't check %s\n", *argv);
-		else
-			(void)checkfilesys(blockcheck(*argv), 0, 0L, 0);
+		
+		if (snap_backup || snap_internal) {
+			char *snap_dev;
+			int snapfd;
+
+			snapfd = snap_open(*argv, snap_backup, NULL, &snap_dev);
+			if (snapfd < 0) {
+				warn("can't take snapshot of %s", *argv);
+				goto next;
+			}
+			nret = checkfilesys(blockcheck(snap_dev), path, 0);
+			if (ret < nret)
+				ret = nret;
+			close(snapfd);
+		} else {
+			nret = checkfilesys(path, path, 0);
+			if (ret < nret)
+				ret = nret;
+		}
+next:
+		free(path);
 		argv++;
 	}
 
-	if (returntosingle)
-		ret = 2;
-
-	exit(ret);
+	return returntosingle ? FSCK_EXIT_UNRESOLVED : ret;
 }
 
 static int
@@ -211,7 +271,8 @@ argtoi(int flag, const char *req, const char *str, int base)
 
 	ret = (int)strtol(str, &cp, base);
 	if (cp == str || *cp)
-		errx(EEXIT, "-%c flag requires a %s", flag, req);
+		errx(FSCK_EXIT_USAGE, "-%c flag requires a %s",
+		    flag, req);
 	return (ret);
 }
 
@@ -220,7 +281,7 @@ argtoi(int flag, const char *req, const char *str, int base)
  */
 /* ARGSUSED */
 static int
-checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
+checkfilesys(const char *filesys, const char *origfs, int child)
 {
 	daddr_t n_ffree, n_bfree;
 	struct dups *dp;
@@ -251,13 +312,13 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 	setcdevname(filesys, preen);
 	if (debug && preen)
 		pwarn("starting\n");
-	switch (setup(filesys)) {
+	switch (setup(filesys, origfs)) {
 	case 0:
 		if (preen)
 			pfatal("CAN'T CHECK FILE SYSTEM.");
 		/* fall through */
 	case -1:
-		return (0);
+		return FSCK_EXIT_OK;
 	}
 	/*
 	 * Cleared if any questions answered no. Used to decide if
@@ -340,6 +401,11 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 		progress_sethighlim(progress_limits[5]);
 #endif /* PROGRESS */
 	pass5();
+	if (uquot_user_hash != NULL) {
+		if (preen == 0)
+			pwarn("** Phase 6 - Check Quotas\n");
+		pass6();
+	}
 
 	/*
 	 * print out summary statistics
@@ -355,7 +421,7 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 	    (long long)(((n_ffree * 1000 + (daddr_t)sblock->fs_dsize / 2)
 		/ (daddr_t)sblock->fs_dsize) % 10));
 	if (debug &&
-	    (n_files -= maxino - ROOTINO - sblock->fs_cstotal.cs_nifree))
+	    (n_files -= maxino - UFS_ROOTINO - sblock->fs_cstotal.cs_nifree))
 		printf("%llu files missing\n", (unsigned long long)n_files);
 	if (debug) {
 		n_blks += sblock->fs_ncg *
@@ -390,7 +456,7 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 		markclean = 0;
 #if LITE2BORKEN
 	if (!hotroot()) {
-		ckfini();
+		ckfini(1);
 	} else {
 		struct statvfs stfs_buf;
 		/*
@@ -402,10 +468,10 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 			flags = 0;
 		if (markclean)
 			markclean = flags & MNT_RDONLY;
-		ckfini();
+		ckfini(1);
 	}
 #else
-	ckfini();
+	ckfini(1);
 #endif
 	for (cylno = 0; cylno < sblock->fs_ncg; cylno++)
 		if (inostathead[cylno].il_stat != NULL)
@@ -418,7 +484,7 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 		returntosingle = 1;
 	}
 	if (!fsmodified)
-		return (0);
+		return FSCK_EXIT_OK;
 	if (!preen)
 		pwarn("\n***** FILE SYSTEM WAS MODIFIED *****\n");
 	if (rerun)
@@ -432,23 +498,21 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 		if (statvfs("/", &stfs_buf) == 0) {
 			long flags = stfs_buf.f_flag;
 			struct ufs_args args;
-			int ret;
 
 			if (flags & MNT_RDONLY) {
 				args.fspec = 0;
 				flags |= MNT_UPDATE | MNT_RELOAD;
-				ret = mount(MOUNT_FFS, "/", flags,
-				    &args, sizeof args);
-				if (ret == 0)
-					return(0);
+				if (mount(MOUNT_FFS, "/", flags,
+				    &args, sizeof args) == 0)
+					return FSCK_EXIT_OK;
 			}
 		}
 		if (!preen)
 			pwarn("\n***** REBOOT NOW *****\n");
 		sync();
-		return (4);
+		return FSCK_EXIT_ROOT_CHANGED;
 	}
-	return (0);
+	return FSCK_EXIT_OK;
 }
 
 static void
@@ -456,9 +520,16 @@ usage(void)
 {
 
 	(void) fprintf(stderr,
-	    "usage: %s [-adFfnPpqy] [-B be|le] [-b block] [-c level] [-m mode]"
-	    " filesystem ...\n",
+	    "usage: %s [-"
+#ifndef NO_APPLE_UFS
+	    "a"
+#endif
+	    "dFfPpqUX] "
+#ifndef NO_FFS_EI
+	    "[-B byteorder] "
+#endif
+	    "[-b block] [-c level] [-m mode]\n"
+	    "\t[-x snap-backup] [-y | -n] filesystem ...\n",
 	    getprogname());
-	exit(1);
+	exit(FSCK_EXIT_USAGE);
 }
-

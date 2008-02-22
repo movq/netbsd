@@ -1,32 +1,34 @@
-/*	$NetBSD: svc_vc.c,v 1.20 2006/10/17 17:44:34 christos Exp $	*/
+/*	$NetBSD: svc_vc.c,v 1.34 2015/11/10 20:56:20 christos Exp $	*/
 
 /*
- * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
- * unrestricted use provided that this legend is included on all tape
- * media and as a part of the software program in whole or part.  Users
- * may copy or modify Sun RPC without charge, but are not authorized
- * to license or distribute it to anyone else except as part of a product or
- * program developed by the user.
- * 
- * SUN RPC IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING THE
- * WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
- * 
- * Sun RPC is provided with no support and without any obligation on the
- * part of Sun Microsystems, Inc. to assist in its use, correction,
- * modification or enhancement.
- * 
- * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
- * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY SUN RPC
- * OR ANY PART THEREOF.
- * 
- * In no event will Sun Microsystems, Inc. be liable for any lost revenue
- * or profits or other special, indirect and consequential damages, even if
- * Sun has been advised of the possibility of such damages.
- * 
- * Sun Microsystems, Inc.
- * 2550 Garcia Avenue
- * Mountain View, California  94043
+ * Copyright (c) 2010, Oracle America, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the "Oracle America, Inc." nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *   FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ *   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *   GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
@@ -35,7 +37,7 @@
 static char *sccsid = "@(#)svc_tcp.c 1.21 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc_tcp.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc_vc.c,v 1.20 2006/10/17 17:44:34 christos Exp $");
+__RCSID("$NetBSD: svc_vc.c,v 1.34 2015/11/10 20:56:20 christos Exp $");
 #endif
 #endif
 
@@ -68,6 +70,7 @@ __RCSID("$NetBSD: svc_vc.c,v 1.20 2006/10/17 17:44:34 christos Exp $");
 
 #include <rpc/rpc.h>
 
+#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -79,23 +82,22 @@ __weak_alias(svc_vc_create,_svc_vc_create)
 extern rwlock_t svc_fd_lock;
 #endif
 
-static SVCXPRT *makefd_xprt __P((int, u_int, u_int));
-static bool_t rendezvous_request __P((SVCXPRT *, struct rpc_msg *));
-static enum xprt_stat rendezvous_stat __P((SVCXPRT *));
-static void svc_vc_destroy __P((SVCXPRT *));
-static void __svc_vc_dodestroy __P((SVCXPRT *));
-static int read_vc __P((caddr_t, caddr_t, int));
-static int write_vc __P((caddr_t, caddr_t, int));
-static enum xprt_stat svc_vc_stat __P((SVCXPRT *));
-static bool_t svc_vc_recv __P((SVCXPRT *, struct rpc_msg *));
-static bool_t svc_vc_getargs __P((SVCXPRT *, xdrproc_t, caddr_t));
-static bool_t svc_vc_freeargs __P((SVCXPRT *, xdrproc_t, caddr_t));
-static bool_t svc_vc_reply __P((SVCXPRT *, struct rpc_msg *));
-static void svc_vc_rendezvous_ops __P((SVCXPRT *));
-static void svc_vc_ops __P((SVCXPRT *));
-static bool_t svc_vc_control __P((SVCXPRT *, const u_int, void *));
-static bool_t svc_vc_rendezvous_control __P((SVCXPRT *, const u_int,
-					     void *));
+static SVCXPRT *makefd_xprt(int, u_int, u_int);
+static bool_t rendezvous_request(SVCXPRT *, struct rpc_msg *);
+static enum xprt_stat rendezvous_stat(SVCXPRT *);
+static void svc_vc_destroy(SVCXPRT *);
+static void __svc_vc_dodestroy(SVCXPRT *);
+static int read_vc(caddr_t, caddr_t, int);
+static int write_vc(caddr_t, caddr_t, int);
+static enum xprt_stat svc_vc_stat(SVCXPRT *);
+static bool_t svc_vc_recv(SVCXPRT *, struct rpc_msg *);
+static bool_t svc_vc_getargs(SVCXPRT *, xdrproc_t, caddr_t);
+static bool_t svc_vc_freeargs(SVCXPRT *, xdrproc_t, caddr_t);
+static bool_t svc_vc_reply(SVCXPRT *, struct rpc_msg *);
+static void svc_vc_rendezvous_ops(SVCXPRT *);
+static void svc_vc_ops(SVCXPRT *);
+static bool_t svc_vc_control(SVCXPRT *, const u_int, void *);
+static bool_t svc_vc_rendezvous_control(SVCXPRT *, const u_int, void *);
 
 struct cf_rendezvous { /* kept in xprt->xp_p1 for rendezvouser */
 	u_int sendsize;
@@ -132,10 +134,7 @@ struct cf_conn {  /* kept in xprt->xp_p1 for actual connection */
  * 0 => use the system default.
  */
 SVCXPRT *
-svc_vc_create(fd, sendsize, recvsize)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
+svc_vc_create(int fd, u_int sendsize, u_int recvsize)
 {
 	SVCXPRT *xprt;
 	struct cf_rendezvous *r = NULL;
@@ -149,7 +148,7 @@ svc_vc_create(fd, sendsize, recvsize)
 
 	r = mem_alloc(sizeof(*r));
 	if (r == NULL) {
-		warnx("svc_vc_create: out of memory");
+		warn("%s: out of memory", __func__);
 		return NULL;
 	}
 	r->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
@@ -157,7 +156,7 @@ svc_vc_create(fd, sendsize, recvsize)
 	r->maxrec = __svc_maxrec;
 	xprt = mem_alloc(sizeof(SVCXPRT));
 	if (xprt == NULL) {
-		warnx("svc_vc_create: out of memory");
+		warn("%s: out of memory", __func__);
 		goto cleanup_svc_vc_create;
 	}
 	xprt->xp_tp = NULL;
@@ -171,7 +170,7 @@ svc_vc_create(fd, sendsize, recvsize)
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&sslocal, &slen) < 0) {
-		warnx("svc_vc_create: could not retrieve local addr");
+		warn("%s: could not retrieve local addr", __func__);
 		goto cleanup_svc_vc_create;
 	}
 
@@ -179,26 +178,28 @@ svc_vc_create(fd, sendsize, recvsize)
 	 * We want to be able to check credentials on local sockets.
 	 */
 	if (sslocal.ss_family == AF_LOCAL)
-		if (setsockopt(fd, 0, LOCAL_CREDS, &one, sizeof one) < 0)
+		if (setsockopt(fd, 0, LOCAL_CREDS, &one, (socklen_t)sizeof one)
+		    == -1)
 			goto cleanup_svc_vc_create;
 
 	xprt->xp_ltaddr.maxlen = xprt->xp_ltaddr.len = sslocal.ss_len;
 	xprt->xp_ltaddr.buf = mem_alloc((size_t)sslocal.ss_len);
 	if (xprt->xp_ltaddr.buf == NULL) {
-		warnx("svc_vc_create: no mem for local addr");
+		warn("%s: out of memory", __func__);
 		goto cleanup_svc_vc_create;
 	}
 	memcpy(xprt->xp_ltaddr.buf, &sslocal, (size_t)sslocal.ss_len);
 
 	xprt->xp_rtaddr.maxlen = sizeof (struct sockaddr_storage);
-	xprt_register(xprt);
-	return (xprt);
+	if (!xprt_register(xprt))
+		goto cleanup_svc_vc_create;
+	return xprt;
 cleanup_svc_vc_create:
 	if (xprt)
 		mem_free(xprt, sizeof(*xprt));
 	if (r != NULL)
 		mem_free(r, sizeof(*r));
-	return (NULL);
+	return NULL;
 }
 
 /*
@@ -206,10 +207,7 @@ cleanup_svc_vc_create:
  * descriptor as its first input.
  */
 SVCXPRT *
-svc_fd_create(fd, sendsize, recvsize)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
+svc_fd_create(int fd, u_int sendsize, u_int recvsize)
 {
 	struct sockaddr_storage ss;
 	socklen_t slen;
@@ -223,26 +221,26 @@ svc_fd_create(fd, sendsize, recvsize)
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		warnx("svc_fd_create: could not retrieve local addr");
+		warn("%s: could not retrieve local addr", __func__);
 		goto freedata;
 	}
 	ret->xp_ltaddr.maxlen = ret->xp_ltaddr.len = ss.ss_len;
 	ret->xp_ltaddr.buf = mem_alloc((size_t)ss.ss_len);
 	if (ret->xp_ltaddr.buf == NULL) {
-		warnx("svc_fd_create: no mem for local addr");
+		warn("%s: out of memory", __func__);
 		goto freedata;
 	}
 	memcpy(ret->xp_ltaddr.buf, &ss, (size_t)ss.ss_len);
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		warnx("svc_fd_create: could not retrieve remote addr");
+		warn("%s: could not retrieve remote addr", __func__);
 		goto freedata;
 	}
 	ret->xp_rtaddr.maxlen = ret->xp_rtaddr.len = ss.ss_len;
 	ret->xp_rtaddr.buf = mem_alloc((size_t)ss.ss_len);
 	if (ret->xp_rtaddr.buf == NULL) {
-		warnx("svc_fd_create: no mem for local addr");
+		warn("%s: out of memory", __func__);
 		goto freedata;
 	}
 	memcpy(ret->xp_rtaddr.buf, &ss, (size_t)ss.ss_len);
@@ -263,10 +261,7 @@ freedata:
 }
 
 static SVCXPRT *
-makefd_xprt(fd, sendsize, recvsize)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
+makefd_xprt(int fd, u_int sendsize, u_int recvsize)
 {
 	SVCXPRT *xprt;
 	struct cf_conn *cd;
@@ -276,18 +271,12 @@ makefd_xprt(fd, sendsize, recvsize)
 	_DIAGASSERT(fd != -1);
 
 	xprt = mem_alloc(sizeof(SVCXPRT));
-	if (xprt == NULL) {
-		warnx("svc_vc: makefd_xprt: out of memory");
-		goto done;
-	}
+	if (xprt == NULL)
+		goto outofmem;
 	memset(xprt, 0, sizeof *xprt);
 	cd = mem_alloc(sizeof(struct cf_conn));
-	if (cd == NULL) {
-		warnx("svc_tcp: makefd_xprt: out of memory");
-		mem_free(xprt, sizeof(SVCXPRT));
-		xprt = NULL;
-		goto done;
-	}
+	if (cd == NULL)
+		goto outofmem;
 	cd->strm_stat = XPRT_IDLE;
 	xdrrec_create(&(cd->xdrs), sendsize, recvsize,
 	    (caddr_t)(void *)xprt, read_vc, write_vc);
@@ -297,18 +286,24 @@ makefd_xprt(fd, sendsize, recvsize)
 	xprt->xp_port = 0;  /* this is a connection, not a rendezvouser */
 	xprt->xp_fd = fd;
 	if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
-		xprt->xp_netid = strdup(netid);
+		if ((xprt->xp_netid = strdup(netid)) == NULL)
+			goto outofmem;
 
-	xprt_register(xprt);
-done:
-	return (xprt);
+	if (!xprt_register(xprt))
+		goto out;
+	return xprt;
+
+outofmem:
+	warn("svc_tcp: makefd_xprt");
+out:
+	if (xprt)
+		mem_free(xprt, sizeof(SVCXPRT));
+	return NULL;
 }
 
 /*ARGSUSED*/
 static bool_t
-rendezvous_request(xprt, msg)
-	SVCXPRT *xprt;
-	struct rpc_msg *msg;
+rendezvous_request(SVCXPRT *xprt, struct rpc_msg *msg)
 {
 	int sock, flags;
 	struct cf_rendezvous *r;
@@ -317,7 +312,6 @@ rendezvous_request(xprt, msg)
 	socklen_t len;
 	struct __rpc_sockinfo si;
 	SVCXPRT *newxprt;
-	fd_set cleanfds;
 
 	_DIAGASSERT(xprt != NULL);
 	_DIAGASSERT(msg != NULL);
@@ -334,19 +328,20 @@ again:
 		 * running out.
 		 */
 		if (errno == EMFILE || errno == ENFILE) {
-			cleanfds = svc_fdset;
-			if (__svc_clean_idle(&cleanfds, 0, FALSE))
+			if (__svc_clean_idle(NULL, 0, FALSE))
 				goto again;
 		}
-		return (FALSE);
+		return FALSE;
 	}
 	/*
 	 * make a new transporter (re-uses xprt)
 	 */
 	newxprt = makefd_xprt(sock, r->sendsize, r->recvsize);
+	if (newxprt == NULL)
+		goto out;
 	newxprt->xp_rtaddr.buf = mem_alloc(len);
 	if (newxprt->xp_rtaddr.buf == NULL)
-		return (FALSE);
+		goto out;
 	memcpy(newxprt->xp_rtaddr.buf, &addr, len);
 	newxprt->xp_rtaddr.len = len;
 #ifdef PORTMAP
@@ -367,33 +362,34 @@ again:
 	if (cd->maxrec != 0) {
 		flags = fcntl(sock, F_GETFL, 0);
 		if (flags  == -1)
-			return (FALSE);
+			goto out;
 		if (fcntl(sock, F_SETFL, flags | O_NONBLOCK) == -1)
-			return (FALSE);
-		if (cd->recvsize > cd->maxrec)
+			goto out;
+		if (cd->recvsize > (u_int)cd->maxrec)
 			cd->recvsize = cd->maxrec;
 		cd->nonblock = TRUE;
 		__xdrrec_setnonblock(&cd->xdrs, cd->maxrec);
 	} else
 		cd->nonblock = FALSE;
 
-	gettimeofday(&cd->last_recv_time, NULL);
+	(void)gettimeofday(&cd->last_recv_time, NULL);
 
-	return (FALSE); /* there is never an rpc msg to be processed */
+	return FALSE; /* there is never an rpc msg to be processed */
+out:
+	(void)close(sock);
+	return FALSE; /* there was an error */
 }
 
 /*ARGSUSED*/
 static enum xprt_stat
-rendezvous_stat(xprt)
-	SVCXPRT *xprt;
+rendezvous_stat(SVCXPRT *xprt)
 {
 
-	return (XPRT_IDLE);
+	return XPRT_IDLE;
 }
 
 static void
-svc_vc_destroy(xprt)
-	SVCXPRT *xprt;
+svc_vc_destroy(SVCXPRT *xprt)
 {
 	_DIAGASSERT(xprt != NULL);
 
@@ -402,8 +398,7 @@ svc_vc_destroy(xprt)
 }
 
 static void
-__svc_vc_dodestroy(xprt)
-	SVCXPRT *xprt;
+__svc_vc_dodestroy(SVCXPRT *xprt)
 {
 	struct cf_conn *cd;
 	struct cf_rendezvous *r;
@@ -435,26 +430,20 @@ __svc_vc_dodestroy(xprt)
 
 /*ARGSUSED*/
 static bool_t
-svc_vc_control(xprt, rq, in)
-	SVCXPRT *xprt;
-	const u_int rq;
-	void *in;
+svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in)
 {
-	return (FALSE);
+	return FALSE;
 }
 
 /*ARGSUSED*/
 static bool_t
-svc_vc_rendezvous_control(xprt, rq, in)
-	SVCXPRT *xprt;
-	const u_int rq;
-	void *in;
+svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 {
 	struct cf_rendezvous *cfp;
 
 	cfp = (struct cf_rendezvous *)xprt->xp_p1;
 	if (cfp == NULL)
-		return (FALSE);
+		return FALSE;
 	switch (rq) {
 		case SVCGET_CONNMAXREC:
 			*(int *)in = cfp->maxrec;
@@ -463,9 +452,9 @@ svc_vc_rendezvous_control(xprt, rq, in)
 			cfp->maxrec = *(int *)in;
 			break;
 		default:
-			return (FALSE);
+			return FALSE;
 	}
-	return (TRUE);
+	return TRUE;
 }
 
 /*
@@ -476,10 +465,7 @@ svc_vc_rendezvous_control(xprt, rq, in)
  * fatal for the connection.
  */
 static int
-read_vc(xprtp, buf, len)
-	caddr_t xprtp;
-	caddr_t buf;
-	int len;
+read_vc(caddr_t xprtp, caddr_t buf, int len)
 {
 	SVCXPRT *xprt;
 	int sock;
@@ -536,7 +522,7 @@ read_vc(xprtp, buf, len)
 	cfp = (struct cf_conn *)xprt->xp_p1;
 
 	if (cfp->nonblock) {
-		len = read(sock, buf, (size_t)len);
+		len = (int)read(sock, buf, (size_t)len);
 		if (len < 0) {
 			if (errno == EAGAIN)
 				len = 0;
@@ -565,16 +551,16 @@ read_vc(xprtp, buf, len)
 		}
 	} while ((pollfd.revents & POLLIN) == 0);
 
-	if ((len = read(sock, buf, (size_t)len)) > 0) {
+	if ((len = (int)read(sock, buf, (size_t)len)) > 0) {
 		gettimeofday(&cfp->last_recv_time, NULL);
-		return (len);
+		return len;
 	}
 
 fatal_err:
 	if (crmsg != NULL)
 		free(crmsg);
 	((struct cf_conn *)(xprt->xp_p1))->strm_stat = XPRT_DIED;
-	return (-1);
+	return -1;
 }
 
 /*
@@ -582,10 +568,7 @@ fatal_err:
  * Any error is fatal and the connection is closed.
  */
 static int
-write_vc(xprtp, buf, len)
-	caddr_t xprtp;
-	caddr_t buf;
-	int len;
+write_vc(caddr_t xprtp, caddr_t buf, int len)
 {
 	SVCXPRT *xprt;
 	int i, cnt;
@@ -601,12 +584,12 @@ write_vc(xprtp, buf, len)
 		gettimeofday(&tv0, NULL);
 
 	for (cnt = len; cnt > 0; cnt -= i, buf += i) {
-		if ((i = write(xprt->xp_fd, buf, (size_t)cnt)) < 0) {
+		if ((i = (int)write(xprt->xp_fd, buf, (size_t)cnt)) < 0) {
 			if (errno != EAGAIN || !cd->nonblock) {
 				cd->strm_stat = XPRT_DIED;
-				return (-1);
+				return -1;
 			}
-			if (cd->nonblock && i != cnt) {
+			if (cd->nonblock) {
 				/*
 				 * For non-blocking connections, do not
 				 * take more than 2 seconds writing the
@@ -617,17 +600,17 @@ write_vc(xprtp, buf, len)
 				gettimeofday(&tv1, NULL);
 				if (tv1.tv_sec - tv0.tv_sec >= 2) {
 					cd->strm_stat = XPRT_DIED;
-					return (-1);
+					return -1;
 				}
 			}
+			i = 0;
 		}
 	}
-	return (len);
+	return len;
 }
 
 static enum xprt_stat
-svc_vc_stat(xprt)
-	SVCXPRT *xprt;
+svc_vc_stat(SVCXPRT *xprt)
 {
 	struct cf_conn *cd;
 
@@ -636,16 +619,14 @@ svc_vc_stat(xprt)
 	cd = (struct cf_conn *)(xprt->xp_p1);
 
 	if (cd->strm_stat == XPRT_DIED)
-		return (XPRT_DIED);
+		return XPRT_DIED;
 	if (! xdrrec_eof(&(cd->xdrs)))
-		return (XPRT_MOREREQS);
-	return (XPRT_IDLE);
+		return XPRT_MOREREQS;
+	return XPRT_IDLE;
 }
 
 static bool_t
-svc_vc_recv(xprt, msg)
-	SVCXPRT *xprt;
-	struct rpc_msg *msg;
+svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 {
 	struct cf_conn *cd;
 	XDR *xdrs;
@@ -666,31 +647,25 @@ svc_vc_recv(xprt, msg)
 
 	if (xdr_callmsg(xdrs, msg)) {
 		cd->x_id = msg->rm_xid;
-		return (TRUE);
+		return TRUE;
 	}
 	cd->strm_stat = XPRT_DIED;
-	return (FALSE);
+	return FALSE;
 }
 
 static bool_t
-svc_vc_getargs(xprt, xdr_args, args_ptr)
-	SVCXPRT *xprt;
-	xdrproc_t xdr_args;
-	caddr_t args_ptr;
+svc_vc_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, caddr_t args_ptr)
 {
 
 	_DIAGASSERT(xprt != NULL);
 	/* args_ptr may be NULL */
 
-	return ((*xdr_args)(&(((struct cf_conn *)(xprt->xp_p1))->xdrs),
-	    args_ptr));
+	return (*xdr_args)(&(((struct cf_conn *)(xprt->xp_p1))->xdrs),
+	    args_ptr);
 }
 
 static bool_t
-svc_vc_freeargs(xprt, xdr_args, args_ptr)
-	SVCXPRT *xprt;
-	xdrproc_t xdr_args;
-	caddr_t args_ptr;
+svc_vc_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, caddr_t args_ptr)
 {
 	XDR *xdrs;
 
@@ -700,13 +675,11 @@ svc_vc_freeargs(xprt, xdr_args, args_ptr)
 	xdrs = &(((struct cf_conn *)(xprt->xp_p1))->xdrs);
 
 	xdrs->x_op = XDR_FREE;
-	return ((*xdr_args)(xdrs, args_ptr));
+	return (*xdr_args)(xdrs, args_ptr);
 }
 
 static bool_t
-svc_vc_reply(xprt, msg)
-	SVCXPRT *xprt;
-	struct rpc_msg *msg;
+svc_vc_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 {
 	struct cf_conn *cd;
 	XDR *xdrs;
@@ -722,12 +695,11 @@ svc_vc_reply(xprt, msg)
 	msg->rm_xid = cd->x_id;
 	rstat = xdr_replymsg(xdrs, msg);
 	(void)xdrrec_endofrecord(xdrs, TRUE);
-	return (rstat);
+	return rstat;
 }
 
 static void
-svc_vc_ops(xprt)
-	SVCXPRT *xprt;
+svc_vc_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
@@ -753,29 +725,23 @@ svc_vc_ops(xprt)
 }
 
 static void
-svc_vc_rendezvous_ops(xprt)
-	SVCXPRT *xprt;
+svc_vc_rendezvous_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
 #ifdef _REENTRANT
 	extern mutex_t ops_lock;
 #endif
-/* XXXGCC vax compiler unhappy otherwise */
-#ifdef __vax__     
-extern void abort(void);
-#endif
-
 	mutex_lock(&ops_lock);
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = rendezvous_request;
 		ops.xp_stat = rendezvous_stat;
 		ops.xp_getargs =
-		    (bool_t (*) __P((SVCXPRT *, xdrproc_t, caddr_t)))abort;
+		    (bool_t (*)(SVCXPRT *, xdrproc_t, caddr_t))abort;
 		ops.xp_reply =
-		    (bool_t (*) __P((SVCXPRT *, struct rpc_msg *)))abort;
+		    (bool_t (*)(SVCXPRT *, struct rpc_msg *))abort;
 		ops.xp_freeargs =
-		    (bool_t (*) __P((SVCXPRT *, xdrproc_t, caddr_t)))abort;
+		    (bool_t (*)(SVCXPRT *, xdrproc_t, caddr_t))abort;
 		ops.xp_destroy = svc_vc_destroy;
 		ops2.xp_control = svc_vc_rendezvous_control;
 	}
@@ -790,9 +756,10 @@ extern void abort(void);
  * cleaned. If timeout is 0, the least active connection is picked.
  */
 bool_t
-__svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
+/*ARGSUSED1*/
+__svc_clean_idle(fd_set *fds __unused, int timeout, bool_t cleanblock)
 {
-	int i, ncleaned;
+	int i, ncleaned, *fdmax;
 	SVCXPRT *xprt, *least_active;
 	struct timeval tv, tdiff, tmax;
 	struct cf_conn *cd;
@@ -801,28 +768,40 @@ __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 	tmax.tv_sec = tmax.tv_usec = 0;
 	least_active = NULL;
 	rwlock_wrlock(&svc_fd_lock);
-	for (i = ncleaned = 0; i <= svc_maxfd; i++) {
-		if (FD_ISSET(i, fds)) {
-			xprt = __svc_xports[i];
-			if (xprt == NULL || xprt->xp_ops == NULL ||
-			    xprt->xp_ops->xp_recv != svc_vc_recv)
-				continue;
-			cd = (struct cf_conn *)xprt->xp_p1;
-			if (!cleanblock && !cd->nonblock)
-				continue;
-			if (timeout == 0) {
-				timersub(&tv, &cd->last_recv_time, &tdiff);
-				if (timercmp(&tdiff, &tmax, >)) {
-					tmax = tdiff;
-					least_active = xprt;
-				}
-				continue;
+	fdmax = svc_fdset_getmax();
+	if (fdmax == NULL)
+		return FALSE;
+	for (i = ncleaned = 0; i <= *fdmax; i++) {
+		switch (svc_fdset_isset(i)) {
+		case 0:
+		case -1:
+			continue;
+		default:
+			break;
+		}
+
+		xprt = __svc_xports[i];
+		if (xprt == NULL || xprt->xp_ops == NULL ||
+		    xprt->xp_ops->xp_recv != svc_vc_recv)
+			continue;
+
+		cd = (struct cf_conn *)xprt->xp_p1;
+		if (!cleanblock && !cd->nonblock)
+			continue;
+
+		if (timeout == 0) {
+			timersub(&tv, &cd->last_recv_time, &tdiff);
+			if (timercmp(&tdiff, &tmax, >)) {
+				tmax = tdiff;
+				least_active = xprt;
 			}
-			if (tv.tv_sec - cd->last_recv_time.tv_sec > timeout) {
-				__xprt_unregister_unlocked(xprt);
-				__svc_vc_dodestroy(xprt);
-				ncleaned++;
-			}
+			continue;
+		}
+
+		if (tv.tv_sec - cd->last_recv_time.tv_sec > timeout) {
+			__xprt_unregister_unlocked(xprt);
+			__svc_vc_dodestroy(xprt);
+			ncleaned++;
 		}
 	}
 	if (timeout == 0 && least_active != NULL) {

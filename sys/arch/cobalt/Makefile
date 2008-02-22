@@ -1,14 +1,16 @@
-#	$NetBSD: Makefile,v 1.4 2003/01/06 17:40:26 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2011/04/04 19:45:00 dyoung Exp $
 
 # Makefile for cobalt tags file
 
 # Find where mips source files are for inclusion in tags
 .include <../mips/Makefile.inc>
 
-TCOBALT=	../cobalt/tags
-SCOBALT=	../cobalt/cobalt/*.[ch] ../cobalt/include/*.h \
-		../cobalt/dev/*.[ch] ../cobalt/pci/*.[ch]
-ACOBALT=	../cobalt/cobalt/*.S
+TCOBALT=	${SYSDIR}/arch/cobalt/tags
+SCOBALT=	${SYSDIR}/arch/cobalt/cobalt/*.[ch] \
+		${SYSDIR}/arch/cobalt/include/*.h \
+		${SYSDIR}/arch/cobalt/dev/*.[ch] \
+		${SYSDIR}/arch/cobalt/pci/*.[ch]
+ACOBALT=	${SYSDIR}/arch/cobalt/cobalt/*.S
 
 # Directories in which to place tags links
 DCOBALT=	pci include
@@ -16,9 +18,12 @@ DCOBALT=	pci include
 .include "../../kern/Make.tags.inc"
 
 tags:
-	-ctags -wdtf ${TCOBALT} ${SCOBALT} ${SMIPS} ${COMM}
+	-rm -f ${TCOBALT}
+	-echo ${SCOBALT} ${SMIPS} | xargs ctags -wadtf ${TCOBALT}
+	-${FINDCOMM} | xargs ctags -wadtf ${TCOBALT}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ACOBALT} ${AMIPS} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 		>> ${TCOBALT}
 	sort -o ${TCOBALT} ${TCOBALT}
 

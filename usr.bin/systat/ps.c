@@ -1,4 +1,4 @@
-/*      $NetBSD: ps.c,v 1.30 2007/02/17 22:49:57 pavel Exp $  */
+/*      $NetBSD: ps.c,v 1.37 2017/01/10 21:14:51 christos Exp $  */
 
 /*-
  * Copyright (c) 1999
@@ -45,13 +45,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ps.c,v 1.30 2007/02/17 22:49:57 pavel Exp $");
+__RCSID("$NetBSD: ps.c,v 1.37 2017/01/10 21:14:51 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/sched.h>
 #include <sys/sysctl.h>
-#include <sys/user.h>
+#include <sys/stat.h>
 
 #include <curses.h>
 #include <math.h>
@@ -171,7 +171,7 @@ state2str(struct kinfo_proc2 *kp)
 
 	case LSSLEEP:
 		if (flag & L_SINTR)     /* interruptable (long) */
-			*cp = kp->p_slptime >= maxslp ? 'I' : 'S';
+			*cp = kp->p_slptime >= (uint32_t)maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
@@ -193,9 +193,6 @@ state2str(struct kinfo_proc2 *kp)
 		*cp = '?';
 	}
 	cp++;
-	if (flag & L_INMEM) {
-	} else
-		*cp++ = 'W';
 	if (kp->p_nice < NZERO)
 		*cp++ = '<';
 	else if (kp->p_nice > NZERO)
@@ -208,8 +205,6 @@ state2str(struct kinfo_proc2 *kp)
 		*cp++ = 'E';
 	if (flag & P_PPWAIT)
 		*cp++ = 'V';
-	if ((flag & P_SYSTEM) || kp->p_holdcnt)
-		*cp++ = 'L';
 	if (kp->p_eflag & EPROC_SLEADER)
 		*cp++ = 's'; 
 	if ((flag & P_CONTROLT) && kp->p__pgid == kp->p_tpgid)
@@ -226,7 +221,7 @@ tty2str(struct kinfo_proc2 *kp)
 	static char ttystr[4];
 	char *tty_name;
 
-	if (kp->p_tdev == NODEV ||
+	if (kp->p_tdev == (uint32_t)NODEV ||
 	    (tty_name = devname(kp->p_tdev, S_IFCHR)) == NULL)
 		strlcpy(ttystr, "??", sizeof(ttystr));
 	else {
@@ -247,7 +242,7 @@ vsz2int(struct kinfo_proc2 *kp)
 {
 	int     i;
 
-	i = pgtok(kp->p_vm_dsize + kp->p_vm_ssize + kp->p_vm_tsize);
+	i = pgtok(kp->p_vm_msize);
 
 	return ((i < 0) ? 0 : i);
 }
@@ -287,11 +282,12 @@ comm2str(struct kinfo_proc2 *kp)
 		 * they are printed within parentheses.
 		 */
 		if (kp->p_flag & P_SYSTEM)
-			fmt = "[%s]";
+			fmt = "[]";
 		else
-			fmt = "(%s)";
+			fmt = "()";
 
-		snprintf(commstr, sizeof(commstr), fmt, kp->p_comm);
+		snprintf(commstr, sizeof(commstr), "%c%s%c", fmt[0],
+		    kp->p_comm, fmt[1]);
 	}
 
 	return commstr;
@@ -303,9 +299,6 @@ pmem2float(struct kinfo_proc2 *kp)
 	double fracmem;
 	int szptudot = 0;
 
-	/* XXX - I don't like this. */
-	if ((kp->p_flag & L_INMEM) == 0)
-	        return (0.0);
 #ifdef USPACE
 	/* XXX want pmap ptpages, segtab, etc. (per architecture) */
 	szptudot = USPACE/getpagesize();
@@ -332,12 +325,10 @@ start2str(struct kinfo_proc2 *kp)
 	        time(&now);
 	if (now - u_start.tv_sec < 24 * SECSPERHOUR) {
 		/* I *hate* SCCS... */
-	        static char fmt[] = "%l:%" "M%p";
-	        strftime(startstr, sizeof(startstr) - 1, fmt, tp);
+	        strftime(startstr, sizeof(startstr) - 1, "%l:%" "M%p", tp);
 	} else if (now - u_start.tv_sec < 7 * SECSPERDAY) {
 	        /* I *hate* SCCS... */
-	        static char fmt[] = "%a%" "I%p";
-	        strftime(startstr, sizeof(startstr) - 1, fmt, tp);
+	        strftime(startstr, sizeof(startstr) - 1, "%a%" "I%p", tp);
 	} else  
 	        strftime(startstr, sizeof(startstr) - 1, "%e%b%y", tp);
 

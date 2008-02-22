@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.54 2007/12/26 16:01:34 ad Exp $	*/
+/*	$NetBSD: pmap.h,v 1.70 2017/07/24 09:56:45 mrg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -74,7 +74,111 @@
 #ifndef	_MIPS_PMAP_H_
 #define	_MIPS_PMAP_H_
 
-#include <mips/cpuregs.h>	/* for KSEG0 below */
+#ifdef _KERNEL_OPT
+#include "opt_multiprocessor.h"
+#include "opt_uvmhist.h"
+#include "opt_cputype.h"
+#endif
+
+#include <sys/evcnt.h>
+#include <sys/kcpuset.h>
+#include <sys/kernhist.h>
+
+#ifndef __BSD_PTENTRY_T__
+#define __BSD_PTENTRY_T__
+typedef uint32_t pt_entry_t;
+#define PRIxPTE		PRIx32
+#endif /* __BSD_PTENTRY_T__ */
+
+#define KERNEL_PID			0
+
+#if defined(__PMAP_PRIVATE)
+
+#include <mips/locore.h>
+#include <mips/cache.h>
+
+#define PMAP_VIRTUAL_CACHE_ALIASES
+#define PMAP_INVALID_SEGTAB_ADDRESS	((pmap_segtab_t *)NULL)
+#define	PMAP_TLB_NEED_SHOOTDOWN
+#define PMAP_TLB_FLUSH_ASID_ON_RESET	false
+#if UPAGES > 1
+#define PMAP_TLB_WIRED_UPAGES		MIPS3_TLB_WIRED_UPAGES
+#endif
+#define pmap_md_tlb_asid_max()		(MIPS_TLB_NUM_PIDS - 1)
+#ifdef MULTIPROCESSOR
+#define PMAP_NO_PV_UNCACHED
+#endif
+
+/*
+ * We need the pmap_segtab's to be aligned on MIPS*R2 so we can use the
+ * EXT/INS instructions on their addresses.
+ */     
+#if (MIPS32R2 + MIPS64R2 + MIPS64R2_RMIXL) > 0
+#define PMAP_SEGTAB_ALIGN __aligned(sizeof(void *)*NSEGPG) __section(".data1")
+#endif   
+
+#include <uvm/uvm_physseg.h>
+
+void	pmap_md_init(void);
+void	pmap_md_icache_sync_all(void);
+void	pmap_md_icache_sync_range_index(vaddr_t, vsize_t);
+void	pmap_md_page_syncicache(struct vm_page *, const kcpuset_t *);
+bool	pmap_md_vca_add(struct vm_page *, vaddr_t, pt_entry_t *);
+void	pmap_md_vca_clean(struct vm_page *, int);
+void	pmap_md_vca_remove(struct vm_page *, vaddr_t, bool, bool);
+bool	pmap_md_ok_to_steal_p(const uvm_physseg_t, size_t);
+bool	pmap_md_tlb_check_entry(void *, vaddr_t, tlb_asid_t, pt_entry_t);
+
+static inline bool
+pmap_md_virtual_cache_aliasing_p(void)
+{
+	return MIPS_CACHE_VIRTUAL_ALIAS;
+}
+
+static inline vsize_t
+pmap_md_cache_prefer_mask(void)
+{
+	return MIPS_HAS_R4K_MMU ? mips_cache_info.mci_cache_prefer_mask : 0;
+}
+#endif /* __PMAP_PRIVATE */
+
+struct tlbmask {
+	vaddr_t	tlb_hi;
+#ifdef __mips_o32
+	uint32_t tlb_lo0;
+	uint32_t tlb_lo1;
+#else
+	uint64_t tlb_lo0;
+	uint64_t tlb_lo1;
+#endif
+	uint32_t tlb_mask;
+};
+
+#ifdef _LP64
+#define PMAP_SEGTABSIZE		NSEGPG
+#else
+#define PMAP_SEGTABSIZE		(1 << (31 - SEGSHIFT))
+#endif
+
+#include <uvm/pmap/vmpagemd.h>
+#include <uvm/pmap/pmap.h>
+#include <uvm/pmap/pmap_tlb.h>
+#include <uvm/pmap/pmap_synci.h>
+
+#ifdef _KERNEL
+/*
+ * Select CCA to use for unmanaged pages.
+ */
+#define	PMAP_CCA_FOR_PA(pa)	CCA_UNCACHED		/* uncached */
+
+#if defined(_MIPS_PADDR_T_64BIT) || defined(_LP64)
+#define PGC_NOCACHE	0x4000000000000000ULL
+#define PGC_PREFETCH	0x2000000000000000ULL
+#endif
+
+#if defined(__PMAP_PRIVATE)
+#include <mips/pte.h>
+#endif
 
 /*
  * The user address space is 2Gb (0x0 - 0x80000000).
@@ -98,72 +202,13 @@
  * dynamically allocated at boot time.
  */
 
-#define mips_trunc_seg(x)	((vaddr_t)(x) & ~SEGOFSET)
-#define mips_round_seg(x)	(((vaddr_t)(x) + SEGOFSET) & ~SEGOFSET)
-#define pmap_segmap(m, v)	((m)->pm_segtab->seg_tab[((v) >> SEGSHIFT)])
-
-#define PMAP_SEGTABSIZE		512
-
-union pt_entry;
-
-struct segtab {
-	union pt_entry	*seg_tab[PMAP_SEGTABSIZE];
-};
-
-/*
- * Machine dependent pmap structure.
- */
-typedef struct pmap {
-	int			pm_count;	/* pmap reference count */
-	kmutex_t		pm_lock;	/* lock on pmap */
-	struct pmap_statistics	pm_stats;	/* pmap statistics */
-	unsigned		pm_asid;	/* TLB address space tag */
-	unsigned		pm_asidgen;	/* its generation number */
-	struct segtab		*pm_segtab;	/* pointers to pages of PTEs */
-} *pmap_t;
-
-/*
- * For each struct vm_page, there is a list of all currently valid virtual
- * mappings of that page.  An entry is a pv_entry_t, the list is pv_table.
- * XXX really should do this as a part of the higher level code.
- */
-typedef struct pv_entry {
-	struct pv_entry	*pv_next;	/* next pv_entry */
-	struct pmap	*pv_pmap;	/* pmap where mapping lies */
-	vaddr_t	pv_va;			/* virtual address for mapping */
-	int		pv_flags;	/* some flags for the mapping */
-} *pv_entry_t;
-
-#define	PV_UNCACHED	0x0001		/* page is mapped uncached */
-#define	PV_MODIFIED	0x0002		/* page has been modified */
-#define	PV_REFERENCED	0x0004		/* page has been recently referenced */
-
-
-#ifdef	_KERNEL
-
-extern char *pmap_attributes;		/* reference and modify bits */
-extern struct pmap kernel_pmap_store;
-
-#define pmap_kernel()		(&kernel_pmap_store)
-#define	pmap_wired_count(pmap) 	((pmap)->pm_stats.wired_count)
-#define pmap_resident_count(pmap) ((pmap)->pm_stats.resident_count)
-
-#define	pmap_update(pmap)	/* nothing (yet) */
 #define pmap_phys_address(x)	mips_ptob(x)
-
-static __inline void
-pmap_remove_all(struct pmap *pmap)
-{
-	/* Nothing. */
-}
 
 /*
  *	Bootstrap the system enough to run with virtual memory.
  */
 void	pmap_bootstrap(void);
-
-void	pmap_set_modified(paddr_t);
-
+void	pmap_md_alloc_ephemeral_address_space(struct cpu_info *);
 void	pmap_procwr(struct proc *, vaddr_t, size_t);
 #define	PMAP_NEED_PROCWR
 
@@ -172,32 +217,41 @@ void	pmap_procwr(struct proc *, vaddr_t, size_t);
  * the virtually-indexed cache on mips3 CPUs.
  */
 #ifdef MIPS3_PLUS
-#define PMAP_PREFER(pa, va, sz, td)	pmap_prefer((pa), (va), (td))
-void	pmap_prefer(vaddr_t, vaddr_t *, int);
+#define PMAP_PREFER(pa, va, sz, td)	pmap_prefer((pa), (va), (sz), (td))
+void	pmap_prefer(vaddr_t, vaddr_t *, vsize_t, int);
 #endif /* MIPS3_PLUS */
 
-#define	PMAP_STEAL_MEMORY	/* enable pmap_steal_memory() */
+#define	PMAP_ENABLE_PMAP_KMPAGE	/* enable the PMAP_KMPAGE flag */
+
+// these use register_t so we can pass XKPHYS adddresses to them on N32
+bool	pmap_md_direct_mapped_vaddr_p(register_t);
+paddr_t	pmap_md_direct_mapped_vaddr_to_paddr(register_t);
+bool	pmap_md_io_vaddr_p(vaddr_t);
 
 /*
  * Alternate mapping hooks for pool pages.  Avoids thrashing the TLB.
  */
-vaddr_t mips_pmap_map_poolpage(paddr_t);
-paddr_t mips_pmap_unmap_poolpage(vaddr_t);
-#define	PMAP_MAP_POOLPAGE(pa)	mips_pmap_map_poolpage(pa)
-#define	PMAP_UNMAP_POOLPAGE(va)	mips_pmap_unmap_poolpage(va)
+vaddr_t pmap_md_map_poolpage(paddr_t, size_t);
+paddr_t pmap_md_unmap_poolpage(vaddr_t, size_t);
+struct vm_page *pmap_md_alloc_poolpage(int);
 
 /*
  * Other hooks for the pool allocator.
  */
-#define	POOL_VTOPHYS(va)	MIPS_KSEG0_TO_PHYS((vaddr_t)(va))
+paddr_t	pmap_md_pool_vtophys(vaddr_t);
+vaddr_t	pmap_md_pool_phystov(paddr_t);
+#define	POOL_VTOPHYS(va)	pmap_md_pool_vtophys((vaddr_t)va)
+#define	POOL_PHYSTOV(pa)	pmap_md_pool_phystov((paddr_t)pa)
 
-/*
- * Select CCA to use for unmanaged pages.
- */
-#define	PMAP_CCA_FOR_PA(pa)	2		/* uncached */
+#ifdef MIPS64_SB1
+/* uncached accesses are bad; all accesses should be cached (and coherent) */
+#undef PMAP_PAGEIDLEZERO
+#define	PMAP_PAGEIDLEZERO(pa)   (pmap_zero_page(pa), true)
 
-#if defined(_MIPS_PADDR_T_64BIT) || defined(_LP64)
-#define PMAP_NOCACHE	0x4000000000000000ULL
+int sbmips_cca_for_pa(paddr_t);
+
+#undef PMAP_CCA_FOR_PA
+#define	PMAP_CCA_FOR_PA(pa)	sbmips_cca_for_pa(pa)
 #endif
 
 #endif	/* _KERNEL */

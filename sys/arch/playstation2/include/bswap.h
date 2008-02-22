@@ -1,3 +1,3 @@
-/*	$NetBSD: bswap.h,v 1.1 2001/10/16 15:38:42 uch Exp $	*/
+/*	$NetBSD: bswap.h,v 1.3 2014/03/31 11:25:49 martin Exp $	*/
 
 #include <mips/bswap.h>

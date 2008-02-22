@@ -1,4 +1,4 @@
-/*	$NetBSD: umass_quirks.h,v 1.3 2001/12/29 13:46:23 augustss Exp $	*/
+/*	$NetBSD: umass_quirks.h,v 1.5 2016/04/23 10:15:32 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	  This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,16 +39,16 @@ typedef void (*umass_fixup_quirk)(struct umass_softc *);
 struct umass_quirk {
 	struct usb_devno	uq_dev;
 
-	u_int8_t		uq_wire;
-	u_int8_t		uq_cmd;
-	u_int32_t		uq_flags;
-	u_int32_t		uq_busquirks;
+	uint8_t			uq_wire;
+	uint8_t			uq_cmd;
+	uint32_t		uq_flags;
+	uint32_t		uq_busquirks;
 	int			uq_match;
 
 	umass_init_quirk	uq_init;
 	umass_fixup_quirk	uq_fixup;
 };
 
-const struct umass_quirk *umass_lookup(u_int16_t, u_int16_t);
+const struct umass_quirk *umass_lookup(uint16_t, uint16_t);
 
 #endif /* _DEV_USB_UMASS_QUIRKS_H_ */

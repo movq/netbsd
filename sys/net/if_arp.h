@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arp.h,v 1.28 2008/02/20 17:05:52 matt Exp $	*/
+/*	$NetBSD: if_arp.h,v 1.32 2018/04/19 21:20:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1986, 1993
@@ -68,20 +68,43 @@ struct	arphdr {
 #ifdef COMMENT_ONLY
 	uint8_t  ar_sha[];	/* sender hardware address */
 	uint8_t  ar_spa[];	/* sender protocol address */
-	uint8_t  ar_tha[];	/* target hardware address */
+	uint8_t  ar_tha[];	/* target hardware address (!IEEE1394) */
 	uint8_t  ar_tpa[];	/* target protocol address */
 #endif
-#define ar_sha(ap) (((char *)((ap)+1))+0)
-#define ar_spa(ap) (((char *)((ap)+1))+(ap)->ar_hln)
-#define ar_tha(ap) \
-	(ntohs((ap)->ar_hrd) == ARPHRD_IEEE1394 \
-		? NULL : (((char *)((ap)+1))+(ap)->ar_hln+(ap)->ar_pln))
-#define ar_tpa(ap) \
-	(ntohs((ap)->ar_hrd) == ARPHRD_IEEE1394 \
-		? (((char *)((ap)+1))+(ap)->ar_hln+(ap)->ar_pln) \
-		: (((char *)((ap)+1))+(ap)->ar_hln+(ap)->ar_pln+(ap)->ar_hln))
 } __packed;
 
+static __inline uint8_t *
+ar_sha(struct arphdr *ap)
+{
+	return ((uint8_t *)(ap + 1)) + 0;
+}
+
+static __inline uint8_t *
+ar_spa(struct arphdr *ap)
+{
+	return ((uint8_t *)(ap + 1)) + ap->ar_hln;
+}
+
+static __inline uint8_t *
+ar_tha(struct arphdr *ap)
+{
+	if (ntohs(ap->ar_hrd) == ARPHRD_IEEE1394) {
+		return NULL;
+	} else {
+		return ((uint8_t *)(ap + 1)) + ap->ar_hln + ap->ar_pln;
+	}
+}
+
+static __inline uint8_t *
+ar_tpa(struct arphdr *ap)
+{
+	if (ntohs(ap->ar_hrd) == ARPHRD_IEEE1394) {
+		return ((uint8_t *)(ap + 1)) + ap->ar_hln + ap->ar_pln;
+	} else {
+		return ((uint8_t *)(ap + 1)) + ap->ar_hln + ap->ar_pln +
+		    ap->ar_hln;
+	}
+}
 
 /*
  * ARP ioctl request
@@ -101,33 +124,32 @@ struct arpreq {
 /*
  * Kernel statistics about arp
  */
-struct arpstat {
-	u_quad_t	as_sndtotal;	/* total packets sent */
-	u_quad_t	as_sndreply;	/* replies sent */
-	u_quad_t	as_sndrequest;	/* requests sent */
+#define	ARP_STAT_SNDTOTAL	0	/* total packets sent */
+#define	ARP_STAT_SNDREPLY	1	/* replies sent */
+#define	ARP_STAT_SENDREQUEST	2	/* requests sent */
+#define	ARP_STAT_RCVTOTAL	3	/* total packets received */
+#define	ARP_STAT_RCVREQUEST	4	/* valid requests received */
+#define	ARP_STAT_RCVREPLY	5	/* replies received */
+#define	ARP_STAT_RCVMCAST	6	/* multicast/broadcast received */
+#define	ARP_STAT_RCVBADPROTO	7	/* unknown protocol type received */
+#define	ARP_STAT_RCVBADLEN	8	/* bad (short) length received */
+#define	ARP_STAT_RCVZEROTPA	9	/* received w/ null target ip */
+#define	ARP_STAT_RCVZEROSPA	10	/* received w/ null source ip */
+#define	ARP_STAT_RCVNOINT	11	/* couldn't map to interface */
+#define	ARP_STAT_RCVLOCALSHA	12	/* received from local hw address */
+#define	ARP_STAT_RCVBCASTSHA	13	/* received w/ broadcast src */
+#define	ARP_STAT_RCVLOCALSPA	14	/* received for a local ip [dup!] */
+#define	ARP_STAT_RCVOVERPERM	15	/* attempts to overwrite static info */
+#define	ARP_STAT_RCVOVERINT	16	/* attempts to overwrite wrong if */
+#define	ARP_STAT_RCVOVER	17	/* entries overwritten! */
+#define	ARP_STAT_RCVLENCHG	18	/* changes in hw address len */
+#define	ARP_STAT_DFRTOTAL	19	/* deferred pending ARP resolution */
+#define	ARP_STAT_DFRSENT	20	/* deferred, then sent */
+#define	ARP_STAT_DFRDROPPED	21	/* deferred, then dropped */
+#define	ARP_STAT_ALLOCFAIL	22	/* failures to allocate llinfo */
 
-	u_quad_t	as_rcvtotal;	/* total packets received */
-	u_quad_t	as_rcvrequest;	/* valid requests received */
-	u_quad_t	as_rcvreply;	/* replies received */
-	u_quad_t	as_rcvmcast;    /* multicast/broadcast received */
-	u_quad_t	as_rcvbadproto;	/* unknown protocol type received */
-	u_quad_t	as_rcvbadlen;	/* bad (short) length received */
-	u_quad_t	as_rcvzerotpa;	/* received w/ null target ip */
-	u_quad_t	as_rcvzerospa;	/* received w/ null src ip */
-	u_quad_t	as_rcvnoint;	/* couldn't map to interface */
-	u_quad_t	as_rcvlocalsha;	/* received from local hw address */
-	u_quad_t	as_rcvbcastsha;	/* received w/ broadcast src */
-	u_quad_t	as_rcvlocalspa;	/* received for a local ip [dup!] */
-	u_quad_t	as_rcvoverperm;	/* attempts to overwrite static info */
-	u_quad_t	as_rcvoverint;	/* attempts to overwrite wrong if */
-	u_quad_t	as_rcvover;	/* entries overwritten! */
-	u_quad_t	as_rcvlenchg;	/* changes in hw add len */
+#define	ARP_NSTATS		23
 
-	u_quad_t	as_dfrtotal;	/* deferred pending ARP resolution. */
-	u_quad_t	as_dfrsent;	/* deferred, then sent */
-	u_quad_t	as_dfrdropped;	/* deferred, then dropped */
-
-	u_quad_t	as_allocfail;	/* Failures to allocate llinfo */
-};
+void arp_stat_add(int, uint64_t);
 
 #endif /* !_NET_IF_ARP_H_ */

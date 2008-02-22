@@ -1,4 +1,4 @@
-/*	$NetBSD: dirent.h,v 1.23 2005/12/26 18:41:36 perry Exp $	*/
+/*	$NetBSD: dirent.h,v 1.30 2016/01/22 23:31:30 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -34,6 +34,7 @@
 #ifndef _SYS_DIRENT_H_
 #define _SYS_DIRENT_H_
 
+#include <sys/cdefs.h>
 #include <sys/featuretest.h>
 
 /*
@@ -42,9 +43,9 @@
  *
  * A directory entry has a struct dirent at the front of it, containing its
  * inode number, the length of the entry, and the length of the name
- * contained in the entry.  These are followed by the name padded to a 4
- * byte boundary with null bytes.  All names are guaranteed null terminated.
- * The maximum length of a name in a directory is MAXNAMLEN.
+ * contained in the entry.  These are followed by the name padded to 
+ * _DIRENT_ALIGN() byte boundary with null bytes.  All names are guaranteed
+ * NUL terminated.  The maximum length of a name in a directory is MAXNAMLEN.
  */
 struct dirent {
 	ino_t d_fileno;			/* file number of entry */
@@ -52,7 +53,7 @@ struct dirent {
 	uint16_t d_namlen;		/* length of string in d_name */
 	uint8_t  d_type; 		/* file type, see below */
 #if defined(_NETBSD_SOURCE)
-#define	MAXNAMLEN	511
+#define	MAXNAMLEN	511		/* must be kept in sync with NAME_MAX */
 	char	d_name[MAXNAMLEN + 1];	/* name must be no longer than this */
 #else
 	char	d_name[511 + 1];	/* name must be no longer than this */
@@ -74,6 +75,13 @@ struct dirent {
 #define	DT_WHT		14
 
 /*
+ * Caution: the following macros are used by the ufs/ffs code on ffs's
+ * struct direct as well as the exposed struct dirent. The two
+ * structures are not the same, so it's important (until ufs is fixed,
+ * XXX) that the macro definitions remain type-polymorphic.
+ */
+
+/*
  * The _DIRENT_ALIGN macro returns the alignment of struct dirent.
  * struct direct and struct dirent12 used 4 byte alignment but
  * struct dirent uses 8.
@@ -83,8 +91,12 @@ struct dirent {
  * The _DIRENT_NAMEOFF macro returns the offset of the d_name field in 
  * struct dirent
  */
+#if __GNUC_PREREQ__(4, 0)
+#define	_DIRENT_NAMEOFF(dp)	__builtin_offsetof(__typeof__(*(dp)), d_name)
+#else
 #define _DIRENT_NAMEOFF(dp) \
     ((char *)(void *)&(dp)->d_name - (char *)(void *)dp)
+#endif
 /*
  * The _DIRENT_RECLEN macro gives the minimum record length which will hold
  * a name of size "namlen".  This requires the amount of space in struct dirent

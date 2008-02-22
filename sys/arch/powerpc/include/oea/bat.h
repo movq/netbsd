@@ -1,4 +1,4 @@
-/*	$NetBSD: bat.h,v 1.9 2008/02/05 18:10:46 garbled Exp $	*/
+/*	$NetBSD: bat.h,v 1.18 2014/07/06 08:06:03 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,11 +63,13 @@
 #ifndef	_POWERPC_OEA_BAT_H_
 #define	_POWERPC_OEA_BAT_H_
 
-#ifndef _LOCORE
+#if defined(_KERNEL) && !defined(_LOCORE)
+#include <powerpc/psl.h>
+
 struct bat {
 	register_t batu;
 	register_t batl;
-};
+} __aligned(8);
 #endif
 
 /* Lower BAT bits (all but PowerPC 601): */
@@ -85,6 +80,7 @@ struct bat {
 #define	BAT_M		0x00000010	/* memory coherency enable */
 #define	BAT_G		0x00000008	/* guarded region (not on 601) */
 #define	BAT_X		0x00000004	/* eXtended physical page number (3) */
+#define	BAT_WIMG	0x00000078	/* WIMG mask */
 
 /*
  * BAT_XPN and BAT_X are only used when HID0[XAEN] == 1 and are used
@@ -124,18 +120,25 @@ struct bat {
 #define	BAT_BL_64M	0x000007fc
 #define	BAT_BL_128M	0x00000ffc
 #define	BAT_BL_256M	0x00001ffc
+/* Extended Block Lengths (7455+) */
+#define	BAT_BL_512M	0x00003ffc
+#define	BAT_BL_1G	0x00007ffc
+#define	BAT_BL_2G	0x0000fffc
+#define	BAT_BL_4G	0x0001fffc
+
+#define	BAT_BL_TO_SIZE(bl)	(((bl)+4) << 15)
 
 #define	BATU(va, len, v)						\
-	(((va) & BAT_EPI) | ((len) & BAT_BL) | ((v) & BAT_V))
+	(((va) & BAT_EPI) | ((len) & (BAT_BL|BAT_XBL)) | ((v) & BAT_V))
 
 #define	BATL(pa, wimg, pp)						\
 	(((pa) & BAT_RPN) | (wimg) | (pp))
 
 #define BAT_VA_MATCH_P(batu,va) \
-  (((~(((batu)&BAT_BL)<<15))&(va)&BAT_EPI)==((batu)&BAT_EPI))
+  (((~(((batu)&(BAT_BL|BAT_XBL))<<15))&(va)&BAT_EPI)==((batu)&BAT_EPI))
 
 #define BAT_PA_MATCH_P(batu,batl,pa) \
-  (((~(((batu)&BAT_BL)<<15))&(pa)&BAT_RPN)==((batl)&BAT_RPN))
+  (((~(((batu)&(BAT_BL|BAT_XBL))<<15))&(pa)&BAT_RPN)==((batl)&BAT_RPN))
 
 #define BAT_VALID_P(batu, msr) \
   (((msr)&PSL_PR)?(((batu)&BAT_Vu)==BAT_Vu):(((batu)&BAT_Vs)==BAT_Vs))
@@ -195,8 +198,10 @@ struct bat {
 #define	BAT601_VALID_P(batl) \
 	((batl) & BAT601_V)
 
-#ifdef	_KERNEL
-#ifndef _LOCORE
+#define	BAT_VA2IDX(va)	((va) / (8*1024*1024))
+#define	BAT_IDX2VA(i)	((i) * (8*1024*1024))
+
+#if defined(_KERNEL) && !defined(_LOCORE)
 void oea_batinit(paddr_t, ...);
 void oea_iobat_add(paddr_t, register_t);
 void oea_iobat_remove(paddr_t);
@@ -204,7 +209,6 @@ void oea_iobat_remove(paddr_t);
 #if !defined (PPC_OEA64)
 extern struct bat battable[];
 #endif /* PPC_OEA */
-#endif
 #endif
 
 #endif	/* _POWERPC_OEA_BAT_H_ */

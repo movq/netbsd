@@ -1,4 +1,4 @@
-/*	$NetBSD: addbytes.c,v 1.33 2007/11/08 06:42:22 jdc Exp $	*/
+/*	$NetBSD: addbytes.c,v 1.47 2017/01/06 14:25:41 roy Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -34,11 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)addbytes.c	8.4 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: addbytes.c,v 1.33 2007/11/08 06:42:22 jdc Exp $");
+__RCSID("$NetBSD: addbytes.c,v 1.47 2017/01/06 14:25:41 roy Exp $");
 #endif
 #endif				/* not lint */
 
 #include <stdlib.h>
+#include <string.h>
 #include "curses.h"
 #include "curses_private.h"
 #ifdef DEBUG
@@ -59,7 +60,8 @@ __RCSID("$NetBSD: addbytes.c,v 1.33 2007/11/08 06:42:22 jdc Exp $");
 int
 addbytes(const char *bytes, int count)
 {
-	return __waddbytes(stdscr, bytes, count, 0);
+
+	return _cursesi_waddbytes(stdscr, bytes, count, 0, 1);
 }
 
 /*
@@ -69,7 +71,8 @@ addbytes(const char *bytes, int count)
 int
 waddbytes(WINDOW *win, const char *bytes, int count)
 {
-	return __waddbytes(win, bytes, count, 0);
+
+	return _cursesi_waddbytes(win, bytes, count, 0, 1);
 }
 
 /*
@@ -79,6 +82,7 @@ waddbytes(WINDOW *win, const char *bytes, int count)
 int
 mvaddbytes(int y, int x, const char *bytes, int count)
 {
+
 	return mvwaddbytes(stdscr, y, x, bytes, count);
 }
 
@@ -89,27 +93,40 @@ mvaddbytes(int y, int x, const char *bytes, int count)
 int
 mvwaddbytes(WINDOW *win, int y, int x, const char *bytes, int count)
 {
+
 	if (wmove(win, y, x) == ERR)
 		return ERR;
 
-	return __waddbytes(win, bytes, count, 0);
+	return _cursesi_waddbytes(win, bytes, count, 0, 1);
 }
 
 #endif
 
-/*
- * waddbytes --
- *	Add the character to the current position in the given window.
- */
 int
 __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 {
-	int		 x, y, err;
+
+	return _cursesi_waddbytes(win, bytes, count, attr, 1);
+}
+
+/*
+ * _cursesi_waddbytes --
+ *	Add the character to the current position in the given window.
+ * if char_interp is non-zero then character interpretation is done on
+ * the byte (i.e. \n to newline, \r to carriage return, \b to backspace
+ * and so on).
+ */
+int
+_cursesi_waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr,
+	    int char_interp)
+{
+	int		x, y, err;
 	__LINE		*lp;
 #ifdef HAVE_WCHAR
 	int		n;
 	cchar_t		cc;
 	wchar_t		wc;
+	mbstate_t	st;
 #else
 	int		c;
 #endif
@@ -117,7 +134,7 @@ __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 	int             i;
 
 	for (i = 0; i < win->maxy; i++) {
-		assert(win->lines[i]->sentinel == SENTINEL_VALUE);
+		assert(win->alines[i]->sentinel == SENTINEL_VALUE);
 	}
 
 	__CTRACE(__CTRACE_INPUT, "ADDBYTES: add %d bytes\n", count);
@@ -125,8 +142,11 @@ __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 
 	err = OK;
 	SYNCH_IN;
-	lp = win->lines[y];
+	lp = win->alines[y];
 
+#ifdef HAVE_WCHAR
+	(void)memset(&st, 0, sizeof(st));
+#endif
 	while (count > 0) {
 #ifndef HAVE_WCHAR
 		c = *bytes++;
@@ -134,11 +154,11 @@ __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 		__CTRACE(__CTRACE_INPUT, "ADDBYTES('%c', %x) at (%d, %d)\n",
 		    c, attr, y, x);
 #endif
-		err = _cursesi_addbyte(win, &lp, &y, &x, c, attr);
+		err = _cursesi_addbyte(win, &lp, &y, &x, c, attr, char_interp);
 		count--;
 #else
 		/*
-		 * For wide character support only, try and convert the
+		 * For wide-character support only, try and convert the
 		 * given string into a wide character - we do this because
 		 * this is how ncurses behaves (not that I think this is
 		 * actually the correct thing to do but if we don't do it
@@ -147,24 +167,24 @@ __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 		 * then we eat the n characters used to make the wide char
 		 * from the string.
 		 */
-		n = mbtowc(&wc, bytes, count);
-		if (n == 0)
-			break;
-		else if (n < 0) { /* not a valid conversion just eat a char */
+		n = (int)mbrtowc(&wc, bytes, (size_t)count, &st);
+		if (n < 0) {
+			/* not a valid conversion just eat a char */
 			wc = *bytes;
 			n = 1;
+			(void)memset(&st, 0, sizeof(st));
+		} else if (wc == 0) {
+			break;
 		}
-
-
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INPUT,
 		 "ADDBYTES WIDE(0x%x [%s], %x) at (%d, %d), ate %d bytes\n",
-		 (unsigned) wc, unctrl((unsigned) wc), attr, y, x, n);
+		 (unsigned)wc, unctrl((unsigned)wc), attr, y, x, n);
 #endif
 		cc.vals[0] = wc;
 		cc.elements = 1;
 		cc.attributes = attr;
-		err = _cursesi_addwchar(win, &lp, &y, &x, &cc);
+		err = _cursesi_addwchar(win, &lp, &y, &x, &cc, char_interp);
 		bytes += n;
 		count -= n;
 #endif
@@ -174,7 +194,7 @@ __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
 
 #ifdef DEBUG
 	for (i = 0; i < win->maxy; i++) {
-		assert(win->lines[i]->sentinel == SENTINEL_VALUE);
+		assert(win->alines[i]->sentinel == SENTINEL_VALUE);
 	}
 #endif
 
@@ -185,126 +205,136 @@ __waddbytes(WINDOW *win, const char *bytes, int count, attr_t attr)
  * _cursesi_addbyte -
  *	Internal function to add a byte and update the row and column
  * positions as appropriate.  This function is only used in the narrow
- * character version of curses.
+ * character version of curses.  If update_cursor is non-zero then character
+ * interpretation.
  */
 int
 _cursesi_addbyte(WINDOW *win, __LINE **lp, int *y, int *x, int c,
-		 attr_t attr)
+		 attr_t attr, int char_interp)
 {
-	static char	 blanks[] = "        ";
-	int		 newx;
+	static char	 blank[] = " ";
+	int		 tabsize;
+	int		 newx, i;
 	attr_t		 attributes;
 
-	switch (c) {
-	case '\t':
-		PSYNCH_OUT;
-		if (waddbytes(win, blanks, 8 - (*x % 8)) == ERR)
-			return (ERR);
-		PSYNCH_IN;
-		break;
-
-	default:
-#ifdef DEBUG
-		__CTRACE(__CTRACE_INPUT, "ADDBYTES(%p, %d, %d)\n",
-			 win, *y, *x);
-#endif
-
-		if ((*lp)->flags & __ISPASTEOL) {
-		  newline:
-			*x = 0;
-			(*lp)->flags &= ~__ISPASTEOL;
-			if (*y == win->scr_b) {
-#ifdef DEBUG
-				__CTRACE(__CTRACE_INPUT,
-					 "ADDBYTES - on bottom "
-					 "of scrolling region\n");
-#endif
-				if (!(win->flags & __SCROLLOK))
+	if (char_interp) {
+		switch (c) {
+		case '\t':
+			tabsize = win->screen->TABSIZE;
+			PSYNCH_OUT;
+			newx = tabsize - (*x % tabsize);
+			for (i = 0; i < newx; i++) {
+				if (waddbytes(win, blank, 1) == ERR)
 					return ERR;
-				PSYNCH_OUT;
-				scroll(win);
-				PSYNCH_IN;
-			} else {
-				(*y)++;
+				(*x)++;
 			}
-			*lp = win->lines[*y];
-			if (c == '\n')
-				break;
-		}
+			PSYNCH_IN;
+			return OK;
 
-		attributes = (win->wattr | attr) &
-			(__ATTRIBUTES & ~__COLOR);
-		if (attr & __COLOR)
-			attributes |= attr & __COLOR;
-		else if (win->wattr & __COLOR)
-			attributes |= win->wattr & __COLOR;
-#ifdef DEBUG
-		__CTRACE(__CTRACE_INPUT,
-			 "ADDBYTES: 1: y = %d, x = %d, firstch = %d, "
-			 "lastch = %d\n",
-			 *y, *x, *win->lines[*y]->firstchp,
-			 *win->lines[*y]->lastchp);
-#endif
-		/*
-		 * Always update the change pointers.  Otherwise,
-		 * we could end up not displaying 'blank' characters
-		 * when overlapping windows are displayed.
-		 */
-		newx = *x + win->ch_off;
-		(*lp)->flags |= __ISDIRTY;
-		/*
-		 * firstchp/lastchp are shared between
-		 * parent window and sub-window.
-		 */
-		if (newx < *(*lp)->firstchp)
-			*(*lp)->firstchp = newx;
-		if (newx > *(*lp)->lastchp)
-			*(*lp)->lastchp = newx;
-#ifdef DEBUG
-		__CTRACE(__CTRACE_INPUT,
-			 "ADDBYTES: change gives f/l: %d/%d [%d/%d]\n",
-			 *(*lp)->firstchp, *(*lp)->lastchp,
-			 *(*lp)->firstchp - win->ch_off,
-			 *(*lp)->lastchp - win->ch_off);
-#endif
-		if (win->bch != ' ' && c == ' ')
-			(*lp)->line[*x].ch = win->bch;
-		else
-			(*lp)->line[*x].ch = c;
-
-		if (attributes & __COLOR)
-			(*lp)->line[*x].attr =
-				attributes | (win->battr & ~__COLOR);
-		else
-			(*lp)->line[*x].attr = attributes | win->battr;
-
-		if (*x == win->maxx - 1)
+		case '\n':
+			PSYNCH_OUT;
+			wclrtoeol(win);
+			PSYNCH_IN;
 			(*lp)->flags |= __ISPASTEOL;
-		else
-			(*x)++;
-#ifdef DEBUG
-		__CTRACE(__CTRACE_INPUT,
-			 "ADDBYTES: 2: y = %d, x = %d, firstch = %d, "
-			 "lastch = %d\n",
-			 *y, *x, *win->lines[*y]->firstchp,
-			 *win->lines[*y]->lastchp);
-#endif
-		break;
-	case '\n':
-		PSYNCH_OUT;
-		wclrtoeol(win);
-		PSYNCH_IN;
-		goto newline;
-	case '\r':
-		*x = 0;
-		break;
-	case '\b':
-		if (--(*x) < 0)
+			break;
+
+		case '\r':
 			*x = 0;
-		break;
+			win->curx = *x;
+			return OK;
+
+		case '\b':
+			if (--(*x) < 0)
+				*x = 0;
+			win->curx = *x;
+			return OK;
+		}
 	}
 
-	return (OK);
+#ifdef DEBUG
+	__CTRACE(__CTRACE_INPUT, "ADDBYTES(%p, %d, %d)\n", win, *y, *x);
+#endif
+
+	if (char_interp && ((*lp)->flags & __ISPASTEOL)) {
+		*x = 0;
+		(*lp)->flags &= ~__ISPASTEOL;
+		if (*y == win->scr_b) {
+#ifdef DEBUG
+			__CTRACE(__CTRACE_INPUT,
+				 "ADDBYTES - on bottom "
+				 "of scrolling region\n");
+#endif
+			if (!(win->flags & __SCROLLOK))
+				return ERR;
+			PSYNCH_OUT;
+			scroll(win);
+			PSYNCH_IN;
+		} else {
+			(*y)++;
+		}
+		*lp = win->alines[*y];
+		if (c == '\n')
+			return OK;
+	}
+
+#ifdef DEBUG
+	__CTRACE(__CTRACE_INPUT,
+		 "ADDBYTES: 1: y = %d, x = %d, firstch = %d, lastch = %d\n",
+		 *y, *x, *win->alines[*y]->firstchp,
+		 *win->alines[*y]->lastchp);
+#endif
+
+	attributes = (win->wattr | attr) & (__ATTRIBUTES & ~__COLOR);
+	if (attr & __COLOR)
+		attributes |= attr & __COLOR;
+	else if (win->wattr & __COLOR)
+		attributes |= win->wattr & __COLOR;
+
+	/*
+	 * Always update the change pointers.  Otherwise,
+	 * we could end up not displaying 'blank' characters
+	 * when overlapping windows are displayed.
+	 */
+	newx = *x + win->ch_off;
+	(*lp)->flags |= __ISDIRTY;
+	/*
+	 * firstchp/lastchp are shared between
+	 * parent window and sub-window.
+	 */
+	if (newx < *(*lp)->firstchp)
+		*(*lp)->firstchp = newx;
+	if (newx > *(*lp)->lastchp)
+		*(*lp)->lastchp = newx;
+#ifdef DEBUG
+	__CTRACE(__CTRACE_INPUT, "ADDBYTES: change gives f/l: %d/%d [%d/%d]\n",
+		 *(*lp)->firstchp, *(*lp)->lastchp,
+		 *(*lp)->firstchp - win->ch_off,
+		 *(*lp)->lastchp - win->ch_off);
+#endif
+	if (win->bch != ' ' && c == ' ')
+		(*lp)->line[*x].ch = win->bch;
+	else
+		(*lp)->line[*x].ch = c;
+
+	if (attributes & __COLOR)
+		(*lp)->line[*x].attr =
+			attributes | (win->battr & ~__COLOR);
+	else
+		(*lp)->line[*x].attr = attributes | win->battr;
+
+	if (*x == win->maxx - 1)
+		(*lp)->flags |= __ISPASTEOL;
+	else
+		(*x)++;
+
+#ifdef DEBUG
+	__CTRACE(__CTRACE_INPUT,
+		 "ADDBYTES: 2: y = %d, x = %d, firstch = %d, lastch = %d\n",
+		 *y, *x, *win->alines[*y]->firstchp,
+		 *win->alines[*y]->lastchp);
+#endif
+	__sync(win);
+	return OK;
 }
 
 /*
@@ -314,52 +344,58 @@ _cursesi_addbyte(WINDOW *win, __LINE **lp, int *y, int *x, int c,
  */
 int
 _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
-		  const cchar_t *wch)
+		  const cchar_t *wch, int char_interp)
 {
 #ifndef HAVE_WCHAR
-	return (ERR);
+	return ERR;
 #else
-	int sx = 0, ex = 0, cw = 0, i = 0, newx = 0;
-	__LDATA *lp = &win->lines[*y]->line[*x], *tp = NULL;
+	int sx = 0, ex = 0, cw = 0, i = 0, newx = 0, tabsize;
+	__LDATA *lp = &win->alines[*y]->line[*x], *tp = NULL;
 	nschar_t *np = NULL;
 	cchar_t cc;
 	attr_t attributes;
 
-	/* special characters handling */
-	switch (wch->vals[0]) {
-	case L'\b':
-		if (--*x < 0)
+	if (char_interp) {
+		/* special characters handling */
+		switch (wch->vals[0]) {
+		case L'\b':
+			if (--*x < 0)
+				*x = 0;
+			win->curx = *x;
+			return OK;
+		case L'\r':
 			*x = 0;
-		win->curx = *x;
-		return OK;
-	case L'\r':
-		*x = 0;
-		return OK;
-	case L'\n':
-		wclrtoeol(win);
-		PSYNCH_IN;
-		*x = 0;
-		(*lnp)->flags &= ~__ISPASTEOL;
-		if (*y == win->scr_b) {
-			if (!(win->flags & __SCROLLOK))
-				return ERR;
-			PSYNCH_OUT;
-			scroll(win);
+			win->curx = *x;
+			return OK;
+		case L'\n':
+			wclrtoeol(win);
 			PSYNCH_IN;
-		} else {
-			(*y)++;
+			*x = 0;
+			(*lnp)->flags &= ~__ISPASTEOL;
+			if (*y == win->scr_b) {
+				if (!(win->flags & __SCROLLOK))
+					return ERR;
+				PSYNCH_OUT;
+				scroll(win);
+				PSYNCH_IN;
+			} else {
+				(*y)++;
+			}
+			PSYNCH_OUT;
+			return OK;
+		case L'\t':
+			cc.vals[0] = L' ';
+			cc.elements = 1;
+			cc.attributes = win->wattr;
+			tabsize = win->screen->TABSIZE;
+			newx = tabsize - (*x % tabsize);
+			for (i = 0; i < newx; i++) {
+				if (wadd_wch(win, &cc) == ERR)
+					return ERR;
+				(*x)++;
+			}
+			return OK;
 		}
-		PSYNCH_OUT;
-		return OK;
-	case L'\t':
-		cc.vals[0] = L' ';
-		cc.elements = 1;
-		cc.attributes = win->wattr;
-		for (i = 0; i < 8 - (*x % 8); i++) {
-			if (wadd_wch(win, &cc) == ERR)
-				return ERR;
-		}
-		return OK;
 	}
 
 	/* check for non-spacing character */
@@ -391,7 +427,7 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 		return OK;
 	}
 	/* check for new line first */
-	if ((*lnp)->flags & __ISPASTEOL) {
+	if (char_interp && ((*lnp)->flags & __ISPASTEOL)) {
 		*x = 0;
 		(*lnp)->flags &= ~__ISPASTEOL;
 		if (*y == win->scr_b) {
@@ -403,8 +439,8 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 		} else {
 			(*y)++;
 		}
-		(*lnp) = win->lines[*y];
-		lp = &win->lines[*y]->line[*x];
+		(*lnp) = win->alines[*y];
+		lp = &win->alines[*y]->line[*x];
 	}
 	/* clear out the current character */
 	cw = WCOL(*lp);
@@ -417,7 +453,7 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 				 "_cursesi_addwchar: clear current char (%d,%d)\n",
 				 *y, sx);
 #endif /* DEBUG */
-			tp = &win->lines[*y]->line[sx];
+			tp = &win->alines[*y]->line[sx];
 			tp->ch = (wchar_t) btowc((int) win->bch);
 			if (_cursesi_copy_nsp(win->bnsp, tp) == ERR)
 				return ERR;
@@ -434,6 +470,9 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 
 	/* check for enough space before the end of line */
 	cw = wcwidth(wch->vals[0]);
+	if (cw < 0)
+		cw = 1;
+
 	if (cw > win->maxx - *x) {
 #ifdef DEBUG
 		__CTRACE(__CTRACE_INPUT,
@@ -465,8 +504,8 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 		} else {
 			(*y)++;
 		}
-		lp = &win->lines[*y]->line[0];
-		(*lnp) = win->lines[*y];
+		lp = &win->alines[*y]->line[0];
+		(*lnp) = win->alines[*y];
 	}
 	win->cury = *y;
 
@@ -508,7 +547,7 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 
 	if (wch->elements > 1) {
 		for (i = 1; i < wch->elements; i++) {
-			np = (nschar_t *)malloc(sizeof(nschar_t));
+			np = malloc(sizeof(nschar_t));
 			if (!np)
 				return ERR;;
 			np->ch = wch->vals[i];
@@ -536,6 +575,7 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 		/* Mark as "continuation" cell */
 		tp->attr |= __WCWIDTH;
 	}
+
 	if (*x == win->maxx) {
 		(*lnp)->flags |= __ISPASTEOL;
 		newx = win->maxx - 1 + win->ch_off;
@@ -549,13 +589,13 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 		/* clear the remining of the current characer */
 		if (*x && *x < win->maxx) {
 			ex = sx + cw;
-			tp = &win->lines[*y]->line[ex];
+			tp = &win->alines[*y]->line[ex];
 			while (ex < win->maxx && WCOL(*tp) < 0) {
 #ifdef DEBUG
 				__CTRACE(__CTRACE_INPUT,
-					 "_cursesi_addwchar: clear "
-					 "remaining of current char (%d,%d)nn",
-					 *y, ex);
+				    "_cursesi_addwchar: clear "
+				    "remaining of current char (%d,%d)nn",
+				    *y, ex);
 #endif /* DEBUG */
 				tp->ch = (wchar_t) btowc((int) win->bch);
 				if (_cursesi_copy_nsp(win->bnsp, tp) == ERR)
@@ -574,6 +614,7 @@ _cursesi_addwchar(WINDOW *win, __LINE **lnp, int *y, int *x,
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INPUT, "add_wch: %d : 0x%x\n", lp->ch, lp->attr);
 #endif /* DEBUG */
+	__sync(win);
 	return OK;
 #endif
 }

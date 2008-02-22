@@ -1,4 +1,4 @@
-/*	$NetBSD: ne2000var.h,v 1.18 2006/07/11 22:48:37 peter Exp $	*/
+/*	$NetBSD: ne2000var.h,v 1.27 2013/08/11 12:34:16 rkujawa Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,12 +46,16 @@ struct ne2000_softc {
 		NE2000_TYPE_DL10019,
 		NE2000_TYPE_DL10022,
 		NE2000_TYPE_AX88190,
-		NE2000_TYPE_AX88790
+		NE2000_TYPE_AX88790,
+		NE2000_TYPE_RTL8019,
+		NE2000_TYPE_AX88796
 	} sc_type;
 	int sc_useword;
+	u_int sc_quirk;			/* quirks passed from attachments */
+#define	NE2000_QUIRK_8BIT	0x0001	/* force 8bit mode even on NE2000 */
 };
 
-int	ne2000_attach(struct ne2000_softc *, u_int8_t *);
+int	ne2000_attach(struct ne2000_softc *, uint8_t *);
 int	ne2000_detect(bus_space_tag_t, bus_space_handle_t,
 	    bus_space_tag_t, bus_space_handle_t);
 int	ne2000_detach(struct ne2000_softc *, int);
@@ -67,6 +64,8 @@ int	ne2000_detach(struct ne2000_softc *, int);
 int	ne2000_ipkdb_attach(struct ipkdb_if *);
 #endif
 
-void	ne2000_power(int, void *);
+/* pmf(9) */
+bool ne2000_suspend(device_t, const pmf_qual_t *);
+bool ne2000_resume(device_t, const pmf_qual_t *);
 
 #endif /* _DEV_IC_NE2000VAR_H_ */

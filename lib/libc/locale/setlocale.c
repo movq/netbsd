@@ -1,11 +1,8 @@
-/*	$NetBSD: setlocale.c,v 1.52 2007/09/29 07:55:45 tnozaki Exp $	*/
+/* $NetBSD: setlocale.c,v 1.65 2018/01/04 20:57:29 kamil Exp $ */
 
-/*
- * Copyright (c) 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * This code is derived from software contributed to Berkeley by
- * Paul Borman at Krystal Technologies.
+/*-
+ * Copyright (c)2008 Citrus Project,
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,14 +12,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
  * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -34,389 +28,168 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)setlocale.c	8.1 (Berkeley) 7/4/93";
-#else
-__RCSID("$NetBSD: setlocale.c,v 1.52 2007/09/29 07:55:45 tnozaki Exp $");
-#endif
+__RCSID("$NetBSD: setlocale.c,v 1.65 2018/01/04 20:57:29 kamil Exp $");
 #endif /* LIBC_SCCS and not lint */
 
-#define _CTYPE_PRIVATE
-
 #include "namespace.h"
-#include <sys/localedef.h>
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <assert.h>
-#include <limits.h>
-#include <ctype.h>
-#define __SETLOCALE_SOURCE__
+#include <sys/localedef.h>
 #include <locale.h>
+#include <limits.h>
 #include <paths.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#ifdef WITH_RUNE
-#include "rune.h"
-#include "rune_local.h"
-#else
-#include "ctypeio.h"
-#endif
-#include "timeio.h"
 
-#ifdef CITRUS
-#include <citrus/citrus_namespace.h>
-#include <citrus/citrus_region.h>
-#include <citrus/citrus_lookup.h>
-#include <citrus/citrus_bcs.h>
-#else
-#include <locale/aliasname_local.h>
-#define _lookup_alias(p, a, b, s, c)	__unaliasname((p), (a), (b), (s))
-#define _bcs_strcasecmp(a, b)		strcasecmp((a), (b))
-#endif
+#include "setlocale_local.h"
 
-#define _LOCALE_SYM_FORCE	"/force"
+const char *_PathLocale = NULL;
 
-/*
- * Category names for getenv()
- */
-static const char *const categories[_LC_LAST] = {
-    "LC_ALL",
-    "LC_COLLATE",
-    "LC_CTYPE",
-    "LC_MONETARY",
-    "LC_NUMERIC",
-    "LC_TIME",
-    "LC_MESSAGES"
+static _locale_set_t all_categories[_LC_LAST] = {
+	[LC_ALL     ] = &_generic_LC_ALL_setlocale,
+	[LC_COLLATE ] = &_dummy_LC_COLLATE_setlocale,
+	[LC_CTYPE   ] = &_citrus_LC_CTYPE_setlocale,
+	[LC_MONETARY] = &_citrus_LC_MONETARY_setlocale,
+	[LC_NUMERIC ] = &_citrus_LC_NUMERIC_setlocale,
+	[LC_TIME    ] = &_citrus_LC_TIME_setlocale,
+	[LC_MESSAGES] = &_citrus_LC_MESSAGES_setlocale,
 };
 
-/*
- * Current locales for each category
- */
-static char current_categories[_LC_LAST][32] = {
-    "C",
-    "C",
-    "C",
-    "C",
-    "C",
-    "C",
-    "C"
+/* XXX Consider locking the list. Race condition leaks memory. */
+static SLIST_HEAD(, _locale_cache_t) caches = {
+    __UNCONST(&_C_cache)
 };
 
-/*
- * The locales we are going to try and load
- */
-static char new_categories[_LC_LAST][32];
-
-static char current_locale_string[_LC_LAST * 33];
-
-static char *currentlocale __P((void));
-static void revert_to_default __P((int));
-static int force_locale_enable __P((int));
-static int load_locale_sub __P((int, const char *, int));
-static char *loadlocale __P((int));
-static const char *__get_locale_env __P((int));
-
-char *
-__setlocale(category, locale)
-	int category;
-	const char *locale;
+int
+_setlocale_cache(locale_t loc, struct _locale_cache_t *cache)
 {
-	int i, loadlocale_success;
-	size_t len;
-	const char *env, *r;
+	const char *monetary_name = loc->part_name[LC_MONETARY];
+	const char *numeric_name = loc->part_name[LC_NUMERIC];
+	_NumericLocale *numeric = loc->part_impl[LC_NUMERIC];
+	_MonetaryLocale *monetary = loc->part_impl[LC_MONETARY];
+	struct lconv *ldata;
 
-	if (issetugid() ||
-	    (!_PathLocale && !(_PathLocale = getenv("PATH_LOCALE"))))
-		_PathLocale = _PATH_LOCALE;
+	struct _locale_cache_t *old_cache;
 
-	if (category < 0 || category >= _LC_LAST)
-		return (NULL);
-
-	if (!locale)
-		return (category ?
-		    current_categories[category] : currentlocale());
-
-	/*
-	 * Default to the current locale for everything.
-	 */
-	for (i = 1; i < _LC_LAST; ++i)
-		(void)strlcpy(new_categories[i], current_categories[i],
-		    sizeof(new_categories[i]));
-
-	/*
-	 * Now go fill up new_categories from the locale argument
-	 */
-	if (!*locale) {
-		if (category == LC_ALL) {
-			for (i = 1; i < _LC_LAST; ++i) {
-				env = __get_locale_env(i);
-				(void)strlcpy(new_categories[i], env,
-				    sizeof(new_categories[i]));
-			}
-		}
-		else {
-			env = __get_locale_env(category);
-			(void)strlcpy(new_categories[category], env,
-				sizeof(new_categories[category]));
-		}
-	} else if (category) {
-		(void)strlcpy(new_categories[category], locale,
-		    sizeof(new_categories[category]));
-	} else {
-		if ((r = strchr(locale, '/')) == 0) {
-			for (i = 1; i < _LC_LAST; ++i) {
-				(void)strlcpy(new_categories[i], locale,
-				    sizeof(new_categories[i]));
-			}
-		} else {
-			for (i = 1;;) {
-				_DIAGASSERT(*r == '/' || *r == 0);
-				_DIAGASSERT(*locale != 0);
-				if (*locale == '/')
-					return (NULL);	/* invalid format. */
-				len = r - locale;
-				if (len + 1 > sizeof(new_categories[i]))
-					return (NULL);	/* too long */
-				(void)memcpy(new_categories[i], locale, len);
-				new_categories[i][len] = '\0';
-				if (*r == 0)
-					break;
-				_DIAGASSERT(*r == '/');
-				if (*(locale = ++r) == 0)
-					/* slash followed by NUL */
-					return (NULL);
-				/* skip until NUL or '/' */
-				while (*r && *r != '/')
-					r++;
-				if (++i == _LC_LAST)
-					return (NULL);	/* too many slashes. */
-			}
-			if (i + 1 != _LC_LAST)
-				return (NULL);	/* too few slashes. */
-		}
-	}
-
-	if (category)
-		return (loadlocale(category));
-
-	loadlocale_success = 0;
-	for (i = 1; i < _LC_LAST; ++i) {
-		if (loadlocale(i) != NULL)
-			loadlocale_success = 1;
-	}
-
-	/*
-	 * If all categories failed, return NULL; we don't need to back
-	 * changes off, since none happened.
-	 */
-	if (!loadlocale_success)
-		return NULL;
-
-	return (currentlocale());
-}
-
-static char *
-currentlocale()
-{
-	int i;
-
-	(void)strlcpy(current_locale_string, current_categories[1],
-	    sizeof(current_locale_string));
-
-	for (i = 2; i < _LC_LAST; ++i)
-		if (strcmp(current_categories[1], current_categories[i])) {
-			(void)snprintf(current_locale_string,
-			    sizeof(current_locale_string), "%s/%s/%s/%s/%s/%s",
-			    current_categories[1], current_categories[2],
-			    current_categories[3], current_categories[4],
-			    current_categories[5], current_categories[6]);
-			break;
-		}
-	return (current_locale_string);
-}
-
-static void
-revert_to_default(category)
-	int category;
-{
-	switch (category) {
-	case LC_CTYPE:
-#ifdef WITH_RUNE
-		(void)_xpg4_setrunelocale("C");
-#else
-		if (_ctype_ != _C_ctype_) {
-			/* LINTED const castaway */
-			free((void *)_ctype_);
-			_ctype_ = _C_ctype_;
-		}
-		if (_toupper_tab_ != _C_toupper_) {
-			/* LINTED const castaway */
-			free((void *)_toupper_tab_);
-			_toupper_tab_ = _C_toupper_;
-		}
-		if (_tolower_tab_ != _C_tolower_) {
-			/* LINTED const castaway */
-			free((void *)_tolower_tab_);
-			_tolower_tab_ = _C_tolower_;
-		}
-#endif
-		break;
-	case LC_TIME:
-		if (_CurrentTimeLocale != &_DefaultTimeLocale) {
-			free((void *)_CurrentTimeLocale);
-			_CurrentTimeLocale = &_DefaultTimeLocale;
-		}
-		break;
-	case LC_MESSAGES:
-	case LC_COLLATE:
-	case LC_MONETARY:
-	case LC_NUMERIC:
-		break;
-	}
-}
-
-static int
-force_locale_enable(category)
-	int category;
-{
-	revert_to_default(category);
-
-	return 0;
-}
-
-static int
-load_locale_sub(category, locname, isspecial)
-	int category;
-	const char *locname;
-	int isspecial;
-{
-	char name[PATH_MAX];
-
-	/* check for the default locales */
-	if (!strcmp(new_categories[category], "C") ||
-	    !strcmp(new_categories[category], "POSIX")) {
-		revert_to_default(category);
+	SLIST_FOREACH(old_cache, &caches, cache_link) {
+		if (monetary_name != old_cache->monetary_name &&
+		    strcmp(monetary_name, old_cache->monetary_name) != 0)
+			continue;
+		if (numeric_name != old_cache->numeric_name &&
+		    strcmp(numeric_name, old_cache->numeric_name) != 0)
+			continue;
+		loc->cache = old_cache;
+		free(cache);
 		return 0;
 	}
 
-	/* check whether special symbol */
-	if (isspecial && _bcs_strcasecmp(locname, _LOCALE_SYM_FORCE) == 0)
-		return force_locale_enable(category);
-
-	/* sanity check */
-	if (strchr(locname, '/') != NULL)
-		return -1;
-
-	(void)snprintf(name, sizeof(name), "%s/%s/%s",
-		       _PathLocale, locname, categories[category]);
-
-	switch (category) {
-	case LC_CTYPE:
-#ifdef WITH_RUNE
-		if (_xpg4_setrunelocale(__UNCONST(locname)))
+	if (cache == NULL) {
+		cache = malloc(sizeof(*cache));
+		if (cache == NULL)
 			return -1;
-#else
-		if (!__loadctype(name))
-			return -1;
-#endif
-		break;
-
-	case LC_MESSAGES:
-		/*
-		 * XXX we don't have LC_MESSAGES support yet,
-		 * but catopen may use the value of LC_MESSAGES category.
-		 * so return successfully if locale directory is present.
-		 */
-		(void)snprintf(name, sizeof(name), "%s/%s",
-			_PathLocale, locname);
-		/* local */
-		{
-			struct stat st;
-			if (stat(name, &st) < 0)
-				return -1;
-			if (!S_ISDIR(st.st_mode))
-				return -1;
-		}
-		break;
-
-	case LC_TIME:
-		if (!__loadtime(name))
-			return -1;
-		break;
-	case LC_COLLATE:
-	case LC_MONETARY:
-	case LC_NUMERIC:
-		return -1;
 	}
 
+	cache->monetary_name = monetary_name;
+	cache->numeric_name = numeric_name;
+	ldata = &cache->ldata;
+
+	ldata->decimal_point = __UNCONST(numeric->decimal_point);
+	ldata->thousands_sep = __UNCONST(numeric->thousands_sep);
+	ldata->grouping      = __UNCONST(numeric->grouping);
+
+	ldata->int_curr_symbol   = __UNCONST(monetary->int_curr_symbol);
+	ldata->currency_symbol   = __UNCONST(monetary->currency_symbol);
+	ldata->mon_decimal_point = __UNCONST(monetary->mon_decimal_point);
+	ldata->mon_thousands_sep = __UNCONST(monetary->mon_thousands_sep);
+	ldata->mon_grouping      = __UNCONST(monetary->mon_grouping);
+	ldata->positive_sign     = __UNCONST(monetary->positive_sign);
+	ldata->negative_sign     = __UNCONST(monetary->negative_sign);
+
+	ldata->int_frac_digits    = monetary->int_frac_digits;
+	ldata->frac_digits        = monetary->frac_digits;
+	ldata->p_cs_precedes      = monetary->p_cs_precedes;
+	ldata->p_sep_by_space     = monetary->p_sep_by_space;
+	ldata->n_cs_precedes      = monetary->n_cs_precedes;
+	ldata->n_sep_by_space     = monetary->n_sep_by_space;
+	ldata->p_sign_posn        = monetary->p_sign_posn;
+	ldata->n_sign_posn        = monetary->n_sign_posn;
+	ldata->int_p_cs_precedes  = monetary->int_p_cs_precedes;
+	ldata->int_n_cs_precedes  = monetary->int_n_cs_precedes;
+	ldata->int_p_sep_by_space = monetary-> int_p_sep_by_space;
+	ldata->int_n_sep_by_space = monetary->int_n_sep_by_space;
+	ldata->int_p_sign_posn    = monetary->int_p_sign_posn;
+	ldata->int_n_sign_posn    = monetary->int_n_sign_posn;
+	SLIST_INSERT_HEAD(&caches, cache, cache_link);
+
+	loc->cache = cache;
 	return 0;
 }
 
-static char *
-loadlocale(category)
-	int category;
+_locale_set_t
+_find_category(int category)
 {
-	char aliaspath[PATH_MAX], loccat[PATH_MAX], buf[PATH_MAX];
-	const char *alias;
+	static int initialised;
 
-	_DIAGASSERT(0 < category && category < _LC_LAST);
+	if (!initialised) {
+		if (issetugid() || ((_PathLocale == NULL &&
+		    (_PathLocale = getenv("PATH_LOCALE")) == NULL) ||
+		    *_PathLocale == '\0'))
+			_PathLocale = _PATH_LOCALE;
+		initialised = 1;
+	}
 
-	if (strcmp(new_categories[category], current_categories[category]) == 0)
-		return (current_categories[category]);
-
-	/* (1) non-aliased file */
-	if (!load_locale_sub(category, new_categories[category], 0))
-		goto success;
-
-	/* (2) lookup locname/catname type alias */
-	(void)snprintf(aliaspath, sizeof(aliaspath),
-		       "%s/" _LOCALE_ALIAS_NAME, _PathLocale);
-	(void)snprintf(loccat, sizeof(loccat), "%s/%s",
-		       new_categories[category], categories[category]);
-	alias = _lookup_alias(aliaspath, loccat, buf, sizeof(buf),
-			      _LOOKUP_CASE_SENSITIVE);
-	if (!load_locale_sub(category, alias, 1))
-		goto success;
-
-	/* (3) lookup locname type alias */
-	alias = _lookup_alias(aliaspath, new_categories[category],
-			      buf, sizeof(buf), _LOOKUP_CASE_SENSITIVE);
-	if (!load_locale_sub(category, alias, 1))
-		goto success;
-
+	if (category >= LC_ALL && category < _LC_LAST)
+		return all_categories[category];
 	return NULL;
-
-success:
-	(void)strlcpy(current_categories[category],
-		new_categories[category],
-		sizeof(current_categories[category]));
-	return current_categories[category];
 }
 
-static const char *
-__get_locale_env(category)
-	int category;
+const char *
+_get_locale_env(const char *category)
 {
-	const char *env;
+	const char *name;
 
-	_DIAGASSERT(category != LC_ALL);
+	/* 1. check LC_ALL */
+	name = (const char *)getenv("LC_ALL");
+	if (name == NULL || *name == '\0') {
+		/* 2. check LC_* */
+		name = (const char *)getenv(category);
+		if (name == NULL || *name == '\0') {
+			/* 3. check LANG */
+			name = getenv("LANG");
+		}
+	}
+	if (name == NULL || *name == '\0' || strchr(name, '/'))
+		/* 4. if none is set, fall to "C" */
+		name = _C_LOCALE;
+	return name;
+}
 
-	/* 1. check LC_ALL. */
-	env = getenv(categories[0]);
+char *
+__setlocale(int category, const char *name)
+{
+	_locale_set_t sl;
+	locale_t loc;
+	struct _locale_cache_t *cache;
+	const char *result;
 
-	/* 2. check LC_* */
-	if (!env || !*env)
-		env = getenv(categories[category]);
+	sl = _find_category(category);
+	if (sl == NULL)
+		return NULL;
+	cache = malloc(sizeof(*cache));
+	if (cache == NULL)
+		return NULL;
+	loc = _current_locale();
+	result = (*sl)(name, loc);
+	_setlocale_cache(loc, cache);
+	return __UNCONST(result);
+}
 
-	/* 3. check LANG */
-	if (!env || !*env)
-		env = getenv("LANG");
+char *
+setlocale(int category, const char *locale)
+{
 
-	/* 4. if none is set, fall to "C" */
-	if (!env || !*env || strchr(env, '/'))
-		env = "C";
+	/* locale may be NULL */
 
-	return env;
+	__mb_len_max_runtime = MB_LEN_MAX;
+	return __setlocale(category, locale);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ansi.h,v 1.6 2007/10/17 19:53:03 garbled Exp $	*/
+/*	$NetBSD: ansi.h,v 1.10 2011/07/17 20:54:36 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -31,8 +31,10 @@
  *	@(#)ansi.h	8.2 (Berkeley) 1/4/94
  */
 
-#ifndef	_ANSI_H_
-#define	_ANSI_H_
+#ifndef	_X86_64_ANSI_H_
+#define	_X86_64_ANSI_H_
+
+#ifdef __x86_64__
 
 #include <sys/cdefs.h>
 
@@ -51,29 +53,18 @@
 #define	_BSD_PTRDIFF_T_		long		/* ptr1 - ptr2 */
 #define	_BSD_SIZE_T_		unsigned long	/* sizeof() */
 #define	_BSD_SSIZE_T_		long		/* byte count or error */
-#define	_BSD_TIME_T_		int		/* time() */
-#ifdef __GNUC__
-#define	_BSD_VA_LIST_		__builtin_va_list /* GCC built-in type */
-#else
-#define _BSD_VA_LIST_		char *		/* XXXfvdl should be ok? */
-#endif
+#define	_BSD_TIME_T_		__int64_t	/* time() */
 #define	_BSD_CLOCKID_T_		int		/* clockid_t */
 #define	_BSD_TIMER_T_		int		/* timer_t */
 #define	_BSD_SUSECONDS_T_	int		/* suseconds_t */
 #define	_BSD_USECONDS_T_	unsigned int	/* useconds_t */
 #define	_BSD_WCHAR_T_		int		/* wchar_t */
 #define	_BSD_WINT_T_		int		/* wint_t */
-#define _BSD_WCTRANS_T_		void *		/* wctrans_t */
-#define _BSD_WCTYPE_T_		void *		/* wctype_t */
 
-/*
- * mbstate_t is an opaque object to keep conversion state, during multibyte
- * stream conversions.  The content must not be referenced by user programs.
- */
-typedef union {
-	__int64_t __mbstateL;	/* for alignment */
-	char __mbstate8[128];
-} __mbstate_t;
-#define	_BSD_MBSTATE_T_		__mbstate_t	/* mbstate_t */
+#else	/*	!__x86_64__	*/
 
-#endif	/* _ANSI_H_ */
+#include <i386/ansi.h>
+
+#endif	/*	__x86_64__	*/
+
+#endif	/* _X86_64_ANSI_H_ */

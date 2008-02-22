@@ -1,10 +1,39 @@
-#	$NetBSD: genassym.cf,v 1.10 2007/10/17 19:57:46 garbled Exp $
+#	$NetBSD: genassym.cf,v 1.15 2013/09/07 15:56:11 tsutsui Exp $
+
+#
+# Copyright (c) 1982, 1990, 1993
+#	The Regents of the University of California.  All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# 3. Neither the name of the University nor the names of its contributors
+#    may be used to endorse or promote products derived from this software
+#    without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+#	from: @(#)genassym.c	8.3 (Berkeley) 1/4/94
+#
 
 #
 # Copyright (c) 1994, 1995 Gordon W. Ross
 # Copyright (c) 1993 Adam Glass
-# Copyright (c) 1982, 1990, 1993
-#	The Regents of the University of California.  All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -97,13 +126,13 @@ define	ENA_FPP				ENA_FPP
 define	SEGMAP_BASE			SEGMAP_BASE
 
 # sun3 memory map
-define	USRSTACK			USRSTACK
+define	USRSTACK3			USRSTACK3
 define	SUN3_MONSTART			SUN3_MONSTART
 define	SUN3_PROM_BASE			SUN3_PROM_BASE
 define	SUN3_MONEND			SUN3_MONEND
 
 # kernel-isms
-define	KERNBASE			KERNBASE
+define	KERNBASE3			KERNBASE3
 define	USPACE				USPACE
 define	PAGE_SIZE			PAGE_SIZE
 define	NBSG				NBSG
@@ -125,7 +154,7 @@ define	ENAMETOOLONG			ENAMETOOLONG
 #
 
 # lwp & proc fields and values
-define	L_ADDR			offsetof(struct lwp, l_addr)
+define	L_PCB			offsetof(struct lwp, l_addr)
 define	L_PRIORITY		offsetof(struct lwp, l_priority)
 define	L_STAT			offsetof(struct lwp, l_stat)
 define	L_WCHAN			offsetof(struct lwp, l_wchan)
@@ -133,6 +162,7 @@ define	L_PROC			offsetof(struct lwp, l_proc)
 define	L_MD_REGS		offsetof(struct lwp, l_md.md_regs)
 define	L_MD_FLAGS		offsetof(struct lwp, l_md.md_flags)
 define	P_FLAG			offsetof(struct proc, p_flag)
+define	P_RASLIST		offsetof(struct proc, p_raslist)
 define	P_VMSPACE		offsetof(struct proc, p_vmspace)
 
 # lwp fields and values
@@ -157,6 +187,9 @@ define	PCB_REGS		offsetof(struct pcb, pcb_regs[0])
 define	PCB_ONFAULT		offsetof(struct pcb, pcb_onfault)
 define	PCB_FPCTX		offsetof(struct pcb, pcb_fpregs)
 define	SIZEOF_PCB		sizeof(struct pcb)
+
+# frame offsets
+define	TF_PC			offsetof(struct frame, f_pc)
 
 # exception frame offset/sizes
 define	FR_SP			offsetof(struct trapframe, tf_regs[15])

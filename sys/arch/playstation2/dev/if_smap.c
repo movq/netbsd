@@ -1,4 +1,4 @@
-/*	$NetBSD: if_smap.c,v 1.11 2008/01/19 22:10:15 dyoung Exp $	*/
+/*	$NetBSD: if_smap.c,v 1.27 2018/06/26 06:47:59 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,35 +30,28 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_smap.c,v 1.11 2008/01/19 22:10:15 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_smap.c,v 1.27 2018/06/26 06:47:59 msaitoh Exp $");
 
 #include "debug_playstation2.h"
 
-#include "bpfilter.h"
-#include "rnd.h"
-
 #include <sys/param.h>
 #include <sys/systm.h>
-
+#include <sys/device.h>
 #include <sys/syslog.h>
 #include <sys/mbuf.h>
 #include <sys/ioctl.h>
+#include <sys/rndsource.h>
 #include <sys/socket.h>
 
 #include <playstation2/ee/eevar.h>
 
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
-
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
-
 #include <net/if_ether.h>
 #include <net/if_media.h>
+#include <net/bpf.h>
 
-#include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
 #include <netinet/in.h>
@@ -73,11 +59,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_smap.c,v 1.11 2008/01/19 22:10:15 dyoung Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
 
 #include <playstation2/dev/spdvar.h>
 #include <playstation2/dev/spdreg.h>
@@ -123,9 +104,7 @@ struct smap_softc {
 	int tx_done_index, tx_start_index;
 	int rx_done_index;
 
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
+	krndsource_t rnd_source;
 };
 
 #define DEVNAME		(sc->emac3.dev.dv_xname)
@@ -135,7 +114,7 @@ struct smap_softc {
 STATIC int smap_match(struct device *, struct cfdata *, void *);
 STATIC void smap_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL(smap, sizeof (struct smap_softc),
+CFATTACH_DECL_NEW(smap, sizeof (struct smap_softc),
     smap_match, smap_attach, NULL, NULL);
 
 STATIC int smap_intr(void *);
@@ -264,21 +243,19 @@ smap_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	if_attach(ifp);
+	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, emac3->eaddr);
 	
 	spd_intr_establish(SPD_NIC, smap_intr, sc);
 
-#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, DEVNAME,
-	    RND_TYPE_NET, 0);
-#endif
+	    RND_TYPE_NET, RND_FLAG_DEFAULT);
 }
 
 int
 smap_ioctl(struct ifnet *ifp, u_long command, void *data)
 {
 	struct smap_softc *sc = ifp->if_softc;
-	struct ifreq *ifr = (struct ifreq *) data;
 	int error, s;
 
 	s = splnet();
@@ -342,11 +319,8 @@ smap_intr(void *arg)
 	
 	/* if transmission is pending, start here */
 	ifp = &sc->ethercom.ec_if;
-	if (IFQ_IS_EMPTY(&ifp->if_snd) == 0)
-		smap_start(ifp);
-#if NRND > 0
+	if_schedule_deferred_start(ifp);
 	rnd_add_uint32(&sc->rnd_source, cause | sc->tx_fifo_ptr << 16);
-#endif
 
 	return (1);
 }
@@ -412,13 +386,11 @@ smap_rxeof(void *arg)
 		}
 
 		m->m_data += 2; /* for alignment */
-		m->m_pkthdr.rcvif = ifp;
+		m_set_rcvif(m, ifp);
 		m->m_pkthdr.len = m->m_len = sz;
 		memcpy(mtod(m, void *), (void *)sc->rx_buf, sz);
 
 	next_packet:
-		ifp->if_ipackets++;
-
 		_reg_write_1(SMAP_RXFIFO_FRAME_DEC_REG8, 1);
 
 		/* free descriptor */
@@ -427,13 +399,8 @@ smap_rxeof(void *arg)
 		d->stat	= SMAP_RXDESC_EMPTY;
 		_wbflush();
 		
-		if (m != NULL) {
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m);
-#endif
-			(*ifp->if_input)(ifp, m);
-		}
+		if (m != NULL)
+			if_percpuq_enqueue(ifp->if_percpuq, m);
 	}
 	sc->rx_done_index = i;
 
@@ -530,10 +497,7 @@ smap_start(struct ifnet *ifp)
 
 		IFQ_DEQUEUE(&ifp->if_snd, m0);
 		KDASSERT(m0 != NULL);
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0, BPF_D_OUT);
 
 		p = (u_int8_t *)sc->tx_buf;
 		q = p + sz;
@@ -645,10 +609,10 @@ smap_stop(struct ifnet *ifp, int disable)
 
 	mii_down(&sc->emac3.mii);
 
+	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
+
 	if (disable)
 		emac3_disable();
-
-	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 }
 
 /*
@@ -702,7 +666,7 @@ smap_desc_init(struct smap_softc *sc)
 	sc->tx_done_index = 0;
 	sc->rx_done_index = 0;
 
-	/* intialize entry */
+	/* initialize entry */
 	d = sc->tx_desc;
 	for (i = 0; i < SMAP_DESC_MAX; i++, d++) {
 		d->stat = 0;

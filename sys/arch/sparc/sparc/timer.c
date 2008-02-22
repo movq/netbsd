@@ -1,4 +1,4 @@
-/*	$NetBSD: timer.c,v 1.23 2007/12/03 15:34:22 ad Exp $ */
+/*	$NetBSD: timer.c,v 1.34 2018/01/12 09:47:44 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.23 2007/12/03 15:34:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.34 2018/01/12 09:47:44 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -69,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: timer.c,v 1.23 2007/12/03 15:34:22 ad Exp $");
 #include <sys/timetc.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <sparc/sparc/timerreg.h>
 #include <sparc/sparc/timervar.h>
@@ -79,69 +79,115 @@ static struct intrhand level14;
 
 static u_int timer_get_timecount(struct timecounter *);
 
+void *sched_cookie;
+
 /*
  * timecounter local state
  */
 static struct counter {
-	volatile u_int *cntreg;	/* counter register */
+	__cpu_simple_lock_t lock; /* protects access to offset, reg, last* */
+	volatile u_int *cntreg;	/* counter register to read */
 	u_int limit;		/* limit we count up to */
-	u_int offset;		/* accumulated offet due to wraps */
+	u_int offset;		/* accumulated offset due to wraps */
 	u_int shift;		/* scaling for valid bits */
 	u_int mask;		/* valid bit mask */
-} cntr;
+	u_int lastcnt;		/* the last* values are used to notice */
+	u_int lastres;		/* and fix up cases where it would appear */
+	u_int lastoffset;	/* time went backwards. */
+} cntr __aligned(CACHE_LINE_SIZE);
 
 /*
  * define timecounter
  */
 
 static struct timecounter counter_timecounter = {
-	timer_get_timecount,	/* get_timecount */
-	0,			/* no poll_pps */
-	~0u,			/* counter_mask */
-	0,                      /* frequency - set at initialisation */
-	"timer-counter",	/* name */
-	100,			/* quality */
-	&cntr			/* private reference */
+	.tc_get_timecount =	timer_get_timecount,
+	.tc_poll_pps =		NULL,
+	.tc_counter_mask =	~0u,
+	.tc_frequency =		0,
+	.tc_name =		"timer-counter",
+	.tc_quality =		100,
+	.tc_priv =		&cntr,
 };
 
 /*
  * timer_get_timecount provide current counter value
  */
+__attribute__((__optimize__("Os")))
 static u_int
 timer_get_timecount(struct timecounter *tc)
 {
-	struct counter *ctr = (struct counter *)tc->tc_priv;
-
-	u_int c, res, r;
+	u_int cnt, res, fixup, offset;
 	int s;
 
-
+	/*
+	 * We use splhigh/__cpu_simple_lock here as we don't want
+	 * any mutex or lockdebug overhead.  The lock protects a
+	 * bunch of the members of cntr that are written here to
+	 * deal with the various minor races to be observed and
+	 * worked around.
+	 */
 	s = splhigh();
+	__cpu_simple_lock(&cntr.lock);
+	res = cnt = *cntr.cntreg;
 
-	res = c = *ctr->cntreg;
+	res &= ~TMR_LIMIT;
+	offset = cntr.offset;
 
-	res  &= ~TMR_LIMIT;
-
-	if (c != res) {
-		r = ctr->limit;
+	/*
+	 * There are 3 cases here:
+	 * - limit reached, interrupt not yet processed.
+	 * - count reset but offset the same, race between handling
+	 *   the interrupt and tickle_tc() updating the offset.
+	 * - normal case.
+	 *
+	 * For the first two cases, add the limit so that we avoid
+	 * time going backwards.
+	 */
+	if (cnt != res) {
+		fixup = cntr.limit;
+	} else if (res < cntr.lastcnt && offset == cntr.lastoffset) {
+		fixup = cntr.limit;
 	} else {
-		r = 0;
+		fixup = 0;
 	}
+
+	cntr.lastcnt = res;
+	cntr.lastoffset = offset;
 	
-	res >>= ctr->shift;
-	res  &= ctr->mask;
+	res >>= cntr.shift;
+	res  &= cntr.mask;
 
-	res += r + ctr->offset;
+	res += fixup + offset;
 
+	/*
+	 * This handles early-boot cases where the counter resets twice
+	 * before the offset is updated, and we have a stupid check to
+	 * ensure overflow hasn't happened.
+	 */
+	if (res < cntr.lastres && res > (TMR_MASK+1) << 3)
+		res = cntr.lastres + 1;
+
+	cntr.lastres = res;
+
+	__cpu_simple_unlock(&cntr.lock);
 	splx(s);
 
 	return res;
 }
 
 void
-tickle_tc()
+tickle_tc(void)
 {
+
 	if (timecounter->tc_get_timecount == timer_get_timecount) {
+		/*
+		 * This could be protected by cntr.lock/splhigh but the update
+		 * happens at IPL10 already and as a 32 bit value it should
+		 * never be seen as a partial update, so skip it here.  This
+		 * also probably slows down the actual offset update, making
+		 * one of the cases above more likely to need the workaround.
+		 */
 		cntr.offset += cntr.limit;
 	}
 }
@@ -160,11 +206,12 @@ timerattach(volatile int *cntreg, volatile int *limreg)
 	 * Note: sun4m clocks tick with 500ns periods.
 	 */
 	for (timerblurb = 1; ; timerblurb++) {
-		volatile int discard;
+		int discard;
 		u_int t1;
 
 		/* Reset counter register by writing some large limit value */
 		discard = *limreg;
+		__USE(discard);
 		*limreg = tmr_ustolim(TMR_MASK-1);
 
 		t0 = *cntreg;
@@ -188,11 +235,14 @@ timerattach(volatile int *cntreg, volatile int *limreg)
 		if ((1 << t0) & prec)
 			break;
 
+	__cpu_simple_lock_init(&cntr.lock);
+
 	cntr.shift = t0;
 	cntr.mask = (1 << (31-t0))-1;
 	counter_timecounter.tc_frequency = 1000000 * (TMR_SHIFT - t0 + 1);
 	
-	printf(": delay constant %d, frequency = %" PRIu64 " Hz\n", timerblurb, counter_timecounter.tc_frequency);
+	printf(": delay constant %d, frequency = %" PRIu64 " Hz\n",
+	       timerblurb, counter_timecounter.tc_frequency);
 
 #if defined(SUN4) || defined(SUN4C)
 	if (CPU_ISSUN4 || CPU_ISSUN4C) {
@@ -210,9 +260,10 @@ timerattach(volatile int *cntreg, volatile int *limreg)
 		cntr.limit = tmr_ustolim4m(tick);
 	}
 #endif
+
 	/* link interrupt handlers */
-	intr_establish(10, 0, &level10, NULL);
-	intr_establish(14, 0, &level14, NULL);
+	intr_establish(10, 0, &level10, NULL, true);
+	intr_establish(14, 0, &level14, NULL, true);
 
 	/* Establish a soft interrupt at a lower level for schedclock */
 	sched_cookie = sparc_softintr_establish(IPL_SCHED, schedintr, NULL);
@@ -221,6 +272,9 @@ timerattach(volatile int *cntreg, volatile int *limreg)
 
 	cntr.cntreg = cntreg;
 	cntr.limit >>= cntr.shift;
+
+	/* start at non-zero, so that cntr.oldoffset is less */
+	cntr.offset = cntr.limit;
 
 	tc_init(&counter_timecounter);
 }
@@ -231,7 +285,7 @@ timerattach(volatile int *cntreg, volatile int *limreg)
  * The sun4 timer must be probed.
  */
 static int
-timermatch_obio(struct device *parent, struct cfdata *cf, void *aux)
+timermatch_obio(device_t parent, cfdata_t cf, void *aux)
 {
 #if defined(SUN4) || defined(SUN4M)
 	union obio_attach_args *uoba = aux;
@@ -268,7 +322,7 @@ timermatch_obio(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-timerattach_obio(struct device *parent, struct device *self, void *aux)
+timerattach_obio(device_t parent, device_t self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 
@@ -288,14 +342,14 @@ timerattach_obio(struct device *parent, struct device *self, void *aux)
 	}
 }
 
-CFATTACH_DECL(timer_obio, sizeof(struct device),
+CFATTACH_DECL_NEW(timer_obio, 0,
     timermatch_obio, timerattach_obio, NULL, NULL);
 
 /*
  * Only sun4c attaches a timer at mainbus
  */
 static int
-timermatch_mainbus(struct device *parent, struct cfdata *cf, void *aux)
+timermatch_mainbus(device_t parent, cfdata_t cf, void *aux)
 {
 #if defined(SUN4C)
 	struct mainbus_attach_args *ma = aux;
@@ -307,7 +361,7 @@ timermatch_mainbus(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-timerattach_mainbus(struct device *parent, struct device *self, void *aux)
+timerattach_mainbus(device_t parent, device_t self, void *aux)
 {
 
 #if defined(SUN4C)
@@ -315,5 +369,5 @@ timerattach_mainbus(struct device *parent, struct device *self, void *aux)
 #endif /* SUN4C */
 }
 
-CFATTACH_DECL(timer_mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(timer_mainbus, 0,
     timermatch_mainbus, timerattach_mainbus, NULL, NULL);

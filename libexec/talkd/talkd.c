@@ -1,4 +1,4 @@
-/*	$NetBSD: talkd.c,v 1.18 2007/01/08 17:51:34 christos Exp $	*/
+/*	$NetBSD: talkd.c,v 1.21 2009/03/16 01:04:32 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)talkd.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: talkd.c,v 1.18 2007/01/08 17:51:34 christos Exp $");
+__RCSID("$NetBSD: talkd.c,v 1.21 2009/03/16 01:04:32 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -73,20 +73,18 @@ CTL_RESPONSE	response;
 int	sockt = STDIN_FILENO;
 int	debug = 0;
 int	logging = 0;
-long	lastmsgtime;
+time_t	lastmsgtime;
 
 char	hostname[MAXHOSTNAMELEN + 1];
 
 #define TIMEOUT 30
 #define MAXIDLE 120
 
-static void timeout __P((int));
-int	main __P((int, char *[]));
+static void timeout(int);
+int	main(int, char *[]);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	CTL_MSG *mp = &request;
 	int cc, ch;
@@ -146,8 +144,7 @@ main(argc, argv)
 }
 
 void
-timeout(n)
-	int n;
+timeout(int n)
 {
 	int save_errno = errno;
 

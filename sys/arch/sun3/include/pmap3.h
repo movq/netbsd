@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap3.h,v 1.43 2008/01/04 22:03:26 ad Exp $	*/
+/*	$NetBSD: pmap3.h,v 1.49 2013/01/07 16:58:09 chs Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,24 +29,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef _KERNEL
 /*
  * Physical map structures exported to the VM code.
- * XXX - Does user-level code really see this struct?
  */
-
-#include <sys/simplelock.h>
 
 struct pmap {
 	unsigned char   	*pm_segmap; 	/* soft copy of segmap */
 	int             	pm_ctxnum;	/* MMU context number */
-	struct simplelock	pm_lock;    	/* lock on pmap */
-	int             	pm_refcount;	/* reference count */
+	u_int             	pm_refcount;	/* reference count */
 	int             	pm_version;
 };
-
-#ifdef _KERNEL
-extern	struct pmap	kernel_pmap_store;
-#define	pmap_kernel()	(&kernel_pmap_store)
 
 /*
  * We give the pmap code a chance to resolve faults by
@@ -64,8 +50,8 @@ extern	struct pmap	kernel_pmap_store;
 int _pmap_fault(struct vm_map *, vaddr_t, vm_prot_t);
 
 /* This lets us have some say in choosing VA locations. */
-extern void pmap_prefer(vaddr_t, vaddr_t *);
-#define PMAP_PREFER(fo, ap, sz, td) pmap_prefer((fo), (ap))
+extern void pmap_prefer(vaddr_t, vaddr_t *, int);
+#define PMAP_PREFER(fo, ap, sz, td) pmap_prefer((fo), (ap), (td))
 
 /* This needs to be a macro for kern_sysctl.c */
 extern segsz_t pmap_resident_pages(pmap_t);
@@ -106,3 +92,12 @@ pmap_remove_all(struct pmap *pmap)
 #define	PMAP_SPEC	0x1C	/* mask to get all above. */
 
 #endif	/* _KERNEL */
+
+/* MMU specific segment size */
+#define	SEGSHIFT	17	        /* LOG2(NBSG) */
+#define	NBSG		(1 << SEGSHIFT)	/* bytes/segment */
+#define	SEGOFSET	(NBSG - 1)	/* byte offset into segment */
+
+#define	sun3_round_seg(x)	((((vaddr_t)(x)) + SEGOFSET) & ~SEGOFSET)
+#define	sun3_trunc_seg(x)	((vaddr_t)(x) & ~SEGOFSET)
+#define	sun3_seg_offset(x)	((vaddr_t)(x) & SEGOFSET)

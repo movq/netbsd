@@ -1,4 +1,4 @@
-/*	$NetBSD: bufcache.c,v 1.21 2008/01/24 17:32:58 ad Exp $	*/
+/*	$NetBSD: bufcache.c,v 1.28 2017/06/09 00:13:29 chs Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,11 +31,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bufcache.c,v 1.21 2008/01/24 17:32:58 ad Exp $");
+__RCSID("$NetBSD: bufcache.c,v 1.28 2017/06/09 00:13:29 chs Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#define __EXPOSE_MOUNT
 #include <sys/mount.h>
 #include <sys/sysctl.h>
 #include <sys/vnode.h>
@@ -81,16 +75,10 @@ struct ml_entry {
 	struct mount ml_mount;
 };
 
-static struct nlist namelist[] = {
-#define	X_BUFMEM	0
-	{ .n_name = "_bufmem" },
-	{ .n_name = NULL },
-};
-
 static struct vcache vcache[VCACHE_SIZE];
 static LIST_HEAD(mount_list, ml_entry) mount_list;
 
-static u_long bufmem;
+static uint64_t bufmem;
 static u_int nbuf, pgwidth, kbwidth;
 static struct uvmexp_sysctl uvmexp;
 
@@ -140,11 +128,21 @@ showbufcache(void)
 	int tbuf, i, lastrow;
 	double tvalid, tsize;
 	struct ml_entry *ml;
+	size_t len;
+	static int mib[] = { -1, 0 };
 
-	NREAD(X_BUFMEM, &bufmem, sizeof(bufmem));
+	if (mib[0] == -1) {
+		len = __arraycount(mib);
+		if (sysctlnametomib("vm.bufmem", mib, &len) == -1)
+			error("can't get \"vm.bufmem\" mib: %s",
+			    strerror(errno));
+	}
+	len = sizeof(bufmem);
+	if (sysctl(mib, 2, &bufmem, &len, NULL, 0) == -1)
+		error("can't get \"vm.bufmem\": %s", strerror(errno));
 
 	mvwprintw(wnd, 0, 0,
-	    "   %*d metadata buffers using             %*ld kBytes of "
+	    "   %*d metadata buffers using             %*"PRIu64" kBytes of "
 	    "memory (%2.0f%%).",
 	    pgwidth, nbuf, kbwidth, bufmem / 1024,
 	    ((bufmem * 100.0) + 0.5) / getpagesize() / uvmexp.npages);
@@ -225,13 +223,6 @@ showbufcache(void)
 int
 initbufcache(void)
 {
-	if (namelist[0].n_type == 0) {
-		if (kvm_nlist(kd, namelist)) {
-			nlisterr(namelist);
-			return(0);
-		}
-	}
-
 	fetchuvmexp();
 	pgwidth = (int)(floor(log10((double)uvmexp.npages)) + 1);
 	kbwidth = (int)(floor(log10(uvmexp.npages * getpagesize() / 1024.0)) +
@@ -262,7 +253,6 @@ fetchbufcache(void)
 	int count;
 	struct buf_sysctl *bp, *buffers;
 	struct vnode *vn;
-	struct mount *mt;
 	struct ml_entry *ml;
 	int mib[6];
 	size_t size;
@@ -332,8 +322,7 @@ again:
 					mp = sd.sd_mountpoint;
 			}
 			if (mp != NULL)
-				mt = ml_lookup(mp,
-				    bp->b_bufsize,
+				(void)ml_lookup(mp, bp->b_bufsize,
 				    bp->b_bcount);
 		}
 	}

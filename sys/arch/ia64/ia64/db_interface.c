@@ -1,4 +1,4 @@
-/* $NetBSD: db_interface.c,v 1.4 2007/10/17 19:54:59 garbled Exp $ */
+/* $NetBSD: db_interface.c,v 1.8 2014/04/03 17:05:58 martin Exp $ */
 
 /*-
  * Copyright (c) 2003-2005 Marcel Moolenaar
@@ -28,28 +28,28 @@
  * SUCH DAMAGE.
  */
 
-/* 
+/*
  * Mach Operating System
  * Copyright (c) 1992,1991,1990 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS ``AS IS''
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
+ *
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  *
@@ -80,7 +80,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.4 2007/10/17 19:54:59 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.8 2014/04/03 17:05:58 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -110,8 +110,15 @@ int	db_active = 0;
 
 db_regs_t *ddb_regp;
 
+static void db_show_vector(db_expr_t, bool, db_expr_t, const char *);
+
 const struct db_command db_machine_command_table[] = {
-	{  DDB_ADD_CMD(NULL,     NULL,           0,NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("vector", db_show_vector, 0,
+	  "Display information about vectors",
+	  "[vector]",
+	  "   vector:\tthe vector to show (all vectors otherwise)") },
+
+	{ DDB_ADD_CMD(NULL, NULL, 0, NULL,NULL,NULL) },
 };
 
 static int
@@ -361,10 +368,7 @@ const struct db_variable * const db_eregs = db_regs + sizeof(db_regs)/sizeof(db_
  * Read bytes from kernel address space for debugger.
  */
 void
-db_read_bytes(addr, size, data)
-	vaddr_t		addr;
-	register size_t	size;
-	register char	*data;
+db_read_bytes(vaddr_t addr, register size_t size, register char *data)
 {
 	register char	*src;
 
@@ -377,10 +381,7 @@ db_read_bytes(addr, size, data)
  * Write bytes to kernel address space for debugger.
  */
 void
-db_write_bytes(addr, size, data)
-	vaddr_t		addr;
-	register size_t	size;
-	register const char *data;
+db_write_bytes(vaddr_t addr, register size_t size, register const char *data)
 {
 	register char	*dst;
 
@@ -457,17 +458,17 @@ db_disasm(db_addr_t loc, bool altfmt)
 
 		/* Predicate. */
 		if (i->i_oper[0].o_value != 0) {
-			asm_operand(i->i_oper+0, buf, loc);
+			asm_operand(i->i_oper+0, buf, sizeof(buf), loc);
 			db_printf("(%s) ", buf);
 		} else
 			db_printf("   ");
 
 		/* Mnemonic & completers. */
-		asm_mnemonic(i->i_op, buf);
+		asm_mnemonic(i->i_op, buf, sizeof(buf));
 		db_printf(buf);
 		n = 0;
 		while (n < i->i_ncmpltrs) {
-			asm_completer(i->i_cmpltr + n, buf);
+			asm_completer(i->i_cmpltr + n, buf, sizeof(buf));
 			db_printf(buf);
 			n++;
 		}
@@ -483,7 +484,7 @@ db_disasm(db_addr_t loc, bool altfmt)
 				else
 					db_printf(",");
 			}
-			asm_operand(i->i_oper + n, buf, loc);
+			asm_operand(i->i_oper + n, buf, sizeof(buf), loc);
 			db_printf(buf);
 			n++;
 		}
@@ -500,4 +501,24 @@ out:
 	if (slot > 2)
 		slot = 16;
 	return (loc + slot);
+}
+
+
+static void
+db_show_vector(db_expr_t addr, bool have_addr, db_expr_t count,
+	       const char *modif)
+{
+	extern void db_print_vector(u_int, int);
+	u_int vector;
+
+	if (have_addr) {
+		vector = ((addr >> 4) % 16) * 10 + (addr % 16);
+		if (vector >= 256)
+			db_printf("error: vector %u not in range [0..255]\n",
+			    vector);
+		else
+			db_print_vector(vector, 1);
+	} else
+		for (vector = 0; vector < 256; vector++)
+			db_print_vector(vector, 0);
 }

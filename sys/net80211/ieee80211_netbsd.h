@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_netbsd.h,v 1.14 2008/02/13 16:04:03 skrll Exp $ */
+/* $NetBSD: ieee80211_netbsd.h,v 1.21 2018/05/03 17:14:37 maxv Exp $ */
 /*-
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
@@ -153,27 +153,6 @@ typedef kmutex_t acl_lock_t;
 #define	ACL_UNLOCK(_as)			IEEE80211_UNLOCK_IMPL(_as, as_lock)
 #define	ACL_LOCK_ASSERT(_as)		IEEE80211_LOCK_ASSERT_IMPL(_as, as_lock)
 
-/*
- * Node reference counting definitions.
- *
- * ieee80211_node_initref	initialize the reference count to 1
- * ieee80211_node_incref	add a reference
- * ieee80211_node_decref	remove a reference
- * ieee80211_node_dectestref	remove a reference and return 1 if this
- *				is the last reference, otherwise 0
- * ieee80211_node_refcnt	reference count for printing (only)
- */
-
-#define ieee80211_node_initref(_ni) \
-	do { ((_ni)->ni_refcnt = 1); } while (0)
-#define ieee80211_node_incref(_ni) \
-	do { (_ni)->ni_refcnt++; } while (0)
-#define	ieee80211_node_decref(_ni) \
-	do { (_ni)->ni_refcnt--; } while (0)
-struct ieee80211_node;
-int ieee80211_node_dectestref(struct ieee80211_node *ni);
-#define	ieee80211_node_refcnt(_ni)	(_ni)->ni_refcnt
-
 struct ifqueue;
 void	ieee80211_drain_ifq(struct ifqueue *);
 
@@ -251,23 +230,16 @@ struct ieee80211_michael_event {
 #define	RTM_IEEE80211_REJOIN	108	/* station re-associate (ap mode) */
 
 #ifdef _KERNEL
-#define	__offsetof	offsetof
 #define	ticks	hardclock_ticks
-#define	ovbcopy(__src, __dst, __n)	((void)memmove(__dst, __src, __n))
-
-#define TAILQ_FOREACH_SAFE(var, head, field, nextvar)			\
-	for (var = TAILQ_FIRST(head);					\
-	     var != NULL && (nextvar = TAILQ_NEXT(var, field), 1);	\
-	     var = nextvar)
 
 void	if_printf(struct ifnet *, const char *, ...);
-void	m_align(struct mbuf *, int);
-int	m_append(struct mbuf *, int, const void *);
 void	get_random_bytes(void *, size_t);
 
 void	ieee80211_sysctl_attach(struct ieee80211com *);
 void	ieee80211_sysctl_detach(struct ieee80211com *);
 void	ieee80211_load_module(const char *);
+
+void	ieee80211_rssadapt_sysctl_setup(struct sysctllog **);
 
 void	ieee80211_init(void);
 #define	IEEE80211_CRYPTO_SETUP(name)				\
@@ -275,5 +247,8 @@ void	ieee80211_init(void);
 	__link_set_add_text(ieee80211_funcs, name);		\
 	static void name(void)
 #endif
+
+void	m_align(struct mbuf *, int);
+int	m_append(struct mbuf *, int, const void *);
 
 #endif /* !_NET80211_IEEE80211_NETBSD_H_ */

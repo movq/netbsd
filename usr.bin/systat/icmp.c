@@ -1,4 +1,4 @@
-/*	$NetBSD: icmp.c,v 1.9 2006/10/22 16:43:24 christos Exp $	*/
+/*	$NetBSD: icmp.c,v 1.13 2014/06/03 22:22:41 joerg Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Andrew Doran <ad@NetBSD.org>
@@ -29,10 +29,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: icmp.c,v 1.9 2006/10/22 16:43:24 christos Exp $");
+__RCSID("$NetBSD: icmp.c,v 1.13 2014/06/03 22:22:41 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <sys/sysctl.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -49,9 +50,9 @@ __RCSID("$NetBSD: icmp.c,v 1.9 2006/10/22 16:43:24 christos Exp $");
 #define RHD(row, str) mvwprintw(wnd, row, 45, str);
 #define BD(row, str) LHD(row, str); RHD(row, str)
 #define SHOW(stat, row, col) \
-    mvwprintw(wnd, row, col, "%9llu", (unsigned long long)curstat.stat)
-#define SHOW2(type, row) SHOW(icps_inhist[type], row, 0); \
-    SHOW(icps_outhist[type], row, 35)
+    mvwprintw(wnd, row, col, "%9llu", (unsigned long long)curstat[stat])
+#define SHOW2(type, row) SHOW(ICMP_STAT_INHIST + type, row, 0); \
+    SHOW(ICMP_STAT_OUTHIST + type, row, 35)
 
 enum update {
 	UPDATE_TIME,
@@ -60,14 +61,9 @@ enum update {
 };
 
 static enum update update = UPDATE_TIME;
-static struct icmpstat curstat;
-static struct icmpstat newstat;
-static struct icmpstat oldstat;
-
-static struct nlist namelist[] = {
-	{ .n_name = "_icmpstat" },
-	{ .n_name = NULL }
-};
+static uint64_t curstat[ICMP_NSTATS];
+static uint64_t newstat[ICMP_NSTATS];
+static uint64_t oldstat[ICMP_NSTATS];
 
 WINDOW *
 openicmp(void)
@@ -127,23 +123,23 @@ showicmp(void)
 	int i;
 
 	for (i = tin = tout = 0; i <= ICMP_MAXTYPE; i++) {
-		tin += curstat.icps_inhist[i];
-		tout += curstat.icps_outhist[i];
+		tin += curstat[ICMP_STAT_INHIST + i];
+		tout += curstat[ICMP_STAT_OUTHIST + i];
 	}
 
-	tin += curstat.icps_badcode + curstat.icps_badlen + 
-	    curstat.icps_checksum + curstat.icps_tooshort;
+	tin += curstat[ICMP_STAT_BADCODE] + curstat[ICMP_STAT_BADLEN] + 
+	    curstat[ICMP_STAT_CHECKSUM] + curstat[ICMP_STAT_TOOSHORT];
 	mvwprintw(wnd, 2, 0, "%9lu", tin);
 	mvwprintw(wnd, 2, 35, "%9lu", tout);
 
-	SHOW(icps_badcode, 3, 0);
-	SHOW(icps_badlen, 4, 0);
-	SHOW(icps_checksum, 5, 0);
-	SHOW(icps_tooshort, 6, 0);
-	SHOW(icps_error, 3, 35);
-	SHOW(icps_oldshort, 4, 35);
-	SHOW(icps_oldicmp, 5, 35);
-	SHOW(icps_reflect, 6, 35);
+	SHOW(ICMP_STAT_BADCODE, 3, 0);
+	SHOW(ICMP_STAT_BADLEN, 4, 0);
+	SHOW(ICMP_STAT_CHECKSUM, 5, 0);
+	SHOW(ICMP_STAT_TOOSHORT, 6, 0);
+	SHOW(ICMP_STAT_ERROR, 3, 35);
+	SHOW(ICMP_STAT_OLDSHORT, 4, 35);
+	SHOW(ICMP_STAT_OLDICMP, 5, 35);
+	SHOW(ICMP_STAT_REFLECT, 6, 35);
 
 	SHOW2(ICMP_ECHOREPLY, 9);
 	SHOW2(ICMP_ECHO, 10);
@@ -151,58 +147,48 @@ showicmp(void)
 	SHOW2(ICMP_REDIRECT, 12);
 	SHOW2(ICMP_TIMXCEED, 13);
 	SHOW2(ICMP_PARAMPROB, 14);
-	SHOW(icps_inhist[ICMP_ROUTERADVERT], 15, 0);
-	SHOW(icps_outhist[ICMP_ROUTERSOLICIT], 15, 35);
+	SHOW(ICMP_STAT_INHIST + ICMP_ROUTERADVERT, 15, 0);
+	SHOW(ICMP_STAT_OUTHIST + ICMP_ROUTERSOLICIT, 15, 35);
 }
 
 int
 initicmp(void)
 {
 
-	if (namelist[0].n_type == 0) {
-		if (kvm_nlist(kd, namelist)) {
-			nlisterr(namelist);
-			return(0);
-		}
-		if (namelist[0].n_type == 0) {
-			error("No namelist");
-			return(0);
-		}
-	}
-	
 	return (1);
 }
 
 void
 fetchicmp(void)
 {
-	int i;
+	size_t i, size = sizeof(newstat);
 
-	KREAD((void *)namelist[0].n_value, &newstat, sizeof(newstat));
+	if (sysctlbyname("net.inet.icmp.stats", newstat, &size, NULL, 0) == -1)
+		return;
 
-	ADJINETCTR(curstat, oldstat, newstat, icps_badcode);
-	ADJINETCTR(curstat, oldstat, newstat, icps_badlen);
-	ADJINETCTR(curstat, oldstat, newstat, icps_checksum);
-	ADJINETCTR(curstat, oldstat, newstat, icps_tooshort);
-	ADJINETCTR(curstat, oldstat, newstat, icps_error);
-	ADJINETCTR(curstat, oldstat, newstat, icps_oldshort);
-	ADJINETCTR(curstat, oldstat, newstat, icps_oldicmp);
-	ADJINETCTR(curstat, oldstat, newstat, icps_reflect);
+	xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_BADCODE);
+	xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_BADLEN);
+	xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_CHECKSUM);
+	xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_TOOSHORT);
+	xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_ERROR);
+	xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_OLDSHORT);
+	xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_OLDICMP);
+	xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_REFLECT);
 
 	for (i = 0; i <= ICMP_MAXTYPE; i++) {
-		ADJINETCTR(curstat, oldstat, newstat, icps_inhist[i]);
-		ADJINETCTR(curstat, oldstat, newstat, icps_outhist[i]);
+		xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_INHIST + i);
+		xADJINETCTR(curstat, oldstat, newstat, ICMP_STAT_OUTHIST + i);
 	}
 
 	if (update == UPDATE_TIME)
-		memcpy(&oldstat, &newstat, sizeof(oldstat));
+		memcpy(oldstat, newstat, sizeof(oldstat));
 }
 
 void
 icmp_boot(char *args)
 {
 
-	memset(&oldstat, 0, sizeof(oldstat));
+	memset(oldstat, 0, sizeof(oldstat));
 	update = UPDATE_BOOT;
 }
 
@@ -211,7 +197,7 @@ icmp_run(char *args)
 {
 
 	if (update != UPDATE_RUN) {
-		memcpy(&oldstat, &newstat, sizeof(oldstat));
+		memcpy(oldstat, newstat, sizeof(oldstat));
 		update = UPDATE_RUN;
 	}
 }
@@ -221,7 +207,7 @@ icmp_time(char *args)
 {
 
 	if (update != UPDATE_TIME) {
-		memcpy(&oldstat, &newstat, sizeof(oldstat));
+		memcpy(oldstat, newstat, sizeof(oldstat));
 		update = UPDATE_TIME;
 	}
 }
@@ -231,5 +217,5 @@ icmp_zero(char *args)
 {
 
 	if (update == UPDATE_RUN)
-		memcpy(&oldstat, &newstat, sizeof(oldstat));
+		memcpy(oldstat, newstat, sizeof(oldstat));
 }

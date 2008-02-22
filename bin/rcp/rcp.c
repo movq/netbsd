@@ -1,4 +1,4 @@
-/*	$NetBSD: rcp.c,v 1.44 2006/12/15 22:45:34 christos Exp $	*/
+/*	$NetBSD: rcp.c,v 1.49 2012/05/07 15:22:54 chs Exp $	*/
 
 /*
  * Copyright (c) 1983, 1990, 1992, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rcp.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: rcp.c,v 1.44 2006/12/15 22:45:34 christos Exp $");
+__RCSID("$NetBSD: rcp.c,v 1.49 2012/05/07 15:22:54 chs Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,6 +56,7 @@ __RCSID("$NetBSD: rcp.c,v 1.44 2006/12/15 22:45:34 christos Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <netdb.h>
 #include <pwd.h>
 #include <signal.h>
@@ -96,6 +97,9 @@ main(int argc, char *argv[])
 	int ch, fflag, tflag;
 	char *targ;
 	const char *shell;
+
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
 
 	fflag = tflag = 0;
 	while ((ch = getopt(argc, argv, OPTIONS)) != -1)
@@ -358,10 +362,10 @@ syserr:			run_err("%s: %s", name, strerror(errno));
 			 * Make it compatible with possible future
 			 * versions expecting microseconds.
 			 */
-			(void)snprintf(buf, sizeof(buf), "T%ld %ld %ld %ld\n",
-			    (long)stb.st_mtimespec.tv_sec,
+			(void)snprintf(buf, sizeof(buf), "T%lld %ld %lld %ld\n",
+			    (long long)stb.st_mtimespec.tv_sec,
 			    (long)stb.st_mtimespec.tv_nsec / 1000,
-			    (long)stb.st_atimespec.tv_sec,
+			    (long long)stb.st_atimespec.tv_sec,
 			    (long)stb.st_atimespec.tv_nsec / 1000);
 			(void)write(rem, buf, strlen(buf));
 			if (response() < 0)
@@ -424,10 +428,10 @@ rsource(char *name, struct stat *statp)
 	else
 		last++;
 	if (pflag) {
-		(void)snprintf(path, sizeof(path), "T%ld %ld %ld %ld\n",
-		    (long)statp->st_mtimespec.tv_sec,
+		(void)snprintf(path, sizeof(path), "T%lld %ld %lld %ld\n",
+		    (long long)statp->st_mtimespec.tv_sec,
 		    (long)statp->st_mtimespec.tv_nsec / 1000,
-		    (long)statp->st_atimespec.tv_sec,
+		    (long long)statp->st_atimespec.tv_sec,
 		    (long)statp->st_atimespec.tv_nsec / 1000);
 		(void)write(rem, path, strlen(path));
 		if (response() < 0) {
@@ -481,6 +485,8 @@ sink(int argc, char *argv[])
 	char ch, *cp, *np, *targ, *vect[1], buf[BUFSIZ];
 	const char *why;
 	off_t size;
+	char *namebuf = NULL;
+	size_t cursize = 0;
 
 #define	atime	tv[0]
 #define	mtime	tv[1]
@@ -503,7 +509,7 @@ sink(int argc, char *argv[])
 	for (first = 1;; first = 0) {
 		cp = buf;
 		if (read(rem, cp, 1) <= 0)
-			return;
+			goto out;
 		if (*cp++ == '\n')
 			SCREWUP("unexpected <newline>");
 		do {
@@ -524,7 +530,7 @@ sink(int argc, char *argv[])
 		}
 		if (buf[0] == 'E') {
 			(void)write(rem, "", 1);
-			return;
+			goto out;
 		}
 
 		if (ch == '\n')
@@ -578,16 +584,22 @@ sink(int argc, char *argv[])
 		if (*cp++ != ' ')
 			SCREWUP("size not delimited");
 		if (targisdir) {
-			static char *namebuf;
-			static int cursize;
+			char *newnamebuf;
 			size_t need;
 
-			need = strlen(targ) + strlen(cp) + 250;
+			need = strlen(targ) + strlen(cp) + 2;
 			if (need > cursize) {
-				if (!(namebuf = malloc(need)))
+				need += 256;
+				newnamebuf = realloc(namebuf, need);
+				if (newnamebuf != NULL) {
+					namebuf = newnamebuf;
+					cursize = need;
+				} else {
 					run_err("%s", strerror(errno));
+					exit(1);
+				}
 			}
-			(void)snprintf(namebuf, need, "%s%s%s", targ,
+			(void)snprintf(namebuf, cursize, "%s%s%s", targ,
 			    *targ ? "/" : "", cp);
 			np = namebuf;
 		} else
@@ -715,6 +727,13 @@ bad:			run_err("%s: %s", np, strerror(errno));
 			break;
 		}
 	}
+
+out:
+	if (namebuf) {
+		free(namebuf);
+	}
+	return;
+
 screwup:
 	run_err("protocol error: %s", why);
 	exit(1);

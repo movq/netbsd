@@ -1,8 +1,8 @@
-/*	$NetBSD: veriexecctl.c,v 1.31 2008/02/15 15:33:56 elad Exp $	*/
+/*	$NetBSD: veriexecctl.c,v 1.40 2017/01/10 20:48:12 christos Exp $	*/
 
 /*-
  * Copyright 2005 Elad Efrat <elad@NetBSD.org>
- * Copyright 2005 Brett Lymn <blymn@netbsd.org> 
+ * Copyright 2005 Brett Lymn <blymn@netbsd.org>
  *
  * All rights reserved.
  *
@@ -43,6 +43,7 @@
 #include <err.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 
 #include <prop/proplib.h>
 
@@ -64,7 +65,7 @@ extern int yyparse(void);
 int gfd, verbose = 0, error = EXIT_SUCCESS;
 size_t line = 0;
 
-static void
+__dead static void
 usage(void)
 {
 	const char *progname = getprogname();
@@ -124,12 +125,12 @@ print_query(prop_dictionary_t qp, char *file)
 {
 	struct statvfs sv;
 	const char *v;
-	int i;
+	size_t i;
 	uint8_t u8;
 	char buf[64];
 
 	if (statvfs(file, &sv) != 0)
-		err(1, "Can't statvfs() `%s'\n", file);
+		err(EXIT_FAILURE, "Can't statvfs() `%s'", file);
 
 	printf("Filename: %s\n", file);
 	printf("Mount: %s\n", sv.f_mntonname);
@@ -144,7 +145,7 @@ print_query(prop_dictionary_t qp, char *file)
 	 v = dict_getd(qp, "fp");
 	for (i = 0; i < prop_data_size(prop_dictionary_get(qp, "fp")); i++)
 		printf("%02x", v[i] & 0xff);
-	printf("\n");	
+	printf("\n");
 }
 
 static char *
@@ -181,11 +182,11 @@ print_entry(prop_dictionary_t entry)
 
 	/* Get fingerprint in ASCII. */
 	len = prop_data_size(prop_dictionary_get(entry, "fp"));
-	len *= 2;
-	fp = calloc(1, len + 1);
+	fp = calloc(1, len*2 + 1);
 	v = dict_getd(entry, "fp");
-	for (i = 0; i < len; i++)
-		snprintf(fp, len + 1, "%s%02x", fp, v[i] & 0xff);
+	for (i = 0; i < len; i++) {
+		snprintf(&fp[i*2], 3, "%02x", v[i] & 0xff);
+	}
 
 	/* Get flags. */
 	memset(flags, 0, sizeof(flags));
@@ -228,12 +229,12 @@ main(int argc, char **argv)
 	argv += optind;
 
 	if ((gfd = open(VERIEXEC_DEVICE, O_RDWR, 0)) == -1)
-		err(1, "Cannot open `%s'", VERIEXEC_DEVICE);
+		err(EXIT_FAILURE, "Cannot open `%s'", VERIEXEC_DEVICE);
 
 	/*
 	 * Handle the different commands we can do.
 	 */
-	if (argc <= 2 && strcasecmp(argv[0], "load") == 0) {
+	if ((argc == 1 || argc == 2) && strcasecmp(argv[0], "load") == 0) {
 		extern FILE *yyin;
 		const char *file;
 		int lfd;
@@ -245,33 +246,34 @@ main(int argc, char **argv)
 
 		lfd = open(file, O_RDONLY|O_EXLOCK, 0);
 		if (lfd == -1)
-			err(1, "Cannot open `%s'", argv[1]);
+			err(EXIT_FAILURE, "Cannot open `%s'", file);
 
 		yyin = fdopen(lfd, "r");
-
 		yyparse();
+		fclose(yyin);
 
-		(void)fclose(yyin);
+		if (error != EXIT_SUCCESS)
+			errx(1, "Cannot load '%s'", file);
 	} else if (argc == 2 && strcasecmp(argv[0], "delete") == 0) {
 		prop_dictionary_t dp;
 		struct stat sb;
 
 		if (stat(argv[1], &sb) == -1)
-			err(1, "Can't stat `%s'", argv[1]);
+			err(EXIT_FAILURE, "Can't stat `%s'", argv[1]);
 
 		/*
 		 * If it's a regular file, remove it. If it's a directory,
 		 * remove the entire table. If it's neither, abort.
 		 */
 		if (!S_ISDIR(sb.st_mode) && !S_ISREG(sb.st_mode))
-			errx(1, "`%s' is not a regular file or directory.",
+			errx(EXIT_FAILURE, "`%s' is not a regular file or directory.",
 			    argv[1]);
 
 		dp = prop_dictionary_create();
 		dict_sets(dp, "file", argv[1]);
 
 		if (prop_dictionary_send_ioctl(dp, gfd, VERIEXEC_DELETE) != 0)
-			err(1, "Error deleting `%s'", argv[1]);
+			err(EXIT_FAILURE, "Error deleting `%s'", argv[1]);
 
 		prop_object_release(dp);
 	} else if (argc == 2 && strcasecmp(argv[0], "query") == 0) {
@@ -286,9 +288,9 @@ main(int argc, char **argv)
 		    &rqp);
 		if (r) {
 			if (r == ENOENT)
-				errx(1, "No Veriexec entry for `%s'", argv[1]);
+				errx(EXIT_FAILURE, "No Veriexec entry for `%s'", argv[1]);
 
-			err(1, "Error querying `%s'", argv[1]);
+			err(EXIT_FAILURE, "Error querying `%s'", argv[1]);
 		}
 
 		if (rqp != NULL) {
@@ -303,7 +305,7 @@ main(int argc, char **argv)
 
 		if (prop_array_recv_ioctl(gfd, VERIEXEC_DUMP,
 		    &entries) == -1)
-			err(1, "Error dumping tables");
+			err(EXIT_FAILURE, "Error dumping tables");
 
 		nentries = prop_array_count(entries);
 		for (i = 0; i < nentries; i++)
@@ -312,7 +314,7 @@ main(int argc, char **argv)
 		prop_object_release(entries);
 	} else if (argc == 1 && strcasecmp(argv[0], "flush") == 0) {
 		if (ioctl(gfd, VERIEXEC_FLUSH) == -1)
-			err(1, "Cannot flush Veriexec database");
+			err(EXIT_FAILURE, "Cannot flush Veriexec database");
 	} else
 		usage();
 

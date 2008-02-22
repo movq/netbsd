@@ -1,4 +1,4 @@
-/*	$NetBSD: indent_globs.h,v 1.8 2003/08/07 11:14:08 agc Exp $	*/
+/*	$NetBSD: indent_globs.h,v 1.10 2014/09/04 04:06:07 mrg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -222,6 +222,8 @@ EXTERN int     extra_expression_indent; /* True if continuation lines from the
 					 * "for(e;e;e)" should be indented an extra
 					 * tab stop so that they don't conflict with
 					 * the code that follows */
+EXTERN int    use_tabs;			/* set true to use tabs for spacing,
+					 * false uses all spaces */
 
 /* -troff font state information */
 
@@ -343,9 +345,9 @@ EXTERN struct parser_state match_state[5];
 int compute_code_target(void);
 int compute_label_target(void);
 int count_spaces(int, char *);
-void diag(int, char *,...);
+void diag(int, const char *,...) __attribute__((__format__(__printf__, 2, 3)));
 void dump_line(void);
-int eqin(char *, char *);
+int eqin(const char *, const char *);
 void fill_buffer(void);
 int pad_output(int, int);
 void scan_profile(FILE *);
@@ -354,7 +356,7 @@ void set_option(char *);
 void addkey(char *, int);
 void set_profile(void);
 char *chfont(struct fstate *, struct fstate *, char *);
-void parsefont(struct fstate *, char *);
+void parsefont(struct fstate *, const char *);
 void writefdef(struct fstate *, int);
 int lexi(void);
 void reduce(void);

@@ -1,13 +1,18 @@
-#	$NetBSD: Makefile,v 1.29 2004/02/09 07:58:01 lukem Exp $
+#	$NetBSD: Makefile,v 1.34 2014/12/13 14:16:48 christos Exp $
 #	from: @(#)Makefile	8.2 (Berkeley) 4/16/94
 
 .include <bsd.own.mk>
 
 .if ${MKSHARE} != "no"
-SUBDIR=	man0 man1 man2 man3 man4 man5 man6 man7 man8 man9
+SUBDIR=	man0 man1 man2 man3 man3lua man4 man5 man6 man7 man8 man9 man9lua
+
+.if ${MKRUMP} != "no"
+SUBDIR+=${.CURDIR}/../../sys/rump/share/man
+.endif
 
 WHATISDBDIR?=	/usr/share/man
 
+.if ${MKMAKEMANDB} == "no"
 makedb:
 	${TOOL_MAKEWHATIS} ${DESTDIR}${WHATISDBDIR}
 .if ${MKUNPRIVED} != "no"
@@ -18,5 +23,8 @@ makedb:
 makedb:
 .endif
 
+.else
+makedb:
+.endif
+
 .include <bsd.subdir.mk>
-.include <bsd.sys.mk>

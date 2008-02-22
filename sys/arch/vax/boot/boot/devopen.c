@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.14 2005/12/11 12:19:30 christos Exp $ */
+/*	$NetBSD: devopen.c,v 1.20 2018/03/21 18:27:27 ragge Exp $ */
 /*
  * Copyright (c) 1997 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,6 +27,7 @@
 #include <lib/libsa/stand.h>
 #include <lib/libkern/libkern.h>
 
+#include <machine/param.h>
 #include <machine/rpb.h>
 #include <machine/sid.h>
 #include <machine/pte.h>
@@ -43,17 +38,17 @@
 
 #include "vaxstand.h"
 
-int	atoi(char *);
 int nexaddr, csrbase;
+static int *mapaddr;
 
+/*
+ * Boot device syntax:
+ * device(adapter, controller, unit, partition)file
+ */
 int
-devopen(f, fname, file)
-	struct open_file *f;
-	const char *fname;
-	char **file;
+devopen(struct open_file *f, const char *fname, char **file)
 {
 	int dev, unit, ctlr, part, adapt, i, a[4], x;
-	int *mapregs;
 	struct devsw *dp;
 	extern int cnvtab[];
 	char *s, *c;
@@ -134,6 +129,7 @@ devopen(f, fname, file)
 	switch (vax_boardtype) {
 	case VAX_BTYP_750:
 		csrbase = (nexaddr == 0xf30000 ? 0xffe000 : 0xfbe000);
+		mapaddr = (int *)nexaddr + VAX_NBPG;
 		if (adapt < 0)
 			break;
 		nexaddr = (NEX750 + NEXSIZE * adapt);
@@ -142,6 +138,7 @@ devopen(f, fname, file)
 	case VAX_BTYP_780:
 	case VAX_BTYP_790:
 		csrbase = 0x2007e000 + 0x40000 * ((nexaddr & 0x1e000) >> 13);
+		mapaddr = (int *)nexaddr + VAX_NBPG;
 		if (adapt < 0)
 			break;
 		nexaddr = ((int)NEX780 + NEXSIZE * adapt);
@@ -182,11 +179,10 @@ devopen(f, fname, file)
 	default:
 		nexaddr = 0; /* No map regs */
 		csrbase = 0x20000000;
-		/* Always map in the lowest 4M on qbus-based machines */
-		mapregs = (void *)0x20088000;
-		if (bootrpb.adpphy == 0x20087800)
-			for (i = 0; i < 8192; i++)
-				mapregs[i] = PG_V | i;
+		if (bootrpb.adpphy == 0x20087800) {
+			nexaddr = bootrpb.adpphy;
+			mapaddr = (int *)nexaddr + VAX_NBPG;
+		}
 		break;
 	}
 
@@ -202,4 +198,25 @@ devopen(f, fname, file)
 usage:
 	printf("usage: dev(adapter,controller,unit,partition)file -asd\n");
 	return -1;
+}
+
+/*
+ * Map in virtual address vaddr of size vsize starting with map mapno.
+ * Returns the unibus address of the mapped area.
+ */
+int
+ubmap(int mapno, int vaddr, int size)
+{
+	int voff = (vaddr & VAX_PGOFSET);
+	int rv = (mapno << VAX_PGSHIFT) + voff;
+	int vpag, npag;
+
+	if (mapaddr == 0)
+		return vaddr; /* no map, phys == virt */
+
+	npag = (voff + size) / VAX_NBPG;
+	vpag = vaddr >> VAX_PGSHIFT;
+	while (npag-- >= 0)
+		mapaddr[mapno++] = vpag++ | PG_V;
+	return rv;
 }

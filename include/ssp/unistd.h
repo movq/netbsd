@@ -1,4 +1,4 @@
-/*	$NetBSD: unistd.h,v 1.3 2007/06/03 17:41:19 christos Exp $	*/
+/*	$NetBSD: unistd.h,v 1.7 2015/06/25 18:41:03 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,15 +39,13 @@ __BEGIN_DECLS
 __ssp_redirect0(ssize_t, read, (int __fd, void *__buf, size_t __len), \
     (__fd, __buf, __len));
 
-__ssp_redirect(int, readlink, (const char *__restrict __path, \
+__ssp_redirect(ssize_t, readlink, (const char *__restrict __path, \
     char *__restrict __buf, size_t __len), (__path, __buf, __len));
 
-__ssp_redirect(char *, getcwd, (char *__buf, size_t __len), (__buf, __len));
+__ssp_redirect_raw(char *, getcwd, getcwd, (char *__buf, size_t __len),
+    (__buf, __len), __buf != 0, __ssp_bos);
 
 __END_DECLS
 
-#define read(fd, buf, len)		__ssp_alias_func(read, (fd, buf, len))
-#define readlink(path, buf, len)	__ssp_alias_func(readlink, (path, buf, len))
-#define getcwd(buf, len)		__ssp_alias_func(getcwd, (buf, len))
 #endif /* __SSP_FORTIFY_LEVEL > 0 */
 #endif /* _SSP_UNISTD_H_ */

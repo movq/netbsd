@@ -1,9 +1,9 @@
-/*	$NetBSD: content-bozo.c,v 1.2 2007/10/17 18:48:00 tls Exp $	*/
+/*	$NetBSD: content-bozo.c,v 1.14 2016/07/19 09:27:40 shm Exp $	*/
 
-/*	$eterna: content-bozo.c,v 1.8 2006/05/17 08:19:10 mrg Exp $	*/
+/*	$eterna: content-bozo.c,v 1.17 2011/11/18 09:21:15 mrg Exp $	*/
 
 /*
- * Copyright (c) 1997-2006 Matthew R. Green
+ * Copyright (c) 1997-2015 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,8 +15,6 @@
  *    notice, this list of conditions and the following disclaimer and
  *    dedication in the documentation and/or other materials provided
  *    with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -36,6 +34,7 @@
 
 #include <sys/param.h>
 
+#include <errno.h>
 #include <string.h>
 
 #include "bozohttpd.h"
@@ -47,7 +46,7 @@
  * has less info per-entry).
  */
 
-static struct content_map content_map[] = {
+static bozo_content_map_t static_content_map[] = {
 	{ ".html",	"text/html",			"",		"", NULL },
 	{ ".htm",	"text/html",			"",		"", NULL },
 	{ ".gif",	"image/gif",			"",		"", NULL },
@@ -63,17 +62,18 @@ static struct content_map content_map[] = {
 	{ ".pac",	"application/x-ns-proxy-autoconfig", "",	"", NULL },
 	{ ".pa",	"application/x-ns-proxy-autoconfig", "",	"", NULL },
 	{ ".tar",	"multipart/x-tar",		"",		"", NULL },
-	{ ".gtar",	"multipart/x-gtar",		"",		"", NULL },
-	{ ".tar.Z",	"multipart/x-tar",		"x-compress",	"compress", NULL },
-	{ ".tar.gz",	"multipart/x-tar",		"x-gzip",	"gzip", NULL },
-	{ ".taz",	"multipart/x-tar",		"x-gzip",	"gzip", NULL },
-	{ ".tgz",	"multipart/x-tar",		"x-gzip",	"gzip", NULL },
-	{ ".tar.z",	"multipart/x-tar",		"x-pack",	"x-pack", NULL },
-	{ ".Z",		"application/x-compress",	"x-compress",	"compress", NULL },
-	{ ".gz",	"application/x-gzip",		"x-gzip",	"gzip", NULL },
-	{ ".z",		"unknown",			"x-pack",	"x-pack", NULL },
-	{ ".bz2",	"application/x-bzip2",		"x-bzip2",	"x-bzip2", NULL },
+	{ ".gtar",	"application/x-gtar-compressed", "",		"", NULL },
+	{ ".tar.Z",	"application/x-gtar-compressed", "",		"", NULL },
+	{ ".tar.gz",	"application/x-gtar-compressed", "",		"", NULL },
+	{ ".taz",	"application/x-gtar-compressed", "",		"", NULL },
+	{ ".tgz",	"application/x-gtar-compressed", "",		"", NULL },
+	{ ".tar.z",	"application/x-gtar-compressed", "",		"", NULL },
+	{ ".Z",		"application/x-compress",	"",		"", NULL },
+	{ ".gz",	"application/x-gzip",		"",		"", NULL },
+	{ ".z",		"unknown",			"",		"", NULL },
+	{ ".bz2",	"application/x-bzip2",		"",		"", NULL },
 	{ ".ogg",	"application/x-ogg",		"",		"", NULL },
+	{ ".mkv",	"video/x-matroska",		"",		"", NULL },
 	{ ".xbel",	"text/xml",			"",		"", NULL },
 	{ ".xml",	"text/xml",			"",		"", NULL },
 	{ ".xsl",	"text/xml",			"",		"", NULL },
@@ -164,6 +164,9 @@ static struct content_map content_map[] = {
 	{ ".mpeg",	"video/mpeg",			"",		"", NULL },
 	{ ".mpg",	"video/mpeg",			"",		"", NULL },
 	{ ".mpe",	"video/mpeg",			"",		"", NULL },
+	{ ".ts",	"video/mpeg",			"",		"", NULL },
+	{ ".vob",	"video/mpeg",			"",		"", NULL },
+	{ ".mp4",	"video/mp4",			"",		"", NULL },
 	{ ".qt",	"video/quicktime",		"",		"", NULL },
 	{ ".mov",	"video/quicktime",		"",		"", NULL },
 	{ ".avi",	"video/x-msvideo",		"",		"", NULL },
@@ -171,31 +174,41 @@ static struct content_map content_map[] = {
 	{ ".ice",	"x-conference/x-cooltalk",	"",		"", NULL },
 	{ ".wrl",	"x-world/x-vrml",		"",		"", NULL },
 	{ ".vrml",	"x-world/x-vrml",		"",		"", NULL },
-	{ NULL,		NULL,				NULL,		NULL, NULL, },
+	{ ".svg",	"image/svg+xml",		"",		"", NULL },
+	{ NULL,		NULL,		NULL,		NULL, NULL }
 };
 
-static struct content_map *dynamic_content_map;
-
-/* call with stage == 0 for full search, stage == 1 for dynamic only */
-struct content_map *
-match_content_map(const char *name, int stage)
+static bozo_content_map_t *
+search_map(bozo_content_map_t *map, const char *name, size_t len)
 {
-	size_t	len = strlen(name), nlen;
-	struct	content_map	*map;
+	for ( ; map && map->name; map++) {
+		const size_t namelen = strlen(map->name);
 
-	for (map = dynamic_content_map; map && map->name; map++) {
-again:
-		nlen = strlen(map->name);
-		if (nlen > len || strcasecmp(map->name, name + (len - nlen)) != 0)
-			continue;
-		return (map);
+		if (namelen < len &&
+		    strcasecmp(map->name, name + (len - namelen)) == 0)
+			return map;
 	}
-	if (stage++ == 0) {
-		map = content_map;
-		goto again;
+	return NULL;
+}
+
+/* match a suffix on a file - dynamiconly means no static content search */
+bozo_content_map_t *
+bozo_match_content_map(bozohttpd_t *httpd, const char *name,
+			const int dynamiconly)
+{
+	bozo_content_map_t	*map;
+	size_t			 len;
+
+	len = strlen(name);
+	if ((map = search_map(httpd->dynamic_content_map, name, len)) != NULL) {
+		return map;
 	}
-		
-	return (NULL);
+	if (!dynamiconly) {
+		if ((map = search_map(static_content_map, name, len)) != NULL) {
+			return map;
+		}
+	}
+	return NULL;
 }
 
 /*
@@ -203,51 +216,55 @@ again:
  */
 /* ARGSUSED */
 const char *
-content_type(http_req *request, const char *file)
+bozo_content_type(bozo_httpreq_t *request, const char *file)
 {
-	struct	content_map	*map;
+	bozohttpd_t *httpd = request->hr_httpd;
+	bozo_content_map_t	*map;
 
-	map = match_content_map(file, 0);
+	map = bozo_match_content_map(httpd, file, 0);
 	if (map)
-		return (map->type);
-	return (text_plain);
+		return map->type;
+	return httpd->consts.text_plain;
 }
 
 /*
  * given the file name, return a valid Content-Encoding: value.
  */
 const char *
-content_encoding(http_req *request, const char *file)
+bozo_content_encoding(bozo_httpreq_t *request, const char *file)
 {
-	struct	content_map	*map;
+	bozohttpd_t *httpd = request->hr_httpd;
+	bozo_content_map_t	*map;
 
-	map = match_content_map(file, 0);
+	map = bozo_match_content_map(httpd, file, 0);
 	if (map)
-		return (request->hr_proto == http_11 ?
-		    map->encoding11 : map->encoding);
-	return (NULL);
+		return (request->hr_proto == httpd->consts.http_11) ?
+		    map->encoding11 : map->encoding;
+	return NULL;
 }
 
 #ifndef NO_DYNAMIC_CONTENT
-static int dynamic_content_map_size;
 
-struct content_map *
-get_content_map(const char *name)
+bozo_content_map_t *
+bozo_get_content_map(bozohttpd_t *httpd, const char *name)
 {
-	struct	content_map	*map;
+	bozo_content_map_t	*map;
 
-	if ((map = match_content_map(name, 1)))
-		return (map);
+	if ((map = bozo_match_content_map(httpd, name, 1)) != NULL)
+		return map;
 	
-	dynamic_content_map_size++;
-	dynamic_content_map = bozorealloc(dynamic_content_map,
-	    (dynamic_content_map_size + 1) * sizeof *map);
-	map = &dynamic_content_map[dynamic_content_map_size];
+	httpd->dynamic_content_map_size++;
+	httpd->dynamic_content_map = bozorealloc(httpd,
+		httpd->dynamic_content_map,
+		(httpd->dynamic_content_map_size + 1) * sizeof *map);
+	if (httpd->dynamic_content_map == NULL)
+		bozoerr(httpd, 1, "out of memory allocating content map");
+	map = &httpd->dynamic_content_map[httpd->dynamic_content_map_size];
 	map->name = map->type = map->encoding = map->encoding11 =
-	    map->cgihandler = NULL;
+		map->cgihandler = NULL;
 	map--;
 
-	return (map);
+	return map;
 }
 
 /*
@@ -263,14 +280,16 @@ get_content_map(const char *name)
  * NOTE: we destroy 'arg'
  */
 void
-add_content_map_mime(char *cmap0, char *cmap1, char *cmap2, char *cmap3)
+bozo_add_content_map_mime(bozohttpd_t *httpd, const char *cmap0,
+		const char *cmap1, const char *cmap2, const char *cmap3)
 {
-	struct content_map *map;
+	bozo_content_map_t *map;
 
-	debug((DEBUG_FAT, "add_content_map: name %s type %s enc %s enc11 %s ",
+	debug((httpd, DEBUG_FAT,
+		"add_content_map: name %s type %s enc %s enc11 %s ",
 		cmap0, cmap1, cmap2, cmap3));
 
-	map = get_content_map(cmap0);
+	map = bozo_get_content_map(httpd, cmap0);
 #define CHECKMAP(s)	(!s || ((s)[0] == '-' && (s)[1] == '\0') ? "" : (s))
 	map->name = CHECKMAP(cmap0);
 	map->type = CHECKMAP(cmap1);

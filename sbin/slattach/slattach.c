@@ -1,4 +1,4 @@
-/*	$NetBSD: slattach.c,v 1.29 2005/02/05 12:38:58 xtraeme Exp $	*/
+/*	$NetBSD: slattach.c,v 1.33 2013/10/20 20:17:52 mbalmer Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)slattach.c	8.2 (Berkeley) 1/7/94";
 #else
-__RCSID("$NetBSD: slattach.c,v 1.29 2005/02/05 12:38:58 xtraeme Exp $");
+__RCSID("$NetBSD: slattach.c,v 1.33 2013/10/20 20:17:52 mbalmer Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,6 +55,7 @@ __RCSID("$NetBSD: slattach.c,v 1.29 2005/02/05 12:38:58 xtraeme Exp $");
 #include <netinet/in.h>
 
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <paths.h>
@@ -65,13 +66,12 @@ __RCSID("$NetBSD: slattach.c,v 1.29 2005/02/05 12:38:58 xtraeme Exp $");
 #include <termios.h>
 #include <unistd.h>
 
-int	speed = 9600;
-int	slipdisc = SLIPDISC;
+static int	speed = 9600;
+static const char	*ldisc = "slip";
 
-char	devicename[32];
+static char	devicename[32];
 
-int	ttydisc(char *);
-void	usage(void);
+__dead static void	usage(void);
 
 int
 main(int argc, char *argv[])
@@ -104,8 +104,8 @@ main(int argc, char *argv[])
 		case 's':
 			speed = atoi(optarg);
 			break;
-		case 'r': case 't':
-			slipdisc = ttydisc(optarg);
+		case 't':
+			ldisc = optarg;
 			break;
 		case '?':
 		default:
@@ -135,10 +135,10 @@ main(int argc, char *argv[])
 	cfsetspeed(&tty, speed);
 	if (tcsetattr(fd, TCSADRAIN, &tty) < 0)
 		err(1, "tcsetattr");
-	if (ioctl(fd, TIOCSDTR, 0) < 0)
+	if (ioctl(fd, TIOCSDTR, 0) < 0 && errno != ENOTTY)
 		err(1, "TIOCSDTR");
-	if (ioctl(fd, TIOCSETD, &slipdisc) < 0)
-		err(1, "TIOCSETD");
+	if (ioctl(fd, TIOCSLINED, ldisc) < 0)
+		err(1, "TIOCSLINED");
 	if (opt_detach && daemon(0, 0) != 0)
 		err(1, "couldn't detach");
 	sigemptyset(&nsigset);
@@ -146,22 +146,7 @@ main(int argc, char *argv[])
 		sigsuspend(&nsigset);
 }
 
-int
-ttydisc(char *name)
-{
-	if (strcmp(name, "slip") == 0)
-		return(SLIPDISC);
-#ifdef STRIPDISC
-	else if (strcmp(name, "strip") == 0)
-  		return(STRIPDISC);
-#endif
-	else
-		usage();
-	/* NOTREACHED */
-	return -1;
-}
-
-void
+static void
 usage(void)
 {
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tulip.c,v 1.157 2008/01/19 22:10:17 dyoung Exp $	*/
+/*	$NetBSD: tulip.c,v 1.191 2018/06/26 06:48:00 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,9 +36,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tulip.c,v 1.157 2008/01/19 22:10:17 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tulip.c,v 1.191 2018/06/26 06:48:00 msaitoh Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,16 +52,12 @@ __KERNEL_RCSID(0, "$NetBSD: tulip.c,v 1.157 2008/01/19 22:10:17 dyoung Exp $");
 
 #include <machine/endian.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -81,16 +69,13 @@ __KERNEL_RCSID(0, "$NetBSD: tulip.c,v 1.157 2008/01/19 22:10:17 dyoung Exp $");
 #include <dev/ic/tulipreg.h>
 #include <dev/ic/tulipvar.h>
 
-const char * const tlp_chip_names[] = TULIP_CHIP_NAMES;
+static const char * const tlp_chip_names[] = TULIP_CHIP_NAMES;
 
 static const struct tulip_txthresh_tab tlp_10_txthresh_tab[] =
     TLP_TXTHRESH_TAB_10;
 
 static const struct tulip_txthresh_tab tlp_10_100_txthresh_tab[] =
     TLP_TXTHRESH_TAB_10_100;
-
-static const struct tulip_txthresh_tab tlp_winb_txthresh_tab[] =
-    TLP_TXTHRESH_TAB_WINB;
 
 static const struct tulip_txthresh_tab tlp_dm9102_txthresh_tab[] =
     TLP_TXTHRESH_TAB_DM9102;
@@ -100,8 +85,7 @@ static void	tlp_watchdog(struct ifnet *);
 static int	tlp_ioctl(struct ifnet *, u_long, void *);
 static int	tlp_init(struct ifnet *);
 static void	tlp_stop(struct ifnet *, int);
-
-static void	tlp_shutdown(void *);
+static int	tlp_ifflags_cb(struct ethercom *);
 
 static void	tlp_rxdrain(struct tulip_softc *);
 static int	tlp_add_rxbuf(struct tulip_softc *, int);
@@ -110,7 +94,6 @@ static int	tlp_srom_size(struct tulip_softc *);
 
 static int	tlp_enable(struct tulip_softc *);
 static void	tlp_disable(struct tulip_softc *);
-static void	tlp_power(int, void *);
 
 static void	tlp_filter_setup(struct tulip_softc *);
 static void	tlp_winb_filter_setup(struct tulip_softc *);
@@ -121,21 +104,21 @@ static void	tlp_rxintr(struct tulip_softc *);
 static void	tlp_txintr(struct tulip_softc *);
 
 static void	tlp_mii_tick(void *);
-static void	tlp_mii_statchg(struct device *);
-static void	tlp_winb_mii_statchg(struct device *);
-static void	tlp_dm9102_mii_statchg(struct device *);
+static void	tlp_mii_statchg(struct ifnet *);
+static void	tlp_winb_mii_statchg(struct ifnet *);
+static void	tlp_dm9102_mii_statchg(struct ifnet *);
 
 static void	tlp_mii_getmedia(struct tulip_softc *, struct ifmediareq *);
 static int	tlp_mii_setmedia(struct tulip_softc *);
 
-static int	tlp_bitbang_mii_readreg(struct device *, int, int);
-static void	tlp_bitbang_mii_writereg(struct device *, int, int, int);
+static int	tlp_bitbang_mii_readreg(device_t, int, int);
+static void	tlp_bitbang_mii_writereg(device_t, int, int, int);
 
-static int	tlp_pnic_mii_readreg(struct device *, int, int);
-static void	tlp_pnic_mii_writereg(struct device *, int, int, int);
+static int	tlp_pnic_mii_readreg(device_t, int, int);
+static void	tlp_pnic_mii_writereg(device_t, int, int, int);
 
-static int	tlp_al981_mii_readreg(struct device *, int, int);
-static void	tlp_al981_mii_writereg(struct device *, int, int, int);
+static int	tlp_al981_mii_readreg(device_t, int, int);
+static void	tlp_al981_mii_writereg(device_t, int, int, int);
 
 static void	tlp_2114x_preinit(struct tulip_softc *);
 static void	tlp_2114x_mii_preinit(struct tulip_softc *);
@@ -158,8 +141,8 @@ static void	tlp_2114x_nway_tick(void *);
 /*
  * MII bit-bang glue.
  */
-static u_int32_t tlp_sio_mii_bitbang_read(struct device *);
-static void	tlp_sio_mii_bitbang_write(struct device *, u_int32_t);
+static uint32_t tlp_sio_mii_bitbang_read(device_t);
+static void	tlp_sio_mii_bitbang_write(device_t, uint32_t);
 
 static const struct mii_bitbang_ops tlp_sio_mii_bitbang_ops = {
 	tlp_sio_mii_bitbang_read,
@@ -195,10 +178,11 @@ int	tlp_srom_debug = 0;
  *
  *	Attach a Tulip interface to the system.
  */
-void
-tlp_attach(struct tulip_softc *sc, const u_int8_t *enaddr)
+int
+tlp_attach(struct tulip_softc *sc, const uint8_t *enaddr)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+	device_t self = sc->sc_dev;
 	int i, error;
 
 	callout_init(&sc->sc_nway_callout, 0);
@@ -407,32 +391,35 @@ tlp_attach(struct tulip_softc *sc, const u_int8_t *enaddr)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct tulip_control_data), PAGE_SIZE, 0, &sc->sc_cdseg,
 	    1, &sc->sc_cdnseg, 0)) != 0) {
-		printf("%s: unable to allocate control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(self,
+		    "unable to allocate control data, error = %d\n", error);
 		goto fail_0;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->sc_cdseg, sc->sc_cdnseg,
 	    sizeof(struct tulip_control_data), (void **)&sc->sc_control_data,
 	    BUS_DMA_COHERENT)) != 0) {
-		printf("%s: unable to map control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(self,
+		    "unable to map control data, error = %d\n", error);
 		goto fail_1;
 	}
 
 	if ((error = bus_dmamap_create(sc->sc_dmat,
 	    sizeof(struct tulip_control_data), 1,
 	    sizeof(struct tulip_control_data), 0, 0, &sc->sc_cddmamap)) != 0) {
-		printf("%s: unable to create control data DMA map, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+		sc->sc_cddmamap = NULL;
+		aprint_error_dev(self,
+		    "unable to create control data DMA map, error = %d\n",
+		    error);
 		goto fail_2;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_cddmamap,
 	    sc->sc_control_data, sizeof(struct tulip_control_data), NULL,
 	    0)) != 0) {
-		printf("%s: unable to load control data DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(self,
+		    "unable to load control data DMA map, error = %d\n",
+		    error);
 		goto fail_3;
 	}
 
@@ -463,8 +450,10 @@ tlp_attach(struct tulip_softc *sc, const u_int8_t *enaddr)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    sc->sc_ntxsegs, MCLBYTES, 0, 0,
 		    &sc->sc_txsoft[i].txs_dmamap)) != 0) {
-			printf("%s: unable to create tx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+			sc->sc_txsoft[i].txs_dmamap = NULL;
+			aprint_error_dev(self,
+			    "unable to create tx DMA map %d, error = %d\n", i,
+			    error);
 			goto fail_4;
 		}
 	}
@@ -475,8 +464,10 @@ tlp_attach(struct tulip_softc *sc, const u_int8_t *enaddr)
 	for (i = 0; i < TULIP_NRXDESC; i++) {
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
 		    MCLBYTES, 0, 0, &sc->sc_rxsoft[i].rxs_dmamap)) != 0) {
-			printf("%s: unable to create rx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+		        sc->sc_rxsoft[i].rxs_dmamap = NULL;
+			aprint_error_dev(self,
+			    "unable to create rx DMA map %d, error = %d\n", i,
+			    error);
 			goto fail_5;
 		}
 		sc->sc_rxsoft[i].rxs_mbuf = NULL;
@@ -495,7 +486,7 @@ tlp_attach(struct tulip_softc *sc, const u_int8_t *enaddr)
 	tlp_reset(sc);
 
 	/* Announce ourselves. */
-	printf("%s: %s%sEthernet address %s\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(self, "%s%sEthernet address %s\n",
 	    sc->sc_name[0] != '\0' ? sc->sc_name : "",
 	    sc->sc_name[0] != '\0' ? ", " : "",
 	    ether_sprintf(enaddr));
@@ -513,7 +504,7 @@ tlp_attach(struct tulip_softc *sc, const u_int8_t *enaddr)
 	 */
 	(*sc->sc_mediasw->tmsw_init)(sc);
 
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	sc->sc_if_flags = ifp->if_flags;
@@ -533,30 +524,19 @@ tlp_attach(struct tulip_softc *sc, const u_int8_t *enaddr)
 	 * Attach the interface.
 	 */
 	if_attach(ifp);
+	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, enaddr);
-#if NRND > 0
-	rnd_attach_source(&sc->sc_rnd_source, sc->sc_dev.dv_xname,
-	    RND_TYPE_NET, 0);
-#endif
+	ether_set_ifflags_cb(&sc->sc_ethercom, tlp_ifflags_cb);
 
-	/*
-	 * Make sure the interface is shutdown during reboot.
-	 */
-	sc->sc_sdhook = shutdownhook_establish(tlp_shutdown, sc);
-	if (sc->sc_sdhook == NULL)
-		printf("%s: WARNING: unable to establish shutdown hook\n",
-		    sc->sc_dev.dv_xname);
+	rnd_attach_source(&sc->sc_rnd_source, device_xname(self),
+	    RND_TYPE_NET, RND_FLAG_DEFAULT);
 
-	/*
-	 * Add a suspend hook to make sure we come back up after a
-	 * resume.
-	 */
-	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
-	    tlp_power, sc);
-	if (sc->sc_powerhook == NULL)
-		printf("%s: WARNING: unable to establish power hook\n",
-		    sc->sc_dev.dv_xname);
-	return;
+	if (pmf_device_register(self, NULL, NULL))
+		pmf_class_network_register(self, ifp);
+	else
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
+	return 0;
 
 	/*
 	 * Free any resources we've allocated during the failed attach
@@ -583,7 +563,7 @@ tlp_attach(struct tulip_softc *sc, const u_int8_t *enaddr)
  fail_1:
 	bus_dmamem_free(sc->sc_dmat, &sc->sc_cdseg, sc->sc_cdnseg);
  fail_0:
-	return;
+	return error;
 }
 
 /*
@@ -592,27 +572,17 @@ tlp_attach(struct tulip_softc *sc, const u_int8_t *enaddr)
  *	Handle device activation/deactivation requests.
  */
 int
-tlp_activate(struct device *self, enum devact act)
+tlp_activate(device_t self, enum devact act)
 {
-	struct tulip_softc *sc = (void *) self;
-	int s, error = 0;
+	struct tulip_softc *sc = device_private(self);
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
-		if (sc->sc_flags & TULIPF_HAS_MII)
-			mii_activate(&sc->sc_mii, act, MII_PHY_ANY,
-			    MII_OFFSET_ANY);
 		if_deactivate(&sc->sc_ethercom.ec_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-
-	return (error);
 }
 
 /*
@@ -626,7 +596,8 @@ tlp_detach(struct tulip_softc *sc)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct tulip_rxsoft *rxs;
 	struct tulip_txsoft *txs;
-	int i;
+	device_t self = sc->sc_dev;
+	int i, s;
 
 	/*
 	 * Succeed now if there isn't any work to do.
@@ -634,9 +605,14 @@ tlp_detach(struct tulip_softc *sc)
 	if ((sc->sc_flags & TULIPF_ATTACHED) == 0)
 		return (0);
 
-	/* Unhook our tick handler. */
-	if (sc->sc_tick)
-		callout_stop(&sc->sc_tick_callout);
+	s = splnet();
+	/* Stop the interface. Callouts are stopped in it. */
+	tlp_stop(ifp, 1);
+	splx(s);
+
+	/* Destroy our callouts. */
+	callout_destroy(&sc->sc_nway_callout);
+	callout_destroy(&sc->sc_tick_callout);
 
 	if (sc->sc_flags & TULIPF_HAS_MII) {
 		/* Detach all PHYs */
@@ -646,9 +622,8 @@ tlp_detach(struct tulip_softc *sc)
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->sc_mii.mii_media, IFM_INST_ANY);
 
-#if NRND > 0
 	rnd_detach_source(&sc->sc_rnd_source);
-#endif
+
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -676,26 +651,12 @@ tlp_detach(struct tulip_softc *sc)
 	    sizeof(struct tulip_control_data));
 	bus_dmamem_free(sc->sc_dmat, &sc->sc_cdseg, sc->sc_cdnseg);
 
-	shutdownhook_disestablish(sc->sc_sdhook);
-	powerhook_disestablish(sc->sc_powerhook);
+	pmf_device_deregister(self);
 
 	if (sc->sc_srom)
 		free(sc->sc_srom, M_DEVBUF);
 
 	return (0);
-}
-
-/*
- * tlp_shutdown:
- *
- *	Make sure the interface is stopped at reboot time.
- */
-static void
-tlp_shutdown(void *arg)
-{
-	struct tulip_softc *sc = arg;
-
-	tlp_stop(&sc->sc_ethercom.ec_if, 1);
 }
 
 /*
@@ -711,9 +672,10 @@ tlp_start(struct ifnet *ifp)
 	struct tulip_txsoft *txs, *last_txs = NULL;
 	bus_dmamap_t dmamap;
 	int error, firsttx, nexttx, lasttx = 1, ofree, seg;
+	struct tulip_desc *txd;
 
 	DPRINTF(sc, ("%s: tlp_start: sc_flags 0x%08x, if_flags 0x%08x\n",
-	    sc->sc_dev.dv_xname, sc->sc_flags, ifp->if_flags));
+	    device_xname(sc->sc_dev), sc->sc_flags, ifp->if_flags));
 
 	/*
 	 * If we want a filter setup, it means no more descriptors were
@@ -738,7 +700,7 @@ tlp_start(struct ifnet *ifp)
 	firsttx = sc->sc_txnext;
 
 	DPRINTF(sc, ("%s: tlp_start: txfree %d, txnext %d\n",
-	    sc->sc_dev.dv_xname, ofree, firsttx));
+	    device_xname(sc->sc_dev), ofree, firsttx));
 
 	/*
 	 * Loop through the send queue, setting up transmit descriptors
@@ -774,16 +736,15 @@ tlp_start(struct ifnet *ifp)
 		      BUS_DMA_WRITE|BUS_DMA_NOWAIT) != 0) {
 			MGETHDR(m, M_DONTWAIT, MT_DATA);
 			if (m == NULL) {
-				printf("%s: unable to allocate Tx mbuf\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(sc->sc_dev, "unable to allocate Tx mbuf\n");
 				break;
 			}
 			MCLAIM(m, &sc->sc_ethercom.ec_tx_mowner);
 			if (m0->m_pkthdr.len > MHLEN) {
 				MCLGET(m, M_DONTWAIT);
 				if ((m->m_flags & M_EXT) == 0) {
-					printf("%s: unable to allocate Tx "
-					    "cluster\n", sc->sc_dev.dv_xname);
+					aprint_error_dev(sc->sc_dev,
+					    "unable to allocate Tx cluster\n");
 					m_freem(m);
 					break;
 				}
@@ -793,8 +754,9 @@ tlp_start(struct ifnet *ifp)
 			error = bus_dmamap_load_mbuf(sc->sc_dmat, dmamap,
 			    m, BUS_DMA_WRITE|BUS_DMA_NOWAIT);
 			if (error) {
-				printf("%s: unable to load Tx buffer, "
-				    "error = %d\n", sc->sc_dev.dv_xname, error);
+				aprint_error_dev(sc->sc_dev,
+				    "unable to load Tx buffer, error = %d",
+				    error);
 				break;
 			}
 		}
@@ -847,11 +809,12 @@ tlp_start(struct ifnet *ifp)
 			 * yet.  That could cause a race condition.
 			 * We'll do it below.
 			 */
-			sc->sc_txdescs[nexttx].td_status =
+			txd = &sc->sc_txdescs[nexttx];
+			txd->td_status =
 			    (nexttx == firsttx) ? 0 : htole32(TDSTAT_OWN);
-			sc->sc_txdescs[nexttx].td_bufaddr1 =
+			txd->td_bufaddr1 =
 			    htole32(dmamap->dm_segs[seg].ds_addr);
-			sc->sc_txdescs[nexttx].td_ctl =
+			txd->td_ctl =
 			    htole32((dmamap->dm_segs[seg].ds_len <<
 			        TDCTL_SIZE1_SHIFT) | sc->sc_tdctl_ch |
 				(nexttx == (TULIP_NTXDESC - 1) ?
@@ -869,15 +832,16 @@ tlp_start(struct ifnet *ifp)
 		if (ifp->if_flags & IFF_DEBUG) {
 			printf("     txsoft %p transmit chain:\n", txs);
 			for (seg = sc->sc_txnext;; seg = TULIP_NEXTTX(seg)) {
+				txd = &sc->sc_txdescs[seg];
 				printf("     descriptor %d:\n", seg);
 				printf("       td_status:   0x%08x\n",
-				    le32toh(sc->sc_txdescs[seg].td_status));
+				    le32toh(txd->td_status));
 				printf("       td_ctl:      0x%08x\n",
-				    le32toh(sc->sc_txdescs[seg].td_ctl));
+				    le32toh(txd->td_ctl));
 				printf("       td_bufaddr1: 0x%08x\n",
-				    le32toh(sc->sc_txdescs[seg].td_bufaddr1));
+				    le32toh(txd->td_bufaddr1));
 				printf("       td_bufaddr2: 0x%08x\n",
-				    le32toh(sc->sc_txdescs[seg].td_bufaddr2));
+				    le32toh(txd->td_bufaddr2));
 				if (seg == lasttx)
 					break;
 			}
@@ -907,13 +871,10 @@ tlp_start(struct ifnet *ifp)
 
 		last_txs = txs;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0, BPF_D_OUT);
 	}
 
 	if (txs == NULL || sc->sc_txfree == 0) {
@@ -923,7 +884,7 @@ tlp_start(struct ifnet *ifp)
 
 	if (sc->sc_txfree != ofree) {
 		DPRINTF(sc, ("%s: packets enqueued, IC on %d, OWN on %d\n",
-		    sc->sc_dev.dv_xname, lasttx, firsttx));
+		    device_xname(sc->sc_dev), lasttx, firsttx));
 		/*
 		 * Cause a transmit interrupt to happen on the
 		 * last packet we enqueued.
@@ -978,20 +939,39 @@ tlp_watchdog(struct ifnet *ifp)
 
 	if (doing_setup && doing_transmit) {
 		printf("%s: filter setup and transmit timeout\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		ifp->if_oerrors++;
 	} else if (doing_transmit) {
-		printf("%s: transmit timeout\n", sc->sc_dev.dv_xname);
+		printf("%s: transmit timeout\n", device_xname(sc->sc_dev));
 		ifp->if_oerrors++;
 	} else if (doing_setup)
-		printf("%s: filter setup timeout\n", sc->sc_dev.dv_xname);
+		printf("%s: filter setup timeout\n", device_xname(sc->sc_dev));
 	else
-		printf("%s: spurious watchdog timeout\n", sc->sc_dev.dv_xname);
+		printf("%s: spurious watchdog timeout\n",
+		    device_xname(sc->sc_dev));
 
 	(void) tlp_init(ifp);
 
 	/* Try to get more packets going. */
 	tlp_start(ifp);
+}
+
+/* If the interface is up and running, only modify the receive
+ * filter when setting promiscuous or debug mode.  Otherwise fall
+ * through to ether_ioctl, which will reset the chip.
+ */
+static int
+tlp_ifflags_cb(struct ethercom *ec)
+{
+	struct ifnet *ifp = &ec->ec_if;
+	struct tulip_softc *sc = ifp->if_softc;
+	int change = ifp->if_flags ^ sc->sc_if_flags;
+
+	if ((change & ~(IFF_CANTCHANGE|IFF_DEBUG)) != 0)
+		return ENETRESET;
+	if ((change & IFF_PROMISC) != 0)
+		(*sc->sc_filter_setup)(sc);
+	return 0;
 }
 
 /*
@@ -1013,23 +993,6 @@ tlp_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	case SIOCGIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, cmd);
 		break;
-	case SIOCSIFFLAGS:
-		/* If the interface is up and running, only modify the receive
-		 * filter when setting promiscuous or debug mode.  Otherwise
-		 * fall through to ether_ioctl, which will reset the chip.
-		 */
-#define RESETIGN (IFF_CANTCHANGE|IFF_DEBUG)
-		if (((ifp->if_flags & (IFF_UP|IFF_RUNNING))
-		    == (IFF_UP|IFF_RUNNING))
-		    && ((ifp->if_flags & (~RESETIGN))
-		    == (sc->sc_if_flags & (~RESETIGN)))) {
-			/* Set up the receive filter. */
-			(*sc->sc_filter_setup)(sc);
-			error = 0;
-			break;
-#undef RESETIGN
-		}
-		/* FALLTHROUGH */
 	default:
 		error = ether_ioctl(ifp, cmd, data);
 		if (error == ENETRESET) {
@@ -1064,14 +1027,14 @@ tlp_intr(void *arg)
 {
 	struct tulip_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	u_int32_t status, rxstatus, txstatus;
+	uint32_t status, rxstatus, txstatus;
 	int handled = 0, txthresh;
 
-	DPRINTF(sc, ("%s: tlp_intr\n", sc->sc_dev.dv_xname));
+	DPRINTF(sc, ("%s: tlp_intr\n", device_xname(sc->sc_dev)));
 
 #ifdef DEBUG
 	if (TULIP_IS_ENABLED(sc) == 0)
-		panic("%s: tlp_intr: not enabled", sc->sc_dev.dv_xname);
+		panic("%s: tlp_intr: not enabled", device_xname(sc->sc_dev));
 #endif
 
 	/*
@@ -1079,7 +1042,7 @@ tlp_intr(void *arg)
 	 * possibly have come from us.
 	 */
 	if ((ifp->if_flags & IFF_RUNNING) == 0 ||
-	    !device_is_active(&sc->sc_dev))
+	    !device_is_active(sc->sc_dev))
 		return (0);
 
 	/* Disable interrupts on the DM9102 (interrupt edge bug). */
@@ -1113,11 +1076,11 @@ tlp_intr(void *arg)
 
 			if (rxstatus & STATUS_RWT)
 				printf("%s: receive watchdog timeout\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 
 			if (rxstatus & STATUS_RU) {
 				printf("%s: receive ring overrun\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 				/* Get the receive process going again. */
 				if (sc->sc_tdctl_er != TDCTL_ER) {
 					tlp_idle(sc, OPMODE_SR);
@@ -1137,7 +1100,7 @@ tlp_intr(void *arg)
 
 			if (txstatus & STATUS_TJT)
 				printf("%s: transmit jabber timeout\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 
 			if (txstatus & STATUS_UNF) {
 				/*
@@ -1155,7 +1118,7 @@ tlp_intr(void *arg)
 					    sc->sc_txth[txthresh].txth_opmode;
 					printf("%s: transmit underrun; new "
 					    "threshold: %s\n",
-					    sc->sc_dev.dv_xname,
+					    device_xname(sc->sc_dev),
 					    sc->sc_txth[txthresh].txth_name);
 
 					/*
@@ -1175,10 +1138,10 @@ tlp_intr(void *arg)
 		if (status & (STATUS_TPS|STATUS_RPS)) {
 			if (status & STATUS_TPS)
 				printf("%s: transmit process stopped\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			if (status & STATUS_RPS)
 				printf("%s: receive process stopped\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			(void) tlp_init(ifp);
 			break;
 		}
@@ -1202,8 +1165,8 @@ tlp_intr(void *arg)
 				str = "unknown error";
 				break;
 			}
-			printf("%s: fatal system error: %s\n",
-			    sc->sc_dev.dv_xname, str);
+			aprint_error_dev(sc->sc_dev,
+			    "fatal system error: %s\n", str);
 			(void) tlp_init(ifp);
 			break;
 		}
@@ -1237,12 +1200,11 @@ tlp_intr(void *arg)
 	}
 
 	/* Try to get more packets going. */
-	tlp_start(ifp);
+	if_schedule_deferred_start(ifp);
 
-#if NRND > 0
 	if (handled)
 		rnd_add_uint32(&sc->sc_rnd_source, status);
-#endif
+
 	return (handled);
 }
 
@@ -1258,7 +1220,7 @@ tlp_rxintr(struct tulip_softc *sc)
 	struct ether_header *eh;
 	struct tulip_rxsoft *rxs;
 	struct mbuf *m;
-	u_int32_t rxstat;
+	uint32_t rxstat, errors;
 	int i, len;
 
 	for (i = sc->sc_rxptr;; i = TULIP_NEXTRX(i)) {
@@ -1285,7 +1247,7 @@ tlp_rxintr(struct tulip_softc *sc)
 		if ((rxstat & (TDSTAT_Rx_FS|TDSTAT_Rx_LS)) !=
 		    (TDSTAT_Rx_FS|TDSTAT_Rx_LS)) {
 			printf("%s: incoming packet spilled, resetting\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			(void) tlp_init(ifp);
 			return;
 		}
@@ -1300,17 +1262,28 @@ tlp_rxintr(struct tulip_softc *sc)
 		 * If an error occurred, update stats, clear the status
 		 * word, and leave the packet buffer in place.  It will
 		 * simply be reused the next time the ring comes around.
+		 */
+		errors = TDSTAT_Rx_DE | TDSTAT_Rx_RF | TDSTAT_Rx_TL |
+		    TDSTAT_Rx_CS | TDSTAT_Rx_RE | TDSTAT_Rx_DB | TDSTAT_Rx_CE;
+		/*
 	 	 * If 802.1Q VLAN MTU is enabled, ignore the Frame Too Long
 		 * error.
 		 */
-		if (rxstat & TDSTAT_ES &&
-		    ((sc->sc_ethercom.ec_capenable & ETHERCAP_VLAN_MTU) == 0 ||
-		     (rxstat & (TDSTAT_Rx_DE | TDSTAT_Rx_RF |
-				TDSTAT_Rx_DB | TDSTAT_Rx_CE)) != 0)) {
+		if ((sc->sc_ethercom.ec_capenable & ETHERCAP_VLAN_MTU) != 0)
+			errors &= ~TDSTAT_Rx_TL;
+		/*
+		 * If chip doesn't have MII, ignore the MII error bit.
+		 */
+		if ((sc->sc_flags & TULIPF_HAS_MII) == 0)
+			errors &= ~TDSTAT_Rx_RE;
+
+		if ((rxstat & TDSTAT_ES) != 0 &&
+		    (rxstat & errors) != 0) {
+			rxstat &= errors;
 #define	PRINTERR(bit, str)						\
 			if (rxstat & (bit))				\
-				printf("%s: receive error: %s\n",	\
-				    sc->sc_dev.dv_xname, str)
+				aprint_error_dev(sc->sc_dev,		\
+				    "receive error: %s\n", str)
 			ifp->if_ierrors++;
 			PRINTERR(TDSTAT_Rx_DE, "descriptor error");
 			PRINTERR(TDSTAT_Rx_RF, "runt frame");
@@ -1384,9 +1357,8 @@ tlp_rxintr(struct tulip_softc *sc)
 		    rxs->rxs_dmamap->dm_mapsize, BUS_DMASYNC_PREREAD);
 #endif /* __NO_STRICT_ALIGNMENT */
 
-		ifp->if_ipackets++;
 		eh = mtod(m, struct ether_header *);
-		m->m_pkthdr.rcvif = ifp;
+		m_set_rcvif(m, ifp);
 		m->m_pkthdr.len = m->m_len = len;
 
 		/*
@@ -1409,15 +1381,6 @@ tlp_rxintr(struct tulip_softc *sc)
 				    ETHER_MAX_FRAME(ifp, etype, 0);
 		}
 
-#if NBPFILTER > 0
-		/*
-		 * Pass this up to any BPF listeners, but only
-		 * pass it up the stack if it's for us.
-		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
-
 		/*
 		 * We sometimes have to run the 21140 in Hash-Only
 		 * mode.  If we're in that mode, and not in promiscuous
@@ -1434,7 +1397,7 @@ tlp_rxintr(struct tulip_softc *sc)
 		}
 
 		/* Pass it on. */
-		(*ifp->if_input)(ifp, m);
+		if_percpuq_enqueue(ifp->if_percpuq, m);
 	}
 
 	/* Update the receive pointer. */
@@ -1451,10 +1414,10 @@ tlp_txintr(struct tulip_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct tulip_txsoft *txs;
-	u_int32_t txstat;
+	uint32_t txstat;
 
 	DPRINTF(sc, ("%s: tlp_txintr: sc_flags 0x%08x\n",
-	    sc->sc_dev.dv_xname, sc->sc_flags));
+	    device_xname(sc->sc_dev), sc->sc_flags));
 
 	ifp->if_flags &= ~IFF_OACTIVE;
 
@@ -1470,15 +1433,17 @@ tlp_txintr(struct tulip_softc *sc)
 #ifdef TLP_DEBUG
 		if (ifp->if_flags & IFF_DEBUG) {
 			int i;
+			struct tulip_desc *txd;
 			printf("    txsoft %p transmit chain:\n", txs);
 			for (i = txs->txs_firstdesc;; i = TULIP_NEXTTX(i)) {
+				txd = &sc->sc_txdescs[i];
 				printf("     descriptor %d:\n", i);
 				printf("       td_status:   0x%08x\n",
-				    le32toh(sc->sc_txdescs[i].td_status));
+				    le32toh(txd->td_status));
 				printf("       td_ctl:      0x%08x\n",
-				    le32toh(sc->sc_txdescs[i].td_ctl));
+				    le32toh(txd->td_ctl));
 				printf("       td_bufaddr1: 0x%08x\n",
-				    le32toh(sc->sc_txdescs[i].td_bufaddr1));
+				    le32toh(txd->td_bufaddr1));
 				printf("       td_bufaddr2: 0x%08x\n",
 				    le32toh(sc->sc_txdescs[i].td_bufaddr2));
 				if (i == txs->txs_lastdesc)
@@ -1566,7 +1531,7 @@ tlp_print_stats(struct tulip_softc *sc)
 {
 
 	printf("%s: tx_uf %lu, tx_to %lu, tx_ec %lu, tx_lc %lu\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(sc->sc_dev),
 	    sc->sc_stats.ts_tx_uf, sc->sc_stats.ts_tx_to,
 	    sc->sc_stats.ts_tx_ec, sc->sc_stats.ts_tx_lc);
 }
@@ -1616,7 +1581,7 @@ tlp_reset(struct tulip_softc *sc)
 	}
 
 	if (TULIP_ISSET(sc, CSR_BUSMODE, BUSMODE_SWR))
-		printf("%s: reset failed to complete\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "reset failed to complete\n");
 
 	delay(1000);
 
@@ -1819,9 +1784,9 @@ tlp_init(struct ifnet *ifp)
 	 */
 	memset(sc->sc_txdescs, 0, sizeof(sc->sc_txdescs));
 	for (i = 0; i < TULIP_NTXDESC; i++) {
-		sc->sc_txdescs[i].td_ctl = htole32(sc->sc_tdctl_ch);
-		sc->sc_txdescs[i].td_bufaddr2 =
-		    htole32(TULIP_CDTXADDR(sc, TULIP_NEXTTX(i)));
+		struct tulip_desc *txd = &sc->sc_txdescs[i];
+		txd->td_ctl = htole32(sc->sc_tdctl_ch);
+		txd->td_bufaddr2 = htole32(TULIP_CDTXADDR(sc, TULIP_NEXTTX(i)));
 	}
 	sc->sc_txdescs[TULIP_NTXDESC - 1].td_ctl |= htole32(sc->sc_tdctl_er);
 	TULIP_CDTXSYNC(sc, 0, TULIP_NTXDESC,
@@ -1848,9 +1813,9 @@ tlp_init(struct ifnet *ifp)
 		rxs = &sc->sc_rxsoft[i];
 		if (rxs->rxs_mbuf == NULL) {
 			if ((error = tlp_add_rxbuf(sc, i)) != 0) {
-				printf("%s: unable to allocate or map rx "
-				    "buffer %d, error = %d\n",
-				    sc->sc_dev.dv_xname, i, error);
+				aprint_error_dev(sc->sc_dev,
+				    "unable to allocate or map rx "
+				    "buffer %d, error = %d\n", i, error);
 				/*
 				 * XXX Should attempt to run with fewer receive
 				 * XXX buffers instead of just failing.
@@ -1922,8 +1887,8 @@ tlp_init(struct ifnet *ifp)
 	case TULIP_CHIP_AN983:
 	case TULIP_CHIP_AN985:
 	    {
-		u_int32_t reg;
-		const u_int8_t *enaddr = CLLADDR(ifp->if_sadl);
+		uint32_t reg;
+		const uint8_t *enaddr = CLLADDR(ifp->if_sadl);
 
 		reg = enaddr[0] |
 		      (enaddr[1] << 8) |
@@ -1940,8 +1905,8 @@ tlp_init(struct ifnet *ifp)
 	case TULIP_CHIP_AX88140:
 	case TULIP_CHIP_AX88141:
 	    {
-		u_int32_t reg;
-		const u_int8_t *enaddr = CLLADDR(ifp->if_sadl);
+		uint32_t reg;
+		const uint8_t *enaddr = CLLADDR(ifp->if_sadl);
 
 		reg = enaddr[0] |
 		      (enaddr[1] << 8) |
@@ -1993,7 +1958,7 @@ tlp_init(struct ifnet *ifp)
 	if (error) {
 		ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 		ifp->if_timer = 0;
-		printf("%s: interface not running\n", sc->sc_dev.dv_xname);
+		printf("%s: interface not running\n", device_xname(sc->sc_dev));
 	}
 	return (error);
 }
@@ -2009,8 +1974,7 @@ tlp_enable(struct tulip_softc *sc)
 
 	if (TULIP_IS_ENABLED(sc) == 0 && sc->sc_enable != NULL) {
 		if ((*sc->sc_enable)(sc) != 0) {
-			printf("%s: device enable failed\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev, "device enable failed\n");
 			return (EIO);
 		}
 		sc->sc_flags |= TULIPF_ENABLED;
@@ -2031,43 +1995,6 @@ tlp_disable(struct tulip_softc *sc)
 		(*sc->sc_disable)(sc);
 		sc->sc_flags &= ~TULIPF_ENABLED;
 	}
-}
-
-/*
- * tlp_power:
- *
- *	Power management (suspend/resume) hook.
- */
-static void
-tlp_power(int why, void *arg)
-{
-	struct tulip_softc *sc = arg;
-	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	int s;
-
-	s = splnet();
-	switch (why) {
-	case PWR_STANDBY:
-		/* do nothing! */
-		break;
-	case PWR_SUSPEND:
-		tlp_stop(ifp, 0);
-		if (sc->sc_power != NULL)
-			(*sc->sc_power)(sc, why);
-		break;
-	case PWR_RESUME:
-		if (ifp->if_flags & IFF_UP) {
-			if (sc->sc_power != NULL)
-				(*sc->sc_power)(sc, why);
-			tlp_init(ifp);
-		}
-		break;
-	case PWR_SOFTSUSPEND:
-	case PWR_SOFTSTANDBY:
-	case PWR_SOFTRESUME:
-		break;
-	}
-	splx(s);
 }
 
 /*
@@ -2134,11 +2061,6 @@ tlp_stop(struct ifnet *ifp, int disable)
 		SIMPLEQ_INSERT_TAIL(&sc->sc_txfreeq, txs, txs_q);
 	}
 
-	if (disable) {
-		tlp_rxdrain(sc);
-		tlp_disable(sc);
-	}
-
 	sc->sc_flags &= ~(TULIPF_WANT_SETUP|TULIPF_DOING_SETUP);
 
 	/*
@@ -2152,6 +2074,11 @@ tlp_stop(struct ifnet *ifp, int disable)
 	 * Reset the chip (needed on some flavors to actually disable it).
 	 */
 	tlp_reset(sc);
+
+	if (disable) {
+		tlp_rxdrain(sc);
+		tlp_disable(sc);
+	}
 }
 
 #define	SROM_EMIT(sc, x)						\
@@ -2168,7 +2095,7 @@ do {									\
 static void
 tlp_srom_idle(struct tulip_softc *sc)
 {
-	u_int32_t miirom;
+	uint32_t miirom;
 	int i;
 
 	miirom = MIIROM_SR;
@@ -2204,7 +2131,7 @@ tlp_srom_idle(struct tulip_softc *sc)
 static int
 tlp_srom_size(struct tulip_softc *sc)
 {
-	u_int32_t miirom;
+	uint32_t miirom;
 	int x;
 
 	/* Select the SROM. */
@@ -2247,13 +2174,13 @@ tlp_srom_size(struct tulip_softc *sc)
 	SROM_EMIT(sc, 0);
 
 	if (x < 4 || x > 12) {
-		aprint_debug("%s: broken MicroWire interface detected; "
-		    "setting SROM size to 1Kb\n", sc->sc_dev.dv_xname);
+		aprint_debug_dev(sc->sc_dev, "broken MicroWire interface "
+		    "detected; setting SROM size to 1Kb\n");
 		return (6);
 	} else {
 		if (tlp_srom_debug)
 			printf("%s: SROM size is 2^%d*16 bits (%d bytes)\n",
-			    sc->sc_dev.dv_xname, x, (1 << (x + 4)) >> 3);
+			    device_xname(sc->sc_dev), x, (1 << (x + 4)) >> 3);
 		return (x);
 	}
 }
@@ -2267,8 +2194,8 @@ int
 tlp_read_srom(struct tulip_softc *sc)
 {
 	int size;
-	u_int32_t miirom;
-	u_int16_t datain;
+	uint32_t miirom;
+	uint16_t datain;
 	int i, x;
 
 	tlp_srom_idle(sc);
@@ -2383,8 +2310,8 @@ tlp_add_rxbuf(struct tulip_softc *sc, int idx)
 	    m->m_ext.ext_buf, m->m_ext.ext_size, NULL,
 	    BUS_DMA_READ|BUS_DMA_NOWAIT);
 	if (error) {
-		printf("%s: can't load rx DMA map %d, error = %d\n",
-		    sc->sc_dev.dv_xname, idx, error);
+		aprint_error_dev(sc->sc_dev,
+		    "can't load rx DMA map %d, error = %d\n", idx, error);
 		panic("tlp_add_rxbuf");	/* XXX */
 	}
 
@@ -2402,9 +2329,9 @@ tlp_add_rxbuf(struct tulip_softc *sc, int idx)
  *	Check the CRC of the Tulip SROM.
  */
 int
-tlp_srom_crcok(const u_int8_t *romdata)
+tlp_srom_crcok(const uint8_t *romdata)
 {
-	u_int32_t crc;
+	uint32_t crc;
 
 	crc = ether_crc32_le(romdata, TULIP_ROM_CRC32_CHECKSUM);
 	crc = (crc & 0xffff) ^ 0xffff;
@@ -2428,10 +2355,10 @@ tlp_srom_crcok(const u_int8_t *romdata)
  *	Check to see if the SROM is in the new standardized format.
  */
 int
-tlp_isv_srom(const u_int8_t *romdata)
+tlp_isv_srom(const uint8_t *romdata)
 {
 	int i;
-	u_int16_t cksum;
+	uint16_t cksum;
 
 	if (tlp_srom_crcok(romdata)) {
 		/*
@@ -2467,7 +2394,7 @@ tlp_isv_srom(const u_int8_t *romdata)
  *	Get the Ethernet address from an ISV SROM.
  */
 int
-tlp_isv_srom_enaddr(struct tulip_softc *sc, u_int8_t *enaddr)
+tlp_isv_srom_enaddr(struct tulip_softc *sc, uint8_t *enaddr)
 {
 	int i, devcnt;
 
@@ -2501,12 +2428,12 @@ tlp_isv_srom_enaddr(struct tulip_softc *sc, u_int8_t *enaddr)
  *	This routine is largely lifted from Matt Thomas's `de' driver.
  */
 int
-tlp_parse_old_srom(struct tulip_softc *sc, u_int8_t *enaddr)
+tlp_parse_old_srom(struct tulip_softc *sc, uint8_t *enaddr)
 {
-	static const u_int8_t testpat[] =
+	static const uint8_t testpat[] =
 	    { 0xff, 0, 0x55, 0xaa, 0xff, 0, 0x55, 0xaa };
 	int i;
-	u_int32_t cksum;
+	uint32_t cksum;
 
 	if (memcmp(&sc->sc_srom[0], &sc->sc_srom[16], 8) != 0) {
 		/*
@@ -2598,13 +2525,13 @@ tlp_parse_old_srom(struct tulip_softc *sc, u_int8_t *enaddr)
 
 	memcpy(enaddr, sc->sc_srom, ETHER_ADDR_LEN);
 
-	cksum = *(u_int16_t *) &enaddr[0];
+	cksum = *(uint16_t *) &enaddr[0];
 
 	cksum <<= 1;
 	if (cksum > 0xffff)
 		cksum -= 0xffff;
 
-	cksum += *(u_int16_t *) &enaddr[2];
+	cksum += *(uint16_t *) &enaddr[2];
 	if (cksum > 0xffff)
 		cksum -= 0xffff;
 
@@ -2612,11 +2539,11 @@ tlp_parse_old_srom(struct tulip_softc *sc, u_int8_t *enaddr)
 	if (cksum > 0xffff)
 		cksum -= 0xffff;
 
-	cksum += *(u_int16_t *) &enaddr[4];
+	cksum += *(uint16_t *) &enaddr[4];
 	if (cksum >= 0xffff)
 		cksum -= 0xffff;
 
-	if (cksum != *(u_int16_t *) &sc->sc_srom[6])
+	if (cksum != *(uint16_t *) &sc->sc_srom[6])
 		return (0);
 
 	return (1);
@@ -2634,14 +2561,15 @@ tlp_filter_setup(struct tulip_softc *sc)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ether_multi *enm;
 	struct ether_multistep step;
-	volatile u_int32_t *sp;
+	volatile uint32_t *sp;
 	struct tulip_txsoft *txs;
-	u_int8_t enaddr[ETHER_ADDR_LEN];
-	u_int32_t hash, hashsize;
+	struct tulip_desc *txd;
+	uint8_t enaddr[ETHER_ADDR_LEN];
+	uint32_t hash, hashsize;
 	int cnt, nexttx;
 
 	DPRINTF(sc, ("%s: tlp_filter_setup: sc_flags 0x%08x\n",
-	    sc->sc_dev.dv_xname, sc->sc_flags));
+	    device_xname(sc->sc_dev), sc->sc_flags));
 
 	memcpy(enaddr, CLLADDR(ifp->if_sadl), ETHER_ADDR_LEN);
 
@@ -2653,7 +2581,7 @@ tlp_filter_setup(struct tulip_softc *sc)
 	    (sc->sc_flags & TULIPF_DOING_SETUP) != 0) {
 		sc->sc_flags |= TULIPF_WANT_SETUP;
 		DPRINTF(sc, ("%s: tlp_filter_setup: deferring\n",
-		    sc->sc_dev.dv_xname));
+		    device_xname(sc->sc_dev)));
 		return;
 	}
 	sc->sc_flags &= ~TULIPF_WANT_SETUP;
@@ -2713,25 +2641,25 @@ tlp_filter_setup(struct tulip_softc *sc)
 			goto hashperfect;
 		}
 		cnt++;
-		*sp++ = TULIP_SP_FIELD(enm->enm_addrlo, 0);
-		*sp++ = TULIP_SP_FIELD(enm->enm_addrlo, 1);
-		*sp++ = TULIP_SP_FIELD(enm->enm_addrlo, 2);
+		*sp++ = htole32(TULIP_SP_FIELD(enm->enm_addrlo, 0));
+		*sp++ = htole32(TULIP_SP_FIELD(enm->enm_addrlo, 1));
+		*sp++ = htole32(TULIP_SP_FIELD(enm->enm_addrlo, 2));
 		ETHER_NEXT_MULTI(step, enm);
 	}
 
 	if (ifp->if_flags & IFF_BROADCAST) {
 		/* ...and the broadcast address. */
 		cnt++;
-		*sp++ = TULIP_SP_FIELD_C(0xffff);
-		*sp++ = TULIP_SP_FIELD_C(0xffff);
-		*sp++ = TULIP_SP_FIELD_C(0xffff);
+		*sp++ = htole32(TULIP_SP_FIELD_C(0xff, 0xff));
+		*sp++ = htole32(TULIP_SP_FIELD_C(0xff, 0xff));
+		*sp++ = htole32(TULIP_SP_FIELD_C(0xff, 0xff));
 	}
 
 	/* Pad the rest with our station address. */
 	for (; cnt < TULIP_MAXADDRS; cnt++) {
-		*sp++ = TULIP_SP_FIELD(enaddr, 0);
-		*sp++ = TULIP_SP_FIELD(enaddr, 1);
-		*sp++ = TULIP_SP_FIELD(enaddr, 2);
+		*sp++ = htole32(TULIP_SP_FIELD(enaddr, 0));
+		*sp++ = htole32(TULIP_SP_FIELD(enaddr, 1));
+		*sp++ = htole32(TULIP_SP_FIELD(enaddr, 2));
 	}
 	ifp->if_flags &= ~IFF_ALLMULTI;
 	goto setit;
@@ -2785,9 +2713,9 @@ tlp_filter_setup(struct tulip_softc *sc)
 		 * Hash-Perfect mode; put our station address after
 		 * the hash table.
 		 */
-		sp[39] = TULIP_SP_FIELD(enaddr, 0);
-		sp[40] = TULIP_SP_FIELD(enaddr, 1);
-		sp[41] = TULIP_SP_FIELD(enaddr, 2);
+		sp[39] = htole32(TULIP_SP_FIELD(enaddr, 0));
+		sp[40] = htole32(TULIP_SP_FIELD(enaddr, 1));
+		sp[41] = htole32(TULIP_SP_FIELD(enaddr, 2));
 	}
 	ifp->if_flags &= ~IFF_ALLMULTI;
 	goto setit;
@@ -2804,14 +2732,14 @@ tlp_filter_setup(struct tulip_softc *sc)
 	cnt = 0;
 	if (ifp->if_flags & IFF_BROADCAST) {
 		cnt++;
-		*sp++ = TULIP_SP_FIELD_C(0xffff);
-		*sp++ = TULIP_SP_FIELD_C(0xffff);
-		*sp++ = TULIP_SP_FIELD_C(0xffff);
+		*sp++ = htole32(TULIP_SP_FIELD_C(0xff, 0xff));
+		*sp++ = htole32(TULIP_SP_FIELD_C(0xff, 0xff));
+		*sp++ = htole32(TULIP_SP_FIELD_C(0xff, 0xff));
 	}
 	for (; cnt < TULIP_MAXADDRS; cnt++) {
-		*sp++ = TULIP_SP_FIELD(enaddr, 0);
-		*sp++ = TULIP_SP_FIELD(enaddr, 1);
-		*sp++ = TULIP_SP_FIELD(enaddr, 2);
+		*sp++ = htole32(TULIP_SP_FIELD(enaddr, 0));
+		*sp++ = htole32(TULIP_SP_FIELD(enaddr, 1));
+		*sp++ = htole32(TULIP_SP_FIELD(enaddr, 2));
 	}
 	ifp->if_flags |= IFF_ALLMULTI;
 
@@ -2833,10 +2761,10 @@ tlp_filter_setup(struct tulip_softc *sc)
 	txs->txs_mbuf = NULL;
 
 	nexttx = sc->sc_txnext;
-	sc->sc_txdescs[nexttx].td_status = 0;
-	sc->sc_txdescs[nexttx].td_bufaddr1 = htole32(TULIP_CDSPADDR(sc));
-	sc->sc_txdescs[nexttx].td_ctl =
-	    htole32((TULIP_SETUP_PACKET_LEN << TDCTL_SIZE1_SHIFT) |
+	txd = &sc->sc_txdescs[nexttx];
+	txd->td_status = 0;
+	txd->td_bufaddr1 = htole32(TULIP_CDSPADDR(sc));
+	txd->td_ctl = htole32((TULIP_SETUP_PACKET_LEN << TDCTL_SIZE1_SHIFT) |
 	    sc->sc_filtmode | TDCTL_Tx_SET | sc->sc_setup_fsls |
 	    TDCTL_Tx_IC | sc->sc_tdctl_ch |
 	    (nexttx == (TULIP_NTXDESC - 1) ? sc->sc_tdctl_er : 0));
@@ -2847,18 +2775,16 @@ tlp_filter_setup(struct tulip_softc *sc)
 	if (ifp->if_flags & IFF_DEBUG) {
 		printf("     filter_setup %p transmit chain:\n", txs);
 		printf("     descriptor %d:\n", nexttx);
-		printf("       td_status:   0x%08x\n",
-		    le32toh(sc->sc_txdescs[nexttx].td_status));
-		printf("       td_ctl:      0x%08x\n",
-		    le32toh(sc->sc_txdescs[nexttx].td_ctl));
+		printf("       td_status:   0x%08x\n", le32toh(txd->td_status));
+		printf("       td_ctl:      0x%08x\n", le32toh(txd->td_ctl));
 		printf("       td_bufaddr1: 0x%08x\n",
-		    le32toh(sc->sc_txdescs[nexttx].td_bufaddr1));
+		    le32toh(txd->td_bufaddr1));
 		printf("       td_bufaddr2: 0x%08x\n",
-		    le32toh(sc->sc_txdescs[nexttx].td_bufaddr2));
+		    le32toh(txd->td_bufaddr2));
 	}
 #endif
 
-	sc->sc_txdescs[nexttx].td_status = htole32(TDSTAT_OWN);
+	txd->td_status = htole32(TDSTAT_OWN);
 	TULIP_CDTXSYNC(sc, nexttx, 1,
 	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 
@@ -2887,7 +2813,8 @@ tlp_filter_setup(struct tulip_softc *sc)
 	/* Set up a watchdog timer in case the chip flakes out. */
 	ifp->if_timer = 5;
 
-	DPRINTF(sc, ("%s: tlp_filter_setup: returning\n", sc->sc_dev.dv_xname));
+	DPRINTF(sc, ("%s: tlp_filter_setup: returning\n",
+		device_xname(sc->sc_dev)));
 }
 
 /*
@@ -2902,10 +2829,10 @@ tlp_winb_filter_setup(struct tulip_softc *sc)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ether_multi *enm;
 	struct ether_multistep step;
-	u_int32_t hash, mchash[2];
+	uint32_t hash, mchash[2];
 
 	DPRINTF(sc, ("%s: tlp_winb_filter_setup: sc_flags 0x%08x\n",
-	    sc->sc_dev.dv_xname, sc->sc_flags));
+	    device_xname(sc->sc_dev), sc->sc_flags));
 
 	sc->sc_opmode &= ~(OPMODE_WINB_APP|OPMODE_WINB_AMP|OPMODE_WINB_ABP);
 
@@ -2958,7 +2885,7 @@ tlp_winb_filter_setup(struct tulip_softc *sc)
 	TULIP_WRITE(sc, CSR_WINB_CMA1, mchash[1]);
 	TULIP_WRITE(sc, CSR_OPMODE, sc->sc_opmode);
 	DPRINTF(sc, ("%s: tlp_winb_filter_setup: returning\n",
-	    sc->sc_dev.dv_xname));
+	    device_xname(sc->sc_dev)));
 }
 
 /*
@@ -2973,7 +2900,7 @@ tlp_al981_filter_setup(struct tulip_softc *sc)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ether_multi *enm;
 	struct ether_multistep step;
-	u_int32_t hash, mchash[2];
+	uint32_t hash, mchash[2];
 
 	/*
 	 * If the chip is running, we need to reset the interface,
@@ -2987,7 +2914,7 @@ tlp_al981_filter_setup(struct tulip_softc *sc)
 	}
 
 	DPRINTF(sc, ("%s: tlp_al981_filter_setup: sc_flags 0x%08x\n",
-	    sc->sc_dev.dv_xname, sc->sc_flags));
+	    device_xname(sc->sc_dev), sc->sc_flags));
 
 	sc->sc_opmode &= ~(OPMODE_PR|OPMODE_PM);
 
@@ -3028,7 +2955,7 @@ tlp_al981_filter_setup(struct tulip_softc *sc)
 	bus_space_write_4(sc->sc_st, sc->sc_sh, CSR_ADM_MAR1, mchash[1]);
 	TULIP_WRITE(sc, CSR_OPMODE, sc->sc_opmode);
 	DPRINTF(sc, ("%s: tlp_al981_filter_setup: returning\n",
-	    sc->sc_dev.dv_xname));
+	    device_xname(sc->sc_dev)));
 }
 
 /*
@@ -3043,10 +2970,10 @@ tlp_asix_filter_setup(struct tulip_softc *sc)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ether_multi *enm;
 	struct ether_multistep step;
-	u_int32_t hash, mchash[2];
+	uint32_t hash, mchash[2];
 
 	DPRINTF(sc, ("%s: tlp_asix_filter_setup: sc_flags 0x%08x\n",
-		sc->sc_dev.dv_xname, sc->sc_flags));
+		device_xname(sc->sc_dev), sc->sc_flags));
 
 	sc->sc_opmode &= ~(OPMODE_PM|OPMODE_AX_RB|OPMODE_PR);
 
@@ -3098,7 +3025,7 @@ setit:
 	TULIP_WRITE(sc, CSR_AX_FILTDATA, mchash[1]);
 	TULIP_WRITE(sc, CSR_OPMODE, sc->sc_opmode);
 	DPRINTF(sc, ("%s: tlp_asix_filter_setup: returning\n",
-		sc->sc_dev.dv_xname));
+		device_xname(sc->sc_dev)));
 }
 
 
@@ -3108,7 +3035,7 @@ setit:
  *	Cause the transmit and/or receive processes to go idle.
  */
 void
-tlp_idle(struct tulip_softc *sc, u_int32_t bits)
+tlp_idle(struct tulip_softc *sc, uint32_t bits)
 {
 	static const char * const tlp_tx_state_names[] = {
 		"STOPPED",
@@ -3152,7 +3079,7 @@ tlp_idle(struct tulip_softc *sc, u_int32_t bits)
 	};
 
 	const char * const *tx_state_names, * const *rx_state_names;
-	u_int32_t csr, ackmask = 0;
+	uint32_t csr, ackmask = 0;
 	int i;
 
 	switch (sc->sc_chip) {
@@ -3195,7 +3122,7 @@ tlp_idle(struct tulip_softc *sc, u_int32_t bits)
 				break;
 			default:
 				printf("%s: transmit process failed to idle: "
-				    "state %s\n", sc->sc_dev.dv_xname,
+				    "state %s\n", device_xname(sc->sc_dev),
 				    tx_state_names[(csr & STATUS_TS) >> 20]);
 			}
 		}
@@ -3212,7 +3139,7 @@ tlp_idle(struct tulip_softc *sc, u_int32_t bits)
 				break;
 			default:
 				printf("%s: receive process failed to idle: "
-				    "state %s\n", sc->sc_dev.dv_xname,
+				    "state %s\n", device_xname(sc->sc_dev),
 				    rx_state_names[(csr & STATUS_RS) >> 17]);
 			}
 		}
@@ -3273,7 +3200,7 @@ tlp_mii_tick(void *arg)
 	struct tulip_softc *sc = arg;
 	int s;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return;
 
 	s = splnet();
@@ -3289,9 +3216,9 @@ tlp_mii_tick(void *arg)
  *	Callback from PHY when media changes.
  */
 static void
-tlp_mii_statchg(struct device *self)
+tlp_mii_statchg(struct ifnet *ifp)
 {
-	struct tulip_softc *sc = (struct tulip_softc *)self;
+	struct tulip_softc *sc = ifp->if_softc;
 
 	/* Idle the transmit and receive processes. */
 	tlp_idle(sc, OPMODE_ST|OPMODE_SR);
@@ -3320,9 +3247,9 @@ tlp_mii_statchg(struct device *self)
  *	for the Winbond 89C840F, which has different OPMODE bits.
  */
 static void
-tlp_winb_mii_statchg(struct device *self)
+tlp_winb_mii_statchg(struct ifnet *ifp)
 {
-	struct tulip_softc *sc = (struct tulip_softc *)self;
+	struct tulip_softc *sc = ifp->if_softc;
 
 	/* Idle the transmit and receive processes. */
 	tlp_idle(sc, OPMODE_ST|OPMODE_SR);
@@ -3349,9 +3276,9 @@ tlp_winb_mii_statchg(struct device *self)
  *	for the DM9102.
  */
 static void
-tlp_dm9102_mii_statchg(struct device *self)
+tlp_dm9102_mii_statchg(struct ifnet *ifp)
 {
-	struct tulip_softc *sc = (struct tulip_softc *)self;
+	struct tulip_softc *sc = ifp->if_softc;
 
 	/*
 	 * Don't idle the transmit and receive processes, here.  It
@@ -3420,9 +3347,9 @@ tlp_mii_setmedia(struct tulip_softc *sc)
  *	Read a PHY register via bit-bang'ing the MII.
  */
 static int
-tlp_bitbang_mii_readreg(struct device *self, int phy, int reg)
+tlp_bitbang_mii_readreg(device_t self, int phy, int reg)
 {
-	struct tulip_softc *sc = (void *) self;
+	struct tulip_softc *sc = device_private(self);
 
 	return (mii_bitbang_readreg(self, sc->sc_bitbang_ops, phy, reg));
 }
@@ -3433,9 +3360,9 @@ tlp_bitbang_mii_readreg(struct device *self, int phy, int reg)
  *	Write a PHY register via bit-bang'ing the MII.
  */
 static void
-tlp_bitbang_mii_writereg(struct device *self, int phy, int reg, int val)
+tlp_bitbang_mii_writereg(device_t self, int phy, int reg, int val)
 {
-	struct tulip_softc *sc = (void *) self;
+	struct tulip_softc *sc = device_private(self);
 
 	mii_bitbang_writereg(self, sc->sc_bitbang_ops, phy, reg, val);
 }
@@ -3445,10 +3372,10 @@ tlp_bitbang_mii_writereg(struct device *self, int phy, int reg, int val)
  *
  *	Read the MII serial port for the MII bit-bang module.
  */
-static u_int32_t
-tlp_sio_mii_bitbang_read(struct device *self)
+static uint32_t
+tlp_sio_mii_bitbang_read(device_t self)
 {
-	struct tulip_softc *sc = (void *) self;
+	struct tulip_softc *sc = device_private(self);
 
 	return (TULIP_READ(sc, CSR_MIIROM));
 }
@@ -3459,9 +3386,9 @@ tlp_sio_mii_bitbang_read(struct device *self)
  *	Write the MII serial port for the MII bit-bang module.
  */
 static void
-tlp_sio_mii_bitbang_write(struct device *self, u_int32_t val)
+tlp_sio_mii_bitbang_write(device_t self, uint32_t val)
 {
-	struct tulip_softc *sc = (void *) self;
+	struct tulip_softc *sc = device_private(self);
 
 	TULIP_WRITE(sc, CSR_MIIROM, val);
 }
@@ -3472,10 +3399,10 @@ tlp_sio_mii_bitbang_write(struct device *self, u_int32_t val)
  *	Read a PHY register on the Lite-On PNIC.
  */
 static int
-tlp_pnic_mii_readreg(struct device *self, int phy, int reg)
+tlp_pnic_mii_readreg(device_t self, int phy, int reg)
 {
-	struct tulip_softc *sc = (void *) self;
-	u_int32_t val;
+	struct tulip_softc *sc = device_private(self);
+	uint32_t val;
 	int i;
 
 	TULIP_WRITE(sc, CSR_PNIC_MII,
@@ -3493,7 +3420,7 @@ tlp_pnic_mii_readreg(struct device *self, int phy, int reg)
 				return (val & PNIC_MII_DATA);
 		}
 	}
-	printf("%s: MII read timed out\n", sc->sc_dev.dv_xname);
+	printf("%s: MII read timed out\n", device_xname(sc->sc_dev));
 	return (0);
 }
 
@@ -3503,9 +3430,9 @@ tlp_pnic_mii_readreg(struct device *self, int phy, int reg)
  *	Write a PHY register on the Lite-On PNIC.
  */
 static void
-tlp_pnic_mii_writereg(struct device *self, int phy, int reg, int val)
+tlp_pnic_mii_writereg(device_t self, int phy, int reg, int val)
 {
-	struct tulip_softc *sc = (void *) self;
+	struct tulip_softc *sc = device_private(self);
 	int i;
 
 	TULIP_WRITE(sc, CSR_PNIC_MII,
@@ -3518,7 +3445,7 @@ tlp_pnic_mii_writereg(struct device *self, int phy, int reg, int val)
 		if (TULIP_ISSET(sc, CSR_PNIC_MII, PNIC_MII_BUSY) == 0)
 			return;
 	}
-	printf("%s: MII write timed out\n", sc->sc_dev.dv_xname);
+	printf("%s: MII write timed out\n", device_xname(sc->sc_dev));
 }
 
 static const bus_addr_t tlp_al981_phy_regmap[] = {
@@ -3544,9 +3471,9 @@ static const int tlp_al981_phy_regmap_size = sizeof(tlp_al981_phy_regmap) /
  *	Read a PHY register on the ADMtek AL981.
  */
 static int
-tlp_al981_mii_readreg(struct device *self, int phy, int reg)
+tlp_al981_mii_readreg(device_t self, int phy, int reg)
 {
-	struct tulip_softc *sc = (struct tulip_softc *)self;
+	struct tulip_softc *sc = device_private(self);
 
 	/* AL981 only has an internal PHY. */
 	if (phy != 0)
@@ -3565,9 +3492,9 @@ tlp_al981_mii_readreg(struct device *self, int phy, int reg)
  *	Write a PHY register on the ADMtek AL981.
  */
 static void
-tlp_al981_mii_writereg(struct device *self, int phy, int reg, int val)
+tlp_al981_mii_writereg(device_t self, int phy, int reg, int val)
 {
-	struct tulip_softc *sc = (struct tulip_softc *)self;
+	struct tulip_softc *sc = device_private(self);
 
 	/* AL981 only has an internal PHY. */
 	if (phy != 0)
@@ -3745,7 +3672,7 @@ tlp_21142_reset(struct tulip_softc *sc)
 {
 	struct ifmedia_entry *ife = sc->sc_mii.mii_media.ifm_cur;
 	struct tulip_21x4x_media *tm = ife->ifm_aux;
-	const u_int8_t *cp;
+	const uint8_t *cp;
 	int i;
 
 	cp = &sc->sc_srom[tm->tm_reset_offset];
@@ -3995,19 +3922,19 @@ static const struct tulip_srom_to_ifmedia tulip_srom_to_ifmedia_table[] = {
 	    0 } },
 };
 
-static const struct tulip_srom_to_ifmedia *tlp_srom_to_ifmedia(u_int8_t);
+static const struct tulip_srom_to_ifmedia *tlp_srom_to_ifmedia(uint8_t);
 static void	tlp_srom_media_info(struct tulip_softc *,
 		    const struct tulip_srom_to_ifmedia *,
 		    struct tulip_21x4x_media *);
 static void	tlp_add_srom_media(struct tulip_softc *, int,
 		    void (*)(struct tulip_softc *, struct ifmediareq *),
-		    int (*)(struct tulip_softc *), const u_int8_t *, int);
+		    int (*)(struct tulip_softc *), const uint8_t *, int);
 static void	tlp_print_media(struct tulip_softc *);
 static void	tlp_nway_activate(struct tulip_softc *, int);
 static void	tlp_get_minst(struct tulip_softc *);
 
 static const struct tulip_srom_to_ifmedia *
-tlp_srom_to_ifmedia(u_int8_t sm)
+tlp_srom_to_ifmedia(uint8_t sm)
 {
 	const struct tulip_srom_to_ifmedia *tsti;
 
@@ -4059,7 +3986,7 @@ tlp_srom_media_info(struct tulip_softc *sc,
 static void
 tlp_add_srom_media(struct tulip_softc *sc, int type,
     void (*get)(struct tulip_softc *, struct ifmediareq *),
-    int (*set)(struct tulip_softc *), const u_int8_t *list,
+    int (*set)(struct tulip_softc *), const uint8_t *list,
     int cnt)
 {
 	struct tulip_21x4x_media *tm;
@@ -4087,11 +4014,10 @@ tlp_print_media(struct tulip_softc *sc)
 	struct tulip_21x4x_media *tm;
 	const char *sep = "";
 
-#define	PRINT(str)	printf("%s%s", sep, str); sep = ", "
+#define	PRINT(str)	aprint_normal("%s%s", sep, str); sep = ", "
 
-	printf("%s: ", sc->sc_dev.dv_xname);
-	for (ife = TAILQ_FIRST(&sc->sc_mii.mii_media.ifm_list);
-	     ife != NULL; ife = TAILQ_NEXT(ife, ifm_list)) {
+	aprint_normal_dev(sc->sc_dev, "");
+	TAILQ_FOREACH(ife, &sc->sc_mii.mii_media.ifm_list, ifm_list) {
 		tm = ife->ifm_aux;
 		if (tm == NULL) {
 #ifdef DIAGNOSTIC
@@ -4104,7 +4030,7 @@ tlp_print_media(struct tulip_softc *sc)
 			PRINT(tm->tm_name);
 		}
 	}
-	printf("\n");
+	aprint_normal("\n");
 
 #undef PRINT
 }
@@ -4154,7 +4080,7 @@ tlp_sia_update_link(struct tulip_softc *sc)
 {
 	struct ifmedia_entry *ife;
 	struct tulip_21x4x_media *tm;
-	u_int32_t siastat;
+	uint32_t siastat;
 
 	ife = TULIP_CURRENT_MEDIA(sc);
 	tm = ife->ifm_aux;
@@ -4249,7 +4175,7 @@ tlp_sia_fixup(struct tulip_softc *sc)
 {
 	struct ifmedia_entry *ife;
 	struct tulip_21x4x_media *tm;
-	u_int32_t siaconn, siatxrx, siagen;
+	uint32_t siaconn, siatxrx, siagen;
 
 	switch (sc->sc_chip) {
 	case TULIP_CHIP_82C115:
@@ -4268,8 +4194,7 @@ tlp_sia_fixup(struct tulip_softc *sc)
 		return;
 	}
 
-	for (ife = TAILQ_FIRST(&sc->sc_mii.mii_media.ifm_list);
-	     ife != NULL; ife = TAILQ_NEXT(ife, ifm_list)) {
+	TAILQ_FOREACH(ife, &sc->sc_mii.mii_media.ifm_list, ifm_list) {
 		tm = ife->ifm_aux;
 		if (tm == NULL)
 			continue;
@@ -4436,7 +4361,7 @@ const struct tulip_mediasw tlp_21041_mediasw = {
 static void
 tlp_21040_tmsw_init(struct tulip_softc *sc)
 {
-	static const u_int8_t media[] = {
+	static const uint8_t media[] = {
 		TULIP_ROM_MB_MEDIA_TP,
 		TULIP_ROM_MB_MEDIA_TP_FDX,
 		TULIP_ROM_MB_MEDIA_AUI,
@@ -4473,7 +4398,7 @@ tlp_21040_tmsw_init(struct tulip_softc *sc)
 static void
 tlp_21040_tp_tmsw_init(struct tulip_softc *sc)
 {
-	static const u_int8_t media[] = {
+	static const uint8_t media[] = {
 		TULIP_ROM_MB_MEDIA_TP,
 		TULIP_ROM_MB_MEDIA_TP_FDX,
 	};
@@ -4491,7 +4416,7 @@ tlp_21040_tp_tmsw_init(struct tulip_softc *sc)
 static void
 tlp_21040_auibnc_tmsw_init(struct tulip_softc *sc)
 {
-	static const u_int8_t media[] = {
+	static const uint8_t media[] = {
 		TULIP_ROM_MB_MEDIA_AUI,
 	};
 
@@ -4508,7 +4433,7 @@ tlp_21040_auibnc_tmsw_init(struct tulip_softc *sc)
 static void
 tlp_21041_tmsw_init(struct tulip_softc *sc)
 {
-	static const u_int8_t media[] = {
+	static const uint8_t media[] = {
 		TULIP_ROM_MB_MEDIA_TP,
 		TULIP_ROM_MB_MEDIA_TP_FDX,
 		TULIP_ROM_MB_MEDIA_BNC,
@@ -4517,8 +4442,8 @@ tlp_21041_tmsw_init(struct tulip_softc *sc)
 	int i, defmedia, devcnt, leaf_offset, mb_offset, m_cnt;
 	const struct tulip_srom_to_ifmedia *tsti;
 	struct tulip_21x4x_media *tm;
-	u_int16_t romdef;
-	u_int8_t mb;
+	uint16_t romdef;
+	uint8_t mb;
 
 	ifmedia_init(&sc->sc_mii.mii_media, 0, tlp_mediachange,
 	    tlp_mediastatus);
@@ -4593,8 +4518,8 @@ tlp_21041_tmsw_init(struct tulip_softc *sc)
 			break;
 
 		default:
-			printf("%s: unknown media code 0x%02x\n",
-			    sc->sc_dev.dv_xname,
+			aprint_error_dev(sc->sc_dev,
+			    "unknown media code 0x%02x\n",
 			    mb & TULIP_ROM_MB_MEDIA_CODE);
 			free(tm, M_DEVBUF);
 		}
@@ -4661,7 +4586,7 @@ const struct tulip_mediasw tlp_2114x_isv_mediasw = {
 static void	tlp_2114x_nway_get(struct tulip_softc *, struct ifmediareq *);
 static int	tlp_2114x_nway_set(struct tulip_softc *);
 
-static void	tlp_2114x_nway_statchg(struct device *);
+static void	tlp_2114x_nway_statchg(struct ifnet *);
 static int	tlp_2114x_nway_service(struct tulip_softc *, int);
 static void	tlp_2114x_nway_auto(struct tulip_softc *);
 static void	tlp_2114x_nway_status(struct tulip_softc *);
@@ -4676,8 +4601,8 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 	const struct tulip_srom_to_ifmedia *tsti;
 	int i, devcnt, leaf_offset, m_cnt, type, length;
 	int defmedia, miidef;
-	u_int16_t word;
-	u_int8_t *cp, *ncp;
+	uint16_t word;
+	uint8_t *cp, *ncp;
 
 	defmedia = miidef = 0;
 
@@ -4705,8 +4630,8 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 	}
 
 	if (i == devcnt) {
-		printf("%s: unable to locate info leaf in SROM\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "unable to locate info leaf in SROM\n");
 		return;
 	}
 
@@ -4882,7 +4807,7 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 			 * particularly care; the MII code just likes to
 			 * search the whole thing anyhow.
 			 */
-			mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff,
+			mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff,
 			    MII_PHY_ANY, tm->tm_phyno, 0);
 
 			/*
@@ -4891,14 +4816,13 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 			 * kernel, we lose.  The PHY's default media always
 			 * takes priority.
 			 */
-			for (phy = LIST_FIRST(&sc->sc_mii.mii_phys);
-			     phy != NULL;
-			     phy = LIST_NEXT(phy, mii_list))
+			LIST_FOREACH(phy, &sc->sc_mii.mii_phys, mii_list) {
 				if (phy->mii_offset == tm->tm_phyno)
 					break;
+			}
 			if (phy == NULL) {
-				printf("%s: unable to configure MII\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(sc->sc_dev,
+				    "unable to configure MII\n");
 				break;
 			}
 
@@ -4917,9 +4841,8 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 			 * We do this by looking for media with our
 			 * PHY's `instance'.
 			 */
-			for (ife = TAILQ_FIRST(&sc->sc_mii.mii_media.ifm_list);
-			     ife != NULL;
-			     ife = TAILQ_NEXT(ife, ifm_list)) {
+			TAILQ_FOREACH(ife, &sc->sc_mii.mii_media.ifm_list,
+			      ifm_list) {
 				if (IFM_INST(ife->ifm_media) != phy->mii_inst)
 					continue;
 				ife->ifm_aux = tm;
@@ -5040,7 +4963,7 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 			 * particularly care; the MII code just likes to
 			 * search the whole thing anyhow.
 			 */
-			mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff,
+			mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff,
 			    MII_PHY_ANY, tm->tm_phyno, 0);
 
 			/*
@@ -5049,14 +4972,13 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 			 * kernel, we lose.  The PHY's default media always
 			 * takes priority.
 			 */
-			for (phy = LIST_FIRST(&sc->sc_mii.mii_phys);
-			     phy != NULL;
-			     phy = LIST_NEXT(phy, mii_list))
+			LIST_FOREACH(phy, &sc->sc_mii.mii_phys, mii_list) {
 				if (phy->mii_offset == tm->tm_phyno)
 					break;
+			}
 			if (phy == NULL) {
-				printf("%s: unable to configure MII\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(sc->sc_dev,
+				    "unable to configure MII\n");
 				break;
 			}
 
@@ -5075,9 +4997,8 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 			 * We do this by looking for media with our
 			 * PHY's `instance'.
 			 */
-			for (ife = TAILQ_FIRST(&sc->sc_mii.mii_media.ifm_list);
-			     ife != NULL;
-			     ife = TAILQ_NEXT(ife, ifm_list)) {
+			TAILQ_FOREACH(ife, &sc->sc_mii.mii_media.ifm_list,
+			      ifm_list) {
 				if (IFM_INST(ife->ifm_media) != phy->mii_inst)
 					continue;
 				ife->ifm_aux = tm;
@@ -5132,12 +5053,12 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 			break;
 
 		case TULIP_ROM_MB_21143_RESET:
-			printf("%s: 21143 reset block\n", sc->sc_dev.dv_xname);
+			aprint_normal_dev(sc->sc_dev, "21143 reset block\n");
 			break;
 
 		default:
-			printf("%s: unknown ISV media block type 0x%02x\n",
-			    sc->sc_dev.dv_xname, type);
+			aprint_error_dev(sc->sc_dev,
+			    "unknown ISV media block type 0x%02x\n", type);
 		}
 	}
 
@@ -5145,7 +5066,7 @@ tlp_2114x_isv_tmsw_init(struct tulip_softc *sc)
 	 * Deal with the case where no media is configured.
 	 */
 	if (TAILQ_FIRST(&sc->sc_mii.mii_media.ifm_list) == NULL) {
-		printf("%s: no media found!\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "no media found!\n");
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE, 0, NULL);
 		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE);
 		return;
@@ -5227,9 +5148,9 @@ tlp_2114x_nway_set(struct tulip_softc *sc)
 }
 
 static void
-tlp_2114x_nway_statchg(struct device *self)
+tlp_2114x_nway_statchg(struct ifnet *ifp)
 {
-	struct tulip_softc *sc = (struct tulip_softc *)self;
+	struct tulip_softc *sc = ifp->if_softc;
 	struct mii_data *mii = &sc->sc_mii;
 	struct ifmedia_entry *ife;
 
@@ -5253,7 +5174,7 @@ tlp_2114x_nway_tick(void *arg)
 	struct mii_data *mii = &sc->sc_mii;
 	int s, ticks;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return;
 
 	s = splnet();
@@ -5346,7 +5267,7 @@ tlp_2114x_nway_service(struct tulip_softc *sc, int cmd)
 	 */
 	if (IFM_SUBTYPE(ife->ifm_media) == IFM_AUTO &&
 	    ife->ifm_data != mii->mii_media_active) {
-		(*sc->sc_statchg)(&sc->sc_dev);
+		(*sc->sc_statchg)(mii->mii_ifp);
 		ife->ifm_data = mii->mii_media_active;
 	}
 	return (0);
@@ -5516,7 +5437,7 @@ tlp_sio_mii_tmsw_init(struct tulip_softc *sc)
 	sc->sc_mii.mii_statchg = sc->sc_statchg;
 	ifmedia_init(&sc->sc_mii.mii_media, 0, tlp_mediachange,
 	    tlp_mediastatus);
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, 0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE, 0, NULL);
@@ -5539,7 +5460,7 @@ const struct tulip_mediasw tlp_pnic_mediasw = {
 	tlp_pnic_tmsw_init, tlp_pnic_tmsw_get, tlp_pnic_tmsw_set
 };
 
-static void	tlp_pnic_nway_statchg(struct device *);
+static void	tlp_pnic_nway_statchg(struct ifnet *);
 static void	tlp_pnic_nway_tick(void *);
 static int	tlp_pnic_nway_service(struct tulip_softc *, int);
 static void	tlp_pnic_nway_reset(struct tulip_softc *);
@@ -5555,7 +5476,7 @@ tlp_pnic_tmsw_init(struct tulip_softc *sc)
 	const char *sep = "";
 
 #define	ADD(m, c)	ifmedia_add(&sc->sc_mii.mii_media, (m), (c), NULL)
-#define	PRINT(str)	printf("%s%s", sep, str); sep = ", "
+#define	PRINT(str)	aprint_normal("%s%s", sep, str); sep = ", "
 
 	sc->sc_mii.mii_ifp = ifp;
 	sc->sc_mii.mii_readreg = tlp_pnic_mii_readreg;
@@ -5563,11 +5484,11 @@ tlp_pnic_tmsw_init(struct tulip_softc *sc)
 	sc->sc_mii.mii_statchg = sc->sc_statchg;
 	ifmedia_init(&sc->sc_mii.mii_media, 0, tlp_mediachange,
 	    tlp_mediastatus);
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, 0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		/* XXX What about AUI/BNC support? */
-		printf("%s: ", sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "");
 
 		tlp_pnic_nway_reset(sc);
 
@@ -5594,7 +5515,7 @@ tlp_pnic_tmsw_init(struct tulip_softc *sc)
 		    PNIC_NWAY_CAP100TXFDX|PNIC_NWAY_CAP100TX);
 		PRINT("auto");
 
-		printf("\n");
+		aprint_normal("\n");
 
 		sc->sc_statchg = tlp_pnic_nway_statchg;
 		sc->sc_tick = tlp_pnic_nway_tick;
@@ -5650,9 +5571,9 @@ tlp_pnic_tmsw_set(struct tulip_softc *sc)
 }
 
 static void
-tlp_pnic_nway_statchg(struct device *self)
+tlp_pnic_nway_statchg(struct ifnet *ifp)
 {
-	struct tulip_softc *sc = (struct tulip_softc *)self;
+	struct tulip_softc *sc = ifp->if_softc;
 
 	/* Idle the transmit and receive processes. */
 	tlp_idle(sc, OPMODE_ST|OPMODE_SR);
@@ -5688,7 +5609,7 @@ tlp_pnic_nway_tick(void *arg)
 	struct tulip_softc *sc = arg;
 	int s;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return;
 
 	s = splnet();
@@ -5769,7 +5690,7 @@ tlp_pnic_nway_service(struct tulip_softc *sc, int cmd)
 	if ((sc->sc_nway_active == NULL ||
 	     sc->sc_nway_active->ifm_media != mii->mii_media_active) ||
 	    cmd == MII_MEDIACHG) {
-		(*sc->sc_statchg)(&sc->sc_dev);
+		(*sc->sc_statchg)(mii->mii_ifp);
 		tlp_nway_activate(sc, mii->mii_media_active);
 	}
 	return (0);
@@ -5789,7 +5710,7 @@ tlp_pnic_nway_auto(struct tulip_softc *sc, int waitfor)
 {
 	struct mii_data *mii = &sc->sc_mii;
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
-	u_int32_t reg;
+	uint32_t reg;
 	int i;
 
 	if ((sc->sc_flags & TULIPF_DOINGAUTO) == 0)
@@ -5807,8 +5728,8 @@ tlp_pnic_nway_auto(struct tulip_softc *sc, int waitfor)
 		}
 #if 0
 		if ((reg & PNIC_NWAY_LPAR_MASK) == 0)
-			printf("%s: autonegotiation failed to complete\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev,
+			    "autonegotiation failed to complete\n");
 #endif
 
 		/*
@@ -5836,16 +5757,17 @@ static void
 tlp_pnic_nway_auto_timeout(void *arg)
 {
 	struct tulip_softc *sc = arg;
-	u_int32_t reg;
+	/* uint32_t reg; */
 	int s;
 
 	s = splnet();
 	sc->sc_flags &= ~TULIPF_DOINGAUTO;
-	reg = TULIP_READ(sc, CSR_PNIC_NWAY);
+	/* reg = */
+	TULIP_READ(sc, CSR_PNIC_NWAY);
 #if 0
 	if ((reg & PNIC_NWAY_LPAR_MASK) == 0)
-		printf("%s: autonegotiation failed to complete\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "autonegotiation failed to complete\n");
 #endif
 
 	tlp_pnic_nway_acomp(sc);
@@ -5859,7 +5781,7 @@ static void
 tlp_pnic_nway_status(struct tulip_softc *sc)
 {
 	struct mii_data *mii = &sc->sc_mii;
-	u_int32_t reg;
+	uint32_t reg;
 
 	mii->mii_media_status = IFM_AVALID;
 	mii->mii_media_active = IFM_ETHER;
@@ -5904,7 +5826,7 @@ tlp_pnic_nway_status(struct tulip_softc *sc)
 static void
 tlp_pnic_nway_acomp(struct tulip_softc *sc)
 {
-	u_int32_t reg;
+	uint32_t reg;
 
 	reg = TULIP_READ(sc, CSR_PNIC_NWAY);
 	reg &= ~(PNIC_NWAY_FD|PNIC_NWAY_100|PNIC_NWAY_RN);
@@ -5944,7 +5866,7 @@ const struct tulip_mediasw tlp_pmac_mii_mediasw = {
 static void
 tlp_pmac_tmsw_init(struct tulip_softc *sc)
 {
-	static const u_int8_t media[] = {
+	static const uint8_t media[] = {
 		TULIP_ROM_MB_MEDIA_TP,
 		TULIP_ROM_MB_MEDIA_TP_FDX,
 		TULIP_ROM_MB_MEDIA_100TX,
@@ -5961,7 +5883,7 @@ tlp_pmac_tmsw_init(struct tulip_softc *sc)
 	    tlp_mediastatus);
 	if (sc->sc_chip == TULIP_CHIP_MX98713 ||
 	    sc->sc_chip == TULIP_CHIP_MX98713A) {
-		mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff,
+		mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff,
 		    MII_PHY_ANY, MII_OFFSET_ANY, 0);
 		if (LIST_FIRST(&sc->sc_mii.mii_phys) != NULL) {
 			sc->sc_flags |= TULIPF_HAS_MII;
@@ -6034,7 +5956,7 @@ tlp_al981_tmsw_init(struct tulip_softc *sc)
 	sc->sc_mii.mii_statchg = sc->sc_statchg;
 	ifmedia_init(&sc->sc_mii.mii_media, 0, tlp_mediachange,
 	    tlp_mediastatus);
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, 0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE, 0, NULL);
@@ -6069,7 +5991,7 @@ tlp_an985_tmsw_init(struct tulip_softc *sc)
 	sc->sc_mii.mii_statchg = sc->sc_statchg;
 	ifmedia_init(&sc->sc_mii.mii_media, 0, tlp_mediachange,
 	    tlp_mediastatus);
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, 1,
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, 1,
 	    MII_OFFSET_ANY, 0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE, 0, NULL);
@@ -6098,7 +6020,7 @@ static void
 tlp_dm9102_tmsw_init(struct tulip_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	u_int32_t opmode;
+	uint32_t opmode;
 
 	sc->sc_mii.mii_ifp = ifp;
 	sc->sc_mii.mii_readreg = tlp_bitbang_mii_readreg;
@@ -6129,7 +6051,7 @@ tlp_dm9102_tmsw_init(struct tulip_softc *sc)
 	TULIP_WRITE(sc, CSR_OPMODE, opmode);
 
 	/* Now, probe the internal MII for the internal PHY. */
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, 0);
 
 	/*
@@ -6181,7 +6103,7 @@ static void
 tlp_asix_tmsw_init(struct tulip_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
-	u_int32_t opmode;
+	uint32_t opmode;
 
 	sc->sc_mii.mii_ifp = ifp;
         sc->sc_mii.mii_readreg = tlp_bitbang_mii_readreg;
@@ -6206,7 +6128,7 @@ tlp_asix_tmsw_init(struct tulip_softc *sc)
 	TULIP_WRITE(sc, CSR_OPMODE, opmode);
 
 	/* Now, probe the internal MII for the internal PHY. */
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, 0);
 
 	/* XXX Figure how to handle the PHY. */
@@ -6273,7 +6195,7 @@ tlp_rs7112_tmsw_init(struct tulip_softc *sc)
 	 * The RS7112 reports a PHY at 0 (possibly HomePNA?)
 	 * and 1 (ethernet). We attach ethernet only.
 	 */
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, 1,
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, 1,
 	    MII_OFFSET_ANY, 0);
 
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
@@ -6284,4 +6206,14 @@ tlp_rs7112_tmsw_init(struct tulip_softc *sc)
 		sc->sc_tick = tlp_mii_tick;
 		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_AUTO);
 	}
+}
+
+const char *
+tlp_chip_name(tulip_chip_t t) {
+	if ((int)t < 0 || (int)t >= __arraycount(tlp_chip_names)) {
+		static char buf[256];
+		(void)snprintf(buf, sizeof(buf), "[unknown 0x%x]", t);
+		return buf;
+	}
+	return tlp_chip_names[t];
 }

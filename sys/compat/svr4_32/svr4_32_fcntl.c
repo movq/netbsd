@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_32_fcntl.c,v 1.32 2008/01/09 20:45:19 tnn Exp $	 */
+/*	$NetBSD: svr4_32_fcntl.c,v 1.36 2014/09/05 09:21:55 matt Exp $	 */
 
 /*-
- * Copyright (c) 1994, 1997 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 1997, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_fcntl.c,v 1.32 2008/01/09 20:45:19 tnn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_fcntl.c,v 1.36 2014/09/05 09:21:55 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -223,31 +216,27 @@ svr4_32_to_bsd_flock64(struct svr4_32_flock64 *iflp, struct flock *oflp)
 static int
 fd_revoke(struct lwp *l, int fd, register_t *retval)
 {
-	struct filedesc *fdp = l->l_proc->p_fd;
-	struct file *fp;
+	file_t *fp;
 	struct vnode *vp;
 	int error;
 
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
+	if ((fp = fd_getfile(fd)) == NULL)
 		return EBADF;
 
 	if (fp->f_type != DTYPE_VNODE) {
-		FILE_UNLOCK(fp);
+		fd_putfile(fd);
 		return EINVAL;
 	}
 
-	FILE_USE(fp);
-	vp = (struct vnode *) fp->f_data;
-
+	vp = fp->f_vnode;
 	if (vp->v_type != VCHR && vp->v_type != VBLK) {
 		error = EINVAL;
 		goto out;
 	}
-
 	error = dorevoke(vp, l->l_cred);
 out:
 	vrele(vp);
-	FILE_UNUSE(fp, l);
+	fd_putfile(fd);
 	return error;
 }
 
@@ -255,8 +244,7 @@ out:
 static int
 fd_truncate(struct lwp *l, int fd, struct flock *flp, register_t *retval)
 {
-	struct filedesc *fdp = l->l_proc->p_fd;
-	struct file *fp;
+	file_t *fp;
 	off_t start, length;
 	struct vnode *vp;
 	struct vattr vattr;
@@ -266,17 +254,18 @@ fd_truncate(struct lwp *l, int fd, struct flock *flp, register_t *retval)
 	/*
 	 * We only support truncating the file.
 	 */
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
+	if ((fp = fd_getfile(fd)) == NULL)
 		return EBADF;
-
-	vp = (struct vnode *)fp->f_data;
+	vp = fp->f_vnode;
 	if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
-		FILE_UNLOCK(fp);
+		fd_putfile(fd);
 		return ESPIPE;
 	}
-	FILE_USE(fp);
-	if ((error = VOP_GETATTR(vp, &vattr, l->l_cred)) != 0) {
-		FILE_UNUSE(fp, l);
+	vn_lock(vp, LK_SHARED | LK_RETRY);
+	error = VOP_GETATTR(vp, &vattr, l->l_cred);
+	VOP_UNLOCK(vp);
+	if (error) {
+		fd_putfile(fd);
 		return error;
 	}
 
@@ -296,13 +285,13 @@ fd_truncate(struct lwp *l, int fd, struct flock *flp, register_t *retval)
 		break;
 
 	default:
-		FILE_UNUSE(fp, l);
+		fd_putfile(fd);
 		return EINVAL;
 	}
 
 	if (start + flp->l_len < length) {
 		/* We don't support free'ing in the middle of the file */
-		FILE_UNUSE(fp, l);
+		fd_putfile(fd);
 		return EINVAL;
 	}
 
@@ -310,7 +299,7 @@ fd_truncate(struct lwp *l, int fd, struct flock *flp, register_t *retval)
 	SCARG(&ft, length) = start;
 
 	error = sys_ftruncate(l, &ft, retval);
-	FILE_UNUSE(fp, l);
+	fd_putfile(fd);
 	return error;
 }
 
@@ -334,17 +323,17 @@ svr4_32_sys_open(struct lwp *l, const struct svr4_32_sys_open_args *uap, registe
 
 	if (!(SCARG(&cup, flags) & O_NOCTTY) && SESS_LEADER(l->l_proc) &&
 	    !(l->l_proc->p_lflag & PL_CONTROLT)) {
-		struct filedesc	*fdp = l->l_proc->p_fd;
-		struct file	*fp;
+		file_t *fp;
+		int fd;
 
-		fp = fd_getfile(fdp, *retval);
+		fd = *retval;
+		fp = fd_getfile(fd);
 
 		/* ignore any error, just give it a try */
 		if (fp != NULL) {
-			FILE_USE(fp);
 			if (fp->f_type == DTYPE_VNODE)
-				(fp->f_ops->fo_ioctl)(fp, TIOCSCTTY, NULL, l);
-			FILE_UNUSE(fp, l);
+				(fp->f_ops->fo_ioctl)(fp, TIOCSCTTY, NULL);
+			fd_putfile(fd);
 		}
 	}
 	return 0;
@@ -524,7 +513,7 @@ svr4_32_sys_fcntl(struct lwp *l, const struct svr4_32_sys_fcntl_args *uap, regis
 			return error;
 		svr4_32_to_bsd_flock(&ifl, &fl);
 
-		error = do_fcntl_lock(l, SCARG(uap, fd), cmd, &fl);
+		error = do_fcntl_lock(SCARG(uap, fd), cmd, &fl);
 		if (cmd != F_GETLK || error != 0)
 			return error;
 
@@ -565,7 +554,7 @@ svr4_32_sys_fcntl(struct lwp *l, const struct svr4_32_sys_fcntl_args *uap, regis
 			return error;
 		svr4_32_to_bsd_flock64(&ifl64, &fl);
 
-		error = do_fcntl_lock(l, SCARG(uap, fd), cmd, &fl);
+		error = do_fcntl_lock(SCARG(uap, fd), cmd, &fl);
 		if (cmd != F_GETLK || error != 0)
 			return error;
 

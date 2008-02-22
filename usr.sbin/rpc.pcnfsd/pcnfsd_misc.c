@@ -1,4 +1,4 @@
-/*	$NetBSD: pcnfsd_misc.c,v 1.10 2003/07/16 08:22:01 itojun Exp $	*/
+/*	$NetBSD: pcnfsd_misc.c,v 1.16 2018/01/23 21:06:25 sevan Exp $	*/
 
 /* RE_SID: @(%)/usr/dosnfs/shades_SCCS/unix/pcnfsd/v2/src/SCCS/s.pcnfsd_misc.c 1.5 92/01/24 19:59:13 SMI */
 /*
@@ -37,6 +37,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <util.h>
+#ifdef SUPPORT_UTMPX
+#include <utmpx.h>
+#endif
 
 #ifdef ISC_2_0
 #include <sys/fcntl.h>
@@ -64,10 +67,10 @@ int     wtmp_enabled = 1;
 
 char    tempstr[256];
 
-char   *mapfont __P((char, char, char));
-void	myhandler __P((int));
-void	start_watchdog __P((int));
-void	stop_watchdog __P((void));
+char   *mapfont(char, char, char);
+void	myhandler(int);
+void	start_watchdog(int);
+void	stop_watchdog(void);
 
 /*
 **=====================================================================
@@ -82,9 +85,7 @@ void	stop_watchdog __P((void));
 
 
 void
-scramble(s1, s2)
-	char   *s1;
-	char   *s2;
+scramble(char *s1, char *s2)
 {
 	while (*s1) {
 		*s2++ = (*s1 ^ zchar) & 0x7f;
@@ -96,8 +97,7 @@ scramble(s1, s2)
 
 
 struct passwd *
-get_password(usrnam)
-	char   *usrnam;
+get_password(char *usrnam)
 {
 	struct passwd *p;
 	static struct passwd localp;
@@ -124,9 +124,9 @@ get_password(usrnam)
 	setpwent();
 	if (shadowfile)
 		(void) setspent();	/* Setting the shadow password file */
-	if ((p = getpwnam(usrnam)) == (struct passwd *) NULL ||
-	    (shadowfile && (sp = getspnam(usrnam)) == (struct spwd *) NULL))
-		return ((struct passwd *) NULL);
+	if ((p = getpwnam(usrnam)) == NULL ||
+	    (shadowfile && (sp = getspnam(usrnam)) == NULL))
+		return (NULL);
 
 	if (shadowfile) {
 		pswd = sp->sp_pwdp;
@@ -136,8 +136,8 @@ get_password(usrnam)
 
 #else
 	p = getpwnam(usrnam);
-	if (p == (struct passwd *) NULL)
-		return ((struct passwd *) NULL);
+	if (p == NULL)
+		return (NULL);
 	pswd = p->pw_passwd;
 #endif
 
@@ -149,7 +149,7 @@ get_password(usrnam)
 		struct spwd *shadow = getspnam(usrnam);
 
 		if (!shadow)
-			return ((struct passwd *) NULL);
+			return (NULL);
 		pswd = shadow->sp_pwdp;
 	}
 #endif
@@ -166,17 +166,17 @@ get_password(usrnam)
 	}
 	endusershell();
 	if (!ok)
-		return ((struct passwd *) NULL);
+		return (NULL);
 #else
 /*
 * the best we can do is to ensure that the shell ends in "sh"
 */
 	ushell = localp.pw_shell;
 	if (strlen(ushell) < 2)
-		return ((struct passwd *) NULL);
+		return (NULL);
 	ushell += strlen(ushell) - 2;
 	if (strcmp(ushell, "sh"))
-		return ((struct passwd *) NULL);
+		return (NULL);
 
 #endif
 	return (&localp);
@@ -192,10 +192,7 @@ get_password(usrnam)
 
 
 char   *
-mapfont(f, i, b)
-	char    f;
-	char    i;
-	char    b;
+mapfont(char f, char i, char b)
 {
 	static char fontname[64];
 
@@ -238,9 +235,7 @@ finis:	return (&fontname[0]);
 /* #define PS630_IS_BROKEN 1 */
 
 void
-run_ps630(f, opts)
-	char   *f;
-	char   *opts;
+run_ps630(char *f, char *opts)
 {
 	char    temp_file[256];
 	char    commbuf[256];
@@ -298,9 +293,7 @@ run_ps630(f, opts)
 
 #ifdef WTMP
 void
-wlogin(name, req)
-	char   *name;
-	struct svc_req *req;
+wlogin(char *name, struct svc_req *req)
 {
 	struct sockaddr_in *who;
 	struct hostent *hp;
@@ -357,8 +350,7 @@ int     interrupted = 0;
 static FILE *pipe_handle;
 
 void
-myhandler(dummy)
-	int     dummy;
+myhandler(int dummy)
 {
 	interrupted = 1;
 	fclose(pipe_handle);
@@ -367,8 +359,7 @@ myhandler(dummy)
 }
 
 void
-start_watchdog(n)
-	int     n;
+start_watchdog(int n)
 {
 /*
  * Setup SIGALRM handler, force interrupt of ongoing syscall
@@ -414,10 +405,7 @@ stop_watchdog()
 }
 
 FILE   *
-su_popen(user, cmd, maxtime)
-	char   *user;
-	char   *cmd;
-	int     maxtime;
+su_popen(char *user, char *cmd, int maxtime)
 {
 	int     p[2];
 	int     parent_fd, child_fd, pid;
@@ -475,8 +463,7 @@ su_popen(user, cmd, maxtime)
 }
 
 int
-su_pclose(ptr)
-	FILE   *ptr;
+su_pclose(FILE *ptr)
 {
 	int     pid, status;
 
@@ -491,7 +478,6 @@ su_pclose(ptr)
 
 
 
-#if XXX_unused
 /*
 ** The following routine reads a file "/etc/pcnfsd.conf" if present,
 ** and uses it to replace certain builtin elements, like the
@@ -507,8 +493,8 @@ su_pclose(ptr)
 **	printer name alias-for command
 **	wtmp yes|no
 */
-void
-config_from_file()
+static void
+config_from_file(void)
 {
 	FILE   *fd;
 	char    buff[1024];
@@ -559,17 +545,28 @@ config_from_file()
 	}
 	fclose(fd);
 }
-#endif	/* XXX_unused */
 
+/*
+** hack for main() - call config_from_file() then the real main
+** in the rpcgen output, which is hacked by CPPFLAGS to be "mymain"
+*/
+#undef main
+
+int mymain(int argc, char *argv[]);
+
+int
+main(int argc, char *argv[])
+{
+	config_from_file();
+	return mymain(argc, argv);
+}
 
 /*
 ** strembedded - returns true if s1 is embedded (in any case) in s2
 */
 
 int
-strembedded(s1, s2)
-	const char   *s1;
-	const char   *s2;
+strembedded(const char *s1, const char *s2)
 {
 	while (*s2) {
 		if (!strcasecmp(s1, s2))

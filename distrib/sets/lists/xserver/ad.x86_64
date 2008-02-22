@@ -1,8 +1,8 @@
-# $NetBSD: ad.x86_64,v 1.2 2006/09/12 02:36:38 simonb Exp $
-./usr/X11R6/bin/inb
-./usr/X11R6/bin/inl
-./usr/X11R6/bin/inw
-./usr/X11R6/bin/ioport
-./usr/X11R6/bin/outb
-./usr/X11R6/bin/outl
-./usr/X11R6/bin/outw
+# $NetBSD: ad.x86_64,v 1.7 2016/08/19 22:37:04 mrg Exp $
+./usr/X11R7/bin/inb					-unknown-	obsolete
+./usr/X11R7/bin/inl					-unknown-	obsolete
+./usr/X11R7/bin/inw					-unknown-	obsolete
+./usr/X11R7/bin/ioport					-unknown-	obsolete
+./usr/X11R7/bin/outb					-unknown-	obsolete
+./usr/X11R7/bin/outl					-unknown-	obsolete
+./usr/X11R7/bin/outw					-unknown-	obsolete

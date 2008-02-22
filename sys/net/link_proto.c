@@ -1,4 +1,4 @@
-/*	$NetBSD: link_proto.c,v 1.3 2007/08/30 02:17:35 dyoung Exp $	*/
+/*	$NetBSD: link_proto.c,v 1.36 2017/04/06 03:55:00 ozaki-r Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: link_proto.c,v 1.3 2007/08/30 02:17:35 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: link_proto.c,v 1.36 2017/04/06 03:55:00 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -45,8 +45,30 @@ __KERNEL_RCSID(0, "$NetBSD: link_proto.c,v 1.3 2007/08/30 02:17:35 dyoung Exp $"
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/raw_cb.h>
+#include <net/route.h>
 
 static int sockaddr_dl_cmp(const struct sockaddr *, const struct sockaddr *);
+static int link_attach(struct socket *, int);
+static void link_detach(struct socket *);
+static int link_accept(struct socket *, struct sockaddr *);
+static int link_bind(struct socket *, struct sockaddr *, struct lwp *);
+static int link_listen(struct socket *, struct lwp *);
+static int link_connect(struct socket *, struct sockaddr *, struct lwp *);
+static int link_connect2(struct socket *, struct socket *);
+static int link_disconnect(struct socket *);
+static int link_shutdown(struct socket *);
+static int link_abort(struct socket *);
+static int link_ioctl(struct socket *, u_long, void *, struct ifnet *);
+static int link_stat(struct socket *, struct stat *);
+static int link_peeraddr(struct socket *, struct sockaddr *);
+static int link_sockaddr(struct socket *, struct sockaddr *);
+static int link_rcvd(struct socket *, int, struct lwp *);
+static int link_recvoob(struct socket *, struct mbuf *, int);
+static int link_send(struct socket *, struct mbuf *, struct sockaddr *,
+    struct mbuf *, struct lwp *);
+static int link_sendoob(struct socket *, struct mbuf *, struct mbuf *);
+static int link_purgeif(struct socket *, struct ifnet *);
+static void link_init(void);
 
 /*
  * Definitions of protocols supported in the link-layer domain.
@@ -54,15 +76,340 @@ static int sockaddr_dl_cmp(const struct sockaddr *, const struct sockaddr *);
 
 DOMAIN_DEFINE(linkdomain);	/* forward define and add to link set */
 
+static const struct pr_usrreqs link_usrreqs = {
+	.pr_attach	= link_attach,
+	.pr_detach	= link_detach,
+	.pr_accept	= link_accept,
+	.pr_bind	= link_bind,
+	.pr_listen	= link_listen,
+	.pr_connect	= link_connect,
+	.pr_connect2	= link_connect2,
+	.pr_disconnect	= link_disconnect,
+	.pr_shutdown	= link_shutdown,
+	.pr_abort	= link_abort,
+	.pr_ioctl	= link_ioctl,
+	.pr_stat	= link_stat,
+	.pr_peeraddr	= link_peeraddr,
+	.pr_sockaddr	= link_sockaddr,
+	.pr_rcvd	= link_rcvd,
+	.pr_recvoob	= link_recvoob,
+	.pr_send	= link_send,
+	.pr_sendoob	= link_sendoob,
+	.pr_purgeif	= link_purgeif,
+};
+
+const struct protosw linksw[] = {
+	{	.pr_type = SOCK_DGRAM,
+		.pr_domain = &linkdomain,
+		.pr_protocol = 0,	/* XXX */
+		.pr_flags = PR_ATOMIC|PR_ADDR|PR_PURGEIF,
+		.pr_input = NULL,
+		.pr_ctlinput = NULL,
+		.pr_ctloutput = NULL,
+		.pr_usrreqs = &link_usrreqs,
+		.pr_init = link_init,
+	},
+};
+
 struct domain linkdomain = {
 	.dom_family = AF_LINK,
 	.dom_name = "link",
 	.dom_externalize = NULL,
 	.dom_dispose = NULL,
-	.dom_protosw = NULL,
-	.dom_protoswNPROTOSW = NULL,
+	.dom_protosw = linksw,
+	.dom_protoswNPROTOSW = &linksw[__arraycount(linksw)],
 	.dom_sockaddr_cmp = sockaddr_dl_cmp
 };
+
+static void
+link_init(void)
+{
+	return;
+}
+
+static int
+link_control(struct socket *so, unsigned long cmd, void *data,
+    struct ifnet *ifp)
+{
+	int error, s;
+	bool isactive, mkactive;
+	struct if_laddrreq *iflr;
+	union {
+		struct sockaddr sa;
+		struct sockaddr_dl sdl;
+		struct sockaddr_storage ss;
+	} u;
+	struct ifaddr *ifa;
+	const struct sockaddr_dl *asdl, *nsdl;
+	struct psref psref;
+
+	switch (cmd) {
+	case SIOCALIFADDR:
+	case SIOCDLIFADDR:
+	case SIOCGLIFADDR:
+		iflr = data;
+
+		if (iflr->addr.ss_family != AF_LINK)
+			return EINVAL;
+
+		asdl = satocsdl(sstocsa(&iflr->addr));
+
+		if (asdl->sdl_alen != ifp->if_addrlen)
+			return EINVAL;
+
+		if (sockaddr_dl_init(&u.sdl, sizeof(u.ss), ifp->if_index,
+		    ifp->if_type, ifp->if_xname, strlen(ifp->if_xname),
+		    CLLADDR(asdl), asdl->sdl_alen) == NULL)
+			return EINVAL;
+
+		if ((iflr->flags & IFLR_PREFIX) == 0)
+			;
+		else if (iflr->prefixlen != NBBY * ifp->if_addrlen)
+			return EINVAL;	/* XXX match with prefix */
+
+		error = 0;
+
+		s = pserialize_read_enter();
+		IFADDR_READER_FOREACH(ifa, ifp) {
+			if (sockaddr_cmp(&u.sa, ifa->ifa_addr) == 0) {
+				ifa_acquire(ifa, &psref);
+				break;
+			}
+		}
+		pserialize_read_exit(s);
+
+		switch (cmd) {
+		case SIOCGLIFADDR:
+			ifa_release(ifa, &psref);
+			s = pserialize_read_enter();
+			if ((iflr->flags & IFLR_PREFIX) == 0) {
+				IFADDR_READER_FOREACH(ifa, ifp) {
+					if (ifa->ifa_addr->sa_family == AF_LINK)
+						break;
+				}
+			}
+			if (ifa == NULL) {
+				pserialize_read_exit(s);
+				error = EADDRNOTAVAIL;
+				break;
+			}
+
+			if (ifa == ifp->if_dl)
+				iflr->flags = IFLR_ACTIVE;
+			else
+				iflr->flags = 0;
+
+			if (ifa == ifp->if_hwdl)
+				iflr->flags |= IFLR_FACTORY;
+
+			sockaddr_copy(sstosa(&iflr->addr), sizeof(iflr->addr),
+			    ifa->ifa_addr);
+			pserialize_read_exit(s);
+			ifa = NULL;
+
+			break;
+		case SIOCDLIFADDR:
+			if (ifa == NULL)
+				error = EADDRNOTAVAIL;
+			else if (ifa == ifp->if_dl || ifa == ifp->if_hwdl)
+				error = EBUSY;
+			else {
+				/* TBD routing socket */
+				rt_newaddrmsg(RTM_DELETE, ifa, 0, NULL);
+				/* We need to release psref for ifa_remove */
+				ifaref(ifa);
+				ifa_release(ifa, &psref);
+				ifa_remove(ifp, ifa);
+				KASSERT(ifa->ifa_refcnt == 1);
+				ifafree(ifa);
+				ifa = NULL;
+			}
+			break;
+		case SIOCALIFADDR:
+			if (ifa == NULL) {
+				ifa = if_dl_create(ifp, &nsdl);
+				if (ifa == NULL) {
+					error = ENOMEM;
+					break;
+				}
+				ifa_acquire(ifa, &psref);
+				sockaddr_copy(ifa->ifa_addr,
+				    ifa->ifa_addr->sa_len, &u.sa);
+				ifa_insert(ifp, ifa);
+				rt_newaddrmsg(RTM_ADD, ifa, 0, NULL);
+			}
+
+			mkactive = (iflr->flags & IFLR_ACTIVE) != 0;
+			isactive = (ifa == ifp->if_dl);
+
+			if (!isactive && mkactive) {
+				if_activate_sadl(ifp, ifa, nsdl);
+				rt_newaddrmsg(RTM_CHANGE, ifa, 0, NULL);
+				error = ENETRESET;
+			}
+			break;
+		}
+		ifa_release(ifa, &psref);
+		if (error != ENETRESET)
+			return error;
+		else if ((ifp->if_flags & IFF_RUNNING) != 0 &&
+		         ifp->if_init != NULL)
+			return (*ifp->if_init)(ifp);
+		else
+			return 0;
+	default:
+		return ENOTTY;
+	}
+}
+
+static int
+link_attach(struct socket *so, int proto)
+{
+	sosetlock(so);
+	KASSERT(solocked(so));
+	return 0;
+}
+
+static void
+link_detach(struct socket *so)
+{
+	KASSERT(solocked(so));
+	sofree(so);
+}
+
+static int
+link_accept(struct socket *so, struct sockaddr *nam)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_bind(struct socket *so, struct sockaddr *nam, struct lwp *l)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_listen(struct socket *so, struct lwp *l)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_connect(struct socket *so, struct sockaddr *nam, struct lwp *l)
+{
+ 	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_connect2(struct socket *so, struct socket *so2)
+{
+ 	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_disconnect(struct socket *so)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_shutdown(struct socket *so)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_abort(struct socket *so)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_ioctl(struct socket *so, u_long cmd, void *nam, struct ifnet *ifp)
+{
+	return link_control(so, cmd, nam, ifp);
+}
+
+static int
+link_stat(struct socket *so, struct stat *ub)
+{
+	KASSERT(solocked(so));
+
+	return 0;
+}
+
+static int
+link_peeraddr(struct socket *so, struct sockaddr *nam)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_sockaddr(struct socket *so, struct sockaddr *nam)
+{
+ 	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_rcvd(struct socket *so, int flags, struct lwp *l)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_recvoob(struct socket *so, struct mbuf *m, int flags)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_send(struct socket *so, struct mbuf *m, struct sockaddr *nam,
+    struct mbuf *control, struct lwp *l)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_sendoob(struct socket *so, struct mbuf *m, struct mbuf *control)
+{
+	KASSERT(solocked(so));
+
+	return EOPNOTSUPP;
+}
+
+static int
+link_purgeif(struct socket *so, struct ifnet *ifp)
+{
+
+	return EOPNOTSUPP;
+}
 
 /* Compare the field at byte offsets [fieldstart, fieldend) in
  * two memory regions, [l, l + llen) and [r, r + llen).
@@ -145,8 +492,8 @@ sockaddr_dl_init(struct sockaddr_dl *sdl, socklen_t socklen, uint16_t ifindex,
 	if (len > socklen) {
 		sdl->sdl_len = socklen;
 #ifdef DIAGNOSTIC
-		printf("%s: too long: %" PRIu8 " > %" PRIu8 "\n", __func__, len,
-		    socklen);
+		printf("%s: too long: %u > %u\n", __func__, (u_int)len,
+		    (u_int)socklen);
 #endif
 		return NULL;
 	}
@@ -225,8 +572,8 @@ sockaddr_dl_setaddr(struct sockaddr_dl *sdl, socklen_t socklen,
 	len = sockaddr_dl_measure(sdl->sdl_nlen, addrlen);
 	if (len > socklen) {
 #ifdef DIAGNOSTIC
-		printf("%s: too long: %" PRIu8 " > %" PRIu8 "\n", __func__, len,
-		    socklen);
+		printf("%s: too long: %u > %u\n", __func__, (u_int)len,
+		    (u_int)socklen);
 #endif
 		return NULL;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: nslu2_buttons.c,v 1.2 2006/03/01 21:02:50 scw Exp $	*/
+/*	$NetBSD: nslu2_buttons.c,v 1.4 2012/10/14 14:20:58 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nslu2_buttons.c,v 1.2 2006/03/01 21:02:50 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nslu2_buttons.c,v 1.4 2012/10/14 14:20:58 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: nslu2_buttons.c,v 1.2 2006/03/01 21:02:50 scw Exp $"
 #include <evbarm/nslu2/nslu2reg.h>
 
 struct slugbutt_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct sysmon_pswitch sc_smpwr;
 	struct sysmon_pswitch sc_smrst;
 };
@@ -81,7 +74,7 @@ power_intr(void *arg)
 	rv = sysmon_task_queue_sched(0, power_event, sc);
 	if (rv) {
 		printf("%s: WARNING: unable to queue power button "
-		    "callback: %d\n", sc->sc_dev.dv_xname, rv);
+		    "callback: %d\n", device_xname(sc->sc_dev), rv);
 	}
 
 	return (1);
@@ -106,18 +99,20 @@ reset_intr(void *arg)
 	rv = sysmon_task_queue_sched(0, reset_event, sc);
 	if (rv) {
 		printf("%s: WARNING: unable to queue reset button "
-		    "callback: %d\n", sc->sc_dev.dv_xname, rv);
+		    "callback: %d\n", device_xname(sc->sc_dev), rv);
 	}
 
 	return (1);
 }
 
 static void
-slugbutt_deferred(struct device *self)
+slugbutt_deferred(device_t self)
 {
-	struct slugbutt_softc *sc = (struct slugbutt_softc *) self;
+	struct slugbutt_softc *sc = device_private(self);
 	struct ixp425_softc *ixsc = ixp425_softc;
 	uint32_t reg;
+
+	sc->sc_dev = self;
 
 	/* Configure the GPIO pins as inputs */
 	reg = GPIO_CONF_READ_4(ixsc, IXP425_GPIO_GPOER);
@@ -141,21 +136,21 @@ slugbutt_deferred(struct device *self)
 
 	sysmon_task_queue_init();
 
-	sc->sc_smpwr.smpsw_name = sc->sc_dev.dv_xname;
+	sc->sc_smpwr.smpsw_name = device_xname(sc->sc_dev);
 	sc->sc_smpwr.smpsw_type = PSWITCH_TYPE_POWER;
 
 	if (sysmon_pswitch_register(&sc->sc_smpwr) != 0) {
 		printf("%s: unable to register power button with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		return;
 	}
 
-	sc->sc_smrst.smpsw_name = sc->sc_dev.dv_xname;
+	sc->sc_smrst.smpsw_name = device_xname(sc->sc_dev);
 	sc->sc_smrst.smpsw_type = PSWITCH_TYPE_RESET;
 
 	if (sysmon_pswitch_register(&sc->sc_smrst) != 0) {
 		printf("%s: unable to register reset button with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		return;
 	}
 
@@ -166,14 +161,14 @@ slugbutt_deferred(struct device *self)
 
 
 static int
-slugbutt_match(struct device *parent, struct cfdata *cf, void *arg)
+slugbutt_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (slugbutt_attached == 0);
 }
 
 static void
-slugbutt_attach(struct device *parent, struct device *self, void *arg)
+slugbutt_attach(device_t parent, device_t self, void *aux)
 {
 
 	slugbutt_attached = 1;
@@ -184,5 +179,5 @@ slugbutt_attach(struct device *parent, struct device *self, void *arg)
 	config_interrupts(self, slugbutt_deferred);
 }
 
-CFATTACH_DECL(slugbutt, sizeof(struct slugbutt_softc),
+CFATTACH_DECL_NEW(slugbutt, sizeof(struct slugbutt_softc),
     slugbutt_match, slugbutt_attach, NULL, NULL);

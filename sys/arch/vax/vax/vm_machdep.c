@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.100 2008/02/20 16:37:52 matt Exp $	     */
+/*	$NetBSD: vm_machdep.c,v 1.118 2017/05/22 16:53:05 ragge Exp $	     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,39 +26,29 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.100 2008/02/20 16:37:52 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.118 2017/05/22 16:53:05 ragge Exp $");
 
+#include "opt_execfmt.h"
 #include "opt_compat_ultrix.h"
 #include "opt_multiprocessor.h"
-#include "opt_coredump.h"
+#include "opt_cputype.h"
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/exec.h>
-#include <sys/vnode.h>
+#include <sys/buf.h>
 #include <sys/core.h>
-#include <sys/mount.h>
-#include <sys/device.h>
+#include <sys/cpu.h>
+#include <sys/exec.h>
+#include <sys/exec_aout.h>
+#include <sys/proc.h>
+#include <sys/syscallargs.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/vmparam.h>
-#include <machine/mtpr.h>
-#include <machine/pmap.h>
-#include <machine/pte.h>
 #include <machine/macros.h>
-#include <machine/trap.h>
-#include <machine/pcb.h>
 #include <machine/frame.h>
-#include <machine/cpu.h>
 #include <machine/sid.h>
-
-#include <sys/syscallargs.h>
-
-#include "opt_cputype.h"
 
 /*
  * Finish a fork operation, with process p2 nearly set up.
@@ -93,10 +78,10 @@ void
 cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
     void (*func)(void *), void *arg)
 {
-	struct pcb *pcb;
-	struct trapframe *tf;
 	struct callsframe *cf;
 	extern int sret; /* Return address in trap routine */
+
+	struct pcb * const pcb2 = lwp_getpcb(l2);
 
 #ifdef DIAGNOSTIC
 	/*
@@ -107,21 +92,28 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 #endif
 
 	/*
+	 * Clear new pcb
+	 */
+	memset(pcb2, 0, sizeof(*pcb2));
+
+	/*
 	 * Copy the trap frame.
 	 */
-	tf = (struct trapframe *)((u_int)l2->l_addr + USPACE) - 1;
-	l2->l_addr->u_pcb.framep = tf;
-	*tf = *(struct trapframe *)l1->l_addr->u_pcb.framep;
+	const vaddr_t uv = uvm_lwp_getuarea(l2);
+	struct trapframe * const tf = (struct trapframe *)(uv + USPACE) - 1;
+	l2->l_md.md_utf = tf;
+	*tf = *l1->l_md.md_utf;
 
 	/*
 	 * Activate address space for the new process.	The PTEs have
 	 * already been allocated by way of pmap_create().
 	 * This writes the page table registers to the PCB.
 	 */
+	pcb2->pcb_pm = NULL;
 	pmap_activate(l2);
 
 	/* Mark guard page invalid in kernel stack */
-	kvtopte((uintptr_t)l2->l_addr + REDZONEADDR)->pg_v = 0;
+	kvtopte((uintptr_t)uv + REDZONEADDR)->pg_v = 0;
 
 	/*
 	 * Set up the calls frame above (below) the trapframe and populate
@@ -140,44 +132,65 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	 * Set up internal defs in PCB. This matches the "fake" CALLS frame
 	 * that were constructed earlier.
 	 */
-	pcb = &l2->l_addr->u_pcb;
-	pcb->iftrap = NULL;
-	pcb->AP = (uintptr_t)&cf->ca_argno;
-	pcb->KSP = (uintptr_t)cf;
-	pcb->FP = (uintptr_t)cf;
-	pcb->PC = (uintptr_t)cpu_lwp_bootstrap + 2;
-	pcb->PSL = PSL_HIGHIPL;
-	pcb->ESP = (uintptr_t)&pcb->iftrap;
-#ifndef MULTIPROCESSOR
-	pcb->SSP = (uintptr_t)curcpu();
-#endif
+	pcb2->pcb_onfault = NULL;
+	pcb2->AP = (uintptr_t)&cf->ca_argno;
+	pcb2->KSP = (uintptr_t)cf;
+	pcb2->FP = (uintptr_t)cf;
+	pcb2->PC = (uintptr_t)cpu_lwp_bootstrap + 2;
+	pcb2->PSL = PSL_HIGHIPL;
+	pcb2->ESP = (uintptr_t)&pcb2->pcb_onfault;
+	pcb2->SSP = (uintptr_t)l2;
+
 	/* pcb->R[0] (oldlwp) set by Swtchto */
-	pcb->R[1] = (uintptr_t)l2;
-	pcb->R[2] = (uintptr_t)func;
-	pcb->R[3] = (uintptr_t)arg;
-	pcb->pcb_paddr = kvtophys(pcb);
+	pcb2->R[1] = (uintptr_t)l2;
+	pcb2->R[2] = (uintptr_t)func;
+	pcb2->R[3] = (uintptr_t)arg;
+	pcb2->pcb_paddr = kvtophys(pcb2);
 
 	/*
 	 * If specified, give the child a different stack.
 	 */
 	if (stack != NULL)
-		tf->sp = (uintptr_t)stack + stacksize;
+		tf->tf_sp = (uintptr_t)stack + stacksize;
 
 	/*
 	 * Set the last return information after fork().
 	 * This is only interesting if the child will return to userspace,
 	 * but doesn't hurt otherwise.
 	 */
-	tf->r0 = l1->l_proc->p_pid; /* parent pid. (shouldn't be needed) */
-	tf->r1 = 1;
-	tf->psl = PSL_U|PSL_PREVU;
+	tf->tf_r0 = l1->l_proc->p_pid; /* parent pid. (shouldn't be needed) */
+	tf->tf_r1 = 1;
+	tf->tf_psl = PSL_U|PSL_PREVU;
 }
 
+vaddr_t
+cpu_lwp_pc(struct lwp *l)
+{
+	return l->l_md.md_utf->tf_pc;
+}
+
+void
+cpu_lwp_free(struct lwp *l, int proc)
+{
+
+	(void)l;
+	(void)proc;
+}
+
+void
+cpu_lwp_free2(struct lwp *l)
+{
+
+	(void)l;
+}
+
+#ifdef EXEC_AOUT
 int
 cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	return ENOEXEC;
 }
+#endif
 
 int
 sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retval)
@@ -185,49 +198,11 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 	return (ENOSYS);
 }
 
-#ifdef COREDUMP
-/*
- * Dump the machine specific header information at the start of a core dump.
- * First put all regs in PCB for debugging purposes. This is not an good
- * way to do this, but good for my purposes so far.
- */
-int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
-{
-	struct md_coredump md_core;
-	struct coreseg cseg;
-	int error;
-
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-		chdr->c_hdrsize = sizeof(struct core);
-		chdr->c_seghdrsize = sizeof(struct coreseg);
-		chdr->c_cpusize = sizeof(struct md_coredump);
-		chdr->c_nseg++;
-		return 0;
-	}
-
-	md_core.md_tf = *(struct trapframe *)l->l_addr->u_pcb.framep; /*XXX*/
-
-	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
-	cseg.c_addr = 0;
-	cseg.c_size = chdr->c_cpusize;
-
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
-	if (error)
-		return error;
-
-	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
-	    sizeof(md_core));
-}
-#endif
-
 /*
  * Map in a bunch of pages read/writable for the kernel.
  */
 void
-ioaccess(vaddr_t vaddr, paddr_t paddr, int npgs)
+ioaccess(vaddr_t vaddr, paddr_t paddr, size_t npgs)
 {
 	uint32_t *pte = (uint32_t *)kvtopte(vaddr);
 	int i;
@@ -240,7 +215,7 @@ ioaccess(vaddr_t vaddr, paddr_t paddr, int npgs)
  * Opposite to the above: just forget their mapping.
  */
 void
-iounaccess(vaddr_t vaddr, int npgs)
+iounaccess(vaddr_t vaddr, size_t npgs)
 {
 	uint32_t *pte = (uint32_t *)kvtopte(vaddr);
 	int i;
@@ -255,7 +230,7 @@ iounaccess(vaddr_t vaddr, int npgs)
  * Note: the pages are already locked by uvm_vslock(), so we
  * do not need to pass an access_type to pmap_enter().
  */
-void
+int
 vmapbuf(struct buf *bp, vsize_t len)
 {
 #if VAX46 || VAX48 || VAX49 || VAX53 || VAXANY
@@ -267,7 +242,7 @@ vmapbuf(struct buf *bp, vsize_t len)
 	    && vax_boardtype != VAX_BTYP_48
 	    && vax_boardtype != VAX_BTYP_49
 	    && vax_boardtype != VAX_BTYP_53)
-		return;
+		return 0;
 	if ((bp->b_flags & B_PHYS) == 0)
 		panic("vmapbuf");
 	p = bp->b_proc;
@@ -289,6 +264,8 @@ vmapbuf(struct buf *bp, vsize_t len)
 	}
 	pmap_update(vm_map_pmap(phys_map));
 #endif
+
+	return 0;
 }
 
 /*

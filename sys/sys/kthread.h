@@ -1,7 +1,7 @@
-/*	$NetBSD: kthread.h,v 1.6 2007/12/25 18:33:48 perry Exp $	*/
+/*	$NetBSD: kthread.h,v 1.13 2015/04/21 11:10:29 pooka Exp $	*/
 
 /*-
- * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2007, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,23 +33,27 @@
 #ifndef _SYS_KTHREAD_H_
 #define	_SYS_KTHREAD_H_
 
+#if !defined(_KERNEL)
+#error "not supposed to be exposed to userland"
+#endif
+
 /*
  * Kernel thread handling.
  */
 
-#ifdef _KERNEL
 #include <sys/proc.h>
 
-#define	KTHREAD_IDLE	0x01	/* do not set runnable */
-#define	KTHREAD_MPSAFE	0x02	/* does not need kernel_lock */
-#define	KTHREAD_INTR	0x04	/* interrupt handler */
+#define	KTHREAD_IDLE		0x01	/* Do not run on creation */
+#define	KTHREAD_MPSAFE		0x02	/* Do not acquire kernel_lock */
+#define	KTHREAD_INTR		0x04	/* Software interrupt handler */
+#define	KTHREAD_TS		0x08	/* Time-sharing priority range */
+#define	KTHREAD_MUSTJOIN	0x10	/* Must join on exit */
+
+void	kthread_sysinit(void);
 
 int	kthread_create(pri_t, int, struct cpu_info *,
-		       void (*)(void *), void *,
-		       lwp_t **, const char *, ...)
-	    __attribute__((__format__(__printf__,7,8)));
+    void (*)(void *), void *, lwp_t **, const char *, ...) __printflike(7, 8);
 void	kthread_exit(int) __dead;
-void	kthread_destroy(lwp_t *);
-#endif /* _KERNEL */
+int	kthread_join(lwp_t *);
 
 #endif /* _SYS_KTHREAD_H_ */

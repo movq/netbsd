@@ -1,4 +1,4 @@
-/*	$NetBSD: riscoscalls.h,v 1.10 2007/03/04 05:59:07 christos Exp $	*/
+/*	$NetBSD: riscoscalls.h,v 1.12 2012/05/10 10:27:10 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001 Ben Harris
@@ -99,7 +99,7 @@
 
 #ifndef __ASSEMBLER__
 typedef struct os_error {
-	u_int32_t errnum;
+	uint32_t errnum;
 	char errmess[252];
 } os_error;
 
@@ -194,10 +194,20 @@ extern os_error *xosfind_open(int, char const *, char const *, int *);
 #define OSReadSysInfo_ReadMonitorInfo		0x01
 #define OSReadSysInfo_ReadChipPresenceAndId	0x02
 #define OSReadSysInfo_ReadSuperIOFeatures	0x03
+#define OSReadSysInfo_ReadPlatformClass		0x08
 
 #define osreadsysinfo_IOEB_ASIC_PRESENT		0x01
 #define osreadsysinfo_SUPERIO_PRESENT		0x02
 #define osreadsysinfo_LCD_ASIC_PRESENT		0x04
+
+#define osreadsysinfo_Platform_Unknown		0x00
+#define osreadsysinfo_Platform_RiscPC		0x01
+#define osreadsysinfo_Platform_A7000		0x02
+#define osreadsysinfo_Platform_A7000Plus	0x03
+#define osreadsysinfo_Platform_Phoebe		0x04
+#define osreadsysinfo_Platform_Pace		0x05
+#define osreadsysinfo_Platform_VirtualRPC	0x06
+#define osreadsysinfo_Platform_A9		0x07
 
 #ifndef __ASSEMBLER__
 extern void os_readsysinfo(int what, int *r0, int *r1, int *r2, int *r3, int *r4);
@@ -215,6 +225,9 @@ extern void os_readsysinfo(int what, int *r0, int *r1, int *r2, int *r3, int *r4
 
 #define os_readsysinfo_superio_features(basic, extra) \
 	os_readsysinfo(OSReadSysInfo_ReadSuperIOFeatures, (basic), (extra), 0, 0, 0)
+
+#define os_readsysinfo_platform_class(class, flags, feature) \
+	os_readsysinfo(OSReadSysInfo_ReadPlatformClass, (class), (flags), (feature), 0, 0)
 
 #endif
 
@@ -374,26 +387,26 @@ extern os_error xcache_control(u_int, u_int, u_int *);
 #ifndef __ASSEMBLER__
 
 struct filecore_disc {
-	u_int8_t	log2secsize;
-	u_int8_t	secspertrack;
-	u_int8_t	heads;
-	u_int8_t	density;
-	u_int8_t	idlen;
-	u_int8_t	log2bpmp;
-	u_int8_t	skew;
-	u_int8_t	bootoption;
-	u_int8_t	lowsector;
-	u_int8_t	nzones;
-	u_int16_t	zone_spare;
-	u_int32_t	root;
-	u_int32_t	disc_size;
-	u_int16_t	disc_id;
+	uint8_t		log2secsize;
+	uint8_t		secspertrack;
+	uint8_t		heads;
+	uint8_t		density;
+	uint8_t		idlen;
+	uint8_t		log2bpmp;
+	uint8_t		skew;
+	uint8_t		bootoption;
+	uint8_t		lowsector;
+	uint8_t		nzones;
+	uint16_t	zone_spare;
+	uint32_t	root;
+	uint32_t	disc_size;
+	uint16_t	disc_id;
 	char		disc_name[10];
-	u_int32_t	disc_type;
-	u_int32_t	disc_size_hi;
-	u_int8_t	share_size;
-	u_int8_t	big_flag;
-	u_int8_t	reserved[22];
+	uint32_t	disc_type;
+	uint32_t	disc_size_hi;
+	uint8_t		share_size;
+	uint8_t		big_flag;
+	uint8_t		reserved[22];
 };
 
 struct filecore_daddr64 {

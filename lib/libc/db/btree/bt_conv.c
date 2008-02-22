@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_conv.c,v 1.12 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_conv.c,v 1.15 2016/09/24 20:11:12 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,16 +37,11 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_conv.c	8.5 (Berkeley) 8/17/94";
-#else
-__RCSID("$NetBSD: bt_conv.c,v 1.12 2007/02/03 23:46:09 christos Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
+__RCSID("$NetBSD: bt_conv.c,v 1.15 2016/09/24 20:11:12 christos Exp $");
 
 #include <assert.h>
 #include <stdio.h>
+#include <memory.h>
 
 #include <db.h>
 #include "btree.h"
@@ -68,8 +63,9 @@ __bt_pgin(void *t, pgno_t pg, void *pp)
 {
 	PAGE *h;
 	indx_t i, top;
-	u_char flags;
+	uint8_t flags;
 	char *p;
+	uint32_t ksize;
 
 	if (!F_ISSET(((BTREE *)t), B_NEEDSWAP))
 		return;
@@ -92,11 +88,11 @@ __bt_pgin(void *t, pgno_t pg, void *pp)
 			M_16_SWAP(h->linp[i]);
 			p = (char *)(void *)GETBINTERNAL(h, i);
 			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
+			p += sizeof(uint32_t);
 			P_32_SWAP(p);
 			p += sizeof(pgno_t);
-			if (*(u_char *)p & P_BIGKEY) {
-				p += sizeof(u_char);
+			if (*(uint8_t *)p & P_BIGKEY) {
+				p += sizeof(uint8_t);
 				P_32_SWAP(p);
 				p += sizeof(pgno_t);
 				P_32_SWAP(p);
@@ -107,19 +103,20 @@ __bt_pgin(void *t, pgno_t pg, void *pp)
 			M_16_SWAP(h->linp[i]);
 			p = (char *)(void *)GETBLEAF(h, i);
 			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
+			memcpy(&ksize, p, sizeof(ksize));
+			p += sizeof(uint32_t);
 			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
-			flags = *(u_char *)p;
+			p += sizeof(uint32_t);
+			flags = *(uint8_t *)p;
 			if (flags & (P_BIGKEY | P_BIGDATA)) {
-				p += sizeof(u_char);
+				p += sizeof(uint8_t);
 				if (flags & P_BIGKEY) {
 					P_32_SWAP(p);
 					p += sizeof(pgno_t);
 					P_32_SWAP(p);
 				}
 				if (flags & P_BIGDATA) {
-					p += sizeof(u_int32_t);
+					p += ksize;
 					P_32_SWAP(p);
 					p += sizeof(pgno_t);
 					P_32_SWAP(p);
@@ -133,8 +130,9 @@ __bt_pgout(void *t, pgno_t pg, void *pp)
 {
 	PAGE *h;
 	indx_t i, top;
-	u_char flags;
+	uint8_t flags;
 	char *p;
+	uint32_t ksize;
 
 	if (!F_ISSET(((BTREE *)t), B_NEEDSWAP))
 		return;
@@ -149,11 +147,11 @@ __bt_pgout(void *t, pgno_t pg, void *pp)
 		for (i = 0; i < top; i++) {
 			p = (char *)(void *)GETBINTERNAL(h, i);
 			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
+			p += sizeof(uint32_t);
 			P_32_SWAP(p);
 			p += sizeof(pgno_t);
-			if (*(u_char *)p & P_BIGKEY) {
-				p += sizeof(u_char);
+			if (*(uint8_t *)p & P_BIGKEY) {
+				p += sizeof(uint8_t);
 				P_32_SWAP(p);
 				p += sizeof(pgno_t);
 				P_32_SWAP(p);
@@ -163,20 +161,21 @@ __bt_pgout(void *t, pgno_t pg, void *pp)
 	else if ((h->flags & P_TYPE) == P_BLEAF)
 		for (i = 0; i < top; i++) {
 			p = (char *)(void *)GETBLEAF(h, i);
+			ksize = GETBLEAF(h, i)->ksize;
 			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
+			p += sizeof(uint32_t);
 			P_32_SWAP(p);
-			p += sizeof(u_int32_t);
-			flags = *(u_char *)p;
+			p += sizeof(uint32_t);
+			flags = *(uint8_t *)p;
 			if (flags & (P_BIGKEY | P_BIGDATA)) {
-				p += sizeof(u_char);
+				p += sizeof(uint8_t);
 				if (flags & P_BIGKEY) {
 					P_32_SWAP(p);
 					p += sizeof(pgno_t);
 					P_32_SWAP(p);
 				}
 				if (flags & P_BIGDATA) {
-					p += sizeof(u_int32_t);
+					p += ksize;
 					P_32_SWAP(p);
 					p += sizeof(pgno_t);
 					P_32_SWAP(p);
@@ -206,15 +205,15 @@ mswap(PAGE *pg)
 
 	p = (char *)(void *)pg;
 	P_32_SWAP(p);		/* magic */
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 	P_32_SWAP(p);		/* version */
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 	P_32_SWAP(p);		/* psize */
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 	P_32_SWAP(p);		/* free */
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 	P_32_SWAP(p);		/* nrecs */
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 	P_32_SWAP(p);		/* flags */
-	p += sizeof(u_int32_t);
+	p += sizeof(uint32_t);
 }

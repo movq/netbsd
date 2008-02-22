@@ -1,4 +1,4 @@
-/*	$NetBSD: args.c,v 1.9 2003/08/07 11:14:07 agc Exp $	*/
+/*	$NetBSD: args.c,v 1.13 2016/02/22 21:20:29 ginsbach Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -68,7 +68,7 @@
 #if 0
 static char sccsid[] = "@(#)args.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: args.c,v 1.9 2003/08/07 11:14:07 agc Exp $");
+__RCSID("$NetBSD: args.c,v 1.13 2016/02/22 21:20:29 ginsbach Exp $");
 #endif
 #endif				/* not lint */
 
@@ -78,6 +78,7 @@ __RCSID("$NetBSD: args.c,v 1.9 2003/08/07 11:14:07 agc Exp $");
  */
 
 #include <ctype.h>
+#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -99,7 +100,7 @@ __RCSID("$NetBSD: args.c,v 1.9 2003/08/07 11:14:07 agc Exp $");
 #define	STDIN		3	/* use stdin */
 #define	KEY		4	/* type (keyword) */
 
-char   *option_source = "?";
+const char *option_source = "?";
 
 /*
  * N.B.: because of the way the table here is scanned, options whose names are
@@ -108,7 +109,7 @@ char   *option_source = "?";
  * default value is the one actually assigned.
  */
 struct pro {
-	char   *p_name;		/* name, eg -bl, -cli */
+	const char *p_name;	/* name, eg -bl, -cli */
 	int     p_type;		/* type (int, bool, special) */
 	int     p_default;	/* the default value (if int) */
 	int     p_special;	/* depends on type */
@@ -274,6 +275,9 @@ struct pro {
 		"nsc", PRO_BOOL, true, OFF, &star_comment_cont
 	},
 	{
+		"nut", PRO_BOOL, true, OFF, &use_tabs
+	},
+	{
 		"nsob", PRO_BOOL, false, OFF, &swallow_optional_blanklines
 	},
 	{
@@ -299,6 +303,9 @@ struct pro {
 	},
 	{
 		"troff", PRO_BOOL, false, ON, &troff
+	},
+	{
+		"ut", PRO_BOOL, true, ON, &use_tabs
 	},
 	{
 		"v", PRO_BOOL, false, ON, &verbose
@@ -351,10 +358,10 @@ scan_profile(FILE *f)
 	}
 }
 
-char   *param_start;
+const char *param_start;
 
 int
-eqin(char *s1, char *s2)
+eqin(const char *s1, const char *s2)
 {
 	while (*s1) {
 		if (*s1++ != *s2++)
@@ -390,8 +397,7 @@ set_option(char *arg)
 	for (p = pro; p->p_name; p++)
 		if (*p->p_name == *arg && eqin(p->p_name, arg))
 			goto found;
-	fprintf(stderr, "indent: %s: unknown parameter \"%s\"\n", option_source, arg - 1);
-	exit(1);
+	errx(1, "%s: unknown parameter \"%s\"", option_source, arg - 1);
 found:
 	switch (p->p_type) {
 
@@ -426,9 +432,8 @@ found:
 			break;
 
 		default:
-			fprintf(stderr, "\
-indent: set_option: internal error: p_special %d\n", p->p_special);
-			exit(1);
+			errx(1, "set_option: internal error: p_special %d",
+			     p->p_special);
 		}
 		break;
 
@@ -442,9 +447,8 @@ indent: set_option: internal error: p_special %d\n", p->p_special);
 	case PRO_INT:
 		if (!isdigit((unsigned char)*param_start)) {
 	need_param:
-			fprintf(stderr, "indent: %s: ``%s'' requires a parameter\n",
-			    option_source, arg - 1);
-			exit(1);
+			errx(1, "%s: ``%s'' requires a parameter",
+			     option_source, arg - 1);
 		}
 		*p->p_obj = atoi(param_start);
 		break;
@@ -454,8 +458,6 @@ indent: set_option: internal error: p_special %d\n", p->p_special);
 		break;
 
 	default:
-		fprintf(stderr, "indent: set_option: internal error: p_type %d\n",
-		    p->p_type);
-		exit(1);
+		errx(1, "set_option: internal error: p_type %d", p->p_type);
 	}
 }

@@ -1,4 +1,4 @@
-.\" $NetBSD: btsco.4,v 1.9 2006/10/04 19:29:25 wiz Exp $
+.\" $NetBSD: btsco.4,v 1.13 2017/07/03 21:30:58 wiz Exp $
 .\"
 .\" Copyright (c) 2006 Itronix Inc.
 .\" All rights reserved.
@@ -29,7 +29,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd October 4, 2006
+.Dd November 29, 2014
 .Dt BTSCO 4
 .Os
 .Sh NAME
@@ -41,7 +41,8 @@
 .Sh DESCRIPTION
 The
 .Nm
-driver provides support for Bluetooth SCO Audio devices through the
+driver provides support for Bluetooth SCO (Synchronous connection-oriented)
+Audio devices through the
 .Xr audio 4
 driver.
 .Pp
@@ -95,8 +96,8 @@ an application setting up a control channel prior to use, via the
 call on the mixer device, which returns a
 .Ar btsco_info
 structure as follows:
-.Bd -literal -offset
-#include \*[Lt]dev/bluetooth/btsco.h\*[Gt]
+.Bd -literal
+#include <dev/bluetooth/btsco.h>
 
 struct btsco_info {
 	bdaddr_t	laddr;		/* controller bdaddr */
@@ -114,7 +115,7 @@ The
 driver can be configured to act in Connect or Listen mode.
 In Connect mode, the
 .Nm
-driver will initate a connection to the remote device on an
+driver will initiate a connection to the remote device on an
 .Xr open 2
 call, whereas in Listen mode,
 .Xr open 2

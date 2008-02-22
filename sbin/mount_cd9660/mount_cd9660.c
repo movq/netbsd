@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_cd9660.c,v 1.26 2007/07/16 17:06:52 pooka Exp $	*/
+/*	$NetBSD: mount_cd9660.c,v 1.32 2011/08/29 14:35:00 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -38,15 +38,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-        The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_cd9660.c	8.7 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: mount_cd9660.c,v 1.26 2007/07/16 17:06:52 pooka Exp $");
+__RCSID("$NetBSD: mount_cd9660.c,v 1.32 2011/08/29 14:35:00 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,6 +64,9 @@ __RCSID("$NetBSD: mount_cd9660.c,v 1.26 2007/07/16 17:06:52 pooka Exp $");
 
 #include <mntopts.h>
 
+#include "mountprog.h"
+#include "mount_cd9660.h"
+
 static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_UPDATE,
@@ -71,6 +74,7 @@ static const struct mntopt mopts[] = {
 	{ "extatt", 0, ISOFSMNT_EXTATT, 1 },
 	{ "gens", 0, ISOFSMNT_GENS, 1 },
 	{ "maplcase", 1, ISOFSMNT_NOCASETRANS, 1 },
+	{ "casetrans", 1, ISOFSMNT_NOCASETRANS, 1 },
 	{ "nrr", 0, ISOFSMNT_NORRIP, 1 },
 	{ "rrip", 1, ISOFSMNT_NORRIP, 1 },
 	{ "joliet", 1, ISOFSMNT_NOJOLIET, 1 },
@@ -78,26 +82,30 @@ static const struct mntopt mopts[] = {
 	MOPT_NULL,
 };
 
-int	mount_cd9660(int argc, char **argv);
-static void	usage(void);
+__dead static void	usage(void);
 
 #ifndef MOUNT_NOMAIN
 int
 main(int argc, char **argv)
 {
+
+	setprogname(argv[0]);
 	return mount_cd9660(argc, argv);
 }
 #endif
 
-int
-mount_cd9660(int argc, char **argv)
+void
+mount_cd9660_parseargs(int argc, char **argv,
+	struct iso_args *args, int *mntflags,
+	char *canon_dev, char *canon_dir)
 {
-	struct iso_args args;
-	int ch, mntflags, opts;
+	int ch, opts;
 	mntoptparse_t mp;
-	char *dev, *dir, canon_dev[MAXPATHLEN], canon_dir[MAXPATHLEN];
+	char *dev, *dir;
 
-	mntflags = opts = 0;
+	memset(args, 0, sizeof(*args));
+	*mntflags = opts = 0;
+	optind = optreset = 1;
 	while ((ch = getopt(argc, argv, "egijo:r")) != -1)
 		switch (ch) {
 		case 'e':
@@ -116,7 +124,7 @@ mount_cd9660(int argc, char **argv)
 			opts |= ISOFSMNT_NOJOLIET;
 			break;
 		case 'o':
-			mp = getmntopts(optarg, mopts, &mntflags, &opts);
+			mp = getmntopts(optarg, mopts, mntflags, &opts);
 			if (mp == NULL)
 				err(1, "getmntopts");
 			freemntopts(mp);
@@ -130,6 +138,7 @@ mount_cd9660(int argc, char **argv)
 		default:
 			usage();
 		}
+
 	argc -= optind;
 	argv += optind;
 
@@ -139,37 +148,37 @@ mount_cd9660(int argc, char **argv)
 	dev = argv[0];
 	dir = argv[1];
 
-	if (realpath(dev, canon_dev) == NULL)        /* Check device path */
-		err(1, "realpath %s", dev);
-	if (strncmp(dev, canon_dev, MAXPATHLEN)) {
-		warnx("\"%s\" is a relative path.", dev);
-		dev = canon_dev;
-		warnx("using \"%s\" instead.", dev);
-	}
-
-	if (realpath(dir, canon_dir) == NULL)        /* Check mounton path */
-		err(1, "realpath %s", dir);
-	if (strncmp(dir, canon_dir, MAXPATHLEN)) {
-		warnx("\"%s\" is a relative path.", dir);
-		dir = canon_dir;
-		warnx("using \"%s\" instead.", dir);
-	}
+	pathadj(dev, canon_dev);
+	pathadj(dir, canon_dir);
 
 #define DEFAULT_ROOTUID	-2
 	/*
 	 * ISO 9660 filesystems are not writable.
 	 */
-	mntflags |= MNT_RDONLY;
-	args.fspec = dev;
-	args.flags = opts;
+	if ((*mntflags & MNT_GETARGS) == 0)
+		*mntflags |= MNT_RDONLY;
+	args->fspec = canon_dev;
+	args->flags = opts;
+}
 
-	if (mount(MOUNT_CD9660, dir, mntflags, &args, sizeof args) == -1)
-		err(1, "%s on %s", dev, dir);
+int
+mount_cd9660(int argc, char **argv)
+{
+	struct iso_args args;
+	char canon_dev[MAXPATHLEN], canon_dir[MAXPATHLEN];
+	int mntflags;
+
+	mount_cd9660_parseargs(argc, argv, &args, &mntflags,
+	    canon_dev, canon_dir);
+
+	if (mount(MOUNT_CD9660, canon_dir, mntflags, &args, sizeof args) == -1)
+		err(1, "%s on %s", canon_dev, canon_dir);
 	if (mntflags & MNT_GETARGS) {
 		char buf[2048];
 		(void)snprintb(buf, sizeof(buf), ISOFSMNT_BITS, args.flags);
 		printf("%s\n", buf);
 	}
+
 	exit(0);
 }
 
@@ -177,6 +186,6 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr,
-		"usage: mount_cd9660 [-o options] special node\n");
+		"usage: %s [-o options] special node\n", getprogname());
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep_common.c,v 1.7 2008/01/17 23:42:59 garbled Exp $ */
+/* $NetBSD: pci_machdep_common.c,v 1.23 2018/03/02 19:36:19 macallan Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,22 +37,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep_common.c,v 1.7 2008/01/17 23:42:59 garbled Exp $");
-
-#include <sys/types.h>
-#include <sys/param.h>
-#include <sys/time.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
-#include <sys/extent.h>
-#include <sys/device.h>
-#include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep_common.c,v 1.23 2018/03/02 19:36:19 macallan Exp $");
 
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
-#include <machine/intr.h>
+
+#include <sys/param.h>
+#include <sys/bus.h>
+#include <sys/device.h>
+#include <sys/errno.h>
+#include <sys/extent.h>
+#include <sys/intr.h>
+#include <sys/kmem.h>
+#include <sys/systm.h>
+#include <sys/time.h>
+
+#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -72,43 +64,42 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep_common.c,v 1.7 2008/01/17 23:42:59 garbl
  * of these functions.
  */
 struct powerpc_bus_dma_tag pci_bus_dma_tag = {
-	0,			/* _bounce_thresh */
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	NULL,			/* _dmamap_sync */
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
+	._dmamap_create = _bus_dmamap_create,
+	._dmamap_destroy = _bus_dmamap_destroy,
+	._dmamap_load = _bus_dmamap_load,
+	._dmamap_load_mbuf = _bus_dmamap_load_mbuf,
+	._dmamap_load_uio = _bus_dmamap_load_uio,
+	._dmamap_load_raw = _bus_dmamap_load_raw,
+	._dmamap_unload = _bus_dmamap_unload,
+
+	._dmamem_alloc = _bus_dmamem_alloc,
+	._dmamem_free = _bus_dmamem_free,
+	._dmamem_map = _bus_dmamem_map,
+	._dmamem_unmap = _bus_dmamem_unmap,
+	._dmamem_mmap = _bus_dmamem_mmap,
 };
 
 int
-genppc_pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+genppc_pci_bus_maxdevs(void *v, int busno)
 {
 	return 32;
 }
 
 const char *
-genppc_pci_intr_string(void *v, pci_intr_handle_t ih)
+genppc_pci_intr_string(void *v, pci_intr_handle_t ih, char *buf, size_t len)
 {
-	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
-
-	if (ih == 0 || ih >= ICU_LEN
+#ifdef ICU_LEN
+	if (ih >= ICU_LEN
 /* XXX on macppc it's completely legal to have PCI interrupts on a slave PIC */
 #ifdef IRQ_SLAVE
 	    || ih == IRQ_SLAVE
 #endif
 	    )
 		panic("pci_intr_string: bogus handle 0x%x", ih);
+#endif
 
-	sprintf(irqstr, "irq %d", ih);
-	return (irqstr);
+	snprintf(buf, len, "irq %d", ih);
+	return buf;
 	
 }
 
@@ -122,17 +113,19 @@ genppc_pci_intr_evcnt(void *v, pci_intr_handle_t ih)
 
 void *
 genppc_pci_intr_establish(void *v, pci_intr_handle_t ih, int level,
-    int (*func)(void *), void *arg)
+    int (*func)(void *), void *arg, const char *xname)
 {
 
-	if (ih == 0 || ih >= ICU_LEN
+#ifdef ICU_LEN
+	if (ih >= ICU_LEN
 #ifdef IRQ_SLAVE
 	    || ih == IRQ_SLAVE
 #endif
 	    )
 		panic("pci_intr_establish: bogus handle 0x%x", ih);
+#endif
 
-	return intr_establish(ih, IST_LEVEL, level, func, arg);
+	return intr_establish_xname(ih, IST_LEVEL, level, func, arg, xname);
 }
 
 void
@@ -142,22 +135,84 @@ genppc_pci_intr_disestablish(void *v, void *cookie)
 	intr_disestablish(cookie);
 }
 
+int
+genppc_pci_intr_setattr(void *v, pci_intr_handle_t *ihp, int attr,
+    uint64_t data)
+{
+
+	return ENODEV;
+}
+
+pci_intr_type_t
+genppc_pci_intr_type(void *v, pci_intr_handle_t ih)
+{
+
+	return PCI_INTR_TYPE_INTX;
+}
+
+int
+genppc_pci_intr_alloc(const struct pci_attach_args *pa,
+    pci_intr_handle_t **ihps, int *counts, pci_intr_type_t max_type)
+{
+	pci_intr_handle_t *ihp;
+
+	if (counts != NULL && counts[PCI_INTR_TYPE_INTX] == 0)
+		return EINVAL;
+
+	ihp = kmem_alloc(sizeof(*ihp), KM_SLEEP);
+	if (pci_intr_map(pa, ihp)) {
+		kmem_free(ihp, sizeof(*ihp));
+		return EINVAL;
+	}
+
+	*ihps = ihp;
+	return 0;
+}
+
 void
-genppc_pci_conf_interrupt(pci_chipset_tag_t pct, int bus, int dev, int pin,
+genppc_pci_intr_release(void *v, pci_intr_handle_t *pih, int count)
+{
+
+	if (pih == NULL)
+		return;
+
+	KASSERT(count == 1);
+	kmem_free(pih, sizeof(*pih));
+}
+
+int
+genppc_pci_intx_alloc(const struct pci_attach_args *pa,
+    pci_intr_handle_t **ihps)
+{
+	pci_intr_handle_t *handle;
+	int error;
+
+	handle = kmem_zalloc(sizeof(*handle), KM_SLEEP);
+	error = pci_intr_map(pa, handle);
+	if (error != 0) {
+		kmem_free(handle, sizeof(*handle));
+		return error;
+	}
+
+	*ihps = handle;
+	return 0;
+}
+
+void
+genppc_pci_conf_interrupt(void *v, int bus, int dev, int pin,
     int swiz, int *iline)
 {
 	/* do nothing */
 }
 
 int
-genppc_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
-	pcireg_t id)
+genppc_pci_conf_hook(void *v, int bus, int dev, int func, pcireg_t id)
 {
 	return (PCI_CONF_DEFAULT);
 }
 
 int
-genppc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+genppc_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int pin = pa->pa_intrpin;
 	int line = pa->pa_intrline;
@@ -190,15 +245,19 @@ genppc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 	 * Since IRQ 0 is only used by the clock, and we can't actually be sure
 	 * that the BIOS did its job, we also recognize that as meaning that
 	 * the BIOS has not configured the device.
+	 * XXX
+	 * it's perfectly legal to use IRQ 0 on macppc
 	 */
-	if (line == 0 || line == 255) {
+	if (line == 255) {
 		aprint_error("pci_intr_map: no mapping for pin %c\n", '@' + pin);
 		goto bad;
+#ifdef ICU_LEN
 	} else {
 		if (line >= ICU_LEN) {
 			aprint_error("pci_intr_map: bad interrupt line %d\n", line);
 			goto bad;
 		}
+#endif
 	}
 
 	*ihp = line;
@@ -209,15 +268,45 @@ bad:
 	return 1;
 }
 
+/* experimental MSI support */
+int
+genppc_pci_msi_alloc(const struct pci_attach_args *pa, pci_intr_handle_t **ihps,
+    int *count, bool exact)
+{
+
+	return EOPNOTSUPP;
+}
+
+/* experimental MSI-X support */
+int
+genppc_pci_msix_alloc(const struct pci_attach_args *pa,
+    pci_intr_handle_t **ihps, u_int *table_indexes, int *count, bool exact)
+{
+
+	return EOPNOTSUPP;
+}
+
+void
+genppc_pci_chipset_msi_init(pci_chipset_tag_t pc)
+{
+	pc->pc_msi_alloc = genppc_pci_msi_alloc;
+}
+
+void
+genppc_pci_chipset_msix_init(pci_chipset_tag_t pc)
+{
+	pc->pc_msix_alloc = genppc_pci_msix_alloc;
+}
+
 #ifdef __HAVE_PCIIDE_MACHDEP_COMPAT_INTR_ESTABLISH
 #include <machine/isa_machdep.h>
 #include "isa.h"
 
-void *genppc_pciide_machdep_compat_intr_establish(struct device *,
+void *genppc_pciide_machdep_compat_intr_establish(device_t,
     struct pci_attach_args *, int, int (*)(void *), void *);
 
 void *
-genppc_pciide_machdep_compat_intr_establish(struct device *dev,
+genppc_pciide_machdep_compat_intr_establish(device_t dev,
     struct pci_attach_args *pa, int chan, int (*func)(void *), void *arg)
 {
 #if NISA > 0
@@ -228,7 +317,7 @@ genppc_pciide_machdep_compat_intr_establish(struct device *dev,
 	cookie = isa_intr_establish(NULL, irq, IST_LEVEL, IPL_BIO, func, arg);
 	if (cookie == NULL)
 		return (NULL);
-	printf("%s: %s channel interrupting at irq %d\n", dev->dv_xname,
+	aprint_normal_dev(dev, "%s channel interrupting at irq %d\n",
 	    PCIIDE_CHANNEL_NAME(chan), irq);
 	return (cookie);
 #else

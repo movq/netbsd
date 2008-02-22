@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_namecache.c,v 1.22 2007/11/22 22:26:18 plunky Exp $	*/
+/*	$NetBSD: coda_namecache.c,v 1.26 2014/10/18 08:33:27 snj Exp $	*/
 
 /*
  *
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_namecache.c,v 1.22 2007/11/22 22:26:18 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_namecache.c,v 1.26 2014/10/18 08:33:27 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -88,10 +88,7 @@ __KERNEL_RCSID(0, "$NetBSD: coda_namecache.c,v 1.22 2007/11/22 22:26:18 plunky E
 #include <coda/coda.h>
 #include <coda/cnode.h>
 #include <coda/coda_namecache.h>
-
-#ifdef	DEBUG
-#include <coda/coda_vnops.h>
-#endif
+#include <coda/coda_subr.h>
 
 /*
  * Declaration of the name cache data structure.
@@ -202,8 +199,8 @@ coda_nc_find(struct cnode *dcp, const char *name, int namelen,
 			kauth_cred_getrefcnt(cncp->cred),
 			kauth_cred_geteuid(cncp->cred),
 			kauth_cred_getegid(cncp->cred));
-		print_cred(cred);
-		print_cred(cncp->cred);
+		coda_print_cred(cred);
+		coda_print_cred(cncp->cred);
 	    }
 #endif
 	    count++;
@@ -274,7 +271,7 @@ coda_nc_enter(struct cnode *dcp, const char *name, int namelen,
     cncp->namelen = namelen;
     cncp->cred = cred;
 
-    bcopy(name, cncp->name, (unsigned)namelen);
+    memcpy(cncp->name, name, (unsigned)namelen);
 
     /* Insert into the lru and hash chains. */
     TAILQ_INSERT_TAIL(&coda_nc_lru.head, cncp, lru);
@@ -285,7 +282,7 @@ coda_nc_enter(struct cnode *dcp, const char *name, int namelen,
 }
 
 /*
- * Find the (dir cnode, name) pair in the cache, if it's cred
+ * Find the (dir cnode, name) pair in the cache, if its cred
  * matches the input, return it, otherwise return 0
  */
 struct cnode *
@@ -340,7 +337,7 @@ coda_nc_remove(struct coda_cache *cncp, enum dc_status dcstat)
 {
 	/*
 	 * remove an entry -- vrele(cncp->dcp, cp), crfree(cred),
-	 * remove it from it's hash chain, and
+	 * remove it from its hash chain, and
 	 * place it at the head of the lru list.
 	 */
         CODA_NC_DEBUG(CODA_NC_REMOVE,
@@ -710,7 +707,7 @@ coda_nc_name(struct cnode *cp)
 
 		LIST_FOREACH(cncp, &coda_nc_hash[i].head, hash) {
 			if (cncp->cp == cp) {
-				bcopy(cncp->name, coda_nc_name_buf, cncp->namelen);
+				memcpy(coda_nc_name_buf, cncp->name, cncp->namelen);
 				coda_nc_name_buf[cncp->namelen] = 0;
 				printf(" is %s (%p,%p)@%p",
 					coda_nc_name_buf, cncp->cp, cncp->dcp, cncp);

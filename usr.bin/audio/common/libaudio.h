@@ -1,7 +1,7 @@
-/*	$NetBSD: libaudio.h,v 1.14 2006/05/11 01:19:10 mrg Exp $	*/
+/*	$NetBSD: libaudio.h,v 1.20 2015/08/05 06:54:39 mrg Exp $	*/
 
 /*
- * Copyright (c) 1999 Matthew R. Green
+ * Copyright (c) 1999, 2009 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -109,18 +107,30 @@ int	audio_encoding_to_sun (int, int, int *);
 #define	WAVAUDIO_FILE_MAGIC_FMT		((u_int32_t)0x666d7420)
 #define	WAVAUDIO_FILE_MAGIC_DATA	((u_int32_t)0x64617461)
 
-/* purloined from public Microsoft RIFF docs via sox */
+/* purloined from public Microsoft RIFF docs via sox or mplayer */
 #define WAVE_FORMAT_UNKNOWN		(0x0000)
 #define WAVE_FORMAT_PCM			(0x0001)
 #define WAVE_FORMAT_ADPCM		(0x0002)
 #define WAVE_FORMAT_ALAW		(0x0006)
 #define WAVE_FORMAT_MULAW		(0x0007)
 #define WAVE_FORMAT_OKI_ADPCM		(0x0010)
+#define WAVE_FORMAT_IMA_ADPCM		(0x0011)
 #define WAVE_FORMAT_DIGISTD		(0x0015)
 #define WAVE_FORMAT_DIGIFIX		(0x0016)
+#define WAVE_FORMAT_DOLBY_AC2		(0x0030)
+#define WAVE_FORMAT_GSM610		(0x0031)
+#define WAVE_FORMAT_ROCKWELL_ADPCM	(0x003b)
+#define WAVE_FORMAT_ROCKWELL_DIGITALK	(0x003c)
+#define WAVE_FORMAT_G721_ADPCM		(0x0040)
+#define WAVE_FORMAT_G728_CELP		(0x0041)
+#define WAVE_FORMAT_MPEG		(0x0050)
+#define WAVE_FORMAT_MPEGLAYER3		(0x0055)
+#define WAVE_FORMAT_G726_ADPCM		(0x0064)
+#define WAVE_FORMAT_G722_ADPCM		(0x0065)
 #define IBM_FORMAT_MULAW		(0x0101)
 #define IBM_FORMAT_ALAW			(0x0102)
 #define IBM_FORMAT_ADPCM		(0x0103)
+#define WAVE_FORMAT_EXTENSIBLE		(0xfffe)
 
 const char *wav_enc_from_val (int);
 
@@ -138,8 +148,18 @@ typedef struct {
 	u_int16_t	bits_per_sample;
 } __packed wav_audioheaderfmt;
 
+typedef struct {
+	u_int16_t	len;
+	u_int16_t	valid_bits;
+	u_int32_t	speaker_pos_mask;
+	u_int16_t	sub_tag;
+	u_int8_t	dummy[14];
+} __packed wav_audiohdrextensible;
+
 /* returns size of header, or -ve for failure */
-ssize_t audio_wav_parse_hdr (void *, size_t, u_int *, u_int *, u_int *, u_int *, size_t *);
+ssize_t audio_wav_parse_hdr (void *, size_t, u_int *, u_int *, u_int *, u_int *, off_t *);
+
+extern int verbose;
 
 /*
  * audio routine error codes
@@ -160,8 +180,41 @@ const char *audio_errstring (int);
  * generic routines?
  */
 void	decode_int (const char *, int *);
+void	decode_uint (const char *, unsigned *);
 void	decode_time (const char *, struct timeval *);
 void	decode_encoding (const char *, int *);
+
+/*
+ * Track info, for reading/writing sun/wav header.
+ *
+ * Note that write_header() may change the values of format,
+ * encoding.
+ */
+
+struct track_info {
+	int	outfd;
+	char	*header_info;
+	int	format;
+	int	encoding;
+	int	precision;
+	int	qflag;
+	off_t	total_size;
+	int	sample_rate;
+	int	channels;
+};
+
+typedef void (*write_conv_func) (u_char *, int);
+
+void	write_header (struct track_info *);
+write_conv_func write_get_conv_func(struct track_info *);
+
+/* backends for the above */
+int sun_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp);
+int wav_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp);
+write_conv_func sun_write_get_conv_func(struct track_info *ti);
+write_conv_func wav_write_get_conv_func(struct track_info *ti);
+
+extern char	audio_default_info[8];
 
 /*
  * get/put 16/32 bits of big/little endian data

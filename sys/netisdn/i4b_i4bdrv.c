@@ -27,7 +27,7 @@
  *	i4b_i4bdrv.c - i4b userland interface driver
  *	--------------------------------------------
  *
- *	$Id: i4b_i4bdrv.c,v 1.32 2007/12/05 17:20:02 pooka Exp $
+ *	$Id: i4b_i4bdrv.c,v 1.40 2017/10/25 08:12:40 maya Exp $
  *
  * $FreeBSD$
  *
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_i4bdrv.c,v 1.32 2007/12/05 17:20:02 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_i4bdrv.c,v 1.40 2017/10/25 08:12:40 maya Exp $");
 
 #include "isdn.h"
 
@@ -110,17 +110,17 @@ static void *devfs_token;
 #ifndef __FreeBSD__
 
 #define	PDEVSTATIC	/* - not static - */
-PDEVSTATIC void isdnattach __P((void));
-PDEVSTATIC int isdnopen __P((dev_t dev, int flag, int fmt, struct lwp *l));
-PDEVSTATIC int isdnclose __P((dev_t dev, int flag, int fmt, struct lwp *l));
-PDEVSTATIC int isdnread __P((dev_t dev, struct uio *uio, int ioflag));
-PDEVSTATIC int isdnioctl __P((dev_t dev, u_long cmd, void *data, int flag, struct lwp *l));
+PDEVSTATIC void isdnattach(void);
+PDEVSTATIC int isdnopen(dev_t dev, int flag, int fmt, struct lwp *l);
+PDEVSTATIC int isdnclose(dev_t dev, int flag, int fmt, struct lwp *l);
+PDEVSTATIC int isdnread(dev_t dev, struct uio *uio, int ioflag);
+PDEVSTATIC int isdnioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l);
 
 #ifdef OS_USES_POLL
-PDEVSTATIC int isdnpoll __P((dev_t dev, int events, struct lwp *l));
-PDEVSTATIC int isdnkqfilter __P((dev_t dev, struct knote *kn));
+PDEVSTATIC int isdnpoll(dev_t dev, int events, struct lwp *l);
+PDEVSTATIC int isdnkqfilter(dev_t dev, struct knote *kn);
 #else
-PDEVSTATIC int isdnselect __P((dev_t dev, int rw, struct lwp *l));
+PDEVSTATIC int isdnselect(dev_t dev, int rw, struct lwp *l);
 #endif
 
 #endif /* #ifndef __FreeBSD__ */
@@ -196,14 +196,24 @@ SYSINIT(i4bdev,SI_SUB_DRIVERS,SI_ORDER_MIDDLE+CDEV_MAJOR,i4b_drvinit,NULL)
 
 #ifdef __NetBSD__
 const struct cdevsw isdn_cdevsw = {
-	isdnopen, isdnclose, isdnread, nowrite, isdnioctl,
-	nostop, notty, isdnpoll, nommap, isdnkqfilter, D_OTHER
+	.d_open = isdnopen,
+	.d_close = isdnclose,
+	.d_read = isdnread,
+	.d_write = nowrite,
+	.d_ioctl = isdnioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = isdnpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = isdnkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 #endif /* __NetBSD__ */
 
 #ifdef __bsdi__
 #include <sys/device.h>
-int i4bmatch(struct device *parent, struct cfdata *cf, void *aux);
+int i4bmatch(device_t parent, cfdata_t cf, void *aux);
 void dummy_i4battach(struct device*, struct device *, void *);
 
 #define CDEV_MAJOR 65
@@ -219,13 +229,13 @@ struct devsw i4bsw =
 };
 
 int
-i4bmatch(struct device *parent, struct cfdata *cf, void *aux)
+i4bmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	printf("i4bmatch: aux=0x%x\n", aux);
 	return 1;
 }
 void
-dummy_i4battach(struct device *parent, struct device *self, void *aux)
+dummy_i4battach(device_t parent, device_t self, void *aux)
 {
 	printf("dummy_i4battach: aux=0x%x\n", aux);
 }
@@ -238,10 +248,11 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 isdnattach(void *dummy)
 #else
-isdnattach()
+isdnattach(void)
 #endif
 {
 	i4b_rdqueue.ifq_maxlen = IFQ_MAXLEN;
+	selinit(&select_rd_info);
 
 #if defined(__FreeBSD__)
 #if __FreeBSD__ == 3
@@ -980,11 +991,19 @@ filt_i4bread(struct knote *kn, long hint)
 	return (1);
 }
 
-static const struct filterops i4bread_filtops =
-	{ 1, NULL, filt_i4brdetach, filt_i4bread };
+static const struct filterops i4bread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_i4brdetach,
+	.f_event = filt_i4bread,
+};
 
-static const struct filterops i4b_seltrue_filtops =
-	{ 1, NULL, filt_i4brdetach, filt_seltrue };
+static const struct filterops i4b_seltrue_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_i4brdetach,
+	.f_event = filt_seltrue,
+};
 
 int
 isdnkqfilter(dev_t dev, struct knote *kn)
@@ -1055,7 +1074,7 @@ i4bputqueue(struct mbuf *m)
 	if(selflag)
 	{
 		selflag = 0;
-		selnotify(&select_rd_info, 0);
+		selnotify(&select_rd_info, 0, 0);
 	}
 }
 
@@ -1096,7 +1115,7 @@ i4bputqueue_hipri(struct mbuf *m)
 	if(selflag)
 	{
 		selflag = 0;
-		selnotify(&select_rd_info, 0);
+		selnotify(&select_rd_info, 0, 0);
 	}
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: elf.c,v 1.7 2005/12/11 12:17:00 christos Exp $	*/
+/*	$NetBSD: elf.c,v 1.14 2011/10/01 15:59:00 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,7 +43,6 @@
 
 #include <lib/libsa/stand.h>
 #include <atari_stand.h>
-#include <string.h>
 #include <libkern.h>
 #include <sys/exec_elf.h>
 
@@ -73,17 +65,13 @@
 				(ELFMAG2 << 8) | ELFMAG3)
 
 int
-elf_load(fd, od, errp, loadsyms)
-int	fd;
-osdsc_t	*od;
-char	**errp;
-int	loadsyms;
+elf_load(int fd, osdsc_t *od, char **errp, int loadsyms)
 {
 	int		i,j;
 	int		err;
 	Elf32_Ehdr	ehdr;
 	Elf32_Phdr	*phdrs;
-	Elf32_Word	symsize, symstart;
+	Elf32_Word	ident, symsize, symstart;
 	long		kernsize;
 
 	*errp = NULL;
@@ -91,7 +79,8 @@ int	loadsyms;
 	if (read(fd, (char *)&ehdr, sizeof(ehdr)) != sizeof(ehdr))
 		return -1;
 
-	if (*((u_int *)ehdr.e_ident) != ELFMAGIC)
+	memcpy(&ident, ehdr.e_ident, sizeof ident);
+	if (ident != ELFMAGIC)
 		return -1;
 
 	/*
@@ -169,7 +158,7 @@ int	loadsyms;
 		if (read(fd, p, php->p_filesz) != php->p_filesz)
 		    goto error;
 		if (php->p_memsz > php->p_filesz)
-		    bzero(p + php->p_filesz, php->p_memsz - php->p_filesz);
+		    memset(p + php->p_filesz, 0, php->p_memsz - php->p_filesz);
 	    }
 	}
 
@@ -224,7 +213,7 @@ int	loadsyms;
 		}
 	    }
 	    ehdr.e_shoff = sizeof(ehdr);
-	    bcopy(&ehdr, symtab, sizeof(ehdr));
+	    memcpy(symtab, &ehdr, sizeof(ehdr));
 	}
 	return 0;
 

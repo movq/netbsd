@@ -1,4 +1,4 @@
-/*	$NetBSD: eaytest.c,v 1.8 2007/06/06 15:37:15 vanhu Exp $	*/
+/*	$NetBSD: eaytest.c,v 1.10 2010/01/17 23:02:48 wiz Exp $	*/
 
 /* Id: eaytest.c,v 1.22 2005/06/19 18:02:54 manubsd Exp */
 
@@ -65,7 +65,7 @@
 
 #include "package_version.h"
 
-#define PVDUMP(var) hexdump((var)->v, (var)->l)
+#define PVDUMP(var) racoon_hexdump((var)->v, (var)->l)
 
 /*#define CERTTEST_BROKEN */
 
@@ -572,6 +572,7 @@ getcerts(path)
 
 		n++;
 	}
+	closedir(dirp);
 
 	p = (char **)realloc(certs, (n + 1) * sizeof(certs));
 	if (p == NULL)

@@ -1,10 +1,15 @@
-#	$NetBSD: Makefile,v 1.10 2006/01/27 01:57:29 uwe Exp $
+#	$NetBSD: Makefile,v 1.16 2017/04/08 19:53:22 christos Exp $
+
+NOMAN=		# defined
+
+.include <bsd.own.mk>
+.include <bsd.klinks.mk>
 
 S=		${.CURDIR}/../../../..
 
-WARNS=		4
+WARNS=		2
 PROG=		ofwboot
-SRCS=		srt0.S Locore.c alloc.c boot.c ofdev.c net.c netif_of.c vers.c
+SRCS=		srt0.S Locore.c alloc.c boot.c ofdev.c net.c netif_of.c
 CFLAGS+=	-ffreestanding -Wno-main
 #CPPFLAGS+=	-DDEBUG -DNETIF_DEBUG
 CPPFLAGS+=	-DSUPPORT_DHCP -I${.CURDIR}
@@ -16,11 +21,11 @@ SRCS+=		byteorder.c
 
 # XXX SHOULD NOT NEED TO DEFINE THESE!
 LIBCRT0=
+LIBCRTI=
 LIBC=
 LIBCRTBEGIN=
 LIBCRTEND=
 
-NOMAN=		# defined
 STRIPFLAG=
 BINMODE=	444
 
@@ -30,19 +35,10 @@ RELOC=		f0000000
 
 ENTRY=		_start
 
-CLEANFILES+=	vers.c
-
 CPPFLAGS+=	-nostdinc -I. -I${.CURDIR}/../../.. -I${S}
 CPPFLAGS+=	-DRELOC=0x${RELOC}
-
-.if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN:
-	@[ -h machine ] || ln -s ${S}/arch/${MACHINE}/include machine
-	@[ -h arm ] || ln -s ${S}/arch/arm/include arm
-.endif
-
-.NOPATH: machine arm
-CLEANFILES+= machine arm
+CFLAGS+=	-fno-unwind-tables
+CPUFLAGS=	-mcpu=strongarm
 
 CLEANFILES+= ${PROG}.aout
 
@@ -62,13 +58,12 @@ SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_USE_LOADFILE=yes
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
-.PHONY: vers.c
-vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "shark" ${NEWVERSWHAT}
-
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
+	${_MKTARGET_LINK}
 	${LD} -s -N -Ttext ${RELOC} -Bstatic -e ${ENTRY} -o ${.TARGET}.aout \
 	    ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 	${OBJCOPY} -O binary ${.TARGET}.aout ${.TARGET}
+
+.include "${S}/conf/newvers_stand.mk"
 
 .include <bsd.prog.mk>

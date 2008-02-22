@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_close.c,v 1.12 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_close.c,v 1.17 2016/09/24 21:31:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_close.c	8.7 (Berkeley) 8/17/94";
-#else
-__RCSID("$NetBSD: bt_close.c,v 1.12 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_close.c,v 1.17 2016/09/24 21:31:25 christos Exp $");
 
 #include "namespace.h"
 
@@ -138,7 +136,8 @@ __bt_sync(const DB *dbp, u_int flags)
 		return (RET_ERROR);
 	}
 
-	if (F_ISSET(t, B_INMEM | B_RDONLY) || !F_ISSET(t, B_MODIFIED))
+	if (F_ISSET(t, B_INMEM | B_RDONLY)
+	    || !F_ISSET(t, B_MODIFIED | B_METADIRTY))
 		return (RET_SUCCESS);
 
 	if (F_ISSET(t, B_METADIRTY) && bt_meta(t) == RET_ERROR)

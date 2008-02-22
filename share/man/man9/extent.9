@@ -1,4 +1,4 @@
-.\" $NetBSD: extent.9,v 1.27 2007/03/07 00:41:17 dogcow Exp $
+.\" $NetBSD: extent.9,v 1.37 2017/08/28 06:18:40 skrll Exp $
 .\"
 .\" Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd September 23, 1996
+.Dd August 28, 2017
 .Dt EXTENT 9
 .Os
 .Sh NAME
@@ -43,6 +36,8 @@
 .Nm extent_destroy ,
 .Nm extent_alloc ,
 .Nm extent_alloc_subregion ,
+.Nm extent_alloc1 ,
+.Nm extent_alloc_subregion1 ,
 .Nm extent_alloc_region ,
 .Nm extent_free ,
 .Nm extent_print
@@ -51,7 +46,7 @@
 .In sys/malloc.h
 .In sys/extent.h
 .Ft struct extent *
-.Fn extent_create "char *name" "u_long start" "u_long end" "int mtype" "void *storage" "size_t storagesize" "int flags"
+.Fn extent_create "char *name" "u_long start" "u_long end" "void *storage" "size_t storagesize" "int flags"
 .Ft void
 .Fn extent_destroy "struct extent *ex"
 .Ft int
@@ -94,12 +89,6 @@ creates an extent map managing the space from
 to
 .Fa end
 inclusive.
-All memory allocation will use the memory type
-.Fa mtype
-.Po
-see
-.Xr malloc 9
-.Pc .
 The extent map will have the name
 .Fa name ,
 used for identification in case of an error.
@@ -143,6 +132,13 @@ flag
 may be passed to allocation requests to indicate that a fixed extent
 map may be extended using a call to
 .Fn malloc .
+.Pp
+If the flag
+.Dv EX_EARLY
+is specified, no
+.Xr mutex 9
+calls are made in the expectation that
+mutual exclusion is not available or required.
 .Pp
 .Fn extent_destroy
 destroys the extent map
@@ -286,7 +282,9 @@ Print out information about extent
 This function always succeeds.
 Behavior is undefined if invalid arguments are provided.
 .Sh LOCKING
-The extent manager performs all necessary locking on the extent map
+The extent manager performs all necessary locking (unless
+.Dv EX_EARLY
+is specified) on the extent map
 itself, and any other data structures internal to the extent manager.
 The locks used by the extent manager are simplelocks, and will never sleep
 .Po
@@ -354,7 +352,7 @@ func()
 	 * 128k, and 192k) within the extent.
 	 */
 	error = extent_alloc(foo_ex, 0x2000, 0x1000, 0x10000,
-	    EX_NOWAIT, \*[Am]region_start);
+	    EX_NOWAIT, &region_start);
 	if (error)
 		panic("you lose");
 
@@ -365,13 +363,6 @@ func()
 }
 .Ed
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where
-actual code implementing or using the extent manager can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The extent manager itself is implemented within the file
 .Pa sys/kern/subr_extent.c .
 Function prototypes for the framework are located in

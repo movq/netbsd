@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.6 2006/03/04 02:56:21 uwe Exp $ */
+/*	$NetBSD: pci_machdep.h,v 1.12 2016/07/07 06:55:38 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1999 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -40,7 +38,7 @@
  */
 typedef struct sparc_pci_chipset *pci_chipset_tag_t;
 typedef u_int pci_intr_handle_t;
-typedef uint64_t pcitag_t; 
+typedef uint64_t pcitag_t;
 
 
 /*
@@ -57,6 +55,10 @@ struct sparc_pci_chipset {
 	void		*cookie;	/* msiiep_softc, but sssh! */
 };
 
+#define IS_PCI_BRIDGE(class) \
+	(((class >> 16) & 0xff) == PCI_CLASS_BRIDGE && \
+	    ((class >> 8) & 0xff) == PCI_SUBCLASS_BRIDGE_PCI)
+
 /* 
  * The MI PCI code expects pcitag_t to be a scalar type.  But besides
  * the bus/device/function we need to store the OFW node as well.  We
@@ -65,7 +67,7 @@ struct sparc_pci_chipset {
  * form directly suitable for pci mode1 configuration address port.
  */
 #define	PCITAG_CREATE(n,b,d,f)	\
-	(((uint64_t)(n)<<32)|0x80000000U|((b)<<16)|((d)<<11)|((f)<<8))
+	(((uint64_t)(n)<<32)|0x80000000U|((b)<<16)|((d)<<11)|((f)<<8)|(b?1:0))
 
 #define	PCITAG_NODE(t)		((uint32_t)(((t)>>32)&0xffffffff))
 #define	PCITAG_OFFSET(t)	((uint32_t)((t)&0xffffffff))
@@ -77,7 +79,7 @@ struct sparc_pci_chipset {
 /*
  * Functions provided to machine-independent PCI code.
  */
-void		pci_attach_hook(struct device *, struct device *,
+void		pci_attach_hook(device_t, device_t,
 				struct pcibus_attach_args *);
 int		pci_bus_maxdevs(pci_chipset_tag_t, int);
 pcitag_t	pci_make_tag(pci_chipset_tag_t, int, int, int);
@@ -85,8 +87,10 @@ void		pci_decompose_tag(pci_chipset_tag_t, pcitag_t,
 				  int *, int *, int *);
 pcireg_t	pci_conf_read(pci_chipset_tag_t, pcitag_t, int);
 void		pci_conf_write(pci_chipset_tag_t, pcitag_t, int, pcireg_t);
-int		pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
-const char	*pci_intr_string(pci_chipset_tag_t, pci_intr_handle_t);
+int		pci_intr_map(const struct pci_attach_args *,
+		             pci_intr_handle_t *);
+const char	*pci_intr_string(pci_chipset_tag_t, pci_intr_handle_t,
+				 char *, size_t);
 const struct evcnt *pci_intr_evcnt(pci_chipset_tag_t, pci_intr_handle_t);
 void		*pci_intr_establish(pci_chipset_tag_t, pci_intr_handle_t,
 				    int, int (*)(void *), void *);

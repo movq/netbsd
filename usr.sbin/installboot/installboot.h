@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.h,v 1.34 2008/02/02 17:01:03 tsutsui Exp $	*/
+/*	$NetBSD: installboot.h,v 1.39 2014/02/24 07:23:44 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,6 +65,8 @@ typedef enum {
 	IB_PASSWORD =	1<<18,		/* i386 boot password */
 	IB_KEYMAP = 	1<<19,		/* i386 console keymap */
 	IB_CONSADDR = 	1<<20,		/* i386 console io address */
+	IB_MODULES =	1<<21,		/* i386: load modules */
+	IB_BOOTCONF = 	1<<22,		/* i386: read boot.conf */
 } ib_flags;
 
 typedef struct {
@@ -87,6 +82,7 @@ typedef struct {
 	uint64_t	 s1start;	/*  start block of stage1 */
 	const char	*stage2;	/* name of stage2 bootstrap */
 	uint64_t	 s2start;	/*  start block of stage2 */
+	uint32_t	 sectorsize;	/* sector size of target fs */
 		/* parsed -o option=value data */
 	const char	*command;	/* name of command string */
 	const char	*console;	/* name of console */
@@ -139,7 +135,7 @@ struct bbinfo_params {
 	bbinfo_endian	endian;
 };
 
-extern struct ib_mach	*machines[];
+extern struct ib_mach	* const machines[];
 extern struct ib_fs	fstypes[];
 
 	/* installboot.c */
@@ -171,7 +167,7 @@ extern struct ib_mach ib_mach_amd64;
 extern struct ib_mach ib_mach_amiga;
 extern struct ib_mach ib_mach_ews4800mips;
 extern struct ib_mach ib_mach_hp300;
-extern struct ib_mach ib_mach_hp700;
+extern struct ib_mach ib_mach_hppa;
 extern struct ib_mach ib_mach_i386;
 extern struct ib_mach ib_mach_landisk;
 extern struct ib_mach ib_mach_macppc;

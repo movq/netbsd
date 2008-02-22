@@ -1,4 +1,4 @@
-/*	$NetBSD: ppbreg.h,v 1.6 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: ppbreg.h,v 1.8 2017/12/18 04:48:28 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -91,7 +91,7 @@
 /*
  * bridge control register (see table 3.9 of ppb rev. 1.1)
  *
- * Note these are in the *upper* 16 bits if the Bridge Control
+ * Note these are in the *upper* 16 bits of the Bridge Control
  * Register (the bottom 16 are Interrupt Line and Interrupt Pin).
  */
 #define	PPB_BC_BITBASE			   16
@@ -100,6 +100,7 @@
 #define PPB_BC_SERR_ENABLE                 (1U << (1 + PPB_BC_BITBASE))
 #define PPB_BC_ISA_ENABLE                  (1U << (2 + PPB_BC_BITBASE))
 #define PPB_BC_VGA_ENABLE                  (1U << (3 + PPB_BC_BITBASE))
+#define PPB_BC_VGA16_ENABLE                (1U << (3 + PPB_BC_BITBASE))
 #define PPB_BC_MASTER_ABORT_MODE           (1U << (5 + PPB_BC_BITBASE))
 #define PPB_BC_SECONDARY_RESET             (1U << (6 + PPB_BC_BITBASE))
 #define	PPB_BC_FAST_B2B_ENABLE		   (1U << (7 + PPB_BC_BITBASE))

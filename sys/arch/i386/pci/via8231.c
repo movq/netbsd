@@ -1,4 +1,4 @@
-/*	$NetBSD: via8231.c,v 1.2 2006/05/15 00:36:55 christos Exp $	*/
+/*	$NetBSD: via8231.c,v 1.5 2014/01/25 21:11:03 christos Exp $	*/
 /*	OpenBSD: via8231.c,v 1.6 2005/10/27 16:41:06 mickey Exp 	*/
 
 /*-
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed by the NetBSD
- *     Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: via8231.c,v 1.2 2006/05/15 00:36:55 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: via8231.c,v 1.5 2014/01/25 21:11:03 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: via8231.c,v 1.2 2006/05/15 00:36:55 christos Exp $")
 #include <sys/malloc.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -265,7 +258,7 @@ int
 via8231_set_trigger(pciintr_icu_handle_t v, int irq, int trigger)
 {
 	struct via8231_handle *ph = v;
-	int reg, clink, m, pciirq;
+	int reg, clink, pciirq;
 
 	if (VIA8231_PIRQ_LEGAL(irq) == 0 || VIA8231_TRIG_LEGAL(trigger) == 0)
 		return (1);
@@ -275,7 +268,6 @@ via8231_set_trigger(pciintr_icu_handle_t v, int irq, int trigger)
 	via8231_pir_dump("via8231_set_trig: ", ph);
 #endif
 
-	m = ph->flags & VT8237? VIA8237_LINK_MAX : VIA8231_LINK_MAX;
 	for (clink = 0; clink <= VIA8231_LINK_MAX; clink++) {
 		via8231_get_intr(v, clink, &pciirq);
 		if (pciirq == irq) {

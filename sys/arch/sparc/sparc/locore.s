@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.243 2008/01/08 21:32:11 martin Exp $	*/
+/*	$NetBSD: locore.s,v 1.271 2018/05/31 22:44:13 mrg Exp $	*/
 
 /*
  * Copyright (c) 1996 Paul Kranenburg
@@ -75,18 +75,6 @@
 	
 #include <sys/syscall.h>
 
-/*
- * GNU assembler does not understand `.empty' directive; Sun assembler
- * gripes about labels without it.  To allow cross-compilation using
- * the Sun assembler, and because .empty directives are useful documentation,
- * we use this trick.
- */
-#ifdef SUN_AS
-#define	EMPTY	.empty
-#else
-#define	EMPTY	/* .empty */
-#endif
-
 /* use as needed to align things on longword boundaries */
 #define	_ALIGN	.align 4
 
@@ -104,19 +92,14 @@
 BARF
 .endif
 
-/*
- * A handy macro for maintaining instrumentation counters.
- * Note that this clobbers %o0 and %o1.  Normal usage is
- * something like:
- *	foointr:
- *		TRAP_SETUP(...)		! makes %o registers safe
- *		INCR(cnt+V_FOO)	! count a foo
- */
-#define INCR(what) \
-	sethi	%hi(what), %o0; \
-	ld	[%o0 + %lo(what)], %o1; \
-	inc	%o1; \
-	st	%o1, [%o0 + %lo(what)]
+#if EV_COUNT != 0
+# error "this code does not work with EV_COUNT != 0"
+#endif
+#if EV_STRUCTSIZE != 32
+# error "this code does not work with EV_STRUCTSIZE != 32"
+#else
+# define EV_STRUCTSHIFT	5
+#endif
 
 /*
  * Another handy macro: load one register window, given `base' address.
@@ -1267,7 +1250,7 @@ Lpanic_red:
 	cmp	pte, -1; \
 	be,a	1f; andn addr, page_offset, pte; \
 	tst	pte; \
-	bne	bad; EMPTY; \
+	bne	bad; .empty; \
 	andn	addr, page_offset, pte; \
 1:
 
@@ -1694,14 +1677,14 @@ ctw_user:
 	st	%g7, [%g6 + PCB_UW]	! cpcb->pcb_uw--;
 	btst	7, %sp			! if not aligned,
 	bne	ctw_invalid		! choke on it
-	 EMPTY
+	 .empty
 
 	sethi	%hi(_C_LABEL(pgofset)), %g6	! trash %g6=curpcb
 	ld	[%g6 + %lo(_C_LABEL(pgofset))], %g6
 	PTE_OF_ADDR(%sp, %g7, ctw_invalid, %g6, NOP_ON_4M_1)
 	CMP_PTE_USER_WRITE(%g7, %g5, NOP_ON_4M_2) ! likewise if not writable
 	bne	ctw_invalid
-	 EMPTY
+	 .empty
 	/* Note side-effect of SLT_IF_1PAGE_RW: decrements %g6 by 62 */
 	SLT_IF_1PAGE_RW(%sp, %g7, %g6)
 	bl,a	ctw_merge		! all ok if only 1
@@ -1803,9 +1786,11 @@ ctw_invalid:
  */
 
 #if defined(SUN4)
+_ENTRY(memfault_sun4)
 memfault_sun4:
 	TRAP_SETUP(-CCFSZ-80)
-	INCR(_C_LABEL(uvmexp)+V_FAULTS)	! cnt.v_faults++ (clobbers %o0,%o1)
+	! tally interrupt (curcpu()->cpu_data.cpu_nfault++) (clobbers %o0,%o1)
+	INCR64(CPUINFO_VA + CPUINFO_NFAULT)
 
 	st	%g1, [%sp + CCFSZ + 20]	! save g1
 	rd	%y, %l4			! save y
@@ -1867,10 +1852,12 @@ memfault_sun4:
 #endif /* SUN4C || SUN4M */
 #endif /* SUN4 */
 
-memfault_sun4c:
 #if defined(SUN4C)
+_ENTRY(memfault_sun4c)
+memfault_sun4c:
 	TRAP_SETUP(-CCFSZ-80)
-	INCR(_C_LABEL(uvmexp)+V_FAULTS)	! cnt.v_faults++ (clobbers %o0,%o1)
+	! tally fault (curcpu()->cpu_data.cpu_nfault++) (clobbers %o0,%o1,%o2)
+	INCR64(CPUINFO_VA + CPUINFO_NFAULT)
 
 	st	%g1, [%sp + CCFSZ + 20]	! save g1
 	rd	%y, %l4			! save y
@@ -1966,13 +1953,15 @@ memfault_sun4c:
 #endif /* SUN4C */
 
 #if defined(SUN4M)
+_ENTRY(memfault_sun4m)
 memfault_sun4m:
 	sethi	%hi(CPUINFO_VA), %l4
 	ld	[%l4 + %lo(CPUINFO_VA+CPUINFO_GETSYNCFLT)], %l5
 	jmpl	%l5, %l7
 	 or	%l4, %lo(CPUINFO_SYNCFLTDUMP), %l4
 	TRAP_SETUP(-CCFSZ-80)
-	INCR(_C_LABEL(uvmexp)+V_FAULTS)	! cnt.v_faults++ (clobbers %o0,%o1)
+	! tally fault (curcpu()->cpu_data.cpu_nfault++) (clobbers %o0,%o1,%o2)
+	INCR64(CPUINFO_VA + CPUINFO_NFAULT)
 
 	st	%g1, [%sp + CCFSZ + 20]	! save g1
 	rd	%y, %l4			! save y
@@ -2067,7 +2056,7 @@ illinst4m:
 
 	btst	PSR_PS, %l0		! slowtrap() if from kernel
 	bnz	slowtrap
-	 EMPTY
+	 .empty
 
 	! clear fault status
 	set	SRMMU_SFSR, %l7
@@ -2090,7 +2079,7 @@ illinst4m:
 	lda	[%l7]ASI_SRMMU, %l6		! fault status
 	andcc	%l6, SFSR_FAV, %l6		! get fault status bits
 	bnz	slowtrap
-	 EMPTY
+	 .empty
 
 	! we got the insn; check whether it was a FLUSH
 	! instruction format: op=2, op3=0x3b (see also instr.h)
@@ -2120,7 +2109,7 @@ fp_exception:
 	set	special_fp_store, %l4	! see if we came from the special one
 	cmp	%l1, %l4		! pc == special_fp_store?
 	bne	slowtrap		! no, go handle per usual
-	 EMPTY
+	 .empty
 	sethi	%hi(savefpcont), %l4	! yes, "return" to the special code
 	or	%lo(savefpcont), %l4, %l4
 	jmp	%l4
@@ -2196,17 +2185,17 @@ softtrap:
 	ld	[%l6 + %lo(_EINTSTACKP)], %l7
 	cmp	%sp, %l7
 	bge	Lslowtrap_reenter
-	 EMPTY
+	 .empty
 	set	INT_STACK_SIZE, %l6
 	sub	%l7, %l6, %l7
 	cmp	%sp, %l7
 	blu	Lslowtrap_reenter
-	 EMPTY
+	 .empty
 #else
 	sethi	%hi(_C_LABEL(eintstack)), %l7
 	cmp	%sp, %l7
 	bge	Lslowtrap_reenter
-	 EMPTY
+	 .empty
 #endif
 	sethi	%hi(cpcb), %l6
 	ld	[%l6 + %lo(cpcb)], %l6
@@ -2506,7 +2495,8 @@ softintr_sun44c:
 softintr_common:
 	INTR_SETUP(-CCFSZ-80)
 	std	%g2, [%sp + CCFSZ + 24]	! save registers
-	INCR(_C_LABEL(uvmexp)+V_SOFT)	! cnt.v_intr++; (clobbers %o0,%o1)
+	! tally softint (curcpu()->cpu_data.cpu_nintr++) (clobbers %o0,%o1,%o2)
+	INCR64(CPUINFO_VA + CPUINFO_NSOFT)
 	mov	%g1, %l7
 	rd	%y, %l6
 	std	%g4, [%sp + CCFSZ + 32]
@@ -2518,11 +2508,15 @@ softintr_common:
 	wr	%l4, PSR_ET, %psr	! song and dance is necessary
 	std	%l0, [%sp + CCFSZ + 0]	! set up intrframe/clockframe
 	sll	%l3, 2, %l5
-	set	_C_LABEL(intrcnt), %l4	! intrcnt[intlev]++;
-	ld	[%l4 + %l5], %o0
-	std	%l2, [%sp + CCFSZ + 8]
-	inc	%o0
-	st	%o0, [%l4 + %l5]
+
+	set	CPUINFO_VA + CPUINFO_SINTRCNT, %l4	! sintrcnt[intlev].ev_count++;
+	sll	%l3, EV_STRUCTSHIFT, %o2
+	ldd	[%l4 + %o2], %o0
+	std	%l2, [%sp + CCFSZ + 8]	! set up intrframe/clockframe
+	inccc   %o1
+	addx    %o0, 0, %o0
+	std	%o0, [%l4 + %o2]
+
 	set	_C_LABEL(sintrhand), %l4! %l4 = sintrhand[intlev];
 	ld	[%l4 + %l5], %l4
 
@@ -2531,46 +2525,24 @@ softintr_common:
 	inc	%o3
 	st	%o3, [ %o2 + CPUINFO_IDEPTH ]
 
-#if defined(MULTIPROCESSOR)
-	/*
-	 * Grab the kernel lock for interrupt levels <= IPL_VM
-	 * XXX Must not happen for fast soft interrupts!
-	 */
-	cmp	%l3, IPL_VM
-	bgeu	0f
-	 st	%fp, [%sp + CCFSZ + 16]
-	call	_C_LABEL(intr_lock_kernel)
-	 nop
-0:
-#endif
-
 	b	3f
 	 st	%fp, [%sp + CCFSZ + 16]
 
-1:	ld	[%l4 + 12], %o2		! ih->ih_classipl
+1:	ld	[%l4 + IH_CLASSIPL], %o2 ! ih->ih_classipl
 	rd	%psr, %o3		!  (bits already shifted to PIL field)
 	andn	%o3, PSR_PIL, %o3	! %o3 = psr & ~PSR_PIL
 	wr	%o3, %o2, %psr		! splraise(ih->ih_classipl)
-	ld	[%l4], %o1
-	ld	[%l4 + 4], %o0
+	ld	[%l4 + IH_FUN], %o1
+	ld	[%l4 + IH_ARG], %o0
 	nop				! one more isns before touching ICC
 	tst	%o0
 	bz,a	2f
 	 add	%sp, CCFSZ, %o0
 2:	jmpl	%o1, %o7		!	(void)(*ih->ih_fun)(...)
-	 ld	[%l4 + 8], %l4		!	and ih = ih->ih_next
+	 ld	[%l4 + IH_NEXT], %l4	!	and ih = ih->ih_next
 3:	tst	%l4			! while ih != NULL
 	bnz	1b
 	 nop
-
-#if defined(MULTIPROCESSOR)
-	cmp	%l3, IPL_VM
-	bgeu	0f
-	 nop
-	call	_C_LABEL(intr_unlock_kernel)
-	 nop
-0:
-#endif
 
 	sethi	%hi(CPUINFO_VA), %o2
 	ld	[ %o2 + CPUINFO_IDEPTH ], %o3
@@ -2659,7 +2631,8 @@ _ENTRY(_C_LABEL(sparc_interrupt4m))
 sparc_interrupt4m_bogus:
 	INTR_SETUP(-CCFSZ-80)
 	std	%g2, [%sp + CCFSZ + 24]	! save registers
-	INCR(_C_LABEL(uvmexp)+V_INTR)	! cnt.v_intr++; (clobbers %o0,%o1)
+	! tally interrupt (curcpu()->cpu_data.cpu_nintr++) (clobbers %o0,%o1)
+	INCR64X(CPUINFO_VA + CPUINFO_NINTR, %o0, %o1, %l7)
 	mov	%g1, %l7
 	rd	%y, %l6
 	std	%g4, [%sp + CCFSZ + 32]
@@ -2671,11 +2644,14 @@ sparc_interrupt4m_bogus:
 	wr	%l4, PSR_ET, %psr	! song and dance is necessary
 	std	%l0, [%sp + CCFSZ + 0]	! set up intrframe/clockframe
 	sll	%l3, 2, %l5
-	set	_C_LABEL(intrcnt), %l4	! intrcnt[intlev]++;
-	ld	[%l4 + %l5], %o0
+
+	set	CPUINFO_VA + CPUINFO_INTRCNT, %l4	! intrcnt[intlev].ev_count++;
+	sll	%l3, EV_STRUCTSHIFT, %o2
+	ldd	[%l4 + %o2], %o0
 	std	%l2, [%sp + CCFSZ + 8]	! set up intrframe/clockframe
-	inc	%o0
-	st	%o0, [%l4 + %l5]
+	inccc   %o1
+	addx    %o0, 0, %o0
+	std	%o0, [%l4 + %o2]
 
 	st	%fp, [%sp + CCFSZ + 16]
 
@@ -2704,7 +2680,8 @@ _ENTRY(_C_LABEL(sparc_interrupt44c))
 sparc_interrupt_common:
 	INTR_SETUP(-CCFSZ-80)
 	std	%g2, [%sp + CCFSZ + 24]	! save registers
-	INCR(_C_LABEL(uvmexp)+V_INTR)	! cnt.v_intr++; (clobbers %o0,%o1)
+	! tally intr (curcpu()->cpu_data.cpu_nintr++) (clobbers %o0,%o1)
+	INCR64X(CPUINFO_VA + CPUINFO_NINTR, %o0, %o1, %l7)
 	mov	%g1, %l7
 	rd	%y, %l6
 	std	%g4, [%sp + CCFSZ + 32]
@@ -2716,11 +2693,15 @@ sparc_interrupt_common:
 	wr	%l4, PSR_ET, %psr	! song and dance is necessary
 	std	%l0, [%sp + CCFSZ + 0]	! set up intrframe/clockframe
 	sll	%l3, 2, %l5
-	set	_C_LABEL(intrcnt), %l4	! intrcnt[intlev]++;
-	ld	[%l4 + %l5], %o0
+
+	set	CPUINFO_VA + CPUINFO_INTRCNT, %l4	! intrcnt[intlev].ev_count++;
+	sll	%l3, EV_STRUCTSHIFT, %o2
+	ldd	[%l4 + %o2], %o0
 	std	%l2, [%sp + CCFSZ + 8]	! set up intrframe/clockframe
-	inc	%o0
-	st	%o0, [%l4 + %l5]
+	inccc   %o1
+	addx    %o0, 0, %o0
+	std	%o0, [%l4 + %o2]
+
 	set	_C_LABEL(intrhand), %l4	! %l4 = intrhand[intlev];
 	ld	[%l4 + %l5], %l4
 
@@ -2729,29 +2710,21 @@ sparc_interrupt_common:
 	inc	%o3
 	st	%o3, [ %o2 + CPUINFO_IDEPTH ]
 
-#if defined(MULTIPROCESSOR)
-	/* Grab the kernel lock for interrupt levels =< IPL_VM */
-	cmp	%l3, IPL_VM
-	bgeu	3f
-	 st	%fp, [%sp + CCFSZ + 16]
-	call	_C_LABEL(intr_lock_kernel)
-	 nop
-#endif
 	b	3f
 	 st	%fp, [%sp + CCFSZ + 16]
 
-1:	ld	[%l4 + 12], %o2		! ih->ih_classipl
+1:	ld	[%l4 + IH_CLASSIPL], %o2 ! ih->ih_classipl
 	rd	%psr, %o3		!  (bits already shifted to PIL field)
 	andn	%o3, PSR_PIL, %o3	! %o3 = psr & ~PSR_PIL
 	wr	%o3, %o2, %psr		! splraise(ih->ih_classipl)
-	ld	[%l4], %o1
-	ld	[%l4 + 4], %o0
+	ld	[%l4 + IH_FUN], %o1
+	ld	[%l4 + IH_ARG], %o0
 	nop				! one more isns before touching ICC
 	tst	%o0
 	bz,a	2f
 	 add	%sp, CCFSZ, %o0
 2:	jmpl	%o1, %o7		!	handled = (*ih->ih_fun)(...)
-	 ld	[%l4 + 8], %l4		!	and ih = ih->ih_next
+	 ld	[%l4 + IH_NEXT], %l4	!	and ih = ih->ih_next
 	tst	%o0
 	bnz	4f			! if (handled) break
 	 nop
@@ -2770,14 +2743,6 @@ sparc_interrupt_common:
 	 add	%sp, CCFSZ, %o0
 	/* all done: restore registers and go return */
 4:
-#if defined(MULTIPROCESSOR)
-	cmp	%l3, IPL_VM
-	bgeu	0f
-	 nop
-	call	_C_LABEL(intr_unlock_kernel)
-	 nop
-0:
-#endif
 	sethi	%hi(CPUINFO_VA), %o2
 	ld	[ %o2 + CPUINFO_IDEPTH ], %o3
 	dec	%o3
@@ -2799,11 +2764,11 @@ sparc_interrupt_common:
  * %l6 = &cpuinfo
  */
 lev14_softint:
-	set	_C_LABEL(lev14_evcnt), %l7	! lev14_evcnt.ev_count++;
-	ldd	[%l7 + EV_COUNT], %l4
+	sethi	%hi(CPUINFO_VA), %l7
+	ldd	[%l7 + CPUINFO_LEV14], %l4
 	inccc	%l5
 	addx	%l4, %g0, %l4
-	std	%l4, [%l7 + EV_COUNT]
+	std	%l4, [%l7 + CPUINFO_LEV14]
 
 	ld	[%l6 + CPUINFO_XMSG_TRAP], %l7
 #ifdef DIAGNOSTIC
@@ -2974,17 +2939,6 @@ _ENTRY(_C_LABEL(ft_srmmu_vcache_flush_range))
 	b	ft_rett
 	 mov	SRMMU_CXR, %l7			! reload ctx register
 
-_ENTRY(_C_LABEL(ft_want_ast))
-	mov	1, %l4				! ack xcall in all cases
-	st	%l4, [%l6 + CPUINFO_XMSG_CMPLT]	! completed = 1
-
-	btst	PSR_PS, %l0		! if from user mode
-	be,a	slowtrap		!  call trap(T_AST)
-	 mov	T_AST, %l3
-
-	mov	%l0, %psr		! else return from trap
-	 nop				! AST will be noticed on out way out
-	RETT
 #endif /* MULTIPROCESSOR */
 
 #ifdef notyet
@@ -3027,9 +2981,10 @@ zshard:
  */
 
 #if defined(SUN4)
-nmi_sun4:
+_ENTRY(_C_LABEL(nmi_sun4))
 	INTR_SETUP(-CCFSZ-80)
-	INCR(_C_LABEL(uvmexp)+V_INTR)	! cnt.v_intr++; (clobbers %o0,%o1)
+	! tally intr (curcpu()->cpu_data.cpu_nintr++) (clobbers %o0,%o1,%o2)
+	INCR64(CPUINFO_VA + CPUINFO_NINTR)
 	/*
 	 * Level 15 interrupts are nonmaskable, so with traps off,
 	 * disable all interrupts to prevent recursion.
@@ -3053,9 +3008,10 @@ nmi_sun4:
 #endif
 
 #if defined(SUN4C)
-nmi_sun4c:
+_ENTRY(_C_LABEL(nmi_sun4c))
 	INTR_SETUP(-CCFSZ-80)
-	INCR(_C_LABEL(uvmexp)+V_INTR)	! cnt.v_intr++; (clobbers %o0,%o1)
+	! tally intr (curcpu()->cpu_data.cpu_nintr++) (clobbers %o0,%o1,%o2)
+	INCR64(CPUINFO_VA + CPUINFO_NINTR)
 	/*
 	 * Level 15 interrupts are nonmaskable, so with traps off,
 	 * disable all interrupts to prevent recursion.
@@ -3087,7 +3043,7 @@ nmi_sun4c:
 #endif /* SUN4M */
 #endif /* SUN4C */
 
-nmi_common:
+_ENTRY(_C_LABEL(nmi_common))
 	! and call C code
 	call	_C_LABEL(memerr4_4c)	! memerr(0, ser, sva, aer, ava)
 	 clr	%o0
@@ -3108,9 +3064,8 @@ nmi_common:
 	 wr	%l4, 0, %y		! restore y
 
 #if defined(SUN4M)
-nmi_sun4m:
-	INTR_SETUP(-CCFSZ-80)
-	INCR(_C_LABEL(uvmexp)+V_INTR)	! cnt.v_intr++; (clobbers %o0,%o1)
+_ENTRY(_C_LABEL(nmi_sun4m))
+	INTR_SETUP(-CCFSZ-80-8-8)	! normal frame, plus g2..g5
 
 #if !defined(MSIIEP) /* normal sun4m */
 
@@ -3447,14 +3402,14 @@ winuf_user:
 	 */
 	btst	7, %sp			! if unaligned, it is invalid
 	bne	winuf_invalid
-	 EMPTY
+	 .empty
 
 	sethi	%hi(_C_LABEL(pgofset)), %l4
 	ld	[%l4 + %lo(_C_LABEL(pgofset))], %l4
 	PTE_OF_ADDR(%sp, %l7, winuf_invalid, %l4, NOP_ON_4M_5)
 	CMP_PTE_USER_READ(%l7, %l5, NOP_ON_4M_6) ! if first page not readable,
 	bne	winuf_invalid		! it is invalid
-	 EMPTY
+	 .empty
 	SLT_IF_1PAGE_RW(%sp, %l7, %l4)	! first page is readable
 	bl,a	winuf_ok		! if only one page, enter window X
 	 restore %g0, 1, %l1		! and goto ok, & set %l1 to 1
@@ -3671,14 +3626,14 @@ rft_user:
 1:
 	btst	7, %fp			! if unaligned, address is invalid
 	bne	rft_invalid
-	 EMPTY
+	 .empty
 
 	sethi	%hi(_C_LABEL(pgofset)), %l3
 	ld	[%l3 + %lo(_C_LABEL(pgofset))], %l3
 	PTE_OF_ADDR(%fp, %l7, rft_invalid, %l3, NOP_ON_4M_9)
 	CMP_PTE_USER_READ(%l7, %l5, NOP_ON_4M_10)	! try first page
 	bne	rft_invalid		! no good
-	 EMPTY
+	 .empty
 	SLT_IF_1PAGE_RW(%fp, %l7, %l3)
 	bl,a	rft_user_ok		! only 1 page: ok
 	 wr	%g0, 0, %wim
@@ -4602,12 +4557,15 @@ _C_LABEL(cpu_hatch):
 	wr	%g6, 0, %tbr
 	nop; nop; nop			! paranoia
 
-	/* Set up a stack */
-	set	USRSTACK - CCFSZ, %fp	! as if called from user code
-	sethi	%hi(_EINTSTACKP), %o0
-	ld	[%o0 + %lo(_EINTSTACKP)], %o0
-	set	USPACE - CCFSZ - 80, %sp
-	add	%sp, %o0, %sp
+	/*
+	 * Use this CPUs idlelwp's stack
+	 */
+	sethi	%hi(cpcb), %o0
+	ld	[%o0 + %lo(cpcb)], %o0
+	set	USPACE - 80 - CCFSZ, %sp
+	add	%o0, %sp, %sp
+
+	add	80, %sp, %fp
 
 	/* Enable traps */
 	rd	%psr, %l0
@@ -4840,7 +4798,8 @@ Ldocopy:
 	jmp	%g7 + 8
 	 clr	%o0			! return 0
 
-! Copyin or copyout fault.  Clear cpcb->pcb_onfault and return EFAULT.
+! Copyin or copyout fault.  Clear cpcb->pcb_onfault.
+! The return value was already put in %o0 by the fault handler.
 ! Note that although we were in bcopy, there is no state to clean up;
 ! the only special thing is that we have to return to [g7 + 8] rather than
 ! [o7 + 8].
@@ -4937,7 +4896,7 @@ Lnosaveoldlwp:
 	 * we need afterwards.
 	 */
 
-	ld	[%g3 + L_ADDR], %g5	! newpcb = l->l_addr;
+	ld	[%g3 + L_PCB], %g5	! newpcb
 	ld	[%g5 + PCB_PSR], %g2    ! cwpbits = newpcb->pcb_psr;
 
 	/* traps off while we switch to the new stack */
@@ -4976,22 +4935,28 @@ Lnosaveoldlwp:
 	/*
 	 * Now running p.  
 	 */
-#if defined(MULTIPROCESSOR)
-	ld	[%g3 + L_PROC], %o2	! p = l->l_proc;
-	ld	[%o2 + P_VMSPACE], %o3	! vm = p->p_vmspace;
-	ld	[%o3 + VM_PMAP], %o4	! pm = vm->vm_map.vm_pmap;
-	/* Add this CPU to the pmap's CPU set */
-	sethi	%hi(CPUINFO_VA + CPUINFO_CPUNO), %o0
-	ld	[%o0 + %lo(CPUINFO_VA + CPUINFO_CPUNO)], %o1
-	mov	1, %o2
-	ld	[%o4 + PMAP_CPUSET], %o0
-	sll	%o2, %o1, %o2
-	or	%o0, %o2, %o0		! pm->pm_cpuset |= cpu_number();
-	st	%o0, [%o4 + PMAP_CPUSET]
-#endif
+
+	/*
+	 * Check for restartable atomic sequences (RAS)
+	 */
+	ld	[%g3 + L_PROC], %o0	! now %o0 points to p
+	ld	[%o0 + P_RASLIST], %o1	! any RAS in p?
+	cmp	%o1, 0
+	be	Lsw_noras		! no, skip RAS check
+	 mov	%g1, %i0		! restore oldlwp (for return value)
+	ld	[%g3 + L_TF], %l3	! pointer to trap frame
+	call	_C_LABEL(ras_lookup)
+	 ld	[%l3 + TF_PC], %o1
+	cmp	%o0, -1
+	be	Lsw_noras
+	 add	%o0, 4, %o1
+	st	%o0, [%l3 + TF_PC]	! store rewound %pc
+	st	%o1, [%l3 + TF_NPC]	! and %npc
+
+Lsw_noras:
 
 	ret
-	 restore %g0, %g1, %o0		! return (lastproc)
+	 restore			! return (oldlwp)
 
 /*
  * Call the idlespin() function if it exists, otherwise just return.
@@ -5080,10 +5045,10 @@ ENTRY(fuword)
 	set	KERNBASE, %o2
 	cmp	%o0, %o2		! if addr >= KERNBASE...
 	bgeu	Lfsbadaddr
-	EMPTY
+	 .empty
 	btst	3, %o0			! or has low bits set...
 	bnz	Lfsbadaddr		!	go return -1
-	EMPTY
+	 .empty
 	sethi	%hi(cpcb), %o2		! cpcb->pcb_onfault = Lfserr;
 	ld	[%o2 + %lo(cpcb)], %o2
 	set	Lfserr, %o3
@@ -5117,7 +5082,7 @@ ENTRY(fuswintr)
 	set	KERNBASE, %o2
 	cmp	%o0, %o2		! if addr >= KERNBASE
 	bgeu	Lfsbadaddr		!	return error
-	EMPTY
+	 .empty
 	sethi	%hi(cpcb), %o2		! cpcb->pcb_onfault = Lfsbail;
 	ld	[%o2 + %lo(cpcb)], %o2
 	set	_C_LABEL(Lfsbail), %o3
@@ -5130,7 +5095,7 @@ ENTRY(fusword)
 	set	KERNBASE, %o2
 	cmp	%o0, %o2		! if addr >= KERNBASE
 	bgeu	Lfsbadaddr		!	return error
-	EMPTY
+	 .empty
 	sethi	%hi(cpcb), %o2		! cpcb->pcb_onfault = Lfserr;
 	ld	[%o2 + %lo(cpcb)], %o2
 	set	Lfserr, %o3
@@ -5144,7 +5109,7 @@ ENTRY(fubyte)
 	set	KERNBASE, %o2
 	cmp	%o0, %o2		! if addr >= KERNBASE
 	bgeu	Lfsbadaddr		!	return error
-	EMPTY
+	 .empty
 	sethi	%hi(cpcb), %o2		! cpcb->pcb_onfault = Lfserr;
 	ld	[%o2 + %lo(cpcb)], %o2
 	set	Lfserr, %o3
@@ -5158,10 +5123,10 @@ ENTRY(suword)
 	set	KERNBASE, %o2
 	cmp	%o0, %o2		! if addr >= KERNBASE ...
 	bgeu	Lfsbadaddr
-	EMPTY
+	 .empty
 	btst	3, %o0			! or has low bits set ...
 	bnz	Lfsbadaddr		!	go return error
-	EMPTY
+	 .empty
 	sethi	%hi(cpcb), %o2		! cpcb->pcb_onfault = Lfserr;
 	ld	[%o2 + %lo(cpcb)], %o2
 	set	Lfserr, %o3
@@ -5175,7 +5140,7 @@ ENTRY(suswintr)
 	set	KERNBASE, %o2
 	cmp	%o0, %o2		! if addr >= KERNBASE
 	bgeu	Lfsbadaddr		!	go return error
-	EMPTY
+	 .empty
 	sethi	%hi(cpcb), %o2		! cpcb->pcb_onfault = Lfsbail;
 	ld	[%o2 + %lo(cpcb)], %o2
 	set	_C_LABEL(Lfsbail), %o3
@@ -5189,7 +5154,7 @@ ENTRY(susword)
 	set	KERNBASE, %o2
 	cmp	%o0, %o2		! if addr >= KERNBASE
 	bgeu	Lfsbadaddr		!	go return error
-	EMPTY
+	 .empty
 	sethi	%hi(cpcb), %o2		! cpcb->pcb_onfault = Lfserr;
 	ld	[%o2 + %lo(cpcb)], %o2
 	set	Lfserr, %o3
@@ -5204,7 +5169,7 @@ ENTRY(subyte)
 	set	KERNBASE, %o2
 	cmp	%o0, %o2		! if addr >= KERNBASE
 	bgeu	Lfsbadaddr		!	go return error
-	EMPTY
+	 .empty
 	sethi	%hi(cpcb), %o2		! cpcb->pcb_onfault = Lfserr;
 	ld	[%o2 + %lo(cpcb)], %o2
 	set	Lfserr, %o3
@@ -5366,7 +5331,6 @@ ENTRY(qzero)
 
 ENTRY(bcopy)
 	cmp	%o2, BCOPY_SMALL
-Lbcopy_start:
 	bge,a	Lbcopy_fancy	! if >= this many, go be fancy.
 	btst	7, %o0		! (part of being fancy)
 
@@ -5375,7 +5339,7 @@ Lbcopy_start:
 	 */
 	deccc	%o2		! while (--len >= 0)
 	bl	1f
-	EMPTY
+	 .empty
 0:
 	inc	%o0
 	ldsb	[%o0 - 1], %o4	!	(++dst)[-1] = *src++;
@@ -5395,7 +5359,7 @@ Lbcopy_fancy:
 	! check for common case first: everything lines up.
 !	btst	7, %o0		! done already
 	bne	1f
-	EMPTY
+	 .empty
 	btst	7, %o1
 	be,a	Lbcopy_doubles
 	dec	8, %o2		! if all lined up, len -= 8, goto bcopy_doubes
@@ -5529,164 +5493,6 @@ Lbcopy_done:
 1:
 	retl
 	 stb	%o4,[%o1]
-/*
- * ovbcopy(src, dst, len): like bcopy, but regions may overlap.
- */
-ENTRY(ovbcopy)
-	cmp	%o0, %o1	! src < dst?
-	bgeu	Lbcopy_start	! no, go copy forwards as via bcopy
-	cmp	%o2, BCOPY_SMALL! (check length for doublecopy first)
-
-	/*
-	 * Since src comes before dst, and the regions might overlap,
-	 * we have to do the copy starting at the end and working backwards.
-	 */
-	add	%o2, %o0, %o0	! src += len
-	add	%o2, %o1, %o1	! dst += len
-	bge,a	Lback_fancy	! if len >= BCOPY_SMALL, go be fancy
-	btst	3, %o0
-
-	/*
-	 * Not much to copy, just do it a byte at a time.
-	 */
-	deccc	%o2		! while (--len >= 0)
-	bl	1f
-	EMPTY
-0:
-	dec	%o0		!	*--dst = *--src;
-	ldsb	[%o0], %o4
-	dec	%o1
-	deccc	%o2
-	bge	0b
-	stb	%o4, [%o1]
-1:
-	retl
-	nop
-
-	/*
-	 * Plenty to copy, try to be optimal.
-	 * We only bother with word/halfword/byte copies here.
-	 */
-Lback_fancy:
-!	btst	3, %o0		! done already
-	bnz	1f		! if ((src & 3) == 0 &&
-	btst	3, %o1		!     (dst & 3) == 0)
-	bz,a	Lback_words	!	goto words;
-	dec	4, %o2		! (done early for word copy)
-
-1:
-	/*
-	 * See if the low bits match.
-	 */
-	xor	%o0, %o1, %o3	! t = src ^ dst;
-	btst	1, %o3
-	bz,a	3f		! if (t & 1) == 0, can do better
-	btst	1, %o0
-
-	/*
-	 * Nope; gotta do byte copy.
-	 */
-2:
-	dec	%o0		! do {
-	ldsb	[%o0], %o4	!	*--dst = *--src;
-	dec	%o1
-	deccc	%o2		! } while (--len != 0);
-	bnz	2b
-	stb	%o4, [%o1]
-	retl
-	nop
-
-3:
-	/*
-	 * Can do halfword or word copy, but might have to copy 1 byte first.
-	 */
-!	btst	1, %o0		! done earlier
-	bz,a	4f		! if (src & 1) {	/* copy 1 byte */
-	btst	2, %o3		! (done early)
-	dec	%o0		!	*--dst = *--src;
-	ldsb	[%o0], %o4
-	dec	%o1
-	stb	%o4, [%o1]
-	dec	%o2		!	len--;
-	btst	2, %o3		! }
-
-4:
-	/*
-	 * See if we can do a word copy ((t&2) == 0).
-	 */
-!	btst	2, %o3		! done earlier
-	bz,a	6f		! if (t & 2) == 0, can do word copy
-	btst	2, %o0		! (src&2, done early)
-
-	/*
-	 * Gotta do halfword copy.
-	 */
-	dec	2, %o2		! len -= 2;
-5:
-	dec	2, %o0		! do {
-	ldsh	[%o0], %o4	!	src -= 2;
-	dec	2, %o1		!	dst -= 2;
-	deccc	2, %o0		!	*(short *)dst = *(short *)src;
-	bge	5b		! } while ((len -= 2) >= 0);
-	sth	%o4, [%o1]
-	b	Lback_mopb	! goto mop_up_byte;
-	btst	1, %o2		! (len&1, done early)
-
-6:
-	/*
-	 * We can do word copies, but we might have to copy
-	 * one halfword first.
-	 */
-!	btst	2, %o0		! done already
-	bz	7f		! if (src & 2) {
-	dec	4, %o2		! (len -= 4, done early)
-	dec	2, %o0		!	src -= 2, dst -= 2;
-	ldsh	[%o0], %o4	!	*(short *)dst = *(short *)src;
-	dec	2, %o1
-	sth	%o4, [%o1]
-	dec	2, %o2		!	len -= 2;
-				! }
-
-7:
-Lback_words:
-	/*
-	 * Do word copies (backwards), then mop up trailing halfword
-	 * and byte if any.
-	 */
-!	dec	4, %o2		! len -= 4, done already
-0:				! do {
-	dec	4, %o0		!	src -= 4;
-	dec	4, %o1		!	src -= 4;
-	ld	[%o0], %o4	!	*(int *)dst = *(int *)src;
-	deccc	4, %o2		! } while ((len -= 4) >= 0);
-	bge	0b
-	st	%o4, [%o1]
-
-	/*
-	 * Check for trailing shortword.
-	 */
-	btst	2, %o2		! if (len & 2) {
-	bz,a	1f
-	btst	1, %o2		! (len&1, done early)
-	dec	2, %o0		!	src -= 2, dst -= 2;
-	ldsh	[%o0], %o4	!	*(short *)dst = *(short *)src;
-	dec	2, %o1
-	sth	%o4, [%o1]	! }
-	btst	1, %o2
-
-	/*
-	 * Check for trailing byte.
-	 */
-1:
-Lback_mopb:
-!	btst	1, %o2		! (done already)
-	bnz,a	1f		! if (len & 1) {
-	ldsb	[%o0 - 1], %o4	!	b = src[-1];
-	retl
-	nop
-1:
-	retl			!	dst[-1] = b;
-	stb	%o4, [%o1 - 1]	! }
 
 /*
  * kcopy() is exactly like bcopy except that it set pcb_onfault such that
@@ -5710,7 +5516,7 @@ Lkcopy_start:
 	 */
 	deccc	%o2		! while (--len >= 0)
 	bl	1f
-	 EMPTY
+	 .empty
 0:
 	ldsb	[%o0], %o4	!	*dst++ = *src++;
 	inc	%o0
@@ -5731,7 +5537,7 @@ Lkcopy_fancy:
 	! check for common case first: everything lines up.
 !	btst	7, %o0		! done already
 	bne	1f
-	 EMPTY
+	 .empty
 	btst	7, %o1
 	be,a	Lkcopy_doubles
 	 dec	8, %o2		! if all lined up, len -= 8, goto bcopy_doubes
@@ -5884,12 +5690,29 @@ Lkcerr:
 	/* NOTREACHED */
 
 /*
- * savefpstate(f) struct fpstate *f;
+ * savefpstate(struct fpstate *f);
+ * ipi_savefpstate(struct fpstate *f);
  *
  * Store the current FPU state.  The first `st %fsr' may cause a trap;
  * our trap handler knows how to recover (by `returning' to savefpcont).
+ *
+ * The IPI version just deals with updating event counters first.
  */
+Lpanic_savefpstate:
+	.asciz	"cpu%d: NULL fpstate"
+	_ALIGN
+
+ENTRY(ipi_savefpstate)
+	sethi	%hi(CPUINFO_VA), %o5
+	ldd	[%o5 + CPUINFO_SAVEFPSTATE], %o2
+	inccc   %o3
+	addx    %o2, 0, %o2
+	std	%o2, [%o5 + CPUINFO_SAVEFPSTATE]
+
 ENTRY(savefpstate)
+	cmp	%o0, 0
+	bz	Lfp_null_fpstate
+	 nop
 	rd	%psr, %o1		! enable FP before we begin
 	set	PSR_EF, %o2
 	or	%o1, %o2, %o1
@@ -5908,8 +5731,8 @@ special_fp_store:
 	 * So we still have to check the blasted QNE bit.
 	 * With any luck it will usually not be set.
 	 */
-	ld	[%o0 + FS_FSR], %o4	! if (f->fs_fsr & QNE)
-	btst	%o5, %o4
+	ld	[%o0 + FS_FSR], %o2	! if (f->fs_fsr & QNE)
+	btst	%o5, %o2
 	bnz	Lfp_storeq		!	goto storeq;
 	 std	%f0, [%o0 + FS_REGS + (4*0)]	! f->fs_f0 = etc;
 Lfp_finish:
@@ -5931,6 +5754,22 @@ Lfp_finish:
 	retl
 	 std	%f30, [%o0 + FS_REGS + (4*30)]
 
+/* Handle NULL fpstate argument for savefpstate */
+Lfp_null_fpstate:
+#ifdef DIAGNOSTIC
+	ld	[%o5 + CPUINFO_CPUNO], %o1
+	sethi	%hi(Lpanic_savefpstate), %o0
+	call	_C_LABEL(panic)
+	 or	%o0, %lo(Lpanic_savefpstate), %o0
+#else
+	sethi	%hi(CPUINFO_VA), %o5
+	ldd	[%o5 + CPUINFO_SAVEFPSTATE_NULL], %o2
+	inccc   %o3
+	addx    %o2, 0, %o2
+	retl
+	 std	%o2, [%o5 + CPUINFO_SAVEFPSTATE_NULL]
+#endif
+
 /*
  * Store the (now known nonempty) FP queue.
  * We have to reread the fsr each time in order to get the new QNE bit.
@@ -5944,6 +5783,7 @@ Lfp_storeq:
 	btst	%o5, %o4
 	bnz	1b
 	 inc	8, %o3
+	st	%o2, [%o0 + FS_FSR]	! fs->fs_fsr = original_fsr
 	b	Lfp_finish		! set qsize and finish storing fregs
 	 srl	%o3, 3, %o3		! (but first fix qsize)
 
@@ -6194,7 +6034,7 @@ ENTRY(delay)			! %o0 = n
 /*
  * void __cpu_simple_lock(__cpu_simple_lock_t *alp)
  */
-_ENTRY(_C_LABEL(__cpu_simple_lock))
+ENTRY_NOPROFILE(__cpu_simple_lock)
 0:
 	ldstub	[%o0], %o1
 	tst	%o1
@@ -6202,7 +6042,7 @@ _ENTRY(_C_LABEL(__cpu_simple_lock))
 	 ldub	[%o0], %o1
 1:
 	retl
-	 EMPTY
+	 .empty
 2:
 	set	0x1000000, %o2	! set spinout counter
 3:
@@ -6285,8 +6125,9 @@ ENTRY(longjmp)
 	cmp	%fp, %g7	! compare against desired frame
 	bl,a	1b		! if below,
 	 restore		!    pop frame and loop
-	be,a	2f		! if there,
-	 ldd	[%g1+0], %o2	!    fetch return %sp and pc, and get out
+	ld	[%g1+0], %o2	! fetch return %sp
+	be,a	2f		! we're there, get out
+	 ld	[%g1+4], %o3	! fetch return pc
 
 Llongjmpbotch:
 				! otherwise, went too far; bomb out
@@ -6312,35 +6153,6 @@ _C_LABEL(kernel_top):
 	.globl	_C_LABEL(bootinfo)
 _C_LABEL(bootinfo):
 	.word	0
-
-	.globl	_C_LABEL(proc0paddr)
-_C_LABEL(proc0paddr):
-	.word	_C_LABEL(u0)	! KVA of proc0 uarea
-
-/* interrupt counters	XXX THESE BELONG ELSEWHERE (if anywhere) */
-	.globl	_C_LABEL(intrcnt), _C_LABEL(eintrcnt)
-	.globl	_C_LABEL(intrnames), _C_LABEL(eintrnames)
-_C_LABEL(intrnames):
-	.asciz	"spur"
-	.asciz	"lev1"
-	.asciz	"lev2"
-	.asciz	"lev3"
-	.asciz	"lev4"
-	.asciz	"lev5"
-	.asciz	"lev6"
-	.asciz	"lev7"
-	.asciz  "lev8"
-	.asciz	"lev9"
-	.asciz	"clock"
-	.asciz	"lev11"
-	.asciz	"lev12"
-	.asciz	"lev13"
-	.asciz	"prof"
-_C_LABEL(eintrnames):
-	_ALIGN
-_C_LABEL(intrcnt):
-	.skip	4*15
-_C_LABEL(eintrcnt):
 
 	.comm	_C_LABEL(nwindows), 4
 	.comm	_C_LABEL(romp), 4

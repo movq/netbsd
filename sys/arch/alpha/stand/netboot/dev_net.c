@@ -1,4 +1,4 @@
-/* $NetBSD: dev_net.c,v 1.12 2003/03/19 17:21:41 drochner Exp $ */
+/* $NetBSD: dev_net.c,v 1.16 2011/07/17 20:54:36 joerg Exp $ */
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- * 4. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Gordon W. Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -48,7 +43,6 @@
  * for use by the NFS open code (NFS/lookup).
  */
 
-#include <machine/stdarg.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <net/if.h>
@@ -66,7 +60,7 @@
 #include "dev_net.h"
 
 #ifndef SUN_BOOTPARAMS
-void bootp      __P((int));
+void bootp(int);
 #endif
 
 extern int debug;
@@ -95,7 +89,7 @@ char hostname[FNAME_SIZE];
 static int netdev_sock = -1;
 static int netdev_opens;
 
-int net_getparams __P((int));
+int net_getparams(int);
 
 /*
  * Called by devopen after it sets f->f_dev to our devsw entry.
@@ -158,8 +152,7 @@ net_open(struct open_file *f, ...)
 }
 
 int
-net_close(f)
-	struct open_file *f;
+net_close(struct open_file *f)
 {
 
 #ifdef	NETIF_DEBUG
@@ -187,29 +180,19 @@ net_close(f)
 }
 
 int
-net_ioctl(f, cmd, data)
-	struct open_file *f;
-	u_long cmd;
-	void *data;
+net_ioctl(struct open_file *f, u_long cmd, void *data)
 {
 	return EIO;
 }
 
 int
-net_strategy(devdata, rw, blk, size, buf, rsize)
-	void *devdata;
-	int rw;
-	daddr_t blk;
-	size_t size;
-	void *buf;
-	size_t *rsize;
+net_strategy(void *devdata, int rw, daddr_t blk, size_t size, void *buf, size_t *rsize)
 {
 	return EIO;
 }
 
 int
-net_getparams(sock)
-	int sock;
+net_getparams(int sock)
 {
 	/*
 	 * Get info for NFS boot: our IP address, our hostname,

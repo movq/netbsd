@@ -1,4 +1,4 @@
-.\"	$NetBSD: install,v 1.53 2007/12/14 21:16:00 pavel Exp $
+.\"	$NetBSD: install,v 1.58 2014/11/05 07:34:21 snj Exp $
 .\"
 .\" Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -117,7 +110,7 @@ command at the PROM prompt (this example is for the swap partition):
 .(tag OpenBoot\ PROM\ 2 -offset indent -compact
 .It sunmon
 .(disp
-.No \*> Ic "b sd(,,1)netbsd -s"
+.No \*[Gt] Ic "b sd(,,1)netbsd -s"
 .disp)
 .It OpenBoot PROM 1
 .(disp
@@ -143,7 +136,7 @@ below.
 .
 If you wish to burn a CD-R containing a bootable NetBSD installation,
 then you can either burn the prepared disk image in
-.Pa installation/cdrom/sparccd-\*V.iso
+.Pa images/NetBSD-\*V-sparc.iso
 or create your own.
 If you wish to create your own, you should follow the directions on the
 .Nx
@@ -151,7 +144,7 @@ Bootable CD-ROM HOW-TO at:
 .Lk http://www.NetBSD.org/docs/bootcd.html#sparcimage
 .Pp
 Once you have downloaded
-.Pa sparccd-\*V.iso
+.Pa NetBSD-\*V-sparc.iso
 or created your own disk image, then you need to burn it to a CD-R.
 .Pp
 The CD-ROM attached to your Sparc must support 512 byte sectors to be
@@ -168,7 +161,7 @@ Boot the installer by typing the appropriate command at the PROM prompt:
 .(tag OpenBoot\ PROM\ 2 -offset indent -compact
 .It sunmon
 .(disp
-.No \*> Ic b "sd(,30,)"
+.No \*[Gt] Ic b "sd(,30,)"
 .disp)
 .It OpenBoot PROM 1
 .(disp
@@ -304,7 +297,7 @@ of the following forms:
 .(tag OpenBoot\ PROM\ 2 -offset indent -compact
 .It sunmon
 .(disp
-.No \*> Ic "b le()netbsd"
+.No \*[Gt] Ic "b le()netbsd"
 .disp)
 .It OpenBoot PROM 1
 .(disp
@@ -348,7 +341,7 @@ distribution sets from
 .Pq Pa binary/sets
 to the tape by using a series of additional
 .(disp
-.No # Ic "dd if=\*<aset\*>.tgz of=/dev/nrst0 bs=4k conv=osync"
+.No # Ic "dd if=\*[Lt]aset\*[Gt].tgz of=/dev/nrst0 bs=4k conv=osync"
 .disp)
 commands.
 See also the section
@@ -362,7 +355,7 @@ Boot the installer by typing the appropriate command at the PROM prompt:
 .(tag OpenBoot\ PROM\ 2\ (alternate) -offset indent -compact
 .It sunmon
 .(disp
-.No \*> Ic "b st()"
+.No \*[Gt] Ic "b st()"
 .disp)
 .It OpenBoot PROM 1
 .(disp

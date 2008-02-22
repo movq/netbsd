@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.2 2006/07/05 18:12:54 ross Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.5 2014/08/13 15:41:21 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,14 +33,14 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 	.text
-	.asciz "$NetBSD: swapcontext.S,v 1.2 2006/07/05 18:12:54 ross Exp $"
+	.asciz "$NetBSD: swapcontext.S,v 1.5 2014/08/13 15:41:21 joerg Exp $"
 #endif /* LIBC_SCCS && !lint */
 
 ENTRY(swapcontext)
 	mc_off	= 56				# offset of uc_mcontext
 	stdu	%r1,-SF_SZ(%r1)			# set up new stack frame
 	mflr	%r0
-	std	%r0,[SF_SZ+SF_LR](%r1)		# save link register
+	std	%r0,(SF_SZ+SF_LR)(%r1)		# save link register
 	std	%r3,SF_PARAM(%r1)		# must save oucp (was 8)
 	std	%r4,SF_PARAM+8(%r1)		# must save ucp (was 12)
 	bl	._getcontext			# getcontext(oucp)
@@ -59,8 +52,8 @@ ENTRY(swapcontext)
 	std	%r0,mc_off+34*8(%r11)	# 	pc <- lr
 	la	%r0,16(%r1)
 	std	%r0,mc_off+1*8(%r11)		# adjust sp
-	ld	%r3,SF_PARAM+8(%r1)			# load ucp
-	bl	.setcontext			# setcontext(ucp)
+	ld	%r3,SF_PARAM+8(%r1)		# load ucp
+	bl	PIC_PLT(_C_LABEL(setcontext))	# setcontext(ucp)
 	nop
 1:
 	ld	%r0,SF_SZ+SF_LR(%r1)

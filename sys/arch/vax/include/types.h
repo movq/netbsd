@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.39 2008/02/20 16:37:52 matt Exp $	*/
+/*	$NetBSD: types.h,v 1.50 2016/01/23 22:31:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -44,20 +44,27 @@ typedef struct label_t {
 } label_t;
 #endif
 
-/* NB: This should probably be if defined(_KERNEL) */
-#if defined(_NETBSD_SOURCE)
+#if defined(_KERNEL) || defined(_KMEMUSER) || defined(_KERNTYPES) || defined(_STANDALONE)
 typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
-#endif
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
 
 typedef int		register_t;
+#define	PRIxREGISTER	"x"
+#endif
 
 /*
  * BBCCI/BBSSI can operate on bytes so let's save some space.
  */
-typedef volatile char	__cpu_simple_lock_t;
+typedef char	__cpu_simple_lock_nv_t;
+typedef int	__register_t;
 
 #define __SIMPLELOCK_LOCKED	1
 #define __SIMPLELOCK_UNLOCKED	0
@@ -68,5 +75,17 @@ typedef volatile char	__cpu_simple_lock_t;
 #define	__HAVE_DEVICE_REGISTER
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_FAST_SOFTINTS
+#define	__HAVE_MD_SOFTINT_TRIGGER
+#define	__HAVE_CPU_DATA_FIRST
+#define	__HAVE_MM_MD_READWRITE
+#define	__HAVE_MM_MD_DIRECT_MAPPED_PHYS
+#define	__HAVE_OLD_DISKLABEL
+#ifdef _KERNEL
+#define	__HAVE_RAS
+#endif
+
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_NO___THREAD
+#define	__HAVE_TLS_VARIANT_I
 
 #endif	/* _MACHTYPES_H_ */

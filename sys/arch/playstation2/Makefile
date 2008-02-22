@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2003/01/06 17:40:44 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2014/03/31 11:25:48 martin Exp $
 
 SUBDIR=	compile include
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_amr.c,v 1.14 2007/10/19 12:00:51 ad Exp $	*/
+/*	$NetBSD: ld_amr.c,v 1.25 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,9 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_amr.c,v 1.14 2007/10/19 12:00:51 ad Exp $");
-
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: ld_amr.c,v 1.25 2016/09/27 03:33:32 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,11 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld_amr.c,v 1.14 2007/10/19 12:00:51 ad Exp $");
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
-
-#include <uvm/uvm_extern.h>
+#include <sys/module.h>
 
 #include <sys/bus.h>
 
@@ -68,6 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: ld_amr.c,v 1.14 2007/10/19 12:00:51 ad Exp $");
 #include <dev/pci/pcivar.h>
 #include <dev/pci/amrreg.h>
 #include <dev/pci/amrvar.h>
+
+#include "ioconf.h"
 
 struct ld_amr_softc {
 	struct	ld_softc sc_ld;
@@ -81,27 +70,22 @@ static void	ld_amr_handler(struct amr_ccb *);
 static int	ld_amr_start(struct ld_softc *, struct buf *);
 
 static int
-ld_amr_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ld_amr_match(device_t parent, cfdata_t match, void *aux)
 {
-
 	return (1);
 }
 
 static void
-ld_amr_attach(struct device *parent, struct device *self, void *aux)
+ld_amr_attach(device_t parent, device_t self, void *aux)
 {
-	struct amr_attach_args *amra;
-	struct ld_amr_softc *sc;
-	struct ld_softc *ld;
-	struct amr_softc *amr;
+	struct amr_attach_args *amra = aux;
+	struct ld_amr_softc *sc = device_private(self);
+	struct ld_softc *ld = &sc->sc_ld;
+	struct amr_softc *amr = device_private(parent);
 	const char *statestr;
 	int happy;
 
-	sc = (struct ld_amr_softc *)self;
-	ld = &sc->sc_ld;
-	amr = (struct amr_softc *)parent;
-	amra = aux;
+	ld->sc_dv = self;
 
 	sc->sc_hwunit = amra->amra_unit;
 	ld->sc_maxxfer = amr_max_xfer;
@@ -126,10 +110,10 @@ ld_amr_attach(struct device *parent, struct device *self, void *aux)
 	    amr->amr_drive[sc->sc_hwunit].al_properties & AMR_DRV_RAID_MASK,
 	    statestr);
 
-	ldattach(ld);
+	ldattach(ld, BUFQ_DISK_DEFAULT_STRAT);
 }
 
-CFATTACH_DECL(ld_amr, sizeof(struct ld_amr_softc),
+CFATTACH_DECL_NEW(ld_amr, sizeof(struct ld_amr_softc),
     ld_amr_match, ld_amr_attach, NULL, NULL);
 
 static int
@@ -139,9 +123,9 @@ ld_amr_dobio(struct ld_amr_softc *sc, void *data, int datasize,
 	struct amr_ccb *ac;
 	struct amr_softc *amr;
 	struct amr_mailbox_cmd *mb;
-	int s, rv;
+	int rv;
 
-	amr = (struct amr_softc *)device_parent(&sc->sc_ld.sc_dv);
+	amr = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	if ((rv = amr_ccb_alloc(amr, &ac)) != 0)
 		return (rv);
@@ -164,15 +148,13 @@ ld_amr_dobio(struct ld_amr_softc *sc, void *data, int datasize,
 		 * Polled commands must not sit on the software queue.  Wait
 		 * up to 30 seconds for the command to complete.
 		 */
-		s = splbio();
 		rv = amr_ccb_poll(amr, ac, 30000);
-		splx(s);
 		amr_ccb_unmap(amr, ac);
 		amr_ccb_free(amr, ac);
 	} else {
 		ac->ac_handler = ld_amr_handler;
 		ac->ac_context = bp;
-		ac->ac_dv = (struct device *)sc;
+		ac->ac_dv = sc->sc_ld.sc_dv;
 		amr_ccb_enqueue(amr, ac);
 		rv = 0;
 	}
@@ -183,7 +165,6 @@ ld_amr_dobio(struct ld_amr_softc *sc, void *data, int datasize,
 static int
 ld_amr_start(struct ld_softc *ld, struct buf *bp)
 {
-
 	return (ld_amr_dobio((struct ld_amr_softc *)ld, bp->b_data,
 	    bp->b_bcount, bp->b_rawblkno, (bp->b_flags & B_READ) == 0, bp));
 }
@@ -196,11 +177,11 @@ ld_amr_handler(struct amr_ccb *ac)
 	struct amr_softc *amr;
 
 	bp = ac->ac_context;
-	sc = (struct ld_amr_softc *)ac->ac_dv;
-	amr = (struct amr_softc *)device_parent(&sc->sc_ld.sc_dv);
+	sc = device_private(ac->ac_dv);
+	amr = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	if (ac->ac_status != AMR_STATUS_SUCCESS) {
-		printf("%s: cmd status 0x%02x\n", sc->sc_ld.sc_dv.dv_xname,
+		printf("%s: cmd status 0x%02x\n", device_xname(sc->sc_ld.sc_dv),
 		    ac->ac_status);
 
 		bp->b_error = EIO;
@@ -222,4 +203,47 @@ ld_amr_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 
 	return (ld_amr_dobio(sc, data, blkcnt * ld->sc_secsize, blkno, 1,
 	    NULL));
+}
+
+MODULE(MODULE_CLASS_DRIVER, ld_amr, "ld,amr");
+
+#ifdef _MODULE
+/*
+ * XXX Don't allow ioconf.c to redefine the "struct cfdriver ld_cd"
+ * XXX it will be defined in the common-code module
+ */
+#undef  CFDRIVER_DECL
+#define CFDRIVER_DECL(name, class, attr)
+#include "ioconf.c"
+#endif
+
+static int
+ld_amr_modcmd(modcmd_t cmd, void *opaque)
+{
+#ifdef _MODULE
+	/*
+	 * We ignore the cfdriver_vec[] that ioconf provides, since
+	 * the cfdrivers are attached already.
+	 */
+	static struct cfdriver * const no_cfdriver_vec[] = { NULL };
+#endif
+	int error = 0;
+
+#ifdef _MODULE
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = config_init_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_amr, cfdata_ioconf_ld_amr);
+		break;
+	case MODULE_CMD_FINI:
+		error = config_fini_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_amr, cfdata_ioconf_ld_amr);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+#endif
+
+	return error;
 }

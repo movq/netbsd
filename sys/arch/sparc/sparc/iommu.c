@@ -1,4 +1,4 @@
-/*	$NetBSD: iommu.c,v 1.89 2007/10/17 19:57:14 garbled Exp $ */
+/*	$NetBSD: iommu.c,v 1.95 2012/01/27 18:53:02 para Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.89 2007/10/17 19:57:14 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.95 2012/01/27 18:53:02 para Exp $");
 
 #include "opt_sparc_arch.h"
 
@@ -52,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.89 2007/10/17 19:57:14 garbled Exp $");
 #include <uvm/uvm.h>
 
 #define _SPARC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/ctlreg.h>
 #include <sparc/sparc/asm.h>
@@ -62,7 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: iommu.c,v 1.89 2007/10/17 19:57:14 garbled Exp $");
 #include <sparc/sparc/iommuvar.h>
 
 struct iommu_softc {
-	struct device	sc_dev;		/* base device */
 	struct iommureg	*sc_reg;
 	u_int		sc_pagesize;
 	u_int		sc_range;
@@ -80,14 +79,14 @@ struct iommu_softc {
 
 /* autoconfiguration driver */
 int	iommu_print(void *, const char *);
-void	iommu_attach(struct device *, struct device *, void *);
-int	iommu_match(struct device *, struct cfdata *, void *);
+void	iommu_attach(device_t, device_t, void *);
+int	iommu_match(device_t, cfdata_t, void *);
 
 #if defined(SUN4M)
 static void iommu_copy_prom_entries(struct iommu_softc *);
 #endif
 
-CFATTACH_DECL(iommu, sizeof(struct iommu_softc),
+CFATTACH_DECL_NEW(iommu, sizeof(struct iommu_softc),
     iommu_match, iommu_attach, NULL, NULL);
 
 /* IOMMU DMA map functions */
@@ -130,7 +129,7 @@ iommu_print(void *args, const char *iommu)
 }
 
 int
-iommu_match(struct device *parent, struct cfdata *cf, void *aux)
+iommu_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -143,10 +142,10 @@ iommu_match(struct device *parent, struct cfdata *cf, void *aux)
  * Attach the iommu.
  */
 void
-iommu_attach(struct device *parent, struct device *self, void *aux)
+iommu_attach(device_t parent, device_t self, void *aux)
 {
 #if defined(SUN4M)
-	struct iommu_softc *sc = (struct iommu_softc *)self;
+	struct iommu_softc *sc = device_private(self);
 	struct mainbus_attach_args *ma = aux;
 	struct sparc_bus_dma_tag *dmat = &sc->sc_dmatag;
 	bus_space_handle_t bh;
@@ -233,9 +232,10 @@ iommu_attach(struct device *parent, struct device *self, void *aux)
 	iopte_table_pa = VM_PAGE_TO_PHYS(m);
 
 	/* Map the pages */
-	for (; m != NULL; m = TAILQ_NEXT(m,pageq)) {
+	for (; m != NULL; m = TAILQ_NEXT(m,pageq.queue)) {
 		paddr_t pa = VM_PAGE_TO_PHYS(m);
-		pmap_kenter_pa(va, pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(va, pa | PMAP_NC,
+		    VM_PROT_READ | VM_PROT_WRITE, 0);
 		va += PAGE_SIZE;
 	}
 	pmap_update(pmap_kernel());
@@ -276,7 +276,7 @@ iommu_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_dvmamap = extent_create("iommudvma",
 					IOMMU_DVMA_BASE, IOMMU_DVMA_END,
-					M_DEVBUF, 0, 0, EX_NOWAIT);
+					0, 0, EX_NOWAIT);
 	if (sc->sc_dvmamap == NULL)
 		panic("iommu: unable to allocate DVMA map");
 
@@ -289,7 +289,7 @@ iommu_attach(struct device *parent, struct device *self, void *aux)
 		struct iommu_attach_args ia;
 		struct openprom_addr sbus_iommu_reg = { 0, 0x10001000, 0x28 };
 
-		bzero(&ia, sizeof ia);
+		memset(&ia, 0, sizeof ia);
 
 		/* Propagate BUS & DMA tags */
 		ia.iom_bustag = ma->ma_bustag;
@@ -300,7 +300,7 @@ iommu_attach(struct device *parent, struct device *self, void *aux)
 		ia.iom_reg = &sbus_iommu_reg;
 		ia.iom_nreg = 1;
 
-		(void) config_found(&sc->sc_dev, (void *)&ia, iommu_print);
+		(void) config_found(self, (void *)&ia, iommu_print);
 		return;
 	}
 
@@ -310,7 +310,7 @@ iommu_attach(struct device *parent, struct device *self, void *aux)
 	for (node = firstchild(node); node; node = nextsibling(node)) {
 		struct iommu_attach_args ia;
 
-		bzero(&ia, sizeof ia);
+		memset(&ia, 0, sizeof ia);
 		ia.iom_name = prom_getpropstring(node, "name");
 
 		/* Propagate BUS & DMA tags */
@@ -323,7 +323,7 @@ iommu_attach(struct device *parent, struct device *self, void *aux)
 		prom_getprop(node, "reg", sizeof(struct openprom_addr),
 			&ia.iom_nreg, &ia.iom_reg);
 
-		(void) config_found(&sc->sc_dev, (void *)&ia, iommu_print);
+		(void) config_found(self, (void *)&ia, iommu_print);
 		if (ia.iom_reg != NULL)
 			free(ia.iom_reg, M_DEVBUF);
 	}
@@ -678,7 +678,7 @@ iommu_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map,
 
 	/* Map physical pages into IOMMU */
 	mlist = segs[0]._ds_mlist;
-	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq)) {
+	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq.queue)) {
 		if (sgsize == 0)
 			panic("iommu_dmamap_load_raw: size botch");
 		pa = VM_PAGE_TO_PHYS(m);
@@ -778,13 +778,14 @@ iommu_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	 * kernel virtual address space.
 	 */
 	mlist = segs[0]._ds_mlist;
-	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq)) {
+	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq.queue)) {
 
 		if (size == 0)
 			panic("iommu_dmamem_map: size botch");
 
 		addr = VM_PAGE_TO_PHYS(m);
-		pmap_kenter_pa(va, addr | cbit, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(va, addr | cbit,
+		    VM_PROT_READ | VM_PROT_WRITE, 0);
 #if 0
 			if (flags & BUS_DMA_COHERENT)
 				/* XXX */;

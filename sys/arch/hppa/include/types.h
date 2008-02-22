@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.16 2007/10/17 19:54:41 garbled Exp $	*/
+/*	$NetBSD: types.h,v 1.26 2016/01/23 22:31:19 christos Exp $	*/
 
 /*	$OpenBSD: types.h,v 1.6 2001/08/11 01:58:34 art Exp $	*/
 
@@ -39,7 +39,7 @@
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
 
-#if defined(_NETBSD_SOURCE)
+#if defined(_KERNEL)
 typedef struct label_t {
 	int	lbl_rp;
 	int	lbl_sp;
@@ -47,7 +47,9 @@ typedef struct label_t {
 	int	lbl_ss[1];
 	double	lbl_sf[10];	/* hp800:fr12-fr15, hp700:fr12-fr21 */
 } label_t;
+#endif
 
+#if defined(_KERNEL) || defined(_KMEMUSER) || defined(_KERNTYPES) || defined(_STANDALONE)
 typedef	unsigned long		hppa_hpa_t;
 typedef	unsigned long		hppa_spa_t;
 typedef	unsigned int		pa_space_t;
@@ -55,24 +57,30 @@ typedef	unsigned long		vaddr_t;
 typedef	unsigned long		vsize_t;
 typedef	unsigned long		paddr_t;
 typedef	unsigned long		psize_t;
-/* XXX DIE DIE DIE */
-typedef	unsigned long vm_offset_t;
-typedef unsigned long vm_size_t;
+#define	PRIxVADDR		"lx"
+#define	PRIxVSIZE		"lx"
+#define	PRIuVSIZE		"lu"
+#define	PRIxPADDR		"lx"
+#define	PRIxPSIZE		"lx"
+#define	PRIuPSIZE		"lu"
 
+typedef int			register_t;
+#define	PRIxREGISTER		"x"
 #endif
 
 /*
  * Semaphores must be aligned on 16-byte boundaries on the PA-RISC.
  */
-typedef volatile struct {
+typedef struct {
 	volatile unsigned long csl_lock[4];
-} __cpu_simple_lock_t;
+} __cpu_simple_lock_nv_t;
+
+typedef int			__register_t;
 
 
 #define __SIMPLELOCK_LOCKED	{ { 0, 0, 0, 0} }
 #define __SIMPLELOCK_UNLOCKED	{ { 1, 1, 1, 1} }
 
-typedef int			register_t;
 
 #define	__MACHINE_STACK_GROWS_UP	/* stack grows to higher addresses */
 #define	__HAVE_FUNCTION_DESCRIPTORS	/* function ptrs may be descriptors */
@@ -85,5 +93,14 @@ typedef int			register_t;
 
 #define	RAS_DECL(name)							\
 extern const char __CONCAT(name,_ras_start[]), __CONCAT(name,_ras_end[])
+
+#define	__HAVE_CPU_LWP_SETPRIVATE
+#define	__HAVE_COMMON___TLS_GET_ADDR
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_TLS_VARIANT_I
+#define	__HAVE_NEW_STYLE_BUS_H
+
+#define	__HAVE_MM_MD_DIRECT_MAPPED_PHYS
+#define	__HAVE_MM_MD_KERNACC
 
 #endif	/* _HPPA_TYPES_H_ */

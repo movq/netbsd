@@ -1,4 +1,5 @@
-/*	$NetBSD: event.h,v 1.19 2007/12/03 15:21:57 pooka Exp $	*/
+/*	$NetBSD: event.h,v 1.32 2018/01/09 03:31:13 christos Exp $	*/
+
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
  * All rights reserved.
@@ -35,25 +36,15 @@
 #include <sys/inttypes.h>		/* for uintptr_t */
 #include <sys/null.h>			/* for NULL */
 
-#define	EVFILT_READ		0
-#define	EVFILT_WRITE		1
-#define	EVFILT_AIO		2	/* attached to aio requests */
-#define	EVFILT_VNODE		3	/* attached to vnodes */
-#define	EVFILT_PROC		4	/* attached to struct proc */
-#define	EVFILT_SIGNAL		5	/* attached to struct proc */
-#define	EVFILT_TIMER		6	/* arbitrary timer (in ms) */
-#define	EVFILT_SYSCOUNT		7	/* number of filters */
-
-#define	EV_SET(kevp, a, b, c, d, e, f)					\
-do {									\
-	(kevp)->ident = (a);						\
-	(kevp)->filter = (b);						\
-	(kevp)->flags = (c);						\
-	(kevp)->fflags = (d);						\
-	(kevp)->data = (e);						\
-	(kevp)->udata = (f);						\
-} while (/* CONSTCOND */ 0)
-
+#define	EVFILT_READ		0U
+#define	EVFILT_WRITE		1U
+#define	EVFILT_AIO		2U	/* attached to aio requests */
+#define	EVFILT_VNODE		3U	/* attached to vnodes */
+#define	EVFILT_PROC		4U	/* attached to struct proc */
+#define	EVFILT_SIGNAL		5U	/* attached to struct proc */
+#define	EVFILT_TIMER		6U	/* arbitrary timer (in ms) */
+#define	EVFILT_FS		7U	/* filesystem events */
+#define	EVFILT_SYSCOUNT		8U	/* number of filters */
 
 struct kevent {
 	uintptr_t	ident;		/* identifier for this event */
@@ -64,58 +55,76 @@ struct kevent {
 	intptr_t	udata;		/* opaque user data identifier */
 };
 
+#define EV_SET(kevp, ident, filter, flags, fflags, data, udata)	\
+    _EV_SET((kevp), __CAST(uintptr_t, (ident)), (filter), (flags), \
+    (fflags), (data), __CAST(intptr_t, (udata)))
+
+static __inline void
+_EV_SET(struct kevent *_kevp, uintptr_t _ident, uint32_t _filter,
+    uint32_t _flags, uint32_t _fflags, int64_t _data, intptr_t _udata)
+{
+	_kevp->ident = _ident;
+	_kevp->filter = _filter;
+	_kevp->flags = _flags;
+	_kevp->fflags = _fflags;
+	_kevp->data = _data;
+	_kevp->udata = _udata;
+}
+
 /* actions */
-#define	EV_ADD		0x0001		/* add event to kq (implies ENABLE) */
-#define	EV_DELETE	0x0002		/* delete event from kq */
-#define	EV_ENABLE	0x0004		/* enable event */
-#define	EV_DISABLE	0x0008		/* disable event (not reported) */
+#define	EV_ADD		0x0001U		/* add event to kq (implies ENABLE) */
+#define	EV_DELETE	0x0002U		/* delete event from kq */
+#define	EV_ENABLE	0x0004U		/* enable event */
+#define	EV_DISABLE	0x0008U		/* disable event (not reported) */
 
 /* flags */
-#define	EV_ONESHOT	0x0010		/* only report one occurrence */
-#define	EV_CLEAR	0x0020		/* clear event state after reporting */
+#define	EV_ONESHOT	0x0010U		/* only report one occurrence */
+#define	EV_CLEAR	0x0020U		/* clear event state after reporting */
+#define EV_RECEIPT	0x0040U		/* force EV_ERROR on success, data=0 */
+#define EV_DISPATCH	0x0080U		/* disable event after reporting */
 
-#define	EV_SYSFLAGS	0xF000		/* reserved by system */
-#define	EV_FLAG1	0x2000		/* filter-specific flag */
+#define	EV_SYSFLAGS	0xF000U		/* reserved by system */
+#define	EV_FLAG1	0x2000U		/* filter-specific flag */
 
 /* returned values */
-#define	EV_EOF		0x8000		/* EOF detected */
-#define	EV_ERROR	0x4000		/* error, data contains errno */
+#define	EV_EOF		0x8000U		/* EOF detected */
+#define	EV_ERROR	0x4000U		/* error, data contains errno */
 
 /*
  * hint flag for in-kernel use - must not equal any existing note
  */
 #ifdef _KERNEL
-#define NOTE_SUBMIT	0x01000000		/* initial knote submission */
+#define NOTE_SUBMIT	0x01000000U		/* initial knote submission */
 #endif
 /*
  * data/hint flags for EVFILT_{READ|WRITE}, shared with userspace
  */
-#define	NOTE_LOWAT	0x0001			/* low water mark */
+#define	NOTE_LOWAT	0x0001U			/* low water mark */
 
 /*
  * data/hint flags for EVFILT_VNODE, shared with userspace
  */
-#define	NOTE_DELETE	0x0001			/* vnode was removed */
-#define	NOTE_WRITE	0x0002			/* data contents changed */
-#define	NOTE_EXTEND	0x0004			/* size increased */
-#define	NOTE_ATTRIB	0x0008			/* attributes changed */
-#define	NOTE_LINK	0x0010			/* link count changed */
-#define	NOTE_RENAME	0x0020			/* vnode was renamed */
-#define	NOTE_REVOKE	0x0040			/* vnode access was revoked */
+#define	NOTE_DELETE	0x0001U			/* vnode was removed */
+#define	NOTE_WRITE	0x0002U			/* data contents changed */
+#define	NOTE_EXTEND	0x0004U			/* size increased */
+#define	NOTE_ATTRIB	0x0008U			/* attributes changed */
+#define	NOTE_LINK	0x0010U			/* link count changed */
+#define	NOTE_RENAME	0x0020U			/* vnode was renamed */
+#define	NOTE_REVOKE	0x0040U			/* vnode access was revoked */
 
 /*
  * data/hint flags for EVFILT_PROC, shared with userspace
  */
-#define	NOTE_EXIT	0x80000000		/* process exited */
-#define	NOTE_FORK	0x40000000		/* process forked */
-#define	NOTE_EXEC	0x20000000		/* process exec'd */
-#define	NOTE_PCTRLMASK	0xf0000000		/* mask for hint bits */
-#define	NOTE_PDATAMASK	0x000fffff		/* mask for pid */
+#define	NOTE_EXIT	0x80000000U		/* process exited */
+#define	NOTE_FORK	0x40000000U		/* process forked */
+#define	NOTE_EXEC	0x20000000U		/* process exec'd */
+#define	NOTE_PCTRLMASK	0xf0000000U		/* mask for hint bits */
+#define	NOTE_PDATAMASK	0x000fffffU		/* mask for pid */
 
 /* additional flags for EVFILT_PROC */
-#define	NOTE_TRACK	0x00000001		/* follow across forks */
-#define	NOTE_TRACKERR	0x00000002		/* could not track child */
-#define	NOTE_CHILD	0x00000004		/* am a child process */
+#define	NOTE_TRACK	0x00000001U		/* follow across forks */
+#define	NOTE_TRACKERR	0x00000002U		/* could not track child */
+#define	NOTE_CHILD	0x00000004U		/* am a child process */
 
 /*
  * This is currently visible to userland to work around broken
@@ -143,9 +152,6 @@ struct kfilter_mapping {
 #define KFILTER_BYNAME		_IOWR('k', 1, struct kfilter_mapping)
 
 #ifdef _KERNEL
-#include <sys/mallocvar.h>		/* for malloc types */
-
-MALLOC_DECLARE(M_KEVENT);
 
 #define	KNOTE(list, hint)	if (!SLIST_EMPTY(list)) knote(list, hint)
 
@@ -153,7 +159,7 @@ MALLOC_DECLARE(M_KEVENT);
  * Flag indicating hint is a signal.  Used by EVFILT_SIGNAL, and also
  * shared by EVFILT_PROC  (all knotes attached to p->p_klist)
  */
-#define	NOTE_SIGNAL	0x08000000
+#define	NOTE_SIGNAL	0x08000000U
 
 /*
  * Callback methods for each filter type.
@@ -168,34 +174,51 @@ struct filterops {
 					/* called when event is triggered */
 };
 
+/*
+ * Field locking:
+ *
+ * f	kn_kq->kq_fdp->fd_lock
+ * q	kn_kq->kq_lock
+ * o	object mutex (e.g. device driver or vnode interlock)
+ */
+struct kfilter;
+
 struct knote {
-	SLIST_ENTRY(knote)	kn_link;	/* for fd */
-	SLIST_ENTRY(knote)	kn_selnext;	/* for struct selinfo */
-	TAILQ_ENTRY(knote)	kn_tqe;
-	struct kqueue		*kn_kq;		/* which queue we are on */
+	SLIST_ENTRY(knote)	kn_link;	/* f: for fd */
+	SLIST_ENTRY(knote)	kn_selnext;	/* o: for struct selinfo */
+	TAILQ_ENTRY(knote)	kn_tqe;		/* q: for struct kqueue */
+	struct kqueue		*kn_kq;		/* q: which queue we are on */
 	struct kevent		kn_kevent;
-	uint32_t		kn_status;
-	uint32_t		kn_sfflags;	/* saved filter flags */
-	uintptr_t		kn_sdata;	/* saved data field */
-	union {
-		struct file	*p_fp;		/* file data pointer */
-		struct proc	*p_proc;	/* proc pointer */
-		void		*p_opaque;	/* opaque/misc pointer */
-	} kn_ptr;
+	uint32_t		kn_status;	/* q: flags below */
+	uint32_t		kn_sfflags;	/*    saved filter flags */
+	uintptr_t		kn_sdata;	/*    saved data field */
+	void			*kn_obj;	/*    monitored obj */
 	const struct filterops	*kn_fop;
+	struct kfilter		*kn_kfilter;
 	void 			*kn_hook;
 
-#define	KN_ACTIVE	0x01			/* event has been triggered */
-#define	KN_QUEUED	0x02			/* event is on queue */
-#define	KN_DISABLED	0x04			/* event is disabled */
-#define	KN_DETACHED	0x08			/* knote is detached */
+#define	KN_ACTIVE	0x01U			/* event has been triggered */
+#define	KN_QUEUED	0x02U			/* event is on queue */
+#define	KN_DISABLED	0x04U			/* event is disabled */
+#define	KN_DETACHED	0x08U			/* knote is detached */
+#define	KN_MARKER	0x10U			/* is a marker */
+#define	KN_BUSY		0x20U			/* is being scanned */
+/* Toggling KN_BUSY also requires kn_kq->kq_fdp->fd_lock. */
+#define __KN_FLAG_BITS \
+    "\20" \
+    "\1ACTIVE" \
+    "\2QUEUED" \
+    "\3DISABLED" \
+    "\4DETACHED" \
+    "\5MARKER" \
+    "\6BUSY"
+
 
 #define	kn_id		kn_kevent.ident
 #define	kn_filter	kn_kevent.filter
 #define	kn_flags	kn_kevent.flags
 #define	kn_fflags	kn_kevent.fflags
 #define	kn_data		kn_kevent.data
-#define	kn_fp		kn_ptr.p_fp
 };
 
 #include <sys/systm.h> /* for copyin_t */
@@ -203,10 +226,9 @@ struct knote {
 struct lwp;
 struct timespec;
 
+void	kqueue_init(void);
 void	knote(struct klist *, long);
-void	knote_remove(struct lwp *, struct klist *);
-void	knote_fdclose(struct lwp *, int);
-int 	kqueue_register(struct kqueue *, struct kevent *, struct lwp *);
+void	knote_fdclose(int);
 
 typedef	int (*kevent_fetch_changes_t)(void *, const struct kevent *,
     struct kevent *, size_t, int);
@@ -220,7 +242,12 @@ struct kevent_ops {
 	kevent_put_events_t keo_put_events;
 };
 
-int	kevent1(struct lwp *, register_t *, int, const struct kevent *,
+
+int	kevent_fetch_changes(void *, const struct kevent *, struct kevent *,
+    size_t, int);
+int 	kevent_put_events(void *, struct kevent *, struct kevent *, size_t,
+    int);
+int	kevent1(register_t *, int, const struct kevent *,
     size_t, struct kevent *, size_t, const struct timespec *,
     const struct kevent_ops *);
 
@@ -230,6 +257,8 @@ int	kfilter_unregister(const char *);
 int	filt_seltrue(struct knote *, long);
 extern const struct filterops seltrue_filtops;
 
+extern struct klist fs_klist;	/* EVFILT_FS */
+
 #else 	/* !_KERNEL */
 
 #include <sys/cdefs.h>
@@ -238,8 +267,11 @@ struct timespec;
 __BEGIN_DECLS
 #if defined(_NETBSD_SOURCE)
 int	kqueue(void);
+int	kqueue1(int);
+#ifndef __LIBC12_SOURCE__
 int	kevent(int, const struct kevent *, size_t, struct kevent *, size_t,
-		    const struct timespec *);
+		    const struct timespec *) __RENAME(__kevent50);
+#endif
 #endif /* !_POSIX_C_SOURCE */
 __END_DECLS
 

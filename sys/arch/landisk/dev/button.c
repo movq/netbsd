@@ -1,4 +1,4 @@
-/*	$NetBSD: button.c,v 1.4 2008/01/07 00:27:35 ad Exp $	*/
+/*	$NetBSD: button.c,v 1.9 2017/10/25 08:12:37 maya Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,20 +36,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: button.c,v 1.4 2008/01/07 00:27:35 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: button.c,v 1.9 2017/10/25 08:12:37 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
-#include <sys/simplelock.h>
 #include <sys/queue.h>
-#include <sys/proc.h>
-#include <sys/kthread.h>
+#include <sys/mutex.h>
 #include <sys/errno.h>
 #include <sys/fcntl.h>
 #include <sys/callout.h>
 #include <sys/kernel.h>
+#include <sys/once.h>
 #include <sys/poll.h>
 #include <sys/select.h>
 #include <sys/vnode.h>
@@ -61,17 +59,17 @@ __KERNEL_RCSID(0, "$NetBSD: button.c,v 1.4 2008/01/07 00:27:35 ad Exp $");
 /*
  * event handler
  */
-static LIST_HEAD(, btn_event) btn_event_list =
-    LIST_HEAD_INITIALIZER(btn_event_list);
-static struct simplelock btn_event_list_slock =
-    SIMPLELOCK_INITIALIZER;
+static ONCE_DECL(btn_once);
+static LIST_HEAD(, btn_event) btn_event_list;
+static kmutex_t btn_event_list_lock;
 
 static struct lwp *btn_daemon;
 
 #define	BTN_MAX_EVENTS		32
 
-static struct simplelock btn_event_queue_slock =
-    SIMPLELOCK_INITIALIZER;
+static kmutex_t btn_event_queue_lock;
+static kcondvar_t btn_event_queue_cv;
+
 static button_event_t btn_event_queue[BTN_MAX_EVENTS];
 static int btn_event_queue_head;
 static int btn_event_queue_tail;
@@ -93,9 +91,32 @@ dev_type_poll(btnpoll);
 dev_type_kqfilter(btnkqfilter);
 
 const struct cdevsw button_cdevsw = {
-	btnopen, btnclose, btnread, nowrite, btnioctl,
-	nostop, notty, btnpoll, nommap, btnkqfilter,
+	.d_open = btnopen,
+	.d_close = btnclose,
+	.d_read = btnread,
+	.d_write = nowrite,
+	.d_ioctl = btnioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = btnpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = btnkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
+
+static int
+btn_init(void)
+{
+
+	LIST_INIT(&btn_event_list);
+	mutex_init(&btn_event_list_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&btn_event_queue_lock, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&btn_event_queue_cv, "btncv");
+	selinit(&btn_event_queue_selinfo);
+
+	return 0;
+}
 
 static int
 btn_queue_event(button_event_t *bev)
@@ -140,11 +161,16 @@ btnopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	int error;
 
+	error = RUN_ONCE(&btn_once, btn_init);
+	if (error) {
+		return error;
+	}
+
 	if (minor(dev) != 0) {
 		return (ENODEV);
 	}
 
-	simple_lock(&btn_event_queue_slock);
+	mutex_enter(&btn_event_queue_lock);
 	if (btn_daemon != NULL) {
 		error = EBUSY;
 	} else {
@@ -152,7 +178,7 @@ btnopen(dev_t dev, int flag, int mode, struct lwp *l)
 		btn_daemon = l;
 		btn_event_queue_flush();
 	}
-	simple_unlock(&btn_event_queue_slock);
+	mutex_exit(&btn_event_queue_lock);
 
 	return (error);
 }
@@ -166,11 +192,11 @@ btnclose(dev_t dev, int flag, int mode, struct lwp *l)
 		return (ENODEV);
 	}
 
-	simple_lock(&btn_event_queue_slock);
+	mutex_enter(&btn_event_queue_lock);
 	count = btn_event_queue_count;
 	btn_daemon = NULL;
 	btn_event_queue_flush();
-	simple_unlock(&btn_event_queue_slock);
+	mutex_exit(&btn_event_queue_lock);
 
 	if (count) {
 		printf("WARNING: %d events lost by exiting daemon\n", count);
@@ -218,23 +244,22 @@ btnread(dev_t dev, struct uio *uio, int flags)
 		return (EINVAL);
 	}
 
-	simple_lock(&btn_event_queue_slock);
+	mutex_enter(&btn_event_queue_lock);
 	for (;;) {
 		if (btn_get_event(&bev)) {
-			simple_unlock(&btn_event_queue_slock);
+			mutex_exit(&btn_event_queue_lock);
 			return (uiomove(&bev, BUTTON_EVENT_MSG_SIZE, uio));
 		}
 
 		if (flags & IO_NDELAY) {
-			simple_unlock(&btn_event_queue_slock);
+			mutex_exit(&btn_event_queue_lock);
 			return (EWOULDBLOCK);
 		}
 
 		btn_event_queue_flags |= BEVQ_F_WAITING;
-		error = ltsleep(&btn_event_queue_count,
-		    (PRIBIO|PCATCH), "btnread", 0, &btn_event_queue_slock);
+		error = cv_wait_sig(&btn_event_queue_cv, &btn_event_queue_lock);
 		if (error) {
-			simple_unlock(&btn_event_queue_slock);
+			mutex_exit(&btn_event_queue_lock);
 			return (error);
 		}
 	}
@@ -255,13 +280,13 @@ btnpoll(dev_t dev, int events, struct lwp *l)
 	if ((events & (POLLIN | POLLRDNORM)) == 0)
 		return (revents);
 
-	simple_lock(&btn_event_queue_slock);
+	mutex_enter(&btn_event_queue_lock);
 	if (btn_event_queue_count) {
 		revents |= events & (POLLIN | POLLRDNORM);
 	} else {
 		selrecord(l, &btn_event_queue_selinfo);
 	}
-	simple_unlock(&btn_event_queue_slock);
+	mutex_exit(&btn_event_queue_lock);
 
 	return (revents);
 }
@@ -270,28 +295,36 @@ static void
 filt_btn_rdetach(struct knote *kn)
 {
 
-	simple_lock(&btn_event_queue_slock);
+	mutex_enter(&btn_event_queue_lock);
 	SLIST_REMOVE(&btn_event_queue_selinfo.sel_klist,
 	    kn, knote, kn_selnext);
-	simple_unlock(&btn_event_queue_slock);
+	mutex_exit(&btn_event_queue_lock);
 }
 
 static int
 filt_btn_read(struct knote *kn, long hint)
 {
 
-	simple_lock(&btn_event_queue_slock);
+	mutex_enter(&btn_event_queue_lock);
 	kn->kn_data = btn_event_queue_count;
-	simple_unlock(&btn_event_queue_slock);
+	mutex_exit(&btn_event_queue_lock);
 
 	return (kn->kn_data > 0);
 }
 
-static const struct filterops btn_read_filtops =
-    { 1, NULL, filt_btn_rdetach, filt_btn_read };
+static const struct filterops btn_read_filtops = {
+    .f_isfd = 1,
+    .f_attach = NULL,
+    .f_detach = filt_btn_rdetach,
+    .f_event = filt_btn_read,
+};
 
-static const struct filterops btn_write_filtops =
-    { 1, NULL, filt_btn_rdetach, filt_seltrue };
+static const struct filterops btn_write_filtops = {
+    .f_isfd = 1,
+    .f_attach = NULL,
+    .f_detach = filt_btn_rdetach,
+    .f_event = filt_seltrue,
+};
 
 int
 btnkqfilter(dev_t dev, struct knote *kn)
@@ -317,9 +350,9 @@ btnkqfilter(dev_t dev, struct knote *kn)
 		return (1);
 	}
 
-	simple_lock(&btn_event_queue_slock);
+	mutex_enter(&btn_event_queue_lock);
 	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
-	simple_unlock(&btn_event_queue_slock);
+	mutex_exit(&btn_event_queue_lock);
 
 	return (0);
 }
@@ -340,9 +373,9 @@ int
 btn_event_register(struct btn_event *bev)
 {
 
-	simple_lock(&btn_event_list_slock);
+	mutex_enter(&btn_event_list_lock);
 	LIST_INSERT_HEAD(&btn_event_list, bev, bev_list);
-	simple_unlock(&btn_event_list_slock);
+	mutex_exit(&btn_event_list_lock);
 
 	return (0);
 }
@@ -351,9 +384,9 @@ void
 btn_event_unregister(struct btn_event *bev)
 {
 
-	simple_lock(&btn_event_list_slock);
+	mutex_enter(&btn_event_list_lock);
 	LIST_REMOVE(bev, bev_list);
-	simple_unlock(&btn_event_list_slock);
+	mutex_exit(&btn_event_list_lock);
 }
 
 void
@@ -362,30 +395,28 @@ btn_event_send(struct btn_event *bev, int event)
 	button_event_t btnev;
 	int rv;
 
-	simple_lock(&btn_event_queue_slock);
-	if (btn_daemon != NULL) {
-		btnev.bev_type = BUTTON_EVENT_STATE_CHANGE;
-		btnev.bev_event.bs_state = event;
-		strcpy(btnev.bev_event.bs_name, bev->bev_name);
-
-		rv = btn_queue_event(&btnev);
-		if (rv == 0) {
-			simple_unlock(&btn_event_queue_slock);
-			printf("%s: WARNING: state change event %d lost; "
-			    "queue full\n", bev->bev_name, btnev.bev_type);
-		} else {
-			if (btn_event_queue_flags & BEVQ_F_WAITING) {
-				btn_event_queue_flags &= ~BEVQ_F_WAITING;
-				simple_unlock(&btn_event_queue_slock);
-				wakeup(&btn_event_queue_count);
-			} else {
-				simple_unlock(&btn_event_queue_slock);
-			}
-			selnotify(&btn_event_queue_selinfo, 0);
-		}
+	mutex_enter(&btn_event_queue_lock);
+	if (btn_daemon == NULL) {
+		mutex_exit(&btn_event_queue_lock);
+		printf("%s: btn_event_send can't handle me.\n", bev->bev_name);
 		return;
 	}
-	simple_unlock(&btn_event_queue_slock);
 
-	printf("%s: btn_event_send can't handle me.\n", bev->bev_name);
+	btnev.bev_type = BUTTON_EVENT_STATE_CHANGE;
+	btnev.bev_event.bs_state = event;
+	strcpy(btnev.bev_event.bs_name, bev->bev_name);
+
+	rv = btn_queue_event(&btnev);
+	if (rv == 0) {
+		mutex_exit(&btn_event_queue_lock);
+		printf("%s: WARNING: state change event %d lost; "
+		    "queue full\n", bev->bev_name, btnev.bev_type);
+		return;
+	}
+	if (btn_event_queue_flags & BEVQ_F_WAITING) {
+		btn_event_queue_flags &= ~BEVQ_F_WAITING;
+		cv_broadcast(&btn_event_queue_cv);
+	}
+	selnotify(&btn_event_queue_selinfo, 0, 0);
+	mutex_exit(&btn_event_queue_lock);
 }

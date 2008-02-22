@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_siginfo.h,v 1.3 1999/01/03 05:34:39 erh Exp $	*/
+/*	$NetBSD: linux_siginfo.h,v 1.7 2011/11/18 04:07:43 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,6 +69,7 @@ typedef struct linux_siginfo {
 		/* SIGCHLD */
 		struct {
 			linux_pid_t	_pid;
+			linux_uid_t	_uid;
 			int		_status;
 			linux_clock_t	_utime;
 			linux_clock_t	_stime;
@@ -93,19 +87,5 @@ typedef struct linux_siginfo {
 		} _sigfault;
 	} _sidata;
 } linux_siginfo_t;
-
-#define lsi_pid		_sidata._kill._pid
-#define lsi_uid		_sidata._kill._uid
-
-#define LINUX_SI_USER		0
-#define	LINUX_SI_KERNEL		0x80
-#define LINUX_SI_QUEUE		-1
-#define LINUX_SI_TIMER		-2
-#define LINUX_SI_MESGQ		-3
-#define LINUX_SI_ASYNCIO	-4
-
-#define LINUX_SI_FROMUSER(sp)	((sp)->si_code <= 0)
-#define LINUX_SI_FROMKERENL(sp)	((sp)->si_code > 0)
-
 
 #endif /* !_ALPHA_LINUX_SIGINFO_H */

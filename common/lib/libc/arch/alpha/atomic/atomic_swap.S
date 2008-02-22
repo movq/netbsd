@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_swap.S,v 1.2 2007/11/28 17:39:08 ad Exp $	*/
+/*	$NetBSD: atomic_swap.S,v 1.4 2008/05/25 15:56:11 chs Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 
 	.text
 
-LEAF_NOPROFILE(_atomic_swap_32, 2)
+LEAF(_atomic_swap_32, 2)
 1:	ldl_l	v0, 0(a0)
 	mov	a1, t2
 	stl_c	t2, 0(a0)
@@ -52,7 +45,7 @@ ATOMIC_OP_ALIAS(atomic_swap_32,_atomic_swap_32)
 ATOMIC_OP_ALIAS(atomic_swap_uint,_atomic_swap_32)
 STRONG_ALIAS(_atomic_swap_uint,_atomic_swap_32)
 
-LEAF_NOPROFILE(_atomic_swap_64, 2)
+LEAF(_atomic_swap_64, 2)
 1:	ldq_l	v0, 0(a0)
 	mov	a1, t2
 	stq_c	t2, 0(a0)

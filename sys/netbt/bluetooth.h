@@ -1,4 +1,4 @@
-/*	$NetBSD: bluetooth.h,v 1.6 2007/09/17 01:23:17 rillig Exp $	*/
+/*	$NetBSD: bluetooth.h,v 1.12 2014/05/18 14:46:16 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -52,7 +52,7 @@
  */
 typedef struct {
 	uint8_t	b[BLUETOOTH_BDADDR_SIZE];
-} __attribute__ ((packed)) bdaddr_t;
+} __packed bdaddr_t;
 
 /*
  * bdaddr utility functions
@@ -103,6 +103,9 @@ struct sockaddr_bt {
 
 #ifdef _KERNEL
 
+#include <sys/protosw.h>
+
+#include <sys/mallocvar.h>
 MALLOC_DECLARE(M_BLUETOOTH);
 
 /*
@@ -119,21 +122,30 @@ struct btproto {
 	void (*input)(void *, struct mbuf *);
 };
 
+extern const struct pr_usrreqs hci_usrreqs;
+extern const struct pr_usrreqs sco_usrreqs;
+extern const struct pr_usrreqs l2cap_usrreqs;
+extern const struct pr_usrreqs rfcomm_usrreqs;
+
+extern kmutex_t *bt_lock;
+
 /*
  * Debugging stuff
  */
-#include "opt_bluetooth.h"
-
 #ifdef BLUETOOTH_DEBUG
 extern int bluetooth_debug;
-# define DPRINTF(fmt, args...)	do {			\
-	if (bluetooth_debug)				\
-		printf("%s: "fmt, __func__ , ##args);	\
+# define DPRINTF(...)	do {			\
+	if (bluetooth_debug) {			\
+		printf("%s: ", __func__);	\
+		printf(__VA_ARGS__);		\
+	}					\
 } while (/* CONSTCOND */0)
 
-# define DPRINTFN(n, fmt, args...)	do {		\
-	if (bluetooth_debug > (n))			\
-		printf("%s: "fmt, __func__ , ##args);	\
+# define DPRINTFN(n, ...)	do {		\
+	if (bluetooth_debug > (n)) {		\
+		printf("%s: ", __func__);	\
+		printf(__VA_ARGS__);		\
+	}					\
 } while (/* CONSTCOND */0)
 
 # define UNKNOWN(value)			\

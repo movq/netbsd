@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_div.c,v 1.5 2005/12/11 12:17:52 christos Exp $ */
+/*	$NetBSD: fpu_div.c,v 1.10 2014/01/01 05:23:40 isaki Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_div.c,v 1.5 2005/12/11 12:17:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_div.c,v 1.10 2014/01/01 05:23:40 isaki Exp $");
 
 #include <sys/types.h>
 
@@ -150,12 +150,11 @@ __KERNEL_RCSID(0, "$NetBSD: fpu_div.c,v 1.5 2005/12/11 12:17:52 christos Exp $")
  */
 
 struct fpn *
-fpu_div(fe)
-	register struct fpemu *fe;
+fpu_div(struct fpemu *fe)
 {
-	register struct fpn *x = &fe->fe_f1, *y = &fe->fe_f2;
-	register u_int q, bit;
-	register u_int r0, r1, r2, d0, d1, d2, y0, y1, y2;
+	struct fpn *x = &fe->fe_f1, *y = &fe->fe_f2;
+	uint32_t q, bit;
+	uint32_t r0, r1, r2, d0, d1, d2, y0, y1, y2;
 	FPU_DECL_CARRY
 
 	fe->fe_fpsr &= ~FPSR_EXCP; /* clear all exceptions */
@@ -167,11 +166,11 @@ fpu_div(fe)
 	 * return it.  Otherwise we have the following cases:
 	 *
 	 *	Inf / Inf = NaN, plus NV exception
-	 *	Inf / num = Inf [i.e., return x]
-	 *	Inf / 0   = Inf [i.e., return x]
-	 *	0 / Inf = 0 [i.e., return x]
-	 *	0 / num = 0 [i.e., return x]
-	 *	0 / 0   = NaN, plus NV exception
+	 *	Inf / num = Inf
+	 *	Inf / 0   = Inf
+	 *	0   / Inf = 0
+	 *	0   / num = 0
+	 *	0   / 0   = NaN, plus NV exception
 	 *	num / Inf = 0
 	 *	num / num = num (do the divide)
 	 *	num / 0   = Inf, plus DZ exception
@@ -183,6 +182,8 @@ fpu_div(fe)
 	if (ISINF(x) || ISZERO(x)) {
 		if (x->fp_class == y->fp_class)
 			return (fpu_newnan(fe));
+		/* all results at this point use XOR of operand signs */
+		x->fp_sign ^= y->fp_sign;
 		return (x);
 	}
 

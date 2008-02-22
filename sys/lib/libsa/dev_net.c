@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_net.c,v 1.22 2007/11/24 13:20:54 isaki Exp $	*/
+/*	$NetBSD: dev_net.c,v 1.26 2011/07/17 20:54:52 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,7 +47,6 @@
  * for use by the NFS open code (NFS/lookup).
  */
 
-#include <machine/stdarg.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <net/if.h>
@@ -78,7 +70,7 @@ extern int nfs_root_node[];	/* XXX - get from nfs_mount() */
 static int netdev_sock = -1;
 static int netdev_opens;
 
-static int net_getparams __P((int));
+static int net_getparams(int);
 
 /*
  * Called by devopen after it sets f->f_dev to our devsw entry.
@@ -125,7 +117,7 @@ net_open(struct open_file *f, ...)
 			/* Get the NFS file handle (mountd). */
 			error = nfs_mount(netdev_sock, rootip, rootpath);
 			if (error) {
-				printf("NFS mount error=%d\n", error);
+				printf("NFS mount error=%d\n", errno);
 				rootip.s_addr = 0;
 			fail:
 				netif_close(netdev_sock);

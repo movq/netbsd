@@ -1,4 +1,4 @@
-/*	$NetBSD: ofisapc.c,v 1.7 2007/03/08 20:48:39 matt Exp $	*/
+/*	$NetBSD: ofisapc.c,v 1.11 2011/06/06 16:29:15 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofisapc.c,v 1.7 2007/03/08 20:48:39 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofisapc.c,v 1.11 2011/06/06 16:29:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -53,21 +53,18 @@ __KERNEL_RCSID(0, "$NetBSD: ofisapc.c,v 1.7 2007/03/08 20:48:39 matt Exp $");
 #include <shark/shark/ns87307reg.h>
 
 
-int ofisapcprobe __P((struct device *, struct cfdata *, void *));
-void ofisapcattach __P((struct device *, struct device *, void *));
+int ofisapcprobe(device_t, cfdata_t, void *);
+void ofisapcattach(device_t, device_t, void *);
 
 
-CFATTACH_DECL(ofisapc, sizeof(struct device),
+CFATTACH_DECL_NEW(ofisapc, 0,
     ofisapcprobe, ofisapcattach, NULL, NULL);
 
 extern struct cfdriver ofisapc_cd;
 
 
 int
-ofisapcprobe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ofisapcprobe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	char type[64];
@@ -86,9 +83,7 @@ ofisapcprobe(parent, cf, aux)
 
 
 void
-ofisapcattach(parent, dev, aux)
-	struct device *parent, *dev;
-	void *aux;
+ofisapcattach(device_t parent, device_t dev, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	static struct isa_attach_args ia;

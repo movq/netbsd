@@ -1,4 +1,4 @@
-/*	$NetBSD: zxvar.h,v 1.1 2002/09/13 14:03:53 ad Exp $	*/
+/*	$NetBSD: zxvar.h,v 1.6 2009/09/19 11:55:09 tsutsui Exp $	*/
 
 /*
  *  Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. All advertising materials mentioning features or use of this software
- *     must display the following acknowledgement:
- *         This product includes software developed by the NetBSD
- *         Foundation, Inc. and its contributors.
- *  4. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,16 +79,19 @@
  * Per-instance data.
  */
 struct zx_softc {
-	struct device	sc_dv;
-	struct sbusdev	sc_sd;
+	device_t	sc_dv;
 	struct fbdevice	sc_fb;
 	bus_space_tag_t	sc_bt;
 
+	bus_space_handle_t sc_bhzc;
+	bus_space_handle_t sc_bhzx;
+	bus_space_handle_t sc_bhzdss0;
+	bus_space_handle_t sc_bhzdss1;
+	bus_space_handle_t sc_bhzcu;
+
 	int		sc_flags;
-	int		sc_fontw;
-	int		sc_fonth;
-	u_int8_t	*sc_cmap;
-	u_int32_t	*sc_pixels;
+	uint8_t		*sc_cmap;
+	uint32_t	*sc_pixels;
 	bus_addr_t	sc_paddr;
 	int		sc_shiftx;
 	int		sc_shifty;
@@ -103,14 +99,17 @@ struct zx_softc {
 	struct fbcurpos	sc_curpos;
 	struct fbcurpos	sc_curhot;
 	struct fbcurpos sc_cursize;
-	u_int8_t	sc_curcmap[8];
-	u_int32_t	sc_curbits[2][32];
+	uint8_t		sc_curcmap[8];
+	uint32_t	sc_curbits[2][32];
 
-	volatile struct zx_command *sc_zc;
-	volatile struct zx_cross *sc_zx;
-	volatile struct zx_draw *sc_zd_ss0;
-	volatile struct zx_draw_ss1 *sc_zd_ss1;
-	volatile struct zx_cursor *sc_zcu;
+#if NWSDISPLAY > 0	
+	uint32_t sc_width;
+	uint32_t sc_height;	/* display width / height */
+	uint32_t sc_stride;
+	int sc_mode;
+	uint32_t sc_bg;
+	struct vcons_data vd;
+#endif	
 };
 #define	ZX_BLANKED	0x01
 #define	ZX_CURSOR	0x02

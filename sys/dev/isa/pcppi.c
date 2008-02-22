@@ -1,4 +1,4 @@
-/* $NetBSD: pcppi.c,v 1.28 2008/01/30 12:30:01 he Exp $ */
+/* $NetBSD: pcppi.c,v 1.45 2017/06/14 05:01:35 pgoyette Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.28 2008/01/30 12:30:01 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.45 2017/06/14 05:01:35 pgoyette Exp $");
 
 #include "attimer.h"
 
@@ -39,8 +39,10 @@ __KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.28 2008/01/30 12:30:01 he Exp $");
 #include <sys/proc.h>
 #include <sys/device.h>
 #include <sys/errno.h>
-
 #include <sys/bus.h>
+#include <sys/mutex.h>
+#include <sys/condvar.h>
+#include <sys/tty.h>
 
 #include <dev/ic/attimervar.h>
 
@@ -56,24 +58,26 @@ __KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.28 2008/01/30 12:30:01 he Exp $");
 void	pcppi_pckbd_bell(void *, u_int, u_int, u_int, int);
 #endif
 
-int	pcppi_match(struct device *, struct cfdata *, void *);
-void	pcppi_isa_attach(struct device *, struct device *, void *);
+int	pcppi_match(device_t, cfdata_t, void *);
+void	pcppi_isa_attach(device_t, device_t, void *);
+void	pcppi_childdet(device_t, device_t);
+int	pcppi_rescan(device_t, const char *, const int *);
 
-CFATTACH_DECL(pcppi, sizeof(struct pcppi_softc),
-    pcppi_match, pcppi_isa_attach, pcppi_detach, NULL);
+CFATTACH_DECL3_NEW(pcppi, sizeof(struct pcppi_softc),
+    pcppi_match, pcppi_isa_attach, pcppi_detach, NULL, pcppi_rescan,
+    pcppi_childdet, DVF_DETACH_SHUTDOWN);
 
 static int pcppisearch(device_t, cfdata_t, const int *, void *);
-static void pcppi_bell_stop(void*);
+static void pcppi_bell_stop(struct pcppi_softc *);
+static void pcppi_bell_callout(void *);
 
 #if NATTIMER > 0
-static void pcppi_attach_speaker(struct device *);
+static void pcppi_attach_speaker(device_t);
+static void pcppi_detach_speaker(struct pcppi_softc *);
 #endif
 
-#define PCPPIPRI (PZERO - 1)
-
 int
-pcppi_match(struct device *parent, struct cfdata *match,
-    void *aux)
+pcppi_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_handle_t ppi_ioh;
@@ -151,21 +155,29 @@ lose:
 }
 
 void
-pcppi_isa_attach(struct device *parent, struct device *self, void *aux)
+pcppi_isa_attach(device_t parent, device_t self, void *aux)
 {
-        struct pcppi_softc *sc = (struct pcppi_softc *)self;
+        struct pcppi_softc *sc = device_private(self);
         struct isa_attach_args *ia = aux;
         bus_space_tag_t iot;
 
+	sc->sc_dv = self;
         sc->sc_iot = iot = ia->ia_iot;
 
         sc->sc_size = 1;
         if (bus_space_map(iot, IO_PPI, sc->sc_size, 0, &sc->sc_ppi_ioh))
                 panic("pcppi_attach: couldn't map");
 
-        printf("\n");
-
+	aprint_naive("\n");
+	aprint_normal("\n");
         pcppi_attach(sc);
+}
+
+void
+pcppi_childdet(device_t self, device_t child)
+{
+
+	/* we hold no child references, so do nothing */
 }
 
 int
@@ -174,7 +186,11 @@ pcppi_detach(device_t self, int flags)
 	int rc;
 	struct pcppi_softc *sc = device_private(self);
 
-	if ((rc = config_detach_children(&sc->sc_dv, flags)) != 0)
+#if NATTIMER > 0
+	pcppi_detach_speaker(sc);
+#endif
+
+	if ((rc = config_detach_children(sc->sc_dv, flags)) != 0)
 		return rc;
 
 	pmf_device_deregister(self);
@@ -182,38 +198,58 @@ pcppi_detach(device_t self, int flags)
 #if NPCKBD > 0
 	pckbd_unhook_bell(pcppi_pckbd_bell, sc);
 #endif
+	mutex_spin_enter(&tty_lock);
 	pcppi_bell_stop(sc);
+	mutex_spin_exit(&tty_lock);
 
-	callout_stop(&sc->sc_bell_ch);
+	callout_halt(&sc->sc_bell_ch, NULL);
 	callout_destroy(&sc->sc_bell_ch);
+
+	cv_destroy(&sc->sc_slp);
+
 	bus_space_unmap(sc->sc_iot, sc->sc_ppi_ioh, sc->sc_size);
+
 	return 0;
 }
 
 void
 pcppi_attach(struct pcppi_softc *sc)
 {
-        struct pcppi_attach_args pa;
-	struct device *self = (struct device *)sc;
+	device_t self = sc->sc_dv;
 
-        callout_init(&sc->sc_bell_ch, 0);
+	callout_init(&sc->sc_bell_ch, CALLOUT_MPSAFE);
+	callout_setfunc(&sc->sc_bell_ch, pcppi_bell_callout, sc);
+	cv_init(&sc->sc_slp, "bell");
 
-        sc->sc_bellactive = sc->sc_bellpitch = sc->sc_slp = 0;
+        sc->sc_bellactive = sc->sc_bellpitch = 0;
 
 #if NPCKBD > 0
 	/* Provide a beeper for the PC Keyboard, if there isn't one already. */
 	pckbd_hookup_bell(pcppi_pckbd_bell, sc);
 #endif
 #if NATTIMER > 0
-	config_defer(&sc->sc_dv, pcppi_attach_speaker);
+	config_defer(sc->sc_dv, pcppi_attach_speaker);
 #endif
-        if (!device_pmf_is_registered(self))
-		if (!pmf_device_register(self, NULL, NULL))
-			aprint_error_dev(self,
-			    "couldn't establish power handler\n"); 
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
+	pcppi_rescan(self, "pcppi", NULL);
+}
+
+int
+pcppi_rescan(device_t self, const char *ifattr, const int *flags)
+{
+	struct pcppi_softc *sc = device_private(self);
+        struct pcppi_attach_args pa;
+
+	if (!ifattr_match(ifattr, "pcppi"))
+		return 0;
 
 	pa.pa_cookie = sc;
-	config_search_loc(pcppisearch, &sc->sc_dv, "pcppi", NULL, &pa);
+	pa.pa_bell_func = pcppi_bell;
+	config_search_loc(pcppisearch, sc->sc_dv, "pcppi", NULL, &pa);
+
+	return 0;
 }
 
 static int
@@ -228,38 +264,52 @@ pcppisearch(device_t parent, cfdata_t cf, const int *locs, void *aux)
 
 #if NATTIMER > 0
 static void
-pcppi_attach_speaker(struct device *self)
+pcppi_detach_speaker(struct pcppi_softc *sc)
 {
-	struct pcppi_softc *sc = (struct pcppi_softc *)self;
+	if (sc->sc_timer != NULL) {
+		attimer_detach_speaker(sc->sc_timer);
+		sc->sc_timer = NULL;
+	}
+}
+
+static void
+pcppi_attach_speaker(device_t self)
+{
+	struct pcppi_softc *sc = device_private(self);
 
 	if ((sc->sc_timer = attimer_attach_speaker()) == NULL)
-		aprint_error("%s: could not find any available timer\n",
-		    sc->sc_dv.dv_xname);
-	else
-		aprint_normal("%s: attached to %s\n", sc->sc_dv.dv_xname,
-		    sc->sc_timer->sc_dev.dv_xname);
+		aprint_error_dev(self, "could not find any available timer\n");
+	else {
+		aprint_normal_dev(sc->sc_timer, "attached to %s\n",
+		    device_xname(self));
+	}
 }
 #endif
 
 void
 pcppi_bell(pcppi_tag_t self, int pitch, int period, int slp)
 {
-	struct pcppi_softc *sc = self;
-	int s;
 
-	s = spltty(); /* ??? */
+	mutex_spin_enter(&tty_lock);
+	pcppi_bell_locked(self, pitch, period, slp);
+	mutex_spin_exit(&tty_lock);
+}
+
+void
+pcppi_bell_locked(pcppi_tag_t self, int pitch, int period, int slp)
+{
+	struct pcppi_softc *sc = self;
+
 	if (sc->sc_bellactive) {
 		if (sc->sc_timeout) {
 			sc->sc_timeout = 0;
 			callout_stop(&sc->sc_bell_ch);
 		}
-		if (sc->sc_slp)
-			wakeup(pcppi_bell_stop);
+		cv_broadcast(&sc->sc_slp);
 	}
 	if (pitch == 0 || period == 0) {
 		pcppi_bell_stop(sc);
 		sc->sc_bellpitch = 0;
-		splx(s);
 		return;
 	}
 	if (!sc->sc_bellactive || sc->sc_bellpitch != pitch) {
@@ -280,23 +330,29 @@ pcppi_bell(pcppi_tag_t self, int pitch, int period, int slp)
 		pcppi_bell_stop(sc);
 	} else {
 		sc->sc_timeout = 1;
-		callout_reset(&sc->sc_bell_ch, period, pcppi_bell_stop, sc);
+		callout_schedule(&sc->sc_bell_ch, period);
 		if (slp & PCPPI_BELL_SLEEP) {
-			sc->sc_slp = 1;
-			tsleep(pcppi_bell_stop, PCPPIPRI | PCATCH, "bell", 0);
-			sc->sc_slp = 0;
+			cv_wait_sig(&sc->sc_slp, &tty_lock);
 		}
 	}
-	splx(s);
 }
 
 static void
-pcppi_bell_stop(void *arg)
+pcppi_bell_callout(void *arg)
 {
 	struct pcppi_softc *sc = arg;
-	int s;
 
-	s = spltty(); /* ??? */
+	mutex_spin_enter(&tty_lock);
+	if (sc->sc_timeout != 0) {
+		pcppi_bell_stop(sc);
+	}
+	mutex_spin_exit(&tty_lock);
+}
+
+static void
+pcppi_bell_stop(struct pcppi_softc *sc)
+{
+
 	sc->sc_timeout = 0;
 
 	/* disable bell */
@@ -304,9 +360,7 @@ pcppi_bell_stop(void *arg)
 			  bus_space_read_1(sc->sc_iot, sc->sc_ppi_ioh, 0)
 			  & ~PIT_SPKR);
 	sc->sc_bellactive = 0;
-	if (sc->sc_slp)
-		wakeup(pcppi_bell_stop);
-	splx(s);
+	cv_broadcast(&sc->sc_slp);
 }
 
 #if NPCKBD > 0
@@ -318,7 +372,7 @@ pcppi_pckbd_bell(void *arg, u_int pitch, u_int period, u_int volume,
 	/*
 	 * Comes in as ms, goes out at ticks; volume ignored.
 	 */
-	pcppi_bell(arg, pitch, (period * hz) / 1000,
+	pcppi_bell_locked(arg, pitch, (period * hz) / 1000,
 	    poll ? PCPPI_BELL_POLL : 0);
 }
 #endif /* NPCKBD > 0 */

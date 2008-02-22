@@ -1,4 +1,4 @@
-/* $NetBSD: sscom_var.h,v 1.7 2006/03/06 20:21:25 rjs Exp $ */
+/* $NetBSD: sscom_var.h,v 1.14 2015/04/14 20:32:35 riastradh Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -75,11 +75,17 @@
 #include <sys/device.h>
 #include <sys/termios.h>
 #include <sys/callout.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
+#ifdef RND_COM
+#include <sys/rndsource.h>
+#endif
 
 #ifdef	SSCOM_S3C2410
 #include <arm/s3c2xx0/s3c2410reg.h>
 #include <arm/s3c2xx0/s3c2410var.h>
+#elif defined(SSCOM_S3C2440)
+#include <arm/s3c2xx0/s3c2440reg.h>
+#include <arm/s3c2xx0/s3c2440var.h>
 #endif
 
 /* Hardware flag masks */
@@ -94,7 +100,7 @@
 #define	SSCOM_RING_SIZE	2048
 
 struct sscom_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_si;
 	struct tty *sc_tty;
 
@@ -171,11 +177,11 @@ struct sscom_softc {
 	pps_params_t ppsparam;
 #endif
 
-#if NRND > 0 && defined(RND_COM)
-	rndsource_element_t  rnd_source;
+#ifdef RND_COM
+	krndsource_t  sc_rnd_source;
 #endif
 #if (defined(MULTIPROCESSOR) || defined(LOCKDEBUG)) && defined(SSCOM_MPLOCK)
-	struct simplelock	sc_lock;
+	kmutex_t sc_lock;
 #endif
 
 	/*
@@ -184,8 +190,9 @@ struct sscom_softc {
 	 * or provided by other means such as GPIO.  Platform specific attach routine
 	 * have to provide functions to read/write modem control/status pins.
 	 */
-	int	(* read_modem_status)( struct sscom_softc * );
-	void	(* set_modem_control)( struct sscom_softc * );
+	int	(*sc_read_modem_status)( struct sscom_softc * );
+	void	(*sc_set_modem_control)( struct sscom_softc * );
+	void	(*sc_change_txrx_interrupts)(struct sscom_softc *, bool, u_int);
 };
 
 /* UART register address, etc. */
@@ -200,42 +207,20 @@ struct sscom_uart_info {
 #define sscom_getc(iot,ioh) bus_space_read_1((iot), (ioh), SSCOM_URXH)
 #define sscom_geterr(iot,ioh) bus_space_read_1((iot), (ioh), SSCOM_UERSTAT)
 
-/* 
- * we need to tweak interrupt controller to mask/unmask rxint and/or txint.
- */
-#ifdef SSCOM_S3C2410
-/* RXINTn, TXINTn and ERRn interrupts are cascaded to UARTn irq. */
-
-#define	_sscom_intbit(irqno)	(1<<((irqno)-S3C2410_SUBIRQ_MIN))
-
-#define	sscom_unmask_rxint(sc)	\
-	s3c2410_unmask_subinterrupts(_sscom_intbit((sc)->sc_rx_irqno))
 #define	sscom_mask_rxint(sc)	\
-	s3c2410_mask_subinterrupts(_sscom_intbit((sc)->sc_rx_irqno))
-#define	sscom_unmask_txint(sc)	\
-	s3c2410_unmask_subinterrupts(_sscom_intbit((sc)->sc_tx_irqno))
+	(*(sc)->sc_change_txrx_interrupts)((sc), false, SSCOM_HW_RXINT)
+#define	sscom_unmask_rxint(sc)	\
+	(*(sc)->sc_change_txrx_interrupts)((sc), true, SSCOM_HW_RXINT)
 #define	sscom_mask_txint(sc)	\
-	s3c2410_mask_subinterrupts(_sscom_intbit((sc)->sc_tx_irqno))
-#define	sscom_unmask_txrxint(sc)                                      \
-	s3c2410_unmask_subinterrupts(_sscom_intbit((sc)->sc_tx_irqno) | \
-			             _sscom_intbit((sc)->sc_rx_irqno))
-#define	sscom_mask_txrxint(sc)	                                    \
-	s3c2410_mask_subinterrupts(_sscom_intbit((sc)->sc_tx_irqno) | \
-			           _sscom_intbit((sc)->sc_rx_irqno))
-
-#else
-
-/* for S3C2800 and S3C2400 */
-#define	sscom_unmask_rxint(sc)	s3c2xx0_unmask_interrupts(1<<(sc)->sc_rx_irqno)
-#define	sscom_mask_rxint(sc)	s3c2xx0_mask_interrupts(1<<(sc)->sc_rx_irqno)
-#define	sscom_unmask_txint(sc)	s3c2xx0_unmask_interrupts(1<<(sc)->sc_tx_irqno)
-#define	sscom_mask_txint(sc)	s3c2xx0_mask_interrupts(1<<(sc)->sc_tx_irqno)
-#define	sscom_unmask_txrxint(sc) \
-	s3c2xx0_unmask_interrupts((1<<(sc)->sc_tx_irqno)|(1<<(sc)->sc_rx_irqno))
+	(*(sc)->sc_change_txrx_interrupts)((sc), false, SSCOM_HW_TXINT)
+#define	sscom_unmask_txint(sc)	\
+	(*(sc)->sc_change_txrx_interrupts)((sc), true, SSCOM_HW_TXINT)
 #define	sscom_mask_txrxint(sc)	\
-	s3c2xx0_mask_interrupts((1<<(sc)->sc_tx_irqno)|(1<<(sc)->sc_rx_irqno))
-
-#endif /* SSCOM_S3C2410 */
+	(*(sc)->sc_change_txrx_interrupts)((sc), false, \
+	    SSCOM_HW_RXINT | SSCOM_HW_TXINT)
+#define	sscom_unmask_txrxint(sc)	\
+	(*(sc)->sc_change_txrx_interrupts)((sc), true, \
+	    SSCOM_HW_RXINT | SSCOM_HW_TXINT)
 
 #define sscom_enable_rxint(sc)		\
 	(sscom_unmask_rxint(sc), ((sc)->sc_hwflags |= SSCOM_HW_RXINT))
@@ -254,10 +239,10 @@ struct sscom_uart_info {
 int	sscomspeed(long, long);
 void	sscom_attach_subr(struct sscom_softc *);
 
-int	sscom_detach(struct device *, int);
-int	sscom_activate(struct device *, enum devact);
+int	sscom_detach(device_t, int);
+int	sscom_activate(device_t, enum devact);
 void	sscom_shutdown(struct sscom_softc *);
-void	sscomdiag		(void *);
+void	sscomdiag(void *);
 void	sscomstart(struct tty *);
 int	sscomparam(struct tty *, struct termios *);
 int	sscomread(dev_t, struct uio *, int);

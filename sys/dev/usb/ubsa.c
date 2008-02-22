@@ -1,4 +1,4 @@
-/*	$NetBSD: ubsa.c,v 1.21 2008/02/18 05:31:24 dyoung Exp $	*/
+/*	$NetBSD: ubsa.c,v 1.34 2016/12/04 10:12:35 skrll Exp $	*/
 /*-
  * Copyright (c) 2002, Alexander Kabaev <kan.FreeBSD.org>.
  * All rights reserved.
@@ -39,13 +39,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,25 +54,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubsa.c,v 1.21 2008/02/18 05:31:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubsa.c,v 1.34 2016/12/04 10:12:35 skrll Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_usb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
-#ifdef __FreeBSD__
-#include <sys/bus.h>
-#endif
+#include <sys/kmem.h>
 #include <sys/ioccom.h>
 #include <sys/fcntl.h>
 #include <sys/conf.h>
 #include <sys/tty.h>
 #include <sys/file.h>
-#if __FreeBSD_version >= 500014
-#include <sys/selinfo.h>
-#else
 #include <sys/select.h>
-#endif
 #include <sys/proc.h>
 #include <sys/device.h>
 #include <sys/poll.h>
@@ -97,16 +87,11 @@ __KERNEL_RCSID(0, "$NetBSD: ubsa.c,v 1.21 2008/02/18 05:31:24 dyoung Exp $");
 #include <dev/usb/ubsavar.h>
 
 #ifdef UBSA_DEBUG
-Static int	ubsadebug = 0;
-#ifdef __FreeBSD__
-SYSCTL_NODE(_hw_usb, OID_AUTO, ubsa, CTLFLAG_RW, 0, "USB ubsa");
-SYSCTL_INT(_hw_usb_ubsa, OID_AUTO, debug, CTLFLAG_RW,
-	   &ubsadebug, 0, "ubsa debug level");
-#endif
+int		ubsadebug = 0;
 
 #define	DPRINTFN(n, x)	do { \
 				if (ubsadebug > (n)) \
-					logprintf x; \
+					printf x; \
 			} while (0)
 #else
 #define	DPRINTFN(n, x)
@@ -114,14 +99,14 @@ SYSCTL_INT(_hw_usb_ubsa, OID_AUTO, debug, CTLFLAG_RW,
 #define	DPRINTF(x) DPRINTFN(0, x)
 
 struct	ucom_methods ubsa_methods = {
-	ubsa_get_status,
-	ubsa_set,
-	ubsa_param,
-	NULL,
-	ubsa_open,
-	ubsa_close,
-	NULL,
-	NULL
+	.ucom_get_status = ubsa_get_status,
+	.ucom_set = ubsa_set,
+	.ucom_param = ubsa_param,
+	.ucom_ioctl = NULL,
+	.ucom_open = ubsa_open,
+	.ucom_close = ubsa_close,
+	.ucom_read = NULL,
+	.ucom_write = NULL
 };
 
 Static const struct usb_devno ubsa_devs[] = {
@@ -144,7 +129,7 @@ Static const struct usb_devno ubsa_devs[] = {
 };
 #define ubsa_lookup(v, p) usb_lookup(ubsa_devs, v, p)
 
-int ubsa_match(device_t, struct cfdata *, void *);
+int ubsa_match(device_t, cfdata_t, void *);
 void ubsa_attach(device_t, device_t, void *);
 void ubsa_childdet(device_t, device_t);
 int ubsa_detach(device_t, int);
@@ -152,33 +137,39 @@ int ubsa_activate(device_t, enum devact);
 
 extern struct cfdriver ubsa_cd;
 
-CFATTACH_DECL2(ubsa, sizeof(struct ubsa_softc),
+CFATTACH_DECL2_NEW(ubsa, sizeof(struct ubsa_softc),
     ubsa_match, ubsa_attach, ubsa_detach, ubsa_activate, NULL, ubsa_childdet);
 
-USB_MATCH(ubsa)
+int
+ubsa_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_MATCH_START(ubsa, uaa);
+	struct usb_attach_arg *uaa = aux;
 
-	return (ubsa_lookup(uaa->vendor, uaa->product) != NULL ?
+	return (ubsa_lookup(uaa->uaa_vendor, uaa->uaa_product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
 
-USB_ATTACH(ubsa)
+void
+ubsa_attach(device_t parent, device_t self, void *aux)
 {
-	USB_ATTACH_START(ubsa, sc, uaa);
-	usbd_device_handle dev = uaa->device;
+	struct ubsa_softc *sc = device_private(self);
+	struct usb_attach_arg *uaa = aux;
+	struct usbd_device *dev = uaa->uaa_device;
 	usb_config_descriptor_t *cdesc;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
 	char *devinfop;
-	const char *devname = USBDEVNAME(sc->sc_dev);
 	usbd_status err;
-	struct ucom_attach_args uca;
+	struct ucom_attach_args ucaa;
 	int i;
 
+	sc->sc_dev = self;
+
+	aprint_naive("\n");
+	aprint_normal("\n");
+
 	devinfop = usbd_devinfo_alloc(dev, 0);
-	USB_ATTACH_SETUP;
-	printf("%s: %s\n", devname, devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
         sc->sc_udev = dev;
@@ -197,8 +188,8 @@ USB_ATTACH(ubsa)
 	 * control com settings and only some.
 	 */
 	sc->sc_quadumts = 0;
-	if (uaa->vendor == USB_VENDOR_OPTIONNV) {
-		switch (uaa->product) {
+	if (uaa->uaa_vendor == USB_VENDOR_OPTIONNV) {
+		switch (uaa->uaa_product) {
 		case USB_PRODUCT_OPTIONNV_QUADUMTS:
 		case USB_PRODUCT_OPTIONNV_QUADUMTS2:
 			sc->sc_quadumts = 1;
@@ -211,8 +202,9 @@ USB_ATTACH(ubsa)
 	/* Move the device into the configured state. */
 	err = usbd_set_config_index(dev, sc->sc_config_index, 1);
 	if (err) {
-		printf("%s: failed to set configuration: %s\n",
-		    devname, usbd_errstr(err));
+		aprint_error_dev(self,
+		    "failed to set configuration: %s\n",
+		    usbd_errstr(err));
 		sc->sc_dying = 1;
 		goto error;
 	}
@@ -221,8 +213,8 @@ USB_ATTACH(ubsa)
 	cdesc = usbd_get_config_descriptor(sc->sc_udev);
 
 	if (cdesc == NULL) {
-		printf("%s: failed to get configuration descriptor\n",
-		    devname);
+		aprint_error_dev(self,
+		    "failed to get configuration descriptor\n");
 		sc->sc_dying = 1;
 		goto error;
 	}
@@ -244,13 +236,13 @@ USB_ATTACH(ubsa)
 	sc->sc_iface_number[0] = id->bInterfaceNumber;
 
 	/* initialize endpoints */
-	uca.bulkin = uca.bulkout = -1;
+	ucaa.ucaa_bulkin = ucaa.ucaa_bulkout = -1;
 
 	for (i = 0; i < id->bNumEndpoints; i++) {
 		ed = usbd_interface2endpoint_descriptor(sc->sc_iface[0], i);
 		if (ed == NULL) {
-			printf("%s: no endpoint descriptor for %d\n",
-		    		USBDEVNAME(sc->sc_dev), i);
+			aprint_error_dev(self,
+			     "no endpoint descriptor for %d\n", i);
 			break;
 		}
 
@@ -260,54 +252,53 @@ USB_ATTACH(ubsa)
 			sc->sc_isize = UGETW(ed->wMaxPacketSize);
 		} else if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN &&
 		    UE_GET_XFERTYPE(ed->bmAttributes) == UE_BULK) {
-			uca.bulkin = ed->bEndpointAddress;
-			uca.ibufsize = UGETW(ed->wMaxPacketSize);
+			ucaa.ucaa_bulkin = ed->bEndpointAddress;
+			ucaa.ucaa_ibufsize = UGETW(ed->wMaxPacketSize);
 		} else if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_OUT &&
 		    UE_GET_XFERTYPE(ed->bmAttributes) == UE_BULK) {
-			uca.bulkout = ed->bEndpointAddress;
-			uca.obufsize = UGETW(ed->wMaxPacketSize);
+			ucaa.ucaa_bulkout = ed->bEndpointAddress;
+			ucaa.ucaa_obufsize = UGETW(ed->wMaxPacketSize);
 		}
 	} /* end of Endpoint loop */
 
 	if (sc->sc_intr_number == -1) {
-		printf("%s: Could not find interrupt in\n", devname);
+		aprint_error_dev(self, "Could not find interrupt in\n");
 		sc->sc_dying = 1;
 		goto error;
 	}
 
-	if (uca.bulkin == -1) {
-		printf("%s: Could not find data bulk in\n", devname);
+	if (ucaa.ucaa_bulkin == -1) {
+		aprint_error_dev(self, "Could not find data bulk in\n");
 		sc->sc_dying = 1;
 		goto error;
 	}
 
-	if (uca.bulkout == -1) {
-		printf("%s: Could not find data bulk out\n", devname);
+	if (ucaa.ucaa_bulkout == -1) {
+		aprint_error_dev(self, "Could not find data bulk out\n");
 		sc->sc_dying = 1;
 		goto error;
 	}
 
-	uca.portno = 0;
+	ucaa.ucaa_portno = 0;
 	/* bulkin, bulkout set above */
-	uca.ibufsizepad = uca.ibufsize;
-	uca.opkthdrlen = 0;
-	uca.device = dev;
-	uca.iface = sc->sc_iface[0];
-	uca.methods = &ubsa_methods;
-	uca.arg = sc;
-	uca.info = NULL;
+	ucaa.ucaa_ibufsizepad = ucaa.ucaa_ibufsize;
+	ucaa.ucaa_opkthdrlen = 0;
+	ucaa.ucaa_device = dev;
+	ucaa.ucaa_iface = sc->sc_iface[0];
+	ucaa.ucaa_methods = &ubsa_methods;
+	ucaa.ucaa_arg = sc;
+	ucaa.ucaa_info = NULL;
 	DPRINTF(("ubsa: int#=%d, in = 0x%x, out = 0x%x, intr = 0x%x\n",
-    		i, uca.bulkin, uca.bulkout, sc->sc_intr_number));
-	sc->sc_subdevs[0] = config_found_sm_loc(self, "ucombus", NULL, &uca,
+	    i, ucaa.ucaa_bulkin, ucaa.ucaa_bulkout, sc->sc_intr_number));
+	sc->sc_subdevs[0] = config_found_sm_loc(self, "ucombus", NULL, &ucaa,
 				    ucomprint, ucomsubmatch);
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   USBDEV(sc->sc_dev));
+	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev, sc->sc_dev);
 
-	USB_ATTACH_SUCCESS_RETURN;
+	return;
 
 error:
-	USB_ATTACH_ERROR_RETURN;
+	return;
 }
 
 
@@ -325,9 +316,10 @@ ubsa_childdet(device_t self, device_t child)
 		sc->sc_subdevs[i] = NULL;
 }
 
-USB_DETACH(ubsa)
+int
+ubsa_detach(device_t self, int flags)
 {
-	USB_DETACH_START(ubsa, sc);
+	struct ubsa_softc *sc = device_private(self);
 	int i;
 	int rv = 0;
 
@@ -337,7 +329,7 @@ USB_DETACH(ubsa)
 	if (sc->sc_intr_pipe != NULL) {
 		usbd_abort_pipe(sc->sc_intr_pipe);
 		usbd_close_pipe(sc->sc_intr_pipe);
-		free(sc->sc_intr_buf, M_USBDEV);
+		kmem_free(sc->sc_intr_buf, sc->sc_isize);
 		sc->sc_intr_pipe = NULL;
 	}
 
@@ -347,31 +339,21 @@ USB_DETACH(ubsa)
 			rv |= config_detach(sc->sc_subdevs[i], flags);
 	}
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   USBDEV(sc->sc_dev));
+	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
 
 	return (rv);
 }
 
 int
-ubsa_activate(device_ptr_t self, enum devact act)
+ubsa_activate(device_t self, enum devact act)
 {
 	struct ubsa_softc *sc = device_private(self);
-	int rv = 0;
-	int i;
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
 	case DVACT_DEACTIVATE:
-		for (i = 0; i < sc->sc_numif; i++) {
-			if (sc->sc_subdevs[i] != NULL)
-				rv |= config_deactivate(sc->sc_subdevs[i]);
-		}
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (rv);
 }
-

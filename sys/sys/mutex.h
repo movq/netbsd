@@ -1,7 +1,7 @@
-/*	$NetBSD: mutex.h,v 1.14 2007/12/24 14:57:56 ad Exp $	*/
+/*	$NetBSD: mutex.h,v 1.22 2017/09/16 23:25:35 christos Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -135,9 +128,8 @@
  *	mutex_exit()
  *
  * Two additional stubs may be implemented that handle only the spinlock
- * case, primarily for the scheduler.  These should not be documented for
- * or used by device drivers.  __HAVE_SPIN_MUTEX_STUBS should be defined
- * if these are provided:
+ * case, primarily for the scheduler.  __HAVE_SPIN_MUTEX_STUBS should be
+ * defined if these are provided:
  *
  *	mutex_spin_enter()
  *	mutex_spin_exit()
@@ -168,7 +160,12 @@ typedef struct kmutex kmutex_t;
 
 #define	MUTEX_BIT_SPIN			0x01
 #define	MUTEX_BIT_WAITERS		0x02
-#define	MUTEX_BIT_DEBUG			0x04
+
+#if defined(LOCKDEBUG)
+#define	MUTEX_BIT_NODEBUG		0x04	/* LOCKDEBUG disabled */
+#else
+#define	MUTEX_BIT_NODEBUG		0x00	/* do nothing */
+#endif	/* LOCKDEBUG */
 
 #define	MUTEX_SPIN_IPL(mtx)		((mtx)->mtx_ipl)
 #define	MUTEX_SPIN_OLDSPL(ci)		((ci)->ci_mtx_oldspl)
@@ -206,8 +203,14 @@ void	mutex_spin_exit(kmutex_t *);
 
 int	mutex_tryenter(kmutex_t *);
 
-int	mutex_owned(kmutex_t *);
-lwp_t	*mutex_owner(kmutex_t *);
+int	mutex_owned(const kmutex_t *);
+int	mutex_ownable(const kmutex_t *);
+lwp_t	*mutex_owner(const kmutex_t *);
+
+void	mutex_obj_init(void);
+kmutex_t *mutex_obj_alloc(kmutex_type_t, int);
+void	mutex_obj_hold(kmutex_t *);
+bool	mutex_obj_free(kmutex_t *);
 
 #endif /* _KERNEL */
 

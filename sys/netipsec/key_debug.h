@@ -1,5 +1,5 @@
-/*	$NetBSD: key_debug.h,v 1.5 2007/07/07 18:38:23 degroote Exp $	*/
-/*	$FreeBSD: src/sys/netipsec/key_debug.h,v 1.1.4.1 2003/01/24 05:11:36 sam Exp $	*/
+/*	$NetBSD: key_debug.h,v 1.10 2018/04/19 08:27:38 maxv Exp $	*/
+/*	$FreeBSD: key_debug.h,v 1.1.4.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$KAME: key_debug.h,v 1.10 2001/08/05 08:37:52 itojun Exp $	*/
 
 /*
@@ -39,6 +39,7 @@
 #define KEYDEBUG_STAMP		0x00000001 /* path */
 #define KEYDEBUG_DATA		0x00000002 /* data */
 #define KEYDEBUG_DUMP		0x00000004 /* dump */
+#define KEYDEBUG_MATCH		0x00000008 /* match */
 
 #define KEYDEBUG_KEY		0x00000010 /* key processing */
 #define KEYDEBUG_ALG		0x00000020 /* ciph & auth algorithm */
@@ -54,16 +55,22 @@
 #define KEYDEBUG_IPSEC_DATA	(KEYDEBUG_IPSEC | KEYDEBUG_DATA)
 #define KEYDEBUG_IPSEC_DUMP	(KEYDEBUG_IPSEC | KEYDEBUG_DUMP)
 
-#define KEYDEBUG(lev,arg) \
-	do { if ((key_debug_level & (lev)) == (lev)) { arg; } } while (/*CONSTCOND*/ 0)
+#define KEYDEBUG_ON(lev)	((key_debug_level & (lev)) == (lev))
+
+#define KEYDEBUG_PRINTF(lev, fmt, ...)				\
+	do {							\
+		if (KEYDEBUG_ON((lev)))				\
+			log(LOG_DEBUG, "%s: " fmt, __func__,	\
+			    __VA_ARGS__);			\
+	} while (0)
 
 extern u_int32_t key_debug_level;
 #endif /*_KERNEL*/
 
 struct sadb_msg;
 struct sadb_ext;
-void kdebug_sadb (struct sadb_msg *);
-void kdebug_sadb_x_policy (struct sadb_ext *);
+void kdebug_sadb(const struct sadb_msg *);
+void kdebug_sadb_xpolicy(const char *, const struct sadb_ext *);
 
 #ifdef _KERNEL
 struct secpolicy;
@@ -72,18 +79,9 @@ struct secasindex;
 struct secasvar;
 struct secreplay;
 struct mbuf;
-void kdebug_secpolicy (struct secpolicy *);
-void kdebug_secpolicyindex (struct secpolicyindex *);
-void kdebug_secasindex (struct secasindex *);
-void kdebug_secasv (struct secasvar *);
-void kdebug_mbufhdr (struct mbuf *);
-void kdebug_mbuf (struct mbuf *);
+void kdebug_secpolicy(const struct secpolicy *);
+void kdebug_secpolicyindex(const char *, const struct secpolicyindex *);
+void kdebug_mbuf(const char *, const struct mbuf *);
 #endif /*_KERNEL*/
-
-struct sockaddr;
-void kdebug_sockaddr (struct sockaddr *);
-
-void ipsec_hexdump (char *, int);
-void ipsec_bindump (char *, int);
 
 #endif /* !_NETIPSEC_KEY_DEBUG_H_ */

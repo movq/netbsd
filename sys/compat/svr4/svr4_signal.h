@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_signal.h,v 1.30 2007/12/04 18:40:23 dsl Exp $	 */
+/*	$NetBSD: svr4_signal.h,v 1.32 2013/01/02 18:50:08 dsl Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -133,6 +126,7 @@ struct svr4_sigaltstack {
 #define SVR4_SS_DISABLE		0x00000002
 #define SVR4_SS_ALLBITS		0x00000003
 
+#ifdef _KERNEL
 extern const int native_to_svr4_signo[];
 extern const int svr4_to_native_signo[];
 void native_to_svr4_sigset(const sigset_t *, svr4_sigset_t *);
@@ -140,6 +134,7 @@ void svr4_to_native_sigset(const svr4_sigset_t *, sigset_t *);
 void native_to_svr4_sigaltstack(const struct sigaltstack *, struct svr4_sigaltstack *);
 void svr4_to_native_sigaltstack(const struct svr4_sigaltstack *, struct sigaltstack *);
 void svr4_sendsig(const struct ksiginfo *, const sigset_t *);
+#endif
 
 /* sys_context() function codes */
 #define	SVR4_GETCONTEXT		0

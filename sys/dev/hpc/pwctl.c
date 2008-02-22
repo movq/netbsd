@@ -1,4 +1,4 @@
-/*	$NetBSD: pwctl.c,v 1.17 2007/10/19 11:59:43 ad Exp $	*/
+/*	$NetBSD: pwctl.c,v 1.20 2012/10/27 17:18:17 chs Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pwctl.c,v 1.17 2007/10/19 11:59:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pwctl.c,v 1.20 2012/10/27 17:18:17 chs Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_pwctl.h"
@@ -70,7 +70,6 @@ int	pwctl_debug = PWCTLDEBUG_CONF;
 #endif
 
 struct pwctl_softc {
-	struct device sc_dev;
 	hpcio_chip_t sc_hc;
 	int sc_port;
 	long sc_id;
@@ -82,17 +81,17 @@ struct pwctl_softc {
 	int sc_initvalue;
 };
 
-static int	pwctl_match(struct device *, struct cfdata *, void *);
-static void	pwctl_attach(struct device *, struct device *, void *);
+static int	pwctl_match(device_t, cfdata_t, void *);
+static void	pwctl_attach(device_t, device_t, void *);
 static int	pwctl_hook(void *, int, long, void *);
 static int	pwctl_ghook(void *, int, long, void *);
 int	pwctl_hardpower(void *, int, long, void *);
 
-CFATTACH_DECL(pwctl, sizeof(struct pwctl_softc),
+CFATTACH_DECL_NEW(pwctl, sizeof(struct pwctl_softc),
     pwctl_match, pwctl_attach, NULL, NULL);
 
 int
-pwctl_match(struct device *parent, struct cfdata *match, void *aux)
+pwctl_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct hpcio_attach_args *haa = aux;
 	platid_mask_t mask;
@@ -108,13 +107,13 @@ pwctl_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-pwctl_attach(struct device *parent, struct device *self, void *aux)
+pwctl_attach(device_t parent, device_t self, void *aux)
 {
 	struct hpcio_attach_args *haa = aux;
 	int *loc;
 	struct pwctl_softc *sc = device_private(self);
 
-	loc = device_cfdata(&sc->sc_dev)->cf_loc;
+	loc = device_cfdata(self)->cf_loc;
 	sc->sc_hc = (*haa->haa_getchip)(haa->haa_sc, loc[HPCIOIFCF_IOCHIP]);
 	sc->sc_port = loc[HPCIOIFCF_PORT];
 	sc->sc_id = loc[HPCIOIFCF_ID];

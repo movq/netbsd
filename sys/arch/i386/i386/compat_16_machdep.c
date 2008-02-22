@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.14 2007/12/20 23:02:39 dsl Exp $	*/
+/*	$NetBSD: compat_16_machdep.c,v 1.30 2017/09/17 09:41:35 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,11 +30,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.14 2007/12/20 23:02:39 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.30 2017/09/17 09:41:35 maxv Exp $");
 
-#include "opt_vm86.h"
+#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
-#include "opt_compat_ibcs2.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,21 +42,16 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.14 2007/12/20 23:02:39 dsl E
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
-#ifdef VM86
-#include <machine/mcontext.h>
-#include <machine/vm86.h>
-#endif
 #include <uvm/uvm_extern.h>
-#include <uvm/uvm_page.h>
 
 #include <machine/pmap.h>
 #include <machine/vmparam.h>
+#include <x86/fpu.h>
 
-#if defined(COMPAT_16) || defined(COMPAT_IBCS2)
+#if defined(COMPAT_16)
 
 #include <compat/sys/signal.h>
 #include <compat/sys/signalvar.h>
@@ -100,35 +88,24 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 
 	/* Restore register context. */
 	tf = l->l_md.md_regs;
-#ifdef VM86
-	if (context.sc_eflags & PSL_VM) {
-		void syscall_vm86(struct trapframe *);
 
-		tf->tf_vm86_gs = context.sc_gs;
-		tf->tf_vm86_fs = context.sc_fs;
-		tf->tf_vm86_es = context.sc_es;
-		tf->tf_vm86_ds = context.sc_ds;
-		set_vflags(l, context.sc_eflags);
-		p->p_md.md_syscall = syscall_vm86;
-	} else
-#endif
-	{
-		/*
-		 * Check for security violations.  If we're returning to
-		 * protected mode, the CPU will validate the segment registers
-		 * automatically and generate a trap on violations.  We handle
-		 * the trap, rather than doing all of the checking here.
-		 */
-		if (((context.sc_eflags ^ tf->tf_eflags) & PSL_USERSTATIC) != 0 ||
-		    !USERMODE(context.sc_cs, context.sc_eflags))
-			return (EINVAL);
+	/*
+	 * Check for security violations.  If we're returning to
+	 * protected mode, the CPU will validate the segment registers
+	 * automatically and generate a trap on violations.  We handle
+	 * the trap, rather than doing all of the checking here.
+	 */
+	if (((context.sc_eflags ^ tf->tf_eflags) & PSL_USERSTATIC) != 0 ||
+	    !USERMODE(context.sc_cs))
+		return (EINVAL);
 
-		tf->tf_gs = context.sc_gs;
-		tf->tf_fs = context.sc_fs;
-		tf->tf_es = context.sc_es;
-		tf->tf_ds = context.sc_ds;
-		tf->tf_eflags = context.sc_eflags;
-	}
+	tf->tf_gs = context.sc_gs;
+	tf->tf_fs = context.sc_fs;
+	tf->tf_es = context.sc_es;
+	tf->tf_ds = context.sc_ds;
+	tf->tf_eflags &= ~PSL_USER;
+	tf->tf_eflags |= context.sc_eflags & PSL_USER;
+
 	tf->tf_edi = context.sc_edi;
 	tf->tf_esi = context.sc_esi;
 	tf->tf_ebp = context.sc_ebp;
@@ -142,14 +119,14 @@ compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigretur
 	tf->tf_ss = context.sc_ss;
 
 	/* Restore signal stack. */
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (context.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
 		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 	/* Restore signal mask. */
 	(void) sigprocmask1(l, SIG_SETMASK, &context.sc_mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }
@@ -204,23 +181,12 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_scp = &fp->sf_sc;
 
 	/* Save register context. */
-#ifdef VM86
-	if (tf->tf_eflags & PSL_VM) {
-		frame.sf_sc.sc_gs = tf->tf_vm86_gs;
-		frame.sf_sc.sc_fs = tf->tf_vm86_fs;
-		frame.sf_sc.sc_es = tf->tf_vm86_es;
-		frame.sf_sc.sc_ds = tf->tf_vm86_ds;
-		frame.sf_sc.sc_eflags = get_vflags(l);
-		(*p->p_emul->e_syscall_intern)(p);
-	} else
-#endif
-	{
-		frame.sf_sc.sc_gs = tf->tf_gs;
-		frame.sf_sc.sc_fs = tf->tf_fs;
-		frame.sf_sc.sc_es = tf->tf_es;
-		frame.sf_sc.sc_ds = tf->tf_ds;
-		frame.sf_sc.sc_eflags = tf->tf_eflags;
-	}
+	frame.sf_sc.sc_gs = tf->tf_gs;
+	frame.sf_sc.sc_fs = tf->tf_fs;
+	frame.sf_sc.sc_es = tf->tf_es;
+	frame.sf_sc.sc_ds = tf->tf_ds;
+	frame.sf_sc.sc_eflags = tf->tf_eflags;
+
 	frame.sf_sc.sc_edi = tf->tf_edi;
 	frame.sf_sc.sc_esi = tf->tf_esi;
 	frame.sf_sc.sc_ebp = tf->tf_ebp;
@@ -253,9 +219,9 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	sendsig_reset(l, sig);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -266,6 +232,7 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 		/* NOTREACHED */
 	}
 
+	fpu_save_area_reset(l);
 	buildcontext(l, sel, catcher, fp);
 
 	/* Remember that we're now on the signal stack. */
@@ -273,97 +240,3 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 }
 #endif
-
-#if defined(COMPAT_16) && defined(VM86)
-struct compat_16_vm86_kern {
-	struct sigcontext regs;
-	unsigned long ss_cpu_type;
-};
-
-struct compat_16_vm86_struct {
-	struct compat_16_vm86_kern substr;
-	unsigned long screen_bitmap;	/* not used/supported (yet) */
-	unsigned long flags;		/* not used/supported (yet) */
-	unsigned char int_byuser[32];	/* 256 bits each: pass control to user */
-	unsigned char int21_byuser[32];	/* otherwise, handle directly */
-};
-
-int
-compat_16_x86_vm86(struct lwp *l, char *args, register_t *retval)
-{
-	struct trapframe *tf = l->l_md.md_regs;
-	struct pcb *pcb = &l->l_addr->u_pcb;
-	struct compat_16_vm86_kern vm86s;
-	struct proc *p = l->l_proc;
-	int error;
-
-	error = copyin(args, &vm86s, sizeof(vm86s));
-	if (error)
-		return (error);
-
-	pcb->vm86_userp = (void *)(args +
-	    (offsetof(struct compat_16_vm86_struct, screen_bitmap)
-	    - offsetof(struct vm86_struct, screen_bitmap)));
-	printf("offsetting by %lu\n", (unsigned long)
-	    (offsetof(struct compat_16_vm86_struct, screen_bitmap)
-	    - offsetof(struct vm86_struct, screen_bitmap)));
-
-	/*
-	 * Keep mask of flags we simulate to simulate a particular type of
-	 * processor.
-	 */
-	switch (vm86s.ss_cpu_type) {
-	case VCPU_086:
-	case VCPU_186:
-	case VCPU_286:
-		pcb->vm86_flagmask = PSL_ID|PSL_AC|PSL_NT|PSL_IOPL;
-		break;
-	case VCPU_386:
-		pcb->vm86_flagmask = PSL_ID|PSL_AC;
-		break;
-	case VCPU_486:
-		pcb->vm86_flagmask = PSL_ID;
-		break;
-	case VCPU_586:
-		pcb->vm86_flagmask = 0;
-		break;
-	default:
-		return (EINVAL);
-	}
-
-#define DOVREG(reg) tf->tf_vm86_##reg = (u_short) vm86s.regs.sc_##reg
-#define DOREG(reg) tf->tf_##reg = (u_short) vm86s.regs.sc_##reg
-
-	DOVREG(ds);
-	DOVREG(es);
-	DOVREG(fs);
-	DOVREG(gs);
-	DOREG(edi);
-	DOREG(esi);
-	DOREG(ebp);
-	DOREG(eax);
-	DOREG(ebx);
-	DOREG(ecx);
-	DOREG(edx);
-	DOREG(eip);
-	DOREG(cs);
-	DOREG(esp);
-	DOREG(ss);
-
-#undef	DOVREG
-#undef	DOREG
-
-	mutex_enter(&p->p_smutex);
-
-	/* Going into vm86 mode jumps off the signal stack. */
-	l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-
-	mutex_exit(&p->p_smutex);
-
-	set_vflags(l, vm86s.regs.sc_eflags | PSL_VM);
-
-	return (EJUSTRETURN);
-}
-
-#endif
-

@@ -1,4 +1,4 @@
-/*	$NetBSD: consio.c,v 1.14 2006/07/01 05:55:34 mrg Exp $ */
+/*	$NetBSD: consio.c,v 1.17 2017/05/22 16:59:32 ragge Exp $ */
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -44,33 +39,33 @@
 
 #include "data.h"
 
-void setup __P((void));
+void setup(void);
 
-static void (*put_fp) __P((int))  = NULL;
-static int (*get_fp) __P((void)) = NULL;
-static int (*test_fp) __P((void)) = NULL;
+static void (*put_fp)(int)  = NULL;
+static int (*get_fp)(void) = NULL;
+static int (*test_fp)(void) = NULL;
 
-void pr_putchar __P((int c));	/* putchar() using mtpr/mfpr */
-int pr_getchar __P((void));
-int pr_testchar __P((void));
+void pr_putchar(int c);	/* putchar() using mtpr/mfpr */
+int pr_getchar(void);
+int pr_testchar(void);
 
-void rom_putchar __P((int c));	/* putchar() using ROM routines */
-int rom_getchar __P((void));
-int rom_testchar __P((void));
+void rom_putchar(int c);	/* putchar() using ROM routines */
+int rom_getchar(void);
+int rom_testchar(void);
 
 int rom_putc;		/* ROM-address of put-routine */
 int rom_getc;		/* ROM-address of get-routine */
 
 /* Pointer to KA630 console page, initialized by ka630_consinit */
-unsigned char  *ka630_conspage; 
+unsigned char  *ka630_conspage;
 
 /* Function that initializes things for KA630 ROM console I/O */
-void ka630_consinit __P((void));
+void ka630_consinit(void);
 
 /* Functions that use KA630 ROM for console I/O */
-void ka630_rom_putchar __P((int c));
-int ka630_rom_getchar __P((void));
-int ka630_rom_testchar __P((void));
+void ka630_rom_putchar(int c);
+int ka630_rom_getchar(void);
+int ka630_rom_testchar(void);
 
 /* Also added such a thing for KA53 - MK-991208 */
 unsigned char  *ka53_conspage;

@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.4 2007/03/26 23:08:29 hubertf Exp $	*/
+/*	$NetBSD: installboot.c,v 1.6 2017/02/12 18:21:50 maxv Exp $	*/
 
 #include <err.h>
 #include <fcntl.h>
@@ -7,7 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "../aout2bb/chksum.h"
+#include "../elf2bb/chksum.h"
 
 /* XXX Must be kept in sync with bbstart.s! */
 #define CMDLN_LOC 0x10
@@ -17,7 +17,7 @@ int main(int argc, char *argv[]);
 
 int main(int argc, char *argv[]){
 
-	char *line;
+	char *line = NULL;
 	char *progname;
 	char *bootnam, *devnam;
 	char *dline;

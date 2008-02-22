@@ -1,4 +1,6 @@
-/*-
+/*	$NetBSD: ieee80211_crypto_tkip.c,v 1.14 2018/01/19 07:57:50 maxv Exp $	*/
+
+/*
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
  *
@@ -34,7 +36,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_crypto_tkip.c,v 1.10 2005/08/08 18:46:35 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_tkip.c,v 1.7 2006/11/16 01:33:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_tkip.c,v 1.14 2018/01/19 07:57:50 maxv Exp $");
 #endif
 
 /*
@@ -42,11 +44,11 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_tkip.c,v 1.7 2006/11/16 01:33:40 ch
  *
  * Part of this module is derived from similar code in the Host
  * AP driver. The code is used with the consent of the author and
- * it's license is included below.
+ * its license is included below.
  */
 #include <sys/param.h>
-#include <sys/systm.h> 
-#include <sys/mbuf.h>   
+#include <sys/systm.h>
+#include <sys/mbuf.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 #include <sys/endian.h>
@@ -116,8 +118,7 @@ tkip_attach(struct ieee80211com *ic, struct ieee80211_key *k)
 {
 	struct tkip_ctx *ctx;
 
-	MALLOC(ctx, struct tkip_ctx *, sizeof(struct tkip_ctx),
-		M_DEVBUF, M_NOWAIT | M_ZERO);
+	ctx = malloc(sizeof(struct tkip_ctx), M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (ctx == NULL) {
 		ic->ic_stats.is_crypto_nomem++;
 		return NULL;
@@ -132,7 +133,7 @@ tkip_detach(struct ieee80211_key *k)
 {
 	struct tkip_ctx *ctx = k->wk_private;
 
-	FREE(ctx, M_DEVBUF);
+	free(ctx, M_DEVBUF);
 }
 
 static int
@@ -176,17 +177,9 @@ tkip_encap(struct ieee80211_key *k, struct mbuf *m, u_int8_t keyid)
 		ic->ic_stats.is_crypto_tkipcm++;
 		return 0;
 	}
-	hdrlen = ieee80211_hdrspace(ic, mtod(m, void *));
 
-	/*
-	 * Copy down 802.11 header and add the IV, KeyID, and ExtIV.
-	 */
-	M_PREPEND(m, tkip.ic_header, M_NOWAIT);
-	if (m == NULL)
-		return 0;
-	ivp = mtod(m, u_int8_t *);
-	memmove(ivp, ivp + tkip.ic_header, hdrlen);
-	ivp += hdrlen;
+	hdrlen = ieee80211_hdrspace(ic, mtod(m, void *));
+	ivp = mtod(m, u_int8_t *) + hdrlen;
 
 	ivp[0] = k->wk_keytsc >> 8;		/* TSC1 */
 	ivp[1] = (ivp[0] | 0x20) & 0x7f;	/* WEP seed */
@@ -337,7 +330,7 @@ tkip_demic(struct ieee80211_key *k, struct mbuf *m, int force)
 
 		ic->ic_stats.is_crypto_tkipdemic++;
 
-		michael_mic(ctx, k->wk_rxmic, 
+		michael_mic(ctx, k->wk_rxmic,
 			m, hdrlen, m->m_pkthdr.len - (hdrlen + tkip.ic_miclen),
 			mic);
 		m_copydata(m, m->m_pkthdr.len - tkip.ic_miclen,
@@ -803,6 +796,8 @@ michael_mic(struct tkip_ctx *ctx, const u8 *key,
 	u32 l, r;
 	const uint8_t *data;
 	u_int space;
+	uint8_t spill[4];
+	int nspill = 0;
 
 	michael_mic_hdr(mtod(m, struct ieee80211_frame *), hdr);
 
@@ -825,75 +820,49 @@ michael_mic(struct tkip_ctx *ctx, const u8 *key,
 	for (;;) {
 		if (space > data_len)
 			space = data_len;
+		if (nspill) {
+			int n = min(4 - nspill, space);
+			memcpy(spill + nspill, data, n);
+			nspill += n;
+			data += n;
+			space -= n;
+			data_len -= n;
+			if (nspill == 4) {
+				l ^= get_le32(spill);
+				michael_block(l, r);
+				nspill = 0;
+			} else
+				goto next;
+		}
 		/* collect 32-bit blocks from current buffer */
 		while (space >= sizeof(uint32_t)) {
 			l ^= get_le32(data);
 			michael_block(l, r);
-			data += sizeof(uint32_t), space -= sizeof(uint32_t);
+			data += sizeof(uint32_t);
+			space -= sizeof(uint32_t);
 			data_len -= sizeof(uint32_t);
 		}
-		if (data_len < sizeof(uint32_t))
+		if (space) {
+			memcpy(spill, data, space);
+			nspill = space;
+			data_len -= space;
+		}
+next:
+		if (!data_len)
 			break;
 		m = m->m_next;
-		if (m == NULL) {
-			IASSERT(0, ("out of data, data_len %zu\n", data_len));
-			break;
-		}
-		if (space != 0) {
-			const uint8_t *data_next;
-			/*
-			 * Block straddles buffers, split references.
-			 */
-			data_next = mtod(m, const uint8_t *);
-			IASSERT(m->m_len >= sizeof(uint32_t) - space,
-				("not enough data in following buffer, "
-				"m_len %u need %zu\n", m->m_len,
-				sizeof(uint32_t) - space));
-			switch (space) {
-			case 1:
-				l ^= get_le32_split(data[0], data_next[0],
-					data_next[1], data_next[2]);
-				data = data_next + 3;
-				space = m->m_len - 3;
-				break;
-			case 2:
-				l ^= get_le32_split(data[0], data[1],
-					data_next[0], data_next[1]);
-				data = data_next + 2;
-				space = m->m_len - 2;
-				break;
-			case 3:
-				l ^= get_le32_split(data[0], data[1],
-					data[2], data_next[0]);
-				data = data_next + 1;
-				space = m->m_len - 1;
-				break;
-			}
-			michael_block(l, r);
-			data_len -= sizeof(uint32_t);
-		} else {
-			/*
-			 * Setup for next buffer.
-			 */
-			data = mtod(m, const uint8_t *);
-			space = m->m_len;
-		}
+		KASSERT(m);
+		/*
+		 * Setup for next buffer.
+		 */
+		data = mtod(m, const uint8_t *);
+		space = m->m_len;
 	}
 	/* Last block and padding (0x5a, 4..7 x 0) */
-	switch (data_len) {
-	case 0:
-		l ^= get_le32_split(0x5a, 0, 0, 0);
-		break;
-	case 1:
-		l ^= get_le32_split(data[0], 0x5a, 0, 0);
-		break;
-	case 2:
-		l ^= get_le32_split(data[0], data[1], 0x5a, 0);
-		break;
-	case 3:
-		l ^= get_le32_split(data[0], data[1], data[2], 0x5a);
-		break;
-	}
+	spill[nspill++] = 0x5a;
+	for (; nspill < 4; nspill++)
+		spill[nspill] = 0;
+	l ^= get_le32(spill);
 	michael_block(l, r);
 	/* l ^= 0; */
 	michael_block(l, r);
@@ -918,17 +887,21 @@ tkip_encrypt(struct tkip_ctx *ctx, struct ieee80211_key *key,
 		ctx->tx_phase1_done = 1;
 	}
 	tkip_mixing_phase2(ctx->tx_rc4key, key->wk_key, ctx->tx_ttak,
-		(u16) key->wk_keytsc);
+		(u16)key->wk_keytsc);
 
 	wep_encrypt(ctx->tx_rc4key,
 		m, hdrlen + tkip.ic_header,
 		m->m_pkthdr.len - (hdrlen + tkip.ic_header),
 		icv);
-	(void) m_append(m, IEEE80211_WEP_CRCLEN, icv);	/* XXX check return */
+
+	if (!m_append(m, IEEE80211_WEP_CRCLEN, icv)) {
+		return 0;
+	}
 
 	key->wk_keytsc++;
 	if ((u16)(key->wk_keytsc) == 0)
 		ctx->tx_phase1_done = 0;
+
 	return 1;
 }
 
@@ -955,9 +928,8 @@ tkip_decrypt(struct tkip_ctx *ctx, struct ieee80211_key *key,
 	tkip_mixing_phase2(ctx->rx_rc4key, key->wk_key, ctx->rx_ttak, iv16);
 
 	/* NB: m is unstripped; deduct headers + ICV to get payload */
-	if (wep_decrypt(ctx->rx_rc4key,
-		m, hdrlen + tkip.ic_header,
-	        m->m_pkthdr.len - (hdrlen + tkip.ic_header + tkip.ic_trailer))) {
+	if (wep_decrypt(ctx->rx_rc4key, m, hdrlen + tkip.ic_header,
+	    m->m_pkthdr.len - (hdrlen + tkip.ic_header + tkip.ic_trailer))) {
 		if (iv32 != (u32)(key->wk_keyrsc >> 16)) {
 			/* Previously cached Phase1 result was already lost, so
 			 * it needs to be recalculated for the next packet. */
@@ -969,6 +941,7 @@ tkip_decrypt(struct tkip_ctx *ctx, struct ieee80211_key *key,
 		ctx->tc_ic->ic_stats.is_rx_tkipicv++;
 		return 0;
 	}
+
 	return 1;
 }
 

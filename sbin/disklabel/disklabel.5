@@ -1,4 +1,4 @@
-.\"	$NetBSD: disklabel.5,v 1.27 2006/02/25 01:55:00 christos Exp $
+.\"	$NetBSD: disklabel.5,v 1.30 2017/07/03 21:33:41 wiz Exp $
 .\"
 .\" Copyright (c) 1987, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"     @(#)disklabel.5.5	8.1 (Berkeley) 6/5/93
 .\"
-.Dd February 24, 2006
+.Dd September 11, 2016
 .Dt DISKLABEL 5
 .Os
 .Sh NAME
@@ -116,7 +116,7 @@ is
  * label can describe and the number of the "whole disk" (raw)
  * partition are machine dependent.
  */
-#include \*[Lt]machine/disklabel.h\*[Gt]
+#include <machine/disklabel.h>
 
 /*
  * The absolute maximum number of disk partitions allowed.
@@ -124,7 +124,7 @@ is
  * is \*[Le] DEV_BSIZE bytes long.  If MAXPARTITIONS is greater than this, beware.
  */
 #define MAXMAXPARTITIONS	22
-#if MAXPARTITIONS \*[Gt] MAXMAXPARTITIONS
+#if MAXPARTITIONS > MAXMAXPARTITIONS
 #warning beware: MAXPARTITIONS bigger than MAXMAXPARTITIONS
 #endif
 
@@ -404,8 +404,8 @@ struct partinfo {
 .Pp
 Disk specific ioctls are defined in
 .Pa sys/dkio.h .
-.Pp
 .Bd -literal
+.Pp
 /*
  * Disk-specific ioctls.
  */

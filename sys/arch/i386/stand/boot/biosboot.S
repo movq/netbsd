@@ -1,4 +1,4 @@
-/*	$NetBSD: biosboot.S,v 1.5 2005/12/11 12:17:47 christos Exp $	*/
+/*	$NetBSD: biosboot.S,v 1.8 2011/01/05 23:13:01 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,8 +37,8 @@
  *
  * On entry:
  * 	%dl			BIOS drive number
- *	%ebx			Sector number of netbsd partition
- *	%ds:%esi		Boot parameter block (patched by installboot)
+ *	%ecx:%ebx		Sector number of NetBSD partition
+ *	%ds:%si			Boot parameter block (patched by installboot)
  *	%cs			0x1000
  *	%ds, %es, %ss		All zero
  *	%sp			near 0xfffc
@@ -84,6 +77,8 @@ boot_start_1:
 	mov	%cs, %ax
 	mov	%ax, %es
 
+	movl	%ecx, %ebp		/* move LBA out of the way */
+
 	/* Grab boot_params patched into bootxx by installboot */
 	cmpl	$X86_BOOT_MAGIC_1,-4(%si)	/* sanity check ptr */
 	jne	2f
@@ -117,11 +112,17 @@ boot_start_1:
 	rep
 	stosl
 
-	and	$0xff, %edx
+	testb	$X86_BP_FLAGS_LBA64VALID, boot_params+4
+	jnz	1f
+	xorl	%ebp, %ebp		/* high part of LBA is not valid */
+1:
+
+	movzbl	%dl, %edx
+	push	%ebp			/* high 32 bits of first sector */
 	push	%ebx			/* first sector of bios partition */
 	push	%edx			/* bios disk */
 	call	_C_LABEL(boot2)		/* C bootstrap code */
-	add	$8, %esp
+	addl	$12, %esp
 	call	prot_to_real
 	.code16
 
@@ -139,7 +140,7 @@ ENTRY(_rtt)
 	call	prot_to_real
 	.code16
 loopstop:
-	movb	0x86, %ah		/* delay for about a second */
+	movb	$0x86, %ah		/* delay for about a second */
 	movw	$16, %cx
 	int	$0x15
 	int	$0x18			/* might be a boot fail entry */

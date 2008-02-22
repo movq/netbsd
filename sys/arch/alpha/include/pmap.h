@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.h,v 1.69 2008/01/02 11:48:21 ad Exp $ */
+/* $NetBSD: pmap.h,v 1.80 2018/05/19 20:04:41 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001, 2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* 
+/*
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -72,7 +65,7 @@
  *	@(#)pmap.h	8.1 (Berkeley) 6/10/93
  */
 
-/* 
+/*
  * Copyright (c) 1987 Carnegie-Mellon University
  *
  * This code is derived from software contributed to Berkeley by
@@ -148,22 +141,17 @@ struct pmap {
 	struct pmap_statistics	pm_stats;	/* pmap statistics */
 	unsigned long		pm_cpus;	/* mask of CPUs using pmap */
 	unsigned long		pm_needisync;	/* mask of CPUs needing isync */
-	struct pmap_asn_info	pm_asni[1];	/* ASN information */
+	struct pmap_asn_info	pm_asni[];	/* ASN information */
 			/*	variable length		*/
 };
-typedef struct pmap	*pmap_t;
 
 /*
- * Compute the sizeof of a pmap structure.  Subtract one because one
- * ASN info structure is already included in the pmap structure itself.
+ * Compute the sizeof of a pmap structure.
  */
 #define	PMAP_SIZEOF(x)							\
-	(ALIGN(sizeof(struct pmap) +					\
-	       (sizeof(struct pmap_asn_info) * ((x) - 1))))
+	(ALIGN(offsetof(struct pmap, pm_asni[(x)])))
 
 #define	PMAP_ASN_RESERVED	0	/* reserved for Lev1map users */
-
-extern struct pmap	kernel_pmap_store[];
 
 /*
  * For each struct vm_page, there is a list of all currently valid virtual
@@ -189,18 +177,21 @@ typedef struct pv_entry {
 
 #ifdef _KERNEL
 
-#ifndef _LKM
-#include "opt_dec_kn8ae.h"			/* XXX */
+#include <sys/atomic.h>
 
+#ifdef _KERNEL_OPT
+#include "opt_dec_kn8ae.h"			/* XXX */
 #if defined(DEC_KN8AE)
 #define	_PMAP_MAY_USE_PROM_CONSOLE
 #endif
+#else
+#define	_PMAP_MAY_USE_PROM_CONSOLE
+#endif
 
+#ifndef _LKM
 #if defined(MULTIPROCESSOR)
 struct cpu_info;
 struct trapframe;
-
-void	pmap_do_reactivate(struct cpu_info *, struct trapframe *);
 
 void	pmap_tlb_shootdown(pmap_t, vaddr_t, pt_entry_t, u_long *);
 void	pmap_tlb_shootnow(u_long);
@@ -217,8 +208,6 @@ void	pmap_do_tlb_shootdown(struct cpu_info *, struct trapframe *);
 #endif /* MULTIPROCESSOR */
 #endif /* _LKM */
 
-#define pmap_kernel()			(kernel_pmap_store)
- 
 #define	pmap_resident_count(pmap)	((pmap)->pm_stats.resident_count)
 #define	pmap_wired_count(pmap)		((pmap)->pm_stats.wired_count)
 
@@ -239,11 +228,24 @@ pmap_remove_all(struct pmap *pmap)
 #define	PMAP_STEAL_MEMORY		/* enable pmap_steal_memory() */
 #define	PMAP_GROWKERNEL			/* enable pmap_growkernel() */
 
+#define	PMAP_DIRECT
+#define	PMAP_DIRECT_MAP(pa)		ALPHA_PHYS_TO_K0SEG((pa))
+#define	PMAP_DIRECT_UNMAP(va)		ALPHA_K0SEG_TO_PHYS((va))
+
+static __inline int
+pmap_direct_process(paddr_t pa, voff_t pgoff, size_t len,
+    int (*process)(void *, size_t, void *), void *arg)
+{
+	vaddr_t va = PMAP_DIRECT_MAP(pa);
+
+	return process((void *)(va + pgoff), len, arg);
+}
+
 /*
  * Alternate mapping hooks for pool pages.  Avoids thrashing the TLB.
  */
-#define	PMAP_MAP_POOLPAGE(pa)		ALPHA_PHYS_TO_K0SEG((pa))
-#define	PMAP_UNMAP_POOLPAGE(va)		ALPHA_K0SEG_TO_PHYS((va))
+#define	PMAP_MAP_POOLPAGE(pa)		PMAP_DIRECT_MAP(pa)
+#define	PMAP_UNMAP_POOLPAGE(va)		PMAP_DIRECT_UNMAP(va)
 
 /*
  * Other hooks for the pool allocator.
@@ -295,10 +297,7 @@ static __inline pt_entry_t *pmap_l3pte(pmap_t, vaddr_t, pt_entry_t *);
 	(&(pmap)->pm_lev1map[l1pte_index((vaddr_t)(v))])
 
 static __inline pt_entry_t *
-pmap_l2pte(pmap, v, l1pte)
-	pmap_t pmap;
-	vaddr_t v;
-	pt_entry_t *l1pte;
+pmap_l2pte(pmap_t pmap, vaddr_t v, pt_entry_t *l1pte)
 {
 	pt_entry_t *lev2map;
 
@@ -313,10 +312,7 @@ pmap_l2pte(pmap, v, l1pte)
 }
 
 static __inline pt_entry_t *
-pmap_l3pte(pmap, v, l2pte)
-	pmap_t pmap;
-	vaddr_t v;
-	pt_entry_t *l2pte;
+pmap_l3pte(pmap_t pmap, vaddr_t v, pt_entry_t *l2pte)
 {
 	pt_entry_t *l1pte, *lev2map, *lev3map;
 
@@ -359,11 +355,26 @@ do {									\
 	u_long cpu_mask = (1UL << cpu_number());			\
 									\
 	if ((pmap)->pm_needisync & cpu_mask) {				\
-		atomic_clearbits_ulong(&(pmap)->pm_needisync,		\
-		    cpu_mask);						\
+		atomic_and_ulong(&(pmap)->pm_needisync,	~cpu_mask);	\
 		alpha_pal_imb();					\
 	}								\
 } while (0)
+
+/*
+ * pmap-specific data store in the vm_page structure.
+ */
+#define	__HAVE_VM_PAGE_MD
+struct vm_page_md {
+	struct pv_entry *pvh_list;		/* pv_entry list */
+	int pvh_attrs;				/* page attributes */
+	unsigned pvh_refcnt;
+};
+
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	(pg)->mdpage.pvh_list = NULL;					\
+	(pg)->mdpage.pvh_refcnt = 0;					\
+} while (/*CONSTCOND*/0)
 
 #endif /* _KERNEL */
 

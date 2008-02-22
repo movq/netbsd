@@ -1,4 +1,4 @@
-/*	$NetBSD: intio.c,v 1.12 2005/12/11 12:18:25 christos Exp $	*/
+/*	$NetBSD: intio.c,v 1.14 2011/06/06 16:52:18 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intio.c,v 1.12 2005/12/11 12:18:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intio.c,v 1.14 2011/06/06 16:52:18 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,13 +45,12 @@ __KERNEL_RCSID(0, "$NetBSD: intio.c,v 1.12 2005/12/11 12:18:25 christos Exp $");
 
 #include <next68k/dev/intiovar.h>
 
-int	intiomatch(struct device *, struct cfdata *, void *);
-void	intioattach(struct device *, struct device *, void *);
+int	intiomatch(device_t, cfdata_t, void *);
+void	intioattach(device_t, device_t, void *);
 int	intioprint(void *, const char *);
-int	intiosearch(struct device *, struct cfdata *,
-		    const int *, void *);
+int	intiosearch(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(intio, sizeof(struct device),
+CFATTACH_DECL_NEW(intio, 0,
     intiomatch, intioattach, NULL, NULL);
 
 #if 0
@@ -67,10 +59,10 @@ struct cfdriver intio_cd = {
 };
 #endif
 
-static int intio_attached = 0;
+static bool intio_attached;
 
 int
-intiomatch(struct device *parent, struct cfdata *match, void *aux)
+intiomatch(device_t parent, cfdata_t match, void *aux)
 {
 	/* Allow only one instance. */
 	if (intio_attached)
@@ -80,7 +72,7 @@ intiomatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-intioattach(struct device *parent, struct device *self, void *aux)
+intioattach(device_t parent, device_t self, void *aux)
 {
 
 	printf("\n");
@@ -88,7 +80,7 @@ intioattach(struct device *parent, struct device *self, void *aux)
 	/* Search for and attach children. */
 	config_search_ia(intiosearch, self, "intio", aux);
 
-	intio_attached = 1;
+	intio_attached = true;
 }
 
 int
@@ -103,8 +95,7 @@ intioprint(void *aux, const char *pnp)
 }
 
 int
-intiosearch(struct device *parent, struct cfdata *cf,
-	    const int *ldesc, void *aux)
+intiosearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args *mba = (struct mainbus_attach_args *) aux;
 	struct intio_attach_args ia;

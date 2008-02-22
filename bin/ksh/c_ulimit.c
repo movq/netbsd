@@ -1,4 +1,4 @@
-/*	$NetBSD: c_ulimit.c,v 1.8 2006/10/16 00:07:32 christos Exp $	*/
+/*	$NetBSD: c_ulimit.c,v 1.16 2017/06/30 03:43:57 kamil Exp $	*/
 
 /*
 	ulimit -- handle "ulimit" builtin
@@ -20,12 +20,13 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: c_ulimit.c,v 1.8 2006/10/16 00:07:32 christos Exp $");
+__RCSID("$NetBSD: c_ulimit.c,v 1.16 2017/06/30 03:43:57 kamil Exp $");
 #endif
 
+#include <sys/time.h>
+#include <time.h>
 
 #include "sh.h"
-#include "ksh_time.h"
 #ifdef HAVE_SYS_RESOURCE_H
 # include <sys/resource.h>
 #endif /* HAVE_SYS_RESOURCE_H */
@@ -100,6 +101,9 @@ c_ulimit(wp)
 #ifdef RLIMIT_NPROC
 		{ "processes", RLIMIT, RLIMIT_NPROC, RLIMIT_NPROC, 1, 'p' },
 #endif
+#ifdef RLIMIT_NTHR
+		{ "threads", RLIMIT, RLIMIT_NTHR, RLIMIT_NTHR, 1, 'r' },
+#endif
 #ifdef RLIMIT_VMEM
 		{ "vmemory(kbytes)", RLIMIT, RLIMIT_VMEM, RLIMIT_VMEM, 1024, 'v' },
 #else /* RLIMIT_VMEM */
@@ -110,9 +114,6 @@ c_ulimit(wp)
 #  ifdef UL_GETBREAK /* osf/1 */
 		{ "vmemory(maxaddr)", ULIMIT, UL_GETBREAK, -1, 1, 'v' },
 #  else /* UL_GETBREAK */
-#   ifdef UL_GETMAXBRK /* hpux */
-		{ "vmemory(maxaddr)", ULIMIT, UL_GETMAXBRK, -1, 1, 'v' },
-#   endif /* UL_GETMAXBRK */
 #  endif /* UL_GETBREAK */
 # endif /* UL_GMEMLIM */
 #endif /* RLIMIT_VMEM */
@@ -193,14 +194,18 @@ c_ulimit(wp)
 			    bi_errorf("invalid limit: %s", wp[0]);
 			    return 1;
 			}
-			val = rval * l->factor;
+			val = (u_long)rval * l->factor;
 		}
 	}
 	if (all) {
 		for (l = limits; l->name; l++) {
 #ifdef HAVE_SETRLIMIT
 			if (l->which == RLIMIT) {
-				getrlimit(l->gcmd, &limit);
+				if (getrlimit(l->gcmd, &limit) == -1) {
+					bi_errorf("can't get limit: %s",
+					    strerror(errno));
+					return 1;
+				}
 				if (how & SOFT)
 					val = limit.rlim_cur;
 				else if (how & HARD)
@@ -229,7 +234,10 @@ c_ulimit(wp)
 	}
 #ifdef HAVE_SETRLIMIT
 	if (l->which == RLIMIT) {
-		getrlimit(l->gcmd, &limit);
+		if (getrlimit(l->gcmd, &limit) == -1) {
+			bi_errorf("can't get limit: %s", strerror(errno));
+			return 1;
+		}
 		if (set) {
 			if (how & SOFT)
 				limit.rlim_cur = val;

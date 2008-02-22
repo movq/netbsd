@@ -1,4 +1,4 @@
-/*	$NetBSD: reentrant.h,v 1.12 2008/02/04 23:08:01 rtr Exp $	*/
+/*	$NetBSD: reentrant.h,v 1.20 2017/02/08 18:00:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -91,8 +84,6 @@
  *
  */
 
-#ifdef _REENTRANT
-
 /*
  * Abstract thread interface for thread-safe libraries.  These routines
  * will use stubs in libc if the application is not linked against the
@@ -131,6 +122,8 @@
 #define	once_t			pthread_once_t
 #define	ONCE_INITIALIZER	PTHREAD_ONCE_INIT
 
+#ifdef _REENTRANT
+
 #ifndef __LIBC_THREAD_STUBS
 
 __BEGIN_DECLS
@@ -160,7 +153,9 @@ int	__libc_cond_init(cond_t *, const condattr_t *);
 int	__libc_cond_signal(cond_t *);
 int	__libc_cond_broadcast(cond_t *);
 int	__libc_cond_wait(cond_t *, mutex_t *);
+#ifndef __LIBC12_SOURCE__
 int	__libc_cond_timedwait(cond_t *, mutex_t *, const struct timespec *);
+#endif
 int	__libc_cond_destroy(cond_t *);
 __END_DECLS
 
@@ -226,6 +221,56 @@ __END_DECLS
 #define	thr_enabled()		(__isthreaded)
 #define thr_setcancelstate(n, o) __libc_thr_setcancelstate((n),(o))
 #define thr_curcpu()		__libc_thr_curcpu()
+
+#else /* __LIBC_THREAD_STUBS */
+
+__BEGIN_DECLS
+void	__libc_thr_init_stub(void);
+
+int	__libc_mutex_init_stub(mutex_t *, const mutexattr_t *);
+int	__libc_mutex_lock_stub(mutex_t *);
+int	__libc_mutex_trylock_stub(mutex_t *);
+int	__libc_mutex_unlock_stub(mutex_t *);
+int	__libc_mutex_destroy_stub(mutex_t *);
+
+int	__libc_mutexattr_init_stub(mutexattr_t *); 
+int	__libc_mutexattr_destroy_stub(mutexattr_t *);
+int	__libc_mutexattr_settype_stub(mutexattr_t *, int);
+
+int	__libc_cond_init_stub(cond_t *, const condattr_t *);
+int	__libc_cond_signal_stub(cond_t *);
+int	__libc_cond_broadcast_stub(cond_t *);
+int	__libc_cond_wait_stub(cond_t *, mutex_t *);
+int	__libc_cond_timedwait_stub(cond_t *, mutex_t *,
+				   const struct timespec *);
+int	__libc_cond_destroy_stub(cond_t *);
+
+int	__libc_rwlock_init_stub(rwlock_t *, const rwlockattr_t *);
+int	__libc_rwlock_rdlock_stub(rwlock_t *);
+int	__libc_rwlock_wrlock_stub(rwlock_t *);
+int	__libc_rwlock_tryrdlock_stub(rwlock_t *);
+int	__libc_rwlock_trywrlock_stub(rwlock_t *);
+int	__libc_rwlock_unlock_stub(rwlock_t *);
+int	__libc_rwlock_destroy_stub(rwlock_t *);
+
+int	__libc_thr_keycreate_stub(thread_key_t *, void (*)(void *));
+int	__libc_thr_setspecific_stub(thread_key_t, const void *);
+void	*__libc_thr_getspecific_stub(thread_key_t);
+int	__libc_thr_keydelete_stub(thread_key_t);
+
+int	__libc_thr_once_stub(once_t *, void (*)(void));
+int	__libc_thr_sigsetmask_stub(int, const sigset_t *, sigset_t *);
+thr_t	__libc_thr_self_stub(void);
+int	__libc_thr_yield_stub(void);
+int	__libc_thr_create_stub(thr_t *, const thrattr_t *,
+	    void *(*)(void *), void *);
+void	__libc_thr_exit_stub(void *) __dead;
+int	*__libc_thr_errno_stub(void);
+int	__libc_thr_setcancelstate_stub(int, int *);
+int	__libc_thr_equal_stub(pthread_t, pthread_t);
+unsigned int	__libc_thr_curcpu_stub(void);
+__END_DECLS
+
 #endif /* __LIBC_THREAD_STUBS */
 
 #define	FLOCKFILE(fp)		__flockfile_internal(fp, 1)
@@ -233,39 +278,51 @@ __END_DECLS
 
 #else /* _REENTRANT */
 
-#define	mutex_init(m, a)
-#define	mutex_lock(m)
-#define	mutex_trylock(m)
-#define	mutex_unlock(m)
-#define	mutex_destroy(m)
+#define	mutex_init(m, a) __nothing
+#define	mutex_lock(m) __nothing
+#define	mutex_trylock(m) __nothing
+#define	mutex_unlock(m)	__nothing
+#define	mutex_destroy(m) __nothing
 
-#define	cond_init(c, t, a)
-#define	cond_signal(c)
-#define	cond_broadcast(c)
-#define	cond_wait(c, m)
-#define	cond_timedwait(c, m, t)
-#define	cond_destroy(c)
+#define	cond_init(c, t, a) __nothing
+#define	cond_signal(c) __nothing
+#define	cond_broadcast(c) __nothing
+#define	cond_wait(c, m) __nothing
+#define	cond_timedwait(c, m, t) __nothing
+#define	cond_destroy(c) __nothing
 
-#define	rwlock_init(l, a)
-#define	rwlock_rdlock(l)
-#define	rwlock_wrlock(l)
-#define	rwlock_tryrdlock(l)
-#define	rwlock_trywrlock(l)
-#define	rwlock_unlock(l)
-#define	rwlock_destroy(l)
+#define	rwlock_init(l, a) __nothing
+#define	rwlock_rdlock(l) __nothing
+#define	rwlock_wrlock(l) __nothing
+#define	rwlock_tryrdlock(l) __nothing
+#define	rwlock_trywrlock(l) __nothing
+#define	rwlock_unlock(l) __nothing
+#define	rwlock_destroy(l) __nothing
 
-#define	thr_keycreate(k, d)
-#define	thr_setspecific(k, p)
-#define	thr_getspecific(k)
-#define	thr_keydelete(k)
+#define	thr_keycreate(k, d) /*LINTED*/0
+#define	thr_setspecific(k, p) __nothing
+#define	thr_getspecific(k) /*LINTED*/0
+#define	thr_keydelete(k) __nothing
 
-#define	thr_once(o, f)
-#define	thr_sigsetmask(f, n, o)
-#define	thr_self()
-#define	thr_errno()
+#define	mutexattr_init(ma) __nothing
+#define	mutexattr_settype(ma, t) __nothing
+#define	mutexattr_destroy(ma) __nothing
+
+static inline int
+thr_once(once_t *once_control, void (*routine)(void))
+{
+	if (__predict_false(once_control->pto_done == 0)) {
+		(*routine)();
+		once_control->pto_done = 1;
+	}
+	return 0;
+}
+#define	thr_sigsetmask(f, n, o)	__nothing
+#define	thr_self() __nothing
+#define	thr_errno() __nothing
 #define	thr_curcpu()		((unsigned int)0)
 
-#define	FLOCKFILE(fp)		
-#define	FUNLOCKFILE(fp)		
+#define	FLOCKFILE(fp) __nothing
+#define	FUNLOCKFILE(fp) __nothing
 
 #endif /* _REENTRANT */

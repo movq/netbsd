@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,10 +27,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/param.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <limits.h>
+#include <unistd.h>
 
 #ifdef NEED_SETPROCTITLE
 
@@ -49,34 +45,60 @@ setproctitle(const char *fmt, ...)
 	va_list ap;
 	char buf[1024];
 	int len;
-	char *pname, *p;
-	char **args = __environ - 2;
+	char *pname, *p, *s;
+	/*
+	 * Assumes that stack grows down, and than environ has not bee
+	 * reallocated because of setenv() required growth. Stack layout:
+	 * 
+	 * argc
+	 * argv[0]
+	 * ...
+	 * argv[n]
+	 * NULL
+	 * environ[0]
+	 * ...
+	 * environ[n]
+	 * NULL
+	 */
 
+	/* 1 for the first entry, 1 for the NULL */
+	char **args = __environ - 2;
+#ifdef _SC_ARG_MAX
+	s = (char *)sysconf(_SC_ARG_MAX);
+#elif defined(ARG_MAX)
+	s = (char *)ARG_MAX;
+#elif defined(NCARGS)
+	s = (char *)NCARGS;
+#else
+	s = (char *)(256 * 1024);
+#endif
 	/*
 	 * Keep going while it looks like a pointer. We'll stop at argc,
-	 * Assume that we have < 10K args.
+	 * Which is a lot smaller than a pointer, limited by ARG_MAX
 	 */
-	while (*args > (char *)10240)
+	while (*args > s)
 		args--;
 
-	pname = *++args;
-	*(int *)((int *)pname - 1) = 1; /* *argc = 1; */
+	*(int *)args = 1; /* *argc = 1; */
+	pname = *++args;  /* pname = argv[0] */
  
+	/* In case we get called again */
+	if ((p = strchr(pname, ':')) != NULL)
+		*p = '\0';
+
 	/* Just the last component of the name */
 	if ((p = strrchr(pname, '/')) != NULL)
-		pname = p + 1;
-
-	/* In case we get called again */
-	if ((p = strrchr(pname, ':')) != NULL)
-		*p = '\0';
+		p = p + 1;
+	else
+		p = pname;
 
 	va_start(ap, fmt);
 	if (fmt != NULL) {
-		len = snprintf(buf, sizeof(buf), "%s: ", pname);
+		len = snprintf(buf, sizeof(buf), "%s: ", p);
 		if (len >= 0)
 			(void)vsnprintf(buf + len, sizeof(buf) - len, fmt, ap);
 	} else
-		(void)snprintf(buf, sizeof(buf), "%s", pname);
+		(void)snprintf(buf, sizeof(buf), "%s", p);
 	va_end(ap);
  
 	(void)strcpy(pname, buf);

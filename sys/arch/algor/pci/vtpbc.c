@@ -1,4 +1,4 @@
-/*	$NetBSD: vtpbc.c,v 1.6 2005/12/24 20:06:46 perry Exp $	*/
+/*	$NetBSD: vtpbc.c,v 1.10 2015/10/02 05:22:49 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,13 +37,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vtpbc.c,v 1.6 2005/12/24 20:06:46 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vtpbc.c,v 1.10 2015/10/02 05:22:49 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/locore.h>
 
@@ -74,7 +67,7 @@ const char *vtpbc_revs[] = {
 };
 const int vtpbc_nrevs = sizeof(vtpbc_revs) / sizeof(vtpbc_revs[0]);
 
-void	vtpbc_attach_hook(struct device *, struct device *,
+void	vtpbc_attach_hook(device_t, device_t,
 	    struct pcibus_attach_args *);
 int	vtpbc_bus_maxdevs(void *, int);
 pcitag_t vtpbc_make_tag(void *, int, int, int);
@@ -135,7 +128,7 @@ vtpbc_init(pci_chipset_tag_t pc, struct vtpbc_config *vt)
 }
 
 void
-vtpbc_attach_hook(struct device *parent, struct device *self,
+vtpbc_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 }
@@ -171,6 +164,9 @@ vtpbc_conf_addr(struct vtpbc_config *vt, pcitag_t tag, int offset,
     u_int32_t *cfgoff, u_int32_t *ad_low)
 {
 	int b, d, f;
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return (1);
 
 	vtpbc_decompose_tag(vt, tag, &b, &d, &f);
 

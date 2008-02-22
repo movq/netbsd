@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.25 2006/01/20 22:02:40 christos Exp $	*/
+/*	$NetBSD: asm.h,v 1.28 2013/09/12 15:36:17 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -138,7 +138,7 @@
  * 	CALL_DATUM(function, 2b)
  */
 
-#ifdef PIC
+#ifdef __PIC__
 
 #define	PIC_PLT(x)	x@PLT
 #define	PIC_GOT(x)	x@GOT
@@ -180,7 +180,7 @@
 #define CALL_DATUM_LOCAL(function, lpcs) \
 		.long	function - ((lpcs) + 4)
 
-#else  /* !PIC */
+#else  /* !__PIC__ */
 
 #define	PIC_PROLOGUE(label)
 #define	PIC_PROLOGUE_NOSAVE(label)
@@ -197,13 +197,13 @@
 #define CALL_DATUM_LOCAL(function, lpcs) \
 		.long	function
 
-#endif /* !PIC */
+#endif /* !__PIC__ */
 
 
 #define	ASMSTR		.asciz
 
 #ifdef __ELF__
-#define RCSID(x)	.section .ident; .asciz x; .previous
+#define RCSID(x)	.pushsection ".ident"; .asciz x; .popsection
 #else
 #define	RCSID(x)	.text; .asciz x
 #endif
@@ -227,7 +227,16 @@
 	.globl _C_LABEL(alias);						\
 	_C_LABEL(alias) = _C_LABEL(sym)
 
-#define	WARN_REFERENCES(_sym,_msg)				\
-	.section .gnu.warning._sym; .ascii _msg; .previous
+#ifdef __STDC__
+#define	WARN_REFERENCES(sym,msg)					\
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
+#else
+#define	WARN_REFERENCES(sym,msg)					\
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
+#endif /* __STDC__ */
 
 #endif /* !_SH3_ASM_H_ */

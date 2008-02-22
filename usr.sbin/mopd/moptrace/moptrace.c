@@ -1,4 +1,4 @@
-/*	$NetBSD: moptrace.c,v 1.9 2003/04/20 00:20:29 christos Exp $	*/
+/*	$NetBSD: moptrace.c,v 1.12 2016/06/08 01:19:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "port.h"
 #ifndef lint
-__RCSID("$NetBSD: moptrace.c,v 1.9 2003/04/20 00:20:29 christos Exp $");
+__RCSID("$NetBSD: moptrace.c,v 1.12 2016/06/08 01:19:05 christos Exp $");
 #endif
 
 /*
@@ -58,9 +53,8 @@ __RCSID("$NetBSD: moptrace.c,v 1.9 2003/04/20 00:20:29 christos Exp $");
  */
 struct if_info *iflist;
 
-void	Usage __P((void));
-int	main __P((int, char **));
-void	mopProcess __P((struct if_info *, u_char *));
+__dead static void	Usage(void);
+void	mopProcess(struct if_info *, u_char *);
 
 int     AllFlag = 0;		/* listen on "all" interfaces  */
 int     DebugFlag = 0;		/* print debugging messages    */
@@ -69,9 +63,7 @@ int	Not4Flag = 0;		/* Ignore MOP V4 messages      */
 int	promisc = 1;		/* Need promisc mode           */
 
 int
-main(argc, argv)
-	int     argc;
-	char  **argv;
+main(int argc, char  **argv)
 {
 	int     op;
 	char   *interface;
@@ -115,8 +107,8 @@ main(argc, argv)
 	return (0);
 }
 
-void
-Usage()
+static void
+Usage(void)
 {
 	(void) fprintf(stderr, "usage: %s -a [ -d ] [ -3 | -4 ]\n",
 		       getprogname());
@@ -129,9 +121,7 @@ Usage()
  * Process incoming packages.
  */
 void
-mopProcess(ii, pkt)
-	struct if_info *ii;
-	u_char *pkt;
+mopProcess(struct if_info *ii, u_char *pkt)
 {
 	int	 trans;
 

@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay_compat_usl.c,v 1.44 2008/01/14 21:17:00 drochner Exp $ */
+/* $NetBSD: wsdisplay_compat_usl.c,v 1.51 2017/11/04 01:52:09 christos Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,19 +27,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.44 2008/01/14 21:17:00 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.51 2017/11/04 01:52:09 christos Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_compat_freebsd.h"
 #include "opt_compat_netbsd.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/ioctl.h>
 #include <sys/kernel.h>
+#include <sys/kmem.h>
 #include <sys/proc.h>
 #include <sys/signalvar.h>
-#include <sys/malloc.h>
 #include <sys/errno.h>
 #include <sys/kauth.h>
 
@@ -99,9 +101,8 @@ usl_sync_init(struct wsscreen *scr, struct usl_syncdata **sdp,
 	struct usl_syncdata *sd;
 	int res;
 
-	sd = malloc(sizeof(struct usl_syncdata), M_DEVBUF, M_WAITOK);
-	if (!sd)
-		return (ENOMEM);
+	sd = kmem_alloc(sizeof(*sd), KM_SLEEP);
+
 	sd->s_scr = scr;
 	sd->s_proc = p;
 	sd->s_pid = p->p_pid;
@@ -115,7 +116,7 @@ usl_sync_init(struct wsscreen *scr, struct usl_syncdata **sdp,
 	callout_setfunc(&sd->s_detach_ch, usl_detachtimeout, sd);
 	res = wsscreen_attach_sync(scr, &usl_syncops, sd);
 	if (res) {
-		free(sd, M_DEVBUF);
+		kmem_free(sd, sizeof(*sd));
 		return (res);
 	}
 	*sdp = sd;
@@ -134,22 +135,22 @@ usl_sync_done(struct usl_syncdata *sd)
 		(*sd->s_callback)(sd->s_cbarg, ENXIO, 0);
 	}
 	wsscreen_detach_sync(sd->s_scr);
-	free(sd, M_DEVBUF);
+	kmem_free(sd, sizeof(*sd));
 }
 
 static int
 usl_sync_check_sig(struct usl_syncdata *sd, int sig, int flags)
 {
 
-	mutex_enter(&proclist_mutex);
-	if (sd->s_proc == p_find(sd->s_pid, PFIND_LOCKED)) {
+	mutex_enter(proc_lock);
+	if (sd->s_proc == proc_find(sd->s_pid)) {
 		sd->s_flags |= flags;
 		if (sig)
 			psignal(sd->s_proc, sig);
-		mutex_exit(&proclist_mutex);
+		mutex_exit(proc_lock);
 		return (1);
 	}
-	mutex_exit(&proclist_mutex);
+	mutex_exit(proc_lock);
 
 	printf("usl_sync_check: process %d died\n", sd->s_pid);
 	usl_sync_done(sd);
@@ -191,8 +192,10 @@ usl_detachproc(void *cookie, int waitok,
 	 */
 	sd->s_callback = callback;
 	sd->s_cbarg = cbarg;
-	if (!usl_sync_check_sig(sd, sd->s_relsig, SF_DETACHPENDING))	
-		return (0);
+	if (waitok) {
+		if (!usl_sync_check_sig(sd, sd->s_relsig, SF_DETACHPENDING))	
+			return (0);
+	}
 
 	callout_schedule(&sd->s_detach_ch, wscompat_usl_synctimeout * hz);
 	return (EAGAIN);
@@ -447,7 +450,7 @@ wsdisplay_usl_ioctl2(struct wsdisplay_softc *sc, struct wsscreen *scr,
 	     */
 	    case KDSETMODE:
 		req = WSDISPLAYIO_SMODE;
-#define d (*(int *)data)
+#define d (*(long *)data)
 		switch (d) {
 		    case KD_GRAPHICS:
 			intarg = WSDISPLAYIO_MODE_MAPPED;
@@ -463,7 +466,7 @@ wsdisplay_usl_ioctl2(struct wsdisplay_softc *sc, struct wsscreen *scr,
 		break;
 	    case KDMKTONE:
 		req = WSKBDIO_COMPLEXBELL;
-#define d (*(int *)data)
+#define d (*(long *)data)
 		if (d) {
 #define PCVT_SYSBEEPF	1193182
 			if (d >> 16) {
@@ -484,7 +487,7 @@ wsdisplay_usl_ioctl2(struct wsdisplay_softc *sc, struct wsscreen *scr,
 	    case KDSETLED:
 		req = WSKBDIO_SETLEDS;
 		intarg = 0;
-#define d (*(int *)data)
+#define d (*(long *)data)
 		if (d & LED_CAP)
 			intarg |= WSKBD_LED_CAPS;
 		if (d & LED_NUM)
@@ -501,7 +504,7 @@ wsdisplay_usl_ioctl2(struct wsdisplay_softc *sc, struct wsscreen *scr,
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	    case KDSKBMODE:
 		req = WSKBDIO_SETMODE;
-		switch (*(int *)data) {
+		switch (*(long *)data) {
 		    case K_RAW:
 			intarg = WSKBD_RAW;
 			break;

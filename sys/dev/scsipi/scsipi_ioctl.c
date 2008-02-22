@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_ioctl.c,v 1.64 2008/01/02 11:48:39 ad Exp $	*/
+/*	$NetBSD: scsipi_ioctl.c,v 1.69 2016/11/20 15:37:19 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,10 +37,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsipi_ioctl.c,v 1.64 2008/01/02 11:48:39 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsipi_ioctl.c,v 1.69 2016/11/20 15:37:19 mlelstv Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_compat_freebsd.h"
 #include "opt_compat_netbsd.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -77,29 +72,35 @@ struct scsi_ioctl {
 };
 
 static LIST_HEAD(, scsi_ioctl) si_head;
+static kmutex_t si_lock;
+
+void
+scsipi_ioctl_init(void)
+{
+
+	mutex_init(&si_lock, MUTEX_DEFAULT, IPL_BIO);
+}
 
 static struct scsi_ioctl *
 si_get(void)
 {
 	struct scsi_ioctl *si;
-	int s;
 
 	si = malloc(sizeof(struct scsi_ioctl), M_TEMP, M_WAITOK|M_ZERO);
 	buf_init(&si->si_bp);
-	s = splbio();
+	mutex_enter(&si_lock);
 	LIST_INSERT_HEAD(&si_head, si, si_list);
-	splx(s);
+	mutex_exit(&si_lock);
 	return (si);
 }
 
 static void
 si_free(struct scsi_ioctl *si)
 {
-	int s;
 
-	s = splbio();
+	mutex_enter(&si_lock);
 	LIST_REMOVE(si, si_list);
-	splx(s);
+	mutex_exit(&si_lock);
 	buf_destroy(&si->si_bp);
 	free(si, M_TEMP);
 }
@@ -108,13 +109,12 @@ static struct scsi_ioctl *
 si_find(struct buf *bp)
 {
 	struct scsi_ioctl *si;
-	int s;
 
-	s = splbio();
+	mutex_enter(&si_lock);
 	for (si = si_head.lh_first; si != 0; si = si->si_list.le_next)
 		if (bp == &si->si_bp)
 			break;
-	splx(s);
+	mutex_exit(&si_lock);
 	return (si);
 }
 
@@ -133,7 +133,6 @@ scsipi_user_done(struct scsipi_xfer *xs)
 	struct scsi_ioctl *si;
 	scsireq_t *screq;
 	struct scsipi_periph *periph = xs->xs_periph;
-	int s;
 
 	bp = xs->bp;
 #ifdef DIAGNOSTIC
@@ -205,9 +204,9 @@ scsipi_user_done(struct scsipi_xfer *xs)
 	}
 
 	if (xs->xs_control & XS_CTL_ASYNC) {
-		s = splbio();
+		mutex_enter(chan_mtx(periph->periph_channel));
 		scsipi_put_xs(xs);
-		splx(s);
+		mutex_exit(chan_mtx(periph->periph_channel));
 	}
 }
 
@@ -284,6 +283,8 @@ scsistrategy(struct buf *bp)
 	    screq->timeout, bp, flags | XS_CTL_USERCMD);
 
 done:
+	if (error)
+		bp->b_resid = bp->b_bcount;
 	bp->b_error = error;
 	biodone(bp);
 	return;
@@ -384,7 +385,7 @@ scsipi_do_ioctl(struct scsipi_periph *periph, dev_t dev, u_long cmd,
 	case SCIOCIDENTIFY: {
 		struct scsi_addr *sca = (struct scsi_addr *)addr;
 
-		switch (scsipi_periph_bustype(periph)) {
+		switch (SCSIPI_BUSTYPE_TYPE(scsipi_periph_bustype(periph))) {
 		case SCSIPI_BUSTYPE_SCSI:
 			sca->type = TYPE_SCSI;
 			sca->addr.scsi.scbus =
@@ -406,7 +407,7 @@ scsipi_do_ioctl(struct scsipi_periph *periph, dev_t dev, u_long cmd,
 	case OSCIOCIDENTIFY: {
 		struct oscsi_addr *sca = (struct oscsi_addr *)addr;
 
-		switch (scsipi_periph_bustype(periph)) {
+		switch (SCSIPI_BUSTYPE_TYPE(scsipi_periph_bustype(periph))) {
 		case SCSIPI_BUSTYPE_SCSI:
 			sca->scbus =
 			    device_unit(device_parent(periph->periph_dev));

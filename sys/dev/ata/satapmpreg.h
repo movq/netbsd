@@ -1,4 +1,4 @@
-/*	$NetBSD: satapmpreg.h,v 1.2 2005/12/11 12:21:14 christos Exp $	*/
+/*	$NetBSD: satapmpreg.h,v 1.6 2012/07/31 15:50:34 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
  */
 
 #define PMP_GSCR_ID	0x00		/* product and vendor id */
-#define 	PMP_ID_DEV(x)	((x) << 16)
+#define 	PMP_ID_DEV(x)	((x) >> 16)
 #define		PMP_ID_VEND(x)	((x) & 0xffff)
 #define PMP_GSCR_REV	0x01		/* revision */
 #define		PMP_REV_SPEC_10		0x02
@@ -85,5 +78,8 @@
  */
 #define PMPC_READ_PORT		0xe4
 #define PMPC_WRITE_PORT		0xe8
+
+/* max number of drives (last one being the PM itself */
+#define PMP_MAX_DRIVES		16
 
 #endif /* _DEV_ATA_SATAPMPREG_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.18 2008/01/20 13:43:38 yamt Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.45 2017/11/13 07:06:49 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -34,10 +34,11 @@
  *	@(#)vmparam.h	5.9 (Berkeley) 5/12/91
  */
 
-#ifndef _VMPARAM_H_
-#define _VMPARAM_H_
+#ifndef _X86_64_VMPARAM_H_
+#define _X86_64_VMPARAM_H_
 
-#include <sys/tree.h>
+#ifdef __x86_64__
+
 #include <sys/mutex.h>
 #ifdef _KERNEL_OPT
 #include "opt_xen.h"
@@ -56,6 +57,12 @@
 #define	PAGE_MASK	(PAGE_SIZE - 1)
 
 /*
+ * Default pager_map of 16MB is awfully small.  There is plenty
+ * of VA so use it.
+ */
+#define	PAGER_MAP_DEFAULT_SIZE (512 * 1024 * 1024)
+
+/*
  * USRSTACK is the top (end) of the user stack. Immediately above the
  * user stack resides the user structure, which is UPAGES long and contains
  * the kernel stack.
@@ -70,7 +77,7 @@
 /*
  * Virtual memory related constants, all in bytes
  */
-#define	MAXTSIZ		(64*1024*1024)		/* max text size */
+#define	MAXTSIZ		(256*1024*1024)		/* max text size */
 #ifndef DFLDSIZ
 #define	DFLDSIZ		(256*1024*1024)		/* initial data size limit */
 #endif
@@ -78,17 +85,17 @@
 #define	MAXDSIZ		(8L*1024*1024*1024)	/* max data size */
 #endif
 #ifndef	DFLSSIZ
-#define	DFLSSIZ		(2*1024*1024)		/* initial stack size limit */
+#define	DFLSSIZ		(4*1024*1024)		/* initial stack size limit */
 #endif
 #ifndef	MAXSSIZ
-#define	MAXSSIZ		(32*1024*1024)		/* max stack size */
+#define	MAXSSIZ		(128*1024*1024)		/* max stack size */
 #endif
 
 /*
  * 32bit memory related constants.
  */
 
-#define MAXTSIZ32	(64*1024*1024)
+#define MAXTSIZ32	(256*1024*1024)
 #ifndef DFLDSIZ32
 #define	DFLDSIZ32	(256*1024*1024)		/* initial data size limit */
 #endif
@@ -103,33 +110,28 @@
 #endif
 
 /*
- * Size of shared memory map
- */
-#ifndef SHMMAXPGS
-#define SHMMAXPGS	2048
-#endif
-
-/*
  * Size of User Raw I/O map
  */
 #define	USRIOSIZE 	300
 
-/*
- * Mach derived constants
- */
-
-/* user/kernel map constants */
+/* User map constants */
 #define VM_MIN_ADDRESS		0
-#define VM_MAXUSER_ADDRESS	0x00007f8000000000
+#define VM_MAXUSER_ADDRESS	(0x00007f8000000000 - PAGE_SIZE)
+#define VM_MAXUSER_ADDRESS32	0xfffff000
 #define VM_MAX_ADDRESS		0x00007fbfdfeff000
+
+/*
+ * Kernel map constants.
+ * MIN = VA_SIGN_NEG(L4_SLOT_KERN * NBPD_L4)
+ * MAX = MIN + NKL4_MAX_ENTRIES * NBPD_L4
+ */
 #ifndef XEN
 #define VM_MIN_KERNEL_ADDRESS	0xffff800000000000
-#else /* XEN */
+#define VM_MAX_KERNEL_ADDRESS	0xffffa00000000000
+#else
 #define VM_MIN_KERNEL_ADDRESS	0xffffa00000000000
+#define VM_MAX_KERNEL_ADDRESS	0xffffc00000000000
 #endif
-#define VM_MAX_KERNEL_ADDRESS	0xffffff8000000000
-
-#define VM_MAXUSER_ADDRESS32	0xfffff000
 
 /*
  * The address to which unspecified mapping requests default
@@ -138,38 +140,33 @@
 #include "opt_uvm.h"
 #endif
 #define __USE_TOPDOWN_VM
-#define VM_DEFAULT_ADDRESS(da, sz) \
-	trunc_page(USRSTACK - MAXSSIZ - (sz))
-#define VM_DEFAULT_ADDRESS32(da, sz) \
-	trunc_page(USRSTACK32 - MAXSSIZ32 - (sz))
 
-/*
- * XXXfvdl we have plenty of KVM now, remove this.
- */
-#ifndef VM_MAX_KERNEL_BUF
-#define VM_MAX_KERNEL_BUF	(384 * 1024 * 1024)
-#endif
+#define VM_DEFAULT_ADDRESS_BOTTOMUP(da, sz) \
+    round_page((vaddr_t)(da) + (vsize_t)maxdmap)
+
+#define VM_DEFAULT_ADDRESS32_TOPDOWN(da, sz) \
+	trunc_page(USRSTACK32 - MAXSSIZ32 - (sz) - user_stack_guard_size)
+#define VM_DEFAULT_ADDRESS32_BOTTOMUP(da, sz) \
+    round_page((vaddr_t)(da) + (vsize_t)MAXDSIZ32)
 
 /* virtual sizes (bytes) for various kernel submaps */
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)
 
-#define VM_PHYSSEG_MAX		10	/* 1 "hole" + 9 free lists */
+#define VM_PHYSSEG_MAX		32	/* 1 "hole" + 31 free lists */
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
-#define VM_PHYSSEG_NOADD		/* can't add RAM after vm_mem_init */
 
-#define	VM_NFREELIST		2
+#define	VM_NFREELIST		6
 #define	VM_FREELIST_DEFAULT	0
-#define	VM_FREELIST_FIRST16	1
+#define	VM_FREELIST_FIRST1T	1
+#define	VM_FREELIST_FIRST64G	2
+#define	VM_FREELIST_FIRST4G	3
+#define	VM_FREELIST_FIRST1G	4
+#define	VM_FREELIST_FIRST16	5
 
-#include <x86/pmap_pv.h>
+#else	/*	!__x86_64__	*/
 
-#define	__HAVE_VM_PAGE_MD
-#define	VM_MDPAGE_INIT(pg) \
-	memset(&(pg)->mdpage, 0, sizeof((pg)->mdpage)); \
-	PMAP_PAGE_INIT(&(pg)->mdpage.mp_pp)
+#include <i386/vmparam.h>
 
-struct vm_page_md {
-	struct pmap_page mp_pp;
-};
+#endif	/*	__x86_64__	*/
 
-#endif /* _VMPARAM_H_ */
+#endif /* _X86_64_VMPARAM_H_ */

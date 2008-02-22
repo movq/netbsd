@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile,v 1.7 2006/06/28 16:24:08 lukem Exp $
+#	$NetBSD: Makefile,v 1.22 2017/04/08 19:53:20 christos Exp $
 
 WARNS		?= 1
 NOMAN		=
+NOPIE		=
 
 BINMODE		= 444
 
@@ -12,6 +13,13 @@ LIBSADIR	= ${S}/lib/libsa
 SYSVBFSDIR	= ${S}/fs/sysvbfs
 EWS4800MIPSDIR	= ${.CURDIR}/../../ews4800mips
 DEVDIR		= ${.CURDIR}/../../dev
+
+# XXX SHOULD NOT NEED TO DEFINE THESE!
+LIBCRT0=
+LIBCRTI=
+LIBC=
+LIBCRTBEGIN=
+LIBCRTEND=
 
 .PATH:		${COMMON} ${LIBSADIR} ${SYSVBFSDIR}	\
 		${EWS4800MIPSDIR} ${SBDDIR} ${DEVDIR}
@@ -30,7 +38,7 @@ SRCS		+= boot_device.c floppy_2d.c floppy_2hd_ibmpc.c
 #SRCS		+= floppy_2hc.c
 SRCS		+= console.c cons_rom.c cons_fb.c cons_zskbd.c cons_zs.c
 BINKERNEL_C	= ${COMMON}/binkernel.c
-BINKERNEL_SIZE	= '2 * 1024 * 1024'
+BINKERNEL_SIZE	= '2 * 1024 * 1024 + 32 * 1024'
 BINKERNEL_O	= binkernel.o
 BINKERNEL_DUMMY_O= binkernel_dummy.o
 
@@ -43,13 +51,7 @@ SRCS		+= ga.c
 # ../../ews4800mips
 SRCS		+= pdinfo.c vtoc.c
 
-.PHONY: vers.c
-vers.c: version
-	${_MKTARGET_CREATE}
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version ${MACHINE}
-
-SRCS+=	vers.c
-CLEANFILES+= vers.c
+.include "${S}/conf/newvers_stand.mk"
 
 TEXTADDR	= 0xa0a00000
 LINKFLAGS	= -T ${S}/arch/mips/conf/stand.ldscript -Ttext ${TEXTADDR} \
@@ -68,7 +70,6 @@ CFLAGS		= ${FLAGS} -ffreestanding
 CPPFLAGS	+= -D_STANDALONE -DSUPPORT_BOOTP
 CPPFLAGS	+= -nostdinc -I${.OBJDIR} -I${.CURDIR} -I${COMMON} -I${S}
 CPPFLAGS	+= -D__daddr_t=int32_t
-CPPFLAGS	+= -DLIBSA_USE_MEMCPY -DLIBSA_USE_MEMSET
 #CPPFLAGS	+= -DBOOTP_DEBUG -DNETIF_DEBUG -DETHER_DEBUG -DNFS_DEBUG
 #CPPFLAGS	+= -DRPC_DEBUG -DRARP_DEBUG -DNET_DEBUG -DDEBUG -DPARANOID
 
@@ -77,7 +78,6 @@ CLEANFILES	+= ${PROG} ${PROG}.elf ${PROG}.coff ${PROG}.tmp ${PROG}.dis
 CLEANFILES	+= ${COFFHDRFIX}
 CLEANFILES	+= ${BOOT_KERNEL} ${BOOT_KERNEL}.elf ${BOOT_KERNEL}.tmp
 CLEANFILES	+= ${BOOT_KERNEL}.gz ${BOOT_KERNEL}.gz.tmp
-CLEANFILES	+= machine mips
 
 .include "${S}/lib/libkern/Makefile.inc"
 LIBKERN=	${KERNLIB}
@@ -85,7 +85,8 @@ LIBKERN=	${KERNLIB}
 .include "${S}/lib/libz/Makefile.inc"
 LIBZ=		${ZLIB}
 
-SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_USE_LOADFILE=yes
+CPPFLAGS+= -DLIBSA_ENABLE_LS_OP
+SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_USE_LOADFILE=yes SA_ENABLE_LS_OP=yes
 .include "${S}/lib/libsa/Makefile.inc"
 LIBSA=		${SALIB}
 
@@ -95,14 +96,7 @@ LIBS		= ${LIBSA} ${LIBZ} ${LIBKERN}
 coffhdrfix:	${COMMON}/coffhdrfix.c
 	${HOST_CC} -o ${COFFHDRFIX} ${COMMON}/coffhdrfix.c
 
-.if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN:
-	@[ -h machine ] || ln -s $S/arch/${MACHINE}/include machine
-	@[ -h mips ] || ln -s $S/arch/mips/include mips
-.NOPATH: machine mips
-.endif
-
-clean cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
@@ -127,6 +121,7 @@ ${PROG}: ${BINKERNEL_DUMMY_O} ${OBJS} ${LIBS}
 	mv ${PROG}.elf ${PROG}
 	ls -al ${PROG}
 
+.include <bsd.klinks.mk>
 .include <bsd.prog.mk>
 
 ${PROG}.coff:	${PROG}
@@ -140,6 +135,8 @@ ${BOOT_KERNEL}.gz: ${BINKERNEL_O} ${OBJS} ${LIBS}
 	    ${BINKERNEL_O}
 	mv ${BOOT_KERNEL}.elf ${BOOT_KERNEL}
 	${OBJDUMP} -h ${BOOT_KERNEL}
-	gzip -9c ${BOOT_KERNEL} > ${.TARGET}.tmp
+	${TOOL_GZIP_N} -9c ${BOOT_KERNEL} > ${.TARGET}.tmp
 	mv ${.TARGET}.tmp ${.TARGET}
 	ls -al ${.TARGET}
+
+COPTS.ustarfs.c+=	-fno-strict-aliasing

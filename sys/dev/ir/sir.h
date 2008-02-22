@@ -1,4 +1,4 @@
-/*	$NetBSD: sir.h,v 1.6 2006/02/16 20:17:19 perry Exp $	*/
+/*	$NetBSD: sir.h,v 1.8 2013/05/27 16:23:20 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,7 +42,39 @@
 
 #define SIR_ESC_BIT              0x20
 
+enum framefsmstate {
+	FSTATE_END_OF_FRAME,
+	FSTATE_START_OF_FRAME,
+	FSTATE_IN_DATA,
+	FSTATE_IN_END
+};
+
+enum frameresult {
+	FR_IDLE,
+	FR_INPROGRESS,
+	FR_FRAMEOK,
+	FR_FRAMEBADFCS,
+	FR_FRAMEMALFORMED,
+	FR_BUFFEROVERRUN
+};
+
+struct framestate {
+	u_int8_t *buffer;
+	size_t buflen;
+	size_t bufindex;
+
+	enum framefsmstate fsmstate;
+	u_int escaped;
+	u_int state_index;
+};
+
+#define deframe_isclear(fs) ((fs)->fsmstate == FSTATE_END_OF_FRAME)
+
 int irda_sir_frame(u_int8_t *, u_int, struct uio *, u_int);
+void deframe_init(struct framestate *, u_int8_t *, size_t);
+void deframe_clear(struct framestate *);
+enum frameresult deframe_process(struct framestate *, u_int8_t const **,
+				 size_t *);
 
 /*
  * CRC computation
@@ -62,3 +87,5 @@ extern const u_int16_t irda_fcstab[];
 static __inline u_int16_t updateFCS(u_int16_t fcs, int c) {
 	return (fcs >> 8) ^ irda_fcstab[(fcs^c) & 0xff];
 }
+
+u_int32_t crc_ccitt_16(u_int32_t, u_int8_t const*, size_t);

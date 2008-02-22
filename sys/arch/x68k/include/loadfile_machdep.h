@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.5 2006/01/25 18:28:28 christos Exp $	 */
+/*	$NetBSD: loadfile_machdep.h,v 1.8 2014/08/06 21:57:51 joerg Exp $	 */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,25 +33,45 @@
 #define	_X68K_LOADFILE_MACHDEP_H_
 
 #define BOOT_AOUT
+#ifndef BOOT_STAGE1
 #define BOOT_ELF32
+#endif
 
 #define LOAD_KERNEL	LOAD_ALL
 #define COUNT_KERNEL	COUNT_ALL
 
 #ifdef _STANDALONE
 
+#ifndef BOOT_STAGE1
 #define LOADADDR(a)		((a) + offset)
 #define ALIGNENTRY(a)		0
 #define READ(f, b, c)		pread((f), (void *)LOADADDR(b), (c))
 #define BCOPY(s, d, c)		vpbcopy((s), (void *)LOADADDR(d), (c))
 #define BZERO(d, c)		pbzero((void *)LOADADDR(d), (c))
-#define	WARN(a)			(void)(printf a, \
-				    printf((errno ? ": %s\n" : "\n"), \
-				    strerror(errno)))
+#define	WARN(a)			do { \
+					(void)printf a; \
+					if (errno) \
+						(void)printf(": %s\n", \
+						             strerror(errno)); \
+					else \
+						(void)printf("\n"); \
+				} while(/* CONSTCOND */0)
 #define PROGRESS(a)		(void) printf a
 #define ALLOC(a)		alloc(a)
 #define DEALLOC(a, b)		dealloc(a, b)
-#define OKMAGIC(a)		((a) == NMAGIC)
+#define OKMAGIC(a)		(((a) == NMAGIC) || ((a) == OMAGIC))
+#else
+#define LOADADDR(a)		((a) + offset)
+#define ALIGNENTRY(a)		0
+#define READ(f, b, c)		pread((f), (void *)LOADADDR(b), (c))
+#define BCOPY(s, d, c)		vpbcopy((s), (void *)LOADADDR(d), (c))
+#define BZERO(d, c)		pbzero((void *)LOADADDR(d), (c))
+#define WARN(a)			/* nothing */
+#define PROGRESS(a)		/* nothing */
+#define ALLOC(a)		alloc(a)
+#define DEALLOC(a, b)		dealloc(a, b)
+#define OKMAGIC(a)		(((a) == NMAGIC) || ((a) == OMAGIC))
+#endif
 
 #define	vpbcopy bcopy
 #define	pbzero  bzero

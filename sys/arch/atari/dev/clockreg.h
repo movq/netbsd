@@ -1,4 +1,4 @@
-/*	$NetBSD: clockreg.h,v 1.5 2001/04/24 06:27:58 leo Exp $	*/
+/*	$NetBSD: clockreg.h,v 1.7 2014/11/17 02:15:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -61,10 +56,6 @@ struct rtc {
 /*
  * Some useful constants/macros
  */
-#define	is_leap(x)		(!(x % 4) && ((x % 100) || !(x % 1000)))
 #define	range_test(n, l, h)	((n) < (l) || (n) > (h))
-#define	SECS_DAY		86400L
-#define	SECS_HOUR		3600L
 #define	GEMSTARTOFTIME		((machineid & ATARI_CLKBROKEN) ? 1970 : 1968)
-#define	BSDSTARTOFTIME		1970
 #endif /* _CLOCKREG_H */

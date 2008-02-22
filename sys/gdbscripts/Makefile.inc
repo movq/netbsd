@@ -1,3 +1,3 @@
-#	$NetBSD: Makefile.inc,v 1.4 2008/02/20 21:01:23 ad Exp $
+#	$NetBSD: Makefile.inc,v 1.6 2016/05/11 10:39:31 skrll Exp $
 
-SYS_GDBINIT=	bdump cpus kdump lwps msgbuf pgrpdump procs vchain vdump
+SYS_GDBINIT=	bdump cpus kdump kernhist lwps module msgbuf pgrpdump procs vchain vdump

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sf_pci.c,v 1.13 2007/10/19 12:00:47 ad Exp $	*/
+/*	$NetBSD: if_sf_pci.c,v 1.21 2016/07/07 06:55:41 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sf_pci.c,v 1.13 2007/10/19 12:00:47 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sf_pci.c,v 1.21 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,10 +71,10 @@ struct sf_pci_softc {
 	void	*sc_ih;			/* interrupt handle */
 };
 
-static int	sf_pci_match(struct device *, struct cfdata *, void *);
-static void	sf_pci_attach(struct device *, struct device *, void *);
+static int	sf_pci_match(device_t, cfdata_t, void *);
+static void	sf_pci_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(sf_pci, sizeof(struct sf_pci_softc),
+CFATTACH_DECL_NEW(sf_pci, sizeof(struct sf_pci_softc),
     sf_pci_match, sf_pci_attach, NULL, NULL);
 
 struct sf_pci_product {
@@ -160,8 +153,7 @@ sf_pci_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-sf_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+sf_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -172,9 +164,9 @@ sf_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-sf_pci_attach(struct device *parent, struct device *self, void *aux)
+sf_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct sf_pci_softc *psc = (void *) self;
+	struct sf_pci_softc *psc = device_private(self);
 	struct sf_softc *sc = &psc->sc_starfire;
 	struct pci_attach_args *pa = aux;
 	pci_intr_handle_t ih;
@@ -184,7 +176,9 @@ sf_pci_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_handle_t ioh, memh;
 	pcireg_t reg;
 	int error, ioh_valid, memh_valid;
+	char intrbuf[PCI_INTRSTR_LEN];
 
+	sc->sc_dev = self;
 	spp = sf_pci_lookup(pa);
 	if (spp == NULL) {
 		printf("\n");
@@ -194,10 +188,9 @@ sf_pci_attach(struct device *parent, struct device *self, void *aux)
 	printf(": %s, rev. %d\n", spp->spp_name, PCI_REVISION(pa->pa_class));
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
-	    NULL)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
-		    error);
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self, NULL)) &&
+	    error != EOPNOTSUPP) {
+		aprint_error_dev(self, "cannot activate %d\n", error);
 		return;
 	}
 
@@ -218,8 +211,7 @@ sf_pci_attach(struct device *parent, struct device *self, void *aux)
 	ioh_valid = (pci_mapreg_map(pa,
 	    (reg == (PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_64BIT)) ?
 		SF_PCI_IOBA : SF_PCI_IOBA - 0x04,
-	    PCI_MAPREG_TYPE_IO, 0,
-	    &iot, &ioh, NULL, NULL) == 0);
+	    PCI_MAPREG_TYPE_IO, 0, &iot, &ioh, NULL, NULL) == 0);
 
 	if (memh_valid) {
 		sc->sc_st = memt;
@@ -230,8 +222,7 @@ sf_pci_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_sh = ioh;
 		sc->sc_iomapped = 1;
 	} else {
-		printf("%s: unable to map device registers\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map device registers\n");
 		return;
 	}
 
@@ -246,20 +237,19 @@ sf_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: unable to map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pa->pa_pc, ih);
+	intrstr = pci_intr_string(pa->pa_pc, ih, intrbuf, sizeof(intrbuf));
 	psc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_NET, sf_intr, sc);
 	if (psc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Finish off the attach.

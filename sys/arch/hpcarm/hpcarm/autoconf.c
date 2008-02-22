@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.16 2008/02/12 17:30:57 joerg Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.23 2017/06/16 18:17:41 jdolecek Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -36,28 +36,34 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2008/02/12 17:30:57 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.23 2017/06/16 18:17:41 jdolecek Exp $");
 
 #include "opt_md.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/reboot.h>
-#include <sys/disklabel.h>
-#include <sys/device.h>
 #include <sys/conf.h>
+#include <sys/device.h>
+#include <sys/disklabel.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
+#include <sys/reboot.h>
+
+#include <uvm/uvm_extern.h>
+
+#include <arm/arm32/machdep.h>
 
 #include <machine/bootconfig.h>
 #include <machine/config_hook.h>
-#include <machine/intr.h>
 
+#include "opt_cputypes.h"
+#if defined(CPU_SA1100) || defined(CPU_SA1110)
 #include "sacom.h"
+#endif
 
 extern dev_t dumpdev;
 
-void dumpconf(void);
 void isa_intr_init(void);
 
 #ifndef MEMORY_DISK_IS_ROOT
@@ -123,9 +129,9 @@ cpu_rootconf(void)
 	set_root_device();
 
 	printf("boot device: %s\n",
-	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
+	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
 #endif
-	setroot(booted_device, booted_partition);
+	rootconf();
 }
 
 
@@ -162,21 +168,18 @@ cpu_configure(void)
 		panic("configure: mainbus not configured");
 
 	/* Debugging information */
-#ifdef DEBUG
-	printf("ipl_bio=%08x ipl_net=%08x ipl_tty=%08x ipl_vm=%08x\n",
-	    imask[IPL_BIO], imask[IPL_NET], imask[IPL_TTY],
-	    imask[IPL_VM]);
-	printf("ipl_audio=%08x ipl_imp=%08x ipl_high=%08x ipl_serial=%08x\n",
-	    imask[IPL_AUDIO], imask[IPL_CLOCK], imask[IPL_HIGH],
-	    imask[IPL_SERIAL]);
+#if defined(DIAGNOSTIC)
+#if defined(CPU_SA1100) || defined(CPU_SA1110)
+	dump_spl_masks();
 #endif
+#endif	/* DIAGNOSTIC */
 
 	/* Time to start taking interrupts so lets open the flood gates .... */
 	(void)spl0();
 }
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
 }
 
@@ -187,14 +190,20 @@ device_register(struct device *dev, void *aux)
  * known algorithm unless we see a pressing need otherwise.
  */
 
+#include "biconsdev.h"
+
 #include <dev/cons.h>
 
-cons_decl(com);   
 cons_decl(sacom);
+#define biconscnpollc	nullcnpollc
+cons_decl(bicons);   
 
 struct consdev constab[] = {
 #if (NSACOM > 0)
 	cons_init(sacom),
+#endif
+#if (NBICONSDEV > 0)
+	cons_init(bicons),
 #endif
 	{ NULL },
 };

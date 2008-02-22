@@ -1,4 +1,4 @@
-/*	$NetBSD: null.h,v 1.17 2005/12/11 12:24:51 christos Exp $	*/
+/*	$NetBSD: null.h,v 1.20 2017/04/11 07:51:37 hannken Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -68,6 +68,9 @@
  *	@(#)null.h	8.2 (Berkeley) 1/21/94
  */
 
+#ifndef _MISCFS_NULLFS_H_
+#define _MISCFS_NULLFS_H_
+
 #include <miscfs/genfs/layer.h>
 
 struct null_args {
@@ -80,7 +83,6 @@ struct null_args {
 struct null_mount {
 	struct	layer_mount	lm;	/* generic layerfs mount stuff */
 };
-#define	nullm_vfs		lm.layerm_vfs
 #define	nullm_rootvp		lm.layerm_rootvp
 #define	nullm_export		lm.layerm_export
 #define	nullm_flags		lm.layerm_flags
@@ -104,25 +106,12 @@ struct null_node {
 #define	null_vnode	ln.layer_vnode
 #define	null_flags	ln.layer_flags
 
-int	null_node_create(struct mount *, struct vnode *,
-	    struct vnode **);
-
 #define	MOUNTTONULLMOUNT(mp) ((struct null_mount *)((mp)->mnt_data))
-#define	VTONULL(vp) ((struct null_node *)(vp)->v_data)
-#define	NULLTOV(xp) ((xp)->null_vnode)
-#ifdef NULLFS_DIAGNOSTIC
-struct vnode *layer_checkvp(struct vnode *, char *, int);
-#define	NULLVPTOLOWERVP(vp) layer_checkvp((vp), __FILE__, __LINE__)
-#else
-#define	NULLVPTOLOWERVP(vp) (VTONULL(vp)->null_lowervp)
-#endif
 
 extern int (**null_vnodeop_p)(void *);
 extern struct vfsops nullfs_vfsops;
 
 void nullfs_init(void);
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_null_setup);
-#endif /* SYSCTL_SETUP_PROTO */
 #endif /* _KERNEL */
+#endif /* _MISCFS_NULLFS_H_ */

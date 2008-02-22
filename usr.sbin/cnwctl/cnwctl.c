@@ -1,4 +1,4 @@
-/*	$NetBSD: cnwctl.c,v 1.6 2001/08/18 17:10:04 ad Exp $	*/
+/*	$NetBSD: cnwctl.c,v 1.8 2013/10/19 17:05:58 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Berkeley Software Design, Inc.
@@ -60,7 +60,8 @@ int
 main(int argc, char **argv)
 {
 	int c, domain, i, key, rate, sflag, Sflag, skt;
-	char *e, *interface;
+	const char *interface;
+	char *e;
 	struct ifreq ifr;
         struct cnwistats cnwis, onwis;
         struct cnwstatus cnws;
@@ -209,8 +210,10 @@ main(int argc, char **argv)
 		    cnws.data[0x58]);
 		printf("      0x%02x mhs\n",
 		    cnws.data[0x6b]);
-		printf(" %04x %04x revision\n",
-		    *(u_short *)&cnws.data[0x66], *(u_short *)&cnws.data[0x68]);
+		u_short x, y;
+		memcpy(&x, &cnws.data[0x66], sizeof(x));
+		memcpy(&y, &cnws.data[0x68], sizeof(y));
+		printf(" %04x %04x revision\n", x, y);
 		printf("        %c%c id\n",
 		    cnws.data[0x6e], cnws.data[0x6f]);
 	}

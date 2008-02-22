@@ -1,9 +1,11 @@
-# $NetBSD: Makefile,v 1.10 2002/07/08 22:17:47 agc Exp $
+# $NetBSD: Makefile,v 1.12 2009/04/22 15:23:09 lukem Exp $
 #
+
+WARNS?=	1	# XXX: -Wsign-compare -Wcast-qual
+
 .include <bsd.own.mk>
 
 CPPFLAGS+= -DEXTENSIONS -DPW_MKDB_ARGC=2
-WARNS= 3
 
 PROG= user
 SRCS+= user.c main.c
@@ -26,9 +28,11 @@ MLINKS=	useradd.8 adduser.8
 # creates it
 default-group:
 	@ln -fs ${.OBJDIR}/user ${.OBJDIR}/group;			\
-	defgrp=`${.OBJDIR}/user add -D | awk '/^group/ { print $$2 }'`;	\
+	defgrp=`${.OBJDIR}/user add -D |				\
+		${TOOL_AWK} '/^group/ { print $$2 }'`;			\
 	if ${.OBJDIR}/group info -e $$defgrp; then			\
-		defgid=`${.OBJDIR}/group info $$defgrp | awk '/^gid/ { print $$2 }'`; \
+		defgid=`${.OBJDIR}/group info $$defgrp |		\
+			${TOOL_AWK} '/^gid/ { print $$2 }'`;		\
 	else								\
 		defgid=99;						\
 		while [ $$defgid -gt 0 ]; do				\

@@ -1,4 +1,4 @@
-/* $NetBSD: sysarch.h,v 1.12 2007/03/04 05:59:11 christos Exp $ */
+/* $NetBSD: sysarch.h,v 1.20 2012/02/06 02:14:13 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 #ifndef _ALPHA_SYSARCH_H_
 #define _ALPHA_SYSARCH_H_
 
-#include <machine/bus.h>
+#include <machine/bus_user.h>
 #include <machine/ieeefp.h>
 
 /*
@@ -85,7 +78,7 @@ struct alpha_pci_conf_readwrite_args {
 	u_int device;
 	u_int function;
 	u_int reg;
-	u_int32_t val;
+	uint32_t val;
 };
 
 #ifdef _KERNEL
@@ -112,8 +105,8 @@ void	*alpha_pci_mem_map(bus_addr_t, bus_size_t, int,
 void	alpha_pci_mem_unmap(struct alpha_bus_space_translation *,
 	    void *addr, bus_size_t);
 
-u_int32_t alpha_pci_conf_read(u_int, u_int, u_int, u_int);
-void	alpha_pci_conf_write(u_int, u_int, u_int, u_int, u_int32_t);
+uint32_t alpha_pci_conf_read(u_int, u_int, u_int, u_int);
+void	alpha_pci_conf_write(u_int, u_int, u_int, u_int, uint32_t);
 
 int	sysarch(int, void *);
 __END_DECLS

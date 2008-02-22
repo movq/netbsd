@@ -1,4 +1,4 @@
-#	$NetBSD: install.md,v 1.25 2006/01/18 13:39:05 is Exp $
+#	$NetBSD: install.md,v 1.28 2017/08/15 12:07:23 mlelstv Exp $
 #
 #
 # Copyright (c) 1996,2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -97,8 +90,10 @@ md_installboot() {
 		getresp "y"
 		case "$resp" in
 			y*|Y*)
+				echo -n "Boot command? [netbsd -ASn2] "
+				getresp "netbsd -ASn2"
 				echo "Installing boot block..."
-				chroot /mnt /usr/sbin/installboot /dev/r${1}a /usr/mdec/bootxx_ffs
+				chroot /mnt /usr/sbin/installboot -o command="$resp" /dev/r${1}a /usr/mdec/bootxx_ffs
 				cp -p /mnt/usr/mdec/boot.amiga /mnt/
 				;;
 			*)
@@ -336,8 +331,7 @@ md_lib_is_aout() {
 	test -h $1 && return 1
 	test -f $1 || return 1
 
-	r=`file $1 | sed -n -e '/ELF/p'`
-	test -z "$r" || return 1
+	[ "`dd if=$1 bs=1 skip=1 count=3 2> /dev/null`" = "ELF" ] && return 1
 	return 0
 }
 

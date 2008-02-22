@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.29 2007/10/17 19:54:56 garbled Exp $	*/
+/*	$NetBSD: frame.h,v 1.37 2017/08/12 13:11:23 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -83,10 +76,14 @@
  * Exception/Trap Stack Frame
  */
 struct trapframe {
-	int	tf_gs;
-	int	tf_fs;
-	int	tf_es;
-	int	tf_ds;
+	uint16_t	tf_gs;
+	uint16_t	tf_gs_pad;
+	uint16_t	tf_fs;
+	uint16_t	tf_fs_pad;
+	uint16_t	tf_es;
+	uint16_t	tf_es_pad;
+	uint16_t	tf_ds;
+	uint16_t	tf_ds_pad;
 	int	tf_edi;
 	int	tf_esi;
 	int	tf_ebp;
@@ -103,11 +100,6 @@ struct trapframe {
 	/* below used when transitting rings (e.g. user to kernel) */
 	int	tf_esp;
 	int	tf_ss;
-	/* below used when switching out of VM86 mode */
-	int	tf_vm86_es;
-	int	tf_vm86_ds;
-	int	tf_vm86_fs;
-	int	tf_vm86_gs;
 };
 
 /*
@@ -147,12 +139,9 @@ struct switchframe {
 	int	sf_eip;
 };
 
-#if (defined(COMPAT_16) || defined(COMPAT_IBCS2)) && defined(_KERNEL)
+#ifdef _KERNEL
 /*
- * XXX: Really COMPAT_IBCS2 should not be using our old signal frame.
- */
-/*
- * Signal frame
+ * Old-style signal frame
  */
 struct sigframe_sigcontext {
 	int	sf_ra;			/* return address for handler */
@@ -163,6 +152,9 @@ struct sigframe_sigcontext {
 };
 #endif
 
+/*
+ * New-style signal frame
+ */
 struct sigframe_siginfo {
 	int		sf_ra;		/* return address for handler */
 	int		sf_signum;	/* "signum" argument for handler */
@@ -175,9 +167,8 @@ struct sigframe_siginfo {
 #ifdef _KERNEL
 void *getframe(struct lwp *, int, int *);
 void buildcontext(struct lwp *, int, void *, void *);
-#ifdef COMPAT_16
 void sendsig_sigcontext(const ksiginfo_t *, const sigset_t *);
-#endif
+#define lwp_trapframe(l)	((l)->l_md.md_regs)
 #endif
 
 #endif  /* _I386_FRAME_H_ */

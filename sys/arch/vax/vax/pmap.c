@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.156 2008/02/22 08:46:48 matt Exp $	   */
+/*	$NetBSD: pmap.c,v 1.186 2018/03/30 08:34:35 ragge Exp $	   */
 /*
  * Copyright (c) 1994, 1998, 1999, 2003 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,39 +25,35 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.156 2008/02/22 08:46:48 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.186 2018/03/30 08:34:35 ragge Exp $");
 
 #include "opt_ddb.h"
 #include "opt_cputype.h"
+#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
 #include "opt_pipe.h"
 
-#include <sys/types.h>
 #include <sys/param.h>
-#include <sys/queue.h>
-#include <sys/malloc.h>
+#include <sys/systm.h>
+#include <sys/buf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 #include <sys/extent.h>
 #include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/systm.h>
-#include <sys/device.h>
-#include <sys/buf.h>
+#include <sys/atomic.h>
+#include <sys/kmem.h>
+#include <sys/mutex.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
+#include <uvm/uvm_physseg.h>
 
 #ifdef PMAPDEBUG
 #include <dev/cons.h>
 #endif
 
-#include <uvm/uvm.h>
-
-#include <machine/pte.h>
-#include <machine/pcb.h>
-#include <machine/mtpr.h>
 #include <machine/macros.h>
 #include <machine/sid.h>
-#include <machine/cpu.h>
 #include <machine/scb.h>
 #include <machine/rpb.h>
 
@@ -70,8 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.156 2008/02/22 08:46:48 matt Exp $");
 #include "qd.h"
 void	qdearly(void);
 
-#define ISTACK_SIZE (PAGE_SIZE*2)
-vaddr_t istack;
 /* 
  * This code uses bitfield operators for most page table entries.  
  */
@@ -94,7 +83,8 @@ uintptr_t scratch;
 #define SCRATCHPAGES	4
 
 
-struct pmap kernel_pmap_store;
+static struct pmap kernel_pmap_store;
+struct pmap *const kernel_pmap_ptr = &kernel_pmap_store;
 
 struct	pte *Sysmap;		/* System page table */
 struct	pv_entry *pv_table;	/* array of entries, one per LOGICAL page */
@@ -109,7 +99,7 @@ char	ptmapstorage[PTMAPSZ];
 
 extern	void *msgbufaddr;
 
-#define IOSPACE(p)	(((u_long)(p)) & 0xe0000000)
+#define IOSPACE_P(p)	(((u_long)(p) & 0xe0000000) != 0)
 #define NPTEPROCSPC	0x1000	/* # of virtual PTEs per process space */
 #define NPTEPG		0x80	/* # of PTEs per page (logical or physical) */
 #define PPTESZ		sizeof(struct pte)
@@ -122,6 +112,34 @@ extern	void *msgbufaddr;
 #define	P0SEG		0
 #define P1SEG		1
 #define	SYSSEG		2
+
+static inline void
+pmap_decrement_stats(struct pmap *pm, bool wired)
+{
+#if defined(MULTIPROCESSOR)
+	atomic_dec_ulong(&pm->pm_stats.resident_count);
+	if (wired)
+		atomic_dec_ulong(&pm->pm_stats.wired_count);
+#else
+	pm->pm_stats.resident_count--;
+	if (wired)
+		pm->pm_stats.wired_count--;
+#endif
+}
+
+static inline void
+pmap_increment_stats(struct pmap *pm, bool wired)
+{
+#if defined(MULTIPROCESSOR)
+	atomic_inc_ulong(&pm->pm_stats.resident_count);
+	if (wired)
+		atomic_inc_ulong(&pm->pm_stats.wired_count);
+#else
+	pm->pm_stats.resident_count++;
+	if (wired)
+		pm->pm_stats.wired_count++;
+#endif
+}
 
 /*
  * Map in a virtual page.
@@ -170,9 +188,9 @@ volatile int recurse;
 #endif
 
 #if defined(MULTIPROCESSOR) || defined(LOCKDEBUG)
-static struct simplelock pvtable_lock;
-#define PVTABLE_LOCK	simple_lock(&pvtable_lock);
-#define PVTABLE_UNLOCK	simple_unlock(&pvtable_lock);
+static kmutex_t pvtable_lock;
+#define PVTABLE_LOCK	mutex_spin_enter(&pvtable_lock);
+#define PVTABLE_UNLOCK	mutex_spin_enter(&pvtable_lock);
 #else
 #define PVTABLE_LOCK
 #define PVTABLE_UNLOCK
@@ -188,7 +206,7 @@ vaddr_t	  virtual_avail, virtual_end; /* Available virtual memory	*/
 struct pv_entry *get_pventry(void);
 void free_pventry(struct pv_entry *);
 void more_pventries(void);
-vaddr_t get_ptp(int);
+vaddr_t get_ptp(bool);
 void free_ptp(paddr_t);
 
 /*
@@ -203,7 +221,7 @@ calc_kvmsize(vsize_t usrptsize)
 	vsize_t kvmsize, bufsz;
 
 	/*
-	 * Compute the number of pages kmem_map will have.
+	 * Compute the number of pages kmem_arena will have.
 	 */
 	kmeminit_nkmempages();
 
@@ -221,6 +239,8 @@ calc_kvmsize(vsize_t usrptsize)
 	kvmsize += (pager_map_size + MAXBSIZE);
 	/* Anon pool structures */
 	kvmsize += (physmem * sizeof(struct vm_anon));
+	/* kernel malloc arena */
+	kvmsize += avail_end;
 
 	/* Buffer space - get size of buffer cache and set an upper limit */
 	bufsz = buf_memcalc();
@@ -239,8 +259,8 @@ calc_kvmsize(vsize_t usrptsize)
 #if VAX46 || VAX49
 	kvmsize += 0x800000; /* 8 MB framebuffer */
 #endif
-#ifdef LKM
-	/* LKMs are allocated out of kernel_map */
+#ifdef MODULAR
+	/* Modules are allocated out of kernel_map */
 #define MAXLKMSIZ	0x100000	/* XXX */
 	kvmsize += MAXLKMSIZ;
 #endif
@@ -255,7 +275,7 @@ calc_kvmsize(vsize_t usrptsize)
 #ifndef PIPE_SOCKETPAIR
 	kvmsize += PIPE_DIRECT_CHUNK*10;
 #endif
-	kvmsize = (kvmsize + PAGE_SIZE + 1) & ~(PAGE_SIZE - 1);
+	kvmsize = round_page(kvmsize);
 	return kvmsize;
 }
 
@@ -266,18 +286,19 @@ calc_kvmsize(vsize_t usrptsize)
  * immediately after end.
  */
 void
-pmap_bootstrap()
+pmap_bootstrap(void)
 {
+	struct pcb * const pcb = lwp_getpcb(&lwp0);
+	struct pmap * const pmap = pmap_kernel();
+	struct cpu_info *ci;
 	extern unsigned int etext;
-	extern struct user *proc0paddr;
 	unsigned int sysptsize, i;
-	struct pcb *pcb = (struct pcb *)proc0paddr;
-	pmap_t pmap = pmap_kernel();
 	vsize_t kvmsize, usrptsize;
+	vaddr_t istack;
 
 	/* Set logical page size */
 	uvmexp.pagesize = NBPG;
-	uvm_setpagesize();
+	uvm_md_init();
 
 	physmem = btoc(avail_end);
 
@@ -318,15 +339,15 @@ pmap_bootstrap()
 	mtpr((unsigned)Sysmap - KERNBASE, PR_SBR);
 
 	/* Map Interrupt stack and set red zone */
-	istack = (unsigned)Sysmap + round_page(sysptsize * 4);
-	mtpr(istack + ISTACK_SIZE, PR_ISP);
+	istack = (uintptr_t)Sysmap + round_page(sysptsize * 4);
+	mtpr(istack + USPACE, PR_ISP);
 	kvtopte(istack)->pg_v = 0;
 
 	/* Some scratch pages */
-	scratch = istack + ISTACK_SIZE;
+	scratch = istack + USPACE;
 
 	/* Physical-to-virtual translation table */
-	pv_table = (struct pv_entry *)(scratch + 3 * VAX_NBPG);
+	pv_table = (struct pv_entry *)(scratch + SCRATCHPAGES * VAX_NBPG);
 
 	avail_start = (vaddr_t)pv_table + (round_page(avail_end >> PGSHIFT)) *
 	    sizeof(struct pv_entry) - KERNBASE;
@@ -351,7 +372,7 @@ pmap_bootstrap()
 
 	/* Init SCB and set up stray vectors. */
 	avail_start = scb_init(avail_start);
-	*(struct rpb *) 0 = *(struct rpb *) ((char *)proc0paddr + REDZONEADDR);
+	*(struct rpb *)0 = *(struct rpb *)(uvm_lwp_getuarea(&lwp0) + REDZONEADDR);
 
 	if (dep_call->cpu_steal_pages)
 		(*dep_call->cpu_steal_pages)();
@@ -363,7 +384,7 @@ pmap_bootstrap()
 
 #if 0 /* Breaks cninit() on some machines */
 	cninit();
-	printf("Sysmap %p, istack %lx, scratch %lx\n",Sysmap,istack,scratch);
+	printf("Sysmap %p, istack %lx, scratch %lx\n",Sysmap,ci->ci_istack,scratch);
 	printf("etext %p, kvmsize %lx\n", &etext, kvmsize);
 	printf("SYSPTSIZE %x usrptsize %lx\n",
 	    sysptsize, usrptsize * sizeof(struct pte));
@@ -385,7 +406,6 @@ pmap_bootstrap()
 	    /* btop(virtual_avail - KERNBASE); */
 
 	pmap->pm_count = 1;
-	simple_lock_init(&pmap->pm_lock);
 
 	/* Activate the kernel pmap. */
 	pcb->P1BR = pmap->pm_p1br;
@@ -400,22 +420,23 @@ pmap_bootstrap()
 	mtpr(pcb->P1LR, PR_P1LR);
 	mtpr(pcb->P0LR, PR_P0LR);
 
-	/* cpu_info struct */
-	pcb->SSP = scratch;
+	/* initialize SSP to point curlwp (lwp0) */
+	pcb->SSP = (uintptr_t)&lwp0;
 	mtpr(pcb->SSP, PR_SSP);
-	memset((void *)pcb->SSP, 0,
-	    sizeof(struct cpu_info) + sizeof(struct device));
-	curcpu()->ci_curlwp = &lwp0;
-#ifdef MUTEX_COUNT_BIAS
-	curcpu()->ci_mtx_count = MUTEX_COUNT_BIAS;
-#endif
-	curcpu()->ci_dev = (void *)(pcb->SSP + sizeof(struct cpu_info));
+
+	/* cpu_info struct */
+	ci = (struct cpu_info *) scratch;
+	lwp0.l_cpu = ci;
+	ci->ci_istack = istack;
+	memset(ci, 0, sizeof(struct cpu_info) + sizeof(struct device));
+	ci->ci_dev = (void *)(ci + 1);
 #if defined(MULTIPROCESSOR)
-	curcpu()->ci_flags = CI_MASTERCPU|CI_RUNNING;
-	SIMPLEQ_FIRST(&cpus) = curcpu();
+	ci->ci_curlwp = &lwp0;
+	ci->ci_flags = CI_MASTERCPU|CI_RUNNING;
+	SIMPLEQ_FIRST(&cpus) = ci;
 #endif
 #if defined(MULTIPROCESSOR) || defined(LOCKDEBUG)
-	simple_lock_init(&pvtable_lock);
+	mutex_init(&pvtable_lock, MUTEX_DEFAULT, IPL_VM);
 #endif
 
 	/*
@@ -437,7 +458,6 @@ pmap_bootstrap()
 void
 pmap_virtual_space(vaddr_t *vstartp, vaddr_t *vendp)
 {
-
 	*vstartp = virtual_avail;
 	*vendp = virtual_end;
 }
@@ -447,12 +467,11 @@ pmap_virtual_space(vaddr_t *vstartp, vaddr_t *vendp)
  * physical memory instead.
  */
 vaddr_t
-pmap_steal_memory(size, vstartp, vendp)
-	vsize_t size;
-	vaddr_t *vstartp, *vendp;
+pmap_steal_memory(vsize_t size, vaddr_t *vstartp, vaddr_t *vendp)
 {
 	vaddr_t v;
 	int npgs;
+	uvm_physseg_t bank;
 
 	PMDEBUG(("pmap_steal_memory: size 0x%lx start %p end %p\n",
 		    size, vstartp, vendp));
@@ -468,11 +487,11 @@ pmap_steal_memory(size, vstartp, vendp)
 	/*
 	 * A vax only have one segment of memory.
 	 */
+	bank = uvm_physseg_get_first();
 
-	v = (vm_physmem[0].avail_start << PGSHIFT) | KERNBASE;
-	vm_physmem[0].avail_start += npgs;
-	vm_physmem[0].start += npgs;
-	bzero((void *)v, size);
+	v = (uvm_physseg_get_start(bank) << PGSHIFT) | KERNBASE;
+	uvm_physseg_unplug(uvm_physseg_get_start(bank), npgs);
+	memset((void *)v, 0, size);
 	return v;
 }
 
@@ -482,13 +501,13 @@ pmap_steal_memory(size, vstartp, vendp)
  * Here is the resource map for the user page tables inited.
  */
 void 
-pmap_init() 
+pmap_init(void) 
 {
 	/*
 	 * Create the extent map used to manage the page table space.
 	 */
 	ptemap = extent_create("ptemap", ptemapstart, ptemapend,
-	    M_VMPMAP, ptmapstorage, PTMAPSZ, EX_NOCOALESCE);
+	    ptmapstorage, PTMAPSZ, EX_NOCOALESCE);
 	if (ptemap == NULL)
 		panic("pmap_init");
 }
@@ -528,18 +547,14 @@ rmpage(pmap_t pm, int *br)
 	else
 		vaddr = (br - (int *)pm->pm_p1br) * VAX_NBPG + 0x40000000;
 
-	if (IOSPACE((br[0] & PG_FRAME) << VAX_PGSHIFT))
+	if (IOSPACE_P((br[0] & PG_FRAME) << VAX_PGSHIFT))
 		return; /* Forget mappings of IO space */
 
 	pv = pv_table + ((br[0] & PG_FRAME) >> LTOHPS);
 	if (((br[0] & PG_PROT) == PG_RW) && 
 	    ((pv->pv_attr & PG_M) != PG_M))
 		pv->pv_attr |= br[0]|br[1]|br[2]|br[3]|br[4]|br[5]|br[6]|br[7];
-	simple_lock(&pm->pm_lock);
-	pm->pm_stats.resident_count--;
-	if (br[0] & PG_W)
-		pm->pm_stats.wired_count--;
-	simple_unlock(&pm->pm_lock);
+	pmap_decrement_stats(pm, (br[0] & PG_W) != 0);
 	if (pv->pv_pmap == pm && pv->pv_vaddr == vaddr) {
 		pv->pv_vaddr = NOVADDR;
 		pv->pv_pmap = 0;
@@ -593,7 +608,7 @@ update_pcbs(struct pmap *pm)
  * Allocate a page through direct-mapped segment.
  */
 static vaddr_t
-getpage(int w)
+getpage(bool wait)
 {
 	struct vm_page *pg;
 
@@ -601,7 +616,7 @@ getpage(int w)
 		pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_ZERO);
 		if (pg != NULL)
 			break;
-		if (w == NOWAIT)
+		if (!wait)
 			return 0;
 		uvm_wait("getpage");
 	}
@@ -674,16 +689,28 @@ rmspace(struct pmap *pm)
 }
 
 /*
- * Find a process to remove the process space for.
- * This is based on uvm_swapout_threads().
+ * Find a process to remove the process space for. *sigh*
  * Avoid to remove ourselves.
  */
 
-#undef swappable
-#define swappable(l, pm)						\
-	(((l)->l_flag & (LW_SYSTEM | LW_INMEM | LW_WEXIT)) == LW_INMEM	\
-	 && (l)->l_holdcnt == 0						\
-	 && (l)->l_proc->p_vmspace->vm_map.pmap != pm)
+static inline bool
+pmap_vax_swappable(struct lwp *l, struct pmap *pm)
+{
+
+	if (l->l_flag & (LW_SYSTEM | LW_WEXIT))
+		return false;
+	if (l->l_proc->p_vmspace->vm_map.pmap == pm)
+		return false;
+	if ((l->l_pflag & LP_RUNNING) != 0)
+		return false;
+	if (l->l_class != SCHED_OTHER)
+		return false;
+	if (l->l_syncobj == &rw_syncobj || l->l_syncobj == &mutex_syncobj)
+		return false;
+	if (l->l_proc->p_stat != SACTIVE && l->l_proc->p_stat != SSTOP)
+		return false;
+	return true;
+}
 
 static int
 pmap_rmproc(struct pmap *pm)
@@ -697,9 +724,9 @@ pmap_rmproc(struct pmap *pm)
 
 	outl = outl2 = NULL;
 	outpri = outpri2 = 0;
-	mutex_enter(&proclist_lock);
+	mutex_enter(proc_lock);
 	LIST_FOREACH(l, &alllwp, l_list) {
-		if (!swappable(l, pm))
+		if (!pmap_vax_swappable(l, pm))
 			continue;
 		ppm = l->l_proc->p_vmspace->vm_map.pmap;
 		if (ppm->pm_p0lr == 0 && ppm->pm_p1lr == NPTEPERREG)
@@ -724,7 +751,7 @@ pmap_rmproc(struct pmap *pm)
 			continue;
 		}
 	}
-	mutex_exit(&proclist_lock);
+	mutex_exit(proc_lock);
 	if (didswap == 0) {
 		if ((l = outl) == NULL)
 			l = outl2;
@@ -738,10 +765,8 @@ pmap_rmproc(struct pmap *pm)
 
 /*
  * Allocate space for user page tables, from ptemap.
- * This routine should never fail; use the same algorithm as when processes
- * are swapped.
  * Argument is needed space, in bytes.
- * Returns a pointer to the newly allocated space.
+ * Returns a pointer to the newly allocated space, or 0 if failed.
  */
 static vaddr_t
 pmap_getusrptes(pmap_t pm, vsize_t nsize)
@@ -754,9 +779,7 @@ pmap_getusrptes(pmap_t pm, vsize_t nsize)
 #endif
 	while (((rv = pmap_extwrap(nsize)) == 0) && (pmap_rmproc(pm) != 0))
 		;
-	if (rv)
-		return rv;
-	panic("usrptmap space leakage");
+	return rv;
 }
 
 /*
@@ -777,7 +800,7 @@ rmptep(struct pte *pte)
 	*ptpp = 0;
 }
 
-static void 
+static int 
 grow_p0(struct pmap *pm, int reqlen)
 {
 	vaddr_t nptespc;
@@ -796,6 +819,8 @@ grow_p0(struct pmap *pm, int reqlen)
 	nptespc = pmap_getusrptes(pm, len);
 	RECURSESTART;
  
+	if (nptespc == 0)
+		return 0;
 	/*
 	 * Copy the old ptes to the new space.
 	 * Done by moving on system page table.
@@ -809,8 +834,8 @@ grow_p0(struct pmap *pm, int reqlen)
 	    from, to, srclen, dstlen));
 
 	if (inuse)
-		bcopy(from, to, srclen);
-	bzero(to+srclen, dstlen-srclen);
+		memcpy(to, from, srclen);
+	memset(to+srclen, 0, dstlen-srclen);
 	p0br = (u_long)pm->pm_p0br;
 	pm->pm_p0br = (struct pte *)nptespc;
 	pm->pm_p0lr = (len/PPTESZ);
@@ -819,10 +844,11 @@ grow_p0(struct pmap *pm, int reqlen)
 	/* Remove the old after update_pcbs() (for multi-CPU propagation) */
 	if (inuse)
 		extent_free(ptemap, p0br, p0lr*PPTESZ, EX_WAITOK);
+	return 1;
 }
 
 
-static void
+static int
 grow_p1(struct pmap *pm, int len)
 {
 	vaddr_t nptespc, optespc;
@@ -835,6 +861,9 @@ grow_p1(struct pmap *pm, int len)
 	RECURSEEND;
 	nptespc = pmap_getusrptes(pm, nlen);
 	RECURSESTART;
+	if (nptespc == 0)
+		return 0;
+
 	olen = (NPTEPERREG*PPTESZ) - (pm->pm_p1lr * PPTESZ);
 	optespc = (vaddr_t)pm->pm_p1ap;
 
@@ -842,9 +871,9 @@ grow_p1(struct pmap *pm, int len)
 	 * Copy the old ptes to the new space.
 	 * Done by moving on system page table.
 	 */
-	bzero(kvtopte(nptespc), vax_btop(nlen-olen) * PPTESZ);
+	memset(kvtopte(nptespc), 0, vax_btop(nlen-olen) * PPTESZ);
 	if (optespc)
-		bcopy(kvtopte(optespc), kvtopte(nptespc+nlen-olen),
+		memcpy(kvtopte(nptespc+nlen-olen), kvtopte(optespc),
 		    vax_btop(olen) * PPTESZ);
 
 	pm->pm_p1ap = (struct pte *)nptespc;
@@ -854,6 +883,7 @@ grow_p1(struct pmap *pm, int len)
 
 	if (optespc)
 		extent_free(ptemap, optespc, olen, EX_WAITOK);
+	return 1;
 }
 
 /*
@@ -883,17 +913,16 @@ pmap_pinit(pmap_t pmap)
 
 /*
  * pmap_create() creates a pmap for a new task.
- * If not already allocated, malloc space for one.
+ * If not already allocated, allocate space for one.
  */
 struct pmap * 
 pmap_create(void)
 {
 	struct pmap *pmap;
 
-	MALLOC(pmap, struct pmap *, sizeof(*pmap), M_VMPMAP, M_WAITOK|M_ZERO);
+	pmap = kmem_zalloc(sizeof(*pmap), KM_SLEEP);
 	pmap_pinit(pmap);
-	simple_lock_init(&pmap->pm_lock);
-	return (pmap);
+	return pmap;
 }
 
 /*
@@ -944,32 +973,25 @@ pmap_release(struct pmap *pmap)
  * pmap_destroy(pmap): Remove a reference from the pmap. 
  * If the pmap is NULL then just return else decrese pm_count.
  * If this was the last reference we call's pmap_relaese to release this pmap.
- * OBS! remember to set pm_lock
  */
 
 void
 pmap_destroy(pmap_t pmap)
 {
-	int count;
-  
 	PMDEBUG(("pmap_destroy: pmap %p\n",pmap));
 
-	simple_lock(&pmap->pm_lock);
-	count = --pmap->pm_count;
-	simple_unlock(&pmap->pm_lock);
-  
-	if (count == 0) {
+	if (atomic_dec_uint_nv(&pmap->pm_count) == 0) {
 #ifdef DIAGNOSTIC
 		if (pmap->pm_pcbs)
 			panic("pmap_destroy used pmap");
 #endif
 		pmap_release(pmap);
-		FREE(pmap, M_VMPMAP);
+		kmem_free(pmap, sizeof(*pmap));
 	}
 }
 
 static struct pte *
-vaddrtopte(struct pv_entry *pv)
+vaddrtopte(const struct pv_entry *pv)
 {
 	struct pmap *pm;
 	if (pv->pv_pmap == NULL || pv->pv_vaddr == NOVADDR)
@@ -988,7 +1010,7 @@ vaddrtopte(struct pv_entry *pv)
  * without tracking it in the MD code.
  */
 void
-pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
+pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 {
 	int *ptp, opte;
 
@@ -1037,12 +1059,12 @@ pmap_kremove(vaddr_t va, vsize_t len)
 			continue;
 		if (pte->pg_sref == 0)
 			panic("pmap_kremove");
-		bzero(pte, LTOHPN * sizeof(struct pte));
+		memset(pte, 0, LTOHPN * sizeof(struct pte));
 		pte += LTOHPN;
 	}
 #else
 	len >>= VAX_PGSHIFT;
-	bzero(pte, len * sizeof(struct pte));
+	memset(pte, 0, len * sizeof(struct pte));
 #endif
 #if defined(MULTIPROCESSOR)
 	cpu_send_ipi(IPI_DEST_ALL, IPI_TBIA);
@@ -1055,10 +1077,10 @@ pmap_kremove(vaddr_t va, vsize_t len)
  * upgrades mappings to more "rights".
  */
 int
-pmap_enter(pmap_t pmap, vaddr_t v, paddr_t p, vm_prot_t prot, int flags)
+pmap_enter(pmap_t pmap, vaddr_t v, paddr_t p, vm_prot_t prot, u_int flags)
 {
 	struct pv_entry *pv, *tmp;
-	int s, newpte, oldpte;
+	int newpte, oldpte;
 	int *pteptr;	/* current pte to write mapping info to */
 	int *ptpptr;	/* ptr to page table page */
 
@@ -1077,14 +1099,16 @@ pmap_enter(pmap_t pmap, vaddr_t v, paddr_t p, vm_prot_t prot, int flags)
 
 	case P0SEG:
 		if (vax_btop(v) >= pmap->pm_p0lr)
-			grow_p0(pmap, vax_btop(v));
+			if (grow_p0(pmap, vax_btop(v)) == 0)
+				goto growfail;
 		pteptr = (int *)pmap->pm_p0br + vax_btop(v);
 		newpte = (prot & VM_PROT_WRITE ? PG_RW : PG_RO);
 		break;
 
 	case P1SEG:
 		if (vax_btop(v - 0x40000000) < pmap->pm_p1lr)
-			grow_p1(pmap, vax_btop(v - 0x40000000));
+			if (grow_p1(pmap, vax_btop(v - 0x40000000)) == 0)
+				goto growfail;
 		pteptr = (int *)pmap->pm_p1br + vax_btop(v - 0x40000000);
 		newpte = (prot & VM_PROT_WRITE ? PG_RW : PG_RO);
 		break;
@@ -1102,7 +1126,7 @@ pmap_enter(pmap_t pmap, vaddr_t v, paddr_t p, vm_prot_t prot, int flags)
 		if (*ptpptr == 0) {
 			paddr_t phys;
 
-			phys = get_ptp(flags & PMAP_CANFAIL ? NOWAIT : WAITOK);
+			phys = get_ptp((flags & PMAP_CANFAIL) != 0);
 			if (phys == 0) {
 				RECURSEEND;
 				return ENOMEM;
@@ -1114,7 +1138,7 @@ pmap_enter(pmap_t pmap, vaddr_t v, paddr_t p, vm_prot_t prot, int flags)
 	/*
 	 * Do not keep track of anything if mapping IO space.
 	 */
-	if (IOSPACE(p)) {
+	if (IOSPACE_P(p)) {
 		mapin8(pteptr, newpte);
 		RECURSEEND;
 		return 0;
@@ -1144,9 +1168,7 @@ pmap_enter(pmap_t pmap, vaddr_t v, paddr_t p, vm_prot_t prot, int flags)
 	
 	if ((newpte & PG_FRAME) == (oldpte & PG_FRAME)) {
 		/* prot change. resident_count will be increased later */
-		pmap->pm_stats.resident_count--;
-		if (oldpte & PG_W)
-			pmap->pm_stats.wired_count--;
+		pmap_decrement_stats(pmap, (oldpte & PG_W) != 0);
 	} else {
 
 		/*
@@ -1162,7 +1184,6 @@ pmap_enter(pmap_t pmap, vaddr_t v, paddr_t p, vm_prot_t prot, int flags)
 			RECURSESTART;
 		}
 
-		s = splvm();
 		PVTABLE_LOCK;
 		if (pv->pv_pmap == NULL) {
 			pv->pv_vaddr = v;
@@ -1175,11 +1196,8 @@ pmap_enter(pmap_t pmap, vaddr_t v, paddr_t p, vm_prot_t prot, int flags)
 			pv->pv_next = tmp;
 		}
 		PVTABLE_UNLOCK;
-		splx(s);
 	}
-	pmap->pm_stats.resident_count++;
-	if (flags & PMAP_WIRED)
-		pmap->pm_stats.wired_count++;
+	pmap_increment_stats(pmap, (flags & PMAP_WIRED) != 0);
 
 	PVTABLE_LOCK;
 	if (flags & (VM_PROT_READ|VM_PROT_WRITE)) {
@@ -1201,37 +1219,36 @@ pmap_enter(pmap_t pmap, vaddr_t v, paddr_t p, vm_prot_t prot, int flags)
 
 	mtpr(0, PR_TBIA); /* Always; safety belt */
 	return 0;
+
+growfail:
+	if (flags & PMAP_CANFAIL)
+		return ENOMEM;
+	panic("usrptmap space leakage");
 }
 
 vaddr_t
-pmap_map(virtuell, pstart, pend, prot)
-	vaddr_t virtuell;
-	paddr_t pstart, pend;
-	int prot;
+pmap_map(vaddr_t virtual, paddr_t pstart, paddr_t pend, int prot)
 {
 	vaddr_t count;
 	int *pentry;
 
 	PMDEBUG(("pmap_map: virt %lx, pstart %lx, pend %lx, Sysmap %p\n",
-	    virtuell, pstart, pend, Sysmap));
+	    virtual, pstart, pend, Sysmap));
 
-	pstart=(uint)pstart &0x7fffffff;
-	pend=(uint)pend &0x7fffffff;
-	virtuell=(uint)virtuell &0x7fffffff;
-	pentry = (int *)((((uint)(virtuell)>>VAX_PGSHIFT)*4)+(uint)Sysmap);
-	for(count=pstart;count<pend;count+=VAX_NBPG){
-		*pentry++ = (count>>VAX_PGSHIFT)|PG_V|
+	pstart &= 0x7fffffffUL;
+	pend &= 0x7fffffffUL;
+	virtual &= 0x7fffffffUL;
+	pentry = &((int *)Sysmap)[virtual >> VAX_PGSHIFT];
+	for (count = pstart; count < pend; count += VAX_NBPG) {
+		*pentry++ = (count >> VAX_PGSHIFT)|PG_V|
 		    (prot & VM_PROT_WRITE ? PG_KW : PG_KR);
 	}
-	return(virtuell+(count-pstart)+0x80000000);
+	return virtual + (count - pstart) + KERNBASE;
 }
 
 #if 0
 bool 
-pmap_extract(pmap, va, pap)
-	pmap_t pmap;
-	vaddr_t va;
-	paddr_t *pap;
+pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *pap)
 {
 	paddr_t pa = 0;
 	int	*pte, sva;
@@ -1343,7 +1360,7 @@ pmap_protect_long(pmap_t pmap, vaddr_t start, vaddr_t end, vm_prot_t prot)
 					panic("pmap_remove PG_SREF page");
 #endif
 				RECURSESTART;
-				bzero(pts, sizeof(struct pte) * LTOHPN);
+				memset(pts, 0, sizeof(struct pte) * LTOHPN);
 				if (pt != Sysmap) {
 					if (ptpinuse(pts) == 0)
 						rmptep(pts);
@@ -1369,6 +1386,7 @@ pmap_protect_long(pmap_t pmap, vaddr_t start, vaddr_t end, vm_prot_t prot)
 }
 
 int pmap_simulref(int bits, int addr);
+
 /*
  * Called from interrupt vector routines if we get a page invalid fault.
  * Note: the save mask must be or'ed with 0x3f for this function.
@@ -1416,7 +1434,7 @@ pmap_simulref(int bits, int addr)
 	pte[5] |= PG_V;
 	pte[6] |= PG_V;
 	pte[7] |= PG_V;
-	if (IOSPACE(pa) == 0) { /* No pv_table fiddling in iospace */
+	if (!IOSPACE_P(pa)) { /* No pv_table fiddling in iospace */
 		PVTABLE_LOCK;
 		pv = pv_table + (pa >> PGSHIFT);
 		pv->pv_attr |= PG_V; /* Referenced */
@@ -1431,7 +1449,7 @@ pmap_simulref(int bits, int addr)
  * Clears valid bit in all ptes referenced to this physical page.
  */
 bool
-pmap_clear_reference_long(struct pv_entry *pv)
+pmap_clear_reference_long(const struct pv_entry *pv)
 {
 	struct pte *pte;
 	int ref = 0;
@@ -1440,17 +1458,7 @@ pmap_clear_reference_long(struct pv_entry *pv)
 
 	RECURSESTART;
 	PVTABLE_LOCK;
-	if (pv->pv_pmap != NULL) {
-		pte = vaddrtopte(pv);
-		if (pte->pg_w == 0) {
-			pte[0].pg_v = 0; pte[1].pg_v = 0;
-			pte[2].pg_v = 0; pte[3].pg_v = 0;
-			pte[4].pg_v = 0; pte[5].pg_v = 0;
-			pte[6].pg_v = 0; pte[7].pg_v = 0;
-		}
-	}
-
-	while ((pv = pv->pv_next)) {
+	if (pv->pv_pmap != NULL) do {
 		pte = vaddrtopte(pv);
 		if (pte[0].pg_w == 0) {
 			pte[0].pg_v = 0; pte[1].pg_v = 0;
@@ -1458,7 +1466,7 @@ pmap_clear_reference_long(struct pv_entry *pv)
 			pte[4].pg_v = 0; pte[5].pg_v = 0;
 			pte[6].pg_v = 0; pte[7].pg_v = 0;
 		}
-	}
+	} while ((pv = pv->pv_next) != NULL);
 	PVTABLE_UNLOCK;
 	RECURSEEND;
 #ifdef MULTIPROCESSOR
@@ -1472,68 +1480,45 @@ pmap_clear_reference_long(struct pv_entry *pv)
  * Checks if page is modified; returns true or false depending on result.
  */
 bool
-pmap_is_modified_long(struct pv_entry *pv)
+pmap_is_modified_long_p(const struct pv_entry *pv)
 {
-	struct pte *pte;
+	bool rv = false;
 
 	PMDEBUG(("pmap_is_modified: pv_entry %p ", pv));
 
 	PVTABLE_LOCK;
-	if (pv->pv_pmap != NULL) {
-		pte = vaddrtopte(pv);
-		if ((pte[0].pg_m | pte[1].pg_m | pte[2].pg_m | pte[3].pg_m |
-		    pte[4].pg_m | pte[5].pg_m | pte[6].pg_m | pte[7].pg_m)) {
-			PMDEBUG(("Yes: (1)\n"));
-			PVTABLE_UNLOCK;
-			return 1;
+	if (pv->pv_pmap != NULL) do {
+		const struct pte * const pte = vaddrtopte(pv);
+		if (pte[0].pg_m | pte[1].pg_m | pte[2].pg_m | pte[3].pg_m
+		    | pte[4].pg_m | pte[5].pg_m | pte[6].pg_m | pte[7].pg_m) {
+			rv = true;
+			break;
 		}
-	}
-
-	while ((pv = pv->pv_next)) {
-		pte = vaddrtopte(pv);
-		if ((pte[0].pg_m | pte[1].pg_m | pte[2].pg_m | pte[3].pg_m
-		    | pte[4].pg_m | pte[5].pg_m | pte[6].pg_m | pte[7].pg_m)) {
-			PMDEBUG(("Yes: (2)\n"));
-			PVTABLE_UNLOCK;
-			return 1;
-		}
-	}
+	} while ((pv = pv->pv_next) != NULL);
 	PVTABLE_UNLOCK;
-	PMDEBUG(("No\n"));
-	return 0;
+	return rv;
 }
 
 /*
  * Clears modify bit in all ptes referenced to this physical page.
  */
 bool
-pmap_clear_modify_long(struct pv_entry *pv)
+pmap_clear_modify_long(const struct pv_entry *pv)
 {
-	struct pte *pte;
 	bool rv = false;
 
 	PMDEBUG(("pmap_clear_modify: pv_entry %p\n", pv));
 
 	PVTABLE_LOCK;
-	if (pv->pv_pmap != NULL) {
-		pte = vaddrtopte(pv);
+	if (pv->pv_pmap != NULL) do {
+		struct pte * const pte = vaddrtopte(pv);
 		if (pte[0].pg_m | pte[1].pg_m | pte[2].pg_m | pte[3].pg_m |
 		    pte[4].pg_m | pte[5].pg_m | pte[6].pg_m | pte[7].pg_m) {
 			rv = true;
 		}
-		pte[0].pg_m = pte[1].pg_m = pte[2].pg_m = pte[3].pg_m = 
-		    pte[4].pg_m = pte[5].pg_m = pte[6].pg_m = pte[7].pg_m = 0;
-	}
-
-	while ((pv = pv->pv_next)) {
-		pte = vaddrtopte(pv);
-		if (pte[0].pg_m | pte[1].pg_m | pte[2].pg_m | pte[3].pg_m |
-		    pte[4].pg_m | pte[5].pg_m | pte[6].pg_m | pte[7].pg_m) {
-			rv = true;
-		}
-		pte[0].pg_m = pte[1].pg_m = pte[2].pg_m = pte[3].pg_m = 
-		    pte[4].pg_m = pte[5].pg_m = pte[6].pg_m = pte[7].pg_m = 0;
-	}
+		pte[0].pg_m = pte[1].pg_m = pte[2].pg_m = pte[3].pg_m = 0;
+		pte[4].pg_m = pte[5].pg_m = pte[6].pg_m = pte[7].pg_m = 0;
+	} while ((pv = pv->pv_next) != NULL);
 	PVTABLE_UNLOCK;
 	return rv;
 }
@@ -1548,10 +1533,9 @@ pmap_page_protect_long(struct pv_entry *pv, vm_prot_t prot)
 {
 	struct	pte *pt;
 	struct	pv_entry *opv, *pl;
-	int	s, *g;
+	int	*g;
 
 	PMDEBUG(("pmap_page_protect: pv %p, prot %x\n", pv, prot));
-
 
 	if (prot == VM_PROT_ALL) /* 'cannot happen' */
 		return;
@@ -1559,19 +1543,13 @@ pmap_page_protect_long(struct pv_entry *pv, vm_prot_t prot)
 	RECURSESTART;
 	PVTABLE_LOCK;
 	if (prot == VM_PROT_NONE) {
-		s = splvm();
 		g = (int *)vaddrtopte(pv);
 		if (g) {
-			simple_lock(&pv->pv_pmap->pm_lock);
-			pv->pv_pmap->pm_stats.resident_count--;
-			if (g[0] & PG_W) {
-				pv->pv_pmap->pm_stats.wired_count--;
-			}
-			simple_unlock(&pv->pv_pmap->pm_lock);
+			pmap_decrement_stats(pv->pv_pmap, (g[0] & PG_W) != 0);
 			if ((pv->pv_attr & (PG_V|PG_M)) != (PG_V|PG_M))
 				pv->pv_attr |= 
 				    g[0]|g[1]|g[2]|g[3]|g[4]|g[5]|g[6]|g[7];
-			bzero(g, sizeof(struct pte) * LTOHPN);
+			memset(g, 0, sizeof(struct pte) * LTOHPN);
 			if (pv->pv_pmap != pmap_kernel()) {
 				if (ptpinuse(g) == 0)
 					rmptep((void *)g);
@@ -1584,16 +1562,11 @@ pmap_page_protect_long(struct pv_entry *pv, vm_prot_t prot)
 		pv->pv_next = 0;
 		while (pl) {
 			g = (int *)vaddrtopte(pl);
-			simple_lock(&pl->pv_pmap->pm_lock);
-			pl->pv_pmap->pm_stats.resident_count--;
-			if (g[0] & PG_W) {
-				pl->pv_pmap->pm_stats.wired_count--;
-			}
-			simple_unlock(&pl->pv_pmap->pm_lock);
+			pmap_decrement_stats(pl->pv_pmap, (g[0] & PG_W) != 0);
 			if ((pv->pv_attr & (PG_V|PG_M)) != (PG_V|PG_M))
 				pv->pv_attr |=
 				    g[0]|g[1]|g[2]|g[3]|g[4]|g[5]|g[6]|g[7];
-			bzero(g, sizeof(struct pte) * LTOHPN);
+			memset(g, 0, sizeof(struct pte) * LTOHPN);
 			if (pl->pv_pmap != pmap_kernel()) {
 				if (ptpinuse(g) == 0)
 					rmptep((void *)g);
@@ -1602,7 +1575,6 @@ pmap_page_protect_long(struct pv_entry *pv, vm_prot_t prot)
 			pl = pl->pv_next;
 			free_pventry(opv);
 		} 
-		splx(s);
 	} else { /* read-only */
 		do {
 			int pr;
@@ -1657,7 +1629,7 @@ pmap_remove_pcb(struct pmap *pm, struct pcb *thispcb)
 void
 pmap_activate(struct lwp *l)
 {
-	struct pcb * const pcb = &l->l_addr->u_pcb;
+	struct pcb * const pcb = lwp_getpcb(l);
 	struct pmap * const pmap = l->l_proc->p_vmspace->vm_map.pmap;
 
 	PMDEBUG(("pmap_activate: l %p\n", l));
@@ -1687,7 +1659,7 @@ pmap_activate(struct lwp *l)
 void	
 pmap_deactivate(struct lwp *l)
 {
-	struct pcb * const pcb = &l->l_addr->u_pcb;
+	struct pcb * const pcb = lwp_getpcb(l);
 	struct pmap * const pmap = l->l_proc->p_vmspace->vm_map.pmap;
 
 	PMDEBUG(("pmap_deactivate: l %p\n", l));
@@ -1773,7 +1745,7 @@ more_pventries(void)
 	struct pv_entry *pv;
 	int s, i, count;
 
-	pv = (struct pv_entry *)getpage(NOWAIT);
+	pv = (struct pv_entry *)getpage(false);
 	if (pv == NULL)
 		return;
 	count = PAGE_SIZE/sizeof(struct pv_entry);
@@ -1796,16 +1768,16 @@ static int *ptpp;
  * Get a (vax-size) page, to use for page tables.
  */
 vaddr_t
-get_ptp(int w)
+get_ptp(bool wait)
 {
 	int *a;
 
 	if ((a = ptpp)) {
 		ptpp = (int *)*ptpp;
-		bzero(a, VAX_NBPG);
+		memset(a, 0, VAX_NBPG);
 		return (vaddr_t)a;
 	}
-	a = (int *)getpage(w);
+	a = (int *)getpage(wait);
 	if (a != NULL) {
 		a[128] = (int)&a[256];
 		a[256] = (int)&a[384];
@@ -1829,39 +1801,4 @@ free_ptp(paddr_t v)
 	v |= KERNBASE;
 	*(int *)v = (int)ptpp;
 	ptpp = (int *)v;
-}
-
-/*
- * Called when a process is about to be swapped, to remove the page tables.
- */
-void
-cpu_swapout(struct lwp *l)
-{
-	struct proc *p = l->l_proc;
-	pmap_t pm;
-
-	PMDEBUG(("Swapout pid %d\n", p->p_pid));
-
-	pm = p->p_vmspace->vm_map.pmap;
-	rmspace(pm);
-	pmap_deactivate(l);
-}
-
-/*
- * Kernel stack red zone need to be set when a process is swapped in.
- * Be sure that all pages are valid.
- */
-void
-cpu_swapin(struct lwp *l)
-{
-	struct pte *pte;
-	int i;
-
-	PMDEBUG(("Swapin pid %d.%d\n", l->l_proc->p_pid, l->l_lid));
-
-	pte = kvtopte((vaddr_t)l->l_addr);
-	for (i = 0; i < (USPACE/VAX_NBPG); i ++)
-		pte[i].pg_v = 1;
-	kvtopte((vaddr_t)l->l_addr + REDZONEADDR)->pg_v = 0;
-	pmap_activate(l);
 }

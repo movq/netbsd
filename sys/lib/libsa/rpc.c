@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc.c,v 1.26 2007/11/24 13:20:57 isaki Exp $	*/
+/*	$NetBSD: rpc.c,v 1.29 2009/01/17 14:00:36 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992 Regents of the University of California.
@@ -103,7 +103,7 @@ struct rpc_reply {
 };
 
 /* Local forwards */
-static	ssize_t recvrpc __P((struct iodesc *, void *, size_t, time_t));
+static	ssize_t recvrpc(struct iodesc *, void *, size_t, saseconds_t);
 
 int rpc_xid;
 int rpc_port = 0x400;	/* predecrement */
@@ -153,7 +153,7 @@ rpc_call(struct iodesc *d, n_long prog, n_long vers, n_long proc,
 #if 1
 	/* Auth credentials: always auth unix (as root) */
 	send_head -= sizeof(struct auth_unix);
-	bzero(send_head, sizeof(struct auth_unix));
+	(void)memset(send_head, 0, sizeof(struct auth_unix));
 	send_head -= sizeof(*auth);
 	auth = (struct auth_info *)send_head;
 	auth->authtype = htonl(RPCAUTH_UNIX);
@@ -232,7 +232,7 @@ rpc_call(struct iodesc *d, n_long prog, n_long vers, n_long proc,
  * Remaining checks are done by callrpc
  */
 static ssize_t
-recvrpc(struct iodesc *d, void *pkt, size_t len, time_t tleft)
+recvrpc(struct iodesc *d, void *pkt, size_t len, saseconds_t tleft)
 {
 	struct rpc_reply *reply;
 	ssize_t	n;

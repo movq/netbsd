@@ -1,4 +1,4 @@
-/*	$NetBSD: specdev.h,v 1.35 2008/01/25 14:32:16 ad Exp $	*/
+/*	$NetBSD: specdev.h,v 1.44 2015/06/23 10:42:35 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -93,23 +86,16 @@ typedef struct specdev {
 #define v_specnext	v_specnode->sn_next
 #define v_rdev		v_specnode->sn_rdev
 #define v_speclockf	v_specnode->sn_dev->sd_lockf
-#define v_specmountpoint v_specnode->sn_dev->sd_mountpoint
 
 /*
  * Special device management
  */
-#define	SPECHSZ	64
-#if	((SPECHSZ&(SPECHSZ-1)) == 0)
-#define	SPECHASH(rdev)	(((rdev>>5)+(rdev))&(SPECHSZ-1))
-#else
-#define	SPECHASH(rdev)	(((unsigned)((rdev>>5)+(rdev)))%SPECHSZ)
-#endif
-
-extern vnode_t	*specfs_hash[SPECHSZ];
-extern kmutex_t	specfs_lock;
-
 void	spec_node_init(vnode_t *, dev_t);
 void	spec_node_destroy(vnode_t *);
+int	spec_node_lookup_by_dev(enum vtype, dev_t, vnode_t **);
+int	spec_node_lookup_by_mount(struct mount *, vnode_t **);
+struct mount *spec_node_getmountedfs(vnode_t *);
+void	spec_node_setmountedfs(vnode_t *, struct mount *);
 void	spec_node_revoke(vnode_t *);
 
 /*
@@ -124,6 +110,7 @@ struct	uio;
 
 int	spec_lookup(void *);
 #define	spec_create	genfs_badop
+#define	spec_whiteout	genfs_badop
 #define	spec_mknod	genfs_badop
 int	spec_open(void *);
 int	spec_close(void *);
@@ -132,6 +119,8 @@ int	spec_close(void *);
 #define	spec_setattr	genfs_ebadf
 int	spec_read(void *);
 int	spec_write(void *);
+#define spec_fallocate	genfs_eopnotsupp
+int	spec_fdiscard(void *);
 #define spec_fcntl	genfs_fcntl
 int	spec_ioctl(void *);
 int	spec_poll(void *);
@@ -149,8 +138,8 @@ int	spec_fsync(void *);
 #define	spec_readdir	genfs_badop
 #define	spec_readlink	genfs_badop
 #define	spec_abortop	genfs_badop
-#define	spec_reclaim	genfs_nullop
 int	spec_inactive(void *);
+int	spec_reclaim(void *);
 #define	spec_lock	genfs_nolock
 #define	spec_unlock	genfs_nounlock
 int	spec_bmap(void *);
@@ -162,5 +151,8 @@ int	spec_advlock(void *);
 #define	spec_bwrite	vn_bwrite
 #define	spec_getpages	genfs_getpages
 #define	spec_putpages	genfs_putpages
+
+bool	iskmemvp(struct vnode *);
+void	spec_init(void);
 
 #endif /* _MISCFS_SPECFS_SPECDEV_H_ */

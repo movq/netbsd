@@ -1,4 +1,4 @@
-/*	$NetBSD: g2busvar.h,v 1.4 2002/12/27 11:34:05 tsutsui Exp $	*/
+/*	$NetBSD: g2busvar.h,v 1.7 2012/10/27 17:17:44 chs Exp $	*/
 
 /*-
  * Copyright (c) 2001 Marcus Comstedt
@@ -35,7 +35,7 @@
 #ifndef _DREAMCAST_G2BUSVAR_H_
 #define _DREAMCAST_G2BUSVAR_H_
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /*
  * G2 driver attach arguments
@@ -48,7 +48,7 @@ struct g2bus_attach_args {
  * Per-device G2 variables
  */
 struct g2busdev {
-	struct  device *gd_dev;		/* back pointer to generic */
+	device_t gd_dev;		/* back pointer to generic */
 	TAILQ_ENTRY(g2busdev)
 		gd_bchain;		/* bus chain */
 };
@@ -57,7 +57,7 @@ struct g2busdev {
  * G2 master bus
  */
 struct g2bus_softc {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	struct dreamcast_bus_space sc_memt;
 	TAILQ_HEAD(, g2busdev)
 		sc_subdevs;		/* list of all children */

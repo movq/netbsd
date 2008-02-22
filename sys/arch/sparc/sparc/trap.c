@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.174 2008/01/05 22:50:12 martin Exp $ */
+/*	$NetBSD: trap.c,v 1.196 2016/12/30 17:54:43 christos Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.174 2008/01/05 22:50:12 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.196 2016/12/30 17:54:43 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_svr4.h"
@@ -60,17 +60,14 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.174 2008/01/05 22:50:12 martin Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
-#include <sys/pool.h>
+#include <sys/kmem.h>
 #include <sys/resource.h>
 #include <sys/signal.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
 #include <sys/syslog.h>
 #include <sys/kauth.h>
-#include <sys/simplelock.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -79,6 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.174 2008/01/05 22:50:12 martin Exp $");
 #include <machine/ctlreg.h>
 #include <machine/trap.h>
 #include <machine/instr.h>
+#include <machine/pcb.h>
 #include <machine/pmap.h>
 #include <machine/userret.h>
 
@@ -109,10 +107,19 @@ int	rwindow_debug = 0;
  * set, no matter how it is interpreted.  Appendix N of the Sparc V8 document
  * seems to imply that we should do this, and it does make sense.
  */
-struct	fpstate initfpstate = {
-	{ ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0,
-	  ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0 },
-	0, 0,
+struct fpstate initfpstate = {
+    .fs_reg = { 
+	.fr_regs = { 
+	    ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0,
+	    ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0,
+	},
+	.fr_fsr = 0,
+    },
+    .fs_qsize = 0,
+    .fs_queue = { {
+	.fq_addr = NULL,
+	.fq_instr = 0,
+    }, },
 };
 
 /*
@@ -229,7 +236,7 @@ trap(unsigned type, int psr, int pc, struct trapframe *tf)
 	/* This steps the PC over the trap. */
 #define	ADVANCE (n = tf->tf_npc, tf->tf_pc = n, tf->tf_npc = n + 4)
 
-	uvmexp.traps++;	/* XXXSMP */
+	curcpu()->ci_data.cpu_ntrap++;
 	/*
 	 * Generally, kernel traps cause a panic.  Any exceptions are
 	 * handled early here.
@@ -291,14 +298,14 @@ trap(unsigned type, int psr, int pc, struct trapframe *tf)
 			return;
 		}
 	dopanic:
+	        snprintb(bits, sizeof(bits), PSR_BITS, psr);
 		printf("trap type 0x%x: pc=0x%x npc=0x%x psr=%s\n",
-		       type, pc, tf->tf_npc, bitmask_snprintf(psr,
-		       PSR_BITS, bits, sizeof(bits)));
+		       type, pc, tf->tf_npc, bits);
 #ifdef DDB
 		write_all_windows();
 		(void) kdb_trap(type, tf);
 #endif
-		panic(type < N_TRAP_TYPES ? trap_type[type] : T);
+		panic("%s", type < N_TRAP_TYPES ? trap_type[type] : T);
 		/* NOTREACHED */
 	}
 	if ((l = curlwp) == NULL)
@@ -306,7 +313,7 @@ trap(unsigned type, int psr, int pc, struct trapframe *tf)
 	p = l->l_proc;
 	LWP_CACHE_CREDS(l, p);
 	sticks = p->p_sticks;
-	pcb = &l->l_addr->u_pcb;
+	pcb = lwp_getpcb(l);
 	l->l_md.md_tf = tf;	/* for ptrace/signals */
 
 #ifdef FPU_DEBUG
@@ -330,9 +337,9 @@ trap(unsigned type, int psr, int pc, struct trapframe *tf)
 		if (type < 0x80) {
 			if (!ignore_bogus_traps)
 				goto dopanic;
+		        snprintb(bits, sizeof(bits), PSR_BITS, psr);
 			printf("trap type 0x%x: pc=0x%x npc=0x%x psr=%s\n",
-			       type, pc, tf->tf_npc, bitmask_snprintf(psr,
-			       PSR_BITS, bits, sizeof(bits)));
+			       type, pc, tf->tf_npc, bits);
 			sig = SIGILL;
 			KSI_INIT_TRAP(&ksi);
 			ksi.ksi_trap = type;
@@ -418,7 +425,7 @@ badtrap:
 #endif
 
 		if (fs == NULL) {
-			fs = malloc(sizeof *fs, M_SUBPROC, M_WAITOK);
+			fs = kmem_alloc(sizeof(struct fpstate), KM_SLEEP);
 			*fs = initfpstate;
 			l->l_md.md_fpstate = fs;
 		}
@@ -477,7 +484,7 @@ badtrap:
 					panic("FPU(%d): state for %p",
 							cpi->ci_cpuid, l);
 #if defined(MULTIPROCESSOR)
-				XCALL1(savefpstate, fs, 1 << cpi->ci_cpuid);
+				XCALL1(ipi_savefpstate, fs, 1 << cpi->ci_cpuid);
 #endif
 				cpi->fplwp = NULL;
 			}
@@ -495,7 +502,7 @@ badtrap:
 
 	case T_WINOF:
 		if (rwindow_save(l)) {
-			mutex_enter(&p->p_smutex);
+			mutex_enter(p->p_lock);
 			sigexit(l, SIGILL);
 		}
 		break;
@@ -521,7 +528,7 @@ badtrap:
 				tf->tf_out[6]);
 #endif
 		if (read_rw(tf->tf_out[6], &pcb->pcb_rw[0])) {
-			mutex_enter(&p->p_smutex);
+			mutex_enter(p->p_lock);
 			sigexit(l, SIGILL);
 		}
 		if (pcb->pcb_nsaved)
@@ -547,7 +554,7 @@ badtrap:
 #endif
 		write_user_windows();
 		if (rwindow_save(l) || read_rw(tf->tf_out[6], &pcb->pcb_rw[0])) {
-			mutex_enter(&p->p_smutex);
+			mutex_enter(p->p_lock);
 			sigexit(l, SIGILL);
 		}
 #ifdef DEBUG
@@ -557,7 +564,7 @@ badtrap:
 				pcb->pcb_rw[0].rw_in[6]);
 #endif
 		if (read_rw(pcb->pcb_rw[0].rw_in[6], &pcb->pcb_rw[1])) {
-			mutex_enter(&p->p_smutex);
+			mutex_enter(p->p_lock);
 			sigexit(l, SIGILL);
 		}
 		if (pcb->pcb_nsaved)
@@ -567,7 +574,7 @@ badtrap:
 
 	case T_ALIGN:
 		if ((p->p_md.md_flags & MDP_FIXALIGN) != 0) {
-			n = fixalign(l, tf);
+			n = fixalign(l, tf, NULL);
 			if (n == 0) {
 				ADVANCE;
 				break;
@@ -577,7 +584,7 @@ badtrap:
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_trap = type;
 		ksi.ksi_code = BUS_ADRALN;
-		ksi.ksi_addr = (void *)pc;
+		fixalign(l, tf, &ksi.ksi_addr);
 		break;
 
 	case T_FPE:
@@ -648,7 +655,7 @@ badtrap:
 		write_user_windows();
 #ifdef probably_slower_since_this_is_usually_false
 		if (pcb->pcb_nsaved && rwindow_save(p)) {
-			mutex_enter(&p->p_smutex);
+			mutex_enter(p->p_lock);
 			sigexit(l, SIGILL);
 		}
 #endif
@@ -710,7 +717,7 @@ badtrap:
 int
 rwindow_save(struct lwp *l)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct rwindow *rw = &pcb->pcb_rw[0];
 	int i;
 
@@ -750,11 +757,12 @@ rwindow_save(struct lwp *l)
  * the registers into the new process after the exec.
  */
 void
-kill_user_windows(struct lwp *l)
+cpu_vmspace_exec(struct lwp *l, vaddr_t start, vaddr_t end)
 {
+	struct pcb *pcb = lwp_getpcb(l);
 
 	write_user_windows();
-	l->l_addr->u_pcb.pcb_nsaved = 0;
+	pcb->pcb_nsaved = 0;
 }
 
 /*
@@ -775,19 +783,22 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 #if defined(SUN4) || defined(SUN4C)
 	struct proc *p;
 	struct lwp *l;
+	struct pcb *pcb;
 	struct vmspace *vm;
 	vaddr_t va;
-	int rv = EFAULT;
+	int rv;
 	vm_prot_t atype;
-	int onfault;
+	vaddr_t onfault;
 	u_quad_t sticks;
 	char bits[64];
 	ksiginfo_t ksi;
 
-	uvmexp.traps++;
-	if ((l = curlwp) == NULL)	/* safety check */
-		l = &lwp0;
+	curcpu()->ci_data.cpu_ntrap++;
+	l = curlwp;
 	p = l->l_proc;
+	pcb = lwp_getpcb(l);
+	onfault = (vaddr_t)pcb->pcb_onfault;
+
 	LWP_CACHE_CREDS(l, p);
 	sticks = p->p_sticks;
 
@@ -834,10 +845,12 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 	va = trunc_page(v);
 	if (psr & PSR_PS) {
 		extern char Lfsbail[];
+
 		if (type == T_TEXTFAULT) {
 			(void) splhigh();
-			printf("text fault: pc=0x%x ser=%s\n", pc,
-			  bitmask_snprintf(ser, SER_BITS, bits, sizeof(bits)));
+		        snprintb(bits, sizeof(bits), SER_BITS, ser);
+			printf("cpu%d: text fault: pc=0x%x ser=%s\n",
+			       cpu_number(), pc, bits);
 			panic("kernel fault");
 			/* NOTREACHED */
 		}
@@ -845,16 +858,20 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 		 * If this was an access that we shouldn't try to page in,
 		 * resume at the fault handler without any action.
 		 */
-		if (l->l_addr && l->l_addr->u_pcb.pcb_onfault == Lfsbail)
+		if (onfault == (vaddr_t)Lfsbail) {
+			rv = EFAULT;
 			goto kfault;
+		}
 
 		/*
 		 * During autoconfiguration, faults are never OK unless
 		 * pcb_onfault is set.  Once running normally we must allow
 		 * exec() to cause copy-on-write faults to kernel addresses.
 		 */
-		if (cold)
+		if (cold) {
+			rv = EFAULT;
 			goto kfault;
+		}
 		if (va >= KERNBASE) {
 			rv = mmu_pagein(pmap_kernel(), va, atype);
 			if (rv < 0) {
@@ -863,13 +880,16 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 			}
 			if (rv > 0)
 				return;
+			pcb->pcb_onfault = NULL;
 			rv = uvm_fault(kernel_map, va, atype);
+			pcb->pcb_onfault = (void *)onfault;
 			if (rv == 0)
 				return;
 			goto kfault;
 		}
-	} else
+	} else {
 		l->l_md.md_tf = tf;
+	}
 
 	/*
 	 * mmu_pagein returns -1 if the page is already valid, in which
@@ -886,7 +906,9 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 		goto out;
 
 	/* alas! must call the horrible vm code */
+	pcb->pcb_onfault = NULL;
 	rv = uvm_fault(&vm->vm_map, (vaddr_t)va, atype);
+	pcb->pcb_onfault = (void *)onfault;
 
 	/*
 	 * If this was a stack access we keep track of the maximum
@@ -921,13 +943,12 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 fault:
 		if (psr & PSR_PS) {
 kfault:
-			onfault = l->l_addr ?
-			    (int)l->l_addr->u_pcb.pcb_onfault : 0;
 			if (!onfault) {
 				(void) splhigh();
-				printf("data fault: pc=0x%x addr=0x%x ser=%s\n",
-				    pc, v, bitmask_snprintf(ser, SER_BITS,
-				    bits, sizeof(bits)));
+				snprintb(bits, sizeof(bits), SER_BITS, ser);
+				printf("cpu%d: data fault: pc=0x%x "
+				       "addr=0x%x ser=%s\n",
+				       cpu_number(), pc, v, bits);
 				panic("kernel fault");
 				/* NOTREACHED */
 			}
@@ -937,19 +958,27 @@ kfault:
 			return;
 		}
 		KSI_INIT_TRAP(&ksi);
-		if (rv == ENOMEM) {
+		switch (rv) {
+		case ENOMEM:
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       l->l_cred ?
 			       kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
-			ksi.ksi_code = SI_NOINFO;
-		} else {
+			break;
+		case EINVAL:
+			ksi.ksi_signo = SIGBUS;
+			ksi.ksi_code = BUS_ADRERR;
+			break;
+		case EACCES:
 			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = (rv == EACCES
-				? SEGV_ACCERR : SEGV_MAPERR);
+			ksi.ksi_code = SEGV_ACCERR;
+			break;
+		default:
+			ksi.ksi_signo = SIGSEGV;
+			ksi.ksi_code = SEGV_MAPERR;
+			break;
 		}
-		ksi.ksi_errno = rv;
 		ksi.ksi_trap = type;
 		ksi.ksi_addr = (void *)v;
 		trapsignal(l, &ksi);
@@ -971,22 +1000,24 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 	int pc, psr;
 	struct proc *p;
 	struct lwp *l;
+	struct pcb *pcb;
 	struct vmspace *vm;
 	vaddr_t va;
-	int rv = EFAULT;
+	int rv;
 	vm_prot_t atype;
 	int onfault;
 	u_quad_t sticks;
 	char bits[64];
 	ksiginfo_t ksi;
 
-	uvmexp.traps++;	/* XXXSMP */
+	curcpu()->ci_data.cpu_ntrap++;
 
-	if ((l = curlwp) == NULL)	/* safety check */
-		l = &lwp0;
+	l = curlwp;
 	p = l->l_proc;
 	LWP_CACHE_CREDS(l, p);
 	sticks = p->p_sticks;
+	pcb = lwp_getpcb(l);
+	onfault = (vaddr_t)pcb->pcb_onfault;
 
 #ifdef FPU_DEBUG
 	if ((tf->tf_psr & PSR_EF) != 0) {
@@ -1101,8 +1132,10 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 
 	if (((sfsr & SFSR_AT_TEXT) || type == T_TEXTFAULT) &&
 	    !(sfsr & SFSR_AT_STORE) && (sfsr & SFSR_OW)) {
-		if (psr & PSR_PS)	/* never allow in kernel */
+		if (psr & PSR_PS) {	/* never allow in kernel */
+			rv = EFAULT;
 			goto kfault;
+		}
 #if 0
 		/*
 		 * Double text fault. The evil "case 5" from the HS manual...
@@ -1114,8 +1147,11 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 		if (cpuinfo.cpu_type == CPUTYP_HS_MBUS) {
 			/* On HS, we have va for both */
 			vm = p->p_vmspace;
-			if (uvm_fault(&vm->vm_map, trunc_page(pc),
-				      VM_PROT_READ) != 0)
+			pcb->pcb_onfault = NULL;
+			rv = uvm_fault(&vm->vm_map, trunc_page(pc),
+				      VM_PROT_READ);
+			pcb->pcb_onfault = onfault;
+			if (rv != 0)
 #ifdef DEBUG
 				printf("mem_access_fault: "
 					"can't pagein 1st text fault.\n")
@@ -1141,9 +1177,9 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 		extern char Lfsbail[];
 		if (sfsr & SFSR_AT_TEXT || type == T_TEXTFAULT) {
 			(void) splhigh();
-			printf("text fault: pc=0x%x sfsr=%s sfva=0x%x\n", pc,
-			    bitmask_snprintf(sfsr, SFSR_BITS, bits,
-			    sizeof(bits)), sfva);
+			snprintb(bits, sizeof(bits), SFSR_BITS, sfsr);
+			printf("cpu%d text fault: pc=0x%x sfsr=%s sfva=0x%x\n",
+			       cpu_number(), pc, bits, sfva);
 			panic("kernel fault");
 			/* NOTREACHED */
 		}
@@ -1151,30 +1187,39 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 		 * If this was an access that we shouldn't try to page in,
 		 * resume at the fault handler without any action.
 		 */
-		if (l->l_addr && l->l_addr->u_pcb.pcb_onfault == Lfsbail)
+		if (onfault == (vaddr_t)Lfsbail) {
+			rv = EFAULT;
 			goto kfault;
+		}
 
 		/*
 		 * During autoconfiguration, faults are never OK unless
 		 * pcb_onfault is set.  Once running normally we must allow
 		 * exec() to cause copy-on-write faults to kernel addresses.
 		 */
-		if (cold)
+		if (cold) {
+			rv = EFAULT;
 			goto kfault;
+		}
 		if (va >= KERNBASE) {
+			pcb->pcb_onfault = NULL;
 			rv = uvm_fault(kernel_map, va, atype);
+			pcb->pcb_onfault = (void *)onfault;
 			if (rv == 0) {
 				return;
 			}
 			goto kfault;
 		}
-	} else
+	} else {
 		l->l_md.md_tf = tf;
+	}
 
 	vm = p->p_vmspace;
 
 	/* alas! must call the horrible vm code */
+	pcb->pcb_onfault = NULL;
 	rv = uvm_fault(&vm->vm_map, (vaddr_t)va, atype);
+	pcb->pcb_onfault = (void *)onfault;
 
 	/*
 	 * If this was a stack access we keep track of the maximum
@@ -1194,13 +1239,12 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 fault:
 		if (psr & PSR_PS) {
 kfault:
-			onfault = l->l_addr ?
-			    (int)l->l_addr->u_pcb.pcb_onfault : 0;
 			if (!onfault) {
 				(void) splhigh();
-				printf("data fault: pc=0x%x addr=0x%x sfsr=%s\n",
-				    pc, sfva, bitmask_snprintf(sfsr, SFSR_BITS,
-				    bits, sizeof(bits)));
+				snprintb(bits, sizeof(bits), SFSR_BITS, sfsr);
+				printf("cpu%d: data fault: pc=0x%x "
+				       "addr=0x%x sfsr=%s\n",
+				       cpu_number(), pc, sfva, bits);
 				panic("kernel fault");
 				/* NOTREACHED */
 			}
@@ -1210,19 +1254,27 @@ kfault:
 			return;
 		}
 		KSI_INIT_TRAP(&ksi);
-		if (rv == ENOMEM) {
+		switch (rv) {
+		case ENOMEM:
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       l->l_cred ?
 			       kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
-			ksi.ksi_code = SI_NOINFO;
-		} else {
+			break;
+		case EINVAL:
+			ksi.ksi_signo = SIGBUS;
+			ksi.ksi_code = BUS_ADRERR;
+			break;
+		case EACCES:
 			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = (rv == EACCES)
-				? SEGV_ACCERR : SEGV_MAPERR;
+			ksi.ksi_code = SEGV_ACCERR;
+			break;
+		default:
+			ksi.ksi_signo = SIGSEGV;
+			ksi.ksi_code = SEGV_MAPERR;
+			break;
 		}
-		ksi.ksi_errno = rv;
 		ksi.ksi_trap = type;
 		ksi.ksi_addr = (void *)sfva;
 		trapsignal(l, &ksi);
@@ -1242,18 +1294,14 @@ out_nounlock:
 void
 startlwp(void *arg)
 {
-	int err;
 	ucontext_t *uc = arg;
-	struct lwp *l = curlwp;
+	lwp_t *l = curlwp;
+	int error __diagused;
 
-	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-#if DIAGNOSTIC
-	if (err) {
-		printf("Error %d from cpu_setmcontext.", err);
-	}
-#endif
-	pool_put(&lwp_uc_pool, uc);
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
 
+	kmem_free(uc, sizeof(ucontext_t));
 	userret(l, l->l_md.md_tf->tf_pc, 0);
 }
 

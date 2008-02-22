@@ -1,4 +1,4 @@
-/*	$NetBSD: rmt.h,v 1.5 2005/02/03 04:39:32 perry Exp $	*/
+/*	$NetBSD: rmt.h,v 1.8 2016/01/22 23:15:58 dholland Exp $	*/
 
 /*
  *	rmt.h
@@ -18,8 +18,15 @@
 #define _RMT_H_
 
 #include <sys/cdefs.h>
+#include <sys/types.h>
+
+#if _FORTIFY_SOURCE > 0
+#define __ssp_weak_name(x)	rmt ## x
+#include <ssp/unistd.h>
+#endif 
 
 __BEGIN_DECLS
+int	isrmt(int);
 int	rmtaccess(const char *, int);
 int	rmtclose(int);
 int	rmtcreat(const char *, mode_t);
@@ -48,7 +55,9 @@ __END_DECLS
 #define lseek rmtlseek
 #define lstat rmtlstat
 #define open rmtopen
+#if __SSP_FORTIFY_LEVEL == 0
 #define read rmtread
+#endif
 #define stat rmtstat
 #define write rmtwrite
 #endif /* __RMTLIB_PRIVATE */

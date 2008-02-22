@@ -1,4 +1,4 @@
-/* $NetBSD: strtof_vaxf.c,v 1.3 2006/03/24 16:04:32 kleink Exp $ */
+/* $NetBSD: strtof_vaxf.c,v 1.8 2013/05/17 12:55:57 joerg Exp $ */
 
 /****************************************************************
 
@@ -35,17 +35,16 @@ THIS SOFTWARE.
 
 #include "namespace.h"
 #include "gdtoaimp.h"
+#include <locale.h>
+#include "setlocale_local.h"
 
 #ifdef __weak_alias
 __weak_alias(strtof, _strtof)
+__weak_alias(strtof_l, _strtof_l)
 #endif
 
- float
-#ifdef KR_headers
-strtof(s, sp) CONST char *s; char **sp;
-#else
-strtof(CONST char *s, char **sp)
-#endif
+static float
+_int_strtof_l(CONST char *s, char **sp, locale_t loc)
 {
 	static CONST FPI fpi = { 24, 1-128-1-24+1,  255-128-1-24+1, 1, SI };
 	ULong bits[1];
@@ -53,11 +52,16 @@ strtof(CONST char *s, char **sp)
 	int k;
 	union { ULong L[1]; float f; } u;
 
-	k = strtodg(s, sp, &fpi, &expt, bits);
+	k = strtodg(s, sp, &fpi, &expt, bits, loc);
+	if (k == STRTOG_NoMemory) {
+		errno = ERANGE;
+		return HUGE_VALF;
+	}
 	switch(k & STRTOG_Retmask) {
 	  case STRTOG_NoNumber:
 	  case STRTOG_Zero:
-		u.L[0] = 0;
+	  default:
+		u.f = 0.0;
 		break;
 
 	  case STRTOG_Normal:
@@ -67,11 +71,23 @@ strtof(CONST char *s, char **sp)
 		break;
 
 	  case STRTOG_Infinite:
-		u.L[0] = 0xffff7fff;
+		u.f = HUGE_VALF;
 		break;
 
 	  }
 	if (k & STRTOG_Neg)
 		u.L[0] |= 0x00008000L;
 	return u.f;
-	}
+}
+
+float
+strtof(CONST char *s, char **sp)
+{
+	return _int_strtof_l(s, sp, _current_locale());
+}
+
+float
+strtof_l(CONST char *s, char **sp, locale_t loc)
+{
+	return _int_strtof_l(s, sp, loc);
+}

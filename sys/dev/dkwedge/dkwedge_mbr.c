@@ -1,4 +1,4 @@
-/*	$NetBSD: dkwedge_mbr.c,v 1.5 2006/08/13 19:17:11 martin Exp $	*/
+/*	$NetBSD: dkwedge_mbr.c,v 1.10 2017/01/19 00:44:40 maya Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dkwedge_mbr.c,v 1.5 2006/08/13 19:17:11 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dkwedge_mbr.c,v 1.10 2017/01/19 00:44:40 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,12 +45,14 @@ __KERNEL_RCSID(0, "$NetBSD: dkwedge_mbr.c,v 1.5 2006/08/13 19:17:11 martin Exp $
 #include <sys/malloc.h>
 
 #include <sys/bootblock.h>
+#include <sys/disklabel.h>
 
 typedef struct mbr_args {
 	struct disk	*pdk;
 	struct vnode	*vp;
 	void		*buf;
 	int		error;
+	uint32_t	secsize;
 	int		mbr_count;
 } mbr_args_t;
 
@@ -93,10 +88,10 @@ getparts(mbr_args_t *a, uint32_t off, uint32_t extoff)
 	const char *ptype;
 	int i, error;
 
-	error = dkwedge_read(a->pdk, a->vp, off, a->buf, DEV_BSIZE);
+	error = dkwedge_read(a->pdk, a->vp, off, a->buf, a->secsize);
 	if (error) {
-		aprint_error("%s: unable to read MBR @ %u, "
-		    "error = %d\n", a->pdk->dk_name, off, a->error);
+		aprint_error("%s: unable to read MBR @ %u/%u, "
+		    "error = %d\n", a->pdk->dk_name, off, a->secsize, a->error);
 		a->error = error;
 		return;
 	}
@@ -108,10 +103,16 @@ getparts(mbr_args_t *a, uint32_t off, uint32_t extoff)
 	dp = mbr->mbr_parts;
 
 	for (i = 0; i < MBR_PART_COUNT; i++) {
-		/* Extended partitions are handled below. */
-		if (dp[i].mbrp_type == 0 ||
-		    MBR_IS_EXTENDED(dp[i].mbrp_type))
-		    	continue;
+		switch (dp[i].mbrp_type) {
+		case 0:			/* empty */
+		case MBR_PTYPE_PMBR:	/* Handled by GPT */
+			continue;
+		default:
+		    /* Extended partitions are handled below. */
+			if (MBR_IS_EXTENDED(dp[i].mbrp_type))
+				continue;
+			break;
+		}
 
 		if ((ptype = mbr_ptype_to_str(dp[i].mbrp_type)) == NULL) {
 			/*
@@ -123,9 +124,9 @@ getparts(mbr_args_t *a, uint32_t off, uint32_t extoff)
 			    dp[i].mbrp_type);
 			continue;
 		}
-		strcpy(dkw.dkw_ptype, ptype);
+		strlcpy(dkw.dkw_ptype, ptype, sizeof(dkw.dkw_ptype));
 
-		strcpy(dkw.dkw_parent, a->pdk->dk_name);
+		strlcpy(dkw.dkw_parent, a->pdk->dk_name, sizeof(dkw.dkw_parent));
 		dkw.dkw_offset = le32toh(dp[i].mbrp_start);
 		dkw.dkw_size = le32toh(dp[i].mbrp_size);
 
@@ -173,8 +174,9 @@ dkwedge_discover_mbr(struct disk *pdk, struct vnode *vp)
 	mbr_args_t a;
 
 	a.pdk = pdk;
+	a.secsize = DEV_BSIZE << pdk->dk_blkshift;  
 	a.vp = vp;
-	a.buf = malloc(DEV_BSIZE, M_DEVBUF, M_WAITOK);
+	a.buf = malloc(a.secsize, M_DEVBUF, M_WAITOK);
 	a.error = 0;
 	a.mbr_count = 0;
 

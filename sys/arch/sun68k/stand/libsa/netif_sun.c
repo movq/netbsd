@@ -1,4 +1,4 @@
-/*	$NetBSD: netif_sun.c,v 1.5 2005/12/11 12:19:29 christos Exp $	*/
+/*	$NetBSD: netif_sun.c,v 1.10 2013/11/07 00:42:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,6 +50,8 @@
 #include <stand.h>
 #include <net.h>
 
+#include <lib/libkern/libkern.h>
+
 #include "libsa.h"
 #include "dvma.h"
 #include "saio.h"
@@ -78,6 +73,11 @@ struct devdata {
 	u_short dd_opens;
 	u_char dd_myea[6];
 } netif_devdata;
+
+struct devdata * netif_init(void *);
+void netif_fini(struct devdata *);
+int netif_attach(struct netif *, struct iodesc *, void *);
+void netif_detach(struct netif *);
 
 void netif_getether(struct saif *, u_char *);
 
@@ -278,8 +278,7 @@ netif_put(struct iodesc *desc, void *pkt, size_t len)
 	struct devdata *dd;
 	struct saioreq *si;
 	struct saif *sif;
-	char *dmabuf;
-	int rv, slen;
+	int slen;
 
 #ifdef NETIF_DEBUG
 	if (debug > 1) {
@@ -319,7 +318,7 @@ netif_put(struct iodesc *desc, void *pkt, size_t len)
 		slen = 60;
 	}
 
-	rv = (*sif->sif_xmit)(si->si_devdata, dd->tbuf, slen);
+	(void)(*sif->sif_xmit)(si->si_devdata, dd->tbuf, slen);
 
 #ifdef NETIF_DEBUG
 	if (debug > 1)
@@ -338,8 +337,8 @@ netif_put(struct iodesc *desc, void *pkt, size_t len)
  * Receive a packet, including the ether header.
  * Return the total length received (or -1 on error).
  */
-int 
-netif_get(struct iodesc *desc, void *pkt, size_t maxlen, time_t timo)
+ssize_t
+netif_get(struct iodesc *desc, void *pkt, size_t maxlen, saseconds_t timo)
 {
 	struct netif *nif;
 	struct devdata *dd;

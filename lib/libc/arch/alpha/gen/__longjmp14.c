@@ -1,4 +1,4 @@
-/*	$NetBSD: __longjmp14.c,v 1.4 2005/09/14 08:59:37 martin Exp $	*/
+/*	$NetBSD: __longjmp14.c,v 1.7 2013/03/13 08:05:46 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -81,6 +74,7 @@ __longjmp14(jmp_buf env, int val)
 	uc.uc_mcontext.__gregs[_REG_S5] = sc->sc_regs[R_S5];
 	uc.uc_mcontext.__gregs[_REG_S6] = sc->sc_regs[R_S6];
 	uc.uc_mcontext.__gregs[_REG_RA] = sc->sc_regs[R_RA];
+	uc.uc_mcontext.__gregs[_REG_GP] = sc->sc_regs[R_GP];
 	uc.uc_mcontext.__gregs[_REG_SP] = sc->sc_sp;
 	uc.uc_mcontext.__gregs[_REG_PC] = sc->sc_pc;
 	uc.uc_mcontext.__gregs[_REG_PS] =

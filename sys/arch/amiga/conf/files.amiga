@@ -1,4 +1,4 @@
-#	$NetBSD: files.amiga,v 1.140 2008/02/20 21:43:33 drochner Exp $
+#	$NetBSD: files.amiga,v 1.179 2018/03/06 06:04:21 spz Exp $
 
 # maxpartitions must be first item in files.${ARCH}.newconf
 maxpartitions 16			# NOTE THAT AMIGA IS SPECIAL!
@@ -18,8 +18,9 @@ defflag	opt_amigaccgrf.h	USE_C_BFOPS
 
 defflag	opt_amigacons.h		RETINACONSOLE ULOWELLCONSOLE CL5426CONSOLE
 defflag	opt_amigacons.h		CV64CONSOLE CV3DCONSOLE TSENGCONSOLE
-defflag	opt_amigacons.h		CV3DONZORRO2
 defflag	opt_amigacons.h		SERCONSOLE
+
+defflag opt_mntva.h		MNTVA_CONSOLE
 
 defflag	opt_kfont.h		KFONT_CONS_ISO8859_1
 defflag	opt_kfont.h		KFONT_CONS_ISO8859_2
@@ -33,6 +34,8 @@ defflag				P5PPC68KBOARD
 defflag				LEV6_DEFER
 defflag				DEVRELOAD
 
+defflag opt_p5pb.h		P5PB_DEBUG P5PB_CONSOLE
+
 defparam			IOBZCLOCK
 
 device	mainbus {}
@@ -42,7 +45,6 @@ device	cpu
 attach	cpu at mainbus
 
 # for bus_space
-
 define	amibus_bl
 file	arch/amiga/amiga/amiga_bus_simple_4.c
 
@@ -58,6 +60,17 @@ file	arch/amiga/amiga/amiga_bus_simple_16.c	amibus_b16
 define	amibus_b800
 file	arch/amiga/amiga/amiga_bus_simple_0x800.c	amibus_b800
 
+define	amibus_b1000
+file	arch/amiga/amiga/amiga_bus_simple_0x1000.c	amibus_b1000
+
+define	amibus_b4000
+file	arch/amiga/amiga/amiga_bus_simple_0x4000.c	amibus_b4000
+
+define  amibus_empb
+file	arch/amiga/pci/empb_bsm.c	amibus_empb
+
+file	arch/amiga/amiga/bus.c
+
 # zorro expansion bus.
 device	zbus {}
 attach	zbus at mainbus
@@ -71,7 +84,7 @@ attach	clock at mainbus
 file	arch/amiga/dev/clock.c
 
 # A2000 internal hwc
-device	a2kbbc
+device	a2kbbc: msm6242b
 attach	a2kbbc at mainbus
 file	arch/amiga/dev/a2kbbc.c		a2kbbc
 
@@ -129,7 +142,7 @@ file	arch/amiga/dev/fd.c		fd needs-flag
 # graphic devices
 define	grfbus {}
 
-device	grf {}
+device	grf {}: wsemuldisplaydev, vcons
 attach	grf at grfbus
 file	arch/amiga/dev/grf.c		grf needs-count
 
@@ -139,11 +152,11 @@ file	arch/amiga/dev/ite.c		ite needs-flag
 file	arch/amiga/dev/kbdmap.c		ite
 file	arch/amiga/dev/kf_custom.c	kfont_custom
 file	arch/amiga/dev/kf_iso8859_1_8x8.c	kfont_cons_iso8859_1 &
-	( ite | amidisplaycc )
+	( ite | wsdisplay)
 file	arch/amiga/dev/kf_iso8859_1_8x11.c	kfont_cons_iso8859_1 &
 	kfont_8x11
 file	arch/amiga/dev/kf_iso8859_2_8x8.c	kfont_cons_iso8859_2 &
-	( ite | amidisplaycc )
+	( ite | wsdisplay )
 file	arch/amiga/dev/kf_iso8859_2_8x11.c	kfont_cons_iso8859_2 &
 	kfont_8x11
 
@@ -154,7 +167,7 @@ file	arch/amiga/dev/grf_cc.c		grfcc needs-flag
 file	arch/amiga/dev/ite_cc.c		grfcc & ite
 
 # wscons interface to custom chips
-device	amidisplaycc: wsemuldisplaydev
+device	amidisplaycc: wsemuldisplaydev, vcons
 attach	amidisplaycc at mainbus
 file	arch/amiga/dev/amidisplaycc.c	amidisplaycc needs-flag
 
@@ -207,6 +220,11 @@ attach	grfcv3d at zbus
 file	arch/amiga/dev/grf_cv3d.c	grfcv3d needs-flag
 file	arch/amiga/dev/ite_cv3d.c	grfcv3d & ite
 
+# MNT VA2000
+device	mntva: wsemuldisplaydev, rasops16, rasops32, vcons, videomode
+attach	mntva at zbus
+file	arch/amiga/dev/mntva.c		mntva needs-flag
+
 # device defined in sys/conf/files
 # A2065, Ameristar, Ariadne ethernet cards
 attach	le at zbus with le_zbus: le24
@@ -217,10 +235,32 @@ file	arch/amiga/dev/if_le.c		le_zbus needs-flag
 attach	ne at zbus with ne_zbus: rtl80x9
 file	arch/amiga/dev/if_ne_zbus.c	ne_zbus needs-flag
 
+# X-Surf
+define	xsurfbus {}
+
+device	xsurf: xsurfbus 
+attach	xsurf at zbus
+file	arch/amiga/dev/xsurf.c		xsurf needs-flag
+
+attach	ne at xsurfbus with ne_xsurf: rtl80x9
+file	arch/amiga/dev/if_ne_xsurf.c	ne_xsurf needs-flag
+
+attach	wdc at xsurfbus with wdc_xsurf
+file	arch/amiga/dev/wdc_xsurf.c	wdc_xsurf & xsurf
+
+define	xshbus {}
+
+device	xsh: xshbus
+attach	xsh at zbus
+file	arch/amiga/dev/xsh.c		xsh needs-flag
+
+attach	ne at xshbus with ne_xsh: ax88190, mii_bitbang
+file	arch/amiga/dev/if_ne_xsh.c	ne_xsh needs-flag
+
 # Hydra ethernet card
 device	ed: ifnet, ether, arp
-attach	ed at zbus with ed_zbus
-file	arch/amiga/dev/if_ed.c		ed_zbus needs-flag
+attach	ed at zbus with ed_zbus: dp8390nic
+file	arch/amiga/dev/if_ed_zbus.c	ed_zbus needs-flag
 
 # C=/Ameristar A2060 / 560
 attach	bah at zbus with bah_zbus
@@ -365,11 +405,6 @@ file	arch/amiga/dev/afsc.c		afsc | aftsc needs-flag
 define	siopng
 file	arch/amiga/dev/siop2.c		siopng
 
-# CyberStorm MKIII scsi
-device	cbiiisc: scsi, siopng
-attach	cbiiisc at zbus
-file	arch/amiga/dev/cbiiisc.c	cbiiisc needs-flag
-
 # Emulex ESP216 & FAS216 controllers
 
 # FastlaneZ3
@@ -434,18 +469,17 @@ file	arch/amiga/amiga/conf.c
 file	arch/amiga/amiga/disksubr.c
 file	arch/amiga/amiga/dkbad.c
 file	arch/amiga/amiga/machdep.c
-file	arch/amiga/amiga/mem.c
-file	arch/amiga/amiga/pmap.c
 file	arch/amiga/amiga/pmap_bootstrap.c
 file	arch/amiga/amiga/trap.c
 file	arch/amiga/amiga/cc.c
 file	dev/md_root.c			memory_disk_hooks
 file	arch/m68k/m68k/cacheops.c
 file	arch/m68k/m68k/db_memrw.c	ddb
-#file	arch/m68k/m68k/pmap_motorola.c
+file	arch/m68k/m68k/pmap_motorola.c
 file	arch/m68k/m68k/procfs_machdep.c	procfs
 file	arch/m68k/m68k/sys_machdep.c
 file	arch/m68k/m68k/vm_machdep.c
+file	arch/m68k/m68k/bus_dma.c
 
 define	gayle
 file	arch/amiga/amiga/gayle.c		gayle
@@ -459,12 +493,17 @@ include "dev/pcmcia/files.pcmcia"
 include "dev/ata/files.ata"
 
 # Amiga 4000/1200 IDE using MI wdc
-attach	wdc at mainbus with wdc_amiga: gayle
+attach	wdc at mainbus with wdc_amiga: gayle, amibus_b1000
 file	arch/amiga/dev/wdc_amiga.c	wdc_amiga
 
 # Buddha wdc
 attach	wdc at zbus with wdc_buddha
 file	arch/amiga/dev/wdc_buddha.c	wdc_buddha
+
+# FastATA 
+device  efa: ata, wdc_common, amibus_b1000
+attach  efa at mainbus
+file    arch/amiga/dev/efa.c		efa
 
 # Compatibility modules
 
@@ -486,4 +525,82 @@ file arch/m68k/m68k/linux_trap.c		compat_linux
 # OSS audio driver compatibility
 include "compat/ossaudio/files.ossaudio"
 
-include "arch/amiga/conf/majors.amiga"
+# Bluetooth stack
+include "dev/bluetooth/files.bluetooth"
+
+# USB stack
+include "dev/usb/files.usb"
+
+# Phase5 BPPC/CSPPC internal bus
+device	p5bus {}
+attach	p5bus at zbus
+file	arch/amiga/dev/p5bus.c		p5bus
+
+device	p5membar {}
+attach	p5membar at zbus
+file	arch/amiga/pci/p5membar.c	p5membar
+
+# CyberStorm MKIII scsi
+device	cbiiisc: scsi, siopng
+attach	cbiiisc at p5bus 
+file	arch/amiga/dev/cbiiisc.c	cbiiisc needs-flag
+
+# Phase5 Blizzard 603e+ SCSI
+device	bppcsc: scsi, asiop
+attach	bppcsc at p5bus 
+file	arch/amiga/dev/bppcsc.c		bppcsc needs-flag
+
+# PCI bus
+file	arch/amiga/pci/pci_machdep.c	pci
+
+device	p5pb: pcibus
+attach	p5pb at p5bus 
+file	arch/amiga/pci/p5pb.c		p5pb & pci
+
+device	mppb: pcibus
+attach	mppb at zbus
+file	arch/amiga/pci/mppb.c		mppb & pci
+
+device	cv3dpb: pcibus
+attach	cv3dpb at zbus
+file	arch/amiga/pci/cv3dpb.c		cv3dpb & pci
+
+define	empmdev { }
+device	empm
+attach	empm at empmdev
+file	arch/amiga/pci/empm.c		empm needs-flag
+
+device	empb: pcibus, amibus_empb, empmdev
+attach	empb at zbus
+file	arch/amiga/pci/empb.c		empb & pci & empm
+
+device	em4k: pcibus
+attach	em4k at zbus
+file	arch/amiga/pci/em4k.c		em4k & pci
+
+device	emmem {}
+attach	emmem at zbus
+file	arch/amiga/pci/emmem.c		emmem
+
+include	"dev/i2o/files.i2o"
+include	"dev/pci/files.pci"
+
+device	z3rambd: altmemdev
+attach	z3rambd at zbus
+file	arch/amiga/dev/z3rambd.c	z3rambd needs-flag
+
+attach	slhci at zbus with slhci_zbus
+file	arch/amiga/dev/slhci_zbus.c	slhci_zbus
+
+define	acafhbus {}
+
+device	acafh: acafhbus, amibus_b4000
+attach	acafh at mainbus 
+file	arch/amiga/dev/acafh.c		acafh needs-count 
+
+attach	wdc at acafhbus with wdc_acafh: gayle, amibus_b1000
+file	arch/amiga/dev/wdc_acafh.c	wdc_acafh & acafh 
+
+include "arch/amiga/clockport/files.clockport"
+
+include	"arch/amiga/conf/majors.amiga"

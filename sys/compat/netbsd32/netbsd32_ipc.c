@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_ipc.c,v 1.14 2007/12/20 23:03:01 dsl Exp $	*/
+/*	$NetBSD: netbsd32_ipc.c,v 1.18 2015/12/03 10:38:21 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_ipc.c,v 1.14 2007/12/20 23:03:01 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_ipc.c,v 1.18 2015/12/03 10:38:21 pgoyette Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_sysv.h"
@@ -42,25 +40,105 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_ipc.c,v 1.14 2007/12/20 23:03:01 dsl Exp $"
 #include <sys/sem.h>
 #include <sys/shm.h>
 #include <sys/mount.h>
+#include <sys/module.h>
 #include <sys/dirent.h>
+#include <sys/syscallvar.h>
 
 #include <sys/syscallargs.h>
 #include <sys/proc.h>
 
 #include <compat/netbsd32/netbsd32.h>
+#include <compat/netbsd32/netbsd32_syscall.h>
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/netbsd32/netbsd32_conv.h>
+
+extern struct emul emul_netbsd32;
+
+#define _PKG_ENTRY(name)	\
+	{ NETBSD32_SYS_ ## name, 0, (sy_call_t *)name }
+
+#define _PKG_ENTRY2(code, name)	\
+	{ NETBSD32_SYS_ ## code, 0, (sy_call_t *)name }
+
+static const struct syscall_package compat_sysvipc_syscalls[] = {
+#if defined(SYSVSEM)
+	_PKG_ENTRY(netbsd32_____semctl50),
+	_PKG_ENTRY(netbsd32_semget),
+	_PKG_ENTRY(netbsd32_semop),
+	_PKG_ENTRY(netbsd32_semconfig),
+#if defined(COMPAT_10)
+	_PKG_ENTRY2(compat_10_osemsys, compat_10_netbsd32_semsys),
+#endif
+#if defined(COMPAT_14)
+	_PKG_ENTRY(compat_14_netbsd32___semctl),
+#endif
+#if defined(COMPAT_50)
+	_PKG_ENTRY(compat_50_netbsd32___semctl14),
+#endif
+#endif /* SYSVSEM */
+
+#if defined(SYSVSHM)
+	_PKG_ENTRY(netbsd32_shmat),
+	_PKG_ENTRY(netbsd32___shmctl50),
+	_PKG_ENTRY(netbsd32_shmdt),
+	_PKG_ENTRY(netbsd32_shmget),
+#if defined(COMPAT_10)
+	_PKG_ENTRY2(compat_10_oshmsys, compat_10_netbsd32_shmsys),
+#endif
+#if defined(COMPAT_14)
+	_PKG_ENTRY(compat_14_netbsd32_shmctl),
+#endif
+#if defined(COMPAT_50)
+	_PKG_ENTRY(compat_50_netbsd32___shmctl13),
+#endif
+#endif /* SYSVSHM */
+
+#if defined(SYSVMSG)
+	_PKG_ENTRY(netbsd32___msgctl50),
+	_PKG_ENTRY(netbsd32_msgget),
+	_PKG_ENTRY(netbsd32_msgsnd),
+	_PKG_ENTRY(netbsd32_msgrcv),
+#if defined(COMPAT_10)
+	_PKG_ENTRY2(compat_10_omsgsys, compat_10_netbsd32_msgsys),
+#endif
+#if defined(COMPAT_14)
+	_PKG_ENTRY(compat_14_netbsd32_msgctl),
+#endif
+#if defined(COMPAT_50)
+	_PKG_ENTRY(compat_50_netbsd32___msgctl13),
+#endif
+#endif /* SYSVMSG */
+	{ 0, 0, NULL }
+};
+
+MODULE(MODULE_CLASS_EXEC, compat_netbsd32_sysvipc, "sysv_ipc,compat_netbsd32");
+
+static int
+compat_netbsd32_sysvipc_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = syscall_establish(&emul_netbsd32,
+		    compat_sysvipc_syscalls);
+		break;
+	case MODULE_CMD_FINI:
+		error = syscall_disestablish(&emul_netbsd32,
+		    compat_sysvipc_syscalls);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+	return error;
+}
+
 
 #if defined(SYSVSEM)
 
 int
-netbsd32___semctl14(struct lwp *l, const struct netbsd32___semctl14_args *uap, register_t *retval)
-{
-	return do_netbsd32___semctl14(l, uap, retval, NULL);
-}
-
-int
-do_netbsd32___semctl14(struct lwp *l, const struct netbsd32___semctl14_args *uap, register_t *retval, void *vkarg)
+netbsd32_____semctl50(struct lwp *l, const struct netbsd32_____semctl50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) semid;
@@ -94,14 +172,9 @@ do_netbsd32___semctl14(struct lwp *l, const struct netbsd32___semctl14_args *uap
 	}
 
 	if (pass_arg) {
-		if (vkarg != NULL)
-			karg32 = *(union netbsd32_semun *)vkarg;
-		else {
-			error = copyin(SCARG_P32(uap, arg), &karg32,
-					sizeof(karg32));
-			if (error)
-				return error;
-		}
+		error = copyin(SCARG_P32(uap, arg), &karg32, sizeof(karg32));
+		if (error)
+			return error;
 		if (pass_arg == &karg) {
 			switch (cmd) {
 			case GETALL:
@@ -182,7 +255,8 @@ netbsd32_semconfig(struct lwp *l, const struct netbsd32_semconfig_args *uap, reg
 #if defined(SYSVMSG)
 
 int
-netbsd32___msgctl13(struct lwp *l, const struct netbsd32___msgctl13_args *uap, register_t *retval)
+netbsd32___msgctl50(struct lwp *l, const struct netbsd32___msgctl50_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int) msqid;
@@ -306,7 +380,8 @@ netbsd32_shmat(struct lwp *l, const struct netbsd32_shmat_args *uap, register_t 
 }
 
 int
-netbsd32___shmctl13(struct lwp *l, const struct netbsd32___shmctl13_args *uap, register_t *retval)
+netbsd32___shmctl50(struct lwp *l, const struct netbsd32___shmctl50_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int) shmid;
@@ -358,8 +433,8 @@ netbsd32_shmget(struct lwp *l, const struct netbsd32_shmget_args *uap, register_
 	} */
 	struct sys_shmget_args ua;
 
-	NETBSD32TOX_UAP(key, key_t)
-	NETBSD32TOX_UAP(size, size_t)
+	NETBSD32TOX_UAP(key, key_t);
+	NETBSD32TOX_UAP(size, size_t);
 	NETBSD32TO64_UAP(shmflg);
 	return (sys_shmget(l, &ua, retval));
 }

@@ -1,11 +1,10 @@
-#	$NetBSD: Makefile,v 1.4 2003/07/10 10:34:19 lukem Exp $
+#	$NetBSD: Makefile,v 1.7 2014/07/05 19:22:42 dholland Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/8/93
 
-DIR=	usd/30.rogue
+SECTION=reference/ref6
+ARTICLE=rogue
 SRCS=	rogue.me
 MACROS=	-me
-
-paper.${PRINTER}: ${SRCS}
-	${TOOL_TBL} ${SRCS} | ${TOOL_ROFF_PS} ${MACROS} > ${.TARGET}
+ROFF_TBL=yes
 
 .include <bsd.doc.mk>

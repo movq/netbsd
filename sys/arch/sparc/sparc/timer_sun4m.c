@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_sun4m.c,v 1.16 2007/02/25 06:03:32 macallan Exp $	*/
+/*	$NetBSD: timer_sun4m.c,v 1.31 2018/01/12 06:01:33 mrg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,23 +58,29 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.16 2007/02/25 06:03:32 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.31 2018/01/12 06:01:33 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <sparc/sparc/vaddrs.h>
 #include <sparc/sparc/cpuvar.h>
 #include <sparc/sparc/timerreg.h>
 #include <sparc/sparc/timervar.h>
 
-struct timer_4m		*timerreg4m;
+static struct timer_4m		*timerreg4m;
 #define	counterreg4m	cpuinfo.counterreg_4m
+
+/*
+ * SMP hardclock handler.
+ */
+#define IPL_HARDCLOCK	10
 
 /*
  * Set up the real-time and statistics clocks.
@@ -86,15 +92,52 @@ void
 timer_init_4m(void)
 {
 	struct cpu_info *cpi;
-	int n;
+	CPU_INFO_ITERATOR n;
 
 	timerreg4m->t_limit = tmr_ustolim4m(tick);
-	for (n = 0; n < sparc_ncpus; n++) {
-		if ((cpi = cpus[n]) == NULL)
-			continue;
+	for (CPU_INFO_FOREACH(n, cpi)) {
 		cpi->counterreg_4m->t_limit = tmr_ustolim4m(statint);
 	}
 	icr_si_bic(SINTR_T);
+}
+
+#ifdef MULTIPROCESSOR
+/*
+ * Handle SMP hardclock() calling for this CPU.
+ */
+static void
+hardclock_ipi(void *cap)
+{
+	int s = splsched();
+
+	hardclock((struct clockframe *)cap);
+	splx(s);
+}
+#endif
+
+/*
+ * Call hardclock on all CPUs.
+ */
+static void
+handle_hardclock(struct clockframe *cap)
+{
+	int s;
+#ifdef MULTIPROCESSOR
+	struct cpu_info *cpi;
+	CPU_INFO_ITERATOR n;
+
+	for (CPU_INFO_FOREACH(n, cpi)) {
+		if (cpi == cpuinfo.ci_self) {
+			KASSERT(CPU_IS_PRIMARY(cpi));
+			continue;
+		}
+		
+		raise_ipi(cpi, IPL_HARDCLOCK);
+	}
+#endif
+	s = splsched();
+	hardclock(cap);
+	splx(s);
 }
 
 /*
@@ -111,13 +154,29 @@ clockintr_4m(void *cap)
 	 * a timer interrupt - if we call hardclock() at that point we'll
 	 * panic
 	 * so for now just bail when cold
+	 *
+	 * For MP, we defer calling hardclock() to the schedintr so
+	 * that we call it on all cpus.
 	 */
 	if (cold)
 		return 0;
-	/* read the limit register to clear the interrupt */
+
+	kpreempt_disable();
+
+	/* Read the limit register to clear the interrupt. */
 	*((volatile int *)&timerreg4m->t_limit);
+
+	/* Update the timecounter offset. */
 	tickle_tc();
-	hardclock((struct clockframe *)cap);
+
+	/*
+	 * We don't have a system-clock per-cpu, and we'd like to keep
+	 * the per-cpu timer for the statclock, so, send an IPI to
+	 * everyone to call hardclock.
+	 */
+	handle_hardclock(cap);
+
+	kpreempt_enable();
 	return (1);
 }
 
@@ -129,6 +188,8 @@ statintr_4m(void *cap)
 {
 	struct clockframe *frame = cap;
 	u_long newint;
+
+	kpreempt_disable();
 
 	/* read the limit register to clear the interrupt */
 	*((volatile int *)&counterreg4m->t_limit);
@@ -151,7 +212,7 @@ statintr_4m(void *cap)
 	 * The factor 8 is only valid for stathz==100.
 	 * See also clock.c
 	 */
-	if (curlwp && (++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0) {
+	if ((++cpuinfo.ci_schedstate.spc_schedticks & 7) == 0 && schedhz != 0) {
 		if (CLKF_LOPRI(frame, IPL_SCHED)) {
 			/* No need to schedule a soft interrupt */
 			spllowerschedclock();
@@ -164,18 +225,20 @@ statintr_4m(void *cap)
 			raise_ipi(&cpuinfo, IPL_SCHED); /* sched_cookie->pil */
 		}
 	}
+	kpreempt_enable();
 
 	return (1);
 }
 
 void
-timerattach_obio_4m(struct device *parent, struct device *self, void *aux)
+timerattach_obio_4m(device_t parent, device_t self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;
 	struct cpu_info *cpi;
 	bus_space_handle_t bh;
-	int i, n;
+	int i;
+	CPU_INFO_ITERATOR n;
 
 	if (sa->sa_nreg < 2) {
 		printf(": only %d register sets\n", sa->sa_nreg);
@@ -201,10 +264,7 @@ timerattach_obio_4m(struct device *parent, struct device *self, void *aux)
 		 * Check whether the CPU corresponding to this timer
 		 * register is installed.
 		 */
-		cpi = NULL;
-		for (n = 0; n < sparc_ncpus; n++) {
-			if ((cpi = cpus[n]) == NULL)
-				continue;
+		for (CPU_INFO_FOREACH(n, cpi)) {
 			if ((i == 0 && sparc_ncpus == 1) || cpi->mid == i + 8) {
 				/* We got a corresponding MID. */
 				break;
@@ -225,6 +285,22 @@ timerattach_obio_4m(struct device *parent, struct device *self, void *aux)
 		}
 		cpi->counterreg_4m = (struct counter_4m *)bh;
 	}
+
+#if defined(MULTIPROCESSOR)
+	if (sparc_ncpus > 1) {
+		/*
+		 * Note that we don't actually use this cookie after checking
+		 * it was establised, we call directly via raise_ipi() on
+		 * IPL_HARDCLOCK.
+		 */
+		void *hardclock_cookie;
+
+		hardclock_cookie = sparc_softintr_establish(IPL_HARDCLOCK,
+		    hardclock_ipi, NULL);
+		if (hardclock_cookie == NULL)
+			panic("timerattach: cannot establish hardclock_intr");
+	}
+#endif
 
 	/* Put processor counter in "timer" mode */
 	timerreg4m->t_cfg = 0;

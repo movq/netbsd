@@ -1,4 +1,4 @@
-/*	$NetBSD: paths.c,v 1.37 2007/10/05 22:21:07 ad Exp $	 */
+/*	$NetBSD: paths.c,v 1.42 2016/01/24 01:56:04 christos Exp $	 */
 
 /*
  * Copyright 1996 Matt Thomas <matt@3am-software.com>
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: paths.c,v 1.37 2007/10/05 22:21:07 ad Exp $");
+__RCSID("$NetBSD: paths.c,v 1.42 2016/01/24 01:56:04 christos Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -49,7 +49,6 @@ __RCSID("$NetBSD: paths.c,v 1.37 2007/10/05 22:21:07 ad Exp $");
 #include <sys/gmon.h>
 #include <sys/socket.h>
 #include <sys/mount.h>
-#include <sys/mbuf.h>
 #include <sys/resource.h>
 #include <machine/cpu.h>
 
@@ -228,7 +227,7 @@ _rtld_add_paths(const char *execname, Search_Path **path_p, const char *pathstr)
 
 /*
  * Process library mappings of the form:
- *	<library_name>	<machdep_variable> <value,...:library_name,...> ... 
+ *	<library_name>	<machdep_variable> <value,...:library_name,...> ...
  */
 static void
 _rtld_process_mapping(Library_Xform **lib_p, const char *bp, const char *ep)
@@ -236,7 +235,7 @@ _rtld_process_mapping(Library_Xform **lib_p, const char *bp, const char *ep)
 	Library_Xform *hwptr = NULL;
 	const char *ptr, *key, *ekey, *lib, *elib, *l;
 	int i, j;
-	
+
 	dbg((" processing mapping \"%.*s\"", (int)(ep - bp), bp));
 
 	if ((ptr = getword(&bp, ep, WS)) == NULL || ptr == bp)
@@ -309,7 +308,7 @@ no_more:
 			if (i == RTLD_MAX_ENTRY)
 				goto no_more;
 			if (i != j)
-				(void)memcpy(hwptr->entry[i].library, 
+				(void)memcpy(hwptr->entry[i].library,
 				    hwptr->entry[j].library,
 				    sizeof(hwptr->entry[j].library));
 			hwptr->entry[i].value = exstrdup(l, key);
@@ -337,10 +336,10 @@ _rtld_process_hints(const char *execname, Search_Path **path_p,
     Library_Xform **lib_p, const char *fname)
 {
 	int fd;
-	char *buf;
+	char *buf, small[128];
 	const char *b, *ep, *ptr;
 	struct stat st;
-	size_t sz;
+	ssize_t sz;
 	Search_Path **head_p = path_p;
 
 	if ((fd = open(fname, O_RDONLY)) == -1) {
@@ -348,19 +347,31 @@ _rtld_process_hints(const char *execname, Search_Path **path_p,
 		return;
 	}
 
-	if (fstat(fd, &st) == -1) {
-		/* Complain */
-		xwarn("fstat: %s", fname);
-		return;
-	}
-
-	sz = (size_t) st.st_size;
-
-	buf = mmap(0, sz, PROT_READ, MAP_SHARED|MAP_FILE, fd, 0);
-	if (buf == MAP_FAILED) {
-		xwarn("mmap: %s", fname);
+	/* Try to avoid mmap/stat on the file. */
+	buf = small;
+	buf[0] = '\0';
+	sz = read(fd, buf, sizeof(small));
+	if (sz == -1) {
+		xwarn("read: %s", fname);
 		(void)close(fd);
 		return;
+	}
+	if (sz >= (ssize_t)sizeof(small)) {
+		if (fstat(fd, &st) == -1) {
+			/* Complain */
+			xwarn("fstat: %s", fname);
+			(void)close(fd);
+			return;
+		}
+
+		sz = (ssize_t) st.st_size;
+
+		buf = mmap(0, sz, PROT_READ, MAP_SHARED|MAP_FILE, fd, 0);
+		if (buf == MAP_FAILED) {
+			xwarn("mmap: %s", fname);
+			(void)close(fd);
+			return;
+		}
 	}
 	(void)close(fd);
 
@@ -392,7 +403,8 @@ _rtld_process_hints(const char *execname, Search_Path **path_p,
 		(void)getstr(&b, ep, "\n");
 	}
 
-	(void)munmap(buf, sz);
+	if (buf != small)
+		(void)munmap(buf, sz);
 }
 
 /* Basic name -> sysctl MIB translation */
@@ -401,8 +413,8 @@ _rtld_sysctl(const char *name, void *oldp, size_t *oldlen)
 {
 	const char *node, *ep;
 	struct sysctlnode query, *result, *newresult;
-	int mib[CTL_MAXNAME], i, r;
-	size_t res_size, n;
+	int mib[CTL_MAXNAME], r;
+	size_t res_size, n, i;
 	u_int miblen = 0;
 
 	/* Start with 16 entries, will grow it up as needed. */
@@ -413,7 +425,7 @@ _rtld_sysctl(const char *name, void *oldp, size_t *oldlen)
 
 	ep = name + strlen(name);
 	do {
-		i = -1;
+		i = ~0ul;
 		while (*name == '/' || *name == '.')
 			name++;
 		if (name >= ep)
@@ -450,7 +462,7 @@ _rtld_sysctl(const char *name, void *oldp, size_t *oldlen)
 			}
 	} while (name < ep && miblen <= CTL_MAXNAME);
 
-	if (name < ep || i == -1)
+	if (name < ep || i == ~0ul)
 		goto bad;
 	r = SYSCTL_TYPE(result[i].sysctl_flags);
 

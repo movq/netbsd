@@ -1,21 +1,21 @@
-/* $NetBSD: apecs_pci.c,v 1.19 2002/05/15 16:57:42 thorpej Exp $ */
+/* $NetBSD: apecs_pci.c,v 1.26 2015/10/02 05:22:49 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,33 +29,28 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: apecs_pci.c,v 1.19 2002/05/15 16:57:42 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apecs_pci.c,v 1.26 2015/10/02 05:22:49 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <alpha/pci/apecsreg.h>
 #include <alpha/pci/apecsvar.h>
 
-void		apecs_attach_hook __P((struct device *, struct device *,
-		    struct pcibus_attach_args *));
-int		apecs_bus_maxdevs __P((void *, int));
-pcitag_t	apecs_make_tag __P((void *, int, int, int));
-void		apecs_decompose_tag __P((void *, pcitag_t, int *, int *,
-		    int *));
-pcireg_t	apecs_conf_read __P((void *, pcitag_t, int));
-void		apecs_conf_write __P((void *, pcitag_t, int, pcireg_t));
+void		apecs_attach_hook(device_t, device_t,
+		    struct pcibus_attach_args *);
+int		apecs_bus_maxdevs(void *, int);
+pcitag_t	apecs_make_tag(void *, int, int, int);
+void		apecs_decompose_tag(void *, pcitag_t, int *, int *, int *);
+pcireg_t	apecs_conf_read(void *, pcitag_t, int);
+void		apecs_conf_write(void *, pcitag_t, int, pcireg_t);
 
 void
-apecs_pci_init(pc, v)
-	pci_chipset_tag_t pc;
-	void *v;
+apecs_pci_init(pci_chipset_tag_t pc, void *v)
 {
 
 	pc->pc_conf_v = v;
@@ -68,35 +63,26 @@ apecs_pci_init(pc, v)
 }
 
 void
-apecs_attach_hook(parent, self, pba)
-	struct device *parent, *self;
-	struct pcibus_attach_args *pba;
+apecs_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 }
 
 int
-apecs_bus_maxdevs(cpv, busno)
-	void *cpv;
-	int busno;
+apecs_bus_maxdevs(void *cpv, int busno)
 {
 
 	return 32;
 }
 
 pcitag_t
-apecs_make_tag(cpv, b, d, f)
-	void *cpv;
-	int b, d, f;
+apecs_make_tag(void *cpv, int b, int d, int f)
 {
 
 	return (b << 16) | (d << 11) | (f << 8);
 }
 
 void
-apecs_decompose_tag(cpv, tag, bp, dp, fp)
-	void *cpv;
-	pcitag_t tag;
-	int *bp, *dp, *fp;
+apecs_decompose_tag(void *cpv, pcitag_t tag, int *bp, int *dp, int *fp)
 {
 
 	if (bp != NULL)
@@ -108,15 +94,15 @@ apecs_decompose_tag(cpv, tag, bp, dp, fp)
 }
 
 pcireg_t
-apecs_conf_read(cpv, tag, offset)
-	void *cpv;
-	pcitag_t tag;
-	int offset;
+apecs_conf_read(void *cpv, pcitag_t tag, int offset)
 {
 	struct apecs_config *acp = cpv;
 	pcireg_t *datap, data;
 	int s, secondary, ba;
 	int32_t old_haxr2;					/* XXX */
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return (pcireg_t) -1;
 
 	s = 0;					/* XXX gcc -Wuninitialized */
 	old_haxr2 = 0;				/* XXX gcc -Wuninitialized */
@@ -156,16 +142,15 @@ apecs_conf_read(cpv, tag, offset)
 }
 
 void
-apecs_conf_write(cpv, tag, offset, data)
-	void *cpv;
-	pcitag_t tag;
-	int offset;
-	pcireg_t data;
+apecs_conf_write(void *cpv, pcitag_t tag, int offset, pcireg_t data)
 {
 	struct apecs_config *acp = cpv;
 	pcireg_t *datap;
 	int s, secondary;
 	int32_t old_haxr2;					/* XXX */
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return;
 
 	s = 0;					/* XXX gcc -Wuninitialized */
 	old_haxr2 = 0;				/* XXX gcc -Wuninitialized */

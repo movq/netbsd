@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_pcb.h,v 1.32 2007/05/02 20:40:26 dyoung Exp $	*/
+/*	$NetBSD: in6_pcb.h,v 1.49 2017/03/02 05:26:24 ozaki-r Exp $	*/
 /*	$KAME: in6_pcb.h,v 1.45 2001/02/09 05:59:46 itojun Exp $	*/
 
 /*
@@ -66,6 +66,7 @@
 
 #include <sys/queue.h>
 #include <netinet/in_pcb_hdr.h>
+#include <netinet/ip6.h>
 
 /*
  * Common structure pcb for internet protocol implementation.
@@ -78,14 +79,15 @@ struct icmp6_filter;
 
 struct	in6pcb {
 	struct inpcb_hdr in6p_head;
-#define in6p_hash	in6p_head.inph_hash
-#define in6p_queue	in6p_head.inph_queue
-#define in6p_af		in6p_head.inph_af
-#define in6p_ppcb	in6p_head.inph_ppcb
-#define in6p_state	in6p_head.inph_state
-#define in6p_socket	in6p_head.inph_socket
-#define in6p_table	in6p_head.inph_table
-#define in6p_sp		in6p_head.inph_sp
+#define in6p_hash	 in6p_head.inph_hash
+#define in6p_queue	 in6p_head.inph_queue
+#define in6p_af		 in6p_head.inph_af
+#define in6p_ppcb	 in6p_head.inph_ppcb
+#define in6p_state	 in6p_head.inph_state
+#define in6p_portalgo	 in6p_head.inph_portalgo
+#define in6p_socket	 in6p_head.inph_socket
+#define in6p_table	 in6p_head.inph_table
+#define in6p_sp		 in6p_head.inph_sp
 	struct	route in6p_route;	/* placeholder for routing entry */
 	u_int16_t in6p_fport;		/* foreign port */
 	u_int16_t in6p_lport;		/* local port */
@@ -98,10 +100,16 @@ struct	in6pcb {
 	struct	ip6_moptions *in6p_moptions; /* IP6 multicast options */
 	struct icmp6_filter *in6p_icmp6filt;
 	int	in6p_cksum;		/* IPV6_CHECKSUM setsockopt */
+	bool    in6p_bindportonsend;
+	struct ip_moptions *in6p_v4moptions;/* IP4 multicast options */
 };
 
 #define in6p_faddr	in6p_ip6.ip6_dst
 #define in6p_laddr	in6p_ip6.ip6_src
+
+#define	in6p_lock(in6p)		solock((in6p)->in6p_socket)
+#define	in6p_unlock(in6p)	sounlock((in6p)->in6p_socket)
+#define	in6p_locked(in6p)	solocked((in6p)->in6p_socket)
 
 /* states in inp_state: */
 #define	IN6P_ATTACHED		INP_ATTACHED
@@ -138,6 +146,7 @@ struct	in6pcb {
 				 IN6P_TCLASS|IN6P_RFC2292|\
 				 IN6P_MTU)
 
+#ifdef _KERNEL
 /* compute hash value for foreign and local in6_addr and port */
 #define IN6_HASH(faddr, fport, laddr, lport) 			\
 	(((faddr)->s6_addr32[0] ^ (faddr)->s6_addr32[1] ^	\
@@ -148,16 +157,15 @@ struct	in6pcb {
 
 #define sotoin6pcb(so)	((struct in6pcb *)(so)->so_pcb)
 
-#ifdef _KERNEL
 void	in6_losing(struct in6pcb *);
 void	in6_pcbinit(struct inpcbtable *, int, int);
 int	in6_pcballoc(struct socket *, void *);
-int	in6_pcbbind(void *, struct mbuf *, struct lwp *);
-int	in6_pcbconnect(void *, struct mbuf *, struct lwp *);
+int	in6_pcbbind(void *, struct sockaddr_in6 *, struct lwp *);
+int	in6_pcbconnect(void *, struct sockaddr_in6 *, struct lwp *);
 void	in6_pcbdetach(struct in6pcb *);
 void	in6_pcbdisconnect(struct in6pcb *);
 struct	in6pcb *in6_pcblookup_port(struct inpcbtable *, struct in6_addr *,
-	u_int, int);
+				   u_int, int, struct vestigial_inpcb *);
 int	in6_pcbnotify(struct inpcbtable *, const struct sockaddr *,
 	u_int, const struct sockaddr *, u_int, int, void *,
 	void (*)(struct in6pcb *, int));
@@ -165,17 +173,21 @@ void	in6_pcbpurgeif0(struct inpcbtable *, struct ifnet *);
 void	in6_pcbpurgeif(struct inpcbtable *, struct ifnet *);
 void	in6_pcbstate(struct in6pcb *, int);
 void	in6_rtchange(struct in6pcb *, int);
-void	in6_setpeeraddr(struct in6pcb *, struct mbuf *);
-void	in6_setsockaddr(struct in6pcb *, struct mbuf *);
+void	in6_setpeeraddr(struct in6pcb *, struct sockaddr_in6 *);
+void	in6_setsockaddr(struct in6pcb *, struct sockaddr_in6 *);
 
 /* in in6_src.c */
 int	in6_selecthlim(struct in6pcb *, struct ifnet *);
-int	in6_pcbsetport(struct in6_addr *, struct in6pcb *, struct lwp *);
+int	in6_selecthlim_rt(struct in6pcb *);
+int	in6_pcbsetport(struct sockaddr_in6 *, struct in6pcb *, struct lwp *);
 
 extern struct rtentry *
 	in6_pcbrtentry(struct in6pcb *);
+extern void
+	in6_pcbrtentry_unref(struct rtentry *, struct in6pcb *);
 extern struct in6pcb *in6_pcblookup_connect(struct inpcbtable *,
-	const struct in6_addr *, u_int, const struct in6_addr *, u_int, int);
+					    const struct in6_addr *, u_int, const struct in6_addr *, u_int, int,
+					    struct vestigial_inpcb *);
 extern struct in6pcb *in6_pcblookup_bind(struct inpcbtable *,
 	const struct in6_addr *, u_int, int);
 #endif /* _KERNEL */

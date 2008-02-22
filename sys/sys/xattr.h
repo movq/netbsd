@@ -1,4 +1,4 @@
-/*	$NetBSD: xattr.h,v 1.2 2005/12/11 12:25:21 christos Exp $	*/
+/*	$NetBSD: xattr.h,v 1.5 2011/09/27 01:40:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,13 +41,13 @@
 #define	_SYS_XATTR_H_
 
 #include <sys/types.h>
-#include <sys/syslimits.h>
+#include <sys/param.h>
 
 /*
  * This is compatible with EXTATTR_MAXNAMELEN, and also happens to be
  * the same as Linux (255).
  */
-#define	XATTR_NAME_MAX		NAME_MAX
+#define	XATTR_NAME_MAX		KERNEL_NAME_MAX
 
 #define	XATTR_SIZE_MAX		65536	/* NetBSD does not enforce this */
 
@@ -66,9 +59,9 @@
 #include <sys/cdefs.h>
 
 __BEGIN_DECLS
-int	setxattr(const char *, const char *, void *, size_t, int);
-int	lsetxattr(const char *, const char *, void *, size_t, int);
-int	fsetxattr(int, const char *, void *, size_t, int);
+int	setxattr(const char *, const char *, const void *, size_t, int);
+int	lsetxattr(const char *, const char *, const void *, size_t, int);
+int	fsetxattr(int, const char *, const void *, size_t, int);
 
 ssize_t	getxattr(const char *, const char *, void *, size_t);
 ssize_t	lgetxattr(const char *, const char *, void *, size_t);

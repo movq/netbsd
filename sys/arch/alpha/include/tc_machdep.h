@@ -1,4 +1,4 @@
-/* $NetBSD: tc_machdep.h,v 1.4 2000/06/01 00:04:50 cgd Exp $ */
+/* $NetBSD: tc_machdep.h,v 1.7 2017/06/22 16:46:52 flxd Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -28,12 +28,12 @@
  */
 
 /*
- * Machine-specific definitions for TurboChannel support.
+ * Machine-specific definitions for TURBOchannel support.
  *
  * This file must typedef the following types:
  *
- *	tc_addr_t	TurboChannel bus address
- *	tc_offset_t	TurboChannel bus address difference (offset)
+ *	tc_addr_t	TURBOchannel bus address
+ *	tc_offset_t	TURBOchannel bus address difference (offset)
  *
  * This file must prototype or define the following functions
  * or macros (one or more of which may be no-ops):
@@ -45,19 +45,19 @@
  *			before must complete before any CPU<->memory
  *			writes after).
  *	tc_syncbus()	sync TC bus; make sure CPU writes are
- *			propagated across the TurboChannel bus.
+ *			propagated across the TURBOchannel bus.
  *	tc_badaddr()	return non-zero if the given address is invalid.
  *	TC_DENSE_TO_SPARSE()
  *			convert the given physical address in
- *			TurboChannel dense space to the corresponding
- *			address in TurboChannel sparse space.
+ *			TURBOchannel dense space to the corresponding
+ *			address in TURBOchannel sparse space.
  *	TC_PHYS_TO_UNCACHED()
  *			convert the given system memory physical address
  *			to the physical address of the corresponding
  *			region that is not cached.
  */
 
-typedef u_int64_t	tc_addr_t;
+typedef uint64_t	tc_addr_t;
 typedef int32_t		tc_offset_t;
 
 #define	tc_mb()		alpha_mb()
@@ -70,13 +70,14 @@ typedef int32_t		tc_offset_t;
  */
 #define	tc_syncbus()							\
     do {								\
-	volatile u_int32_t no_optimize;					\
+	volatile uint32_t no_optimize;					\
 	no_optimize =	 						\
-	    *(volatile u_int32_t *)ALPHA_PHYS_TO_K0SEG(0x00000001f0080220); \
-    } while (0)
+	    *(volatile uint32_t *)ALPHA_PHYS_TO_K0SEG(0x00000001f0080220); \
+	__USE(no_optimize);						\
+    } while (/*CONSTCOND*/0)
 
 #define	tc_badaddr(tcaddr)						\
-    badaddr((void *)(tcaddr), sizeof (u_int32_t))
+    badaddr((void *)(tcaddr), sizeof (uint32_t))
 
 #define	TC_SPACE_IND		0xffffffffe0000003
 #define	TC_SPACE_DENSE		0x0000000000000000

@@ -1,4 +1,4 @@
-/*	$NetBSD: rambo.c,v 1.8 2006/09/15 16:37:19 gdamore Exp $	*/
+/*	$NetBSD: rambo.c,v 1.13 2012/10/27 17:18:03 chs Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rambo.c,v 1.8 2006/09/15 16:37:19 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rambo.c,v 1.13 2012/10/27 17:18:03 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -57,14 +50,13 @@ __KERNEL_RCSID(0, "$NetBSD: rambo.c,v 1.8 2006/09/15 16:37:19 gdamore Exp $");
  * Timer & Interrupt manipulation routines for the Rambo Custom ASIC 
  */
 
-static int	rambo_match  __P((struct device *, struct cfdata *, void *));
-static void	rambo_attach __P((struct device *, struct device *, void *));
+static int	rambo_match(device_t, cfdata_t, void *);
+static void	rambo_attach(device_t, device_t, void *);
 static unsigned rambo_get_timecount(struct timecounter *);
-void rambo_clkintr __P((struct clockframe *));
+void rambo_clkintr(struct clockframe *);
 static void rambo_tc_init(void);
 
 struct rambo_softc {
-        struct device		dev; 
 	struct evcnt		sc_intrcnt;
 	bus_space_tag_t		sc_bst;
 	bus_space_handle_t	sc_bsh;
@@ -74,25 +66,20 @@ struct rambo_softc {
 
 static struct rambo_softc *rambo;
 
-CFATTACH_DECL(rambo, sizeof(struct rambo_softc),
+CFATTACH_DECL_NEW(rambo, sizeof(struct rambo_softc),
     rambo_match, rambo_attach, NULL, NULL);
 
 static int
-rambo_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+rambo_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return 1;
 }
 
 static void
-rambo_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+rambo_attach(device_t parent, device_t self, void *aux)
 {
 	struct confargs *ca = aux;
-	struct rambo_softc *sc = (void *)self;
+	struct rambo_softc *sc = device_private(self);
 
 	sc->sc_bst = ca->ca_bustag;
 
@@ -121,8 +108,7 @@ rambo_attach(parent, self, aux)
 }
 
 void
-rambo_clkintr(cf)
-	struct clockframe *cf;
+rambo_clkintr(struct clockframe *cf)
 {
 	register u_int32_t tbreak, tcount;
 	register int delta;

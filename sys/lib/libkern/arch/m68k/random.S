@@ -1,4 +1,4 @@
-/*	$NetBSD: random.S,v 1.2 1999/11/11 01:53:46 thorpej Exp $	*/
+/*	$NetBSD: random.S,v 1.6 2014/03/18 18:20:43 riastradh Exp $	*/
 
 /*
  * Copyright (c) 1990,1993 The Regents of the University of California.
@@ -48,12 +48,14 @@ ASLOCAL(randseed)
 
 ENTRY(random)
 	movl	#16807, %d0
-	mulsl	_ASM_LABEL(randseed), %d1:%d0
+	LEA_LCL(_ASM_LABEL(randseed),%a0)
+	mulsl	(%a0), %d1:%d0
 	lsll	#1, %d0
 	roxll	#2, %d1
 	addl	%d1, %d0
 	moveql	#1, %d1
 	addxl	%d1, %d0
 	lsrl	#1, %d0
-	movl	%d0, _ASM_LABEL(randseed)
+	movl	%d0, (%a0)
 	rts
+END(random)

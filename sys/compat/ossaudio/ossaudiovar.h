@@ -1,4 +1,4 @@
-/*	$NetBSD: ossaudiovar.h,v 1.14 2008/01/22 01:05:05 jmcneill Exp $	*/
+/*	$NetBSD: ossaudiovar.h,v 1.16 2011/09/06 01:19:34 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -106,6 +99,7 @@ struct oss_sys_ioctl_args {
 #define	OSS_AFMT_U16_LE			0x00000080	/* Little endian U16 */
 #define	OSS_AFMT_U16_BE			0x00000100	/* Big endian U16 */
 #define	OSS_AFMT_MPEG			0x00000200	/* MPEG (2) audio */
+#define	OSS_AFMT_AC3			0x00000400	/* Dolby Digital AC3 */
 
 /* Mixer defines */
 #define OSS_SOUND_MIXER_FIRST		0

@@ -1,4 +1,4 @@
-/* $NetBSD: radiotrack2.c,v 1.13 2006/11/16 01:33:00 christos Exp $ */
+/* $NetBSD: radiotrack2.c,v 1.16 2012/10/27 17:18:25 chs Exp $ */
 /* $OpenBSD: radiotrack2.c,v 1.1 2001/12/05 10:27:06 mickey Exp $ */
 /* $RuOBSD: radiotrack2.c,v 1.2 2001/10/18 16:51:36 pva Exp $ */
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radiotrack2.c,v 1.13 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radiotrack2.c,v 1.16 2012/10/27 17:18:25 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,8 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: radiotrack2.c,v 1.13 2006/11/16 01:33:00 christos Ex
 #define RTII_READ_CLOCK_LOW	(RTII_DATA_ON | RTII_CLCK_OFF | RTII_WREN_OFF)
 #define RTII_READ_CLOCK_HIGH	(RTII_DATA_ON | RTII_CLCK_ON | RTII_WREN_OFF)
 
-int	rtii_probe(struct device *, struct cfdata *, void *);
-void	rtii_attach(struct device *, struct device * self, void *);
+int	rtii_probe(device_t, cfdata_t, void *);
+void	rtii_attach(device_t, device_t  self, void *);
 
 int	rtii_get_info(void *, struct radio_info *);
 int	rtii_set_info(void *, struct radio_info *);
@@ -97,8 +97,6 @@ const struct radio_hw_if rtii_hw_if = {
 };
 
 struct rtii_softc {
-	struct device	dev;
-
 	u_int32_t	freq;
 	u_int32_t	stereo;
 	u_int32_t	lock;
@@ -108,7 +106,7 @@ struct rtii_softc {
 	struct tea5757_t	tea;
 };
 
-CFATTACH_DECL(rtii, sizeof(struct rtii_softc),
+CFATTACH_DECL_NEW(rtii, sizeof(struct rtii_softc),
     rtii_probe, rtii_attach, NULL, NULL);
 
 void	rtii_set_mute(struct rtii_softc *);
@@ -121,8 +119,7 @@ void	rtii_rset(bus_space_tag_t, bus_space_handle_t, bus_size_t, u_int32_t);
 void	rtii_write_bit(bus_space_tag_t, bus_space_handle_t, bus_size_t, int);
 
 int
-rtii_probe(struct device *parent, struct cfdata *cf,
-    void *aux)
+rtii_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -165,9 +162,9 @@ rtii_probe(struct device *parent, struct cfdata *cf,
 }
 
 void
-rtii_attach(struct device *parent, struct device *self, void *aux)
+rtii_attach(device_t parent, device_t self, void *aux)
 {
-	struct rtii_softc *sc = (void *) self;
+	struct rtii_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 
 	sc->tea.iot = ia->ia_iot;
@@ -194,7 +191,7 @@ rtii_attach(struct device *parent, struct device *self, void *aux)
 	tea5757_set_freq(&sc->tea, sc->stereo, sc->lock, sc->freq);
 	rtii_set_mute(sc);
 
-	radio_attach_mi(&rtii_hw_if, sc, &sc->dev);
+	radio_attach_mi(&rtii_hw_if, sc, self);
 }
 
 /*

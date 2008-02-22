@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.21 2007/11/16 07:36:11 skrll Exp $	*/
+/*	$NetBSD: proc.h,v 1.28 2015/06/30 04:20:19 matt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -38,42 +38,38 @@
 #define _MIPS_PROC_H_
 
 #include <sys/param.h>
+#include <mips/vmparam.h>
 
 struct lwp;
 
 /*
  * Machine-dependent part of the lwp structure for MIPS
  */
+struct trapframe;
 
 struct mdlwp {
-	void	*md_regs;		/* registers on current frame */
-	int	md_flags;		/* machine-dependent flags */
-	int	md_upte[UPAGES];	/* ptes for mapping u page */
+	struct trapframe *md_utf;	/* trapframe from userspace */
 	vaddr_t	md_ss_addr;		/* single step address for ptrace */
 	int	md_ss_instr;		/* single step instruction for ptrace */
 	volatile int md_astpending;	/* AST pending on return to userland */
+	int	md_upte[2];		/* ptes for mapping u page */
 };
 
 struct mdproc {
 					/* syscall entry for this process */
-	void	(*md_syscall)(struct lwp *, u_int, u_int, u_int);
+	void	(*md_syscall)(struct lwp *, u_int, u_int, vaddr_t);
+	int	md_abi;			/* which ABI is this process using? */
 };
 
 /* md_flags */
-#define	MDP_FPUSED	0x0001	/* floating point coprocessor used */
-
-/*
- * MIPS trapframe
- */
-struct frame {
-	mips_reg_t f_regs[38];
-	u_int32_t f_ppl;	/* previous priority level */
-	int32_t f_pad;		/* for 8 byte aligned */
-};
 
 #ifdef _KERNEL
+struct lwp;
+
 /* kernel single-step emulation */
-int mips_singlestep(struct lwp *l);
+int	mips_singlestep(struct lwp *);
+
+#define	LWP0_CPU_INFO	&cpu_info_store	/* staticly set in lwp0 */
 #endif /* _KERNEL */
 
 #endif /* _MIPS_PROC_H_ */

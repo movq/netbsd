@@ -1,10 +1,33 @@
-/*	$NetBSD: trm.c,v 1.27 2007/10/19 12:00:55 ad Exp $	*/
+/*	$NetBSD: trm.c,v 1.39 2017/02/09 20:42:30 macallan Exp $	*/
+/*-
+ * Copyright (c) 2002 Izumi Tsutsui.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /*
  * Device Driver for Tekram DC395U/UW/F, DC315/U
  * PCI SCSI Bus Master Host Adapter
  * (SCSI chip set used Tekram ASIC TRM-S1040)
  *
- * Copyright (c) 2002 Izumi Tsutsui
  * Copyright (c) 2001 Rui-Xiang Guo
  * All rights reserved.
  *
@@ -42,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trm.c,v 1.27 2007/10/19 12:00:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trm.c,v 1.39 2017/02/09 20:42:30 macallan Exp $");
 
 /* #define TRM_DEBUG */
 #ifdef TRM_DEBUG
@@ -62,8 +85,6 @@ int trm_debug = 1;
 
 #include <sys/bus.h>
 #include <sys/intr.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_spc.h>
 #include <dev/scsipi/scsi_all.h>
@@ -234,7 +255,7 @@ struct trm_tinfo {
  *-----------------------------------------------------------------------
  */
 struct trm_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -309,8 +330,8 @@ struct trm_softc {
 #define SCSI_BUS_RST_DETECT	0xFE	/* SCSI Bus Reset detected    */
 #define SCSI_SEL_TIMEOUT	0xFF	/* Selection Timeout          */
 
-static int  trm_probe(struct device *, struct cfdata *, void *);
-static void trm_attach(struct device *, struct device *, void *);
+static int  trm_match(device_t, cfdata_t, void *);
+static void trm_attach(device_t, device_t, void *);
 
 static int  trm_init(struct trm_softc *);
 
@@ -349,8 +370,8 @@ static void trm_eeprom_set_data(struct trm_softc *, uint8_t, uint8_t);
 static void trm_eeprom_write_cmd(struct trm_softc *, uint8_t, uint8_t);
 static uint8_t trm_eeprom_get_data(struct trm_softc *, uint8_t);
 
-CFATTACH_DECL(trm, sizeof(struct trm_softc),
-    trm_probe, trm_attach, NULL, NULL);
+CFATTACH_DECL_NEW(trm, sizeof(struct trm_softc),
+    trm_match, trm_attach, NULL, NULL);
 
 /* real period: */
 static const uint8_t trm_clock_period[] = {
@@ -363,38 +384,41 @@ static const uint8_t trm_clock_period[] = {
 	50,	/* 200 ns  5.0 MB/sec */
 	62	/* 248 ns  4.0 MB/sec */
 };
-#define NPERIOD	(sizeof(trm_clock_period)/sizeof(trm_clock_period[0]))
+#define NPERIOD	__arraycount(trm_clock_period)
 
 static int
-trm_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+trm_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_TEKRAM2)
 		switch (PCI_PRODUCT(pa->pa_id)) {
 		case PCI_PRODUCT_TEKRAM2_DC315:
-			return (1);
+			return 1;
 		}
-	return (0);
+	return 0;
 }
 
 /*
  * attach and init a host adapter
  */
 static void
-trm_attach(struct device *parent, struct device *self, void *aux)
+trm_attach(device_t parent, device_t self, void *aux)
 {
+	struct trm_softc *sc = device_private(self);
 	struct pci_attach_args *const pa = aux;
-	struct trm_softc *sc = (struct trm_softc *)self;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	pci_intr_handle_t ih;
 	pcireg_t command;
 	const char *intrstr;
+	int fl = -1;
+	char intrbuf[PCI_INTRSTR_LEN];
+
+	sc->sc_dev = self;
 
 	/*
-	 * These cards do not allow memory mapped accesses
+	 * Some cards do not allow memory mapped accesses
 	 * pa_pc:  chipset tag
 	 * pa_tag: pci tag
 	 */
@@ -408,10 +432,17 @@ trm_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * mask for get correct base address of pci IO port
 	 */
-	if (pci_mapreg_map(pa, PCI_MAPREG_START, PCI_MAPREG_TYPE_IO, 0,
-	    &iot, &ioh, NULL, NULL)) {
-		printf("%s: unable to map registers\n", sc->sc_dev.dv_xname);
-		return;
+	if (command & PCI_COMMAND_MEM_ENABLE) {
+		fl = pci_mapreg_map(pa, TRM_BAR_MMIO, PCI_MAPREG_TYPE_MEM, 0, &iot,
+		    &ioh, NULL, NULL);
+	}
+	if (fl != 0) {
+		aprint_verbose_dev(self, "couldn't map MMIO registers, trying PIO\n");
+		if ((fl = pci_mapreg_map(pa, TRM_BAR_PIO, PCI_MAPREG_TYPE_IO,
+		    0, &iot, &ioh, NULL, NULL)) != 0) {
+			aprint_error(": unable to map registers (%d)\n", fl);
+			return;
+		}
 	}
 	/*
 	 * test checksum of eeprom.. & initialize softc...
@@ -424,17 +455,16 @@ trm_attach(struct device *parent, struct device *self, void *aux)
 		/*
 		 * Error during initialization!
 		 */
-		printf(": Error during initialization\n");
 		return;
 	}
 	/*
 	 * Now try to attach all the sub-devices
 	 */
 	if ((sc->sc_config & HCC_WIDE_CARD) != 0)
-		printf(": Tekram DC395UW/F (TRM-S1040) Fast40 "
+		aprint_normal(": Tekram DC395UW/F (TRM-S1040) Fast40 "
 		    "Ultra Wide SCSI Adapter\n");
 	else
-		printf(": Tekram DC395U, DC315/U (TRM-S1040) Fast20 "
+		aprint_normal(": Tekram DC395U, DC315/U (TRM-S1040) Fast20 "
 		    "Ultra SCSI Adapter\n");
 
 	/*
@@ -442,23 +472,22 @@ trm_attach(struct device *parent, struct device *self, void *aux)
 	 * map and establish interrupt
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pa->pa_pc, ih);
+	intrstr = pci_intr_string(pa->pa_pc, ih, intrbuf, sizeof(intrbuf));
 
 	if (pci_intr_establish(pa->pa_pc, ih, IPL_BIO, trm_intr, sc) == NULL) {
-		printf("%s: couldn't establish interrupt", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	if (intrstr != NULL)
-		printf("%s: interrupting at %s\n",
-		    sc->sc_dev.dv_xname, intrstr);
+		aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
-	sc->sc_adapter.adapt_dev = &sc->sc_dev;
+	sc->sc_adapter.adapt_dev = self;
 	sc->sc_adapter.adapt_nchannels = 1;
 	sc->sc_adapter.adapt_openings = TRM_MAX_SRB;
 	sc->sc_adapter.adapt_max_periph = TRM_MAX_SRB;
@@ -472,7 +501,7 @@ trm_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_channel.chan_nluns = 8;
 	sc->sc_channel.chan_id = sc->sc_id;
 
-	config_found(&sc->sc_dev, &sc->sc_channel, scsiprint);
+	config_found(self, &sc->sc_channel, scsiprint);
 }
 
 /*
@@ -500,28 +529,28 @@ trm_init(struct trm_softc *sc)
 	all_sgsize = TRM_MAX_SRB * TRM_SG_SIZE;
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, all_sgsize, PAGE_SIZE,
 	    0, &seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		printf(": unable to allocate SCSI REQUEST BLOCKS, "
+		aprint_error(": unable to allocate SCSI REQUEST BLOCKS, "
 		    "error = %d\n", error);
-		return (1);
+		return 1;
 	}
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
 	    all_sgsize, (void **) &sc->sc_sglist,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
-		printf(": unable to map SCSI REQUEST BLOCKS, "
+		aprint_error(": unable to map SCSI REQUEST BLOCKS, "
 		    "error = %d\n", error);
-		return (1);
+		return 1;
 	}
 	if ((error = bus_dmamap_create(sc->sc_dmat, all_sgsize, 1,
 	    all_sgsize, 0, BUS_DMA_NOWAIT, &sc->sc_dmamap)) != 0) {
-		printf(": unable to create SRB DMA maps, "
+		aprint_error(": unable to create SRB DMA maps, "
 		    "error = %d\n", error);
-		return (1);
+		return 1;
 	}
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_dmamap,
 	    sc->sc_sglist, all_sgsize, NULL, BUS_DMA_NOWAIT)) != 0) {
-		printf(": unable to load SRB DMA maps, "
+		aprint_error(": unable to load SRB DMA maps, "
 		    "error = %d\n", error);
-		return (1);
+		return 1;
 	}
 	DPRINTF(("all_sgsize=%x\n", all_sgsize));
 	memset(sc->sc_sglist, 0, all_sgsize);
@@ -552,10 +581,10 @@ trm_init(struct trm_softc *sc)
 
 	sc->sc_srb = malloc(sizeof(struct trm_srb) * TRM_MAX_SRB,
 	    M_DEVBUF, M_NOWAIT|M_ZERO);
-	DPRINTF(("all SRB size=%x\n", sizeof(struct trm_srb) * TRM_MAX_SRB));
+	DPRINTF(("all SRB size=%zx\n", sizeof(struct trm_srb) * TRM_MAX_SRB));
 	if (sc->sc_srb == NULL) {
-		printf(": can not allocate SRB\n");
-		return (1);
+		aprint_error(": can not allocate SRB\n");
+		return 1;
 	}
 
 	for (i = 0, srb = sc->sc_srb; i < TRM_MAX_SRB; i++) {
@@ -568,9 +597,9 @@ trm_init(struct trm_softc *sc)
 		if (bus_dmamap_create(sc->sc_dmat,
 		    MAXPHYS, TRM_MAX_SG_ENTRIES, MAXPHYS, 0,
 		    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW, &srb->dmap)) {
-			printf(": unable to create DMA transfer map...\n");
+			aprint_error(": unable to create DMA transfer map.\n");
 			free(sc->sc_srb, M_DEVBUF);
-			return (1);
+			return 1;
 		}
 		TAILQ_INSERT_TAIL(&sc->sc_freesrb, srb, next);
 		srb++;
@@ -645,7 +674,7 @@ trm_init(struct trm_softc *sc)
 
 	trm_reset(sc);
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -661,26 +690,25 @@ trm_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 	struct trm_softc *sc;
 	struct trm_srb *srb;
 	struct scsipi_xfer *xs;
-	int error, i, target, lun, s;
+	int error, i, s;
 
-	sc = (struct trm_softc *)chan->chan_adapter->adapt_dev;
+	sc = device_private(chan->chan_adapter->adapt_dev);
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
 
 	switch (req) {
 	case ADAPTER_REQ_RUN_XFER:
 		xs = arg;
-		target = xs->xs_periph->periph_target;
-		lun = xs->xs_periph->periph_lun;
 		DPRINTF(("trm_scsipi_request.....\n"));
-		DPRINTF(("target= %d lun= %d\n", target, lun));
+		DPRINTF(("target= %d lun= %d\n", xs->xs_periph->periph_target,
+		    xs->xs_periph->periph_lun));
 		if (xs->xs_control & XS_CTL_RESET) {
 			trm_reset(sc);
-			xs->error = XS_NOERROR | XS_RESET;
+			xs->error = XS_RESET;
 			return;
 		}
 		if (xs->xs_status & XS_STS_DONE) {
-			printf("%s: Is it done?\n", sc->sc_dev.dv_xname);
+			printf("%s: Is it done?\n", device_xname(sc->sc_dev));
 			xs->xs_status &= ~XS_STS_DONE;
 		}
 
@@ -710,7 +738,8 @@ trm_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 			    ((xs->xs_control & XS_CTL_DATA_IN) ?
 			    BUS_DMA_READ : BUS_DMA_WRITE))) != 0) {
 				printf("%s: DMA transfer map unable to load, "
-				    "error = %d\n", sc->sc_dev.dv_xname, error);
+				    "error = %d\n", device_xname(sc->sc_dev),
+				    error);
 				xs->error = XS_DRIVER_STUFFUP;
 				/*
 				 * free SRB
@@ -981,7 +1010,7 @@ trm_select(struct trm_softc *sc, struct trm_srb *srb)
 		/* SCSI command */
 		bus_space_write_1(iot, ioh, TRM_SCSI_COMMAND, SCMD_SEL_ATNSTOP);
 		DPRINTF(("select with SEL_ATNSTOP\n"));
-		return (0);
+		return 0;
 	}
 
 	if (srb->tag[0] != 0) {
@@ -1018,7 +1047,7 @@ trm_select(struct trm_softc *sc, struct trm_srb *srb)
 	sc->sc_phase = PH_BUS_FREE;	/* SCSI bus free Phase */
 	/* SCSI command */
 	bus_space_write_1(iot, ioh, TRM_SCSI_COMMAND, scsicmd);
-	return (0);
+	return 0;
 }
 
 /*
@@ -1086,7 +1115,7 @@ trm_timeout(void *arg)
 	scsipi_printaddr(xs->xs_periph);
 	printf("SCSI OpCode 0x%02x timed out\n", xs->cmd->opcode);
 
-	sc = (void *)periph->periph_channel->chan_adapter->adapt_dev;
+	sc = device_private(periph->periph_channel->chan_adapter->adapt_dev);
 
 	trm_reset_scsi_bus(sc);
 	s = splbio();
@@ -1109,16 +1138,16 @@ trm_intr(void *arg)
 	int intstat, stat;
 
 	DPRINTF(("trm_intr......\n"));
-	sc = (struct trm_softc *)arg;
+	sc = arg;
 	if (sc == NULL)
-		return (0);
+		return 0;
 
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
 
 	stat = bus_space_read_2(iot, ioh, TRM_SCSI_STATUS);
 	if ((stat & SCSIINTERRUPT) == 0)
-		return (0);
+		return 0;
 
 	DPRINTF(("stat = %04x, ", stat));
 	intstat = bus_space_read_1(iot, ioh, TRM_SCSI_INTSTATUS);
@@ -1127,17 +1156,17 @@ trm_intr(void *arg)
 	if (intstat & (INT_SELTIMEOUT | INT_DISCONNECT)) {
 		DPRINTF(("\n"));
 		trm_disconnect(sc);
-		return (1);
+		return 1;
 	}
 	if (intstat & INT_RESELECTED) {
 		DPRINTF(("\n"));
 		trm_reselect(sc);
-		return (1);
+		return 1;
 	}
 	if (intstat & INT_SCSIRESET) {
 		DPRINTF(("\n"));
 		trm_scsi_reset_detect(sc);
-		return (1);
+		return 1;
 	}
 	if (intstat & (INT_BUSSERVICE | INT_CMDDONE)) {
 		DPRINTF(("sc->sc_phase = %2d, sc->sc_state = %2d\n",
@@ -1176,7 +1205,7 @@ trm_intr(void *arg)
 			break;
 		default:
 			printf("%s: unexpected phase in trm_intr() phase0\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			break;
 		}
 
@@ -1205,13 +1234,13 @@ trm_intr(void *arg)
 			break;
 		default:
 			printf("%s: unexpected phase in trm_intr() phase1\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			break;
 		}
 
-		return (1);
+		return 1;
 	}
-	return (0);
+	return 0;
 }
 
 static void
@@ -1785,7 +1814,7 @@ trm_msgin_phase0(struct trm_softc *sc)
 					break;
 				} else {
 					printf("%s: invalid tag id\n",
-					   sc->sc_dev.dv_xname);
+					    device_xname(sc->sc_dev));
 				}
 
 				sc->sc_state = TRM_UNEXPECT_RESEL;
@@ -2097,7 +2126,7 @@ trm_reselect(struct trm_softc *sc)
 		    sc->sc_actsrb == NULL) {
 			printf("%s: reselect from target %d lun %d "
 			    "without nexus; sending abort\n",
-			    sc->sc_dev.dv_xname, target, lun);
+			    device_xname(sc->sc_dev), target, lun);
 			sc->sc_state = TRM_UNEXPECT_RESEL;
 			sc->sc_msgbuf[0] = MSG_ABORT_TAG;
 			sc->sc_msgcnt = 1;
@@ -2172,13 +2201,12 @@ trm_done(struct trm_softc *sc, struct trm_srb *srb)
 		 */
 		if ((srb->hastat & H_OVER_UNDER_RUN) != 0) {
 			printf("%s: over/under run error\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			srb->tastat = 0;
 			/* Illegal length (over/under run) */
 			xs->error = XS_DRIVER_STUFFUP;
 		} else if ((srb->flag & PARITY_ERROR) != 0) {
-			printf("%s: parity error\n",
-			    sc->sc_dev.dv_xname);
+			printf("%s: parity error\n", device_xname(sc->sc_dev));
 			/* Driver failed to perform operation */
 			xs->error = XS_DRIVER_STUFFUP; /* XXX */
 		} else if ((srb->flag & SRB_TIMEOUT) != 0) {
@@ -2202,7 +2230,7 @@ trm_done(struct trm_softc *sc, struct trm_srb *srb)
 		if ((srb->flag & AUTO_REQSENSE) != 0 ||
 		    trm_request_sense(sc, srb) != 0) {
 			printf("%s: request sense failed\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			xs->error = XS_DRIVER_STUFFUP;
 			break;
 		}
@@ -2221,7 +2249,7 @@ trm_done(struct trm_softc *sc, struct trm_srb *srb)
 		break;
 
 	case SCSI_RESV_CONFLICT:
-		DPRINTF(("%s: target reserved at ", sc->sc_dev.dv_xname));
+		DPRINTF(("%s: target reserved at ", device_xname(sc->sc_dev)));
 		DPRINTF(("%s %d\n", __FILE__, __LINE__));
 		xs->error = XS_BUSY;
 		break;
@@ -2229,7 +2257,7 @@ trm_done(struct trm_softc *sc, struct trm_srb *srb)
 	default:
 		srb->hastat = 0;
 		printf("%s: trm_done(): unknown status = %02x\n",
-		    sc->sc_dev.dv_xname, xs->status);
+		    device_xname(sc->sc_dev), xs->status);
 		xs->error = XS_DRIVER_STUFFUP;
 		break;
 	}
@@ -2601,7 +2629,7 @@ trm_eeprom_get_data(struct trm_softc *sc, uint8_t addr)
 	 * Disable chip select
 	 */
 	bus_space_write_1(iot, ioh, TRM_GEN_NVRAM, 0);
-	return (data);
+	return data;
 }
 
 /*

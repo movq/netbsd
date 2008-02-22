@@ -1,13 +1,13 @@
-#	$NetBSD: Makefile,v 1.20 2005/06/27 01:00:06 christos Exp $
+#	$NetBSD: Makefile,v 1.22 2009/12/22 17:50:22 pooka Exp $
 
 .include <bsd.own.mk>
 
 PROG=	mount_msdos
-SRCS=	mount_msdos.c fattr.c
+SRCS=	mount_msdos.c fattr.c pathadj.c
 MAN=	mount_msdos.8
 
 MOUNT=	${NETBSDSRCDIR}/sbin/mount
-CPPFLAGS+= -I${MOUNT} -I${NETBSDSRCDIR}/sys
+CPPFLAGS+= -I${MOUNT}
 .PATH:	${MOUNT}
 
 DPADD+=${LIBUTIL}

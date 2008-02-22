@@ -1,4 +1,4 @@
-/*	$NetBSD: mlx_pci.c,v 1.17 2007/10/19 12:00:52 ad Exp $	*/
+/*	$NetBSD: mlx_pci.c,v 1.26 2016/09/27 03:33:32 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mlx_pci.c,v 1.17 2007/10/19 12:00:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mlx_pci.c,v 1.26 2016/09/27 03:33:32 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: mlx_pci.c,v 1.17 2007/10/19 12:00:52 ad Exp $");
 #include <sys/device.h>
 #include <sys/queue.h>
 #include <sys/callout.h>
+#include <sys/module.h>
 
 #include <machine/endian.h>
 #include <sys/bus.h>
@@ -89,8 +83,10 @@ __KERNEL_RCSID(0, "$NetBSD: mlx_pci.c,v 1.17 2007/10/19 12:00:52 ad Exp $");
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 
-static void	mlx_pci_attach(struct device *, struct device *, void *);
-static int	mlx_pci_match(struct device *, struct cfdata *, void *);
+#include "ioconf.h"
+
+static void	mlx_pci_attach(device_t, device_t, void *);
+static int	mlx_pci_match(device_t, cfdata_t, void *);
 static const struct mlx_pci_ident *mlx_pci_findmpi(struct pci_attach_args *);
 
 static int	mlx_v3_submit(struct mlx_softc *, struct mlx_ccb *);
@@ -148,8 +144,15 @@ static struct mlx_pci_ident {
 	},
 };
 
-CFATTACH_DECL(mlx_pci, sizeof(struct mlx_softc),
-    mlx_pci_match, mlx_pci_attach, NULL, NULL);
+static int
+mlx_pci_rescan(device_t self, const char *attr, const int *flag)
+{
+
+	return mlx_configure(device_private(self), 1);
+}
+
+CFATTACH_DECL3_NEW(mlx_pci, sizeof(struct mlx_softc),
+    mlx_pci_match, mlx_pci_attach, NULL, NULL, mlx_pci_rescan, NULL, 0);
 
 /*
  * Try to find a `mlx_pci_ident' entry corresponding to this board.
@@ -185,8 +188,7 @@ mlx_pci_findmpi(struct pci_attach_args *pa)
  * Match a supported board.
  */
 static int
-mlx_pci_match(struct device *parent, struct cfdata *cfdata,
-    void *aux)
+mlx_pci_match(device_t parent, cfdata_t cfdata, void *aux)
 {
 
 	return (mlx_pci_findmpi(aux) != NULL);
@@ -196,7 +198,7 @@ mlx_pci_match(struct device *parent, struct cfdata *cfdata,
  * Attach a supported board.
  */
 static void
-mlx_pci_attach(struct device *parent, struct device *self, void *aux)
+mlx_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct mlx_softc *mlx;
@@ -208,12 +210,14 @@ mlx_pci_attach(struct device *parent, struct device *self, void *aux)
 	const char *intrstr;
 	int ior, memr, i;
 	const struct mlx_pci_ident *mpi;
+	char intrbuf[PCI_INTRSTR_LEN];
 
-	mlx = (struct mlx_softc *)self;
+	mlx = device_private(self);
 	pa = aux;
 	pc = pa->pa_pc;
 	mpi = mlx_pci_findmpi(aux);
 
+	mlx->mlx_dv = self;
 	mlx->mlx_dmat = pa->pa_dmat;
 	mlx->mlx_ci.ci_iftype = mpi->mpi_iftype;
 
@@ -253,7 +257,7 @@ mlx_pci_attach(struct device *parent, struct device *self, void *aux)
 		mlx->mlx_iot = iot;
 		mlx->mlx_ioh = ioh;
 	} else {
-		printf("%s: can't map i/o or memory space\n", self->dv_xname);
+		aprint_error_dev(self, "can't map i/o or memory space\n");
 		return;
 	}
 
@@ -264,16 +268,16 @@ mlx_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: can't map interrupt\n", self->dv_xname);
+		aprint_error_dev(self, "can't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	mlx->mlx_ih = pci_intr_establish(pc, ih, IPL_BIO, mlx_intr, mlx);
 	if (mlx->mlx_ih == NULL) {
-		printf("%s: can't establish interrupt", self->dv_xname);
+		aprint_error_dev(self, "can't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 
@@ -676,4 +680,45 @@ mlx_v5_fw_handshake(struct mlx_softc *mlx, int *error, int *param1, int *param2)
 	mlx_outb(mlx, MLX_V5REG_FWERROR, 0xff);
 
 	return (2);
+}
+
+MODULE(MODULE_CLASS_DRIVER, mlx_pci, "mlx,pci");
+        
+#ifdef _MODULE
+/*      
+ * XXX Don't allow ioconf.c to redefine the "struct cfdriver ld_cd"
+ * XXX it will be defined in the common-code module
+ */     
+#undef  CFDRIVER_DECL
+#define CFDRIVER_DECL(name, class, attr)
+#include "ioconf.c"  
+#endif  
+        
+static int
+mlx_pci_modcmd(modcmd_t cmd, void *opaque)
+{           
+	int error = 0;
+ 
+#ifdef _MODULE  
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		/*
+		 * We skip over the first entry in cfdriver[] array
+		 * since the cfdriver is attached by the common
+		 * (non-attachment-specific) code.
+		 */
+		error = config_init_component(&cfdriver_ioconf_mlx_pci[1],
+		    cfattach_ioconf_mlx_pci, cfdata_ioconf_mlx_pci);
+		break;
+	case MODULE_CMD_FINI:
+		error = config_fini_component(&cfdriver_ioconf_mlx_pci[1],
+		    cfattach_ioconf_mlx_pci, cfdata_ioconf_mlx_pci);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+#endif
+
+	return error;
 }

@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_pager.h,v 1.37 2007/10/25 13:03:06 yamt Exp $	*/
+/*	$NetBSD: uvm_pager.h,v 1.44 2017/01/13 04:43:16 christos Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -84,11 +77,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -119,6 +108,7 @@
  */
 
 struct uvm_faultinfo;
+struct uvm_object;
 
 /*
  * pager ops
@@ -156,6 +146,7 @@ struct uvm_pagerops {
 /* if PGO_FREE is not set then the pages stay where they are. */
 
 #define PGO_ALLPAGES	0x010	/* flush whole object/get all pages */
+#define PGO_JOURNALLOCKED 0x020	/* journal is already locked [put] */
 #define PGO_LOCKED	0x040	/* fault data structures are locked [get] */
 #define PGO_BUSYFAIL	0x080	/* fail if a page is busy [put] */
 #define PGO_OVERWRITE	0x200	/* pages will be overwritten before unlocked */
@@ -163,6 +154,8 @@ struct uvm_pagerops {
 #define PGO_NOBLOCKALLOC 0x800	/* backing block allocation is not needed */
 #define PGO_NOTIMESTAMP 0x1000	/* don't mark object accessed/modified */
 #define PGO_RECLAIM	0x2000	/* object is being reclaimed */
+#define PGO_GLOCKHELD	0x4000	/* genfs_node's lock is already held */
+#define PGO_LAZY	0x8000	/* equivalent of MNT_LAZY / FSYNC_LAZY */
 
 /* page we are not interested in getting */
 #define PGO_DONTCARE ((struct vm_page *) -1L)	/* [get only] */
@@ -174,6 +167,7 @@ struct uvm_pagerops {
  */
 
 void	uvm_pager_init(void);
+void	uvm_pager_realloc_emerg(void);
 struct vm_page *uvm_pageratop(vaddr_t);
 vaddr_t	uvm_pagermapin(struct vm_page **, int, int);
 void	uvm_pagermapout(vaddr_t, int);

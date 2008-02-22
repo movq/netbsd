@@ -1,4 +1,4 @@
-/*	$NetBSD: sscom_s3c2410.c,v 1.2 2005/12/11 12:16:51 christos Exp $ */
+/*	$NetBSD: sscom_s3c2410.c,v 1.7 2014/03/14 21:40:48 matt Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sscom_s3c2410.c,v 1.2 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sscom_s3c2410.c,v 1.7 2014/03/14 21:40:48 matt Exp $");
 
 #include "opt_sscom.h"
 #include "opt_ddb.h"
@@ -45,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: sscom_s3c2410.c,v 1.2 2005/12/11 12:16:51 christos E
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -58,17 +57,17 @@ __KERNEL_RCSID(0, "$NetBSD: sscom_s3c2410.c,v 1.2 2005/12/11 12:16:51 christos E
 #include <sys/vnode.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/s3c2xx0/s3c2410reg.h>
 #include <arm/s3c2xx0/s3c2410var.h>
 #include <arm/s3c2xx0/sscom_var.h>
 #include <sys/termios.h>
 
-static int sscom_match(struct device *, struct cfdata *, void *);
-static void sscom_attach(struct device *, struct device *, void *);
+static int sscom_match(device_t, cfdata_t, void *);
+static void sscom_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(sscom, sizeof(struct sscom_softc), sscom_match,
+CFATTACH_DECL_NEW(sscom, sizeof(struct sscom_softc), sscom_match,
     sscom_attach, NULL, NULL);
 
 const struct sscom_uart_info s3c2410_uart_config[] = {
@@ -99,7 +98,7 @@ const struct sscom_uart_info s3c2410_uart_config[] = {
 };
 
 static int
-sscom_match(struct device *parent, struct cfdata *cf, void *aux)
+sscom_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct s3c2xx0_attach_args *sa = aux;
 	int unit = sa->sa_index;
@@ -107,25 +106,48 @@ sscom_match(struct device *parent, struct cfdata *cf, void *aux)
 	return unit == 0 || unit == 1;
 }
 
+/* RXINTn, TXINTn and ERRn interrupts are cascaded to UARTn irq. */
+
+#define	_sscom_intbit(irqno)	(1<<((irqno)-S3C2410_SUBIRQ_MIN))
+
 static void
-sscom_attach(struct device *parent, struct device *self, void *aux)
+s3c2410_change_txrx_interrupts(struct sscom_softc *sc, bool unmask_p,
+    u_int flags)
 {
-	struct sscom_softc *sc = (struct sscom_softc *)self;
+	int intbits = 0;
+	if (flags & SSCOM_HW_RXINT)
+		intbits |= _sscom_intbit((sc)->sc_rx_irqno);
+	if (flags & SSCOM_HW_TXINT)
+		intbits |= _sscom_intbit((sc)->sc_rx_irqno);
+	if (unmask_p) {
+		s3c2410_unmask_subinterrupts(intbits);
+	} else {
+		s3c2410_mask_subinterrupts(intbits);
+	}
+}
+
+static void
+sscom_attach(device_t parent, device_t self, void *aux)
+{
+	struct sscom_softc *sc = device_private(self);
 	struct s3c2xx0_attach_args *sa = aux;
 	int unit = sa->sa_index;
 	bus_addr_t iobase = s3c2410_uart_config[unit].iobase;
 
-	printf( ": UART%d addr=%lx", sa->sa_index, iobase );
+	aprint_normal(": UART%d addr=%lx", sa->sa_index, iobase );
 
+	sc->sc_dev = self;
 	sc->sc_iot = s3c2xx0_softc->sc_iot;
 	sc->sc_unit = unit;
 	sc->sc_frequency = s3c2xx0_softc->sc_pclk;
+
+	sc->sc_change_txrx_interrupts = s3c2410_change_txrx_interrupts;
 
 	sc->sc_rx_irqno = s3c2410_uart_config[sa->sa_index].rx_int;
 	sc->sc_tx_irqno = s3c2410_uart_config[sa->sa_index].tx_int;
 
 	if (bus_space_map(sc->sc_iot, iobase, SSCOM_SIZE, 0, &sc->sc_ioh)) {
-		printf( ": failed to map registers\n" );
+		aprint_error( ": failed to map registers\n" );
 		return;
 	}
 

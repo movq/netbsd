@@ -1,4 +1,4 @@
-/*	$NetBSD: symtab.c,v 1.23 2005/08/19 02:07:19 christos Exp $	*/
+/*	$NetBSD: symtab.c,v 1.29 2013/01/22 09:39:13 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)symtab.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: symtab.c,v 1.23 2005/08/19 02:07:19 christos Exp $");
+__RCSID("$NetBSD: symtab.c,v 1.29 2013/01/22 09:39:13 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -85,7 +85,7 @@ lookupino(ino_t inum)
 {
 	struct entry *ep;
 
-	if (inum < WINO || inum >= maxino)
+	if (inum < UFS_WINO || inum >= maxino)
 		return (NULL);
 	for (ep = entry[inum % entrytblsize]; ep != NULL; ep = ep->e_next)
 		if (ep->e_ino == inum)
@@ -101,7 +101,7 @@ addino(ino_t inum, struct entry *np)
 {
 	struct entry **epp;
 
-	if (inum < WINO || inum >= maxino)
+	if (inum < UFS_WINO || inum >= maxino)
 		panic("addino: out of range %llu\n", (unsigned long long)inum);
 	epp = &entry[inum % entrytblsize];
 	np->e_ino = inum;
@@ -122,7 +122,7 @@ deleteino(ino_t inum)
 	struct entry *next;
 	struct entry **prev;
 
-	if (inum < WINO || inum >= maxino)
+	if (inum < UFS_WINO || inum >= maxino)
 		panic("deleteino: out of range %llu\n",
 		    (unsigned long long)inum);
 	prev = &entry[inum % entrytblsize];
@@ -149,7 +149,7 @@ lookupname(const char *name)
 	char buf[MAXPATHLEN];
 
 	cp = name;
-	for (ep = lookupino(ROOTINO); ep != NULL; ep = ep->e_entries) {
+	for (ep = lookupino(UFS_ROOTINO); ep != NULL; ep = ep->e_entries) {
 		for (np = buf; *cp != '/' && *cp != '\0'; )
 			*np++ = *cp++;
 		*np = '\0';
@@ -198,7 +198,7 @@ myname(struct entry *ep)
 	for (cp = &namebuf[MAXPATHLEN - 2]; cp > &namebuf[ep->e_namlen]; ) {
 		cp -= ep->e_namlen;
 		memmove(cp, ep->e_name, (long)ep->e_namlen);
-		if (ep == lookupino(ROOTINO))
+		if (ep == lookupino(UFS_ROOTINO))
 			return (cp);
 		*(--cp) = '/';
 		ep = ep->e_parent;
@@ -233,17 +233,17 @@ addentry(const char *name, ino_t inum, int type)
 	}
 	np = freelist;
 	freelist = np->e_next;
-	memset(np, 0, (long)sizeof(struct entry));
+	memset(np, 0, sizeof(struct entry));
 
 	np->e_type = type & ~LINK;
 	ep = lookupparent(name);
 	if (ep == NULL) {
-		if (inum != ROOTINO || lookupino(ROOTINO) != NULL)
+		if (inum != UFS_ROOTINO || lookupino(UFS_ROOTINO) != NULL)
 			panic("bad name to addentry %s\n", name);
 		np->e_name = savename(name);
 		np->e_namlen = strlen(name);
 		np->e_parent = np;
-		addino(ROOTINO, np);
+		addino(UFS_ROOTINO, np);
 		return (np);
 	}
 	np->e_name = savename(strrchr(name, '/') + 1);
@@ -450,12 +450,13 @@ dumpsymtable(const char *filename, int32_t checkpt)
 {
 	struct entry *ep, *tep;
 	ino_t i;
+	long l;
 	struct entry temp, *tentry;
 	long mynum = 1, stroff = 0;
 	FILE *fd;
 	struct symtableheader hdr;
 
-	vprintf(stdout, "Check pointing the restore\n");
+	vprintf(stdout, "Checkpointing the restore\n");
 	if (Nflag)
 		return;
 	if ((fd = fopen(filename, "w")) == NULL) {
@@ -468,7 +469,7 @@ dumpsymtable(const char *filename, int32_t checkpt)
 	 * Assign indicies to each entry
 	 * Write out the string entries
 	 */
-	for (i = WINO; i <= maxino; i++) {
+	for (i = UFS_WINO; i <= maxino; i++) {
 		for (ep = lookupino(i); ep != NULL; ep = ep->e_links) {
 			ep->e_index = mynum++;
 			(void) fwrite(ep->e_name, sizeof(char),
@@ -480,7 +481,7 @@ dumpsymtable(const char *filename, int32_t checkpt)
 	 */
 	tep = &temp;
 	stroff = 0;
-	for (i = WINO; i <= maxino; i++) {
+	for (i = UFS_WINO; i <= maxino; i++) {
 		for (ep = lookupino(i); ep != NULL; ep = ep->e_links) {
 			memmove(tep, ep, (long)sizeof(struct entry));
 			tep->e_name = (char *)stroff;
@@ -505,11 +506,11 @@ dumpsymtable(const char *filename, int32_t checkpt)
 	/*
 	 * Convert entry pointers to indexes, and output
 	 */
-	for (i = 0; i < entrytblsize; i++) {
-		if (entry[i] == NULL)
+	for (l = 0; l < entrytblsize; l++) {
+		if (entry[l] == NULL)
 			tentry = NULL;
 		else
-			tentry = (struct entry *)(long)entry[i]->e_index;
+			tentry = (struct entry *)(long)entry[l]->e_index;
 		(void) fwrite((char *)&tentry, sizeof(struct entry *), 1, fd);
 	}
 	hdr.volno = checkpt;
@@ -548,9 +549,9 @@ initsymtable(const char *filename)
 		entrytblsize = maxino / HASHFACTOR;
 		entry = (struct entry **)
 			calloc((unsigned)entrytblsize, sizeof(struct entry *));
-		if (entry == (struct entry **)NULL)
+		if (entry == NULL)
 			panic("no memory for entry table\n");
-		ep = addentry(".", ROOTINO, NODE);
+		ep = addentry(".", UFS_ROOTINO, NODE);
 		ep->e_flags |= NEW;
 		return;
 	}
@@ -571,6 +572,7 @@ initsymtable(const char *filename)
 		fprintf(stderr, "read: %s\n", strerror(errno));
 		panic("cannot read symbol table file %s\n", filename);
 	}
+	(void)close(fd);
 	switch (command) {
 	case 'r':
 		/*

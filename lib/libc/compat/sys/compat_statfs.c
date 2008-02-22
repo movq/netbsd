@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_statfs.c,v 1.3 2006/08/04 16:30:22 yamt Exp $	*/
+/*	$NetBSD: compat_statfs.c,v 1.7 2013/10/04 21:07:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat_statfs.c,v 1.3 2006/08/04 16:30:22 yamt Exp $");
+__RCSID("$NetBSD: compat_statfs.c,v 1.7 2013/10/04 21:07:37 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
@@ -63,6 +56,11 @@ __warn_references(fhstatfs,
 
 __warn_references(getfsstat,
     "warning: reference to obsolete getfsstat(); use getvfsstat()")
+
+__strong_alias(statfs, __compat_statfs)
+__strong_alias(fstatfs, __compat_fstatfs)
+__strong_alias(fhstatfs, __compat_fhstatfs)
+__strong_alias(getfsstat, __compat_getfsstat)
 
 /*
  * Convert from a new statvfs to an old statfs structure.
@@ -97,7 +95,7 @@ static const struct {
 static void
 vfs2fs(struct statfs12 *bfs, const struct statvfs *fs) 
 {
-	int i = 0;
+	size_t i = 0;
 	bfs->f_type = 0;
 	bfs->f_oflags = (short)fs->f_flag;
 
@@ -132,7 +130,7 @@ vfs2fs(struct statfs12 *bfs, const struct statvfs *fs)
 }
 
 int
-statfs(const char *file, struct statfs12 *ost)
+__compat_statfs(const char *file, struct statfs12 *ost)
 {
 	struct statvfs nst;
 	int ret;
@@ -144,7 +142,7 @@ statfs(const char *file, struct statfs12 *ost)
 }
 
 int
-fstatfs(int f, struct statfs12 *ost)
+__compat_fstatfs(int f, struct statfs12 *ost)
 {
 	struct statvfs nst;
 	int ret;
@@ -159,7 +157,7 @@ int __fhstatvfs140(const void *fhp, size_t fh_size, struct statvfs *buf,
     int flags);
 
 int
-fhstatfs(const struct compat_30_fhandle *fh, struct statfs12 *ost)
+__compat_fhstatfs(const struct compat_30_fhandle *fh, struct statfs12 *ost)
 {
 	struct statvfs nst;
 	int ret;
@@ -171,7 +169,7 @@ fhstatfs(const struct compat_30_fhandle *fh, struct statfs12 *ost)
 }
 
 int
-getfsstat(struct statfs12 *ost, long size, int flags)
+__compat_getfsstat(struct statfs12 *ost, long size, int flags)
 {
 	struct statvfs *nst;
 	int ret, i;

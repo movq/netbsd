@@ -1,4 +1,4 @@
-/*	$NetBSD: invite.c,v 1.7 2005/09/24 16:40:01 christos Exp $	*/
+/*	$NetBSD: invite.c,v 1.10 2012/12/29 23:44:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)invite.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: invite.c,v 1.7 2005/09/24 16:40:01 christos Exp $");
+__RCSID("$NetBSD: invite.c,v 1.10 2012/12/29 23:44:23 christos Exp $");
 #endif /* not lint */
 
 #include "talk.h"
@@ -43,6 +43,7 @@ __RCSID("$NetBSD: invite.c,v 1.7 2005/09/24 16:40:01 christos Exp $");
 #include <errno.h>
 #include <setjmp.h>
 #include <unistd.h>
+#include <err.h>
 #include "talk_ctl.h"
 
 /*
@@ -57,11 +58,11 @@ __RCSID("$NetBSD: invite.c,v 1.7 2005/09/24 16:40:01 christos Exp $");
  * These are used to delete the 
  * invitations.
  */
-int	local_id, remote_id;
-jmp_buf invitebuf;
+static int	local_id, remote_id;
+static jmp_buf invitebuf;
 
 void
-invite_remote()
+invite_remote(void)
 {
 	int new_sockt;
 	struct itimerval itimer;
@@ -117,8 +118,7 @@ invite_remote()
  * Routine called on interrupt to re-invite the callee
  */
 void
-re_invite(dummy)
-	int dummy;
+re_invite(int dummy)
 {
 
 	message("Ringing your party again");
@@ -129,7 +129,7 @@ re_invite(dummy)
 	longjmp(invitebuf, 1);
 }
 
-static	char *answers[] = {
+static	const char *answers[] = {
 	"answer #0",					/* SUCCESS */
 	"Your party is not logged on",			/* NOT_HERE */
 	"Target machine is too confused to talk to us",	/* FAILED */
@@ -146,7 +146,7 @@ static	char *answers[] = {
  * Transmit the invitation and process the response
  */
 void
-announce_invite()
+announce_invite(void)
 {
 	CTL_RESPONSE response;
 
@@ -167,7 +167,7 @@ announce_invite()
  * Tell the daemon to remove your invitation
  */
 void
-send_delete()
+send_delete(void)
 {
 
 	msg.type = DELETE;
@@ -180,11 +180,11 @@ send_delete()
 	if (sendto(ctl_sockt, &msg, sizeof (msg), 0,
 	    (struct sockaddr *)&daemon_addr,
 	    sizeof (daemon_addr)) != sizeof(msg))
-		perror("send_delete (remote)");
+		warn("send_delete (remote)");
 	msg.id_num = htonl(local_id);
 	daemon_addr.sin_addr = my_machine_addr;
 	if (sendto(ctl_sockt, &msg, sizeof (msg), 0,
 	    (struct sockaddr *)&daemon_addr,
 	    sizeof (daemon_addr)) != sizeof (msg))
-		perror("send_delete (local)");
+		warn("send_delete (local)");
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.11 2007/12/03 15:33:49 ad Exp $	*/
+/*	$NetBSD: isr.c,v 1.22 2014/03/22 16:52:07 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.11 2007/12/03 15:33:49 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.22 2014/03/22 16:52:07 tsutsui Exp $");
 
 /*
  * Link and dispatch interrupts.
@@ -57,17 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.11 2007/12/03 15:33:49 ad Exp $");
 isr_autovec_list_t isr_autovec[NISRAUTOVEC];
 struct	isr_vectored isr_vectored[NISRVECTORED];
 int	idepth;
-volatile int	ssir;
 
 extern	int intrcnt[];		/* from locore.s */
-extern	void (*vectab[]) __P((void));
-extern	void badtrap __P((void));
-extern	void intrhand_vectored __P((void));
+extern	void (*vectab[])(void);
+extern	void badtrap(void);
+extern	void intrhand_vectored(void);
 
-extern	int getsr __P((void));	/* in locore.s */
+extern	int getsr(void);	/* in locore.s */
 
 void
-isrinit()
+isrinit(void)
 {
 	int i;
 
@@ -82,11 +74,7 @@ isrinit()
  * Called by driver attach functions.
  */
 void
-isrlink_autovec(func, arg, ipl, priority)
-	int (*func) __P((void *));
-	void *arg;
-	int ipl;
-	int priority;
+isrlink_autovec(int (*func)(void *), void *arg, int ipl, int priority)
 {
 	struct isr_autovec *newisr, *curisr;
 	isr_autovec_list_t *list;
@@ -157,10 +145,7 @@ isrlink_autovec(func, arg, ipl, priority)
  * Called by bus interrupt establish functions.
  */
 void
-isrlink_vectored(func, arg, ipl, vec)
-	int (*func) __P((void *));
-	void *arg;
-	int ipl, vec;
+isrlink_vectored(int (*func)(void *), void *arg, int ipl, int vec)
 {
 	struct isr_vectored *isr;
 
@@ -187,8 +172,7 @@ isrlink_vectored(func, arg, ipl, vec)
  * Unhook a vectored interrupt.
  */
 void
-isrunlink_vectored(vec)
-	int vec;
+isrunlink_vectored(int vec)
 {
 
 	if ((vec < ISRVECTORED) || (vec >= ISRVECTORED + NISRVECTORED))
@@ -198,7 +182,7 @@ isrunlink_vectored(vec)
 		panic("isrunlink_vectored: not vectored interrupt");
 
 	vectab[vec] = badtrap;
-	bzero(&isr_vectored[vec - ISRVECTORED], sizeof(struct isr_vectored));
+	memset(&isr_vectored[vec - ISRVECTORED], 0, sizeof(struct isr_vectored));
 }
 
 /*
@@ -206,8 +190,8 @@ isrunlink_vectored(vec)
  * assembly language autovectored interrupt routine.
  */
 void
-isrdispatch_autovec(evec)
-	int evec;		/* format | vector offset */
+isrdispatch_autovec(int evec)
+	/* evec:		 format | vector offset */
 {
 	struct isr_autovec *isr;
 	isr_autovec_list_t *list;
@@ -221,7 +205,7 @@ isrdispatch_autovec(evec)
 	ipl = vec - ISRAUTOVEC;
 
 	intrcnt[ipl]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	list = &isr_autovec[ipl];
 	if (list->lh_first == NULL) {
@@ -250,9 +234,7 @@ isrdispatch_autovec(evec)
  * assembly language vectored interrupt routine.
  */
 void
-isrdispatch_vectored(pc, evec, frame)
-	int pc, evec;
-	void *frame;
+isrdispatch_vectored(int pc, int evec, void *frame)
 {
 	struct isr_vectored *isr;
 	int ipl, vec;
@@ -262,7 +244,7 @@ isrdispatch_vectored(pc, evec, frame)
 	ipl = (getsr() >> 8) & 7;
 
 	intrcnt[ipl]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	if ((vec < ISRVECTORED) || (vec >= (ISRVECTORED + NISRVECTORED)))
 		panic("isrdispatch_vectored: bad vec 0x%x", vec);
@@ -290,13 +272,13 @@ cpu_intr_p(void)
 	return idepth != 0;
 }
 
-const int ipl2spl_table[NIPL] = {
+const uint16_t ipl2psl_table[NIPL] = {
 	[IPL_NONE]       = PSL_S|PSL_IPL0,
 	[IPL_SOFTCLOCK]  = PSL_S|PSL_IPL1,
+	[IPL_SOFTBIO]    = PSL_S|PSL_IPL1,
 	[IPL_SOFTNET]    = PSL_S|PSL_IPL1,
 	[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1,
-	[IPL_SOFTBIO]    = PSL_S|PSL_IPL1,
-	[IPL_VM]         = PSL_S|PSL_IPL7,
-	[IPL_SCHED]      = PSL_S|PSL_IPL7,
+	[IPL_VM]         = PSL_S|PSL_IPL4,
+	[IPL_SCHED]      = PSL_S|PSL_IPL5,
 	[IPL_HIGH]       = PSL_S|PSL_IPL7,
 };

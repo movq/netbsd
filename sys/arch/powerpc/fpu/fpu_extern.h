@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_extern.h,v 1.3 2005/12/11 12:18:42 christos Exp $	*/
+/*	$NetBSD: fpu_extern.h,v 1.5 2012/07/23 04:13:06 matt Exp $	*/
 
 /*-
  * Copyright (c) 1995 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _POWERPC_FPU_FPU_EXTERN_H_
+#define _POWERPC_FPU_FPU_EXTERN_H_
+
+#include <sys/signal.h>
+#include <sys/siginfo.h>
+
 struct proc;
 struct fpreg;
 struct trapframe;
@@ -44,7 +43,7 @@ struct fpemu;
 struct fpn;
 
 /* fpu.c */
-int fpu_emulate(struct trapframe *, struct fpreg *);
+bool fpu_emulate(struct trapframe *, struct fpreg *, ksiginfo_t *);
 int fpu_execute(struct trapframe *, struct fpemu *, union instr *);
 
 /* fpu_add.c */
@@ -80,3 +79,5 @@ struct fpn *fpu_sqrt(struct fpemu *);
 int fpu_shr(struct fpn *, int);
 void fpu_norm(struct fpn *);
 struct fpn *fpu_newnan(struct fpemu *);
+
+#endif /* _POWERPC_FPU_FPU_EXTERN_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.5 2005/12/11 12:19:29 christos Exp $ */
+/*	$NetBSD: boot.c,v 1.8 2016/06/11 06:49:46 dholland Exp $ */
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -98,7 +98,7 @@ main(void)
 	for (;;) {
 		if (prom_boothow & RB_ASKNAME) {
 			printf("tapeboot: segment? [%s]: ", defname);
-			gets(line);
+			kgets(line, sizeof(line));
 			if (line[0])
 				file = line;
 			else
@@ -107,7 +107,8 @@ main(void)
 			printf("tapeboot: loading segment %s\n", file);
 
 		marks[MARK_START] = mark_start;
-		if ((fd = loadfile(file, marks, LOAD_KERNEL)) != -1) {
+		if ((fd = loadfile(file, marks,
+		    LOAD_KERNEL & ~LOAD_BACKWARDS)) != -1) {
 			break;
 		}
 		printf("tapeboot: segment %s: %s\n", file, strerror(errno));
@@ -120,6 +121,8 @@ main(void)
 		printf("relocating program...");
 		entry = sun2_map_mem_run(entry);
 	}
-	printf("Starting program at 0x%x\n", entry);
+	printf("Starting program at 0x%x\n", (u_int)entry);
 	chain_to(entry);
+
+	return 0;
 }

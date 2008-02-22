@@ -26,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-bootp.c,v 1.8 2007/05/27 16:31:42 tls Exp $");
+__RCSID("$NetBSD: print-bootp.c,v 1.11 2013/10/19 17:16:37 christos Exp $");
 /* 93/10/10 <gwr@mc.com> New data-driven option print routine. */
 #endif
 
@@ -195,7 +195,7 @@ bootp_print(struct bootp *bp, int length, u_short sport, u_short dport)
  * l: int32
  * s: short (16-bit)
  */
-char *
+const char *
 rfc1048_opts[] = {
 	/* Originally from RFC-1048: */
 	"?PAD",				/*  0: Padding - special, no data. */
@@ -280,7 +280,7 @@ rfc1048_print(u_char *bp, int length)
 	u_int32 ul;
 	u_short us;
 	struct in_addr ia;
-	char *optstr;
+	const char *optstr;
 
 	printf("-rfc1395");
 
@@ -375,17 +375,14 @@ static void
 cmu_print(u_char *bp, int length)
 {
 	struct cmu_vend *v;
-	u_char *ep;
 
 	printf("-cmu");
 
 	v = (struct cmu_vend *) bp;
-	if (length < sizeof(*v)) {
+	if (length < (int)sizeof(*v)) {
 		printf(" |L=%d", length);
 		return;
 	}
-	/* Setup end pointer */
-	ep = bp + length;
 
 	/* Subnet mask */
 	if (v->v_flags & VF_SMASK) {

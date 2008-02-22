@@ -1,4 +1,4 @@
-/*	$Id: shutdown_xenbus.c,v 1.4 2007/11/22 16:17:08 bouyer Exp $	*/
+/*	$Id: shutdown_xenbus.c,v 1.7 2011/09/20 00:12:24 jym Exp $	*/
 
 /*-
  * Copyright (c)2006 YAMAMOTO Takashi,
@@ -37,11 +37,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -61,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shutdown_xenbus.c,v 1.4 2007/11/22 16:17:08 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shutdown_xenbus.c,v 1.7 2011/09/20 00:12:24 jym Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -80,6 +75,10 @@ static struct sysmon_pswitch xenbus_power = {
 };
 static struct sysmon_pswitch xenbus_reset = {
 	.smpsw_type = PSWITCH_TYPE_RESET,
+	.smpsw_name = "xenbus",
+};
+static struct sysmon_pswitch xenbus_sleep = {
+	.smpsw_type = PSWITCH_TYPE_SLEEP,
 	.smpsw_name = "xenbus",
 };
 
@@ -130,8 +129,10 @@ again:
 		sysmon_pswitch_event(&xenbus_power, PSWITCH_EVENT_PRESSED);
 	} else if (strcmp(reqstr, "reboot") == 0) {
 		sysmon_pswitch_event(&xenbus_reset, PSWITCH_EVENT_PRESSED);
+	} else if (strcmp(reqstr, "suspend") == 0) {
+		xen_suspend_allow = true;
+		sysmon_pswitch_event(&xenbus_sleep, PSWITCH_EVENT_PRESSED);
 	} else {
-		/* XXX suspend */
 		printf("ignore shutdown request: %s\n", reqstr);
 	}
 	free(reqstr, M_DEVBUF);
@@ -145,13 +146,15 @@ static struct xenbus_watch xenbus_shutdown_watch = {
 void
 shutdown_xenbus_setup(void)
 {
+	xen_suspend_allow = false;
 
 	if (sysmon_pswitch_register(&xenbus_power) != 0 ||
-	    sysmon_pswitch_register(&xenbus_reset) != 0) {
-		printf("%s: unable to register with sysmon\n", __func__);
+	    sysmon_pswitch_register(&xenbus_reset) != 0 ||
+	    sysmon_pswitch_register(&xenbus_sleep) != 0) {
+		aprint_error("%s: unable to register with sysmon\n", __func__);
 		return;
 	}
 	if (register_xenbus_watch(&xenbus_shutdown_watch)) {
-		printf("%s: unable to watch control/shutdown\n", __func__);
+		aprint_error("%s: unable to watch control/shutdown\n", __func__);
 	}
 }

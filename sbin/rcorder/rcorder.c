@@ -1,4 +1,4 @@
-/*	$NetBSD: rcorder.c,v 1.14 2006/08/26 18:14:29 christos Exp $	*/
+/*	$NetBSD: rcorder.c,v 1.18 2016/09/05 01:09:57 sevan Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -164,7 +162,6 @@ Hash_Entry *make_fake_provision(filenode *);
 void crunch_all_files(void);
 void initialize(void);
 void generate_ordering(void);
-int main(int, char *[]);
 
 int
 main(int argc, char *argv[])
@@ -662,11 +659,15 @@ keep_ok(filenode *fnode)
  * is ok, we loop over the filenodes requirements, calling satisfy_req()
  * for each of them.. once we have done this, remove this filenode
  * from each provision table, as we are now done.
+ *
+ * NOTE: do_file() is called recursively from several places and cannot
+ * safely free() anything related to items that may be recursed on.
+ * Circular dependancies will cause problems if we do.
  */
 void
 do_file(filenode *fnode)
 {
-	f_reqnode *r, *r_tmp;
+	f_reqnode *r;
 	f_provnode *p, *p_tmp;
 	provnode *pnode;
 	int was_set;	
@@ -693,10 +694,14 @@ do_file(filenode *fnode)
 	 */
 	r = fnode->req_list;
 	while (r != NULL) {
-		r_tmp = r;
+#if 0
+		f_reqnode *r_tmp = r;
+#endif
 		satisfy_req(r, fnode->filename);
 		r = r->next;
+#if 0
 		free(r_tmp);
+#endif
 	}
 	fnode->req_list = NULL;
 
@@ -735,8 +740,10 @@ do_file(filenode *fnode)
 	}
 
 	DPRINTF((stderr, "nuking %s\n", fnode->filename));
+#if 0
 	free(fnode->filename);
 	free(fnode);
+#endif
 }
 
 void

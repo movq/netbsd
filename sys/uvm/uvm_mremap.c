@@ -1,7 +1,7 @@
-/*	$NetBSD: uvm_mremap.c,v 1.10 2008/01/02 11:49:18 ad Exp $	*/
+/*	$NetBSD: uvm_mremap.c,v 1.19 2017/05/06 21:34:52 joerg Exp $	*/
 
 /*-
- * Copyright (c)2006 YAMAMOTO Takashi,
+ * Copyright (c)2006,2007,2009 YAMAMOTO Takashi,
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,12 +27,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_mremap.c,v 1.10 2008/01/02 11:49:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_mremap.c,v 1.19 2017/05/06 21:34:52 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/mman.h>
+#include <sys/sched.h>
 #include <sys/syscallargs.h>
 #include <sys/proc.h>
+#include <sys/atomic.h>
 
 #include <uvm/uvm.h>
 
@@ -52,13 +54,13 @@ uvm_mapent_extend(struct vm_map *map, vaddr_t endva, vsize_t size)
 	if (reserved_entry->start != endva ||
 	    reserved_entry->end != endva + size ||
 	    reserved_entry->object.uvm_obj != NULL ||
-	    reserved_entry->aref.ar_amap != NULL) {
+	    reserved_entry->aref.ar_amap != NULL ||
+	    reserved_entry->protection != VM_PROT_NONE) {
 		error = EINVAL;
 		goto done;
 	}
 	entry = reserved_entry->prev;
-	KASSERT(&map->header != entry);
-	if (entry->end != endva) {
+	if (&map->header == entry || entry->end != endva) {
 		error = EINVAL;
 		goto done;
 	}
@@ -78,10 +80,10 @@ uvm_mapent_extend(struct vm_map *map, vaddr_t endva, vsize_t size)
 			error = E2BIG; /* XXX */
 			goto done;
 		}
-		mutex_enter(&uobj->vmobjlock);
+		mutex_enter(uobj->vmobjlock);
 		KASSERT(uobj->uo_refs > 0);
-		uobj->uo_refs++;
-		mutex_exit(&uobj->vmobjlock);
+		atomic_inc_uint(&uobj->uo_refs);
+		mutex_exit(uobj->vmobjlock);
 		reserved_entry->object.uvm_obj = uobj;
 		reserved_entry->offset = newoffset;
 	}
@@ -114,9 +116,11 @@ uvm_mremap(struct vm_map *oldmap, vaddr_t oldva, vsize_t oldsize,
 	vaddr_t dstva;
 	vsize_t movesize;
 	vaddr_t newva;
+	int alignshift;
 	vaddr_t align = 0;
 	int error = 0;
 	const bool fixed = (flags & MAP_FIXED) != 0;
+	const bool duplicate = (flags & MAP_REMAPDUP) != 0;
 
 	if (fixed) {
 		newva = *newvap;
@@ -135,25 +139,25 @@ uvm_mremap(struct vm_map *oldmap, vaddr_t oldva, vsize_t oldsize,
 	}
 
 	/*
-	 * Try to see if any requested alignment can even be attemped.
+	 * Try to see if any requested alignment can even be attempted.
 	 * Make sure we can express the alignment (asking for a >= 4GB
 	 * alignment on an ILP32 architecure make no sense) and the
 	 * alignment is at least for a page sized quanitiy.  If the
 	 * request was for a fixed mapping, make sure supplied address
 	 * adheres to the request alignment.
 	 */
-	align = (flags & MAP_ALIGNMENT_MASK) >> MAP_ALIGNMENT_SHIFT;
-	if (align) {
-		if (align >= sizeof(vaddr_t) * NBBY)
-			return(EINVAL);
-		align = 1L << align;
+	alignshift = (flags & MAP_ALIGNMENT_MASK) >> MAP_ALIGNMENT_SHIFT;
+	if (alignshift != 0) {
+		if (alignshift >= sizeof(vaddr_t) * NBBY)
+			return EINVAL;
+		align = 1L << alignshift;
 		if (align < PAGE_SIZE)
-			return(EINVAL);
+			return EINVAL;
 		if (align >= vm_map_max(oldmap))
-			return(ENOMEM);
-		if (flags & MAP_FIXED) {
-			if ((*newvap & (align-1)) != 0)
-				return(EINVAL);
+			return ENOMEM;
+		if ((flags & MAP_FIXED) != 0) {
+			if ((*newvap & (align - 1)) != 0)
+				return EINVAL;
 			align = 0;
 		}
 	}
@@ -162,7 +166,8 @@ uvm_mremap(struct vm_map *oldmap, vaddr_t oldva, vsize_t oldsize,
 	 * check the easy cases first.
 	 */
 
-	if ((!fixed || newva == oldva) && newmap == oldmap &&
+	if (!duplicate &&
+	    (!fixed || newva == oldva) && newmap == oldmap &&
 	    (align == 0 || (oldva & (align - 1)) == 0)) {
 		vaddr_t va;
 
@@ -193,7 +198,8 @@ uvm_mremap(struct vm_map *oldmap, vaddr_t oldva, vsize_t oldsize,
 	if (!fixed) {
 		KASSERT(&newproc->p_vmspace->vm_map == newmap);
 		newva = newproc->p_emul->e_vm_default_addr(newproc,
-		    (vaddr_t)newproc->p_vmspace->vm_daddr, newsize);
+		    (vaddr_t)newproc->p_vmspace->vm_daddr, newsize,
+		    newproc->p_vmspace->vm_map.flags & VM_MAP_TOPDOWN);
 	}
 	dstva = newva;
 	if (!uvm_map_reserve(newmap, newsize, oldva, align, &dstva, 
@@ -207,7 +213,9 @@ uvm_mremap(struct vm_map *oldmap, vaddr_t oldva, vsize_t oldsize,
 	    UVM_EXTRACT_RESERVED);
 	KASSERT(dstva == newva);
 	if (error != 0) {
-		/* undo uvm_map_reserve */
+		/*
+		 * undo uvm_map_reserve.
+		 */
 		uvm_unmap(newmap, newva, newva + newsize);
 		return error;
 	}
@@ -216,17 +224,25 @@ extend:
 		error = uvm_mapent_extend(newmap, newva + oldsize,
 		    newsize - oldsize);
 		if (error != 0) {
-			/* undo uvm_map_reserve and uvm_map_extract */
-			uvm_unmap(newmap, newva, newva + newsize);
+			/*
+			 * undo uvm_map_reserve and uvm_map_extract.
+			 */
+			if (newva == oldva && newmap == oldmap) {
+				uvm_unmap(newmap, newva + oldsize,
+				    newva + newsize);
+			} else {
+				uvm_unmap(newmap, newva, newva + newsize);
+			}
 			return error;
 		}
 	}
 
 	/*
-	 * now we won't fail.  remove original entries.
+	 * now we won't fail.
+	 * remove original entries unless we did in-place extend.
 	 */
 
-	if (oldva != newva || oldmap != newmap) {
+	if (!duplicate && (oldva != newva || oldmap != newmap)) {
 		uvm_unmap(oldmap, oldva, oldva + oldsize);
 	}
 done:
@@ -264,7 +280,7 @@ sys_mremap(struct lwp *l, const struct sys_mremap_args *uap, register_t *retval)
 	newva = (vaddr_t)SCARG(uap, new_address);
 	newsize = (vsize_t)(SCARG(uap, new_size));
 
-	if ((flags & ~(MAP_FIXED | MAP_ALIGNMENT_MASK)) != 0) {
+	if ((flags & ~(MAP_FIXED | MAP_REMAPDUP | MAP_ALIGNMENT_MASK)) != 0) {
 		error = EINVAL;
 		goto done;
 	}
@@ -274,11 +290,9 @@ sys_mremap(struct lwp *l, const struct sys_mremap_args *uap, register_t *retval)
 
 	p = l->l_proc;
 	map = &p->p_vmspace->vm_map;
-	error = uvm_mremap(map, oldva, oldsize, map, &newva, newsize, p,
-	    flags);
+	error = uvm_mremap(map, oldva, oldsize, map, &newva, newsize, p, flags);
 
 done:
 	*retval = (error != 0) ? 0 : (register_t)newva;
 	return error;
-
 }

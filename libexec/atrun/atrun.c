@@ -1,4 +1,4 @@
-/*	$NetBSD: atrun.c,v 1.18 2007/12/15 19:44:45 perry Exp $	*/
+/*	$NetBSD: atrun.c,v 1.23 2017/01/10 20:29:48 christos Exp $	*/
 
 /*
  *  atrun.c - run jobs queued by at; run with root privileges.
@@ -28,6 +28,7 @@
 /* System Headers */
 #include <sys/cdefs.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 
 #include <ctype.h>
@@ -49,7 +50,6 @@
 
 /* Local headers */
 
-#define MAIN
 #include "privs.h"
 #include "pathnames.h"
 #include "atrun.h"
@@ -59,7 +59,7 @@
 #if 0
 static char rcsid[] = "$OpenBSD: atrun.c,v 1.7 1997/09/08 22:12:10 millert Exp $";
 #else
-__RCSID("$NetBSD: atrun.c,v 1.18 2007/12/15 19:44:45 perry Exp $");
+__RCSID("$NetBSD: atrun.c,v 1.23 2017/01/10 20:29:48 christos Exp $");
 #endif
 
 static int debug = 0;
@@ -106,6 +106,12 @@ perrx(const char *fmt, ...)
 	va_end(ap);
 
 	exit(EXIT_FAILURE);
+}
+
+__dead void
+privs_fail(const char *msg)
+{
+	perr("%s", msg);
 }
 
 static int
@@ -160,12 +166,12 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 	gid_t ngid;
 	int serrno;
 
-	PRIV_START
+	privs_enter();
 
 	if (chmod(filename, S_IRUSR) == -1)
 		perr("Cannot change file permissions to `%s'", filename);
 
-	PRIV_END
+	privs_exit();
 
 	pid = fork();
 	if (pid == -1)
@@ -184,12 +190,12 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 		perrx("Userid %lu not found - aborting job `%s'",
 		    (unsigned long)uid, filename);
 
-	PRIV_START
+	privs_enter();
 
 	stream = fopen(filename, "r");
 	serrno = errno;
 
-	PRIV_END
+	privs_exit();
 
 	if (stream == NULL) {
 		errno = serrno;
@@ -206,12 +212,12 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 	if (fstat(fd_in, &buf) == -1)
 		perr("Error in fstat of input file descriptor");
 
-	PRIV_START
+	privs_enter();
 
 	if (lstat(filename, &lbuf) == -1)
 		perr("Error in lstat of `%s'", filename);
 
-	PRIV_END
+	privs_exit();
 
 	if (S_ISLNK(lbuf.st_mode))
 		perrx("Symbolic link encountered in job `%s' - aborting",
@@ -253,7 +259,7 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 
 	(void)fclose(stream);
 
-	PRIV_START
+	privs_enter();
 
 	if (chdir(_PATH_ATSPOOL) == -1)
 		perr("Cannot chdir to `%s'", _PATH_ATSPOOL);
@@ -267,7 +273,7 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 		    O_WRONLY | O_CREAT | O_EXCL, S_IWUSR | S_IRUSR)) == -1)
 		perr("Cannot create output file `%s'", filename);
 
-	PRIV_END
+	privs_exit();
 
 	write_string(fd_out, "To: ");
 	write_string(fd_out, mailname);
@@ -309,7 +315,7 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 		(void)close(fd_in);
 		(void)close(fd_out);
 
-		PRIV_START
+		privs_enter();
 
 		if (chdir(_PATH_ATJOBS) == -1)
 			perr("Cannot chdir to `%s'", _PATH_ATJOBS);
@@ -327,13 +333,13 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 	/* We're the parent.  Let's wait. */
 	(void)close(fd_in);
 	(void)close(fd_out);
-	(void)waitpid(pid, (int *)NULL, 0);
+	(void)waitpid(pid, NULL, 0);
 
 	/*
 	 * Send mail.  Unlink the output file first, so it is deleted
 	 * after the run.
 	 */
-	PRIV_START
+	privs_enter();
 
 	if (stat(filename, &buf) == -1)
 		perr("Error in stat of output file `%s'", filename);
@@ -342,12 +348,12 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 
 	(void)unlink(filename);
 
-	PRIV_END
+	privs_exit();
 
 	if ((buf.st_size != size) || send_mail) {
 		/* Fork off a child for sending mail */
 
-		PRIV_START
+		privs_enter();
 
 		become_user(pentry, uid);
 
@@ -355,7 +361,7 @@ run_file(const char *filename, uid_t uid, gid_t gid)
 		    "-odi", "-oem", "-t", (char *) NULL);
 		perr("Exec failed for mail command `%s'", _PATH_SENDMAIL);
 
-		PRIV_END
+		privs_exit();
 	}
 	exit(EXIT_SUCCESS);
 }
@@ -366,7 +372,7 @@ int
 main(int argc, char *argv[])
 {
 	/*
-	 * Browse through  _PATH_ATJOBS, checking all the jobfiles wether
+	 * Browse through  _PATH_ATJOBS, checking all the jobfiles whether
 	 * they should be executed and or deleted. The queue is coded into
 	 * the first byte of the job filename, the date (in minutes since
 	 * Eon) as a hex number in the following eight bytes, followed by
@@ -406,7 +412,7 @@ main(int argc, char *argv[])
 	 * We don't need root privileges all the time; running under uid
 	 * and gid nobody is fine except for privileged operations.
 	 */
-	RELINQUISH_PRIVS_ROOT(pwd->pw_uid, grp->gr_gid)
+	privs_relinquish_root(pwd->pw_uid, grp->gr_gid);
 
 	opterr = 0;
 	errno = 0;
@@ -433,7 +439,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	PRIV_START
+	privs_enter();
 
 	if (chdir(_PATH_ATJOBS) == -1)
 		perr("Cannot change directory to `%s'", _PATH_ATJOBS);
@@ -453,7 +459,7 @@ main(int argc, char *argv[])
 	if ((spool = opendir(".")) == NULL)
 		perr("Cannot open `%s'", _PATH_ATJOBS);
 
-	PRIV_END
+	privs_exit();
 
 	now = time(NULL);
 	run_batch = 0;
@@ -461,13 +467,13 @@ main(int argc, char *argv[])
 	batch_gid = (gid_t) -1;
 
 	while ((dirent = readdir(spool)) != NULL) {
-		PRIV_START
+		privs_enter();
 
 		if (stat(dirent->d_name, &buf) == -1)
 			perr("Cannot stat `%s' in `%s'", dirent->d_name,
 			    _PATH_ATJOBS);
 
-		PRIV_END
+		privs_exit();
 
 		/* We don't want directories */
 		if (!S_ISREG(buf.st_mode))
@@ -498,11 +504,11 @@ main(int argc, char *argv[])
 		/* Delete older files */
 		if ((run_time < now) && !(S_IXUSR & buf.st_mode) &&
 		    (S_IRUSR & buf.st_mode)) {
-			PRIV_START
+			privs_enter();
 
 			(void)unlink(dirent->d_name);
 
-			PRIV_END
+			privs_exit();
 		}
 	}
 

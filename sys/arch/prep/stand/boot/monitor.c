@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor.c,v 1.6 2006/04/10 18:40:06 garbled Exp $	*/
+/*	$NetBSD: monitor.c,v 1.9 2016/06/11 06:38:50 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,7 +47,7 @@ void db_cmd_mt(int, char **);
 void db_cmd_put(int, char **);
 void db_cmd_help(int, char **);
 
-unsigned int mfmsr((void);
+unsigned int mfmsr(void);
 void mtmsr(unsigned int);
 
 int db_atob(char *);
@@ -82,7 +75,7 @@ db_monitor(void)
 
 	while(1) {
 		printf("db> ");
-		gets(line);
+		kgets(line, sizeof(line));
 
 		flag = 0;
 		for(p = line, argc = 0; *p != '\0'; p++) {

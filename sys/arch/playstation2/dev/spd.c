@@ -1,4 +1,4 @@
-/*	$NetBSD: spd.c,v 1.6 2005/12/11 12:18:35 christos Exp $	*/
+/*	$NetBSD: spd.c,v 1.13 2016/07/19 17:04:25 maya Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spd.c,v 1.6 2005/12/11 12:18:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spd.c,v 1.13 2016/07/19 17:04:25 maya Exp $");
 
 #include <sys/param.h>
+#include <sys/device.h>
 #include <sys/systm.h>
 
 #include <machine/bootinfo.h>
@@ -55,8 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: spd.c,v 1.6 2005/12/11 12:18:35 christos Exp $");
 #define STATIC static
 #endif
 
-STATIC int spd_match(struct device *, struct cfdata *, void *);
-STATIC void spd_attach(struct device *, struct device *, void *);
+STATIC int spd_match(device_t, cfdata_t, void *);
+STATIC void spd_attach(device_t, device_t, void *);
 STATIC int spd_print(void *, const char *);
 STATIC int spd_intr(void *);
 STATIC void __spd_eeprom_out(u_int8_t *, int);
@@ -69,7 +63,7 @@ STATIC struct {
 	const char *name;
 } __spd_table[2];
 
-CFATTACH_DECL(spd, sizeof(struct device),
+CFATTACH_DECL_NEW(spd, sizeof(struct device),
     spd_match, spd_attach, NULL, NULL);
 
 #ifdef DEBUG
@@ -77,7 +71,7 @@ CFATTACH_DECL(spd, sizeof(struct device),
 #endif
 
 int
-spd_match(struct device *parent, struct cfdata *cf, void *aux)
+spd_match(device_t parent, cfdata_t cf, void *aux)
 {
 	
 	return ((BOOTINFO_REF(BOOTINFO_DEVCONF) ==
@@ -85,7 +79,7 @@ spd_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-spd_attach(struct device *parent, struct device *self, void *aux)
+spd_attach(device_t parent, device_t self, void *aux)
 {
 	struct spd_attach_args spa;
 

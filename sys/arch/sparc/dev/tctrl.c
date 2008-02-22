@@ -1,4 +1,4 @@
-/*	$NetBSD: tctrl.c,v 1.45 2008/02/12 17:30:58 joerg Exp $	*/
+/*	$NetBSD: tctrl.c,v 1.61 2017/10/25 08:12:37 maya Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2005, 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tctrl.c,v 1.45 2008/02/12 17:30:58 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tctrl.c,v 1.61 2017/10/25 08:12:37 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: tctrl.c,v 1.45 2008/02/12 17:30:58 joerg Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -60,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: tctrl.c,v 1.45 2008/02/12 17:30:58 joerg Exp $");
 
 #include <machine/apmvar.h>
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/tctrl.h>
 
@@ -96,8 +88,18 @@ dev_type_poll(tctrlpoll);
 dev_type_kqfilter(tctrlkqfilter);
 
 const struct cdevsw tctrl_cdevsw = {
-	tctrlopen, tctrlclose, noread, nowrite, tctrlioctl,
-	nostop, notty, tctrlpoll, nommap, tctrlkqfilter,
+	.d_open = tctrlopen,
+	.d_close = tctrlclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = tctrlioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = tctrlpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = tctrlkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 static const char *tctrl_ext_statuses[16] = {
@@ -115,7 +117,7 @@ static const char *tctrl_ext_statuses[16] = {
 };
 
 struct tctrl_softc {
-	struct	device sc_dev;
+	device_t	sc_dev;
 	bus_space_tag_t	sc_memt;
 	bus_space_handle_t	sc_memh;
 	unsigned int	sc_junk;
@@ -178,8 +180,8 @@ struct tctrl_softc {
 #define TCTRL_STD_DEV		0
 #define TCTRL_APMCTL_DEV	8
 
-static int tctrl_match(struct device *, struct cfdata *, void *);
-static void tctrl_attach(struct device *, struct device *, void *);
+static int tctrl_match(device_t, cfdata_t, void *);
+static void tctrl_attach(device_t, device_t, void *);
 static void tctrl_write(struct tctrl_softc *, bus_size_t, uint8_t);
 static uint8_t tctrl_read(struct tctrl_softc *, bus_size_t);
 static void tctrl_write_data(struct tctrl_softc *, uint8_t);
@@ -207,7 +209,7 @@ void tctrl_update_lcd(struct tctrl_softc *);
 static void tctrl_lock(struct tctrl_softc *);
 static void tctrl_unlock(struct tctrl_softc *);
 
-CFATTACH_DECL(tctrl, sizeof(struct tctrl_softc),
+CFATTACH_DECL_NEW(tctrl, sizeof(struct tctrl_softc),
     tctrl_match, tctrl_attach, NULL, NULL);
 
 static int tadpole_request(struct tctrl_req *, int, int);
@@ -216,7 +218,7 @@ static int tadpole_request(struct tctrl_req *, int, int);
 int tctrl_apm_evindex;
 
 static int
-tctrl_match(struct device *parent, struct cfdata *cf, void *aux)
+tctrl_match(device_t parent, cfdata_t cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;
@@ -233,9 +235,9 @@ tctrl_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-tctrl_attach(struct device *parent, struct device *self, void *aux)
+tctrl_attach(device_t parent, device_t self, void *aux)
 {
-	struct tctrl_softc *sc = (void *)self;
+	struct tctrl_softc *sc = device_private(self);
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;
 	unsigned int i, v;
@@ -243,6 +245,7 @@ tctrl_attach(struct device *parent, struct device *self, void *aux)
 	/* We're living on a sbus slot that looks like an obio that
 	 * looks like an sbus slot.
 	 */
+	sc->sc_dev = self;
 	sc->sc_memt = sa->sa_bustag;
 	if (sbus_bus_map(sc->sc_memt,
 			 sa->sa_slot,
@@ -272,7 +275,7 @@ tctrl_attach(struct device *parent, struct device *self, void *aux)
 		(void)bus_intr_establish(sc->sc_memt, sa->sa_pri, IPL_NONE,
 					 tctrl_intr, sc);
 		evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-				     sc->sc_dev.dv_xname, "intr");
+				     device_xname(sc->sc_dev), "intr");
 	}
 
 	/* See what the external status is */
@@ -281,7 +284,7 @@ tctrl_attach(struct device *parent, struct device *self, void *aux)
 	if (sc->sc_ext_status != 0) {
 		const char *sep;
 
-		printf("%s: ", sc->sc_dev.dv_xname);
+		printf("%s: ", device_xname(sc->sc_dev));
 		v = sc->sc_ext_status;
 		for (i = 0, sep = ""; v != 0; i++, v >>= 1) {
 			if (v & 1) {
@@ -310,6 +313,7 @@ tctrl_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_ext_pending = 0;
 
 	mutex_init(&sc->sc_requestlock, MUTEX_DEFAULT, IPL_NONE);
+	selinit(&sc->sc_rsel);
 
 	/* setup sensors and register the power button */
 	tctrl_sensor_setup(sc);
@@ -328,9 +332,9 @@ tctrl_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_events = 0;
 
 	if (kthread_create(PRI_NONE, 0, NULL, tctrl_event_thread, sc,
-	    &sc->sc_thread, "%s", sc->sc_dev.dv_xname) != 0) {
+	    &sc->sc_thread, "%s", device_xname(sc->sc_dev)) != 0) {
 		printf("%s: unable to create event kthread",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 	}
 }
 
@@ -376,13 +380,13 @@ tctrl_intr(void *arg)
 				sc->sc_ext_pending = 1;
 			} else {
 				printf("%s: (op=0x%02x): unexpected data (0x%02x)\n",
-					sc->sc_dev.dv_xname, sc->sc_op, d);
+					device_xname(sc->sc_dev), sc->sc_op, d);
 			}
 			goto again;
 		case TCTRL_ACK:
 			if (d != 0xfe) {
 				printf("%s: (op=0x%02x): unexpected ack value (0x%02x)\n",
-					sc->sc_dev.dv_xname, sc->sc_op, d);
+					device_xname(sc->sc_dev), sc->sc_op, d);
 			}
 #ifdef TCTRLDEBUG
 			printf(" ack=0x%02x", d);
@@ -414,7 +418,7 @@ tctrl_intr(void *arg)
 			goto again;
 		default:
 			printf("%s: (op=0x%02x): unexpected data (0x%02x) in state %d\n",
-			       sc->sc_dev.dv_xname, sc->sc_op, d, sc->sc_state);
+			       device_xname(sc->sc_dev), sc->sc_op, d, sc->sc_state);
 			goto again;
 		}
 	}
@@ -436,7 +440,7 @@ tctrl_intr(void *arg)
 		tctrl_write_data(sc, sc->sc_cmdbuf[sc->sc_cmdoff++]);
 #ifdef TCTRLDEBUG
 		if (sc->sc_cmdoff == 1) {
-			printf("%s: op=0x%02x(l=%u)", sc->sc_dev.dv_xname,
+			printf("%s: op=0x%02x(l=%u)", device_xname(sc->sc_dev),
 				sc->sc_cmdbuf[0], sc->sc_rsplen);
 		} else {
 			printf(" [%d]=0x%02x", sc->sc_cmdoff-1,
@@ -473,7 +477,7 @@ tctrl_setup_bitport_nop(void)
 	struct tctrl_req req;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	req.cmdbuf[0] = TS102_OP_CTL_BITPORT;
 	req.cmdbuf[1] = 0xff;
 	req.cmdbuf[2] = 0x00;
@@ -492,7 +496,7 @@ tctrl_setup_bitport(void)
 	struct tctrl_req req;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	s = splts102();
 	req.cmdbuf[2] = 0;
 	if ((sc->sc_ext_status & TS102_EXT_STATUS_LID_DOWN)
@@ -686,7 +690,7 @@ tadpole_set_lcd(int what, unsigned short which)
 	struct tctrl_softc *sc;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 
 	s = splhigh();
 	switch (what) {
@@ -710,7 +714,7 @@ tctrl_read_ext_status(void)
 	struct tctrl_req req;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	req.cmdbuf[0] = TS102_OP_RD_EXT_STATUS;
 	req.cmdlen = 1;
 	req.rsplen = 3;
@@ -743,7 +747,7 @@ tctrl_apm_record_event(struct tctrl_softc *sc, u_int event_type)
 		sc->sc_event_ptr %= APM_NEVENTS;
 		evp->type = event_type;
 		evp->index = ++tctrl_apm_evindex;
-		selnotify(&sc->sc_rsel, 0);
+		selnotify(&sc->sc_rsel, 0, 0);
 		return(sc->sc_flags & TCTRL_APM_CTLOPEN) ? 0 : 1;
 	}
 	return(1);
@@ -753,7 +757,7 @@ static void
 tctrl_read_event_status(struct tctrl_softc *sc)
 {
 	struct tctrl_req req;
-	int s, lid;
+	int s;
 	uint32_t v;
 
 	req.cmdbuf[0] = TS102_OP_RD_EVENT_STATUS;
@@ -766,24 +770,24 @@ tctrl_read_event_status(struct tctrl_softc *sc)
 	printf("event: %x\n",v);
 #endif
 	if (v & TS102_EVENT_STATUS_POWERON_BTN_PRESSED) {
-		printf("%s: Power button pressed\n",sc->sc_dev.dv_xname);
+		printf("%s: Power button pressed\n",device_xname(sc->sc_dev));
 		tctrl_powerfail(sc);
 	}
 	if (v & TS102_EVENT_STATUS_SHUTDOWN_REQUEST) {
-		printf("%s: SHUTDOWN REQUEST!\n", sc->sc_dev.dv_xname);
+		printf("%s: SHUTDOWN REQUEST!\n", device_xname(sc->sc_dev));
 		tctrl_powerfail(sc);
 	}
 	if (v & TS102_EVENT_STATUS_VERY_LOW_POWER_WARNING) {
-/*printf("%s: VERY LOW POWER WARNING!\n", sc->sc_dev.dv_xname);*/
+/*printf("%s: VERY LOW POWER WARNING!\n", device_xname(sc->sc_dev));*/
 /* according to a tadpole header, and observation */
 #ifdef TCTRLDEBUG
 		printf("%s: Battery charge level change\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 #endif
 	}
 	if (v & TS102_EVENT_STATUS_LOW_POWER_WARNING) {
 		if (tctrl_apm_record_event(sc, APM_BATTERY_LOW))
-			printf("%s: LOW POWER WARNING!\n", sc->sc_dev.dv_xname);
+			printf("%s: LOW POWER WARNING!\n", device_xname(sc->sc_dev));
 	}
 	if (v & TS102_EVENT_STATUS_DC_STATUS_CHANGE) {
 		splx(s);
@@ -791,7 +795,7 @@ tctrl_read_event_status(struct tctrl_softc *sc)
 		tctrl_ac_state(sc);
 		s = splts102();
 		if (tctrl_apm_record_event(sc, APM_POWER_CHANGE))
-			printf("%s: main power %s\n", sc->sc_dev.dv_xname,
+			printf("%s: main power %s\n", device_xname(sc->sc_dev),
 			    (sc->sc_ext_status &
 			    TS102_EXT_STATUS_MAIN_POWER_AVAILABLE) ?
 			    "restored" : "removed");
@@ -802,11 +806,10 @@ tctrl_read_event_status(struct tctrl_softc *sc)
 		tctrl_lid_state(sc);
 		tctrl_setup_bitport();
 #ifdef TCTRLDEBUG
-		printf("%s: lid %s\n", sc->sc_dev.dv_xname,
+		printf("%s: lid %s\n", device_xname(sc->sc_dev),
 		    (sc->sc_ext_status & TS102_EXT_STATUS_LID_DOWN)
 		    ? "closed" : "opened");
 #endif
-		lid = (sc->sc_ext_status & TS102_EXT_STATUS_LID_DOWN) == 0;
 	}
 	if (v & TS102_EVENT_STATUS_EXTERNAL_VGA_STATUS_CHANGE) {
 		int vga;
@@ -857,13 +860,10 @@ tadpole_request(struct tctrl_req *req, int spin, int sleep)
 	struct tctrl_softc *sc;
 	int i, s;
 
-	if (tctrl_cd.cd_devs == NULL
-	    || tctrl_cd.cd_ndevs == 0
-	    || tctrl_cd.cd_devs[TCTRL_STD_DEV] == NULL) {
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
+	if (!sc)
 		return ENODEV;
-	}
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
 	tctrl_lock(sc);
 
 	if (spin)
@@ -957,7 +957,7 @@ tadpole_set_video(int enabled)
 	struct tctrl_req req;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	while (sc->sc_wantdata != 0)
 		DELAY(1);
 	s = splts102();
@@ -1040,7 +1040,7 @@ tctrlopen(dev_t dev, int flags, int mode, struct lwp *l)
 
 	if (unit >= tctrl_cd.cd_ndevs)
 		return(ENXIO);
-	sc = tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	if (!sc)
 		return(ENXIO);
 
@@ -1068,7 +1068,7 @@ tctrlclose(dev_t dev, int flags, int mode, struct lwp *l)
 	int ctl = (minor(dev)&0x0f);
 	struct tctrl_softc *sc;
 
-	sc = tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	if (!sc)
 		return(ENXIO);
 
@@ -1093,12 +1093,10 @@ tctrlioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 	int i;
 	uint8_t c;
 
-	if (tctrl_cd.cd_devs == NULL
-	    || tctrl_cd.cd_ndevs == 0
-	    || tctrl_cd.cd_devs[TCTRL_STD_DEV] == NULL) {
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
+	if (!sc)
 		return ENXIO;
-	}
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+
         switch (cmd) {
 
 	case APM_IOC_STANDBY:
@@ -1160,8 +1158,8 @@ tctrlioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 	/* this ioctl assumes the caller knows exactly what he is doing */
 	case TCTRL_CMD_REQ:
 		reqn = (struct tctrl_req *)data;
-		if ((i = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) != 0 &&
+		if ((i = kauth_authorize_device_passthru(l->l_cred,
+		    dev, KAUTH_REQ_DEVICE_RAWIO_PASSTHRU_ALL, data)) != 0 &&
 		    (reqn->cmdbuf[0] == TS102_OP_CTL_BITPORT ||
 		    (reqn->cmdbuf[0] >= TS102_OP_CTL_WATCHDOG &&
 		    reqn->cmdbuf[0] <= TS102_OP_CTL_SECURITY_KEY) ||
@@ -1198,7 +1196,8 @@ tctrlioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 int
 tctrlpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct tctrl_softc *sc = tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	struct tctrl_softc *sc = device_lookup_private(&tctrl_cd,
+						       TCTRL_STD_DEV);
 	int revents = 0;
 
 	if (events & (POLLIN | POLLRDNORM)) {
@@ -1231,13 +1230,18 @@ filt_tctrlread(struct knote *kn, long hint)
 	return (kn->kn_data > 0);
 }
 
-static const struct filterops tctrlread_filtops =
-	{ 1, NULL, filt_tctrlrdetach, filt_tctrlread };
+static const struct filterops tctrlread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_tctrlrdetach,
+	.f_event = filt_tctrlread,
+};
 
 int
 tctrlkqfilter(dev_t dev, struct knote *kn)
 {
-	struct tctrl_softc *sc = tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	struct tctrl_softc *sc = device_lookup_private(&tctrl_cd,
+						       TCTRL_STD_DEV);
 	struct klist *klist;
 	int s;
 
@@ -1271,16 +1275,19 @@ tctrl_sensor_setup(struct tctrl_softc *sc)
 	(void)strlcpy(sc->sc_sensor[0].desc, "Case temperature",
 	    sizeof(sc->sc_sensor[0].desc));
 	sc->sc_sensor[0].units = ENVSYS_STEMP;
+	sc->sc_sensor[0].state = ENVSYS_SINVALID;
 
 	/* battery voltage */
 	(void)strlcpy(sc->sc_sensor[1].desc, "Internal battery voltage",
 	    sizeof(sc->sc_sensor[1].desc));
 	sc->sc_sensor[1].units = ENVSYS_SVOLTS_DC;
+	sc->sc_sensor[1].state = ENVSYS_SINVALID;
 
 	/* DC voltage */
 	(void)strlcpy(sc->sc_sensor[2].desc, "DC-In voltage",
 	    sizeof(sc->sc_sensor[2].desc));
 	sc->sc_sensor[2].units = ENVSYS_SVOLTS_DC;
+	sc->sc_sensor[2].state = ENVSYS_SINVALID;
 
 	for (i = 0; i < ENVSYS_NUMSENSORS; i++) {
 		if (sysmon_envsys_sensor_attach(sc->sc_sme,
@@ -1290,13 +1297,13 @@ tctrl_sensor_setup(struct tctrl_softc *sc)
 		}
 	}
 
-	sc->sc_sme->sme_name = sc->sc_dev.dv_xname;
+	sc->sc_sme->sme_name = device_xname(sc->sc_dev);
 	sc->sc_sme->sme_cookie = sc;
 	sc->sc_sme->sme_refresh = tctrl_refresh;
 
 	if ((error = sysmon_envsys_register(sc->sc_sme)) != 0) {
 		printf("%s: couldn't register sensors (%d)\n",
-		    sc->sc_dev.dv_xname, error);
+		    device_xname(sc->sc_dev), error);
 		sysmon_envsys_destroy(sc->sc_sme);
 		return;
 	}
@@ -1307,25 +1314,25 @@ tctrl_sensor_setup(struct tctrl_softc *sc)
 
 	sc->sc_powerpressed = 0;
 	memset(&sc->sc_sm_pbutton, 0, sizeof(struct sysmon_pswitch));
-	sc->sc_sm_pbutton.smpsw_name = sc->sc_dev.dv_xname;
+	sc->sc_sm_pbutton.smpsw_name = device_xname(sc->sc_dev);
 	sc->sc_sm_pbutton.smpsw_type = PSWITCH_TYPE_POWER;
 	if (sysmon_pswitch_register(&sc->sc_sm_pbutton) != 0)
 		printf("%s: unable to register power button with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 
 	memset(&sc->sc_sm_lid, 0, sizeof(struct sysmon_pswitch));
-	sc->sc_sm_lid.smpsw_name = sc->sc_dev.dv_xname;
+	sc->sc_sm_lid.smpsw_name = device_xname(sc->sc_dev);
 	sc->sc_sm_lid.smpsw_type = PSWITCH_TYPE_LID;
 	if (sysmon_pswitch_register(&sc->sc_sm_lid) != 0)
 		printf("%s: unable to register lid switch with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 
 	memset(&sc->sc_sm_ac, 0, sizeof(struct sysmon_pswitch));
-	sc->sc_sm_ac.smpsw_name = sc->sc_dev.dv_xname;
+	sc->sc_sm_ac.smpsw_name = device_xname(sc->sc_dev);
 	sc->sc_sm_ac.smpsw_type = PSWITCH_TYPE_ACADAPTER;
 	if (sysmon_pswitch_register(&sc->sc_sm_ac) != 0)
 		printf("%s: unable to register AC adaptor with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 }
 
 static void
@@ -1443,43 +1450,44 @@ static void
 tctrl_event_thread(void *v)
 {
 	struct tctrl_softc *sc = v;
-	struct device *dv;
-	struct sd_softc *sd = NULL;
-	struct lance_softc *le = NULL;
-	int ticks = hz/2;
-	int rcount, wcount;
-	int s;
+	device_t dv;
+	struct sd_softc *sd;
 	
-	while (sd == NULL) {
+	for (sd = NULL; sd == NULL;) {
 		dv = device_find_by_xname("sd0");
 		if (dv != NULL)
 			sd = device_private(dv);
 		else
 			tsleep(&sc->sc_events, PWAIT, "probe_disk", hz);
 	}			
+
 	dv = device_find_by_xname("le0");
-	if (dv != NULL)
-		le = device_private(dv);
-	printf("found %s\n", sd->sc_dev.dv_xname);
-	rcount = sd->sc_dk.dk_stats->io_rxfer;
-	wcount = sd->sc_dk.dk_stats->io_wxfer;
+
+	struct lance_softc *le = dv != NULL ? device_private(dv) : NULL;
+	struct dk_softc *dk = &sd->sc_dksc;
+	printf("found %s\n", device_xname(dk->sc_dev));
+
+	struct io_stats *io = dk->sc_dkdev.dk_stats;
+	int rcount = io->io_rxfer;
+	int wcount = io->io_wxfer;
 
 	tctrl_read_event_status(sc);
 	
-	while (1) {
+	int ticks = hz / 2;
+	for (;;) {
 		tsleep(&sc->sc_events, PWAIT, "tctrl_event", ticks);
-		s = splhigh();
-		if ((rcount != sd->sc_dk.dk_stats->io_rxfer) || 
-		    (wcount != sd->sc_dk.dk_stats->io_wxfer)) {
-			rcount = sd->sc_dk.dk_stats->io_rxfer;
-			wcount = sd->sc_dk.dk_stats->io_wxfer;
+		int s = splhigh();
+		if ((rcount != io->io_rxfer) || (wcount != io->io_wxfer)) {
+			rcount = io->io_rxfer;
+			wcount = io->io_wxfer;
 			sc->sc_lcdwanted |= TS102_LCD_DISK_ACTIVE;
 		} else
 			sc->sc_lcdwanted &= ~TS102_LCD_DISK_ACTIVE;
+
 		if (le != NULL) {
-			if (le->sc_havecarrier != 0) {
+			if (le->sc_havecarrier != 0)
 				sc->sc_lcdwanted |= TS102_LCD_LAN_ACTIVE;
-			} else
+			else
 				sc->sc_lcdwanted &= ~TS102_LCD_LAN_ACTIVE;
 		}
 		splx(s);
@@ -1494,7 +1502,7 @@ tadpole_register_callback(void (*callback)(void *, int), void *cookie)
 {
 	struct tctrl_softc *sc;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	sc->sc_video_callback = callback;
 	sc->sc_video_callback_cookie = cookie;
 	if (sc->sc_video_callback != NULL) {

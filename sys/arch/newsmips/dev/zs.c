@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.22 2007/11/26 23:29:37 ad Exp $	*/
+/*	$NetBSD: zs.c,v 1.27 2012/07/28 23:08:57 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.22 2007/11/26 23:29:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.27 2012/07/28 23:08:57 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -61,9 +54,11 @@ __KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.22 2007/11/26 23:29:37 ad Exp $");
 
 #include <dev/ic/z8530reg.h>
 
-#define ZS_DELAY() (*zs_delay)()
+#include "ioconf.h"
 
-extern struct cfdriver zsc_cd;
+void (*zs_delay)(void);
+
+#define ZS_DELAY() (*zs_delay)()
 
 /*
  * Some warts needed by z8530tty.c -
@@ -87,48 +82,21 @@ zs_print(void *aux, const char *name)
 }
 
 /*
- * Our ZS chips all share a common, autovectored interrupt,
- * so we have to look at all of them on each interrupt.
+ * Our ZS chips all share a common interrupt level,
+ * but we establish zshard handler per each ZS chips
+ * to avoid holding unnecessary locks in interrupt context.
  */
 int
 zshard(void *arg)
 {
-	struct zsc_softc *zsc;
-	int unit, rval, softreq;
+	struct zsc_softc *zsc = arg;
+	int rval;
 
-	rval = 0;
-	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
-		zsc = zsc_cd.cd_devs[unit];
-		if (zsc == NULL)
-			continue;
-		rval |= zsc_intr_hard(zsc);
-		softreq =  zsc->zsc_cs[0]->cs_softreq;
-		softreq |= zsc->zsc_cs[1]->cs_softreq;
-		if (softreq)
-			softint_schedule(zsc->zsc_si);
-	}
+	rval = zsc_intr_hard(zsc);
+	if (zsc->zsc_cs[0]->cs_softreq || zsc->zsc_cs[1]->cs_softreq)
+		softint_schedule(zsc->zsc_si);
 
 	return rval;
-}
-
-/*
- * Similar scheme as for zshard (look at all of them)
- */
-void
-zssoft(void *arg)
-{
-	struct zsc_softc *zsc;
-	int s, unit;
-
-	/* Make sure we call the tty layer at spltty. */
-	s = spltty();
-	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
-		zsc = zsc_cd.cd_devs[unit];
-		if (zsc == NULL)
-			continue;
-		(void)zsc_intr_soft(zsc);
-	}
-	splx(s);
 }
 
 /*
@@ -221,10 +189,10 @@ zs_set_modes(struct zs_chanstate *cs, int cflag)
  * Read or write the chip with suitable delays.
  */
 
-u_char
-zs_read_reg(struct zs_chanstate *cs, u_char reg)
+uint8_t
+zs_read_reg(struct zs_chanstate *cs, uint8_t reg)
 {
-	u_char val;
+	uint8_t val;
 
 	*cs->cs_reg_csr = reg;
 	ZS_DELAY();
@@ -234,7 +202,7 @@ zs_read_reg(struct zs_chanstate *cs, u_char reg)
 }
 
 void
-zs_write_reg(struct zs_chanstate *cs, u_char reg, u_char val)
+zs_write_reg(struct zs_chanstate *cs, uint8_t reg, uint8_t val)
 {
 
 	*cs->cs_reg_csr = reg;
@@ -243,32 +211,36 @@ zs_write_reg(struct zs_chanstate *cs, u_char reg, u_char val)
 	ZS_DELAY();
 }
 
-u_char zs_read_csr(struct zs_chanstate *cs)
+uint8_t
+zs_read_csr(struct zs_chanstate *cs)
 {
-	u_char val;
+	uint8_t val;
 
 	val = *cs->cs_reg_csr;
 	ZS_DELAY();
 	return val;
 }
 
-void  zs_write_csr(struct zs_chanstate *cs, u_char val)
+void
+zs_write_csr(struct zs_chanstate *cs, uint8_t val)
 {
 
 	*cs->cs_reg_csr = val;
 	ZS_DELAY();
 }
 
-u_char zs_read_data(struct zs_chanstate *cs)
+uint8_t
+ zs_read_data(struct zs_chanstate *cs)
 {
-	u_char val;
+	uint8_t val;
 
 	val = *cs->cs_reg_data;
 	ZS_DELAY();
 	return val;
 }
 
-void  zs_write_data(struct zs_chanstate *cs, u_char val)
+void
+zs_write_data(struct zs_chanstate *cs, uint8_t val)
 {
 
 	*cs->cs_reg_data = val;

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.h,v 1.11 2008/01/28 14:31:35 njoly Exp $ */
+/*	$NetBSD: linux_machdep.h,v 1.14 2014/02/07 22:40:22 dsl Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved.
@@ -41,6 +41,7 @@
 #include <compat/linux/common/linux_siginfo.h>
 
 /* From <asm/sigcontext.h> */
+/* Matches the cpu's fxsave format */
 struct linux__fpstate {
 	u_int16_t cwd;
 	u_int16_t swd;
@@ -54,6 +55,7 @@ struct linux__fpstate {
 	u_int32_t xmm_space[64];
 	u_int32_t reserved2[24];
 };
+__CTASSERT(sizeof (struct linux__fpstate) == 512);
 
 /* From <asm/sigcontext.h> */
 struct linux_sigcontext {
@@ -114,9 +116,10 @@ __END_DECLS
 #define LINUX_VSYSCALL_MAXNR	3
 
 #define LINUX_UNAME_ARCH MACHINE_ARCH
-#define LINUX_NPTL
 #define LINUX_LARGEFILE64
-#define LINUX_SHMCTL_FORCEIPC64
+#define LINUX_IPC_FORCE64
+
+#define LINUX_LWP_SETPRIVATE	linux_lwp_setprivate
 
 /*
  * Used in ugly patch to fake device numbers.

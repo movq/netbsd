@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_passwd.c,v 1.4 2007/05/06 09:19:44 jnemeth Exp $	*/
+/*	$NetBSD: pam_passwd.c,v 1.6 2010/03/09 16:14:08 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2002 Networks Associates Technologies, Inc.
@@ -38,7 +38,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/usr.bin/passwd/passwd.c,v 1.23 2003/04/18 21:27:09 nectar Exp $");
 #else
-__RCSID("$NetBSD: pam_passwd.c,v 1.4 2007/05/06 09:19:44 jnemeth Exp $");
+__RCSID("$NetBSD: pam_passwd.c,v 1.6 2010/03/09 16:14:08 joerg Exp $");
 #endif
 
 #include <sys/param.h>
@@ -75,6 +75,12 @@ pwpam_process(const char *username, int argc, char **argv)
 	int ch, pam_err;
 	char hostname[MAXHOSTNAMELEN + 1];
 
+	/* details about the invoking user for logging */
+	const uid_t i_uid = getuid();
+	const struct passwd *const i_pwd = getpwuid(i_uid);
+	const char *const i_username = (i_pwd && i_pwd->pw_name)
+		? i_pwd->pw_name : "(null)";
+
 	while ((ch = getopt(argc, argv, "")) != -1) {
 		switch (ch) {
 		default:
@@ -102,7 +108,9 @@ pwpam_process(const char *username, int argc, char **argv)
 
 	/* initialize PAM -- always use the program name "passwd" */
 	pam_err = pam_start("passwd", username, &pamc, &pamh);
-	pam_check("unable to start PAM session");
+	if (pam_err != PAM_SUCCESS)
+		errx(1, "unable to start PAM session: %s",
+		    pam_strerror(NULL, pam_err));
 
 	pam_err = pam_set_item(pamh, PAM_TTY, ttyname(STDERR_FILENO));
 	pam_check("unable to set TTY");
@@ -116,9 +124,22 @@ pwpam_process(const char *username, int argc, char **argv)
 
 	/* set new password */
 	pam_err = pam_chauthtok(pamh, 0);
-	if (pam_err != PAM_SUCCESS)
+	if (pam_err != PAM_SUCCESS) {
+		if (pam_err == PAM_PERM_DENIED) {
+			syslog(LOG_AUTH | LOG_NOTICE,
+			       "user %s (UID %lu) failed to change the "
+			       "PAM authentication token of user %s: %s",
+			       i_username, (unsigned long)i_uid, username,
+			       pam_strerror(pamh, pam_err));
+		}
 		printf("Unable to change auth token: %s\n",
 		    pam_strerror(pamh, pam_err));
+	} else {
+		syslog(LOG_AUTH | LOG_INFO,
+		       "user %s (UID %lu) successfully changed the "
+		       "PAM authentication token of user %s",
+		       i_username, (unsigned long)i_uid, username);
+	}
 
  end:
 	pam_end(pamh, pam_err);

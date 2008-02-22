@@ -1,4 +1,4 @@
-.\"     $NetBSD: skey.3,v 1.8 2003/06/06 13:42:50 wiz Exp $
+.\"     $NetBSD: skey.3,v 1.11 2017/07/03 21:32:51 wiz Exp $
 .\"
 .\" Copyright (c) 2001 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -88,7 +81,7 @@ S/key One-Time Password Library (libskey, -lskey)
 .Ft void
 .Fn rip "char *buf"
 .Ft char *
-.Fn readpass "char *buf " "int n"
+.Fn readpass "char *buf" "int n"
 .Ft char *
 .Fn readskey "char *buf" "int n"
 .Ft int
@@ -234,7 +227,7 @@ Returns a pointer to a static buffer in
 .It Fn etob "out" "e"
 Convert English to binary.
 Returns 0 if the word is not in the database, 1 if all good words and
-parity is valid, \-1 if badly formed input (i.e. \*[Gt] 4 char word)
+parity is valid, \-1 if badly formed input (i.e. > 4 char word)
 and -2 if words are valid but parity is wrong.
 .It Fn put8 "out" "s"
 Display 8 bytes

@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.104 2008/02/10 17:48:00 christos Exp $	*/
+/*	$NetBSD: print.c,v 1.129 2018/04/11 18:52:05 christos Exp $	*/
 
 /*
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.6 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.104 2008/02/10 17:48:00 christos Exp $");
+__RCSID("$NetBSD: print.c,v 1.129 2018/04/11 18:52:05 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -100,16 +93,14 @@ __RCSID("$NetBSD: print.c,v 1.104 2008/02/10 17:48:00 christos Exp $");
 #include "ps.h"
 
 static char *cmdpart(char *);
-static void  printval(void *, VAR *, int);
+static void  printval(void *, VAR *, enum mode);
 static int   titlecmp(char *, char **);
 
-static void  doubleprintorsetwidth(VAR *, double, int, int);
-static void  intprintorsetwidth(VAR *, int, int);
-static void  strprintorsetwidth(VAR *, const char *, int);
+static void  doubleprintorsetwidth(VAR *, double, int, enum mode);
+static void  intprintorsetwidth(VAR *, int, enum mode);
+static void  strprintorsetwidth(VAR *, const char *, enum mode);
 
 static time_t now;
-static int ncpu;
-static u_int64_t *cp_id;
 
 #define	min(a,b)	((a) <= (b) ? (a) : (b))
 
@@ -227,7 +218,7 @@ titlecmp(char *name, char **argv)
 }
 
 static void
-doubleprintorsetwidth(VAR *v, double val, int prec, int mode)
+doubleprintorsetwidth(VAR *v, double val, int prec, enum mode mode)
 {
 	int fmtlen;
 
@@ -249,7 +240,7 @@ doubleprintorsetwidth(VAR *v, double val, int prec, int mode)
 }
 
 static void
-intprintorsetwidth(VAR *v, int val, int mode)
+intprintorsetwidth(VAR *v, int val, enum mode mode)
 {
 	int fmtlen;
 
@@ -270,7 +261,7 @@ intprintorsetwidth(VAR *v, int val, int mode)
 }
 
 static void
-strprintorsetwidth(VAR *v, const char *str, int mode)
+strprintorsetwidth(VAR *v, const char *str, enum mode mode)
 {
 	int len;
 
@@ -287,9 +278,9 @@ strprintorsetwidth(VAR *v, const char *str, int mode)
 }
 
 void
-command(void *arg, VARENT *ve, int mode)
+command(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *ki;
+	struct kinfo_proc2 *ki = pi->ki;
 	VAR *v;
 	int left;
 	char **argv, **p, *name;
@@ -297,7 +288,6 @@ command(void *arg, VARENT *ve, int mode)
 	if (mode == WIDTHMODE)
 		return;
 
-	ki = arg;
 	v = ve->var;
 	if (SIMPLEQ_NEXT(ve, next) != NULL || termwidth != UNLIMITED) {
 		if (SIMPLEQ_NEXT(ve, next) == NULL) {
@@ -319,6 +309,8 @@ command(void *arg, VARENT *ve, int mode)
 		}
 	}
 	if (needcomm) {
+		if (pi->prefix)
+			(void)fmt_puts(pi->prefix, &left);
 		name = ki->p_comm;
 		if (!commandonly) {
 			argv = kvm_getargv2(kd, ki, termwidth);
@@ -368,9 +360,9 @@ command(void *arg, VARENT *ve, int mode)
 }
 
 void
-groups(void *arg, VARENT *ve, int mode)
+groups(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *ki;
+	struct kinfo_proc2 *ki = pi->ki;
 	VAR *v;
 	int left, i;
 	char buf[16], *p;
@@ -378,7 +370,6 @@ groups(void *arg, VARENT *ve, int mode)
 	if (mode == WIDTHMODE)
 		return;
 
-	ki = arg;
 	v = ve->var;
 	if (SIMPLEQ_NEXT(ve, next) != NULL || termwidth != UNLIMITED) {
 		if (SIMPLEQ_NEXT(ve, next) == NULL) {
@@ -390,10 +381,8 @@ groups(void *arg, VARENT *ve, int mode)
 	} else
 		left = -1;
 
-	if (ki->p_ngroups == 0) {
+	if (ki->p_ngroups == 0)
 		fmt_putc('-', &left);
-		return;
-	}
 
 	for (i = 0; i < ki->p_ngroups; i++) {
 		(void)snprintf(buf, sizeof(buf), "%d", ki->p_groups[i]);
@@ -408,9 +397,9 @@ groups(void *arg, VARENT *ve, int mode)
 }
 
 void
-groupnames(void *arg, VARENT *ve, int mode)
+groupnames(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *ki;
+	struct kinfo_proc2 *ki = pi->ki;
 	VAR *v;
 	int left, i;
 	const char *p;
@@ -418,7 +407,6 @@ groupnames(void *arg, VARENT *ve, int mode)
 	if (mode == WIDTHMODE)
 		return;
 
-	ki = arg;
 	v = ve->var;
 	if (SIMPLEQ_NEXT(ve, next) != NULL || termwidth != UNLIMITED) {
 		if (SIMPLEQ_NEXT(ve, next) == NULL) {
@@ -430,10 +418,8 @@ groupnames(void *arg, VARENT *ve, int mode)
 	} else
 		left = -1;
 
-	if (ki->p_ngroups == 0) {
+	if (ki->p_ngroups == 0)
 		fmt_putc('-', &left);
-		return;
-	}
 
 	for (i = 0; i < ki->p_ngroups; i++) {
 		if (i)
@@ -447,53 +433,64 @@ groupnames(void *arg, VARENT *ve, int mode)
 }
 
 void
-ucomm(void *arg, VARENT *ve, int mode)
+ucomm(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
+	char buf[MAXPATHLEN], *p;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
-	strprintorsetwidth(v, k->p_comm, mode);
+	if (pi->prefix)
+		snprintf(p = buf, sizeof(buf), "%s%s", pi->prefix, k->p_comm);
+	else
+		p = k->p_comm;
+	strprintorsetwidth(v, p, mode);
 }
 
 void
-emul(void *arg, VARENT *ve, int mode)
+emul(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	strprintorsetwidth(v, k->p_ename, mode);
 }
 
 void
-logname(void *arg, VARENT *ve, int mode)
+logname(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	strprintorsetwidth(v, k->p_login, mode);
 }
 
 void
-state(void *arg, VARENT *ve, int mode)
+state(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	int flag, is_zombie;
 	char *cp;
 	VAR *v;
 	char buf[16];
 
-	k = arg;
 	is_zombie = 0;
 	v = ve->var;
 	flag = k->p_flag;
 	cp = buf;
 
+	/*
+	 * NOTE: There are historical letters, which are no longer used:
+	 *
+	 * - W: indicated that process is swapped out.
+	 * - L: indicated non-zero l_holdcnt (i.e. that process was
+	 *   prevented from swapping-out.
+	 *
+	 * These letters should not be used for new states to avoid
+	 * conflicts with old applications which might depend on them.
+	 */
 	switch (k->p_stat) {
 
 	case LSSTOP:
@@ -502,15 +499,18 @@ state(void *arg, VARENT *ve, int mode)
 
 	case LSSLEEP:
 		if (flag & L_SINTR)	/* interruptable (long) */
-			*cp = k->p_slptime >= maxslp ? 'I' : 'S';
+			*cp = (int)k->p_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
 
 	case LSRUN:
 	case LSIDL:
-	case LSONPROC:
 		*cp = 'R';
+		break;
+
+	case LSONPROC:
+		*cp = 'O';
 		break;
 
 	case LSZOMB:
@@ -526,9 +526,6 @@ state(void *arg, VARENT *ve, int mode)
 		*cp = '?';
 	}
 	cp++;
-	if (flag & L_INMEM) {
-	} else
-		*cp++ = 'W';
 	if (k->p_nice < NZERO)
 		*cp++ = '<';
 	else if (k->p_nice > NZERO)
@@ -541,9 +538,6 @@ state(void *arg, VARENT *ve, int mode)
 		*cp++ = 'V';
 	if (flag & P_SYSTEM)
 		*cp++ = 'K';
-	/* system process might have this too, don't need to double up */
-	else if (k->p_holdcnt)
-		*cp++ = 'L';
 	if (k->p_eflag & EPROC_SLEADER)
 		*cp++ = 's';
 	if (flag & P_SA)
@@ -557,16 +551,14 @@ state(void *arg, VARENT *ve, int mode)
 }
 
 void
-lstate(void *arg, VARENT *ve, int mode)
+lstate(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_lwp *k;
-	int flag, is_zombie;
+	struct kinfo_lwp *k = pi->li;
+	int flag;
 	char *cp;
 	VAR *v;
 	char buf[16];
 
-	k = arg;
-	is_zombie = 0;
 	v = ve->var;
 	flag = k->l_flag;
 	cp = buf;
@@ -579,21 +571,23 @@ lstate(void *arg, VARENT *ve, int mode)
 
 	case LSSLEEP:
 		if (flag & L_SINTR)	/* interruptible (long) */
-			*cp = k->l_slptime >= maxslp ? 'I' : 'S';
+			*cp = (int)k->l_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
 
 	case LSRUN:
 	case LSIDL:
-	case LSONPROC:
 		*cp = 'R';
+		break;
+
+	case LSONPROC:
+		*cp = 'O';
 		break;
 
 	case LSZOMB:
 	case LSDEAD:
 		*cp = 'Z';
-		is_zombie = 1;
 		break;
 
 	case LSSUSPENDED:
@@ -604,11 +598,10 @@ lstate(void *arg, VARENT *ve, int mode)
 		*cp = '?';
 	}
 	cp++;
-	if (flag & L_INMEM) {
-	} else
-		*cp++ = 'W';
-	if (k->l_holdcnt)
-		*cp++ = 'L';
+	if (flag & L_SYSTEM)
+		*cp++ = 'K';
+	if (flag & L_SA)
+		*cp++ = 'a';
 	if (flag & L_DETACHED)
 		*cp++ = '-';
 	*cp = '\0';
@@ -616,102 +609,93 @@ lstate(void *arg, VARENT *ve, int mode)
 }
 
 void
-pnice(void *arg, VARENT *ve, int mode)
+pnice(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	intprintorsetwidth(v, k->p_nice - NZERO, mode);
 }
 
 void
-pri(void *arg, VARENT *ve, int mode)
+pri(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_lwp *l;
+	struct kinfo_lwp *l = pi->li;
 	VAR *v;
 
-	l = arg;
 	v = ve->var;
 	intprintorsetwidth(v, l->l_priority, mode);
 }
 
 void
-uname(void *arg, VARENT *ve, int mode)
+usrname(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	strprintorsetwidth(v, user_from_uid(k->p_uid, 0), mode);
 }
 
 void
-runame(void *arg, VARENT *ve, int mode)
+runame(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	strprintorsetwidth(v, user_from_uid(k->p_ruid, 0), mode);
 }
 
 void
-svuname(void *arg, VARENT *ve, int mode)
+svuname(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	strprintorsetwidth(v, user_from_uid(k->p_svuid, 0), mode);
 }
 
 void
-gname(void *arg, VARENT *ve, int mode)
+gname(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	strprintorsetwidth(v, group_from_gid(k->p_gid, 0), mode);
 }
 
 void
-rgname(void *arg, VARENT *ve, int mode)
+rgname(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	strprintorsetwidth(v, group_from_gid(k->p_rgid, 0), mode);
 }
 
 void
-svgname(void *arg, VARENT *ve, int mode)
+svgname(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	strprintorsetwidth(v, group_from_gid(k->p_svgid, 0), mode);
 }
 
 void
-tdev(void *arg, VARENT *ve, int mode)
+tdev(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 	dev_t dev;
 	char buff[16];
 
-	k = arg;
 	v = ve->var;
 	dev = k->p_tdev;
 	if (dev == NODEV) {
@@ -722,21 +706,20 @@ tdev(void *arg, VARENT *ve, int mode)
 				v->width = 2;
 	} else {
 		(void)snprintf(buff, sizeof(buff),
-		    "%d/%d", major(dev), minor(dev));
+		    "%lld/%lld", (long long)major(dev), (long long)minor(dev));
 		strprintorsetwidth(v, buff, mode);
 	}
 }
 
 void
-tname(void *arg, VARENT *ve, int mode)
+tname(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 	dev_t dev;
 	const char *ttname;
 	int noctty;
 
-	k = arg;
 	v = ve->var;
 	dev = k->p_tdev;
 	if (dev == NODEV || (ttname = devname(dev, S_IFCHR)) == NULL) {
@@ -763,14 +746,13 @@ tname(void *arg, VARENT *ve, int mode)
 }
 
 void
-longtname(void *arg, VARENT *ve, int mode)
+longtname(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 	dev_t dev;
 	const char *ttname;
 
-	k = arg;
 	v = ve->var;
 	dev = k->p_tdev;
 	if (dev == NODEV || (ttname = devname(dev, S_IFCHR)) == NULL) {
@@ -785,15 +767,14 @@ longtname(void *arg, VARENT *ve, int mode)
 }
 
 void
-started(void *arg, VARENT *ve, int mode)
+started(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 	time_t startt;
 	struct tm *tp;
 	char buf[100], *cp;
 
-	k = arg;
 	v = ve->var;
 	if (!k->p_uvalid) {
 		if (mode == PRINTMODE)
@@ -821,14 +802,13 @@ started(void *arg, VARENT *ve, int mode)
 }
 
 void
-lstarted(void *arg, VARENT *ve, int mode)
+lstarted(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 	time_t startt;
 	char buf[100];
 
-	k = arg;
 	v = ve->var;
 	if (!k->p_uvalid) {
 		/*
@@ -850,14 +830,13 @@ lstarted(void *arg, VARENT *ve, int mode)
 }
 
 void
-elapsed(void *arg, VARENT *ve, int mode)
+elapsed(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 	int32_t origseconds, secs, mins, hours, days;
 	int fmtlen, printed_something;
 
-	k = arg;
 	v = ve->var;
 	if (k->p_uvalid == 0) {
 		origseconds = 0;
@@ -944,23 +923,22 @@ elapsed(void *arg, VARENT *ve, int mode)
 }
 
 void
-wchan(void *arg, VARENT *ve, int mode)
+wchan(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_lwp *l;
+	struct kinfo_lwp *l = pi->li;
 	VAR *v;
 	char *buf;
 
-	l = arg;
 	v = ve->var;
 	if (l->l_wchan) {
-		if (l->l_wmesg) {
+		if (l->l_wmesg[0]) {
 			strprintorsetwidth(v, l->l_wmesg, mode);
 			v->width = min(v->width, KI_WMESGLEN);
 		} else {
 			(void)asprintf(&buf, "%-*" PRIx64, v->width,
 			    l->l_wchan);
 			if (buf == NULL)
-				err(1, "%s", "");
+				err(EXIT_FAILURE, "%s", "");
 			strprintorsetwidth(v, buf, mode);
 			v->width = min(v->width, KI_WMESGLEN);
 			free(buf);
@@ -971,110 +949,54 @@ wchan(void *arg, VARENT *ve, int mode)
 	}
 }
 
-#define	pgtok(a)        (((a)*getpagesize())/1024)
+#define	pgtok(a)        (((a)*(size_t)getpagesize())/1024)
 
 void
-vsize(void *arg, VARENT *ve, int mode)
+vsize(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
-	intprintorsetwidth(v,
-	    pgtok(k->p_vm_dsize + k->p_vm_ssize + k->p_vm_tsize), mode);
+	intprintorsetwidth(v, pgtok(k->p_vm_msize), mode);
 }
 
 void
-rssize(void *arg, VARENT *ve, int mode)
+rssize(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	/* XXX don't have info about shared */
 	intprintorsetwidth(v, pgtok(k->p_vm_rssize), mode);
 }
 
 void
-p_rssize(void *arg, VARENT *ve, int mode)	/* doesn't account for text */
+p_rssize(struct pinfo *pi, VARENT *ve, enum mode mode)	/* doesn't account for text */
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	intprintorsetwidth(v, pgtok(k->p_vm_rssize), mode);
 }
 
 void
-setncpu(void)
+cpuid(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	int mib[2];
-	size_t size;
-
-	mib[0] = CTL_HW;
-	mib[1] = HW_NCPU;
-	size = sizeof(ncpu);
-	if (sysctl(mib, 2, &ncpu, &size, NULL, 0) == -1) {
-		ncpu = 0;
-		return;
-	}
-	cp_id = malloc(sizeof(cp_id[0]) * ncpu);
-	if (cp_id == NULL)
-		err(1, NULL);
-	mib[0] = CTL_KERN;
-	mib[1] = KERN_CP_ID;
-	size = sizeof(cp_id[0]) * ncpu;
-	if (sysctl(mib, 2, cp_id, &size, NULL, 0) == -1)
-		ncpu = 0;
-}
-
-static int
-get_cpunum(u_int64_t id)
-{
-	int i = 0;
-	for (i = 0; i < ncpu; i++)
-		if (id == cp_id[i])
-			return i;
-	return -1;
-}
-
-void
-cpuid(void *arg, VARENT *ve, int mode)
-{
-	struct kinfo_lwp *l;
+	struct kinfo_lwp *l = pi->li;
 	VAR *v;
 
-	l = arg;
 	v = ve->var;
-	intprintorsetwidth(v, get_cpunum(l->l_cpuid), mode);
+	intprintorsetwidth(v, l->l_cpuid, mode);
 }
 
-void
-cputime(void *arg, VARENT *ve, int mode)
+static void
+cputime1(int32_t secs, int32_t psecs, VAR *v, enum mode mode)
 {
-	struct kinfo_proc2 *k;
-	VAR *v;
-	int32_t secs;
-	int32_t psecs;	/* "parts" of a second. first micro, then centi */
 	int fmtlen;
 
-	k = arg;
-	v = ve->var;
-
-	/*
-	 * This counts time spent handling interrupts.  We could
-	 * fix this, but it is not 100% trivial (and interrupt
-	 * time fractions only work on the sparc anyway).	XXX
-	 */
-	secs = k->p_rtime_sec;
-	psecs = k->p_rtime_usec;
-	if (sumrusage) {
-		secs += k->p_uctime_sec;
-		psecs += k->p_uctime_usec;
-	}
 	/*
 	 * round and scale to 100's
 	 */
@@ -1106,55 +1028,67 @@ cputime(void *arg, VARENT *ve, int mode)
 	}
 }
 
-double
-getpcpu(k)
-	const struct kinfo_proc2 *k;
+void
+cputime(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	static int failure;
+	struct kinfo_proc2 *k = pi->ki;
+	VAR *v;
+	int32_t secs;
+	int32_t psecs;	/* "parts" of a second. first micro, then centi */
 
-	if (!nlistread)
-		failure = (kd) ? donlist() : 1;
-	if (failure)
-		return (0.0);
+	v = ve->var;
 
-#define	fxtofl(fixpt)	((double)(fixpt) / fscale)
+	/*
+	 * This counts time spent handling interrupts.  We could
+	 * fix this, but it is not 100% trivial (and interrupt
+	 * time fractions only work on the sparc anyway).	XXX
+	 */
+	secs = k->p_rtime_sec;
+	psecs = k->p_rtime_usec;
+	if (sumrusage) {
+		secs += k->p_uctime_sec;
+		psecs += k->p_uctime_usec;
+	}
 
-	/* XXX - I don't like this */
-	if (k->p_swtime == 0 || (k->p_flag & L_INMEM) == 0 ||
-	    k->p_realstat == SZOMB)
-		return (0.0);
-	if (rawcpu)
-		return (100.0 * fxtofl(k->p_pctcpu));
-	return (100.0 * fxtofl(k->p_pctcpu) /
-		(1.0 - exp(k->p_swtime * log(ccpu))));
+	cputime1(secs, psecs, v, mode);
 }
 
 void
-pcpu(void *arg, VARENT *ve, int mode)
+lcputime(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_lwp *l = pi->li;
 	VAR *v;
+	int32_t secs;
+	int32_t psecs;	/* "parts" of a second. first micro, then centi */
 
-	k = arg;
 	v = ve->var;
-	doubleprintorsetwidth(v, getpcpu(k), 1, mode);
+
+	secs = l->l_rtime_sec;
+	psecs = l->l_rtime_usec;
+
+	cputime1(secs, psecs, v, mode);
+}
+
+void
+pcpu(struct pinfo *pi, VARENT *ve, enum mode mode)
+{
+	VAR *v;
+	double dbl;
+
+	v = ve->var;
+	dbl = pi->pcpu;
+	doubleprintorsetwidth(v, dbl, (dbl >= 99.95) ? 0 : 1, mode);
 }
 
 double
-getpmem(k)
-	const struct kinfo_proc2 *k;
+getpmem(const struct kinfo_proc2 *k)
 {
-	static int failure;
 	double fracmem;
 	int szptudot;
 
 	if (!nlistread)
-		failure = (kd) ? donlist() : 1;
-	if (failure)
-		return (0.0);
+		donlist();
 
-	if ((k->p_flag & L_INMEM) == 0)
-		return (0.0);
 	/* XXX want pmap ptpages, segtab, etc. (per architecture) */
 	szptudot = uspace/getpagesize();
 	/* XXX don't have info about shared */
@@ -1163,29 +1097,27 @@ getpmem(k)
 }
 
 void
-pmem(void *arg, VARENT *ve, int mode)
+pmem(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	doubleprintorsetwidth(v, getpmem(k), 1, mode);
 }
 
 void
-pagein(void *arg, VARENT *ve, int mode)
+pagein(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	intprintorsetwidth(v, k->p_uvalid ? k->p_uru_majflt : 0, mode);
 }
 
 void
-maxrss(void *arg, VARENT *ve, int mode)
+maxrss(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
 	VAR *v;
 
@@ -1196,12 +1128,11 @@ maxrss(void *arg, VARENT *ve, int mode)
 }
 
 void
-tsize(void *arg, VARENT *ve, int mode)
+tsize(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_proc2 *k;
+	struct kinfo_proc2 *k = pi->ki;
 	VAR *v;
 
-	k = arg;
 	v = ve->var;
 	intprintorsetwidth(v, pgtok(k->p_vm_tsize), mode);
 }
@@ -1211,10 +1142,7 @@ tsize(void *arg, VARENT *ve, int mode)
  * structures.
  */
 static void
-printval(bp, v, mode)
-	void *bp;
-	VAR *v;
-	int mode;
+printval(void *bp, VAR *v, enum mode mode)
 {
 	static char ofmt[32] = "%";
 	int width, vok, fmtlen;
@@ -1405,34 +1333,35 @@ printval(bp, v, mode)
 		(void)printf(ofmt, width, CHK_INF127(GET(u_int64_t)));
 		return;
 	default:
-		errx(1, "unknown type %d", v->type);
+		errx(EXIT_FAILURE, "unknown type %d", v->type);
 	}
 #undef GET
 #undef CHK_INF127
 }
 
 void
-pvar(void *arg, VARENT *ve, int mode)
+pvar(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	VAR *v;
+	VAR *v = ve->var;
+	char *b = (v->flag & LWP) ? (char *)pi->li : (char *)pi->ki;
 
-	v = ve->var;
-	if (v->flag & UAREA && !((struct kinfo_proc2 *)arg)->p_uvalid) {
+	if ((v->flag & UAREA) && !pi->ki->p_uvalid) {
 		if (mode == PRINTMODE)
 			(void)printf("%*s", v->width, "-");
 		return;
 	}
 
-	(void)printval((char *)arg + v->off, v, mode);
+	(void)printval(b + v->off, v, mode);
 }
 
 void
-putimeval(void *arg, VARENT *ve, int mode)
+putimeval(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
 	VAR *v = ve->var;
-	struct kinfo_proc2 *k = arg;
-	ulong secs = *(uint32_t *)((char *)arg + v->off);
-	ulong usec = *(uint32_t *)((char *)arg + v->off + sizeof (uint32_t));
+	struct kinfo_proc2 *k = pi->ki;
+	char *b = (v->flag & LWP) ? (char *)pi->li : (char *)pi->ki;
+	ulong secs = *(uint32_t *)(b + v->off);
+	ulong usec = *(uint32_t *)(b + v->off + sizeof (uint32_t));
 	int fmtlen;
 
 	if (!k->p_uvalid) {
@@ -1479,14 +1408,13 @@ putimeval(void *arg, VARENT *ve, int mode)
 }
 
 void
-lname(void *arg, VARENT *ve, int mode)
+lname(struct pinfo *pi, VARENT *ve, enum mode mode)
 {
-	struct kinfo_lwp *l;
+	struct kinfo_lwp *l = pi->li;
 	VAR *v;
 
-	l = arg;
 	v = ve->var;
-	if (l->l_name && l->l_name[0] != '\0') {
+	if (l->l_name[0] != '\0') {
 		strprintorsetwidth(v, l->l_name, mode);
 		v->width = min(v->width, KI_LNAMELEN);
 	} else {

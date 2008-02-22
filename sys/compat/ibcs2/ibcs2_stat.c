@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_stat.c,v 1.44 2007/12/20 23:02:50 dsl Exp $	*/
+/*	$NetBSD: ibcs2_stat.c,v 1.50 2017/07/29 01:14:00 riastradh Exp $	*/
 /*
  * Copyright (c) 1995, 1998 Scott Bartram
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_stat.c,v 1.44 2007/12/20 23:02:50 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_stat.c,v 1.50 2017/07/29 01:14:00 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -139,19 +139,21 @@ ibcs2_sys_statfs(struct lwp *l, const struct ibcs2_sys_statfs_args *uap, registe
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
-	struct nameidata nd;
+	struct vnode *vp;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(uap, path));
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return (error);
-	mp = nd.ni_vp->v_mount;
+	mp = vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(nd.ni_vp);
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
-		return (error);
+		goto out;
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
-	return cvt_statfs(sp, (void *)SCARG(uap, buf), SCARG(uap, len));
+	error = cvt_statfs(sp, (void *)SCARG(uap, buf), SCARG(uap, len));
+out:
+	vrele(vp);
+	return (error);
 }
 
 int
@@ -163,23 +165,22 @@ ibcs2_sys_fstatfs(struct lwp *l, const struct ibcs2_sys_fstatfs_args *uap, regis
 		syscallarg(int) len;
 		syscallarg(int) fstype;
 	} */
-	struct proc *p = l->l_proc;
-	struct file *fp;
+	file_t *fp;
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
-	mp = ((struct vnode *)fp->f_data)->v_mount;
+	mp = fp->f_vnode->v_mount;
 	sp = &mp->mnt_stat;
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		goto out;
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
 	error = cvt_statfs(sp, (void *)SCARG(uap, buf), SCARG(uap, len));
  out:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -193,20 +194,22 @@ ibcs2_sys_statvfs(struct lwp *l, const struct ibcs2_sys_statvfs_args *uap, regis
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
-	struct nameidata nd;
+	struct vnode *vp;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(uap, path));
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return (error);
-	mp = nd.ni_vp->v_mount;
+	mp = vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(nd.ni_vp);
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
-		return (error);
+		goto out;
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
-	return cvt_statvfs(sp, (void *)SCARG(uap, buf),
-			   sizeof(struct ibcs2_statvfs));
+	error = cvt_statvfs(sp, (void *)SCARG(uap, buf),
+	    sizeof(struct ibcs2_statvfs));
+out:
+	vrele(vp);
+	return error;
 }
 
 int
@@ -216,23 +219,22 @@ ibcs2_sys_fstatvfs(struct lwp *l, const struct ibcs2_sys_fstatvfs_args *uap, reg
 		syscallarg(int) fd;
 		syscallarg(struct ibcs2_statvfs *) buf;
 	} */
-	struct proc *p = l->l_proc;
-	struct file *fp;
+	file_t *fp;
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
-	mp = ((struct vnode *)fp->f_data)->v_mount;
+	mp = fp->f_vnode->v_mount;
 	sp = &mp->mnt_stat;
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		goto out;
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
 	error = cvt_statvfs(sp, SCARG(uap, buf), sizeof(struct ibcs2_statvfs));
  out:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -247,7 +249,7 @@ ibcs2_sys_stat(struct lwp *l, const struct ibcs2_sys_stat_args *uap, register_t 
 	struct ibcs2_stat ibcs2_st;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), FOLLOW, &sb);
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &sb);
 	if (error != 0)
 		return error;
 
@@ -266,7 +268,7 @@ ibcs2_sys_lstat(struct lwp *l, const struct ibcs2_sys_lstat_args *uap, register_
 	struct ibcs2_stat ibcs2_st;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), NOFOLLOW, &sb);
+	error = do_sys_stat(SCARG(uap, path), NOFOLLOW, &sb);
 	if (error != 0)
 		return error;
 
@@ -286,7 +288,7 @@ ibcs2_sys_fstat(struct lwp *l, const struct ibcs2_sys_fstat_args *uap, register_
 	struct ibcs2_stat ibcs2_st;
 	int error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &sb);
+	error = do_sys_fstat(SCARG(uap, fd), &sb);
 	if (error != 0)
 		return error;
 

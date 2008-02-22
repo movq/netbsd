@@ -1,4 +1,4 @@
-/*	$NetBSD: mkarp.c,v 1.6 2003/08/07 11:25:40 agc Exp $ */
+/*	$NetBSD: mkarp.c,v 1.12 2017/04/12 16:57:14 roy Exp $ */
 
 /*
  * Copyright (c) 1984, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1984, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1984, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)arp.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: mkarp.c,v 1.6 2003/08/07 11:25:40 agc Exp $");
+__RCSID("$NetBSD: mkarp.c,v 1.12 2017/04/12 16:57:14 roy Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,10 +82,30 @@ __RCSID("$NetBSD: mkarp.c,v 1.6 2003/08/07 11:25:40 agc Exp $");
 
 int	rtmsg(int, int, struct rt_msghdr *, struct sockaddr_inarp *, 
 	      struct sockaddr_dl *);
-struct	{
+static struct {
 	struct	rt_msghdr m_rtm;
 	char	m_space[512];
 }	m_rtmsg;
+
+static int
+is_llinfo(const struct sockaddr_dl *sdl, int rtflags)
+{
+	if (sdl->sdl_family != AF_LINK ||
+	    (rtflags & (RTF_LLDATA|RTF_GATEWAY)) != RTF_LLDATA)
+		return 0;
+
+	switch (sdl->sdl_type) {
+	case IFT_ETHER:
+	case IFT_FDDI:
+	case IFT_ISO88023:
+	case IFT_ISO88024:
+	case IFT_ISO88025:
+	case IFT_ARCNET:
+		return 1;
+	default:
+		return 0;
+	}
+}
 
 /*
  * Set an individual arp entry 
@@ -93,8 +113,14 @@ struct	{
 int
 mkarp(u_char *haddr, u_int32_t ipaddr)
 {
-	static struct sockaddr_inarp blank_sin = {sizeof(blank_sin), AF_INET };
-	static struct sockaddr_dl blank_sdl = {sizeof(blank_sdl), AF_LINK };
+	static struct sockaddr_inarp blank_sin = {
+		.sin_len = sizeof(blank_sin),
+		.sin_family = AF_INET,
+	};
+	static struct sockaddr_dl blank_sdl = {
+		.sdl_len = sizeof(blank_sdl),
+		.sdl_family = AF_LINK,
+	};
 
 	struct sockaddr_inarp *sin;
 	struct sockaddr_dl *sdl;
@@ -105,6 +131,10 @@ mkarp(u_char *haddr, u_int32_t ipaddr)
 
 	struct sockaddr_inarp sin_m;
 	struct sockaddr_dl sdl_m;
+
+#ifdef RO_MSGFILTER
+	unsigned char msgfilter[] = { RTM_GET, RTM_ADD };
+#endif
 
 	sin = &sin_m;
 	rtm = &(m_rtmsg.m_rtm);
@@ -132,6 +162,11 @@ mkarp(u_char *haddr, u_int32_t ipaddr)
 	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0)
 		err(1, "socket");
+#ifdef RO_MSGFILTER
+	if (setsockopt(s, PF_ROUTE, RO_MSGFILTER,
+	    &msgfilter, sizeof(msgfilter)) < 0)
+		warn("RO_MSGFILTER");
+#endif
 
 	rtm->rtm_flags = 0;
 
@@ -145,13 +180,8 @@ mkarp(u_char *haddr, u_int32_t ipaddr)
 	sin = (struct sockaddr_inarp *)(rtm + 1);
 	sdl = (struct sockaddr_dl *)(sin->sin_len + (char *)sin);
 	if (sin->sin_addr.s_addr == sin_m.sin_addr.s_addr) {
-		if (sdl->sdl_family == AF_LINK &&
-		    (rtm->rtm_flags & RTF_LLINFO) &&
-		    !(rtm->rtm_flags & RTF_GATEWAY)) switch (sdl->sdl_type) {
-		case IFT_ETHER: case IFT_FDDI: case IFT_ISO88023:
-		case IFT_ISO88024: case IFT_ISO88025: case IFT_ARCNET:
+		if (is_llinfo(sdl, rtm->rtm_flags))
 			goto overwrite;
-		}
 #if 0
 		(void)printf("set: can only proxy for %s\n", host);
 #endif
@@ -183,7 +213,7 @@ rtmsg(int cmd, int s, struct rt_msghdr *rtm, struct sockaddr_inarp *sin_m,
 	char *cp;
 	int l;
 	pid_t pid;
-	struct timeval time;
+	struct timeval tv;
 
 	rtm = &m_rtmsg.m_rtm;
 	cp = m_rtmsg.m_space;
@@ -200,10 +230,10 @@ rtmsg(int cmd, int s, struct rt_msghdr *rtm, struct sockaddr_inarp *sin_m,
 		/*NOTREACHED*/
 	case RTM_ADD:
 		rtm->rtm_addrs |= RTA_GATEWAY;
-		(void)gettimeofday(&time, 0);
-		rtm->rtm_rmx.rmx_expire = time.tv_sec + 20 * 60;
+		(void)gettimeofday(&tv, 0);
+		rtm->rtm_rmx.rmx_expire = tv.tv_sec + 20 * 60;
 		rtm->rtm_inits = RTV_EXPIRE;
-		rtm->rtm_flags |= (RTF_HOST | RTF_STATIC);
+		rtm->rtm_flags |= (RTF_HOST | RTF_STATIC | RTF_LLDATA);
 		sin_m->sin_other = 0;
 
 		/* FALLTHROUGH */

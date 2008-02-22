@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor.c,v 1.1 2006/09/01 21:26:18 uwe Exp $	*/
+/*	$NetBSD: monitor.c,v 1.4 2016/06/11 06:31:49 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,7 +68,7 @@ db_monitor(void)
 
 	for (;;) {
 		printf("db> ");
-		gets(line);
+		kgets(line, sizeof(line));
 
 		flag = 0;
 		argc = 0;
@@ -113,8 +106,7 @@ db_monitor(void)
 }
 
 static int
-db_atob(p)
-	char *p;
+db_atob(char *p)
 {
 	int b = 0, width, tmp, exp, x = 0;
 	
@@ -140,9 +132,7 @@ db_atob(p)
 }
 
 static void
-db_cmd_dump(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_dump(int argc, char **argv)
 {
 	char *p, *r, *pp;
 	int mode, add, size, i;
@@ -218,9 +208,7 @@ out:
 }
 
 static void
-db_cmd_get(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_get(int argc, char **argv)
 {
 	char *p, *r;
 	int mode, add;
@@ -278,9 +266,7 @@ out:
 }
 
 static void
-db_cmd_put(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_put(int argc, char **argv)
 {
 	char *p, *r, *pp;
 	int mode, add, data;
@@ -337,9 +323,7 @@ out:
 }
 
 static void
-db_cmd_help(argc, argv)
-	int argc;
-	char **argv;
+db_cmd_help(int argc, char **argv)
 {
 	int i = 0;
 

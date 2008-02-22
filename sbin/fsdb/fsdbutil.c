@@ -1,4 +1,4 @@
-/*	$NetBSD: fsdbutil.c,v 1.17 2007/03/10 01:16:17 hubertf Exp $	*/
+/*	$NetBSD: fsdbutil.c,v 1.22 2009/04/11 06:53:53 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsdbutil.c,v 1.17 2007/03/10 01:16:17 hubertf Exp $");
+__RCSID("$NetBSD: fsdbutil.c,v 1.22 2009/04/11 06:53:53 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -120,14 +113,18 @@ printstat(const char *cp, ino_t inum, union dinode *dp)
 		puts("regular file");
 		break;
 	case IFBLK:
-		printf("block special (%d,%d)", major(rdev), minor(rdev));
+		printf("block special (%llu,%llu)",
+		    (unsigned long long)major(rdev),
+		    (unsigned long long)minor(rdev));
 		break;
 	case IFCHR:
-		printf("character special (%d,%d)", major(rdev), minor(rdev));
+		printf("character special (%llu,%llu)",
+		    (unsigned long long)major(rdev),
+		    (unsigned long long)minor(rdev));
 		break;
 	case IFLNK:
 		fputs("symlink", stdout);
-		if (size > 0 && size < sblock->fs_maxsymlinklen &&
+		if (size > 0 && size < (uint64_t)sblock->fs_maxsymlinklen &&
 		    DIP(dp, blocks) == 0) {
 			p = is_ufs2 ? (char *)dp->dp2.di_db :
 			    (char *)dp->dp1.di_db;
@@ -174,7 +171,7 @@ printstat(const char *cp, ino_t inum, union dinode *dp)
 	else
 		printf("GID=%u ", gid);
 
-	printf("LINKCNT=%hd FLAGS=0x%#x BLKCNT=0x%llx GEN=0x%x\n",
+	printf("LINKCNT=%hd FLAGS=0x%x BLKCNT=0x%llx GEN=0x%x\n",
 		iswap16(DIP(dp, nlink)),
 	    iswap32(DIP(dp, flags)), (unsigned long long)blocks,
 		iswap32(DIP(dp, gen)));

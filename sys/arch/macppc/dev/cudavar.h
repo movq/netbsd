@@ -10,9 +10,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -28,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cudavar.h,v 1.1 2007/01/17 23:25:45 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cudavar.h,v 1.3 2014/08/13 09:41:50 macallan Exp $");
 
 #ifndef CUDAVAR_H
 #define CUDAVAR_H
@@ -46,10 +43,12 @@ __KERNEL_RCSID(0, "$NetBSD: cudavar.h,v 1.1 2007/01/17 23:25:45 macallan Exp $")
 /* Cuda commands */
 #define CMD_AUTOPOLL	1
 #define CMD_READ_RTC	3
+#define CMD_READ_PRAM	7	/* addr is 16bit, upper byte first */
 #define CMD_WRITE_RTC	9
 #define CMD_POWEROFF	10
+#define CMD_WRITE_PRAM	12
 #define CMD_RESET	17
-#define CMD_IIC	34
+#define CMD_IIC		34
 
 struct cuda_attach_args {
 	void *cookie;

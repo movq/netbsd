@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.S,v 1.2 2003/08/07 16:42:37 agc Exp $	*/
+/*	$NetBSD: ptrace.S,v 1.7 2016/03/19 21:27:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,7 +36,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: ptrace.S,v 1.2 2003/08/07 16:42:37 agc Exp $")
+	RCSID("$NetBSD: ptrace.S,v 1.7 2016/03/19 21:27:38 christos Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
@@ -44,19 +44,26 @@
 	.globl	_C_LABEL(__errno)
 
 ENTRY(ptrace)
-#ifdef PIC
+	/*
+	 * The following code calls __errno() to set it to 0 before
+	 * calling ptrace(2). Preserve and restore all the parameters
+	 */
+	pushq	%rdi
+	pushq	%rsi
+	pushq	%rdx
+	pushq	%rcx
+#ifdef __PIC__
 	call	PIC_PLT(_C_LABEL(__errno))
 #else
 	call	_C_LABEL(__errno)
-#endif /* PIC */
-	movl	$0,(%rax)
+#endif /* __PIC__ */
+	popq	%rcx
+	popq	%rdx
+	popq	%rsi
+	popq	%rdi
 	SYSTRAP(ptrace)
 	jc	err
 	ret
 err:
-#ifdef PIC
-	movq	PIC_GOT(CERROR), %rcx
-	jmp	*%rcx
-#else
 	jmp	CERROR
-#endif
+END(ptrace)

@@ -1,4 +1,4 @@
-/*	$NetBSD: biosgetsystime.S,v 1.1 2003/04/16 13:24:09 dsl Exp $	*/
+/*	$NetBSD: biosgetsystime.S,v 1.3 2011/06/16 13:27:59 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,13 +34,7 @@
 /* Return system time (~18.2Hz ticks since midnight) */
 
 ENTRY(biosgetsystime)
-	pushl	%ebp
-	movl	%esp, %ebp
-	pushl	%ebx
-	pushl	%ecx
-	pushl	%edx
-	push	%esi
-	push	%edi
+	pusha
 
 	call	_C_LABEL(prot_to_real)	# enter real mode
 	.code16
@@ -61,11 +48,7 @@ ENTRY(biosgetsystime)
 	mov	%ecx, %eax
 	shl	$16, %eax
 	movw	%dx, %ax
+	movl	%eax, 28(%esp)
 
-	pop	%edi
-	pop	%esi
-	popl	%edx
-	popl	%ecx
-	popl	%ebx
-	popl	%ebp
+	popa
 	ret

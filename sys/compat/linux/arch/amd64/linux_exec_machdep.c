@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_machdep.c,v 1.10 2007/10/19 12:16:37 ad Exp $ */
+/*	$NetBSD: linux_exec_machdep.c,v 1.22 2014/02/23 12:01:51 njoly Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved
@@ -32,11 +32,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.10 2007/10/19 12:16:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.22 2014/02/23 12:01:51 njoly Exp $");
 
-#ifdef __amd64__
 #define ELFSIZE 64
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,27 +42,33 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.10 2007/10/19 12:16:37 ad E
 #include <sys/resource.h>
 #include <sys/proc.h>
 #include <sys/conf.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/exec_elf.h>
 #include <sys/vnode.h>
 #include <sys/lwp.h>
 #include <sys/exec.h>
 #include <sys/stat.h>
 #include <sys/kauth.h>
+#include <sys/cprng.h>
 
 #include <sys/cpu.h>
 #include <machine/vmparam.h>
+#include <sys/syscallargs.h>
 
 #include <uvm/uvm.h>
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
+#include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_util.h>
 #include <compat/linux/common/linux_ioctl.h>
 #include <compat/linux/common/linux_hdio.h>
 #include <compat/linux/common/linux_exec.h>
-#include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_errno.h>
+#include <compat/linux/common/linux_prctl.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
+#include <compat/linux/linux_syscallargs.h>
 
 int
 linux_exec_setup_stack(struct lwp *l, struct exec_package *epp)
@@ -108,23 +112,20 @@ linux_exec_setup_stack(struct lwp *l, struct exec_package *epp)
 	noaccess_linear_min = (u_long)STACK_ALLOC(STACK_GROW(epp->ep_minsaddr,
 	    access_size), noaccess_size);
 	if (noaccess_size > 0) {
-		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, noaccess_size,
-		    noaccess_linear_min, NULLVP, 0, VM_PROT_NONE);
+		NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, noaccess_size,
+		    noaccess_linear_min, NULLVP, 0, VM_PROT_NONE, VMCMD_STACK);
 	}
 	KASSERT(access_size > 0);
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, access_size,
-	    access_linear_min, NULLVP, 0, VM_PROT_READ | VM_PROT_WRITE);
+	NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, access_size,
+	    access_linear_min, NULLVP, 0, VM_PROT_READ | VM_PROT_WRITE,
+	    VMCMD_STACK);
 
 	return 0;
 }
 
 int
-ELFNAME2(linux,copyargs)(l, pack, arginfo, stackp, argp)
-	struct lwp *l;
-	struct exec_package *pack;
-	struct ps_strings *arginfo;
-	char **stackp;
-	void *argp;
+ELFNAME2(linux,copyargs)(struct lwp *l, struct exec_package *pack,
+	struct ps_strings *arginfo, char **stackp, void *argp)
 {
 	struct linux_extra_stack_data64 *esdp, esd;
 	struct elf_args *ap;
@@ -150,11 +151,11 @@ ELFNAME2(linux,copyargs)(l, pack, arginfo, stackp, argp)
 	eh = (Elf_Ehdr *)pack->ep_hdr;
 
 	/*
-	 * We forgot this, so we ned to reload it now. XXX keep track of it?
+	 * We forgot this, so we need to reload it now. XXX keep track of it?
 	 */
 	if (ap == NULL) {
 		phsize = eh->e_phnum * sizeof(Elf_Phdr);
-		ph = (Elf_Phdr *)malloc(phsize, M_TEMP, M_WAITOK);
+		ph = (Elf_Phdr *)kmem_alloc(phsize, KM_SLEEP);
 		error = exec_read_from(l, pack->ep_vp, eh->e_phoff, ph, phsize);
 		if (error != 0) {
 			for (i = 0; i < eh->e_phnum; i++) {
@@ -164,7 +165,7 @@ ELFNAME2(linux,copyargs)(l, pack, arginfo, stackp, argp)
 				}
 			}
 		}
-		free(ph, M_TEMP);
+		kmem_free(ph, phsize);
 	}
 
 
@@ -223,23 +224,22 @@ ELFNAME2(linux,copyargs)(l, pack, arginfo, stackp, argp)
 	esd.ai[i].a_type = LINUX_AT_PLATFORM;
 	esd.ai[i++].a_v = (Elf_Addr)&esdp->hw_platform[0];
 
+	esd.ai[i].a_type = LINUX_AT_RANDOM;
+	esd.ai[i++].a_v = (Elf_Addr)&esdp->randbytes[0];
+	esd.randbytes[0] = cprng_strong32();
+	esd.randbytes[1] = cprng_strong32();
+	esd.randbytes[2] = cprng_strong32();
+	esd.randbytes[3] = cprng_strong32();
+
 	esd.ai[i].a_type = AT_NULL;
 	esd.ai[i++].a_v = 0;
 
-#ifdef DEBUG_LINUX
-	if (i != LINUX_ELF_AUX_ENTRIES) {
-		printf("linux_elf64_copyargs: %d Aux entries\n", i);
-		return EINVAL;
-	}
-#endif
-		
+	KASSERT(i == LINUX_ELF_AUX_ENTRIES);
+
 	strcpy(esd.hw_platform, LINUX_PLATFORM); 
 
-	if (ap) {
-		free((char *)ap, M_TEMP);
-		pack->ep_emul_arg = NULL;
-	}
-	
+	exec_free_emul_arg(pack);
+
 	/*
 	 * Copy out the ELF auxiliary table and hw platform name
 	 */

@@ -1,7 +1,6 @@
-/*      $NetBSD: if_atm.h,v 1.10 2007/02/17 22:34:10 dyoung Exp $       */
+/*      $NetBSD: if_atm.h,v 1.13 2016/04/28 00:16:56 ozaki-r Exp $       */
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,8 +32,8 @@
  * if_atm.h
  */
 
-void atm_rtrequest(int, struct rtentry *, struct rt_addrinfo *);
-int atmresolve(struct rtentry *, struct mbuf *, const struct sockaddr *,
+void atm_rtrequest(int, struct rtentry *, const struct rt_addrinfo *);
+int atmresolve(const struct rtentry *, struct mbuf *, const struct sockaddr *,
 		struct atm_pseudohdr *);
 
 #endif /* !_NETINET_IF_ATM_H_ */

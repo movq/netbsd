@@ -1,4 +1,4 @@
-/*	$NetBSD: apropos.c,v 1.27 2006/04/10 14:39:06 chuck Exp $	*/
+/*	$NetBSD: apropos.c,v 1.30 2009/05/08 12:48:43 wiz Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -32,15 +32,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)apropos.c	8.8 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: apropos.c,v 1.27 2006/04/10 14:39:06 chuck Exp $");
+__RCSID("$NetBSD: apropos.c,v 1.30 2009/05/08 12:48:43 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,6 +51,7 @@ __RCSID("$NetBSD: apropos.c,v 1.27 2006/04/10 14:39:06 chuck Exp $");
 #include <err.h>
 #include <glob.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,14 +60,15 @@ __RCSID("$NetBSD: apropos.c,v 1.27 2006/04/10 14:39:06 chuck Exp $");
 #include "manconf.h"		/* from ../man/ */
 #include "pathnames.h"		/* from ../man/ */
 
-static int *found, foundman;
+static bool *found;
+static bool foundman = false;
 
 #define	MAXLINELEN	8192		/* max line handled */
 
-void apropos(char **, char *, int);
-void lowstr(char *, char *);
-int match(char *, char *);
-void usage(void);
+static void apropos(char **, const char *, bool, const char *, const char *);
+static void lowstr(const char *, char *);
+static bool match(const char *, const char *);
+static void usage(void) __dead;
 
 int
 main(int argc, char *argv[])
@@ -74,12 +76,13 @@ main(int argc, char *argv[])
 	ENTRY *ep;
 	TAG *tp;
 	int ch, rv;
-	char *conffile, **p, *p_augment, *p_path;
+	char *conffile, *machine, **p, *p_augment, *p_path, *sflag;
 	glob_t pg;
 
 	conffile = NULL;
 	p_augment = p_path = NULL;
-	while ((ch = getopt(argc, argv, "C:M:m:P:")) != -1)
+	machine = sflag = NULL;
+	while ((ch = getopt(argc, argv, "C:M:m:P:S:s:")) != -1) {
 		switch (ch) {
 		case 'C':
 			conffile = optarg;
@@ -91,27 +94,36 @@ main(int argc, char *argv[])
 		case 'm':
 			p_augment = optarg;
 			break;
+		case 'S':
+			machine = optarg;
+			lowstr(machine, machine);
+			break;
+		case 's':
+			sflag = optarg;
+			lowstr(sflag, sflag);
+			break;
 		case '?':
 		default:
 			usage();
 		}
+	}
 	argv += optind;
 	argc -= optind;
 
 	if (argc < 1)
 		usage();
 
-	if ((found = malloc((u_int)argc * sizeof(int))) == NULL)
-		err(1, "malloc");
-	memset(found, 0, argc * sizeof(int));
+	if ((found = malloc(argc * sizeof(*found))) == NULL)
+		err(EXIT_FAILURE, "malloc");
+	(void)memset(found, 0, argc * sizeof(*found));
 
 	for (p = argv; *p; ++p)			/* convert to lower-case */
 		lowstr(*p, *p);
 
 	if (p_augment)
-		apropos(argv, p_augment, 1);
+		apropos(argv, p_augment, true, sflag, machine);
 	if (p_path || (p_path = getenv("MANPATH")))
-		apropos(argv, p_path, 1);
+		apropos(argv, p_path, true, sflag, machine);
 	else {
 		config(conffile);
 		tp = gettag("_whatdb", 1);
@@ -123,17 +135,18 @@ main(int argc, char *argv[])
 				if (rv == GLOB_NOMATCH)
 					continue;
 				else
-					err(EXIT_FAILURE, "glob"); 
+					err(EXIT_FAILURE, "glob");
 			}
 			if (pg.gl_pathc)
 				for (p = pg.gl_pathv; *p; p++)
-					apropos(argv, *p, 0);
+					apropos(argv, *p, false, sflag,
+						machine);
 			globfree(&pg);
 		}
 	}
 
 	if (!foundman)
-		errx(1, "no %s file found", _PATH_WHATIS);
+		errx(EXIT_FAILURE, "no %s file found", _PATH_WHATIS);
 
 	rv = 1;
 	for (p = argv; *p; ++p)
@@ -141,22 +154,31 @@ main(int argc, char *argv[])
 			rv = 0;
 		else
 			(void)printf("%s: nothing appropriate\n", *p);
-	exit(rv);
+	return rv;
 }
 
-void
-apropos(char **argv, char *path, int buildpath)
+static void
+apropos(char **argv, const char *path, bool buildpath,
+	const char *sflag, const char *machine)
 {
-	char *end, *name, **p;
-	char buf[MAXLINELEN + 1], wbuf[MAXLINELEN + 1];
+	char *end, **p;
+	const char *name;
+	char buf[MAXLINELEN + 1];
 	char hold[MAXPATHLEN + 1];
+	char wbuf[MAXLINELEN + 1];
+	size_t slen = 0, mlen = 0;
+
+	if (sflag)
+		slen = strlen(sflag);
+	if (machine)
+		mlen = strlen(machine);
 
 	for (name = path; name; name = end) {	/* through name list */
-		if ((end = strchr(name, ':')))
+		if ((end = strchr(name, ':')) != NULL)
 			*end++ = '\0';
 
 		if (buildpath) {
-			(void)snprintf(hold, sizeof(hold), "%s/%s", name, 
+			(void)snprintf(hold, sizeof(hold), "%s/%s", name,
 					_PATH_WHATIS);
 			name = hold;
 		}
@@ -164,26 +186,40 @@ apropos(char **argv, char *path, int buildpath)
 		if (!freopen(name, "r", stdin))
 			continue;
 
-		foundman = 1;
+		foundman = true;
 
 		/* for each file found */
-		while (fgets(buf, sizeof(buf), stdin)) {
+		while (fgets(buf, (int)sizeof(buf), stdin)) {
 			if (!strchr(buf, '\n')) {
 				warnx("%s: line too long", name);
 				continue;
 			}
 			lowstr(buf, wbuf);
-			for (p = argv; *p; ++p)
+			if (machine) {
+				if ((strncmp(wbuf, machine, mlen) != 0) ||
+				    strlen(wbuf) <= mlen || wbuf[mlen] != '/')
+					continue;
+			}
+			if (sflag) {
+				char *s = strchr(wbuf, '(');
+
+				if (!s)
+					continue;
+				if (strncmp(s+1, sflag, slen) != 0)
+					continue;
+			}
+			for (p = argv; *p; ++p) {
 				if (match(wbuf, *p)) {
 					(void)printf("%s", buf);
-					found[p - argv] = 1;
+					found[p - argv] = true;
 
 					/* only print line once */
 					while (*++p)
 						if (match(wbuf, *p))
-							found[p - argv] = 1;
+							found[p - argv] = true;
 					break;
 				}
+			}
 		}
 	}
 }
@@ -192,29 +228,29 @@ apropos(char **argv, char *path, int buildpath)
  * match --
  *	match anywhere the string appears
  */
-int
-match(char *bp, char *str)
+static bool
+match(const char *bp, const char *str)
 {
-	int len;
+	size_t len;
 	char test;
 
 	if (!*bp)
-		return (0);
+		return false;
 	/* backward compatible: everything matches empty string */
 	if (!*str)
-		return (1);
+		return true;
 	for (test = *str++, len = strlen(str); *bp;)
 		if (test == *bp++ && !strncmp(bp, str, len))
-			return (1);
-	return (0);
+			return true;
+	return false;
 }
 
 /*
  * lowstr --
  *	convert a string to lower case
  */
-void
-lowstr(char *from, char *to)
+static void
+lowstr(const char *from, char *to)
 {
 	char ch;
 
@@ -227,12 +263,15 @@ lowstr(char *from, char *to)
  * usage --
  *	print usage message and die
  */
-void
+__dead
+static void
 usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "usage: %s [-C file] [-M path] [-m path] keyword ...\n",
+	    "usage: %s [-C file] [-M path] [-m path] "
+	    "[-S subsection] [-s section]\n"
+	    "       keyword ...\n",
 	    getprogname());
 	exit(1);
 }

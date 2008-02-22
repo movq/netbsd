@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_dec.S,v 1.4 2007/12/22 23:19:41 mrg Exp $	*/
+/*	$NetBSD: atomic_dec.S,v 1.8 2015/10/18 02:28:07 nakayama Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 
 	.text
 
-ENTRY_NOPROFILE(_atomic_dec_32)
+ENTRY(_atomic_dec_32)
 	ld	[%o0], %o2
 1:	add	%o2, -1, %o3
 	cas	[%o0], %o2, %o3
@@ -58,15 +51,20 @@ STRONG_ALIAS(_atomic_dec_32_nv,_atomic_dec_32)
 ATOMIC_OP_ALIAS(atomic_dec_uint_nv,_atomic_dec_32)
 STRONG_ALIAS(_atomic_dec_uint_nv,_atomic_dec_32)
 
-ENTRY_NOPROFILE(_atomic_dec_64)
+ENTRY(_atomic_dec_64)
 	ldx	[%o0], %o2
 1:	add	%o2, -1, %o3
 	casx	[%o0], %o2, %o3
 	cmp	%o2, %o3
-	bne,a,pn %icc, 1b
+	bne,a,pn %xcc, 1b
 	 mov	%o3, %o2
+#ifdef __arch64__
 	retl
 	 add	%o2, -1, %o0
+#else
+	add	%o2, -1, %o0
+	SPLIT_RETL(%o0, %o0, %o1)
+#endif
 ATOMIC_OP_ALIAS(atomic_dec_64,_atomic_dec_64)
 
 ATOMIC_OP_ALIAS(atomic_dec_64_nv,_atomic_dec_64)

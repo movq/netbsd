@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.h,v 1.1 2002/02/10 01:57:25 thorpej Exp $	*/
+/*	$NetBSD: kbd.h,v 1.3 2015/09/07 03:49:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1995 Mark Brinicombe.
@@ -39,6 +39,8 @@
  * Created      : 21/07/95
  */
 
+#include <sys/ioccom.h>
+
 struct kbd_data {
 	int keycode;
 	struct timeval event_time;
@@ -59,8 +61,8 @@ struct kbd_autorepeat {
 #define KBD_LED_CAPS_LOCK	0x04
 
 #ifdef _KERNEL
-void	kbdsetstate __P((int /*state*/));
-int	kbdgetstate __P((void));
+void	kbdsetstate(int /*state*/);
+int	kbdgetstate(void);
 #endif
 
 /* End of kbd.h */

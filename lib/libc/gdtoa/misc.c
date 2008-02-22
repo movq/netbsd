@@ -1,4 +1,4 @@
-/* $NetBSD: misc.c,v 1.3 2006/10/15 16:11:04 christos Exp $ */
+/* $NetBSD: misc.c,v 1.11 2011/11/21 09:46:19 mlelstv Exp $ */
 
 /****************************************************************
 
@@ -53,11 +53,13 @@ Balloc
 	int x;
 	Bigint *rv;
 #ifndef Omit_Private_Memory
-	unsigned int len;
+	size_t len;
 #endif
 
 	ACQUIRE_DTOA_LOCK(0);
-	if ( (rv = freelist[k]) !=0) {
+	/* The k > Kmax case does not need ACQUIRE_DTOA_LOCK(0), */
+	/* but this case seems very unlikely. */
+	if ((size_t)k <= Kmax && (rv = freelist[k]) !=0) {
 		freelist[k] = rv->next;
 		}
 	else {
@@ -67,13 +69,17 @@ Balloc
 #else
 		len = (sizeof(Bigint) + (x-1)*sizeof(ULong) + sizeof(double) - 1)
 			/sizeof(double);
-		if (pmem_next - private_mem + len <= PRIVATE_mem) {
+		if ((size_t)k <= Kmax && pmem_next - private_mem + len <= PRIVATE_mem) {
 			rv = (Bigint*)(void *)pmem_next;
 			pmem_next += len;
 			}
 		else
 			rv = (Bigint*)MALLOC(len*sizeof(double));
 #endif
+		if (rv == NULL) {
+			FREE_DTOA_LOCK(0);
+			return NULL;
+		}
 		rv->k = k;
 		rv->maxwds = x;
 		}
@@ -91,10 +97,18 @@ Bfree
 #endif
 {
 	if (v) {
-		ACQUIRE_DTOA_LOCK(0);
-		v->next = freelist[v->k];
-		freelist[v->k] = v;
-		FREE_DTOA_LOCK(0);
+		if ((size_t)v->k > Kmax)
+#ifdef FREE
+			FREE((void*)v);
+#else
+			free((void*)v);
+#endif
+		else {
+			ACQUIRE_DTOA_LOCK(0);
+			v->next = freelist[v->k];
+			freelist[v->k] = v;
+			FREE_DTOA_LOCK(0);
+			}
 		}
 	}
 
@@ -194,6 +208,10 @@ multadd
 	if (carry) {
 		if (wds >= b->maxwds) {
 			b1 = Balloc(b->k+1);
+			if (b1 == NULL) {
+				Bfree(b);
+				return NULL;
+				}
 			Bcopy(b1, b);
 			Bfree(b);
 			b = b1;
@@ -250,6 +268,8 @@ i2b
 	Bigint *b;
 
 	b = Balloc(1);
+	if (b == NULL)
+		return NULL;
 	b->x[0] = i;
 	b->wds = 1;
 	return b;
@@ -288,6 +308,8 @@ mult
 	if (wc > a->maxwds)
 		k++;
 	c = Balloc(k);
+	if (c == NULL)
+		return NULL;
 	for(x = c->x, xa = x + wc; x < xa; x++)
 		*x = 0;
 	xa = a->x;
@@ -381,8 +403,11 @@ pow5mult
 	int i;
 	static CONST int p05[3] = { 5, 25, 125 };
 
-	if ( (i = k & 3) !=0)
+	if ( (i = k & 3) !=0) {
 		b = multadd(b, p05[i-1], 0);
+		if (b == NULL)
+			return NULL;
+		}
 
 	if (!(k = (unsigned int)k >> 2))
 		return b;
@@ -392,17 +417,25 @@ pow5mult
 		ACQUIRE_DTOA_LOCK(1);
 		if (!(p5 = p5s)) {
 			p5 = p5s = i2b(625);
+			if (p5 == NULL) {
+				FREE_DTOA_LOCK(1);
+				return NULL;
+			}
 			p5->next = 0;
 			}
 		FREE_DTOA_LOCK(1);
 #else
 		p5 = p5s = i2b(625);
+		if (p5 == NULL)
+			return NULL;
 		p5->next = 0;
 #endif
 		}
 	for(;;) {
 		if (k & 1) {
 			b1 = mult(b, p5);
+			if (b1 == NULL)
+				return NULL;
 			Bfree(b);
 			b = b1;
 			}
@@ -413,11 +446,17 @@ pow5mult
 			ACQUIRE_DTOA_LOCK(1);
 			if (!(p51 = p5->next)) {
 				p51 = p5->next = mult(p5,p5);
+				if (p51 == NULL) {
+					FREE_DTOA_LOCK(1);
+					return NULL;
+				}
 				p51->next = 0;
 				}
 			FREE_DTOA_LOCK(1);
 #else
 			p51 = p5->next = mult(p5,p5);
+			if (p51 == NULL)
+				return NULL;
 			p51->next = 0;
 #endif
 			}
@@ -444,6 +483,8 @@ lshift
 	for(i = b->maxwds; n1 > i; i <<= 1)
 		k1++;
 	b1 = Balloc(k1);
+	if (b1 == NULL)
+		return NULL;
 	x1 = b1->x;
 	for(i = 0; i < n; i++)
 		*x1++ = 0;
@@ -537,6 +578,8 @@ diff
 	i = cmp(a,b);
 	if (!i) {
 		c = Balloc(0);
+		if (c == NULL)
+			return NULL;
 		c->wds = 1;
 		c->x[0] = 0;
 		return c;
@@ -550,6 +593,8 @@ diff
 	else
 		i = 0;
 	c = Balloc(a->k);
+	if (c == NULL)
+		return NULL;
 	c->sign = i;
 	wa = a->wds;
 	xa = a->x;
@@ -620,12 +665,12 @@ b2d
 {
 	ULong *xa, *xa0, w, y, z;
 	int k;
-	double d;
+	U d;
 #ifdef VAX
 	ULong d0, d1;
 #else
-#define d0 word0(d)
-#define d1 word1(d)
+#define d0 word0(&d)
+#define d1 word1(&d)
 #endif
 
 	xa0 = a->x;
@@ -671,10 +716,10 @@ b2d
 #endif
  ret_d:
 #ifdef VAX
-	word0(d) = d0 >> 16 | d0 << 16;
-	word1(d) = d1 >> 16 | d1 << 16;
+	word0(&d) = d0 >> 16 | d0 << 16;
+	word1(&d) = d1 >> 16 | d1 << 16;
 #endif
-	return dval(d);
+	return dval(&d);
 	}
 #undef d0
 #undef d1
@@ -682,12 +727,13 @@ b2d
  Bigint *
 d2b
 #ifdef KR_headers
-	(d, e, bits) double d; int *e, *bits;
+	(dd, e, bits) double dd; int *e, *bits;
 #else
-	(double d, int *e, int *bits)
+	(double dd, int *e, int *bits)
 #endif
 {
 	Bigint *b;
+	U d;
 #ifndef Sudden_Underflow
 	int i;
 #endif
@@ -695,11 +741,14 @@ d2b
 	ULong *x, y, z;
 #ifdef VAX
 	ULong d0, d1;
-	d0 = word0(d) >> 16 | word0(d) << 16;
-	d1 = word1(d) >> 16 | word1(d) << 16;
 #else
-#define d0 word0(d)
-#define d1 word1(d)
+#define d0 word0(&d)
+#define d1 word1(&d)
+#endif
+	d.d = dd;
+#ifdef VAX
+	d0 = word0(&d) >> 16 | word0(&d) << 16;
+	d1 = word1(&d) >> 16 | word1(&d) << 16;
 #endif
 
 #ifdef Pack_32
@@ -707,6 +756,8 @@ d2b
 #else
 	b = Balloc(2);
 #endif
+	if (b == NULL)
+		return NULL;
 	x = b->x;
 
 	z = d0 & Frac_mask;
@@ -734,10 +785,6 @@ d2b
 		     b->wds = (x[1] = z) !=0 ? 2 : 1;
 		}
 	else {
-#ifdef DEBUG
-		if (!z)
-			Bug("Zero passed to d2b");
-#endif
 		k = lo0bits(&z);
 		x[0] = z;
 #ifndef Sudden_Underflow
@@ -796,7 +843,7 @@ d2b
 #endif
 #ifdef IBM
 		*e = (de - Bias - (P-1) << 2) + k;
-		*bits = 4*P + 8 - k - hi0bits(word0(d) & Frac_mask);
+		*bits = 4*P + 8 - k - hi0bits(word0(&d) & Frac_mask);
 #else
 		*e = de - Bias - (P-1) + k;
 		*bits = P - k;

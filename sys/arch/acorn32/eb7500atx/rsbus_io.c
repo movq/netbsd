@@ -1,4 +1,4 @@
-/*	$NetBSD: rsbus_io.c,v 1.2 2005/12/11 12:16:05 christos Exp $	*/
+/*	$NetBSD: rsbus_io.c,v 1.5 2018/03/16 17:56:31 ryo Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -37,11 +37,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rsbus_io.c,v 1.2 2005/12/11 12:16:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rsbus_io.c,v 1.5 2018/03/16 17:56:31 ryo Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* Proto types for all the bus_space structure functions */
 
@@ -52,79 +52,79 @@ bs_protos(mainbus);
 /* Declare the rsbus bus space tag */
 struct bus_space rsbus_bs_tag = {
 	/* cookie */
-	(void *) 2,			/* Shift to apply to registers */
+	.bs_cookie = (void *) 2,	/* Shift to apply to registers */
 
 	/* mapping/unmapping */
-	mainbus_bs_map,
-	mainbus_bs_unmap,
-	mainbus_bs_subregion,
+	.bs_map = mainbus_bs_map,
+	.bs_unmap = mainbus_bs_unmap,
+	.bs_subregion = mainbus_bs_subregion,
 
 	/* allocation/deallocation */
-	mainbus_bs_alloc,
-	mainbus_bs_free,
+	.bs_alloc = mainbus_bs_alloc,
+	.bs_free = mainbus_bs_free,
 
 	/* get kernel virtual address */
-	0, /* there is no linear mapping */
+	.bs_vaddr = 0, /* there is no linear mapping */
 
 	/* mmap bus space for userland */
-	mainbus_bs_mmap,
+	.bs_mmap = mainbus_bs_mmap,
 
 	/* barrier */
-	mainbus_bs_barrier,
+	.bs_barrier = mainbus_bs_barrier,
 
 	/* read (single) */
-	rsbus_bs_r_1,
-	rsbus_bs_r_2,
-	rsbus_bs_r_4,
-	bs_notimpl_bs_r_8,
+	.bs_r_1 = rsbus_bs_r_1,
+	.bs_r_2 = rsbus_bs_r_2,
+	.bs_r_4 = rsbus_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
 
 	/* read multiple */
-	rsbus_bs_rm_1,
-   	rsbus_bs_rm_2,
-	bs_notimpl_bs_rm_4,
-	bs_notimpl_bs_rm_8,
+	.bs_rm_1 = rsbus_bs_rm_1,
+	.bs_rm_2 = rsbus_bs_rm_2,
+	.bs_rm_4 = bs_notimpl_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
 
 	/* read region */
-	rsbus_bs_rr_1,
-	rsbus_bs_rr_2,
-	bs_notimpl_bs_rr_4,
-	bs_notimpl_bs_rr_8,
+	.bs_rr_1 = rsbus_bs_rr_1,
+	.bs_rr_2 = rsbus_bs_rr_2,
+	.bs_rr_4 = bs_notimpl_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
 
 	/* write (single) */
-	rsbus_bs_w_1,
-	rsbus_bs_w_2,
-	rsbus_bs_w_4,
-	bs_notimpl_bs_w_8,
+	.bs_w_1 = rsbus_bs_w_1,
+	.bs_w_2 = rsbus_bs_w_2,
+	.bs_w_4 = rsbus_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
 
 	/* write multiple */
-	rsbus_bs_wm_1,
-	rsbus_bs_wm_2,
-	bs_notimpl_bs_wm_4,
-	bs_notimpl_bs_wm_8,
+	.bs_wm_1 = rsbus_bs_wm_1,
+	.bs_wm_2 = rsbus_bs_wm_2,
+	.bs_wm_4 = bs_notimpl_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
 
 	/* write region */
-	rsbus_bs_wr_1,
-	rsbus_bs_wr_2,
-	bs_notimpl_bs_wr_4,
-	bs_notimpl_bs_wr_8,
+	.bs_wr_1 = rsbus_bs_wr_1,
+	.bs_wr_2 = rsbus_bs_wr_2,
+	.bs_wr_4 = bs_notimpl_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
 
 	/* set multiple */
-	bs_notimpl_bs_sm_1,
-	bs_notimpl_bs_sm_2,
-	bs_notimpl_bs_sm_4,
-	bs_notimpl_bs_sm_8,
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
 
 	/* set region */
-	rsbus_bs_sr_1,
-	rsbus_bs_sr_2,
-	bs_notimpl_bs_sr_4,
-	bs_notimpl_bs_sr_8,
+	.bs_sr_1 = rsbus_bs_sr_1,
+	.bs_sr_2 = rsbus_bs_sr_2,
+	.bs_sr_4 = bs_notimpl_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
 
 	/* copy */
-	bs_notimpl_bs_c_1,
-	bs_notimpl_bs_c_2,
-	bs_notimpl_bs_c_4,
-	bs_notimpl_bs_c_8,
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = bs_notimpl_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
 };
 
 /* bus space functions */
@@ -132,7 +132,7 @@ struct bus_space rsbus_bs_tag = {
 /* Rough-and-ready implementations from arm26 */
 void
 rsbus_bs_rr_1(void *cookie, bus_space_handle_t bsh,
-			bus_size_t offset, u_int8_t *datap, bus_size_t count)
+			bus_size_t offset, uint8_t *datap, bus_size_t count)
 {
 	int i;
 
@@ -142,7 +142,7 @@ rsbus_bs_rr_1(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_rr_2(void *cookie, bus_space_handle_t bsh,
-			bus_size_t offset, u_int16_t *datap, bus_size_t count)
+			bus_size_t offset, uint16_t *datap, bus_size_t count)
 {
 	int i;
 
@@ -152,7 +152,7 @@ rsbus_bs_rr_2(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_wr_1(void *cookie, bus_space_handle_t bsh,
-			 bus_size_t offset, u_int8_t const *datap,
+			 bus_size_t offset, uint8_t const *datap,
 			 bus_size_t count)
 {
 	int i;
@@ -163,7 +163,7 @@ rsbus_bs_wr_1(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_wr_2(void *cookie, bus_space_handle_t bsh,
-			 bus_size_t offset, u_int16_t const *datap,
+			 bus_size_t offset, uint16_t const *datap,
 			 bus_size_t count)
 {
 	int i;
@@ -174,7 +174,7 @@ rsbus_bs_wr_2(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_sr_1(void *cookie, bus_space_handle_t bsh,
-		       bus_size_t offset, u_int8_t value, bus_size_t count)
+		       bus_size_t offset, uint8_t value, bus_size_t count)
 {
 	int i;
 
@@ -184,7 +184,7 @@ rsbus_bs_sr_1(void *cookie, bus_space_handle_t bsh,
 
 void
 rsbus_bs_sr_2(void *cookie, bus_space_handle_t bsh,
-		       bus_size_t offset, u_int16_t value, bus_size_t count)
+		       bus_size_t offset, uint16_t value, bus_size_t count)
 {
 	int i;
 

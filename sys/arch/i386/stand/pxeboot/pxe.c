@@ -1,4 +1,4 @@
-/*	$NetBSD: pxe.c,v 1.10 2006/04/14 05:32:26 dyoung Exp $	*/
+/*	$NetBSD: pxe.c,v 1.18 2013/10/20 19:47:28 christos Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -107,7 +107,7 @@ void	(*pxe_call)(uint16_t);
 void	pxecall_bangpxe(uint16_t);	/* pxe_call.S */
 void	pxecall_pxenv(uint16_t);	/* pxe_call.S */
 
-char pxe_command_buf[256];
+extern char pxe_command_buf[256];
 
 BOOTPLAYER bootplayer;
 
@@ -151,7 +151,7 @@ sendudp(struct iodesc *d, void *pkt, size_t len)
  * Caller leaves room for the headers (Ether, IP, UDP).
  */
 ssize_t
-readudp(struct iodesc *d, void *pkt, size_t len, time_t tleft)
+readudp(struct iodesc *d, void *pkt, size_t len, saseconds_t tleft)
 {
 	t_PXENV_UDP_READ *ur = (void *) pxe_command_buf;
 	struct udphdr *uh;
@@ -160,7 +160,7 @@ readudp(struct iodesc *d, void *pkt, size_t len, time_t tleft)
 	uh = (struct udphdr *)pkt - 1;
 	ip = (struct ip *)uh - 1;
 
-	bzero(ur, sizeof(*ur));
+	(void)memset(ur, 0, sizeof(*ur));
 
 	ur->dest_ip = d->myip.s_addr;
 	ur->d_port = d->myport;
@@ -199,7 +199,7 @@ static int pxe_inited;
 static struct iodesc desc;
 
 int
-pxe_netif_open()
+pxe_netif_open(void)
 {
 	t_PXENV_UDP_OPEN *uo = (void *) pxe_command_buf;
 
@@ -210,7 +210,7 @@ pxe_netif_open()
 	}
 	BI_ADD(&bi_netif, BTINFO_NETIF, sizeof(bi_netif));
 
-	bzero(uo, sizeof(*uo));
+	(void)memset(uo, 0, sizeof(*uo));
 
 	uo->src_ip = bootplayer.yip;
 
@@ -222,7 +222,7 @@ pxe_netif_open()
 		return (-1);
 	}
 
-	bcopy(bootplayer.CAddr, desc.myea, ETHER_ADDR_LEN);
+	memcpy(desc.myea, bootplayer.CAddr, ETHER_ADDR_LEN);
 
 	/*
 	 * Since the PXE BIOS has already done DHCP, make sure we
@@ -234,8 +234,7 @@ pxe_netif_open()
 }
 
 void
-pxe_netif_close(sock)
-	int sock;
+pxe_netif_close(int sock)
 {
 	t_PXENV_UDP_CLOSE *uc = (void *) pxe_command_buf;
 
@@ -253,16 +252,8 @@ pxe_netif_close(sock)
 		    uc->status);
 }
 
-void
-pxe_netif_shutdown()
-{
-
-	pxe_fini();
-}
-
 struct iodesc *
-socktodesc(sock)
-	int sock;
+socktodesc(int sock)
 {
 
 #ifdef NETIF_DEBUG
@@ -384,7 +375,7 @@ pxe_init(void)
 	/*
 	 * Get the cached info from the server's Discovery reply packet.
 	 */
-	bzero(gci, sizeof(*gci));
+	(void)memset(gci, 0, sizeof(*gci));
 	gci->PacketType = PXENV_PACKET_TYPE_BINL_REPLY;
 	pxe_call(PXENV_GET_CACHED_INFO);
 	if (gci->Status != PXENV_STATUS_SUCCESS) {
@@ -398,7 +389,7 @@ pxe_init(void)
 	/*
 	 * Get network interface information.
 	 */
-	bzero(gnt, sizeof(*gnt));
+	(void)memset(gnt, 0, sizeof(*gnt));
 	pxe_call(PXENV_UNDI_GET_NIC_TYPE);
 
 	if (gnt->Status != PXENV_STATUS_SUCCESS) {

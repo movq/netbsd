@@ -1,3 +1,3 @@
-/*	$NetBSD: cpu_counter.h,v 1.1 2003/02/05 13:57:56 nakayama Exp $	*/
+/*	$NetBSD: cpu_counter.h,v 1.3 2014/03/31 11:25:49 martin Exp $	*/
 
 #include <mips/cpu_counter.h>

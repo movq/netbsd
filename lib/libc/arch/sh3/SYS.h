@@ -30,16 +30,17 @@
  * SUCH DAMAGE.
  *
  *	from: @(#)SYS.h	5.5 (Berkeley) 5/7/91
- *	$NetBSD: SYS.h,v 1.9 2006/01/06 06:19:20 uwe Exp $
+ *	$NetBSD: SYS.h,v 1.11 2013/09/12 15:36:15 joerg Exp $
  */
 
 #include <machine/asm.h>
 #include <sys/syscall.h>
 
 #ifdef __STDC__
+#define	IMMEDIATE	#
 #define SYSTRAP(x)					\
 		mov.l	903f, r0;			\
-		.long	0xc380;	/* trapa #0x80 */	\
+		trapa	IMMEDIATE 0x80;			\
 		bra	904f;				\
 		 nop;					\
 		.align	2;				\
@@ -60,7 +61,7 @@
 		ENTRY(x);				\
 		SYSTRAP(y)
 
-#ifdef PIC
+#ifdef __PIC__
 
 #define JUMP_CERROR					\
 		mov	r0, r4;				\
@@ -75,7 +76,7 @@
 	912:	.long	_GLOBAL_OFFSET_TABLE_;		\
 	913:	.long	PIC_GOT(cerror)
 
-#else  /* !PIC */
+#else  /* !__PIC__ */
 
 #define JUMP_CERROR					\
 		mov.l	912f, r3;			\
@@ -84,7 +85,7 @@
 		.align	2;				\
 	912:	.long	cerror
 
-#endif /* !PIC */
+#endif /* !__PIC__ */
 
 #define _SYSCALL(x,y)					\
 		.text;					\

@@ -1,5 +1,5 @@
-/*	$NetBSD: context.S,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
-	
+/*	$NetBSD: context.S,v 1.8 2017/04/08 17:38:43 scole Exp $	*/
+
 /*
  * Copyright (c) 2003 Marcel Moolenaar
  * All rights reserved.
@@ -25,7 +25,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * $FreeBSD: src/sys/ia64/ia64/context.S,v 1.3 2003/07/02 12:57:07 ru Exp $
+ * $FreeBSD: releng/10.1/sys/ia64/ia64/context.S 204184 2010-02-22 01:23:41Z marcel $
  */
 
 #include <machine/asm.h>
@@ -88,18 +88,18 @@ ENTRY(restorectx, 1)
 {	.mmi
 	ld8.fill	r6=[r14],16		// r6
 	ld8.fill	r7=[r15],16		// r7
-	nop		1
+	nop		0
 	;;
 }
 {	.mmi
 	mov		ar.unat=r16
 	mov		ar.rsc=3
-	nop		2
+	nop		0
 }
 {	.mmi
 	ld8		r17=[r14],16		// b1
 	ld8		r18=[r15],16		// b2
-	nop		3
+	nop		0
 	;;
 }
 {	.mmi
@@ -288,7 +288,7 @@ ENTRY(swapctx, 2)
 (p15)	br.ret.sptk	rp
 	;;
 }
-{	.mfb
+{	.mib
 	mov		r32=r33
 	nop		0
 	br.sptk		restorectx
@@ -340,10 +340,10 @@ ENTRY(save_callee_saved, 1)
 	mov		r17=b5
 	;;
 }
-{	.mfi
+{	.mii
 	st8		[r14]=r17,16		// b5
-	nop		0
 	mov		r16=ar.lc
+	nop		0
 	;;
 }
 {	.mmb
@@ -365,13 +365,13 @@ ENTRY(restore_callee_saved, 1)
 	add		r31=-8,r32
 	;;
 }
-{	.mmb
+{	.mmi
 	ld8.fill	r4=[r31],16		// r4
 	ld8.fill	r5=[r32],16		// r5
 	nop		0
 	;;
 }
-{	.mmb
+{	.mmi
 	ld8.fill	r6=[r31],16		// r6
 	ld8.fill	r7=[r32],16		// r7
 	nop		0
@@ -804,3 +804,60 @@ ENTRY(restore_high_fp, 1)
 	br.ret.sptk	rp
 	;;
 END(restore_high_fp)
+
+/*
+ * lwp_trampoline()
+ *
+ * Arrange for a function to be invoked neatly, after a cpu_switchto().
+ *
+ * Invokes fork_exit() passing in three arguments: a callout function, an
+ * argument to the callout, and a trapframe pointer.  For child processes
+ * returning from fork(2), the argument is a pointer to the child process.
+ *
+ * The callout function and its argument is in the trapframe in scratch
+ * registers r2 and r3.
+ */
+ENTRY(lwp_trampoline, 0)
+	.prologue
+	.save	rp,r0
+
+	.body
+{	.mmi
+	alloc		r14=ar.pfs,0,1,2,0
+	add		r2=PC_CURLWP,r13	// r2 = &ci->ci_curlwp
+	;;
+}
+{	.mmi
+	mov		out0=ret1		// oldlwp
+	ld8		out1=[r2]		// newlwp = ci->ci_curlwp
+	add		loc0=32+SIZEOF_SPECIAL+8,sp	// tf_scratch.gr2(func)
+	;;
+}
+{	.mmb
+	ld8		loc0=[loc0]
+	add		r4=32+SIZEOF_SPECIAL+16,sp	// tf_scratch.gr3(arg)
+	br.call.sptk	rp=_C_LABEL(lwp_startup)
+	;;
+}
+{	.mib
+	ld8		out0=[r4]
+	mov		b1=loc0
+	br.call.sptk	rp=b1
+	;;
+}
+	/*
+	 * If we get back here, it means we're a user space process that's
+	 * the immediate result of fork(2).
+	 */
+	.global		enter_userland
+	.type		enter_userland, @function
+enter_userland:
+{	.mfb
+	nop		0
+	nop		0
+#if 0
+	br.sptk		epc_syscall_return
+#endif
+	;;
+}
+END(lwp_trampoline)

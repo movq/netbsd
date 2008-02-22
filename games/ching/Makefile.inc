@@ -1,5 +1,5 @@
-#	$NetBSD: Makefile.inc,v 1.1 2005/06/30 13:30:33 perry Exp $
+#	$NetBSD: Makefile.inc,v 1.3 2013/08/11 03:27:02 dholland Exp $
 
 CPPFLAGS+=-I${.CURDIR}/../include
 BINDIR?=/usr/games
-WARNS=2
+WARNS?=5

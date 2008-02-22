@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.67 2007/10/18 15:28:37 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.83 2018/02/19 13:02:47 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -41,6 +41,13 @@
  * Machine dependent constants for Intel 386.
  */
 
+/*
+ * MAXCPUS must be defined before cpu.h inclusion.  Note: i386 might
+ * support more CPUs, but due to the limited KVA space available on
+ * i386, such support would be inefficient.  Use amd64 instead.
+ */
+#define	MAXCPUS		32
+
 #ifdef _KERNEL
 #include <machine/cpu.h>
 #endif
@@ -51,20 +58,6 @@
 #define	MACHINE_ARCH	"i386"
 #define	MID_MACHINE	MID_I386
 
-/*
- * Round p (pointer or byte index) up to a correctly-aligned value
- * for all data types (int, long, ...).   The result is u_int and
- * must be cast to any desired pointer type.
- *
- * ALIGNED_POINTER is a boolean macro that checks whether an address
- * is valid to fetch data elements of type t from on this architecture.
- * This does not reflect the optimal alignment, just the possibility
- * (within reasonable limits). 
- *
- */
-#define ALIGNBYTES		(sizeof(int) - 1)
-#define ALIGN(p)		(((u_int)(u_long)(p) + ALIGNBYTES) &~ \
-    ALIGNBYTES)
 #define ALIGNED_POINTER(p,t)	1
 
 #define	PGSHIFT		12		/* LOG2(NBPG) */
@@ -72,13 +65,20 @@
 #define	PGOFSET		(NBPG-1)	/* byte offset into page */
 #define	NPTEPG		(NBPG/(sizeof (pt_entry_t)))
 
+#define	MAXIOMEM	0xffffffff
+
+/*
+ * Maximum physical memory supported by the implementation.
+ */
+#ifdef PAE
+#define MAXPHYSMEM	0x1000000000ULL /* 64GB */
+#else
+#define MAXPHYSMEM	0x100000000ULL	/* 4GB */
+#endif
+
 #if defined(_KERNEL_OPT)
 #include "opt_kernbase.h"
 #endif /* defined(_KERNEL_OPT) */
-
-#ifdef KERNBASE_LOCORE
-#error "You should only re-define KERNBASE"
-#endif
 
 #ifndef	KERNBASE
 #define	KERNBASE	0xc0000000UL	/* start of kernel virtual space */
@@ -97,21 +97,18 @@
 #define	SSIZE		1		/* initial stack size/NBPG */
 #define	SINCR		1		/* increment of stack/NBPG */
 
-#ifdef _KERNEL_OPT
-#include "opt_noredzone.h"
-#endif
 #ifndef UPAGES
-#ifdef NOREDZONE
-#define	UPAGES		2		/* pages of u-area */
-#else
-#define UPAGES		3
-#endif /*NOREDZONE */
+# ifdef DIAGNOSTIC
+#  define	UPAGES		3	/* 2 + 1 page for redzone */
+# else
+#  define	UPAGES		2	/* normal pages of u-area */
+# endif /* DIAGNOSTIC */
 #endif /* !defined(UPAGES) */
 #define	USPACE		(UPAGES * NBPG)	/* total size of u-area */
 #define	INTRSTACKSIZE	8192
 
 #ifndef MSGBUFSIZE
-#define MSGBUFSIZE	8*NBPG		/* default message buffer size */
+#define MSGBUFSIZE	(16*NBPG)	/* default message buffer size */
 #endif
 
 /*
@@ -130,16 +127,8 @@
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
+#ifndef NMBCLUSTERS_MAX
+#define	NMBCLUSTERS_MAX	(0x4000000 / MCLBYTES)	/* Limit to 64MB for clusters */
 #endif
 
 #ifndef NFS_RSIZE
@@ -153,8 +142,8 @@
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
  */
-#define	NKMEMPAGES_MIN_DEFAULT	((8 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MIN_DEFAULT	((16 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MAX_DEFAULT	((360 * 1024 * 1024) >> PAGE_SHIFT)
 
 /*
  * Mach derived conversion macros
@@ -164,9 +153,9 @@
 #define	x86_trunc_pdr(x)	((unsigned long)(x) & ~(NBPD_L2 - 1))
 #define	x86_btod(x)		((unsigned long)(x) >> L2_SHIFT)
 #define	x86_dtob(x)		((unsigned long)(x) << L2_SHIFT)
-#define	x86_round_page(x)	((((unsigned long)(x)) + PGOFSET) & ~PGOFSET)
-#define	x86_trunc_page(x)	((unsigned long)(x) & ~PGOFSET)
-#define	x86_btop(x)		((unsigned long)(x) >> PGSHIFT)
-#define	x86_ptob(x)		((unsigned long)(x) << PGSHIFT)
+#define	x86_round_page(x)	((((paddr_t)(x)) + PGOFSET) & ~PGOFSET)
+#define	x86_trunc_page(x)	((paddr_t)(x) & ~PGOFSET)
+#define	x86_btop(x)		((paddr_t)(x) >> PGSHIFT)
+#define	x86_ptob(x)		((paddr_t)(x) << PGSHIFT)
 
 #endif /* _I386_PARAM_H_ */

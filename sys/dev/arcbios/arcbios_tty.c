@@ -1,4 +1,4 @@
-/*	$NetBSD: arcbios_tty.c,v 1.19 2007/11/19 18:51:45 ad Exp $	*/
+/*	$NetBSD: arcbios_tty.c,v 1.25 2014/07/25 08:10:36 dholland Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,10 +28,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.19 2007/11/19 18:51:45 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.25 2014/07/25 08:10:36 dholland Exp $");
 
 #include <sys/param.h>
-#include <sys/user.h>
 #include <sys/uio.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
@@ -65,9 +64,18 @@ dev_type_tty(arcbios_ttytty);
 dev_type_poll(arcbios_ttypoll);
 
 const struct cdevsw arcbios_cdevsw = {
-	arcbios_ttyopen, arcbios_ttyclose, arcbios_ttyread, arcbios_ttywrite,
-	arcbios_ttyioctl, arcbios_ttystop, arcbios_ttytty, arcbios_ttypoll,
-	nommap, ttykqfilter, D_TTY,
+	.d_open = arcbios_ttyopen,
+	.d_close = arcbios_ttyclose,
+	.d_read = arcbios_ttyread,
+	.d_write = arcbios_ttywrite,
+	.d_ioctl = arcbios_ttyioctl,
+	.d_stop = arcbios_ttystop,
+	.d_tty = arcbios_ttytty,
+	.d_poll = arcbios_ttypoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY,
 };
 
 int
@@ -88,7 +96,7 @@ arcbios_ttyopen(dev_t dev, int flag, int mode, struct lwp *l)
 	s = spltty();
 
 	if (arcbios_tty[unit] == NULL) {
-		tp = arcbios_tty[unit] = ttymalloc();
+		tp = arcbios_tty[unit] = tty_alloc();
 		tty_attach(tp);
 	} else
 		tp = arcbios_tty[unit];
@@ -192,7 +200,7 @@ arcbios_tty_start(struct tty *tp)
 	ttypull(tp);
 	tp->t_state |= TS_BUSY;
 	while (tp->t_outq.c_cc != 0) {
-		(*ARCBIOS->Write)(ARCBIOS_STDOUT, tp->t_outq.c_cf,
+		arcbios_Write(ARCBIOS_STDOUT, tp->t_outq.c_cf,
 		    ndqb(&tp->t_outq, 0), &count);
 		ndflush(&tp->t_outq, count);
 	}
@@ -220,10 +228,10 @@ arcbios_tty_getchar(int *cp)
 	int32_t q;
 	u_long count;
 
-	q = ARCBIOS->GetReadStatus(ARCBIOS_STDIN);
+	q = arcbios_GetReadStatus(ARCBIOS_STDIN);
 
 	if (q == 0) {
-		ARCBIOS->Read(ARCBIOS_STDIN, &c, 1, &count);
+		arcbios_Read(ARCBIOS_STDIN, &c, 1, &count);
 		*cp = c;
 
 		return 1;
@@ -236,11 +244,11 @@ void
 arcbios_tty_poll(void *v)
 {
 	struct tty *tp = v;
-	int c, l_r;
+	int c;
 
 	while (arcbios_tty_getchar(&c)) {
 		if (tp->t_state & TS_ISOPEN)
-			l_r = (*tp->t_linesw->l_rint)(c, tp);
+			(void)(*tp->t_linesw->l_rint)(c, tp);
 	}
 	callout_reset(&arcbios_tty_ch, 1, arcbios_tty_poll, tp);
 }

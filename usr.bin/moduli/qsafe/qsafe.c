@@ -1,4 +1,4 @@
-/* $NetBSD: qsafe.c,v 1.1 2006/01/24 18:59:23 elad Exp $ */
+/* $NetBSD: qsafe.c,v 1.4 2018/02/06 19:32:49 christos Exp $ */
 
 /*-
  * Copyright 1994 Phil Karn <karn@qualcomm.com>
@@ -61,7 +61,7 @@
 /* define DEBUGPRINT     1 */
 #define TRIAL_MINIMUM           (4)
 
-static void     usage(void);
+__dead static void     usage(void);
 
 /*
  * perform a Miller-Rabin primality test
@@ -194,7 +194,7 @@ main(int argc, char *argv[])
 		 * due to earlier inconsistencies in interpretation, check the
 		 * proposed bit size.
 		 */
-		if (BN_num_bits(p) != (in_size + 1)) {
+		if ((uint32_t)BN_num_bits(p) != (in_size + 1)) {
 #ifdef  DEBUGPRINT
 			(void)fprintf(stderr, "%10lu: bit size %ul "
 				      "mismatch\n", count_in, in_size);
@@ -254,7 +254,7 @@ main(int argc, char *argv[])
 		 * single pass will weed out the vast majority of composite
 		 * q's.
 		 */
-		if (BN_is_prime(q, 1, NULL, ctx, NULL) <= 0) {
+		if (BN_is_prime_ex(q, 1, ctx, NULL) <= 0) {
 #ifdef  DEBUGPRINT
 			(void)fprintf(stderr, "%10lu: q failed first "
 				      "possible prime test\n", count_in);
@@ -269,7 +269,7 @@ main(int argc, char *argv[])
 		 * the first Rabin-Miller iteration so it doesn't hurt to
 		 * specify a high iteration count.
 		 */
-		if (!BN_is_prime(p, trials, NULL, ctx, NULL)) {
+		if (!BN_is_prime_ex(p, trials, ctx, NULL)) {
 #ifdef  DEBUGPRINT
 			(void)fprintf(stderr, "%10lu: p is not prime\n",
 				      count_in);
@@ -283,7 +283,7 @@ main(int argc, char *argv[])
 #endif
 
 		/* recheck q more rigorously */
-		if (!BN_is_prime(q, trials - 1, NULL, ctx, NULL)) {
+		if (!BN_is_prime_ex(q, trials - 1, ctx, NULL)) {
 #ifdef  DEBUGPRINT
 			(void)fprintf(stderr, "%10lu: q is not prime\n",
 				      count_in);

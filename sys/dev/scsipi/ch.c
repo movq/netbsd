@@ -1,4 +1,4 @@
-/*	$NetBSD: ch.c,v 1.78 2007/12/05 17:19:51 pooka Exp $	*/
+/*	$NetBSD: ch.c,v 1.92 2017/10/25 08:12:39 maya Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ch.c,v 1.78 2007/12/05 17:19:51 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ch.c,v 1.92 2017/10/25 08:12:39 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: ch.c,v 1.78 2007/12/05 17:19:51 pooka Exp $");
 #include <sys/ioctl.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/chio.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
@@ -64,10 +56,12 @@ __KERNEL_RCSID(0, "$NetBSD: ch.c,v 1.78 2007/12/05 17:19:51 pooka Exp $");
 #include <dev/scsipi/scsiconf.h>
 
 #define CHRETRIES	2
+#define CHTIMEOUT	(5 * 60 * 1000)
+
 #define CHUNIT(x)	(minor((x)))
 
 struct ch_softc {
-	struct device	sc_dev;		/* generic device info */
+	device_t	sc_dev;		/* generic device info */
 	struct scsipi_periph *sc_periph;/* our periph data */
 
 	u_int		sc_events;	/* event bitmask */
@@ -106,10 +100,10 @@ struct ch_softc {
 #define CHF_ROTATE		0x01	/* picker can rotate */
 
 /* Autoconfiguration glue */
-static int	chmatch(struct device *, struct cfdata *, void *);
-static void	chattach(struct device *, struct device *, void *);
+static int	chmatch(device_t, cfdata_t, void *);
+static void	chattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ch, sizeof(struct ch_softc),
+CFATTACH_DECL_NEW(ch, sizeof(struct ch_softc),
     chmatch, chattach, NULL, NULL);
 
 extern struct cfdriver ch_cd;
@@ -127,8 +121,18 @@ static dev_type_poll(chpoll);
 static dev_type_kqfilter(chkqfilter);
 
 const struct cdevsw ch_cdevsw = {
-	chopen, chclose, chread, nowrite, chioctl,
-	nostop, notty, chpoll, nommap, chkqfilter, D_OTHER
+	.d_open = chopen,
+	.d_close = chclose,
+	.d_read = chread,
+	.d_write = nowrite,
+	.d_ioctl = chioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = chpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = chkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER | D_MPSAFE
 };
 
 /* SCSI glue */
@@ -180,7 +184,7 @@ static const struct chquirk chquirks[] = {
 };
 
 static int
-chmatch(struct device *parent, struct cfdata *match,
+chmatch(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
@@ -194,15 +198,18 @@ chmatch(struct device *parent, struct cfdata *match,
 }
 
 static void
-chattach(struct device *parent, struct device *self, void *aux)
+chattach(device_t parent, device_t self, void *aux)
 {
 	struct ch_softc *sc = device_private(self);
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_periph *periph = sa->sa_periph;
 
+	sc->sc_dev = self;
+	selinit(&sc->sc_selq);
+
 	/* Glue into the SCSI bus */
 	sc->sc_periph = periph;
-	periph->periph_dev = &sc->sc_dev;
+	periph->periph_dev = sc->sc_dev;
 	periph->periph_switch = &ch_switch;
 
 	printf("\n");
@@ -218,7 +225,7 @@ chattach(struct device *parent, struct device *self, void *aux)
 	 */
 	if (sc->sc_settledelay) {
 		printf("%s: waiting %d seconds for changer to settle...\n",
-		    sc->sc_dev.dv_xname, sc->sc_settledelay);
+		    device_xname(sc->sc_dev), sc->sc_settledelay);
 		delay(1000000 * sc->sc_settledelay);
 	}
 
@@ -227,11 +234,11 @@ chattach(struct device *parent, struct device *self, void *aux)
 	 * interrupts yet.
 	 */
 	if (ch_get_params(sc, XS_CTL_DISCOVERY|XS_CTL_IGNORE_MEDIA_CHANGE))
-		printf("%s: offline\n", sc->sc_dev.dv_xname);
+		printf("%s: offline\n", device_xname(sc->sc_dev));
 	else {
 #define PLURAL(c)	(c) == 1 ? "" : "s"
 		printf("%s: %d slot%s, %d drive%s, %d picker%s, %d portal%s\n",
-		    sc->sc_dev.dv_xname,
+		    device_xname(sc->sc_dev),
 		    sc->sc_counts[CHET_ST], PLURAL(sc->sc_counts[CHET_ST]),
 		    sc->sc_counts[CHET_DT], PLURAL(sc->sc_counts[CHET_DT]),
 		    sc->sc_counts[CHET_MT], PLURAL(sc->sc_counts[CHET_MT]),
@@ -239,11 +246,11 @@ chattach(struct device *parent, struct device *self, void *aux)
 #undef PLURAL
 #ifdef CHANGER_DEBUG
 		printf("%s: move mask: 0x%x 0x%x 0x%x 0x%x\n",
-		    sc->sc_dev.dv_xname,
+		    device_xname(sc->sc_dev),
 		    sc->sc_movemask[CHET_MT], sc->sc_movemask[CHET_ST],
 		    sc->sc_movemask[CHET_IE], sc->sc_movemask[CHET_DT]);
 		printf("%s: exchange mask: 0x%x 0x%x 0x%x 0x%x\n",
-		    sc->sc_dev.dv_xname,
+		    device_xname(sc->sc_dev),
 		    sc->sc_exchangemask[CHET_MT], sc->sc_exchangemask[CHET_ST],
 		    sc->sc_exchangemask[CHET_IE], sc->sc_exchangemask[CHET_DT]);
 #endif /* CHANGER_DEBUG */
@@ -262,8 +269,8 @@ chopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	int unit, error;
 
 	unit = CHUNIT(dev);
-	if ((unit >= ch_cd.cd_ndevs) ||
-	    ((sc = ch_cd.cd_devs[unit]) == NULL))
+	sc = device_lookup_private(&ch_cd, unit);
+	if (sc == NULL)
 		return (ENXIO);
 
 	periph = sc->sc_periph;
@@ -309,7 +316,7 @@ chopen(dev_t dev, int flags, int fmt, struct lwp *l)
 static int
 chclose(dev_t dev, int flags, int fmt, struct lwp *l)
 {
-	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
+	struct ch_softc *sc = device_lookup_private(&ch_cd, CHUNIT(dev));
 	struct scsipi_periph *periph = sc->sc_periph;
 	struct scsipi_adapter *adapt = periph->periph_channel->chan_adapter;
 
@@ -326,7 +333,7 @@ chclose(dev_t dev, int flags, int fmt, struct lwp *l)
 static int
 chread(dev_t dev, struct uio *uio, int flags)
 {
-	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
+	struct ch_softc *sc = device_lookup_private(&ch_cd, CHUNIT(dev));
 	int error;
 
 	if (uio->uio_resid != CHANGER_EVENT_SIZE)
@@ -345,7 +352,7 @@ chread(dev_t dev, struct uio *uio, int flags)
 static int
 chioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
-	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
+	struct ch_softc *sc = device_lookup_private(&ch_cd, CHUNIT(dev));
 	int error = 0;
 
 	/*
@@ -445,7 +452,7 @@ chioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 static int
 chpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
+	struct ch_softc *sc = device_lookup_private(&ch_cd, CHUNIT(dev));
 	int revents;
 
 	revents = events & (POLLOUT | POLLWRNORM);
@@ -480,16 +487,24 @@ filt_chread(struct knote *kn, long hint)
 	return (1);
 }
 
-static const struct filterops chread_filtops =
-	{ 1, NULL, filt_chdetach, filt_chread };
+static const struct filterops chread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_chdetach,
+	.f_event = filt_chread,
+};
 
-static const struct filterops chwrite_filtops =
-	{ 1, NULL, filt_chdetach, filt_seltrue };
+static const struct filterops chwrite_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_chdetach,
+	.f_event = filt_seltrue,
+};
 
 static int
 chkqfilter(dev_t dev, struct knote *kn)
 {
-	struct ch_softc *sc = ch_cd.cd_devs[CHUNIT(dev)];
+	struct ch_softc *sc = device_lookup_private(&ch_cd, CHUNIT(dev));
 	struct klist *klist;
 
 	switch (kn->kn_filter) {
@@ -519,7 +534,7 @@ ch_interpret_sense(struct scsipi_xfer *xs)
 {
 	struct scsipi_periph *periph = xs->xs_periph;
 	struct scsi_sense_data *sense = &xs->sense.scsi_sense;
-	struct ch_softc *sc = (void *)periph->periph_dev;
+	struct ch_softc *sc = device_private(periph->periph_dev);
 	u_int16_t asc_ascq;
 
 	/*
@@ -572,7 +587,7 @@ ch_event(struct ch_softc *sc, u_int event)
 {
 
 	sc->sc_events |= event;
-	selnotify(&sc->sc_selq, 0);
+	selnotify(&sc->sc_selq, 0, 0);
 }
 
 static int
@@ -617,7 +632,7 @@ ch_move(struct ch_softc *sc, struct changer_move_request *cm)
 	 * Send command to changer.
 	 */
 	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd), 0, 0,
-	    CHRETRIES, 100000, NULL, 0));
+	    CHRETRIES, CHTIMEOUT, NULL, 0));
 }
 
 static int
@@ -671,7 +686,7 @@ ch_exchange(struct ch_softc *sc, struct changer_exchange_request *ce)
 	 * Send command to changer.
 	 */
 	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd), 0, 0,
-	    CHRETRIES, 100000, NULL, 0));
+	    CHRETRIES, CHTIMEOUT, NULL, 0));
 }
 
 static int
@@ -707,7 +722,7 @@ ch_position(struct ch_softc *sc, struct changer_position_request *cp)
 	 * Send command to changer.
 	 */
 	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd), 0, 0,
-	    CHRETRIES, 100000, NULL, 0));
+	    CHRETRIES, CHTIMEOUT, NULL, 0));
 }
 
 /*
@@ -739,8 +754,7 @@ ch_ousergetelemstatus(struct ch_softc *sc, int chet, u_int8_t *uptr)
 	 * order to read all data.
 	 */
 	error = ch_getelemstatus(sc, sc->sc_firsts[chet],
-	    sc->sc_counts[chet], &st_hdr, sizeof(st_hdr),
-	    XS_CTL_DATA_ONSTACK, 0);
+	    sc->sc_counts[chet], &st_hdr, sizeof(st_hdr), 0, 0);
 	if (error)
 		return (error);
 
@@ -777,7 +791,7 @@ ch_ousergetelemstatus(struct ch_softc *sc, int chet, u_int8_t *uptr)
 
 	if (avail != sc->sc_counts[chet])
 		printf("%s: warning, READ ELEMENT STATUS avail != count\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 
 	desc = (struct read_element_status_descriptor *)((u_long)data +
 	    sizeof(struct read_element_status_header) +
@@ -939,7 +953,7 @@ ch_usergetelemstatus(struct ch_softc *sc,
 			     ces.ces_target, ces.ces_lun)) != NULL &&
 			    dtperiph->periph_dev != NULL) {
 				strlcpy(ces.ces_xname,
-				    dtperiph->periph_dev->dv_xname,
+				    device_xname(dtperiph->periph_dev),
 				    sizeof(ces.ces_xname));
 				ces.ces_flags |= CESTATUS_XNAME_VALID;
 			}
@@ -1047,7 +1061,7 @@ ch_getelemstatus(struct ch_softc *sc, int first, int count, void *data,
 	 */
 	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd),
 	    (void *)data, datalen,
-	    CHRETRIES, 100000, NULL, scsiflags | XS_CTL_DATA_IN));
+	    CHRETRIES, CHTIMEOUT, NULL, scsiflags | XS_CTL_DATA_IN));
 }
 
 static int
@@ -1111,8 +1125,8 @@ ch_setvoltag(struct ch_softc *sc, struct changer_set_voltag_request *csvr)
 	 * Send command to changer.
 	 */
 	return (scsipi_command(sc->sc_periph, (void *)&cmd, sizeof(cmd),
-	    (void *)data, datalen, CHRETRIES, 100000, NULL,
-	    datalen ? XS_CTL_DATA_OUT | XS_CTL_DATA_ONSTACK : 0));
+	    (void *)data, datalen, CHRETRIES, CHTIMEOUT, NULL,
+	    datalen ? XS_CTL_DATA_OUT : 0));
 }
 
 static int
@@ -1174,10 +1188,9 @@ ch_get_params(struct ch_softc *sc, int scsiflags)
 	memset(&sense_data, 0, sizeof(sense_data));
 	error = scsipi_mode_sense(sc->sc_periph, SMS_DBD, 0x1d,
 	    &sense_data.header, sizeof(sense_data),
-	    scsiflags | XS_CTL_DATA_ONSTACK, CHRETRIES, 6000);
+	    scsiflags, CHRETRIES, 6000);
 	if (error) {
-		printf("%s: could not sense element address page\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "could not sense element address page\n");
 		return (error);
 	}
 
@@ -1201,10 +1214,9 @@ ch_get_params(struct ch_softc *sc, int scsiflags)
 	 */
 	error = scsipi_mode_sense(sc->sc_periph, SMS_DBD, 0x1f,
 	    &sense_data.header, sizeof(sense_data),
-	    scsiflags | XS_CTL_DATA_ONSTACK, CHRETRIES, 6000);
+	    scsiflags, CHRETRIES, 6000);
 	if (error) {
-		printf("%s: could not sense capabilities page\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "could not sense capabilities page\n");
 		return (error);
 	}
 

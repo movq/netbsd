@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_vt100_chars.c,v 1.11 2005/12/11 12:24:12 christos Exp $ */
+/* $NetBSD: wsemul_vt100_chars.c,v 1.15 2017/11/03 19:20:27 maya Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_vt100_chars.c,v 1.11 2005/12/11 12:24:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_vt100_chars.c,v 1.15 2017/11/03 19:20:27 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,8 +52,8 @@ static const u_int16_t decspcgr2uni[128] = {
 	0x0050, 0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057,
 	0x0058, 0x0059, 0x005a, 0x005b, 0x005c, 0x005d, 0x005e, 0x00a0,
 /* 6 */	0x25c6, 0x2592, 0x2409, 0x240c, 0x240d, 0x240a, 0x00b0, 0x00b1,
-	_e006U, 0x240b, 0x2518, 0x2510, 0x250c, 0x2514, 0x253c, _e001U,
-	_e002U, 0x2500, _e004U, _e005U, 0x251c, 0x2524, 0x2534, 0x252c,
+	_e006U, 0x240b, 0x2518, 0x2510, 0x250c, 0x2514, 0x253c, 0x23ba,
+	0x23bb, 0x2500, 0x23bc, 0x23bd, 0x251c, 0x2524, 0x2534, 0x252c,
 	0x2502, 0x2264, 0x2265, 0x03c0, 0x2260, 0x00a3, 0x00b7, 0x007f,
 };
 
@@ -80,15 +80,16 @@ void
 vt100_initchartables(struct wsemul_vt100_emuldata *edp)
 {
 	int i;
+	struct vt100base_data *vd = &edp->bd;
 
 	for (i = 0; i < 128; i++)
-		(*edp->emulops->mapchar)(edp->emulcookie, 128 + i,
+		(*vd->emulops->mapchar)(vd->emulcookie, 128 + i,
 					 &edp->isolatin1tab[i]);
 	for (i = 0; i < 128; i++)
-		(*edp->emulops->mapchar)(edp->emulcookie, decspcgr2uni[i],
+		(*vd->emulops->mapchar)(vd->emulcookie, decspcgr2uni[i],
 					 &edp->decgraphtab[i]);
 	for (i = 0; i < 128; i++)
-		(*edp->emulops->mapchar)(edp->emulcookie, dectech2uni[i],
+		(*vd->emulops->mapchar)(vd->emulcookie, dectech2uni[i],
 					 &edp->dectechtab[i]);
 	vt100_setnrc(edp, 0);
 }
@@ -124,7 +125,7 @@ static const struct {
 	/* norwegian /danish */
 	{{0x0023, 0x0040, 0x00c6, 0x00d8, 0x00c5, 0x005e,
 	0x005f, 0x0060, 0x00e6, 0x00f8, 0x00e5, 0x007e}},
-	/* portugese */
+	/* portuguese */
 	{{0x0023, 0x0040, 0x00c3, 0x00c7, 0x00d5, 0x005e,
 	0x005f, 0x0060, 0x00e3, 0x00e7, 0x00f5, 0x007e}},
 	/* spanish */
@@ -142,12 +143,13 @@ void
 vt100_setnrc(struct wsemul_vt100_emuldata *edp, int nrc)
 {
 	int i;
+	struct vt100base_data *vd = &edp->bd;
 
-	KASSERT(nrc < sizeof(nrctable) / sizeof(nrctable[0]));
+	KASSERT(nrc < __arraycount(nrctable));
 
 	for (i = 0; i < 128; i++)
-		(*edp->emulops->mapchar)(edp->emulcookie, i, &edp->nrctab[i]);
+		(*vd->emulops->mapchar)(vd->emulcookie, i, &edp->nrctab[i]);
 	for (i = 0; i < 12; i++)
-		(*edp->emulops->mapchar)(edp->emulcookie, nrctable[nrc].c[i],
+		(*vd->emulops->mapchar)(vd->emulcookie, nrctable[nrc].c[i],
 					 &edp->nrctab[nrcovlpos[i]]);
 }

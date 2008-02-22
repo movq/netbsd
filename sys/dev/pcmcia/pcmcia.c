@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmcia.c,v 1.85 2007/12/16 21:28:30 dyoung Exp $	*/
+/*	$NetBSD: pcmcia.c,v 1.94 2011/07/26 22:24:36 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2004 Charles M. Hannum.  All rights reserved.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcmcia.c,v 1.85 2007/12/16 21:28:30 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcmcia.c,v 1.94 2011/07/26 22:24:36 dyoung Exp $");
 
 #include "opt_pcmciaverbose.h"
 
@@ -80,21 +80,19 @@ int	pcmcia_verbose = 1;
 int	pcmcia_verbose = 0;
 #endif
 
-int	pcmcia_match(struct device *, struct cfdata *, void *);
-void	pcmcia_attach(struct device *, struct device *, void *);
+int	pcmcia_match(device_t, cfdata_t, void *);
+void	pcmcia_attach(device_t, device_t, void *);
 int	pcmcia_detach(device_t, int);
-int	pcmcia_rescan(struct device *, const char *, const int *);
-void	pcmcia_childdetached(struct device *, struct device *);
+int	pcmcia_rescan(device_t, const char *, const int *);
+void	pcmcia_childdetached(device_t, device_t);
 int	pcmcia_print(void *, const char *);
 
-CFATTACH_DECL2(pcmcia, sizeof(struct pcmcia_softc),
+CFATTACH_DECL3_NEW(pcmcia, sizeof(struct pcmcia_softc),
     pcmcia_match, pcmcia_attach, pcmcia_detach, NULL,
-    pcmcia_rescan, pcmcia_childdetached);
+    pcmcia_rescan, pcmcia_childdetached, DVF_DETACH_SHUTDOWN);
 
 int
-pcmcia_ccr_read(pf, ccr)
-	struct pcmcia_function *pf;
-	int ccr;
+pcmcia_ccr_read(struct pcmcia_function *pf, int ccr)
 {
 
 	return (bus_space_read_1(pf->pf_ccrt, pf->pf_ccrh,
@@ -102,10 +100,7 @@ pcmcia_ccr_read(pf, ccr)
 }
 
 void
-pcmcia_ccr_write(pf, ccr, val)
-	struct pcmcia_function *pf;
-	int ccr;
-	int val;
+pcmcia_ccr_write(struct pcmcia_function *pf, int ccr, int val)
 {
 
 	if (pf->ccr_mask & (1 << ccr)) {
@@ -115,7 +110,7 @@ pcmcia_ccr_write(pf, ccr, val)
 }
 
 int
-pcmcia_match(struct device *parent, struct cfdata *match, void *aux)
+pcmcia_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pcmciabus_attach_args *paa = aux;
 
@@ -127,18 +122,17 @@ pcmcia_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-pcmcia_attach(struct device *parent, struct device *self, void *aux)
+pcmcia_attach(device_t parent, device_t self, void *aux)
 {
 	struct pcmciabus_attach_args *paa = aux;
-	struct pcmcia_softc *sc = (struct pcmcia_softc *) self;
+	struct pcmcia_softc *sc = device_private(self);
 
 	aprint_naive("\n");
 	aprint_normal("\n");
 
+	sc->dev = self;
 	sc->pct = paa->pct;
 	sc->pch = paa->pch;
-	sc->iobase = paa->iobase;
-	sc->iosize = paa->iosize;
 
 	sc->ih = NULL;
 
@@ -159,10 +153,9 @@ pcmcia_detach(device_t self, int flags)
 }
 
 int
-pcmcia_card_attach(dev)
-	struct device *dev;
+pcmcia_card_attach(device_t dev)
 {
-	struct pcmcia_softc *sc = (struct pcmcia_softc *) dev;
+	struct pcmcia_softc *sc = device_private(dev);
 	struct pcmcia_function *pf;
 	int error;
 	static const int wildcard[PCMCIACF_NLOCS] = {
@@ -187,7 +180,7 @@ pcmcia_card_attach(dev)
 	if (sc->card.error ||
 	    SIMPLEQ_EMPTY(&sc->card.pf_head)) {
 		printf("%s: card appears to have bogus CIS\n",
-		    sc->dev.dv_xname);
+		    device_xname(sc->dev));
 		error = EIO;
 		goto done;
 	}
@@ -203,7 +196,7 @@ pcmcia_card_attach(dev)
 #ifdef DIAGNOSTIC
 		if (pf->child != NULL) {
 			printf("%s: %s still attached to function %d!\n",
-			    sc->dev.dv_xname, pf->child->dv_xname,
+			    device_xname(sc->dev), device_xname(pf->child),
 			    pf->number);
 			panic("pcmcia_card_attach");
 		}
@@ -221,10 +214,10 @@ done:
 }
 
 int
-pcmcia_rescan(struct device *self, const char *ifattr,
+pcmcia_rescan(device_t self, const char *ifattr,
     const int *locators)
 {
-	struct pcmcia_softc *sc = (struct pcmcia_softc *)self;
+	struct pcmcia_softc *sc = device_private(self);
 	struct pcmcia_function *pf;
 	struct pcmcia_attach_args paa;
 	int locs[PCMCIACF_NLOCS];
@@ -262,11 +255,10 @@ pcmcia_rescan(struct device *self, const char *ifattr,
 }
 
 void
-pcmcia_card_detach(dev, flags)
-	struct device *dev;
-	int flags;		/* DETACH_* flags */
+pcmcia_card_detach(device_t dev, int flags)
+	/* flags:		 DETACH_* flags */
 {
-	struct pcmcia_softc *sc = (struct pcmcia_softc *) dev;
+	struct pcmcia_softc *sc = device_private(dev);
 	struct pcmcia_function *pf;
 	int error;
 
@@ -281,10 +273,10 @@ pcmcia_card_detach(dev, flags)
 		if (pf->child == NULL)
 			continue;
 		DPRINTF(("%s: detaching %s (function %d)\n",
-		    sc->dev.dv_xname, pf->child->dv_xname, pf->number));
+		    device_xname(sc->dev), device_xname(pf->child), pf->number));
 		if ((error = config_detach(pf->child, flags)) != 0) {
 			printf("%s: error %d detaching %s (function %d)\n",
-			    sc->dev.dv_xname, error, pf->child->dv_xname,
+			    device_xname(sc->dev), error, device_xname(pf->child),
 			    pf->number);
 		}
 	}
@@ -299,9 +291,9 @@ pcmcia_card_detach(dev, flags)
 }
 
 void
-pcmcia_childdetached(struct device *self, struct device *child)
+pcmcia_childdetached(device_t self, device_t child)
 {
-	struct pcmcia_softc *sc = (struct pcmcia_softc *)self;
+	struct pcmcia_softc *sc = device_private(self);
 	struct pcmcia_function *pf;
 
 	SIMPLEQ_FOREACH(pf, &sc->card.pf_head, pf_list) {
@@ -315,15 +307,14 @@ pcmcia_childdetached(struct device *self, struct device *child)
 		}
 	}
 
-	printf("%s: pcmcia_childdetached: %s not found\n",
-	       self->dv_xname, child->dv_xname);
+	aprint_error_dev(self, "pcmcia_childdetached: %s not found\n",
+	       device_xname(child));
 }
 
 void
-pcmcia_card_deactivate(dev)
-	struct device *dev;
+pcmcia_card_deactivate(device_t dev)
 {
-	struct pcmcia_softc *sc = (struct pcmcia_softc *) dev;
+	struct pcmcia_softc *sc = device_private(dev);
 	struct pcmcia_function *pf;
 
 	/*
@@ -337,15 +328,13 @@ pcmcia_card_deactivate(dev)
 		if (pf->child == NULL)
 			continue;
 		DPRINTF(("%s: deactivating %s (function %d)\n",
-		    sc->dev.dv_xname, pf->child->dv_xname, pf->number));
+		    device_xname(sc->dev), device_xname(pf->child), pf->number));
 		config_deactivate(pf->child);
 	}
 }
 
 int
-pcmcia_print(arg, pnp)
-	void *arg;
-	const char *pnp;
+pcmcia_print(void *arg, const char *pnp)
 {
 	struct pcmcia_attach_args *pa = arg;
 	struct pcmcia_softc *sc = pa->pf->sc;
@@ -363,11 +352,7 @@ pcmcia_print(arg, pnp)
 }
 
 void
-pcmcia_devinfo(card, showhex, cp, cplen)
-	struct pcmcia_card *card;
-	int showhex;
-	char *cp;
-	size_t cplen;
+pcmcia_devinfo(struct pcmcia_card *card, int showhex, char *cp, size_t cplen)
 {
 	int i, n;
 
@@ -398,12 +383,7 @@ pcmcia_devinfo(card, showhex, cp, cplen)
 }
 
 const void *
-pcmcia_product_lookup(pa, tab, nent, ent_size, matchfn)
-	struct pcmcia_attach_args *pa;
-	const void *tab;
-	size_t nent;
-	size_t ent_size;
-	pcmcia_product_match_fn matchfn;
+pcmcia_product_lookup(struct pcmcia_attach_args *pa, const void *tab, size_t nent, size_t ent_size, pcmcia_product_match_fn matchfn)
 {
         const struct pcmcia_product *pp;
 	int n;
@@ -445,11 +425,9 @@ pcmcia_product_lookup(pa, tab, nent, ent_size, matchfn)
 }
 
 void
-pcmcia_socket_settype(dev, type)
-	struct device *dev;
-	int type;
+pcmcia_socket_settype(device_t dev, int type)
 {
-	struct pcmcia_softc *sc = (void *)dev;
+	struct pcmcia_softc *sc = device_private(dev);
 
 	pcmcia_chip_socket_settype(sc->pct, sc->pch, type);
 }
@@ -459,9 +437,7 @@ pcmcia_socket_settype(dev, type)
  * disabled.
  */
 void
-pcmcia_function_init(pf, cfe)
-	struct pcmcia_function *pf;
-	struct pcmcia_config_entry *cfe;
+pcmcia_function_init(struct pcmcia_function *pf, struct pcmcia_config_entry *cfe)
 {
 	if (pf->pf_flags & PFF_ENABLED)
 		panic("pcmcia_function_init: function is enabled");
@@ -471,33 +447,30 @@ pcmcia_function_init(pf, cfe)
 }
 
 void
-pcmcia_socket_enable(dev)
-	struct device *dev;
+pcmcia_socket_enable(device_t dev)
 {
-	struct pcmcia_softc *sc = (void *)dev;
+	struct pcmcia_softc *sc = device_private(dev);
 
 	if (sc->sc_enabled_count++ == 0)
 		pcmcia_chip_socket_enable(sc->pct, sc->pch);
-	DPRINTF(("%s: ++enabled_count = %d\n", sc->dev.dv_xname,
+	DPRINTF(("%s: ++enabled_count = %d\n", device_xname(sc->dev),
 		 sc->sc_enabled_count));
 }
 
 void
-pcmcia_socket_disable(dev)
-	struct device *dev;
+pcmcia_socket_disable(device_t dev)
 {
-	struct pcmcia_softc *sc = (void *)dev;
+	struct pcmcia_softc *sc = device_private(dev);
 
 	if (--sc->sc_enabled_count == 0)
 		pcmcia_chip_socket_disable(sc->pct, sc->pch);
-	DPRINTF(("%s: --enabled_count = %d\n", sc->dev.dv_xname,
+	DPRINTF(("%s: --enabled_count = %d\n", device_xname(sc->dev),
 		 sc->sc_enabled_count));
 }
 
 /* Enable a PCMCIA function */
 int
-pcmcia_function_enable(pf)
-	struct pcmcia_function *pf;
+pcmcia_function_enable(struct pcmcia_function *pf)
 {
 	struct pcmcia_softc *sc = pf->sc;
 	struct pcmcia_function *tmp;
@@ -511,8 +484,8 @@ pcmcia_function_enable(pf)
 	 * Increase the reference count on the socket, enabling power, if
 	 * necessary.
 	 */
-	pcmcia_socket_enable(&sc->dev);
-	pcmcia_socket_settype(&sc->dev, pf->cfe->iftype);
+	pcmcia_socket_enable(sc->dev);
+	pcmcia_socket_settype(sc->dev, pf->cfe->iftype);
 
 	if (pf->pf_flags & PFF_ENABLED) {
 		/*
@@ -598,7 +571,7 @@ pcmcia_function_enable(pf)
 		SIMPLEQ_FOREACH(tmp, &sc->card.pf_head, pf_list) {
 			printf("%s: function %d CCR at %d offset %lx: "
 			       "%x %x %x %x, %x %x %x %x, %x\n",
-			       tmp->sc->dev.dv_xname, tmp->number,
+			       device_xname(tmp->sc->dev), tmp->number,
 			       tmp->pf_ccr_window,
 			       (unsigned long) tmp->pf_ccr_offset,
 			       pcmcia_ccr_read(tmp, 0),
@@ -629,16 +602,15 @@ bad:
 	 * Decrement the reference count, and power down the socket, if
 	 * necessary.
 	 */
-	printf("%s: couldn't map the CCR\n", pf->child->dv_xname);
-	pcmcia_socket_disable(&sc->dev);
+	printf("%s: couldn't map the CCR\n", device_xname(pf->child));
+	pcmcia_socket_disable(sc->dev);
 
 	return (error);
 }
 
 /* Disable PCMCIA function. */
 void
-pcmcia_function_disable(pf)
-	struct pcmcia_function *pf;
+pcmcia_function_disable(struct pcmcia_function *pf)
 {
 	struct pcmcia_softc *sc = pf->sc;
 	struct pcmcia_function *tmp;
@@ -689,15 +661,11 @@ out:
 	 * Decrement the reference count, and power down the socket, if
 	 * necessary.
 	 */
-	pcmcia_socket_disable(&sc->dev);
+	pcmcia_socket_disable(sc->dev);
 }
 
 int
-pcmcia_io_map(pf, width, pcihp, windowp)
-	struct pcmcia_function *pf;
-	int width;
-	struct pcmcia_io_handle *pcihp;
-	int *windowp;
+pcmcia_io_map(struct pcmcia_function *pf, int width, struct pcmcia_io_handle *pcihp, int *windowp)
 {
 	struct pcmcia_softc *sc = pf->sc;
 	int error;
@@ -739,9 +707,7 @@ pcmcia_io_map(pf, width, pcihp, windowp)
 }
 
 void
-pcmcia_io_unmap(pf, window)
-	struct pcmcia_function *pf;
-	int window;
+pcmcia_io_unmap(struct pcmcia_function *pf, int window)
 {
 	struct pcmcia_softc *sc = pf->sc;
 
@@ -752,11 +718,8 @@ pcmcia_io_unmap(pf, window)
 }
 
 void *
-pcmcia_intr_establish(pf, ipl, ih_fct, ih_arg)
-	struct pcmcia_function *pf;
-	int ipl;
-	int (*ih_fct)(void *);
-	void *ih_arg;
+pcmcia_intr_establish(struct pcmcia_function *pf, int ipl,
+	int (*ih_fct)(void *), void *ih_arg)
 {
 
 	if (pf->pf_flags & PFF_ENABLED)
@@ -767,14 +730,12 @@ pcmcia_intr_establish(pf, ipl, ih_fct, ih_arg)
 	pf->pf_ih = pcmcia_chip_intr_establish(pf->sc->pct, pf->sc->pch,
 	    pf, ipl, ih_fct, ih_arg);
 	if (!pf->pf_ih)
-		printf("%s: interrupt establish failed\n", pf->child->dv_xname);
+		aprint_error_dev(pf->child, "interrupt establish failed\n");
 	return (pf->pf_ih);
 }
 
 void
-pcmcia_intr_disestablish(pf, ih)
-	struct pcmcia_function *pf;
-	void *ih;
+pcmcia_intr_disestablish(struct pcmcia_function *pf, void *ih)
 {
 
 	if (pf->pf_flags & PFF_ENABLED)
@@ -787,9 +748,7 @@ pcmcia_intr_disestablish(pf, ih)
 }
 
 int
-pcmcia_config_alloc(pf, cfe)
-	struct pcmcia_function *pf;
-	struct pcmcia_config_entry *cfe;
+pcmcia_config_alloc(struct pcmcia_function *pf, struct pcmcia_config_entry *cfe)
 {
 	int error = 0;
 	int n, m;
@@ -844,8 +803,7 @@ pcmcia_config_alloc(pf, cfe)
 }
 
 void
-pcmcia_config_free(pf)
-	struct pcmcia_function *pf;
+pcmcia_config_free(struct pcmcia_function *pf)
 {
 	struct pcmcia_config_entry *cfe = pf->cfe;
 	int m;
@@ -857,8 +815,7 @@ pcmcia_config_free(pf)
 }
 
 int
-pcmcia_config_map(pf)
-	struct pcmcia_function *pf;
+pcmcia_config_map(struct pcmcia_function *pf)
 {
 	struct pcmcia_config_entry *cfe = pf->cfe;
 	int error = 0;
@@ -910,8 +867,7 @@ pcmcia_config_map(pf)
 }
 
 void
-pcmcia_config_unmap(pf)
-	struct pcmcia_function *pf;
+pcmcia_config_unmap(struct pcmcia_function *pf)
 {
 	struct pcmcia_config_entry *cfe = pf->cfe;
 	int m;
@@ -923,9 +879,8 @@ pcmcia_config_unmap(pf)
 }
 
 int
-pcmcia_function_configure(pf, validator)
-	struct pcmcia_function *pf;
-	int (*validator)(struct pcmcia_config_entry *);
+pcmcia_function_configure(struct pcmcia_function *pf,
+	int (*validator)(struct pcmcia_config_entry *))
 {
 	struct pcmcia_config_entry *cfe;
 	int error = ENOENT;
@@ -958,8 +913,7 @@ pcmcia_function_configure(pf, validator)
 }
 
 void
-pcmcia_function_unconfigure(pf)
-	struct pcmcia_function *pf;
+pcmcia_function_unconfigure(struct pcmcia_function *pf)
 {
 
 	pcmcia_config_unmap(pf);

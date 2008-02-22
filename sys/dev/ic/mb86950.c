@@ -1,4 +1,4 @@
-/*	$NetBSD: mb86950.c,v 1.10 2007/10/19 11:59:55 ad Exp $	*/
+/*	$NetBSD: mb86950.c,v 1.28 2018/06/26 06:48:00 msaitoh Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -67,7 +67,7 @@
   */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.10 2007/10/19 11:59:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.28 2018/06/26 06:48:00 msaitoh Exp $");
 
 /*
  * Device driver for Fujitsu mb86950 based Ethernet cards.
@@ -120,8 +120,6 @@ __KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.10 2007/10/19 11:59:55 ad Exp $");
  */
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -131,15 +129,14 @@ __KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.10 2007/10/19 11:59:55 ad Exp $");
 #include <sys/socket.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
+#include <net/bpf.h>
 
 #ifdef INET
 #include <netinet/in.h>
@@ -147,12 +144,6 @@ __KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.10 2007/10/19 11:59:55 ad Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
-#endif
-
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
 #endif
 
 #include <sys/bus.h>
@@ -167,40 +158,38 @@ __KERNEL_RCSID(0, "$NetBSD: mb86950.c,v 1.10 2007/10/19 11:59:55 ad Exp $");
 #endif /* __BUS_SPACE_HAS_STREAM_METHODS */
 
 /* Standard driver entry points.  These can be static. */
-int		mb86950_ioctl	__P((struct ifnet *, u_long, void *));
-void	mb86950_init	__P((struct mb86950_softc *));
-void	mb86950_start	__P((struct ifnet *));
-void	mb86950_watchdog __P((struct ifnet *));
-void	mb86950_reset	__P((struct mb86950_softc *));
+int		mb86950_ioctl(struct ifnet *, u_long, void *);
+void	mb86950_init(struct mb86950_softc *);
+void	mb86950_start(struct ifnet *);
+void	mb86950_watchdog(struct ifnet *);
+void	mb86950_reset(struct mb86950_softc *);
 
 /* Local functions. */
-void	mb86950_stop __P((struct mb86950_softc *));
-void	mb86950_tint __P((struct mb86950_softc *, u_int8_t));
-void	mb86950_rint __P((struct mb86950_softc *, u_int8_t));
-int		mb86950_get_fifo __P((struct mb86950_softc *, u_int));
-ushort	mb86950_put_fifo __P((struct mb86950_softc *, struct mbuf *));
-void	mb86950_drain_fifo __P((struct mb86950_softc *));
+void	mb86950_stop(struct mb86950_softc *);
+void	mb86950_tint(struct mb86950_softc *, u_int8_t);
+void	mb86950_rint(struct mb86950_softc *, u_int8_t);
+int		mb86950_get_fifo(struct mb86950_softc *, u_int);
+ushort	mb86950_put_fifo(struct mb86950_softc *, struct mbuf *);
+void	mb86950_drain_fifo(struct mb86950_softc *);
 
-int		mb86950_mediachange __P((struct ifnet *));
-void	mb86950_mediastatus __P((struct ifnet *, struct ifmediareq *));
+int		mb86950_mediachange(struct ifnet *);
+void	mb86950_mediastatus(struct ifnet *, struct ifmediareq *);
 
 
 #if ESTAR_DEBUG >= 1
-void	mb86950_dump __P((int, struct mb86950_softc *));
+void	mb86950_dump(int, struct mb86950_softc *);
 #endif
 
 /********************************************************************/
 
 void
-mb86950_attach(sc, myea)
-	struct mb86950_softc *sc;
-	u_int8_t *myea;
+mb86950_attach(struct mb86950_softc *sc, u_int8_t *myea)
 {
 
 #ifdef DIAGNOSTIC
 	if (myea == NULL) {
 		printf("%s: ethernet address shouldn't be NULL\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		panic("NULL ethernet address");
 	}
 #endif
@@ -220,8 +209,7 @@ mb86950_attach(sc, myea)
  * if any, will be lost by stopping the interface.
  */
 void
-mb86950_stop(sc)
-	struct mb86950_softc *sc;
+mb86950_stop(struct mb86950_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -250,8 +238,7 @@ mb86950_stop(sc)
 }
 
 void
-mb86950_drain_fifo(sc)
-	struct mb86950_softc *sc;
+mb86950_drain_fifo(struct mb86950_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -278,7 +265,7 @@ mb86950_config(struct mb86950_softc *sc, int *media,
 	bus_space_handle_t bsh = sc->sc_bsh;
 
 	/* Initialize ifnet structure. */
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = mb86950_start;
 	ifp->if_ioctl = mb86950_ioctl;
@@ -297,16 +284,15 @@ mb86950_config(struct mb86950_softc *sc, int *media,
 
 	/* Attach the interface. */
 	if_attach(ifp);
+	if_deferred_start_init(ifp, NULL);
 
 	/* Feed the chip the station address. */
 	bus_space_write_region_1(bst, bsh, DLCR_NODE_ID, sc->sc_enaddr, ETHER_ADDR_LEN);
 
 	ether_ifattach(ifp, sc->sc_enaddr);
 
-#if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
-	    RND_TYPE_NET, 0);
-#endif
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+	    RND_TYPE_NET, RND_FLAG_DEFAULT);
 
 /* XXX No! This doesn't work - DLCR6 of the mb86950 is different
 
@@ -335,7 +321,7 @@ mb86950_config(struct mb86950_softc *sc, int *media,
 	if (sc->rxb_num_pkt == 0) sc->rxb_num_pkt = 100;
 
 	/* Print additional info when attached. */
-	printf("%s: Ethernet address %s\n", sc->sc_dev.dv_xname,
+	printf("%s: Ethernet address %s\n", device_xname(sc->sc_dev),
 	    ether_sprintf(sc->sc_enaddr));
 
 	/* The attach is successful. */
@@ -346,8 +332,7 @@ mb86950_config(struct mb86950_softc *sc, int *media,
  * Media change callback.
  */
 int
-mb86950_mediachange(ifp)
-	struct ifnet *ifp;
+mb86950_mediachange(struct ifnet *ifp)
 {
 
 	struct mb86950_softc *sc = ifp->if_softc;
@@ -362,9 +347,7 @@ mb86950_mediachange(ifp)
  * Media status callback.
  */
 void
-mb86950_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
+mb86950_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
 	struct mb86950_softc *sc = ifp->if_softc;
 
@@ -383,13 +366,12 @@ mb86950_mediastatus(ifp, ifmr)
  * Reset interface.
  */
 void
-mb86950_reset(sc)
-	struct mb86950_softc *sc;
+mb86950_reset(struct mb86950_softc *sc)
 {
 	int s;
 
 	s = splnet();
-	log(LOG_ERR, "%s: device reset\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device reset\n", device_xname(sc->sc_dev));
 	mb86950_stop(sc);
 	mb86950_init(sc);
 	splx(s);
@@ -400,8 +382,7 @@ mb86950_reset(sc)
  * generate an interrupt after a transmit has been started on it.
  */
 void
-mb86950_watchdog(ifp)
-	struct ifnet *ifp;
+mb86950_watchdog(struct ifnet *ifp)
 {
 	struct mb86950_softc *sc = ifp->if_softc;
 	bus_space_tag_t bst = sc->sc_bst;
@@ -413,21 +394,21 @@ mb86950_watchdog(ifp)
 		if (tstat & TX_CR_LOST) {
 			if ((tstat & (TX_COL | TX_16COL)) == 0) {
 				 log(LOG_ERR, "%s: carrier lost\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			} else {
 				log(LOG_ERR, "%s: excessive collisions\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			}
 		}
 		else if ((tstat & (TX_UNDERFLO | TX_BUS_WR_ERR)) != 0) {
 			log(LOG_ERR, "%s: tx fifo underflow/overflow\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 		} else {
 			log(LOG_ERR, "%s: transmit error\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 		}
 	} else {
-		log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+		log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
 	}
 
 	/* Don't know how many packets are lost by this accident.
@@ -444,10 +425,7 @@ mb86950_watchdog(ifp)
  * Process an ioctl request.
  */
 int
-mb86950_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	void *data;
+mb86950_ioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 {
 	struct mb86950_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -458,32 +436,34 @@ mb86950_ioctl(ifp, cmd, data)
 	s = splnet();
 
 	switch (cmd) {
-	case SIOCSIFADDR:
-		/* XXX depreciated ? What should I use instead? */
+	case SIOCINITIFADDR:
+		/* XXX deprecated ? What should I use instead? */
 		if ((error = mb86950_enable(sc)) != 0)
 			break;
 
 		ifp->if_flags |= IFF_UP;
 
+		mb86950_init(sc);
 		switch (ifa->ifa_addr->sa_family) {
 
 #ifdef INET
 		case AF_INET:
-			mb86950_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 
 
 		default:
-			mb86950_init(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		/* XXX re-use ether_ioctl() */
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
@@ -491,9 +471,8 @@ mb86950_ioctl(ifp, cmd, data)
 			mb86950_stop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
 			mb86950_disable(sc);
-
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-			(ifp->if_flags & IFF_RUNNING) == 0) {
+			break;
+		case IFF_UP:
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
@@ -501,22 +480,26 @@ mb86950_ioctl(ifp, cmd, data)
 			if ((error = mb86950_enable(sc)) != 0)
 				break;
 			mb86950_init(sc);
-
-		} else if ((ifp->if_flags & IFF_UP) != 0) {
+			break;
+		case IFF_UP|IFF_RUNNING:
 			/*
 			 * Reset the interface to pick up changes in any other
 			 * flags that affect hardware registers.
 			 */
-/* Setmode not supported
+#if 0
+			/* Setmode not supported */
 			mb86950_setmode(sc);
-*/
+#endif
+			break;
+		case 0:
+			break;
 		}
 
 #if ESTAR_DEBUG >= 1
 		/* "ifconfig fe0 debug" to print register dump. */
 		if (ifp->if_flags & IFF_DEBUG) {
 			log(LOG_INFO, "%s: SIOCSIFFLAGS(DEBUG)\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			mb86950_dump(LOG_DEBUG, sc);
 		}
 #endif
@@ -528,7 +511,7 @@ mb86950_ioctl(ifp, cmd, data)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ether_ioctl(ifp, cmd, data);
 		break;
 	}
 
@@ -540,8 +523,7 @@ mb86950_ioctl(ifp, cmd, data)
  * Initialize device.
  */
 void
-mb86950_init(sc)
-	struct mb86950_softc *sc;
+mb86950_init(struct mb86950_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -572,8 +554,7 @@ mb86950_init(sc)
 }
 
 void
-mb86950_start(ifp)
-	struct ifnet *ifp;
+mb86950_start(struct ifnet *ifp)
 {
 	struct mb86950_softc *sc = ifp->if_softc;
     bus_space_tag_t bst = sc->sc_bst;
@@ -588,11 +569,8 @@ mb86950_start(ifp)
 	if (m == 0)
 		return;
 
-#if NBPFILTER > 0
 	/* Tap off here if there is a BPF listener. */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m, BPF_D_OUT);
 
 	/* Send the packet to the mb86950 */
 	len = mb86950_put_fifo(sc,m);
@@ -600,7 +578,7 @@ mb86950_start(ifp)
 
 	/* XXX bus_space_barrier here ? */
 	if (bus_space_read_1(bst, bsh, DLCR_TX_STAT) & (TX_UNDERFLO | TX_BUS_WR_ERR)) {
-		log(LOG_ERR, "%s: tx fifo underflow/overflow\n", sc->sc_dev.dv_xname);
+		log(LOG_ERR, "%s: tx fifo underflow/overflow\n", device_xname(sc->sc_dev));
 	}
 
 	bus_space_write_2(bst, bsh, BMPR_TX_LENGTH, len | TRANSMIT_START);
@@ -620,9 +598,7 @@ mb86950_start(ifp)
  * Send packet - copy packet from mbuf to the fifo
  */
 u_short
-mb86950_put_fifo(sc, m)
-	struct mb86950_softc *sc;
-	struct mbuf *m;
+mb86950_put_fifo(struct mb86950_softc *sc, struct mbuf *m)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -689,8 +665,7 @@ mb86950_put_fifo(sc, m)
  * Ethernet interface interrupt processor
  */
 int
-mb86950_intr(arg)
-	void *arg;
+mb86950_intr(void *arg)
 {
 	struct mb86950_softc *sc = arg;
 	bus_space_tag_t bst = sc->sc_bst;
@@ -743,7 +718,7 @@ mb86950_intr(arg)
 	 */
 
 	if ((ifp->if_flags & IFF_OACTIVE) == 0)
-		mb86950_start(ifp);
+		if_schedule_deferred_start(ifp);
 
 	/* Set receive interrupts back */
 	bus_space_write_1(bst, bsh, DLCR_RX_INT_EN, RX_MASK);
@@ -753,9 +728,7 @@ mb86950_intr(arg)
 
 /* Transmission interrupt handler */
 void
-mb86950_tint(sc, tstat)
-	struct mb86950_softc *sc;
-	u_int8_t tstat;
+mb86950_tint(struct mb86950_softc *sc, u_int8_t tstat)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -798,9 +771,7 @@ mb86950_tint(sc, tstat)
 
 /* receiver interrupt. */
 void
-mb86950_rint(sc, rstat)
-	struct mb86950_softc *sc;
-	u_int8_t rstat;
+mb86950_rint(struct mb86950_softc *sc, u_int8_t rstat)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -859,22 +830,17 @@ mb86950_rint(sc, rstat)
 			mb86950_drain_fifo(sc);
 			return;
 		}
-
-		/* Successfully received a packet.  Update stat. */
-		ifp->if_ipackets++;
 	}
 }
 
 /*
  * Receive packet.
  * Retrieve packet from receive buffer and send to the next level up via
- * ether_input(). If there is a BPF listener, give a copy to BPF, too.
+ * ether_input().
  * Returns 0 if success, -1 if error (i.e., mbuf allocation failure).
  */
 int
-mb86950_get_fifo(sc, len)
-	struct mb86950_softc *sc;
-	u_int len;
+mb86950_get_fifo(struct mb86950_softc *sc, u_int len)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -892,7 +858,7 @@ mb86950_get_fifo(sc, len)
 	if (len & 1)
 		len++;
 
-	m->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(m, ifp);
 	m->m_pkthdr.len = len;
 
 	/* The following silliness is to make NFS happy. */
@@ -931,16 +897,7 @@ mb86950_get_fifo(sc, len)
 	/* Get a packet. */
 	bus_space_read_multi_stream_2(bst, bsh, BMPR_FIFO, mtod(m, u_int16_t *), (len + 1) >> 1);
 
-#if NBPFILTER > 0
-	/*
-	 * Check if there's a BPF listener on this interface.  If so, hand off
-	 * the raw packet to bpf.
-	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
-
-	(*ifp->if_input)(ifp, m);
+	if_percpuq_enqueue(ifp->if_percpuq, m);
 	return (0);
 }
 
@@ -948,14 +905,12 @@ mb86950_get_fifo(sc, len)
  * Enable power on the interface.
  */
 int
-mb86950_enable(sc)
-	struct mb86950_softc *sc;
+mb86950_enable(struct mb86950_softc *sc)
 {
 
 	if ((sc->sc_stat & ESTAR_STAT_ENABLED) == 0 && sc->sc_enable != NULL) {
 		if ((*sc->sc_enable)(sc) != 0) {
-			printf("%s: device enable failed\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev, "device enable failed\n");
 			return (EIO);
 		}
 	}
@@ -968,8 +923,7 @@ mb86950_enable(sc)
  * Disable power on the interface.
  */
 void
-mb86950_disable(sc)
-	struct mb86950_softc *sc;
+mb86950_disable(struct mb86950_softc *sc)
 {
 
 	if ((sc->sc_stat & ESTAR_STAT_ENABLED) != 0 && sc->sc_disable != NULL) {
@@ -984,26 +938,17 @@ mb86950_disable(sc)
  *	Handle device activation/deactivation requests.
  */
 int
-mb86950_activate(self, act)
-	struct device *self;
-	enum devact act;
+mb86950_activate(device_t self, enum devact act)
 {
-	struct mb86950_softc *sc = (struct mb86950_softc *)self;
-	int rv, s;
+	struct mb86950_softc *sc = device_private(self);
 
-	rv = 0;
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->sc_ec.ec_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return (rv);
 }
 
 /*
@@ -1012,8 +957,7 @@ mb86950_activate(self, act)
  *	Detach a mb86950 interface.
  */
 int
-mb86950_detach(sc)
-	struct mb86950_softc *sc;
+mb86950_detach(struct mb86950_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 
@@ -1024,10 +968,9 @@ mb86950_detach(sc)
 	/* Delete all media. */
 	ifmedia_delete_instance(&sc->sc_media, IFM_INST_ANY);
 
-#if NRND > 0
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->rnd_source);
-#endif
+
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -1036,9 +979,7 @@ mb86950_detach(sc)
 
 #if ESTAR_DEBUG >= 1
 void
-mb86950_dump(level, sc)
-	int level;
-	struct mb86950_softc *sc;
+mb86950_dump(int level, struct mb86950_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;

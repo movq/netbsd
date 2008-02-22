@@ -1,4 +1,4 @@
-/*	$NetBSD: mkstr.c,v 1.11 2003/08/07 11:15:16 agc Exp $	*/
+/*	$NetBSD: mkstr.c,v 1.17 2016/09/05 00:40:29 sevan Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mkstr.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mkstr.c,v 1.11 2003/08/07 11:15:16 agc Exp $");
+__RCSID("$NetBSD: mkstr.c,v 1.17 2016/09/05 00:40:29 sevan Exp $");
 #endif
 #endif /* not lint */
 
@@ -81,19 +81,16 @@ char	*progname;
 const char	usagestr[] =	"usage: %s [ - ] mesgfile prefix file ...\n";
 char	name[100], *np;
 
-void process __P((void));
-int main __P((int, char **));
-int match __P((char *));
-int octdigit __P((char));
-void inithash __P((void));
-int hashit __P((char *, char, unsigned));
-void copystr __P((void));
-int fgetNUL __P((char *, int, FILE *));
+void process(void);
+int match(const char *);
+int octdigit(char);
+void inithash(void);
+long hashit(const char *, char, long);
+void copystr(void);
+int fgetNUL(char *, int, FILE *);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	char addon = 0;
 
@@ -126,7 +123,7 @@ main(argc, argv)
 }
 
 void
-process()
+process(void)
 {
 	int c;
 
@@ -150,10 +147,9 @@ process()
 }
 
 int
-match(ocp)
-	char *ocp;
+match(const char *ocp)
 {
-	char *cp;
+	const char *cp;
 	int c;
 
 	for (cp = ocp + 1; *cp; cp++) {
@@ -169,7 +165,7 @@ match(ocp)
 }
 
 void
-copystr()
+copystr(void)
 {
 	int c, ch;
 	char buf[512];
@@ -229,22 +225,21 @@ copystr()
 	}
 out:
 	*cp = 0;
-	printf("%d", hashit(buf, 1, 0));
+	printf("%ld", hashit(buf, 1, 0));
 }
 
 int
-octdigit(c)
-	char c;
+octdigit(char c)
 {
 
 	return (c >= '0' && c <= '7');
 }
 
 void
-inithash()
+inithash(void)
 {
 	char buf[512];
-	int mesgpt = 0;
+	long mesgpt = 0;
 
 	rewind(mesgread);
 	while (fgetNUL(buf, sizeof buf, mesgread) != 0) {
@@ -257,21 +252,18 @@ inithash()
 
 struct	hash {
 	long	hval;
-	unsigned hpt;
+	long	hpt;
 	struct	hash *hnext;
 } *bucket[NBUCKETS];
 
-int
-hashit(str, really, fakept)
-	char *str;
-	char really;
-	unsigned fakept;
+long
+hashit(const char *str, char really, long fakept)
 {
 	int i;
 	struct hash *hp;
 	char buf[512];
 	long hashval = 0;
-	char *cp;
+	const char *cp;
 
 #ifdef __GNUC__
 	hp = NULL;	/* XXX gcc */
@@ -286,10 +278,10 @@ hashit(str, really, fakept)
 	if (really != 0)
 		for (hp = bucket[i]; hp != 0; hp = hp->hnext)
 		if (hp->hval == hashval) {
-			fseek(mesgread, (long) hp->hpt, 0);
+			fseek(mesgread, hp->hpt, 0);
 			fgetNUL(buf, sizeof buf, mesgread);
 /*
-			fprintf(stderr, "Got (from %d) %s\n", hp->hpt, buf);
+			fprintf(stderr, "Got (from %ld) %s\n", hp->hpt, buf);
 */
 			if (strcmp(buf, str) == 0)
 				break;
@@ -306,7 +298,7 @@ hashit(str, really, fakept)
 		bucket[i] = hp;
 	}
 /*
-	fprintf(stderr, "%s hashed to %ld at %d\n", str, hp->hval, hp->hpt);
+	fprintf(stderr, "%s hashed to %ld at %ld\n", str, hp->hval, hp->hpt);
 */
 	return (hp->hpt);
 }
@@ -315,10 +307,7 @@ hashit(str, really, fakept)
 #include <sys/stat.h>
 
 int
-fgetNUL(obuf, rmdr, file)
-	char *obuf;
-	int rmdr;
-	FILE *file;
+fgetNUL(char *obuf, int rmdr, FILE *file)
 {
 	int c;
 	char *buf = obuf;

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_pipe.c,v 1.61 2007/12/20 23:02:56 dsl Exp $	*/
+/*	$NetBSD: linux_pipe.c,v 1.68 2017/12/26 08:30:57 kamil Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,16 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_pipe.c,v 1.61 2007/12/20 23:02:56 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_pipe.c,v 1.68 2017/12/26 08:30:57 kamil Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
+#include <sys/fcntl.h>
+#include <sys/filedesc.h>
 
+#include <sys/sched.h>
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -54,6 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_pipe.c,v 1.61 2007/12/20 23:02:56 dsl Exp $");
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_ipc.h>
 #include <compat/linux/common/linux_sem.h>
+#include <compat/linux/common/linux_fcntl.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
@@ -61,37 +57,43 @@ __KERNEL_RCSID(0, "$NetBSD: linux_pipe.c,v 1.61 2007/12/20 23:02:56 dsl Exp $");
 /* Not used on: alpha, mips, sparc, sparc64 */
 /* Alpha, mips, sparc and sparc64 pass one of the fds in a register */
 
-/*
- * NetBSD passes fd[0] in retval[0], and fd[1] in retval[1].
- * Linux directly passes the pointer.
- */
 int
-linux_sys_pipe(struct lwp *l, const struct linux_sys_pipe_args *uap, register_t *retval)
+linux_sys_pipe(struct lwp *l, const struct linux_sys_pipe_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int *) pfds;
 	} */
-	int error;
-#ifdef __amd64__
-	int pfds[2];
-#endif
+	int fd[2], error;
 
-	if ((error = sys_pipe(l, 0, retval)))
+	if ((error = pipe1(l, fd, 0)))
 		return error;
 
-#ifndef __amd64__
-	/* Assumes register_t is an int */
-	if ((error = copyout(retval, SCARG(uap, pfds), 2 * sizeof (int))))
+	if ((error = copyout(fd, SCARG(uap, pfds), sizeof(fd))) != 0)
 		return error;
-#else
-	/* On amd64, sizeof(register_t) != sizeof(int) */
-	pfds[0] = (int)retval[0];
-	pfds[1] = (int)retval[1];
+	retval[0] = 0;
+	return 0;
+}
 
-	if ((error = copyout(pfds, SCARG(uap, pfds), sizeof(pfds))))
+int
+linux_sys_pipe2(struct lwp *l, const struct linux_sys_pipe2_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int *) pfds;
+		syscallarg(int) flags;
+	} */
+	int fd[2], error, flags;
+
+	flags = linux_to_bsd_ioflags(SCARG(uap, flags));
+	if ((flags & ~(O_CLOEXEC|O_NONBLOCK)) != 0)
+		return EINVAL;
+
+	if ((error = pipe1(l, fd, flags)))
 		return error;
-#endif
 
+	if ((error = copyout(fd, SCARG(uap, pfds), sizeof(fd))) != 0)
+		return error;
 	retval[0] = 0;
 	return 0;
 }

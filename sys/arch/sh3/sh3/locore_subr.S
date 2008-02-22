@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_subr.S,v 1.43 2008/02/15 04:37:37 uwe Exp $	*/
+/*	$NetBSD: locore_subr.S,v 1.56 2018/02/08 09:05:18 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,7 @@
 #include "opt_cputype.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "opt_modular.h"
 #include "assym.h"
 
 #include <sys/syscall.h>	/* SYS___sigreturn14, SYS_exit */
@@ -46,7 +40,7 @@
 #include <sh3/mmu_sh3.h>
 #include <sh3/mmu_sh4.h>
 
-__KERNEL_RCSID(0, "$NetBSD: locore_subr.S,v 1.43 2008/02/15 04:37:37 uwe Exp $")
+__KERNEL_RCSID(0, "$NetBSD: locore_subr.S,v 1.56 2018/02/08 09:05:18 dholland Exp $")
 
 
 /*
@@ -63,18 +57,19 @@ __KERNEL_RCSID(0, "$NetBSD: locore_subr.S,v 1.43 2008/02/15 04:37:37 uwe Exp $")
 #define SAVEPCB_AND_JUMP(pcb, jump)			  \
 	add	#SF_SIZE, pcb				; \
 	stc.l	r7_bank, @-pcb				; \
-	stc.l	sr, @-pcb				; \
 	stc.l	r6_bank, @-pcb				; \
-	sts.l	pr, @-pcb				; \
-	mov.l	r8, @-pcb				; \
-	mov.l	r9, @-pcb				; \
-	mov.l	r10, @-pcb				; \
-	mov.l	r11, @-pcb				; \
-	mov.l	r12, @-pcb				; \
-	mov.l	r13, @-pcb				; \
+	mov.l	r15, @-pcb				; \
 	mov.l	r14, @-pcb				; \
+	mov.l	r13, @-pcb				; \
+	mov.l	r12, @-pcb				; \
+	mov.l	r11, @-pcb				; \
+	mov.l	r10, @-pcb				; \
+	mov.l	r9, @-pcb				; \
+	mov.l	r8, @-pcb				; \
+	sts.l	pr, @-pcb				; \
+	stc.l	sr, @-pcb				; \
 	jump						; \
-	 mov.l	r15, @-pcb
+	 stc.l	gbr, @-pcb
 
 /* Hide ugly empty argument if we don't need the jump */
 #define SAVEPCB(pcb) \
@@ -84,75 +79,84 @@ __KERNEL_RCSID(0, "$NetBSD: locore_subr.S,v 1.43 2008/02/15 04:37:37 uwe Exp $")
 	.text
 	.align 5	/* align cache line size (32B) */
 /*
- * LINTSTUB: Func: struct lwp *cpu_switchto(struct lwp *olwp, struct lwp *nlwp)
- *	Switch to the specified LWP.
+ * LINTSTUB: Func: lwp_t *cpu_switchto(lwp_t *olwp, lwp_t *nlwp, bool returning)
+ *	Switch from olwp to nlwp.
+ *	If returning is true, we do the fast softint dance
+ *	 and can skip user-space related activities (pmap, ras, etc...)
+ *	Return olwp (in the nlwp context).
  */
 ENTRY(cpu_switchto)
-	tst	r4, r4			/* olwp can be NULL */
+	tst	r4, r4			! olwp can be NULL
 	bt	.L_saved
 
-	/* Save old lwp's context to switchframe */
-	mov.l	@(L_MD_PCB, r4), r1	/* l->l_md.md_pcb */
+	!! save old lwp's context to switchframe
+	mov.l	@(L_MD_PCB, r4), r1	! olwp->l_md.md_pcb
 	SAVEPCB(r1)
 .L_saved:
-	/* free to use callee-save registers now */
+	!! free to use callee-save registers now
 
-	/* old and new lwps are already in r4, r5 */
+	mov.l	.L_curlwp, r2
+	mov.l	.L_curpcb, r3
+	mov.l	@(L_MD_PCB, r5), r10	! nlwp->l_md.md_pcb
+	!tst	r6, r6			! "full" switch?
+	mov.l	r5, @r2			! curlwp = nlwp;
+	!bt/s	.L_prepare_switch
+	 mov.l	r10, @r3		! curpcb = nlwp->l_md.md_pcb;
+
+	!mov	r5, r8		! preserve nlwp
+	!bra	.L_restore_nlwp
+	! mov	r4, r9		! preserve olwp
+
+.L_prepare_switch:
+	!! arguments to cpu_switch_prepare are already in the right registers
 	mov.l	.L_cpu_switch_prepare, r0
-	mov	r5, r8		/* preserve nlwp */
+	mov	r5, r8		! preserve nlwp
 	jsr	@r0
-	 mov	r4, r9		/* preserve olwp */
+	 mov	r4, r9		! preserve olwp
 
-	mov	r8, r4		/* nlwp */
+.L_restore_nlwp:
+	!! restore new lwp's context from switchframe
+	!! r10 is nlwp->l_md.md_pcb == &nlwp->l_md.md_pcb->pcb_sf
 
-	/* Restore new lwp's context from switchframe */
-	mov.l	@(L_MD_PCB, r4), r1	/* l->l_md.md_pcb */
-	/* no additional offset to l->l_md.md_pcb->pcb_sf */
+	!! setup nlwp's kernel stack first
+	mov.l	@(SF_R7_BANK, r10), r0	! kernel stack bottom
+	mov.l	@(SF_R6_BANK, r10), r2	! current trapframe
+	mov.l	@(SF_R15, r10), r3	! current kernel sp
 
-	/* Setup kernel stack first */
-	mov.l	@(SF_R7_BANK, r1), r0	/* stack top */
-	mov.l	@(SF_R6_BANK, r1), r2	/* current frame */
-	mov.l	@(SF_R15, r1), r3	/* current stack */
-	/* During kernel stack switching, all interrupts are disabled. */
-	__EXCEPTION_BLOCK(r1, r5)
-	/* switch to new kernel stack */
-	ldc	r0,	r7_bank
-	ldc	r2,	r6_bank
-	mov	r3,	r15
+	!! while switching kernel stack, all exceptions must be disabled
+	__EXCEPTION_BLOCK(r1, r11)	! saves SR in r11
+	ldc	r0, r7_bank
+	ldc	r2, r6_bank
+	mov	r3, r15
 
 #if !defined(P1_STACK) && defined(SH4)
-	/* Wire u-area */
+	!! wire u-area in TLB
 	MOV	(switch_resume, r0)
 	jsr	@r0
-	 mov	r4,	r8	/* save new lwp */
-	mov	r8,	r4
+	 mov	r8, r4		! nlwp
 #endif
-	__EXCEPTION_UNBLOCK(r0, r1)
-	/* Now OK to use kernel stack. */
+	!! safe to use nlwp's kernel stack now
+	ldc	r11, sr		! __EXCEPTION_UNBLOCK
 
-	mov	r9, r2		/* olwp */
-
-	/* Finish restoring new lwp's context from switchframe */
-	mov.l	@(L_MD_PCB, r4), r1	/* l->l_md.md_pcb */
-	/* no additional offset to l->l_md.md_pcb->pcb_sf */
-	add	#4,	r1		/* r15 already restored */
-	mov.l	@r1+,	r14
-	mov.l	@r1+,	r13
-	mov.l	@r1+,	r12
-	mov.l	@r1+,	r11
-	mov.l	@r1+,	r10
-	mov.l	@r1+,	r9
-	mov.l	@r1+,	r8
-	lds.l	@r1+,	pr
-	add	#4,	r1		/* r6_bank already restored */
-	ldc.l	@r1+,	sr
-					/* r7_bank already restored*/
-
-	/* r2 has the return value; stuff it into r0 now. */
+	!! finish restoring new lwp's context from switchframe
+	!! sf_r15, sf_r6_bank, sf_r7_bank are already restored
+	mov	r10, r1		! &nlwp->l_md.md_pcb->pcb_sf
+	mov	r9, r0		! return olwp (we are about to clobber r9)
+	ldc.l	@r1+, gbr
+	ldc.l	@r1+, sr
+	lds.l	@r1+, pr
+	mov.l	@r1+, r8
+	mov.l	@r1+, r9
+	mov.l	@r1+, r10
+	mov.l	@r1+, r11
+	mov.l	@r1+, r12
+	mov.l	@r1+, r13
 	rts
-	 mov	r2, r0
+	 mov.l	@r1+, r14
 
 	.align	2
+.L_curlwp:		.long	_C_LABEL(curlwp)
+.L_curpcb:		.long	_C_LABEL(curpcb)
 .L_cpu_switch_prepare:	.long	_C_LABEL(cpu_switch_prepare)
 #ifdef SH4
 FUNC_SYMBOL(switch_resume)
@@ -375,7 +379,7 @@ NENTRY(_cpu_spin)
  * cpu_switchto(), so r0 contains previous lwp (the one we are
  * switching from) that we pass to lwp_startup().
  *
- * After that the trampoline should call the function that is indended
+ * After that the trampoline should call the function that is intended
  * to do some additional setup.  When the function returns, the
  * trampoline returns to the user mode.
  */
@@ -384,7 +388,6 @@ NENTRY(lwp_trampoline)
 	mov	r0, r4		/* previous lwp returned by cpu_switchto */
 	jsr	@r1
 	 mov	r10, r5		/* my struct lwp */
-ALTENTRY(lwp_setfunc_trampoline)
 	jsr	@r12
 	 mov	r11, r4
 	__EXCEPTION_RETURN
@@ -396,7 +399,7 @@ ALTENTRY(lwp_setfunc_trampoline)
 	SET_ENTRY_SIZE(lwp_trampoline)
 
 
-#ifdef COMPAT_16
+#if defined(COMPAT_16) || defined(MODULAR)
 /*
  * LINTSTUB: Var: char sigcode[1]
  *	Signal trampoline. copied to top of user stack.
@@ -424,7 +427,7 @@ NENTRY(sigcode)
 .globl	_C_LABEL(esigcode)
 _C_LABEL(esigcode):
 	SET_ENTRY_SIZE(sigcode)
-#endif /* COMPAT_16 */
+#endif /* COMPAT_16 || MODULAR */
 
 
 /*
@@ -445,18 +448,17 @@ ENTRY(copyout)
 	sts.l	pr,	@-r15
 	mov	r15,	r14
 
-	mov	#EFAULT, r0		/* assume there was a problem */
 	mov	r4,	r3
 	mov	r5,	r2
 	mov	r5,	r4
 	add	r6,	r2
 	cmp/hs	r5,	r2		/* bomb if uaddr+len wraps */
-	bf	2f
+	bf	3f
 	mov.l	.L_copyout_VM_MAXUSER_ADDRESS, r1
 	cmp/hi	r1,	r2		/* bomb if uaddr isn't in user space */
-	bt	2f
+	bt	3f
 
-	mov.l	.L_copyout_curpcb, r1	/* set fault hander */
+	mov.l	.L_copyout_curpcb, r1	/* set fault handler */
 	mov.l	@r1,	r2
 	mov.l	.L_copyout_onfault, r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
@@ -477,12 +479,12 @@ ENTRY(copyout)
 	 mov.l	@r15+,	r14
 
 3:
-	bra	1b
+	bra	2b
 	 mov	#EFAULT, r0
 
 	.align 2
 .L_copyout_onfault:
-	.long	3b
+	.long	1b
 .L_copyout_VM_MAXUSER_ADDRESS:
 	.long	VM_MAXUSER_ADDRESS
 .L_copyout_curpcb:
@@ -501,18 +503,17 @@ ENTRY(copyin)
 	sts.l	pr,	@-r15
 	mov	r15,	r14
 
-	mov	#EFAULT, r0		/* assume there was a problem */
 	mov	r4,	r3
 	mov	r5,	r4
 	mov	r3,	r2
 	add	r6,	r2
 	cmp/hs	r3,	r2		/* bomb if uaddr+len wraps */
-	bf	2f
+	bf	3f
 	mov.l	.L_copyin_VM_MAXUSER_ADDRESS, r1
 	cmp/hi	r1,	r2		/* bomb if uaddr isn't in user space */
-	bt	2f
+	bt	3f
 
-	mov.l	.L_copyin_curpcb, r1	/* set fault hander */
+	mov.l	.L_copyin_curpcb, r1	/* set fault handler */
 	mov.l	@r1,	r2
 	mov.l	.L_copyin_onfault, r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
@@ -522,7 +523,7 @@ ENTRY(copyin)
 
 	mov	#0,	r0
 1:
-	mov.l	.L_copyin_curpcb, r1	/* clear fault hander */
+	mov.l	.L_copyin_curpcb, r1	/* clear fault handler */
 	mov.l	@r1,	r2
 	mov	#0,	r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
@@ -533,12 +534,12 @@ ENTRY(copyin)
 	 mov.l	@r15+,	r14
 
 3:
-	bra	1b
+	bra	2b
 	 mov	#EFAULT, r0
 
 	.align 2
 .L_copyin_onfault:
-	.long	3b
+	.long	1b
 .L_copyin_VM_MAXUSER_ADDRESS:
 	.long	VM_MAXUSER_ADDRESS
 .L_copyin_curpcb:
@@ -558,16 +559,15 @@ ENTRY(copyin)
 ENTRY(copyoutstr)
 	mov.l	r8,	@-r15
 
-	mov	#EFAULT, r3		/* assume there was a problem */
 	mov	r4,	r8
 	mov.l	.L_copyoutstr_curpcb, r1	/* set fault handler */
 	mov.l	@r1,	r2
 	mov.l	.L_copyoutstr_onfault, r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
-	mov.l	.L_copyoutstr_VM_MAXUSER_ADDRESS, r1
-	cmp/hi	r1,	r5		/* bomb if udst isn't in user space */
-	bt	4f
-	mov	r1,	r0
+	mov.l	.L_copyoutstr_VM_MAXUSER_ADDRESS, r3
+	cmp/hi	r3,	r5		/* bomb if udst isn't in user space */
+	bt	5f
+	mov	r3,	r0
 	sub	r5,	r0
 	cmp/hi	r6,	r0		/* don't beyond user space */
 	bf	2f
@@ -583,16 +583,16 @@ ENTRY(copyoutstr)
 	tst	r1,	r1
 	bf	2f
 	bra	3f
-	 mov	#0,	r3
+	 mov	#0,	r0
+
 	.align 2
 2:
 	add	#-1,	r0
 	cmp/eq	#-1,	r0
 	bf	1b
-	mov.l	.L_copyoutstr_VM_MAXUSER_ADDRESS, r1
-	cmp/hs	r1,	r5
-	bt	3f
-	mov	#ENAMETOOLONG, r3
+	cmp/hi	r3,	r5
+	bf	6f
+	mov	#0,	r0
 
 3:
 	tst	r7,	r7		/* set lencopied if needed */
@@ -600,23 +600,26 @@ ENTRY(copyoutstr)
 	mov	r4,	r1
 	sub	r8,	r1
 	mov.l	r1,	@r7
+
 4:
 	mov.l	.L_copyoutstr_curpcb, r1	/* clear fault handler */
 	mov.l	@r1,	r2
 	mov	#0,	r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
 
-	mov	r3,	r0
 	rts
 	 mov.l	@r15+,	r8
 
 5:
 	bra	4b
-	 mov	#EFAULT, r3
+	 mov	#EFAULT, r0
+
+6:	bra	3b
+	 mov	#ENAMETOOLONG, r0
 
 	.align 2
 .L_copyoutstr_onfault:
-	.long	5b
+	.long	4b
 .L_copyoutstr_VM_MAXUSER_ADDRESS:
 	.long	VM_MAXUSER_ADDRESS
 .L_copyoutstr_curpcb:
@@ -633,17 +636,17 @@ ENTRY(copyoutstr)
  */
 ENTRY(copyinstr)
 	mov.l	r8,	@-r15
-	mov	#EFAULT, r3		/* assume there was a problem */
+
 	mov	r4,	r8
 	mov.l	.L_copyinstr_curpcb, r1	/* set fault handler */
 	mov.l	@r1,	r2
 	mov.l	.L_copyinstr_onfault, r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
 
-	mov.l	.L_copyinstr_VM_MAXUSER_ADDRESS, r1
-	cmp/hi	r1,	r4		/* bomb if usrc isn't in user space */
-	bt	4f
-	mov	r1,	r0
+	mov.l	.L_copyinstr_VM_MAXUSER_ADDRESS, r3
+	cmp/hi	r3,	r4		/* bomb if usrc isn't in user space */
+	bt	5f
+	mov	r3,	r0
 	sub	r4,	r0
 	cmp/hi	r6,	r0		/* don't beyond user space */
 	bf	2f
@@ -659,16 +662,16 @@ ENTRY(copyinstr)
 	tst	r1,	r1
 	bf	2f
 	bra	3f
-	 mov	#0,	r3
+	 mov	#0,	r0
+
 	.align 2
 2:
 	add	#-1,	r0
 	cmp/eq	#-1,	r0
 	bf	1b
-	mov.l	.L_copyinstr_VM_MAXUSER_ADDRESS, r1
-	cmp/hs	r1,	r5
-	bt	3f
-	mov	#ENAMETOOLONG, r3
+	cmp/hi	r3,	r4
+	bf	6f
+	mov	#0,	r0
 
 3:
 	tst	r7,	r7		/* set lencopied if needed */
@@ -676,23 +679,27 @@ ENTRY(copyinstr)
 	mov	r4,	r1
 	sub	r8,	r1
 	mov.l	r1,	@r7
+
 4:
 	mov.l	.L_copyinstr_curpcb, r1	/* clear fault handler */
 	mov.l	@r1,	r2
 	mov	#0,	r1
 	mov.l	r1,	@(PCB_ONFAULT,r2)
 
-	mov	r3,	r0
 	rts
 	 mov.l	@r15+,	r8
 
 5:
 	bra	4b
-	 mov	#EFAULT, r3
+	 mov	#EFAULT, r0
+
+6:
+	bra	3b
+	 mov	#ENAMETOOLONG, r0
 
 	.align 2
 .L_copyinstr_onfault:
-	.long	5b
+	.long	4b
 .L_copyinstr_VM_MAXUSER_ADDRESS:
 	.long	VM_MAXUSER_ADDRESS
 .L_copyinstr_curpcb:
@@ -1043,13 +1050,9 @@ ENTRY(kcopy)
 	rts
 	 mov.l	@r15+,	r8
 
-2:
-	bra	1b
-	 mov	#EFAULT, r0
-
 	.align 2
 .L_kcopy_onfault:
-	.long	2b
+	.long	1b
 .L_kcopy_curpcb:
 	.long	_C_LABEL(curpcb)
 .L_kcopy_memcpy:

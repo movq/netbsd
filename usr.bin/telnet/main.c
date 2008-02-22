@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.26 2006/12/18 14:18:40 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.30 2016/09/05 00:40:30 sevan Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.3 (Berkeley) 5/30/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.26 2006/12/18 14:18:40 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.30 2016/09/05 00:40:30 sevan Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,8 +70,6 @@ char *ipsec_policy_out = NULL;
 
 int family = AF_UNSPEC;
 
-int main(int, char *[]);
-
 /*
  * Initialize variables.
  */
@@ -92,7 +90,7 @@ tninit(void)
 }
 
 	void
-usage()
+usage(void)
 {
 	fprintf(stderr, "usage: %s %s%s%s%s\n",
 	    prompt,
@@ -325,6 +323,7 @@ main(int argc, char *argv[])
 	argv += optind;
 
 	if (argc) {
+		static char ml[] = "-l";
 		char *args[7];
 		char ** volatile argp;	/* avoid longjmp clobbering */
 
@@ -333,7 +332,7 @@ main(int argc, char *argv[])
 			usage();
 		*argp++ = prompt;
 		if (user) {
-			*argp++ = "-l";
+			*argp++ = ml;
 			*argp++ = user;
 		}
 		*argp++ = argv[0];		/* host */

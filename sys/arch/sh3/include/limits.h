@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.10 2007/10/17 19:57:07 garbled Exp $	*/
+/*	$NetBSD: limits.h,v 1.14 2014/04/21 10:53:48 matt Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -37,14 +37,10 @@
 #include <sys/featuretest.h>
 
 #define	CHAR_BIT	8		/* number of bits in a char */
-#define	MB_LEN_MAX	32		/* no multibyte characters */
-
-#define	SCHAR_MAX	0x7f		/* max value for a signed char */
-#define	SCHAR_MIN	(-0x7f-1)	/* min value for a signed char */
 
 #define	UCHAR_MAX	0xff		/* max value for an unsigned char */
-#define	CHAR_MAX	0x7f		/* max value for a char */
-#define	CHAR_MIN	(-0x7f-1)	/* min value for a char */
+#define	SCHAR_MAX	0x7f		/* max value for a signed char */
+#define	SCHAR_MIN	(-0x7f-1)	/* min value for a signed char */
 
 #define	USHRT_MAX	0xffff		/* max value for an unsigned short */
 #define	SHRT_MAX	0x7fff		/* max value for a short */
@@ -70,6 +66,7 @@
 #endif
 
 #if defined(_NETBSD_SOURCE)
+#define	SSIZE_MIN	INT_MIN		/* min value for a ssize_t */
 #define	SIZE_T_MAX	UINT_MAX	/* max value for a size_t */
 
 #define	UQUAD_MAX	0xffffffffffffffffULL		/* max unsigned quad */
@@ -83,13 +80,13 @@
 #define	LONG_BIT	32
 #define	WORD_BIT	32
 
-#define	DBL_DIG		15
-#define	DBL_MAX		1.7976931348623157E+308
-#define	DBL_MIN		2.2250738585072014E-308
+#define	DBL_DIG		__DBL_DIG__
+#define	DBL_MAX		__DBL_MAX__
+#define	DBL_MIN		__DBL_MIN__
 
-#define	FLT_DIG		6
-#define	FLT_MAX		3.40282347E+38F
-#define	FLT_MIN		1.17549435E-38F
+#define	FLT_DIG		__FLT_DIG__
+#define	FLT_MAX		__FLT_MAX__
+#define	FLT_MIN		__FLT_MIN__
 #endif
 
 #endif /* !_SH3_LIMITS_H_ */

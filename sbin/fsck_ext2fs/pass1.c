@@ -1,4 +1,4 @@
-/*	$NetBSD: pass1.c,v 1.16 2007/11/16 16:55:04 tsutsui Exp $	*/
+/*	$NetBSD: pass1.c,v 1.26 2017/04/21 19:33:56 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,11 +40,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +58,7 @@
 #if 0
 static char sccsid[] = "@(#)pass1.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: pass1.c,v 1.16 2007/11/16 16:55:04 tsutsui Exp $");
+__RCSID("$NetBSD: pass1.c,v 1.26 2017/04/21 19:33:56 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -83,6 +78,7 @@ __RCSID("$NetBSD: pass1.c,v 1.16 2007/11/16 16:55:04 tsutsui Exp $");
 #include "fsck.h"
 #include "extern.h"
 #include "fsutil.h"
+#include "exitvalues.h"
 
 static daddr_t badblk;
 static daddr_t dupblk;
@@ -93,6 +89,7 @@ pass1(void)
 {
 	ino_t inumber;
 	int c, i;
+	size_t j;
 	daddr_t dbase;
 	struct inodesc idesc;
 
@@ -143,9 +140,9 @@ pass1(void)
 	n_files = n_blks = 0;
 	resetinodebuf();
 	for (c = 0; c < sblock.e2fs_ncg; c++) {
-		for (i = 0;
-			i < sblock.e2fs.e2fs_ipg && inumber <= sblock.e2fs.e2fs_icount;
-			i++, inumber++) {
+		for (j = 0;
+			j < sblock.e2fs.e2fs_ipg && inumber <= sblock.e2fs.e2fs_icount;
+			j++, inumber++) {
 			if (inumber < EXT2_ROOTINO) /* XXX */
 				continue;
 			checkinode(inumber, &idesc);
@@ -173,7 +170,7 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	if (mode == 0 || (dp->e2di_dtime != 0 && dp->e2di_nlink == 0)) {
 		if (mode == 0 && (
 		    memcmp(dp->e2di_blocks, zino.e2di_blocks,
-		    (NDADDR + NIADDR) * sizeof(u_int32_t)) ||
+		    (EXT2FS_NDADDR + EXT2FS_NIADDR) * sizeof(u_int32_t)) ||
 		    dp->e2di_mode || inosize(dp))) {
 			pfatal("PARTIALLY ALLOCATED INODE I=%llu",
 			    (unsigned long long)inumber);
@@ -204,10 +201,9 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	}
 	lastino = inumber;
 	if (dp->e2di_dtime != 0) {
-		time_t t = fs2h32(dp->e2di_dtime);
-		char *p = ctime(&t);
-		pwarn("INODE I=%llu HAS DTIME=%12.12s %4.4s",
-		    (unsigned long long)inumber, &p[4], &p[20]);
+		pwarn("INODE I=%llu HAS DTIME=%s",
+		    (unsigned long long)inumber,
+		    print_mtime(fs2h32(dp->e2di_dtime)));
 		if (preen) {
 			printf(" (CORRECTED)\n");
 		}
@@ -243,32 +239,32 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 		 * will detect any garbage after symlink string.
 		 */
 		if (inosize(dp) < EXT2_MAXSYMLINKLEN ||
-		    (EXT2_MAXSYMLINKLEN == 0 && dp->e2di_blocks == 0)) {
+		    (EXT2_MAXSYMLINKLEN == 0 && inonblock(dp) == 0)) {
 			ndb = howmany(inosize(dp), sizeof(u_int32_t));
-			if (ndb > NDADDR) {
-				j = ndb - NDADDR;
+			if (ndb > EXT2FS_NDADDR) {
+				j = ndb - EXT2FS_NDADDR;
 				for (ndb = 1; j > 1; j--)
-					ndb *= NINDIR(&sblock);
-				ndb += NDADDR;
+					ndb *= EXT2_NINDIR(&sblock);
+				ndb += EXT2FS_NDADDR;
 			}
 		}
 	}
 	/* Linux puts things in blocks for FIFO, so skip this check */
 	if (mode != IFIFO) {
-		for (j = ndb; j < NDADDR; j++)
+		for (j = ndb; j < EXT2FS_NDADDR; j++)
 			if (dp->e2di_blocks[j] != 0) {
 				if (debug)
 					printf("bad direct addr: %d\n",
 					    fs2h32(dp->e2di_blocks[j]));
 				goto unknown;
 			}
-		for (j = 0, ndb -= NDADDR; ndb > 0; j++)
-			ndb /= NINDIR(&sblock);
-		for (; j < NIADDR; j++) {
-			if (dp->e2di_blocks[j+NDADDR] != 0) {
+		for (j = 0, ndb -= EXT2FS_NDADDR; ndb > 0; j++)
+			ndb /= EXT2_NINDIR(&sblock);
+		for (; j < EXT2FS_NIADDR; j++) {
+			if (dp->e2di_blocks[j+EXT2FS_NDADDR] != 0) {
 				if (debug)
 					printf("bad indirect addr: %d\n",
-					    fs2h32(dp->e2di_blocks[j+NDADDR]));
+					    fs2h32(dp->e2di_blocks[j+EXT2FS_NDADDR]));
 				goto unknown;
 			}
 		}
@@ -281,11 +277,11 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	}
 	lncntp[inumber] = fs2h16(dp->e2di_nlink);
 	if (dp->e2di_nlink == 0) {
-		zlnp = (struct zlncnt *)malloc(sizeof *zlnp);
+		zlnp = malloc(sizeof *zlnp);
 		if (zlnp == NULL) {
 			pfatal("LINK COUNT TABLE OVERFLOW");
 			if (reply("CONTINUE") == 0)
-				errexit("%s\n", "");
+				exit(FSCK_EXIT_CHECK_FAILED);
 		} else {
 			zlnp->zlncnt = inumber;
 			zlnp->next = zlnhead;
@@ -306,16 +302,17 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	idesc->id_number = inumber;
 	(void)ckinode(dp, idesc);
 	idesc->id_entryno *= btodb(sblock.e2fs_bsize);
-	if (fs2h32(dp->e2di_nblock) != idesc->id_entryno) {
-		pwarn("INCORRECT BLOCK COUNT I=%llu (%d should be %d)",
-		    (unsigned long long)inumber, fs2h32(dp->e2di_nblock),
+	if (inonblock(dp) != (uint32_t)idesc->id_entryno) {
+		pwarn("INCORRECT BLOCK COUNT I=%llu (%llu should be %d)",
+		    (unsigned long long)inumber,
+		    (unsigned long long)inonblock(dp),
 		    idesc->id_entryno);
 		if (preen)
 			printf(" (CORRECTED)\n");
 		else if (reply("CORRECT") == 0)
 			return;
 		dp = ginode(inumber);
-		dp->e2di_nblock = h2fs32(idesc->id_entryno);
+		inosnblock(dp, idesc->id_entryno);
 		inodirty();
 	}
 	return;
@@ -347,7 +344,7 @@ pass1check(struct inodesc *idesc)
 			if (preen)
 				printf(" (SKIPPING)\n");
 			else if (reply("CONTINUE") == 0)
-				errexit("%s\n", "");
+				exit(FSCK_EXIT_CHECK_FAILED);
 			return (STOP);
 		}
 	}
@@ -365,14 +362,14 @@ pass1check(struct inodesc *idesc)
 				if (preen)
 					printf(" (SKIPPING)\n");
 				else if (reply("CONTINUE") == 0)
-					errexit("%s\n", "");
+					exit(FSCK_EXIT_CHECK_FAILED);
 				return (STOP);
 			}
-			new = (struct dups *)malloc(sizeof(struct dups));
+			new = malloc(sizeof(struct dups));
 			if (new == NULL) {
 				pfatal("DUP TABLE OVERFLOW.");
 				if (reply("CONTINUE") == 0)
-					errexit("%s\n", "");
+					exit(FSCK_EXIT_CHECK_FAILED);
 				return (STOP);
 			}
 			new->dup = blkno;

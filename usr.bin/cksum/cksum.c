@@ -1,4 +1,4 @@
-/*	$NetBSD: cksum.c,v 1.41 2007/01/17 00:21:43 hubertf Exp $	*/
+/*	$NetBSD: cksum.c,v 1.48 2015/06/16 22:54:10 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -73,15 +73,15 @@
 
 #include <sys/cdefs.h>
 #if defined(__COPYRIGHT) && !defined(lint)
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)cksum.c	8.2 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: cksum.c,v 1.41 2007/01/17 00:21:43 hubertf Exp $");
+__RCSID("$NetBSD: cksum.c,v 1.48 2015/06/16 22:54:10 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -91,12 +91,12 @@ __RCSID("$NetBSD: cksum.c,v 1.41 2007/01/17 00:21:43 hubertf Exp $");
 #include <errno.h>
 #include <fcntl.h>
 #include <locale.h>
-#include <md5.h>
-#include <md4.h>
 #include <md2.h>
+#include <md4.h>
+#include <md5.h>
+#include <rmd160.h>
 #include <sha1.h>
 #include <sha2.h>
-#include <rmd160.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,15 +104,12 @@ __RCSID("$NetBSD: cksum.c,v 1.41 2007/01/17 00:21:43 hubertf Exp $");
 
 #include "extern.h"
 
-#define HASH_MD2	0
-#define HASH_MD4	1
-#define HASH_MD5	2
-#define HASH_SHA1	3
-#define HASH_RMD160	4
+#define PRINT_NORMAL     0x01
+#define PRINT_QUIET      0x02
 
 typedef char *(*_filefunc)(const char *, char *);
 
-struct hash {
+const struct hash {
 	const char *progname;
 	const char *hashname;
 	void (*stringfunc)(const char *);
@@ -130,12 +127,12 @@ struct hash {
 	{ "md5", "MD5",
 	  MD5String, MD5TimeTrial, MD5TestSuite,
 	  MD5Filter, MD5File },
-	{ "sha1", "SHA1",
-	  SHA1String, SHA1TimeTrial, SHA1TestSuite,
-	  SHA1Filter, (_filefunc) SHA1File },
 	{ "rmd160", "RMD160",
 	  RMD160String, RMD160TimeTrial, RMD160TestSuite,
 	  RMD160Filter, (_filefunc) RMD160File },
+	{ "sha1", "SHA1",
+	  SHA1String, SHA1TimeTrial, SHA1TestSuite,
+	  SHA1Filter, (_filefunc) SHA1File },
 	{ "sha256", "SHA256",
 	  SHA256_String, SHA256_TimeTrial, SHA256_TestSuite,
 	  SHA256_Filter, (_filefunc) SHA256_File },
@@ -148,29 +145,30 @@ struct hash {
 	{ .progname = NULL, },
 };
 
-int	hash_digest_file(char *, struct hash *, int);
-void	requirehash(const char *);
-void	usage(void);
+static int	hash_digest_file(char *, const struct hash *, int);
+__dead static void	requirehash(const char *);
+__dead static void	usage(void);
 
 int
 main(int argc, char **argv)
 {
-	int ch, fd, rval, dosum, pflag, nohashstdin;
+	int ch, fd, rval, pflag, nohashstdin;
 	u_int32_t val;
 	off_t len;
 	char *fn;
 	const char *progname;
 	int (*cfncn) (int, u_int32_t *, off_t *);
 	void (*pfncn) (char *, u_int32_t, off_t);
-	struct hash *hash;
-	int normal, i, check_warn, do_check;
+	const struct hash *hash;
+	int i, check_warn, do_check;
+	int print_flags;
 
 	cfncn = NULL;
 	pfncn = NULL;
-	dosum = pflag = nohashstdin = 0;
-	normal = 0;
+	pflag = nohashstdin = 0;
 	check_warn = 0;
 	do_check = 0;
+	print_flags = 0;
 
 	setlocale(LC_ALL, "");
 
@@ -184,7 +182,6 @@ main(int argc, char **argv)
 		hash = NULL;
 
 		if (!strcmp(progname, "sum")) {
-			dosum = 1;
 			cfncn = csum1;
 			pfncn = psum1;
 		} else {
@@ -193,11 +190,11 @@ main(int argc, char **argv)
 		}
 	}
 
-	while ((ch = getopt(argc, argv, "a:cno:ps:twx")) != -1)
+	while ((ch = getopt(argc, argv, "a:cno:pqs:twx")) != -1)
 		switch(ch) {
 		case 'a':
-			if (hash != NULL || dosum) {
-				warnx("illegal use of -a option\n");
+			if (hash) {
+				warnx("illegal use of -a option");
 				usage();
 			}
 			i = 0;
@@ -228,7 +225,7 @@ main(int argc, char **argv)
 			do_check = 1;
 			break;
 		case 'n':
-			normal = 1;
+			print_flags |= PRINT_NORMAL;
 			break;
 		case 'o':
 			if (hash) {
@@ -251,6 +248,9 @@ main(int argc, char **argv)
 			if (hash == NULL)
 				requirehash("-p");
 			pflag = 1;
+			break;
+		case 'q':
+			print_flags |= PRINT_QUIET;
 			break;
 		case 's':
 			if (hash == NULL)
@@ -305,7 +305,7 @@ main(int argc, char **argv)
 			    argc>0?argv[0]:"stdin");
 		
 		while(fgets(buf, sizeof(buf), f) != NULL) {
-			s=strrchr(buf, '\n');
+			s = strrchr(buf, '\n');
 			if (s)
 				*s = '\0';
 
@@ -317,7 +317,7 @@ main(int argc, char **argv)
 				 * Assume 'normal' output if there's a '('
 				 */
 				p_filename += 1;
-				normal = 0;
+				print_flags &= ~(PRINT_NORMAL);
 
 				p_cksum = strrchr(p_filename, ')');
 				if (p_cksum == NULL) {
@@ -342,7 +342,7 @@ main(int argc, char **argv)
 					/*
 					 * Search proper hash
 					 */
-					struct hash *nhash;
+					const struct hash *nhash;
 					
 					for (nhash = hashes ;
 					     nhash->hashname != NULL;
@@ -371,7 +371,7 @@ main(int argc, char **argv)
 					/*
 					 * 'normal' output, no (ck)sum
 					 */
-					normal = 1;
+					print_flags |= PRINT_NORMAL;
 					nspaces = 1;
 					
 					p_cksum = buf;
@@ -475,7 +475,7 @@ main(int argc, char **argv)
 			if (*argv) {
 				fn = *argv++;
 				if (hash != NULL) {
-					if (hash_digest_file(fn, hash, normal)) {
+					if (hash_digest_file(fn, hash, print_flags)) {
 						warn("%s", fn);
 						rval = 1;
 					}
@@ -503,8 +503,8 @@ main(int argc, char **argv)
 	exit(rval);
 }
 
-int
-hash_digest_file(char *fn, struct hash *hash, int normal)
+static int
+hash_digest_file(char *fn, const struct hash *hash, int flags)
 {
 	char *cp;
 
@@ -512,7 +512,9 @@ hash_digest_file(char *fn, struct hash *hash, int normal)
 	if (cp == NULL)
 		return 1;
 
-	if (normal)
+	if (flags & PRINT_QUIET)
+		printf("%s\n", cp);
+	else if (flags & PRINT_NORMAL)
 		printf("%s %s\n", cp, fn);
 	else
 		printf("%s (%s) = %s\n", hash->hashname, fn, cp);
@@ -522,29 +524,28 @@ hash_digest_file(char *fn, struct hash *hash, int normal)
 	return 0;
 }
 
-void
+static void
 requirehash(const char *flg)
 {
-	warnx("%s flag requires `md2', `md4', `md5', `sha1', or `rmd160'",
-	    flg);
+	warnx("%s flag requires `-a algorithm'", flg);
 	usage();
 }
 
-void
+static void
 usage(void)
 {
+	const char fileargs[] = "[file ... | -c [-w] [sumfile]]";
+	const char sumargs[] = "[-n] [-a algorithm [-ptx] [-s string]] [-o 1|2]";
+	const char hashargs[] = "[-nptx] [-s string]";
 
-	(void)fprintf(stderr, "usage: cksum [-nw] [-a algorithm | -c file ]\n\t\t| [-o 1 | 2]] [file ...]\n");
-	(void)fprintf(stderr, "       sum [-c] [file ...]\n");
-	(void)fprintf(stderr,
-	    "       md2 [-n] [-p | -t | -x | -s string] [file ...]\n");
-	(void)fprintf(stderr,
-	    "       md4 [-n] [-p | -t | -x | -s string] [file ...]\n");
-	(void)fprintf(stderr,
-	    "       md5 [-n] [-p | -t | -x | -s string] [file ...]\n");
-	(void)fprintf(stderr,
-	    "       sha1 [-n] [-p | -t | -x | -s string] [file ...]\n");
-	(void)fprintf(stderr,
-	    "       rmd160 [-n] [-p | -t | -x | -s string] [file ...]\n");
+	(void)fprintf(stderr, "usage: cksum %s\n             %s\n",
+	    sumargs, fileargs);
+	(void)fprintf(stderr, "       sum %s\n           %s\n",
+	    sumargs, fileargs);
+	(void)fprintf(stderr, "       md2 %s %s\n", hashargs, fileargs);
+	(void)fprintf(stderr, "       md4 %s %s\n", hashargs, fileargs);
+	(void)fprintf(stderr, "       md5 %s %s\n", hashargs, fileargs);
+	(void)fprintf(stderr, "       rmd160 %s %s\n", hashargs, fileargs);
+	(void)fprintf(stderr, "       sha1 %s %s\n", hashargs, fileargs);
 	exit(1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: lock_cas.S,v 1.3 2008/02/10 13:32:14 ad Exp $	*/
+/*	$NetBSD: lock_cas.S,v 1.12 2018/01/24 09:04:44 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,9 +29,18 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "opt_multiprocessor.h"
 #include "opt_arm_debug.h"
 
+#include "assym.h"
+
 #include <machine/asm.h>
+
+#include <arm/locore.h>
+
+#if defined(MULTIPROCESSOR) && !defined(_ARM_ARCH_6)
+#error need to write MP support for ucas_* functions
+#endif
 
 	.text
 	.align	0
@@ -50,6 +52,7 @@
 	.word	_C_LABEL(_lock_cas_fail)
 #endif /* ARM_LOCK_CAS_DEBUG */
 
+#ifndef _ARM_ARCH_6
 /*
  * _lock_cas:
  *
@@ -58,25 +61,23 @@
  *	ARM doesn't have a compare-and-swap, so this is implemented
  *	as a restartable atomic sequence.  See irq_dispatch.S.
  *
- *	Returns true if the swap was performed, false if the swap
- *	was not performed.
+ *	Returns the old value whether or not the swap happened.
  *
  * r0	Address of interest.
  * r1	Old value to compare.
  * r2	New value.
  */
+	.globl	_C_LABEL(_lock_cas_end)
 ENTRY_NP(_lock_cas)
 	ldr	r3, [r0]
 	teq	r3, r1
-	bne	1f
-	str	r2, [r0]
-
-	.globl	_C_LABEL(_lock_cas_end)
+	streq	r2, [r0]
 _C_LABEL(_lock_cas_end):
+	mov	r0, r3
 #if defined(ARM_LOCK_CAS_DEBUG)
-	mov	r3, r1			/* save 'old' */
-	ldr	r0, .L_lock_cas_success
-	ldmia	r0, {r1-r2}		/* load ev_count */
+	ldreq	r3, .L_lock_cas_success
+	ldrne	r3, .L_lock_cas_fail
+	ldmia	r3, {r1-r2}		/* load ev_count */
 #if defined(__ARMEB__)
 	adds	r2, r2, #1		/* 64-bit incr (lo) */
 	adc	r1, r1, #0		/* 64-bit incr (hi) */
@@ -84,27 +85,10 @@ _C_LABEL(_lock_cas_end):
 	adds	r1, r1, #1		/* 64-bit incr (lo) */
 	adc	r2, r2, #0		/* 64-bit incr (hi) */
 #endif /* __ARMEB__ */
-	stmia	r0, {r1-r2}		/* store ev_count */
-	mov	r0, r3			/* return 'old' */
-#else
-	mov	r0, r1			/* return 'old' */
+	stmia	r3, {r1-r2}		/* store ev_count */
 #endif /* ARM_LOCK_CAS_DEBUG */
 	RET
-1:
-#if defined(ARM_LOCK_CAS_DEBUG)
-	ldr	r0, .L_lock_cas_fail
-	ldmia	r0, {r1-r2}		/* load ev_count */
-#if defined(__ARMEB__)
-	adds	r2, r2, #1		/* 64-bit incr (lo) */
-	adc	r1, r1, #0		/* 64-bit incr (hi) */
-#else
-	adds	r1, r1, #1		/* 64-bit incr (lo) */
-	adc	r2, r2, #0		/* 64-bit incr (hi) */
-#endif /* __ARMEB__ */
-	stmia	r0, {r1-r2}		/* store ev_count */
-#endif /* ARM_LOCK_CAS_DEBUG */
-	mov	r0, r3			/* return actual value */
-	RET
+END(_lock_cas)
 
 STRONG_ALIAS(_atomic_cas_ulong,_lock_cas)
 STRONG_ALIAS(atomic_cas_ulong,_lock_cas)
@@ -123,3 +107,47 @@ STRONG_ALIAS(_atomic_cas_uint_ni,_lock_cas)
 STRONG_ALIAS(atomic_cas_uint_ni,_lock_cas)
 STRONG_ALIAS(_atomic_cas_ptr_ni,_lock_cas)
 STRONG_ALIAS(atomic_cas_ptr_ni,_lock_cas)
+#endif /* !_ARM_ARCH_6 */
+
+#define SAVE_REGS	push	{r4-r5}
+#define RESTORE_REGS	pop	{r4-r5}
+
+/*
+ * int ucas_32(volatile int32_t *uptr, int32_t old, int32_t new, int32_t *ret);
+ */
+ENTRY(ucas_32)
+	SAVE_REGS
+	GET_CURPCB(r4)
+	adr	r5, .Lucasfault
+	str	r5, [r4, #PCB_ONFAULT]
+
+	.globl	_C_LABEL(ucas_32_ras_start)
+	mov	ip, r0
+_C_LABEL(ucas_32_ras_start):
+#if defined(MULTIPROCESSOR) || defined(_ARM_ARCH_6)
+1:	ldrex	r5, [ip]		/* we should have access */
+	cmp	r1, r5
+	bne	2f
+	strex	r0, r2, [ip]
+	cmp	r0, #0
+	bne	1b
+2:
+#else
+	ldrt	r5, [ip]
+	cmp	r1, r5
+	strteq	r2, [ip]
+	mov	r0, #0
+#endif
+	.size _C_LABEL(ucas_32_ras_start), . - _C_LABEL(ucas_32_ras_start)
+	.globl _C_LABEL(ucas_32_ras_end)
+_C_LABEL(ucas_32_ras_end):
+
+	str	r5, [r3]
+.Lucasfault:
+	movs	r3, #0
+	str	r3, [r4, #PCB_ONFAULT]
+	RESTORE_REGS
+	RET
+END(ucas_32)
+STRONG_ALIAS(ucas_int,ucas_32)
+STRONG_ALIAS(ucas_ptr,ucas_32)

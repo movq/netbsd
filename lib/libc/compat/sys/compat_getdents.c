@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_getdents.c,v 1.2 2007/03/02 13:18:55 nakayama Exp $	*/
+/*	$NetBSD: compat_getdents.c,v 1.6 2012/03/13 22:24:48 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,14 +31,16 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat_getdents.c,v 1.2 2007/03/02 13:18:55 nakayama Exp $");
+__RCSID("$NetBSD: compat_getdents.c,v 1.6 2012/03/13 22:24:48 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
 
 #include "namespace.h"
 #include <sys/types.h>
+#include <assert.h>
 #include <dirent.h>
+#include <stddef.h>
 #include <compat/include/dirent.h>
 #include <string.h>
 
@@ -57,7 +52,9 @@ getdents(int fd, char *buf, size_t nbytes)
 {
 	struct dirent *ndp, *nndp, *endp;
 	struct dirent12 *odp;
+	ino_t ino;
 	int rv;
+	size_t len;
 
 	if ((rv = __getdents30(fd, buf, nbytes)) == -1)
 		return rv;
@@ -74,7 +71,9 @@ getdents(int fd, char *buf, size_t nbytes)
 	for (; ndp < endp; ndp = nndp) {
 		nndp = _DIRENT_NEXT(ndp);
 		/* XXX: avoid unaligned 64-bit access on sparc64 */
-		odp->d_ino = ((u_int32_t *)(void *)&ndp->d_ino)[_QUAD_LOWWORD];
+		/* XXX: does this work? */
+		memcpy(&ino, &ndp->d_ino, sizeof(ino_t));
+		odp->d_ino = (uint32_t)ino;
 		if (ndp->d_namlen >= sizeof(odp->d_name))
 			odp->d_namlen = sizeof(odp->d_name) - 1;
 		else
@@ -82,8 +81,12 @@ getdents(int fd, char *buf, size_t nbytes)
 		odp->d_type = ndp->d_type;
 		(void)memcpy(odp->d_name, ndp->d_name, (size_t)odp->d_namlen);
 		odp->d_name[odp->d_namlen] = '\0';
-		odp->d_reclen = _DIRENT_SIZE(odp);
+		len = _DIRENT_SIZE(odp);
+		_DIAGASSERT(__type_fit(uint16_t, len));
+		odp->d_reclen = (uint16_t)len;
 		odp = _DIRENT_NEXT(odp);
 	}
-	return ((char *)(void *)odp) - buf;
+	ptrdiff_t td = (((char *)(void *)odp) - buf);
+	_DIAGASSERT(__type_fit(int, td));
+	return (int)td;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mscpvar.h,v 1.15 2007/03/04 06:02:14 christos Exp $	*/
+/*	$NetBSD: mscpvar.h,v 1.18 2012/10/27 17:18:27 chs Exp $	*/
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
@@ -113,34 +113,34 @@ struct mscp_xi {
 
 struct	mscp_ctlr {
 	void	(*mc_ctlrdone)		/* controller operation complete */
-	   (struct device *);
+	   (device_t);
 	void	(*mc_go)		/* device-specific start routine */
-	   (struct device *, struct mscp_xi *);
+	   (device_t, struct mscp_xi *);
 	void	(*mc_saerror)		/* ctlr error handling */
-	   (struct device *, int);
+	   (device_t, int);
 };
 
 struct mscp_softc;
 
 struct	mscp_device {
 	void	(*me_dgram)	/* error datagram */
-	   (struct device *, struct mscp *, struct mscp_softc *);
+	   (device_t, struct mscp *, struct mscp_softc *);
 	void	(*me_iodone)	/* normal I/O is done */
-	   (struct device *, struct buf *);
+	   (device_t, struct buf *);
 	int	(*me_online)	/* drive on line */
-	   (struct device *, struct mscp *);
+	   (device_t, struct mscp *);
 	int	(*me_gotstatus) /* got unit status */
-	   (struct device *, struct mscp *);
+	   (device_t, struct mscp *);
 	void	(*me_replace)	/* replace done */
-	   (struct device *, struct mscp *);
+	   (device_t, struct mscp *);
 	int	(*me_ioerr)	/* read or write failed */
-	   (struct device *, struct mscp *, struct buf *);
+	   (device_t, struct mscp *, struct buf *);
 	void	(*me_bb)	/* B_BAD io done */
-	   (struct device *, struct mscp *, struct buf *);
+	   (device_t, struct mscp *, struct buf *);
 	void	(*me_fillin)	/* Fill in mscp info for this drive */
 	   (struct buf *,struct mscp *);
 	void	(*me_cmddone)	/* Non-data transfer operation is done */
-	   (struct device *, struct mscp *);
+	   (device_t, struct mscp *);
 };
 
 /*
@@ -183,6 +183,14 @@ struct	drive_attach_args {
 #define MSCP_FAILED	1		/* no go */
 #define MSCP_RESTARTED	2		/* transfer restarted */
 
+/* Work item for autoconf setup */
+struct mscp_work {
+	struct work mw_work;
+	struct mscp_softc *mw_mi;
+	struct mscp mw_mp;
+	SLIST_ENTRY(mscp_work) mw_list;
+};
+
 /*
  * Per device information.
  *
@@ -198,7 +206,7 @@ struct	drive_attach_args {
  * been handed out; b_actf is that place.
  */
 struct mscp_softc {
-	struct	device mi_dev;		/* Autoconf stuff */
+	device_t mi_dev;		/* Autoconf stuff */
 	struct	mscp_ri mi_cmd;		/* MSCP command ring info */
 	struct	mscp_ri mi_rsp;		/* MSCP response ring info */
 	bus_dma_tag_t	mi_dmat;
@@ -210,7 +218,7 @@ struct mscp_softc {
 	char	mi_wantcredits;		/* waiting for transfer credits */
 	struct	mscp_ctlr *mi_mc;	/* Pointer to parent's mscp_ctlr */
 	struct	mscp_device *mi_me;	/* Pointer to child's mscp_device */
-	struct	device **mi_dp;		/* array of backpointers */
+	device_t *mi_dp;		/* array of backpointers */
 	int	mi_driveno;		/* Max physical drive number found */
 	char	mi_ctlrnr;		/* Phys ctlr nr */
 	char	mi_adapnr;		/* Phys adapter nr */
@@ -224,6 +232,9 @@ struct mscp_softc {
 	bus_space_handle_t mi_sah;	/* status & address (read part) */
 	bus_space_handle_t mi_swh;	/* status & address (write part) */
 	struct bufq_state *mi_resq;	/* While waiting for packets */
+	struct workqueue *mi_wq;	/* Autoconf workqueue */
+	kmutex_t mi_mtx;		/* Freelist mutex */
+	SLIST_HEAD(, mscp_work) mi_freelist; /* Work item freelist */
 };
 
 /* mi_flags */
@@ -275,8 +286,9 @@ void	mscp_dorsp(struct mscp_softc *);
 int	mscp_decodeerror(const char *, struct mscp *, struct mscp_softc *);
 int	mscp_print(void *, const char *);
 void	mscp_hexdump(struct mscp *);
-void	mscp_strategy(struct buf *, struct device *);
+void	mscp_strategy(struct buf *, device_t);
 void	mscp_printtype(int, int);
 int	mscp_waitstep(struct mscp_softc *, int, int);
 void	mscp_dgo(struct mscp_softc *, struct mscp_xi *);
 void	mscp_intr(struct mscp_softc *);
+void	mscp_worker(struct work *, void *);

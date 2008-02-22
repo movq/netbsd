@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.2 2007/10/17 19:54:18 garbled Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.6 2011/07/01 19:03:08 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,13 +30,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2 2007/10/17 19:54:18 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.6 2011/07/01 19:03:08 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pmppc.h>
 #include <arch/evbppc/pmppc/dev/mainbus.h>
 
@@ -56,10 +49,10 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2 2007/10/17 19:54:18 garbled Exp $");
 #error	A cpu device is now required
 #endif
 
-int	mainbus_match(struct device *, struct cfdata *, void *);
-void	mainbus_attach(struct device *, struct device *, void *);
+int	mainbus_match(device_t, cfdata_t, void *);
+void	mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
 static int mainbus_print(void *, const char *);
@@ -68,14 +61,14 @@ static int mainbus_print(void *, const char *);
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(struct device *parent, struct cfdata *match, void *aux)
+mainbus_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return 1;
 }
 
 static int
-mainbus_submatch(struct device *parent, struct cfdata *cf,
+mainbus_submatch(device_t parent, cfdata_t cf,
 		 const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args *maa = aux;
@@ -104,15 +97,14 @@ mainbus_print(void *aux, const char *pnp)
  * Attach the mainbus.
  */
 void
-mainbus_attach(struct device *parent, struct device *self, void *aux)
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args maa;
 
-	printf(": Artesyn PM/PPC\n");
-	printf("%s: %sPCI bus Monarch\n", self->dv_xname,
+	aprint_normal(": Artesyn PM/PPC\n");
+	aprint_normal_dev(self, "%sPCI bus Monarch\n",
 	       a_config.a_is_monarch ? "" : "not");
-	printf("%s: boot from %s, %sECC, %s L2 cache\n",
-	       self->dv_xname,
+	aprint_normal_dev(self, "boot from %s, %sECC, %s L2 cache\n",
 	       a_config.a_boot_device == A_BOOT_ROM ? "ROM" : "flash",
 	       a_config.a_has_ecc ? "" : "no ",
 	       a_config.a_l2_cache == A_CACHE_PARITY ? "parity" :
@@ -157,16 +149,16 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 	config_found(self, &maa, mainbus_print);
 }
 
-static int	cpu_match(struct device *, struct cfdata *, void *);
-static void	cpu_attach(struct device *, struct device *, void *);
+static int	cpu_match(device_t, cfdata_t, void *);
+static void	cpu_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(cpu, sizeof(struct device),
+CFATTACH_DECL_NEW(cpu, 0,
     cpu_match, cpu_attach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
 
 int
-cpu_match(struct device *parent, struct cfdata *cf, void *aux)
+cpu_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *maa = aux;
 
@@ -180,7 +172,7 @@ cpu_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-cpu_attach(struct device *parent, struct device *self, void *aux)
+cpu_attach(device_t parent, device_t self, void *aux)
 {
 	(void) cpu_attach_common(self, 0);
 }

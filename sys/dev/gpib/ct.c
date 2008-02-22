@@ -1,4 +1,4 @@
-/*	$NetBSD: ct.c,v 1.13 2008/01/02 11:48:37 ad Exp $ */
+/*	$NetBSD: ct.c,v 1.29 2017/10/28 04:53:56 riastradh Exp $ */
 
 /*-
  * Copyright (c) 1996-2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,7 @@
  */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -74,46 +68,6 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: rd.c 1.44 92/12/26$
- *
- *	@(#)rd.c	8.2 (Berkeley) 5/19/94
- */
-
-/*
  * CS/80 cartridge tape driver (HP9144, HP88140, HP9145)
  *
  * Reminder:
@@ -128,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.13 2008/01/02 11:48:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.29 2017/10/28 04:53:56 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -146,6 +100,8 @@ __KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.13 2008/01/02 11:48:37 ad Exp $");
 #include <dev/gpib/gpibvar.h>
 #include <dev/gpib/cs80busvar.h>
 
+#include "ioconf.h"
+
 /* number of eof marks to remember */
 #define EOFS	128
 
@@ -162,7 +118,7 @@ int ctdebug = 0xff;
 #endif
 
 struct	ct_softc {
-	struct	device sc_dev;
+	device_t sc_dev;
 
 	gpib_chipset_tag_t sc_ic;
 	gpib_handle_t sc_hdl;
@@ -198,13 +154,13 @@ struct	ct_softc {
 	int	sc_eofs[EOFS];
 };
 
-int	ctmatch(struct device *, struct cfdata *, void *);
-void	ctattach(struct device *, struct device *, void *);
+int	ctmatch(device_t, cfdata_t, void *);
+void	ctattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ct, sizeof(struct ct_softc),
+CFATTACH_DECL_NEW(ct, sizeof(struct ct_softc),
 	ctmatch, ctattach, NULL, NULL);
 
-int	ctident(struct device *, struct ct_softc *,
+int	ctident(device_t, struct ct_softc *,
 	    struct cs80bus_attach_args *);
 
 int	ctlookup(int, int, int);
@@ -227,15 +183,30 @@ dev_type_ioctl(ctioctl);
 dev_type_strategy(ctstrategy);
 
 const struct bdevsw ct_bdevsw = {
-	ctopen, ctclose, ctstrategy, ctioctl, nodump, nosize, D_TAPE
+	.d_open = ctopen,
+	.d_close = ctclose,
+	.d_strategy = ctstrategy,
+	.d_ioctl = ctioctl,
+	.d_dump = nodump,
+	.d_psize = nosize,
+	.d_discard = nodiscard,
+	.d_flag = D_TAPE
 };
 
 const struct cdevsw ct_cdevsw = {
-	ctopen, ctclose, ctread, ctwrite, ctioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_TAPE
+	.d_open = ctopen,
+	.d_close = ctclose,
+	.d_read = ctread,
+	.d_write = ctwrite,
+	.d_ioctl = ctioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TAPE
 };
-
-extern struct cfdriver ct_cd;
 
 struct	ctinfo {
 	short	hwid;
@@ -256,10 +227,7 @@ int	nctinfo = sizeof(ctinfo) / sizeof(ctinfo[0]);
 #define	CTUNIT(x)	(minor(x) & 0x03)
 
 int
-ctlookup(id, slave, punit)
-	int id;
-	int slave;
-	int punit;
+ctlookup(int id, int slave, int punit)
 {
 	int i;
 
@@ -272,10 +240,7 @@ ctlookup(id, slave, punit)
 }
 
 int
-ctmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ctmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct cs80bus_attach_args *ca = aux;
 	int i;
@@ -287,9 +252,7 @@ ctmatch(parent, match, aux)
 }
 
 void
-ctattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ctattach(device_t parent, device_t self, void *aux)
 {
 	struct ct_softc *sc = device_private(self);
 	struct cs80bus_attach_args *ca = aux;
@@ -305,13 +268,15 @@ ctattach(parent, self, aux)
 		return;
 
 	if (cs80reset(parent, sc->sc_slave, sc->sc_punit)) {
-		printf("\n%s: can't reset device\n", sc->sc_dev.dv_xname);
+		aprint_normal("\n");
+		aprint_error_dev(sc->sc_dev, "can't reset device\n");
 		return;
 	}
 
 	if (cs80describe(parent, sc->sc_slave, sc->sc_punit, &csd)) {
-		printf("\n%s: didn't respond to describe command\n",
-		    sc->sc_dev.dv_xname);
+		aprint_normal("\n");
+		aprint_error_dev(sc->sc_dev,
+		    "didn't respond to describe command\n");
 		return;
 	}
 	memset(name, 0, sizeof(name));
@@ -323,7 +288,7 @@ ctattach(parent, self, aux)
 #ifdef DEBUG
 	if (ctdebug & CDB_IDENT) {
 		printf("\n%s: name: ('%s')\n",
-		    sc->sc_dev.dv_xname,name);
+		    device_xname(sc->sc_dev),name);
 		printf("  iuw %x, maxxfr %d, ctype %d\n",
 		    csd.d_iuw, csd.d_cmaxxfr, csd.d_ctype);
 		printf("  utype %d, bps %d, blkbuf %d, burst %d, blktime %d\n",
@@ -335,7 +300,7 @@ ctattach(parent, self, aux)
 		printf("  maxcyl/head/sect %d/%d/%d, maxvsect %d, inter %d\n",
 		    csd.d_maxcylhead >> 8 , csd.d_maxcylhead & 0xff,
 		    csd.d_maxsect, csd.d_maxvsectl, csd.d_interleave);
-		printf("%s", sc->sc_dev.dv_xname);
+		printf("%s", device_xname(sc->sc_dev));
 	}
 #endif
 
@@ -369,7 +334,7 @@ ctattach(parent, self, aux)
 
 	if (gpibregister(sc->sc_ic, sc->sc_slave, ctcallback, sc,
 	    &sc->sc_hdl)) {
-		printf("%s: can't register callback\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "can't register callback\n");
 		return;
 	}
 
@@ -378,15 +343,12 @@ ctattach(parent, self, aux)
 
 /*ARGSUSED*/
 int
-ctopen(dev, flag, type, l)
-	dev_t dev;
-	int flag, type;
-	struct lwp *l;
+ctopen(dev_t dev, int flag, int type, struct lwp *l)
 {
 	struct ct_softc *sc;
 	u_int8_t opt;
 
-	sc = device_lookup(&ct_cd, CTUNIT(dev));
+	sc = device_lookup_private(&ct_cd, CTUNIT(dev));
 	if (sc == NULL || (sc->sc_flags & CTF_ALIVE) == 0)
 		return (ENXIO);
 
@@ -398,7 +360,7 @@ ctopen(dev, flag, type, l)
 	else
 		opt = C_SPAR;
 
-	if (cs80setoptions(device_parent(&sc->sc_dev), sc->sc_slave,
+	if (cs80setoptions(device_parent(sc->sc_dev), sc->sc_slave,
 	    sc->sc_punit, opt))
 		return (EBUSY);
 
@@ -410,14 +372,11 @@ ctopen(dev, flag, type, l)
 
 /*ARGSUSED*/
 int
-ctclose(dev, flag, fmt, l)
-	dev_t dev;
-	int flag, fmt;
-	struct lwp *l;
+ctclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct ct_softc *sc;
 
-	sc = device_lookup(&ct_cd, CTUNIT(dev));
+	sc = device_lookup_private(&ct_cd, CTUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -430,7 +389,7 @@ ctclose(dev, flag, fmt, l)
 		else
 			sc->sc_eofp--;
 		DPRINTF(CDB_BSF, ("%s: ctclose backup eofs prt %d blk %d\n",
-		    sc->sc_dev.dv_xname, sc->sc_eofp,
+		    device_xname(sc->sc_dev), sc->sc_eofp,
 		    sc->sc_eofs[sc->sc_eofp]));
 	}
 
@@ -444,16 +403,13 @@ ctclose(dev, flag, fmt, l)
 }
 
 void
-ctcommand(dev, cmd, cnt)
-	dev_t dev;
-	int cmd;
-	int cnt;
+ctcommand(dev_t dev, int cmd, int cnt)
 {
 	struct ct_softc *sc;
 	struct buf *bp;
 	struct buf *nbp = 0;
 
-	sc = device_lookup(&ct_cd, CTUNIT(dev));
+	sc = device_lookup_private(&ct_cd, CTUNIT(dev));
 	bp = &sc->sc_bufstore;
 
 	DPRINTF(CDB_FOLLOW, ("ctcommand: called\n"));
@@ -490,7 +446,7 @@ ctcommand(dev, cmd, cnt)
 			sc->sc_blkno = sc->sc_eofs[sc->sc_eofp];
 			sc->sc_eofp--;
 			DPRINTF(CDB_BSF, ("%s: backup eof pos %d blk %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_eofp,
+			    device_xname(sc->sc_dev), sc->sc_eofp,
 			    sc->sc_eofs[sc->sc_eofp]));
 		}
 		ctstrategy(bp);
@@ -503,20 +459,20 @@ ctcommand(dev, cmd, cnt)
 }
 
 void
-ctstrategy(bp)
-	struct buf *bp;
+ctstrategy(struct buf *bp)
 {
 	struct ct_softc *sc;
 	int s;
 
-	DPRINTF(CDB_FOLLOW, ("cdstrategy(%p): dev %x, bn %x, bcount %lx, %c\n",
+	DPRINTF(CDB_FOLLOW, ("cdstrategy(%p): dev %" PRIx64 ", bn %" PRIx64
+	    ", bcount %x, %c\n",
 	    bp, bp->b_dev, bp->b_blkno, bp->b_bcount,
 	    (bp->b_flags & B_READ) ? 'R' : 'W'));
 
-	sc = device_lookup(&ct_cd, CTUNIT(bp->b_dev));
+	sc = device_lookup_private(&ct_cd, CTUNIT(bp->b_dev));
 
 	s = splbio();
-	BUFQ_PUT(sc->sc_tab, bp);
+	bufq_put(sc->sc_tab, bp);
 	if (sc->sc_active == 0) {
 		sc->sc_active = 1;
 		ctustart(sc);
@@ -525,12 +481,11 @@ ctstrategy(bp)
 }
 
 void
-ctustart(sc)
-	struct ct_softc *sc;
+ctustart(struct ct_softc *sc)
 {
 	struct buf *bp;
 
-	bp = BUFQ_PEEK(sc->sc_tab);
+	bp = bufq_peek(sc->sc_tab);
 	sc->sc_addr = bp->b_data;
 	sc->sc_resid = bp->b_bcount;
 	if (gpibrequest(sc->sc_ic, sc->sc_hdl))
@@ -538,8 +493,7 @@ ctustart(sc)
 }
 
 void
-ctstart(sc)
-	struct ct_softc *sc;
+ctstart(struct ct_softc *sc)
 {
 	struct buf *bp;
 	struct ct_ulcmd ul;
@@ -549,7 +503,7 @@ ctstart(sc)
 	slave = sc->sc_slave;
 	punit = sc->sc_punit;
 
-	bp = BUFQ_PEEK(sc->sc_tab);
+	bp = bufq_peek(sc->sc_tab);
 	if ((sc->sc_flags & CTF_CMD) && sc->sc_bp == bp) {
 		switch(sc->sc_cmd) {
 		case MTFSF:
@@ -563,7 +517,7 @@ ctstart(sc)
 			sc->sc_blkno = 0;
 			ul.unit = CS80CMD_SUNIT(punit);
 			ul.cmd = CS80CMD_UNLOAD;
-			(void) cs80send(device_parent(&sc->sc_dev), slave,
+			(void) cs80send(device_parent(sc->sc_dev), slave,
 			    punit, CS80CMD_SCMD, &ul, sizeof(ul));
 			break;
 
@@ -572,7 +526,7 @@ ctstart(sc)
 			sc->sc_flags |= CTF_WRT;
 			wfm.unit = CS80CMD_SUNIT(sc->sc_punit);
 			wfm.cmd = CS80CMD_WFM;
-			(void) cs80send(device_parent(&sc->sc_dev), slave,
+			(void) cs80send(device_parent(sc->sc_dev), slave,
 			    punit, CS80CMD_SCMD, &wfm, sizeof(wfm));
 			ctaddeof(sc);
 			break;
@@ -588,7 +542,7 @@ ctstart(sc)
 		case MTREW:
 			sc->sc_blkno = 0;
 			DPRINTF(CDB_BSF, ("%s: clearing eofs\n",
-			    sc->sc_dev.dv_xname));
+			    device_xname(sc->sc_dev)));
 			for (i=0; i<EOFS; i++)
 				sc->sc_eofs[i] = 0;
 			sc->sc_eofp = 0;
@@ -603,7 +557,7 @@ gotaddr:
 			sc->sc_ioc.len = htobe32(0);
 			sc->sc_ioc.nop3 = CS80CMD_NOP;
 			sc->sc_ioc.cmd = CS80CMD_READ;
-			(void) cs80send(device_parent(&sc->sc_dev), slave,
+			(void) cs80send(device_parent(sc->sc_dev), slave,
 			    punit, CS80CMD_SCMD, &sc->sc_ioc,
 			    sizeof(sc->sc_ioc));
 			break;
@@ -639,7 +593,7 @@ mustio:
 			sc->sc_ioc.cmd = CS80CMD_WRITE;
 			sc->sc_flags |= (CTF_WRT | CTF_WRTTN);
 		}
-		(void) cs80send(device_parent(&sc->sc_dev), slave, punit,
+		(void) cs80send(device_parent(sc->sc_dev), slave, punit,
 		    CS80CMD_SCMD, &sc->sc_ioc, sizeof(sc->sc_ioc));
 	}
 	gpibawait(sc->sc_ic);
@@ -649,9 +603,7 @@ mustio:
  * Hideous grue to handle EOF/EOT (mostly for reads)
  */
 void
-cteof(sc, bp)
-	struct ct_softc *sc;
-	struct buf *bp;
+cteof(struct ct_softc *sc, struct buf *bp)
 {
 	long blks;
 
@@ -669,14 +621,14 @@ cteof(sc, bp)
 	 * we really read and update b_resid.
 	 */
 	blks = sc->sc_stat.c_blk - sc->sc_blkno - 1;
-	DPRINTF(CDB_FILES, ("cteof: bc %ld oblk %d nblk %d read %ld, resid %ld\n",
+	DPRINTF(CDB_FILES,
+	    ("cteof: bc %d oblk %d nblk %d read %ld, resid %ld\n",
 	    bp->b_bcount, sc->sc_blkno, sc->sc_stat.c_blk,
 	    blks, bp->b_bcount - CTKTOB(blks)));
 	if (blks == -1) { /* 9145 on EOF does not change sc_stat.c_blk */
 		blks = 0;
 		sc->sc_blkno++;
-	}
-	else {
+	} else {
 		sc->sc_blkno = sc->sc_stat.c_blk;
 	}
 	bp->b_resid = bp->b_bcount - CTKTOB(blks);
@@ -716,9 +668,7 @@ cteof(sc, bp)
 
 
 void
-ctcallback(v, action)
-	void *v;
-	int action;
+ctcallback(void *v, int action)
 {
 	struct ct_softc *sc = v;
 
@@ -740,8 +690,7 @@ ctcallback(v, action)
 }
 
 void
-ctintr(sc)
-	struct ct_softc *sc;
+ctintr(struct ct_softc *sc)
 {
 	struct buf *bp;
 	u_int8_t stat;
@@ -751,9 +700,9 @@ ctintr(sc)
 	slave = sc->sc_slave;
 	punit = sc->sc_punit;
 
-	bp = BUFQ_PEEK(sc->sc_tab);
+	bp = bufq_peek(sc->sc_tab);
 	if (bp == NULL) {
-		printf("%s: bp == NULL\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "bp == NULL\n");
 		return;
 	}
 	if (sc->sc_flags & CTF_IO) {
@@ -781,9 +730,10 @@ ctintr(sc)
 		(void) gpibrecv(sc->sc_ic, slave, CS80CMD_EXEC, &sc->sc_stat,
 		    sizeof(sc->sc_stat));
 		(void) gpibrecv(sc->sc_ic, slave, CS80CMD_QSTAT, &stat, 1);
-		DPRINTF(CDB_FILES, ("ctintr: return stat 0x%x, A%x F%x blk %d\n",
-			       stat, sc->sc_stat.c_aef,
-			       sc->sc_stat.c_fef, sc->sc_stat.c_blk));
+		DPRINTF(CDB_FILES,
+		    ("ctintr: return stat 0x%x, A%x F%x blk %d\n",
+			stat, sc->sc_stat.c_aef,
+			sc->sc_stat.c_fef, sc->sc_stat.c_blk));
 		if (stat == 0) {
 			if (sc->sc_stat.c_aef & (AEF_EOF | AEF_EOV)) {
 				cteof(sc, bp);
@@ -803,18 +753,18 @@ ctintr(sc)
 				if (sc->sc_stat.c_aef & 0x4000)
 					tprintf(sc->sc_tpr,
 					    "%s: uninitialized media\n",
-					    sc->sc_dev.dv_xname);
+					    device_xname(sc->sc_dev));
 				if (sc->sc_stat.c_aef & 0x1000)
 					tprintf(sc->sc_tpr,
 					    "%s: not ready\n",
-					    sc->sc_dev.dv_xname);
+					    device_xname(sc->sc_dev));
 				if (sc->sc_stat.c_aef & 0x0800)
 					tprintf(sc->sc_tpr,
 					    "%s: write protect\n",
-					    sc->sc_dev.dv_xname);
+					    device_xname(sc->sc_dev));
 			} else {
 				printf("%s err: v%d u%d ru%d bn%d, ",
-				    sc->sc_dev.dv_xname,
+				    device_xname(sc->sc_dev),
 				    (sc->sc_stat.c_vu>>4)&0xF,
 				    sc->sc_stat.c_vu&0xF,
 				    sc->sc_stat.c_pend,
@@ -826,8 +776,7 @@ ctintr(sc)
 				    sc->sc_stat.c_ief);
 			}
 		} else
-			printf("%s: request status failed\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev, "request status failed\n");
 		bp->b_error = EIO;
 		goto done;
 	} else
@@ -875,15 +824,13 @@ done:
 }
 
 void
-ctdone(sc, bp)
-	struct ct_softc *sc;
-	struct buf *bp;
+ctdone(struct ct_softc *sc, struct buf *bp)
 {
 
-	(void)BUFQ_GET(sc->sc_tab);
+	(void)bufq_get(sc->sc_tab);
 	biodone(bp);
 	gpibrelease(sc->sc_ic, sc->sc_hdl);
-	if (BUFQ_PEEK(sc->sc_tab) == NULL) {
+	if (bufq_peek(sc->sc_tab) == NULL) {
 		sc->sc_active = 0;
 		return;
 	}
@@ -891,19 +838,13 @@ ctdone(sc, bp)
 }
 
 int
-ctread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+ctread(dev_t dev, struct uio *uio, int flags)
 {
 	return (physio(ctstrategy, NULL, dev, B_READ, minphys, uio));
 }
 
 int
-ctwrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+ctwrite(dev_t dev, struct uio *uio, int flags)
 {
 	/* XXX: check for hardware write-protect? */
 	return (physio(ctstrategy, NULL, dev, B_WRITE, minphys, uio));
@@ -911,12 +852,7 @@ ctwrite(dev, uio, flags)
 
 /*ARGSUSED*/
 int
-ctioctl(dev, cmd, data, flag, l)
-	dev_t dev;
-	u_long cmd;
-	int flag;
-	void *data;
-	struct lwp *l;
+ctioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct mtop *op;
 	int cnt;
@@ -956,8 +892,7 @@ ctioctl(dev, cmd, data, flag, l)
 }
 
 void
-ctaddeof(sc)
-	struct ct_softc *sc;
+ctaddeof(struct ct_softc *sc)
 {
 
 	if (sc->sc_eofp == EOFS - 1)
@@ -971,6 +906,6 @@ ctaddeof(sc)
 			sc->sc_eofs[sc->sc_eofp] = sc->sc_blkno - 1;
 	}
 	DPRINTF(CDB_BSF, ("%s: add eof pos %d blk %d\n",
-		       sc->sc_dev.dv_xname, sc->sc_eofp,
+		       device_xname(sc->sc_dev), sc->sc_eofp,
 		       sc->sc_eofs[sc->sc_eofp]));
 }

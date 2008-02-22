@@ -1,4 +1,4 @@
-/*	$NetBSD: pcnfsd_v1.c,v 1.3 1997/10/25 13:45:59 lukem Exp $	*/
+/*	$NetBSD: pcnfsd_v1.c,v 1.5 2018/01/23 21:06:25 sevan Exp $	*/
 
 /* RE_SID: @(%)/usr/dosnfs/shades_SCCS/unix/pcnfsd/v2/src/SCCS/s.pcnfsd_v1.c 1.1 91/09/03 12:41:50 SMI */
 /*
@@ -61,18 +61,14 @@ int     buggit = 0;
 
 /*ARGSUSED*/
 void   *
-pcnfsd_null_1_svc(arg, req)
-	void   *arg;
-	struct svc_req *req;
+pcnfsd_null_1_svc(void *arg, struct svc_req *req)
 {
 	static char dummy;
 	return ((void *) &dummy);
 }
 
 auth_results *
-pcnfsd_auth_1_svc(arg, req)
-	auth_args *arg;
-	struct svc_req *req;
+pcnfsd_auth_1_svc(auth_args *arg, struct svc_req *req)
 {
 	static auth_results r;
 
@@ -100,7 +96,7 @@ pcnfsd_auth_1_svc(arg, req)
 #endif
 
 	p = get_password(uname);
-	if (p == (struct passwd *) NULL)
+	if (p == NULL)
 		return (&r);
 
 	c1 = strlen(pw);
@@ -124,9 +120,7 @@ pcnfsd_auth_1_svc(arg, req)
 }
 
 pr_init_results *
-pcnfsd_pr_init_1_svc(pi_arg, req)
-	pr_init_args *pi_arg;
-	struct svc_req *req;
+pcnfsd_pr_init_1_svc(pr_init_args *pi_arg, struct svc_req *req)
 {
 	static pr_init_results pi_res;
 
@@ -137,9 +131,7 @@ pcnfsd_pr_init_1_svc(pi_arg, req)
 }
 
 pr_start_results *
-pcnfsd_pr_start_1_svc(ps_arg, req)
-	pr_start_args *ps_arg;
-	struct svc_req *req;
+pcnfsd_pr_start_1_svc(pr_start_args *ps_arg, struct svc_req *req)
 {
 	static pr_start_results ps_res;
 	char   *dummyptr;

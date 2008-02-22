@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.8 2007/10/17 19:54:40 garbled Exp $	*/
+/*	$NetBSD: limits.h,v 1.15 2013/04/11 00:57:34 christos Exp $	*/
 
 /*	$OpenBSD: limits.h,v 1.2 2000/07/31 20:06:02 millert Exp $	*/
 
@@ -56,11 +56,12 @@
  *	@(#)limits.h	8.3 (Berkeley) 1/4/94
  */
 
+#ifndef	_MACHINE_LIMITS_H_
+#define	_MACHINE_LIMITS_H_
+
 #include <sys/featuretest.h>
 
 #define	CHAR_BIT	8		/* number of bits in a char */
-#define	MB_LEN_MAX	6		/* Allow 31 bit UTF2 */
-
 
 /*
  * According to ANSI (section 2.2.4.2), the values below must be usable by
@@ -72,12 +73,9 @@
  * These numbers work for pcc as well.  The UINT_MAX and ULONG_MAX values
  * are written as hex so that GCC will be quiet about large integer constants.
  */
-#define	SCHAR_MAX	0x7f		/* min value for a signed char */
-#define	SCHAR_MIN	(-0x7f-1)	/* max value for a signed char */
-
 #define	UCHAR_MAX	0xff		/* max value for an unsigned char */
-#define	CHAR_MAX	0x7f		/* max value for a char */
-#define	CHAR_MIN	(-0x7f-1)	/* min value for a char */
+#define	SCHAR_MAX	0x7f		/* max value for a signed char */
+#define	SCHAR_MIN	(-0x7f-1)	/* min value for a signed char */
 
 #define	USHRT_MAX	0xffff		/* max value for an unsigned short */
 #define	SHRT_MAX	0x7fff		/* max value for a short */
@@ -95,31 +93,76 @@
     defined(_NETBSD_SOURCE)
 #define	SSIZE_MAX	INT_MAX		/* max value for a ssize_t */
 
-#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
-#define	SIZE_T_MAX	UINT_MAX	/* max value for a size_t */
+#if defined(_ISOC99_SOURCE) || (__STDC_VERSION__ - 0) >= 199901L || \
+    defined(_NETBSD_SOURCE)
+#define ULLONG_MAX      0xffffffffffffffffULL   /* max unsigned long long */
+#define LLONG_MAX       0x7fffffffffffffffLL    /* max signed long long */
+#define LLONG_MIN       (-0x7fffffffffffffffLL-1) /* min signed long long */
+#endif
 
-/* GCC requires that quad constants be written as expressions. */
-#define	UQUAD_MAX	((u_quad_t)0-1)	/* max value for a uquad_t */
-					/* max value for a quad_t */
-#define	QUAD_MAX	((quad_t)(UQUAD_MAX >> 1))
-#define	QUAD_MIN	(-QUAD_MAX-1)	/* min value for a quad_t */
-#define ULLONG_MAX	(UQUAD_MAX)	/* max value for unsigned long long */
-#define LLONG_MAX	(QUAD_MAX)	/* max value for a signed long long */
-#define LLONG_MIN	(QUAD_MIN)	/* min value for a signed long long */
+#if defined(_NETBSD_SOURCE)
+#define	SSIZE_MIN	INT_MIN		/* min value for a ssize_t */
+#define SIZE_T_MAX      UINT_MAX        /* max value for a size_t */
 
-#endif /* _XOPEN_SOURCE || _NETBSD_SOURCE */
+#define UQUAD_MAX       0xffffffffffffffffULL           /* max unsigned quad */
+#define QUAD_MAX        0x7fffffffffffffffLL            /* max signed quad */
+#define QUAD_MIN        (-0x7fffffffffffffffLL-1)       /* min signed quad */
 
+#endif /* _NETBSD_SOURCE */
 #endif /* _POSIX_C_SOURCE || _XOPEN_SOURCE || _NETBSD_SOURCE */
 
 #if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 #define LONG_BIT	32
 #define WORD_BIT	32
 
+#ifndef DBL_DIG
+#ifdef __DBL_DIG__
+#define DBL_DIG         __DBL_DIG__
+#else
 #define DBL_DIG		15
-#define DBL_MAX		1.7976931348623157E+308
-#define DBL_MIN		2.2250738585072014E-308
+#endif
+#endif
 
+#ifndef DBL_MAX
+#ifdef __DBL_MAX__
+#define DBL_MAX		__DBL_MAX__
+#else
+#define DBL_MAX		1.7976931348623157E+308
+#endif
+#endif
+
+#ifndef DBL_MIN
+#ifdef __DBL_MIN__
+#define DBL_MIN		__DBL_MIN__
+#else
+#define DBL_MIN		2.2250738585072014E-308
+#endif
+#endif
+
+#ifndef FLT_DIG
+#ifdef __FLT_DIG__
+#define FLT_DIG         __FLT_DIG__
+#else
 #define FLT_DIG         6
+#endif
+#endif
+
+#ifndef FLT_MAX
+#ifdef __FLT_MAX__
+#define FLT_MAX		__FLT_MAX__
+#else
 #define FLT_MAX		3.40282347E+38F 
+#endif
+#endif
+
+#ifndef FLT_MIN
+#ifdef __FLT_MIN__
+#define FLT_MIN		__FLT_MIN__
+#else
 #define FLT_MIN		1.17549435E-38F 
 #endif
+#endif
+
+#endif
+
+#endif /* _MACHINE_LIMITS_H_ */

@@ -1,10 +1,10 @@
-/*	$NetBSD: pcmciadevs.h,v 1.226 2007/09/22 20:01:21 kiyohara Exp $	*/
+/*	$NetBSD: pcmciadevs.h,v 1.234 2018/03/16 01:58:42 sevan Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcmciadevs,v 1.223 2007/09/22 19:59:55 kiyohara Exp
+ *	NetBSD: pcmciadevs,v 1.234 2018/03/16 01:49:15 sevan Exp
  */
 /* $FreeBSD: src/sys/dev/pccard/pccarddevs,v 1.20 2001/11/19 05:02:55 imp Exp $*/
 
@@ -23,13 +23,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,6 +35,11 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*
+ * Use "make -f Makefile.pcmciadevs" to regenerate pcmicadevs.h and
+ * pcmicadevs_data.h
  */
 
 /*
@@ -86,6 +84,7 @@
 #define	PCMCIA_VENDOR_PSION	0x016c	/* Psion */
 #define	PCMCIA_VENDOR_COMPAQ2	0x0183	/* Compaq */
 #define	PCMCIA_VENDOR_KINGSTON	0x0186	/* Kingston */
+#define	PCMCIA_VENDOR_SIERRA	0x0192	/* Sierra Wireless */
 #define	PCMCIA_VENDOR_DAYNA	0x0194	/* Dayna Corporation */
 #define	PCMCIA_VENDOR_RAYTHEON	0x01a6	/* Raytheon */
 #define	PCMCIA_VENDOR_IODATA	0x01bf	/* I-O DATA */
@@ -106,6 +105,7 @@
 #define	PCMCIA_VENDOR_ASUSTEK	0x02aa	/* Asustek Computer */
 #define	PCMCIA_VENDOR_SIEMENS	0x02ac	/* Siemens */
 #define	PCMCIA_VENDOR_MICROSOFT	0x02d2	/* Microsoft Corporation */
+#define	PCMCIA_VENDOR_AMBICOM	0x02df	/* AmbiCom Inc */
 #define	PCMCIA_VENDOR_BREEZECOM	0x0a02	/* BreezeCOM */
 #define	PCMCIA_VENDOR_NEWMEDIA2	0x10cd	/* NewMedia */
 #define	PCMCIA_VENDOR_ACTIONTEC	0x1668	/* ACTIONTEC */
@@ -143,6 +143,8 @@
 #define	PCMCIA_PRODUCT_3COM_3CXEM556INT	0x003d
 #define	PCMCIA_CIS_3COM_3CRWB6096	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_3COM_3CRWB6096	0x0040
+#define	PCMCIA_CIS_3COM_3CRWB6096B	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_3COM_3CRWB6096B	0x0041
 #define	PCMCIA_CIS_3COM_3CCFEM556BI	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_3COM_3CCFEM556BI	0x0556
 #define	PCMCIA_CIS_3COM_3C562	{ NULL, NULL, NULL, NULL }
@@ -151,6 +153,8 @@
 #define	PCMCIA_PRODUCT_3COM_3C589	0x0589
 #define	PCMCIA_CIS_3COM_3C574	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_3COM_3C574	0x0574
+#define	PCMCIA_CIS_3COM_3CRWE777A	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_3COM_3CRWE777A	0x0777
 #define	PCMCIA_CIS_3COM_3C1	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_3COM_3C1	0x0cf1
 #define	PCMCIA_CIS_3COM_3CRWE62092A	{ NULL, NULL, NULL, NULL }
@@ -181,6 +185,10 @@
 /* Alvarion Ltd. */
 #define	PCMCIA_CIS_ALVARION_BREEZENET	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_ALVARION_BREEZENET	0x0001
+
+/* AmbiCom Inc */
+#define	PCMCIA_CIS_AMBICOM_WL54CF	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_AMBICOM_WL54CF	0x8103
 
 /* Anycom */
 #define	PCMCIA_CIS_ANYCOM_LSE041	{ NULL, NULL, NULL, NULL }
@@ -468,8 +476,18 @@
 #define	PCMCIA_PRODUCT_NOKIA_C020_WLAN	0x20c0
 
 /* Olicom Products */
+#define	PCMCIA_CIS_OLICOM_OC2220	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_OLICOM_OC2220	0x0101
 #define	PCMCIA_CIS_OLICOM_TR	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_OLICOM_TR	0x2132
+#define	PCMCIA_CIS_OLICOM_OC2231	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_OLICOM_OC2231	0x3122
+#define	PCMCIA_CIS_OLICOM_OC3231	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_OLICOM_OC3231	0x3132
+#define	PCMCIA_CIS_OLICOM_OC2232	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_OLICOM_OC2232	0x3222
+#define	PCMCIA_CIS_OLICOM_OC3232	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_OLICOM_OC3232	0x3232
 
 /* Ositech Products */
 #define	PCMCIA_CIS_OSITECH_TRUMPCARD_SOD	{ NULL, NULL, NULL, NULL }
@@ -522,6 +540,10 @@
 /* Sharp Products */
 #define	PCMCIA_CIS_SHARP_PALDIO611S	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_SHARP_PALDIO611S	0x0000
+
+/* Sierra Wireless */
+#define	PCMCIA_CIS_SIERRA_AC850	{ NULL, NULL, NULL, NULL }
+#define	PCMCIA_PRODUCT_SIERRA_AC850	0x0710
 
 /* Simple Technology Products */
 #define	PCMCIA_CIS_SIMPLETECH_COMMUNICATOR288	{ NULL, NULL, NULL, NULL }
@@ -614,7 +636,6 @@
  * Cards we know only by their cis, sorted by name.
  */
 #define	PCMCIA_VENDOR_ACCTON	-1	/* ACCTON */
-#define	PCMCIA_VENDOR_AMBICOM	-1	/* AmbiCom Inc */
 #define	PCMCIA_VENDOR_AMD	-1	/* AMD */
 #define	PCMCIA_VENDOR_BILLIONTON	-1	/* Billionton Systems Inc. */
 #define	PCMCIA_VENDOR_CNET	-1	/* CNet */
@@ -656,6 +677,8 @@
 #define	PCMCIA_PRODUCT_BILLIONTON_LNT10TN	-1
 #define	PCMCIA_CIS_CNET_NE2000	{ "CNet", "CN40BC Ethernet", NULL, NULL }
 #define	PCMCIA_PRODUCT_CNET_NE2000	-1
+#define	PCMCIA_CIS_COREGA_ETHER_CF_TD	{ "corega K.K.", "corega Ether CF-TD LAN Card", NULL, NULL }
+#define	PCMCIA_PRODUCT_COREGA_ETHER_CF_TD	-1
 #define	PCMCIA_CIS_COREGA_ETHER_PCC_T	{ "corega K.K.", "corega Ether PCC-T", NULL, NULL }
 #define	PCMCIA_PRODUCT_COREGA_ETHER_PCC_T	-1
 #define	PCMCIA_CIS_COREGA_ETHER_PCC_TD	{ "corega K.K.", "corega Ether PCC-TD", NULL, NULL }
@@ -674,6 +697,8 @@
 #define	PCMCIA_PRODUCT_COREGA_FETHER_PCC_TXF	-1
 #define	PCMCIA_CIS_COREGA_FETHER_II_PCC_TXD	{ "corega K.K.", "corega FEtherII PCC-TXD", NULL, NULL }
 #define	PCMCIA_PRODUCT_COREGA_FETHER_II_PCC_TXD	-1
+#define	PCMCIA_CIS_COREGA_LAPCCTXD	{ "corega K.K.", "(CG-LAPCCTXD)", "(HardwareFirmwareVer.)", NULL }
+#define	PCMCIA_PRODUCT_COREGA_LAPCCTXD	-1
 #define	PCMCIA_CIS_COREGA_WIRELESS_LAN_PCC_11	{ "corega K.K.", "Wireless LAN PCC-11", NULL, NULL }
 #define	PCMCIA_PRODUCT_COREGA_WIRELESS_LAN_PCC_11	-1
 #define	PCMCIA_CIS_COREGA_WIRELESS_LAN_PCCA_11	{ "corega K.K.", "Wireless LAN PCCA-11", NULL, NULL }

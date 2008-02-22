@@ -1,4 +1,4 @@
-/*	$NetBSD: cdvar.h,v 1.27 2007/07/21 19:51:48 ad Exp $	*/
+/*	$NetBSD: cdvar.h,v 1.33 2016/12/10 10:26:38 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,17 +24,16 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <dev/dkvar.h>
+
 #define	CDRETRIES	4
 
 struct cd_softc {
-	struct device sc_dev;
-	struct disk sc_dk;
-	kmutex_t sc_lock;
+	struct dk_softc sc_dksc;
 
 	int flags;
-#define	CDF_WLABEL	0x04		/* label is writable */
-#define	CDF_LABELLING	0x08		/* writing label */
 #define	CDF_ANCIENT	0x10		/* disk is ancient; for minphys */
+#define	CDF_EJECTED	0x20		/* be silent when flushing cache */
 
 	struct scsipi_periph *sc_periph;
 
@@ -49,10 +43,9 @@ struct cd_softc {
 		u_long disksize512;	/* total number sectors */
 	} params;
 
-	struct bufq_state *buf_queue;
 	struct callout sc_callout;
-
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
 };
+
+#define CDGP_RESULT_OK          0       /* parameters obtained */
+#define CDGP_RESULT_OFFLINE     1       /* no media, or otherwise losing */
+#define CDGP_RESULT_UNFORMATTED 2       /* unformatted media (max params) */

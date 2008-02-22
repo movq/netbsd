@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_subr.c,v 1.30 2007/02/09 21:55:36 ad Exp $	*/
+/*	$NetBSD: smb_subr.c,v 1.39 2017/10/03 15:27:10 christos Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_subr.c,v 1.30 2007/02/09 21:55:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_subr.c,v 1.39 2017/10/03 15:27:10 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +60,8 @@ __KERNEL_RCSID(0, "$NetBSD: smb_subr.c,v 1.30 2007/02/09 21:55:36 ad Exp $");
 
 const smb_unichar smb_unieol = 0;
 
-static MALLOC_DEFINE(M_SMBSTR, "smbstr", "SMB strings");
+/* XXX M_SMBSTR could be static but that doesn't work with gcc 4.5 on alpha. */
+MALLOC_DEFINE(M_SMBSTR, "smbstr", "SMB strings");
 MALLOC_DEFINE(M_SMBTEMP, "smbtemp", "Temp netsmb data");
 
 void
@@ -85,9 +86,9 @@ smb_proc_intr(struct lwp *l)
 		return 0;
 	p = l->l_proc;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	error = sigispending(l, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (error != 0 ? EINTR : 0);
 }
@@ -96,12 +97,12 @@ char *
 smb_strdup(const char *s)
 {
 	char *p;
-	int len;
+	size_t len;
 
 	len = s ? strlen(s) + 1 : 1;
 	p = malloc(len, M_SMBSTR, M_WAITOK);
 	if (s)
-		bcopy(s, p, len);
+		memcpy(p, s, len);
 	else
 		*p = 0;
 	return p;
@@ -111,22 +112,17 @@ smb_strdup(const char *s)
  * duplicate string from a user space.
  */
 char *
-smb_strdupin(char *s, int maxlen)
+smb_strdupin(char *s, size_t maxlen)
 {
-	char *p, bt;
-	int len = 0;
+	char *p;
+	int error;
 
-	for (p = s; ;p++) {
-		if (copyin(p, &bt, 1))
-			return NULL;
-		len++;
-		if (maxlen && len > maxlen)
-			return NULL;
-		if (bt == 0)
-			break;
+	p = malloc(maxlen + 1, M_SMBSTR, M_WAITOK);
+	error = copyinstr(s, p, maxlen + 1, NULL);
+	if (error) {
+		free(p, M_SMBSTR);
+		return NULL;
 	}
-	p = malloc(len, M_SMBSTR, M_WAITOK);
-	copyin(s, p, len);
 	return p;
 }
 
@@ -134,7 +130,7 @@ smb_strdupin(char *s, int maxlen)
  * duplicate memory block from a user space.
  */
 void *
-smb_memdupin(void *umem, int len)
+smb_memdupin(void *umem, size_t len)
 {
 	char *p;
 
@@ -160,7 +156,7 @@ smb_memfree(void *s)
 }
 
 void *
-smb_zmalloc(unsigned long size, struct malloc_type *type, int flags)
+smb_zmalloc(size_t size, struct malloc_type *type, int flags)
 {
 
 	return malloc(size, type, flags | M_ZERO);
@@ -179,12 +175,12 @@ smb_strtouni(u_int16_t *dst, const char *src)
 void
 m_dumpm(struct mbuf *m) {
 	char *p;
-	int len;
+	size_t len;
 	printf("d=");
 	while(m) {
-		p=mtod(m,char *);
-		len=m->m_len;
-		printf("(%d)",len);
+		p = mtod(m,char *);
+		len = m->m_len;
+		printf("(%zu)", len);
 		while(len--){
 			printf("%02x ",((int)*(p++)) & 0xff);
 		}
@@ -267,7 +263,7 @@ smb_maperror(int eclass, int eno)
 		    case ERRinvnid:
 			return ENETRESET;
 		    case ERRinvnetname:
-			SMBERROR("NetBIOS name is invalid\n");
+			SMBERROR(("NetBIOS name is invalid\n"));
 			return EAUTH;
 		    case ERRbadtype:	/* reserved and returned */
 			return EIO;
@@ -301,21 +297,30 @@ smb_maperror(int eclass, int eno)
 		}
 		break;
 	}
-	SMBERROR("Unmapped error %d:%d\n", eclass, eno);
+	SMBERROR(("Unmapped error %d:%d\n", eclass, eno));
 	return EBADRPC;
 }
 
 static int
-smb_copy_iconv(struct mbchain *mbp, const char *src, char *dst, size_t len)
+smb_copy_iconv(struct mbchain *mbp, const char *src, char *dst,
+    size_t *srclen, size_t *dstlen)
 {
-	size_t outlen = len;
+	int error;
+	size_t inlen = *srclen, outlen = *dstlen;
 
-	return iconv_conv((struct iconv_drv*)mbp->mb_udata, &src, &len, &dst, &outlen);
+	error = iconv_conv((struct iconv_drv*)mbp->mb_udata, &src, &inlen,
+	    &dst, &outlen);
+	if (inlen != *srclen || outlen != *dstlen) {
+		*srclen -= inlen;
+		*dstlen -= outlen;
+		return 0;
+	} else
+		return error;
 }
 
 int
 smb_put_dmem(struct mbchain *mbp, struct smb_vc *vcp, const char *src,
-	int size, int caseopt)
+	size_t size, int caseopt)
 {
 	struct iconv_drv *dp = vcp->vc_toserver;
 
@@ -369,4 +374,33 @@ dup_sockaddr(struct sockaddr *sa, int canwait)
 	if (sa2)
 		memcpy(sa2, sa, sa->sa_len);
 	return sa2;
+}
+
+int
+dup_sockaddr_copyin(struct sockaddr **ksap, struct sockaddr *usa,
+    size_t usalen)
+{
+	struct sockaddr *ksa;
+
+	/* Make sure user provided enough data for a generic sockaddr.  */
+	if (usalen < sizeof(*ksa))
+		return EINVAL;
+
+	/* Don't let the user overfeed us.  */
+	usalen = MIN(usalen, sizeof(struct sockaddr_storage));
+
+	/* Copy the buffer in from userland.  */
+	ksa = smb_memdupin(usa, usalen);
+	if (ksa == NULL)
+		return ENOMEM;
+
+	/* Make sure the user's idea of sa_len is reasonable.  */
+	if (ksa->sa_len > usalen) {
+		smb_memfree(ksa);
+		return EINVAL;
+	}
+
+	/* Success!  */
+	*ksap = ksa;
+	return 0;
 }

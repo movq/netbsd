@@ -1,6 +1,6 @@
-.\"	$NetBSD: mutex.9,v 1.15 2007/12/07 14:24:21 ad Exp $
+.\"	$NetBSD: mutex.9,v 1.31 2017/12/09 16:00:19 wiz Exp $
 .\"
-.\" Copyright (c) 2007 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2007, 2009 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 4, 2007
+.Dd December 8, 2017
 .Dt MUTEX 9
 .Os
 .Sh NAME
@@ -43,6 +36,7 @@
 .Nm mutex_destroy ,
 .Nm mutex_enter ,
 .Nm mutex_exit ,
+.Nm mutex_ownable ,
 .Nm mutex_owned ,
 .Nm mutex_spin_enter ,
 .Nm mutex_spin_exit ,
@@ -58,6 +52,8 @@
 .Fn mutex_enter "kmutex_t *mtx"
 .Ft void
 .Fn mutex_exit "kmutex_t *mtx"
+.Ft int
+.Fn mutex_ownable "kmutex_t *mtx"
 .Ft int
 .Fn mutex_owned "kmutex_t *mtx"
 .Ft void
@@ -82,10 +78,7 @@ consumers.
 Mutexes replace the
 .Xr spl 9
 system traditionally used to provide synchronization between interrupt
-handlers and LWPs, and in combination with reader / writer locks replace
-the
-.Xr lockmgr 9
-facility.
+handlers and LWPs.
 .Sh OPTIONS
 .Bl -tag -width abcd
 .It Cd "options DIAGNOSTIC"
@@ -114,7 +107,8 @@ may block in order to allocate memory.
 .Pp
 The
 .Fa type
-argument must be given as MUTEX_DEFAULT.
+argument must be given as
+.Dv MUTEX_DEFAULT .
 Other constants are defined but are for low-level system use and are not
 an endorsed, stable part of the interface.
 .Pp
@@ -152,7 +146,6 @@ a spin mutex that is already held.
 See
 .Xr spl 9
 for further information on interrupt priority levels (IPLs).
-.Pp
 .It Fn mutex_destroy "mtx"
 .Pp
 Release resources used by a mutex.
@@ -165,17 +158,64 @@ Acquire a mutex.
 If the mutex is already held, the caller will block and not return until the
 mutex is acquired.
 .Pp
+All loads and stores after
+.Fn mutex_enter
+will not be reordered before it or served from a prior cache, and hence
+will
+.Em happen after
+any prior
+.Fn mutex_exit
+to release the mutex even on another CPU or in an interrupt.
+Thus, there is a global total ordering on all loads and stores under
+the same mutex.
+.Pp
 Mutexes and other types of locks must always be acquired in a
 consistent order with respect to each other.
 Otherwise, the potential for system deadlock exists.
 .Pp
 Adaptive mutexes and other types of lock that can sleep may
 not be acquired while a spin mutex is held by the caller.
+.Pp
+When acquiring a spin mutex, the IPL of the current CPU will be raised to
+the level set in
+.Fn mutex_init
+if it is not already equal or higher.
 .It Fn mutex_exit "mtx"
 .Pp
 Release a mutex.
 The mutex must have been previously acquired by the caller.
 Mutexes may be released out of order as needed.
+.Pp
+All loads and stores before
+.Fn mutex_exit
+will not be reordered after it or delayed in a write buffer, and hence
+will
+.Fn happen before
+any subsequent
+.Fn mutex_enter
+to acquire the mutex even on another CPU or in an interrupt.
+Thus, there is a global total ordering on all loads and stores under
+the same mutex.
+.It Fn mutex_ownable "mtx"
+.Pp
+When compiled with
+.Dv LOCKDEBUG
+(see
+.Xr options 4 ) ,
+ensure that the current process can successfully acquire
+.Ar mtx .
+If
+.Ar mtx
+is already owned by the current process, the system will panic
+with a "locking against myself" error.
+.Pp
+This function is needed because
+.Fn mutex_owned
+does not differentiate if a spin mutex is owned by the current process
+vs owned by another process.
+.Fn mutex_ownable
+is reasonably heavy-weight, and should only be used with
+.Xr KDASSERT 9 .
 .It Fn mutex_owned "mtx"
 .Pp
 For adaptive mutexes, return non-zero if the current LWP holds the mutex.
@@ -187,11 +227,11 @@ Otherwise, return zero.
 is provided for making diagnostic checks to verify that a lock is held.
 For example:
 .Bd -literal
-	KASSERT(mutex_owned(\*[Am]driver_lock));
+	KASSERT(mutex_owned(&driver_lock));
 .Ed
 .Pp
-It should not be used to make locking decisions at run time, or to
-verify that a lock is unheld.
+It should not be used to make locking decisions at run time.
+For spin mutexes, it must not be used to verify that a lock is not held.
 .It Fn mutex_spin_enter "mtx"
 .Pp
 Equivalent to
@@ -199,7 +239,9 @@ Equivalent to
 but may only be used when it is known that
 .Ar mtx
 is a spin mutex.
-On some architectures, this can substantially reduce the cost of acquring
+Implies the same memory ordering as
+.Fn mutex_enter .
+On some architectures, this can substantially reduce the cost of acquiring
 a spin mutex.
 .It Fn mutex_spin_exit "mtx"
 .Pp
@@ -208,8 +250,10 @@ Equivalent to
 but may only be used when it is known that
 .Ar mtx
 is a spin mutex.
+Implies the same memory ordering as
+.Fn mutex_exit .
 On some architectures, this can substantially reduce the cost of releasing
-an unheld spin mutex.
+a spin mutex.
 .It Fn mutex_tryenter "mtx"
 .Pp
 Try to acquire a mutex, but do not block if the mutex is already held.
@@ -217,7 +261,7 @@ Returns non-zero if the mutex was acquired, or zero if the mutex was
 already held.
 .Pp
 .Fn mutex_tryenter
-can be used as an optimization when acquiring locks in the the wrong order.
+can be used as an optimization when acquiring locks in the wrong order.
 For example, in a setting where the convention is that
 .Dv first_lock
 must be acquired before
@@ -225,13 +269,13 @@ must be acquired before
 the following can be used to optimistically lock in reverse order:
 .Bd -literal
 	/* We hold second_lock, but not first_lock. */
-	KASSERT(mutex_owned(\*[Am]second_lock));
+	KASSERT(mutex_owned(&second_lock));
 
-	if (!mutex_tryenter(\*[Am]first_lock)) {
+	if (!mutex_tryenter(&first_lock)) {
 		/* Failed to get it - lock in the correct order. */
-		mutex_exit(\*[Am]second_lock);
-		mutex_enter(\*[Am]first_lock);
-		mutex_enter(\*[Am]second_lock);
+		mutex_exit(&second_lock);
+		mutex_enter(&first_lock);
+		mutex_enter(&second_lock);
 
 		/*
 		 * We may need to recheck any conditions the code
@@ -242,12 +286,6 @@ the following can be used to optimistically lock in reverse order:
 .Ed
 .El
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where code implementing mutexes can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The core of the mutex implementation is in
 .Pa sys/kern/kern_mutex.c .
 .Pp
@@ -256,15 +294,18 @@ The header file
 describes the public interface, and interfaces that machine-dependent
 code must provide to support mutexes.
 .Sh SEE ALSO
+.Xr atomic_ops 3 ,
+.Xr membar_ops 3 ,
+.Xr lockstat 8 ,
 .Xr condvar 9 ,
-.Xr mb 9 ,
+.Xr kpreempt 9 ,
 .Xr rwlock 9 ,
 .Xr spl 9
 .Pp
 .Rs
 .%A Jim Mauro
 .%A Richard McDougall
-.%T Solaris Internals: Core Kernel Architecture ,
+.%T Solaris Internals: Core Kernel Architecture
 .%I Prentice Hall
 .%D 2001
 .%O ISBN 0-13-022496-0

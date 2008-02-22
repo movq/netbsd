@@ -1,4 +1,4 @@
-/*	$NetBSD: keypad.c,v 1.10 2007/01/21 13:25:36 jdc Exp $  */
+/*	$NetBSD: keypad.c,v 1.14 2017/01/06 13:53:18 roy Exp $  */
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com)
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: keypad.c,v 1.10 2007/01/21 13:25:36 jdc Exp $");
+__RCSID("$NetBSD: keypad.c,v 1.14 2017/01/06 13:53:18 roy Exp $");
 #endif				/* not lint */
 
 #include "curses.h"
@@ -39,7 +39,7 @@ __RCSID("$NetBSD: keypad.c,v 1.10 2007/01/21 13:25:36 jdc Exp $");
  *	Turn on and off interpretation of function/keypad keys in the
  *	given window.
  */
-void
+int
 keypad(WINDOW *win, bool bf)
 {
 #ifdef DEBUG
@@ -49,9 +49,22 @@ keypad(WINDOW *win, bool bf)
 	if (bf) {
 		win->flags |= __KEYPAD;
 		if (!(curscr->flags & __KEYPAD)) {
-			tputs (__tc_ks, 0, __cputchar);
+			tputs(keypad_xmit, 0, __cputchar);
 			curscr->flags |= __KEYPAD;
 		}
 	} else
 		win->flags &= ~__KEYPAD;
+
+	return OK;
+}
+
+/*
+ * is_keypad --
+ *	Return true if window is set for keypad.
+ */
+bool
+is_keypad(const WINDOW *win)
+{
+
+	return win->flags & __KEYPAD ? true : false;
 }

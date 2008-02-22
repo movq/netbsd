@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmciavar.h,v 1.32 2006/02/23 03:18:42 gdamore Exp $	*/
+/*	$NetBSD: pcmciavar.h,v 1.35 2011/07/26 22:24:36 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -139,7 +139,7 @@ struct pcmcia_function {
 	SIMPLEQ_ENTRY(pcmcia_function) pf_list;
 	/* run-time state */
 	struct pcmcia_softc *sc;
-	struct device *child;
+	device_t child;
 	struct pcmcia_config_entry *cfe;
 	struct pcmcia_mem_handle pf_pcmh;
 #define	pf_ccrt		pf_pcmh.memt
@@ -186,7 +186,7 @@ struct pcmcia_card {
 };
 
 struct pcmcia_softc {
-	struct device	dev;
+	device_t	dev;
 
 	/* this stuff is for the socket */
 	pcmcia_chipset_tag_t pct;
@@ -197,14 +197,6 @@ struct pcmcia_softc {
 	void		*ih;
 	int		sc_enabled_count;	/* how many functions are
 						   enabled */
-
-	/*
-	 * These are passed down from the PCMCIA chip, and exist only
-	 * so that cards with Very Special address allocation needs
-	 * know what range they should be dealing with.
-	 */
-	bus_addr_t iobase;		/* start i/o space allocation here */
-	bus_size_t iosize;		/* size of the i/o space range */
 };
 
 struct pcmcia_cis_quirk {
@@ -248,7 +240,7 @@ void	pcmcia_devinfo(struct pcmcia_card *, int, char *, size_t);
 void	pcmcia_read_cis(struct pcmcia_softc *);
 void	pcmcia_check_cis_quirks(struct pcmcia_softc *);
 void	pcmcia_print_cis(struct pcmcia_softc *);
-int	pcmcia_scan_cis(struct device *,
+int	pcmcia_scan_cis(device_t,
 	    int (*) (struct pcmcia_tuple *, void *), void *);
 
 #define	pcmcia_cis_read_1(tuple, idx0)					\
@@ -287,9 +279,9 @@ void	pcmcia_ccr_write(struct pcmcia_function *, int, int);
 #define	pcmcia_mfc(sc)	(! SIMPLEQ_EMPTY(&(sc)->card.pf_head) &&	\
 		 SIMPLEQ_NEXT(SIMPLEQ_FIRST(&(sc)->card.pf_head), pf_list))
 
-void	pcmcia_socket_enable(struct device *);
-void	pcmcia_socket_disable(struct device *);
-void	pcmcia_socket_settype(struct device *, int);
+void	pcmcia_socket_enable(device_t);
+void	pcmcia_socket_disable(device_t);
+void	pcmcia_socket_settype(device_t, int);
 
 int	pcmcia_config_alloc(struct pcmcia_function *,
 	    struct pcmcia_config_entry *);

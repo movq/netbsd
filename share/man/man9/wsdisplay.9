@@ -1,4 +1,4 @@
-.\"     $NetBSD: wsdisplay.9,v 1.20 2007/03/07 00:41:18 dogcow Exp $
+.\"     $NetBSD: wsdisplay.9,v 1.23 2010/12/02 12:54:13 wiz Exp $
 .\"
 .\" Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -143,7 +136,7 @@ The
 .Fa show_screen
 member defines a function for mapping a screen onto the physical
 display.
-This function is used for between switching screens.
+This function is used for switching between screens.
 The
 .Fa load_font
 member defines a function for loading a new font into the display.
@@ -170,21 +163,18 @@ points to the virtual screen on which these operations were executed.
 A structure used to attach the
 .Xr wsdisplay 4
 child device for the simple bit-mapped interface.
-If the full terminal-emulation interface is to be used, then
-.Em struct wsemuldisplaydev_attach_args
-should be used instead.
 It has the following members:
 .Bd -literal
 	const struct wsdisplay_accessops *accessops;
 	void *accesscookie;
 .Ed
+If the full terminal-emulation interface is to be used, then
+.Em struct wsemuldisplaydev_attach_args
+should be used instead.
 .It Fa struct wsemuldisplaydev_attach_args
 A structure used to attach the
 .Xr wsdisplay 4
 child device for the full terminal emulation interface.
-If the simple bit-mapped interface is to be used, then
-.Em struct wsdisplaydev_attach_args
-should be used instead.
 It has the following members:
 .Bd -literal
 	int console;
@@ -192,6 +182,9 @@ It has the following members:
 	const struct wsdisplay_accessops *accessops;
 	void *accesscookie;
 .Ed
+If the simple bit-mapped interface is to be used, then
+.Em struct wsdisplaydev_attach_args
+should be used instead.
 .It Fa struct wsdisplay_emulops
 A structure used to specify the display emulation functions.
 All displays intending to provide terminal emulation must provide
@@ -405,13 +398,6 @@ defined in the
 .Em wsdisplay_emulops
 structure.
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing or using the
-machine-independent wscons subsystem can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The wscons subsystem is implemented within the directory
 .Pa sys/dev/wscons .
 The

@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: readfile.c,v 1.15 2007/05/27 16:31:42 tls Exp $");
+__RCSID("$NetBSD: readfile.c,v 1.20 2017/01/11 12:18:22 joerg Exp $");
 #endif
 
 
@@ -131,13 +131,13 @@ __RCSID("$NetBSD: readfile.c,v 1.15 2007/05/27 16:31:42 tls Exp $");
  */
 
 struct symbolmap {
-	char *symbol;
+	const char *symbol;
 	int symbolcode;
 };
 
 
 struct htypename {
-	char *name;
+	const char *name;
 	byte htype;
 };
 
@@ -495,7 +495,8 @@ readtab(int force)
 PRIVATE void
 read_entry(FILE *fp, char *buffer, unsigned int *bufsiz)
 {
-	int c, length;
+	int c;
+	unsigned int length;
 
 	length = 0;
 
@@ -632,7 +633,7 @@ PRIVATE int
 process_entry(struct host *host, char *src)
 {
 	int retval;
-	char *msg;
+	const char *msg;
 
 	if (!host || *src == '\0') {
 		return -1;
@@ -680,8 +681,10 @@ process_entry(struct host *host, char *src)
 			break;
 		case E_BAD_PATHNAME:
 			msg = "bad pathname (need leading '/')";
+			break;
 		case E_BAD_VALUE:
 			msg = "bad value";
+			break;
 		default:
 			msg = "unknown error";
 			break;
@@ -777,7 +780,7 @@ eval_symbol(char **symbol, struct host *hp)
 	byte *tmphaddr;
 	struct symbolmap *symbolptr;
 	u_int32 value;
-	int32 timeoff;
+	int32 ltimeoff;
 	int i, numsymbols;
 	unsigned len;
 	int optype;					/* Indicates boolean, addition, or deletion */
@@ -964,9 +967,9 @@ eval_symbol(char **symbol, struct host *hp)
 			if (!strncmp(tmpstr, "auto", 4)) {
 				hp->time_offset = secondswest;
 			} else {
-				if (sscanf(tmpstr, "%d", &timeoff) != 1)
+				if (sscanf(tmpstr, "%d", &ltimeoff) != 1)
 					return E_BAD_LONGWORD;
-				hp->time_offset = timeoff;
+				hp->time_offset = ltimeoff;
 			}
 			hp->flags.time_offset = TRUE;
 		}
@@ -1108,7 +1111,7 @@ eval_symbol(char **symbol, struct host *hp)
 
 	case SYM_MIN_WAIT:
 		PARSE_INT(min_wait);
-		if (hp->min_wait < 0)
+		if (hp->min_wait == 0)
 			return E_BAD_VALUE;
 		break;
 
@@ -1205,9 +1208,9 @@ get_shared_string(char **src)
 	(void) get_string(src, retstring, &length);
 
 	s = (struct shared_string *) smalloc(sizeof(struct shared_string) +
-	    length);
+	    length + 1);
 	s->linkcount = 1;
-	strlcpy(s->string, retstring, sizeof(retstring));
+	memcpy(s->string, retstring, length + 1);
 
 	return s;
 }
@@ -1579,23 +1582,21 @@ makelower(char *s)
 PRIVATE struct in_addr_list *
 get_addresses(char **src)
 {
-	struct in_addr tmpaddrlist[MAXINADDRS];
-	struct in_addr *address1, *address2;
+	__aligned(4) struct in_addr tmpaddrlist[MAXINADDRS];
 	struct in_addr_list *result;
-	unsigned addrcount, totalsize;
+	unsigned addrcount, totalsize, address;
 
-	address1 = tmpaddrlist;
-	for (addrcount = 0; addrcount < MAXINADDRS; addrcount++) {
+	for (address = 0, addrcount = 0; addrcount < MAXINADDRS; addrcount++) {
 		while (isspace((unsigned char)**src) || (**src == ',')) {
 			(*src)++;
 		}
 		if (!**src) {			/* Quit if nothing more */
 			break;
 		}
-		if (prs_inetaddr(src, &(address1->s_addr)) < 0) {
+		if (prs_inetaddr(src, &tmpaddrlist[address].s_addr) < 0) {
 			break;
 		}
-		address1++;				/* Point to next address slot */
+		address++;				/* Point to next address slot */
 	}
 	if (addrcount < 1) {
 		result = NULL;
@@ -1605,13 +1606,8 @@ get_addresses(char **src)
 		result = (struct in_addr_list *) smalloc(totalsize);
 		result->linkcount = 1;
 		result->addrcount = addrcount;
-		address1 = tmpaddrlist;
-		address2 = result->addr;
-		for (; addrcount > 0; addrcount--) {
-			address2->s_addr = address1->s_addr;
-			address1++;
-			address2++;
-		}
+		for (address = 0; address < addrcount; ++address)
+			result->addr[address] = tmpaddrlist[address];
 	}
 	return result;
 }

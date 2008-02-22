@@ -1,4 +1,4 @@
-/*	$NetBSD: isapnpvar.h,v 1.25 2006/07/16 06:01:03 rillig Exp $	*/
+/*	$NetBSD: isapnpvar.h,v 1.28 2009/03/15 15:45:48 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -88,7 +81,7 @@ struct isapnp_softc;
 #endif
 
 struct isapnp_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	int			sc_read_port;
 	bus_space_tag_t		sc_iot;
 	bus_space_tag_t		sc_memt;
@@ -155,19 +148,14 @@ static __inline void isapnp_write_reg(struct isapnp_softc *, int, u_char);
 static __inline u_char isapnp_read_reg(struct isapnp_softc *, int);
 
 static __inline void
-isapnp_write_reg(sc, r, v)
-	struct isapnp_softc *sc;
-	int r;
-	u_char v;
+isapnp_write_reg(struct isapnp_softc *sc, int r, u_char v)
 {
 	ISAPNP_WRITE_ADDR(sc, r);
 	ISAPNP_WRITE_DATA(sc, v);
 }
 
 static __inline u_char
-isapnp_read_reg(sc, r)
-	struct isapnp_softc *sc;
-	int r;
+isapnp_read_reg(struct isapnp_softc *sc, int r)
 {
 	ISAPNP_WRITE_ADDR(sc, r);
 	return ISAPNP_READ_DATA(sc);

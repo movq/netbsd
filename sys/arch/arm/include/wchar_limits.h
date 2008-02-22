@@ -1,4 +1,4 @@
-/*	$NetBSD: wchar_limits.h,v 1.2 2005/12/11 12:16:47 christos Exp $	*/
+/*	$NetBSD: wchar_limits.h,v 1.4 2013/01/24 10:17:00 matt Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,11 +37,39 @@
  */
 
 /* limits of wchar_t */
+
+#ifdef __WCHAR_MIN__
+#define	WCHAR_MIN	__WCHAR_MIN__			/* wchar_t	  */
+#elif __WCHAR_UNSIGNED__
+#define	WCHAR_MIN	0U				/* wchar_t	  */
+#else
 #define	WCHAR_MIN	(-0x7fffffff-1)			/* wchar_t	  */
+#endif
+
+#ifdef __WCHAR_MAX__
+#define	WCHAR_MAX	__WCHAR_MAX__			/* wchar_t	  */
+#elif __WCHAR_UNSIGNED__
+#define	WCHAR_MAX	0xffffffffU			/* wchar_t	  */
+#else
 #define	WCHAR_MAX	0x7fffffff			/* wchar_t	  */
+#endif
 
 /* limits of wint_t */
+
+#ifdef __WINT_MIN__
+#define	WINT_MIN	__WINT_MIN__			/* wint_t	  */
+#elif __WINT_UNSIGNED__
+#define	WINT_MIN	0U				/* wint_t	  */
+#else
 #define	WINT_MIN	(-0x7fffffff-1)			/* wint_t	  */
+#endif
+
+#ifdef __WINT_MAX__
+#define	WINT_MAX	__WINT_MAX__			/* wint_t	  */
+#elif __WINT_UNSIGNED__
+#define	WINT_MAX	0xffffffffU			/* wint_t	  */
+#else
 #define	WINT_MAX	0x7fffffff			/* wint_t	  */
+#endif
 
 #endif /* !_ARM_WCHAR_LIMITS_H_ */

@@ -1,6 +1,6 @@
-.\" $NetBSD: utoppya.1,v 1.2 2006/04/04 20:45:41 wiz Exp $
+.\" $NetBSD: utoppya.1,v 1.7 2015/06/21 12:05:11 wiz Exp $
 .\"
-.\" Copyright (c) 2006 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2006,2015 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 .Os
 .Sh NAME
 .Nm utoppya
-.Nd Topfield TF5000PVR file manipulation program
+.Nd Topfield TF5000PVR DVB recorder file manipulation program
 .Sh SYNOPSIS
 .Nm
 .Op Fl f Ar device
@@ -47,6 +40,8 @@
 .Sh DESCRIPTION
 .Nm
 is the userland interface to the
+Topfield TF5000PVR range of DVB recorders (nicknamed `Toppy')
+which uses the
 .Xr utoppy 4
 device driver.
 .Pp
@@ -92,7 +87,7 @@ Copy
 .Ar toppyfile
 from the Toppy to
 .Ar localfile
-on the local filesystem.
+on the local file system.
 If
 .Ar localfile
 is omitted, the file will be copied into the current directory and will be
@@ -168,4 +163,4 @@ and
 written by Peter Urbanec
 .Aq toppy at urbanec.net .
 .Sh AUTHORS
-.An Steve C. Woodford Aq scw@netbsd.org
+.An Steve C. Woodford Aq Mt scw@netbsd.org

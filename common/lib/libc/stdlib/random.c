@@ -1,4 +1,4 @@
-/*	$NetBSD: random.c,v 1.3 2005/12/21 14:23:58 christos Exp $	*/
+/*	$NetBSD: random.c,v 1.5 2016/02/08 05:27:24 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -35,7 +35,7 @@
 #if 0
 static char sccsid[] = "@(#)random.c	8.2 (Berkeley) 5/19/95";
 #else
-__RCSID("$NetBSD: random.c,v 1.3 2005/12/21 14:23:58 christos Exp $");
+__RCSID("$NetBSD: random.c,v 1.5 2016/02/08 05:27:24 dholland Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -92,7 +92,7 @@ static long random_unlocked(void);
  * state information, which will allow a degree seven polynomial.  (Note:
  * the zeroeth word of state information also has some other information
  * stored in it -- see setstate() for details).
- * 
+ *
  * The random number generation technique is a linear feedback shift register
  * approach, employing trinomials (since there are fewer terms to sum up that
  * way).  In this approach, the least significant bit of all the numbers in
@@ -302,11 +302,11 @@ srandom_unlocked(unsigned int x)
 }
 
 void
-srandom(unsigned long x)
+srandom(unsigned int x)
 {
 
 	mutex_lock(&random_mutex);
-	srandom_unlocked((unsigned int) x);
+	srandom_unlocked(x);
 	mutex_unlock(&random_mutex);
 }
 
@@ -318,12 +318,12 @@ srandom(unsigned long x)
  * the break values for the different R.N.G.'s, we choose the best (largest)
  * one we can and set things up for it.  srandom() is then called to
  * initialize the state information.
- * 
+ *
  * Note that on return from srandom(), we set state[-1] to be the type
  * multiplexed with the current value of the rear pointer; this is so
  * successive calls to initstate() won't lose this information and will be
  * able to restart with setstate().
- * 
+ *
  * Note: the first thing we do is save the current state, if any, just like
  * setstate() so that it doesn't matter when initstate is called.
  *
@@ -335,7 +335,7 @@ srandom(unsigned long x)
  */
 char *
 initstate(
-	unsigned long seed,		/* seed for R.N.G. */
+	unsigned int seed,		/* seed for R.N.G. */
 	char *arg_state,		/* pointer to state array */
 	size_t n)			/* # bytes of state info */
 {
@@ -377,7 +377,7 @@ initstate(
 	}
 	state = (int *) (int_arg_state + 1); /* first location */
 	end_ptr = &state[rand_deg];	/* must set end_ptr before srandom */
-	srandom_unlocked((unsigned int) seed);
+	srandom_unlocked(seed);
 	if (rand_type == TYPE_0)
 		int_arg_state[0] = rand_type;
 	else
@@ -511,7 +511,7 @@ random(void)
 {
 	static u_long randseed = 1;
 	long x, hi, lo, t;
- 
+
 	/*
 	 * Compute x[n + 1] = (7^5 * x[n]) mod (2^31 - 1).
 	 * From "Random number generators: good ones are hard to find",

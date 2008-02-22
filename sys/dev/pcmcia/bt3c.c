@@ -1,4 +1,4 @@
-/* $NetBSD: bt3c.c,v 1.16 2007/11/28 20:16:11 plunky Exp $ */
+/* $NetBSD: bt3c.c,v 1.23 2014/05/20 18:25:54 rmind Exp $ */
 
 /*-
  * Copyright (c) 2005 Iain D. Hibbert,
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bt3c.c,v 1.16 2007/11/28 20:16:11 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bt3c.c,v 1.23 2014/05/20 18:25:54 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -101,7 +101,6 @@ struct bt3c_softc {
 	struct pcmcia_function *sc_pf;		/* our PCMCIA function */
 	struct pcmcia_io_handle sc_pcioh;	/* PCMCIA i/o space info */
 	int		sc_iow;			/* our i/o window */
-	void		*sc_powerhook;		/* power hook descriptor */
 	int		sc_flags;		/* flags */
 
 	struct hci_unit *sc_unit;		/* Bluetooth HCI Unit */
@@ -130,14 +129,14 @@ struct bt3c_softc {
 #define BT3C_RECV_EVENT_DATA	6		/* event packet data */
 
 /* sc_flags */
-#define BT3C_SLEEPING		(1 << 0)	/* but not with the fishes */
 #define BT3C_XMIT		(1 << 1)	/* transmit active */
 #define BT3C_ENABLED		(1 << 2)	/* enabled */
 
-static int bt3c_match(device_t, struct cfdata *, void *);
+static int bt3c_match(device_t, cfdata_t, void *);
 static void bt3c_attach(device_t, device_t, void *);
 static int bt3c_detach(device_t, int);
-static void bt3c_power(int, void *);
+static bool bt3c_suspend(device_t, const pmf_qual_t *);
+static bool bt3c_resume(device_t, const pmf_qual_t *);
 
 CFATTACH_DECL_NEW(bt3c, sizeof(struct bt3c_softc),
     bt3c_match, bt3c_attach, bt3c_detach, NULL);
@@ -585,7 +584,7 @@ bt3c_load_firmware(struct bt3c_softc *sc)
 	int32_t addr, data;
 	int err, sum, len;
 	firmware_handle_t fh;
-	struct cfdata *cf = device_cfdata(sc->sc_dev);
+	cfdata_t cf = device_cfdata(sc->sc_dev);
 	size_t size;
 
 	err = firmware_open(cf->cf_name,
@@ -597,13 +596,11 @@ bt3c_load_firmware(struct bt3c_softc *sc)
 	}
 
 	size = (size_t)firmware_get_size(fh);
-#ifdef DIAGNOSTIC
 	if (size > 10 * 1024) {	/* sanity check */
 		aprint_error_dev(sc->sc_dev, "insane firmware file size!\n");
 		firmware_close(fh);
 		return EFBIG;
 	}
-#endif
 
 	buf = firmware_malloc(size);
 	KASSERT(buf != NULL);
@@ -925,7 +922,7 @@ bt3c_stats(device_t self, struct bt_stats *dest, int flush)
  */
 
 static int
-bt3c_match(device_t parent, struct cfdata *match, void *aux)
+bt3c_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -964,7 +961,7 @@ bt3c_attach(device_t parent, device_t self, void *aux)
 	}
 
 	if (cfe == 0) {
-		aprint_error("bt3c_attach: cannot allocate io space\n");
+		aprint_error_dev(self, "cannot allocate io space\n");
 		goto no_config_entry;
 	}
 
@@ -974,16 +971,18 @@ bt3c_attach(device_t parent, device_t self, void *aux)
 	/* Map in the io space */
 	if (pcmcia_io_map(pa->pf, PCMCIA_WIDTH_AUTO,
 			&sc->sc_pcioh, &sc->sc_iow)) {
-		aprint_error("bt3c_attach: cannot map io space\n");
+		aprint_error_dev(self, "cannot map io space\n");
 		goto iomap_failed;
 	}
 
 	/* Attach Bluetooth unit */
-	sc->sc_unit = hci_attach(&bt3c_hci, self, BTF_POWER_UP_NOOP);
+	sc->sc_unit = hci_attach_pcb(&bt3c_hci, self, BTF_POWER_UP_NOOP);
+	if (sc->sc_unit == NULL)
+		aprint_error_dev(self, "HCI attach failed\n");
 
-	/* establish a power change hook */
-	sc->sc_powerhook = powerhook_establish(device_xname(sc->sc_dev),
-	    bt3c_power, sc);
+	if (!pmf_device_register(self, bt3c_suspend, bt3c_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
 	return;
 
 iomap_failed:
@@ -1000,15 +999,11 @@ bt3c_detach(device_t self, int flags)
 	struct bt3c_softc *sc = device_private(self);
 	int err = 0;
 
+	pmf_device_deregister(self);
 	bt3c_disable(self);
 
-	if (sc->sc_powerhook) {
-		powerhook_disestablish(sc->sc_powerhook);
-		sc->sc_powerhook = NULL;
-	}
-
 	if (sc->sc_unit) {
-		hci_detach(sc->sc_unit);
+		hci_detach_pcb(sc->sc_unit);
 		sc->sc_unit = NULL;
 	}
 
@@ -1021,38 +1016,29 @@ bt3c_detach(device_t self, int flags)
 	return err;
 }
 
-static void
-bt3c_power(int why, void *arg)
+static bool
+bt3c_suspend(device_t self, const pmf_qual_t *qual)
 {
-	struct bt3c_softc *sc = arg;
+	struct bt3c_softc *sc = device_private(self);
 
-	switch(why) {
-	case PWR_SUSPEND:
-	case PWR_STANDBY:
-		if (sc->sc_flags & BT3C_ENABLED) {
-			if (sc->sc_unit) {
-				hci_detach(sc->sc_unit);
-				sc->sc_unit = NULL;
-			}
-
-			sc->sc_flags |= BT3C_SLEEPING;
-			aprint_verbose_dev(sc->sc_dev, "sleeping\n");
-		}
-		break;
-
-	case PWR_RESUME:
-		if (sc->sc_flags & BT3C_SLEEPING) {
-			aprint_verbose_dev(sc->sc_dev, "waking up\n");
-			sc->sc_flags &= ~BT3C_SLEEPING;
-
-			sc->sc_unit = hci_attach(&bt3c_hci, sc->sc_dev,
-			    BTF_POWER_UP_NOOP);
-		}
-		break;
-
-	case PWR_SOFTSUSPEND:
-	case PWR_SOFTSTANDBY:
-	case PWR_SOFTRESUME:
-		break;
+	if (sc->sc_unit) {
+		hci_detach_pcb(sc->sc_unit);
+		sc->sc_unit = NULL;
 	}
+
+	return true;
+}
+
+static bool
+bt3c_resume(device_t self, const pmf_qual_t *qual)
+{
+	struct bt3c_softc *sc = device_private(self);
+
+	KASSERT(sc->sc_unit == NULL);
+
+	sc->sc_unit = hci_attach_pcb(&bt3c_hci, self, BTF_POWER_UP_NOOP);
+	if (sc->sc_unit == NULL)
+		return false;
+
+	return true;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pax.c,v 1.44 2007/10/05 07:22:23 lukem Exp $	*/
+/*	$NetBSD: pax.c,v 1.48 2017/10/02 21:55:35 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -39,28 +39,28 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)pax.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: pax.c,v 1.44 2007/10/05 07:22:23 lukem Exp $");
+__RCSID("$NetBSD: pax.c,v 1.48 2017/10/02 21:55:35 joerg Exp $");
 #endif
 #endif /* not lint */
 
-#include <sys/types.h>
 #include <sys/param.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/resource.h>
-#include <stdio.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <paths.h>
 #include <signal.h>
-#include <unistd.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <paths.h>
+#include <time.h>
+#include <unistd.h>
 #include <util.h>
 #include "pax.h"
 #include "extern.h"
@@ -79,14 +79,12 @@ int	cflag;			/* match all EXCEPT pattern/file */
 int	cwdfd = -1;		/* starting cwd */
 int	dflag;			/* directory member match only  */
 int	iflag;			/* interactive file/archive rename */
-int	jflag;			/* pass through bzip2 */
 int	kflag;			/* do not overwrite existing files */
 int	lflag;			/* use hard links when possible */
 int	nflag;			/* select first archive member match */
 int	tflag;			/* restore access time after read */
 int	uflag;			/* ignore older modification time files */
 int	vflag;			/* produce verbose output */
-int	zflag;			/* use gzip */
 int	Aflag;			/* honor absolute path */
 int	Dflag;			/* same as uflag except inode change time */
 int	Hflag;			/* follow command line symlinks (write only) */
@@ -339,7 +337,7 @@ main(int argc, char **argv)
  *	never....
  */
 
-void
+__dead static void
 sig_cleanup(int which_sig)
 {
 	/*

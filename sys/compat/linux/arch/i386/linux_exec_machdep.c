@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_machdep.c,v 1.4 2007/10/19 12:16:38 ad Exp $	*/
+/*	$NetBSD: linux_exec_machdep.c,v 1.18 2017/08/12 07:21:57 maxv Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,10 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.4 2007/10/19 12:16:38 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.18 2017/08/12 07:21:57 maxv Exp $");
 
 #if defined(_KERNEL_OPT)
-#include "opt_vm86.h"
 #include "opt_user_ldt.h"
 #endif
 
@@ -59,14 +51,23 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_machdep.c,v 1.4 2007/10/19 12:16:38 ad Ex
 
 #include <uvm/uvm.h>
 
+#include <sys/syscallargs.h>
+
+#ifndef DEBUG_LINUX
+#define DPRINTF(a)
+#else
+#define DPRINTF(a)	uprintf a
+#endif
+
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
+#include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_util.h>
 #include <compat/linux/common/linux_ioctl.h>
 #include <compat/linux/common/linux_hdio.h>
 #include <compat/linux/common/linux_exec.h>
-#include <compat/linux/common/linux_machdep.h>
 #include <compat/linux/common/linux_errno.h>
+#include <compat/linux/linux_syscallargs.h>
 
 int
 linux_exec_setup_stack(struct lwp *l, struct exec_package *epp)
@@ -118,12 +119,36 @@ linux_exec_setup_stack(struct lwp *l, struct exec_package *epp)
 	noaccess_linear_min = (u_long)STACK_ALLOC(STACK_GROW(epp->ep_minsaddr,
 	    access_size), noaccess_size);
 	if (noaccess_size > 0) {
-		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, noaccess_size,
-		    noaccess_linear_min, NULLVP, 0, VM_PROT_NONE);
+		NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, noaccess_size,
+		    noaccess_linear_min, NULLVP, 0, VM_PROT_NONE, VMCMD_STACK);
 	}
 	KASSERT(access_size > 0);
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, access_size,
-	    access_linear_min, NULLVP, 0, VM_PROT_READ | VM_PROT_WRITE);
+	NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, access_size,
+	    access_linear_min, NULLVP, 0, VM_PROT_READ | VM_PROT_WRITE,
+	    VMCMD_STACK);
 
 	return 0;
+}
+
+int
+linux_sys_set_thread_area(struct lwp *l,
+    const struct linux_sys_set_thread_area_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(struct linux_user_desc *) desc;
+	} */
+
+	return linux_lwp_setprivate(l, SCARG(uap, desc));
+}
+
+int
+linux_sys_get_thread_area(struct lwp *l,
+    const struct linux_sys_get_thread_area_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(struct linux_user_desc *) desc;
+	} */
+
+	/* glibc doesn't actually call this. */
+	return ENOSYS;
 }

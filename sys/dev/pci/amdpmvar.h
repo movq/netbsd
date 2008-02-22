@@ -1,4 +1,4 @@
-/*	$NetBSD: amdpmvar.h,v 1.5 2007/08/27 15:57:13 xtraeme Exp $	*/
+/*	$NetBSD: amdpmvar.h,v 1.11 2015/04/13 16:33:25 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,10 +32,11 @@
 #ifndef _DEV_PCI_AMDPMVAR_H_
 #define _DEV_PCI_AMDPMVAR_H_
 
-#include <sys/rwlock.h>
+#include <sys/mutex.h>
+#include <sys/rndsource.h>
 
 struct amdpm_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	pci_chipset_tag_t sc_pc;
 	pcitag_t sc_tag;
@@ -54,12 +48,13 @@ struct amdpm_softc {
 
 	i2c_addr_t sc_smbus_slaveaddr;		/* address of smbus slave */
 	struct i2c_controller sc_i2c;		/* i2c controller info */
-	krwlock_t sc_rwlock;
+	kmutex_t sc_mutex;
 
 	void *sc_ih;
 
 	struct callout sc_rnd_ch;
-	rndsource_element_t sc_rnd_source;
+	krndsource_t sc_rnd_source;
+	int sc_rnd_need;
 #ifdef AMDPM_RND_COUNTERS
 	struct evcnt sc_rnd_hits;
 	struct evcnt sc_rnd_miss;

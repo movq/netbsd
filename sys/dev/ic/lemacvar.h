@@ -1,4 +1,4 @@
-/*      $NetBSD: lemacvar.h,v 1.9 2005/12/11 12:21:27 christos Exp $ */
+/*      $NetBSD: lemacvar.h,v 1.13 2015/04/13 16:33:24 riastradh Exp $ */
 
 /*
  * Copyright (c) 1997 Matt Thomas <matt@3am-software.com>
@@ -27,16 +27,13 @@
 #ifndef _LEMAC_VAR_H
 #define	_LEMAC_VAR_H
 
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 /*
  * Ethernet status, per interface.
  */
 typedef struct {
-    struct device sc_dv;
+    device_t sc_dev;
     void *sc_ih;
     void *sc_ats;
     struct ethercom sc_ec;
@@ -79,9 +76,7 @@ typedef struct {
     unsigned char sc_enaddr[ETHER_ADDR_LEN];	/* current Ethernet address */
     char sc_prodname[LEMAC_EEP_PRDNMSZ+1]; /* product name DE20x-xx */
     u_int8_t sc_eeprom[LEMAC_EEP_SIZE];	/* local copy eeprom */
-#if NRND > 0
-    rndsource_element_t rnd_source;
-#endif
+    krndsource_t rnd_source;
 } lemac_softc_t;
 
 #define	sc_if	sc_ec.ec_if

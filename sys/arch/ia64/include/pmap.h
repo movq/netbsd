@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,73 +69,93 @@
  *	from: hp300: @(#)pmap.h	7.2 (Berkeley) 12/16/90
  *	from: @(#)pmap.h	7.4 (Berkeley) 5/12/91
  *	from: i386 pmap.h,v 1.54 1997/11/20 19:30:35 bde Exp
- * $FreeBSD: src/sys/ia64/include/pmap.h,v 1.25 2005/09/03 23:53:50 marcel Exp $
+ * $FreeBSD: releng/10.1/sys/ia64/include/pmap.h 268201 2014-07-02 23:57:55Z marcel $
  */
 
-#ifndef _PMAP_MACHINE_
-#define _PMAP_MACHINE_
+#ifndef _IA64_PMAP_H_
+#define _IA64_PMAP_H_
 
+#include <sys/types.h>
+#include <sys/queue.h>
 #include <sys/lock.h>
+#include <sys/mutex.h>
 
-paddr_t vtophys(vaddr_t);
+#include <machine/pte.h>
+#include <machine/vmparam.h>
 
-struct pv_entry;	/* Forward declaration. */
+#include <machine/md_var.h>
+
+typedef char	vm_memattr_t;
+
+#define VM_MEMATTR_WRITE_BACK           ((vm_memattr_t)PTE_MA_WB)
+#define VM_MEMATTR_UNCACHEABLE          ((vm_memattr_t)PTE_MA_UC)
+#define VM_MEMATTR_UNCACHEABLE_EXPORTED ((vm_memattr_t)PTE_MA_UCE)
+#define VM_MEMATTR_WRITE_COMBINING      ((vm_memattr_t)PTE_MA_WC)
+#define VM_MEMATTR_NATPAGE              ((vm_memattr_t)PTE_MA_NATPAGE)
+#define VM_MEMATTR_DEFAULT              VM_MEMATTR_WRITE_BACK
+
+#ifdef _KERNEL
+
+#define MAXKPT		(PAGE_SIZE/sizeof(vaddr_t))
+
+#define	vtophys(va)	pmap_kextract((vaddr_t)(va))
+
+#endif /* _KERNEL */
+
+/*
+ * Pmap stuff
+ */
+struct	pv_entry;
+struct	pv_chunk;
 
 struct pmap {
-	TAILQ_ENTRY(pmap)	pm_list;	/* list of all pmaps */
-	TAILQ_HEAD(,pv_entry)	pm_pvlist;	/* list of mappings in pmap */
-	int			pm_count;	/* pmap reference count */
-	struct simplelock	pm_slock;	/* lock on pmap */
-	u_int32_t		pm_rid[5];	/* base RID for pmap */
-	int			pm_active;	/* active flag */
+	kmutex_t		pm_mtx;
+	TAILQ_HEAD(,pv_chunk)	pm_pvchunk;	/* list of mappings in pmap */
+	uint32_t		pm_rid[IA64_VM_MINKERN_REGION];
 	struct pmap_statistics	pm_stats;	/* pmap statistics */
-	unsigned long		pm_cpus;	/* mask of CPUs using pmap */
-
+	uint64_t		pm_refcount;	/* pmap reference count, atomic */
 };
 
-typedef struct pmap	*pmap_t;
+typedef struct pmap *pmap_t;
+
+#ifdef _KERNEL
+
+#define	PMAP_LOCK(pmap)		mutex_enter(&(pmap)->pm_mtx)
+#define	PMAP_LOCK_ASSERT(pmap)	KASSERT(mutex_owned(&(pmap)->pm_mtx))
+#define	PMAP_LOCK_DESTROY(pmap)	mutex_destroy(&(pmap)->pm_mtx)
+#define	PMAP_LOCK_INIT(pmap)	mutex_init(&(pmap)->pm_mtx, MUTEX_DEFAULT, IPL_NONE)
+#define	PMAP_LOCKED(pmap)	mutex_owned(&(pmap)->pm_mtx)
+#define	PMAP_MTX(pmap)		(&(pmap)->pm_mtx)
+#define	PMAP_TRYLOCK(pmap)	mutex_tryenter(&(pmap)->pm_mtx)
+#define	PMAP_UNLOCK(pmap)	mutex_exit(&(pmap)->pm_mtx)
+
+#endif
 
 /*
  * For each vm_page_t, there is a list of all currently valid virtual
- * mappings of that page.  An entry is a pv_entry_t, the list is pv_pvlist.
+ * mappings of that page.  An entry is a pv_entry_t, the list is pv_list.
  */
 typedef struct pv_entry {
-	pmap_t		pv_pmap;	/* pmap where mapping lies */
-	vaddr_t		pv_va;		/* virtual address for mapping */
+	vaddr_t	pv_va;		/* virtual address for mapping */
 	TAILQ_ENTRY(pv_entry)	pv_list;
-	TAILQ_ENTRY(pv_entry)	pv_plist;
 } *pv_entry_t;
-
-/* pvh_attrs */
-#define	PGA_MODIFIED		0x01		/* modified */
-#define	PGA_REFERENCED		0x02		/* referenced */
-
-
-extern struct pmap	kernel_pmap_store;
-
-#define pmap_kernel()			(&kernel_pmap_store)
-
-#define	pmap_resident_count(pmap)	((pmap)->pm_stats.resident_count)
-#define	pmap_wired_count(pmap)		((pmap)->pm_stats.wired_count)
-
-#define	pmap_copy(dp, sp, da, l, sa)	/* nothing */
-#define	pmap_update(pmap)		/* nothing (yet) */
 
 void pmap_bootstrap(void);
 
-#define	pmap_is_referenced(pg)						\
-	(((pg)->mdpage.pvh_attrs & PGA_REFERENCED) != 0)
-#define	pmap_is_modified(pg)						\
-	(((pg)->mdpage.pvh_attrs & PGA_MODIFIED) != 0)
+/* optional pmap API functions, according to pmap(9) */
+#define PMAP_STEAL_MEMORY
+#define PMAP_GROWKERNEL
 
-
-#define PMAP_STEAL_MEMORY		/* enable pmap_steal_memory() */
+#define PMAP_NEED_PROCWR
+void pmap_procwr(struct proc *, vaddr_t, vsize_t);
 
 /*
  * Alternate mapping hooks for pool pages.  Avoids thrashing the TLB.
  */
+/* XXX
 #define	PMAP_MAP_POOLPAGE(pa)		IA64_PHYS_TO_RR7((pa))
 #define	PMAP_UNMAP_POOLPAGE(va)		IA64_RR_MASK((va))
+*/
 
 /*
  * Macros for locking pmap structures.
@@ -152,11 +165,46 @@ void pmap_bootstrap(void);
  * operations, locking the kernel pmap is not necessary.  Therefore,
  * it is not necessary to block interrupts when locking pmap strucutres.
  */
-#define	PMAP_LOCK(pmap)		simple_lock(&(pmap)->pm_slock)
-#define	PMAP_UNLOCK(pmap)	simple_unlock(&(pmap)->pm_slock)
+/* XXX
+#define	PMAP_LOCK(pmap)		mutex_enter(&(pmap)->pm_slock)
+#define	PMAP_UNLOCK(pmap)	mutex_exit(&(pmap)->pm_slock)
+*/
 
+/*
+ * pmap-specific data store in the vm_page structure.
+ */
+#define	__HAVE_VM_PAGE_MD
 
-#define PMAP_VHPT_LOG2SIZE 16 
+struct vm_page_md {
+	TAILQ_HEAD(,pv_entry)	pv_list;
+	vm_memattr_t		memattr;
+#if 0 /* XXX freebsd */	
+	uint8_t		pv_flags;
+	uint8_t		aflags;
+#endif	
+};
 
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	TAILQ_INIT(&(pg)->mdpage.pv_list);				\
+	(pg)->mdpage.memattr = VM_MEMATTR_DEFAULT;			\
+} while (/*CONSTCOND*/0)
 
-#endif /* _PMAP_MACHINE_ */
+#ifdef	_KERNEL
+
+extern uint64_t pmap_vhpt_base[];
+extern uint64_t pmap_vhpt_log2size;
+
+vaddr_t pmap_page_to_va(struct vm_page*);
+
+/* Machine-architecture private */
+vaddr_t pmap_alloc_vhpt(void);
+void pmap_bootstrap(void);
+void pmap_invalidate_all(void);
+paddr_t pmap_kextract(vaddr_t va);
+struct pmap *pmap_switch(struct pmap *pmap);
+void pmap_remove_all_phys(struct vm_page*);  /* used in only pmap_page_protect */
+
+#endif /* _KERNEL */
+
+#endif /* _IA64_PMAP_H_ */

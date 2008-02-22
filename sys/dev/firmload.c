@@ -1,4 +1,4 @@
-/*	$NetBSD: firmload.c,v 1.9 2007/12/08 19:29:41 pooka Exp $	*/
+/*	$NetBSD: firmload.c,v 1.22 2016/05/30 02:33:49 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.9 2007/12/08 19:29:41 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.22 2016/05/30 02:33:49 dholland Exp $");
 
 /*
  * The firmload API provides an interface for device drivers to access
@@ -47,16 +40,15 @@ __KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.9 2007/12/08 19:29:41 pooka Exp $");
 #include <sys/param.h>
 #include <sys/fcntl.h>
 #include <sys/filedesc.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/namei.h>
 #include <sys/systm.h>
 #include <sys/sysctl.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
+#include <sys/lwp.h>
 
 #include <dev/firmload.h>
-
-static MALLOC_DEFINE(M_DEVFIRM, "devfirm", "device firmware buffers");
 
 struct firmware_handle {
 	struct vnode	*fh_vp;
@@ -67,14 +59,14 @@ static firmware_handle_t
 firmware_handle_alloc(void)
 {
 
-	return (malloc(sizeof(struct firmware_handle), M_DEVFIRM, M_WAITOK));
+	return (kmem_alloc(sizeof(struct firmware_handle), KM_SLEEP));
 }
 
 static void
 firmware_handle_free(firmware_handle_t fh)
 {
 
-	free(fh, M_DEVFIRM);
+	kmem_free(fh, sizeof(*fh));
 }
 
 #if !defined(FIRMWARE_PATHS)
@@ -123,18 +115,9 @@ sysctl_hw_firmware_path(SYSCTLFN_ARGS)
 	return (0);
 }
 
-SYSCTL_SETUP_PROTO(sysctl_hw_firmware_setup);
-
 SYSCTL_SETUP(sysctl_hw_firmware_setup, "sysctl hw.firmware subtree setup")
 {
 	const struct sysctlnode *firmware_node;
-
-	if (sysctl_createv(clog, 0, NULL, NULL,
-	    CTLFLAG_PERMANENT,
-	    CTLTYPE_NODE, "hw", NULL,
-	    NULL, 0, NULL, 0,
-	    CTL_HW, CTL_EOL) != 0)
-	    	return;
 	
 	if (sysctl_createv(clog, 0, NULL, &firmware_node,
 	    CTLFLAG_PERMANENT,
@@ -159,8 +142,7 @@ firmware_path_next(const char *drvname, const char *imgname, char *pnbuf,
 	size_t maxprefix, i;
 
 	if (prefix == NULL		/* terminated early */
-	    || *prefix == '\0'		/* no more left */
-	    || *prefix != '/') {	/* not absolute */
+	    || *prefix != '/') {	/* empty or not absolute */
 		*prefixp = NULL;
 	    	return (NULL);
 	}
@@ -198,11 +180,8 @@ firmware_path_next(const char *drvname, const char *imgname, char *pnbuf,
 		prefix++;
 	*prefixp = prefix;
 
-	/*
-	 * This sprintf() is safe because of the maxprefix calculation
-	 * performed above.
-	 */
-	sprintf(&pnbuf[i], "/%s/%s", drvname, imgname);
+	KASSERT(MAXPATHLEN >= i);
+	snprintf(pnbuf + i, MAXPATHLEN - i, "/%s/%s", drvname, imgname);
 
 	return (pnbuf);
 }
@@ -224,6 +203,7 @@ firmware_path_first(const char *drvname, const char *imgname, char *pnbuf,
 int
 firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 {
+	struct pathbuf *pb;
 	struct nameidata nd;
 	struct vattr va;
 	char *pnbuf, *path, *prefix;
@@ -251,10 +231,17 @@ firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 	for (path = firmware_path_first(drvname, imgname, pnbuf, &prefix);
 	     path != NULL;
 	     path = firmware_path_next(drvname, imgname, pnbuf, &prefix)) {
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, path);
+		pb = pathbuf_create(path);
+		if (pb == NULL) {
+			error = ENOMEM;
+			break;
+		}
+		NDINIT(&nd, LOOKUP, FOLLOW | NOCHROOT, pb);
 		error = vn_open(&nd, FREAD, 0);
-		if (error == ENOENT)
+		pathbuf_destroy(pb);
+		if (error == ENOENT) {
 			continue;
+		}
 		break;
 	}
 
@@ -268,15 +255,15 @@ firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 
 	error = VOP_GETATTR(vp, &va, kauth_cred_get());
 	if (error) {
-		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD, kauth_cred_get(), curlwp);
+		VOP_UNLOCK(vp);
+		(void)vn_close(vp, FREAD, kauth_cred_get());
 		firmware_handle_free(fh);
 		return (error);
 	}
 
 	if (va.va_type != VREG) {
-		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD, kauth_cred_get(), curlwp);
+		VOP_UNLOCK(vp);
+		(void)vn_close(vp, FREAD, kauth_cred_get());
 		firmware_handle_free(fh);
 		return (EINVAL);
 	}
@@ -286,7 +273,7 @@ firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 	fh->fh_vp = vp;
 	fh->fh_size = va.va_size;
 
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	*fhp = fh;
 	return (0);
@@ -302,7 +289,7 @@ firmware_close(firmware_handle_t fh)
 {
 	int error;
 
-	error = vn_close(fh->fh_vp, FREAD, kauth_cred_get(), curlwp);
+	error = vn_close(fh->fh_vp, FREAD, kauth_cred_get());
 	firmware_handle_free(fh);
 	return (error);
 }
@@ -344,7 +331,7 @@ void *
 firmware_malloc(size_t size)
 {
 
-	return (malloc(size, M_DEVFIRM, M_WAITOK));
+	return (kmem_alloc(size, KM_SLEEP));
 }
 
 /*
@@ -357,5 +344,5 @@ void
 firmware_free(void *v, size_t size)
 {
 
-	free(v, M_DEVFIRM);
+	kmem_free(v, size);
 }

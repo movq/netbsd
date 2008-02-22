@@ -1,4 +1,4 @@
-/*	$NetBSD: z8530sc.c,v 1.27 2007/11/12 17:28:23 ad Exp $	*/
+/*	$NetBSD: z8530sc.c,v 1.31 2013/09/15 16:13:33 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -91,7 +91,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: z8530sc.c,v 1.27 2007/11/12 17:28:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: z8530sc.c,v 1.31 2013/09/15 16:13:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,9 +109,7 @@ __KERNEL_RCSID(0, "$NetBSD: z8530sc.c,v 1.27 2007/11/12 17:28:23 ad Exp $");
 #include <machine/z8530var.h>
 
 void
-zs_break(cs, set)
-	struct zs_chanstate *cs;
-	int set;
+zs_break(struct zs_chanstate *cs, int set)
 {
 
 	if (set) {
@@ -129,10 +127,9 @@ zs_break(cs, set)
  * drain on-chip fifo
  */
 void
-zs_iflush(cs)
-	struct zs_chanstate *cs;
+zs_iflush(struct zs_chanstate *cs)
 {
-	u_char c, rr0, rr1;
+	uint8_t rr0, rr1;
 	int i;
 
 	/*
@@ -150,7 +147,7 @@ zs_iflush(cs)
 		 * destroys the status of this char.
 		 */
 		rr1 = zs_read_reg(cs, 1);
-		c = zs_read_data(cs);
+		(void)zs_read_data(cs);
 
 		if (rr1 & (ZSRR1_FE | ZSRR1_DO | ZSRR1_PE)) {
 			/* Clear the receive error. */
@@ -167,10 +164,9 @@ zs_iflush(cs)
  * Call this with interrupts disabled.
  */
 void
-zs_loadchannelregs(cs)
-	struct zs_chanstate *cs;
+zs_loadchannelregs(struct zs_chanstate *cs)
 {
-	u_char *reg, v;
+	uint8_t *reg, v;
 
 	zs_write_csr(cs, ZSM_RESET_ERR); /* XXX: reset error condition */
 
@@ -278,6 +274,20 @@ zs_lock_init(struct zs_chanstate *cs)
 	mutex_init(&cs->cs_lock, MUTEX_NODEBUG, IPL_ZS);
 }
 
+void
+zs_lock_chan(struct zs_chanstate *cs)
+{
+
+	mutex_spin_enter(&cs->cs_lock);
+}
+
+void
+zs_unlock_chan(struct zs_chanstate *cs)
+{
+
+	mutex_spin_exit(&cs->cs_lock);
+}
+
 /*
  * ZS hardware interrupt.  Scan all ZS channels.  NB: we know here that
  * channels are kept in (A,B) pairs.
@@ -290,59 +300,68 @@ zs_lock_init(struct zs_chanstate *cs)
  * the order.
  */
 int
-zsc_intr_hard(arg)
-	void *arg;
+zsc_intr_hard(void *arg)
 {
 	struct zsc_softc *zsc = arg;
-	struct zs_chanstate *cs;
-	u_char rr3;
+	struct zs_chanstate *cs0, *cs1;
+	int handled;
+	uint8_t rr3;
+
+	handled = 0;
 
 	/* First look at channel A. */
-	cs = zsc->zsc_cs[0];
-
-	/* Lock both channels */
-	mutex_spin_enter(&cs->cs_lock);
-	mutex_spin_enter(&zsc->zsc_cs[1]->cs_lock);
-	/* Note: only channel A has an RR3 */
-	rr3 = zs_read_reg(cs, 3);
+	cs0 = zsc->zsc_cs[0];
+	cs1 = zsc->zsc_cs[1];
 
 	/*
-	 * Clear interrupt first to avoid a race condition.
-	 * If a new interrupt condition happens while we are
-	 * servicing this one, we will get another interrupt
-	 * shortly.  We can NOT just sit here in a loop, or
-	 * we will cause horrible latency for other devices
-	 * on this interrupt level (i.e. sun3x floppy disk).
+	 * We have to clear interrupt first to avoid a race condition,
+	 * but it will be done in each MD handler.
 	 */
-	if (rr3 & (ZSRR3_IP_A_RX | ZSRR3_IP_A_TX | ZSRR3_IP_A_STAT)) {
-		zs_write_csr(cs, ZSWR0_CLR_INTR);
+	for (;;) {
+		/* Lock both channels */
+		mutex_spin_enter(&cs1->cs_lock);
+		mutex_spin_enter(&cs0->cs_lock);
+		/* Note: only channel A has an RR3 */
+		rr3 = zs_read_reg(cs0, 3);
+
+		if ((rr3 & (ZSRR3_IP_A_RX | ZSRR3_IP_A_TX | ZSRR3_IP_A_STAT |
+		    ZSRR3_IP_B_RX | ZSRR3_IP_B_TX | ZSRR3_IP_B_STAT)) == 0) {
+			mutex_spin_exit(&cs0->cs_lock);
+			mutex_spin_exit(&cs1->cs_lock);
+			break;
+		}
+		handled = 1;
+
+		/* First look at channel A. */
+		if (rr3 & (ZSRR3_IP_A_RX | ZSRR3_IP_A_TX | ZSRR3_IP_A_STAT))
+			zs_write_csr(cs0, ZSWR0_CLR_INTR);
+
 		if (rr3 & ZSRR3_IP_A_RX)
-			(*cs->cs_ops->zsop_rxint)(cs);
+			(*cs0->cs_ops->zsop_rxint)(cs0);
 		if (rr3 & ZSRR3_IP_A_STAT)
-			(*cs->cs_ops->zsop_stint)(cs, 0);
+			(*cs0->cs_ops->zsop_stint)(cs0, 0);
 		if (rr3 & ZSRR3_IP_A_TX)
-			(*cs->cs_ops->zsop_txint)(cs);
-	}
+			(*cs0->cs_ops->zsop_txint)(cs0);
 
-	/* Done with channel A */
-	mutex_spin_exit(&cs->cs_lock);
+		/* Done with channel A */
+		mutex_spin_exit(&cs0->cs_lock);
 
-	/* Now look at channel B. */
-	cs = zsc->zsc_cs[1];
-	if (rr3 & (ZSRR3_IP_B_RX | ZSRR3_IP_B_TX | ZSRR3_IP_B_STAT)) {
-		zs_write_csr(cs, ZSWR0_CLR_INTR);
+		/* Now look at channel B. */
+		if (rr3 & (ZSRR3_IP_B_RX | ZSRR3_IP_B_TX | ZSRR3_IP_B_STAT))
+			zs_write_csr(cs1, ZSWR0_CLR_INTR);
+
 		if (rr3 & ZSRR3_IP_B_RX)
-			(*cs->cs_ops->zsop_rxint)(cs);
+			(*cs1->cs_ops->zsop_rxint)(cs1);
 		if (rr3 & ZSRR3_IP_B_STAT)
-			(*cs->cs_ops->zsop_stint)(cs, 0);
+			(*cs1->cs_ops->zsop_stint)(cs1, 0);
 		if (rr3 & ZSRR3_IP_B_TX)
-			(*cs->cs_ops->zsop_txint)(cs);
-	}
+			(*cs1->cs_ops->zsop_txint)(cs1);
 
-	mutex_spin_exit(&cs->cs_lock);
+		mutex_spin_exit(&cs1->cs_lock);
+	}
 
 	/* Note: caller will check cs_x->cs_softreq and DTRT. */
-	return (rr3);
+	return handled;
 }
 
 
@@ -350,8 +369,7 @@ zsc_intr_hard(arg)
  * ZS software interrupt.  Scan all channels for deferred interrupts.
  */
 int
-zsc_intr_soft(arg)
-	void *arg;
+zsc_intr_soft(void *arg)
 {
 	struct zsc_softc *zsc = arg;
 	struct zs_chanstate *cs;
@@ -385,34 +403,33 @@ static void zsnull_txint  (struct zs_chanstate *);
 static void zsnull_softint(struct zs_chanstate *);
 
 static void
-zsnull_rxint(cs)
-	struct zs_chanstate *cs;
+zsnull_rxint(struct zs_chanstate *cs)
 {
+
 	/* Ask for softint() call. */
 	cs->cs_softreq = 1;
 }
 
 static void
-zsnull_stint(cs, force)
-	struct zs_chanstate *cs;
-	int force;
+zsnull_stint(struct zs_chanstate *cs, int force)
 {
+
 	/* Ask for softint() call. */
 	cs->cs_softreq = 1;
 }
 
 static void
-zsnull_txint(cs)
-	struct zs_chanstate *cs;
+zsnull_txint(struct zs_chanstate *cs)
 {
+
 	/* Ask for softint() call. */
 	cs->cs_softreq = 1;
 }
 
 static void
-zsnull_softint(cs)
-	struct zs_chanstate *cs;
+zsnull_softint(struct zs_chanstate *cs)
 {
+
 	zs_write_reg(cs,  1, 0);
 	zs_write_reg(cs, 15, 0);
 }

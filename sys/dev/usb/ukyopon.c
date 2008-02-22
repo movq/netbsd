@@ -1,4 +1,4 @@
-/*	$NetBSD: ukyopon.c,v 1.8 2007/10/19 12:01:22 ad Exp $	*/
+/*	$NetBSD: ukyopon.c,v 1.19 2016/11/25 12:56:29 skrll Exp $	*/
 
 /*
  * Copyright (c) 1998, 2005 The NetBSD Foundation, Inc.
@@ -19,13 +19,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ukyopon.c,v 1.8 2007/10/19 12:01:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ukyopon.c,v 1.19 2016/11/25 12:56:29 skrll Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_usb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: ukyopon.c,v 1.8 2007/10/19 12:01:22 ad Exp $");
 #include <dev/usb/ukyopon.h>
 
 #ifdef UKYOPON_DEBUG
-#define DPRINTFN(n, x)	if (ukyopondebug > (n)) logprintf x
+#define DPRINTFN(n, x)	if (ukyopondebug > (n)) printf x
 int	ukyopondebug = 0;
 #else
 #define DPRINTFN(n, x)
@@ -90,48 +87,57 @@ struct ukyopon_softc {
 #define UKYOPON_DATA_IFACE_INDEX	3
 
 Static void	ukyopon_get_status(void *, int, u_char *, u_char *);
-Static int	ukyopon_ioctl(void *, int, u_long, void *, int, usb_proc_ptr);
+Static int	ukyopon_ioctl(void *, int, u_long, void *, int, proc_t *);
 
 Static struct ucom_methods ukyopon_methods = {
-	ukyopon_get_status,
-	umodem_set,
-	umodem_param,
-	ukyopon_ioctl,
-	umodem_open,
-	umodem_close,
-	NULL,
-	NULL,
+	.ucom_get_status = ukyopon_get_status,
+	.ucom_set = umodem_set,
+	.ucom_param = umodem_param,
+	.ucom_ioctl = ukyopon_ioctl,
+	.ucom_open = umodem_open,
+	.ucom_close = umodem_close,
+	.ucom_read = NULL,
+	.ucom_write = NULL,
 };
 
-USB_DECLARE_DRIVER(ukyopon);
+int		ukyopon_match(device_t, cfdata_t, void *);
+void		ukyopon_attach(device_t, device_t, void *);
+int		ukyopon_detach(device_t, int);
+int		ukyopon_activate(device_t, enum devact);
+extern struct cfdriver ukyopon_cd;
+CFATTACH_DECL_NEW(ukyopon, sizeof(struct ukyopon_softc), ukyopon_match,
+    ukyopon_attach, ukyopon_detach, ukyopon_activate);
 
-USB_MATCH(ukyopon)
+int
+ukyopon_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_IFMATCH_START(ukyopon, uaa);
+	struct usbif_attach_arg *uiaa = aux;
 
-	if (uaa->vendor == USB_VENDOR_KYOCERA &&
-	    uaa->product == USB_PRODUCT_KYOCERA_AHK3001V &&
-	    (uaa->ifaceno == UKYOPON_MODEM_IFACE_INDEX ||
-	     uaa->ifaceno == UKYOPON_DATA_IFACE_INDEX))
+	if (uiaa->uiaa_vendor == USB_VENDOR_KYOCERA &&
+	    uiaa->uiaa_product == USB_PRODUCT_KYOCERA_AHK3001V &&
+	    (uiaa->uiaa_ifaceno == UKYOPON_MODEM_IFACE_INDEX ||
+	     uiaa->uiaa_ifaceno == UKYOPON_DATA_IFACE_INDEX))
 		return (UMATCH_VENDOR_PRODUCT);
 
 	return (UMATCH_NONE);
 }
 
-USB_ATTACH(ukyopon)
+void
+ukyopon_attach(device_t parent, device_t self, void *aux)
 {
-	USB_IFATTACH_START(ukyopon, sc, uaa);
-	struct ucom_attach_args uca;
+	struct ukyopon_softc *sc = device_private(self);
+	struct usbif_attach_arg *uiaa = aux;
+	struct ucom_attach_args ucaa;
 
-	uca.portno = (uaa->ifaceno == UKYOPON_MODEM_IFACE_INDEX) ?
+	ucaa.ucaa_portno = (uiaa->uiaa_ifaceno == UKYOPON_MODEM_IFACE_INDEX) ?
 		UKYOPON_PORT_MODEM : UKYOPON_PORT_DATA;
-	uca.methods = &ukyopon_methods;
-	uca.info = (uaa->ifaceno == UKYOPON_MODEM_IFACE_INDEX) ?
+	ucaa.ucaa_methods = &ukyopon_methods;
+	ucaa.ucaa_info = (uiaa->uiaa_ifaceno == UKYOPON_MODEM_IFACE_INDEX) ?
 	    "modem port" : "data transfer port";
 
-	if (umodem_common_attach(self, &sc->sc_umodem, uaa, &uca))
-		USB_ATTACH_ERROR_RETURN;
-	USB_ATTACH_SUCCESS_RETURN;
+	if (umodem_common_attach(self, &sc->sc_umodem, uiaa, &ucaa))
+		return;
+	return;
 }
 
 Static void
@@ -146,12 +152,12 @@ ukyopon_get_status(void *addr, int portno, u_char *lsr, u_char *msr)
 	if ((sc->sc_umodem.sc_msr & UMSR_DCD) == 0)
 		sc->sc_umodem.sc_msr |= UMSR_DCD;
 
-	return umodem_get_status(addr, portno, lsr, msr);
+	umodem_get_status(addr, portno, lsr, msr);
 }
 
 Static int
 ukyopon_ioctl(void *addr, int portno, u_long cmd, void *data, int flag,
-	      usb_proc_ptr p)
+	      proc_t *p)
 {
 	struct ukyopon_softc *sc = addr;
 	struct ukyopon_identify *arg_id = (void*)data;
@@ -159,10 +165,10 @@ ukyopon_ioctl(void *addr, int portno, u_long cmd, void *data, int flag,
 
 	switch (cmd) {
 	case UKYOPON_IDENTIFY:
-		strncpy(arg_id->ui_name, UKYOPON_NAME, sizeof arg_id->ui_name);
+		strncpy(arg_id->ui_name, UKYOPON_NAME, sizeof(arg_id->ui_name));
 		arg_id->ui_busno =
-		    USBDEVUNIT(*(device_ptr_t)sc->sc_umodem.sc_udev->bus->usbctl);
-		arg_id->ui_address = sc->sc_umodem.sc_udev->address;
+		    device_unit(sc->sc_umodem.sc_udev->ud_bus->ub_usbctl);
+		arg_id->ui_address = sc->sc_umodem.sc_udev->ud_addr;
 		arg_id->ui_model = UKYOPON_MODEL_UNKNOWN;
 		arg_id->ui_porttype = portno;
 		break;
@@ -175,24 +181,18 @@ ukyopon_ioctl(void *addr, int portno, u_long cmd, void *data, int flag,
 	return (error);
 }
 
-#ifdef __strong_alias
-__strong_alias(ukyopon_activate,umodem_common_activate)
-#else
 int
-ukyopon_activate(device_ptr_t self, enum devact act)
+ukyopon_activate(device_t self, enum devact act)
 {
-	struct ukyopon_softc *sc = (struct ukyopon_softc *)self;
+	struct ukyopon_softc *sc = device_private(self);
 
 	return umodem_common_activate(&sc->sc_umodem, act);
 }
-#endif
 
-USB_DETACH(ukyopon)
+int
+ukyopon_detach(device_t self, int flags)
 {
-	USB_DETACH_START(ukyopon, sc);
-#ifdef __FreeBSD__
-	int flags = 0;
-#endif
+	struct ukyopon_softc *sc = device_private(self);
 
 	return umodem_common_detach(&sc->sc_umodem, flags);
 }

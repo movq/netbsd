@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.49 2008/01/07 16:40:17 joerg Exp $	 */
+/*	$NetBSD: clock.c,v 1.58 2017/05/22 16:39:40 ragge Exp $	 */
 /*
  * Copyright (c) 1995 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,29 +25,32 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.49 2008/01/07 16:40:17 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.58 2017/05/22 16:39:40 ragge Exp $");
 
 #include <sys/param.h>
-#include <sys/kernel.h>
 #include <sys/systm.h>
-#include <sys/timetc.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
+#include <sys/timetc.h>
+#include <sys/kernel.h>
 
-#include <machine/mtpr.h>
 #include <machine/sid.h>
 #include <machine/clock.h>
-#include <machine/cpu.h>
-#include <machine/uvax.h>
 
 #include "opt_cputype.h"
+
+struct evcnt clock_misscnt =
+	EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL, "clock", "intr miss");
+
+EVCNT_ATTACH_STATIC(clock_misscnt);
 
 struct evcnt clock_intrcnt =
 	EVCNT_INITIALIZER(EVCNT_TYPE_INTR, NULL, "clock", "intr");
 
 EVCNT_ATTACH_STATIC(clock_intrcnt);
 
-static int vax_gettime(todr_chip_handle_t, volatile struct timeval *);
-static int vax_settime(todr_chip_handle_t, volatile struct timeval *);
+static int vax_gettime(todr_chip_handle_t, struct timeval *);
+static int vax_settime(todr_chip_handle_t, struct timeval *);
 
 static struct todr_chip_handle todr_handle = {
 	.todr_gettime = vax_gettime,
@@ -83,13 +81,31 @@ vax_mfpr_get_counter(struct timecounter *tc)
 {
 	int cur_hardclock;
 	u_int counter;
+	static int prev_count, prev_hardclock;
 
 	do {
 		cur_hardclock = hardclock_ticks;
-		counter = mfpr(PR_ICR);
+		counter = mfpr(PR_ICR) + tick;
 	} while (cur_hardclock != hardclock_ticks);
 
-	return counter + hardclock_ticks * tick;
+	/*
+	 * Handle interval counter wrapping with interrupts blocked.
+	 * If the current hardclock_ticks is less than what we saw
+	 *   previously, use the previous value.
+	 * If the interval counter is smaller, assume it has wrapped,
+	 *   and if the [adjusted] current hardclock ticks is the same
+	 *   as what we saw previously, increment the local copy of
+	 *   the hardclock ticks.
+	 */
+	if (cur_hardclock < prev_hardclock)
+		cur_hardclock = prev_hardclock;
+	if (counter < prev_count && cur_hardclock == prev_hardclock)
+		cur_hardclock++;
+
+	prev_count = counter;
+	prev_hardclock=cur_hardclock;
+
+	return counter + cur_hardclock * tick;
 }
 
 #if VAX46 || VAXANY
@@ -148,14 +164,14 @@ cpu_initclocks(void)
 }
 
 int
-vax_gettime(todr_chip_handle_t handle, volatile struct timeval *tvp)
+vax_gettime(todr_chip_handle_t handle, struct timeval *tvp)
 {
 	tvp->tv_sec = handle->base_time;
 	return (*dep_call->cpu_gettime)(tvp);
 }
 
 int
-vax_settime(todr_chip_handle_t handle, volatile struct timeval *tvp)
+vax_settime(todr_chip_handle_t handle, struct timeval *tvp)
 {
 	(*dep_call->cpu_settime)(tvp);
 	return 0;
@@ -176,19 +192,19 @@ yeartonum(int y)
 {
 	int n;
 
-	for (n = 0, y -= 1; y > 69; y--)
-		n += SECPERYEAR(y);
+	for (n = 0, y -= 1; y > 1969; y--)
+ 		n += days_per_year(y) * SECS_PER_DAY;
 	return n;
 }
 
 /* 
- * Converts tick number to a year 70 ->
+ * Converts tick number to a year 1970 ->
  */
 int
 numtoyear(int num)
 {
-	int y = 70, j;
-	while(num >= (j = SECPERYEAR(y))) {
+	int y = 1970, j;
+	while(num >= (j = days_per_year(y) * SECS_PER_DAY)) {
 		y++;
 		num -= j;
 	}
@@ -203,7 +219,7 @@ numtoyear(int num)
  * year; the TODR doesn't hold years.
  */
 int
-generic_gettime(volatile struct timeval *tvp)
+generic_gettime(struct timeval *tvp)
 {
 	unsigned klocka = mfpr(PR_TODR);
 
@@ -226,7 +242,7 @@ generic_gettime(volatile struct timeval *tvp)
  * Takes the current system time and writes it to the TODR.
  */
 void
-generic_settime(volatile struct timeval *tvp)
+generic_settime(struct timeval *tvp)
 {
 	unsigned tid = tvp->tv_sec, bastid;
 
@@ -245,7 +261,7 @@ int	clk_tweak;	/* Offset of time into word. */
 #define	REGPOKE(off, v)	(clk_page[off << clk_adrshift] = ((v) << clk_tweak))
 
 int
-chip_gettime(volatile struct timeval *tvp)
+chip_gettime(struct timeval *tvp)
 {
 	struct clock_ymdhms c;
 	int timeout = 1<<15, s;
@@ -256,7 +272,7 @@ chip_gettime(volatile struct timeval *tvp)
 #endif
 
 	if ((REGPEEK(CSRD_OFF) & CSRD_VRT) == 0) {
-		printf("WARNING: TOY clock not marked valid");
+		printf("WARNING: TOY clock not marked valid\n");
 		return EINVAL;
 	}
 	while (REGPEEK(CSRA_OFF) & CSRA_UIP) {
@@ -282,7 +298,7 @@ chip_gettime(volatile struct timeval *tvp)
 }
 
 void
-chip_settime(volatile struct timeval *tvp)
+chip_settime(struct timeval *tvp)
 {
 	struct clock_ymdhms c;
 

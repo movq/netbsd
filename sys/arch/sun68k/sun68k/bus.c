@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.19 2007/03/04 06:00:55 christos Exp $	*/
+/*	$NetBSD: bus.c,v 1.23 2016/07/07 06:55:39 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -94,13 +94,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -160,7 +153,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.19 2007/03/04 06:00:55 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.23 2016/07/07 06:55:39 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -273,14 +266,16 @@ extern	paddr_t avail_end;
 	 */
 	error = uvm_pglistalloc(size, low, high, 0, 0,
 				mlist, nsegs, (flags & BUS_DMA_NOWAIT) == 0);
-	if (error)
+	if (error) {
+		free(mlist, M_DEVBUF);
 		return (error);
+	}
 
 	/*
 	 * Simply keep a pointer around to the linked list, so
 	 * bus_dmamap_free() can return it.
 	 *
-	 * NOBODY SHOULD TOUCH THE pageq FIELDS WHILE THESE PAGES
+	 * NOBODY SHOULD TOUCH THE pageq.queue FIELDS WHILE THESE PAGES
 	 * ARE IN OUR CUSTODY.
 	 */
 	segs[0]._ds_mlist = mlist;
@@ -343,7 +338,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	*kvap = (void *)va;
 
 	mlist = segs[0]._ds_mlist;
-	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq)) {
+	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq.queue)) {
 		paddr_t pa;
 
 		if (size == 0)
@@ -631,7 +626,7 @@ sun68k_bus_peek(bus_space_tag_t tag, bus_space_handle_t handle,
 	if (vp == NULL)
 		vp = &junk;
 
-	nofault = &faultbuf; 
+	nofault = &faultbuf;
 	if (setjmp(&faultbuf))
 		result = -1;
 	else {
@@ -665,7 +660,7 @@ sun68k_bus_poke(bus_space_tag_t tag, bus_space_handle_t handle,
 	int result;
 	label_t	faultbuf;
 	
-	nofault = &faultbuf; 
+	nofault = &faultbuf;
 	if (setjmp(&faultbuf))
 		result = -1;
 	else {

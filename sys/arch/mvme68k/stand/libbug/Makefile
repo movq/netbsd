@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2001/12/12 01:49:46 tv Exp $
+#	$NetBSD: Makefile,v 1.18 2014/11/21 20:21:08 christos Exp $
 
 LIB=bug
 
@@ -11,6 +11,7 @@ DIR_SA=$S/lib/libsa
 
 SRCS=	bugcrt.c delay.c diskrd.c diskwr.c getbrdid.c inchr.c instat.c \
 	outln.c outstr.c putchar.c return.c rtc_rd.c
+OBJS+=	bugstart.o
 CLEANFILES+= bugstart.o
 
 .include "../Makefile.booters"
@@ -18,13 +19,7 @@ CLEANFILES+= bugstart.o
 # only needed during build
 libinstall::
 
-# separate rule for bugstart.c
-# this is build separately from rest of libbug
-bugstart.o: bugstart.s
-	${CC} -x assembler-with-cpp -traditional-cpp -nostdinc ${INCPATH} \
-	-D_STANDALONE -c ${.IMPSRC}
-
-all realall: lib${LIB}.a bugstart.o
+all realall: lib${LIB}.a
 
 .include <bsd.own.mk>
 .undef DESTDIR

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_bmap.c,v 1.47 2008/01/02 11:49:13 ad Exp $	*/
+/*	$NetBSD: ufs_bmap.c,v 1.52 2017/03/18 05:33:06 riastradh Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.47 2008/01/02 11:49:13 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.52 2017/03/18 05:33:06 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.47 2008/01/02 11:49:13 ad Exp $");
 #include <sys/mount.h>
 #include <sys/resourcevar.h>
 #include <sys/trace.h>
-#include <sys/fstrans.h>
 
 #include <miscfs/specfs/specdev.h>
 
@@ -93,10 +92,8 @@ ufs_bmap(void *v)
 	if (ap->a_bnp == NULL)
 		return (0);
 
-	fstrans_start(ap->a_vp->v_mount, FSTRANS_SHARED);
 	error = ufs_bmaparray(ap->a_vp, ap->a_bn, ap->a_bnp, NULL, NULL,
 	    ap->a_runp, ufs_issequential);
-	fstrans_done(ap->a_vp->v_mount);
 	return error;
 }
 
@@ -122,7 +119,7 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 	struct buf *bp, *cbp;
 	struct ufsmount *ump;
 	struct mount *mp;
-	struct indir a[NIADDR + 1], *xap;
+	struct indir a[UFS_NIADDR + 1], *xap;
 	daddr_t daddr;
 	daddr_t metalbn;
 	int error, maxrun = 0, num;
@@ -130,10 +127,8 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 	ip = VTOI(vp);
 	mp = vp->v_mount;
 	ump = ip->i_ump;
-#ifdef DIAGNOSTIC
-	if ((ap != NULL && nump == NULL) || (ap == NULL && nump != NULL))
-		panic("ufs_bmaparray: invalid arguments");
-#endif
+	KASSERTMSG(((ap == NULL) == (nump == NULL)),
+	    "ufs_bmaparray: invalid arguments: ap = %p, nump = %p", ap, nump);
 
 	if (runp) {
 		/*
@@ -146,7 +141,7 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 		maxrun = MAXPHYS / mp->mnt_stat.f_iosize - 1;
 	}
 
-	if (bn >= 0 && bn < NDADDR) {
+	if (bn >= 0 && bn < UFS_NDADDR) {
 		if (nump != NULL)
 			*nump = 0;
 		if (ump->um_fstype == UFS1)
@@ -164,18 +159,20 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 		 * return a request for a zeroed out buffer if attempts
 		 * are made to read a BLK_NOCOPY or BLK_SNAP block.
 		 */
-		if ((ip->i_flags & SF_SNAPSHOT) && daddr > 0 &&
+		if ((ip->i_flags & (SF_SNAPSHOT | SF_SNAPINVAL)) == SF_SNAPSHOT
+		    && daddr > 0 &&
 		    daddr < ump->um_seqinc) {
 			*bnp = -1;
 		} else if (*bnp == 0) {
-			if (ip->i_flags & SF_SNAPSHOT) {
+			if ((ip->i_flags & (SF_SNAPSHOT | SF_SNAPINVAL))
+			    == SF_SNAPSHOT) {
 				*bnp = blkptrtodb(ump, bn * ump->um_seqinc);
 			} else {
 				*bnp = -1;
 			}
 		} else if (runp) {
 			if (ump->um_fstype == UFS1) {
-				for (++bn; bn < NDADDR && *runp < maxrun &&
+				for (++bn; bn < UFS_NDADDR && *runp < maxrun &&
 				    is_sequential(ump,
 				        ufs_rw32(ip->i_ffs1_db[bn - 1],
 				            UFS_MPNEEDSWAP(ump)),
@@ -183,7 +180,7 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 				            UFS_MPNEEDSWAP(ump)));
 				    ++bn, ++*runp);
 			} else {
-				for (++bn; bn < NDADDR && *runp < maxrun &&
+				for (++bn; bn < UFS_NDADDR && *runp < maxrun &&
 				    is_sequential(ump,
 				        ufs_rw64(ip->i_ffs2_db[bn - 1],
 				            UFS_MPNEEDSWAP(ump)),
@@ -250,18 +247,15 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 		}
 		if (bp->b_oflags & (BO_DONE | BO_DELWRI)) {
 			trace(TR_BREADHIT, pack(vp, size), metalbn);
-		}
-#ifdef DIAGNOSTIC
-		else if (!daddr)
-			panic("ufs_bmaparray: indirect block not in cache");
-#endif
-		else {
+		} else {
+			KASSERTMSG((daddr != 0),
+			    "ufs_bmaparray: indirect block not in cache");
 			trace(TR_BREADMISS, pack(vp, size), metalbn);
 			bp->b_blkno = blkptrtodb(ump, daddr);
 			bp->b_flags |= B_READ;
 			BIO_SETPRIO(bp, BPRIO_TIMECRITICAL);
 			VOP_STRATEGY(vp, bp);
-			curproc->p_stats->p_ru.ru_inblock++;	/* XXX */
+			curlwp->l_ru.ru_inblock++;	/* XXX */
 			if ((error = biowait(bp)) != 0) {
 				brelse(bp, 0);
 				return (error);
@@ -305,14 +299,15 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 	 * return a request for a zeroed out buffer if attempts are made
 	 * to read a BLK_NOCOPY or BLK_SNAP block.
 	 */
-	if ((ip->i_flags & SF_SNAPSHOT) && daddr > 0 &&
-	    daddr < ump->um_seqinc) {
+	if ((ip->i_flags & (SF_SNAPSHOT | SF_SNAPINVAL)) == SF_SNAPSHOT
+	    && daddr > 0 && daddr < ump->um_seqinc) {
 		*bnp = -1;
 		return (0);
 	}
 	*bnp = blkptrtodb(ump, daddr);
 	if (*bnp == 0) {
-		if (ip->i_flags & SF_SNAPSHOT) {
+		if ((ip->i_flags & (SF_SNAPSHOT | SF_SNAPINVAL))
+		    == SF_SNAPSHOT) {
 			*bnp = blkptrtodb(ump, bn * ump->um_seqinc);
 		} else {
 			*bnp = -1;
@@ -346,17 +341,17 @@ ufs_getlbns(struct vnode *vp, daddr_t bn, struct indir *ap, int *nump)
 	realbn = bn;
 	if (bn < 0)
 		bn = -bn;
-	KASSERT(bn >= NDADDR);
+	KASSERT(bn >= UFS_NDADDR);
 
 	/*
 	 * Determine the number of levels of indirection.  After this loop
 	 * is done, blockcnt indicates the number of data blocks possible
-	 * at the given level of indirection, and NIADDR - i is the number
+	 * at the given level of indirection, and UFS_NIADDR - i is the number
 	 * of levels of indirection needed to locate the requested block.
 	 */
 
-	bn -= NDADDR;
-	for (lbc = 0, i = NIADDR;; i--, bn -= blockcnt) {
+	bn -= UFS_NDADDR;
+	for (lbc = 0, i = UFS_NIADDR;; i--, bn -= blockcnt) {
 		if (i == 0)
 			return (EFBIG);
 
@@ -368,7 +363,7 @@ ufs_getlbns(struct vnode *vp, daddr_t bn, struct indir *ap, int *nump)
 	}
 
 	/* Calculate the address of the first meta-block. */
-	metalbn = -((realbn >= 0 ? realbn : -realbn) - bn + NIADDR - i);
+	metalbn = -((realbn >= 0 ? realbn : -realbn) - bn + UFS_NIADDR - i);
 
 	/*
 	 * At each iteration, off is the offset into the bap array which is
@@ -377,10 +372,10 @@ ufs_getlbns(struct vnode *vp, daddr_t bn, struct indir *ap, int *nump)
 	 * into the argument array.
 	 */
 	ap->in_lbn = metalbn;
-	ap->in_off = off = NIADDR - i;
+	ap->in_off = off = UFS_NIADDR - i;
 	ap->in_exists = 0;
 	ap++;
-	for (++numlevels; i <= NIADDR; i++) {
+	for (++numlevels; i <= UFS_NIADDR; i++) {
 		/* If searching for a meta-data block, quit when found. */
 		if (metalbn == realbn)
 			break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.12 2008/02/05 22:31:51 garbled Exp $	*/
+/*	$NetBSD: locore.S,v 1.24 2014/02/07 08:51:34 phx Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -33,8 +33,8 @@
  */
 
 #include "opt_ddb.h"
-#include "fs_kernfs.h"
 #include "opt_ipkdb.h"
+#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_openpic.h"
 #include "opt_ppcparam.h"
@@ -43,14 +43,12 @@
 #include <sys/syscall.h>
 
 #include <machine/param.h>
-#include <machine/vmparam.h>
-#include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
-#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 #include <powerpc/oea/hid.h>
 
 #include "ksyms.h"
@@ -67,8 +65,6 @@ GLOBAL(startsym)
 	.long	0			/* start symbol table */
 GLOBAL(endsym)
 	.long	0			/* end symbol table */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
 GLOBAL(oeacpufeat)
 	.long	0			/* cpu features */
 /*
@@ -96,7 +92,7 @@ __start:
 	mtspr	1008,8
 
 /* compute end of kernel memory */
-#if NKSYMS || defined(DDB) || defined(LKM) || defined(KERNFS)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	lis	7,_C_LABEL(startsym)@ha
 	addi	7,7,_C_LABEL(startsym)@l
 	stw	3,0(7)
@@ -133,26 +129,13 @@ __start:
 
 loop:	b	loop			/* not reached */
 
-	.globl	_C_LABEL(enable_intr)
-_C_LABEL(enable_intr):
-	mfmsr	3
-	ori	3,3,PSL_EE@l
-	mtmsr	3
-	blr
-
-	.globl	_C_LABEL(disable_intr)
-_C_LABEL(disable_intr):
-	mfmsr	3
-	andi.	3,3,~PSL_EE@l
-	mtmsr	3
-	blr
-
-	.globl	_C_LABEL(sandpoint_reboot)
-_C_LABEL(sandpoint_reboot):
+	.globl	_C_LABEL(jump_to_ppc_reset_entry)
+_C_LABEL(jump_to_ppc_reset_entry):
 	mfmsr	3
 	ori	3,3,PSL_IP@l
 	mtmsr	3
-	b	0xFFF00100
+	isync
+	ba	0xFFF00100
 
 /*
  * Include common switch / setfault code
@@ -160,7 +143,7 @@ _C_LABEL(sandpoint_reboot):
 #include <powerpc/powerpc/locore_subr.S>
 
 /*
- * Include common trap / execption code
+ * Include common trap / exception code
  */
 #include <powerpc/powerpc/trap_subr.S>
 

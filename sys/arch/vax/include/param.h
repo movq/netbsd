@@ -1,4 +1,4 @@
-/*      $NetBSD: param.h,v 1.54 2006/08/28 13:43:36 yamt Exp $    */
+/*      $NetBSD: param.h,v 1.61 2014/01/23 21:37:09 jklos Exp $    */
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -46,22 +46,6 @@
 #define	MACHINE_ARCH	"vax"
 #define	MID_MACHINE	MID_VAX
 
-/*
- * Round p (pointer or byte index) up to a correctly-aligned value
- * for all data types (int, long, ...).   The result is u_int and
- * must be cast to any desired pointer type.
- *
- * ALIGNED_POINTER is a boolean macro that checks whether an address
- * is valid to fetch data elements of type t from on this architecture.
- * This does not reflect the optimal alignment, just the possibility
- * (within reasonable limits). 
- *
- */
-
-#define ALIGNBYTES		(sizeof(int) - 1)
-#define ALIGN(p)		(((u_int)(p) + ALIGNBYTES) &~ ALIGNBYTES)
-#define ALIGNED_POINTER(p,t)	((((u_long)(p)) & (sizeof(t)-1)) == 0)
-
 #define	PGSHIFT		12			/* LOG2(NBPG) */
 #define	NBPG		(1 << PGSHIFT)		/* (1 << PGSHIFT) bytes/page */
 #define	PGOFSET		(NBPG - 1)		/* byte offset into page */
@@ -78,11 +62,10 @@
 
 #define BLKDEV_IOSIZE	2048
 #define	MAXPHYS		(64 * 1024)	/* max raw I/O transfer size */
-#define	MAXBSIZE	0x4000		/* max FS block size - XXX */
 
 #define	UPAGES		2		/* pages of u-area */
 #define USPACE		(NBPG*UPAGES)
-#define	REDZONEADDR	(VAX_NBPG*3)	/* Must be > sizeof(struct user) */
+#define	REDZONEADDR	(VAX_NBPG*3)	/* Must be > sizeof(struct pcb) */
 
 #ifndef MSGBUFSIZE
 #define MSGBUFSIZE	NBPG		/* default message buffer size */
@@ -112,18 +95,6 @@
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	512		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	256		/* map size, max cluster allocation */
-#endif
-#endif
-
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
@@ -146,12 +117,13 @@
 
 /* Prototype needed for delay() */
 #ifndef	_LOCORE
-void	delay __P((int));
+void	delay(int);
 /* inline macros used inside kernel */
 #include <machine/macros.h>
 #endif
 
 #define	DELAY(x) delay(x)
+#define	MAXEXEC	1
 #endif /* _KERNEL */
 
 #endif /* _VAX_PARAM_H_ */

@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.4 1997/10/18 04:37:51 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2011/03/06 23:41:47 christos Exp $
+
+WARNS?=	4
 
 PROG=	quot
 MAN=	quot.8

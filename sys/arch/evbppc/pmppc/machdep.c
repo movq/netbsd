@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.2 2007/10/17 19:54:18 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.13 2016/12/22 14:47:57 cherry Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,25 +61,27 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2 2007/10/17 19:54:18 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.13 2016/12/22 14:47:57 cherry Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"
 #include "opt_inet.h"
 #include "opt_ccitt.h"
-#include "opt_iso.h"
 #include "opt_ns.h"
 #include "opt_ipkdb.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/extent.h>
+#include <sys/intr.h>
 #include <sys/kernel.h>
 #include <sys/kgdb.h>
+#include <sys/ksyms.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
@@ -94,28 +89,22 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2 2007/10/17 19:54:18 garbled Exp $");
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/syscallargs.h>
-#include <sys/syslog.h>
 #include <sys/sysctl.h>
+#include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-#include <sys/ksyms.h>
 
-#include <uvm/uvm.h>
 #include <uvm/uvm_extern.h>
 
-#include <net/netisr.h>
-
-#include <machine/bus.h>
-#include <machine/db_machdep.h>
-#include <machine/intr.h>
-#include <machine/pio.h>
-#include <machine/pmap.h>
 #include <machine/powerpc.h>
-#include <machine/trap.h>
 #include <machine/pmppc.h>
 
+#include <powerpc/db_machdep.h>
+#include <powerpc/pio.h>
+#include <powerpc/pmap.h>
+#include <powerpc/trap.h>
+
 #include <powerpc/oea/bat.h>
-#include <arch/powerpc/pic/picvar.h>
+#include <powerpc/pic/picvar.h>
 
 #include <ddb/db_extern.h>
 
@@ -172,17 +161,6 @@ void initppc(u_int, u_int, u_int, void *); /* Called from locore */
 void pmppc_setup(void);
 void setleds(int leds);
 
-/*
- * Force cpu_info to be in the data segment to avoid the
- * memset() blowing away the data set up by locore.S.
- */
-#if 0
- /* this is defined in powerpc/oea/cpu_subr.c, I don't understand the above
-  * comment however.
-  */
-struct cpu_info cpu_info[1] = { { .ci_curlwp = &lwp0, }, };
-#endif
-
 void
 initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 {
@@ -213,14 +191,6 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 		panic("bus_space_init failed");
 
 	/*
-	 * Get CPU clock
-	 */
-	ticks_per_sec = a_config.a_bus_freq;
-	ticks_per_sec /= 4;	/* 4 cycles per DEC tick */
-	cpu_timebase = ticks_per_sec;
-	cpu_initclocks();
-
-	/*
 	 * Initialize the BAT registers
 	 */
 	oea_batinit(
@@ -235,29 +205,26 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 	oea_init(NULL);
 
 	/*
+	 * Get CPU clock
+	 */
+	ticks_per_sec = a_config.a_bus_freq;
+	ticks_per_sec /= 4;	/* 4 cycles per DEC tick */
+	cpu_timebase = ticks_per_sec;
+
+	/*
 	 * Set up console.
 	 */
 	consinit();		/* XXX should not be here */
 
 	printf("console set up\n");
 
-        /*
-	 * Set the page size.
-	 */
-	uvm_setpagesize();
+	uvm_md_init();
 
 	/*
 	 * Initialize pmap module.
 	 */
 	pmap_bootstrap(startkernel, endkernel);
 
-#if NKSYMS || defined(DDB) || defined(LKM)
-#ifdef SYMTAB_SPACE
-	ksyms_init(0, NULL, NULL);
-#else
-	#error "No SYMTAB_SPACE"
-#endif
-#endif
 #ifdef IPKDB
 	/*
 	 * Now trap to IPKDB
@@ -286,7 +253,7 @@ mem_regions(struct mem_region **mem, struct mem_region **avail)
  * Machine dependent startup code.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 
 	oea_startup(NULL);
@@ -384,12 +351,15 @@ cpu_reboot(int howto, char *what)
 	splhigh();
 	if (howto & RB_HALT) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("halted\n\n");
 		while(1);
 	}
 	if (!cold && (howto & RB_DUMP))
 		oea_dumpsys();
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 	printf("rebooting\n\n");
 	if (what && *what) {
 		if (strlen(what) > sizeof str - 5)

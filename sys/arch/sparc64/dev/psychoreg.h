@@ -1,8 +1,33 @@
-/*	$NetBSD: psychoreg.h,v 1.13 2006/02/25 00:58:35 wiz Exp $ */
+/*	$NetBSD: psychoreg.h,v 1.19 2013/08/20 19:19:23 macallan Exp $ */
+
+/*
+ * Copyright (c) 1999 Matthew R. Green
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1998, 1999 Eduardo E. Horvath
- * Copyright (c) 1999 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -217,9 +242,18 @@ struct psychoreg {
 		uint64_t	strbuf_error_diag[128];	/* streaming buffer error status diag *//* 1fe.0000.b400-b7f8 */
 		uint64_t	strbuf_pg_tag_diag[16];	/* streaming buffer page tag diag */	/* 1fe.0000.b800-b878 */
 		uint64_t	pad18[16];
-		uint64_t	strbuf_ln_tag_diag[16];	/* streaming buffer line tag diag */	/* 1fe.0000.b900-b978 */
-		uint64_t	pad19[208];
+		uint64_t	strbuf_ln_tag_diag[16];	/* streaming buffer line tag diag */ /* 1fe.0000.b900-b978 */
+		uint64_t	pad19[208];	
 	} psy_strbufdiag[2];					/* For PCI a and b */
+	
+	/* 1fe.0000.d000-f058 */
+	uint64_t	pad20[1036];
+	/* US-IIe and II'i' only */
+	uint64_t        stick_cmp_low;
+	uint64_t        stick_cmp_high;
+	uint64_t        stick_count_low;
+	uint64_t        stick_count_high;
+	uint64_t        estar_mode;
 
 	/* 
 	 * Here is the rest of the map, which we're not specifying:
@@ -263,6 +297,12 @@ struct psychoreg {
 	 */
 };
 
+#define STICK_CMP_LOW	0xf060
+#define STICK_CMP_HIGH	0xf068
+#define STICK_CNT_LOW	0xf070
+#define STICK_CNT_HIGH	0xf078
+#define ESTAR_MODE	0xf080
+
 /* what the bits mean! */
 
 /* PCI [a|b] control/status register */
@@ -277,12 +317,31 @@ struct psychoreg {
 #define	PCICTL_4ENABLE	0x000000000000000fLL	/* enable 4 PCI slots */
 #define	PCICTL_6ENABLE	0x000000000000003fLL	/* enable 6 PCI slots */
 
+/* the following registers only exist on US-IIe and US-II'i' */
+
+/* STICK_CMP_HIGH */
+#define STICK_DISABLE	0x80000000	/* disable STICK interrupt */
+
+/*
+ * ESTAR_MODE
+ * CPU clock MUST remain above 66MHz, so we can't use 1/6 on a 400MHz chip
+ */
+#define ESTAR_FULL	0	/* full CPU speed */
+#define ESTAR_DIV_2	1	/* 1/2 */
+#define ESTAR_DIV_6	2	/* 1/6 */
+/*
+ * the following exist only on US-II'i' - that is the 2nd generation of US-IIe
+ * CPUs that Sun decided to call US-IIi just to screw with everyone
+ */
+#define ESTAR_DIV_4	3	/* 1/4 */
+#define ESTAR_DIV_8	4	/* 1/8 */
+
 /*
  * these are the PROM structures we grovel
  */
 
 /*
- * For the physical addresses split into 3 32 bit values, we deocde
+ * For the physical addresses split into 3 32 bit values, we decode
  * them like the following (IEEE1275 PCI Bus binding 2.0, 2.2.1.1
  * Numerical Representation):
  *

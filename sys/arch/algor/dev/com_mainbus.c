@@ -1,4 +1,4 @@
-/*	$NetBSD: com_mainbus.c,v 1.8 2006/07/13 22:56:00 gdamore Exp $	*/
+/*	$NetBSD: com_mainbus.c,v 1.14 2011/07/09 16:03:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,26 +33,24 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: com_mainbus.c,v 1.8 2006/07/13 22:56:00 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_mainbus.c,v 1.14 2011/07/09 16:03:01 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/ioctl.h>
-#include <sys/select.h>
-#include <sys/tty.h>
-#include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
-#include <sys/file.h>
-#include <sys/uio.h>
-#include <sys/kernel.h>
-#include <sys/syslog.h>
-#include <sys/types.h>
 #include <sys/device.h>
+#include <sys/file.h>
+#include <sys/intr.h>
+#include <sys/ioctl.h>
+#include <sys/kernel.h>
+#include <sys/proc.h>
+#include <sys/select.h>
+#include <sys/syslog.h>
+#include <sys/systm.h>
+#include <sys/tty.h>
+#include <sys/uio.h>
 
-#include <machine/autoconf.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <algor/autoconf.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -71,15 +62,14 @@ struct com_mainbus_softc {
 	void	*sc_ih;			/* interrupt handler */
 };
 
-int	com_mainbus_match(struct device *, struct cfdata *, void *);
-void	com_mainbus_attach(struct device *, struct device *, void *);
-void	com_mainbus_cleanup(void *);
+static int	com_mainbus_match(device_t, cfdata_t , void *);
+static void	com_mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(com_mainbus, sizeof(struct com_mainbus_softc),
+CFATTACH_DECL_NEW(com_mainbus, sizeof(struct com_mainbus_softc),
     com_mainbus_match, com_mainbus_attach, NULL, NULL);
 
 int
-com_mainbus_match(struct device *parent, struct cfdata *match, void *aux)
+com_mainbus_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -91,16 +81,17 @@ com_mainbus_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-com_mainbus_attach(struct device *parent, struct device *self, void *aux)
+com_mainbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_mainbus_softc *msc = (void *)self;
+	struct com_mainbus_softc *msc = device_private(self);
 	struct com_softc *sc = &msc->sc_com;
 	struct mainbus_attach_args *ma = aux;
 	bus_space_handle_t ioh;
 
+	sc->sc_dev = self;
 	if (com_is_console(ma->ma_st, ma->ma_addr, &ioh) == 0 &&
 	    bus_space_map(ma->ma_st, ma->ma_addr, COM_NPORTS, 0, &ioh) != 0) {
-		printf(": can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 	COM_INIT_REGS(sc->sc_regs, ma->ma_st, ioh, ma->ma_addr);
@@ -110,15 +101,12 @@ com_mainbus_attach(struct device *parent, struct device *self, void *aux)
 
 	msc->sc_ih = (*algor_intr_establish)(ma->ma_irq, comintr, sc);
 	if (msc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt\n");
 		return;
 	}
 
-	/*
-	 * Shutdown hook for buggy BIOSs that don't recognize the UART
-	 * without a disabled FIFO.
-	 */
-	if (shutdownhook_establish(com_cleanup, sc) == NULL)
-		panic("com_mainbus_attach: could not establish shutdown hook");
+	if (!pmf_device_register1(self, com_suspend, com_resume, com_cleanup)) {
+		aprint_error_dev(self, "could not establish shutdown hook");
+	}
+
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.23 2005/12/11 12:18:03 christos Exp $	*/
+/*	$NetBSD: obio.c,v 1.25 2011/06/06 16:52:18 matt Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.23 2005/12/11 12:18:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.25 2011/06/06 16:52:18 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,30 +42,29 @@ __KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.23 2005/12/11 12:18:03 christos Exp $");
 
 #include <mac68k/obio/obiovar.h>
 
-static int	obio_match(struct device *, struct cfdata *, void *);
-static void	obio_attach(struct device *, struct device *, void *);
+static int	obio_match(device_t, cfdata_t, void *);
+static void	obio_attach(device_t, device_t, void *);
 static int	obio_print(void *, const char *);
-static int	obio_search(struct device *, struct cfdata *,
-			    const int *, void *);
+static int	obio_search(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(obio, sizeof(struct device),
+CFATTACH_DECL_NEW(obio, 0,
     obio_match, obio_attach, NULL, NULL);
 
 static int
-obio_match(struct device *parent, struct cfdata *cf, void *aux)
+obio_match(device_t parent, cfdata_t cf, void *aux)
 {
-	static int obio_matched = 0;
+	static bool obio_matched;
 
 	/* Allow only one instance. */
 	if (obio_matched)
 		return (0);
 
-	obio_matched = 1;
+	obio_matched = true;
 	return (1);
 }
 
 static void
-obio_attach(struct device *parent, struct device *self, void *aux)
+obio_attach(device_t parent, device_t self, void *aux)
 {
 	printf("\n");
 
@@ -92,8 +84,7 @@ obio_print(void *args, const char *name)
 }
 
 int
-obio_search(struct device *parent, struct cfdata *cf,
-	    const int *ldesc, void *aux)
+obio_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args *mba = (struct mainbus_attach_args *) aux;
 	struct obio_attach_args oa;

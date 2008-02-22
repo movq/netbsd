@@ -1,4 +1,4 @@
-/*	$NetBSD: ubsavar.h,v 1.3 2008/02/11 02:23:09 ichiro Exp $	*/
+/*	$NetBSD: ubsavar.h,v 1.10 2016/04/23 10:15:32 skrll Exp $	*/
 /*-
  * Copyright (c) 2002, Alexander Kabaev <kan.FreeBSD.org>.
  * All rights reserved.
@@ -39,13 +39,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -62,7 +55,7 @@
 
 #define	UBSA_MODVER		1	/* module version */
 
-#define	UBSA_DEFAULT_CONFIG_INDEX	1
+#define	UBSA_DEFAULT_CONFIG_INDEX	0
 #define	UBSA_IFACE_INDEX_OFFSET	0
 
 #define	UBSA_INTR_INTERVAL	100	/* ms */
@@ -119,15 +112,15 @@
 #define UBSA_MAXCONN		3
 
 struct	ubsa_softc {
-	USBBASEDEVICE		sc_dev;		/* base device */
-	usbd_device_handle	sc_udev;	/* USB device */
-	usbd_interface_handle	sc_iface[UBSA_MAXCONN]; /* interface */
+	device_t		sc_dev;		/* base device */
+	struct usbd_device *	sc_udev;	/* USB device */
+	struct usbd_interface *	sc_iface[UBSA_MAXCONN]; /* interface */
 
 	int			sc_iface_number[UBSA_MAXCONN];	/* interface number */
 	int			sc_config_index;	/* USB CONFIG_INDEX */
 
 	int			sc_intr_number;	/* interrupt number */
-	usbd_pipe_handle	sc_intr_pipe;	/* interrupt pipe */
+	struct usbd_pipe *	sc_intr_pipe;	/* interrupt pipe */
 	u_char			*sc_intr_buf;	/* interrupt buffer */
 	int			sc_isize;
 
@@ -137,16 +130,16 @@ struct	ubsa_softc {
 	u_char			sc_lsr;		/* Local status register */
 	u_char			sc_msr;		/* ubsa status register */
 
-	device_ptr_t		sc_subdevs[UBSA_MAXCONN]; /* ucom device */
+	device_t		sc_subdevs[UBSA_MAXCONN]; /* ucom device */
 	int			sc_numif;	/* number of interfaces */
 
 	u_char			sc_dying;	/* disconnecting */
 	u_char			sc_quadumts;
-	u_int16_t		sc_devflags;		
+	uint16_t		sc_devflags;
 };
 
 
-void ubsa_intr(usbd_xfer_handle, usbd_private_handle, usbd_status);
+void ubsa_intr(struct usbd_xfer *, void *, usbd_status);
 
 void ubsa_get_status(void *, int, u_char *, u_char *);
 void ubsa_set(void *, int, int, int);
@@ -154,8 +147,8 @@ int  ubsa_param(void *, int, struct termios *);
 int  ubsa_open(void *, int);
 void ubsa_close(void *, int);
 
-void ubsa_break(struct ubsa_softc *sc, int, int onoff);
-int  ubsa_request(struct ubsa_softc *, int, u_int8_t, u_int16_t);
+void ubsa_break(struct ubsa_softc *, int, int);
+int  ubsa_request(struct ubsa_softc *, int, uint8_t, uint16_t);
 void ubsa_dtr(struct ubsa_softc *, int, int);
 void ubsa_quadumts_dtr(struct ubsa_softc *, int, int);
 void ubsa_rts(struct ubsa_softc *, int, int);

@@ -1,4 +1,4 @@
-/*	$NetBSD: getextmemx.c,v 1.8 2007/12/25 18:33:34 perry Exp $	*/
+/*	$NetBSD: getextmemx.c,v 1.10 2011/06/16 13:27:59 joerg Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999
@@ -35,12 +35,8 @@
 #include <lib/libsa/stand.h>
 #include "libi386.h"
 
-extern int getextmem2 __P((int *));
-extern int getmementry __P((int *, int *));
-extern int getextmemps2 __P((void *));
-
 int
-getextmemx()
+getextmemx(void)
 {
 	int buf[5], i;
 	int extmem = getextmem1();
@@ -93,5 +89,5 @@ getextmemx()
 	}
 #endif
 
-	return (extmem);
+	return extmem;
 }

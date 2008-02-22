@@ -1,4 +1,4 @@
-/*	$NetBSD: i80321_aau.c,v 1.12 2008/01/05 00:31:55 ad Exp $	*/
+/*	$NetBSD: i80321_aau.c,v 1.15 2012/02/12 16:31:01 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80321_aau.c,v 1.12 2008/01/05 00:31:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80321_aau.c,v 1.15 2012/02/12 16:31:01 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/pool.h>
@@ -69,82 +69,77 @@ struct aau321_softc {
 };
 
 static struct iopaau_function aau321_func_zero = {
-	iopaau_func_zero_setup,
-	NULL,
+	.af_setup = iopaau_func_zero_setup,
 };
 
 static struct iopaau_function aau321_func_fill8 = {
-	iopaau_func_fill8_setup,
-	NULL,
+	.af_setup = iopaau_func_fill8_setup,
 };
 
 static struct iopaau_function aau321_func_xor_1_4 = {
-	iopaau_func_xor_setup,
-	NULL,
+	.af_setup = iopaau_func_xor_setup,
 };
 
 static struct iopaau_function aau321_func_xor_5_8 = {
-	iopaau_func_xor_setup,
-	NULL,
+	.af_setup = iopaau_func_xor_setup,
 };
 
 static const struct dmover_algdesc aau321_algdescs[] = {
 	{
-	  DMOVER_FUNC_ZERO,
-	  &aau321_func_zero,
-	  0
+	  .dad_name = DMOVER_FUNC_ZERO,
+	  .dad_data = &aau321_func_zero,
+	  .dad_ninputs = 0
 	},
 	{
-	  DMOVER_FUNC_FILL8,
-	  &aau321_func_fill8,
-	  0
+	  .dad_name = DMOVER_FUNC_FILL8,
+	  .dad_data = &aau321_func_fill8,
+	  .dad_ninputs = 0
 	},
 	{
-	  DMOVER_FUNC_COPY,
-	  &aau321_func_xor_1_4,
-	  1
+	  .dad_name = DMOVER_FUNC_COPY,
+	  .dad_data = &aau321_func_xor_1_4,
+	  .dad_ninputs = 1
 	},
 	{
-	  DMOVER_FUNC_XOR2,
-	  &aau321_func_xor_1_4,
-	  2
+	  .dad_name = DMOVER_FUNC_XOR2,
+	  .dad_data = &aau321_func_xor_1_4,
+	  .dad_ninputs = 2
 	},
 	{
-	  DMOVER_FUNC_XOR3,
-	  &aau321_func_xor_1_4,
-	  3
+	  .dad_name = DMOVER_FUNC_XOR3,
+	  .dad_data = &aau321_func_xor_1_4,
+	  .dad_ninputs = 3
 	},
 	{
-	  DMOVER_FUNC_XOR4,
-	  &aau321_func_xor_1_4,
-	  4
+	  .dad_name = DMOVER_FUNC_XOR4,
+	  .dad_data = &aau321_func_xor_1_4,
+	  .dad_ninputs = 4
 	},
 	{
-	  DMOVER_FUNC_XOR5,
-	  &aau321_func_xor_5_8,
+	  .dad_name = DMOVER_FUNC_XOR5,
+	  .dad_data = &aau321_func_xor_5_8,
 	  5
 	},
 	{
-	  DMOVER_FUNC_XOR6,
-	  &aau321_func_xor_5_8,
-	  6
+	  .dad_name = DMOVER_FUNC_XOR6,
+	  .dad_data = &aau321_func_xor_5_8,
+	  .dad_ninputs = 6
 	},
 	{
-	  DMOVER_FUNC_XOR7,
-	  &aau321_func_xor_5_8,
-	  7
+	  .dad_name = DMOVER_FUNC_XOR7,
+	  .dad_data = &aau321_func_xor_5_8,
+	  .dad_ninputs = 7
 	},
 	{
-	  DMOVER_FUNC_XOR8,
-	  &aau321_func_xor_5_8,
-	  8
+	  .dad_name = DMOVER_FUNC_XOR8,
+	  .dad_data = &aau321_func_xor_5_8,
+	  .dad_ninputs = 8
 	},
 };
-#define	AAU321_ALGDESC_COUNT \
-	(sizeof(aau321_algdescs) / sizeof(aau321_algdescs[0]))
+#define	AAU321_ALGDESC_COUNT	__arraycount(aau321_algdescs)
 
 static int
-aau321_match(struct device *parent, struct cfdata *match, void *aux)
+aau321_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct iopxs_attach_args *ia = aux;
 
@@ -155,22 +150,24 @@ aau321_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-aau321_attach(struct device *parent, struct device *self, void *aux)
+aau321_attach(device_t parent, device_t self, void *aux)
 {
-	struct aau321_softc *sc321 = (void *) self;
+	struct aau321_softc *sc321 = device_private(self);
 	struct iopaau_softc *sc = &sc321->sc_iopaau;
 	struct iopxs_attach_args *ia = aux;
+	const char *xname = device_xname(self);
 	int error;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
 
+	sc->sc_dev = self;
 	sc->sc_st = ia->ia_st;
 	error = bus_space_subregion(sc->sc_st, ia->ia_sh,
 	    ia->ia_offset, ia->ia_size, &sc->sc_sh);
 	if (error) {
 		aprint_error("%s: unable to subregion registers, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		    xname, error);
 		return;
 	}
 
@@ -180,7 +177,7 @@ aau321_attach(struct device *parent, struct device *self, void *aux)
 	    iopaau_intr, sc);
 	if (sc321->sc_error_ih == NULL) {
 		aprint_error("%s: unable to register error interrupt handler\n",
-		    sc->sc_dev.dv_xname);
+		    xname);
 		return;
 	}
 
@@ -188,7 +185,7 @@ aau321_attach(struct device *parent, struct device *self, void *aux)
 	    iopaau_intr, sc);
 	if (sc321->sc_eoc_ih == NULL) {
 		aprint_error("%s: unable to register EOC interrupt handler\n",
-		    sc->sc_dev.dv_xname);
+		    xname);
 		return;
 	}
 
@@ -196,11 +193,11 @@ aau321_attach(struct device *parent, struct device *self, void *aux)
 	    iopaau_intr, sc);
 	if (sc321->sc_eoc_ih == NULL) {
 		aprint_error("%s: unable to register EOT interrupt handler\n",
-		    sc->sc_dev.dv_xname);
+		    xname);
 		return;
 	}
 
-	sc->sc_dmb.dmb_name = sc->sc_dev.dv_xname;
+	sc->sc_dmb.dmb_name = xname;
 	sc->sc_dmb.dmb_speed = 1638400;			/* XXX */
 	sc->sc_dmb.dmb_cookie = sc;
 	sc->sc_dmb.dmb_algdescs = aau321_algdescs;
@@ -209,11 +206,18 @@ aau321_attach(struct device *parent, struct device *self, void *aux)
 
 	iopaau_attach(sc);
 
+	/*
+	 * These must be initialized after iopaau_attach()
+	 * because iopaau_desc_[48]_cache is set up there.
+	 */
+	KASSERT(iopaau_desc_4_cache != NULL);
 	aau321_func_zero.af_desc_cache = iopaau_desc_4_cache;
 	aau321_func_fill8.af_desc_cache = iopaau_desc_4_cache;
 	aau321_func_xor_1_4.af_desc_cache = iopaau_desc_4_cache;
+
+	KASSERT(iopaau_desc_8_cache != NULL);
 	aau321_func_xor_5_8.af_desc_cache = iopaau_desc_8_cache;
 }
 
-CFATTACH_DECL(iopaau, sizeof(struct aau321_softc),
+CFATTACH_DECL_NEW(iopaau, sizeof(struct aau321_softc),
     aau321_match, aau321_attach, NULL, NULL);

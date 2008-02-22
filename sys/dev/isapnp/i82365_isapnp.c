@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365_isapnp.c,v 1.24 2007/10/19 12:00:31 ad Exp $	*/
+/*	$NetBSD: i82365_isapnp.c,v 1.33 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1998 Bill Sommerfeld.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365_isapnp.c,v 1.24 2007/10/19 12:00:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365_isapnp.c,v 1.33 2016/07/14 10:19:06 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,13 +65,13 @@ int	pcicisapnp_debug = 0 /* XXX */ ;
 #define	DPRINTF(arg)
 #endif
 
-int pcic_isapnp_match(struct device *, struct cfdata *, void *);
-void	pcic_isapnp_attach(struct device *, struct device *, void *);
+int pcic_isapnp_match(device_t, cfdata_t, void *);
+void pcic_isapnp_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pcic_isapnp, sizeof(struct pcic_isa_softc),
+CFATTACH_DECL_NEW(pcic_isapnp, sizeof(struct pcic_isa_softc),
     pcic_isapnp_match, pcic_isapnp_attach, NULL, NULL);
 
-static struct pcmcia_chip_functions pcic_isa_functions = {
+static const struct pcmcia_chip_functions pcic_isa_functions = {
 	pcic_chip_mem_alloc,
 	pcic_chip_mem_free,
 	pcic_chip_mem_map,
@@ -92,23 +92,21 @@ static struct pcmcia_chip_functions pcic_isa_functions = {
 };
 
 int
-pcic_isapnp_match(struct device *parent, struct cfdata *match,
-    void *aux)
+pcic_isapnp_match(device_t parent, cfdata_t match, void *aux)
 {
 	int pri, variant;
 
 	pri = isapnp_devmatch(aux, &isapnp_pcic_devinfo, &variant);
 	if (pri && variant > 0)
 		pri = 0;
-	return (pri);
+	return pri;
 }
 
 void
-pcic_isapnp_attach(struct device *parent, struct device *self,
-    void *aux)
+pcic_isapnp_attach(device_t parent, device_t self, void *aux)
 {
-	struct pcic_softc *sc = device_private(self);
 	struct pcic_isa_softc *isc = device_private(self);
+	struct pcic_softc *sc = &isc->sc_pcic;
 	struct isapnp_attach_args *ipa = aux;
 	isa_chipset_tag_t ic = ipa->ipa_ic;
 	bus_space_tag_t iot = ipa->ipa_iot;
@@ -119,20 +117,22 @@ pcic_isapnp_attach(struct device *parent, struct device *self,
 	int msize;
 	int tmp1;
 
-	printf("\n");
+	sc->dev = self;
+
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	if (isapnp_config(iot, memt, ipa)) {
-		printf("%s: error in region allocation\n", sc->dev.dv_xname);
+		aprint_error_dev(self, "error in region allocation\n");
 		return;
 	}
 
-	printf("%s: %s %s", sc->dev.dv_xname, ipa->ipa_devident,
-	    ipa->ipa_devclass);
+	aprint_normal_dev(self, "%s %s", ipa->ipa_devident, ipa->ipa_devclass);
 
 	/* sanity check that we get at least one hunk of IO space.. */
 	if (ipa->ipa_nio < 1) {
-		printf("%s: failed to get one chunk of i/o space\n",
-		       sc->dev.dv_xname);
+		aprint_error_dev(self,
+		    "failed to get one chunk of i/o space\n");
 		return;
 	}
 
@@ -142,26 +142,25 @@ pcic_isapnp_attach(struct device *parent, struct device *self,
 	/* sanity check to make sure we have a real PCIC there.. */
 	bus_space_write_1(iot, ioh, PCIC_REG_INDEX, C0SA + PCIC_IDENT);
 	tmp1 = bus_space_read_1(iot, ioh, PCIC_REG_DATA);
-	printf("(ident 0x%x", tmp1);
+	aprint_normal("(ident 0x%x", tmp1);
 	if (pcic_ident_ok(tmp1)) {
-	  	printf(" OK)");
+	  	aprint_normal(" OK)");
 	} else {
-	        printf(" Not OK)\n");
+	        aprint_error(" Not OK)\n");
 		return;
 	}
 
 	msize =  0x4000;
-	if (isa_mem_alloc (memt, msize, msize, 0, 0,
-			   &maddr, &memh)) {
-		printf(": can't alloc mem space\n");
+	if (isa_mem_alloc(memt, msize, msize, 0, 0, &maddr, &memh)) {
+		aprint_error(": can't alloc mem space\n");
 		return;
 	}
-	printf(": using iomem 0x%lx iosiz 0x%x", maddr, msize);
+	aprint_normal(": using iomem %#" PRIxPADDR " iosiz %#x", maddr, msize);
 	sc->membase = maddr;
 	sc->subregionmask = (1 << (msize / PCIC_MEM_PAGESIZE)) - 1;
 
 	isc->sc_ic = ic;
-	sc->pct = (pcmcia_chipset_tag_t) & pcic_isa_functions;
+	sc->pct = &pcic_isa_functions;
 
 	sc->iot = iot;
 	sc->ioh = ioh;
@@ -179,7 +178,7 @@ pcic_isapnp_attach(struct device *parent, struct device *self,
 	else
 		sc->irq = -1;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	pcic_attach(sc);
 	pcic_isa_bus_width_probe(sc, iot, ioh, ipa->ipa_io[0].base,

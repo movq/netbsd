@@ -1,4 +1,4 @@
-/*	$NetBSD: getcontext.S,v 1.4 2004/08/21 11:30:17 rearnsha Exp $	*/
+/*	$NetBSD: getcontext.S,v 1.10 2013/09/03 00:30:19 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,10 @@
  */
 
 #include "SYS.h"
+#include "assym.h"
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: getcontext.S,v 1.4 2004/08/21 11:30:17 rearnsha Exp $")
+	RCSID("$NetBSD: getcontext.S,v 1.10 2013/09/03 00:30:19 matt Exp $")
 #endif /* SYSLIBC_SCCS && !lint */
 
 #ifdef WEAK_ALIAS
@@ -48,14 +42,20 @@ WEAK_ALIAS(getcontext, _getcontext)
 
 ENTRY(_getcontext)
 	mov	r2, r0			/* Must save argument pointer. */
-	swi	SYS_getcontext
-	bcs	PIC_SYM(CERROR, PLT)
-	str	lr, [r2, #(36 + 15*4)]	/* Adjust PC. */
+	SYSTRAP (getcontext)
+	_INVOKE_CERROR()
+#if !defined(__thumb__) || defined(_ARM_ARCH_T2)
+	str	lr, [r2, #_UC_REGS_PC]	/* Adjust PC. */
+#else
+	mov	r3, lr
+	str	r3, [r2, #_UC_REGS_PC]	/* Adjust PC. */
+#endif
 #ifdef SOFTFLOAT
 	/* Ahem. */
 	/* Judging from the softfloat code we should at least save
 	   the exception codes and rounding mode here. */
 #endif
-	mov	r0, #0
-	str	r0, [r2, #(36 + 0*4)]	/* Return 0. */
+	movs	r0, #0
+	str	r0, [r2, #_UC_REGS_R0]	/* Return 0. */
 	RET
+END(_getcontext)

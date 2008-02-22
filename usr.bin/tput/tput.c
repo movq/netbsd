@@ -1,4 +1,4 @@
-/*	$NetBSD: tput.c,v 1.18 2007/12/15 19:44:53 perry Exp $	*/
+/*	$NetBSD: tput.c,v 1.26 2013/02/05 11:31:56 roy Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1988, 1993
@@ -31,38 +31,39 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tput.c	8.3 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: tput.c,v 1.18 2007/12/15 19:44:53 perry Exp $");
+__RCSID("$NetBSD: tput.c,v 1.26 2013/02/05 11:31:56 roy Exp $");
 #endif /* not lint */
 
 #include <termios.h>
 
 #include <err.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <termcap.h>
+#include <term_private.h>
+#include <term.h>
 #include <unistd.h>
 
-static int    outc(int);
-static void   prlongname(char *);
-static void   setospeed(void);
 static void   usage(void) __dead;
-static char **process(const char *, char *, char **);
+static char **process(const char *, const char *, char **);
 
 int
 main(int argc, char **argv)
 {
 	int ch, exitval, n;
-	char *cptr, *term, buf[1024], tbuf[1024];
-	const char *p;
+	char *term;
+	const char *p, *s;
+	size_t pl;
 
 	term = NULL;
 	while ((ch = getopt(argc, argv, "T:")) != -1)
@@ -80,37 +81,53 @@ main(int argc, char **argv)
 	if (!term && !(term = getenv("TERM")))
 		errx(2, "No terminal type specified and no TERM "
 		    "variable set in the environment.");
-	if (tgetent(tbuf, term) != 1)
-		err(2, "tgetent failure");
-	setospeed();
+	setupterm(term, 0, NULL);
 	for (exitval = 0; (p = *argv) != NULL; ++argv) {
 		switch (*p) {
 		case 'c':
 			if (!strcmp(p, "clear"))
-				p = "cl";
+				p = "clear";
 			break;
 		case 'i':
-			if (!strcmp(p, "init"))
-				p = "is";
+			if (!strcmp(p, "init")) {
+				s = tigetstr("is1");
+				if (s != NULL)
+					putp(s);
+				p = "is2";
+			}
 			break;
 		case 'l':
 			if (!strcmp(p, "longname")) {
-				prlongname(tbuf);
+				(void)printf("%s\n", longname());
 				continue;
 			}
 			break;
 		case 'r':
-			if (!strcmp(p, "reset"))
-				p = "rs";
+			if (!strcmp(p, "reset")) {
+				s = tigetstr("rs1");
+				if (s != NULL)
+					putp(s);
+				p = "rs2";
+			}
 			break;
 		}
-		cptr = buf;
-		if (tgetstr(p, &cptr))
-			argv = process(p, buf, argv);
-		else if ((n = tgetnum(p)) != -1)
+		pl = strlen(p);
+		if (((s = tigetstr(p)) != NULL && s != (char *)-1) ||
+		    (pl <= 2 && (s = tgetstr(p, NULL)) != NULL))
+			argv = process(p, s, argv);
+		else if ((((n = tigetnum(p)) != -1 && n != -2 ) ||
+			   (pl <= 2 && (n = tgetnum(p)) != -1)))
 			(void)printf("%d\n", n);
-		else
-			exitval = !tgetflag(p);
+		else {
+			exitval = tigetflag(p);
+			if (exitval == -1) {
+				if (pl <= 2)
+					exitval = !tgetflag(p);
+				else
+					exitval = 1;
+			} else
+				exitval = !exitval;
+		}
 
 		if (argv == NULL)
 			break;
@@ -118,109 +135,54 @@ main(int argc, char **argv)
 	return argv ? exitval : 2;
 }
 
-static void
-prlongname(char *buf)
-{
-	int savech;
-	char *p, *savep;
-
-	for (p = buf; *p && *p != ':'; ++p)
-		continue;
-	savech = *(savep = p);
-	for (*p = '\0'; p >= buf && *p != '|'; --p)
-		continue;
-	(void)printf("%s\n", p + 1);
-	*savep = savech;
-}
-
 static char **
-process(const char *cap, char *str, char **argv)
+process(const char *cap, const char *str, char **argv)
 {
 	static const char errfew[] =
 	    "Not enough arguments (%d) for capability `%s'";
-	static const char errmany[] =
-	    "Too many arguments (%d) for capability `%s'";
 	static const char erresc[] =
-	    "Unknown %% escape `%c' for capability `%s'";
-	char *cp;
-	int arg_need, arg_rows, arg_cols;
+	    "Unknown %% escape (%s) for capability `%s'";
+	static const char errnum[] =
+	    "Expected a numeric argument [%d] (%s) for capability `%s'";
+	static const char errcharlong[] = 
+	    "Platform does not fit a string into a long for capability '%s'";
+	int i, nparams, piss[TPARM_MAX];
+	long nums[TPARM_MAX];
+	char *strs[TPARM_MAX], *tmp;
 
 	/* Count how many values we need for this capability. */
-	for (cp = str, arg_need = 0; *cp != '\0'; cp++)
-		if (*cp == '%')
-			    switch (*++cp) {
-			    case 'd':
-			    case '2':
-			    case '3':
-			    case '.':
-			    case '+':
-				    arg_need++;
-				    break;
-			    case '%':
-			    case '>':
-			    case 'i':
-			    case 'r':
-			    case 'n':
-			    case 'B':
-			    case 'D':
-				    break;
-			    default:
-				/*
-				 * hpux has lot's of them, but we complain
-				 */
-				 errx(2, erresc, *cp, cap);
-			    }
+	errno = 0;
+	memset(&piss, 0, sizeof(piss));
+	nparams = _ti_parm_analyse(str, piss, TPARM_MAX);
+	if (errno == EINVAL)
+		errx(2, erresc, str, cap);
 
-	/* And print them. */
-	switch (arg_need) {
-	case 0:
-		(void)tputs(str, 1, outc);
-		break;
-	case 1:
-		arg_cols = 0;
-
+	/* Create our arrays of integers and strings */
+	for (i = 0; i < nparams; i++) {
 		if (*++argv == NULL || *argv[0] == '\0')
-			errx(2, errfew, 1, cap);
-		arg_rows = atoi(*argv);
-
-		(void)tputs(tgoto(str, arg_cols, arg_rows), 1, outc);
-		break;
-	case 2:
-		if (*++argv == NULL || *argv[0] == '\0')
-			errx(2, errfew, 2, cap);
-		arg_rows = atoi(*argv);
-
-		if (*++argv == NULL || *argv[0] == '\0')
-			errx(2, errfew, 2, cap);
-		arg_cols = atoi(*argv);
-
-		(void)tputs(tgoto(str, arg_cols, arg_rows), arg_rows, outc);
-		break;
-
-	default:
-		errx(2, errmany, arg_need, cap);
+			errx(2, errfew, nparams, cap);
+		if (piss[i]) {
+			if (sizeof(char *) > sizeof(long) /* CONSTCOND */)
+				errx(2, errcharlong, cap);
+			strs[i] = *argv;
+		} else {
+			errno = 0;
+			nums[i] = strtol(*argv, &tmp, 0);
+			if ((errno == ERANGE && 
+			    (nums[i] == LONG_MIN || nums[i] == LONG_MAX)) ||
+			    (errno != 0 && nums[i] == 0) ||
+			    tmp == str ||
+			    *tmp != '\0')
+				errx(2, errnum, i + 1, *argv, cap);
+		}
 	}
+
+	/* And output */
+#define p(i)	(i <= nparams ? \
+		    (piss[i - 1] ? (long)strs[i - 1] : nums[i - 1]) : 0)
+	putp(tparm(str, p(1), p(2), p(3), p(4), p(5), p(6), p(7), p(8), p(9)));
+
 	return argv;
-}
-
-static void
-setospeed(void)
-{
-#undef ospeed
-	extern short ospeed;
-	struct termios t;
-
-	if (tcgetattr(STDOUT_FILENO, &t) != -1)
-		ospeed = 0;
-	else
-		ospeed = cfgetospeed(&t);
-}
-
-static int
-outc(c)
-	int c;
-{
-	return putchar(c);
 }
 
 static void

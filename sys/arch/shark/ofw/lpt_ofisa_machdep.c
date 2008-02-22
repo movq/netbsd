@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt_ofisa_machdep.c,v 1.4 2005/12/11 12:19:04 christos Exp $	*/
+/*	$NetBSD: lpt_ofisa_machdep.c,v 1.9 2012/10/27 17:18:11 chs Exp $	*/
 
 /*
  * Copyright 1998
@@ -34,14 +34,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt_ofisa_machdep.c,v 1.4 2005/12/11 12:19:04 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt_ofisa_machdep.c,v 1.9 2012/10/27 17:18:11 chs Exp $");
 
 #include "opt_compat_old_ofw.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <dev/ofw/openfirm.h>
@@ -50,13 +50,10 @@ __KERNEL_RCSID(0, "$NetBSD: lpt_ofisa_machdep.c,v 1.4 2005/12/11 12:19:04 christ
 
 #ifdef COMPAT_OLD_OFW
 
-extern int i87307PrinterConfig __P((bus_space_tag_t, u_int));	/* XXX */
+extern int i87307PrinterConfig(bus_space_tag_t, u_int);	/* XXX */
 
 int
-lpt_ofisa_md_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+lpt_ofisa_md_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofisa_attach_args *aa = aux;
 	char type[9];
@@ -78,11 +75,7 @@ lpt_ofisa_md_match(parent, cf, aux)
 }
 
 int
-lpt_ofisa_md_intr_fixup(parent, self, aux, descp, ndescs, ndescsfilled)
-	struct device *parent, *self;
-	void *aux;
-	struct ofisa_intr_desc *descp;
-	int ndescs, ndescsfilled;
+lpt_ofisa_md_intr_fixup(device_t parent, device_t self, void *aux, struct ofisa_intr_desc *descp, int ndescs, int ndescsfilled)
 {
 
 	if (1)			/* XXX old firmware compat enabled */

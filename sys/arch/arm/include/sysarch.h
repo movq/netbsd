@@ -1,4 +1,4 @@
-/*	$NetBSD: sysarch.h,v 1.6 2005/12/11 12:16:47 christos Exp $	*/
+/*	$NetBSD: sysarch.h,v 1.14 2017/01/13 19:53:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1996-1997 Mark Brinicombe.
@@ -38,9 +38,18 @@
 #include <sys/cdefs.h>
 
 /*
- * Pickup definition of uintptr_t
+ * Pickup definition of size_t and uintptr_t
  */
+#include <machine/ansi.h>
 #include <sys/stdint.h>
+#ifndef _KERNEL
+#include <stdbool.h>
+#endif
+
+#ifdef	_BSD_SIZE_T_
+typedef	_BSD_SIZE_T_ size_t;
+#undef	_BSD_SIZE_T_
+#endif
 
 /*
  * Architecture specific syscalls (arm)
@@ -48,17 +57,28 @@
 
 #define ARM_SYNC_ICACHE		0
 #define ARM_DRAIN_WRITEBUF	1
+#define ARM_VFP_FPSCR		2
+#define ARM_FPU_USED		3
 
 struct arm_sync_icache_args {
 	uintptr_t	addr;		/* Virtual start address */
 	size_t		len;		/* Region size */
 };
 
+struct arm_vfp_fpscr_args {
+	uint32_t	fpscr_clear;	/* bits to clear */
+	uint32_t	fpscr_set;	/* bits to set */
+};
+
+struct arm_unaligned_faults_args {
+	bool		enabled;	/* unaligned faults are enabled */ 
+};
+
 #ifndef _KERNEL
 __BEGIN_DECLS
-int	arm_sync_icache __P((u_int addr, int len));
-int	arm_drain_writebuf __P((void));
-int	sysarch __P((int, void *));
+int	arm_sync_icache(uintptr_t, size_t);
+int	arm_drain_writebuf(void);
+int	sysarch(int, void *);
 __END_DECLS
 #endif
 

@@ -1,4 +1,4 @@
-/* $NetBSD: mcpcia_dma.c,v 1.15 2001/07/19 18:55:40 thorpej Exp $ */
+/* $NetBSD: mcpcia_dma.c,v 1.21 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mcpcia_dma.c,v 1.15 2001/07/19 18:55:40 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcpcia_dma.c,v 1.21 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,10 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: mcpcia_dma.c,v 1.15 2001/07/19 18:55:40 thorpej Exp 
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -58,21 +49,21 @@ __KERNEL_RCSID(0, "$NetBSD: mcpcia_dma.c,v 1.15 2001/07/19 18:55:40 thorpej Exp 
 #include <alpha/pci/mcpciavar.h>
 #include <alpha/pci/pci_kn300.h>
 
-bus_dma_tag_t mcpcia_dma_get_tag __P((bus_dma_tag_t, alpha_bus_t));
+bus_dma_tag_t mcpcia_dma_get_tag(bus_dma_tag_t, alpha_bus_t);
 
-int	mcpcia_bus_dmamap_load_sgmap __P((bus_dma_tag_t, bus_dmamap_t, void *,
-	    bus_size_t, struct proc *, int));
+int	mcpcia_bus_dmamap_load_sgmap(bus_dma_tag_t, bus_dmamap_t, void *,
+	    bus_size_t, struct proc *, int);
 
-int	mcpcia_bus_dmamap_load_mbuf_sgmap __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct mbuf *, int));
+int	mcpcia_bus_dmamap_load_mbuf_sgmap(bus_dma_tag_t, bus_dmamap_t,
+	    struct mbuf *, int);
 
-int	mcpcia_bus_dmamap_load_uio_sgmap __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct uio *, int));
+int	mcpcia_bus_dmamap_load_uio_sgmap(bus_dma_tag_t, bus_dmamap_t,
+	    struct uio *, int);
 
-int	mcpcia_bus_dmamap_load_raw_sgmap __P((bus_dma_tag_t, bus_dmamap_t,
-	    bus_dma_segment_t *, int, bus_size_t, int));
+int	mcpcia_bus_dmamap_load_raw_sgmap(bus_dma_tag_t, bus_dmamap_t,
+	    bus_dma_segment_t *, int, bus_size_t, int);
 
-void	mcpcia_bus_dmamap_unload_sgmap __P((bus_dma_tag_t, bus_dmamap_t));
+void	mcpcia_bus_dmamap_unload_sgmap(bus_dma_tag_t, bus_dmamap_t);
 
 /*
  * Direct-mapped window: 2G at 2G
@@ -103,8 +94,7 @@ do {									\
 } while (0)
 
 void
-mcpcia_dma_init(ccp)
-	struct mcpcia_config *ccp;
+mcpcia_dma_init(struct mcpcia_config *ccp)
 {
 	bus_dma_tag_t t;
 
@@ -194,12 +184,12 @@ mcpcia_dma_init(ccp)
 	alpha_sgmap_init(&ccp->cc_dmat_pci_sgmap, &ccp->cc_pci_sgmap,
 	    "mcpcia pci sgmap",
 	    MCPCIA_PCI_SG_MAPPED_BASE, 0, MCPCIA_PCI_SG_MAPPED_SIZE,
-	    sizeof(u_int64_t), NULL, 0);
+	    sizeof(uint64_t), NULL, 0);
 
 	alpha_sgmap_init(&ccp->cc_dmat_isa_sgmap, &ccp->cc_isa_sgmap,
 	    "mcpcia isa sgmap",
 	    MCPCIA_ISA_SG_MAPPED_BASE, 0, MCPCIA_ISA_SG_MAPPED_SIZE,
-	    sizeof(u_int64_t), NULL, 0);
+	    sizeof(uint64_t), NULL, 0);
 
 	/*
 	 * Disable windows first.
@@ -264,9 +254,7 @@ mcpcia_dma_init(ccp)
  * INTERNAL USE ONLY!
  */
 bus_dma_tag_t
-mcpcia_dma_get_tag(t, bustype)
-	bus_dma_tag_t t;
-	alpha_bus_t bustype;
+mcpcia_dma_get_tag(bus_dma_tag_t t, alpha_bus_t bustype)
 {
 	struct mcpcia_config *ccp = t->_cookie;
 
@@ -297,13 +285,7 @@ mcpcia_dma_get_tag(t, bustype)
  * Load a MCPCIA SGMAP-mapped DMA map with a linear buffer.
  */
 int
-mcpcia_bus_dmamap_load_sgmap(t, map, buf, buflen, p, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	void *buf;
-	bus_size_t buflen;
-	struct proc *p;
-	int flags;
+mcpcia_bus_dmamap_load_sgmap(bus_dma_tag_t t, bus_dmamap_t map, void *buf, bus_size_t buflen, struct proc *p, int flags)
 {
 	int error;
 	struct mcpcia_config *ccp = t->_cookie;
@@ -319,11 +301,7 @@ mcpcia_bus_dmamap_load_sgmap(t, map, buf, buflen, p, flags)
  * Load a MCPCIA SGMAP-mapped DMA map with an mbuf chain.
  */
 int
-mcpcia_bus_dmamap_load_mbuf_sgmap(t, map, m, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct mbuf *m;
-	int flags;
+mcpcia_bus_dmamap_load_mbuf_sgmap(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m, int flags)
 {
 	int error;
 	struct mcpcia_config *ccp = t->_cookie;
@@ -338,11 +316,7 @@ mcpcia_bus_dmamap_load_mbuf_sgmap(t, map, m, flags)
  * Load a MCPCIA SGMAP-mapped DMA map with a uio.
  */
 int
-mcpcia_bus_dmamap_load_uio_sgmap(t, map, uio, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct uio *uio;
-	int flags;
+mcpcia_bus_dmamap_load_uio_sgmap(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio, int flags)
 {
 	int error;
 	struct mcpcia_config *ccp = t->_cookie;
@@ -357,13 +331,7 @@ mcpcia_bus_dmamap_load_uio_sgmap(t, map, uio, flags)
  * Load a MCPCIA SGMAP-mapped DMA map with raw memory.
  */
 int
-mcpcia_bus_dmamap_load_raw_sgmap(t, map, segs, nsegs, size, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	bus_size_t size;
-	int flags;
+mcpcia_bus_dmamap_load_raw_sgmap(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs, int nsegs, bus_size_t size, int flags)
 {
 	int error;
 	struct mcpcia_config *ccp = t->_cookie;
@@ -379,9 +347,7 @@ mcpcia_bus_dmamap_load_raw_sgmap(t, map, segs, nsegs, size, flags)
  * Unload a MCPCIA DMA map.
  */
 void
-mcpcia_bus_dmamap_unload_sgmap(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
+mcpcia_bus_dmamap_unload_sgmap(bus_dma_tag_t t, bus_dmamap_t map)
 {
 	struct mcpcia_config *ccp = t->_cookie;
 

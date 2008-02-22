@@ -1,4 +1,4 @@
-/*	$NetBSD: sprite.h,v 1.9 2005/08/05 00:53:18 christos Exp $	*/
+/*	$NetBSD: sprite.h,v 1.14 2017/05/31 22:02:06 maya Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -78,8 +78,8 @@
  * Common constants and type declarations for Sprite.
  */
 
-#ifndef _SPRITE
-#define _SPRITE
+#ifndef MAKE_SPRITE_H
+#define MAKE_SPRITE_H
 
 
 /*
@@ -113,25 +113,4 @@ typedef int  ReturnStatus;
 #define	SUCCESS			0x00000000
 #define	FAILURE			0x00000001
 
-
-/*
- * A nil pointer must be something that will cause an exception if
- * referenced.  There are two nils: the kernels nil and the nil used
- * by user processes.
- */
-
-#define NIL 		~0
-#ifndef NULL
-#define NULL	 	0
-#endif /* NULL */
-
-/*
- * ClientData is an uninterpreted word.  It is defined as an int so that
- * kdbx will not interpret client data as a string. The
- * client data will generally not be used in arithmetic.
- * But we don't have kdbx anymore so we define it as void (christos)
- */
-
-typedef void *ClientData;
-
-#endif /* _SPRITE */
+#endif /* MAKE_SPRITE_H */

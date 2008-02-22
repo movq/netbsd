@@ -1,4 +1,4 @@
-.\"	$NetBSD: ref.me,v 1.7 2003/08/07 10:30:58 agc Exp $
+.\"	$NetBSD: ref.me,v 1.10 2015/12/23 10:43:35 wiz Exp $
 .\"
 .\" Copyright (c) 1986, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -216,10 +216,14 @@ phototypesetter;
 this changes the page offset
 and inserts cut marks.
 .pp
-This documentation was
+This documentation
+was
 .if n \*N'ed
 .if t \*T'ed
+.if \nR==0 \
+\{
 on \*(td
+.\}
 and applies to version
 \*(MO
 of the \-me macros.
@@ -1981,19 +1985,19 @@ as a word.
 .DE
 Today's date,
 directly printable.
-The date is of the form \*(td.
+The date is of the form June 1, 1994.
 Other forms of the date can be used
 by using
 .NR (dy
 (the day of the month;
-for example, \n(dy),
+for example, 22,
 .ST (mo
 (as noted above)
 or
 .NR (mo
 (the same,
 but as an ordinal number;
-for example, \*(mo is \n(mo),
+for example, December is 12,
 and
 .NR (yr
 (the last two digits of the current year).

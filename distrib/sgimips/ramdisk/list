@@ -1,6 +1,6 @@
-#	$NetBSD: list,v 1.7 2007/05/10 23:22:32 dogcow Exp $
+#	$NetBSD: list,v 1.20 2011/06/19 02:25:46 tsutsui Exp $
 
-SRCDIRS	bin sbin usr.bin usr.sbin gnu/usr.bin sys/arch/sgimips/stand
+SRCDIRS	bin sbin usr.bin usr.sbin sys/arch/sgimips/stand
 
 PROG	bin/cat
 PROG	bin/chmod
@@ -19,7 +19,7 @@ PROG	bin/sh
 PROG	bin/stty
 PROG	bin/sync
 
-PROG	sbin/dhclient
+PROG	sbin/chown	bin/chgrp
 PROG	sbin/disklabel
 PROG	sbin/fsck
 PROG	sbin/fsck_ffs
@@ -44,18 +44,17 @@ PROG	usr/bin/sed
 
 PROG	usr/mdec/sgivol
 
-PROG	usr/sbin/chown	usr/bin/chgrp
 PROG	usr/sbin/chroot
 
-SPECIAL	dhclient	srcdir	distrib/utils/x_dhclient
 SPECIAL	ed		srcdir	distrib/utils/x_ed
+SPECIAL	gzip		srcdir	distrib/utils/x_gzip
 SPECIAL	ifconfig	srcdir	distrib/utils/x_ifconfig
 SPECIAL	ping		srcdir	distrib/utils/x_ping
 SPECIAL	route		srcdir	distrib/utils/x_route
 SPECIAL	umount		srcdir	distrib/utils/x_umount
 SPECIAL	sgivol		srcdir	sys/arch/sgimips/stand/sgivol
 
-LIBS	libhack.o -lbz2 -lutil -lcurses -ltermcap -lrmt -lcrypt -ll -lm -lz
+LIBS	libhack.o -lutil -lcurses -lterminfo -lrmt -lcrypt -ll -lm -lz -lprop
 
 # init invokes the shell as -sh
 ARGVLN	sh -sh
@@ -66,20 +65,11 @@ COPY	${DESTDIR}/usr/mdec/ip2xboot		usr/mdec/ip2xboot
 COPY	${DESTDIR}/usr/mdec/ip3xboot		usr/mdec/ip3xboot
 
 # various files that we need in /etc for the install
-COPY	${NETBSDSRCDIR}/usr.sbin/dhcp/clientscript/dhclient-script sbin/dhclient-script 555
 COPY	${NETBSDSRCDIR}/etc/group		etc/group
 COPY	${NETBSDSRCDIR}/etc/master.passwd	etc/master.passwd
-COPY	${NETBSDSRCDIR}/etc/protocols		etc/protocols
 COPY	${NETBSDSRCDIR}/etc/netconfig		etc/netconfig
-COPY	${NETBSDSRCDIR}/distrib/common/services		etc/services
-
-# and the common installation tools
-COPY	${CURDIR}/../miniroot/termcap.iris-ansi	usr/share/misc/termcap
-
-# the disktab explanation file
-COPY	${CURDIR}/disktab.preinstall		etc/disktab.preinstall
+COPY	${DISTRIBDIR}/common/protocols		etc/protocols
+COPY	${DISTRIBDIR}/common/services		etc/services
 
 # and the shell startup files
 COPY	${CURDIR}/dot.profile			.profile
-COPY	${CURDIR}/dot.hdprofile			tmp/.hdprofile
-

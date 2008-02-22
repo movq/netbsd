@@ -1,4 +1,4 @@
-/*	$NetBSD: trace.c,v 1.31 2006/03/22 02:23:11 christos Exp $	*/
+/*	$NetBSD: trace.c,v 1.33 2017/10/02 11:02:19 maya Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -41,18 +41,12 @@
 #include <fcntl.h>
 
 #ifdef __NetBSD__
-__RCSID("$NetBSD: trace.c,v 1.31 2006/03/22 02:23:11 christos Exp $");
+__RCSID("$NetBSD: trace.c,v 1.33 2017/10/02 11:02:19 maya Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
 __RCSID("Revision: 2.27 ");
 #ident "Revision: 2.27 "
-#endif
-
-
-#ifdef sgi
-/* use *stat64 for files on large filesystems */
-#define stat	stat64
 #endif
 
 #define	NRECORDS	50		/* size of circular trace buffer */
@@ -158,12 +152,9 @@ ts(time_t secs) {
 	static char s[20];
 
 	secs += epoch.tv_sec;
-#ifdef sgi
-	(void)cftime(s, "%T", &secs);
-#else
 	memcpy(s, ctime(&secs)+11, 8);
 	s[8] = '\0';
-#endif
+
 	return s;
 }
 
@@ -601,7 +592,7 @@ rtname(naddr dst,
 	int i;
 
 	i = snprintf(buf, sizeof(buf), "%-16s-->", addrname(dst, mask, 0));
-	if (i >= sizeof(buf) || i < 0)
+	if (i < 0 || (size_t)i >= sizeof(buf))
 		return buf;
 	(void)snprintf(&buf[i], sizeof(buf) - i, "%-*s", 15+20-MAX(20, i),
 	    naddr_ntoa(gate));

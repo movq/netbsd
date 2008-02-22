@@ -1,4 +1,4 @@
-/*	$NetBSD: i80321var.h,v 1.11 2006/04/10 03:36:03 simonb Exp $	*/
+/*	$NetBSD: i80321var.h,v 1.13 2012/02/12 16:31:01 matt Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -65,7 +65,7 @@ struct intrq {
 };
 
 struct i80321_softc {
-	struct device sc_dev;		/* generic device glue */
+	device_t sc_dev;		/* generic device glue */
 
 	int sc_is_host;			/* indicates if we're a host or
 					   plugged into another host */
@@ -164,7 +164,7 @@ struct iopxs_attach_args {
 
 extern struct bus_space i80321_bs_tag;
 extern struct i80321_softc *i80321_softc;
-extern const char *i80321_irqnames[];
+extern const char * const i80321_irqnames[];
 
 extern void (*i80321_hardclock_hook)(void);
 
@@ -175,6 +175,7 @@ void	i80321_calibrate_delay(void);
 
 void	i80321_icu_init(void);
 void	i80321_intr_init(void);
+void	i80321_intr_evcnt_attach(void);
 void	*i80321_intr_establish(int, int, int (*)(void *), void *);
 void	i80321_intr_disestablish(void *);
 

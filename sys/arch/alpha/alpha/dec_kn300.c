@@ -1,4 +1,4 @@
-/* $NetBSD: dec_kn300.c,v 1.34 2007/03/04 15:18:10 yamt Exp $ */
+/* $NetBSD: dec_kn300.c,v 1.42 2015/12/14 10:12:45 martin Exp $ */
 
 /*
  * Copyright (c) 1998 by Matthew Jacob
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_kn300.c,v 1.34 2007/03/04 15:18:10 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_kn300.c,v 1.42 2015/12/14 10:12:45 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,6 +72,9 @@ __KERNEL_RCSID(0, "$NetBSD: dec_kn300.c,v 1.34 2007/03/04 15:18:10 yamt Exp $");
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
+#include <dev/ic/mlxio.h>
+#include <dev/ic/mlxvar.h>
+
 
 #include "pckbd.h"
 
@@ -80,11 +83,11 @@ __KERNEL_RCSID(0, "$NetBSD: dec_kn300.c,v 1.34 2007/03/04 15:18:10 yamt Exp $");
 #endif
 static int comcnrate = CONSPEED;
 
-void dec_kn300_init __P((void));
-void dec_kn300_cons_init __P((void));
-static void dec_kn300_device_register __P((struct device *, void *));
+void dec_kn300_init(void);
+void dec_kn300_cons_init(void);
+static void dec_kn300_device_register(device_t, void *);
 static void dec_kn300_mcheck_handler
-	__P((unsigned long, struct trapframe *, unsigned long, unsigned long));
+(unsigned long, struct trapframe *, unsigned long, unsigned long);
 
 #ifdef KGDB
 #include <machine/db_machdep.h>
@@ -103,9 +106,9 @@ const struct alpha_variation_table dec_kn300_variations[] = {
 };
 
 void
-dec_kn300_init()
+dec_kn300_init(void)
 {
-	u_int64_t variation;
+	uint64_t variation;
 	int cachesize;
 
 	platform.family = ALPHASERVER_4100;
@@ -156,7 +159,7 @@ dec_kn300_init()
 }
 
 void
-dec_kn300_cons_init()
+dec_kn300_cons_init(void)
 {
 	struct ctb *ctb;
 	struct mcpcia_config *ccp;
@@ -168,7 +171,7 @@ dec_kn300_cons_init()
 	ctb = (struct ctb *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
 
 	switch (ctb->ctb_term_type) {
-	case CTB_PRINTERPORT: 
+	case CTB_PRINTERPORT:
 		/* serial console ... */
 		/*
 		 * Delay to allow PROM putchars to complete.
@@ -189,7 +192,7 @@ dec_kn300_cons_init()
 		/* display console ... */
 		/* XXX */
 		(void) pckbc_cnattach(&ccp->cc_iot, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT);
+		    PCKBC_KBD_SLOT, 0);
 
 		if (CTB_TURBOSLOT_TYPE(ctb->ctb_turboslot) ==
 		    CTB_TURBOSLOT_TYPE_ISA)
@@ -218,20 +221,19 @@ dec_kn300_cons_init()
 
 /* #define	BDEBUG	1 */
 static void
-dec_kn300_device_register(dev, aux)
-	struct device *dev;
-	void *aux;
+dec_kn300_device_register(device_t dev, void *aux)
 {
 	static int found, initted, diskboot, netboot;
-	static struct device *primarydev, *pcidev, *ctrlrdev;
+	static device_t primarydev, pcidev, ctrlrdev;
 	struct bootdev_data *b = bootdev_data;
-	struct device *parent = device_parent(dev);
+	device_t parent = device_parent(dev);
 
 	if (found)
 		return;
 
 	if (!initted) {
-		diskboot = (strcasecmp(b->protocol, "SCSI") == 0);
+		diskboot = (strcasecmp(b->protocol, "SCSI") == 0) ||
+		    (strcasecmp(b->protocol, "RAID") == 0);
 		netboot = (strcasecmp(b->protocol, "BOOTP") == 0) ||
 		    (strcasecmp(b->protocol, "MOP") == 0);
 #ifdef BDEBUG
@@ -259,7 +261,7 @@ dec_kn300_device_register(dev, aux)
 				return;
 			primarydev = dev;
 #ifdef BDEBUG
-			printf("\nprimarydev = %s\n", dev->dv_xname);
+			printf("\nprimarydev = %s\n", device_xname(dev));
 #endif
 			return;
 		}
@@ -287,7 +289,7 @@ dec_kn300_device_register(dev, aux)
 	
 			pcidev = dev;
 #ifdef BDEBUG
-			printf("\npcidev = %s\n", dev->dv_xname);
+			printf("\npcidev = %s\n", device_xname(dev));
 #endif
 			return;
 		}
@@ -308,13 +310,13 @@ dec_kn300_device_register(dev, aux)
 			if (netboot) {
 				booted_device = dev;
 #ifdef BDEBUG
-				printf("\nbooted_device = %s\n", dev->dv_xname);
+				printf("\nbooted_device = %s\n", device_xname(dev));
 #endif
 				found = 1;
 			} else {
 				ctrlrdev = dev;
 #ifdef BDEBUG
-				printf("\nctrlrdev = %s\n", dev->dv_xname);
+				printf("\nctrlrdev = %s\n", device_xname(dev));
 #endif
 			}
 			return;
@@ -343,7 +345,28 @@ dec_kn300_device_register(dev, aux)
 		/* we've found it! */
 		booted_device = dev;
 #ifdef BDEBUG
-		printf("\nbooted_device = %s\n", dev->dv_xname);
+		printf("\nbooted_device = %s\n", device_xname(dev));
+#endif
+		found = 1;
+	}
+
+	if (device_is_a(dev, "ld") && device_is_a(parent, "mlx")) {
+		/*
+		 * Argh!  The attach arguments for ld devices is not
+		 * consistent, so each supported raid controller requires
+		 * different checks.
+		 */
+		struct mlx_attach_args *mlxa = aux;
+
+		if (parent != ctrlrdev)
+			return;
+
+		if (b->unit != mlxa->mlxa_unit)
+			return;
+		/* we've found it! */
+		booted_device = dev;
+#if 0
+		printf("\nbooted_device = %s\n", device_xname(dev));
 #endif
 		found = 1;
 	}
@@ -353,11 +376,11 @@ dec_kn300_device_register(dev, aux)
 /*
  * KN300 Machine Check Handlers.
  */
-static void kn300_softerr __P((unsigned long, unsigned long,
-    unsigned long, struct trapframe *));
+static void kn300_softerr(unsigned long, unsigned long,
+    unsigned long, struct trapframe *);
 
-static void kn300_mcheck __P((unsigned long, unsigned long,
-    unsigned long, struct trapframe *));
+static void kn300_mcheck(unsigned long, unsigned long,
+    unsigned long, struct trapframe *);
 
 /*
  * "soft" error structure in system area for KN300 processor.
@@ -370,34 +393,30 @@ typedef struct {
 	 * Should be mc_cc_ev5 structure. Contents are the same,
 	 * just in different places.
 	 */
-	u_int64_t	ei_stat;
-	u_int64_t	ei_addr;
-	u_int64_t	fill_syndrome;
-	u_int64_t	isr;
+	uint64_t	ei_stat;
+	uint64_t	ei_addr;
+	uint64_t	fill_syndrome;
+	uint64_t	isr;
 	/*
 	 * Platform Specific Area
 	 */
-	u_int32_t	whami;
-	u_int32_t	sys_env;
-	u_int64_t	mcpcia_regs;
-	u_int32_t	pci_rev;
-	u_int32_t	mc_err0;
-	u_int32_t	mc_err1;
-	u_int32_t	cap_err;
-	u_int32_t	mdpa_stat;
-	u_int32_t	mdpa_syn;
-	u_int32_t	mdpb_stat;
-	u_int32_t	mdpb_syn;
-	u_int64_t	end_rsvd;
+	uint32_t	whami;
+	uint32_t	sys_env;
+	uint64_t	mcpcia_regs;
+	uint32_t	pci_rev;
+	uint32_t	mc_err0;
+	uint32_t	mc_err1;
+	uint32_t	cap_err;
+	uint32_t	mdpa_stat;
+	uint32_t	mdpa_syn;
+	uint32_t	mdpb_stat;
+	uint32_t	mdpb_syn;
+	uint64_t	end_rsvd;
 } mc_soft300;
 #define	CAP_ERR_CRDX	204
 
 static void
-kn300_softerr(mces, type, logout, framep)
-	unsigned long mces;
-	unsigned long type;
-	unsigned long logout;
-	struct trapframe *framep;
+kn300_softerr(unsigned long mces, unsigned long type, unsigned long logout, struct trapframe *framep)
 {
 	static const char *sys = "system";
 	static const char *proc = "processor";
@@ -412,8 +431,8 @@ kn300_softerr(mces, type, logout, framep)
 
 	printf("kn300: CPU ID %d %s correctable error corrected by %s\n", whami,
 	    (type == ALPHA_SYS_ERROR)?  sys : proc,
-	    ((hdr->mcheck_code & 0xff00) == (EV5_CORRECTED << 16))? proc :
-	    (((hdr->mcheck_code & 0xff00) == (CAP_ERR_CRDX << 16)) ?
+	    ((hdr->mcheck_code & 0xff00) == (EV5_CORRECTED << 8))? proc :
+	    (((hdr->mcheck_code & 0xff00) == (CAP_ERR_CRDX << 8)) ?
 		"I/O Bridge Module" : sys));
 
 	printf("    Machine Check Code 0x%lx\n", hdr->mcheck_code);
@@ -458,11 +477,7 @@ kn300_softerr(mces, type, logout, framep)
  */
 
 static void
-kn300_mcheck(mces, type, logout, framep)
-	unsigned long mces;
-	unsigned long type;
-	unsigned long logout;
-	struct trapframe *framep;
+kn300_mcheck(unsigned long mces, unsigned long type, unsigned long logout, struct trapframe *framep)
 {
 	struct mchkinfo *mcp;
 	static const char *fmt1 = "        %-25s = 0x%l016x\n";
@@ -525,11 +540,7 @@ kn300_mcheck(mces, type, logout, framep)
 }
 
 static void
-dec_kn300_mcheck_handler(mces, framep, vector, param)
-	unsigned long mces;
-	struct trapframe *framep;
-	unsigned long vector;
-	unsigned long param;
+dec_kn300_mcheck_handler(unsigned long mces, struct trapframe *framep, unsigned long vector, unsigned long param)
 {
 	switch (vector) {
 	case ALPHA_SYS_ERROR:

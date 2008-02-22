@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_types.h,v 1.6 2005/12/11 12:20:14 christos Exp $	*/
+/*	$NetBSD: linux_types.h,v 1.9 2013/03/21 15:03:47 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,6 +39,7 @@ typedef unsigned long linux_ino_t;
 typedef unsigned short linux_mode_t;
 typedef unsigned short linux_nlink_t;
 typedef long linux_time_t;
+typedef long linux_suseconds_t;
 typedef long linux_clock_t;
 typedef long linux_off_t;
 typedef int linux_pid_t;
@@ -82,34 +76,33 @@ struct linux_stat {
  * insane amounts of padding around dev_t's.
  */
 struct linux_stat64 {
-	unsigned short	lst_dev;
-	unsigned char	__pad0[10];
+	unsigned long long lst_dev;
+	unsigned int	__pad1;
 
 #define LINUX_STAT64_HAS_BROKEN_ST_INO	1
-	unsigned long	__lst_ino;
+	unsigned int	__lst_ino;
 	unsigned int	lst_mode;
 	unsigned int	lst_nlink;
 
-	unsigned long	lst_uid;
-	unsigned long	lst_gid;
+	unsigned int	lst_uid;
+	unsigned int	lst_gid;
 
-	unsigned short	lst_rdev;
-	unsigned char	__pad3[10];
+	unsigned long long	lst_rdev;
+	unsigned int	__pad2;
 
 	long long	lst_size;
-	unsigned long	lst_blksize;
+	unsigned int	lst_blksize;
 
-	unsigned long	lst_blocks;	/* Number 512-byte blocks allocated. */
-	unsigned long	__pad4;		/* future possible st_blocks high bits*/
+	unsigned long long lst_blocks;	/* Number 512-byte blocks allocated. */
 
-	unsigned long	lst_atime;
-	unsigned long	__pad5;
+	unsigned int	lst_atime;
+	unsigned int	lst_atime_nsec;
 
-	unsigned long	lst_mtime;
-	unsigned long	__pad6;
+	unsigned int	lst_mtime;
+	unsigned int	lst_mtime_nsec;
 
-	unsigned long	lst_ctime;
-	unsigned long	__pad7;		/* will be high 32 bits of ctime someday */
+	unsigned int	lst_ctime;
+	unsigned int	lst_ctime_nsec;
 
 	unsigned long long lst_ino;
 };

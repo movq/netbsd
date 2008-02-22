@@ -1,4 +1,4 @@
-/* $NetBSD: tsreg.h,v 1.3 2001/07/05 08:38:24 toshii Exp $ */
+/* $NetBSD: tsreg.h,v 1.7 2014/02/21 12:23:30 jdc Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -89,9 +89,16 @@
 
 #define TS_C_MISC	0x101##a000##0080UL	/* Miscellaneous Register */
 
+#	define	MISC_NXM(r)	TSFIELD((r), 28, 1)
+#	define	MISC_NXM_SRC(r)	TSFIELD((r), 29, 3)
 #	define	MISC_REV(r)	TSFIELD((r), 39, 8)
 
 #define TS_C_MPD	0x101##a000##00c0UL
+
+#	define	MPD_DR	0x08	/* RO: Data receive */
+#	define	MPD_CKR	0x04	/* RO: Clock receive */
+#	define	MPD_DS	0x02	/* WO: Data send - Must be a 1 to receive */
+#	define	MPD_CKS	0x01	/* WO: Clock send */
 
 #define TS_C_AAR0	0x101##a000##0100UL
 #define TS_C_AAR1	0x101##a000##0140UL
@@ -158,6 +165,15 @@
 	/* reserved	0x0380 */
 #define P_PERROR	0x03c0
 
+#	define	PER_ERR(r)	TSFIELD((r),  0, 12)
+#	define	PER_ECC(r)	TSFIELD((r), 10, 2)
+#	define	PER_SADR(r)	TSFIELD((r), 16, 34)
+#	define	PER_PADR(r)	(TSFIELD((r), 18, 32) << 2)
+#	define	PER_TRNS(r)	TSFIELD((r), 16, 2)
+#	define	PER_INV(r)	TSFIELD((r), 51, 1)
+#	define	PER_CMD(r)	TSFIELD((r), 52, 4)
+#	define	PER_SYN(r)	TSFIELD((r), 56, 8)
+
 #define P_PERRMASK	0x0400
 #define P_PERRSET	0x0440
 #define P_TLBIV		0x0480
@@ -175,7 +191,7 @@
  */
 
 #define	P_CSRBASE	 0x001##8000##0000UL
-#define	P_PCI_MEM	 0
+#define	P_PCI_MEM	 0x800##0000##0000UL
 #define	P_PCI_IO	 0x001##fc00##0000UL
 #define	P_PCI_CONFIG	 0x001##fe00##0000UL
 
@@ -191,22 +207,14 @@
  * Tsunami Generic Register Type
  */
 typedef struct _ts_gr {
-	volatile u_int64_t tsg_r;
+	volatile uint64_t tsg_r;
 	long	tsg_deadspace[7];
 } TS_GR;
 
 /*
  * Tsunami Pchip
  */
-struct	ts_pchip {
-	TS_GR	tsp_wsba[4];	/* Window Space Base Address */
-
-	TS_GR	tsp_wsm[4];	/* Window Space Mask */
-
-	TS_GR	tsp_tba[4];	/* Translated Base Address */
-
-	TS_GR	tsp_pctl;	/* Pchip Control */
-	TS_GR	tsp_plat;	/* Pchip Latency */
+struct	ts_pport {
 	TS_GR	tsp_resA;
 	TS_GR	tsp_error;	/* Pchip Error */
 
@@ -221,6 +229,56 @@ struct	ts_pchip {
 	TS_GR	tsp_resC;
 
 	TS_GR	tsp_resD_K[8];
+};
+
+struct	ts_gport {
+	TS_GR	tsp_resA[2];
+	TS_GR	tsp_serror;
+	TS_GR	tsp_serrmask;
+	TS_GR	tsp_serrset;
+	TS_GR	tsp_resB;
+	TS_GR	tsp_gperrmask;
+	TS_GR	tsp_gperren;
+	TS_GR	tsp_gperrset;
+	TS_GR	tsp_resC;
+	TS_GR	tsp_tlbiv;
+	TS_GR	tsp_tlbia;
+	TS_GR	tsp_resD[2];
+	TS_GR	tsp_sctl;
+	TS_GR	tsp_resE[3];
+};
+
+struct	ts_aport {
+	TS_GR	tsp_resA[2];
+	TS_GR	tsp_agperror;
+	TS_GR	tsp_agperrmask;
+	TS_GR	tsp_agperrset;
+	TS_GR	tsp_agplastwr;
+	TS_GR	tsp_aperror;
+	TS_GR	tsp_aperrmask;
+	TS_GR	tsp_aperrset;
+	TS_GR	tsp_resB;
+	TS_GR	tsp_tlbiv;
+	TS_GR	tsp_tlbia;
+	TS_GR	tsp_resC[6];
+};
+
+struct	ts_pchip {
+	TS_GR	tsp_wsba[4];	/* Window Space Base Address */
+
+	TS_GR	tsp_wsm[4];	/* Window Space Mask */
+
+	TS_GR	tsp_tba[4];	/* Translated Base Address */
+
+	TS_GR	tsp_pctl;	/* Pchip Control */
+	TS_GR	tsp_plat;	/* Pchip Latency */
+
+	union {
+		struct ts_pport	p;
+		struct ts_gport	g;
+		struct ts_aport	a;
+	} port;
 
 	TS_GR	tsp_sprts;	/* ??? */
+	TS_GR   tsp_res[31];
 };

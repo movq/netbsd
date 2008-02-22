@@ -1,4 +1,4 @@
-/*      $NetBSD: ip6_etherip.c,v 1.7 2007/12/20 19:53:33 dyoung Exp $        */
+/*      $NetBSD: ip6_etherip.c,v 1.22 2018/01/26 14:47:41 maxv Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -27,8 +27,9 @@
  *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  *  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  *  SUCH DAMAGE.
- *
- *
+ */
+
+/*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
  * All rights reserved.
  *
@@ -58,9 +59,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.7 2007/12/20 19:53:33 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.22 2018/01/26 14:47:41 maxv Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,7 +74,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.7 2007/12/20 19:53:33 dyoung Exp $
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/syslog.h>
-#include <sys/protosw.h>
 #include <sys/kernel.h>
 
 #include <net/if.h>
@@ -85,6 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.7 2007/12/20 19:53:33 dyoung Exp $
 #ifdef INET6
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
+#include <netinet6/ip6_private.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/ip6_etherip.h>
 #endif
@@ -92,8 +95,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.7 2007/12/20 19:53:33 dyoung Exp $
 #include <net/if_ether.h>
 #include <net/if_media.h>
 #include <net/if_etherip.h>
-
-#include <machine/stdarg.h>
+#include <net/bpf.h>
 
 int
 ip6_etherip_output(struct ifnet *ifp, struct mbuf *m)
@@ -112,7 +114,7 @@ ip6_etherip_output(struct ifnet *ifp, struct mbuf *m)
 	sin6_src = (struct sockaddr_in6 *)sc->sc_src;
 	sin6_dst = (struct sockaddr_in6 *)sc->sc_dst;
 
-	if (sin6_src == NULL || 
+	if (sin6_src == NULL ||
 	    sin6_dst == NULL ||
 	    sin6_src->sin6_family != AF_INET6 ||
 	    sin6_dst->sin6_family != AF_INET6) {
@@ -123,7 +125,7 @@ ip6_etherip_output(struct ifnet *ifp, struct mbuf *m)
 	/* reset broadcast/multicast flags */
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 
-	m->m_flags |= M_PKTHDR;
+	KASSERT((m->m_flags & M_PKTHDR) != 0);
 	proto = IPPROTO_ETHERIP;
 
 	/* fill and prepend Ethernet-in-IP header */
@@ -137,9 +139,9 @@ ip6_etherip_output(struct ifnet *ifp, struct mbuf *m)
 		if (m == NULL)
 			return ENOBUFS;
 	}
-	memcpy(mtod(m, struct etherip_header *), &eiphdr, 
-	       sizeof(struct etherip_header));
-	
+	memcpy(mtod(m, struct etherip_header *), &eiphdr,
+	    sizeof(struct etherip_header));
+
 	/* prepend new IP header */
 	M_PREPEND(m, sizeof(struct ip6_hdr), M_DONTWAIT);
 	if (m && m->m_len < sizeof(struct ip6_hdr))
@@ -170,10 +172,12 @@ ip6_etherip_output(struct ifnet *ifp, struct mbuf *m)
 	}
 	/* if it constitutes infinite encapsulation, punt. */
 	if (rt->rt_ifp == ifp) {
+		rtcache_unref(rt, &sc->sc_ro);
 		rtcache_free(&sc->sc_ro);
 		m_freem(m);
 		return ENETUNREACH;     /* XXX */
 	}
+	rtcache_unref(rt, &sc->sc_ro);
 
 	/*
 	 * force fragmentation to minimum MTU, to avoid path MTU discovery.
@@ -186,31 +190,27 @@ ip6_etherip_output(struct ifnet *ifp, struct mbuf *m)
 }
 
 int
-ip6_etherip_input(struct mbuf *m, ...)
+ip6_etherip_input(struct mbuf **mp, int *offp, int proto)
 {
+	struct mbuf *m = *mp;
+	int off = *offp;
 	struct etherip_softc *sc;
 	const struct ip6_hdr *ip6;
 	struct sockaddr_in6 *src6, *dst6;
 	struct ifnet *ifp = NULL;
-	int off, proto;
-	va_list ap;
-
-	va_start(ap, m);
-	off = va_arg(ap, int);
-	proto = va_arg(ap, int);
-	va_end(ap);
+	int s;
 
 	if (proto != IPPROTO_ETHERIP) {
 		m_freem(m);
-		ip6stat.ip6s_nogif++;
+		IP6_STATINC(IP6_STAT_NOGIF);
 		return IPPROTO_DONE;
 	}
 
 	ip6 = mtod(m, const struct ip6_hdr *);
 
-	/* find device configured for this packets src and dst */
+	/* find device configured for this packet's src and dst */
 	LIST_FOREACH(sc, &etherip_softc_list, etherip_list) {
-		if( !sc->sc_src || !sc->sc_dst)
+		if (!sc->sc_src || !sc->sc_dst)
 			continue;
 		if (sc->sc_src->sa_family != AF_INET6 ||
 		    sc->sc_dst->sa_family != AF_INET6)
@@ -230,7 +230,7 @@ ip6_etherip_input(struct mbuf *m, ...)
 	/* no matching device found */
 	if (!ifp) {
 		m_freem(m);
-		ip6stat.ip6s_odropped++;
+		IP6_STATINC(IP6_STAT_ODROPPED);
 		return IPPROTO_DONE;
 	}
 
@@ -258,16 +258,12 @@ ip6_etherip_input(struct mbuf *m, ...)
 		return IPPROTO_DONE;
 	}
 
-	m->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(m, ifp);
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
-
-	ifp->if_ipackets++;
-	(ifp->if_input)(ifp, m);
+	s = splnet();
+	if_input(ifp, m);
+	splx(s);
 
 	return IPPROTO_DONE;
 }

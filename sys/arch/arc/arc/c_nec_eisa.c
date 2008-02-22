@@ -1,7 +1,30 @@
-/*	$NetBSD: c_nec_eisa.c,v 1.14 2007/12/03 15:33:13 ad Exp $	*/
+/*	$NetBSD: c_nec_eisa.c,v 1.18 2018/02/08 09:05:17 dholland Exp $	*/
 
 /*-
- * Copyright (C) 2003 Izumi Tsutsui.
+ * Copyright (c) 2003 Izumi Tsutsui.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/*-
  * Copyright (C) 2000 Shuichiro URATA.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,13 +55,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: c_nec_eisa.c,v 1.14 2007/12/03 15:33:13 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: c_nec_eisa.c,v 1.18 2018/02/08 09:05:17 dholland Exp $");
 
+#define __INTR_PRIVATE
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kcore.h>
 #include <sys/device.h>
+#include <sys/intr.h>
+
 #include <uvm/uvm_extern.h>
+
+#include <mips/locore.h>
 
 #include <machine/autoconf.h>
 #include <machine/pio.h>
@@ -80,25 +108,19 @@ struct isabr_config isabr_nec_eisa_conf = {
  * This is a mask of bits to clear in the SR when we go to a
  * given interrupt priority level.
  */
-static const uint32_t nec_eisa_ipl_sr_bits[_IPL_N] = {
-	[IPL_NONE] = 0,
-	[IPL_SOFTCLOCK] =
-	    MIPS_SOFT_INT_MASK_0,
-	[IPL_SOFTNET] =
-	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1,
-	[IPL_VM] =
-	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1 |
-	    MIPS_INT_MASK_0 |
-	    MIPS_INT_MASK_1 |
-	    MIPS_INT_MASK_2,
-	[IPL_SCHED] =
-	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1 |
-	    MIPS_INT_MASK_0 |
-	    MIPS_INT_MASK_1 |
-	    MIPS_INT_MASK_2 |
-	    MIPS_INT_MASK_3 |
-	    MIPS_INT_MASK_4 |
-	    MIPS_INT_MASK_5,
+static const struct ipl_sr_map nec_eisa_ipl_sr_map = {
+    .sr_bits = {
+	[IPL_NONE] =		0,
+	[IPL_SOFTCLOCK] =	MIPS_SOFT_INT_MASK_0,
+	[IPL_SOFTNET] =		MIPS_SOFT_INT_MASK,
+	[IPL_VM] =		MIPS_SOFT_INT_MASK
+				| MIPS_INT_MASK_0
+				| MIPS_INT_MASK_1
+				| MIPS_INT_MASK_2,
+	[IPL_SCHED] =		MIPS_INT_MASK,
+	[IPL_DDB] =		MIPS_INT_MASK,
+	[IPL_HIGH] =		MIPS_INT_MASK,
+    },
 };
 
 int
@@ -138,7 +160,7 @@ c_nec_eisa_init(void)
 	/*
 	 * Initialize interrupt priority
 	 */
-	ipl_sr_bits = nec_eisa_ipl_sr_bits;
+	ipl_sr_map = nec_eisa_ipl_sr_map;
 
 	/*
 	 * Initialize I/O address offset
@@ -213,7 +235,7 @@ c_nec_eisa_cons_init(void)
 
 #if NVGA_ISA > 0 && defined(VGA_RESET)
 
-/* values to intialize cirrus GD54xx specific ext registers */
+/* values to initialize cirrus GD54xx specific ext registers */
 /* XXX these values are taken from PC XXX */
 static const uint8_t vga_ts_gd54xx[] = {
 	0x0f,	/* 05: ??? */

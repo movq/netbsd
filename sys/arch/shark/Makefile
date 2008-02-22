@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2003/01/06 17:40:49 lukem Exp $
+#	$NetBSD: Makefile,v 1.4 2013/06/30 21:56:44 matt Exp $
 
 # Makefile for shark tags file and boot blocks
 
@@ -15,7 +15,8 @@ DSHARK=	isa include ofw
 tags:
 	-ctags -wdtf ${TSHARK} ${SSHARK} ${COMM}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ASHARK} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TSHARK}
 	sort -o ${TSHARK} ${TSHARK}
 
@@ -24,6 +25,7 @@ links:
 	    cd $$i && rm -f tags; ln -s ../tags tags; done
 
 
-SUBDIR=	compile include # stand
+SUBDIR=	compile include
+#SUBDIR+=	stand
 
 .include <bsd.subdir.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: pciconf.c,v 1.30 2007/05/24 15:57:58 briggs Exp $	*/
+/*	$NetBSD: pciconf.c,v 1.37 2014/09/05 05:29:16 matt Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciconf.c,v 1.30 2007/05/24 15:57:58 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciconf.c,v 1.37 2014/09/05 05:29:16 matt Exp $");
 
 #include "opt_pci.h"
 
@@ -74,6 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: pciconf.c,v 1.30 2007/05/24 15:57:58 briggs Exp $");
 #include <sys/queue.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
+#include <sys/kmem.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pciconf.h>
@@ -130,6 +131,9 @@ typedef struct _s_pciconf_bus_t {
 	int		swiz;
 	int		io_32bit;
 	int		pmem_64bit;
+	int		io_align;
+	int		mem_align;
+	int		pmem_align;
 
 	int		ndevs;
 	pciconf_dev_t	device[MAX_CONF_DEV];
@@ -210,13 +214,10 @@ get_mem_desc(pciconf_bus_t *pb, bus_size_t size)
 static int
 probe_bus(pciconf_bus_t *pb)
 {
-	int device, maxdevs;
-#ifdef __PCI_BUS_DEVORDER
-	char devs[32];
-	int  i;
-#endif
+	int device;
+	uint8_t devs[32];
+	int i, n;
 
-	maxdevs = pci_bus_maxdevs(pb->pc, pb->busno);
 	pb->ndevs = 0;
 	pb->niowin = 0;
 	pb->nmemwin = 0;
@@ -231,16 +232,14 @@ probe_bus(pciconf_bus_t *pb)
 	pb->min_maxlat = 0x100;	/* we are looking for the minimum */
 	pb->bandwidth_used = 0;
 
-#ifdef __PCI_BUS_DEVORDER
-	pci_bus_devorder(pb->pc, pb->busno, devs);
-	for (i = 0; (device = devs[i]) < 32 && device >= 0; i++) {
-#else
-	for (device = 0; device < maxdevs; device++) {
-#endif
+	n = pci_bus_devorder(pb->pc, pb->busno, devs, __arraycount(devs));
+	for (i = 0; i < n; i++) {
 		pcitag_t tag;
 		pcireg_t id, bhlcr;
 		int function, nfunction;
 		int confmode;
+
+		device = devs[i];
 
 		tag = pci_make_tag(pb->pc, pb->busno, device, 0);
 		if (pci_conf_debug) {
@@ -320,13 +319,17 @@ query_bus(pciconf_bus_t *parent, pciconf_dev_t *pd, int dev)
 	pcireg_t	io, pmem;
 	pciconf_win_t	*pi, *pm;
 
-	pb = malloc (sizeof (pciconf_bus_t), M_DEVBUF, M_NOWAIT);
+	pb = kmem_zalloc(sizeof (pciconf_bus_t), KM_NOSLEEP);
 	if (!pb)
 		panic("Unable to allocate memory for PCI configuration.");
 
 	pb->cacheline_size = parent->cacheline_size;
 	pb->parent_bus = parent;
 	alloc_busno(parent, pb);
+
+	pb->mem_align = 0x100000;	/* 1M alignment */
+	pb->pmem_align = 0x100000;	/* 1M alignment */
+	pb->io_align = 0x1000;		/* 4K alignment */
 
 	set_busreg(parent->pc, pd->tag, parent->busno, pb->busno, 0xff);
 
@@ -371,15 +374,18 @@ query_bus(pciconf_bus_t *parent, pciconf_dev_t *pd, int dev)
 
 	if (pb->io_total > 0) {
 		if (parent->niowin >= MAX_CONF_IO) {
-			printf("pciconf: too many I/O windows\n");
+			printf("pciconf: too many (%d) I/O windows\n",
+			    parent->niowin);
 			goto err;
 		}
-		pb->io_total |= 0xfff;	/* Round up */
+		pb->io_total |= pb->io_align - 1; /* Round up */
 		pi = get_io_desc(parent, pb->io_total);
 		pi->dev = pd;
 		pi->reg = 0;
 		pi->size = pb->io_total;
-		pi->align = 0x1000;	/* 4K alignment */
+		pi->align = pb->io_align;	/* 4K min alignment */
+		if (parent->io_align < pb->io_align)
+			parent->io_align = pb->io_align;
 		pi->prefetch = 0;
 		parent->niowin++;
 		parent->io_total += pb->io_total;
@@ -387,15 +393,18 @@ query_bus(pciconf_bus_t *parent, pciconf_dev_t *pd, int dev)
 
 	if (pb->mem_total > 0) {
 		if (parent->nmemwin >= MAX_CONF_MEM) {
-			printf("pciconf: too many MEM windows\n");
+			printf("pciconf: too many (%d) MEM windows\n",
+			     parent->nmemwin);
 			goto err;
 		}
-		pb->mem_total |= 0xfffff;	/* Round up */
+		pb->mem_total |= pb->mem_align-1; /* Round up */
 		pm = get_mem_desc(parent, pb->mem_total);
 		pm->dev = pd;
 		pm->reg = 0;
 		pm->size = pb->mem_total;
-		pm->align = 0x100000;	/* 1M alignment */
+		pm->align = pb->mem_align;	/* 1M min alignment */
+		if (parent->mem_align < pb->mem_align)
+			parent->mem_align = pb->mem_align;
 		pm->prefetch = 0;
 		parent->nmemwin++;
 		parent->mem_total += pb->mem_total;
@@ -406,12 +415,14 @@ query_bus(pciconf_bus_t *parent, pciconf_dev_t *pd, int dev)
 			printf("pciconf: too many MEM windows\n");
 			goto err;
 		}
-		pb->pmem_total |= 0xfffff;	/* Round up */
+		pb->pmem_total |= pb->pmem_align-1; /* Round up */
 		pm = get_mem_desc(parent, pb->pmem_total);
 		pm->dev = pd;
 		pm->reg = 0;
 		pm->size = pb->pmem_total;
-		pm->align = 0x100000;		/* 1M alignment */
+		pm->align = pb->pmem_align;	/* 1M alignment */
+		if (parent->pmem_align < pb->pmem_align)
+			parent->pmem_align = pb->pmem_align;
 		pm->prefetch = 1;
 		parent->nmemwin++;
 		parent->pmem_total += pb->pmem_total;
@@ -419,7 +430,7 @@ query_bus(pciconf_bus_t *parent, pciconf_dev_t *pd, int dev)
 
 	return pb;
 err:
-	free(pb, M_DEVBUF);
+	kmem_free(pb, sizeof(*pb));
 	return NULL;
 }
 
@@ -428,7 +439,7 @@ pci_do_device_query(pciconf_bus_t *pb, pcitag_t tag, int dev, int func, int mode
 {
 	pciconf_dev_t	*pd;
 	pciconf_win_t	*pi, *pm;
-	pcireg_t	class, cmd, icr, bhlc, bar, mask, bar64, mask64, busreg;
+	pcireg_t	classreg, cmd, icr, bhlc, bar, mask, bar64, mask64, busreg;
 	u_int64_t	size;
 	int		br, width, reg_start, reg_end;
 
@@ -438,11 +449,13 @@ pci_do_device_query(pciconf_bus_t *pb, pcitag_t tag, int dev, int func, int mode
 	pd->ppb = NULL;
 	pd->enable = mode;
 
-	class = pci_conf_read(pb->pc, tag, PCI_CLASS_REG);
+	classreg = pci_conf_read(pb->pc, tag, PCI_CLASS_REG);
 
 	cmd = pci_conf_read(pb->pc, tag, PCI_COMMAND_STATUS_REG);
+	bhlc = pci_conf_read(pb->pc, tag, PCI_BHLC_REG);
 
-	if (PCI_CLASS(class) != PCI_CLASS_BRIDGE) {
+	if (PCI_CLASS(classreg) != PCI_CLASS_BRIDGE
+	    && PCI_HDRTYPE_TYPE(bhlc) != PCI_HDRTYPE_PPB) {
 		cmd &= ~(PCI_COMMAND_MASTER_ENABLE |
 		    PCI_COMMAND_IO_ENABLE | PCI_COMMAND_MEM_ENABLE);
 		pci_conf_write(pb->pc, tag, PCI_COMMAND_STATUS_REG, cmd);
@@ -457,7 +470,6 @@ pci_do_device_query(pciconf_bus_t *pb, pcitag_t tag, int dev, int func, int mode
 	if ((cmd & PCI_STATUS_66MHZ_SUPPORT) == 0)
 		pb->freq_66 = 0;
 
-	bhlc = pci_conf_read(pb->pc, tag, PCI_BHLC_REG);
 	switch (PCI_HDRTYPE_TYPE(bhlc)) {
 	case PCI_HDRTYPE_DEVICE:
 		reg_start = PCI_MAPREG_START;
@@ -513,8 +525,8 @@ pci_do_device_query(pciconf_bus_t *pb, pcitag_t tag, int dev, int func, int mode
 	for (br = reg_start; br < reg_end; br += width) {
 #if 0
 /* XXX Should only ignore if IDE not in legacy mode? */
-		if (PCI_CLASS(class) == PCI_CLASS_MASS_STORAGE &&
-		    PCI_SUBCLASS(class) == PCI_SUBCLASS_MASS_STORAGE_IDE) {
+		if (PCI_CLASS(classreg) == PCI_CLASS_MASS_STORAGE &&
+		    PCI_SUBCLASS(classreg) == PCI_SUBCLASS_MASS_STORAGE_IDE) {
 			break;
 		}
 #endif
@@ -551,6 +563,8 @@ pci_do_device_query(pciconf_bus_t *pb, pcitag_t tag, int dev, int func, int mode
 			pi->reg = br;
 			pi->size = (u_int64_t) size;
 			pi->align = 4;
+			if (pb->io_align < pi->size)
+				pb->io_align = pi->size;
 			pi->prefetch = 0;
 			if (pci_conf_debug) {
 				print_tag(pb->pc, tag);
@@ -594,7 +608,7 @@ pci_do_device_query(pciconf_bus_t *pb, pcitag_t tag, int dev, int func, int mode
 			} else {
 				if (pci_conf_debug) {
 					print_tag(pb->pc, tag);
-					printf("MEM%d BAR 0x%x has size %lx\n",
+					printf("MEM%d BAR 0x%x has size %#lx\n",
 					    PCI_MAPREG_MEM_TYPE(mask) ==
 						PCI_MAPREG_MEM_TYPE_64BIT ?
 						64 : 32, br, (unsigned long)size);
@@ -620,8 +634,12 @@ pci_do_device_query(pciconf_bus_t *pb, pcitag_t tag, int dev, int func, int mode
 			pb->nmemwin++;
 			if (pm->prefetch) {
 				pb->pmem_total += size;
+				if (pb->pmem_align < pm->size)
+					pb->pmem_align = pm->size;
 			} else {
 				pb->mem_total += size;
+				if (pb->mem_align < pm->size)
+					pb->mem_align = pm->size;
 			}
 		}
 	}
@@ -682,12 +700,12 @@ pci_allocate_range(struct extent *ex, u_int64_t amt, int align)
 
 	r = extent_alloc(ex, amt, align, 0, EX_NOWAIT, &addr);
 	if (r) {
-		addr = (u_long) -1;
-		printf("extent_alloc(%p, %" PRIu64 ", %d) returned %d\n",
+		printf("extent_alloc(%p, %#" PRIx64 ", %#x) returned %d\n",
 		    ex, amt, align, r);
 		extent_print(ex);
+		return ~0ULL;
 	}
-	return (pcireg_t) addr;
+	return addr;
 }
 
 static int
@@ -703,7 +721,7 @@ setup_iowins(pciconf_bus_t *pb)
 		pd = pi->dev;
 		pi->address = pci_allocate_range(pb->ioext, pi->size,
 		    pi->align);
-		if (pi->address == -1) {
+		if (~pi->address == 0) {
 			print_tag(pd->pc, pd->tag);
 			printf("Failed to allocate PCI I/O space (%"
 			    PRIu64 " req)\n", pi->size);
@@ -711,7 +729,7 @@ setup_iowins(pciconf_bus_t *pb)
 		}
 		if (pd->ppb && pi->reg == 0) {
 			pd->ppb->ioext = extent_create("pciconf", pi->address,
-			    pi->address + pi->size, M_DEVBUF, NULL, 0,
+			    pi->address + pi->size, NULL, 0,
 			    EX_NOWAIT);
 			if (pd->ppb->ioext == NULL) {
 				print_tag(pd->pc, pd->tag);
@@ -753,7 +771,7 @@ setup_memwins(pciconf_bus_t *pb)
 		pd = pm->dev;
 		ex = (pm->prefetch) ? pb->pmemext : pb->memext;
 		pm->address = pci_allocate_range(ex, pm->size, pm->align);
-		if (pm->address == -1) {
+		if (~pm->address == 0) {
 			print_tag(pd->pc, pd->tag);
 			printf(
 			   "Failed to allocate PCI memory space (%" PRIu64
@@ -762,8 +780,7 @@ setup_memwins(pciconf_bus_t *pb)
 		}
 		if (pd->ppb && pm->reg == 0) {
 			ex = extent_create("pciconf", pm->address,
-			    pm->address + pm->size, M_DEVBUF, NULL, 0,
-			    EX_NOWAIT);
+			    pm->address + pm->size, NULL, 0, EX_NOWAIT);
 			if (ex == NULL) {
 				print_tag(pd->pc, pd->tag);
 				printf("Failed to alloc MEM ext. for bus %d\n",
@@ -919,14 +936,14 @@ configure_bridge(pciconf_dev_t *pd)
 	/*
 	 * XXX -- 64-bit systems need a lot more than just this...
 	 */
-	if (sizeof(u_long) > 4) {
-		mem_base  = (int64_t) mem_base  >> 32;
-		mem_limit = (int64_t) mem_limit >> 32;
+	if (PCI_BRIDGE_PREFETCHMEM_64BITS(mem)) {
+		mem_base  = (uint64_t) mem_base  >> 32;
+		mem_limit = (uint64_t) mem_limit >> 32;
+		pci_conf_write(pb->pc, pd->tag, PCI_BRIDGE_PREFETCHBASE32_REG,
+		    mem_base & 0xffffffff);
+		pci_conf_write(pb->pc, pd->tag, PCI_BRIDGE_PREFETCHLIMIT32_REG,
+		    mem_limit & 0xffffffff);
 	}
-	pci_conf_write(pb->pc, pd->tag, PCI_BRIDGE_PREFETCHBASE32_REG,
-	    mem_base & 0xffffffff);
-	pci_conf_write(pb->pc, pd->tag, PCI_BRIDGE_PREFETCHLIMIT32_REG,
-	    mem_limit & 0xffffffff);
 
 	rv = configure_bus(pb);
 
@@ -974,8 +991,8 @@ configure_bus(pciconf_bus_t *pb)
 	max_ltim = pb->max_mingnt * bus_mhz / 4;	/* cvt to cycle count */
 	band = 4000000;					/* 0.25us cycles/sec */
 	if (band < pb->bandwidth_used) {
-		printf("PCI bus %d: Warning: Total bandwidth exceeded!?\n",
-		    pb->busno);
+		printf("PCI bus %d: Warning: Total bandwidth exceeded!? (%d)\n",
+		    pb->busno, pb->bandwidth_used);
 		def_ltim = -1;
 	} else {
 		def_ltim = (band - pb->bandwidth_used) / pb->ndevs;
@@ -996,8 +1013,8 @@ configure_bus(pciconf_bus_t *pb)
 	 * of free memory ranges from the m.d. system.
 	 */
 	if (setup_iowins(pb) || setup_memwins(pb)) {
-		printf("PCI bus configuration failed: ");
-		printf("unable to assign all I/O and memory ranges.");
+		printf("PCI bus configuration failed: "
+		"unable to assign all I/O and memory ranges.\n");
 		return -1;
 	}
 
@@ -1005,14 +1022,14 @@ configure_bus(pciconf_bus_t *pb)
 	 * Configure the latency for the devices, and enable them.
 	 */
 	for (pd=pb->device ; pd < &pb->device[pb->ndevs] ; pd++) {
-		pcireg_t cmd, class, misc;
+		pcireg_t cmd, classreg, misc;
 		int	ltim;
 
 		if (pci_conf_debug) {
 			print_tag(pd->pc, pd->tag);
 			printf("Configuring device.\n");
 		}
-		class = pci_conf_read(pd->pc, pd->tag, PCI_CLASS_REG);
+		classreg = pci_conf_read(pd->pc, pd->tag, PCI_CLASS_REG);
 		misc = pci_conf_read(pd->pc, pd->tag, PCI_BHLC_REG);
 		cmd = pci_conf_read(pd->pc, pd->tag, PCI_COMMAND_STATUS_REG);
 		if (pd->enable & PCI_CONF_ENABLE_PARITY)
@@ -1021,8 +1038,8 @@ configure_bus(pciconf_bus_t *pb)
 			cmd |= PCI_COMMAND_SERR_ENABLE;
 		if (pb->fast_b2b)
 			cmd |= PCI_COMMAND_BACKTOBACK_ENABLE;
-		if (PCI_CLASS(class) != PCI_CLASS_BRIDGE ||
-		    PCI_SUBCLASS(class) != PCI_SUBCLASS_BRIDGE_PCI) {
+		if (PCI_CLASS(classreg) != PCI_CLASS_BRIDGE ||
+		    PCI_SUBCLASS(classreg) != PCI_SUBCLASS_BRIDGE_PCI) {
 			if (pd->enable & PCI_CONF_ENABLE_IO)
 				cmd |= PCI_COMMAND_IO_ENABLE;
 			if (pd->enable & PCI_CONF_ENABLE_MEM)
@@ -1100,7 +1117,7 @@ pci_configure_bus(pci_chipset_tag_t pc, struct extent *ioext,
 	pciconf_bus_t	*pb;
 	int		rv;
 
-	pb = malloc (sizeof (pciconf_bus_t), M_DEVBUF, M_NOWAIT);
+	pb = kmem_zalloc(sizeof (pciconf_bus_t), KM_NOSLEEP);
 	pb->busno = firstbus;
 	pb->next_busno = pb->busno + 1;
 	pb->last_busno = 255;
@@ -1128,6 +1145,6 @@ pci_configure_bus(pci_chipset_tag_t pc, struct extent *ioext,
 	/*
 	 * All done!
 	 */
-	free(pb, M_DEVBUF);
+	kmem_free(pb, sizeof(*pb));
 	return rv;
 }

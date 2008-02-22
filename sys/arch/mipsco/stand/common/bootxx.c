@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.5 2005/12/11 12:18:16 christos Exp $	*/
+/*	$NetBSD: bootxx.c,v 1.9 2009/03/14 21:04:12 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,10 +68,10 @@
 #include <lib/libsa/stand.h>
 #include <machine/prom.h>
 
-typedef void (*entrypt) __P((int, char **, int, const void *));
+typedef void (*entrypt)(int, char **, int, const void *);
 
-int main __P((int, char **));
-entrypt loadfile __P((char *path, char *name));
+int main(int, char **);
+entrypt loadfile(char *path, char *name);
 
 /*
  * This gets arguments from the PROM, calls other routines to open
@@ -86,13 +79,11 @@ entrypt loadfile __P((char *path, char *name));
  * execution to that program.
  */
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	entrypt entry;
 	char *cp;
-	extern void prom_init __P((void));
+	extern void prom_init(void);
 
 	prom_init();
 
@@ -122,8 +113,7 @@ main(argc, argv)
  * Open 'filename', read in program and return the entry point or -1 if error.
  */
 entrypt
-loadfile(path, name)
-	char *path, *name;
+loadfile(char *path, char *name)
 {
 	int fd, i;
 	char *src, *dst, bootfname[64];

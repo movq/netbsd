@@ -1,4 +1,4 @@
-/*	$NetBSD: sysvbfs.c,v 1.9 2008/01/28 14:31:17 dholland Exp $	*/
+/*	$NetBSD: sysvbfs.c,v 1.17 2018/05/28 21:04:37 chs Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,15 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysvbfs.c,v 1.9 2008/01/28 14:31:17 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysvbfs.c,v 1.17 2018/05/28 21:04:37 chs Exp $");
 
 #include <sys/resource.h>
 #include <sys/param.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
+#include <sys/module.h>
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/genfs_node.h>
 #include <fs/sysvbfs/sysvbfs.h>
+
+MODULE(MODULE_CLASS_VFS, sysvbfs, NULL);
 
 /* External interfaces */
 
@@ -63,6 +59,8 @@ const struct vnodeopv_entry_desc sysvbfs_vnodeop_entries[] = {
 	{ &vop_setattr_desc, sysvbfs_setattr },		/* setattr */
 	{ &vop_read_desc, sysvbfs_read },		/* read */
 	{ &vop_write_desc, sysvbfs_write },		/* write */
+	{ &vop_fallocate_desc, genfs_eopnotsupp },	/* fallocate */
+	{ &vop_fdiscard_desc, genfs_eopnotsupp },	/* fdiscard */
 	{ &vop_fcntl_desc, genfs_fcntl },		/* fcntl */
 	{ &vop_ioctl_desc, genfs_enoioctl },		/* ioctl */
 	{ &vop_poll_desc, genfs_poll },			/* poll */
@@ -110,33 +108,45 @@ const struct genfs_ops sysvbfs_genfsops = {
 	.gop_size = genfs_size,
 	.gop_alloc = sysvbfs_gop_alloc,
 	.gop_write = genfs_gop_write,
+	.gop_putrange = genfs_gop_putrange,
 };
 
 struct vfsops sysvbfs_vfsops = {
-	MOUNT_SYSVBFS,
-	sizeof (struct sysvbfs_args),
-	sysvbfs_mount,
-	sysvbfs_start,
-	sysvbfs_unmount,
-	sysvbfs_root,
-	(void *)eopnotsupp,	/* vfs_quotactl */
-	sysvbfs_statvfs,
-	sysvbfs_sync,
-	sysvbfs_vget,
-	sysvbfs_fhtovp,
-	sysvbfs_vptofh,
-	sysvbfs_init,
-	sysvbfs_reinit,
-	sysvbfs_done,
-	NULL,			/* vfs_mountroot */
-	(int (*)(struct mount *, struct vnode *, struct timespec *))
-	    eopnotsupp,		/* snapshot */
-	vfs_stdextattrctl,
-	(void *)eopnotsupp,	/* vfs_suspendctl */
-	genfs_renamelock_enter,
-	genfs_renamelock_exit,
-	sysvbfs_vnodeopv_descs,
-	0,
-	{ NULL, NULL }
+	.vfs_name = MOUNT_SYSVBFS,
+	.vfs_min_mount_data = sizeof (struct sysvbfs_args),
+	.vfs_mount = sysvbfs_mount,
+	.vfs_start = sysvbfs_start,
+	.vfs_unmount = sysvbfs_unmount,
+	.vfs_root = sysvbfs_root,
+	.vfs_quotactl = (void *)eopnotsupp,
+	.vfs_statvfs = sysvbfs_statvfs,
+	.vfs_sync = sysvbfs_sync,
+	.vfs_vget = sysvbfs_vget,
+	.vfs_loadvnode = sysvbfs_loadvnode,
+	.vfs_fhtovp = sysvbfs_fhtovp,
+	.vfs_vptofh = sysvbfs_vptofh,
+	.vfs_init = sysvbfs_init,
+	.vfs_reinit = sysvbfs_reinit,
+	.vfs_done = sysvbfs_done,
+	.vfs_snapshot = (void *)eopnotsupp,
+	.vfs_extattrctl = vfs_stdextattrctl,
+	.vfs_suspendctl = genfs_suspendctl,
+	.vfs_renamelock_enter = genfs_renamelock_enter,
+	.vfs_renamelock_exit = genfs_renamelock_exit,
+	.vfs_fsync = (void *)eopnotsupp,
+	.vfs_opv_descs = sysvbfs_vnodeopv_descs
 };
-VFS_ATTACH(sysvbfs_vfsops);
+
+static int
+sysvbfs_modcmd(modcmd_t cmd, void *arg)
+{
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		return vfs_attach(&sysvbfs_vfsops);
+	case MODULE_CMD_FINI:
+		return vfs_detach(&sysvbfs_vfsops);
+	default:
+		return ENOTTY;
+	}
+}

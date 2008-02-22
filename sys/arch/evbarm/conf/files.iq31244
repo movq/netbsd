@@ -1,14 +1,11 @@
-#	$NetBSD: files.iq31244,v 1.6 2007/12/03 15:33:30 ad Exp $
+#	$NetBSD: files.iq31244,v 1.8 2013/01/23 14:24:14 skrll Exp $
 #
 # Intel IQ31244 reference board configuration info
 #
 
-# Use the shared initarm_common() code.
-# XXX: Not yet ready for prime-time
-#file	arch/evbarm/evbarm/initarm_common.c
-
 file	arch/evbarm/iq31244/iq31244_7seg.c
 file	arch/evbarm/iq80321/iq80321_machdep.c
+file	arch/evbarm/iq31244/iq31244_machdep.c
 file	arch/evbarm/iq31244/iq31244_pci.c
 
 # IQ31244 on-board devices

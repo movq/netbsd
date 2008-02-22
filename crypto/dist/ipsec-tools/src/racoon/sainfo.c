@@ -1,4 +1,4 @@
-/*	$NetBSD: sainfo.c,v 1.10 2007/09/12 23:39:51 mgrooms Exp $	*/
+/*	$NetBSD: sainfo.c,v 1.16 2018/05/19 20:14:56 maxv Exp $	*/
 
 /*	$KAME: sainfo.c,v 1.16 2003/06/27 07:32:39 sakane Exp $	*/
 
@@ -64,7 +64,8 @@
 #include "sainfo.h"
 #include "gcmalloc.h"
 
-static LIST_HEAD(_sitree, sainfo) sitree, sitree_save, sitree_tmp;
+typedef LIST_HEAD(_sitree, sainfo) sainfo_tailq_head_t;
+static sainfo_tailq_head_t sitree, sitree_save;
 
 /* %%%
  * modules for ipsec sa info
@@ -78,7 +79,7 @@ static LIST_HEAD(_sitree, sainfo) sitree, sitree_save, sitree_tmp;
 struct sainfo *
 getsainfo(loc, rmt, peer, client, remoteid)
 	const vchar_t *loc, *rmt, *peer, *client;
-	int remoteid;
+	uint32_t remoteid;
 {
 	struct sainfo *s = NULL;
 
@@ -109,12 +110,13 @@ getsainfo(loc, rmt, peer, client, remoteid)
 			dclient = ipsecdoi_id2str(client);
 
 		plog(LLV_DEBUG, LOCATION, NULL,
-			"getsainfo params: loc=\'%s\' rmt=\'%s\' peer=\'%s\' client=\'%s\' id=%i\n",
+			"getsainfo params: loc=\'%s\' rmt=\'%s\' peer=\'%s\' client=\'%s\' id=%u\n",
 			dloc, drmt, dpeer, dclient, remoteid );
  
                 racoon_free(dloc);
                 racoon_free(drmt);
                 racoon_free(dpeer);
+                racoon_free(dclient);
 	}
 
 	LIST_FOREACH(s, &sitree, chain) {
@@ -124,7 +126,7 @@ getsainfo(loc, rmt, peer, client, remoteid)
 
 		if(s->remoteid != remoteid) {
 			plog(LLV_DEBUG, LOCATION, NULL,
-				"remoteid mismatch: %i != %i\n",
+				"remoteid mismatch: %u != %u\n",
 				s->remoteid, remoteid);
 				continue;
 		}
@@ -204,12 +206,16 @@ delsainfo(si)
 {
 	int i;
 
+	if (si == NULL)
+		return;
+
 	for (i = 0; i < MAXALGCLASS; i++)
 		delsainfoalg(si->algs[i]);
 
 	if (si->idsrc)
 		vfree(si->idsrc);
-	if (si->iddst)
+	if (si->iddst != NULL &&
+		si->iddst != SAINFO_CLIENTADDR)
 		vfree(si->iddst);
 
 #ifdef ENABLE_HYBRID
@@ -220,8 +226,8 @@ delsainfo(si)
 	racoon_free(si);
 }
 
-int prisainfo(s)
-	struct sainfo *s;
+static int
+prisainfo(struct sainfo *s)
 {
 	/*
 	 * determine the matching priority
@@ -380,7 +386,7 @@ sainfo2str(si)
         else
                 id_i = ipsecdoi_id2str(si->id_i);
  
-        snprintf(buf, 255, "loc=\'%s\', rmt=\'%s\', peer=\'%s\', id=%i",
+        snprintf(buf, 255, "loc=\'%s\', rmt=\'%s\', peer=\'%s\', id=%u",
 		idloc, idrmt, id_i, si->remoteid);
  
         racoon_free(idloc);
@@ -390,12 +396,14 @@ sainfo2str(si)
         return buf;
 }
 
-void save_sainfotree(void){
+void sainfo_start_reload(void){
 	sitree_save=sitree;
 	initsainfo();
 }
 
-void save_sainfotree_flush(void){
+void sainfo_finish_reload(void){
+	sainfo_tailq_head_t sitree_tmp;
+
 	sitree_tmp=sitree;
 	sitree=sitree_save;
 	flushsainfo();

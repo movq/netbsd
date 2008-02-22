@@ -1,4 +1,4 @@
-/* $NetBSD: cia_dma.c,v 1.21 2007/03/14 01:40:14 mhitch Exp $ */
+/* $NetBSD: cia_dma.c,v 1.29 2013/11/04 16:58:14 christos Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: cia_dma.c,v 1.21 2007/03/14 01:40:14 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cia_dma.c,v 1.29 2013/11/04 16:58:14 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,34 +40,32 @@ __KERNEL_RCSID(0, "$NetBSD: cia_dma.c,v 1.21 2007/03/14 01:40:14 mhitch Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
 #define _ALPHA_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <alpha/pci/ciareg.h>
 #include <alpha/pci/ciavar.h>
 
-bus_dma_tag_t cia_dma_get_tag __P((bus_dma_tag_t, alpha_bus_t));
+bus_dma_tag_t cia_dma_get_tag(bus_dma_tag_t, alpha_bus_t);
 
-int	cia_bus_dmamap_create_direct __P((bus_dma_tag_t, bus_size_t, int,
-	    bus_size_t, bus_size_t, int, bus_dmamap_t *));
+int	cia_bus_dmamap_create_direct(bus_dma_tag_t, bus_size_t, int,
+	    bus_size_t, bus_size_t, int, bus_dmamap_t *);
 
-int	cia_bus_dmamap_load_sgmap __P((bus_dma_tag_t, bus_dmamap_t, void *,
-	    bus_size_t, struct proc *, int));
+int	cia_bus_dmamap_load_sgmap(bus_dma_tag_t, bus_dmamap_t, void *,
+	    bus_size_t, struct proc *, int);
 
-int	cia_bus_dmamap_load_mbuf_sgmap __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct mbuf *, int));
+int	cia_bus_dmamap_load_mbuf_sgmap(bus_dma_tag_t, bus_dmamap_t,
+	    struct mbuf *, int);
 
-int	cia_bus_dmamap_load_uio_sgmap __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct uio *, int));
+int	cia_bus_dmamap_load_uio_sgmap(bus_dma_tag_t, bus_dmamap_t,
+	    struct uio *, int);
 
-int	cia_bus_dmamap_load_raw_sgmap __P((bus_dma_tag_t, bus_dmamap_t,
-	    bus_dma_segment_t *, int, bus_size_t, int));
+int	cia_bus_dmamap_load_raw_sgmap(bus_dma_tag_t, bus_dmamap_t,
+	    bus_dma_segment_t *, int, bus_size_t, int);
 
-void	cia_bus_dmamap_unload_sgmap __P((bus_dma_tag_t, bus_dmamap_t));
+void	cia_bus_dmamap_unload_sgmap(bus_dma_tag_t, bus_dmamap_t);
 
 /*
  * Direct-mapped window: 1G at 1G
@@ -91,10 +82,10 @@ void	cia_bus_dmamap_unload_sgmap __P((bus_dma_tag_t, bus_dmamap_t));
 /* ALCOR/ALGOR2/PYXIS have a 256-byte out-bound DMA prefetch threshold. */
 #define	CIA_SGMAP_PFTHRESH	256
 
-void	cia_tlb_invalidate __P((void));
-void	cia_broken_pyxis_tlb_invalidate __P((void));
+void	cia_tlb_invalidate(void);
+void	cia_broken_pyxis_tlb_invalidate(void);
 
-void	(*cia_tlb_invalidate_fn) __P((void));
+void	(*cia_tlb_invalidate_fn)(void);
 
 #define	CIA_TLB_INVALIDATE()	(*cia_tlb_invalidate_fn)()
 
@@ -103,8 +94,7 @@ struct alpha_sgmap cia_pyxis_bug_sgmap;
 #define	CIA_PYXIS_BUG_SIZE	(2*1024*1024)
 
 void
-cia_dma_init(ccp)
-	struct cia_config *ccp;
+cia_dma_init(struct cia_config *ccp)
 {
 	bus_addr_t tbase;
 	bus_dma_tag_t t;
@@ -175,7 +165,7 @@ cia_dma_init(ccp)
 	 */
 	alpha_sgmap_init(t, &ccp->cc_sgmap, "cia_sgmap",
 	    CIA_SGMAP_MAPPED_BASE, 0, CIA_SGMAP_MAPPED_SIZE,
-	    sizeof(u_int64_t), NULL, (32*1024));
+	    sizeof(uint64_t), NULL, (32*1024));
 
 	/*
 	 * Set up window 0 as an 8MB SGMAP-mapped window
@@ -204,7 +194,7 @@ cia_dma_init(ccp)
 	 * the new entries coming in for the spill page.
 	 */
 	if ((ccp->cc_flags & CCF_ISPYXIS) != 0 && ccp->cc_rev <= 1) {
-		u_int64_t *page_table;
+		uint64_t *page_table;
 		int i;
 
 		cia_tlb_invalidate_fn =
@@ -212,7 +202,7 @@ cia_dma_init(ccp)
 
 		alpha_sgmap_init(t, &cia_pyxis_bug_sgmap,
 		    "pyxis_bug_sgmap", CIA_PYXIS_BUG_BASE, 0,
-		    CIA_PYXIS_BUG_SIZE, sizeof(u_int64_t), NULL,
+		    CIA_PYXIS_BUG_SIZE, sizeof(uint64_t), NULL,
 		    (32*1024));
 
 		REGVAL(CIA_PCI_W2BASE) = CIA_PYXIS_BUG_BASE |
@@ -258,9 +248,7 @@ cia_dma_init(ccp)
  * INTERNAL USE ONLY!
  */
 bus_dma_tag_t
-cia_dma_get_tag(t, bustype)
-	bus_dma_tag_t t;
-	alpha_bus_t bustype;
+cia_dma_get_tag(bus_dma_tag_t t, alpha_bus_t bustype)
 {
 	struct cia_config *ccp = t->_cookie;
 
@@ -297,15 +285,14 @@ cia_dma_get_tag(t, bustype)
  * Create a CIA direct-mapped DMA map.
  */
 int
-cia_bus_dmamap_create_direct(t, size, nsegments, maxsegsz, boundary,
-    flags, dmamp)
-	bus_dma_tag_t t;
-	bus_size_t size;
-	int nsegments;
-	bus_size_t maxsegsz;
-	bus_size_t boundary;
-	int flags;
-	bus_dmamap_t *dmamp;
+cia_bus_dmamap_create_direct(
+	bus_dma_tag_t t,
+	bus_size_t size,
+	int nsegments,
+	bus_size_t maxsegsz,
+	bus_size_t boundary,
+	int flags,
+	bus_dmamap_t *dmamp)
 {
 	struct cia_config *ccp = t->_cookie;
 	bus_dmamap_t map;
@@ -341,13 +328,7 @@ cia_bus_dmamap_create_direct(t, size, nsegments, maxsegsz, boundary,
  * Load a CIA SGMAP-mapped DMA map with a linear buffer.
  */
 int
-cia_bus_dmamap_load_sgmap(t, map, buf, buflen, p, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	void *buf;
-	bus_size_t buflen;
-	struct proc *p;
-	int flags;
+cia_bus_dmamap_load_sgmap(bus_dma_tag_t t, bus_dmamap_t map, void *buf, bus_size_t buflen, struct proc *p, int flags)
 {
 	int error;
 
@@ -363,11 +344,7 @@ cia_bus_dmamap_load_sgmap(t, map, buf, buflen, p, flags)
  * Load a CIA SGMAP-mapped DMA map with an mbuf chain.
  */
 int
-cia_bus_dmamap_load_mbuf_sgmap(t, map, m, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct mbuf *m;
-	int flags;
+cia_bus_dmamap_load_mbuf_sgmap(bus_dma_tag_t t, bus_dmamap_t map, struct mbuf *m, int flags)
 {
 	int error;
 
@@ -382,11 +359,7 @@ cia_bus_dmamap_load_mbuf_sgmap(t, map, m, flags)
  * Load a CIA SGMAP-mapped DMA map with a uio.
  */
 int
-cia_bus_dmamap_load_uio_sgmap(t, map, uio, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	struct uio *uio;
-	int flags;
+cia_bus_dmamap_load_uio_sgmap(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio, int flags)
 {
 	int error;
 
@@ -401,13 +374,7 @@ cia_bus_dmamap_load_uio_sgmap(t, map, uio, flags)
  * Load a CIA SGMAP-mapped DMA map with raw memory.
  */
 int
-cia_bus_dmamap_load_raw_sgmap(t, map, segs, nsegs, size, flags)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
-	bus_dma_segment_t *segs;
-	int nsegs;
-	bus_size_t size;
-	int flags;
+cia_bus_dmamap_load_raw_sgmap(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs, int nsegs, bus_size_t size, int flags)
 {
 	int error;
 
@@ -423,9 +390,7 @@ cia_bus_dmamap_load_raw_sgmap(t, map, segs, nsegs, size, flags)
  * Unload a CIA DMA map.
  */
 void
-cia_bus_dmamap_unload_sgmap(t, map)
-	bus_dma_tag_t t;
-	bus_dmamap_t map;
+cia_bus_dmamap_unload_sgmap(bus_dma_tag_t t, bus_dmamap_t map)
 {
 
 	/*
@@ -445,7 +410,7 @@ cia_bus_dmamap_unload_sgmap(t, map)
  * Flush the CIA scatter/gather TLB.
  */
 void
-cia_tlb_invalidate()
+cia_tlb_invalidate(void)
 {
 
 	alpha_mb();
@@ -457,10 +422,9 @@ cia_tlb_invalidate()
  * Flush the scatter/gather TLB on broken Pyxis chips.
  */
 void
-cia_broken_pyxis_tlb_invalidate()
+cia_broken_pyxis_tlb_invalidate(void)
 {
-	volatile u_int64_t dummy;
-	u_int32_t ctrl;
+	uint32_t ctrl;
 	int i, s;
 
 	s = splhigh();
@@ -482,9 +446,11 @@ cia_broken_pyxis_tlb_invalidate()
 	 * XXX to read more times than there are actual tags!
 	 */
 	for (i = 0; i < CIA_TLB_NTAGS + 4; i++) {
-		dummy = *((volatile u_int64_t *)
+		volatile uint64_t dummy;
+		dummy = *((volatile uint64_t *)
 		    ALPHA_PHYS_TO_K0SEG(CIA_PCI_DENSE + CIA_PYXIS_BUG_BASE +
 		    (i * 65536)));
+		__USE(dummy);
 	}
 
 	/*

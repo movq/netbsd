@@ -1,4 +1,4 @@
-/*	$NetBSD: resumecontext.S,v 1.4 2006/12/13 10:48:02 martin Exp $	*/
+/*	$NetBSD: resumecontext.S,v 1.8 2013/07/17 03:04:54 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,10 @@
  */
 
 #include <machine/asm.h>
+#include "assym.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: resumecontext.S,v 1.4 2006/12/13 10:48:02 martin Exp $")
+	RCSID("$NetBSD: resumecontext.S,v 1.8 2013/07/17 03:04:54 matt Exp $")
 #endif /* LIBC_SCCS && !lint */
 
 /*
@@ -49,18 +43,19 @@
  */
 
 ENTRY(_resumecontext)
-	subl	#(4 + 1024),%sp		/* retaddr preservation + ucontext_t */
-	lea	%sp@,%a0
-	movl	%a0,%sp@-
+	subl	#(4 + UC_SIZE),%sp	/* retaddr preservation + ucontext_t */
+	lea	(%sp),%a0
+	movl	%a0,-(%sp)
 	jbsr	PIC_PLT(_C_LABEL(_getcontext))
-	movl	%sp@(4 + 4),%sp@	/* uc_link */
-	tstl	%sp@			/* check for NULL */
+	movl	(4 + UC_LINK)(%sp),(%sp)	/* uc_link */
+	tstl	(%sp)			/* check for NULL */
 	jne	1f
 	jbsr	PIC_PLT(_C_LABEL(exit))	/* cleanly exit(0) */
 	jmp	2f
 1:	jbsr	PIC_PLT(_C_LABEL(setcontext))
 	/* NOTREACHED */
 	/* But just in case... */
-2:	movl	#-1,%sp@
+2:	movl	#-1,(%sp)
 	jbsr	PIC_PLT(_C_LABEL(_exit))
 	/* NOTREACHED */
+END(_resumecontext)

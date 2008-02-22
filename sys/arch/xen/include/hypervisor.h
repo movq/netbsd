@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervisor.h,v 1.24 2007/11/22 16:16:57 bouyer Exp $	*/
+/*	$NetBSD: hypervisor.h,v 1.44 2014/06/14 02:53:02 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -84,24 +79,17 @@ struct xen_npx_attach_args {
 #define	s32 int32_t
 #define	s64 int64_t
 
-#ifdef XEN3
-#include <xen/xen3-public/xen.h>
-#include <xen/xen3-public/sched.h>
-#include <xen/xen3-public/dom0_ops.h>
-#include <xen/xen3-public/event_channel.h>
-#include <xen/xen3-public/physdev.h>
-#include <xen/xen3-public/memory.h>
-#include <xen/xen3-public/io/netif.h>
-#include <xen/xen3-public/io/blkif.h>
-#else
 #include <xen/xen-public/xen.h>
+#include <xen/xen-public/sched.h>
+#include <xen/xen-public/platform.h>
+#if __XEN_INTERFACE_VERSION__ < 0x00030204
 #include <xen/xen-public/dom0_ops.h>
+#endif
 #include <xen/xen-public/event_channel.h>
 #include <xen/xen-public/physdev.h>
-#include <xen/xen-public/io/domain_controller.h>
+#include <xen/xen-public/memory.h>
 #include <xen/xen-public/io/netif.h>
 #include <xen/xen-public/io/blkif.h>
-#endif
 
 #include <machine/hypercalls.h>
 
@@ -128,20 +116,44 @@ extern union start_info_union start_info_union;
 #define xen_start_info (start_info_union.start_info)
 
 /* For use in guest OSes. */
-volatile extern shared_info_t *HYPERVISOR_shared_info;
+extern volatile shared_info_t *HYPERVISOR_shared_info;
+
+
+/* Structural guest handles introduced in 0x00030201. */
+#if __XEN_INTERFACE_VERSION__ >= 0x00030201
+#define xenguest_handle(hnd)	(hnd).p
+#else
+#define xenguest_handle(hnd)	hnd
+#endif
 
 /* hypervisor.c */
 struct intrframe;
+struct cpu_info;
 void do_hypervisor_callback(struct intrframe *regs);
 void hypervisor_enable_event(unsigned int);
 
+extern int xen_version;
+#define XEN_MAJOR(x) (((x) & 0xffff0000) >> 16)
+#define XEN_MINOR(x) ((x) & 0x0000ffff)
+
+/*
+ * Does the hypervisor we're running on support an api
+ * call at the requested version number ?
+ */
+#define XEN_VERSION_SUPPORTED(major, minor)		\
+	(XEN_MAJOR(xen_version) > (major) ||		\
+	 (XEN_MAJOR(xen_version) == (major) &&		\
+	  XEN_MINOR(xen_version) >= (minor)))
+
 /* hypervisor_machdep.c */
+void hypervisor_send_event(struct cpu_info *, unsigned int);
 void hypervisor_unmask_event(unsigned int);
 void hypervisor_mask_event(unsigned int);
 void hypervisor_clear_event(unsigned int);
 void hypervisor_enable_ipl(unsigned int);
-void hypervisor_set_ipending(u_int32_t, int, int);
-
+void hypervisor_set_ipending(uint32_t, int, int);
+void hypervisor_machdep_attach(void);
+void hypervisor_machdep_resume(void);
 
 /* 
  * Force a proper event-channel callback from Xen after clearing the
@@ -150,11 +162,7 @@ void hypervisor_set_ipending(u_int32_t, int, int);
  */
 static __inline void hypervisor_force_callback(void)
 {
-#ifdef XEN3
 	(void)HYPERVISOR_xen_version(0, (void*)0);
-#else
-	(void)HYPERVISOR_xen_version(0);
-#endif
 } __attribute__((no_instrument_function)) /* used by mcount */
 
 static __inline void
@@ -163,11 +171,7 @@ hypervisor_notify_via_evtchn(unsigned int port)
 	evtchn_op_t op;
 
 	op.cmd = EVTCHNOP_send;
-#ifdef XEN3
 	op.u.send.port = port;
-#else
-	op.u.send.local_port = port;
-#endif
 	(void)HYPERVISOR_event_channel_op(&op);
 }
 

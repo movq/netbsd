@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.9 2007/12/02 15:55:09 skrll Exp $	*/
+/*	$NetBSD: asm.h,v 1.15 2013/09/12 15:36:17 joerg Exp $	*/
 
 /*	$OpenBSD: asm.h,v 1.12 2001/03/29 02:15:57 mickey Exp $	*/
 
@@ -40,15 +40,19 @@
 
 #define _C_LABEL(x)	x
 
-#define	LEAF_ENTRY_NOPROFILE(x)				!\
+#define _ASM_LS_CHAR	!
+
+#define	_ENTRY(x) \
 	 ! .text ! .align 4				!\
-	.export	x, entry ! .label x ! .proc		!\
+	.export x, entry ! .label x ! .proc
+
+#define	LEAF_ENTRY_NOPROFILE(x)				!\
+	_ENTRY(x)					!\
 	.callinfo frame=0, no_calls, save_rp		!\
 	.entry
 
 #define	ENTRY_NOPROFILE(x,n)				!\
-	 ! .text ! .align 4				!\
-	.export x, entry ! .label x ! .proc		!\
+	_ENTRY(x)					!\
 	.callinfo frame=n, calls, save_rp, save_sp	!\
 	.entry
 
@@ -95,9 +99,9 @@
 #define ALTENTRY(x) ! .export x, entry ! .label x
 #define EXIT(x) ! .exit ! .procend ! .size x, .-x
 
-#define RCSID(x)	.text				!\
+#define RCSID(x)	.pushsection ".ident"		!\
 			.asciz x			!\
-			.align	4
+			.popsection
 
 #define WEAK_ALIAS(alias,sym)				\
 	.weak alias !					\
@@ -118,7 +122,7 @@
 	bv,n	%r0(tmp)				!\
 	nop
 
-#ifdef PIC
+#ifdef __PIC__
 #define PIC_CALL(func)					!\
 	addil	LT%func, %r19				!\
 	ldw	RT%func(%r1), %r1			!\
@@ -133,15 +137,17 @@
 
 #ifdef __STDC__
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg ## ,30,0,0,0 ;					\
-	.stabs __STRING(sym) ## ,1,0,0,0
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
 #else
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(sym),1,0,0,0
-#endif
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
+#endif /* __STDC__ */
 
-#define	BSS(n,s)	! .data ! .label n ! .comm s
+#define	BSS(n,s)	.comm n, s
 #define	SZREG	4
 
 #endif /* _HPPA_ASM_H_ */

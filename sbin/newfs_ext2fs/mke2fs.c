@@ -1,7 +1,7 @@
-/*	$NetBSD: mke2fs.c,v 1.7 2007/12/14 13:19:35 tsutsui Exp $	*/
+/*	$NetBSD: mke2fs.c,v 1.25 2016/09/05 10:44:36 martin Exp $	*/
 
-/*
- * Copyright (c) 2007 Izumi Tsutsui.
+/*-
+ * Copyright (c) 2007 Izumi Tsutsui.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -66,11 +64,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *	notice, this list of conditions and the following disclaimer in the
  *	documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *	must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -99,8 +92,7 @@
  *	- Design and Implementation of the Second Extended Filesystem
  *		http://e2fsprogs.sourceforge.net/ext2intro.html
  *	- Linux Documentation "The Second Extended Filesystem"
- *		src/linux/Documentation/filesystems/ext2.txt
- *		    in the Linux kernel distribution
+ *		http://www.kernel.org/doc/Documentation/filesystems/ext2.txt
  */
 
 #include <sys/cdefs.h>
@@ -108,7 +100,7 @@
 #if 0
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: mke2fs.c,v 1.7 2007/12/14 13:19:35 tsutsui Exp $");
+__RCSID("$NetBSD: mke2fs.c,v 1.25 2016/09/05 10:44:36 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -132,7 +124,7 @@ __RCSID("$NetBSD: mke2fs.c,v 1.7 2007/12/14 13:19:35 tsutsui Exp $");
 #include "extern.h"
 
 static void initcg(uint);
-static void zap_old_sblock(daddr_t);
+static void zap_old_sblock(int);
 static uint cgoverhead(uint);
 static int fsinit(const struct timeval *);
 static int makedir(struct ext2fs_direct *, int);
@@ -210,27 +202,27 @@ mke2fs(const char *fsys, int fi, int fo)
 	 */
 	if (!powerof2(bsize)) {
 		errx(EXIT_FAILURE,
-		    "block size must be a power of 2, not %u\n",
+		    "block size must be a power of 2, not %u",
 		    bsize);
 	}
 	if (!powerof2(fsize)) {
 		errx(EXIT_FAILURE,
-		    "fragment size must be a power of 2, not %u\n",
+		    "fragment size must be a power of 2, not %u",
 		    fsize);
 	}
 	if (fsize < sectorsize) {
 		errx(EXIT_FAILURE,
-		    "fragment size %u is too small, minimum is %u\n",
+		    "fragment size %u is too small, minimum is %u",
 		    fsize, sectorsize);
 	}
 	if (bsize < MINBSIZE) {
 		errx(EXIT_FAILURE,
-		    "block size %u is too small, minimum is %u\n",
+		    "block size %u is too small, minimum is %u",
 		    bsize, MINBSIZE);
 	}
 	if (bsize > EXT2_MAXBSIZE) {
 		errx(EXIT_FAILURE,
-		    "block size %u is too large, maximum is %u\n",
+		    "block size %u is too large, maximum is %u",
 		    bsize, MAXBSIZE);
 	}
 	if (bsize != fsize) {
@@ -240,9 +232,15 @@ mke2fs(const char *fsys, int fi, int fo)
 		 * and Linux seems to set the same values to them.
 		 */
 		errx(EXIT_FAILURE,
-		    "block size (%u) can't be diffrent from "
-		    "fragment size (%u)\n",
+		    "block size (%u) can't be different from "
+		    "fragment size (%u)",
 		    bsize, fsize);
+	}
+
+	/* variable inodesize is REV1 feature */
+	if (Oflag == 0 && inodesize != EXT2_REV0_DINODE_SIZE) {
+		errx(EXIT_FAILURE, "GOOD_OLD_REV file system format"
+		    " doesn't support %d byte inode", inodesize);
 	}
 
 	sblock.e2fs.e2fs_log_bsize = ilog2(bsize) - LOG_MINBSIZE;
@@ -254,10 +252,10 @@ mke2fs(const char *fsys, int fi, int fo)
 	sblock.e2fs_qbmask = sblock.e2fs_bsize - 1;
 	sblock.e2fs_bmask = ~sblock.e2fs_qbmask;
 	sblock.e2fs_fsbtodb = ilog2(sblock.e2fs_bsize) - ilog2(sectorsize);
-	sblock.e2fs_ipb = sblock.e2fs_bsize / EXT2_DINODE_SIZE;
+	sblock.e2fs_ipb = sblock.e2fs_bsize / inodesize;
 
 	/*
-	 * Ext2fs preseves BBSIZE (1024 bytes) space at the top for
+	 * Ext2fs preserves BBSIZE (1024 bytes) space at the top for
 	 * bootloader (though it is not enough at all for our bootloader).
 	 * If bsize == BBSIZE we have to preserve one block.
 	 * If bsize > BBSIZE, the first block already contains BBSIZE space
@@ -265,7 +263,7 @@ mke2fs(const char *fsys, int fi, int fo)
 	 * bsize is a power of two (i.e. 2048 bytes or more).
 	 */
 	sblock.e2fs.e2fs_first_dblock = (sblock.e2fs_bsize > BBSIZE) ? 0 : 1;
-	minfssize = fsbtodb(&sblock,
+	minfssize = EXT2_FSBTODB(&sblock,
 	    sblock.e2fs.e2fs_first_dblock +
 	    NBLOCK_SUPERBLOCK +
 	    1 /* at least one group descriptor */ +
@@ -278,14 +276,14 @@ mke2fs(const char *fsys, int fi, int fo)
 
 	if (fssize < minfssize)
 		errx(EXIT_FAILURE, "Filesystem size %" PRId64
-		    " < minimum size of %" PRId64 "\n", fssize, minfssize);
+		    " < minimum size of %" PRId64, fssize, minfssize);
 
-	bcount = dbtofsb(&sblock, fssize);
+	bcount = EXT2_DBTOFSB(&sblock, fssize);
 
 	/*
 	 * While many people claim that ext2fs is a (bad) clone of ufs/ffs,
 	 * it isn't actual ffs so maybe we should call it "block group"
-	 * as their native name rather than ffs delived "cylinder group."
+	 * as their native name rather than ffs derived "cylinder group."
 	 * But we'll use the latter here since other kernel sources use it.
 	 * (I also agree "cylinder" based allocation is obsolete though)
 	 */
@@ -303,7 +301,7 @@ mke2fs(const char *fsys, int fi, int fo)
 		num_inodes = UINT16_MAX * ncg;	/* ext2bgd_nifree is uint16_t */
 
 	inodes_per_cg = num_inodes / ncg;
-	iblocks_per_cg = howmany(EXT2_DINODE_SIZE * inodes_per_cg, bsize);
+	iblocks_per_cg = howmany(inodesize * inodes_per_cg, bsize);
 
 	/* Check that the last cylinder group has enough space for inodes */
 	minblocks_per_cg =
@@ -370,7 +368,7 @@ mke2fs(const char *fsys, int fi, int fo)
 	/*
 	 * Maybe we can use E2FS_OS_FREEBSD here and it would be more proper,
 	 * but the purpose of this newfs_ext2fs(8) command is to provide
-	 * a filesystem which can be recognized by firmwares on some
+	 * a filesystem which can be recognized by firmware on some
 	 * Linux based appliances that can load bootstrap files only from
 	 * (their native) ext2fs, and anyway we will (and should) try to
 	 * act like them as much as possible.
@@ -406,13 +404,13 @@ mke2fs(const char *fsys, int fi, int fo)
 	sblock.e2fs.e2fs_rgid = getegid();
 
 	sblock.e2fs.e2fs_first_ino = EXT2_FIRSTINO;
-	sblock.e2fs.e2fs_inode_size = EXT2_DINODE_SIZE;
+	sblock.e2fs.e2fs_inode_size = inodesize;
 
 	/* e2fs_block_group_nr is set on writing superblock to each group */
 
 	uuid_create(&uuid, &uustat);
 	if (uustat != uuid_s_ok)
-		errx(EXIT_FAILURE, "Failed to generate uuid\n");
+		errx(EXIT_FAILURE, "Failed to generate uuid");
 	uuid_enc_le(sblock.e2fs.e2fs_uuid, &uuid);
 	if (volname != NULL) {
 		if (strlen(volname) > sizeof(sblock.e2fs.e2fs_vname))
@@ -449,7 +447,7 @@ mke2fs(const char *fsys, int fi, int fo)
 		 * Reserved group descriptor blocks are preserved as
 		 * the second level double indirect reference blocks in
 		 * the EXT2_RESIZEINO inode, so the maximum number of
-		 * the blocks is NINDIR(fs).
+		 * the blocks is EXT2_NINDIR(fs).
 		 * (see also descriptions in init_resizeino() function)
 		 *
 		 * We check a number including current e2fs_ngdb here
@@ -457,8 +455,8 @@ mke2fs(const char *fsys, int fi, int fo)
 		 * possible future size shrink, though e2fsprogs don't
 		 * seem to care about it.
 		 */
-		if (target_ngdb > NINDIR(&sblock))
-			target_ngdb = NINDIR(&sblock);
+		if (target_ngdb > EXT2_NINDIR(&sblock))
+			target_ngdb = EXT2_NINDIR(&sblock);
 
 		reserved_ngdb = target_ngdb - sblock.e2fs_ngdb;
 
@@ -497,24 +495,27 @@ mke2fs(const char *fsys, int fi, int fo)
 			     EXT2F_COMPAT_RESIZE) != 0)
 				boffset += sblock.e2fs.e2fs_reserved_ngdb;
 		}
-		gd[cylno].ext2bgd_b_bitmap = boffset;
+		gd[cylno].ext2bgd_b_bitmap = h2fs32(boffset);
 		boffset += NBLOCK_BLOCK_BITMAP;
-		gd[cylno].ext2bgd_i_bitmap = boffset;
+		gd[cylno].ext2bgd_i_bitmap = h2fs32(boffset);
 		boffset += NBLOCK_INODE_BITMAP;
-		gd[cylno].ext2bgd_i_tables = boffset;
+		gd[cylno].ext2bgd_i_tables = h2fs32(boffset);
 		if (cylno == (ncg - 1))
-			gd[cylno].ext2bgd_nbfree =
-			    blocks_lastcg - cgoverhead(cylno);
+			gd[cylno].ext2bgd_nbfree = h2fs16(
+			    blocks_lastcg - cgoverhead(cylno));
 		else
-			gd[cylno].ext2bgd_nbfree =
-			    sblock.e2fs.e2fs_bpg - cgoverhead(cylno);
-		fbcount += gd[cylno].ext2bgd_nbfree;
-		gd[cylno].ext2bgd_nifree = sblock.e2fs.e2fs_ipg;
+			gd[cylno].ext2bgd_nbfree = h2fs16(
+			    sblock.e2fs.e2fs_bpg - cgoverhead(cylno));
+		fbcount += fs2h16(gd[cylno].ext2bgd_nbfree);
 		if (cylno == 0) {
 			/* take reserved inodes off nifree */
-			gd[cylno].ext2bgd_nifree -= EXT2_RESERVED_INODES;
+			gd[cylno].ext2bgd_nifree = h2fs16(
+			    sblock.e2fs.e2fs_ipg-EXT2_RESERVED_INODES);
+		} else {
+			gd[cylno].ext2bgd_nifree = 
+			    h2fs16(sblock.e2fs.e2fs_ipg);
 		}
-		ficount += gd[cylno].ext2bgd_nifree;
+		ficount += fs2h16(gd[cylno].ext2bgd_nifree);
 		gd[cylno].ext2bgd_ndirs = 0;
 	}
 	sblock.e2fs.e2fs_fbcount = fbcount;
@@ -545,7 +546,7 @@ mke2fs(const char *fsys, int fi, int fo)
 	iobuf = mmap(0, iobufsize, PROT_READ|PROT_WRITE,
 	    MAP_ANON|MAP_PRIVATE, -1, 0);
 	if (iobuf == NULL)
-		errx(EXIT_FAILURE, "Cannot allocate I/O buffer\n");
+		errx(EXIT_FAILURE, "Cannot allocate I/O buffer");
 	memset(iobuf, 0, iobufsize);
 
 	/*
@@ -554,33 +555,37 @@ mke2fs(const char *fsys, int fi, int fo)
 
 	if (!Nflag) {
 		static const uint pbsize[] = { 1024, 2048, 4096, 0 };
-		uint pblock, epblock;
+		uint pblock;
 		/*
 		 * Validate the given file system size.
 		 * Verify that its last block can actually be accessed.
 		 * Convert to file system fragment sized units.
 		 */
 		if (fssize <= 0)
-			errx(EXIT_FAILURE, "Preposterous size %" PRId64 "\n",
+			errx(EXIT_FAILURE, "Preposterous size %" PRId64,
 			    fssize);
 		wtfs(fssize - 1, sectorsize, iobuf);
 
 		/*
 		 * Ensure there is nothing that looks like a filesystem
-		 * superbock anywhere other than where ours will be.
-		 * If fsck_ext2fs finds the wrong one all hell breaks loose!
+		 * superblock anywhere other than where ours will be.
 		 *
-		 * XXX: needs to check how fsck_ext2fs programs even
-		 *      on other OSes determine alternate superblocks
+		 * Ext2fs superblock is always placed at the same SBOFF,
+		 * so we just zap possible first backups.
 		 */
 		for (i = 0; pbsize[i] != 0; i++) {
-			epblock = (uint64_t)bcount * bsize / pbsize[i];
-			for (pblock = ((pbsize[i] == SBSIZE) ? 1 : 0);
-			    pblock < epblock;
-			    pblock += pbsize[i] * NBBY /* bpg */)
-				zap_old_sblock((daddr_t)pblock *
-				    pbsize[i] / sectorsize);
+ 			pblock = (pbsize[i] > BBSIZE) ? 0 : 1;	/* 1st dblk */
+			pblock += pbsize[i] * NBBY;		/* next bg */
+			/* zap first backup */
+			zap_old_sblock(pblock * pbsize[i]);
 		}
+		/*
+		 * Also zap possbile FFS magic leftover to prevent
+		 * kernel vfs_mountroot() and bootloadres from mis-recognizing
+		 * this file system as FFS.
+		 */
+		zap_old_sblock(8192);	/* SBLOCK_UFS1 */
+		zap_old_sblock(65536);	/* SBLOCK_UFS2 */
 	}
 
 	if (verbosity >= 3)
@@ -624,7 +629,7 @@ mke2fs(const char *fsys, int fi, int fo)
 			continue;
 		}
 		/* Print superblock numbers */
-		len = printf(" %*" PRIu64 "," + !col, fld_width,
+		len = printf("%s%*" PRIu64 ",", (col ? " " : ""), fld_width,
 		    (uint64_t)cgbase(&sblock, cylno));
 		col += len;
 		if (col + len < max_cols)
@@ -672,7 +677,7 @@ mke2fs(const char *fsys, int fi, int fo)
 	e2fs_sbsave(&sblock.e2fs, (struct ext2fs *)(iobuf + sboff));
 	e2fs_cgsave(gd, (struct ext2_gd *)(iobuf + sblock.e2fs_bsize),
 	   sizeof(struct ext2_gd) * sblock.e2fs_ncg);
-	wtfs(fsbtodb(&sblock, cgbase(&sblock, 0)) + sboff / sectorsize,
+	wtfs(EXT2_FSBTODB(&sblock, cgbase(&sblock, 0)) + sboff / sectorsize,
 	    iobufsize - sboff, iobuf + sboff);
 
 	munmap(iobuf, iobufsize);
@@ -705,7 +710,7 @@ initcg(uint cylno)
 		    sblock.e2fs_bsize * NBLOCK_SUPERBLOCK),
 		    sizeof(struct ext2_gd) * sblock.e2fs_ncg);
 		/* write superblock and group descriptor backups */
-		wtfs(fsbtodb(&sblock, cgbase(&sblock, cylno)) +
+		wtfs(EXT2_FSBTODB(&sblock, cgbase(&sblock, cylno)) +
 		    sboff / sectorsize, iobufsize - sboff, iobuf + sboff);
 	}
 
@@ -727,14 +732,14 @@ initcg(uint cylno)
 	i = i * NBBY;
 	for (; i < cgoverhead(cylno); i++)
 		setbit(buf, i);
-	wtfs(fsbtodb(&sblock, gd[cylno].ext2bgd_b_bitmap), sblock.e2fs_bsize,
-	    buf);
+	wtfs(EXT2_FSBTODB(&sblock, fs2h32(gd[cylno].ext2bgd_b_bitmap)),
+	    sblock.e2fs_bsize, buf);
 
 	/*
 	 * Initialize inode bitmap.
 	 *
 	 *  Assume e2fs_ipg is a multiple of NBBY since
-	 *  it's a multible of e2fs_ipb (as we did above).
+	 *  it's a multiple of e2fs_ipb (as we did above).
 	 *  Note even (possibly smaller) the last group has the same e2fs_ipg.
 	 */
 	i = sblock.e2fs.e2fs_ipg / NBBY;
@@ -745,8 +750,8 @@ initcg(uint cylno)
 		for (i = 1; i < EXT2_FIRSTINO; i++)
 			setbit(buf, EXT2_INO_INDEX(i));
 	}
-	wtfs(fsbtodb(&sblock, gd[cylno].ext2bgd_i_bitmap), sblock.e2fs_bsize,
-	    buf);
+	wtfs(EXT2_FSBTODB(&sblock, fs2h32(gd[cylno].ext2bgd_i_bitmap)),
+	    sblock.e2fs_bsize, buf);
 
 	/*
 	 * Initialize inode tables.
@@ -756,13 +761,13 @@ initcg(uint cylno)
 	 *       to override these generated numbers.
 	 */
 	memset(buf, 0, sblock.e2fs_bsize);
-	dp = (struct ext2fs_dinode *)buf;
 	for (i = 0; i < sblock.e2fs_itpg; i++) {
 		for (j = 0; j < sblock.e2fs_ipb; j++) {
+			dp = (struct ext2fs_dinode *)(buf + inodesize * j);
 			/* h2fs32() just for consistency */
-			dp[j].e2di_gen = h2fs32(arc4random());
+			dp->e2di_gen = h2fs32(arc4random());
 		}
-		wtfs(fsbtodb(&sblock, gd[cylno].ext2bgd_i_tables + i),
+		wtfs(EXT2_FSBTODB(&sblock, fs2h32(gd[cylno].ext2bgd_i_tables) + i),
 		    sblock.e2fs_bsize, buf);
 	}
 }
@@ -771,9 +776,9 @@ initcg(uint cylno)
  * Zap possible lingering old superblock data
  */
 static void
-zap_old_sblock(daddr_t sec)
+zap_old_sblock(int sblkoff)
 {
-	static daddr_t cg0_data;
+	static int cg0_data;
 	uint32_t oldfs[SBSIZE / sizeof(uint32_t)];
 	static const struct fsm {
 		uint32_t offset;
@@ -795,24 +800,25 @@ zap_old_sblock(daddr_t sec)
 		return;
 
 	/* don't override data before superblock */
-	if (sec < SBOFF / sectorsize)
+	if (sblkoff < SBOFF)
 		return;
 
 	if (cg0_data == 0) {
 		cg0_data =
 		    ((daddr_t)sblock.e2fs.e2fs_first_dblock + cgoverhead(0)) *
-		    sblock.e2fs_bsize / sectorsize;
+		    sblock.e2fs_bsize;
 	}
 
 	/* Ignore anything that is beyond our filesystem */
-	if (sec >= fssize)
+	if (sblkoff / sectorsize >= fssize)
 		return;
 	/* Zero anything inside our filesystem... */
-	if (sec >= sblock.e2fs.e2fs_first_dblock * bsize / sectorsize) {
+	if (sblkoff >= sblock.e2fs.e2fs_first_dblock * bsize) {
 		/* ...unless we will write that area anyway */
-		if (sec >= cg0_data)
+		if (sblkoff >= cg0_data)
 			/* assume iobuf is zero'ed here */
-			wtfs(sec, roundup(SBSIZE, sectorsize), iobuf);
+			wtfs(sblkoff / sectorsize,
+			    roundup(SBSIZE, sectorsize), iobuf);
 		return;
 	}
 
@@ -820,9 +826,9 @@ zap_old_sblock(daddr_t sec)
 	 * The sector might contain boot code, so we must validate it
 	 *
 	 * XXX: ext2fs won't preserve data after SBOFF,
-	 *      but first_dblock could have a differnt value.
+	 *      but first_dblock could have a different value.
 	 */
-	rdfs(sec, sizeof(oldfs), &oldfs);
+	rdfs(sblkoff / sectorsize, sizeof(oldfs), &oldfs);
 	for (fsm = fs_magics;; fsm++) {
 		uint32_t v;
 		if (fsm->mask == 0)
@@ -835,7 +841,7 @@ zap_old_sblock(daddr_t sec)
 
 	/* Just zap the magic number */
 	oldfs[fsm->offset] = 0;
-	wtfs(sec, sizeof(oldfs), &oldfs);
+	wtfs(sblkoff / sectorsize, sizeof(oldfs), &oldfs);
 }
 
 /*
@@ -929,8 +935,8 @@ fsinit(const struct timeval *tv)
 	/* prepare a bit large directory for preserved files */
 	nblks_lostfound = EXT2_LOSTFOUNDSIZE / sblock.e2fs_bsize;
 	/* ...but only with direct blocks */
-	if (nblks_lostfound > NDADDR)
-		nblks_lostfound = NDADDR;
+	if (nblks_lostfound > EXT2FS_NDADDR)
+		nblks_lostfound = EXT2FS_NDADDR;
 
 	memset(&node, 0, sizeof(node));
 	node.e2di_mode = EXT2_IFDIR | EXT2_LOSTFOUNDUMASK;
@@ -941,8 +947,8 @@ fsinit(const struct timeval *tv)
 	node.e2di_mtime = tv->tv_sec;
 	node.e2di_gid = getegid();
 	node.e2di_nlink = PREDEFDIR;
-	/* e2di_nblock is a number of disk block, not ext2fs block */
-	node.e2di_nblock = fsbtodb(&sblock, nblks_lostfound);
+	/* e2di_nblock is a number of disk blocks, not ext2fs blocks */
+	node.e2di_nblock = EXT2_FSBTODB(&sblock, nblks_lostfound);
 	node.e2di_blocks[0] = alloc(sblock.e2fs_bsize, node.e2di_mode);
 	if (node.e2di_blocks[0] == 0) {
 		printf("%s: can't allocate block for lost+found\n", __func__);
@@ -957,13 +963,14 @@ fsinit(const struct timeval *tv)
 		}
 		node.e2di_blocks[i] = blk;
 	}
-	wtfs(fsbtodb(&sblock, node.e2di_blocks[0]), sblock.e2fs_bsize, buf);
+	wtfs(EXT2_FSBTODB(&sblock, node.e2di_blocks[0]),
+	    sblock.e2fs_bsize, buf);
 	pad_dir.e2d_reclen = sblock.e2fs_bsize;
 	for (i = 1; i < nblks_lostfound; i++) {
 		memset(buf, 0, sblock.e2fs_bsize);
 		copy_dir(&pad_dir, (struct ext2fs_direct *)buf);
-		wtfs(fsbtodb(&sblock, node.e2di_blocks[i]), sblock.e2fs_bsize,
-		    buf);
+		wtfs(EXT2_FSBTODB(&sblock, node.e2di_blocks[i]),
+		    sblock.e2fs_bsize, buf);
 	}
 	iput(&node, EXT2_LOSTFOUNDINO);
 #endif
@@ -988,13 +995,14 @@ fsinit(const struct timeval *tv)
 	node.e2di_gid = getegid();
 	node.e2di_nlink = PREDEFROOTDIR;
 	/* e2di_nblock is a number of disk block, not ext2fs block */
-	node.e2di_nblock = fsbtodb(&sblock, 1);
+	node.e2di_nblock = EXT2_FSBTODB(&sblock, 1);
 	node.e2di_blocks[0] = alloc(node.e2di_size, node.e2di_mode);
 	if (node.e2di_blocks[0] == 0) {
 		printf("%s: can't allocate block for root dir\n", __func__);
 		return 0;
 	}
-	wtfs(fsbtodb(&sblock, node.e2di_blocks[0]), sblock.e2fs_bsize, buf);
+	wtfs(EXT2_FSBTODB(&sblock, node.e2di_blocks[0]),
+	    sblock.e2fs_bsize, buf);
 	iput(&node, EXT2_ROOTINO);
 	return 1;
 }
@@ -1039,7 +1047,7 @@ copy_dir(struct ext2fs_direct *dir, struct ext2fs_direct *dbuf)
 /*
  * void init_resizeino(const struct timeval *tv);
  *
- *	Initialize the EXT2_RESEIZE_INO inode to prereserve
+ *	Initialize the EXT2_RESEIZE_INO inode to preserve
  *	reserved group descriptor blocks for future growth of this ext2fs.
  */
 void
@@ -1101,7 +1109,7 @@ init_resizeino(const struct timeval *tv)
 	 * have block numbers of actual reserved group descriptors
 	 * allocated at block group zero. This means e2fs_reserved_ngdb
 	 * blocks are reserved as the second level dindirect reference
-	 * blocks, and they acutually contain block numbers of indirect
+	 * blocks, and they actually contain block numbers of indirect
 	 * references. It may be safe since they don't have to keep any
 	 * data yet.
 	 *
@@ -1116,41 +1124,42 @@ init_resizeino(const struct timeval *tv)
 	 */
 
 	/* set e2di_size which occupies whole blocks through DINDIR blocks */
-	isize = (uint64_t)sblock.e2fs_bsize * NDADDR +
-	    (uint64_t)sblock.e2fs_bsize * NINDIR(&sblock) +
-	    (uint64_t)sblock.e2fs_bsize * NINDIR(&sblock) * NINDIR(&sblock);
+	isize = (uint64_t)sblock.e2fs_bsize * EXT2FS_NDADDR +
+	    (uint64_t)sblock.e2fs_bsize * EXT2_NINDIR(&sblock) +
+	    (uint64_t)sblock.e2fs_bsize * EXT2_NINDIR(&sblock) *
+	    EXT2_NINDIR(&sblock);
 	if (isize > UINT32_MAX &&
 	    (sblock.e2fs.e2fs_features_rocompat &
 	     EXT2F_ROCOMPAT_LARGEFILE) == 0) {
 		/* XXX should enable it here and update all backups? */
 		errx(EXIT_FAILURE, "%s: large_file rocompat feature is "
-		    "required to enable resize feature for this filesystem\n",
+		    "required to enable resize feature for this filesystem",
 		    __func__);
 	}
-	/* upper 32bit is stored into e2di_dacl on REV1 feature */
-	node.e2di_size = isize & UINT32_MAX;
-	node.e2di_dacl = isize >> 32;
+	/* upper 32bit is stored into e2di_size_high on REV1 feature */
+	node.e2di_size 	    = isize & UINT32_MAX;
+	node.e2di_size_high = isize >> 32;
 
 #define SINGLE	0	/* index of single indirect block */
 #define DOUBLE	1	/* index of double indirect block */
 #define TRIPLE	2	/* index of triple indirect block */
 
 	/* zero out entries for direct references */
-	for (i = 0; i < NDADDR; i++)
+	for (i = 0; i < EXT2FS_NDADDR; i++)
 		node.e2di_blocks[i] = 0;
 	/* also zero out entries for single and triple indirect references */
-	node.e2di_blocks[NDADDR + SINGLE] = 0;
-	node.e2di_blocks[NDADDR + TRIPLE] = 0;
+	node.e2di_blocks[EXT2FS_NDADDR + SINGLE] = 0;
+	node.e2di_blocks[EXT2FS_NDADDR + TRIPLE] = 0;
 
 	/* allocate a block for the first level double indirect reference */
-	node.e2di_blocks[NDADDR + DOUBLE] =
+	node.e2di_blocks[EXT2FS_NDADDR + DOUBLE] =
 	    alloc(sblock.e2fs_bsize, node.e2di_mode);
-	if (node.e2di_blocks[NDADDR + DOUBLE] == 0)
+	if (node.e2di_blocks[EXT2FS_NDADDR + DOUBLE] == 0)
 		errx(EXIT_FAILURE, "%s: Can't allocate a dindirect block",
 		    __func__);
 
 	/* account this first block */
-	nblock = fsbtodb(&sblock, 1);
+	nblock = EXT2_FSBTODB(&sblock, 1);
 
 	/* allocate buffer to set data in the dindirect block */
 	dindir_block = malloc(sblock.e2fs_bsize);
@@ -1178,12 +1187,12 @@ init_resizeino(const struct timeval *tv)
 		 * point reserved group descriptor block in the first
 		 * (i.e. master) block group
 		 * 
-		 * XXX: e2fsprogs seem to use "(i % NINDIR(&sblock))" here
-		 *      to store maximum NINDIR(&sblock) reserved gdbs.
+		 * XXX: e2fsprogs seem to use "(i % EXT2_NINDIR(&sblock))" here
+		 *      to store maximum EXT2_NINDIR(&sblock) reserved gdbs.
 		 *      I'm not sure what will be done on future filesystem
 		 *      shrink in that case on their way.
 		 */
-		if (i >= NINDIR(&sblock))
+		if (i >= EXT2_NINDIR(&sblock))
 			errx(EXIT_FAILURE, "%s: too many reserved "
 			    "group descriptors (%u) for resize inode",
 			    __func__, sblock.e2fs.e2fs_reserved_ngdb);
@@ -1202,7 +1211,7 @@ init_resizeino(const struct timeval *tv)
 			    cg_has_sb(cylno) == 0)
 				continue;
 
-			if (n >= NINDIR(&sblock))
+			if (n >= EXT2_NINDIR(&sblock))
 				errx(EXIT_FAILURE, "%s: too many block groups "
 				    "for the resize feature", __func__);
 			/*
@@ -1211,24 +1220,24 @@ init_resizeino(const struct timeval *tv)
 			 */
 			reserved_gdb[n++] = h2fs32(cgbase(&sblock, cylno) +
 			    NBLOCK_SUPERBLOCK + i);
-			nblock += fsbtodb(&sblock, 1);
+			nblock += EXT2_FSBTODB(&sblock, 1);
 		}
-		for (; n < NINDIR(&sblock); n++)
+		for (; n < EXT2_NINDIR(&sblock); n++)
 			reserved_gdb[n] = 0;
 
 		/* write group descriptor block as the second dindirect refs */
-		wtfs(fsbtodb(&sblock, fs2h32(dindir_block[i])),
+		wtfs(EXT2_FSBTODB(&sblock, fs2h32(dindir_block[i])),
 		    sblock.e2fs_bsize, reserved_gdb);
-		nblock += fsbtodb(&sblock, 1);
+		nblock += EXT2_FSBTODB(&sblock, 1);
 	}
-	for (; i < NINDIR(&sblock); i++) {
+	for (; i < EXT2_NINDIR(&sblock); i++) {
 		/* leave trailing entries unallocated */
 		dindir_block[i] = 0;
 	}
 	free(reserved_gdb);
 
 	/* finally write the first level dindirect block */
-	wtfs(fsbtodb(&sblock, node.e2di_blocks[NDADDR + DOUBLE]),
+	wtfs(EXT2_FSBTODB(&sblock, node.e2di_blocks[EXT2FS_NDADDR + DOUBLE]),
 	    sblock.e2fs_bsize, dindir_block);
 	free(dindir_block);
 
@@ -1258,7 +1267,8 @@ alloc(uint32_t size, uint16_t mode)
 	bbp = malloc(sblock.e2fs_bsize);
 	if (bbp == NULL)
 		return 0;
-	rdfs(fsbtodb(&sblock, gd[0].ext2bgd_b_bitmap), sblock.e2fs_bsize, bbp);
+	rdfs(EXT2_FSBTODB(&sblock, fs2h32(gd[0].ext2bgd_b_bitmap)),
+	    sblock.e2fs_bsize, bbp);
 
 	/* XXX: kernel uses e2fs_fpg here */
 	len = sblock.e2fs.e2fs_bpg / NBBY;
@@ -1273,8 +1283,10 @@ alloc(uint32_t size, uint16_t mode)
 #endif
 
 	loc = skpc(~0U, len, bbp);
-	if (loc == 0)
+	if (loc == 0) {
+		free(bbp);
 		return 0;
+	}
 	loc = len - loc;
 	map = bbp[loc];
 	bno = loc * NBBY;
@@ -1282,19 +1294,21 @@ alloc(uint32_t size, uint16_t mode)
 		if ((map & (1 << i)) == 0)
 			goto gotit;
 	}
+	free(bbp);
 	return 0;
 	
  gotit:
 	if (isset(bbp, bno))
-		errx(EXIT_FAILURE, "%s: inconsistent bitmap\n", __func__);
+		errx(EXIT_FAILURE, "%s: inconsistent bitmap", __func__);
 
 	setbit(bbp, bno);
-	wtfs(fsbtodb(&sblock, gd[0].ext2bgd_b_bitmap), sblock.e2fs_bsize, bbp);
+	wtfs(EXT2_FSBTODB(&sblock, fs2h32(gd[0].ext2bgd_b_bitmap)),
+	    sblock.e2fs_bsize, bbp);
 	free(bbp);
 	/* XXX: modified group descriptors won't be written into backups */
-	gd[0].ext2bgd_nbfree--;
+	gd[0].ext2bgd_nbfree = h2fs16(fs2h16(gd[0].ext2bgd_nbfree)-1);
 	if ((mode & EXT2_IFDIR) != 0)
-		gd[0].ext2bgd_ndirs++;
+		gd[0].ext2bgd_ndirs = h2fs16(fs2h16(gd[0].ext2bgd_ndirs)+1);
 	sblock.e2fs.e2fs_fbcount--;
 
 	return sblock.e2fs.e2fs_first_dblock + bno;
@@ -1315,7 +1329,7 @@ iput(struct ext2fs_dinode *ip, ino_t ino)
 
 	bp = malloc(sblock.e2fs_bsize);
 	if (bp == NULL)
-		errx(EXIT_FAILURE, "%s: can't allocate buffer for inode\n",
+		errx(EXIT_FAILURE, "%s: can't allocate buffer for inode",
 		    __func__);
 
 	/*
@@ -1328,38 +1342,38 @@ iput(struct ext2fs_dinode *ip, ino_t ino)
 		/* sanity check */
 		if (gd[c].ext2bgd_nifree == 0)
 			errx(EXIT_FAILURE,
-			    "%s: no free inode %" PRIu64 " in block group %u\n",
+			    "%s: no free inode %" PRIu64 " in block group %u",
 			    __func__, (uint64_t)ino, c);
 
 		/* update inode bitmap */
-		rdfs(fsbtodb(&sblock, gd[0].ext2bgd_i_bitmap),
+		rdfs(EXT2_FSBTODB(&sblock, fs2h32(gd[0].ext2bgd_i_bitmap)),
 		    sblock.e2fs_bsize, bp);
 
 		/* more sanity */
 		if (isset(bp, EXT2_INO_INDEX(ino)))
 			errx(EXIT_FAILURE, "%s: inode %" PRIu64
-			    " already in use\n", __func__, (uint64_t)ino);
+			    " already in use", __func__, (uint64_t)ino);
 		setbit(bp, EXT2_INO_INDEX(ino));
-		wtfs(fsbtodb(&sblock, gd[0].ext2bgd_i_bitmap),
+		wtfs(EXT2_FSBTODB(&sblock, fs2h32(gd[0].ext2bgd_i_bitmap)),
 		    sblock.e2fs_bsize, bp);
-		gd[c].ext2bgd_nifree--;
+		gd[c].ext2bgd_nifree = h2fs16(fs2h16(gd[c].ext2bgd_nifree)-1);
 		sblock.e2fs.e2fs_ficount--;
 	}
 
 	if (ino >= sblock.e2fs.e2fs_ipg * sblock.e2fs_ncg)
 		errx(EXIT_FAILURE, "%s: inode value out of range (%" PRIu64
-		    ").\n", __func__, (uint64_t)ino);
+		    ")", __func__, (uint64_t)ino);
 
 	/* update an inode entry in the table */
-	d = fsbtodb(&sblock, ino_to_fsba(&sblock, ino));
+	d = EXT2_FSBTODB(&sblock, ino_to_fsba(&sblock, ino));
 	rdfs(d, sblock.e2fs_bsize, bp);
 
-	dp = (struct ext2fs_dinode *)bp;
-	dp += ino_to_fsbo(&sblock, ino);
-	e2fs_isave(ip, dp);
+	dp = (struct ext2fs_dinode *)(bp +
+	    inodesize * ino_to_fsbo(&sblock, ino));
+	e2fs_isave(ip, dp, EXT2_DINODE_SIZE(&sblock));
 	/* e2fs_i_bswap() doesn't swap e2di_blocks addrs */
 	if ((ip->e2di_mode & EXT2_IFMT) != EXT2_IFLNK) {
-		for (i = 0; i < NDADDR + NIADDR; i++)
+		for (i = 0; i < EXT2FS_NDADDR + EXT2FS_NIADDR; i++)
 			dp->e2di_blocks[i] = h2fs32(ip->e2di_blocks[i]);
 	}
 	/* h2fs32() just for consistency */
@@ -1408,7 +1422,7 @@ ilog2(uint val)
 {
 
 	if (val == 0 || !powerof2(val))
-		errx(EXIT_FAILURE, "%s: %u is not a power of 2\n",
+		errx(EXIT_FAILURE, "%s: %u is not a power of 2",
 		    __func__, val);
 
 	return ffs(val) - 1;

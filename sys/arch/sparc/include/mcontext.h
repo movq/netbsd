@@ -1,4 +1,4 @@
-/*	$NetBSD: mcontext.h,v 1.8 2006/03/29 23:07:49 cube Exp $	*/
+/*	$NetBSD: mcontext.h,v 1.17 2018/02/19 08:31:13 mrg Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,10 +30,11 @@
  */
 
 #ifndef _SPARC_MCONTEXT_H_
-#define _SPARC_MCONTEXT_H_
+#define	_SPARC_MCONTEXT_H_
 
-#define _UC_SETSTACK	0x00010000
-#define _UC_CLRSTACK	0x00020000
+#define	_UC_SETSTACK	0x00010000
+#define	_UC_CLRSTACK	0x00020000
+#define	_UC_TLSBASE	0x00080000
 
 /*
  * Layout of mcontext_t according the System V Application Binary Interface,
@@ -56,11 +50,8 @@ typedef	long int	__greg_t;
 typedef	__greg_t	__gregset_t[_NGREG];
 
 /* Offsets into gregset_t, for convenience. */
-#ifdef __arch64__
-#define	_REG_CCR	0
-#else
-#define	_REG_PSR	0
-#endif
+#define	_REG_CCR	0	/* 64 bit only */
+#define	_REG_PSR	0	/* 32 bit only */
 #define	_REG_PC		1
 #define	_REG_nPC	2
 #define	_REG_Y		3
@@ -79,10 +70,8 @@ typedef	__greg_t	__gregset_t[_NGREG];
 #define	_REG_O5		16
 #define	_REG_O6		17
 #define	_REG_O7		18
-#ifdef __arch64__
-#define	_REG_ASI	19
-#define	_REG_FPRS	20
-#endif
+#define	_REG_ASI	19	/* 64 bit only */
+#define	_REG_FPRS	20	/* 64 bit only */
 
 
 #define	_SPARC_MAXREGWINDOW	31
@@ -155,13 +144,13 @@ typedef struct {
 } mcontext_t;
 
 #ifdef __arch64__
-#define _UC_MACHINE_PAD	8		/* Padding appended to ucontext_t */
-#define	_UC_MACHINE_SP(uc)	(((uc)->uc_mcontext.__gregs[_REG_O6])+0x7ff)
-#define _UC_MACHINE32_PAD	43	/* compat_netbsd32 variant */
-#define	_UC_MACHINE32_SP(uc)	((uc)->uc_mcontext.__gregs[_REG_O6])
+#define	_UC_MACHINE_PAD	8		/* Padding appended to ucontext_t */
+#define	_UC_MACHINE_SP(uc)	(((uc)->uc_mcontext.__gregs[_REG_O6]) + 0x7ff)
+#define	_UC_MACHINE_FP(uc)	(((__greg_t *)_UC_MACHINE_SP(uc))[15])
 #else
-#define _UC_MACHINE_PAD	43		/* Padding appended to ucontext_t */
+#define	_UC_MACHINE_PAD	43		/* Padding appended to ucontext_t */
 #define	_UC_MACHINE_SP(uc)	((uc)->uc_mcontext.__gregs[_REG_O6])
+#define	_UC_MACHINE_FP(uc)	(((__greg_t *)_UC_MACHINE_SP(uc))[15])
 #endif
 #define	_UC_MACHINE_PC(uc)	((uc)->uc_mcontext.__gregs[_REG_PC])
 #define	_UC_MACHINE_INTRV(uc)	((uc)->uc_mcontext.__gregs[_REG_O0])
@@ -171,5 +160,15 @@ do {									\
 	(uc)->uc_mcontext.__gregs[_REG_PC] = (pc);			\
 	(uc)->uc_mcontext.__gregs[_REG_nPC] = (pc) + 4;			\
 } while (/*CONSTCOND*/0)
+
+static __inline void *
+__lwp_getprivate_fast(void)
+{
+	register void *__tmp;
+
+	__asm volatile("mov %%g7, %0" : "=r" (__tmp));
+
+	return __tmp;
+}
 
 #endif	/* !_SPARC_MCONTEXT_H_ */

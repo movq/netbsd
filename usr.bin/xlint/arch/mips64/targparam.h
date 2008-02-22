@@ -1,4 +1,4 @@
-/*	$NetBSD: targparam.h,v 1.1 2006/08/25 23:35:04 matt Exp $	*/
+/*	$NetBSD: targparam.h,v 1.5 2014/01/24 00:17:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -34,8 +34,9 @@
 /*
  * Machine-dependent target parameters for lint1.
  */
-
-#include "lp64.h"
+#include "schar.h"
+// This is for __mips_n32
+#include "ilp32.h"
 
 /*    
  * Should be set to 1 if the difference of two pointers is of type long
@@ -49,6 +50,6 @@
 
 #define	FLOAT_SIZE		(4 * CHAR_BIT)
 #define	DOUBLE_SIZE		(8 * CHAR_BIT)
-#define	LDOUBLE_SIZE		(8 * CHAR_BIT)
+#define	LDOUBLE_SIZE		(16 * CHAR_BIT)
 
 #define	ENUM_SIZE		(4 * CHAR_BIT)

@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.7 2006/03/04 02:56:21 uwe Exp $ */
+/*	$NetBSD: frame.h,v 1.10 2018/04/11 19:37:58 palle Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,6 +40,9 @@
  *	@(#)frame.h	8.1 (Berkeley) 6/11/93
  */
 
+#ifndef _SPARC_FRAME_H_
+#define _SPARC_FRAME_H_
+
 #if defined(_KERNEL_OPT)
 #include "opt_sparc_arch.h"
 #endif
@@ -53,7 +56,7 @@
  * windows to the stack.
  */
 #ifndef _LOCORE
-#ifndef SUN4U
+#ifndef __sparc_v9__
 struct frame {
 	int32_t	fr_local[8];	/* space to save locals (%l0..%l7) */
 	int32_t	fr_arg[6];	/* space to save arguments (%i0..%i5) */
@@ -101,7 +104,7 @@ struct frame32 {
  * of the frame, you must first force the kernel to write any such
  * windows to the stack.
  *
- * V9 frames have an odd bias, so you can tall a v9 frame from
+ * V9 frames have an odd bias, so you can tell a v9 frame from
  * a v8 frame by testing the stack pointer's lsb.
  */
 #if !defined(_LOCORE) && !defined(_LIBC)
@@ -132,3 +135,4 @@ struct frame64 {
  */
 #define BIAS	(2048-1)
 
+#endif /* _SPARC_FRAME_H_ */

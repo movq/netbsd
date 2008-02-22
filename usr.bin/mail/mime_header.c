@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_header.c,v 1.4 2007/10/23 14:58:44 christos Exp $	*/
+/*	$NetBSD: mime_header.c,v 1.9 2013/02/14 18:23:45 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,9 +39,10 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_header.c,v 1.4 2007/10/23 14:58:44 christos Exp $");
+__RCSID("$NetBSD: mime_header.c,v 1.9 2013/02/14 18:23:45 christos Exp $");
 #endif /* not __lint__ */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,67 +52,6 @@ __RCSID("$NetBSD: mime_header.c,v 1.4 2007/10/23 14:58:44 christos Exp $");
 #include "mime.h"
 #include "mime_header.h"
 #include "mime_codecs.h"
-
-/*
- * Our interface to mime_b64tobin()
- *
- * XXX - This should move to mime_codecs.c.
- */
-static ssize_t
-mime_B64_decode(char *outbuf, size_t outlen, const char *inbuf, size_t inlen)
-{
-	if (outlen < 3 * roundup(inlen, 4) / 4)
-		return -1;
-
-	return mime_b64tobin(outbuf, inbuf, inlen);
-}
-
-
-/*
- * Header specific "quoted-printable" decode!
- * Differences with body QP decoding (see rfc 2047, sec 4.2):
- * 1) '=' occurs _only_ when followed by two hex digits (FWS is not allowed).
- * 2) Spaces can be encoded as '_' in headers for readability.
- *
- * XXX - This should move to mime_codecs.c.
- */
-static ssize_t
-mime_QPh_decode(char *outbuf, size_t outlen, const char *inbuf, size_t inlen)
-{
-	const char *p, *inend;
-	char *outend;
-	char *q;
-
-	outend = outbuf + outlen;
-	inend = inbuf + inlen;
-	q = outbuf;
-	for (p = inbuf; p < inend; p++) {
-		if (q >= outend)
-			return -1;
-		if (*p == '=') {
-			p++;
-			if (p + 1 < inend) {
-				int c;
-				char *bufend;
-				char buf[3];
-				buf[0] = *p++;
-				buf[1] = *p;
-				buf[2] = '\0';
-				c = strtol(buf, &bufend, 16);
-				if (bufend != &buf[2])
-					return -1;
-				*q++ = c;
-			}
-			else
-				return -1;
-		}
-		else if (*p == '_')  /* header's may encode ' ' as '_' */
-			*q++ = ' ';
-		else
-			*q++ = *p;
-	}
-	return q - outbuf;
-}
 
 static const char *
 grab_charset(char *from_cs, size_t from_cs_len, const char *p)
@@ -188,16 +121,14 @@ decode_word(const char **ibuf, char **obuf, char *oend, const char *to_cs)
 	if (iend > *ibuf + 75)
 		return -1;
 
-	dstend = to_cs ? decword : *obuf;
-	dstlen = (to_cs ? sizeof(decword): oend - *obuf) - 1;
-
-	if (enctype == 'B' || enctype == 'b')
-		declen = mime_B64_decode(dstend, dstlen, encword, enclen);
-	else if (enctype == 'Q' || enctype == 'q')
-		declen = mime_QPh_decode(dstend, dstlen, encword, enclen);
-	else
+	if (oend < *obuf + 1) {
+		assert(/*CONSTCOND*/ 0);	/* We have a coding error! */
 		return -1;
+	}
+	dstend = to_cs ? decword : *obuf;
+	dstlen = (to_cs ? sizeof(decword) : (size_t)(oend - *obuf)) - 1;
 
+	declen = mime_rfc2047_decode(enctype, dstend, dstlen, encword, enclen);
 	if (declen == -1)
 		return -1;
 
@@ -605,48 +536,54 @@ mime_decode_sfield(char *linebuf, size_t bufsize, const char *hstring)
 	*q = '\0';	/* null terminate the result! */
 }
 
-
 /*
  * Returns the correct hfield decoder, or NULL if none.
  * Info extracted from RFC 2822.
+ *
+ * name - pointer to field name of header line (with colon).
  */
 PUBLIC hfield_decoder_t
-mime_hfield_decoder(char *name)
+mime_hfield_decoder(const char *name)
 {
 	static const struct field_decoder_tbl_s {
 		const char *field_name;
+		size_t field_len;
 		hfield_decoder_t decoder;
 	} field_decoder_tbl[] = {
-		{ "Received:",			NULL },
-		{ "Content-Type:",		NULL },
-		{ "Content-Disposition:",	NULL },
-		{ "Content-Transfer-Encoding:",	NULL },
-		{ "Content-Description:",	mime_decode_sfield },
-		{ "Content-ID:",		mime_decode_sfield },
-		{ "MIME-Version:",		mime_decode_sfield },
-		{ "Bcc:",			mime_decode_sfield },
-		{ "Cc:",			mime_decode_sfield },
-		{ "Date:",			mime_decode_sfield },
-		{ "From:",			mime_decode_sfield },
-		{ "In-Reply-To:",		mime_decode_sfield },
-		{ "Keywords:",			mime_decode_sfield },
-		{ "Message-ID:",		mime_decode_sfield },
-		{ "References:",		mime_decode_sfield },
-		{ "Reply-To:",			mime_decode_sfield },
-		{ "Return-Path:",		mime_decode_sfield },
-		{ "Sender:",			mime_decode_sfield },
-		{ "To:",			mime_decode_sfield },
-		{ "Subject:",			mime_decode_usfield },
-		{ "Comments:",			mime_decode_usfield },
-		{ "X-",				mime_decode_usfield },
-		{ NULL,				mime_decode_usfield },	/* optional-fields */
+#define X(s)	s, sizeof(s) - 1
+		{ X("Received:"),			NULL },
+
+		{ X("Content-Type:"),			NULL },
+		{ X("Content-Disposition:"),		NULL },
+		{ X("Content-Transfer-Encoding:"),	NULL },
+		{ X("Content-Description:"),		mime_decode_sfield },
+		{ X("Content-ID:"),			mime_decode_sfield },
+		{ X("MIME-Version:"),			mime_decode_sfield },
+
+		{ X("Bcc:"),				mime_decode_sfield },
+		{ X("Cc:"),				mime_decode_sfield },
+		{ X("Date:"),				mime_decode_sfield },
+		{ X("From:"),				mime_decode_sfield },
+		{ X("In-Reply-To:"),			mime_decode_sfield },
+		{ X("Keywords:"),			mime_decode_sfield },
+		{ X("Message-ID:"),			mime_decode_sfield },
+		{ X("References:"),			mime_decode_sfield },
+		{ X("Reply-To:"),			mime_decode_sfield },
+		{ X("Return-Path:"),			mime_decode_sfield },
+		{ X("Sender:"),				mime_decode_sfield },
+		{ X("To:"),				mime_decode_sfield },
+		{ X("Subject:"),			mime_decode_usfield },
+		{ X("Comments:"),			mime_decode_usfield },
+		{ X("X-"),				mime_decode_usfield },
+		{ NULL, 0,				mime_decode_usfield },	/* optional-fields */
+#undef X
 	};
 	const struct field_decoder_tbl_s *fp;
 
 	/* XXX - this begs for a hash table! */
 	for (fp = field_decoder_tbl; fp->field_name; fp++)
-		if (strncasecmp(name, fp->field_name, strlen(fp->field_name)) == 0)
-			return fp->decoder;
+		if (strncasecmp(name, fp->field_name, fp->field_len) == 0)
+			break;
 	return fp->decoder;
 }
 

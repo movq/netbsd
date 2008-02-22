@@ -1,4 +1,4 @@
-#	$NetBSD: majors.shark,v 1.25 2007/12/31 15:32:05 ad Exp $
+#	$NetBSD: majors.shark,v 1.28 2017/02/17 19:43:40 macallan Exp $
 #
 # Device majors for shark
 #
@@ -31,7 +31,6 @@ device-major	cd		char 26  block 26	cd
 device-major	bpf		char 32			bpfilter
 device-major	tun		char 33			tun
 device-major	filedesc	char 34
-device-major	lkm		char 35			lkm
 device-major	audio		char 36			audio
 
 device-major	opms		char 40			opms
@@ -61,9 +60,10 @@ device-major	openfirm	char 77			openfirm | ofwgencfg
 
 device-major	clockctl	char 84			clockctl
 device-major	ksyms		char 86			ksyms
+device-major	pci		char 88			pci
 
 device-major	nsmb		char 98			nsmb
 
-# Majors up to 143 are reserved for machine-dependant drivers.
+# Majors up to 143 are reserved for machine-dependent drivers.
 # New machine-independent driver majors are assigned in 
 # sys/conf/majors.

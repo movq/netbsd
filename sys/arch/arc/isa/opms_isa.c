@@ -1,21 +1,21 @@
-/* $NetBSD: opms_isa.c,v 1.8 2005/12/11 12:16:39 christos Exp $ */
+/* $NetBSD: opms_isa.c,v 1.12 2011/07/01 19:25:41 dyoung Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -28,14 +28,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opms_isa.c,v 1.8 2005/12/11 12:16:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opms_isa.c,v 1.12 2011/07/01 19:25:41 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -43,16 +43,16 @@ __KERNEL_RCSID(0, "$NetBSD: opms_isa.c,v 1.8 2005/12/11 12:16:39 christos Exp $"
 #include <arc/dev/pcconsvar.h>
 #include <arc/dev/opmsvar.h>
 
-int	opms_isa_match(struct device *, struct cfdata *, void *);
-void	opms_isa_attach(struct device *, struct device *, void *);
+static int	opms_isa_match(device_t, cfdata_t, void *);
+static void	opms_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(opms_isa, sizeof(struct opms_softc),
+CFATTACH_DECL_NEW(opms_isa, sizeof(struct opms_softc),
     opms_isa_match, opms_isa_attach, NULL, NULL);
 
 struct pccons_config *pccons_isa_conf;	/* share stroage with pccons_isa.c */
 
-int
-opms_isa_match(struct device *parent, struct cfdata *match, void *aux)
+static int
+opms_isa_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_addr_t iobase = IO_KBD;
@@ -97,15 +97,17 @@ opms_isa_match(struct device *parent, struct cfdata *match, void *aux)
 	return 1;
 }
 
-void
-opms_isa_attach(struct device *parent, struct device *self, void *aux)
+static void
+opms_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct opms_softc *sc = (struct opms_softc *)self;
+	struct opms_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 
-	printf("\n");
+	sc->sc_dev = self;
+
+	aprint_normal("\n");
 
 	isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq, IST_EDGE, IPL_TTY,
-	    pcintr, self);
+	    pcintr, sc);
 	opms_common_attach(sc, ia->ia_iot, pccons_isa_conf);
 }

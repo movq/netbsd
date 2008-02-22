@@ -1,4 +1,4 @@
-/*	$NetBSD: monetary.h,v 1.1 2005/04/03 20:09:29 christos Exp $	*/
+/*	$NetBSD: monetary.h,v 1.3 2017/08/16 13:53:20 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2001 Alexey Zelkin <phantom@FreeBSD.org>
@@ -44,8 +44,19 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 #undef	_BSD_SSIZE_T_
 #endif
 
+#if defined(_NETBSD_SOURCE)
+#  ifndef __LOCALE_T_DECLARED
+typedef struct _locale		*locale_t;
+#  define __LOCALE_T_DECLARED
+#  endif
 __BEGIN_DECLS
-ssize_t	strfmon(char * __restrict, size_t, const char * __restrict, ...);
+ssize_t	strfmon_l(char * __restrict, size_t, locale_t, const char * __restrict, ...)
+    __attribute__((__format__(__strfmon__, 4, 5)));
+#endif
+
+__BEGIN_DECLS
+ssize_t	strfmon(char * __restrict, size_t, const char * __restrict, ...)
+    __attribute__((__format__(__strfmon__, 3, 4)));
 __END_DECLS
 
 #endif /* !_MONETARY_H_ */

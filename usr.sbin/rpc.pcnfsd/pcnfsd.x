@@ -1,4 +1,4 @@
-/*	$NetBSD: pcnfsd.x,v 1.4 2002/10/31 08:39:13 petrov Exp $	*/
+/*	$NetBSD: pcnfsd.x,v 1.7 2018/01/23 21:27:20 sevan Exp $	*/
 
 /* The maximum number of bytes in a user name argument */
 const IDENTLEN = 32;
@@ -630,9 +630,16 @@ program PCNFSDPROG {
 ** The following forces a publically-visible msg_out()
 */
 %#if RPC_SVC
-% static void _msgout __P((const char *));
-% void msg_out(msg) char *msg; {_msgout(msg);}
+% static void _msgout(const char *);
+% void msg_out(msg) const char *msg; {_msgout(msg);}
 %#endif
 %#if RPC_HDR
-% extern void msg_out __P((char *));
+% extern void msg_out(const char *);
+%#endif
+
+/*
+** This allows initialization prior to running the service. (see PR 12758)
+*/
+%#if RPC_SVC
+%#define main mymain
 %#endif

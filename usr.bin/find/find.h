@@ -1,4 +1,4 @@
-/*	$NetBSD: find.h,v 1.24 2007/02/06 13:25:01 elad Exp $	*/
+/*	$NetBSD: find.h,v 1.26 2016/06/13 00:04:40 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -35,17 +35,18 @@
  */
 
 #include <regex.h>
+#include <time.h>
 
 /* node type */
 enum ntype {
 	N_AND = 1, 				/* must start > 0 */
-	N_AMIN, N_ANEWER, N_ATIME, N_CLOSEPAREN, N_CMIN, N_CNEWER, N_CTIME,
-	N_DEPTH, N_EMPTY, N_EXEC, N_EXECDIR, N_EXIT, N_EXPR, N_FALSE, N_FLAGS,
-	N_FOLLOW, N_FPRINT, N_FSTYPE, N_GROUP,
+	N_AMIN, N_ANEWER, N_ASINCE, N_ATIME, N_CLOSEPAREN, N_CMIN, N_CNEWER,
+	N_CSINCE, N_CTIME, N_DEPTH, N_EMPTY, N_EXEC, N_EXECDIR, N_EXIT,
+	N_EXPR, N_FALSE, N_FLAGS, N_FOLLOW, N_FPRINT, N_FSTYPE, N_GROUP,
 	N_INAME, N_INUM, N_IREGEX, N_LINKS, N_LS, N_MINDEPTH, N_MAXDEPTH,
 	N_MMIN, N_MTIME, N_NAME, N_NEWER, N_NOGROUP, N_NOT, N_NOUSER, N_OK,
 	N_OPENPAREN, N_OR, N_PATH, N_PERM, N_PRINT, N_PRINT0, N_PRINTX,
-	N_PRUNE, N_REGEX, N_SIZE, N_TYPE, N_USER, N_XDEV, N_DELETE
+	N_PRUNE, N_REGEX, N_SINCE, N_SIZE, N_TYPE, N_USER, N_XDEV, N_DELETE
 };
 
 /* node definition */
@@ -71,6 +72,7 @@ typedef struct _plandata {
 		nlink_t _l_data;		/* link count */
 		off_t _o_data;			/* file size */
 		time_t _t_data;			/* time value */
+		struct timespec _ts_data;	/* time value */
 		uid_t _u_data;			/* uid */
 		short _mt_data;			/* mount flags */
 		struct _plandata *_p_data[2];	/* PLAN trees */
@@ -106,6 +108,7 @@ typedef struct _plandata {
 #define	o_data		p_un._o_data
 #define	p_data		p_un._p_data
 #define	t_data		p_un._t_data
+#define	ts_data		p_un._ts_data
 #define	u_data		p_un._u_data
 #define	e_argv		p_un.ex._e_argv
 #define	e_orig		p_un.ex._e_orig
@@ -126,10 +129,10 @@ typedef struct _plandata {
 #define	fprint_file	p_un._fprint_file
 
 typedef struct _option {
-	const char *name;		/* option name */
-	enum ntype token;		/* token type */
-	PLAN *(*create)(char ***, int);	/* create function */
-	int arg;			/* function needs arg */
+	const char *name;			/* option name */
+	enum ntype token;			/* token type */
+	PLAN *(*create)(char ***, int, char *);	/* create function */
+	int arg;				/* function needs arg */
 } OPTION;
 
 #include "extern.h"

@@ -1,4 +1,4 @@
-/* $NetBSD: libstubs.s,v 1.8 2001/12/17 05:41:13 mhitch Exp $ */
+/* $NetBSD: libstubs.s,v 1.10 2009/10/17 11:18:18 mlelstv Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -166,6 +159,26 @@ ENTRY_NOPROFILE(WaitPort)
 	jsr	%a6@(-0x180)
 	movl	%sp@+,%a6
 	movl	%d0,%a0			| Comply with ELF ABI
+	rts
+
+ENTRY_NOPROFILE(RawIOInit)
+	movl	%a6,%sp@-
+	movl	%pc@(_C_LABEL(SysBase):w),%a6
+	jsr	%a6@(-0x1f8)
+	movl	%sp@+,%a6
+	rts
+ENTRY_NOPROFILE(RawPutChar)
+	movl	%a6,%sp@-
+	movl	%pc@(_C_LABEL(SysBase):w),%a6
+	movl	%sp@(8),%d0
+	jsr	%a6@(-0x204)
+	movl	%sp@+,%a6
+	rts
+ENTRY_NOPROFILE(RawMayGetChar)
+	movl	%a6,%sp@-
+	movl	%pc@(_C_LABEL(SysBase):w),%a6
+	jsr	%a6@(-0x1fe)
+	movl	%sp@+,%a6
 	rts
 
 #ifndef DOINLINES

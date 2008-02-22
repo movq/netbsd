@@ -1,4 +1,4 @@
-/*	$NetBSD: dkwedge_gpt.c,v 1.7 2007/12/28 19:53:10 riz Exp $	*/
+/*	$NetBSD: dkwedge_gpt.c,v 1.20 2017/09/07 10:18:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dkwedge_gpt.c,v 1.7 2007/12/28 19:53:10 riz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dkwedge_gpt.c,v 1.20 2017/09/07 10:18:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,26 +47,32 @@ __KERNEL_RCSID(0, "$NetBSD: dkwedge_gpt.c,v 1.7 2007/12/28 19:53:10 riz Exp $");
 #include <sys/disklabel_gpt.h>
 #include <sys/uuid.h>
 
+/* UTF-8 encoding stuff */
+#include <fs/unicode.h>
+
+/*
+ * GUID to dkw_ptype mapping information.
+ *
+ * GPT_ENT_TYPE_MS_BASIC_DATA is not suited to mapping.  Aside from being
+ * used for multiple Microsoft file systems, Linux uses it for its own
+ * set of native file systems.  Treating this GUID as unknown seems best.
+ */
+
 static const struct {
 	struct uuid ptype_guid;
 	const char *ptype_str;
 } gpt_ptype_guid_to_str_tab[] = {
-	{ GPT_ENT_TYPE_EFI,		"msdos" },	/* XXX yes? */
-#if 0
-	{ GPT_ENT_TYPE_FREEBSD,		??? },
-#endif
+	{ GPT_ENT_TYPE_EFI,			DKW_PTYPE_FAT },
 	{ GPT_ENT_TYPE_NETBSD_SWAP,		DKW_PTYPE_SWAP },
 	{ GPT_ENT_TYPE_FREEBSD_SWAP,		DKW_PTYPE_SWAP },
 	{ GPT_ENT_TYPE_NETBSD_FFS,		DKW_PTYPE_FFS },
 	{ GPT_ENT_TYPE_FREEBSD_UFS,		DKW_PTYPE_FFS },
+	{ GPT_ENT_TYPE_APPLE_UFS,		DKW_PTYPE_FFS },
 	{ GPT_ENT_TYPE_NETBSD_LFS,		DKW_PTYPE_LFS },
 	{ GPT_ENT_TYPE_NETBSD_RAIDFRAME,	DKW_PTYPE_RAIDFRAME },
 	{ GPT_ENT_TYPE_NETBSD_CCD,		DKW_PTYPE_CCD },
 	{ GPT_ENT_TYPE_NETBSD_CGD,		DKW_PTYPE_CGD },
-
-	/* XXX What about the MS and Linux types? */
-
-	{ { .time_low = 0 },		NULL },
+	{ GPT_ENT_TYPE_APPLE_HFS,		DKW_PTYPE_APPLEHFS },
 };
 
 static const char *
@@ -81,36 +80,13 @@ gpt_ptype_guid_to_str(const struct uuid *guid)
 {
 	int i;
 
-	for (i = 0; gpt_ptype_guid_to_str_tab[i].ptype_str != NULL; i++) {
+	for (i = 0; i < __arraycount(gpt_ptype_guid_to_str_tab); i++) {
 		if (memcmp(&gpt_ptype_guid_to_str_tab[i].ptype_guid,
 			   guid, sizeof(*guid)) == 0)
 			return (gpt_ptype_guid_to_str_tab[i].ptype_str);
 	}
 
-	return (NULL);
-}
-
-static const uint32_t gpt_crc_tab[16] = {
-	0x00000000U, 0x1db71064U, 0x3b6e20c8U, 0x26d930acU,
-	0x76dc4190U, 0x6b6b51f4U, 0x4db26158U, 0x5005713cU,
-	0xedb88320U, 0xf00f9344U, 0xd6d6a3e8U, 0xcb61b38cU,
-	0x9b64c2b0U, 0x86d3d2d4U, 0xa00ae278U, 0xbdbdf21cU
-};
-
-static uint32_t
-gpt_crc32(const void *vbuf, size_t len)
-{
-	const uint8_t *buf = vbuf;
-	uint32_t crc;
-
-	crc = 0xffffffffU;
-	while (len--) {
-		crc ^= *buf++;
-		crc = (crc >> 4) ^ gpt_crc_tab[crc & 0xf];
-		crc = (crc >> 4) ^ gpt_crc_tab[crc & 0xf];
-	}
-
-	return (crc ^ 0xffffffffU);
+	return (DKW_PTYPE_UNKNOWN);
 }
 
 static int
@@ -121,7 +97,7 @@ gpt_verify_header_crc(struct gpt_hdr *hdr)
 
 	crc = hdr->hdr_crc_self;
 	hdr->hdr_crc_self = 0;
-	rv = le32toh(crc) == gpt_crc32(hdr, le32toh(hdr->hdr_size));
+	rv = le32toh(crc) == crc32(0, (void *)hdr, le32toh(hdr->hdr_size));
 	hdr->hdr_crc_self = crc;
 
 	return (rv);
@@ -134,6 +110,7 @@ dkwedge_discover_gpt(struct disk *pdk, struct vnode *vp)
 	static const char gpt_hdr_sig[] = GPT_HDR_SIG;
 	struct dkwedge_info dkw;
 	void *buf;
+	uint32_t secsize;
 	struct gpt_hdr *hdr;
 	struct gpt_ent *ent;
 	uint32_t entries, entsz;
@@ -141,8 +118,11 @@ dkwedge_discover_gpt(struct disk *pdk, struct vnode *vp)
 	uint32_t gpe_crc;
 	int error;
 	u_int i;
+	size_t r, n;
+	uint8_t *c;
 
-	buf = malloc(DEV_BSIZE, M_DEVBUF, M_WAITOK);
+	secsize = DEV_BSIZE << pdk->dk_blkshift;
+	buf = malloc(secsize, M_DEVBUF, M_WAITOK);
 
 	/*
 	 * Note: We don't bother with a Legacy or Protective MBR
@@ -151,7 +131,7 @@ dkwedge_discover_gpt(struct disk *pdk, struct vnode *vp)
 	 */
 
 	/* Read in the GPT Header. */
-	error = dkwedge_read(pdk, vp, GPT_HDR_BLKNO, buf, DEV_BSIZE);
+	error = dkwedge_read(pdk, vp, GPT_HDR_BLKNO << pdk->dk_blkshift, buf, secsize);
 	if (error)
 		goto out;
 	hdr = buf;
@@ -167,7 +147,7 @@ dkwedge_discover_gpt(struct disk *pdk, struct vnode *vp)
 		error = ESRCH;
 		goto out;
 	}
-	if (le32toh(hdr->hdr_size) > DEV_BSIZE) {
+	if (le32toh(hdr->hdr_size) > secsize) {
 		/* XXX Should check at end-of-disk. */
 		error = ESRCH;
 		goto out;
@@ -198,11 +178,11 @@ dkwedge_discover_gpt(struct disk *pdk, struct vnode *vp)
 	}
 	gpe_crc = le32toh(hdr->hdr_crc_table);
 
-	/* XXX Clamp entries at 128 for now. */
-	if (entries > 128) {
+	/* XXX Clamp entries at 512 for now. */
+	if (entries > 512) {
 		aprint_error("%s: WARNING: clamping number of GPT entries to "
-		    "128 (was %u)\n", pdk->dk_name, entries);
-		entries = 128;
+		    "512 (was %u)\n", pdk->dk_name, entries);
+		entries = 512;
 	}
 
 	lba_start = le64toh(hdr->hdr_lba_start);
@@ -216,9 +196,9 @@ dkwedge_discover_gpt(struct disk *pdk, struct vnode *vp)
 	}
 
 	free(buf, M_DEVBUF);
-	buf = malloc(roundup(entries * entsz, DEV_BSIZE), M_DEVBUF, M_WAITOK);
-	error = dkwedge_read(pdk, vp, lba_table, buf,
-			     roundup(entries * entsz, DEV_BSIZE));
+	buf = malloc(roundup(entries * entsz, secsize), M_DEVBUF, M_WAITOK);
+	error = dkwedge_read(pdk, vp, lba_table << pdk->dk_blkshift, buf,
+			     roundup(entries * entsz, secsize));
 	if (error) {
 		/* XXX Should check alternate location. */
 		aprint_error("%s: unable to read GPT partition array, "
@@ -226,7 +206,7 @@ dkwedge_discover_gpt(struct disk *pdk, struct vnode *vp)
 		goto out;
 	}
 
-	if (gpt_crc32(buf, entries * entsz) != gpe_crc) {
+	if (crc32(0, buf, entries * entsz) != gpe_crc) {
 		/* XXX Should check alternate location. */
 		aprint_error("%s: bad GPT partition array CRC\n",
 		    pdk->dk_name);
@@ -257,46 +237,45 @@ dkwedge_discover_gpt(struct disk *pdk, struct vnode *vp)
 		uuid_snprintf(ent_guid_str, sizeof(ent_guid_str),
 		    &ent_guid);
 
-		/* Skip it if we don't grok this ptype. */
-		if ((ptype = gpt_ptype_guid_to_str(&ptype_guid)) == NULL) {
-			/*
-			 * XXX Should probably just add these... maybe
-			 * XXX just have an empty ptype?
-			 */
-			aprint_verbose("%s: skipping entry %u (%s), type %s\n",
-			    pdk->dk_name, i, ent_guid_str, ptype_guid_str);
-			continue;
-		}
-		strcpy(dkw.dkw_ptype, ptype);
+		/* figure out the type */
+		ptype = gpt_ptype_guid_to_str(&ptype_guid);
+		strlcpy(dkw.dkw_ptype, ptype, sizeof(dkw.dkw_ptype));
 
-		strcpy(dkw.dkw_parent, pdk->dk_name);
+		strlcpy(dkw.dkw_parent, pdk->dk_name, sizeof(dkw.dkw_parent));
 		dkw.dkw_offset = le64toh(ent->ent_lba_start);
 		dkw.dkw_size = le64toh(ent->ent_lba_end) - dkw.dkw_offset + 1;
 
 		/* XXX Make sure it falls within the disk's data area. */
 
 		if (ent->ent_name[0] == 0x0000)
-			strcpy(dkw.dkw_wname, ent_guid_str);
+			strlcpy(dkw.dkw_wname, ent_guid_str, sizeof(dkw.dkw_wname));
 		else {
-			for (j = 0; ent->ent_name[j] != 0x0000; j++) {
-				/* XXX UTF-16 -> UTF-8 */
-				dkw.dkw_wname[j] =
-				    le16toh(ent->ent_name[j]) & 0xff;
+			c = dkw.dkw_wname;
+			r = sizeof(dkw.dkw_wname) - 1;
+			for (j = 0; j < __arraycount(ent->ent_name)
+			    && ent->ent_name[j] != 0x0000; j++) {
+				n = wput_utf8(c, r, le16toh(ent->ent_name[j]));
+				if (n == 0)
+					break;
+				c += n; r -= n;
 			}
-			dkw.dkw_wname[j] = '\0';
+			*c = '\0';
 		}
 
 		/*
 		 * Try with the partition name first.  If that fails,
 		 * use the GUID string.  If that fails, punt.
 		 */
-		if ((error = dkwedge_add(&dkw)) == EEXIST) {
-			aprint_error("%s: wedge named '%s' already exists, "
-			    "trying '%s'\n", pdk->dk_name,
-			    dkw.dkw_wname, /* XXX Unicode */
-			    ent_guid_str);
-			strcpy(dkw.dkw_wname, ent_guid_str);
+		if ((error = dkwedge_add(&dkw)) == EEXIST &&
+		    strcmp(dkw.dkw_wname, ent_guid_str) != 0) {
+			char orig[sizeof(dkw.dkw_wname)];
+			strlcpy(orig, dkw.dkw_wname, sizeof(orig));
+			strlcpy(dkw.dkw_wname, ent_guid_str, sizeof(dkw.dkw_wname));
 			error = dkwedge_add(&dkw);
+			if (!error)
+				aprint_error("%s: wedge named '%s' already "
+				    "existed, using '%s'\n", pdk->dk_name,
+				    orig, ent_guid_str);
 		}
 		if (error == EEXIST)
 			aprint_error("%s: wedge named '%s' already exists, "

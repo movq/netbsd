@@ -1,4 +1,4 @@
-/*	$NetBSD: hfs.h,v 1.6 2007/08/08 09:21:34 pooka Exp $	*/
+/*	$NetBSD: hfs.h,v 1.9 2014/08/10 08:53:22 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2007 The NetBSD Foundation, Inc.
@@ -65,9 +65,13 @@ struct hfsmount {
 	hfs_volume hm_vol;			/* essential volume information */
 };
 
+struct hfsnode_key {
+	hfs_cnid_t hnk_cnid;
+	uint8_t hnk_fork;
+};
+
 struct hfsnode {
 	struct genfs_node h_gnode;
-	LIST_ENTRY(hfsnode) h_hash;/* hash chain */
 	struct vnode *h_vnode;		/* vnode associated with this hnode */
 	struct hfsmount *h_hmp;	/* mount point associated with this hnode */
 	struct vnode *h_devvp;		/* vnode for block I/O */
@@ -81,7 +85,7 @@ struct hfsnode {
 			uint16_t		flags;
 			uint32_t		valence;
 			hfs_cnid_t		cnid;
-		}; /* convenience for accessing common record info */
+		} u; /* convenience for accessing common record info */
 	} h_rec; /* catalog record for this hnode */
 	
 	/*
@@ -92,7 +96,8 @@ struct hfsnode {
 	 */
 	hfs_cnid_t		h_parent;
 
-	uint8_t h_fork;
+	struct hfsnode_key h_key;
+#define h_fork	h_key.hnk_fork
 
 	long	dummy;	/* FOR DEVELOPMENT ONLY */
 };
@@ -118,6 +123,7 @@ typedef struct {
 } hfs_libcb_argsread;
 
 #ifdef _KERNEL
+#include <sys/malloc.h>
 
 MALLOC_DECLARE(M_HFSMNT);	/* defined in hfs_vfsops.c */
 
@@ -148,18 +154,12 @@ extern const struct vnodeopv_desc hfs_specop_opv_desc;
 extern const struct vnodeopv_desc hfs_fifoop_opv_desc;
 extern int (**hfs_specop_p) (void *);
 extern int (**hfs_fifoop_p) (void *);
+extern struct pool hfs_node_pool;
 
 
 /*
  * Function prototypes
  */
-
-/* hfs_nhash.c */
-void hfs_nhashinit (void);
-void hfs_nhashdone (void);
-struct vnode *hfs_nhashget (dev_t, hfs_cnid_t, uint8_t, int);
-void hfs_nhashinsert (struct hfsnode *);
-void hfs_nhashremove (struct hfsnode *);
 
 /* hfs_subr.c */
 void hfs_vinit (struct mount *, int (**)(void *), int (**)(void *),

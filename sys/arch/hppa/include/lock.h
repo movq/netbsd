@@ -1,4 +1,4 @@
-/* 	$NetBSD: lock.h,v 1.15 2007/11/13 11:37:06 skrll Exp $	*/
+/* 	$NetBSD: lock.h,v 1.20 2017/09/17 00:01:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,23 +39,23 @@
 
 #include <sys/stdint.h>
 
-#define HPPA_LDCW_ALIGN	16
+#define HPPA_LDCW_ALIGN	16UL
 
 #define __SIMPLELOCK_ALIGN(p) \
-    (volatile unsigned long *)(((uintptr_t)(p) + HPPA_LDCW_ALIGN - 1) & \
+    (volatile unsigned long *)((((uintptr_t)(p) + HPPA_LDCW_ALIGN - 1)) & \
     ~(HPPA_LDCW_ALIGN - 1))
 
-#define __SIMPLELOCK_RAW_LOCKED		0
-#define __SIMPLELOCK_RAW_UNLOCKED	1
+#define __SIMPLELOCK_RAW_LOCKED		0UL
+#define __SIMPLELOCK_RAW_UNLOCKED	1UL
 
 static __inline int
-__SIMPLELOCK_LOCKED_P(__cpu_simple_lock_t *__ptr)
+__SIMPLELOCK_LOCKED_P(const __cpu_simple_lock_t *__ptr)
 {
 	return *__SIMPLELOCK_ALIGN(__ptr) == __SIMPLELOCK_RAW_LOCKED;
 }
 
 static __inline int
-__SIMPLELOCK_UNLOCKED_P(__cpu_simple_lock_t *__ptr)
+__SIMPLELOCK_UNLOCKED_P(const __cpu_simple_lock_t *__ptr)
 {
 	return *__SIMPLELOCK_ALIGN(__ptr) == __SIMPLELOCK_RAW_UNLOCKED;
 }

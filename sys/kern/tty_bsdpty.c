@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_bsdpty.c,v 1.13 2007/12/08 19:29:49 pooka Exp $	*/
+/*	$NetBSD: tty_bsdpty.c,v 1.20 2014/04/04 18:11:58 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,10 +27,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_bsdpty.c,v 1.13 2007/12/08 19:29:49 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_bsdpty.c,v 1.20 2014/04/04 18:11:58 christos Exp $");
 
 #include "opt_ptm.h"
 
+#ifndef NO_DEV_PTM
 #ifdef COMPAT_BSDPTY
 /* bsd tty implementation for pty multiplexor driver /dev/ptm{,x} */
 
@@ -56,7 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: tty_bsdpty.c,v 1.13 2007/12/08 19:29:49 pooka Exp $"
 #include <sys/filedesc.h>
 #include <sys/conf.h>
 #include <sys/poll.h>
-#include <sys/malloc.h>
 #include <sys/pty.h>
 #include <sys/kauth.h>
 
@@ -76,22 +69,23 @@ __KERNEL_RCSID(0, "$NetBSD: tty_bsdpty.c,v 1.13 2007/12/08 19:29:49 pooka Exp $"
 #define TTY_OLD_SUFFIX  "0123456789abcdef"
 #define TTY_NEW_SUFFIX  "ghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-static int pty_makename(struct ptm_pty *, struct lwp *, char *, size_t, dev_t,
+static int pty_makename(struct mount *, struct lwp *, char *, size_t, dev_t,
     char);
-static int pty_allocvp(struct ptm_pty *, struct lwp *, struct vnode **,
+static int pty_allocvp(struct mount *, struct lwp *, struct vnode **,
     dev_t, char);
-static void pty_getvattr(struct ptm_pty *, struct lwp *, struct vattr *);
+static void pty_getvattr(struct mount *, struct lwp *, struct vattr *);
+static int pty__getmp(struct lwp *, struct mount **);
 
 struct ptm_pty ptm_bsdpty = {
 	pty_allocvp,
 	pty_makename,
 	pty_getvattr,
-	NULL
+	pty__getmp,
 };
 
 static int
 /*ARGSUSED*/
-pty_makename(struct ptm_pty *ptm, struct lwp *l, char *bf,
+pty_makename(struct mount *mp, struct lwp *l, char *bf,
     size_t bufsiz, dev_t dev, char c)
 {
 	size_t nt;
@@ -121,33 +115,51 @@ pty_makename(struct ptm_pty *ptm, struct lwp *l, char *bf,
 
 static int
 /*ARGSUSED*/
-pty_allocvp(struct ptm_pty *ptm, struct lwp *l, struct vnode **vp, dev_t dev,
+pty_allocvp(struct mount *mp, struct lwp *l, struct vnode **vp, dev_t dev,
     char ms)
 {
 	int error;
+	struct pathbuf *pb;
 	struct nameidata nd;
 	char name[TTY_NAMESIZE];
 
-	error = (*ptm->makename)(ptm, l, name, sizeof(name), dev, ms);
+	error = pty_makename(NULL, l, name, sizeof(name), dev, ms);
 	if (error)
 		return error;
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW|LOCKLEAF, UIO_SYSSPACE, name);
-	if ((error = namei(&nd)) != 0)
+	pb = pathbuf_create(name);
+	if (pb == NULL) {
+		return ENOMEM;
+	}
+
+	NDINIT(&nd, LOOKUP, NOFOLLOW|LOCKLEAF, pb);
+	if ((error = namei(&nd)) != 0) {
+		pathbuf_destroy(pb);
 		return error;
+	}
 	*vp = nd.ni_vp;
+	pathbuf_destroy(pb);
 	return 0;
 }
 
 
 static void
 /*ARGSUSED*/
-pty_getvattr(struct ptm_pty *ptm, struct lwp *l, struct vattr *vattr)
+pty_getvattr(struct mount *mp, struct lwp *l, struct vattr *vattr)
 {
-	VATTR_NULL(vattr);
+	vattr_null(vattr);
 	/* get real uid */
 	vattr->va_uid = kauth_cred_getuid(l->l_cred);
 	vattr->va_gid = TTY_GID;
 	vattr->va_mode = TTY_PERM;
 }
-#endif
+
+static int
+pty__getmp(struct lwp *l __unused, struct mount **mpp)
+{
+	*mpp = 0;
+	return 0;
+}
+
+#endif /* COMPAT_BSDPTY */
+#endif /* NO_DEV_PTM */

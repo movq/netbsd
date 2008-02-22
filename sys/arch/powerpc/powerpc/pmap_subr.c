@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_subr.c,v 1.20 2008/02/05 18:10:48 garbled Exp $	*/
+/*	$NetBSD: pmap_subr.c,v 1.28 2018/05/11 22:23:33 macallan Exp $	*/
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,19 +29,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_subr.c,v 1.20 2008/02/05 18:10:48 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_subr.c,v 1.28 2018/05/11 22:23:33 macallan Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_altivec.h"
 #include "opt_pmap.h"
 #include <sys/param.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/sched.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #if defined (PPC_OEA) || defined (PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
 #include <powerpc/oea/vmparam.h>
@@ -60,10 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: pmap_subr.c,v 1.20 2008/02/05 18:10:48 garbled Exp $
 
 #define	MFMSR()		mfmsr()
 #define	MTMSR(psl)	__asm volatile("sync; mtmsr %0; isync" :: "r"(psl))
-
-#ifdef PMAP_EXCLUDE_DECLS
-const struct pmap_ops *pmapops;
-#endif
 
 #ifdef PMAPCOUNTERS
 #define	PMAPCOUNT(ev)	((pmap_evcnt_ ## ev).ev_count++)
@@ -292,21 +280,22 @@ pmap_zero_page(paddr_t pa)
 	size_t linewidth;
 	register_t msr = 0; /* XXX: gcc */
 
-#if defined(PPC_OEA) || defined (PPC_OEA64_BIRDGE)
+#if defined(PPC_OEA) || defined (PPC_OEA64_BRIDGE)
 	{
 		/*
 		 * If we are zeroing this page, we must clear the EXEC-ness
 		 * of this page since the page contents will have changed.
 		 */
 		struct vm_page *pg = PHYS_TO_VM_PAGE(pa);
+		struct vm_page_md * const md = VM_PAGE_TO_MD(pg);
 		KDASSERT(pg != NULL);
-		KDASSERT(LIST_EMPTY(&pg->mdpage.mdpg_pvoh));
+		KDASSERT(LIST_EMPTY(&md->mdpg_pvoh));
 #ifdef PMAPCOUNTERS
-		if (pg->mdpage.mdpg_attrs & PTE_EXEC) {
+		if (md->mdpg_attrs & PTE_EXEC) {
 			PMAPCOUNT(exec_uncached_zero_page);
 		}
 #endif
-		pg->mdpage.mdpg_attrs &= ~PTE_EXEC;
+		md->mdpg_attrs &= ~PTE_EXEC;
 	}
 #endif
 
@@ -379,14 +368,15 @@ pmap_copy_page(paddr_t src, paddr_t dst)
 		 * changed.
 		 */
 		struct vm_page *pg = PHYS_TO_VM_PAGE(dst);
+		struct vm_page_md * const md = VM_PAGE_TO_MD(pg);
 		KDASSERT(pg != NULL);
-		KDASSERT(LIST_EMPTY(&pg->mdpage.mdpg_pvoh));
+		KDASSERT(LIST_EMPTY(&md->mdpg_pvoh));
 #ifdef PMAPCOUNTERS
-		if (pg->mdpage.mdpg_attrs & PTE_EXEC) {
+		if (md->mdpg_attrs & PTE_EXEC) {
 			PMAPCOUNT(exec_uncached_copy_page);
 		}
 #endif
-		pg->mdpage.mdpg_attrs &= ~PTE_EXEC;
+		md->mdpg_attrs &= ~PTE_EXEC;
 	}
 #endif
 
@@ -435,7 +425,14 @@ pmap_copy_page(paddr_t src, paddr_t dst)
 void
 pmap_syncicache(paddr_t pa, psize_t len)
 {
-#ifdef MULTIPROCESSOR
+
+/* 
+ * XXX
+ * disabling the MULTIPROCESSOR case because:
+ * - _syncicache() takes a virtual addresses
+ * - this causes crashes on G5
+ */
+#ifdef MULTIPROCESSOR__
 	__syncicache((void *)pa, len);
 #else
 	const size_t linewidth = curcpu()->ci_ci.icache_line_size;

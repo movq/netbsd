@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.29 2007/02/22 16:48:59 thorpej Exp $ */
+/*	$NetBSD: db_trace.c,v 1.35 2016/12/10 10:41:07 mrg Exp $ */
 
 /*
  * Mach Operating System
@@ -27,23 +27,29 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.29 2007/02/22 16:48:59 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.35 2016/12/10 10:41:07 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/cpu.h>
+
 #include <machine/db_machdep.h>
 
 #include <ddb/db_access.h>
+#include <ddb/db_user.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_interface.h>
 #include <ddb/db_output.h>
 
 #define INKERNEL(va)	(((vaddr_t)(va)) >= USRSTACK)
+#ifdef _KERNEL
 #define ONINTSTACK(fr)	(						\
 	(u_int)(fr) <  (u_int)ddb_cpuinfo->eintstack &&		 	\
 	(u_int)(fr) >= (u_int)ddb_cpuinfo->eintstack - INT_STACK_SIZE	\
 )
+#else
+#define ONINTSTACK(fr)	(0)
+#endif
 
 void
 db_stack_trace_print(db_expr_t addr, bool have_addr,
@@ -58,8 +64,10 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 	const char	*cp = modif;
 	char		c;
 
+#ifdef _KERNEL
 	if (ddb_cpuinfo == NULL)
 		ddb_cpuinfo = curcpu();
+#endif
 
 	while ((c = *cp++) != 0) {
 		if (c == 'a') {
@@ -78,7 +86,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 	} else {
 		if (trace_thread) {
 			struct proc *p;
-			struct user *u;
+			struct pcb *pcb;
 			struct lwp *l;
 			if (lwpaddr) {
 				l = (struct lwp *)addr;
@@ -86,21 +94,23 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 				(*pr)("trace: pid %d ", p->p_pid);
 			} else {
 				(*pr)("trace: pid %d ", (int)addr);
-				p = p_find(addr, PFIND_LOCKED);
+#ifdef _KERNEL
+				p = proc_find_raw(addr);
 				if (p == NULL) {
 					(*pr)("not found\n");
 					return;
 				}
-				l = proc_representative_lwp(p, NULL, 0);
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
+#else
+				(*pr)("no proc_find_raw() in crash\n");
+				return;
+#endif
 			}
 			(*pr)("lid %d ", l->l_lid);
-			if ((l->l_flag & LW_INMEM) == 0) {
-				(*pr)("swapped out\n");
-				return;
-			}
-			u = l->l_addr;
-			frame = (struct frame *)u->u_pcb.pcb_sp;
-			pc = u->u_pcb.pcb_pc;
+			pcb = lwp_getpcb(l);
+			frame = (struct frame *)pcb->pcb_sp;
+			pc = pcb->pcb_pc;
 			(*pr)("at %p\n", frame);
 		} else {
 			frame = (struct frame *)addr;
@@ -114,9 +124,14 @@ db_stack_trace_print(db_expr_t addr, bool have_addr,
 		const char	*name;
 		db_addr_t	prevpc;
 
+#ifdef _KERNEL
 #define FR(framep,field) (INKERNEL(framep)			\
 				? (u_int)(framep)->field	\
 				: fuword(&(framep)->field))
+#else
+/* XXX fix me, this is probably wrong */
+#define FR(framep,field) ((u_int)(framep)->field)
+#endif
 
 		/* Fetch return address and arguments frame */
 		prevpc = (db_addr_t)FR(frame, fr_pc);

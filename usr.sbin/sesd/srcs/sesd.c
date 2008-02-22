@@ -1,4 +1,4 @@
-/* $NetBSD: sesd.c,v 1.4 2001/01/11 02:46:21 lukem Exp $ */
+/* $NetBSD: sesd.c,v 1.9 2018/01/23 21:06:26 sevan Exp $ */
 /* $FreeBSD: $ */
 /* $OpenBSD: $ */
 /*
@@ -45,55 +45,52 @@
 
 #define	ALLSTAT (SES_ENCSTAT_UNRECOV | SES_ENCSTAT_CRITICAL | \
 	SES_ENCSTAT_NONCRITICAL | SES_ENCSTAT_INFO)
-int main __P((int, char **));
 
 /*
  * Monitor named SES devices and note (via syslog) any changes in status.
  */
 
 int
-main(a, v)
-	int a;
-	char **v;
+main(int a, char *v[])
 {
 	static const char usage[] =
-	    "usage: %s [ -d ] [ -t pollinterval ] device [ device ]\n";
-	int fd, polltime, dev, devbase, nodaemon;
-	ses_encstat stat, *carray;
+	    "usage: %s [-d] [-t pollinterval] device [device ...]\n";
+	int c, fd, polltime, dev, nodaemon;
+	ses_encstat sestat, *carray;
 
 	if (a < 2) {
 		fprintf(stderr, usage, *v);
 		return (1);
 	}
 
-	devbase = 1;
-
-	if (strcmp(v[1], "-d") == 0) {
-		nodaemon = 1;
-		devbase++;
-	} else {
-		nodaemon = 0;
-	}
-
-	if (a > 2 && strcmp(v[2], "-t") == 0) {
-		devbase += 2;
-		polltime = atoi(v[3]);
-	} else {
-		polltime = 30;
-	}
+	nodaemon = 0;
+	polltime = 30;
+	while ((c = getopt(a, v, "dt:")) != -1) {
+		switch (c) {
+		case 'd':
+			nodaemon = 1;
+			break;
+		case 't':
+			polltime = atoi(optarg);
+			break;
+		default:
+			fprintf(stderr, usage, *v);
+			return (1);
+		}
+	}			 
 
 	carray = malloc(a);
 	if (carray == NULL) {
 		perror("malloc");
 		return (1);
 	}
-	for (dev = devbase; dev < a; dev++)
+	for (dev = optind; dev < a; dev++)
 		carray[dev] = (ses_encstat) -1;
 
 	/*
 	 * Check to make sure we can open all devices
 	 */
-	for (dev = devbase; dev < a; dev++) {
+	for (dev = optind; dev < a; dev++) {
 		fd = open(v[dev], O_RDWR);
 		if (fd < 0) {
 			perror(v[dev]);
@@ -102,6 +99,7 @@ main(a, v)
 		if (ioctl(fd, SESIOC_INIT, NULL) < 0) {
 			fprintf(stderr, "%s: SESIOC_INIT fails- %s\n",
 			    v[dev], strerror(errno));
+			(void) close(fd);
 			return (1);
 		}
 		(void) close(fd);
@@ -117,7 +115,7 @@ main(a, v)
 	}
 
 	for (;;) {
-		for (dev = devbase; dev < a; dev++) {
+		for (dev = optind; dev < a; dev++) {
 			fd = open(v[dev], O_RDWR);
 			if (fd < 0) {
 				syslog(LOG_ERR, "%s: %m", v[dev]);
@@ -127,7 +125,7 @@ main(a, v)
 			/*
 			 * Get the actual current enclosure status.
 			 */
-			if (ioctl(fd, SESIOC_GETENCSTAT, (caddr_t) &stat) < 0) {
+			if (ioctl(fd, SESIOC_GETENCSTAT, (caddr_t) &sestat) < 0) {
 				syslog(LOG_ERR,
 				    "%s: SESIOC_GETENCSTAT- %m", v[dev]);
 				(void) close(fd);
@@ -135,28 +133,28 @@ main(a, v)
 			}
 			(void) close(fd);
 
-			if (stat == carray[dev])
+			if (sestat == carray[dev])
 				continue;
 
-			carray[dev] = stat;
-			if ((stat & ALLSTAT) == 0) {
+			carray[dev] = sestat;
+			if ((sestat & ALLSTAT) == 0) {
 				syslog(LOG_NOTICE,
 				    "%s: Enclosure Status OK", v[dev]);
 			}
-			if (stat & SES_ENCSTAT_INFO) {
+			if (sestat & SES_ENCSTAT_INFO) {
 				syslog(LOG_INFO,
 				    "%s: Enclosure Status Has Information",
 				    v[dev]);
 			}
-			if (stat & SES_ENCSTAT_NONCRITICAL) {
+			if (sestat & SES_ENCSTAT_NONCRITICAL) {
 				syslog(LOG_WARNING,
 				    "%s: Enclosure Non-Critical", v[dev]);
 			}
-			if (stat & SES_ENCSTAT_CRITICAL) {
+			if (sestat & SES_ENCSTAT_CRITICAL) {
 				syslog(LOG_CRIT,
 				    "%s: Enclosure Critical", v[dev]);
 			}
-			if (stat & SES_ENCSTAT_UNRECOV) {
+			if (sestat & SES_ENCSTAT_UNRECOV) {
 				syslog(LOG_ALERT,
 				    "%s: Enclosure Unrecoverable", v[dev]);
 			}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_rh.c,v 1.11 2007/03/05 20:29:07 he Exp $ */
+/*	$NetBSD: ite_rh.c,v 1.14 2017/12/20 05:27:06 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1994 Markus Wild
@@ -33,7 +33,7 @@
 #include "opt_retina.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite_rh.c,v 1.11 2007/03/05 20:29:07 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite_rh.c,v 1.14 2017/12/20 05:27:06 msaitoh Exp $");
 
 #include "grfrh.h"
 #if NGRFRH > 0
@@ -61,7 +61,7 @@ static void screen_down(struct ite_softc *, int, int, int);
 /*
  * grfrh_cnprobe is called when the console is being initialized
  * i.e. very early.  grfconfig() has been called, so this implies
- * that rt_init() was called.  If we are functioning rh_inited
+ * that rh_init() was called.  If we are functioning rh_inited
  * will be true.
  */
 int
@@ -227,7 +227,7 @@ rh_scroll(struct ite_softc *ip, int sy, int sx, int count, int dir)
 #ifdef	RETINA_SPEED_HACK
 		screen_up(ip, sy - count, ip->bottom_margin, count);
 #else
-		bcopy(fb + sy * ip->cols, fb + (sy - count) * ip->cols,
+		memcpy(fb + (sy - count) * ip->cols, fb + sy * ip->cols,
 		    4 * (ip->bottom_margin - sy + 1) * ip->cols);
 		rh_clear(ip, ip->bottom_margin + 1 - count, 0, count, ip->cols);
 #endif
@@ -235,7 +235,7 @@ rh_scroll(struct ite_softc *ip, int sy, int sx, int count, int dir)
 #ifdef	RETINA_SPEED_HACK
 		screen_down(ip, sy, ip->bottom_margin, count);
 #else
-		bcopy(fb + sy * ip->cols, fb + (sy + count) * ip->cols,
+		memcpy(fb + (sy + count) * ip->cols, fb + sy * ip->cols,
 		    4 * (ip->bottom_margin - sy - count + 1) * ip->cols);
 		rh_clear(ip, sy, 0, count, ip->cols);
 #endif

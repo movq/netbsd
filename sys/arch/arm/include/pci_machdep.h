@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.4 2005/12/11 12:16:47 christos Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.12 2017/04/19 12:58:59 jmcneill Exp $	*/
 
 /*
  * Modified for arm32 by Mark Brinicombe
@@ -31,9 +31,13 @@
  * rights to redistribute these changes.
  */
 
+#ifndef _ARM_PCI_MACHDEP_H_
+#define _ARM_PCI_MACHDEP_H_
 /*
  * Machine-specific definitions for PCI autoconfiguration.
  */
+
+#include <sys/errno.h>
 
 /*
  * Types provided to machine-independent PCI code
@@ -53,8 +57,8 @@ struct pci_attach_args;
  */
 struct arm32_pci_chipset {
 	void		*pc_conf_v;
-	void		(*pc_attach_hook)(struct device *,
-			    struct device *, struct pcibus_attach_args *);
+	void		(*pc_attach_hook)(device_t, device_t,
+			    struct pcibus_attach_args *);
 	int		(*pc_bus_maxdevs)(void *, int);
 	pcitag_t	(*pc_make_tag)(void *, int, int, int);
 	void		(*pc_decompose_tag)(void *, pcitag_t, int *,
@@ -63,13 +67,23 @@ struct arm32_pci_chipset {
 	void		(*pc_conf_write)(void *, pcitag_t, int, pcireg_t);
 
 	void		*pc_intr_v;
-	int		(*pc_intr_map)(struct pci_attach_args *,
+	int		(*pc_intr_map)(const struct pci_attach_args *,
 			    pci_intr_handle_t *);
-	const char	*(*pc_intr_string)(void *, pci_intr_handle_t);
+	const char	*(*pc_intr_string)(void *, pci_intr_handle_t,
+			    char *, size_t);
 	const struct evcnt *(*pc_intr_evcnt)(void *, pci_intr_handle_t);
+	int		(*pc_intr_setattr)(void *, pci_intr_handle_t *,
+			    int, uint64_t);
 	void		*(*pc_intr_establish)(void *, pci_intr_handle_t,
 			    int, int (*)(void *), void *);
 	void		(*pc_intr_disestablish)(void *, void *);
+
+#ifdef __HAVE_PCI_CONF_HOOK
+	int		(*pc_conf_hook)(void *, int, int, int, pcireg_t);
+#endif
+	void		(*pc_conf_interrupt)(void *, int, int, int, int, int *);
+
+	uint32_t	pc_cfg_cmd;
 };
 
 /*
@@ -89,11 +103,28 @@ struct arm32_pci_chipset {
     (*(c)->pc_conf_write)((c)->pc_conf_v, (t), (r), (v))
 #define	pci_intr_map(pa, ihp)						\
     (*(pa)->pa_pc->pc_intr_map)((pa), (ihp))
-#define	pci_intr_string(c, ih)						\
-    (*(c)->pc_intr_string)((c)->pc_intr_v, (ih))
+#define	pci_intr_string(c, ih, buf, len)				\
+    (*(c)->pc_intr_string)((c)->pc_intr_v, (ih), (buf), (len))
 #define	pci_intr_evcnt(c, ih)						\
     (*(c)->pc_intr_evcnt)((c)->pc_intr_v, (ih))
 #define	pci_intr_establish(c, ih, l, h, a)				\
     (*(c)->pc_intr_establish)((c)->pc_intr_v, (ih), (l), (h), (a))
 #define	pci_intr_disestablish(c, iv)					\
     (*(c)->pc_intr_disestablish)((c)->pc_intr_v, (iv))
+#ifdef __HAVE_PCI_CONF_HOOK
+#define	pci_conf_hook(c, b, d, f, id)					\
+    (*(c)->pc_conf_hook)((c)->pc_conf_v, (b), (d), (f), (id))
+#endif
+#define	pci_conf_interrupt(c, b, d, i, s, p)				\
+    (*(c)->pc_conf_interrupt)((c)->pc_conf_v, (b), (d), (i), (s), (p))
+
+static inline int
+pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ihp,
+    int attr, uint64_t data)
+{
+	if (!pc->pc_intr_setattr)
+		return ENODEV;
+	return pc->pc_intr_setattr(pc, ihp, attr, data);
+}
+
+#endif	/* _ARM_PCI_MACHDEP_H_ */

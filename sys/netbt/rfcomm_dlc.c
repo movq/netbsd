@@ -1,4 +1,4 @@
-/*	$NetBSD: rfcomm_dlc.c,v 1.4 2007/11/03 17:20:17 plunky Exp $	*/
+/*	$NetBSD: rfcomm_dlc.c,v 1.8 2014/07/09 04:54:03 rtr Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,12 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rfcomm_dlc.c,v 1.4 2007/11/03 17:20:17 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rfcomm_dlc.c,v 1.8 2014/07/09 04:54:03 rtr Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>
+#include <sys/socketvar.h>
 #include <sys/systm.h>
 
 #include <netbt/bluetooth.h>
@@ -83,14 +84,14 @@ rfcomm_dlc_newconn(struct rfcomm_session *rs, int dlci)
 	 * a note of the best address and BDADDR_ANY matches in order to find
 	 * the oldest and most specific match.
 	 */
-	l2cap_sockaddr(rs->rs_l2cap, &laddr);
-	l2cap_peeraddr(rs->rs_l2cap, &raddr);
+	l2cap_sockaddr_pcb(rs->rs_l2cap, &laddr);
+	l2cap_peeraddr_pcb(rs->rs_l2cap, &raddr);
 	chan = RFCOMM_CHANNEL(dlci);
 	new = NULL;
 
 	any = best = NULL;
 	LIST_FOREACH(ls, &rfcomm_session_listen, rs_next) {
-		l2cap_sockaddr(ls->rs_l2cap, &addr);
+		l2cap_sockaddr_pcb(ls->rs_l2cap, &addr);
 
 		if (addr.bt_psm != laddr.bt_psm)
 			continue;
@@ -186,7 +187,7 @@ rfcomm_dlc_close(struct rfcomm_dlc *dlc, int err)
 /*
  * rfcomm_dlc_timeout(dlc)
  *
- * DLC timeout function is schedUled when we sent any of SABM,
+ * DLC timeout function is scheduled when we sent any of SABM,
  * DISC, MCC_MSC, or MCC_PN and should be cancelled when we get
  * the relevant response. There is nothing to do but shut this
  * DLC down.
@@ -195,9 +196,8 @@ void
 rfcomm_dlc_timeout(void *arg)
 {
 	struct rfcomm_dlc *dlc = arg;
-	int s;
 
-	s = splsoftnet();
+	mutex_enter(bt_lock);
 	callout_ack(&dlc->rd_timeout);
 
 	if (dlc->rd_state != RFCOMM_DLC_CLOSED)
@@ -207,7 +207,7 @@ rfcomm_dlc_timeout(void *arg)
 		free(dlc, M_BLUETOOTH);
 	}
 
-	splx(s);
+	mutex_exit(bt_lock);
 }
 
 /*
@@ -220,7 +220,8 @@ rfcomm_dlc_timeout(void *arg)
 int
 rfcomm_dlc_setmode(struct rfcomm_dlc *dlc)
 {
-	int mode = 0;
+	struct sockopt sopt;
+	int mode = 0, err;
 
 	KASSERT(dlc->rd_session != NULL);
 	KASSERT(dlc->rd_session->rs_state == RFCOMM_SESSION_OPEN);
@@ -239,7 +240,12 @@ rfcomm_dlc_setmode(struct rfcomm_dlc *dlc)
 	if (dlc->rd_mode & RFCOMM_LM_SECURE)
 		mode |= L2CAP_LM_SECURE;
 
-	return l2cap_setopt(dlc->rd_session->rs_l2cap, SO_L2CAP_LM, &mode);
+	sockopt_init(&sopt, BTPROTO_L2CAP, SO_L2CAP_LM, 0);
+	sockopt_setint(&sopt, mode);
+	err = l2cap_setopt(dlc->rd_session->rs_l2cap, &sopt);
+	sockopt_destroy(&sopt);
+
+	return err;
 }
 
 /*

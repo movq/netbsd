@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.60 2008/01/07 05:00:13 uwe Exp $	*/
+/*	$NetBSD: machdep.c,v 1.78 2017/11/06 03:47:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,28 +27,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.60 2008/01/07 05:00:13 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.78 2017/11/06 03:47:46 christos Exp $");
 
 #include "opt_md.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "fs_mfs.h"
-#include "fs_nfs.h"
+#include "opt_modular.h"
 #include "biconsdev.h"
 #include "debug_hpc.h"
 #include "hd64465if.h"
 
 #include "opt_kloader.h"
-#ifdef KLOADER
-#if !defined(KLOADER_KERNEL_PATH)
-#define KLOADER_KERNEL_PATH	"/netbsd"
-#endif
-#endif
+#include "opt_kloader_kernel_path.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/user.h>
+#include <sys/device.h>
+#include <sys/lwp.h>
 
 #include <sys/reboot.h>
 #include <sys/mount.h>
@@ -63,6 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.60 2008/01/07 05:00:13 uwe Exp $");
 #include <sys/kcore.h>
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -73,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.60 2008/01/07 05:00:13 uwe Exp $");
 #include <sh3/cache.h>
 #include <sh3/clock.h>
 #include <sh3/intcreg.h>
+#include <sh3/proc.h>
 
 #ifdef KGDB
 #include <sys/kgdb.h>
@@ -80,16 +72,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.60 2008/01/07 05:00:13 uwe Exp $");
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(LKM) || defined(DDB) || defined(KGDB)
+#if NKSYMS || defined(MODULAR) || defined(DDB) || defined(KGDB)
 #include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
-#ifndef DB_ELFSIZE
-#error Must define DB_ELFSIZE!
-#endif
-#define	ELFSIZE		DB_ELFSIZE
 #include <sys/exec_elf.h>
-#endif /* DDB || KGDB */
+#endif /* NKSYMS || MODULAR || DDB || KGDB */
 
 #include <dev/cons.h> /* consdev */
 #include <dev/md.h>
@@ -102,13 +90,12 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.60 2008/01/07 05:00:13 uwe Exp $");
 #endif
 #include <machine/autoconf.h>		/* makebootdev() */
 #include <machine/intr.h>
+#include <machine/pcb.h>
 
-#ifdef NFS
 #include <nfs/rpcv2.h>
 #include <nfs/nfsproto.h>
 #include <nfs/nfs.h>
 #include <nfs/nfsmount.h>
-#endif
 
 #include <dev/hpc/apm/apmvar.h>
 
@@ -178,6 +165,12 @@ extern void main(void) __attribute__((__noreturn__));
 void machine_startup(int, char *[], struct bootinfo *)
 	__attribute__((__noreturn__));
 
+#ifdef KLOADER
+#if !defined(KLOADER_KERNEL_PATH)
+#define KLOADER_KERNEL_PATH	"/netbsd"
+#endif /* !KLOADER_KERNEL_PATH */
+static const char kernel_path[] = KLOADER_KERNEL_PATH;
+#endif /* KLOADER */
 
 void
 machine_startup(int argc, char *argv[], struct bootinfo *bi)
@@ -199,6 +192,7 @@ machine_startup(int argc, char *argv[], struct bootinfo *bi)
 
 	/* Symbol table size */
 	symbolsize = 0;
+#if NKSYMS || defined(MODULAR) || defined(DDB) || defined(KGDB)
 	if (memcmp(&end, ELFMAG, SELFMAG) == 0) {
 		Elf_Ehdr *eh = (void *)end;
 		Elf_Shdr *sh = (void *)(end + eh->e_shoff);
@@ -207,6 +201,7 @@ machine_startup(int argc, char *argv[], struct bootinfo *bi)
 			    (sh->sh_offset + sh->sh_size) > symbolsize)
 				symbolsize = sh->sh_offset + sh->sh_size;
 	}
+#endif
 
 	/* Clear BSS */
 	memset(edata, 0, end - edata);
@@ -246,14 +241,10 @@ machine_startup(int argc, char *argv[], struct bootinfo *bi)
 		case 'b':
 			/* boot device: -b=sd0 etc. */
 			p = cp + 2;
-#ifdef NFS
 			if (strcmp(p, "nfs") == 0)
-				mountroot = nfs_mountroot;
+				rootfstype = MOUNT_NFS;
 			else
 				makebootdev(p);
-#else /* NFS */
-			makebootdev(p);
-#endif /* NFS */
 			break;
 		default:
 			BOOT_FLAG(*cp, boothowto);
@@ -261,7 +252,6 @@ machine_startup(int argc, char *argv[], struct bootinfo *bi)
 		}
 	}
 
-#ifdef MFS
 	/*
 	 * Check to see if a mini-root was loaded into memory. It resides
 	 * at the start of the next page just after the end of BSS.
@@ -274,7 +264,6 @@ machine_startup(int argc, char *argv[], struct bootinfo *bi)
 #endif
 		kernend += fssz;
 	}
-#endif /* MFS */
 
 	/* Console */
 	consinit();
@@ -298,9 +287,9 @@ machine_startup(int argc, char *argv[], struct bootinfo *bi)
 	/* Initialize pmap and start to address translation */
 	pmap_bootstrap();
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(MODULAR) || defined(DDB) || defined(KGDB)
 	if (symbolsize) {
-		ksyms_init(symbolsize, &end, end + symbolsize);
+		ksyms_addsyms_elf(symbolsize, &end, end + symbolsize);
 		_DPRINTF("symbol size = %d byte\n", symbolsize);
 	}
 #endif
@@ -335,7 +324,7 @@ void
 cpu_startup(void)
 {
 
-	sprintf(cpu_model, "%s\n", platid_name(&platid));
+	cpu_setmodel("%s", platid_name(&platid));
 
 	sh_startup();
 }
@@ -392,8 +381,12 @@ cpu_reboot(int howto, char *bootstr)
 	}
 
 #ifdef KLOADER
-	if ((howto & RB_HALT) == 0)
-		kloader_reboot_setup(KLOADER_KERNEL_PATH);
+	if ((howto & RB_HALT) == 0) {
+		if ((howto & RB_STRING) != 0)
+			kloader_reboot_setup(bootstr);
+		else
+			kloader_reboot_setup(kernel_path);
+	}
 #endif
 
 	boothowto = howto;
@@ -423,15 +416,17 @@ cpu_reboot(int howto, char *bootstr)
 	/* run any shutdown hooks */
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	/* Finally, halt/reboot the system. */
+	if ((howto & RB_HALT) != 0) {
+		printf("halted.\n");
+	} else {
 #ifdef KLOADER
-	if ((howto & RB_HALT) == 0) {
 		kloader_reboot();
 		/* NOTREACHED */
-	}
 #endif
-
-	printf("halted.\n");
+	}
 
 #if NHD64465IF > 0
 	hd64465_shutdown();
@@ -602,6 +597,8 @@ intc_intr(int ssr, int spc, int ssp)
 	int evtcode;
 	uint16_t r;
 
+	curcpu()->ci_data.cpu_nintr++;
+
 	evtcode = _reg_read_4(CPU_IS_SH3 ? SH7709_INTEVT2 : SH4_INTEVT);
 
 	ih = EVTCODE_IH(evtcode);
@@ -625,14 +622,18 @@ intc_intr(int ssr, int spc, int ssp)
 		__dbg_heart_beat(HEART_BEAT_RED);
 	} else if (evtcode ==
 	    (CPU_IS_SH3 ? SH7709_INTEVT2_IRQ4 : SH_INTEVT_IRL11)) {
-		int cause = r & hd6446x_ienable;
-		struct hd6446x_intrhand *hh = &hd6446x_intrhand[ffs(cause) - 1];
+		struct hd6446x_intrhand *hh;
+		int cause;
+
+		cause = r & hd6446x_ienable;
 		if (cause == 0) {
-			printf("masked HD6446x interrupt.0x%04x\n", r);
+			printf("masked HD6446x interrupt 0x%04x\n",
+			       r & ~hd6446x_ienable);
 			_reg_write_2(HD6446X_NIRR, 0x0000);
 			return;
 		}
 		/* Enable higher level interrupt*/
+		hh = &hd6446x_intrhand[ffs(cause) - 1];
 		hd6446x_intr_resume(hh->hh_ipl);
 		KDASSERT(hh->hh_func != NULL);
 		(*hh->hh_func)(hh->hh_arg);
@@ -642,3 +643,14 @@ intc_intr(int ssr, int spc, int ssp)
 		__dbg_heart_beat(HEART_BEAT_BLUE);
 	}
 }
+
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the boot loader.
+ */
+void
+module_init_md(void)
+{
+}
+#endif /* MODULAR */

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.41 2005/12/24 20:06:47 perry Exp $ */
+/*	$NetBSD: if_le.c,v 1.46 2014/01/22 00:25:16 christos Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -81,9 +74,8 @@
 #include "opt_inet.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.41 2005/12/24 20:06:47 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.46 2014/01/22 00:25:16 christos Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -102,7 +94,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.41 2005/12/24 20:06:47 perry Exp $");
 #endif
 
 #include <machine/cpu.h>
-#include <machine/mtpr.h>
 
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/isr.h>
@@ -115,10 +106,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.41 2005/12/24 20:06:47 perry Exp $");
 #include <amiga/dev/zbusvar.h>
 #include <amiga/dev/if_levar.h>
 
-int le_zbus_match(struct device *, struct cfdata *, void *);
-void le_zbus_attach(struct device *, struct device *, void *);
+int le_zbus_match(device_t, cfdata_t, void *);
+void le_zbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(le_zbus, sizeof(struct le_softc),
+CFATTACH_DECL_NEW(le_zbus, sizeof(struct le_softc),
     le_zbus_match, le_zbus_attach, NULL, NULL);
 
 #if defined(_KERNEL_OPT)
@@ -159,7 +150,7 @@ int lemedia_ariadne[] = {
 	IFM_ETHER | IFM_10_2,
 	IFM_ETHER | IFM_AUTO,
 };
-#define NLEMEDIA_ARIADNE (sizeof(lemedia_ariadne) / sizeof(lemedia_ariadne[0]))
+#define NLEMEDIA_ARIADNE __arraycount(lemedia_ariadne)
 
 
 hide u_int16_t
@@ -225,6 +216,7 @@ lepcnet_reset(struct lance_softc *sc)
 	volatile int dummy;
 
 	dummy = ler1->ler1_reset;	/* Reset PCNet-ISA */
+	__USE(dummy);
 }
 
 void
@@ -299,7 +291,7 @@ ariadne_hwinit(struct lance_softc *sc)
 }
 
 int
-le_zbus_match(struct device *parent, struct cfdata *cfp, void *aux)
+le_zbus_match(device_t parent, cfdata_t cfp, void *aux)
 {
 	struct zbus_args *zap = aux;
 
@@ -319,12 +311,14 @@ le_zbus_match(struct device *parent, struct cfdata *cfp, void *aux)
 }
 
 void
-le_zbus_attach(struct device *parent, struct device *self, void *aux)
+le_zbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct le_softc *lesc = (struct le_softc *)self;
+	struct le_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
 	struct zbus_args *zap = aux;
 	u_long ser;
+
+	sc->sc_dev = self;
 
 	/* This has no effect on PCnet-ISA LANCE chips */
 	sc->sc_conf3 = LE_C3_BSWP;

@@ -1,4 +1,4 @@
-/*	$NetBSD: op.h,v 1.3 1998/07/27 13:50:47 mycroft Exp $	*/
+/*	$NetBSD: op.h,v 1.6 2011/02/05 17:14:14 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -52,69 +52,10 @@ typedef	struct {
 	u_int	m_enumop : 1;	/* valid operation on enums */
 	u_int	m_badeop : 1;	/* dubious operation on enums */
 	u_int	m_eqwarn : 1;	/* warning if on operand stems from == */
+	u_int	m_rqintcomp : 1;/* operands must be integer or complex */
 	const char *m_name;	/* name of op. */
 } mod_t;
 
-typedef	enum {
-	NOOP	= 0,
-	ARROW,
-	POINT,
-	NOT,
-	COMPL,
-	INC,
-	DEC,
-	INCBEF,
-	DECBEF,
-	INCAFT,
-	DECAFT,
-	UPLUS,
-	UMINUS,
-	STAR,
-	AMPER,
-	MULT,
-	DIV,
-	MOD,
-	PLUS,
-	MINUS,
-	SHL,
-	SHR,
-	LT,
-	LE,
-	GT,
-	GE,
-	EQ,
-	NE,
-	AND,
-	XOR,
-	OR,
-	LOGAND,
-	LOGOR,
-	QUEST,
-	COLON,
-	ASSIGN,
-	MULASS,
-	DIVASS,
-	MODASS,
-	ADDASS,
-	SUBASS,
-	SHLASS,
-	SHRASS,
-	ANDASS,
-	XORASS,
-	ORASS,
-	NAME,
-	CON,
-	STRING,
-	FSEL,
-	CALL,
-	COMMA,
-	CVT,
-	ICALL,
-	LOAD,
-	PUSH,
-	RETURN,
-	INIT,		/* pseudo op, not used in trees */
-	CASE,		/* pseudo op, not used in trees */
-	FARG		/* pseudo op, not used in trees */
-#define NOPS	((int)FARG + 1)
-} op_t;
+extern mod_t   modtab[];
+
+#include "ops.h"

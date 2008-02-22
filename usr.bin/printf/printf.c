@@ -1,4 +1,4 @@
-/*	$NetBSD: printf.c,v 1.31 2005/03/22 23:55:46 dsl Exp $	*/
+/*	$NetBSD: printf.c,v 1.37 2015/06/16 22:54:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,8 +32,8 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if !defined(BUILTIN) && !defined(SHELL)
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif
 #endif
 
@@ -41,7 +41,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)printf.c	8.2 (Berkeley) 3/22/95";
 #else
-__RCSID("$NetBSD: printf.c,v 1.31 2005/03/22 23:55:46 dsl Exp $");
+__RCSID("$NetBSD: printf.c,v 1.37 2015/06/16 22:54:10 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,13 +68,13 @@ __RCSID("$NetBSD: printf.c,v 1.31 2005/03/22 23:55:46 dsl Exp $");
 static void	 conv_escape_str(char *, void (*)(int));
 static char	*conv_escape(char *, char *);
 static char	*conv_expand(const char *);
-static int	 getchr(void);
+static char	 getchr(void);
 static double	 getdouble(void);
 static int	 getwidth(void);
 static intmax_t	 getintmax(void);
 static uintmax_t getuintmax(void);
 static char	*getstr(void);
-static char	*mklong(const char *, int);
+static char	*mklong(const char *, char);
 static void      check_conversion(const char *, const char *);
 static void	 usage(void); 
 
@@ -98,42 +98,45 @@ static char  **gargv;
 #define PF(f, func) { \
 	if (fieldwidth != -1) { \
 		if (precision != -1) \
-			(void)printf(f, fieldwidth, precision, func); \
+			error = printf(f, fieldwidth, precision, func); \
 		else \
-			(void)printf(f, fieldwidth, func); \
+			error = printf(f, fieldwidth, func); \
 	} else if (precision != -1) \
-		(void)printf(f, precision, func); \
+		error = printf(f, precision, func); \
 	else \
-		(void)printf(f, func); \
+		error = printf(f, func); \
 }
 
 #define APF(cpp, f, func) { \
 	if (fieldwidth != -1) { \
 		if (precision != -1) \
-			(void)asprintf(cpp, f, fieldwidth, precision, func); \
+			error = asprintf(cpp, f, fieldwidth, precision, func); \
 		else \
-			(void)asprintf(cpp, f, fieldwidth, func); \
+			error = asprintf(cpp, f, fieldwidth, func); \
 	} else if (precision != -1) \
-		(void)asprintf(cpp, f, precision, func); \
+		error = asprintf(cpp, f, precision, func); \
 	else \
-		(void)asprintf(cpp, f, func); \
+		error = asprintf(cpp, f, func); \
 }
 
-int main(int, char **);
+#ifdef main
+int main(int, char *[]);
+#endif
 int main(int argc, char *argv[])
 {
 	char *fmt, *start;
 	int fieldwidth, precision;
 	char nextch;
 	char *format;
-	int ch;
+	char ch;
+	int error, o;
 
 #if !defined(SHELL) && !defined(BUILTIN)
 	(void)setlocale (LC_ALL, "");
 #endif
 
-	while ((ch = getopt(argc, argv, "")) != -1) {
-		switch (ch) {
+	while ((o = getopt(argc, argv, "")) != -1) {
+		switch (o) {
 		case '?':
 		default:
 			usage();
@@ -151,8 +154,8 @@ int main(int argc, char *argv[])
 	format = *argv;
 	gargv = ++argv;
 
-#define SKIP1	"#-+ 0"
-#define SKIP2	"*0123456789"
+#define SKIP1	"#-+ 0'"
+#define SKIP2	"0123456789"
 	do {
 		/*
 		 * Basic algorithm is to scan the format string for conversion
@@ -182,13 +185,23 @@ int main(int argc, char *argv[])
 
 			/* skip to field width */
 			fmt += strspn(fmt, SKIP1);
-			fieldwidth = *fmt == '*' ? getwidth() : -1;
+			if (*fmt == '*') {
+				fmt++;
+				fieldwidth = getwidth();
+			} else
+				fieldwidth = -1;
 
 			/* skip to possible '.', get following precision */
 			fmt += strspn(fmt, SKIP2);
-			if (*fmt == '.')
-				++fmt;
-			precision = *fmt == '*' ? getwidth() : -1;
+			if (*fmt == '.') {
+				fmt++;
+				if (*fmt == '*') {
+					fmt++;
+					precision = getwidth();
+				} else
+					precision = -1;
+			} else
+				precision = -1;
 
 			fmt += strspn(fmt, SKIP2);
 
@@ -205,8 +218,12 @@ int main(int argc, char *argv[])
 
 			case 'B': {
 				const char *p = conv_expand(getstr());
+				if (p == NULL)
+					goto out;
 				*fmt = 's';
 				PF(start, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 'b': {
@@ -227,12 +244,14 @@ int main(int argc, char *argv[])
 				conv_escape_str(cp, b_count);
 				t = malloc(b_length + 1);
 				if (t == NULL)
-					break;
-				memset(t, 'x', b_length);
+					goto out;
+				(void)memset(t, 'x', b_length);
 				t[b_length] = 0;
 				/* Get printf to calculate the lengths */
 				*fmt = 's';
 				APF(&a, start, t);
+				if (error == -1)
+					goto out;
 				b_fmt = a;
 				/* Output leading spaces and data bytes */
 				conv_escape_str(cp, b_output);
@@ -243,11 +262,15 @@ int main(int argc, char *argv[])
 			case 'c': {
 				char p = getchr();
 				PF(start, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 's': {
 				char *p = getstr();
 				PF(start, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 'd':
@@ -255,6 +278,8 @@ int main(int argc, char *argv[])
 				intmax_t p = getintmax();
 				char *f = mklong(start, ch);
 				PF(f, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 'o':
@@ -264,6 +289,8 @@ int main(int argc, char *argv[])
 				uintmax_t p = getuintmax();
 				char *f = mklong(start, ch);
 				PF(f, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 'e':
@@ -273,6 +300,8 @@ int main(int argc, char *argv[])
 			case 'G': {
 				double p = getdouble();
 				PF(start, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			default:
@@ -287,7 +316,10 @@ int main(int argc, char *argv[])
 		}
 	} while (gargv != argv && *gargv);
 
-	return rval;
+	return rval & ~0x100;
+out:
+	warn("print failed");
+	return 1;
 }
 
 /* helper functions for conv_escape_str */
@@ -394,8 +426,8 @@ conv_escape_str(char *str, void (*do_putchar)(int))
 static char *
 conv_escape(char *str, char *conv_ch)
 {
-	int value;
-	int ch;
+	char value;
+	char ch;
 	char num_buf[4], *num_end;
 
 	ch = *str++;
@@ -406,9 +438,9 @@ conv_escape(char *str, char *conv_ch)
 		num_buf[0] = ch;
 		ch = str[0];
 		num_buf[1] = ch;
-		num_buf[2] = ch ? str[1] : 0;
-		num_buf[3] = 0;
-		value = strtoul(num_buf, &num_end, 8);
+		num_buf[2] = (char)(ch != '\0' ? str[1] : '\0');
+		num_buf[3] = '\0';
+		value = (char)strtoul(num_buf, &num_end, 8);
 		str += num_end  - (num_buf + 1);
 		break;
 
@@ -419,9 +451,9 @@ conv_escape(char *str, char *conv_ch)
 		   Supporting 2 byte constants is a compromise. */
 		ch = str[0];
 		num_buf[0] = ch;
-		num_buf[1] = ch ? str[1] : 0;
-		num_buf[2] = 0;
-		value = strtoul(num_buf, &num_end, 16);
+		num_buf[1] = (char)(ch != '\0' ? str[1] : '\0');
+		num_buf[2] = '\0';
+		value = (char)strtoul(num_buf, &num_end, 16);
 		str += num_end - num_buf;
 		break;
 
@@ -454,19 +486,18 @@ static char *
 conv_expand(const char *str)
 {
 	static char *conv_str;
-	static char no_memory[] = "<no memory>";
 	char *cp;
-	int ch;
+	char ch;
 
 	if (conv_str)
 		free(conv_str);
 	/* get a buffer that is definitely large enough.... */
 	conv_str = malloc(4 * strlen(str) + 1);
 	if (!conv_str)
-		return no_memory;
+		return NULL;
 	cp = conv_str;
 
-	while ((ch = *(const unsigned char *)str++) != '\0') {
+	while ((ch = *(const char *)str++) != '\0') {
 		switch (ch) {
 		/* Use C escapes for expected control characters */
 		case '\\':	ch = '\\';	break;	/* backslash */
@@ -482,7 +513,7 @@ conv_expand(const char *str)
 		case '\v':	ch = 'v';	break;	/* vertical-tab */
 		default:
 			/* Copy anything printable */
-			if (isprint(ch)) {
+			if (isprint((unsigned char)ch)) {
 				*cp++ = ch;
 				continue;
 			}
@@ -490,7 +521,7 @@ conv_expand(const char *str)
 			*cp++ = '\\';
 			if (ch & 0200) {
 				*cp++ = 'M';
-				ch &= ~0200;
+				ch &= (char)~0200;
 			}
 			if (ch == 0177) {
 				*cp++ = '^';
@@ -515,14 +546,14 @@ conv_expand(const char *str)
 }
 
 static char *
-mklong(const char *str, int ch)
+mklong(const char *str, char ch)
 {
 	static char copy[64];
 	size_t len;	
 
 	len = strlen(str) + 2;
 	if (len > sizeof copy) {
-		warnx("format %s too complex\n", str);
+		warnx("format %s too complex", str);
 		len = 4;
 	}
 	(void)memmove(copy, str, len - 3);
@@ -532,12 +563,12 @@ mklong(const char *str, int ch)
 	return copy;	
 }
 
-static int
+static char
 getchr(void)
 {
 	if (!*gargv)
 		return 0;
-	return (int)**gargv++;
+	return **gargv++;
 }
 
 static char *
@@ -552,7 +583,7 @@ getstr(void)
 static int
 getwidth(void)
 {
-	long val;
+	unsigned long val;
 	char *s, *ep;
 
 	s = *gargv;
@@ -565,12 +596,12 @@ getwidth(void)
 	check_conversion(s, ep);
 
 	/* Arbitrarily 'restrict' field widths to 1Mbyte */
-	if (val < 0 || val > 1 << 20) {
+	if (val > 1 << 20) {
 		warnx("%s: invalid field width", s);
 		return 0;
 	}
 
-	return val;
+	return (int)val;
 }
 
 static intmax_t
@@ -585,7 +616,7 @@ getintmax(void)
 	gargv++;
 
 	if (*cp == '\"' || *cp == '\'')
-		return *(cp+1);
+		return *(cp + 1);
 
 	errno = 0;
 	val = strtoimax(cp, &ep, 0);
@@ -605,7 +636,7 @@ getuintmax(void)
 	gargv++;
 
 	if (*cp == '\"' || *cp == '\'')
-		return *(cp + 1);
+		return (uintmax_t)*(cp + 1);
 
 	/* strtoumax won't error -ve values */
 	while (isspace(*(unsigned char *)cp))

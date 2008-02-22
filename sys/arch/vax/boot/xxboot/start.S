@@ -1,4 +1,4 @@
-/*	$NetBSD: start.S,v 1.4 2005/12/11 12:19:34 christos Exp $ */
+/*	$NetBSD: start.S,v 1.6 2017/05/22 17:00:55 ragge Exp $ */
 /*
  * Copyright (c) 1995 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -14,12 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed at Ludd, University of 
- *	Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -38,6 +32,7 @@
 
 #define _LOCORE
 
+#define	__HAVE_OLD_DISKLABEL	/* not automatically added due to _LOCORE */
 #define OMIT_DKTYPENUMS
 #define OMIT_FSTYPENUMS
 #include "sys/disklabel.h"
@@ -55,8 +50,12 @@ _C_LABEL(start):
 .org	0x00			# uVAX booted from TK50 starts here
 	brb	from_0x00	# continue behind dispatch-block
 
+# At offset 0x02 we have a dual used area: VMB.EXE starts execution here,
+# and uVAX-ROM looks for a pointer to a parameter block. We arrange for
+# the parameter block offset to disassmble as a CASEL instructions which
+# falls through to 0x08.
 .org	0x02			# information used by uVAX-ROM
-	.byte	0xcf		# offset in words to identification area 
+	.byte	0xcf		# offset in words to identification area
 	.byte	1		# this byte must be 1
 	.word	0		# logical block number (word swapped) 
 	.word	0		# of the secondary image
@@ -74,20 +73,6 @@ from_0x00:			# uVAX from TK50
 
 from_0x08:			# Any machine from VMB
 	movzbl	$4,_C_LABEL(from)		# Booted from full VMB
-	brw	start_vmb
-
-# the complete area reserved for label
-# must be empty (i.e. filled with zeroes).
-# disklabel(8) checks that before installing
-# the bootblocks over existing label.
-
-.org	LABELOFFSET
-	.globl	_C_LABEL(romlabel)
-_C_LABEL(romlabel):
-	.long	0
-
-.org	LABELOFFSET + d_end_
-start_vmb:
 	/*
 	 * Read in block 1-15.
 	 */
@@ -102,6 +87,20 @@ start_vmb:
 	calls	$6, (%r6)	# call the qio-routine
 	brw	start_uvax
 
+# the complete area reserved for label
+# must be empty (i.e. filled with zeroes).
+# disklabel(8) checks that before installing
+# the bootblocks over existing label.
+
+.org	LABELOFFSET
+	.globl	_C_LABEL(romlabel)
+_C_LABEL(romlabel):
+	.long	0
+
+.org	LABELOFFSET + d_end_
+# Make sure the parameter block is past the disklabel.
+# If not, the next .org would try to move backwards.
+
 /*
  * Parameter block for uVAX boot.
  */
@@ -110,7 +109,7 @@ start_vmb:
 #define SILOAD		0	/* load offset (usually 0) from the default */
 #define SIOFF		0x200	/* byte offset into secondary image */
 
-.org	0x19e
+.org	0x19e	# do not move, see comment earlier about CASEL
 	.byte	0x18		# must be 0x18 
 	.byte	0x00		# must be 0x00 (MBZ) 
 	.byte	0x00		# any value 

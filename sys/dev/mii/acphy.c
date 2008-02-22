@@ -1,4 +1,4 @@
-/*	$NetBSD: acphy.c,v 1.20 2007/12/09 20:28:02 jmcneill Exp $	*/
+/*	$NetBSD: acphy.c,v 1.25 2016/07/07 06:55:41 msaitoh Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acphy.c,v 1.20 2007/12/09 20:28:02 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acphy.c,v 1.25 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,10 +58,10 @@ __KERNEL_RCSID(0, "$NetBSD: acphy.c,v 1.20 2007/12/09 20:28:02 jmcneill Exp $");
 
 #include <dev/mii/acphyreg.h>
 
-static int	acphymatch(struct device *, struct cfdata *, void *);
-static void	acphyattach(struct device *, struct device *, void *);
+static int	acphymatch(device_t, cfdata_t, void *);
+static void	acphyattach(device_t, device_t, void *);
 
-CFATTACH_DECL(acphy, sizeof(struct mii_softc),
+CFATTACH_DECL_NEW(acphy, sizeof(struct mii_softc),
     acphymatch, acphyattach, mii_phy_detach, mii_phy_activate);
 
 static int	acphy_service(struct mii_softc *, struct mii_data *, int);
@@ -90,8 +90,7 @@ static const struct mii_phydesc acphys[] = {
 };
 
 static int
-acphymatch(struct device *parent, struct cfdata *match,
-    void *aux)
+acphymatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
@@ -102,7 +101,7 @@ acphymatch(struct device *parent, struct cfdata *match,
 }
 
 static void
-acphyattach(struct device *parent, struct device *self, void *aux)
+acphyattach(device_t parent, device_t self, void *aux)
 {
 	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
@@ -113,6 +112,7 @@ acphyattach(struct device *parent, struct device *self, void *aux)
 	aprint_naive(": Media interface\n");
 	aprint_normal(": %s, rev. %d\n", mpd->mpd_name, MII_REV(ma->mii_id2));
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
 	sc->mii_funcs = &acphy_funcs;
@@ -126,9 +126,8 @@ acphyattach(struct device *parent, struct device *self, void *aux)
 	 * XXX Check MCR_FX_SEL to set MIIF_HAVE_FIBER?
 	 */
 
-	sc->mii_capabilities =
-	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
-	aprint_normal("%s: ", sc->mii_dev.dv_xname);
+	sc->mii_capabilities = PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
+	aprint_normal_dev(sc->mii_dev, "");
 
 #define	ADD(m, c)	ifmedia_add(&mii->mii_media, (m), (c), NULL)
 	if (sc->mii_flags & MIIF_HAVEFIBER) {
@@ -146,9 +145,6 @@ acphyattach(struct device *parent, struct device *self, void *aux)
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
-
-	if (!pmf_device_register(self, NULL, mii_phy_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -251,8 +247,11 @@ acphy_status(struct mii_softc *sc)
 			mii->mii_media_active |= IFM_100_TX;
 		else
 			mii->mii_media_active |= IFM_10_T;
+
 		if (dr & DR_DPLX)
 			mii->mii_media_active |= IFM_FDX;
+		else
+			mii->mii_media_active |= IFM_HDX;
 	} else
 		mii->mii_media_active = ife->ifm_media;
 }

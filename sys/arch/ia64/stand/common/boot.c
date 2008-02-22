@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.3 2006/07/02 17:28:11 cherry Exp $	*/
+/*	$NetBSD: boot.c,v 1.8 2016/05/30 02:32:19 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -35,6 +35,7 @@
  */
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
 #include "bootstrap.h"
@@ -63,7 +64,8 @@ command_boot(int argc, char *argv[])
 	
 	/* XXX maybe we should discard everything and start again? */
 	if (file_findfile(NULL, NULL) != NULL) {
-	    sprintf(command_errbuf, "can't boot '%s', kernel module already loaded", argv[1]);
+	    command_seterr("can't boot '%s', kernel module already loaded",
+		argv[1]);
 	    return(CMD_ERROR);
 	}
 
@@ -87,7 +89,7 @@ command_boot(int argc, char *argv[])
      * Loaded anything yet?
      */
     if ((fp = file_findfile(NULL, NULL)) == NULL) {
-	command_errmsg = "no bootable kernel";
+	command_seterr("no bootable kernel");
 	return(CMD_ERROR);
     }
 
@@ -106,8 +108,7 @@ command_boot(int argc, char *argv[])
 	return(CMD_ERROR);
 
     /* Call the exec handler from the loader matching the kernel */
-    file_formats[fp->f_loader]->l_exec(fp);
-    command_errmsg = strerror(file_formats[fp->f_loader]->l_exec(fp));
+    command_seterr("%s", strerror(file_formats[fp->f_loader]->l_exec(fp)));
     return(CMD_ERROR);
 }
 
@@ -131,7 +132,7 @@ command_autoboot(int argc, char *argv[])
     case 2:
 	howlong = strtol(argv[1], &cp, 0);
 	if (*cp != 0) {
-	    sprintf(command_errbuf, "bad delay '%s'", argv[1]);
+	    command_seterr("bad delay '%s'", argv[1]);
 	    return(CMD_ERROR);
 	}
 	/* FALLTHROUGH */
@@ -139,7 +140,7 @@ command_autoboot(int argc, char *argv[])
 	return(autoboot(howlong, prompt));
     }
 	
-    command_errmsg = "too many arguments";
+    command_seterr("too many arguments");
     return(CMD_ERROR);
 }
 
@@ -148,7 +149,7 @@ command_autoboot(int argc, char *argv[])
  * we haven't tried already, try now.
  */
 void
-autoboot_maybe()
+autoboot_maybe(void)
 {
     char	*cp;
     
@@ -184,7 +185,7 @@ autoboot(int timeout, char *prompt)
 	loadakernel(0, 0, argv);
 	kernelname = getenv("kernelname");
 	if (kernelname == NULL) {
-	    command_errmsg = "no valid kernel found";
+	    command_seterr("no valid kernel found");
 	    return(CMD_ERROR);
 	}
     }
@@ -294,7 +295,7 @@ getrootmount(char *rootdev)
     if (getenv("vfs.root.mountfrom") != NULL)
 	return(0);
 
-    sprintf(lbuf, "%s/etc/fstab", rootdev);
+    snprintf(lbuf, sizeof(lbuf), "%s/etc/fstab", rootdev);
     if ((fd = open(lbuf, O_RDONLY)) < 0)
 	return(1);
 
@@ -317,7 +318,7 @@ getrootmount(char *rootdev)
 	while ((*cp != 0) && isspace(*cp))
 	    cp++;
 	/* must have /<space> to be root */
-	if ((*cp == 0) || (*cp != '/') || !isspace(*(cp + 1)))
+	if ((*cp != '/') || !isspace(*(cp + 1)))
 	    continue;
 	/* skip whitespace up to fstype */
 	cp += 2;
@@ -333,7 +334,7 @@ getrootmount(char *rootdev)
 	fstyp = strdup(ep);
 
 	/* build the final result and save it */
-	sprintf(lbuf, "%s:%s", fstyp, dev);
+	snprintf(lbuf, sizeof(lbuf), "%s:%s", fstyp, dev);
 	free(dev);
 	free(fstyp);
 	setenv("vfs.root.mountfrom", lbuf, 0);

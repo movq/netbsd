@@ -1,4 +1,4 @@
-/*	$NetBSD: make.h,v 1.74 2008/02/15 21:29:50 christos Exp $	*/
+/*	$NetBSD: make.h,v 1.104 2018/02/12 21:38:09 sjg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -84,6 +84,7 @@
 #include <sys/param.h>
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -93,22 +94,37 @@
 # include <sys/cdefs.h>
 #endif
 
-#if !defined(__GNUC_PREREQ__)
+#ifndef FD_CLOEXEC
+#define FD_CLOEXEC 1
+#endif
+
 #if defined(__GNUC__)
-#define	__GNUC_PREREQ__(x, y)						\
+#define	MAKE_GNUC_PREREQ(x, y)						\
 	((__GNUC__ == (x) && __GNUC_MINOR__ >= (y)) ||			\
 	 (__GNUC__ > (x)))
 #else /* defined(__GNUC__) */
-#define	__GNUC_PREREQ__(x, y)	0
+#define	MAKE_GNUC_PREREQ(x, y)	0
 #endif /* defined(__GNUC__) */
-#endif /* !defined(__GNUC_PREREQ__) */
 
-#if !defined(__unused)
-#if __GNUC_PREREQ__(2, 7)
-#define __unused        __attribute__((__unused__))
+#if MAKE_GNUC_PREREQ(2, 7)
+#define	MAKE_ATTR_UNUSED	__attribute__((__unused__))
 #else
-#define __unused        /* delete */
+#define	MAKE_ATTR_UNUSED	/* delete */
 #endif
+
+#if MAKE_GNUC_PREREQ(2, 5)
+#define	MAKE_ATTR_DEAD		__attribute__((__noreturn__))
+#elif defined(__GNUC__)
+#define	MAKE_ATTR_DEAD		__volatile
+#else
+#define	MAKE_ATTR_DEAD		/* delete */
+#endif
+
+#if MAKE_GNUC_PREREQ(2, 7)
+#define MAKE_ATTR_PRINTFLIKE(fmtarg, firstvararg)	\
+	    __attribute__((__format__ (__printf__, fmtarg, firstvararg)))
+#else
+#define MAKE_ATTR_PRINTFLIKE(fmtarg, firstvararg)	/* delete */
 #endif
 
 #include "sprite.h"
@@ -116,6 +132,7 @@
 #include "hash.h"
 #include "config.h"
 #include "buf.h"
+#include "make_malloc.h"
 
 /*-
  * The structure for an individual graph node. Each node has several
@@ -163,8 +180,10 @@ typedef struct GNode {
 #define DONE_WAIT	0x8	/* Set by Make_ProcessWait() */
 #define DONE_ORDER	0x10	/* Build requested by .ORDER processing */
 #define FROM_DEPEND	0x20	/* Node created from .depend */
+#define DONE_ALLSRC	0x40	/* We do it once only */
 #define CYCLE		0x1000  /* Used by MakePrintStatus */
 #define DONECYCLE	0x2000  /* Used by MakePrintStatus */
+#define INTERNAL	0x4000	/* Internal use only */
     enum enum_made {
 	UNMADE, DEFERRED, REQUESTED, BEINGMADE,
 	MADE, UPTODATE, ERROR, ABORTED
@@ -185,8 +204,7 @@ typedef struct GNode {
     int             unmade;    	/* The number of unmade children */
 
     time_t          mtime;     	/* Its modification time */
-    time_t     	    cmtime;    	/* The modification time of its youngest
-				 * child */
+    struct GNode    *cmgn;    	/* The youngest child */
 
     Lst     	    iParents;  	/* Links to parents for which this is an
 				 * implied source, if any */
@@ -212,11 +230,6 @@ typedef struct GNode {
     const char	    *fname;	/* filename where the GNode got defined */
     int		     lineno;	/* line number where the GNode got defined */
 } GNode;
-
-/*
- * Manifest constants
- */
-#define NILGNODE	((GNode *) NIL)
 
 /*
  * The OP_ constants are used when parsing a dependency line as a way of
@@ -263,6 +276,10 @@ typedef struct GNode {
 #define OP_PHONY	0x00010000  /* Not a file target; run always */
 #define OP_NOPATH	0x00020000  /* Don't search for file in the path */
 #define OP_WAIT 	0x00040000  /* .WAIT phony node */
+#define OP_NOMETA	0x00080000  /* .NOMETA do not create a .meta file */
+#define OP_META		0x00100000  /* .META we _do_ want a .meta file */
+#define OP_NOMETA_CMP	0x00200000  /* Do not compare commands in .meta file */
+#define OP_SUBMAKE	0x00400000  /* Possibly a submake node */
 /* Attributes applied by PMake */
 #define OP_TRANSFORM	0x80000000  /* The node is a transformation rule */
 #define OP_MEMBER 	0x40000000  /* Target is a member of an archive */
@@ -290,7 +307,7 @@ typedef struct GNode {
  * do if the desired node(s) is (are) not found. If the TARG_CREATE constant
  * is given, a new, empty node will be created for the target, placed in the
  * table of all targets and its address returned. If TARG_NOCREATE is given,
- * a NIL pointer will be returned.
+ * a NULL pointer will be returned.
  */
 #define TARG_NOCREATE	0x00	  /* don't create it */
 #define TARG_CREATE	0x01	  /* create node if not found */
@@ -313,6 +330,7 @@ typedef struct GNode {
  * once the makefile has been parsed. PARSE_WARNING means it can. Passed
  * as the first argument to Parse_Error.
  */
+#define PARSE_INFO	3
 #define PARSE_WARNING	2
 #define PARSE_FATAL	1
 
@@ -356,6 +374,7 @@ extern Boolean  beSilent;    	/* True if should print no commands */
 extern Boolean  noExecute;    	/* True if should execute nothing */
 extern Boolean  noRecursiveExecute;    	/* True if should execute nothing */
 extern Boolean  allPrecious;   	/* True if every target is precious */
+extern Boolean  deleteOnError;	/* True if failed targets should be deleted */
 extern Boolean  keepgoing;    	/* True if should continue on unaffected
 				 * portions of the graph when have an error
 				 * in one portion */
@@ -378,6 +397,10 @@ extern Boolean	varNoExportEnv;	/* TRUE if we should not export variables
 
 extern GNode    *DEFAULT;    	/* .DEFAULT rule */
 
+extern GNode	*VAR_INTERNAL;	/* Variables defined internally by make
+				 * which should not override those set by
+				 * makefiles.
+				 */
 extern GNode    *VAR_GLOBAL;   	/* Variables defined in a global context, e.g
 				 * in the Makefile itself */
 extern GNode    *VAR_CMD;    	/* Variables defined on the command line */
@@ -395,13 +418,30 @@ extern Boolean	oldVars;    	/* Do old-style variable substitution */
 extern Lst	sysIncPath;	/* The system include path. */
 extern Lst	defIncPath;	/* The default include path. */
 
+extern char	curdir[];	/* Startup directory */
 extern char	*progname;	/* The program name */
+extern char	*makeDependfile; /* .depend */
+extern char	**savedEnv;	 /* if we replaced environ this will be non-NULL */
+
+/*
+ * We cannot vfork() in a child of vfork().
+ * Most systems do not enforce this but some do.
+ */
+#define vFork() ((getpid() == myPid) ? vfork() : fork())
+extern pid_t	myPid;
 
 #define	MAKEFLAGS	".MAKEFLAGS"
 #define	MAKEOVERRIDES	".MAKEOVERRIDES"
 #define	MAKE_JOB_PREFIX	".MAKE.JOB.PREFIX" /* prefix for job target output */
 #define	MAKE_EXPORTED	".MAKE.EXPORTED"   /* variables we export */
 #define	MAKE_MAKEFILES	".MAKE.MAKEFILES"  /* all the makefiles we read */
+#define	MAKE_LEVEL	".MAKE.LEVEL"	   /* recursion level */
+#define MAKEFILE_PREFERENCE ".MAKE.MAKEFILE_PREFERENCE"
+#define MAKE_DEPENDFILE	".MAKE.DEPENDFILE" /* .depend */
+#define MAKE_MODE	".MAKE.MODE"
+#ifndef MAKE_LEVEL_ENV
+# define MAKE_LEVEL_ENV	"MAKELEVEL"
+#endif
 
 /*
  * debug control:
@@ -410,32 +450,31 @@ extern char	*progname;	/* The program name */
  */
 FILE *debug_file;		/* Output written here - default stdout */
 extern int debug;
-#define	DEBUG_ARCH	0x0001
-#define	DEBUG_COND	0x0002
-#define	DEBUG_DIR	0x0004
-#define	DEBUG_GRAPH1	0x0008
-#define	DEBUG_GRAPH2	0x0010
-#define	DEBUG_JOB	0x0020
-#define	DEBUG_MAKE	0x0040
-#define	DEBUG_SUFF	0x0080
-#define	DEBUG_TARG	0x0100
-#define	DEBUG_VAR	0x0200
-#define DEBUG_FOR	0x0400
-#define DEBUG_SHELL	0x0800
-#define DEBUG_ERROR	0x1000
-#define DEBUG_LOUD	0x2000
+#define	DEBUG_ARCH	0x00001
+#define	DEBUG_COND	0x00002
+#define	DEBUG_DIR	0x00004
+#define	DEBUG_GRAPH1	0x00008
+#define	DEBUG_GRAPH2	0x00010
+#define	DEBUG_JOB	0x00020
+#define	DEBUG_MAKE	0x00040
+#define	DEBUG_SUFF	0x00080
+#define	DEBUG_TARG	0x00100
+#define	DEBUG_VAR	0x00200
+#define DEBUG_FOR	0x00400
+#define DEBUG_SHELL	0x00800
+#define DEBUG_ERROR	0x01000
+#define DEBUG_LOUD	0x02000
+#define DEBUG_META	0x04000
+
 #define DEBUG_GRAPH3	0x10000
 #define DEBUG_SCRIPT	0x20000
 #define DEBUG_PARSE	0x40000
+#define DEBUG_CWD	0x80000
 
 #define CONCAT(a,b)	a##b
 
 #define	DEBUG(module)	(debug & CONCAT(DEBUG_,module))
 
-/*
- * Since there are so many, all functions that return non-integer values are
- * extracted by means of a sed script or two and stuck in the file "nonints.h"
- */
 #include "nonints.h"
 
 int Make_TimeStamp(GNode *, GNode *);
@@ -448,9 +487,17 @@ void Make_DoAllVar(GNode *);
 Boolean Make_Run(Lst);
 char * Check_Cwd_Cmd(const char *);
 void Check_Cwd(const char **);
-void PrintOnError(const char *);
+void PrintOnError(GNode *, const char *);
 void Main_ExportMAKEFLAGS(Boolean);
-Boolean Main_SetObjdir(const char *);
+Boolean Main_SetObjdir(const char *, ...) MAKE_ATTR_PRINTFLIKE(1, 2);
+int mkTempFile(const char *, char **);
+int str2Lst_Append(Lst, char *, const char *);
+int cached_lstat(const char *, void *);
+int cached_stat(const char *, void *);
+
+#define	VARF_UNDEFERR	1
+#define	VARF_WANTRES	2
+#define	VARF_ASSIGN	4
 
 #ifdef __GNUC__
 #define UNCONST(ptr)	({ 		\
@@ -468,6 +515,21 @@ Boolean Main_SetObjdir(const char *);
 #endif
 #ifndef MAX
 #define MAX(a, b) ((a > b) ? a : b)
+#endif
+
+/* At least GNU/Hurd systems lack hardcoded MAXPATHLEN/PATH_MAX */
+#include <limits.h>
+#ifndef MAXPATHLEN
+#define MAXPATHLEN	4096
+#endif
+#ifndef PATH_MAX
+#define PATH_MAX	MAXPATHLEN
+#endif
+
+#if defined(SYSV)
+#define KILLPG(pid, sig)	kill(-(pid), (sig))
+#else
+#define KILLPG(pid, sig)	killpg((pid), (sig))
 #endif
 
 #endif /* _MAKE_H_ */

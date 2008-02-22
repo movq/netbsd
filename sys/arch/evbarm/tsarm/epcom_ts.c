@@ -1,4 +1,4 @@
-/*	$NetBSD: epcom_ts.c,v 1.2 2005/12/11 12:17:11 christos Exp $ */
+/*	$NetBSD: epcom_ts.c,v 1.8 2012/11/12 18:00:40 skrll Exp $ */
 /*
  * Copyright (c) 2002
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epcom_ts.c,v 1.2 2005/12/11 12:17:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epcom_ts.c,v 1.8 2012/11/12 18:00:40 skrll Exp $");
 
 /* Front-end of epcom */
 
@@ -46,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: epcom_ts.c,v 1.2 2005/12/11 12:17:11 christos Exp $"
 #include <sys/termios.h>
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/ep93xx/epcomreg.h>
 #include <arm/ep93xx/epcomvar.h>
@@ -56,17 +50,14 @@ __KERNEL_RCSID(0, "$NetBSD: epcom_ts.c,v 1.2 2005/12/11 12:17:11 christos Exp $"
 
 #include <evbarm/tsarm/epcom_tsvar.h>
 
-static int	epcom_ts_match(struct device *, struct cfdata *, void *);
-static void	epcom_ts_attach(struct device *, struct device *, void *);
+static int	epcom_ts_match(device_t, cfdata_t, void *);
+static void	epcom_ts_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(epcom_ts, sizeof(struct epcom_ts_softc),
+CFATTACH_DECL_NEW(epcom_ts, sizeof(struct epcom_ts_softc),
     epcom_ts_match, epcom_ts_attach, NULL, NULL);
 
 static int
-epcom_ts_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+epcom_ts_match(device_t parent, cfdata_t match, void *aux)
 {
 	if (strcmp(match->cf_name, "epcom") == 0)
 		return 1;
@@ -74,22 +65,20 @@ epcom_ts_match(parent, match, aux)
 }
 
 static void
-epcom_ts_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;  
-	void *aux;
+epcom_ts_attach(device_t parent, device_t self, void *aux)
 {
-	struct epcom_ts_softc *esc = (struct epcom_ts_softc *)self;
+	struct epcom_ts_softc *esc = device_private(self);
 	struct epcom_softc *sc = &esc->sc_epcom;
 	struct epsoc_attach_args *sa = aux;
-	u_int32_t pwrcnt;
+	uint32_t pwrcnt;
 	bus_space_handle_t ioh;
 
+	sc->sc_dev = self;
 	esc->sc_iot = sa->sa_iot;
 	sc->sc_iot = sa->sa_iot;
 	sc->sc_hwbase = sa->sa_addr;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	bus_space_map(sa->sa_iot, sa->sa_addr, sa->sa_size, 0, &sc->sc_ioh);
 

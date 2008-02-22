@@ -1,4 +1,4 @@
-#	$NetBSD: files.pmax,v 1.111 2008/02/20 21:43:35 drochner Exp $
+#	$NetBSD: files.pmax,v 1.118 2016/11/16 19:37:06 macallan Exp $
 # DECstation-specific configuration info
 
 # maxpartitions must be first item in files.${ARCH}.
@@ -15,6 +15,12 @@ attach mainbus at root
 device cpu				# not optional
 attach cpu at mainbus
 file arch/pmax/pmax/cpu.c		cpu
+
+#
+# common mips stuff
+#
+file arch/mips/mips/bus_dma.c
+
 
 # Model support option headers
 defflag	DEC_3100	# DECstation 2100, 3100 (kn01)
@@ -41,6 +47,11 @@ file	arch/pmax/pmax/dec_5100.c	dec_5100	# kn230, mipsmate
 # handlers for memory subsystems shared across models..
 file	arch/pmax/pmax/memc_3max.c	dec_3max|dec_3maxplus
 file	arch/pmax/pmax/memc_3min.c	dec_3min|dec_maxine
+
+#
+# Stack-less Just-In-Time compiler
+#
+include	"external/bsd/sljit/conf/files.sljit"
 
 #
 # Bus-independent support for DEC devices
@@ -90,6 +101,12 @@ file	arch/mips/mips/mips_mcclock_loop.S	mcclock # CPU speed via mcclock
 
 include "dev/scsipi/files.scsipi"
 
+#
+# Machine-independent ATA drivers
+#
+include "dev/ata/files.ata"
+
+
 # Memory Disk
 file	dev/md_root.c			memory_disk_hooks
 
@@ -111,8 +128,7 @@ attach le at ibus with le_pmax:		le24, le_dec_subr
 file	arch/pmax/ibus/if_le_ibus.c	le_pmax
 
 file	arch/pmax/pmax/autoconf.c
-file	arch/pmax/pmax/bus_dma.c
-file	arch/pmax/pmax/bus_space.c
+file	arch/pmax/pmax/bus.c
 file	arch/pmax/pmax/disksubr.c
 file	arch/pmax/pmax/machdep.c
 file	arch/pmax/pmax/mainbus.c
@@ -122,7 +138,6 @@ file	arch/pmax/pmax/sysconf.c
 file	arch/pmax/stand/common/callvec.c
 file	dev/cons.c
 
-file arch/mips/mips/softintr.c
 
 #
 # Workstation console devices
@@ -160,5 +175,13 @@ file   arch/pmax/tc/dtms.c             dtms needs-flag
 device xcfb: wsemuldisplaydev, rasops8
 attach xcfb at tc
 file   dev/tc/xcfb.c                   xcfb needs-flag
+
+# this wants to be probed as late as possible.
+#
+# Machine-independent USB device support
+#
+include "dev/usb/files.usb"
+
+include "dev/bluetooth/files.bluetooth"
 
 include "arch/pmax/conf/majors.pmax"

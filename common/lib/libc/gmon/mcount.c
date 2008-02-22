@@ -1,4 +1,4 @@
-/*	$NetBSD: mcount.c,v 1.7 2006/10/27 22:14:13 uwe Exp $	*/
+/*	$NetBSD: mcount.c,v 1.13 2016/02/28 02:56:39 christos Exp $	*/
 
 /*
  * Copyright (c) 2003, 2004 Wasabi Systems, Inc.
@@ -76,12 +76,13 @@
 #if 0
 static char sccsid[] = "@(#)mcount.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: mcount.c,v 1.7 2006/10/27 22:14:13 uwe Exp $");
+__RCSID("$NetBSD: mcount.c,v 1.13 2016/02/28 02:56:39 christos Exp $");
 #endif
 #endif
 
 #include <sys/param.h>
 #include <sys/gmon.h>
+#include <sys/lock.h>
 
 #ifndef _KERNEL
 #include "reentrant.h"
@@ -93,11 +94,27 @@ extern struct gmonparam _gmondummy;
 struct gmonparam *_m_gmon_alloc(void);
 #endif
 
-_MCOUNT_DECL __P((u_long, u_long))
+#if defined(_KERNEL) && !defined(_RUMPKERNEL) && defined(MULTIPROCESSOR)
+__cpu_simple_lock_t __mcount_lock;
+#endif
+
+#ifndef __LINT__
+_MCOUNT_DECL(u_long, u_long)
 #ifdef _KERNEL
     __attribute__((__no_instrument_function__))
 #endif
     __used;
+#endif
+
+/* XXX: make these interfaces */
+#ifdef _RUMPKERNEL
+#undef MCOUNT_ENTER
+#define MCOUNT_ENTER
+#undef MCOUNT_EXIT
+#define MCOUNT_EXIT
+#undef MCOUNT
+#define MCOUNT
+#endif
 
 /*
  * mcount is called on entry to each function compiled with the profiling
@@ -114,25 +131,31 @@ _MCOUNT_DECL __P((u_long, u_long))
  * both frompcindex and frompc.  Any reasonable, modern compiler will
  * perform this optimization.
  */
-_MCOUNT_DECL(frompc, selfpc)	/* _mcount; may be static, inline, etc */
-	u_long frompc, selfpc;
+#ifndef __LINT__
+/* _mcount; may be static, inline, etc */
+_MCOUNT_DECL(u_long frompc, u_long selfpc)
 {
 	u_short *frompcindex;
 	struct tostruct *top, *prevtop;
 	struct gmonparam *p;
 	long toindex;
-#ifdef _KERNEL
+#if defined(_KERNEL) && !defined(_RUMPKERNEL)
 	int s;
 #endif
 
 #if defined(_REENTRANT) && !defined(_KERNEL)
 	if (__isthreaded) {
+		/* prevent re-entry via thr_getspecific */
+		if (_gmonparam.state != GMON_PROF_ON)
+			return;
+		_gmonparam.state = GMON_PROF_BUSY;
 		p = thr_getspecific(_gmonkey);
 		if (p == NULL) {
 			/* Prevent recursive calls while allocating */
 			thr_setspecific(_gmonkey, &_gmondummy);
 			p = _m_gmon_alloc();
 		}
+		_gmonparam.state = GMON_PROF_ON;
 	} else
 #endif
 		p = &_gmonparam;
@@ -142,8 +165,12 @@ _MCOUNT_DECL(frompc, selfpc)	/* _mcount; may be static, inline, etc */
 	 */
 	if (p->state != GMON_PROF_ON)
 		return;
-#ifdef _KERNEL
+#if defined(_KERNEL) && !defined(_RUMPKERNEL)
 	MCOUNT_ENTER;
+#ifdef MULTIPROCESSOR
+	__cpu_simple_lock(&__mcount_lock);
+	__insn_barrier();
+#endif
 #endif
 	p->state = GMON_PROF_BUSY;
 	/*
@@ -233,21 +260,30 @@ _MCOUNT_DECL(frompc, selfpc)	/* _mcount; may be static, inline, etc */
 			*frompcindex = (u_short)toindex;
 			goto done;
 		}
-		
 	}
 done:
 	p->state = GMON_PROF_ON;
-#ifdef _KERNEL
+#if defined(_KERNEL) && !defined(_RUMPKERNEL)
+#ifdef MULTIPROCESSOR
+	__insn_barrier();
+	__cpu_simple_unlock(&__mcount_lock);
+#endif
 	MCOUNT_EXIT;
 #endif
 	return;
+
 overflow:
 	p->state = GMON_PROF_ERROR;
-#ifdef _KERNEL
+#if defined(_KERNEL) && !defined(_RUMPKERNEL)
+#ifdef MULTIPROCESSOR
+	__insn_barrier();
+	__cpu_simple_unlock(&__mcount_lock);
+#endif
 	MCOUNT_EXIT;
 #endif
 	return;
 }
+#endif
 
 #ifdef MCOUNT
 /*

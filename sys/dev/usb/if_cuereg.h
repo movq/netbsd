@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cuereg.h,v 1.14 2001/01/21 22:09:24 augustss Exp $	*/
+/*	$NetBSD: if_cuereg.h,v 1.20 2016/04/23 10:15:31 skrll Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -37,6 +37,7 @@
  * Definitions for the CATC Netmate II USB to ethernet controller.
  */
 
+#include <sys/rndsource.h>
 
 /*
  * Vendor specific control commands.
@@ -141,15 +142,15 @@
 #define CUE_ENDPT_MAX		0x3
 
 struct cue_type {
-	u_int16_t		cue_vid;
-	u_int16_t		cue_did;
+	uint16_t		cue_vid;
+	uint16_t		cue_did;
 };
 
 struct cue_softc;
 
 struct cue_chain {
 	struct cue_softc	*cue_sc;
-	usbd_xfer_handle	cue_xfer;
+	struct usbd_xfer	*cue_xfer;
 	char			*cue_buf;
 	struct mbuf		*cue_mbuf;
 	int			cue_idx;
@@ -165,30 +166,23 @@ struct cue_cdata {
 };
 
 struct cue_softc {
-	USBBASEDEVICE		cue_dev;
+	device_t cue_dev;
 
-#if defined(__FreeBSD__) || defined(__OpenBSD__)
-	struct arpcom		arpcom;
-#define GET_IFP(sc) (&(sc)->arpcom.ac_if)
-#elif defined(__NetBSD__)
 	struct ethercom		cue_ec;
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	krndsource_t	rnd_source;
 #define GET_IFP(sc) (&(sc)->cue_ec.ec_if)
-#endif
 
-	usb_callout_t		cue_stat_ch;
+	struct callout cue_stat_ch;
 
-	usbd_device_handle	cue_udev;
-	usbd_interface_handle	cue_iface;
-	u_int16_t		cue_vendor;
-	u_int16_t		cue_product;
+	struct usbd_device *	cue_udev;
+	struct usbd_interface *	cue_iface;
+	uint16_t		cue_vendor;
+	uint16_t		cue_product;
 	int			cue_ed[CUE_ENDPT_MAX];
-	usbd_pipe_handle	cue_ep[CUE_ENDPT_MAX];
-	u_int8_t		cue_mctab[CUE_MCAST_TABLE_LEN];
+	struct usbd_pipe *	cue_ep[CUE_ENDPT_MAX];
+	uint8_t			cue_mctab[CUE_MCAST_TABLE_LEN];
 	int			cue_if_flags;
-	u_int16_t		cue_rxfilt;
+	uint16_t		cue_rxfilt;
 	struct cue_cdata	cue_cdata;
 
 	char			cue_dying;

@@ -1,4 +1,4 @@
-/*	$NetBSD: optr.c,v 1.36 2006/12/18 20:07:32 christos Exp $	*/
+/*	$NetBSD: optr.c,v 1.42 2013/09/08 13:26:05 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)optr.c	8.2 (Berkeley) 1/6/94";
 #else
-__RCSID("$NetBSD: optr.c,v 1.36 2006/12/18 20:07:32 christos Exp $");
+__RCSID("$NetBSD: optr.c,v 1.42 2013/09/08 13:26:05 mlelstv Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,18 +56,17 @@ __RCSID("$NetBSD: optr.c,v 1.36 2006/12/18 20:07:32 christos Exp $");
 #include <time.h>
 #include <tzfile.h>
 #include <unistd.h>
-
-#include <ufs/ufs/dinode.h>
+#include <util.h>
 
 #include "dump.h"
 #include "pathnames.h"
 
-void	alarmcatch(int);
-struct fstab *allocfsent(struct fstab *);
-int	datesort(const void *, const void *);
 extern  char *time_string;
 extern  char default_time_string[];
 
+static void alarmcatch(int);
+static struct fstab *allocfsent(const struct fstab *);
+static int datesort(const void *, const void *);
 static void do_timestamp(time_t, const char *);
 
 /*
@@ -143,7 +142,7 @@ char lastmsg[200];
  *	Alert the console operator, and enable the alarm clock to
  *	sleep for 2 minutes in case nobody comes to satisfy dump
  */
-void
+static void
 alarmcatch(int dummy __unused)
 {
 
@@ -317,12 +316,12 @@ quit(const char *fmt, ...)
  *	we don't actually do it
  */
 
-struct fstab *
-allocfsent(struct fstab *fs)
+static struct fstab *
+allocfsent(const struct fstab *fs)
 {
 	struct fstab *new;
 
-	new = (struct fstab *)xmalloc(sizeof (*fs));
+	new = xmalloc(sizeof (*fs));
 	new->fs_file = xstrdup(fs->fs_file);
 	new->fs_type = xstrdup(fs->fs_type);
 	new->fs_spec = xstrdup(fs->fs_spec);
@@ -386,14 +385,15 @@ fstabsearch(const char *key)
 {
 	struct pfstab *pf;
 	struct fstab *fs;
-	char *rn;
+	const char *rn;
+	char buf[MAXPATHLEN];
 
 	SLIST_FOREACH(pf, &table, pf_list) {
 		fs = pf->pf_fstab;
 		if (strcmp(fs->fs_file, key) == 0 ||
 		    strcmp(fs->fs_spec, key) == 0)
 			return (fs);
-		rn = rawname(fs->fs_spec);
+		rn = getdiskrawname(buf, sizeof(buf), fs->fs_spec);
 		if (rn != NULL && strcmp(rn, key) == 0)
 			return (fs);
 		if (key[0] != '/') {
@@ -422,7 +422,8 @@ mntinfosearch(const char *key)
 {
 	int i, mntbufc;
 	struct statvfs *mntbuf, *fs;
-	char *rn;
+	const char *rn;
+	char buf[MAXPATHLEN];
 
 	if ((mntbufc = getmntinfo(&mntbuf, MNT_NOWAIT)) == 0)
 		quit("Can't get mount list: %s", strerror(errno));
@@ -438,7 +439,7 @@ mntinfosearch(const char *key)
 		if (strcmp(fs->f_mntonname, key) == 0 ||
 		    strcmp(fs->f_mntfromname, key) == 0)
 			return (fs);
-		rn = rawname(fs->f_mntfromname);
+		rn = getdiskrawname(buf, sizeof(buf), fs->f_mntfromname);
 		if (rn != NULL && strcmp(rn, key) == 0)
 			return (fs);
 	}
@@ -494,7 +495,7 @@ lastdump(char arg)
 	}
 }
 
-int
+static int
 datesort(const void *a1, const void *a2)
 {
 	const struct dumpdates *d1 = *(const struct dumpdates *const *)a1;

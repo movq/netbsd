@@ -1,4 +1,4 @@
-/*	$NetBSD: kttcp.c,v 1.25 2008/02/06 21:57:54 ad Exp $	*/
+/*	$NetBSD: kttcp.c,v 1.40 2016/10/02 14:16:02 christos Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kttcp.c,v 1.25 2008/02/06 21:57:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kttcp.c,v 1.40 2016/10/02 14:16:02 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -63,6 +63,8 @@ __KERNEL_RCSID(0, "$NetBSD: kttcp.c,v 1.25 2008/02/06 21:57:54 ad Exp $");
 
 #include <dev/kttcpio.h>
 
+#include "ioconf.h"
+
 static int kttcp_send(struct lwp *l, struct kttcp_io_args *);
 static int kttcp_recv(struct lwp *l, struct kttcp_io_args *);
 static int kttcp_sosend(struct socket *, unsigned long long,
@@ -70,13 +72,21 @@ static int kttcp_sosend(struct socket *, unsigned long long,
 static int kttcp_soreceive(struct socket *, unsigned long long,
 			   unsigned long long *, struct lwp *, int *);
 
-void	kttcpattach(int);
-
 dev_type_ioctl(kttcpioctl);
 
 const struct cdevsw kttcp_cdevsw = {
-	nullopen, nullclose, noread, nowrite, kttcpioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER
+	.d_open = nullopen,
+	.d_close = nullclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = kttcpioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
 
 void
@@ -113,7 +123,7 @@ kttcpioctl(dev_t dev, u_long cmd, void *data, int flag,
 static int
 kttcp_send(struct lwp *l, struct kttcp_io_args *kio)
 {
-	struct file *fp;
+	struct socket *so;
 	int error;
 	struct timeval t0, t1;
 	unsigned long long len, done;
@@ -121,24 +131,17 @@ kttcp_send(struct lwp *l, struct kttcp_io_args *kio)
 	if (kio->kio_totalsize >= KTTCP_MAX_XMIT)
 		return EINVAL;
 
-	fp = fd_getfile(l->l_proc->p_fd, kio->kio_socket);
-	if (fp == NULL)
-		return EBADF;
-	FILE_USE(fp);
-	if (fp->f_type != DTYPE_SOCKET) {
-		FILE_UNUSE(fp, l);
-		return EFTYPE;
-	}
+	if ((error = fd_getsock(kio->kio_socket, &so)) != 0)
+		return error;
 
 	len = kio->kio_totalsize;
 	microtime(&t0);
 	do {
-		error = kttcp_sosend((struct socket *)fp->f_data, len,
-		    &done, l, 0);
+		error = kttcp_sosend(so, len, &done, l, 0);
 		len -= done;
 	} while (error == 0 && len > 0);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(kio->kio_socket);
 
 	microtime(&t1);
 	if (error != 0)
@@ -153,7 +156,7 @@ kttcp_send(struct lwp *l, struct kttcp_io_args *kio)
 static int
 kttcp_recv(struct lwp *l, struct kttcp_io_args *kio)
 {
-	struct file *fp;
+	struct socket *so;
 	int error;
 	struct timeval t0, t1;
 	unsigned long long len, done;
@@ -163,23 +166,16 @@ kttcp_recv(struct lwp *l, struct kttcp_io_args *kio)
 	if (kio->kio_totalsize > KTTCP_MAX_XMIT)
 		return EINVAL;
 
-	fp = fd_getfile(l->l_proc->p_fd, kio->kio_socket);
-	if (fp == NULL)
-		return EBADF;
-	FILE_USE(fp);
-	if (fp->f_type != DTYPE_SOCKET) {
-		FILE_UNUSE(fp, l);
-		return EBADF;
-	}
+	if ((error = fd_getsock(kio->kio_socket, &so)) != 0)
+		return error;
 	len = kio->kio_totalsize;
 	microtime(&t0);
 	do {
-		error = kttcp_soreceive((struct socket *)fp->f_data,
-		    len, &done, l, NULL);
+		error = kttcp_soreceive(so, len, &done, l, NULL);
 		len -= done;
 	} while (error == 0 && len > 0 && done > 0);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(kio->kio_socket);
 
 	microtime(&t1);
 	if (error == EPIPE)
@@ -204,7 +200,7 @@ kttcp_sosend(struct socket *so, unsigned long long slen,
 {
 	struct mbuf **mp, *m, *top;
 	long space, len, mlen;
-	int error, s, dontroute, atomic;
+	int error, dontroute, atomic;
 	long long resid;
 
 	atomic = sosendallatonce(so);
@@ -224,29 +220,26 @@ kttcp_sosend(struct socket *so, unsigned long long slen,
 	dontroute =
 	    (flags & MSG_DONTROUTE) && (so->so_options & SO_DONTROUTE) == 0 &&
 	    (so->so_proto->pr_flags & PR_ATOMIC);
-	/* WRS XXX - are we doing per-lwp or per-proc stats? */
-	l->l_proc->p_stats->p_ru.ru_msgsnd++;
-#define	snderr(errno)	{ error = errno; splx(s); goto release; }
-
+	l->l_ru.ru_msgsnd++;
+#define	snderr(errno)	{ error = errno; goto release; }
+	solock(so);
  restart:
 	if ((error = sblock(&so->so_snd, SBLOCKWAIT(flags))) != 0)
 		goto out;
 	do {
-		s = splsoftnet();
 		if (so->so_state & SS_CANTSENDMORE)
 			snderr(EPIPE);
 		if (so->so_error) {
 			error = so->so_error;
 			so->so_error = 0;
-			splx(s);
 			goto release;
 		}
 		if ((so->so_state & SS_ISCONNECTED) == 0) {
 			if (so->so_proto->pr_flags & PR_CONNREQUIRED) {
-				if ((so->so_state & SS_ISCONFIRMING) == 0)
-					snderr(ENOTCONN);
-			} else
+				snderr(ENOTCONN);
+			} else {
 				snderr(EDESTADDRREQ);
+			}
 		}
 		space = sbspace(&so->so_snd);
 		if (flags & MSG_OOB)
@@ -254,7 +247,7 @@ kttcp_sosend(struct socket *so, unsigned long long slen,
 		if ((atomic && resid > so->so_snd.sb_hiwat))
 			snderr(EMSGSIZE);
 		if (space < resid && (atomic || space < so->so_snd.sb_lowat)) {
-			if (so->so_nbio)
+			if (so->so_state & SS_NBIO)
 				snderr(EWOULDBLOCK);
 			SBLASTRECORDCHK(&so->so_rcv,
 			    "kttcp_soreceive sbwait 1");
@@ -262,20 +255,19 @@ kttcp_sosend(struct socket *so, unsigned long long slen,
 			    "kttcp_soreceive sbwait 1");
 			sbunlock(&so->so_snd);
 			error = sbwait(&so->so_snd);
-			splx(s);
 			if (error)
 				goto out;
 			goto restart;
 		}
-		splx(s);
 		mp = &top;
 		do {
+			sounlock(so);
 			do {
 				if (top == 0) {
 					m = m_gethdr(M_WAIT, MT_DATA);
 					mlen = MHLEN;
 					m->m_pkthdr.len = 0;
-					m->m_pkthdr.rcvif = NULL;
+					m_reset_rcvif(m);
 				} else {
 					m = m_get(M_WAIT, MT_DATA);
 					mlen = MLEN;
@@ -320,25 +312,24 @@ nopages:
 					break;
 				}
 			} while (space > 0 && atomic);
-
-			s = splsoftnet();
+			solock(so);
 
 			if (so->so_state & SS_CANTSENDMORE)
 				snderr(EPIPE);
-
 			if (dontroute)
 				so->so_options |= SO_DONTROUTE;
 			if (resid > 0)
 				so->so_state |= SS_MORETOCOME;
-			error = (*so->so_proto->pr_usrreq)(so,
-			    (flags & MSG_OOB) ? PRU_SENDOOB : PRU_SEND,
-			    top, NULL, NULL, l);
+			if (flags & MSG_OOB)
+				error = (*so->so_proto->pr_usrreqs->pr_sendoob)(so,
+				    top, NULL);
+			else
+				error = (*so->so_proto->pr_usrreqs->pr_send)(so,
+				    top, NULL, NULL, l);
 			if (dontroute)
 				so->so_options &= ~SO_DONTROUTE;
 			if (resid > 0)
 				so->so_state &= ~SS_MORETOCOME;
-			splx(s);
-
 			top = 0;
 			mp = &top;
 			if (error)
@@ -349,6 +340,7 @@ nopages:
  release:
 	sbunlock(&so->so_snd);
  out:
+ 	sounlock(so);
 	if (top)
 		m_freem(top);
 	*done = slen - resid;
@@ -363,7 +355,7 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
     unsigned long long *done, struct lwp *l, int *flagsp)
 {
 	struct mbuf *m, **mp;
-	int flags, len, error, s, offset, moff, type;
+	int flags, len, error, offset, moff, type;
 	long long orig_resid, resid;
 	const struct protosw *pr;
 	struct mbuf *nextrecord;
@@ -378,8 +370,9 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
  		flags = 0;
 	if (flags & MSG_OOB) {
 		m = m_get(M_WAIT, MT_DATA);
-		error = (*pr->pr_usrreq)(so, PRU_RCVOOB, m,
-		    (struct mbuf *)(long)(flags & MSG_PEEK), NULL, NULL);
+		solock(so);
+		error = (*pr->pr_usrreqs->pr_recvoob)(so, m, flags & MSG_PEEK);
+		sounlock(so);
 		if (error)
 			goto bad;
 		do {
@@ -393,14 +386,10 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 	}
 	if (mp)
 		*mp = NULL;
-	if (so->so_state & SS_ISCONFIRMING && resid)
-		(*pr->pr_usrreq)(so, PRU_RCVD, NULL, NULL, NULL, NULL);
-
+	solock(so);
  restart:
 	if ((error = sblock(&so->so_rcv, SBLOCKWAIT(flags))) != 0)
 		return (error);
-	s = splsoftnet();
-
 	m = so->so_rcv.sb_mb;
 	/*
 	 * If we have less data than requested, block awaiting more
@@ -448,15 +437,17 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 		}
 		if (resid == 0)
 			goto release;
-		if (so->so_nbio || (flags & MSG_DONTWAIT)) {
+		if ((so->so_state & SS_NBIO) ||
+		    (flags & (MSG_DONTWAIT|MSG_NBIO))) {
 			error = EWOULDBLOCK;
 			goto release;
 		}
 		sbunlock(&so->so_rcv);
 		error = sbwait(&so->so_rcv);
-		splx(s);
-		if (error)
+		if (error) {
+			sounlock(so);
 			return (error);
+		}
 		goto restart;
 	}
  dontblock:
@@ -467,7 +458,7 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 	 */
 #ifdef notyet /* XXXX */
 	if (uio->uio_lwp)
-		uio->uio_lwp->l_proc->p_stats->p_ru.ru_msgrcv++;
+		uio->uio_lwp->l_ru.ru_msgrcv++;
 #endif
 	KASSERT(m == so->so_rcv.sb_mb);
 	SBLASTRECORDCHK(&so->so_rcv, "kttcp_soreceive 1");
@@ -483,8 +474,7 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 			m = m->m_next;
 		} else {
 			sbfree(&so->so_rcv, m);
-			MFREE(m, so->so_rcv.sb_mb);
-			m = so->so_rcv.sb_mb;
+			m = so->so_rcv.sb_mb = m_free(m);
 		}
 	}
 	while (m && m->m_type == MT_CONTROL && error == 0) {
@@ -492,8 +482,7 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 			m = m->m_next;
 		} else {
 			sbfree(&so->so_rcv, m);
-			MFREE(m, so->so_rcv.sb_mb);
-			m = so->so_rcv.sb_mb;
+			m = so->so_rcv.sb_mb = m_free(m);
 		}
 	}
 
@@ -571,8 +560,7 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 					so->so_rcv.sb_mb = m = m->m_next;
 					*mp = NULL;
 				} else {
-					MFREE(m, so->so_rcv.sb_mb);
-					m = so->so_rcv.sb_mb;
+					m = so->so_rcv.sb_mb = m_free(m);
 				}
 				/*
 				 * If m != NULL, we also know that
@@ -596,8 +584,11 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 			if (flags & MSG_PEEK)
 				moff += len;
 			else {
-				if (mp)
+				if (mp) {
+					sounlock(so);
 					*mp = m_copym(m, 0, len, M_WAIT);
+					solock(so);
+				}
 				m->m_data += len;
 				m->m_len -= len;
 				so->so_rcv.sb_cc -= len;
@@ -640,9 +631,9 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 			 * protocol in case it needs to do something to
 			 * get it filled again.
 			 */
-			if ((pr->pr_flags & PR_WANTRCVD) && so->so_pcb)
-				(*pr->pr_usrreq)(so, PRU_RCVD, NULL,
-				    (struct mbuf *)(long)flags, NULL, NULL);
+			if ((pr->pr_flags & PR_WANTRCVD) && so->so_pcb) {
+				(*pr->pr_usrreqs->pr_rcvd)(so, flags, l);
+			}
 			SBLASTRECORDCHK(&so->so_rcv,
 			    "kttcp_soreceive sbwait 2");
 			SBLASTMBUFCHK(&so->so_rcv,
@@ -650,7 +641,7 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 			error = sbwait(&so->so_rcv);
 			if (error) {
 				sbunlock(&so->so_rcv);
-				splx(s);
+				sounlock(so);
 				return (0);
 			}
 			if ((m = so->so_rcv.sb_mb) != NULL)
@@ -679,14 +670,13 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 		}
 		SBLASTRECORDCHK(&so->so_rcv, "kttcp_soreceive 4");
 		SBLASTMBUFCHK(&so->so_rcv, "kttcp_soreceive 4");
-		if (pr->pr_flags & PR_WANTRCVD && so->so_pcb)
-			(*pr->pr_usrreq)(so, PRU_RCVD, NULL,
-			    (struct mbuf *)(long)flags, NULL, NULL);
+		if (pr->pr_flags & PR_WANTRCVD && so->so_pcb) {
+			(*pr->pr_usrreqs->pr_rcvd)(so, flags, l);
+		}
 	}
 	if (orig_resid == resid && orig_resid &&
 	    (flags & MSG_EOR) == 0 && (so->so_state & SS_CANTRCVMORE) == 0) {
 		sbunlock(&so->so_rcv);
-		splx(s);
 		goto restart;
 	}
 
@@ -694,7 +684,7 @@ kttcp_soreceive(struct socket *so, unsigned long long slen,
 		*flagsp |= flags;
  release:
 	sbunlock(&so->so_rcv);
-	splx(s);
+	sounlock(so);
 	*done = slen - resid;
 #if 0
 	printf("soreceive: error %d slen %llu resid %lld\n", error, slen, resid);

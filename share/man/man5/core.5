@@ -1,4 +1,4 @@
-.\"	$NetBSD: core.5,v 1.23 2005/12/26 19:48:12 perry Exp $
+.\"	$NetBSD: core.5,v 1.31 2017/07/03 21:30:59 wiz Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -63,7 +56,7 @@
 .\"
 .\"     @(#)core.5	8.3 (Berkeley) 12/11/93
 .\"
-.Dd July 8, 2002
+.Dd March 27, 2017
 .Dt CORE 5
 .Os
 .Sh NAME
@@ -94,8 +87,8 @@ abnormality did not cause a system crash.
 .Xr savecore 8 . )
 The file is named from a per-process template, mapped to the sysctl
 variable
-.Em proc.\*[Lt]pid\*[Gt].corename
-(where \*[Lt]pid\*[Gt] has to be replaced by the pid in decimal format of the
+.Em proc.<pid>.corename
+(where <pid> has to be replaced by the pid in decimal format of the
 process).
 This template is either an absolute or relative path name, in which format
 characters can be used, preceded by the percent character
@@ -135,17 +128,19 @@ The maximum size of a core file is limited by
 Files which would be larger than the limit are not created.
 .Ss ELF CORE FORMAT
 ELF-format core files are described by a standard ELF exec header and
-a series of ELF program headers.  Each program header describes a range
+a series of ELF program headers.
+Each program header describes a range
 of the virtual address space of the process.
 .Pp
 In addition,
 .Nx
 ELF core files include an ELF note section which provides additional
-information about the process.  The first note in the note section
-has a note name of
+information about the process.
+The first note in the note section has a note name of
 .Dq NetBSD-CORE
 and a note type of
-ELF_NOTE_NETBSD_CORE_PROCINFO (1), and contains the following
+.Dv ELF_NOTE_NETBSD_CORE_PROCINFO ( 1 ) ,
+and contains the following
 structure:
 .Bd -literal
 struct netbsd_elfcore_procinfo {
@@ -171,6 +166,7 @@ struct netbsd_elfcore_procinfo {
     uint32_t cpi_nlwps;        /* number of LWPs */
     int8_t   cpi_name[32];     /* copy of p->p_comm */
     /* Add version 2 fields below here. */
+    int32_t         cpi_siglwp;     /* LWP target of killing signal */
 };
 .Ed
 .Pp
@@ -179,8 +175,10 @@ The fields of
 are as follows:
 .Bl -tag -width cpi_sigignoreXX
 .It cpi_version
-The version of this structure.  The current version is defined by
-the NETBSD_ELFCORE_PROCINFO_VERSION constant.
+The version of this structure.
+The current version is defined by the
+.Dv NETBSD_ELFCORE_PROCINFO_VERSION
+constant.
 .It cpi_cpisize
 The size of this structure.
 .It cpi_signo
@@ -189,20 +187,20 @@ Signal that caused the process to dump core.
 Signal-specific code, if any, corresponding to
 .Va cpi_signo .
 .It cpi_sigpend
-A mask of signals pending delivery to the process.  This may be
-examined by copying it to a
+A mask of signals pending delivery to the process.
+This may be examined by copying it to a
 .Fa sigset_t .
 .It cpi_sigmask
-The set of signals currently blocked by the process.  This may be
-examined by copying it to a
+The set of signals currently blocked by the process.
+This may be examined by copying it to a
 .Fa sigset_t .
 .It cpi_sigignore
-The set of signals currently being ignored by the process.  This may be
-examined by copying it to a
+The set of signals currently being ignored by the process.
+This may be examined by copying it to a
 .Fa sigset_t .
 .It cpi_sigcatch
-The set of signals with registers signals handlers for the process.  This
-may be examined by copying it to a
+The set of signals with registers signals handlers for the process.
+This may be examined by copying it to a
 .Fa sigset_t .
 .It cpi_pid
 Process ID of the process.
@@ -229,7 +227,15 @@ Number of kernel-visible execution contexts (LWPs) of the process.
 .It cpi_name
 Process name, copied from the p_comm field of
 .Fa struct proc .
+.It cpi_siglwp
+LWP target of killing signal.
 .El
+.Pp
+The second note with name
+.Dq NetBSD-CORE
+is a note type of
+.Dv ELF_NOTE_NETBSD_CORE_AUXV ( 2 ) ,
+and contains an array of AuxInfo structures.
 .Pp
 The note section also contains additional notes for each
 kernel-visible execution context of the process (LWP).
@@ -242,23 +248,25 @@ is the LWP ID of the execution context, for example:
 These notes contain register and other per-execution context
 data in the same format as is used by the
 .Xr ptrace 2
-system call.  The note types correspond to the
+system call.
+The note types correspond to the
 .Xr ptrace 2
-request numbers that return the same data.  For example,
+request numbers that return the same data.
+For example,
 a note with a note type of PT_GETREGS would contain a
 .Fa struct reg
 with the register contents of the execution context.
 For a complete list of available
 .Xr ptrace 2
 request types for a given architecture, refer to that architecture's
-.Pa \*[Lt]machine/ptrace.h\*[Gt]
+.Aq Pa machine/ptrace.h
 header file.
 .Ss A.OUT CORE FORMAT
-.Pp
 The core file consists of a core header followed by a number of
-segments. Each segment is preceded by a core segment header.
+segments.
+Each segment is preceded by a core segment header.
 Both the core header and core segment header are defined in
-.Aq Pa sys/core.h .
+.In sys/core.h .
 .Pp
 The core header,
 .Fa struct core ,
@@ -271,7 +279,7 @@ struct core {
     uint16_t c_hdrsize;        /* Size of this header (machdep algn) */
     uint16_t c_seghdrsize;     /* Size of a segment header */
     uint32_t c_nseg;           /* # of core segments */
-    char      c_name[MAXCOMLEN+1];	/* Copy of p-\*[Gt]p_comm */
+    char      c_name[MAXCOMLEN+1];	/* Copy of p->p_comm */
     uint32_t c_signo;          /* Killing signal */
     u_long    c_ucode;          /* Signal code */
     u_long    c_cpusize;        /* Size of machine dependent segment */
@@ -292,8 +300,9 @@ These values may be extracted with the
 .Fn CORE_GETMAGIC ,
 and
 .Fn CORE_GETFLAG
-macros. The machine ID values are listed in
-.Aq Pa sys/exec_aout.h .
+macros.
+The machine ID values are listed in
+.In sys/exec_aout.h .
 For a valid core file, the magic value in the header must be
 .Dv COREMAGIC .
 No flags are defined for the core header.
@@ -364,11 +373,11 @@ Meaningless if the segment type is
 Size of the segment, not including this header.
 .El
 .Sh SEE ALSO
-.Xr a.out 5 ,
-.Xr elf 5 ,
 .Xr gdb 1 ,
 .Xr setrlimit 2 ,
 .Xr sysctl 3 ,
+.Xr a.out 5 ,
+.Xr elf 5 ,
 .Xr signal 7 ,
 .Xr sysctl 8
 .Sh HISTORY
@@ -388,6 +397,20 @@ ELF core file format was introduced in
 In releases previous to
 .Nx 1.6 ,
 ELF program images produced a.out-format core files.
+.Pp
+The
+.Dv cpi_siglwp
+member of the
+.Dv netbsd_elfcore_procinfo
+structure first appeared in
+.Nx 2.0 .
+However it retained the procinfo version 1,
+stored in
+.Dv cpi_version .
+.Pp
+.Dv ELF_NOTE_NETBSD_CORE_AUXV
+was added in
+.Nx 8.0 .
 .Sh BUGS
 There is no standard location or name for the
 CPU-dependent data structure stored in the

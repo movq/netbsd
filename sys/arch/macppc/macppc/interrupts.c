@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupts.c,v 1.2 2007/10/17 19:55:33 garbled Exp $ */
+/*	$NetBSD: interrupts.c,v 1.7 2018/05/11 22:48:38 macallan Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: interrupts.c,v 1.2 2007/10/17 19:55:33 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupts.c,v 1.7 2018/05/11 22:48:38 macallan Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -38,16 +35,20 @@ __KERNEL_RCSID(0, "$NetBSD: interrupts.c,v 1.2 2007/10/17 19:55:33 garbled Exp $
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 
+#include <prop/proplib.h>
+
 #include <machine/intr.h>
 #include <machine/autoconf.h>
 #include <powerpc/pic/picvar.h>
 #include <powerpc/pic/ipivar.h>
 #include <dev/ofw/openfirm.h>
+#include <powerpc/oea/cpufeat.h>
 
 #include "opt_interrupt.h"
 #include "pic_openpic.h"
 #include "pic_ohare.h"
 #include "pic_heathrow.h"
+#include "pic_u3_ht.h"
 #include "opt_ipi.h"
 #include "ipi_openpic.h"
 #include "ipi_hammerhead.h"
@@ -100,7 +101,7 @@ init_openpic(int pass_through)
 	aprint_debug("pic-base: %08x\n", pic_base);
 
 	aprint_normal("found openpic PIC at %08x\n", pic_base);
-	setup_openpic((void *)pic_base, pass_through);
+	setup_openpic(oea_mapiodev(pic_base, 0x40000), pass_through);
 
 	return TRUE;
 }
@@ -120,20 +121,26 @@ init_interrupt(void)
 	if (init_heathrow())
 		goto done;
 #endif
-#if NPIC_OPENPIC > 0
-	if (init_openpic(0))
+#if NPIC_U3_HT > 0
+	if (init_u3_ht())
 		goto done;
+#endif
+#if NPIC_OPENPIC > 0
+	if (init_openpic(0)) {
+#ifdef MULTIPROCESSOR
+		setup_openpic_ipi();
+#endif
+		goto done;
+	}
 #endif
 	panic("%s: no supported interrupt controller found", __func__);
 done:
 	oea_install_extint(pic_ext_intr);
 
 #ifdef MULTIPROCESSOR
-#if NPIC_OPENPIC > 0
-	setup_openpic_ipi();
-#else /*NPIC_OPENPIC*/
+#if (NPIC_OHARE + NPIC_HEATHROW) > 0
 	if (OF_finddevice("/hammerhead") != -1)
 		setup_hammerhead_ipi();
-#endif /*NPIC_OPENPIC*/
+#endif
 #endif /*MULTIPROCESSOR*/
 }

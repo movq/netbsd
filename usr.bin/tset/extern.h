@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.11 2006/05/01 23:18:37 christos Exp $	*/
+/*	$NetBSD: extern.h,v 1.14 2011/09/06 18:34:12 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -31,20 +31,16 @@
  *	@(#)extern.h	8.1 (Berkeley) 6/9/93
  */
 
-/* This should be in <termcap.h> instead. */
-extern char PC;
-extern short ospeed;
-
 extern struct termios mode, oldmode;
-extern int columns, isreset, lines;
+extern int ncolumns, isreset, nlines;
 
-void	 add_mapping __P((const char *, char *));
-void	 tset_cat __P((char *));
-const	 char *get_termcap_entry __P((const char *, char **, int));
-const	 char *mapped __P((const char *));
-int	 outc __P((int));
-void	 reset_mode __P((void));
-void	 set_control_chars __P((int, int, int));
-void	 set_conversions __P((int));
-void	 set_init __P((void));
-void	 wrtermcap __P((char *));
+void	 add_mapping(const char *, char *);
+void	 tset_cat(const char *);
+const	 char *get_terminfo_entry(const char *);
+const	 char *mapped(const char *);
+int	 outc(int);
+void	 reset_mode(void);
+void	 set_control_chars(int, int, int);
+void	 set_conversions(int);
+void	 set_init(void);
+void	 wrtermcap(char *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: trpt.c,v 1.23 2007/07/10 22:23:13 jmcneill Exp $	*/
+/*	$NetBSD: trpt.c,v 1.28 2018/05/03 07:13:49 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2005, 2006 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,16 +61,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1983, 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)trpt.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: trpt.c,v 1.23 2007/07/10 22:23:13 jmcneill Exp $");
+__RCSID("$NetBSD: trpt.c,v 1.28 2018/05/03 07:13:49 maxv Exp $");
 #endif
 #endif /* not lint */
 
@@ -115,7 +107,6 @@ __RCSID("$NetBSD: trpt.c,v 1.23 2007/07/10 22:23:13 jmcneill Exp $");
 #define	TCPTIMERS
 #include <netinet/tcp_timer.h>
 #include <netinet/tcp_var.h>
-#include <netinet/tcpip.h>
 #define	TANAMES
 #include <netinet/tcp_debug.h>
 
@@ -131,14 +122,14 @@ __RCSID("$NetBSD: trpt.c,v 1.23 2007/07/10 22:23:13 jmcneill Exp $");
 #include <stdlib.h>
 #include <unistd.h>
 
-struct nlist nl[] = {
+static struct nlist nl[] = {
 #define	N_HARDCLOCK_TICKS	0
-	{ "_hardclock_ticks" },
+	{ "_hardclock_ticks", 0, 0, 0, 0 },
 #define	N_TCP_DEBUG		1
-	{ "_tcp_debug" },
+	{ "_tcp_debug", 0, 0, 0, 0 },
 #define	N_TCP_DEBX		2
-	{ "_tcp_debx" },
-	{ NULL },
+	{ "_tcp_debx", 0, 0, 0, 0 },
+	{ NULL, 0, 0, 0, 0 },
 };
 
 static caddr_t tcp_pcbs[TCP_NDEBUG];
@@ -146,28 +137,27 @@ static n_time ntime;
 static int aflag, follow, sflag, tflag;
 
 /* see sys/netinet/tcp_debug.c */
-struct  tcp_debug tcp_debug[TCP_NDEBUG];
-int tcp_debx;
+static struct  tcp_debug tcp_debug[TCP_NDEBUG];
+static int tcp_debx;
 
-int	main(int, char *[]);
-void	dotrace(caddr_t);
-void	tcp_trace(short, short, struct tcpcb *, struct tcpcb *,
+static void	dotrace(caddr_t);
+static void	tcp_trace(short, short, struct tcpcb *, struct tcpcb *,
 	    int, void *, int);
-int	numeric(const void *, const void *);
-void	usage(void);
+static int	numeric(const void *, const void *);
+__dead static void	usage(void);
 
-kvm_t	*kd;
-int     use_sysctl;
+static kvm_t	*kd;
+static int     use_sysctl;
 
 int
 main(int argc, char *argv[])
 {
 	int ch, i, jflag, npcbs;
-	char *system, *core, *cp, errbuf[_POSIX2_LINE_MAX];
+	char *kernel, *core, *cp, errbuf[_POSIX2_LINE_MAX];
 	unsigned long l;
 
 	jflag = npcbs = 0;
-	system = core = NULL;
+	kernel = core = NULL;
 
 	while ((ch = getopt(argc, argv, "afjp:stN:M:")) != -1) {
 		switch (ch) {
@@ -200,7 +190,7 @@ main(int argc, char *argv[])
 			++tflag;
 			break;
 		case 'N':
-			system = optarg;
+			kernel = optarg;
 			break;
 		case 'M':
 			core = optarg;
@@ -216,7 +206,7 @@ main(int argc, char *argv[])
 	if (argc)
 		usage();
 
-	use_sysctl = (system == NULL && core == NULL);
+	use_sysctl = (kernel == NULL && core == NULL);
 
 	if (use_sysctl) {
 		size_t lenx = sizeof(tcp_debx);
@@ -229,12 +219,12 @@ main(int argc, char *argv[])
 		    NULL, 0) == -1)
 			err(1, "net.inet.tcp.debug");
 	} else {
-		kd = kvm_openfiles(system, core, NULL, O_RDONLY, errbuf);
+		kd = kvm_openfiles(kernel, core, NULL, O_RDONLY, errbuf);
 		if (kd == NULL)
 			errx(1, "can't open kmem: %s", errbuf);
 
 		if (kvm_nlist(kd, nl))
-			errx(2, "%s: no namelist", system);
+			errx(2, "%s: no namelist", kernel);
 
 		if (kvm_read(kd, nl[N_TCP_DEBX].n_value, (char *)&tcp_debx,
 		    sizeof(tcp_debx)) != sizeof(tcp_debx))
@@ -285,7 +275,7 @@ main(int argc, char *argv[])
 	exit(0);
 }
 
-void
+static void
 dotrace(caddr_t tcpcb)
 {
 	struct tcp_debug *td;
@@ -388,7 +378,7 @@ dotrace(caddr_t tcpcb)
  * Tcp debug routines
  */
 /*ARGSUSED*/
-void
+static void
 tcp_trace(short act, short ostate, struct tcpcb *atp, struct tcpcb *tp,
     int family, void *packet, int req)
 {
@@ -485,7 +475,7 @@ tcp_trace(short act, short ostate, struct tcpcb *atp, struct tcpcb *tp,
 			printf("(win=%x)", win);
 		flags = th->th_flags;
 		if (flags) {
-			char *cp = "<";
+			const char *cp = "<";
 #define	pf(flag, string) { \
 	if (th->th_flags&flag) { \
 		(void)printf("%s%s", cp, string); \
@@ -525,15 +515,15 @@ skipact:
 	}
 	/* print out timers? */
 	if (tflag) {
-		char *cp = "\t";
+		const char *cp = "\t";
 		int i;
 		int hardticks;
 
 		if (use_sysctl) {
-			size_t len = sizeof(hardticks);
+			size_t hlen = sizeof(hardticks);
 
 			if (sysctlbyname("kern.hardclock_ticks", &hardticks,
-			    &len, NULL, 0) == -1)
+			    &hlen, NULL, 0) == -1)
 				err(1, "kern.hardclock_ticks");
 		} else {
 			if (kvm_read(kd, nl[N_HARDCLOCK_TICKS].n_value,
@@ -558,7 +548,7 @@ skipact:
 	}
 }
 
-int
+static int
 numeric(const void *v1, const void *v2)
 {
 	const caddr_t *c1 = v1;
@@ -575,7 +565,7 @@ numeric(const void *v1, const void *v2)
 	return (rv);
 }
 
-void
+static void
 usage(void)
 {
 

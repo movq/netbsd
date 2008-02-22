@@ -1,4 +1,4 @@
-/*	$NetBSD: advfsops.c,v 1.49 2008/02/05 15:18:36 ad Exp $	*/
+/*	$NetBSD: advfsops.c,v 1.77 2017/06/01 02:45:12 chs Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: advfsops.c,v 1.49 2008/02/05 15:18:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: advfsops.c,v 1.77 2017/06/01 02:45:12 chs Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -48,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: advfsops.c,v 1.49 2008/02/05 15:18:36 ad Exp $");
 #include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/disklabel.h>
+#include <sys/disk.h>
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h> /* XXX */
 #include <sys/fcntl.h>
@@ -57,43 +58,40 @@ __KERNEL_RCSID(0, "$NetBSD: advfsops.c,v 1.49 2008/02/05 15:18:36 ad Exp $");
 #include <sys/buf.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
-#include <sys/simplelock.h>
+#include <sys/module.h>
 #include <fs/adosfs/adosfs.h>
+
+MODULE(MODULE_CLASS_VFS, adosfs, NULL);
 
 VFS_PROTOS(adosfs);
 
-int adosfs_mountfs __P((struct vnode *, struct mount *, struct lwp *));
-int adosfs_loadbitmap __P((struct adosfsmount *));
+static struct sysctllog *adosfs_sysctl_log;
 
-struct simplelock adosfs_hashlock;
+int adosfs_mountfs(struct vnode *, struct mount *, struct lwp *);
+int adosfs_loadbitmap(struct adosfsmount *);
 
 struct pool adosfs_node_pool;
 
-MALLOC_JUSTDEFINE(M_ADOSFSMNT, "adosfs mount", "adosfs mount structures");
 MALLOC_JUSTDEFINE(M_ANODE, "adosfs anode","adosfs anode structures and tables");
-MALLOC_JUSTDEFINE(M_ADOSFSBITMAP, "adosfs bitmap", "adosfs bitmap");
 
 static const struct genfs_ops adosfs_genfsops = {
 	.gop_size = genfs_size,
 };
 
-int (**adosfs_vnodeop_p) __P((void *));
+int (**adosfs_vnodeop_p)(void *);
 
 int
-adosfs_mount(mp, path, data, data_len)
-	struct mount *mp;
-	const char *path;
-	void *data;
-	size_t *data_len;
+adosfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
-	struct nameidata nd;
 	struct vnode *devvp;
 	struct adosfs_args *args = data;
 	struct adosfsmount *amp;
 	int error;
 	mode_t accessmode;
 
+	if (args == NULL)
+		return EINVAL;
 	if (*data_len < sizeof *args)
 		return EINVAL;
 
@@ -119,10 +117,10 @@ adosfs_mount(mp, path, data, data_len)
 	 * Not an update, or updating the name: look up the name
 	 * and verify that it refers to a sensible block device.
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec);
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(args->fspec,
+				NSM_FOLLOW_NOEMULROOT, &devvp);
+	if (error != 0)
 		return (error);
-	devvp = nd.ni_vp;
 
 	if (devvp->v_type != VBLK) {
 		vrele(devvp);
@@ -136,17 +134,16 @@ adosfs_mount(mp, path, data, data_len)
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
 	 */
-	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER, NULL)) {
-		accessmode = VREAD;
-		if ((mp->mnt_flag & MNT_RDONLY) == 0)
-			accessmode |= VWRITE;
-		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-		error = VOP_ACCESS(devvp, accessmode, l->l_cred);
-		if (error) {
-			vput(devvp);
-			return (error);
-		}
-		VOP_UNLOCK(devvp, 0);
+	accessmode = VREAD;
+	if ((mp->mnt_flag & MNT_RDONLY) == 0)
+		accessmode |= VWRITE;
+	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
+	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
+	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(accessmode));
+	VOP_UNLOCK(devvp);
+	if (error) {
+		vrele(devvp);
+		return (error);
 	}
 /* MNT_UPDATE? */
 	if ((error = adosfs_mountfs(devvp, mp, l)) != 0) {
@@ -162,56 +159,80 @@ adosfs_mount(mp, path, data, data_len)
 }
 
 int
-adosfs_mountfs(devvp, mp, l)
-	struct vnode *devvp;
-	struct mount *mp;
-	struct lwp *l;
+adosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 {
 	struct disklabel dl;
 	struct partition *parp;
 	struct adosfsmount *amp;
 	struct buf *bp;
 	struct vnode *rvp;
-	int error, part, i;
+	size_t bitmap_sz = 0;
+	int error;
+	uint64_t numsecs;
+	unsigned secsize;
+	unsigned long secsperblk, blksperdisk, resvblks;
 
-	part = DISKPART(devvp->v_rdev);
 	amp = NULL;
 
 	if ((error = vinvalbuf(devvp, V_SAVE, l->l_cred, l, 0, 0)) != 0)
 		return (error);
 
 	/*
-	 * open blkdev and read root block
+	 * open blkdev and read boot and root block
 	 */
-	if ((error = VOP_OPEN(devvp, FREAD, NOCRED)) != 0)
+	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
+	if ((error = VOP_OPEN(devvp, FREAD, NOCRED)) != 0) {
+		VOP_UNLOCK(devvp);
 		return (error);
-	error = VOP_IOCTL(devvp, DIOCGDINFO, &dl, FREAD, NOCRED);
+	}
+
+	error = getdisksize(devvp, &numsecs, &secsize);
 	if (error)
 		goto fail;
 
-	parp = &dl.d_partitions[part];
-	amp = malloc(sizeof(struct adosfsmount), M_ADOSFSMNT, M_WAITOK);
-	memset((char *)amp, 0, (u_long)sizeof(struct adosfsmount));
-	amp->mp = mp;
-	if (dl.d_type == DTYPE_FLOPPY) {
-		amp->bsize = dl.d_secsize;
-		amp->secsperblk = 1;
-	}
-	else {
-		amp->bsize = parp->p_fsize * parp->p_frag;
-		amp->secsperblk = parp->p_frag;
-	}
+	amp = kmem_zalloc(sizeof(struct adosfsmount), KM_SLEEP);
 
-	/* invalid fs ? */
-	if (amp->secsperblk == 0) {
+	/*
+	 * compute filesystem parameters from disklabel
+	 * on arch/amiga the disklabel is computed from the native
+	 * partition tables
+	 * - p_fsize is the filesystem block size
+	 * - p_frag is the number of sectors per filesystem block
+	 * - p_cpg is the number of reserved blocks (boot blocks)
+	 * - p_psize is reduced by the number of preallocated blocks
+	 *           at the end of a partition
+	 *
+	 * XXX
+	 * - bsize and secsperblk could be computed from the first sector
+	 *   of the root block
+	 * - resvblks (the number of boot blocks) can only be guessed
+	 *   by scanning for the root block as its position moves
+	 *   with resvblks
+	 */
+	error = VOP_IOCTL(devvp, DIOCGDINFO, &dl, FREAD, NOCRED);
+	VOP_UNLOCK(devvp);
+	if (error)
+		goto fail;
+	parp = &dl.d_partitions[DISKPART(devvp->v_rdev)];
+	if (dl.d_type == DKTYPE_FLOPPY) {
+		amp->bsize = secsize;
+		secsperblk = 1;
+		resvblks   = 2;
+	} else if (parp->p_fsize > 0 && parp->p_frag > 0) {
+		amp->bsize = parp->p_fsize * parp->p_frag;
+		secsperblk = parp->p_frag;
+		resvblks   = parp->p_cpg;
+	} else {
 		error = EINVAL;
 		goto fail;
 	}
+	blksperdisk = numsecs / secsperblk;
 
+
+	/* The filesytem variant ('dostype') is stored in the boot block */
 	bp = NULL;
 	if ((error = bread(devvp, (daddr_t)BBOFF,
-			   amp->bsize, NOCRED, &bp)) != 0) {
-		brelse(bp, 0);
+			   amp->bsize, 0, &bp)) != 0) {
 		goto fail;
 	}
 	amp->dostype = adoswordn(bp, 0);
@@ -223,27 +244,22 @@ adosfs_mountfs(devvp, mp, l)
 		goto fail;
 	}
 
-	amp->rootb = (parp->p_size / amp->secsperblk - 1 + parp->p_cpg) >> 1;
-	amp->numblks = parp->p_size / amp->secsperblk - parp->p_cpg;
+	amp->rootb = (blksperdisk - 1 + resvblks) / 2;
+	amp->numblks = blksperdisk - resvblks;
 
 	amp->nwords = amp->bsize >> 2;
 	amp->dbsize = amp->bsize - (IS_FFS(amp) ? 0 : OFS_DATA_OFFSET);
 	amp->devvp = devvp;
 
+	amp->mp = mp;
 	mp->mnt_data = amp;
 	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)devvp->v_rdev;
 	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_ADOSFS);
 	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
 	mp->mnt_stat.f_namemax = ADMAXNAMELEN;
 	mp->mnt_fs_bshift = ffs(amp->bsize) - 1;
-	mp->mnt_dev_bshift = DEV_BSHIFT;	/* XXX */
+	mp->mnt_dev_bshift = DEV_BSHIFT;
 	mp->mnt_flag |= MNT_LOCAL;
-
-	/*
-	 * init anode table.
-	 */
-	for (i = 0; i < ANODEHASHSZ; i++)
-		LIST_INIT(&amp->anodetab[i]);
 
 	/*
 	 * get the root anode, if not a valid fs this will fail.
@@ -251,15 +267,14 @@ adosfs_mountfs(devvp, mp, l)
 	if ((error = VFS_ROOT(mp, &rvp)) != 0)
 		goto fail;
 	/* allocate and load bitmap, set free space */
-	amp->bitmap = malloc(((amp->numblks + 31) / 32) * sizeof(*amp->bitmap),
-	    M_ADOSFSBITMAP, M_WAITOK);
-	if (amp->bitmap)
-		adosfs_loadbitmap(amp);
-	if (mp->mnt_flag & MNT_RDONLY && amp->bitmap) {
+	bitmap_sz = ((amp->numblks + 31) / 32) * sizeof(*amp->bitmap);
+	amp->bitmap = kmem_alloc(bitmap_sz, KM_SLEEP);
+	adosfs_loadbitmap(amp);
+	if (mp->mnt_flag & MNT_RDONLY) {
 		/*
 		 * Don't need the bitmap any more if it's read-only.
 		 */
-		free(amp->bitmap, M_ADOSFSBITMAP);
+		kmem_free(amp->bitmap, bitmap_sz);
 		amp->bitmap = NULL;
 	}
 	vput(rvp);
@@ -269,27 +284,23 @@ adosfs_mountfs(devvp, mp, l)
 fail:
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	(void) VOP_CLOSE(devvp, FREAD, NOCRED);
-	VOP_UNLOCK(devvp, 0);
+	VOP_UNLOCK(devvp);
 	if (amp && amp->bitmap)
-		free(amp->bitmap, M_ADOSFSBITMAP);
+		kmem_free(amp->bitmap, bitmap_sz);
 	if (amp)
-		free(amp, M_ADOSFSMNT);
+		kmem_free(amp, sizeof(*amp));
 	return (error);
 }
 
 int
-adosfs_start(mp, flags)
-	struct mount *mp;
-	int flags;
+adosfs_start(struct mount *mp, int flags)
 {
 
 	return (0);
 }
 
 int
-adosfs_unmount(mp, mntflags)
-	struct mount *mp;
-	int mntflags;
+adosfs_unmount(struct mount *mp, int mntflags)
 {
 	struct adosfsmount *amp;
 	int error, flags;
@@ -301,22 +312,23 @@ adosfs_unmount(mp, mntflags)
 		return (error);
 	amp = VFSTOADOSFS(mp);
 	if (amp->devvp->v_type != VBAD)
-		amp->devvp->v_specmountpoint = NULL;
+		spec_node_setmountedfs(amp->devvp, NULL);
 	vn_lock(amp->devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_CLOSE(amp->devvp, FREAD, NOCRED);
 	vput(amp->devvp);
-	if (amp->bitmap)
-		free(amp->bitmap, M_ADOSFSBITMAP);
-	free(amp, M_ADOSFSMNT);
+	if (amp->bitmap) {
+		size_t bitmap_sz = ((amp->numblks + 31) / 32) *
+		    sizeof(*amp->bitmap);
+		kmem_free(amp->bitmap, bitmap_sz);
+	}
+	kmem_free(amp, sizeof(*amp));
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	return (error);
 }
 
 int
-adosfs_root(mp, vpp)
-	struct mount *mp;
-	struct vnode **vpp;
+adosfs_root(struct mount *mp, struct vnode **vpp)
 {
 	struct vnode *nvp;
 	int error;
@@ -329,9 +341,7 @@ adosfs_root(mp, vpp)
 }
 
 int
-adosfs_statvfs(mp, sbp)
-	struct mount *mp;
-	struct statvfs *sbp;
+adosfs_statvfs(struct mount *mp, struct statvfs *sbp)
 {
 	struct adosfsmount *amp;
 
@@ -352,54 +362,58 @@ adosfs_statvfs(mp, sbp)
 }
 
 /*
- * lookup an anode, check mount's hash table if not found, create
- * return locked and referenced al la vget(vp, 1);
+ * lookup an anode, if not found, create
+ * return locked and referenced
  */
 int
-adosfs_vget(mp, an, vpp)
-	struct mount *mp;
-	ino_t an;
-	struct vnode **vpp;
+adosfs_vget(struct mount *mp, ino_t an, struct vnode **vpp)
+{
+	u_long block;
+	int error;
+
+	block = an;
+	KASSERT(block == an);
+	error = vcache_get(mp, &block, sizeof(block), vpp);
+	if (error)
+		return error;
+	error = vn_lock(*vpp, LK_EXCLUSIVE);
+	if (error) {
+		vrele(*vpp);
+		*vpp = NULL;
+		return error;
+	}
+	return 0;
+}
+
+/*
+ * Initialize this vnode / anode pair.
+ * Caller assures no other thread will try to load this inode.
+ */
+int
+adosfs_loadvnode(struct mount *mp, struct vnode *vp,
+    const void *key, size_t key_len, const void **new_key)
 {
 	struct adosfsmount *amp;
-	struct vnode *vp;
 	struct anode *ap;
 	struct buf *bp;
+	u_long an;
 	char *nam, *tmp;
 	int namlen, error;
 
-	error = 0;
+	KASSERT(key_len == sizeof(an));
+	memcpy(&an, key, key_len);
 	amp = VFSTOADOSFS(mp);
-	bp = NULL;
 
-	/*
-	 * check hash table. we are done if found
-	 */
-	if ((*vpp = adosfs_ahashget(mp, an)) != NULL)
-		return (0);
+	if ((error = bread(amp->devvp, an * amp->bsize / DEV_BSIZE,
+			   amp->bsize, 0, &bp)) != 0)
+		return error;
 
-	error = getnewvnode(VT_ADOSFS, mp, adosfs_vnodeop_p, &vp);
-	if (error)
-		return (error);
-
-	/*
-	 * setup, insert in hash, and lock before io.
-	 */
-	vp->v_data = ap = pool_get(&adosfs_node_pool, PR_WAITOK);
+	ap = pool_get(&adosfs_node_pool, PR_WAITOK);
 	memset(ap, 0, sizeof(struct anode));
 	ap->vp = vp;
 	ap->amp = amp;
 	ap->block = an;
 	ap->nwords = amp->nwords;
-	genfs_node_init(vp, &adosfs_genfsops);
-	adosfs_ainshash(amp, ap);
-
-	if ((error = bread(amp->devvp, an * amp->bsize / DEV_BSIZE,
-			   amp->bsize, NOCRED, &bp)) != 0) {
-		brelse(bp, 0);
-		vput(vp);
-		return (error);
-	}
 
 	/*
 	 * get type and fill rest in based on that.
@@ -453,9 +467,8 @@ adosfs_vget(mp, an, vpp)
 		ap->fsize = namlen;
 		break;
 	default:
-		brelse(bp, 0);
-		vput(vp);
-		return (EINVAL);
+		error = EINVAL;
+		goto bad;
 	}
 
 	/*
@@ -473,9 +486,8 @@ adosfs_vget(mp, an, vpp)
 		printf("adosfs: aget: name length too long blk %llu\n",
 		    (unsigned long long)an);
 #endif
-		brelse(bp, 0);
-		vput(vp);
-		return (EINVAL);
+		error = EINVAL;
+		goto bad;
 	}
 	memcpy(ap->name, nam, namlen);
 	ap->name[namlen] = 0;
@@ -515,17 +527,10 @@ adosfs_vget(mp, an, vpp)
 		brelse(bp, 0);
 		bp = NULL;
 		error = bread(amp->devvp, ap->linkto * amp->bsize / DEV_BSIZE,
-		    amp->bsize, NOCRED, &bp);
-		if (error) {
-			brelse(bp, 0);
-			vput(vp);
-			return (error);
-		}
+		    amp->bsize, 0, &bp);
+		if (error)
+			goto bad;
 		ap->fsize = adoswordn(bp, ap->nwords - 47);
-		/*
-		 * Should ap->block be set to the real file header block?
-		 */
-		ap->block = ap->linkto;
 	}
 
 	if (ap->type == AROOT) {
@@ -572,10 +577,20 @@ adosfs_vget(mp, an, vpp)
 	ap->mtime.mins = adoswordn(bp, ap->nwords - 22);
 	ap->mtime.ticks = adoswordn(bp, ap->nwords - 21);
 
-	*vpp = vp;
 	brelse(bp, 0);
+	vp->v_tag = VT_ADOSFS;
+	vp->v_op = adosfs_vnodeop_p;
+	vp->v_data = ap;
+	genfs_node_init(vp, &adosfs_genfsops);
 	uvm_vnp_setsize(vp, ap->fsize);
-	return (0);
+	*new_key = &ap->block;
+	return 0;
+
+bad:
+	if (bp)
+		brelse(bp, 0);
+	pool_put(&adosfs_node_pool, ap);
+	return error;
 }
 
 /*
@@ -585,8 +600,7 @@ adosfs_vget(mp, an, vpp)
  * only needed to find the free space.
  */
 int
-adosfs_loadbitmap(amp)
-	struct adosfsmount *amp;
+adosfs_loadbitmap(struct adosfsmount *amp)
 {
 	struct buf *bp, *mapbp;
 	u_long bn;
@@ -597,8 +611,7 @@ adosfs_loadbitmap(amp)
 	bp = mapbp = NULL;
 	bn = amp->rootb;
 	if ((error = bread(amp->devvp, bn * amp->bsize / DEV_BSIZE, amp->bsize,
-	    NOCRED, &bp)) != 0) {
-		brelse(bp, 0);
+	    0, &bp)) != 0) {
 		return (error);
 	}
 	blkix = amp->nwords - 49;
@@ -615,7 +628,7 @@ adosfs_loadbitmap(amp)
 			brelse(mapbp, 0);
 		if ((error = bread(amp->devvp,
 		    adoswordn(bp, blkix) * amp->bsize / DEV_BSIZE, amp->bsize,
-		     NOCRED, &mapbp)) != 0)
+		     0, &mapbp)) != 0)
 			break;
 		if (adoscksum(mapbp, amp->nwords)) {
 #ifdef DIAGNOSTIC
@@ -642,7 +655,7 @@ adosfs_loadbitmap(amp)
 			bn = adoswordn(bp, blkix);
 			brelse(bp, 0);
 			if ((error = bread(amp->devvp, bn * amp->bsize / DEV_BSIZE,
-			    amp->bsize, NOCRED, &bp)) != 0)
+			    amp->bsize, 0, &bp)) != 0)
 				break;
 			/*
 			 * Why is there no checksum on these blocks?
@@ -677,10 +690,7 @@ struct ifid {
 };
 
 int
-adosfs_fhtovp(mp, fhp, vpp)
-	struct mount *mp;
-	struct fid *fhp;
-	struct vnode **vpp;
+adosfs_fhtovp(struct mount *mp, struct fid *fhp, struct vnode **vpp)
 {
 	struct ifid ifh;
 #if 0
@@ -693,7 +703,7 @@ adosfs_fhtovp(mp, fhp, vpp)
 		return EINVAL;
 
 #ifdef ADOSFS_DIAGNOSTIC
-	printf("adfhtovp(%x, %x, %x)\n", mp, fhp, vpp);
+	printf("adfhtovp(%p, %p, %p)\n", mp, fhp, vpp);
 #endif
 
 	memcpy(&ifh, fhp, sizeof(ifh));
@@ -715,10 +725,7 @@ adosfs_fhtovp(mp, fhp, vpp)
 }
 
 int
-adosfs_vptofh(vp, fhp, fh_size)
-	struct vnode *vp;
-	struct fid *fhp;
-	size_t *fh_size;
+adosfs_vptofh(struct vnode *vp, struct fid *fhp, size_t *fh_size)
 {
 	struct anode *ap = VTOA(vp);
 	struct ifid ifh;
@@ -736,64 +743,35 @@ adosfs_vptofh(vp, fhp, fh_size)
 	memcpy(fhp, &ifh, sizeof(ifh));
 
 #ifdef ADOSFS_DIAGNOSTIC
-	printf("advptofh(%x, %x)\n", vp, fhp);
+	printf("advptofh(%p, %p)\n", vp, fhp);
 #endif
 	return(0);
 }
 
 int
-adosfs_sync(mp, waitfor, uc)
-	struct mount *mp;
-	int waitfor;
-	kauth_cred_t uc;
+adosfs_sync(struct mount *mp, int waitfor, kauth_cred_t uc)
 {
 #ifdef ADOSFS_DIAGNOSTIC
-	printf("ad_sync(%x, %x)\n", mp, waitfor);
+	printf("ad_sync(%p, %d)\n", mp, waitfor);
 #endif
 	return(0);
 }
 
 void
-adosfs_init()
+adosfs_init(void)
 {
 
-	malloc_type_attach(M_ADOSFSMNT);
 	malloc_type_attach(M_ANODE);
-	malloc_type_attach(M_ADOSFSBITMAP);
 	pool_init(&adosfs_node_pool, sizeof(struct anode), 0, 0, 0, "adosndpl",
 	    &pool_allocator_nointr, IPL_NONE);
-	simple_lock_init(&adosfs_hashlock);
 }
 
 void
-adosfs_done()
+adosfs_done(void)
 {
 
 	pool_destroy(&adosfs_node_pool);
-	malloc_type_detach(M_ADOSFSBITMAP);
 	malloc_type_detach(M_ANODE);
-	malloc_type_detach(M_ADOSFSMNT);
-}
-
-SYSCTL_SETUP(sysctl_vfs_adosfs_setup, "sysctl vfs.adosfs subtree setup")
-{
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "adosfs",
-		       SYSCTL_DESCR("AmigaDOS file system"),
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, 16, CTL_EOL);
-	/*
-	 * XXX the "16" above could be dynamic, thereby eliminating
-	 * one more instance of the "number to vfs" mapping problem,
-	 * but "16" is the order as taken from sys/mount.h
-	 */
 }
 
 /*
@@ -808,29 +786,62 @@ const struct vnodeopv_desc *adosfs_vnodeopv_descs[] = {
 };
 
 struct vfsops adosfs_vfsops = {
-	MOUNT_ADOSFS,
-	sizeof (struct adosfs_args),
-	adosfs_mount,
-	adosfs_start,
-	adosfs_unmount,
-	adosfs_root,
-	(void *)eopnotsupp,		/* vfs_quotactl */
-	adosfs_statvfs,
-	adosfs_sync,
-	adosfs_vget,
-	adosfs_fhtovp,
-	adosfs_vptofh,
-	adosfs_init,
-	NULL,
-	adosfs_done,
-	NULL,				/* vfs_mountroot */
-	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
-	vfs_stdextattrctl,
-	(void *)eopnotsupp,		/* vfs_suspendctl */
-	genfs_renamelock_enter,
-	genfs_renamelock_exit,
-	adosfs_vnodeopv_descs,
-	0,
-	{ NULL, NULL },
+	.vfs_name = MOUNT_ADOSFS,
+	.vfs_min_mount_data = sizeof (struct adosfs_args),
+	.vfs_mount = adosfs_mount,
+	.vfs_start = adosfs_start,
+	.vfs_unmount = adosfs_unmount,
+	.vfs_root = adosfs_root,
+	.vfs_quotactl = (void *)eopnotsupp,
+	.vfs_statvfs = adosfs_statvfs,
+	.vfs_sync = adosfs_sync,
+	.vfs_vget = adosfs_vget,
+	.vfs_loadvnode = adosfs_loadvnode,
+	.vfs_fhtovp = adosfs_fhtovp,
+	.vfs_vptofh = adosfs_vptofh,
+	.vfs_init = adosfs_init,
+	.vfs_done = adosfs_done,
+	.vfs_snapshot = (void *)eopnotsupp,
+	.vfs_extattrctl = vfs_stdextattrctl,
+	.vfs_suspendctl = genfs_suspendctl,
+	.vfs_renamelock_enter = genfs_renamelock_enter,
+	.vfs_renamelock_exit = genfs_renamelock_exit,
+	.vfs_fsync = (void *)eopnotsupp,
+	.vfs_opv_descs = adosfs_vnodeopv_descs
 };
-VFS_ATTACH(adosfs_vfsops);
+
+static int
+adosfs_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&adosfs_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&adosfs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "adosfs",
+			       SYSCTL_DESCR("AmigaDOS file system"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, 16, CTL_EOL);
+		/*
+		 * XXX the "16" above could be dynamic, thereby eliminating
+		 * one more instance of the "number to vfs" mapping problem,
+		 * but "16" is the order as taken from sys/mount.h
+		 */
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&adosfs_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&adosfs_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}

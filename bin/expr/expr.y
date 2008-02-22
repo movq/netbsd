@@ -1,4 +1,4 @@
-/* $NetBSD: expr.y,v 1.33 2006/03/17 14:43:11 rumble Exp $ */
+/* $NetBSD: expr.y,v 1.45 2018/06/27 17:23:36 kamil Exp $ */
 
 /*_
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,30 +15,24 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD  
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 %{
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: expr.y,v 1.33 2006/03/17 14:43:11 rumble Exp $");
+__RCSID("$NetBSD: expr.y,v 1.45 2018/06/27 17:23:36 kamil Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -55,13 +49,11 @@ __RCSID("$NetBSD: expr.y,v 1.33 2006/03/17 14:43:11 rumble Exp $");
 
 static const char * const *av;
 
-static void yyerror(const char *, ...);
+static void yyerror(const char *, ...) __dead;
 static int yylex(void);
 static int is_zero_or_null(const char *);
 static int is_integer(const char *);
 static int64_t perform_arith_op(const char *, const char *, const char *);
-
-int main(int, const char * const *);
 
 #define YYSTYPE	const char *
 
@@ -281,8 +273,7 @@ is_integer(const char *str)
 static int64_t
 perform_arith_op(const char *left, const char *op, const char *right)
 {
-	int64_t res, sign, l, r;
-	u_int64_t temp;
+	int64_t res, l, r;
 
 	res = 0;
 
@@ -315,66 +306,78 @@ perform_arith_op(const char *left, const char *op, const char *right)
 
 	switch(op[0]) {
 	case '+':
-		/* 
-		 * Do the op into an unsigned to avoid overflow and then cast
-		 * back to check the resulting signage. 
+		/*
+		 * Check for over-& underflow.
 		 */
-		temp = l + r;
-		res = (int64_t) temp;
-		/* very simplistic check for over-& underflow */
-		if ((res < 0 && l > 0 && r > 0)
-	  	    || (res > 0 && l < 0 && r < 0)) 
+		if ((l >= 0 && r <= INT64_MAX - l) ||
+		    (l <= 0 && r >= INT64_MIN - l)) {
+			res = l + r;
+		} else {
 			yyerror("integer overflow or underflow occurred for "
                             "operation '%s %s %s'", left, op, right);
+		}
 		break;
 	case '-':
-		/* 
-		 * Do the op into an unsigned to avoid overflow and then cast
-		 * back to check the resulting signage. 
+		/*
+		 * Check for over-& underflow.
 		 */
-		temp = l - r;
-		res = (int64_t) temp;
-		/* very simplistic check for over-& underflow */
-		if ((res < 0 && l > 0 && l > r)
-		    || (res > 0 && l < 0 && l < r) ) 
+		if ((r > 0 && l < INT64_MIN + r) ||
+		    (r < 0 && l > INT64_MAX + r)) {
 			yyerror("integer overflow or underflow occurred for "
 			    "operation '%s %s %s'", left, op, right);
+		} else {
+			res = l - r;
+		}
 		break;
 	case '/':
-		if (r == 0) 
+		if (r == 0)
 			yyerror("second argument to '%s' must not be zero", op);
+		if (l == INT64_MIN && r == -1)
+			yyerror("integer overflow or underflow occurred for "
+			    "operation '%s %s %s'", left, op, right);
 		res = l / r;
 			
 		break;
 	case '%':
 		if (r == 0)
 			yyerror("second argument to '%s' must not be zero", op);
+		if (l == INT64_MIN && r == -1)
+			yyerror("integer overflow or underflow occurred for "
+			    "operation '%s %s %s'", left, op, right);
 		res = l % r;
 		break;
 	case '*':
-		/* shortcut */
-		if ((l == 0) || (r == 0)) {
-			res = 0;
-			break;
-		}
-				
-		sign = 1;
-		if (l < 0)
-			sign *= -1;
-		if (r < 0)
-			sign *= -1;
-
-		res = l * r;
 		/*
-		 * XXX: not the most portable but works on anything with 2's
-		 * complement arithmetic. If the signs don't match or the
-		 * result was 0 on 2's complement this overflowed.
+		 * Check for over-& underflow.
 		 */
-		if ((res < 0 && sign > 0) || (res > 0 && sign < 0) || 
-		    (res == 0))
+
+		/*
+		 * Simplify the conditions:
+		 *  - remove the case of both negative arguments
+		 *    unless the operation will cause an overflow
+		 */
+		if (l < 0 && r < 0 && l != INT64_MIN && r != INT64_MIN) {
+			l = -l;
+			r = -r;
+		}
+
+		/* - remove the case of legative l and positive r */
+		if (l < 0 && r >= 0) {
+			/* Use res as a temporary variable */
+			res = l;
+			l = r;
+			r = res;
+		}
+
+		if ((l < 0 && r < 0) ||
+		    (r > 0 && l > INT64_MAX / r) ||
+		    (r <= 0 && l != 0 && r < INT64_MIN / l)) {
 			yyerror("integer overflow or underflow occurred for "
 			    "operation '%s %s %s'", left, op, right);
 			/* NOTREACHED */
+		} else {
+			res = l * r;
+		}
 		break;
 	}
 	return res;
@@ -436,7 +439,7 @@ yylex(void)
 /*
  * Print error message and exit with error 2 (syntax error).
  */
-static void
+static __printflike(1, 2) void
 yyerror(const char *fmt, ...)
 {
 	va_list arg;
@@ -460,6 +463,5 @@ main(int argc, const char * const *argv)
 
 	av = argv + 1;
 
-	exit(yyparse());
-	/* NOTREACHED */
+	return yyparse();
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_string.c,v 1.9 2007/08/30 12:23:54 joerg Exp $	*/
+/*	$NetBSD: prop_string.c,v 1.12 2014/03/26 18:12:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,13 +51,15 @@ _PROP_POOL_INIT(_prop_string_pool, sizeof(struct _prop_string), "propstng")
 _PROP_MALLOC_DEFINE(M_PROP_STRING, "prop string",
 		    "property string container object")
 
-static int		_prop_string_free(prop_stack_t, prop_object_t *);
+static _prop_object_free_rv_t
+		_prop_string_free(prop_stack_t, prop_object_t *);
 static bool	_prop_string_externalize(
 				struct _prop_object_externalize_context *,
 				void *);
-static bool	_prop_string_equals(prop_object_t, prop_object_t,
-				void **, void **,
-				prop_object_t *, prop_object_t *);
+static _prop_object_equals_rv_t
+		_prop_string_equals(prop_object_t, prop_object_t,
+				    void **, void **,
+				    prop_object_t *, prop_object_t *);
 
 static const struct _prop_object_type _prop_object_type_string = {
 	.pot_type	=	PROP_TYPE_STRING,
@@ -78,7 +73,7 @@ static const struct _prop_object_type _prop_object_type_string = {
 #define	prop_string_contents(x)  ((x)->ps_immutable ? (x)->ps_immutable : "")
 
 /* ARGSUSED */
-static int
+static _prop_object_free_rv_t
 _prop_string_free(prop_stack_t stack, prop_object_t *obj)
 {
 	prop_string_t ps = *obj;
@@ -109,7 +104,7 @@ _prop_string_externalize(struct _prop_object_externalize_context *ctx,
 }
 
 /* ARGSUSED */
-static bool
+static _prop_object_equals_rv_t
 _prop_string_equals(prop_object_t v1, prop_object_t v2,
     void **stored_pointer1, void **stored_pointer2,
     prop_object_t *next_obj1, prop_object_t *next_obj2)
@@ -344,7 +339,7 @@ prop_string_append(prop_string_t dst, prop_string_t src)
 	cp = _PROP_MALLOC(len + 1, M_PROP_STRING);
 	if (cp == NULL)
 		return (false);
-	sprintf(cp, "%s%s", prop_string_contents(dst),
+	snprintf(cp, len + 1, "%s%s", prop_string_contents(dst),
 		prop_string_contents(src));
 	ocp = dst->ps_mutable;
 	dst->ps_mutable = cp;
@@ -378,7 +373,7 @@ prop_string_append_cstring(prop_string_t dst, const char *src)
 	cp = _PROP_MALLOC(len + 1, M_PROP_STRING);
 	if (cp == NULL)
 		return (false);
-	sprintf(cp, "%s%s", prop_string_contents(dst), src);
+	snprintf(cp, len + 1, "%s%s", prop_string_contents(dst), src);
 	ocp = dst->ps_mutable;
 	dst->ps_mutable = cp;
 	dst->ps_size = len;

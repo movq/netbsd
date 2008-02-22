@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.19 2008/01/06 01:37:58 matt Exp $	*/
+/*	$NetBSD: intr.h,v 1.26 2014/03/13 23:48:38 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2003 Wasabi Systems, Inc.
@@ -41,7 +41,6 @@
 #ifdef _KERNEL
 
 /* Interrupt priority "levels". */
-#ifdef __HAVE_FAST_SOFTINTS
 #define	IPL_NONE	0		/* nothing */
 #define	IPL_SOFTCLOCK	1		/* clock */
 #define	IPL_SOFTBIO	2		/* block I/O */
@@ -52,18 +51,6 @@
 #define	IPL_HIGH	7		/* everything */
 
 #define	NIPL		8
-#else
-#define	IPL_NONE	0		/* nothing */
-#define	IPL_SOFTCLOCK	IPL_NONE	/* clock */
-#define	IPL_SOFTBIO	IPL_NONE	/* block I/O */
-#define	IPL_SOFTNET	IPL_NONE	/* software network interrupt */
-#define	IPL_SOFTSERIAL	IPL_NONE	/* software serial interrupt */
-#define	IPL_VM		1		/* memory allocation */
-#define	IPL_SCHED	2		/* clock interrupt */
-#define	IPL_HIGH	3		/* everything */
-
-#define	NIPL		4
-#endif
 
 /* Interrupt sharing types. */
 #define	IST_NONE	0	/* none */
@@ -71,34 +58,17 @@
 #define	IST_EDGE	2	/* edge-triggered */
 #define	IST_LEVEL	3	/* level-triggered */
 
-#define IST_LEVEL_LOW	 IST_LEVEL
-#define IST_LEVEL_HIGH   4
+#define IST_LEVEL_LOW	IST_LEVEL
+#define IST_LEVEL_HIGH	4
 #define IST_EDGE_FALLING IST_EDGE
-#define IST_EDGE_RISING  5
-#define IST_EDGE_BOTH    6
+#define IST_EDGE_RISING	5
+#define IST_EDGE_BOTH	6
+#define IST_SOFT	7
 
-#ifdef __OLD_INTERRUPT_CODE	/* XXX XXX XXX */
-
-/* Software interrupt priority levels */
-
-#ifdef __HAVE_FAST_SOFTINTS
-#define SOFTIRQ_CLOCK   0
-#define SOFTIRQ_BIO     1
-#define SOFTIRQ_NET     2
-#define SOFTIRQ_SERIAL  3
-
-#define SOFTIRQ_BIT(x)  (1 << x)
-#endif
-
-#include <arm/arm32/psl.h>
-
-#else /* ! __OLD_INTERRUPT_CODE */
-
-#define	__NEWINTR	/* enables new hooks in cpu_fork()/cpu_switch() */
+#define IST_MPSAFE	0x100	/* interrupt is MPSAFE */
 
 #ifndef _LOCORE
 
-#include <sys/device.h>
 #include <sys/queue.h>
 
 #if defined(_LKM)
@@ -106,9 +76,6 @@
 int	_splraise(int);
 int	_spllower(int);
 void	splx(int);
-#ifdef __HAVE_FAST_SOFTINTS
-void	_setsoftintr(int);
-#endif
 
 #else	/* _LKM */
 
@@ -181,8 +148,6 @@ splraiseipl(ipl_cookie_t icookie)
 #include <sys/spl.h>
 
 #endif /* ! _LOCORE */
-
-#endif /* __OLD_INTERRUPT_CODE */
 
 #endif /* _KERNEL */
 

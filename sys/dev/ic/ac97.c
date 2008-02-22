@@ -1,4 +1,4 @@
-/*      $NetBSD: ac97.c,v 1.86 2007/02/21 22:59:59 thorpej Exp $ */
+/*      $NetBSD: ac97.c,v 1.97 2017/07/28 01:36:40 nat Exp $ */
 /*	$OpenBSD: ac97.c,v 1.8 2000/07/19 09:01:35 csapuntz Exp $	*/
 
 /*
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ac97.c,v 1.86 2007/02/21 22:59:59 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ac97.c,v 1.97 2017/07/28 01:36:40 nat Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,6 +103,7 @@ static int	ac97_write(struct ac97_softc *, uint8_t, uint16_t);
 
 static void	ac97_ad198x_init(struct ac97_softc *);
 static void	ac97_alc650_init(struct ac97_softc *);
+static void	ac97_ucb1400_init(struct ac97_softc *);
 static void	ac97_vt1616_init(struct ac97_softc *);
 
 static int	ac97_modem_offhook_set(struct ac97_softc *, int, int);
@@ -116,17 +117,104 @@ static int	ac97_sysctl_verify(SYSCTLFN_ARGS);
 static const struct audio_mixer_enum
 ac97_on_off = { 2, { { { AudioNoff, 0 } , 0 },
 		     { { AudioNon, 0 }  , 1 },
-        [2 ... 31] = { { "", 0 }, 0 } } };
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 }, } };
 
 static const struct audio_mixer_enum
 ac97_mic_select = { 2, { { { AudioNmicrophone "0", 0  }, 0 },
 			 { { AudioNmicrophone "1", 0  }, 1 },
-	    [2 ... 31] = { { "", 0 }, 0 } } };
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 }, } };
 
 static const struct audio_mixer_enum
 ac97_mono_select = { 2, { { { AudioNmixerout, 0  }, 0 },
 			  { { AudioNmicrophone, 0  }, 1 },
-	     [2 ... 31] = { { "", 0 }, 0 } } };
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 }, } };
 
 static const struct audio_mixer_enum
 ac97_source = { 8, { { { AudioNmicrophone, 0  } , 0 },
@@ -137,7 +225,30 @@ ac97_source = { 8, { { { AudioNmicrophone, 0  } , 0 },
 		     { { AudioNmixerout, 0 }, 5 },
 		     { { AudioNmixerout AudioNmono, 0 }, 6 },
 		     { { Ac97Nphone, 0 }, 7 },
-	[8 ... 31] = { { "", 0 }, 0 } } };
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 }, } };
 
 /*
  * Due to different values for each source that uses these structures,
@@ -390,6 +501,8 @@ struct ac97_softc {
 
 	struct ac97_host_if *host_if;
 
+	kmutex_t *lock;
+
 #define AUDIO_MAX_SOURCES	(2 * AUDIO_SOURCE_INFO_SIZE)
 #define MODEM_MAX_SOURCES	(2 * MODEM_SOURCE_INFO_SIZE)
 	struct ac97_source_info audio_source_info[AUDIO_MAX_SOURCES];
@@ -519,6 +632,8 @@ static const struct ac97_codecid {
 	  0xffffffff,			"Avance Logic ALC250", NULL,	},
 	{ AC97_CODEC_ID('A', 'L', 'G', 0x60),
 	  0xfffffff0,			"Avance Logic ALC655", NULL,	},
+	{ AC97_CODEC_ID('A', 'L', 'G', 0x70),
+	  0xffffffff,			"Avance Logic ALC203", NULL,	},
 	{ AC97_CODEC_ID('A', 'L', 'G', 0x80),
 	  0xfffffff0,			"Avance Logic ALC658", NULL,	},
 	{ AC97_CODEC_ID('A', 'L', 'G', 0x90),
@@ -609,7 +724,7 @@ static const struct ac97_codecid {
 	  AC97_VENDOR_ID_MASK,		"National Semiconductor unknown", NULL, },
 
 	{ AC97_CODEC_ID('P', 'S', 'C', 4),
-	  0xffffffff,			"Philips Semiconductor UCB1400", NULL, },
+	  0xffffffff,			"Philips Semiconductor UCB1400", ac97_ucb1400_init, },
 	{ AC97_CODEC_ID('P', 'S', 'C', 0),
 	  AC97_VENDOR_ID_MASK,		"Philips Semiconductor unknown", NULL, },
 
@@ -819,6 +934,8 @@ static const char *ac97_register_names[0x80 / 2] = {
 static void
 ac97_read(struct ac97_softc *as, uint8_t reg, uint16_t *val)
 {
+	KASSERT(mutex_owned(as->lock));
+
 	if (as->host_flags & AC97_HOST_DONT_READ &&
 	    (reg != AC97_REG_VENDOR_ID1 && reg != AC97_REG_VENDOR_ID2 &&
 	     reg != AC97_REG_RESET)) {
@@ -834,6 +951,8 @@ ac97_read(struct ac97_softc *as, uint8_t reg, uint16_t *val)
 static int
 ac97_write(struct ac97_softc *as, uint8_t reg, uint16_t val)
 {
+	KASSERT(mutex_owned(as->lock));
+
 #ifndef AC97_IO_DEBUG
 	as->shadow_reg[reg >> 1] = val;
 	return as->host_if->write(as->host_if->arg, reg, val);
@@ -858,6 +977,8 @@ ac97_setup_defaults(struct ac97_softc *as)
 	int idx;
 	const struct ac97_source_info *si;
 
+	KASSERT(mutex_owned(as->lock));
+
 	memset(as->shadow_reg, 0, sizeof(as->shadow_reg));
 
 	for (idx = 0; idx < AUDIO_SOURCE_INFO_SIZE; idx++) {
@@ -873,14 +994,16 @@ ac97_setup_defaults(struct ac97_softc *as)
 }
 
 static void
-ac97_restore_shadow(struct ac97_codec_if *self)
+ac97_restore_shadow(struct ac97_codec_if *codec_if)
 {
 	struct ac97_softc *as;
 	const struct ac97_source_info *si;
 	int idx;
 	uint16_t val;
 
-	as = (struct ac97_softc *) self;
+	as = (struct ac97_softc *)codec_if;
+
+	KASSERT(mutex_owned(as->lock));
 
 	if (as->type == AC97_CODEC_TYPE_AUDIO) {
 		/* restore AC97_REG_POWER */
@@ -980,6 +1103,8 @@ ac97_setup_source_info(struct ac97_softc *as)
 	int idx, ouridx;
 	struct ac97_source_info *si, *si2;
 	uint16_t value1, value2, value3;
+
+	KASSERT(mutex_owned(as->lock));
 
 	for (idx = 0, ouridx = 0; idx < SOURCE_INFO_SIZE(as); idx++) {
 		si = &as->source_info[ouridx];
@@ -1099,13 +1224,13 @@ ac97_setup_source_info(struct ac97_softc *as)
 
 /* backward compatibility */
 int
-ac97_attach(struct ac97_host_if *host_if, struct device *sc_dev)
+ac97_attach(struct ac97_host_if *host_if, device_t sc_dev, kmutex_t *lk)
 {
-	return ac97_attach_type(host_if, sc_dev, AC97_CODEC_TYPE_AUDIO);
+	return ac97_attach_type(host_if, sc_dev, AC97_CODEC_TYPE_AUDIO, lk);
 }
 
 int
-ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
+ac97_attach_type(struct ac97_host_if *host_if, device_t sc_dev, int type, kmutex_t *lk)
 {
 	struct ac97_softc *as;
 	int error, i, j;
@@ -1127,14 +1252,18 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 	as->codec_if.vtbl = &ac97civ;
 	as->host_if = host_if;
 	as->type = type;
+	as->lock = lk;
 
 	if ((error = host_if->attach(host_if->arg, &as->codec_if))) {
 		free(as, M_DEVBUF);
 		return error;
 	}
 
+	mutex_enter(as->lock);
+
 	if (host_if->reset != NULL) {
 		if ((error = host_if->reset(host_if->arg))) {
+			mutex_exit(as->lock);
 			free(as, M_DEVBUF);
 			return error;
 		}
@@ -1184,13 +1313,15 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 	ac97_read(as, AC97_REG_VENDOR_ID1, &id1);
 	ac97_read(as, AC97_REG_VENDOR_ID2, &id2);
 
+	mutex_exit(as->lock);
+
 	id = (id1 << 16) | id2;
-	aprint_normal("%s: ac97: ", sc_dev->dv_xname);
+	aprint_normal_dev(sc_dev, "ac97: ");
 
 	for (i = 0; ; i++) {
 		if (ac97codecid[i].id == 0) {
 			char pnp[4];
-	
+
 			AC97_GET_CODEC_ID(id, pnp);
 #define ISASCII(c) ((c) >= ' ' && (c) < 0x7f)
 			if (ISASCII(pnp[0]) && ISASCII(pnp[1]) &&
@@ -1222,22 +1353,24 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 
 	as->ac97_clock = AC97_STANDARD_CLOCK;
 
+	mutex_enter(as->lock);
+
 	if (as->type == AC97_CODEC_TYPE_AUDIO) {
 		ac97_read(as, AC97_REG_EXT_AUDIO_ID, &as->ext_id);
 		if (as->ext_id != 0) {
+			mutex_exit(as->lock);
+
 			/* Print capabilities */
-			bitmask_snprintf(as->ext_id,
-				 "\20\20SECONDARY10\17SECONDARY01"
-				 "\14AC97_23\13AC97_22\12AMAP\11LDAC\10SDAC"
-				 "\7CDAC\4VRM\3SPDIF\2DRA\1VRA",
-				 flagbuf, FLAGBUFLEN);
-			aprint_normal("%s: ac97: ext id %s\n", sc_dev->dv_xname,
+			snprintb(flagbuf, sizeof(flagbuf),
+			     "\20\20SECONDARY10\17SECONDARY01"
+			     "\14AC97_23\13AC97_22\12AMAP\11LDAC\10SDAC"
+			     "\7CDAC\4VRM\3SPDIF\2DRA\1VRA", as->ext_id);
+			aprint_normal_dev(sc_dev, "ac97: ext id %s\n",
 				      flagbuf);
 
 			/* Print unusual settings */
 			if (as->ext_id & AC97_EXT_AUDIO_DSA_MASK) {
-				aprint_normal("%s: ac97: Slot assignment: ",
-					      sc_dev->dv_xname);
+				aprint_normal_dev(sc_dev, "ac97: Slot assignment: ");
 				switch (as->ext_id & AC97_EXT_AUDIO_DSA_MASK) {
 				case AC97_EXT_AUDIO_DSA01:
 					aprint_normal("7&8, 6&9, 10&11.\n");
@@ -1251,10 +1384,11 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 				}
 			}
 			if (as->host_flags & AC97_HOST_INVERTED_EAMP) {
-				aprint_normal("%s: ac97: using inverted "
-					      "AC97_POWER_EAMP bit\n",
-					      sc_dev->dv_xname);
+				aprint_normal_dev(sc_dev, "ac97: using inverted "
+					      "AC97_POWER_EAMP bit\n");
 			}
+
+			mutex_enter(as->lock);
 
 			/* Enable and disable features */
 			ac97_read(as, AC97_REG_EXT_AUDIO_CTRL, &extstat);
@@ -1289,9 +1423,8 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 				if (rate != 44100) {
 					/* We can't believe ext_id */
 					as->ext_id = 0;
-					aprint_normal(
-					    "%s: Ignore these capabilities.\n",
-					    sc_dev->dv_xname);
+					aprint_normal_dev(sc_dev,
+					    "Ignore these capabilities.\n");
 				}
 				/* restore the default value */
 				ac97_write(as, AC97_REG_PCM_FRONT_DAC_RATE,
@@ -1307,18 +1440,19 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 		int err;
 
 		ac97_read(as, AC97_REG_EXT_MODEM_ID, &as->ext_mid);
+		mutex_exit(as->lock);
+
 		if (as->ext_mid == 0 || as->ext_mid == 0xffff) {
-			aprint_normal("%s: no modem codec found\n",
-				      sc_dev->dv_xname);
+			aprint_normal_dev(sc_dev, "no modem codec found\n");
+			free(as, M_DEVBUF);
 			return ENXIO;
 		}
 		as->type = AC97_CODEC_TYPE_MODEM;
 
 		/* Print capabilities */
-		bitmask_snprintf(as->ext_mid,
-				 "\20\5CID2\4CID1\3HANDSET\2LINE2\1LINE1",
-				 flagbuf, FLAGBUFLEN);
-		aprint_normal("%s: ac97: ext mid %s", sc_dev->dv_xname,
+		snprintb(flagbuf, sizeof(flagbuf),
+		    "\20\5CID2\4CID1\3HANDSET\2LINE2\1LINE1", as->ext_mid);
+		aprint_normal_dev(sc_dev, "ac97: ext mid %s",
 			      flagbuf);
 		aprint_normal(", %s codec\n",
 			      (as->ext_mid & 0xc000) == 0 ?
@@ -1331,12 +1465,14 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 		if (err != 0)
 			goto setup_modem;
 		err = sysctl_createv(&as->log, 0, NULL, &node, 0,
-				     CTLTYPE_NODE, sc_dev->dv_xname, NULL,
+				     CTLTYPE_NODE, device_xname(sc_dev), NULL,
 				     NULL, 0, NULL, 0, CTL_HW, CTL_CREATE,
 				     CTL_EOL);
 		if (err != 0)
 			goto setup_modem;
 setup_modem:
+		mutex_enter(as->lock);
+
 		/* reset */
 		ac97_write(as, AC97_REG_EXT_MODEM_ID, 1);
 
@@ -1367,8 +1503,9 @@ setup_modem:
 			DELAY(1);
 		}
 		if (i <= 0) {
+			mutex_exit(as->lock);
 			printf("%s: codec not responding, status=0x%x\n",
-			    sc_dev->dv_xname, reg);
+			    device_xname(sc_dev), reg);
 			return ENXIO;
 		}
 
@@ -1381,13 +1518,16 @@ setup_modem:
 			reg &= ~AC97_GPIO_LINE1_OH;
 			ac97_write(as, AC97_REG_GPIO_POLARITY, reg);
 
+			mutex_exit(as->lock);
 			err = sysctl_createv(&as->log, 0, NULL, &node_line1,
 					     CTLFLAG_READWRITE, CTLTYPE_INT,
 					     "line1",
 					     SYSCTL_DESCR("off-hook line1"),
-					     ac97_sysctl_verify, 0, as, 0,
+					     ac97_sysctl_verify, 0, (void *)as, 0,
 					     CTL_HW, node->sysctl_num,
 					     CTL_CREATE, CTL_EOL);
+			mutex_enter(as->lock);
+
 			if (err != 0)
 				goto sysctl_err;
 			as->offhook_line1_mib = node_line1->sysctl_num;
@@ -1400,13 +1540,16 @@ setup_modem:
 			reg &= ~AC97_GPIO_LINE2_OH;
 			ac97_write(as, AC97_REG_GPIO_POLARITY, reg);
 
+			mutex_exit(as->lock);
 			err = sysctl_createv(&as->log, 0, NULL, &node_line2,
 					     CTLFLAG_READWRITE, CTLTYPE_INT,
 					     "line2",
 					     SYSCTL_DESCR("off-hook line2"),
-					     ac97_sysctl_verify, 0, as, 0,
+					     ac97_sysctl_verify, 0, (void *)as, 0,
 					     CTL_HW, node->sysctl_num,
 					     CTL_CREATE, CTL_EOL);
+			mutex_enter(as->lock);
+
 			if (err != 0)
 				goto sysctl_err;
 			as->offhook_line2_mib = node_line2->sysctl_num;
@@ -1480,6 +1623,8 @@ sysctl_err:
 	if (as->type == AC97_CODEC_TYPE_AUDIO)
 		ac97_write(as, AC97_REG_POWER, as->power_reg);
 
+	mutex_exit(as->lock);
+
 	return 0;
 }
 
@@ -1489,10 +1634,14 @@ ac97_detach(struct ac97_codec_if *codec_if)
 	struct ac97_softc *as;
 
 	as = (struct ac97_softc *)codec_if;
+
+	mutex_enter(as->lock);
 	ac97_write(as, AC97_REG_POWER, AC97_POWER_IN | AC97_POWER_OUT
 		   | AC97_POWER_MIXER | AC97_POWER_MIXER_VREF
 		   | AC97_POWER_ACLINK | AC97_POWER_CLK | AC97_POWER_AUX
 		   | POWER_EAMP_OFF(as));
+	mutex_exit(as->lock);
+
 	free(as, M_DEVBUF);
 }
 
@@ -1502,6 +1651,9 @@ ac97_lock(struct ac97_codec_if *codec_if)
 	struct ac97_softc *as;
 
 	as = (struct ac97_softc *)codec_if;
+
+	KASSERT(mutex_owned(as->lock));
+
 	as->lock_counter++;
 }
 
@@ -1511,6 +1663,9 @@ ac97_unlock(struct ac97_codec_if *codec_if)
 	struct ac97_softc *as;
 
 	as = (struct ac97_softc *)codec_if;
+
+	KASSERT(mutex_owned(as->lock));
+
 	as->lock_counter--;
 }
 
@@ -1522,7 +1677,7 @@ ac97_query_devinfo(struct ac97_codec_if *codec_if, mixer_devinfo_t *dip)
 	const char *name;
 
 	as = (struct ac97_softc *)codec_if;
-	if (dip->index < as->num_source_info) {
+	if (dip->index >= 0 && dip->index < as->num_source_info) {
 		si = &as->source_info[dip->index];
 		dip->type = si->type;
 		dip->mixer_class = si->mixer_class;
@@ -1564,6 +1719,9 @@ ac97_mixer_set_port(struct ac97_codec_if *codec_if, mixer_ctrl_t *cp)
 	bool spdif;
 
 	as = (struct ac97_softc *)codec_if;
+
+	KASSERT(mutex_owned(as->lock));
+
 	if (cp->dev < 0 || cp->dev >= as->num_source_info)
 		return EINVAL;
 	si = &as->source_info[cp->dev];
@@ -1672,6 +1830,9 @@ ac97_get_portnum_by_name(struct ac97_codec_if *codec_if, const char *class,
 	int idx;
 
 	as = (struct ac97_softc *)codec_if;
+
+	KASSERT(mutex_owned(as->lock));
+
 	for (idx = 0; idx < as->num_source_info; idx++) {
 		struct ac97_source_info *si = &as->source_info[idx];
 		if (ac97_str_equal(class, si->class) &&
@@ -1692,6 +1853,9 @@ ac97_mixer_get_port(struct ac97_codec_if *codec_if, mixer_ctrl_t *cp)
 	uint16_t val;
 
 	as = (struct ac97_softc *)codec_if;
+
+	KASSERT(mutex_owned(as->lock));
+
 	si = &as->source_info[cp->dev];
 	if (cp->dev < 0 || cp->dev >= as->num_source_info)
 		return EINVAL;
@@ -1770,6 +1934,9 @@ ac97_set_rate(struct ac97_codec_if *codec_if, int target, u_int *rate)
 	uint16_t power_bit;
 
 	as = (struct ac97_softc *)codec_if;
+
+	KASSERT(mutex_owned(as->lock));
+
 	if (target == AC97_REG_PCM_MIC_ADC_RATE) {
 		if (!(as->ext_id & AC97_EXT_AUDIO_VRM)) {
 			*rate = AC97_SINGLE_RATE;
@@ -1864,6 +2031,9 @@ ac97_set_clock(struct ac97_codec_if *codec_if, unsigned int clock)
 	struct ac97_softc *as;
 
 	as = (struct ac97_softc *)codec_if;
+
+	KASSERT(mutex_owned(as->lock));
+
 	as->ac97_clock = clock;
 }
 
@@ -1873,6 +2043,9 @@ ac97_get_extcaps(struct ac97_codec_if *codec_if)
 	struct ac97_softc *as;
 
 	as = (struct ac97_softc *)codec_if;
+
+	KASSERT(mutex_owned(as->lock));
+
 	return as->ext_id;
 }
 
@@ -1881,6 +2054,8 @@ ac97_add_port(struct ac97_softc *as, const struct ac97_source_info *src)
 {
 	struct ac97_source_info *si;
 	int ouridx, idx;
+
+	KASSERT(mutex_owned(as->lock));
 
 	if ((as->type == AC97_CODEC_TYPE_AUDIO &&
 	     as->num_source_info >= AUDIO_MAX_SOURCES) ||
@@ -1959,6 +2134,8 @@ ac97_ad198x_init(struct ac97_softc *as)
 	int i;
 	uint16_t misc;
 
+	KASSERT(mutex_owned(as->lock));
+
 	ac97_read(as, AD1980_REG_MISC, &misc);
 	ac97_write(as, AD1980_REG_MISC,
 		   misc | AD1980_MISC_LOSEL | AD1980_MISC_HPSEL);
@@ -2027,6 +2204,42 @@ ac97_alc650_init(struct ac97_softc *as)
 	ac97_add_port(as, &sources[5]);
 }
 
+#define UCB1400_REG_FEATURE_CSR1	0x6a
+#define		UCB1400_BB(bb)			(((bb) & 0xf) << 11)
+#define		UCB1400_TR(tr)			(((tr) & 0x3) << 9)
+#define		UCB1400_M_MAXIMUM		(3 << 7)
+#define		UCB1400_M_MINIMUM		(1 << 7)
+#define		UCB1400_M_FLAT			(0 << 7)
+#define		UCB1400_HPEN			(1 << 6)
+#define		UCB1400_DE			(1 << 5)
+#define		UCB1400_DC			(1 << 4)
+#define		UCB1400_HIPS			(1 << 3)
+#define		UCB1400_GIEN			(1 << 2)
+#define		UCB1400_OVFL			(1 << 0)
+#define UCB1400_REG_FEATURE_CSR2	0x6c
+#define		UCB1400_SMT			(1 << 15)	/* Must be 0 */
+#define		UCB1400_SUEV1			(1 << 14)	/* Must be 0 */
+#define		UCB1400_SUEV0			(1 << 13)	/* Must be 0 */
+#define		UCB1400_AVE			(1 << 12)
+#define		UCB1400_AVEN1			(1 << 11)	/* Must be 0 */
+#define		UCB1400_AVEN0			(1 << 10)	/* Must be 0 */
+#define		UCB1400_SLP_ON			\
+					(UCB1400_SLP_PLL | UCB1400_SLP_CODEC)
+#define		UCB1400_SLP_PLL			(2 << 4)
+#define		UCB1400_SLP_CODEC		(1 << 4)
+#define		UCB1400_SLP_NO			(0 << 4)
+#define		UCB1400_EV2			(1 << 2)	/* Must be 0 */
+#define		UCB1400_EV1			(1 << 1)	/* Must be 0 */
+#define		UCB1400_EV0			(1 << 0)	/* Must be 0 */
+static void
+ac97_ucb1400_init(struct ac97_softc *as)
+{
+
+	ac97_write(as, UCB1400_REG_FEATURE_CSR1,
+	    UCB1400_HPEN | UCB1400_DC | UCB1400_HIPS | UCB1400_OVFL);
+	ac97_write(as, UCB1400_REG_FEATURE_CSR2, UCB1400_AVE | UCB1400_SLP_ON);
+}
+
 #define VT1616_REG_IO_CONTROL	0x5a
 #define		VT1616_IC_LVL			(1 << 15)
 #define		VT1616_IC_LFECENTER_TO_FRONT	(1 << 12)
@@ -2052,6 +2265,8 @@ ac97_vt1616_init(struct ac97_softc *as)
 		  0x0000, 1, 12, 0, 0, 0, CHECK_LFE, 0, 0, 0, },
 	};
 
+	KASSERT(mutex_owned(as->lock));
+
 	ac97_add_port(as, &sources[0]);
 	ac97_add_port(as, &sources[1]);
 	ac97_add_port(as, &sources[2]);
@@ -2061,6 +2276,8 @@ static int
 ac97_modem_offhook_set(struct ac97_softc *as, int line, int newval)
 {
 	uint16_t val;
+
+	KASSERT(mutex_owned(as->lock));
 
 	val = as->shadow_reg[AC97_REG_GPIO_STATUS >> 1];
 	switch (newval) {
@@ -2096,7 +2313,9 @@ ac97_sysctl_verify(SYSCTLFN_ARGS)
 			return EINVAL;
 
 		as->offhook_line1 = tmp;
+		mutex_enter(as->lock);
 		ac97_modem_offhook_set(as, AC97_GPIO_LINE1_OH, tmp);
+		mutex_exit(as->lock);
 	} else if (node.sysctl_num == as->offhook_line2_mib) {
 		tmp = as->offhook_line2;
 		node.sysctl_data = &tmp;
@@ -2108,7 +2327,9 @@ ac97_sysctl_verify(SYSCTLFN_ARGS)
 			return EINVAL;
 
 		as->offhook_line2 = tmp;
+		mutex_enter(as->lock);
 		ac97_modem_offhook_set(as, AC97_GPIO_LINE2_OH, tmp);
+		mutex_exit(as->lock);
 	}
 
 	return 0;

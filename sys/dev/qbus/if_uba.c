@@ -1,4 +1,4 @@
-/*	$NetBSD: if_uba.c,v 1.29 2007/10/19 12:01:09 ad Exp $	*/
+/*	$NetBSD: if_uba.c,v 1.32 2016/06/10 13:27:15 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_uba.c,v 1.29 2007/10/19 12:01:09 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_uba.c,v 1.32 2016/06/10 13:27:15 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_uba.c,v 1.29 2007/10/19 12:01:09 ad Exp $");
 #include <sys/mbuf.h>
 #include <sys/socket.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <net/if.h>
 
@@ -161,7 +159,7 @@ bad:
 }
 
 struct mbuf *
-getmcl()
+getmcl(void)
 {
 	struct mbuf *m;
 
@@ -204,7 +202,7 @@ if_ubaget(struct ifubinfo *ifu, struct ifrw *ifr, struct ifnet *ifp, int len)
 	if ((bus_dmamap_load(uh->uh_dmat, ifr->ifrw_map,
 	    mn->m_ext.ext_buf, mn->m_ext.ext_size, NULL, BUS_DMA_NOWAIT)))
 		panic("if_ubaget"); /* Cannot happen */
-	m->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(m, ifp);
 	m->m_len = m->m_pkthdr.len = len;
 	return m;
 }

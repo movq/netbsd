@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.25 2008/01/19 15:06:52 kardel Exp $	*/
+/*	$NetBSD: clock.c,v 1.33 2009/06/16 21:05:34 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -121,7 +121,7 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.25 2008/01/19 15:06:52 kardel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.33 2009/06/16 21:05:34 bouyer Exp $");
 
 /* #define CLOCKDEBUG */
 /* #define CLOCK_PARANOIA */
@@ -150,8 +150,8 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.25 2008/01/19 15:06:52 kardel Exp $");
 #include <i386/isa/nvram.h>
 #include <x86/x86/tsc.h>
 #include <x86/lock.h>
-#include <dev/clock_subr.h>
 #include <machine/specialreg.h> 
+#include <x86/rtc.h>
 
 #ifndef __x86_64__
 #include "mca.h"
@@ -164,12 +164,13 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.25 2008/01/19 15:06:52 kardel Exp $");
 #if (NPCPPI > 0)
 #include <dev/isa/pcppivar.h>
 
-int sysbeepmatch(struct device *, struct cfdata *, void *);
-void sysbeepattach(struct device *, struct device *, void *);
+int sysbeepmatch(device_t, cfdata_t, void *);
+void sysbeepattach(device_t, device_t, void *);
 int sysbeepdetach(device_t, int);
 
-CFATTACH_DECL(sysbeep, sizeof(struct device),
-    sysbeepmatch, sysbeepattach, sysbeepdetach, NULL);
+CFATTACH_DECL3_NEW(sysbeep, 0,
+    sysbeepmatch, sysbeepattach, sysbeepdetach, NULL, NULL, NULL,
+    DVF_DETACH_SHUTDOWN);
 
 static int ppi_attached;
 static pcppi_tag_t ppicookie;
@@ -188,13 +189,7 @@ void		sysbeep(int, int);
 static void     tickle_tc(void);
 
 static int	clockintr(void *, struct intrframe *);
-static void	rtcinit(void);
-static int	rtcget(mc_todregs *);
-static void	rtcput(mc_todregs *);
 
-static int	cmoscheck(void);
-
-static int	clock_expandyear(int);
 int 		sysbeepdetach(device_t, int);
 
 static unsigned int	gettick_broken_latch(void);
@@ -206,11 +201,7 @@ static volatile int i8254_ticked;
 /* to protect TC timer variables */
 static __cpu_simple_lock_t tmr_lock = __SIMPLELOCK_UNLOCKED;
 
-inline u_int mc146818_read(void *, u_int);
-inline void mc146818_write(void *, u_int, u_int);
-
 u_int i8254_get_timecount(struct timecounter *);
-static void rtc_register(void);
 
 static struct timecounter i8254_timecounter = {
 	i8254_get_timecount,	/* get_timecount */
@@ -219,27 +210,9 @@ static struct timecounter i8254_timecounter = {
 	TIMER_FREQ,		/* frequency */
 	"i8254",		/* name */
 	100,			/* quality */
-	NULL,			/* prev */
+	NULL,			/* private data */
 	NULL,			/* next */
 };
-
-/* XXX use sc? */
-inline u_int
-mc146818_read(void *sc, u_int reg)
-{
-
-	outb(IO_RTC, reg);
-	return (inb(IO_RTC+1));
-}
-
-/* XXX use sc? */
-inline void
-mc146818_write(void *sc, u_int reg, u_int datum)
-{
-
-	outb(IO_RTC, reg);
-	outb(IO_RTC+1, datum);
-}
 
 u_long rtclock_tval;		/* i8254 reload value for countdown */
 int    rtclock_init = 0;
@@ -361,13 +334,11 @@ startrtclock(void)
 	/* Check diagnostic status */
 	if ((s = mc146818_read(NULL, NVRAM_DIAG)) != 0) { /* XXX softc */
 		char bits[128];
-		printf("RTC BIOS diagnostic error %s\n",
-		    bitmask_snprintf(s, NVRAM_DIAG_BITS, bits, sizeof(bits)));
+		snprintb(bits, sizeof(bits), NVRAM_DIAG_BITS, s);
+		printf("RTC BIOS diagnostic error %s\n", bits);
 	}
 
 	tc_init(&i8254_timecounter);
-
-	init_TSC();
 	rtc_register();
 }
 
@@ -420,15 +391,17 @@ i8254_get_timecount(struct timecounter *tc)
 {
 	u_int count;
 	uint16_t rdval;
-	int s;
+	u_long psl;
 
 	/* Don't want someone screwing with the counter while we're here. */
-	s = splhigh();
+	psl = x86_read_psl();
+	x86_disable_intr();
 	__cpu_simple_lock(&tmr_lock);
 	/* Select timer0 and latch counter value. */ 
 	outb(IO_TIMER1 + TIMER_MODE, TIMER_SEL0 | TIMER_LATCH);
 	/* insb to make the read atomic */
-	insb(IO_TIMER1+TIMER_CNTR0, &rdval, 2);
+	rdval = inb(IO_TIMER1+TIMER_CNTR0);
+	rdval |= (inb(IO_TIMER1+TIMER_CNTR0) << 8);
 	count = rtclock_tval - rdval;
 	if (rtclock_tval && (count < i8254_lastcount &&
 			     (!i8254_ticked || rtclock_tval == 0xFFFF))) {
@@ -438,7 +411,7 @@ i8254_get_timecount(struct timecounter *tc)
 	i8254_lastcount = count;
 	count += i8254_offset;
 	__cpu_simple_unlock(&tmr_lock);
-	splx(s);
+	x86_write_psl(psl);
 
 	return (count);
 }
@@ -447,20 +420,21 @@ unsigned int
 gettick(void)
 {
 	uint16_t rdval;
-	int s;
+	u_long psl;
 	
 	if (clock_broken_latch)
 		return (gettick_broken_latch());
 
 	/* Don't want someone screwing with the counter while we're here. */
-	s = splhigh();
+	psl = x86_read_psl();
+	x86_disable_intr();
 	__cpu_simple_lock(&tmr_lock);
 	/* Select counter 0 and latch it. */
 	outb(IO_TIMER1+TIMER_MODE, TIMER_SEL0 | TIMER_LATCH);
-	/* insb to make the read atomic */
-	insb(IO_TIMER1+TIMER_CNTR0, &rdval, 2);
+	rdval = inb(IO_TIMER1+TIMER_CNTR0);
+	rdval |= (inb(IO_TIMER1+TIMER_CNTR0) << 8);
 	__cpu_simple_unlock(&tmr_lock);
-	splx(s);
+	x86_write_psl(psl);
 
 	return rdval;
 }
@@ -502,7 +476,7 @@ i8254_delay(unsigned int n)
 		remaining = (unsigned long long) n * TIMER_FREQ / 1000000;
 	}
 
-	while (remaining > 0) {
+	while (remaining > 1) {
 #ifdef CLOCK_PARANOIA
 		int delta;
 		cur_tick = gettick();
@@ -535,15 +509,13 @@ i8254_delay(unsigned int n)
 
 #if (NPCPPI > 0)
 int
-sysbeepmatch(struct device *parent, struct cfdata *match,
-    void *aux)
+sysbeepmatch(device_t parent, cfdata_t match, void *aux)
 {
 	return (!ppi_attached);
 }
 
 void
-sysbeepattach(struct device *parent, struct device *self,
-    void *aux)
+sysbeepattach(device_t parent, device_t self, void *aux)
 {
 	aprint_naive("\n");
 	aprint_normal("\n");
@@ -583,214 +555,6 @@ i8254_initclocks(void)
 	 */
 	(void)isa_intr_establish(NULL, 0, IST_PULSE, IPL_CLOCK,
 	    (int (*)(void *))clockintr, 0);
-}
-
-static void
-rtcinit(void)
-{
-	static int first_rtcopen_ever = 1;
-
-	if (!first_rtcopen_ever)
-		return;
-	first_rtcopen_ever = 0;
-
-	mc146818_write(NULL, MC_REGA,			/* XXX softc */
-	    MC_BASE_32_KHz | MC_RATE_1024_Hz);
-	mc146818_write(NULL, MC_REGB, MC_REGB_24HR);	/* XXX softc */
-}
-
-static int
-rtcget(mc_todregs *regs)
-{
-
-	rtcinit();
-	if ((mc146818_read(NULL, MC_REGD) & MC_REGD_VRT) == 0) /* XXX softc */
-		return (-1);
-	MC146818_GETTOD(NULL, regs);			/* XXX softc */
-	return (0);
-}	
-
-static void
-rtcput(mc_todregs *regs)
-{
-
-	rtcinit();
-	MC146818_PUTTOD(NULL, regs);			/* XXX softc */
-}
-
-/*
- * check whether the CMOS layout is "standard"-like (ie, not PS/2-like),
- * to be called at splclock()
- */
-static int
-cmoscheck(void)
-{
-	int i;
-	unsigned short cksum = 0;
-
-	for (i = 0x10; i <= 0x2d; i++)
-		cksum += mc146818_read(NULL, i); /* XXX softc */
-
-	return (cksum == (mc146818_read(NULL, 0x2e) << 8)
-			  + mc146818_read(NULL, 0x2f));
-}
-
-#if NMCA > 0
-/*
- * Check whether the CMOS layout is PS/2 like, to be called at splclock().
- */
-static int cmoscheckps2(void);
-static int
-cmoscheckps2(void)
-{
-#if 0
-	/* Disabled until I find out the CRC checksum algorithm IBM uses */
-	int i;
-	unsigned short cksum = 0;
-
-	for (i = 0x10; i <= 0x31; i++)
-		cksum += mc146818_read(NULL, i); /* XXX softc */
-
-	return (cksum == (mc146818_read(NULL, 0x32) << 8)
-			  + mc146818_read(NULL, 0x33));
-#else
-	/* Check 'incorrect checksum' bit of IBM PS/2 Diagnostic Status Byte */
-	return ((mc146818_read(NULL, NVRAM_DIAG) & (1<<6)) == 0);
-#endif
-}
-#endif /* NMCA > 0 */
-
-/*
- * patchable to control century byte handling:
- * 1: always update
- * -1: never touch
- * 0: try to figure out itself
- */
-int rtc_update_century = 0;
-
-/*
- * Expand a two-digit year as read from the clock chip
- * into full width.
- * Being here, deal with the CMOS century byte.
- */
-static int centb = NVRAM_CENTURY;
-static int
-clock_expandyear(int clockyear)
-{
-	int s, clockcentury, cmoscentury;
-
-	clockcentury = (clockyear < 70) ? 20 : 19;
-	clockyear += 100 * clockcentury;
-
-	if (rtc_update_century < 0)
-		return (clockyear);
-
-	s = splclock();
-	if (cmoscheck())
-		cmoscentury = mc146818_read(NULL, NVRAM_CENTURY);
-#if NMCA > 0
-	else if (MCA_system && cmoscheckps2())
-		cmoscentury = mc146818_read(NULL, (centb = 0x37));
-#endif
-	else
-		cmoscentury = 0;
-	splx(s);
-	if (!cmoscentury) {
-#ifdef DIAGNOSTIC
-		printf("clock: unknown CMOS layout\n");
-#endif
-		return (clockyear);
-	}
-	cmoscentury = bcdtobin(cmoscentury);
-
-	if (cmoscentury != clockcentury) {
-		/* XXX note: saying "century is 20" might confuse the naive. */
-		printf("WARNING: NVRAM century is %d but RTC year is %d\n",
-		       cmoscentury, clockyear);
-
-		/* Kludge to roll over century. */
-		if ((rtc_update_century > 0) ||
-		    ((cmoscentury == 19) && (clockcentury == 20) &&
-		     (clockyear == 2000))) {
-			printf("WARNING: Setting NVRAM century to %d\n",
-			       clockcentury);
-			s = splclock();
-			mc146818_write(NULL, centb, bintobcd(clockcentury));
-			splx(s);
-		}
-	} else if (cmoscentury == 19 && rtc_update_century == 0)
-		rtc_update_century = 1; /* will update later in resettodr() */
-
-	return (clockyear);
-}
-
-static int
-rtc_get_ymdhms(todr_chip_handle_t tch, struct clock_ymdhms *dt)
-{
-	int s;
-	mc_todregs rtclk;
-
-	s = splclock();
-	if (rtcget(&rtclk)) {
-		splx(s);
-		return -1;
-	}
-	splx(s);
-
-	dt->dt_sec = bcdtobin(rtclk[MC_SEC]);
-	dt->dt_min = bcdtobin(rtclk[MC_MIN]);
-	dt->dt_hour = bcdtobin(rtclk[MC_HOUR]);
-	dt->dt_day = bcdtobin(rtclk[MC_DOM]);
-	dt->dt_mon = bcdtobin(rtclk[MC_MONTH]);
-	dt->dt_year = clock_expandyear(bcdtobin(rtclk[MC_YEAR]));
-
-	return 0;
-}
-
-static int
-rtc_set_ymdhms(todr_chip_handle_t tch, struct clock_ymdhms *dt)
-{
-	mc_todregs rtclk;
-	int century;
-	int s;
-
-	s = splclock();
-	if (rtcget(&rtclk))
-		memset(&rtclk, 0, sizeof(rtclk));
-	splx(s);
-
-	rtclk[MC_SEC] = bintobcd(dt->dt_sec);
-	rtclk[MC_MIN] = bintobcd(dt->dt_min);
-	rtclk[MC_HOUR] = bintobcd(dt->dt_hour);
-	rtclk[MC_DOW] = dt->dt_wday + 1;
-	rtclk[MC_YEAR] = bintobcd(dt->dt_year % 100);
-	rtclk[MC_MONTH] = bintobcd(dt->dt_mon);
-	rtclk[MC_DOM] = bintobcd(dt->dt_day);
-
-#ifdef DEBUG_CLOCK
-	printf("setclock: %x/%x/%x %x:%x:%x\n", rtclk[MC_YEAR], rtclk[MC_MONTH],
-	   rtclk[MC_DOM], rtclk[MC_HOUR], rtclk[MC_MIN], rtclk[MC_SEC]);
-#endif
-	s = splclock();
-	rtcput(&rtclk);
-	if (rtc_update_century > 0) {
-		century = bintobcd(dt->dt_year / 100);
-		mc146818_write(NULL, centb, century); /* XXX softc */
-	}
-	splx(s);
-	return 0;
-
-}
-
-static void
-rtc_register(void)
-{
-	static struct todr_chip_handle	tch;
-	tch.todr_gettime_ymdhms = rtc_get_ymdhms;
-	tch.todr_settime_ymdhms = rtc_set_ymdhms;
-	tch.todr_setwen = NULL;
-
-	todr_attach(&tch);
 }
 
 void

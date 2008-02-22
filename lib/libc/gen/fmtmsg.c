@@ -1,4 +1,4 @@
-/*	$NetBSD: fmtmsg.c,v 1.3 2002/11/11 06:31:14 thorpej Exp $	*/
+/*	$NetBSD: fmtmsg.c,v 1.6 2014/09/18 13:58:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fmtmsg.c,v 1.3 2002/11/11 06:31:14 thorpej Exp $");
+__RCSID("$NetBSD: fmtmsg.c,v 1.6 2014/09/18 13:58:20 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <fmtmsg.h>
@@ -47,11 +40,11 @@ __RCSID("$NetBSD: fmtmsg.c,v 1.3 2002/11/11 06:31:14 thorpej Exp $");
 #include <stdlib.h>
 #include <string.h>
 
-static unsigned int	msgverb __P((const char *));
-static const char *	severity2str __P((int));
-static int		writeit __P((FILE *, unsigned int, const char *,
+static unsigned int	msgverb(const char *);
+static const char *	severity2str(int);
+static int		writeit(FILE *, unsigned int, const char *,
 			    const char *, const char *, const char *,
-			    const char *));
+			    const char *);
 
 #define MM_VERBLABEL		0x01U
 #define MM_VERBSEVERITY		0x02U
@@ -81,8 +74,7 @@ static const size_t nkeywords = sizeof (keywords) / sizeof (keywords[0]);
  * keywords.
  */
 static unsigned int
-msgverb(str)
-	const char *str;
+msgverb(const char *str)
 {
 	u_int i;
 	unsigned int result;
@@ -114,7 +106,7 @@ msgverb(str)
 	return (result);
 }
 
-static const char * const severities[] = {
+static const char severities[][8] = {
 	"",		/* MM_NONE */
 	"HALT",
 	"ERROR",
@@ -129,8 +121,7 @@ static const size_t nseverities = sizeof (severities) / sizeof (severities[0]);
  * value, defaulting to NULL for an unknown value.
  */
 static const char *
-severity2str(severity)
-	int severity;
+severity2str(int severity)
 {
 	const char *result;
 
@@ -149,14 +140,9 @@ severity2str(severity)
  * written, or a negative value in case of an error.
  */
 static int
-writeit(stream, which, label, sevstr, text, action, tag)
-	FILE *stream;
-	unsigned int which;
-	const char *label;
-	const char *sevstr;
-	const char *text;
-	const char *action;
-	const char *tag;
+writeit(FILE *stream, unsigned int which, const char *label,
+	const char *sevstr, const char *text, const char *action,
+	const char *tag)
 {
 	int nwritten;
 
@@ -191,13 +177,8 @@ writeit(stream, which, label, sevstr, text, action, tag)
 }
 
 int
-fmtmsg(classification, label, severity, text, action, tag)
-	long classification;
-	const char *label;
-	int severity;
-	const char *text;
-	const char *action;
-	const char *tag;
+fmtmsg(long classification, const char *label, int severity,
+	const char *text, const char *action, const char *tag)
 {
 	FILE *console;
 	const char *p, *sevstr;
@@ -232,7 +213,7 @@ fmtmsg(classification, label, severity, text, action, tag)
 	}
 	/* Similar to MM_PRINT but ignoring $MSGVERB. */
 	if (classification & MM_CONSOLE) {
-		if ((console = fopen(_PATH_CONSOLE, "w")) != NULL) {
+		if ((console = fopen(_PATH_CONSOLE, "we")) != NULL) {
 			if (writeit(console, MM_VERBALL,
 			    label, sevstr, text, action, tag) < 0)
 				result |= MM_NOCON;

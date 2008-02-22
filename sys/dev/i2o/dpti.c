@@ -1,4 +1,4 @@
-/*	$NetBSD: dpti.c,v 1.35 2007/10/19 11:59:43 ad Exp $	*/
+/*	$NetBSD: dpti.c,v 1.49 2017/10/28 04:53:55 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.35 2007/10/19 11:59:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.49 2017/10/28 04:53:55 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,11 +71,10 @@ __KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.35 2007/10/19 11:59:43 ad Exp $");
 #include <sys/ioctl.h>
 #include <sys/kauth.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <sys/bus.h>
 #ifdef __i386__
 #include <machine/pio.h>
+#include <machine/cputypes.h>
 #endif
 
 #include <dev/i2o/i2o.h>
@@ -91,6 +83,8 @@ __KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.35 2007/10/19 11:59:43 ad Exp $");
 #include <dev/i2o/iopvar.h>
 #include <dev/i2o/dptivar.h>
 
+#include "ioconf.h"
+
 #ifdef I2ODEBUG
 #define	DPRINTF(x)		printf x
 #else
@@ -98,46 +92,46 @@ __KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.35 2007/10/19 11:59:43 ad Exp $");
 #endif
 
 static struct dpt_sig dpti_sig = {
-	{ 'd', 'P', 't', 'S', 'i', 'G'},
-	SIG_VERSION,
+	.dsSignature = { 'd', 'P', 't', 'S', 'i', 'G'},
+	.dsSigVersion = SIG_VERSION,
 #if defined(__i386__)
-	PROC_INTEL,
+	.dsProcessorFamily = PROC_INTEL,
 #elif defined(__powerpc__)
-	PROC_POWERPC,
+	.dsProcessorFamily = PROC_POWERPC,
 #elif defined(__alpha__)
-	PROC_ALPHA,
+	.dsProcessorFamily = PROC_ALPHA,
 #elif defined(__mips__)
-	PROC_MIPS,
+	.dsProcessorFamily = PROC_MIPS,
 #elif defined(__sparc64__)
-	PROC_ULTRASPARC,
+	.dsProcessorFamily = PROC_ULTRASPARC,
 #endif
 #if defined(__i386__)
-	PROC_386 | PROC_486 | PROC_PENTIUM | PROC_SEXIUM,
+	.dsProcessor = PROC_386 | PROC_486 | PROC_PENTIUM | PROC_SEXIUM,
 #else
-	0,
+	.dsProcessor = 0,
 #endif
-	FT_HBADRVR,
-	0,
-	OEM_DPT,
-	OS_FREE_BSD,	/* XXX */
-	CAP_ABOVE16MB,
-	DEV_ALL,
-	ADF_ALL_SC5,
-	0,
-	0,
-	DPTI_VERSION,
-	DPTI_REVISION,
-	DPTI_SUBREVISION,
-	DPTI_MONTH,
-	DPTI_DAY,
-	DPTI_YEAR,
-	""		/* Will be filled later */
+	.dsFiletype = FT_HBADRVR,
+	.dsFiletypeFlags = 0,
+	.dsOEM = OEM_DPT,
+	.dsOS = (uint32_t)OS_FREE_BSD,	/* XXX */
+	.dsCapabilities = CAP_ABOVE16MB,
+	.dsDeviceSupp = DEV_ALL,
+	.dsAdapterSupp = ADF_ALL_SC5,
+	.dsApplication =  0,
+	.dsRequirements = 0,
+	.dsVersion = DPTI_VERSION,
+	.dsRevision = DPTI_REVISION,
+	.dsSubRevision = DPTI_SUBREVISION,
+	.dsMonth = DPTI_MONTH,
+	.dsDay = DPTI_DAY,
+	.dsYear = DPTI_YEAR,
+	.dsDescription = { '\0' },		/* Will be filled later */
 };
 
-void	dpti_attach(struct device *, struct device *, void *);
+void	dpti_attach(device_t, device_t, void *);
 int	dpti_blinkled(struct dpti_softc *);
 int	dpti_ctlrinfo(struct dpti_softc *, int, void *);
-int	dpti_match(struct device *, struct cfdata *, void *);
+int	dpti_match(device_t, cfdata_t, void *);
 int	dpti_passthrough(struct dpti_softc *, void *, struct proc *);
 int	dpti_sysinfo(struct dpti_softc *, int, void *);
 
@@ -145,23 +139,31 @@ dev_type_open(dptiopen);
 dev_type_ioctl(dptiioctl);
 
 const struct cdevsw dpti_cdevsw = {
-	dptiopen, nullclose, noread, nowrite, dptiioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
+	.d_open = dptiopen,
+	.d_close = nullclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = dptiioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER,
 };
 
-extern struct cfdriver dpti_cd;
-
-CFATTACH_DECL(dpti, sizeof(struct dpti_softc),
+CFATTACH_DECL_NEW(dpti, sizeof(struct dpti_softc),
     dpti_match, dpti_attach, NULL, NULL);
 
 int
-dpti_match(struct device *parent, struct cfdata *match, void *aux)
+dpti_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct iop_attach_args *ia;
 	struct iop_softc *iop;
 
 	ia = aux;
-	iop = (struct iop_softc *)parent;
+	iop = device_private(parent);
 
 	if (ia->ia_class != I2O_CLASS_ANY || ia->ia_tid != I2O_TID_IOP)
 		return (0);
@@ -173,7 +175,7 @@ dpti_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-dpti_attach(struct device *parent, struct device *self, void *aux)
+dpti_attach(device_t parent, device_t self, void *aux)
 {
 	struct iop_softc *iop;
 	struct dpti_softc *sc;
@@ -181,10 +183,11 @@ dpti_attach(struct device *parent, struct device *self, void *aux)
 		struct	i2o_param_op_results pr;
 		struct	i2o_param_read_results prr;
 		struct	i2o_dpt_param_exec_iop_buffers dib;
-	} __attribute__ ((__packed__)) param;
+	} __packed param;
 	int rv;
 
 	sc = device_private(self);
+	sc->sc_dev = self;
 	iop = device_private(parent);
 
 	/*
@@ -223,8 +226,8 @@ dptiioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	struct ioctl_pt *pt;
 	int i, size, rv, linux;
 
-	sc = device_lookup(&dpti_cd, minor(dev));
-	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
+	sc = device_lookup_private(&dpti_cd, minor(dev));
+	iop = device_private(device_parent(sc->sc_dev));
 	rv = 0;
 
 	if (cmd == PTIOCLINUX) {
@@ -280,21 +283,18 @@ dptiioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		if (rv)
 			break;
 
-		if (sc->sc_nactive++ >= 2)
-			tsleep(&sc->sc_nactive, PRIBIO, "dptislp", 0);
-
-		if (linux)
+		mutex_enter(&iop->sc_conflock);
+		if (linux) {
 			rv = dpti_passthrough(sc, data, l->l_proc);
-		else
+		} else {
 			rv = dpti_passthrough(sc, *(void **)data, l->l_proc);
-
-		sc->sc_nactive--;
-		wakeup_one(&sc->sc_nactive);
+		}
+		mutex_exit(&iop->sc_conflock);
 		break;
 
 	case DPT_I2ORESETCMD:
 		printf("%s: I2ORESETCMD not implemented\n",
-		    sc->sc_dv.dv_xname);
+		    device_xname(sc->sc_dev));
 		rv = EOPNOTSUPP;
 		break;
 
@@ -318,7 +318,7 @@ dpti_blinkled(struct dpti_softc *sc)
 	struct iop_softc *iop;
 	u_int v;
 
-	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
+	iop = device_private(device_parent(sc->sc_dev));
 
 	v = bus_space_read_1(iop->sc_iot, iop->sc_ioh, sc->sc_blinkled + 0);
 	if (v == 0xbc) {
@@ -337,12 +337,12 @@ dpti_ctlrinfo(struct dpti_softc *sc, int size, void *data)
 	struct iop_softc *iop;
 	int rv, i;
 
-	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
+	iop = device_private(device_parent(sc->sc_dev));
 
 	memset(&info, 0, sizeof(info));
 
 	info.length = sizeof(info) - sizeof(u_int16_t);
-	info.drvrHBAnum = device_unit(&sc->sc_dv);
+	info.drvrHBAnum = device_unit(sc->sc_dev);
 	info.baseAddr = iop->sc_memaddr;
 	if ((i = dpti_blinkled(sc)) == -1)
 		i = 0;
@@ -459,13 +459,12 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 	int rv, msgsize, repsize, sgoff, i, mapped, nbuf, nfrag, j, sz;
 	u_int32_t *p, *pmax;
 
-	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
+	iop = device_private(device_parent(sc->sc_dev));
 	im = NULL;
 
 	if ((rv = dpti_blinkled(sc)) != -1) {
 		if (rv != 0) {
-			printf("%s: adapter blinkled = 0x%02x\n",
-			    sc->sc_dv.dv_xname, rv);
+			aprint_error_dev(sc->sc_dev, "adapter blinkled = 0x%02x\n", rv);
 			return (EIO);
 		}
 	}
@@ -476,14 +475,14 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 	 */
 	if ((rv = copyin(data, &mh, sizeof(mh))) != 0) {
 		DPRINTF(("%s: message copyin failed\n",
-		    sc->sc_dv.dv_xname));
+		    device_xname(sc->sc_dev)));
 		return (rv);
 	}
 
 	msgsize = (mh.msgflags >> 14) & ~3;
 	if (msgsize < sizeof(mh) || msgsize >= IOP_MAX_MSG_SIZE) {
 		DPRINTF(("%s: bad message frame size\n",
-		    sc->sc_dv.dv_xname));
+		    device_xname(sc->sc_dev)));
 		return (EINVAL);
 	}
 
@@ -493,17 +492,17 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 	switch (mh.msgfunc >> 24) {
 	case I2O_EXEC_IOP_RESET:
 		printf("%s: I2O_EXEC_IOP_RESET not implemented\n",
-		    sc->sc_dv.dv_xname);
+		    device_xname(sc->sc_dev));
 		return (EOPNOTSUPP);
 
 	case I2O_EXEC_OUTBOUND_INIT:
 		printf("%s: I2O_EXEC_OUTBOUND_INIT not implemented\n",
-		    sc->sc_dv.dv_xname);
+		    device_xname(sc->sc_dev));
 		return (EOPNOTSUPP);
 
 	case I2O_EXEC_SYS_TAB_SET:
 		printf("%s: I2O_EXEC_SYS_TAB_SET not implemented\n",
-		    sc->sc_dv.dv_xname);
+		    device_xname(sc->sc_dev));
 		return (EOPNOTSUPP);
 
 	case I2O_EXEC_STATUS_GET:
@@ -518,7 +517,7 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 	 */
 	if ((rv = copyin(data, mbtmp, msgsize)) != 0) {
 		DPRINTF(("%s: full message copyin failed\n",
-		    sc->sc_dv.dv_xname));
+		    device_xname(sc->sc_dev)));
 		return (rv);
 	}
 
@@ -527,19 +526,19 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 	 */
 	if ((rv = copyin((char *)data + msgsize, &rh, sizeof(rh))) != 0) {
 		DPRINTF(("%s: reply copyin failed\n",
-		    sc->sc_dv.dv_xname));
+		    device_xname(sc->sc_dev)));
 		return (rv);
 	}
 
 	repsize = (rh.msgflags >> 14) & ~3;
 	if (repsize < sizeof(rh) || repsize >= IOP_MAX_MSG_SIZE) {
 		DPRINTF(("%s: bad reply header size\n",
-		    sc->sc_dv.dv_xname));
+		    device_xname(sc->sc_dev)));
 		return (EINVAL);
 	}
 
 	if ((rv = copyin((char *)data + msgsize, rbtmp, repsize)) != 0) {
-		DPRINTF(("%s: reply too large\n", sc->sc_dv.dv_xname));
+		DPRINTF(("%s: reply too large\n", device_xname(sc->sc_dev)));
 		return (rv);
 	}
 
@@ -553,7 +552,7 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 	if ((sgoff = ((mh.msgflags >> 4) & 15)) != 0) {
 		if ((sgoff + 2) > (msgsize >> 2)) {
 			DPRINTF(("%s: invalid message size fields\n",
-			    sc->sc_dv.dv_xname));
+			    device_xname(sc->sc_dev)));
 			return (EINVAL);
 		}
 
@@ -565,13 +564,13 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 		for (nbuf = 0; nbuf < IOP_MAX_MSG_XFERS; nbuf++, p += 2) {
 			if (p > pmax) {
 				DPRINTF(("%s: invalid SGL (1)\n",
-				    sc->sc_dv.dv_xname));
+				    device_xname(sc->sc_dev)));
 				goto bad;
 			}
 
 			if ((p[0] & 0x30000000) != I2O_SGL_SIMPLE) {
 				DPRINTF(("%s: invalid SGL (2)\n",
-				    sc->sc_dv.dv_xname));
+				    device_xname(sc->sc_dev)));
 				goto bad;
 			}
 
@@ -581,11 +580,12 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 			if ((p[0] & I2O_SGL_END_BUFFER) != 0) {
 				if ((p[0] & 0x00ffffff) > IOP_MAX_XFER) {
 					DPRINTF(("%s: buffer too large\n",
-					    sc->sc_dv.dv_xname));
+					    device_xname(sc->sc_dev)));
 					goto bad;
 				}
 
-				bufs[nbuf].db_ptr = (void *)p[1];
+				// XXX: 32 bits 
+				bufs[nbuf].db_ptr = (void *)(intptr_t)p[1];
 				bufs[nbuf].db_proc = proc;
 				bufs[nbuf].db_size = p[0] & 0x00ffffff;
 
@@ -604,14 +604,15 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 			for (; p <= pmax; p += 2) {
 				if (nfrag == DPTI_MAX_SEGS) {
 					DPRINTF(("%s: too many segments\n",
-					    sc->sc_dv.dv_xname));
+					    device_xname(sc->sc_dev)));
 					goto bad;
 				}
 
 				bufs[nbuf].db_frags[nfrag].iov_len =
 				    p[0] & 0x00ffffff;
+				// XXX: 32 bits 
 				bufs[nbuf].db_frags[nfrag].iov_base =
-				    (void *)p[1];
+				    (void *)(intptr_t)p[1];
 
 				sz += p[0] & 0x00ffffff;
 				nfrag++;
@@ -620,7 +621,7 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 					if ((p[0] & I2O_SGL_END_BUFFER) == 0) {
 						DPRINTF((
 						    "%s: invalid SGL (3)\n",
-						    sc->sc_dv.dv_xname));
+						    device_xname(sc->sc_dev)));
 						goto bad;
 					}
 					break;
@@ -632,13 +633,13 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 
 			if (p > pmax) {
 				DPRINTF(("%s: invalid SGL (4)\n",
-				    sc->sc_dv.dv_xname));
+				    device_xname(sc->sc_dev)));
 				goto bad;
 			}
 
 			if (sz > IOP_MAX_XFER) {
 				DPRINTF(("%s: buffer too large\n",
-				    sc->sc_dv.dv_xname));
+				    device_xname(sc->sc_dev)));
 				goto bad;
 			}
 
@@ -646,7 +647,7 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 			bufs[nbuf].db_ptr = malloc(sz, M_DEVBUF, M_WAITOK);
 			if (bufs[nbuf].db_ptr == NULL) {
 				DPRINTF(("%s: allocation failure\n",
-				    sc->sc_dv.dv_xname));
+				    device_xname(sc->sc_dev)));
 				rv = ENOMEM;
 				goto bad;
 			}
@@ -657,7 +658,7 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 				    bufs[nbuf].db_frags[i].iov_len);
 				if (rv != 0) {
 					DPRINTF(("%s: frag copyin\n",
-					    sc->sc_dv.dv_xname));
+					    device_xname(sc->sc_dev)));
 					goto bad;
 				}
 				sz += bufs[nbuf].db_frags[i].iov_len;
@@ -669,7 +670,7 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 
 		if (nbuf == IOP_MAX_MSG_XFERS) {
 			DPRINTF(("%s: too many transfers\n",
-			    sc->sc_dv.dv_xname));
+			    device_xname(sc->sc_dev)));
 			goto bad;
 		}
 	} else
@@ -697,7 +698,7 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 		    bufs[i].db_size, bufs[i].db_out, bufs[i].db_proc);
 		if (rv != 0) {
 			DPRINTF(("%s: msg_map failed, rv = %d\n",
-			    sc->sc_dv.dv_xname, rv));
+			    device_xname(sc->sc_dev), rv));
 			goto bad;
 		}
 		mapped = 1;
@@ -714,7 +715,7 @@ dpti_passthrough(struct dpti_softc *sc, void *data, struct proc *proc)
 	 */
 	if ((rv = copyout(rbtmp, (char *)data + msgsize, repsize)) != 0) {
 		DPRINTF(("%s: reply copyout() failed\n",
-		    sc->sc_dv.dv_xname));
+		    device_xname(sc->sc_dev)));
 	}
 
  bad:

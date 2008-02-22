@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_red.c,v 1.27 2008/01/20 18:09:03 joerg Exp $	*/
+/*	$NetBSD: altq_red.c,v 1.30 2016/04/20 08:58:48 knakahara Exp $	*/
 /*	$KAME: altq_red.c,v 1.20 2005/04/13 03:44:25 suz Exp $	*/
 
 /*
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.27 2008/01/20 18:09:03 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.30 2016/04/20 08:58:48 knakahara Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"
@@ -87,6 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.27 2008/01/20 18:09:03 joerg Exp $");
 #include <sys/time.h>
 #endif
 #endif /* ALTQ3_COMPAT */
+#include <sys/cprng.h>
 
 #include <net/if.h>
 
@@ -202,7 +203,7 @@ static int default_inv_pmax = INV_P_MAX;
 
 #ifdef ALTQ3_COMPAT
 /* internal function prototypes */
-static int red_enqueue(struct ifaltq *, struct mbuf *, struct altq_pktattr *);
+static int red_enqueue(struct ifaltq *, struct mbuf *);
 static struct mbuf *red_dequeue(struct ifaltq *, int);
 static int red_request(struct ifaltq *, int, void *);
 static void red_purgeq(red_queue_t *);
@@ -505,7 +506,7 @@ drop_early(int fp_len, int fp_probd, int count)
 	 * drop probability = (avg - TH_MIN) / d
 	 */
 
-	if ((arc4random() % d) < fp_len) {
+	if ((cprng_fast32() % d) < fp_len) {
 		/* drop or mark */
 		return (1);
 	}
@@ -526,7 +527,7 @@ mark_ecn(struct mbuf *m, struct altq_pktattr *pktattr, int flags)
 	void		*hdr;
 	int		 af;
 
-	t = m_tag_find(m, PACKET_TAG_PF_QID, NULL);
+	t = m_tag_find(m, PACKET_TAG_ALTQ_QID, NULL);
 	if (t != NULL) {
 		at = (struct altq_tag *)(t + 1);
 		if (at == NULL)
@@ -1010,11 +1011,16 @@ red_detach(red_queue_t *rqp)
  *		 ENOBUFS when drop occurs.
  */
 static int
-red_enqueue(struct ifaltq *ifq, struct mbuf *m, struct altq_pktattr *pktattr)
+red_enqueue(struct ifaltq *ifq, struct mbuf *m)
 {
+	struct altq_pktattr pktattr;
 	red_queue_t *rqp = (red_queue_t *)ifq->altq_disc;
 
-	if (red_addq(rqp->rq_red, rqp->rq_q, m, pktattr) < 0)
+	pktattr.pattr_class = m->m_pkthdr.pattr_class;
+	pktattr.pattr_af = m->m_pkthdr.pattr_af;
+	pktattr.pattr_hdr = m->m_pkthdr.pattr_hdr;
+
+	if (red_addq(rqp->rq_red, rqp->rq_q, m, &pktattr) < 0)
 		return ENOBUFS;
 	ifq->ifq_len++;
 	return 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xe.c,v 1.17 2005/12/11 12:18:25 christos Exp $	*/
+/*	$NetBSD: if_xe.c,v 1.24 2016/06/10 13:27:12 ozaki-r Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Darrin B. Jewell
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,10 +25,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xe.c,v 1.17 2005/12/11 12:18:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xe.c,v 1.24 2016/06/10 13:27:12 ozaki-r Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,20 +70,15 @@ __KERNEL_RCSID(0, "$NetBSD: if_xe.c,v 1.17 2005/12/11 12:18:25 christos Exp $");
 #ifdef XE_DEBUG
 int xe_debug = 0;
 #define DPRINTF(x) if (xe_debug) printf x;
-extern char *ndtracep;
-extern char ndtrace[];
-extern int ndtraceshow;
-#define NDTRACEIF(x) if (10 && ndtracep < (ndtrace + 8192)) do {x;} while (0)
 #else
 #define DPRINTF(x)
-#define NDTRACEIF(x)
 #endif
 #define PRINTF(x) printf x;
 
 extern int turbo;
 
-int	xe_match(struct device *, struct cfdata *, void *);
-void	xe_attach(struct device *, struct device *, void *);
+int	xe_match(device_t, cfdata_t, void *);
+void	xe_attach(device_t, device_t, void *);
 int	xe_tint(void *);
 int	xe_rint(void *);
 
@@ -102,9 +91,9 @@ void xe_dma_tx_completed(bus_dmamap_t, void *);
 void xe_dma_rx_shutdown(void *);
 void xe_dma_tx_shutdown(void *);
 
-static void	findchannel_defer(struct device *);
+static void	findchannel_defer(device_t);
 
-CFATTACH_DECL(xe, sizeof(struct xe_softc),
+CFATTACH_DECL_NEW(xe, sizeof(struct xe_softc),
     xe_match, xe_attach, NULL, NULL);
 
 static int xe_dma_medias[] = {
@@ -144,7 +133,7 @@ struct mb8795_glue xe_glue = {
 };
 
 int
-xe_match(struct device *parent, struct cfdata *match, void *aux)
+xe_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct intio_attach_args *ia = (struct intio_attach_args *)aux;
 
@@ -157,26 +146,27 @@ xe_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-findchannel_defer(struct device *self)
+findchannel_defer(device_t self)
 {
-	struct xe_softc *xsc = (struct xe_softc *)self;
+	struct xe_softc *xsc = device_private(self);
 	struct mb8795_softc *sc = &xsc->sc_mb8795;
 	int i, error;
 
 	if (!xsc->sc_txdma) {
 		xsc->sc_txdma = nextdma_findchannel ("enetx");
 		if (xsc->sc_txdma == NULL)
-			panic ("%s: can't find enetx DMA channel",
-			       sc->sc_dev.dv_xname);
+			panic("%s: can't find enetx DMA channel",
+			       device_xname(sc->sc_dev));
 	}
 	if (!xsc->sc_rxdma) {
 		xsc->sc_rxdma = nextdma_findchannel ("enetr");
 		if (xsc->sc_rxdma == NULL)
 			panic ("%s: can't find enetr DMA channel",
-			       sc->sc_dev.dv_xname);
+			       device_xname(sc->sc_dev));
 	}
-	printf ("%s: using DMA channels %s %s\n", sc->sc_dev.dv_xname,
-		xsc->sc_txdma->sc_dev.dv_xname, xsc->sc_rxdma->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "using DMA channels %s %s\n",
+		device_xname(xsc->sc_txdma->sc_dev),
+		device_xname(xsc->sc_rxdma->sc_dev));
 
 	nextdma_setconf (xsc->sc_rxdma, continue_cb, xe_dma_rx_continue);
 	nextdma_setconf (xsc->sc_rxdma, completed_cb, xe_dma_rx_completed);
@@ -193,8 +183,8 @@ findchannel_defer(struct device *self)
 				  (MCLBYTES/MSIZE), MCLBYTES, 0, BUS_DMA_ALLOCNOW,
 				  &xsc->sc_tx_dmamap);
 	if (error) {
-		panic("%s: can't create tx DMA map, error = %d",
-		      sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev, "can't create tx DMA map, error = %d",
+		      error);
 	}
 
 	for(i = 0; i < MB8795_NRXBUFS; i++) {
@@ -203,7 +193,7 @@ findchannel_defer(struct device *self)
 					  &xsc->sc_rx_dmamap[i]);
 		if (error) {
 			panic("%s: can't create rx DMA map, error = %d",
-			      sc->sc_dev.dv_xname, error);
+			      device_xname(sc->sc_dev), error);
 		}
 		xsc->sc_rx_mb_head[i] = NULL;
 	}
@@ -217,7 +207,7 @@ findchannel_defer(struct device *self)
 	 */
 	xsc->sc_txbuf = malloc(2000, M_DEVBUF, M_NOWAIT);
 	if (!xsc->sc_txbuf)
-		panic("%s: can't malloc tx DMA buffer", sc->sc_dev.dv_xname);
+		panic("%s: can't malloc tx DMA buffer", device_xname(sc->sc_dev));
 	
 	xsc->sc_tx_mb_head = NULL;
 	xsc->sc_tx_loaded = 0;
@@ -231,13 +221,14 @@ findchannel_defer(struct device *self)
 }
 
 void
-xe_attach(struct device *parent, struct device *self, void *aux)
+xe_attach(device_t parent, device_t self, void *aux)
 {
 	struct intio_attach_args *ia = (struct intio_attach_args *)aux;
-	struct xe_softc *xsc = (struct xe_softc *)self;
+	struct xe_softc *xsc = device_private(self);
 	struct mb8795_softc *sc = &xsc->sc_mb8795;
 
-	DPRINTF(("%s: xe_attach()\n",sc->sc_dev.dv_xname));
+	sc->sc_dev = self;
+	DPRINTF(("%s: xe_attach()\n", device_xname(self)));
 
 	{
 		extern u_char rom_enetaddr[6];     /* kludge from machdep.c:next68k_bootargs() */
@@ -248,7 +239,7 @@ xe_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	printf("\n%s: MAC address %02x:%02x:%02x:%02x:%02x:%02x\n",
-	       sc->sc_dev.dv_xname,
+	       device_xname(self),
 	       sc->sc_enaddr[0],sc->sc_enaddr[1],sc->sc_enaddr[2],
 	       sc->sc_enaddr[3],sc->sc_enaddr[4],sc->sc_enaddr[5]);
 
@@ -256,14 +247,14 @@ xe_attach(struct device *parent, struct device *self, void *aux)
 	if (bus_space_map(xsc->sc_bst, NEXT_P_ENET,
 			  XE_DEVICE_SIZE, 0, &xsc->sc_bsh)) {
 		panic("\n%s: can't map mb8795 registers",
-		      sc->sc_dev.dv_xname);
+		      device_xname(self));
 	}
 
 	sc->sc_bmap_bst = ia->ia_bst;
 	if (bus_space_map(sc->sc_bmap_bst, NEXT_P_BMAP,
 			  BMAP_SIZE, 0, &sc->sc_bmap_bsh)) {
 		panic("\n%s: can't map bmap registers",
-		      sc->sc_dev.dv_xname);
+		      device_xname(self));
 	}
 
 	/*
@@ -271,12 +262,12 @@ xe_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	sc->sc_glue = &xe_glue;
 
-	xsc->sc_txdma = nextdma_findchannel ("enetx");
-	xsc->sc_rxdma = nextdma_findchannel ("enetr");
+	xsc->sc_txdma = nextdma_findchannel("enetx");
+	xsc->sc_rxdma = nextdma_findchannel("enetr");
 	if (xsc->sc_rxdma && xsc->sc_txdma) {
-		findchannel_defer (self);
+		findchannel_defer(self);
 	} else {
-		config_defer (self, findchannel_defer);
+		config_defer(self, findchannel_defer);
 	}
 
 	attached = 1;
@@ -472,7 +463,7 @@ xe_dma_tx_mbuf(struct mb8795_softc *sc, struct mbuf *m)
 			u_char *p = buf;
 			for (m=xsc->sc_tx_mb_head; m; m = m->m_next) {
 				if (m->m_len == 0) continue;
-				bcopy(mtod(m, u_char *), p, m->m_len);
+				memcpy(p, mtod(m, u_char *), m->m_len);
 				p += m->m_len;
 			}
 			/* Fix runt packets */
@@ -488,8 +479,8 @@ xe_dma_tx_mbuf(struct mb8795_softc *sc, struct mbuf *m)
 	}
 #endif
 	if (error) {
-		printf("%s: can't load mbuf chain, error = %d\n",
-		       sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev, "can't load mbuf chain, error = %d\n",
+		    error);
 		m_freem(xsc->sc_tx_mb_head);
 		xsc->sc_tx_mb_head = NULL;
 		return (error);
@@ -497,7 +488,7 @@ xe_dma_tx_mbuf(struct mb8795_softc *sc, struct mbuf *m)
 
 #ifdef DIAGNOSTIC
 	if (xsc->sc_tx_loaded != 0) {
-		panic("%s: xsc->sc_tx_loaded is %d",sc->sc_dev.dv_xname,
+		panic("%s: xsc->sc_tx_loaded is %d", device_xname(sc->sc_dev),
 		      xsc->sc_tx_loaded);
 	}
 #endif
@@ -528,14 +519,14 @@ xe_dma_tx_completed(bus_dmamap_t map, void *arg)
 	struct xe_softc *xsc = (struct xe_softc *)sc;
 #endif
 
-	DPRINTF(("%s: xe_dma_tx_completed()\n",sc->sc_dev.dv_xname));
+	DPRINTF(("%s: xe_dma_tx_completed()\n", device_xname(sc->sc_dev)));
 
 #ifdef DIAGNOSTIC
 	if (!xsc->sc_tx_loaded) {
-		panic("%s: tx completed never loaded",sc->sc_dev.dv_xname);
+		panic("%s: tx completed never loaded", device_xname(sc->sc_dev));
 	}
 	if (map != xsc->sc_tx_dmamap) {
-		panic("%s: unexpected tx completed map",sc->sc_dev.dv_xname);
+		panic("%s: unexpected tx completed map", device_xname(sc->sc_dev));
 	}
 
 #endif
@@ -548,11 +539,11 @@ xe_dma_tx_shutdown(void *arg)
 	struct xe_softc *xsc = (struct xe_softc *)sc;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
-	DPRINTF(("%s: xe_dma_tx_shutdown()\n",sc->sc_dev.dv_xname));
+	DPRINTF(("%s: xe_dma_tx_shutdown()\n", device_xname(sc->sc_dev)));
 
 #ifdef DIAGNOSTIC
 	if (!xsc->sc_tx_loaded) {
-		panic("%s: tx shutdown never loaded",sc->sc_dev.dv_xname);
+		panic("%s: tx shutdown never loaded", device_xname(sc->sc_dev));
 	}
 #endif
 
@@ -571,7 +562,7 @@ xe_dma_tx_shutdown(void *arg)
 
 #ifdef DIAGNOSTIC
 	if (xsc->sc_tx_loaded != 0) {
-		panic("%s: sc->sc_tx_loaded is %d",sc->sc_dev.dv_xname,
+		panic("%s: sc->sc_tx_loaded is %d", device_xname(sc->sc_dev),
 		      xsc->sc_tx_loaded);
 	}
 #endif
@@ -606,19 +597,19 @@ xe_dma_rx_completed(bus_dmamap_t map, void *arg)
 		xsc->sc_rx_completed_idx %= MB8795_NRXBUFS;
 		
 		DPRINTF(("%s: xe_dma_rx_completed(), sc->sc_rx_completed_idx = %d\n",
-			 sc->sc_dev.dv_xname, xsc->sc_rx_completed_idx));
+			 device_xname(sc->sc_dev), xsc->sc_rx_completed_idx));
 		
 #if (defined(DIAGNOSTIC))
 		if (map != xsc->sc_rx_dmamap[xsc->sc_rx_completed_idx]) {
 			panic("%s: Unexpected rx dmamap completed",
-			      sc->sc_dev.dv_xname);
+			      device_xname(sc->sc_dev));
 		}
 #endif
 	}
 #ifdef DIAGNOSTIC
 	else
 		DPRINTF(("%s: Unexpected rx dmamap completed while if not running\n",
-			 sc->sc_dev.dv_xname));
+			 device_xname(sc->sc_dev)));
 #endif
 }
 
@@ -631,7 +622,7 @@ xe_dma_rx_shutdown(void *arg)
 
 	if (ifp->if_flags & IFF_RUNNING) {
 		DPRINTF(("%s: xe_dma_rx_shutdown(), restarting.\n",
-			 sc->sc_dev.dv_xname));
+			 device_xname(sc->sc_dev)));
 		
 		nextdma_start(xsc->sc_rxdma, DMACSR_SETREAD);
 		if (turbo)
@@ -640,7 +631,7 @@ xe_dma_rx_shutdown(void *arg)
 #ifdef DIAGNOSTIC
 	else
 		DPRINTF(("%s: Unexpected rx DMA shutdown while if not running\n",
-			 sc->sc_dev.dv_xname));
+			 device_xname(sc->sc_dev)));
 #endif
 }
 
@@ -685,7 +676,7 @@ xe_dma_rxmap_load(struct mb8795_softc *sc, bus_dmamap_t map)
 		m->m_len = buflen;
 	}
 
-	m->m_pkthdr.rcvif = ifp;
+	m_set_rcvif(m, ifp);
 	m->m_pkthdr.len = m->m_len;
 
 	error = bus_dmamap_load_mbuf(xsc->sc_rxdma->sc_dmat,
@@ -701,7 +692,7 @@ xe_dma_rxmap_load(struct mb8795_softc *sc, bus_dmamap_t map)
 				MCLBYTES, map->_dm_size));
 
 		panic("%s: can't load rx mbuf chain, error = %d",
-				sc->sc_dev.dv_xname, error);
+				device_xname(sc->sc_dev), error);
 		m_freem(m);
 		m = NULL;
 	}
@@ -725,7 +716,7 @@ xe_dma_rx_continue(void *arg)
 			if (m)
 				m_freem(m);
 #if (defined(DIAGNOSTIC))
-			DPRINTF(("%s: out of receive DMA buffers\n",sc->sc_dev.dv_xname));
+			DPRINTF(("%s: out of receive DMA buffers\n", device_xname(sc->sc_dev)));
 #endif
 		}
 		xsc->sc_rx_loaded_idx++;
@@ -733,12 +724,12 @@ xe_dma_rx_continue(void *arg)
 		map = xsc->sc_rx_dmamap[xsc->sc_rx_loaded_idx];
 		
 		DPRINTF(("%s: xe_dma_rx_continue() xsc->sc_rx_loaded_idx = %d\nn",
-			 sc->sc_dev.dv_xname,xsc->sc_rx_loaded_idx));
+			 device_xname(sc->sc_dev), xsc->sc_rx_loaded_idx));
 	}
 #ifdef DIAGNOSTIC
 	else
 		panic("%s: Unexpected rx DMA continue while if not running",
-		      sc->sc_dev.dv_xname);
+		      device_xname(sc->sc_dev));
 #endif
 	
 	return(map);
@@ -751,7 +742,7 @@ xe_dma_tx_continue(void *arg)
 	struct xe_softc *xsc = (struct xe_softc *)sc;
 	bus_dmamap_t map;
 
-	DPRINTF(("%s: xe_dma_tx_continue()\n",sc->sc_dev.dv_xname));
+	DPRINTF(("%s: xe_dma_tx_continue()\n", device_xname(sc->sc_dev)));
 
 	if (xsc->sc_tx_loaded) {
 		map = NULL;
@@ -762,7 +753,7 @@ xe_dma_tx_continue(void *arg)
 
 #ifdef DIAGNOSTIC
 	if (xsc->sc_tx_loaded != 1) {
-		panic("%s: sc->sc_tx_loaded is %d",sc->sc_dev.dv_xname,
+		panic("%s: sc->sc_tx_loaded is %d", device_xname(sc->sc_dev),
 				xsc->sc_tx_loaded);
 	}
 #endif

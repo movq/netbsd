@@ -1,4 +1,4 @@
-/*	$NetBSD: tc.c,v 1.47 2008/02/19 18:30:33 matt Exp $	*/
+/*	$NetBSD: tc.c,v 1.56 2017/06/10 12:03:30 flxd Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tc.c,v 1.47 2008/02/19 18:30:33 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tc.c,v 1.56 2017/06/10 12:03:30 flxd Exp $");
 
 #include "opt_tcverbose.h"
 
@@ -45,9 +45,9 @@ __KERNEL_RCSID(0, "$NetBSD: tc.c,v 1.47 2008/02/19 18:30:33 matt Exp $");
 #include "locators.h"
 
 /* Definition of the driver for autoconfig. */
-static int	tcmatch(struct device *, struct cfdata *, void *);
+static int	tcmatch(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(tc, sizeof(struct tc_softc),
+CFATTACH_DECL_NEW(tc, sizeof(struct tc_softc),
     tcmatch, tcattach, NULL, NULL);
 
 extern struct cfdriver tc_cd;
@@ -56,7 +56,7 @@ static int	tcprint(void *, const char *);
 static void	tc_devinfo(const char *, char *, size_t);
 
 static int
-tcmatch(struct device *parent, struct cfdata *cf, void *aux)
+tcmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct tcbus_attach_args *tba = aux;
 
@@ -67,7 +67,7 @@ tcmatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-tcattach(struct device *parent, struct device *self, void *aux)
+tcattach(device_t parent, device_t self, void *aux)
 {
 	struct tc_softc *sc = device_private(self);
 	struct tcbus_attach_args *tba = aux;
@@ -77,6 +77,8 @@ tcattach(struct device *parent, struct device *self, void *aux)
 	tc_addr_t tcaddr;
 	int i;
 	int locs[TCCF_NLOCS];
+
+	sc->sc_dev = self;
 
 	printf(": %s MHz clock\n",
 	    tba->tba_speed == TC_SPEED_25_MHZ ? "25" : "12.5");
@@ -154,7 +156,7 @@ tcattach(struct device *parent, struct device *self, void *aux)
 		tcaddr = slot->tcs_addr;
 		if (tc_badaddr(tcaddr))
 			continue;
-		if (tc_checkslot(tcaddr, ta.ta_modname) == 0)
+		if (tc_checkslot(tcaddr, ta.ta_modname, NULL) == 0)
 			continue;
 
 		/*
@@ -166,6 +168,7 @@ tcattach(struct device *parent, struct device *self, void *aux)
 		ta.ta_offset = 0;
 		ta.ta_addr = tcaddr;
 		ta.ta_cookie = slot->tcs_cookie;
+		ta.ta_busspeed = sc->sc_speed;
 
 		/*
 		 * Mark the slot as used.
@@ -199,13 +202,38 @@ tcprint(void *aux, const char *pnp)
 
 static const tc_offset_t tc_slot_romoffs[] = {
 	TC_SLOT_ROM,
-#ifndef __vax__
 	TC_SLOT_PROTOROM,
-#endif
 };
 
+static int
+tc_check_romp(const struct tc_rommap *romp)
+{
+
+	switch (romp->tcr_width.v) {
+	case 1:
+	case 2:
+	case 4:
+		break;
+
+	default:
+		return 0;
+	}
+
+	if (romp->tcr_stride.v != 4)
+		return 0;
+
+	for (size_t j = 0; j < romp->tcr_width.v; j++) {
+		if (romp->tcr_test[j + 0 * romp->tcr_stride.v] != 0x55 ||
+		    romp->tcr_test[j + 1 * romp->tcr_stride.v] != 0x00 ||
+		    romp->tcr_test[j + 2 * romp->tcr_stride.v] != 0xaa ||
+		    romp->tcr_test[j + 3 * romp->tcr_stride.v] != 0xff)
+			return 0;
+	}
+	return 1;
+}
+
 int
-tc_checkslot(tc_addr_t slotbase, char *namep)
+tc_checkslot(tc_addr_t slotbase, char *namep, struct tc_rommap **rompp)
 {
 	struct tc_rommap *romp;
 	int i, j;
@@ -214,55 +242,42 @@ tc_checkslot(tc_addr_t slotbase, char *namep)
 		romp = (struct tc_rommap *)
 		    (slotbase + tc_slot_romoffs[i]);
 
-		switch (romp->tcr_width.v) {
-		case 1:
-		case 2:
-		case 4:
-			break;
-
-		default:
+		if (!tc_check_romp(romp))
 			continue;
+
+		if (namep != NULL) {
+			for (j = 0; j < TC_ROM_LLEN; j++)
+				namep[j] = romp->tcr_modname[j].v;
+			namep[j] = '\0';
 		}
-
-		if (romp->tcr_stride.v != 4)
-			continue;
-
-		for (j = 0; j < 4; j++)
-			if (romp->tcr_test[j+0*romp->tcr_stride.v] != 0x55 ||
-			    romp->tcr_test[j+1*romp->tcr_stride.v] != 0x00 ||
-			    romp->tcr_test[j+2*romp->tcr_stride.v] != 0xaa ||
-			    romp->tcr_test[j+3*romp->tcr_stride.v] != 0xff)
-				continue;
-
-		for (j = 0; j < TC_ROM_LLEN; j++)
-			namep[j] = romp->tcr_modname[j].v;
-		namep[j] = '\0';
+		if (rompp != NULL)
+			*rompp = romp;
 		return (1);
 	}
 	return (0);
 }
 
 const struct evcnt *
-tc_intr_evcnt(struct device *dev, void *cookie)
+tc_intr_evcnt(device_t dev, void *cookie)
 {
-	struct tc_softc *sc = tc_cd.cd_devs[0];
+	struct tc_softc *sc = device_lookup_private(&tc_cd, 0);
 
 	return ((*sc->sc_intr_evcnt)(dev, cookie));
 }
 
 void
-tc_intr_establish(struct device *dev, void *cookie, int level,
+tc_intr_establish(device_t dev, void *cookie, int level,
     int (*handler)(void *), void *arg)
 {
-	struct tc_softc *sc = tc_cd.cd_devs[0];
+	struct tc_softc *sc = device_lookup_private(&tc_cd, 0);
 
 	(*sc->sc_intr_establish)(dev, cookie, level, handler, arg);
 }
 
 void
-tc_intr_disestablish(struct device *dev, void *cookie)
+tc_intr_disestablish(device_t dev, void *cookie)
 {
-	struct tc_softc *sc = tc_cd.cd_devs[0];
+	struct tc_softc *sc = device_lookup_private(&tc_cd, 0);
 
 	(*sc->sc_intr_disestablish)(dev, cookie);
 }

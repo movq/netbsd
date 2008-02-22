@@ -1,4 +1,4 @@
-/* $NetBSD: if_skvar.h,v 1.12 2007/03/04 06:02:22 christos Exp $ */
+/* $NetBSD: if_skvar.h,v 1.18 2015/04/13 16:33:25 riastradh Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -87,11 +80,7 @@
 #ifndef _DEV_PCI_IF_SKVAR_H_
 #define _DEV_PCI_IF_SKVAR_H_
 
-#include "rnd.h"
-
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 struct sk_jpool_entry {
 	int                             slot;
@@ -193,7 +182,7 @@ struct sk_if_softc;
 
 /* Softc for the GEnesis controller. */
 struct sk_softc {
-	struct device		sk_dev;		/* generic device */
+	device_t		sk_dev;		/* generic device */
 	bus_space_handle_t	sk_bhandle;	/* bus space handle */
 	bus_space_tag_t		sk_btag;	/* bus space tag */
 	void			*sk_intrhand;	/* irq handler handle */
@@ -211,14 +200,12 @@ struct sk_softc {
 	int			sk_int_mod_pending;
 	bus_dma_tag_t		sc_dmatag;
 	struct sk_if_softc	*sk_if[2];
-#if NRND > 0
-	rndsource_element_t     rnd_source;
-#endif
+	krndsource_t     rnd_source;
 };
 
 /* Softc for each logical interface */
 struct sk_if_softc {
-	struct device		sk_dev;		/* generic device */
+	device_t		sk_dev;		/* generic device */
 	struct ethercom		sk_ethercom;	/* interface info */
 	struct mii_data		sk_mii;
 	u_int8_t                sk_enaddr[ETHER_ADDR_LEN]; /* station addr */
@@ -239,6 +226,7 @@ struct sk_if_softc {
 	struct sk_softc		*sk_softc;	/* parent controller */
 	int			sk_tx_bmu;	/* TX BMU register */
 	int			sk_if_flags;
+	kmutex_t		sk_jpool_mtx;
 	LIST_HEAD(__sk_jfreehead, sk_jpool_entry)	sk_jfree_listhead;
 	LIST_HEAD(__sk_jinusehead, sk_jpool_entry)	sk_jinuse_listhead;
 	SIMPLEQ_HEAD(__sk_txmaphead, sk_txmap_entry) sk_txmap_head;

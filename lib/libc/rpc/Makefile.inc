@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile.inc,v 1.16 2004/02/16 02:39:36 lukem Exp $
+#	$NetBSD: Makefile.inc,v 1.23 2015/11/06 19:34:13 christos Exp $
 
 # librpc sources
-.PATH:	${.CURDIR}/arch/${MACHINE}/rpc ${.CURDIR}/rpc
+.PATH:	${.CURDIR}/rpc
 
 SRCS+=	auth_none.c auth_unix.c authunix_prot.c bindresvport.c \
 	clnt_bcast.c clnt_dg.c clnt_generic.c clnt_perror.c \
@@ -12,9 +12,9 @@ SRCS+=	auth_none.c auth_unix.c authunix_prot.c bindresvport.c \
 	pmap_prot2.c pmap_rmt.c rpc_prot.c rpc_commondata.c rpc_callmsg.c \
 	rpc_generic.c rpc_soc.c rpcb_clnt.c rpcb_prot.c rpcb_st_xdr.c \
 	svc.c svc_auth.c svc_dg.c svc_auth_unix.c svc_generic.c svc_raw.c \
-	svc_run.c svc_simple.c svc_vc.c \
+	svc_run.c svc_simple.c svc_vc.c svc_fdset.c \
 	xdr.c xdr_array.c xdr_float.c xdr_mem.c xdr_rec.c xdr_reference.c \
-	xdr_stdio.c __rpc_getxid.c
+	xdr_stdio.c xdr_sizeof.c __rpc_getxid.c
 
 CPPFLAGS+=	-DPORTMAP
 
@@ -157,6 +157,7 @@ MLINKS+=	bindresvport.3 bindresvport_sa.3 \
 		xdr.3 xdr_reference.3 \
 		xdr.3 xdr_setpos.3 \
 		xdr.3 xdr_short.3 \
+		xdr.3 xdr_sizeof.3 \
 		xdr.3 xdrstdio_create.3 \
 		xdr.3 xdr_string.3 \
 		xdr.3 xdr_u_char.3 \

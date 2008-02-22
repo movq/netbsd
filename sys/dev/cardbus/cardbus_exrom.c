@@ -1,4 +1,4 @@
-/* $NetBSD: cardbus_exrom.c,v 1.10 2007/10/19 11:59:38 ad Exp $ */
+/* $NetBSD: cardbus_exrom.c,v 1.12 2010/02/24 19:52:51 dyoung Exp $ */
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -18,9 +18,6 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cardbus_exrom.c,v 1.10 2007/10/19 11:59:38 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cardbus_exrom.c,v 1.12 2010/02/24 19:52:51 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -150,10 +147,10 @@ cardbus_read_exrom(bus_space_tag_t romt, bus_space_handle_t romh,
 #if 0
 struct cardbus_exrom_data_structure {
 	char		signature[4];
-	cardbusreg_t	id; /* vendor & device id */
+	pcireg_t	id; /* vendor & device id */
 	u_int16_t	structure_length;
 	u_int8_t	structure_revision;
-	cardbusreg_t	class; /* class code in upper 24 bits */
+	pcireg_t	class; /* class code in upper 24 bits */
 	u_int16_t	image_length;
 	u_int16_t	data_revision;
 	u_int8_t	code_type;

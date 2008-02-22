@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.h,v 1.24 2007/11/04 11:20:35 rmind Exp $	*/
+/*	$NetBSD: sem.h,v 1.32 2015/11/06 02:26:42 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -109,15 +102,17 @@ struct sembuf {
 /*
  * Undo structure (one per process)
  */
+struct sem_undo_entry {
+	short	un_adjval;	/* adjust on exit values */
+	short	un_num;		/* semaphore # */
+	int	un_id;		/* semid */
+};
+
 struct sem_undo {
 	struct	sem_undo *un_next;	/* ptr to next active undo structure */
 	struct	proc *un_proc;		/* owner of this structure */
 	short	un_cnt;			/* # of active entries */
-	struct undo {
-		short	un_adjval;	/* adjust on exit values */
-		short	un_num;		/* semaphore # */
-		int	un_id;		/* semid */
-	} un_ent[1];			/* undo entries */
+	struct	sem_undo_entry un_ent[1];/* undo entries */
 };
 #endif /* _KERNEL */
 
@@ -190,7 +185,7 @@ struct sem_sysctl_info {
 #endif
 
 /* actual size of an undo structure */
-#define SEMUSZ	(sizeof(struct sem_undo)+sizeof(struct undo)*SEMUME)
+#define SEMUSZ	(sizeof(struct sem_undo)+sizeof(struct sem_undo_entry)*SEMUME)
 
 /*
  * Structures allocated in machdep.c
@@ -203,6 +198,14 @@ extern struct semid_ds *sema;		/* semaphore id pool */
  */
 #define	SEM_CONFIG_FREEZE	0	/* Freeze the semaphore facility. */
 #define	SEM_CONFIG_THAW		1	/* Thaw the semaphore facility. */
+
+#define SYSCTL_FILL_SEM(src, dst) do { \
+	SYSCTL_FILL_PERM((src).sem_perm, (dst).sem_perm); \
+	(dst).sem_nsems = (src).sem_nsems; \
+	(dst).sem_otime = (src).sem_otime; \
+	(dst).sem_ctime = (src).sem_ctime; \
+} while (/*CONSTCOND*/ 0)
+
 #endif /* _KERNEL */
 
 #ifndef _KERNEL
@@ -210,7 +213,7 @@ extern struct semid_ds *sema;		/* semaphore id pool */
 
 __BEGIN_DECLS
 #ifndef __LIBC12_SOURCE__
-int	semctl(int, int, int, ...) __RENAME(__semctl13);
+int	semctl(int, int, int, ...) __RENAME(__semctl50);
 #endif
 int	semget(key_t, int, int);
 int	semop(int, struct sembuf *, size_t);
@@ -219,7 +222,8 @@ int	semconfig(int);
 #endif
 __END_DECLS
 #else
-void	seminit(void);
+void	seminit(struct sysctllog **);
+int	semfini(void);
 void	semexit(struct proc *, void *);
 
 int	semctl1(struct lwp *, int, int, int, void *, register_t *);

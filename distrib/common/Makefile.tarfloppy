@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.tarfloppy,v 1.12 2006/09/29 08:16:41 pavel Exp $
+#	$NetBSD: Makefile.tarfloppy,v 1.19 2017/02/11 03:07:06 christos Exp $
 #
 # Makefile snippet to create a set of ustar floppies.
 # Each floppy has an 8KB header, followed by part or all of the ustar archive.
@@ -42,12 +42,20 @@ boot: ${FLOPPY_BOOT}
 .endif
 .endif	# FLOPPY_BOOT					# }
 
+.if defined(FLOPPY_BOOT_CFG)
+CLEANFILES+=	boot.cfg
+boot.cfg:	${FLOPPY_BOOT_CFG}
+	${_MKTARGET_CREATE} "(from: ${.ALLSRC})"
+	@rm -f ${.TARGET}
+	@cp ${.ALLSRC} ${.TARGET}
+.endif	# FLOPPY_BOOT_CFG
 
 .if defined(FLOPPY_NETBSD)				# {
 CLEANFILES+=	netbsd netbsd.tmp
 .if ${FLOPPY_NETBSD:E}=="gz"
 COPY_CMD=	gunzip -c ${.ALLSRC} > ${.TARGET}.tmp
-COMPRESS_CMD=	gzip -9c ${.TARGET}.tmp > ${.TARGET}; rm -f ${.TARGET}.tmp
+COMPRESS_CMD=	${TOOL_GZIP_N} -9c ${.TARGET}.tmp > ${.TARGET}; \
+		rm -f ${.TARGET}.tmp
 .else
 COPY_CMD=	cp ${.ALLSRC} ${.TARGET}.tmp
 COMPRESS_CMD=	mv -f ${.TARGET}.tmp ${.TARGET}
@@ -74,6 +82,7 @@ ${FLOPPYBASE}1${FLOPPYSUFFIX}: ${FLOPPYFILES} ${DISTRIBDIR}/common/buildfloppies
 	PAX=${TOOL_PAX:Q} ${HOST_SH} ${DISTRIBDIR}/common/buildfloppies.sh \
 	    ${FLOPPYINSTBOOT:D-i ${FLOPPYINSTBOOT}} ${FLOPPYPAD:D-p} \
 	    ${FLOPPYMAX:D-m ${FLOPPYMAX}} ${FLOPPYSUFFIX:D-s ${FLOPPYSUFFIX}} \
+	    ${MKREPRO_TIMESTAMP:D-t ${MKREPRO_TIMESTAMP}} -N ${DESTDIR}/etc \
 	    ${FLOPPYBASE} ${FLOPPYSIZE} ${FLOPPYFILES}
 
 CLEANFILES+=	${FLOPPYBASE}?${FLOPPYSUFFIX}
@@ -85,10 +94,10 @@ realall: ${FLOPPYBASE}1${FLOPPYSUFFIX}
 release:: check_RELEASEDIR .WAIT ${FLOPPYBASE}1${FLOPPYSUFFIX}
 	if [ -e ${FLOPPYBASE}2${FLOPPYSUFFIX} ]; then \
 		${RELEASE_INSTALL} ${FLOPPYBASE}?${FLOPPYSUFFIX} \
-		    ${RELEASEDIR}/${MACHINE}/${FLOPPY_RELEASEDIR}; \
+		    ${RELEASEDIR}/${RELEASEMACHINEDIR}/${FLOPPY_RELEASEDIR}; \
 	else \
 		${RELEASE_INSTALL} ${FLOPPYBASE}1${FLOPPYSUFFIX} \
-		    ${RELEASEDIR}/${MACHINE}/${FLOPPY_RELEASEDIR}/${FLOPPYBASE}${FLOPPYSUFFIX}; \
+		    ${RELEASEDIR}/${RELEASEMACHINEDIR}/${FLOPPY_RELEASEDIR}/${FLOPPYBASE}${FLOPPYSUFFIX}; \
 	fi
 .endif
 

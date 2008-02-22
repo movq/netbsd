@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_kq.c,v 1.19 2008/02/05 14:19:52 ad Exp $	*/
+/*	$NetBSD: smbfs_kq.c,v 1.27 2017/10/25 08:12:39 maya Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_kq.c,v 1.19 2008/02/05 14:19:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_kq.c,v 1.27 2017/10/25 08:12:39 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,10 +43,11 @@ __KERNEL_RCSID(0, "$NetBSD: smbfs_kq.c,v 1.19 2008/02/05 14:19:52 ad Exp $");
 #include <sys/unistd.h>
 #include <sys/vnode.h>
 #include <sys/lockf.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/kthread.h>
 #include <sys/file.h>
 #include <sys/dirent.h>
+#include <sys/mallocvar.h>
 
 #include <machine/limits.h>
 
@@ -156,7 +150,9 @@ smbfs_kqpoll(void *arg)
 			/* save v_size, smbfs_getattr() updates it */
 			osize = ke->vp->v_size;
 
+			vn_lock(ke->vp, LK_SHARED | LK_RETRY);
 			error = VOP_GETATTR(ke->vp, &attr, l->l_cred);
+			VOP_UNLOCK(ke->vp);
 			if (error) {
 				/* relock and proceed with next */
 				mutex_enter(&smbkq_lock);
@@ -284,9 +280,9 @@ filt_smbfsdetach(struct knote *kn)
 	struct vnode *vp = ke->vp;
 	struct smb_rq *rq = NULL;
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	SLIST_REMOVE(&ke->vp->v_klist, kn, knote, kn_selnext);
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 
 	/* Remove the vnode from watch list */
 	mutex_enter(&smbkq_lock);
@@ -312,7 +308,7 @@ filt_smbfsdetach(struct knote *kn)
 		} else
 			SLIST_REMOVE(&kplist, ke, kevq, k_link);
 		SLIST_REMOVE(&kevlist, ke, kevq, kev_link);
-		FREE(ke, M_KEVENT);
+		kmem_free(ke, sizeof(*ke));
 	}
 	kevs--;
 
@@ -346,16 +342,16 @@ filt_smbfsread(struct knote *kn, long hint)
 		 * filesystem is gone, so set the EOF flag and schedule
 		 * the knote for deletion.
 		 */
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 		kn->kn_flags |= (EV_EOF | EV_ONESHOT);
 		return (1);
 	}
 
 	/* There is no size info for directories */
 	if (hint == 0) {
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 	} else {
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 	}
 	if (vp->v_type == VDIR) {
 		/*
@@ -376,11 +372,11 @@ filt_smbfsread(struct knote *kn, long hint)
 		} else
 			rv = 0;
 	} else {
-		kn->kn_data = vp->v_size - kn->kn_fp->f_offset;
+		kn->kn_data = vp->v_size - ((file_t *)kn->kn_obj)->f_offset;
        		rv = (kn->kn_data != 0);
 	}
 	if (hint == 0) {
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 	}
 
 	return rv;
@@ -391,35 +387,41 @@ filt_smbfsvnode(struct knote *kn, long hint)
 {
 	struct kevq *ke = (struct kevq *)kn->kn_hook;
 	struct vnode *vp = ke->vp;
-	int fflags;
 
 	switch (hint) {
 	case NOTE_REVOKE:
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 		kn->kn_flags |= EV_EOF;
 		if ((kn->kn_sfflags & hint) != 0)
 			kn->kn_fflags |= hint;
 		return (1);
 	case 0:
-		mutex_enter(&vp->v_interlock);
-		fflags = kn->kn_fflags;
-		mutex_exit(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
+		mutex_exit(vp->v_interlock);
 		break;
 	default:
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 		if ((kn->kn_sfflags & hint) != 0)
 			kn->kn_fflags |= hint;
-		fflags = kn->kn_fflags;
 		break;
 	}
 
 	return (kn->kn_fflags != 0);
 }
 
-static const struct filterops smbfsread_filtops =
-	{ 1, NULL, filt_smbfsdetach, filt_smbfsread };
-static const struct filterops smbfsvnode_filtops =
-	{ 1, NULL, filt_smbfsdetach, filt_smbfsvnode };
+static const struct filterops smbfsread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_smbfsdetach,
+	.f_event = filt_smbfsread,
+};
+
+static const struct filterops smbfsvnode_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_smbfsdetach,
+	.f_event = filt_smbfsvnode,
+};
 
 int
 smbfs_kqfilter(void *v)
@@ -465,7 +467,9 @@ smbfs_kqfilter(void *v)
 	 * held. This is likely cheap due to attrcache, so do it now.
 	 */
 	memset(&attr, 0, sizeof(attr));
+	vn_lock(vp, LK_SHARED | LK_RETRY);
 	(void) VOP_GETATTR(vp, &attr, l->l_cred);
+	VOP_UNLOCK(vp);
 
 	/* ensure the handler is running */
 	/* XXX this is unreliable. */
@@ -488,7 +492,7 @@ smbfs_kqfilter(void *v)
 	 * and the malloc is cheaper than scanning possibly
 	 * large kevlist list second time after malloc.
 	 */
-	MALLOC(ken, struct kevq *, sizeof(struct kevq), M_KEVENT, M_WAITOK);
+	ken = kmem_alloc(sizeof(*ken), KM_SLEEP);
 
 	/* Check the list and insert new entry */
 	mutex_enter(&smbkq_lock);
@@ -500,7 +504,7 @@ smbfs_kqfilter(void *v)
 	if (ke) {
 		/* already watched, so just bump usecount */
 		ke->usecount++;
-		FREE(ken, M_KEVENT);	/* dispose, don't need */
+		kmem_free(ken, sizeof(*ken));
 	} else {
 		/* need a new one */
 		memset(ken, 0, sizeof(*ken));
@@ -535,10 +539,10 @@ smbfs_kqfilter(void *v)
 		wakeup(smbkql);
 	}
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	SLIST_INSERT_HEAD(&vp->v_klist, kn, kn_selnext);
 	kn->kn_hook = ke;
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 
 	mutex_exit(&smbkq_lock);
 

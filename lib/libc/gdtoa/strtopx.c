@@ -1,4 +1,4 @@
-/* $NetBSD: strtopx.c,v 1.3 2006/03/15 17:35:18 kleink Exp $ */
+/* $NetBSD: strtopx.c,v 1.6 2013/04/18 21:54:11 joerg Exp $ */
 
 /****************************************************************
 
@@ -54,19 +54,22 @@ THIS SOFTWARE.
 #endif
 
  int
-#ifdef KR_headers
-strtopx(s, sp, V) CONST char *s; char **sp; void *V;
-#else
-strtopx(CONST char *s, char **sp, void *V)
-#endif
+strtopx(CONST char *s, char **sp, void *V, locale_t loc)
 {
-	static CONST FPI fpi = { 64, 1-16383-64+1, 32766 - 16383 - 64 + 1, 1, SI };
+	static const FPI fpi0 = { 64, 1-16383-64+1, 32766 - 16383 - 64 + 1, 1, SI };
 	ULong bits[2];
 	Long expt;
 	int k;
 	UShort *L = (UShort*)V;
+#ifdef Honor_FLT_ROUNDS
+#include "gdtoa_fltrnds.h"
+#else
+#define fpi &fpi0
+#endif
 
-	k = strtodg(s, sp, &fpi, &expt, bits);
+	k = strtodg(s, sp, fpi, &expt, bits, loc);
+	if (k == STRTOG_NoMemory)
+		return k;
 	switch(k & STRTOG_Retmask) {
 	  case STRTOG_NoNumber:
 	  case STRTOG_Zero:
@@ -89,7 +92,8 @@ strtopx(CONST char *s, char **sp, void *V)
 
 	  case STRTOG_Infinite:
 		L[_0] = 0x7fff;
-		L[_1] = L[_2] = L[_3] = L[_4] = 0;
+		L[_1] = 0x8000;
+		L[_2] = L[_3] = L[_4] = 0;
 		break;
 
 	  case STRTOG_NaN:

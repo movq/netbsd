@@ -1,4 +1,4 @@
-/*	$NetBSD: pstat.c,v 1.108 2008/02/11 22:45:03 dyoung Exp $	*/
+/*	$NetBSD: pstat.c,v 1.128 2017/05/04 16:26:09 sevan Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -31,29 +31,33 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)pstat.c	8.16 (Berkeley) 5/9/95";
 #else
-__RCSID("$NetBSD: pstat.c,v 1.108 2008/02/11 22:45:03 dyoung Exp $");
+__RCSID("$NetBSD: pstat.c,v 1.128 2017/05/04 16:26:09 sevan Exp $");
 #endif
 #endif /* not lint */
 
+#define _KERNEL
+#include <sys/types.h>
+#undef _KERNEL
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/vnode.h>
 #include <sys/ucred.h>
 #include <stdbool.h>
 #define _KERNEL
-#include <sys/file.h>
-#include <ufs/ufs/inode.h>
 #define NFS
 #include <sys/mount.h>
 #undef NFS
+#include <sys/file.h>
+#include <ufs/ufs/inode.h>
+#include <ufs/ufs/ufsmount.h>
 #include <sys/uio.h>
 #include <miscfs/genfs/layer.h>
 #undef _KERNEL
@@ -69,6 +73,7 @@ __RCSID("$NetBSD: pstat.c,v 1.108 2008/02/11 22:45:03 dyoung Exp $");
 #include <sys/sysctl.h>
 
 #include <err.h>
+#include <errno.h>
 #include <kvm.h>
 #include <limits.h>
 #include <nlist.h>
@@ -80,20 +85,26 @@ __RCSID("$NetBSD: pstat.c,v 1.108 2008/02/11 22:45:03 dyoung Exp $");
 #include "swapctl.h"
 
 struct nlist nl[] = {
-#define	V_MOUNTLIST	0
-	{ "_mountlist" },	/* address of head of mount list. */
-#define	V_NUMV		1
-	{ "_numvnodes" },
-#define	FNL_NFILE	2
-	{ "_nfiles" },
-#define FNL_MAXFILE	3
-	{ "_maxfiles" },
-#define TTY_NTTY	4
-	{ "_tty_count" },
-#define TTY_TTYLIST	5
-	{ "_ttylist" },
+#define	V_LRU_FREE_LIST	0
+	{ "_lru_free_list", 0, 0, 0, 0 },	/* address of lru free list. */
+#define	V_LRU_HOLD_LIST	1
+	{ "_lru_hold_list", 0, 0, 0, 0 },	/* address of lru hold list. */
+#define	V_LRU_VRELE_LIST	2
+	{ "_lru_vrele_list", 0, 0, 0, 0 },	/* address of lru vrele list. */
+#define	V_NUMV		3
+	{ "_numvnodes", 0, 0, 0, 0 },
+#define	V_NEXT_OFFSET	4
+	{ "_vnode_offset_next_by_lru", 0, 0, 0, 0 },
+#define	FNL_NFILE	5
+	{ "_nfiles", 0, 0, 0, 0 },
+#define FNL_MAXFILE	6
+	{ "_maxfiles", 0, 0, 0, 0 },
+#define TTY_NTTY	7
+	{ "_tty_count", 0, 0, 0, 0 },
+#define TTY_TTYLIST	8
+	{ "_ttylist", 0, 0, 0, 0 },
 #define NLMANDATORY TTY_TTYLIST	/* names up to here are mandatory */
-	{ "" }
+	{ "", 0, 0, 0, 0 }
 };
 
 int	usenumflag;
@@ -163,7 +174,6 @@ char *	kinfo_vnodes(int *);
 void	layer_header(void);
 int	layer_print(struct vnode *, int);
 char *	loadvnodes(int *);
-int	main(int, char **);
 void	mount_print(struct mount *);
 void	nfs_header(void);
 int	nfs_print(struct vnode *, int);
@@ -172,7 +182,7 @@ void	ttyprt(struct tty *);
 void	ufs_header(void);
 int	ufs_print(struct vnode *, int);
 int	ext2fs_print(struct vnode *, int);
-void	usage(void);
+__dead void	usage(void);
 void	vnode_header(void);
 int	vnode_print(struct vnode *, struct vnode *);
 void	vnodemode(void);
@@ -282,6 +292,14 @@ main(int argc, char *argv[])
 						 when pointer is printed
 						 in hexadecimal. */
 
+static void
+devprintf(char *buf, size_t buflen, dev_t dev)
+{
+	(void)snprintf(buf, buflen, "%llu,%llu",
+	    (unsigned long long)major(dev),
+	    (unsigned long long)minor(dev));
+}
+
 void
 vnodemode(void)
 {
@@ -317,6 +335,9 @@ vnodemode(void)
 			maddr = vp->v_mount;
 			mount_print(mp);
 			vnode_header();
+			/*
+			 * XXX do this in a more fs-independent way
+			 */
 			if (FSTYPE_IS(mp, MOUNT_FFS) ||
 			    FSTYPE_IS(mp, MOUNT_MFS)) {
 				ufs_header();
@@ -371,9 +392,7 @@ const struct flagbit_desc vnode_flags[] = {
 	{ VV_SYSTEM,	'S' },
 	{ VV_ISTTY,	'I' },
 	{ VI_EXECMAP,	'E' },
-	{ VI_XLOCK,	'L' },
 	{ VU_DIROP,	'D' },
-	{ VI_LAYER,	'Y' },
 	{ VI_ONWORKLST,	'O' },
 	{ 0,		'\0' },
 };
@@ -389,7 +408,8 @@ vnode_header(void)
 int
 vnode_print(struct vnode *avnode, struct vnode *vp)
 {
-	char *type, flags[sizeof(vnode_flags) / sizeof(vnode_flags[0])];
+	const char *type;
+	char flags[sizeof(vnode_flags) / sizeof(vnode_flags[0])];
 	int ovflw;
 
 	/*
@@ -440,11 +460,8 @@ const struct flagbit_desc ufs_flags[] = {
 	{ IN_UPDATE,	'U' },
 	{ IN_MODIFIED,	'M' },
 	{ IN_ACCESSED,	'a' },
-	{ IN_RENAME,	'R' },
 	{ IN_SHLOCK,	'S' },
 	{ IN_EXLOCK,	'E' },
-	{ IN_CLEANING,	'c' },
-	{ IN_ADIROP,	'D' },
 	{ IN_SPACECOUNTED, 's' },
 	{ 0,		'\0' },
 };
@@ -464,6 +481,7 @@ ufs_print(struct vnode *vp, int ovflw)
 		struct ufs1_dinode dp1;
 		struct ufs2_dinode dp2;
 	} dip;
+	struct ufsmount ump;
 	char flags[sizeof(ufs_flags) / sizeof(ufs_flags[0])];
 	char dev[4 + 1 + 7 + 1]; /* 12bit marjor + 20bit minor */
 	char *name;
@@ -471,13 +489,15 @@ ufs_print(struct vnode *vp, int ovflw)
 	dev_t rdev;
 
 	KGETRET(VTOI(vp), &inode, sizeof(struct inode), "vnode's inode");
-	KGETRET(ip->i_din.ffs1_din, &dip, sizeof (struct ufs1_dinode),
-	    "inode's dinode");
+	KGETRET(ip->i_ump, &ump, sizeof(struct ufsmount),
+	    "vnode's mount point");
 
-	if (ip->i_size == dip.dp1.di_size)
-		rdev = dip.dp1.di_rdev;
-	else {
-		KGETRET(ip->i_din.ffs1_din, &dip, sizeof (struct ufs2_dinode),
+	if (ump.um_fstype == UFS1) {
+		KGETRET(ip->i_din.ffs1_din, &dip, sizeof (struct ufs1_dinode),
+		    "inode's dinode");
+		rdev = (uint32_t)dip.dp1.di_rdev;
+	} else {
+		KGETRET(ip->i_din.ffs2_din, &dip, sizeof (struct ufs2_dinode),
 		    "inode's UFS2 dinode");
 		rdev = dip.dp2.di_rdev;
 	}
@@ -493,8 +513,7 @@ ufs_print(struct vnode *vp, int ovflw)
 	if (S_ISCHR(ip->i_mode) || S_ISBLK(ip->i_mode)) {
 		if (usenumflag ||
 		    (name = devname(rdev, type)) == NULL) {
-			snprintf(dev, sizeof(dev), "%d,%d",
-			    major(rdev), minor(rdev));
+			devprintf(dev, sizeof(dev), rdev);
 			name = dev;
 		}
 		PRWORD(ovflw, " %*s", 8, 1, name);
@@ -528,8 +547,7 @@ ext2fs_print(struct vnode *vp, int ovflw)
 	if (S_ISCHR(dip.e2di_mode) || S_ISBLK(dip.e2di_mode)) {
 		if (usenumflag ||
 		    (name = devname(dip.e2di_rdev, type)) == NULL) {
-			snprintf(dev, sizeof(dev), "%d,%d",
-			    major(dip.e2di_rdev), minor(dip.e2di_rdev));
+			devprintf(dev, sizeof(dev), dip.e2di_rdev);
 			name = dev;
 		}
 		PRWORD(ovflw, " %*s", 8, 1, name);
@@ -581,8 +599,7 @@ nfs_print(struct vnode *vp, int ovflw)
 		type = S_IFBLK;
 	device:
 		if (usenumflag || (name = devname(va.va_rdev, type)) == NULL) {
-			(void)snprintf(dev, sizeof(dev), "%d,%d",
-			    major(va.va_rdev), minor(va.va_rdev));
+			devprintf(dev, sizeof(dev), va.va_rdev);
 			name = dev;
 		}
 		PRWORD(ovflw, " %*s", 8, 1, name);
@@ -648,7 +665,7 @@ mount_print(struct mount *mp)
 	(void)printf("*** MOUNT %s %s on %s", ST.f_fstypename,
 	    ST.f_mntfromname, ST.f_mntonname);
 	if ((flags = mp->mnt_flag) != 0) {
-		int i;
+		size_t i;
 		const char *sep = " (";
 
 		for (i = 0; i < sizeof mnt_flags / sizeof mnt_flags[0]; i++) {
@@ -669,7 +686,11 @@ char *
 loadvnodes(int *avnodes)
 {
 	int mib[2];
+	int status;
 	size_t copysize;
+#if 0
+	size_t oldsize;
+#endif
 	char *vnodebase;
 
 	if (totalflag) {
@@ -684,12 +705,36 @@ loadvnodes(int *avnodes)
 	}
 	mib[0] = CTL_KERN;
 	mib[1] = KERN_VNODE;
+	/*
+	 * First sysctl call gets the necessary buffer size; second
+	 * sysctl call gets the data.  We allow for some growth in the
+	 * data size between the two sysctl calls (increases of a few
+	 * thousand vnodes in between the two calls have been observed).
+	 * We ignore ENOMEM from the second sysctl call, which can
+	 * happen if the kernel's data grew by even more than we allowed
+	 * for.
+	 */
 	if (sysctl(mib, 2, NULL, &copysize, NULL, 0) == -1)
 		err(1, "sysctl: KERN_VNODE");
+#if 0
+	oldsize = copysize;
+#endif
+	copysize += 100 * sizeof(struct vnode) + copysize / 20;
 	if ((vnodebase = malloc(copysize)) == NULL)
 		err(1, "malloc");
-	if (sysctl(mib, 2, vnodebase, &copysize, NULL, 0) == -1)
+	status = sysctl(mib, 2, vnodebase, &copysize, NULL, 0);
+	if (status == -1 && errno != ENOMEM)
 		err(1, "sysctl: KERN_VNODE");
+#if 0 /* for debugging the amount of growth allowed for */
+	if (copysize != oldsize) {
+		warnx("count changed from %ld to %ld (%+ld)%s",
+		    (long)(oldsize / sizeof(struct vnode)),
+		    (long)(copysize / sizeof(struct vnode)),
+		    (long)(copysize / sizeof(struct vnode)) -
+			(long)(oldsize / sizeof(struct vnode)),
+		    (status == 0 ? "" : ", and errno = ENOMEM"));
+	}
+#endif
 	if (copysize % (VPTRSZ + VNODESZ))
 		errx(1, "vnode size mismatch");
 	*avnodes = copysize / (VPTRSZ + VNODESZ);
@@ -700,25 +745,38 @@ loadvnodes(int *avnodes)
 /*
  * simulate what a running kernel does in in kinfo_vnode
  */
+static int
+vnode_cmp(const void *p1, const void *p2)
+{
+	const char *s1 = (const char *)p1;
+	const char *s2 = (const char *)p2;
+	const struct vnode *v1 = (const struct vnode *)(s1 + VPTRSZ);
+	const struct vnode *v2 = (const struct vnode *)(s2 + VPTRSZ);
+
+	return (v2->v_mount - v1->v_mount);
+}
+
 char *
 kinfo_vnodes(int *avnodes)
 {
-	struct mntlist mountlist;
-	struct mount *mp, mount;
-	struct vnode *vp, vnode;
+	int i;
 	char *beg, *bp, *ep;
-	int numvnodes;
+	int numvnodes, next_offset;
 
 	KGET(V_NUMV, numvnodes);
 	if ((bp = malloc((numvnodes + 20) * (VPTRSZ + VNODESZ))) == NULL)
 		err(1, "malloc");
 	beg = bp;
 	ep = bp + (numvnodes + 20) * (VPTRSZ + VNODESZ);
-	KGET(V_MOUNTLIST, mountlist);
-	for (mp = mountlist.cqh_first;;
-	    mp = mount.mnt_list.cqe_next) {
-		KGET2(mp, &mount, sizeof(mount), "mount entry");
-		TAILQ_FOREACH(vp, &mount.mnt_vnodelist, v_mntvnodes) {
+	KGET(V_NEXT_OFFSET, next_offset);
+
+	for (i = V_LRU_FREE_LIST; i <= V_LRU_VRELE_LIST; i++) {
+		TAILQ_HEAD(vnodelst, vnode) lru_head;
+		struct vnode *vp, vnode;
+
+		KGET(i, lru_head);
+		vp = TAILQ_FIRST(&lru_head);
+		while (vp != NULL) {
 			KGET2(vp, &vnode, sizeof(vnode), "vnode");
 			if (bp + VPTRSZ + VNODESZ > ep)
 				/* XXX - should realloc */
@@ -727,11 +785,12 @@ kinfo_vnodes(int *avnodes)
 			bp += VPTRSZ;
 			memmove(bp, &vnode, VNODESZ);
 			bp += VNODESZ;
+			KGET2((char *)vp + next_offset, &vp, sizeof(vp), "nvp");
 		}
-		if (mp == mountlist.cqh_last)
-			break;
 	}
 	*avnodes = (bp - beg) / (VPTRSZ + VNODESZ);
+	/* Sort by mount like we get it from sysctl. */
+	qsort(beg, *avnodes, VPTRSZ + VNODESZ, vnode_cmp);
 	return (beg);
 }
 
@@ -785,8 +844,7 @@ ttyprt(struct tty *tp)
 	int n, ovflw;
 
 	if (usenumflag || (name = devname(tp->t_dev, S_IFCHR)) == NULL) {
-		(void)snprintf(dev, sizeof(dev), "0x%3x:%x",
-		    major(tp->t_dev), minor(tp->t_dev));
+		devprintf(dev, sizeof(dev), tp->t_dev);
 		name = dev;
 	}
 	ovflw = 0;
@@ -837,8 +895,7 @@ static const struct flagbit_desc filemode_flags[] = {
 void
 filemode(void)
 {
-	struct file *fp;
-	struct file *addr;
+	struct kinfo_file *ki;
 	char flags[sizeof(filemode_flags) / sizeof(filemode_flags[0])];
 	char *buf, *offset;
 	int len, maxfile, nfile, ovflw;
@@ -852,36 +909,33 @@ filemode(void)
 	if (getfiles(&buf, &len, &offset) == -1)
 		return;
 	/*
-	 * Getfiles returns in malloc'd memory a pointer to the first file
-	 * structure, and then an array of file structs (whose addresses are
-	 * derivable from the previous entry).
+	 * Getfiles returns in malloc'd memory to an array of kinfo_file2
+	 * structures.
 	 */
-	addr = ((struct filelist *)offset)->lh_first;
-	fp = (struct file *)(offset + sizeof(struct filelist));
-	nfile = (len - sizeof(struct filelist)) / sizeof(struct file);
+	nfile = len / sizeof(struct kinfo_file);
 
 	(void)printf("%d/%d open files\n", nfile, maxfile);
 	(void)printf("%*s%s%*s TYPE    FLG     CNT  MSG  %*s%s%*s IFLG OFFSET\n",
 	    (PTRSTRWIDTH - 4) / 2, "", " LOC", (PTRSTRWIDTH - 4) / 2, "",
 	    (PTRSTRWIDTH - 4) / 2, "", "DATA", (PTRSTRWIDTH - 4) / 2, "");
-	for (; (char *)fp < offset + len; addr = fp->f_list.le_next, fp++) {
-		if ((unsigned)fp->f_type >= sizeof(dtypes) / sizeof(dtypes[0]))
+	for (ki = (struct kinfo_file *)offset; nfile--; ki++) {
+		if ((unsigned)ki->ki_ftype >= sizeof(dtypes) / sizeof(dtypes[0]))
 			continue;
 		ovflw = 0;
-		(void)getflags(filemode_flags, flags, fp->f_flag);
-		PRWORD(ovflw, "%*lx", PTRSTRWIDTH, 0, (long)addr);
-		PRWORD(ovflw, " %-*s", 9, 1, dtypes[fp->f_type]);
+		(void)getflags(filemode_flags, flags, ki->ki_flag);
+		PRWORD(ovflw, "%*lx", PTRSTRWIDTH, 0, (long)ki->ki_fileaddr);
+		PRWORD(ovflw, " %-*s", 9, 1, dtypes[ki->ki_ftype]);
 		PRWORD(ovflw, " %*s", 6, 1, flags);
-		PRWORD(ovflw, " %*d", 5, 1, fp->f_count);
-		PRWORD(ovflw, " %*d", 5, 1, fp->f_msgcount);
-		PRWORD(ovflw, "  %*lx", PTRSTRWIDTH + 1, 2, (long)fp->f_data);
-		PRWORD(ovflw, " %*x", 5, 1, fp->f_iflags);
-		if (fp->f_offset < 0)
+		PRWORD(ovflw, " %*d", 5, 1, ki->ki_count);
+		PRWORD(ovflw, " %*d", 5, 1, ki->ki_msgcount);
+		PRWORD(ovflw, "  %*lx", PTRSTRWIDTH + 1, 2, (long)ki->ki_fdata);
+		PRWORD(ovflw, " %*x", 5, 1, 0);
+		if ((off_t)ki->ki_foffset < 0)
 			PRWORD(ovflw, "  %-*lld\n", PTRSTRWIDTH + 1, 2,
-			    (long long)fp->f_offset);
+			    (long long)ki->ki_foffset);
 		else
 			PRWORD(ovflw, "  %-*lld\n", PTRSTRWIDTH + 1, 2,
-			    (long long)fp->f_offset);
+			    (long long)ki->ki_foffset);
 	}
 	free(buf);
 }
@@ -890,7 +944,7 @@ int
 getfiles(char **abuf, int *alen, char **aoffset)
 {
 	size_t len;
-	int mib[2];
+	int mib[6];
 	char *buf;
 	size_t offset;
 
@@ -902,17 +956,23 @@ getfiles(char **abuf, int *alen, char **aoffset)
 		errx(1, "files on dead kernel, not implemented");
 
 	mib[0] = CTL_KERN;
-	mib[1] = KERN_FILE;
-	if (sysctl(mib, 2, NULL, &len, NULL, 0) == -1) {
-		warn("sysctl: KERN_FILE");
+	mib[1] = KERN_FILE2;
+	mib[2] = KERN_FILE_BYFILE;
+	mib[3] = 0;
+	mib[4] = sizeof(struct kinfo_file);
+	mib[5] = 0;
+	if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1) {
+		warn("sysctl: KERN_FILE2");
 		return (-1);
 	}
-	/* We need to align (struct file *) in the buffer. */
+	/* We need to align (struct kinfo_file *) in the buffer. */
 	offset = len % sizeof(off_t);
+	mib[5] = len / sizeof(struct kinfo_file);
 	if ((buf = malloc(len + offset)) == NULL)
 		err(1, "malloc");
-	if (sysctl(mib, 2, buf + offset, &len, NULL, 0) == -1) {
-		warn("sysctl: KERN_FILE");
+	if (sysctl(mib, 6, buf + offset, &len, NULL, 0) == -1) {
+		warn("sysctl: 2nd KERN_FILE2");
+		free(buf);
 		return (-1);
 	}
 	*abuf = buf;

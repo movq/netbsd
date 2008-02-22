@@ -1,4 +1,4 @@
-/*	$NetBSD: erase.c,v 1.23 2007/05/28 15:01:55 blymn Exp $	*/
+/*	$NetBSD: erase.c,v 1.26 2017/01/06 13:53:18 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)erase.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: erase.c,v 1.23 2007/05/28 15:01:55 blymn Exp $");
+__RCSID("$NetBSD: erase.c,v 1.26 2017/01/06 13:53:18 roy Exp $");
 #endif
 #endif				/* not lint */
 
@@ -72,12 +72,12 @@ werase(WINDOW *win)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_ERASE, "werase: (%p)\n", win);
 #endif
-	if (__using_color && win != curscr)
-		attr = win->battr & __COLOR;
+	if (win != curscr)
+		attr = win->battr & __ATTRIBUTES;
 	else
 		attr = 0;
 	for (y = 0; y < win->maxy; y++) {
-		start = win->lines[y]->line;
+		start = win->alines[y]->line;
 		end = &start[win->maxx];
 		for (sp = start; sp < end; sp++)
 #ifndef HAVE_WCHAR
@@ -86,7 +86,10 @@ werase(WINDOW *win)
 			if (sp->ch != ( wchar_t )btowc(( int ) win->bch ) ||
 			    (sp->attr & WA_ATTRIBUTES) != 0 || sp->nsp) {
 #endif /* HAVE_WCHAR */
-				sp->attr = attr;
+				if (sp->attr & __ALTCHARSET)
+					sp->attr = attr | __ALTCHARSET;
+				else
+					sp->attr = attr;
 #ifdef HAVE_WCHAR
 				sp->ch = ( wchar_t )btowc(( int ) win->bch);
 				if (_cursesi_copy_nsp(win->bnsp, sp) == ERR)
@@ -103,5 +106,5 @@ werase(WINDOW *win)
 	 * screen over the area covered by the window. */
 	__touchwin(win);
 	wmove(win, 0, 0);
-	return (OK);
+	return OK;
 }

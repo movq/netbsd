@@ -1,4 +1,4 @@
-/* $NetBSD: ixm1200_start.S,v 1.2 2002/07/21 14:26:05 ichiro Exp $ */
+/* $NetBSD: ixm1200_start.S,v 1.5 2013/12/02 18:36:11 joerg Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -18,13 +18,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,20 +32,21 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "assym.h"
 
 #include <arm/asm.h>
 #include <arm/armreg.h>
-#include <arm/arm32/pte.h>
+#include "assym.h"
 
 	.section .start,"ax",%progbits
+
+RCSID("$NetBSD: ixm1200_start.S,v 1.5 2013/12/02 18:36:11 joerg Exp $")
 
 	.global _C_LABEL(ixm1200_start)
 _C_LABEL(ixm1200_start):
 	/*
 	 * Disable IRQ and FIQ
 	 */
-	mrs     r3, cpsr_all
+	mrs     r3, cpsr
 	orr     r1, r3, #(I32_bit | F32_bit)
 	msr     cpsr_all, r1
 
@@ -135,7 +129,7 @@ _C_LABEL(ixm1200_start):
 	ldr	r0, Ltable
 	mov	r1, #(L1_TABLE_SIZE / 4)	/* 4096 entry */
 	mov	r2, #(L1_S_SIZE)		/* 1MB / section */
-	mov	r3, #(L1_S_AP(AP_KRW))		/* kernel read/write */
+	mov	r3, #(L1_S_AP_KRW)		/* kernel read/write */
 	orr	r3, r3, #(L1_TYPE_S)		/* L1 entry is section */
 1:
 	str	r3, [r0], #4
@@ -150,7 +144,7 @@ _C_LABEL(ixm1200_start):
 	add	r0, r0, #(0xf00 * 4)		/* offset to 0xf0000000 */
 	mov	r3, #0x90000000
 	add	r3, r3, #0x00100000		/* set 0x90100000 to r3 */
-	orr	r3, r3, #(L1_S_AP(AP_KRW))	/* kernel read/write */
+	orr	r3, r3, #(L1_S_AP_KRW)	/* kernel read/write */
 	orr	r3, r3, #(L1_TYPE_S)		/* L1 entry is section */
 	str	r3, [r0]
 	

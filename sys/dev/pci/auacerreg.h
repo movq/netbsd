@@ -1,4 +1,4 @@
-/*	$NetBSD: auacerreg.h,v 1.3 2005/12/11 12:22:48 christos Exp $	*/
+/*	$NetBSD: auacerreg.h,v 1.5 2018/02/08 09:05:19 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -146,7 +139,7 @@
 /*
  * according to the dev/audiovar.h AU_RING_SIZE is 2^16, what fits
  * in our limits perfectly, i.e. setting it to higher value
- * in your kernel config would improve perfomance, still 2^21 is the max
+ * in your kernel config would improve performance, still 2^21 is the max
  */
 #define	ALI_DMALIST_MAX	32
 #define	ALI_DMASEG_MAX	(65536*2)	/* 64k samples, 2x16 bit samples */

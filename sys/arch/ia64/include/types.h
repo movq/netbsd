@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.3 2008/01/20 18:09:07 joerg Exp $	*/
+/*	$NetBSD: types.h,v 1.10 2016/01/23 22:31:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -44,28 +44,38 @@ typedef struct label_t {
 } label_t;
 #endif
 
-/* NB: This should probably be if defined(_KERNEL) */
-#if defined(_NETBSD_SOURCE)
+#if defined(_KERNEL) || defined(_KMEMUSER) || defined(_KERNTYPES) || defined(_STANDALONE)
 typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
-#endif
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
 
 typedef int		pmc_evid_t;
 typedef __uint64_t	pmc_ctr_t;
-typedef int		register_t;
+typedef long int	register_t;
+#define	PRIxREGISTER	"lx"
+#endif
 
-typedef	__volatile int		__cpu_simple_lock_t;
+typedef	int		__cpu_simple_lock_nv_t;
+typedef long int	__register_t;
 
 #define	__SIMPLELOCK_LOCKED	1
 #define	__SIMPLELOCK_UNLOCKED	0
 
+#define	__HAVE_CPU_DATA_FIRST
 #define	__HAVE_CPU_COUNTER
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_MINIMAL_EMUL
 #define	__HAVE_OLD_DISKLABEL
+#define	__HAVE_ATOMIC64_OPS
 /* XXX: #define	__HAVE_CPU_MAXPROC */
+#define	__HAVE_TLS_VARIANT_I
 
 #if defined(_KERNEL)
 #define __HAVE_RAS

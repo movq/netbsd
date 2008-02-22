@@ -1,4 +1,4 @@
-/*	$NetBSD: pchbvar.h,v 1.3 2008/01/03 04:50:19 dyoung Exp $	*/
+/*	$NetBSD: pchbvar.h,v 1.9 2012/04/16 04:57:42 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,32 +29,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _I386_PCI_PCHBVAR_H_
-#define	_I386_PCI_PCHBVAR_H_
-
-#include <sys/callout.h>
-#include <sys/rnd.h>
+#ifndef _X86_PCI_PCHBVAR_H_
+#define _X86_PCI_PCHBVAR_H_
 
 struct pchb_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	pci_chipset_tag_t sc_pc;
 	pcitag_t sc_tag;
 
-	bus_space_tag_t sc_st;
-	bus_space_handle_t sc_sh;
-
-	struct callout sc_rnd_ch;
-	rndsource_element_t sc_rnd_source;
-
-	int sc_rnd_i;
-	uint32_t sc_rnd_ax;
-	bool sc_rnd_attached;
-
 	pcireg_t sc_pciconfext[48];
 };
 
-void	pchb_attach_rnd(struct pchb_softc *, struct pci_attach_args *);
-void	pchb_detach_rnd(struct pchb_softc *);
-
-#endif /* _I386_PCI_PCHBVAR_H_ */
+#endif /* _X86_PCI_PCHBVAR_H_ */

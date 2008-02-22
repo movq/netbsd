@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.35 2008/01/07 05:00:12 uwe Exp $	*/
+/*	$NetBSD: machdep.c,v 1.45 2014/03/24 20:06:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2002 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,22 +65,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.35 2008/01/07 05:00:12 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.45 2014/03/24 20:06:31 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_memsize.h"
 #include "scif.h"
 #include "opt_kloader.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/sysctl.h>
 #include <sys/ksyms.h>
+#include <sys/device.h>
+#include <sys/module.h>
+#include <sys/cpu.h>
 
 #ifdef KGDB
 #include <sys/kgdb.h>
@@ -103,6 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.35 2008/01/07 05:00:12 uwe Exp $");
 #include <sh3/bscreg.h>
 #include <machine/intr.h>
 #include <machine/kloader.h>
+#include <machine/pcb.h>
 
 #include <dev/cons.h>
 
@@ -145,9 +142,6 @@ dreamcast_startup(void)
 	pmap_bootstrap();
 
 	/* Debugger. */
-#if NKSYMS || defined(DDB) || defined(LKM)
-	ksyms_init(0, NULL, NULL);
-#endif
 #if defined(KGDB) && (NSCIF > 0)
 	if (scif_kgdb_init() == 0) {
 		kgdb_debug_init = 1;
@@ -181,7 +175,7 @@ void
 cpu_startup(void)
 {
 
-	strcpy(cpu_model, "SEGA Dreamcast\n");
+	cpu_setmodel("SEGA Dreamcast");
 
 	sh_startup();
 }
@@ -249,6 +243,8 @@ cpu_reboot(int howto, char *bootstr)
  haltsys:
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if (howto & RB_HALT) {
 		printf("\n");
 		printf("The operating system has halted.\n");
@@ -275,7 +271,9 @@ void
 intc_intr(int ssr, int spc, int ssp)
 {
 	struct intc_intrhand *ih;
-	int s, evtcode;
+	int evtcode;
+
+	curcpu()->ci_data.cpu_nintr++;
 
 	evtcode = _reg_read_4(SH4_INTEVT);
 
@@ -285,7 +283,7 @@ intc_intr(int ssr, int spc, int ssp)
 	 * On entry, all interrrupts are disabled, and exception is enabled.
 	 * Enable higher level interrupt here.
 	 */
-	s = _cpu_intr_resume(ih->ih_level);
+	_cpu_intr_resume(ih->ih_level);
 
 	if (evtcode == SH_INTEVT_TMU0_TUNI0) {	/* hardclock */
 		struct clockframe cf;
@@ -297,3 +295,13 @@ intc_intr(int ssr, int spc, int ssp)
 		(*ih->ih_func)(ih->ih_arg);
 	}
 }
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif

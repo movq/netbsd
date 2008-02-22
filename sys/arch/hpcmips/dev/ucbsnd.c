@@ -1,4 +1,4 @@
-/*	$NetBSD: ucbsnd.c,v 1.17 2007/12/03 15:33:42 ad Exp $ */
+/*	$NetBSD: ucbsnd.c,v 1.25 2016/12/17 03:46:52 riastradh Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ucbsnd.c,v 1.17 2007/12/03 15:33:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ucbsnd.c,v 1.25 2016/12/17 03:46:52 riastradh Exp $");
 
 #include "opt_use_poll.h"
 
@@ -55,11 +48,11 @@ __KERNEL_RCSID(0, "$NetBSD: ucbsnd.c,v 1.17 2007/12/03 15:33:42 ad Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/endian.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
+#include <mips/locore.h>
 #include <mips/cache.h>
-
-#include <machine/bus.h>
-#include <machine/intr.h>
 
 #include <hpcmips/tx/tx39var.h>
 #include <hpcmips/tx/tx39sibvar.h>
@@ -121,9 +114,9 @@ struct ring_buf {
 };
 
 struct ucbsnd_softc {
-	struct device		sc_dev;
-	struct device		*sc_sib; /* parent (TX39 SIB module) */
-	struct device		*sc_ucb; /* parent (UCB1200 module) */
+	device_t		sc_dev;
+	device_t		sc_sib; /* parent (TX39 SIB module) */
+	device_t		sc_ucb; /* parent (UCB1200 module) */
 	tx_chipset_tag_t	sc_tc;
 
 	struct	tx_sound_tag	sc_tag;
@@ -152,29 +145,29 @@ struct ucbsnd_softc {
 	struct ring_buf sc_rb;
 };
 
-int	ucbsnd_match(struct device*, struct cfdata*, void*);
-void	ucbsnd_attach(struct device*, struct device*, void*);
+int	ucbsnd_match(device_t, cfdata_t, void *);
+void	ucbsnd_attach(device_t, device_t, void *);
 
-int	ucbsnd_exec_output(void*);
-int	ucbsnd_busy(void*);
+int	ucbsnd_exec_output(void *);
+int	ucbsnd_busy(void *);
 
-void	ucbsnd_sound_init(struct ucbsnd_softc*);
+void	ucbsnd_sound_init(struct ucbsnd_softc *);
 void	__ucbsnd_sound_click(tx_sound_tag_t);
 void	__ucbsnd_sound_mute(tx_sound_tag_t, int);
 
 int	ucbsndwrite_subr(struct ucbsnd_softc *, u_int32_t *, size_t,
 	    struct uio *);
 
-int	ringbuf_allocate(struct ring_buf*, size_t, int);
-void	ringbuf_deallocate(struct ring_buf*);
-void	ringbuf_reset(struct ring_buf*);
-int	ringbuf_full(struct ring_buf*);
-void	*ringbuf_producer_get(struct ring_buf*);
-void	ringbuf_producer_return(struct ring_buf*, size_t);
-void	*ringbuf_consumer_get(struct ring_buf*, size_t*);
-void	ringbuf_consumer_return(struct ring_buf*);
+int	ringbuf_allocate(struct ring_buf *, size_t, int);
+void	ringbuf_deallocate(struct ring_buf *);
+void	ringbuf_reset(struct ring_buf *);
+int	ringbuf_full(struct ring_buf *);
+void	*ringbuf_producer_get(struct ring_buf *);
+void	ringbuf_producer_return(struct ring_buf *, size_t);
+void	*ringbuf_consumer_get(struct ring_buf *, size_t *);
+void	ringbuf_consumer_return(struct ring_buf *);
 
-CFATTACH_DECL(ucbsnd, sizeof(struct ucbsnd_softc),
+CFATTACH_DECL_NEW(ucbsnd, sizeof(struct ucbsnd_softc),
     ucbsnd_match, ucbsnd_attach, NULL, NULL);
 
 dev_type_open(ucbsndopen);
@@ -183,24 +176,35 @@ dev_type_read(ucbsndread);
 dev_type_write(ucbsndwrite);
 
 const struct cdevsw ucbsnd_cdevsw = {
-	ucbsndopen, ucbsndclose, ucbsndread, ucbsndwrite, nullioctl,
-	nostop, notty, nopoll, nullmmap, nokqfilter,
+	.d_open = ucbsndopen,
+	.d_close = ucbsndclose,
+	.d_read = ucbsndread,
+	.d_write = ucbsndwrite,
+	.d_ioctl = nullioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 int
-ucbsnd_match(struct device *parent, struct cfdata *cf, void *aux)
+ucbsnd_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (1);
 }
 
 void
-ucbsnd_attach(struct device *parent, struct device *self, void *aux)
+ucbsnd_attach(device_t parent, device_t self, void *aux)
 {
 	struct ucb1200_attach_args *ucba = aux;
-	struct ucbsnd_softc *sc = (void*)self;
+	struct ucbsnd_softc *sc = device_private(self);
 	tx_chipset_tag_t tc;
 
+	sc->sc_dev = self;
 	tc = sc->sc_tc = ucba->ucba_tc;
 	sc->sc_sib = ucba->ucba_sib;
 	sc->sc_ucb = ucba->ucba_ucb;
@@ -525,11 +529,11 @@ ucbsndopen(dev_t dev, int flags, int ifmt, struct lwp *l)
 	struct ucbsnd_softc *sc;
 	int s;
 	
-	if (unit >= ucbsnd_cd.cd_ndevs ||
-	    (sc = ucbsnd_cd.cd_devs[unit]) == NULL)
+	sc = device_lookup_private(&ucbsnd_cd, unit);
+	if (sc == NULL)
 		return (ENXIO);
 	
-	s = splaudio();
+	s = splvm();
 	ringbuf_reset(&sc->sc_rb);
 	splx(s);
 
@@ -542,8 +546,8 @@ ucbsndclose(dev_t dev, int flags, int ifmt, struct lwp *l)
 	int unit = AUDIOUNIT(dev);
 	struct ucbsnd_softc *sc;
 	
-	if (unit >= ucbsnd_cd.cd_ndevs ||
-	    (sc = ucbsnd_cd.cd_devs[unit]) == NULL)
+	sc = device_lookup_private(&ucbsnd_cd, unit);
+	if (sc == NULL)
 		return (ENXIO);
 
 	return (0);
@@ -556,8 +560,8 @@ ucbsndread(dev_t dev, struct uio *uio, int ioflag)
 	struct ucbsnd_softc *sc;
 	int error = 0;
 	
-	if (unit >= ucbsnd_cd.cd_ndevs ||
-	    (sc = ucbsnd_cd.cd_devs[unit]) == NULL)
+	sc = device_lookup_private(&ucbsnd_cd, unit);
+	if (sc == NULL)
 		return (ENXIO);
 	/* not supported yet */
 
@@ -580,7 +584,7 @@ ucbsndwrite_subr(struct ucbsnd_softc *sc, u_int32_t *buf, size_t bufsize,
 	
 	ringbuf_producer_return(&sc->sc_rb, bufsize);
 
-	s = splaudio();
+	s = splvm();
 	if (sc->sa_state == UCBSND_IDLE && ringbuf_full(&sc->sc_rb)) {
 		sc->sa_transfer_mode = UCBSND_TRANSFERMODE_DMA;
 		sc->sa_state = UCBSND_INIT;
@@ -600,8 +604,8 @@ ucbsndwrite(dev_t dev, struct uio *uio, int ioflag)
 	int i, n, s, rest;
 	void *buf;
 	
-	if (unit >= ucbsnd_cd.cd_ndevs ||
-	    (sc = ucbsnd_cd.cd_devs[unit]) == NULL)
+	sc = device_lookup_private(&ucbsnd_cd, unit);
+	if (sc == NULL)
 		return (ENXIO);
 
 	len = uio->uio_resid;
@@ -636,8 +640,8 @@ ucbsndwrite(dev_t dev, struct uio *uio, int ioflag)
  out:
 	return (error);
  errout:
-	printf("%s: timeout. reset ring-buffer.\n", sc->sc_dev.dv_xname);
-	s = splaudio();
+	printf("%s: timeout. reset ring-buffer.\n", device_xname(sc->sc_dev));
+	s = splvm();
 	ringbuf_reset(&sc->sc_rb);
 	splx(s);
 
@@ -712,7 +716,7 @@ ringbuf_producer_get(struct ring_buf *rb)
 	u_int32_t ret;
 	int s;
 
-	s = splaudio();
+	s = splvm();
 	ret = ringbuf_full(rb) ? 0 : 
 	    rb->rb_buf + rb->rb_inp * rb->rb_blksize;
 	splx(s);
@@ -727,7 +731,7 @@ ringbuf_producer_return(struct ring_buf *rb, size_t cnt)
 
 	assert(cnt <= rb->rb_blksize);
 
-	s = splaudio();
+	s = splvm();
 	rb->rb_outp++;
 	
 	rb->rb_bufcnt[rb->rb_inp] = cnt;

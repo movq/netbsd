@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.25 2008/02/18 14:59:52 joerg Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.30 2012/10/13 06:38:08 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.25 2008/02/18 14:59:52 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.30 2012/10/13 06:38:08 tsutsui Exp $");
 
 #include "opt_kgdb.h"
 
@@ -109,17 +102,17 @@ cpu_configure(void)
 	(void)spl0();
 }
 
-static int 	mainbus_match(struct device *, struct cfdata *, void *);
-static void	mainbus_attach(struct device *, struct device *, void *);
+static int 	mainbus_match(device_t, cfdata_t, void *);
+static void	mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
 /*
  * Probe for the mainbus; always succeeds.
  */
 static int 
-mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
+mainbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return 1;
@@ -131,7 +124,7 @@ mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
  * used early.  For example, idprom is used by Ether drivers.
  */
 static void 
-mainbus_attach(struct device *parent, struct device *self, void *args)
+mainbus_attach(device_t parent, device_t self, void *args)
 {
 	struct mainbus_attach_args ma;
 	const char *const *cpp;
@@ -142,7 +135,7 @@ mainbus_attach(struct device *parent, struct device *self, void *args)
 		NULL
 	};
 
-	printf("\n");
+	aprint_normal("\n");
 
 	ma.ma_bustag = &mainbus_space_tag;
 	ma.ma_dmatag = &mainbus_dma_tag;
@@ -161,7 +154,7 @@ mainbus_attach(struct device *parent, struct device *self, void *args)
 
 	/* Lastly, find the PROM console */
 	ma.ma_name = "pcons";
-	(void) config_found(self, &ma, NULL);
+	(void)config_found(self, &ma, NULL);
 }
 
 /*
@@ -177,8 +170,7 @@ mainbus_attach(struct device *parent, struct device *self, void *args)
  * setup the _attach_args for each child match and attach call.
  */
 int 
-sun68k_bus_search(struct device *parent, struct cfdata *cf, const int *ldesc,
-    void *aux)
+sun68k_bus_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args *map = aux;
 	struct mainbus_attach_args ma;
@@ -210,9 +202,9 @@ sun68k_bus_search(struct device *parent, struct cfdata *cf, const int *ldesc,
 	 */
 #ifdef	DIAGNOSTIC
 #define BAD_LOCATOR(ma_loc, what) \
-	panic("%s: %s %s for: %s%d", __func__ \
-		map->ma_loc == LOCATOR_REQUIRED ? "missing" : "unexpected", \
-		what, cf->cf_name, cf->cf_unit)
+	panic("%s: %s %s for: %s%d", __func__, \
+	    map->ma_loc == LOCATOR_REQUIRED ? "missing" : "unexpected", \
+	    what, cf->cf_name, cf->cf_unit)
 #else
 #define BAD_LOCATOR(ma_loc, what) return 0
 #endif
@@ -220,7 +212,7 @@ sun68k_bus_search(struct device *parent, struct cfdata *cf, const int *ldesc,
 #define CHECK_LOCATOR(ma_loc, cf_loc, what) \
 	if ((map->ma_loc == LOCATOR_FORBIDDEN && cf->cf_loc != -1) || \
 	    (map->ma_loc == LOCATOR_REQUIRED && cf->cf_loc == -1)) \
-		BAD_LOCATOR( ma_loc, what); \
+		BAD_LOCATOR(ma_loc, what); \
 	else \
 		ma.ma_loc = cf->cf_loc
 
@@ -264,13 +256,13 @@ sun68k_bus_print(void *args, const char *name)
 /****************************************************************/
 
 /* This takes the args: name, ctlr, unit */
-typedef struct device * (*findfunc_t)(char *, int, int);
+typedef device_t (*findfunc_t)(char *, int, int);
 
-static struct device * net_find (char *, int, int);
+static device_t net_find(char *, int, int);
 #if NSCSIBUS > 0
-static struct device * scsi_find(char *, int, int);
+static device_t scsi_find(char *, int, int);
 #endif /* NSCSIBUS > 0 */
-static struct device * xx_find  (char *, int, int);
+static device_t xx_find(char *, int, int);
 
 struct prom_n2f {
 	const char name[4];
@@ -300,11 +292,15 @@ str2hex(const char *p, int *_val)
 	int c;
 	
 	for (val = 0;; val = (val << 4) + c, p++) {
-		c = *((const unsigned char *) p);
-		if (c >= 'a') c-= ('a' + 10);
-		else if (c >= 'A') c -= ('A' + 10);
-		else if (c >= '0') c -= '0';
-		if (c < 0 || c > 15) break;
+		c = *((const unsigned char *)p);
+		if (c >= 'a')
+			c-= ('a' + 10);
+		else if (c >= 'A')
+			c -= ('A' + 10);
+		else if (c >= '0')
+			c -= '0';
+		if (c < 0 || c > 15)
+			break;
 	}
 	*_val = val;
 	return p;
@@ -317,8 +313,6 @@ void
 cpu_rootconf(void)
 {
 	struct prom_n2f *nf;
-	struct device *boot_device;
-	int boot_partition;
 	const char *devname;
 	findfunc_t find;
 	char promname[4];
@@ -328,7 +322,8 @@ cpu_rootconf(void)
 
 	/* Get the PROM boot path and take it apart. */
 	prompath = prom_getbootpath();
-	if (prompath == NULL) prompath = "zz(0,0,0)";
+	if (prompath == NULL)
+		prompath = "zz(0,0,0)";
 	promname[0] = *(prompath++);
 	promname[1] = *(prompath++);
 	promname[2] = '\0';
@@ -339,8 +334,8 @@ cpu_rootconf(void)
 		(void)str2hex(++prompath, &prom_part);
 
 	/* Default to "unknown" */
-	boot_device = NULL;
-	boot_partition = 0;
+	booted_device = NULL;
+	booted_partition = 0;
 	devname = "<unknown>";
 	partname[0] = '\0';
 	find = NULL;
@@ -352,18 +347,18 @@ cpu_rootconf(void)
 			break;
 		}
 	if (find)
-		boot_device = (*find)(promname, prom_ctlr, prom_unit);
-	if (boot_device) {
-		devname = boot_device->dv_xname;
-		if (device_class(boot_device) == DV_DISK) {
-			boot_partition = prom_part & 7;
-			partname[0] = 'a' + boot_partition;
+		booted_device = (*find)(promname, prom_ctlr, prom_unit);
+	if (booted_device) {
+		devname = device_xname(booted_device);
+		if (device_class(booted_device) == DV_DISK) {
+			booted_partition = prom_part & 7;
+			partname[0] = 'a' + booted_partition;
 			partname[1] = '\0';
 		}
 	}
 
 	printf("boot device: %s%s\n", devname, partname);
-	setroot(boot_device, boot_partition);
+	rootconf();
 }
 
 /*
@@ -373,9 +368,10 @@ cpu_rootconf(void)
 /*
  * Network device:  Just use controller number.
  */
-static struct device *
+static device_t
 net_find(char *name, int ctlr, int unit)
 {
+
 	return device_find_by_driver_unit(name, ctlr);
 }
 
@@ -384,10 +380,10 @@ net_find(char *name, int ctlr, int unit)
  * SCSI device:  The controller number corresponds to the
  * scsibus number, and the unit number is (targ*8 + LUN).
  */
-static struct device *
+static device_t
 scsi_find(char *name, int ctlr, int unit)
 {
-	struct device *scsibus;
+	device_t scsibus;
 	struct scsibus_softc *sbsc;
 	struct scsipi_periph *periph;
 	int target, lun;
@@ -413,8 +409,9 @@ scsi_find(char *name, int ctlr, int unit)
  * Xylogics SMD disk: (xy, xd)
  * Assume wired-in unit numbers for now...
  */
-static struct device *
+static device_t
 xx_find(char *name, int ctlr, int unit)
 {
+
 	return device_find_by_driver_unit(name, ctlr * 2 + unit);
 }

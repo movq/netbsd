@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.3 2006/10/16 18:14:37 kiyohara Exp $	*/
+/*	$NetBSD: locore.S,v 1.11 2014/08/05 16:28:39 joerg Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -68,11 +68,11 @@
  */
 
 #undef PPC_4XX_NOCACHE
-#define _NOREGNAMES
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 #include "opt_lockdebug.h"
+#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcarch.h"
 #include "opt_ppcparam.h"
@@ -87,8 +87,8 @@
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/ibm4xx/dcr405gp.h>
-#include <powerpc/ibm4xx/pmap.h>
+#include <powerpc/ibm4xx/spr.h>
+#include <powerpc/ibm4xx/dcr4xx.h>
 
 /* Function pointer for requesting board_config_data from openbios*/
 #define BOARD_CFG_FP       0xFFFE0B50
@@ -101,9 +101,6 @@
 /*
  * Globals
  */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
-
 GLOBAL(intrnames)
 	.asciz	"clock", "irq1", "irq2", "irq3"
 	.asciz	"irq4", "irq5", "irq6", "irq7"
@@ -196,11 +193,11 @@ __start_cpu0:
 	addi	%r8,%r8,_C_LABEL(end)@l
 /* zero bss */
 	li	%r4,0
-2:	stwu	%r4,%r4(3)
+2:	stwu	%r4,4(%r3)
 	cmpw	%r3,%r8
 	bne+	2b
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	/* If we had symbol table location we'd store it here and would've adjusted r8 here */
 	lis	%r7,_C_LABEL(startsym)@ha
 	addi	%r7,%r7,_C_LABEL(startsym)@l

@@ -34,7 +34,7 @@
  *	the "cx" driver for Cronyx's HDLC-in-hardware device).  This driver
  *	is only the glue between sppp and i4b.
  *
- *	$Id: i4b_isppp.c,v 1.22 2007/03/04 06:03:30 christos Exp $
+ *	$Id: i4b_isppp.c,v 1.32 2018/06/26 06:48:03 msaitoh Exp $
  *
  * $FreeBSD$
  *
@@ -43,7 +43,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_isppp.c,v 1.22 2007/03/04 06:03:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_isppp.c,v 1.32 2018/06/26 06:48:03 msaitoh Exp $");
 
 #ifndef __NetBSD__
 #define USE_ISPPP
@@ -99,7 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: i4b_isppp.c,v 1.22 2007/03/04 06:03:30 christos Exp 
 #if defined(__FreeBSD_version) &&  __FreeBSD_version >= 400008
 #include "bpf.h"
 #else
-#include "bpfilter.h"
+#define NBPFILTER 1
 #endif
 #if NBPFILTER > 0 || NBPF > 0
 #include <sys/time.h>
@@ -252,7 +252,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 ipppattach(void *dummy)
 #else
-ipppattach()
+ipppattach(void)
 #endif
 {
 	struct i4bisppp_softc *sc = i4bisppp_softc;
@@ -335,6 +335,11 @@ ipppattach()
 		ether_ifattach(&sc->sc_sp.pp_if, 0);
 #else
 		if_attach(&sc->sc_sp.pp_if);
+#ifndef USE_ISPPP
+		sc->sc_sp.pp_if._if_input = sppp_input;
+#else
+		sc->sc_sp.pp_if._if_input = isppp_input;
+#endif
 #endif
 #ifndef USE_ISPPP
 		sppp_attach(&sc->sc_sp.pp_if);
@@ -348,7 +353,7 @@ ipppattach()
 		CALLOUT_INIT(&sc->sc_ch);
 #endif /* __FreeBSD__ */
 #ifdef __NetBSD__
-		bpfattach(&sc->sc_sp.pp_if, DLT_PPP, sizeof(u_int));
+		bpf_attach(&sc->sc_sp.pp_if, DLT_PPP, sizeof(u_int));
 #endif
 #endif
 	}
@@ -358,31 +363,15 @@ ipppattach()
  *	process ioctl
  *---------------------------------------------------------------------------*/
 static int
-i4bisppp_ioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data)
+i4bisppp_ioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 {
 	struct i4bisppp_softc *sc = ifp->if_softc;
-	int error;
 
 #ifndef USE_ISPPP
-	error = sppp_ioctl(&sc->sc_sp.pp_if, cmd, data);
+	return sppp_ioctl(&sc->sc_sp.pp_if, cmd, data);
 #else
-	error = isppp_ioctl(&sc->sc_sp.pp_if, cmd, data);
+	return isppp_ioctl(&sc->sc_sp.pp_if, cmd, data);
 #endif
-	if (error)
-		return error;
-
-	switch(cmd) {
-	case SIOCSIFFLAGS:
-#if 0 /* never used ??? */
-		x = splnet();
-		if ((ifp->if_flags & IFF_UP) == 0)
-			UNTIMEOUT(i4bisppp_timeout, (void *)sp, sc->sc_ch);
-		splx(x);
-#endif
-		break;
-	}
-
-	return 0;
 }
 
 /*---------------------------------------------------------------------------*
@@ -424,8 +413,7 @@ i4bisppp_start(struct ifnet *ifp)
 #endif /* __FreeBSD__ */
 
 #ifdef __NetBSD__
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
+		bpf_mtap(ifp, m, BPF_D_OUT);
 #endif
 #endif /* NBPFILTER > 0 || NBPF > 0 */
 
@@ -436,12 +424,12 @@ i4bisppp_start(struct ifnet *ifp)
 		}
 		else
 		{
-			IF_ENQUEUE(sc->sc_ilt->tx_queue, m);
 #if 0
 			sc->sc_sp.pp_if.if_obytes += m->m_pkthdr.len;
 #endif
 			sc->sc_outb += m->m_pkthdr.len;
 			sc->sc_sp.pp_if.if_opackets++;
+			IF_ENQUEUE(sc->sc_ilt->tx_queue, m);
 		}
 	}
 	sc->sc_ilt->bchannel_driver->bch_tx_start(sc->sc_ilt->l1token,
@@ -683,15 +671,12 @@ i4bisppp_rx_data_rdy(void *softc)
 {
 	struct i4bisppp_softc *sc = softc;
 	struct mbuf *m;
-	int s;
 
 	if((m = *sc->sc_ilt->rx_mbuf) == NULL)
 		return;
 
-	m->m_pkthdr.rcvif = &sc->sc_sp.pp_if;
+	m_set_rcvif(m, &sc->sc_sp.pp_if);
 	m->m_pkthdr.len = m->m_len;
-
-	sc->sc_sp.pp_if.if_ipackets++;
 
 #if I4BISPPPACCT
 	sc->sc_inb += m->m_pkthdr.len;
@@ -701,29 +686,7 @@ i4bisppp_rx_data_rdy(void *softc)
 	printf("i4bisppp_rx_data_ready: received packet!\n");
 #endif
 
-#if NBPFILTER > 0 || NBPF > 0
-
-#ifdef __FreeBSD__
-	if(sc->sc_sp.pp_if.if_bpf)
-		bpf_mtap(&sc->sc_sp.pp_if, m);
-#endif /* __FreeBSD__ */
-
-#ifdef __NetBSD__
-	if(sc->sc_sp.pp_if.if_bpf)
-		bpf_mtap(sc->sc_sp.pp_if.if_bpf, m);
-#endif
-
-#endif /* NBPFILTER > 0  || NBPF > 0 */
-
-	s = splnet();
-
-#ifndef USE_ISPPP
-	sppp_input(&sc->sc_sp.pp_if, m);
-#else
-	isppp_input(&sc->sc_sp.pp_if, m);
-#endif
-
-	splx(s);
+	if_percpuq_enqueue(sc->sc_sp.pp_if.if_percpuq, m);
 }
 
 /*---------------------------------------------------------------------------*

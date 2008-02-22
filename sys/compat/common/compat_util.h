@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_util.h,v 1.19 2008/01/20 09:37:58 dsl Exp $	*/
+/*	$NetBSD: compat_util.h,v 1.23 2013/02/21 01:39:54 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,7 @@
 
 /*
  * Copyright (c) 1995 Frank van der Linden
+ * Copyright (c) 2009 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -85,5 +79,7 @@ unsigned long emul_flags_translate(const struct emul_flags_xtab *tab,
 				   unsigned long in, unsigned long *leftover);
 
 void compat_offseterr(struct vnode *, const char *);
+
+int compat_elf_check_interp(struct exec_package *, char *, const char *);
 
 #endif /* !_COMPAT_UTIL_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee1212var.h,v 1.3 2005/12/11 12:23:56 christos Exp $	*/
+/*	$NetBSD: ieee1212var.h,v 1.5 2009/05/12 14:46:01 cegger Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -101,7 +94,7 @@ void p1212_walk(struct p1212_dir *, void *,
 struct p1212_key **p1212_find(struct p1212_dir *, int, int, int);
 void p1212_print(struct p1212_dir *);
 void p1212_free(struct p1212_rom *);
-struct device **p1212_match_units(struct device *, struct p1212_dir *,
+device_t *p1212_match_units(device_t, struct p1212_dir *,
     int (*)(void *, const char *));
 
 #endif /* _DEV_STD_IEEE1212VAR_H */

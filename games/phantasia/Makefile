@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.33 2004/02/08 22:14:27 lukem Exp $
+#	$NetBSD: Makefile,v 1.37 2014/06/14 20:49:37 mrg Exp $
 #	@(#)Makefile	8.1 (Berkeley) 5/31/93
 
 .include <bsd.own.mk>
@@ -6,8 +6,8 @@
 PROG=	phantasia
 SRCS=	fight.c gamesupport.c interplayer.c io.c main.c misc.c phantglobs.c
 
-DPADD=	${LIBM} ${LIBCURSES}
-LDADD=	-lm -lcurses
+DPADD=	${LIBM} ${LIBCURSES} ${LIBTERMINFO}
+LDADD=	-lm -lcurses -lterminfo
 HIDEGAME=hidegame
 SETGIDGAME=yes
 USETBL=
@@ -26,18 +26,18 @@ FILES+=${file}
 .endif
 .endfor
 
-CLEANFILES+=map setup setup.lo host_phantglobs.lo ${ALLFILES} files.stamp
+CLEANFILES+=map mkdata setup.lo host_phantglobs.lo ${ALLFILES} files.stamp
 
 realall: ${FILES}
 
 ${FILES}: files.stamp
-files.stamp: setup monsters.asc
+files.stamp: mkdata monsters.asc
 	${_MKMSG_CREATE} ${FILES}
 	rm -f ${.TARGET}
-	./setup -m ${.CURDIR}/monsters.asc
+	./mkdata -m ${.CURDIR}/monsters.asc
 	touch ${.TARGET}
 
-setup: host_phantglobs.lo setup.lo ${LIBM} 
+mkdata: host_phantglobs.lo setup.lo ${LIBM} 
 	${_MKTARGET_LINK}
 	${HOST_LINK.c} -o ${.TARGET} ${.ALLSRC:M*.lo} -lm
 
@@ -52,3 +52,7 @@ map: map.c
 	./map | plot > /dev/tty
 
 .include <bsd.prog.mk>
+
+.if defined(HAVE_GCC) && ${MACHINE_ARCH} == "vax"
+COPTS.misc.c+=	-O0
+.endif

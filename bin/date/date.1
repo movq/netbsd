@@ -1,4 +1,4 @@
-.\"	$NetBSD: date.1,v 1.38 2006/11/26 16:40:44 wiz Exp $
+.\"	$NetBSD: date.1,v 1.47 2018/01/27 18:59:38 wiz Exp $
 .\"
 .\" Copyright (c) 1980, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"     @(#)date.1	8.3 (Berkeley) 4/28/95
 .\"
-.Dd November 15, 2006
+.Dd January 25, 2018
 .Dt DATE 1
 .Os
 .Sh NAME
@@ -73,6 +73,9 @@ implies
 .It Fl d Ar date
 Parse the provided human-described date and time and display the result without
 actually changing the system clock.
+(See
+.Xr parsedate 3
+for examples.)
 .It Fl j
 Parse the provided canonical representation of date and time (described below)
 and display the result without actually changing the system clock.
@@ -81,7 +84,7 @@ The utility
 .Xr timed 8
 is used to synchronize the clocks on groups of machines.
 By default, if
-timed
+.Xr timed 8
 is running,
 .Nm
 will set the time on all of the machines in the local group.
@@ -90,14 +93,12 @@ The
 option stops
 .Nm
 from setting the time for other than the current machine.
-.It Fl r
+.It Fl r Ar seconds
 Print out the date and time that is
 .Ar seconds
 from the Epoch.
 .It Fl u
-Display or set the date in
-.Tn UTC
-(universal) time.
+Display or set the date in UTC (universal) time.
 .El
 .Pp
 An operand with a leading plus
@@ -108,7 +109,7 @@ The format string may contain any of the conversion specifications described
 in the
 .Xr strftime 3
 manual page, as well as any arbitrary text.
-A \*[Lt]newline\*[Gt] character is always output after the characters
+A <newline> character is always output after the characters
 specified by the format string.
 The format string for the default display is:
 .Bd -literal -offset indent
@@ -145,12 +146,12 @@ The hour of the day, from 00 to 23.
 .It Ar MM
 The minute of the hour, from 00 to 59.
 .It Ar SS
-The second of the minute, from 00 to 61.
+The second of the minute, from 00 to 60.
 .El
 .Pp
 Everything but the minutes is optional.
 .Pp
-Time changes for Daylight Saving and Standard time and leap seconds
+Time changes for Daylight Saving and Standard Time and leap seconds
 and years are handled automatically.
 .Sh ENVIRONMENT
 The following environment variables affect the execution of
@@ -163,16 +164,29 @@ See
 for more information.
 .El
 .Sh FILES
-.Bl -tag -width /var/log/messages -compact
+.Bl -tag -width /usr/share/zoneinfo/posixrules -compact
 .It Pa /etc/localtime
 Symlink pointing to system's default timezone information file in
 .Pa /usr/share/zoneinfo
 directory.
+.It Pa /usr/lib/locale/<L>/LC_TIME
+Description of time locale <L>.
+.It Pa /usr/share/zoneinfo
+Time zone information directory.
+.It Pa /usr/share/zoneinfo/posixrules
+Used with POSIX-style TZ's.
+.It Pa /usr/share/zoneinfo/GMT
+For UTC leap seconds.
 .It Pa /var/log/wtmp
 A record of date resets and time changes.
 .It Pa /var/log/messages
 A record of the user setting the time.
 .El
+.Pp
+If
+.Pa /usr/share/zoneinfo/GMT
+is absent, UTC leap seconds are loaded from
+.Pa /usr/share/zoneinfo/posixrules .
 .Sh EXAMPLES
 The command:
 .Bd -literal -offset indent
@@ -214,12 +228,13 @@ On these occasions,
 prints:
 .Ql Network time being set .
 The message
-.Ql Communication error with timed
+.Ql Communication error with
+.Xr timed 8
 occurs when the communication
 between
 .Nm
 and
-timed
+.Xr timed 8
 fails.
 .Sh SEE ALSO
 .Xr adjtime 2 ,
@@ -228,6 +243,7 @@ fails.
 .Xr parsedate 3 ,
 .Xr strftime 3 ,
 .Xr utmp 5 ,
+.Xr environ 7 ,
 .Xr timed 8
 .Rs
 .%T "TSP: The Time Synchronization Protocol for UNIX 4.3BSD"
@@ -239,3 +255,8 @@ The
 .Nm
 utility is expected to be compatible with
 .St -p1003.2 .
+.Sh HISTORY
+A
+.Nm
+utility appeared in
+.At v1 .

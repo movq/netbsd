@@ -1,10 +1,9 @@
-#	$NetBSD: Makefile,v 1.14 2007/02/27 18:17:28 he Exp $
+#	$NetBSD: Makefile,v 1.25 2018/06/02 14:30:07 christos Exp $
 
-S=	${.CURDIR}/../../../../
+S=	${.CURDIR}/../../../..
 
 BASE?= pxeboot_ia32
 PROG= ${BASE}.bin
-NOMAN=	# defined
 NEWVERSWHAT=	"PXE Boot"
 STARTFILE=	${PXESTART}
 RELOC=		0x0
@@ -19,9 +18,9 @@ SRCS= main.c dev_net.c devopen.c conf.c exec.c pxe.c pxe_call.S
 .PATH: ${.CURDIR}/../libsa
 SRCS+= nfs.c
 
-.include <bsd.own.mk>
+.include <bsd.init.mk>
 
-.if ${MACHINE} == "amd64"
+.if ${MACHINE_ARCH} == "x86_64"
 LDFLAGS+=	-Wl,-m,elf_i386
 AFLAGS+=	-m32
 LIBKERN_ARCH=	i386
@@ -58,6 +57,10 @@ CPPFLAGS+= -DSUPPORT_NFS
 
 CPPFLAGS+= -DPASS_MEMMAP
 CPPFLAGS+= -DEPIA_HACK
+
+# modules and boot.cfg need special DHCP server setup, disable
+# per default for compatibility with existing setups
+CPPFLAGS+= -DBOOTPARAM_DEFFLAGS=0x0c
 
 #CFLAGS= -O2 -fomit-frame-pointer -fno-defer-pop
 CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wno-main

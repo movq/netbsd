@@ -1,4 +1,4 @@
-/* $NetBSD: dwlpx_pci.c,v 1.12 2007/03/04 05:59:11 christos Exp $ */
+/* $NetBSD: dwlpx_pci.c,v 1.19 2015/10/02 05:22:49 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -32,14 +32,12 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dwlpx_pci.c,v 1.12 2007/03/04 05:59:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwlpx_pci.c,v 1.19 2015/10/02 05:22:49 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -49,19 +47,17 @@ __KERNEL_RCSID(0, "$NetBSD: dwlpx_pci.c,v 1.12 2007/03/04 05:59:11 christos Exp 
 
 #define	KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 
-void		dwlpx_attach_hook __P((struct device *, struct device *,
-		    struct pcibus_attach_args *));
-int		dwlpx_bus_maxdevs __P((void *, int));
-pcitag_t	dwlpx_make_tag __P((void *, int, int, int));
-void		dwlpx_decompose_tag __P((void *, pcitag_t, int *, int *,
-		    int *));
-pcireg_t	dwlpx_conf_read __P((void *, pcitag_t, int));
-void		dwlpx_conf_write __P((void *, pcitag_t, int, pcireg_t));
+void		dwlpx_attach_hook(device_t, device_t,
+		    struct pcibus_attach_args *);
+int		dwlpx_bus_maxdevs(void *, int);
+pcitag_t	dwlpx_make_tag(void *, int, int, int);
+void		dwlpx_decompose_tag(void *, pcitag_t, int *, int *,
+		    int *);
+pcireg_t	dwlpx_conf_read(void *, pcitag_t, int);
+void		dwlpx_conf_write(void *, pcitag_t, int, pcireg_t);
 
 void
-dwlpx_pci_init(pc, v)
-	pci_chipset_tag_t pc;
-	void *v;
+dwlpx_pci_init(pci_chipset_tag_t pc, void *v)
 {
 	pc->pc_conf_v = v;
 	pc->pc_attach_hook = dwlpx_attach_hook;
@@ -73,28 +69,22 @@ dwlpx_pci_init(pc, v)
 }
 
 void
-dwlpx_attach_hook(parent, self, pba)
-	struct device *parent, *self;
-	struct pcibus_attach_args *pba;
+dwlpx_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 #if	0
 	struct dwlpx_config *ccp = pba->pba_pc->pc_conf_v;
-	printf("dwlpx_attach_hook for %s\n", ccp->cc_sc->dwlpx_dev.dv_xname);
+	printf("dwlpx_attach_hook for %s\n", device_xname(ccp->cc_sc->dwlpx_dev));
 #endif
 }
 
 int
-dwlpx_bus_maxdevs(cpv, busno)
-	void *cpv;
-	int busno;
+dwlpx_bus_maxdevs(void *cpv, int busno)
 {
 	return DWLPX_MAXDEV;
 }
 
 pcitag_t
-dwlpx_make_tag(cpv, b, d, f)
-	void *cpv;
-	int b, d, f;
+dwlpx_make_tag(void *cpv, int b, int d, int f)
 {
 	pcitag_t tag;
 	int hpcdev, pci_idsel;
@@ -106,10 +96,7 @@ dwlpx_make_tag(cpv, b, d, f)
 }
 
 void
-dwlpx_decompose_tag(cpv, tag, bp, dp, fp)
-	void *cpv;
-	pcitag_t tag;
-	int *bp, *dp, *fp;
+dwlpx_decompose_tag(void *cpv, pcitag_t tag, int *bp, int *dp, int *fp)
 {
 
 	if (bp != NULL)
@@ -129,17 +116,17 @@ dwlpx_decompose_tag(cpv, tag, bp, dp, fp)
 }
 
 pcireg_t
-dwlpx_conf_read(cpv, tag, offset)
-	void *cpv;
-	pcitag_t tag;
-	int offset;
+dwlpx_conf_read(void *cpv, pcitag_t tag, int offset)
 {
 	struct dwlpx_config *ccp = cpv;
 	struct dwlpx_softc *sc;
 	pcireg_t *dp, data = (pcireg_t) -1;
 	unsigned long paddr;
 	int secondary, i, s = 0;
-	u_int32_t rvp;
+	uint32_t rvp;
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return (data);
 
 	if (ccp == NULL) {
 		panic("NULL ccp in dwlpx_conf_read");
@@ -198,18 +185,17 @@ dwlpx_conf_read(cpv, tag, offset)
 }
 
 void
-dwlpx_conf_write(cpv, tag, offset, data)
-	void *cpv;
-	pcitag_t tag;
-	int offset;
-	pcireg_t data;
+dwlpx_conf_write(void *cpv, pcitag_t tag, int offset, pcireg_t data)
 {
 	struct dwlpx_config *ccp = cpv;
 	struct dwlpx_softc *sc;
 	pcireg_t *dp;
 	unsigned long paddr;
 	int secondary, i, s = 0;
-	u_int32_t rvp;
+	uint32_t rvp;
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return;
 
 	if (ccp == NULL) {
 		panic("NULL ccp in dwlpx_conf_write");

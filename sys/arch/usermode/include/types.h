@@ -1,4 +1,4 @@
-/* $NetBSD: types.h,v 1.4 2008/01/20 18:09:10 joerg Exp $ */
+/* $NetBSD: types.h,v 1.14 2018/06/01 07:19:50 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -32,8 +26,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _ARCH_USERMODE_INCLUDE_TYPES_H
-#define _ARCH_USERMODE_INCLUDE_TYPES_H
+#ifndef _USERMODE_TYPES_H_
+#define _USERMODE_TYPES_H_
 
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
@@ -45,16 +39,60 @@ typedef struct label_t {
 } label_t;
 #endif
 
+#if defined(_KERNEL) || defined(_KMEMUSER) || defined(_KERNTYPES) || defined(_STANDALONE)
+#if defined(__i386__) || defined(__arm__)
 typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
-typedef unsigned long	vaddr_t;
+typedef unsigned long	__vaddr_t;
+typedef unsigned long	vsize_t;
+typedef int		register_t;
+
+#ifndef __x86_64__
+// XXX hack to allow for amd64->i386 crosscompile, why?
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#else
+#define	PRIxPADDR	"llx"
+#define	PRIxPSIZE	"llx"
+#define	PRIuPSIZE	"llu"
+#endif
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
+#define	PRIxREGISTER	"lx"
+#elif defined(__x86_64__)
+typedef unsigned long	paddr_t;
+typedef unsigned long	psize_t;
+typedef unsigned long	__vaddr_t;
 typedef unsigned long	vsize_t;
 typedef long int	register_t;
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
+#define	PRIxREGISTER	"lx"
+#endif
+#endif
 
-typedef volatile unsigned char	__cpu_simple_lock_t;
+typedef __vaddr_t	vaddr_t;
+typedef unsigned char	__cpu_simple_lock_nv_t;
+typedef register_t	__register_t;
+
 #define __CPU_SIMPLE_LOCK_PAD
 
 #define __SIMPLELOCK_LOCKED	1
 #define __SIMPLELOCK_UNLOCKED	0
 
-#endif /* !_ARCH_USERMODE_INCLUDE_TYPES_H */
+#if defined(__i386__)
+#define __HAVE_OLD_DISKLABEL
+#endif
+
+#define __HAVE_CPU_DATA_FIRST
+#define __HAVE_CPU_LWP_SETPRIVATE
+#define __HAVE_MM_MD_KERNACC
+#define	__HAVE_COMPAT_NETBSD32
+
+#endif /* !_USERMODE_TYPES_H_ */

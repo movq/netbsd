@@ -1,4 +1,4 @@
-/*	$NetBSD: pio.h,v 1.6 2001/01/07 03:59:31 thorpej Exp $	*/
+/*	$NetBSD: pio.h,v 1.10 2012/02/06 02:14:13 matt Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,18 +33,18 @@
 #define	_ALPHA_PIO_H_
 
 #include <sys/cdefs.h>
-#include <machine/bus.h>
+#include <machine/bus_user.h>
 
 #ifdef _KERNEL
 #error This file is for userspace only.
 #else
 struct alpha_pci_io_ops {
-	u_int8_t	(*apio_inb)(bus_addr_t);
-	u_int16_t	(*apio_inw)(bus_addr_t);
-	u_int32_t	(*apio_inl)(bus_addr_t);
-	void		(*apio_outb)(bus_addr_t, u_int8_t);
-	void		(*apio_outw)(bus_addr_t, u_int16_t);
-	void		(*apio_outl)(bus_addr_t, u_int32_t);
+	uint8_t	(*apio_inb)(bus_addr_t);
+	uint16_t	(*apio_inw)(bus_addr_t);
+	uint32_t	(*apio_inl)(bus_addr_t);
+	void		(*apio_outb)(bus_addr_t, uint8_t);
+	void		(*apio_outw)(bus_addr_t, uint16_t);
+	void		(*apio_outl)(bus_addr_t, uint32_t);
 };
 
 #define	inb(addr)	(*alpha_pci_io_switch->apio_inb)((addr))

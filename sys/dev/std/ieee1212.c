@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee1212.c,v 1.10 2005/12/11 12:23:56 christos Exp $	*/
+/*	$NetBSD: ieee1212.c,v 1.13 2014/10/18 08:33:28 snj Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ieee1212.c,v 1.10 2005/12/11 12:23:56 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee1212.c,v 1.13 2014/10/18 08:33:28 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -561,7 +554,7 @@ p1212_parse_directory(struct p1212_dir *root, u_int32_t *addr, u_int32_t mask)
 			/*
 			 * Text descriptors are special. They describe the
 			 * last entry they follow. So they need to be included
-			 * with it's struct and there's nothing in the spec
+			 * with its struct and there's nothing in the spec
 			 * preventing one from putting text descriptors after
 			 * directory descriptors. Also they can be a single
 			 * value or a list of them in a directory format so
@@ -1214,12 +1207,12 @@ p1212_calc_crc(u_int32_t crc, u_int32_t *data, int len, int broke)
  * can match and attach multiple children in one pass.
  */
 
-struct device **
-p1212_match_units(struct device *sc, struct p1212_dir *dir,
+device_t *
+p1212_match_units(device_t sc, struct p1212_dir *dir,
     int (*print)(void *, const char *))
 {
 	struct p1212_dir **udirs;
-	struct device **devret, *dev;
+	device_t *devret, *dev;
 	int numdev;
 
 	/*
@@ -1228,7 +1221,7 @@ p1212_match_units(struct device *sc, struct p1212_dir *dir,
 	 */
 
 	numdev = 0;
-	devret = malloc(sizeof(struct device *) * 2, M_DEVBUF, M_WAITOK);
+	devret = malloc(sizeof(device_t) * 2, M_DEVBUF, M_WAITOK);
 	devret[1] = NULL;
 
 	udirs = (struct p1212_dir **)p1212_find(dir, P1212_KEYTYPE_Directory,
@@ -1240,7 +1233,7 @@ p1212_match_units(struct device *sc, struct p1212_dir *dir,
 			dev = config_found_ia(sc, "fwnode", udirs, print);
 			if (dev && numdev) {
 				devret = realloc(devret,
-				    sizeof(struct device *) *
+				    sizeof(device_t) *
 				    (numdev + 2), M_DEVBUF, M_WAITOK);
 				devret[numdev++] = dev;
 				devret[numdev] = NULL;

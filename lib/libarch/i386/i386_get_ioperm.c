@@ -1,4 +1,4 @@
-/*	$NetBSD: i386_get_ioperm.c,v 1.5 2006/04/12 21:48:08 drochner Exp $	*/
+/*	$NetBSD: i386_get_ioperm.c,v 1.7 2012/03/21 21:37:29 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,8 +37,7 @@
 int i386_get_ioperm(u_long *);
 
 int
-i386_get_ioperm(iomap)
-	u_long *iomap;
+i386_get_ioperm(u_long *iomap)
 {
 	struct i386_get_ioperm_args p;
 

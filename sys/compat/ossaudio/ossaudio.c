@@ -1,7 +1,7 @@
-/*	$NetBSD: ossaudio.c,v 1.61 2007/12/20 23:03:03 dsl Exp $	*/
+/*	$NetBSD: ossaudio.c,v 1.70 2017/03/24 14:32:29 nat Exp $	*/
 
 /*-
- * Copyright (c) 1997 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ossaudio.c,v 1.61 2007/12/20 23:03:03 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ossaudio.c,v 1.70 2017/03/24 14:32:29 nat Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -47,11 +40,14 @@ __KERNEL_RCSID(0, "$NetBSD: ossaudio.c,v 1.61 2007/12/20 23:03:03 dsl Exp $");
 #include <sys/kernel.h>
 #include <sys/audioio.h>
 #include <sys/midiio.h>
-
+#include <sys/kauth.h>
 #include <sys/syscallargs.h>
+#include <sys/module.h>
 
 #include <compat/ossaudio/ossaudio.h>
 #include <compat/ossaudio/ossaudiovar.h>
+
+MODULE(MODULE_CLASS_EXEC, compat_ossaudio, NULL);
 
 #ifdef AUDIO_DEBUG
 #define DPRINTF(x) if (ossdebug) printf x
@@ -63,13 +59,107 @@ int ossdebug = 0;
 #define TO_OSSVOL(x)	(((x) * 100 + 127) / 255)
 #define FROM_OSSVOL(x)	((((x) > 100 ? 100 : (x)) * 255 + 50) / 100)
 
-static struct audiodevinfo *getdevinfo(struct file *, struct lwp *);
+static struct audiodevinfo *getdevinfo(file_t *);
 static int opaque_to_enum(struct audiodevinfo *di, audio_mixer_name_t *label, int opq);
 static int enum_to_ord(struct audiodevinfo *di, int enm);
 static int enum_to_mask(struct audiodevinfo *di, int enm);
 
-static void setblocksize(struct file *, struct audio_info *, struct lwp *);
+static void setblocksize(file_t *, struct audio_info *);
 
+#ifdef AUDIO_DEBUG
+static const char *
+compat_ossaudio_getcmd(u_long cmd)
+{
+	static char buf[64];
+	switch (cmd) {
+#define _DO(_a) \
+	case _a: \
+		return # _a;
+_DO(OSS_SNDCTL_DSP_RESET)
+_DO(OSS_SNDCTL_DSP_SYNC)
+_DO(OSS_SNDCTL_DSP_SPEED)
+_DO(OSS_SOUND_PCM_READ_RATE)
+_DO(OSS_SNDCTL_DSP_STEREO)
+_DO(OSS_SNDCTL_DSP_GETBLKSIZE)
+_DO(OSS_SNDCTL_DSP_SETFMT)
+_DO(OSS_SOUND_PCM_READ_BITS)
+_DO(OSS_SNDCTL_DSP_CHANNELS)
+_DO(OSS_SOUND_PCM_READ_CHANNELS)
+_DO(OSS_SOUND_PCM_WRITE_FILTER)
+_DO(OSS_SOUND_PCM_READ_FILTER)
+_DO(OSS_SNDCTL_DSP_POST)
+_DO(OSS_SNDCTL_DSP_SUBDIVIDE)
+_DO(OSS_SNDCTL_DSP_SETFRAGMENT)
+_DO(OSS_SNDCTL_DSP_GETFMTS)
+_DO(OSS_SNDCTL_DSP_GETOSPACE)
+_DO(OSS_SNDCTL_DSP_GETISPACE)
+_DO(OSS_SNDCTL_DSP_NONBLOCK)
+_DO(OSS_SNDCTL_DSP_GETCAPS)
+_DO(OSS_SNDCTL_DSP_GETTRIGGER)
+_DO(OSS_SNDCTL_DSP_SETTRIGGER)
+_DO(OSS_SNDCTL_DSP_GETIPTR)
+_DO(OSS_SNDCTL_DSP_GETOPTR)
+_DO(OSS_SNDCTL_DSP_MAPINBUF)
+_DO(OSS_SNDCTL_DSP_MAPOUTBUF)
+_DO(OSS_SNDCTL_DSP_SETSYNCRO)
+_DO(OSS_SNDCTL_DSP_SETDUPLEX)
+_DO(OSS_SNDCTL_DSP_GETODELAY)
+_DO(OSS_SNDCTL_DSP_PROFILE)
+_DO(OSS_SOUND_MIXER_INFO)
+_DO(OSS_SOUND_OLD_MIXER_INFO)
+_DO(OSS_GET_VERSION)
+_DO(OSS_SEQ_RESET)
+_DO(OSS_SEQ_SYNC)
+_DO(OSS_SYNTH_INFO)
+_DO(OSS_SEQ_CTRLRATE)
+_DO(OSS_SEQ_GETOUTCOUNT)
+_DO(OSS_SEQ_GETINCOUNT)
+_DO(OSS_SEQ_PERCMODE)
+_DO(OSS_SEQ_TESTMIDI)
+_DO(OSS_SEQ_RESETSAMPLES)
+_DO(OSS_SEQ_NRSYNTHS)
+_DO(OSS_SEQ_NRMIDIS)
+#ifdef notyet
+_DO(OSS_MIDI_INFO)
+#endif
+_DO(OSS_SEQ_THRESHOLD)
+_DO(OSS_MEMAVL)
+_DO(OSS_FM_4OP_ENABLE)
+_DO(OSS_SEQ_PANIC)
+_DO(OSS_SEQ_OUTOFBAND)
+_DO(OSS_SEQ_GETTIME)
+_DO(OSS_ID)
+_DO(OSS_CONTROL)
+_DO(OSS_REMOVESAMPLE)
+_DO(OSS_TMR_TIMEBASE)
+_DO(OSS_TMR_START)
+_DO(OSS_TMR_STOP)
+_DO(OSS_TMR_CONTINUE)
+_DO(OSS_TMR_TEMPO)
+_DO(OSS_TMR_SOURCE)
+_DO(OSS_TMR_METRONOME)
+_DO(OSS_TMR_SELECT)
+#undef _DO
+	default:
+		(void)snprintf(buf, sizeof(buf), "*0x%lx*", cmd);
+		return buf;
+	}
+}
+#endif
+
+
+static int
+compat_ossaudio_modcmd(modcmd_t cmd, void *arg)
+{
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+	case MODULE_CMD_FINI:
+		return 0;
+	default:
+		return ENOTTY;
+	}
+}
 
 int
 oss_ioctl_audio(struct lwp *l, const struct oss_sys_ioctl_args *uap, register_t *retval)
@@ -79,9 +169,7 @@ oss_ioctl_audio(struct lwp *l, const struct oss_sys_ioctl_args *uap, register_t 
 		syscallarg(u_long) com;
 		syscallarg(void *) data;
 	} */
-	struct proc *p = l->l_proc;
-	struct file *fp;
-	struct filedesc *fdp;
+	file_t *fp;
 	u_long com;
 	struct audio_info tmpinfo;
 	struct audio_offset tmpoffs;
@@ -91,13 +179,10 @@ oss_ioctl_audio(struct lwp *l, const struct oss_sys_ioctl_args *uap, register_t 
 	u_int u;
 	int idat, idata;
 	int error = 0;
-	int (*ioctlf)(struct file *, u_long, void *, struct lwp *);
+	int (*ioctlf)(file_t *, u_long, void *);
 
-	fdp = p->p_fd;
-	if ((fp = fd_getfile(fdp, SCARG(uap, fd))) == NULL)
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
 		return (EBADF);
-
-	FILE_USE(fp);
 
 	if ((fp->f_flag & (FREAD | FWRITE)) == 0) {
 		error = EBADF;
@@ -105,21 +190,25 @@ oss_ioctl_audio(struct lwp *l, const struct oss_sys_ioctl_args *uap, register_t 
 	}
 
 	com = SCARG(uap, com);
-	DPRINTF(("oss_ioctl_audio: com=%08lx\n", com));
+	DPRINTF(("%s: com=%s\n", __func__, compat_ossaudio_getcmd(com)));
 
 	retval[0] = 0;
 
 	ioctlf = fp->f_ops->fo_ioctl;
 	switch (com) {
 	case OSS_SNDCTL_DSP_RESET:
-		error = ioctlf(fp, AUDIO_FLUSH, (void *)0, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_FLUSH, NULL);
+		if (error) {
+			DPRINTF(("%s: AUDIO_FLUSH %d\n", __func__, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_SYNC:
-		error = ioctlf(fp, AUDIO_DRAIN, (void *)0, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_DRAIN, NULL);
+		if (error) {
+			DPRINTF(("%s: AUDIO_DRAIN %d\n", __func__, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_POST:
 		/* This call is merely advisory, and may be a nop. */
@@ -127,56 +216,93 @@ oss_ioctl_audio(struct lwp *l, const struct oss_sys_ioctl_args *uap, register_t 
 	case OSS_SNDCTL_DSP_SPEED:
 		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_SPEED %d\n",
+			     __func__, error));
 			goto out;
+		}
 		tmpinfo.play.sample_rate =
 		tmpinfo.record.sample_rate = idat;
-		error = ioctlf(fp, AUDIO_SETINFO, (void *)&tmpinfo, l);
-		DPRINTF(("oss_sys_ioctl: SNDCTL_DSP_SPEED %d = %d\n",
-			 idat, error));
-		if (error)
+		DPRINTF(("%s: SNDCTL_DSP_SPEED > %d\n", __func__, idat));
+		error = ioctlf(fp, AUDIO_SETINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_SPEED %d = %d\n",
+			     __func__, idat, error));
 			goto out;
+		}
 		/* fall into ... */
 	case OSS_SOUND_PCM_READ_RATE:
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			 __func__, error));
 			goto out;
+		}
 		idat = tmpinfo.play.sample_rate;
+		DPRINTF(("%s: SNDCTL_PCM_READ_RATE < %d\n", __func__, idat));
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SOUND_PCM_READ_RATE %d = %d\n",
+			     __func__, idat, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_STEREO:
 		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_STEREO %d\n",
+			     __func__, error));
 			goto out;
+		}
 		tmpinfo.play.channels =
 		tmpinfo.record.channels = idat ? 2 : 1;
-		(void) ioctlf(fp, AUDIO_SETINFO, (void *)&tmpinfo, l);
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_SETINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_SETINFO %d\n",
+			     __func__, error));
 			goto out;
+		}
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
+			goto out;
+		}
 		idat = tmpinfo.play.channels - 1;
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_STEREO %d = %d\n",
+			     __func__, idat, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_GETBLKSIZE:
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
 			goto out;
-		setblocksize(fp, &tmpinfo, l);
+		}
+		setblocksize(fp, &tmpinfo);
 		idat = tmpinfo.blocksize;
+		DPRINTF(("%s: SNDCTL_DSP_GETBLKSIZE < %d\n",
+		     __func__, idat));
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_GETBLKSIZE %d = %d\n",
+			     __func__, idat, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_SETFMT:
 		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_SETFMT %d\n",
+			     __func__, error));
 			goto out;
+		}
 		switch (idat) {
 		case OSS_AFMT_MU_LAW:
 			tmpinfo.play.precision =
@@ -226,16 +352,34 @@ oss_ioctl_audio(struct lwp *l, const struct oss_sys_ioctl_args *uap, register_t 
 			tmpinfo.play.encoding =
 			tmpinfo.record.encoding = AUDIO_ENCODING_ULINEAR_BE;
 			break;
+		case OSS_AFMT_AC3:
+			tmpinfo.play.precision =
+			tmpinfo.record.precision = 16;
+			tmpinfo.play.encoding =
+			tmpinfo.record.encoding = AUDIO_ENCODING_AC3;
+			break;
 		default:
+			DPRINTF(("%s: SNDCTL_DSP_SETFMT bad fmt %d\n",
+			     __func__, idat));
 			error = EINVAL;
 			goto out;
 		}
-		(void) ioctlf(fp, AUDIO_SETINFO, (void *)&tmpinfo, l);
+		DPRINTF(("%s: SNDCTL_DSP_SETFMT > 0x%x\n",
+		    __func__, idat));
+		error = ioctlf(fp, AUDIO_SETINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_SETINFO %d\n",
+			     __func__, error));
+			goto out;
+		}
 		/* fall into ... */
 	case OSS_SOUND_PCM_READ_BITS:
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
 			goto out;
+		}
 		switch (tmpinfo.play.encoding) {
 		case AUDIO_ENCODING_ULAW:
 			idat = OSS_AFMT_MU_LAW;
@@ -270,84 +414,143 @@ oss_ioctl_audio(struct lwp *l, const struct oss_sys_ioctl_args *uap, register_t 
 		case AUDIO_ENCODING_ADPCM:
 			idat = OSS_AFMT_IMA_ADPCM;
 			break;
-		}
-		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		case AUDIO_ENCODING_AC3:
+			idat = OSS_AFMT_AC3;
+			break;
+		default:
+			DPRINTF(("%s: SOUND_PCM_READ_BITS bad encoding %d\n",
+			     __func__, tmpinfo.play.encoding));
+			error = EINVAL;
 			goto out;
+		}
+		DPRINTF(("%s: SOUND_PCM_READ_BITS < 0x%x\n",
+		    __func__, idat));
+		error = copyout(&idat, SCARG(uap, data), sizeof idat);
+		if (error) {
+			DPRINTF(("%s: SOUND_PCM_READ_BITS %d = %d\n",
+			     __func__, idat, error));
+			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_CHANNELS:
 		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_CHANNELS %d\n",
+			     __func__, error));
 			goto out;
+		}
 		tmpinfo.play.channels =
 		tmpinfo.record.channels = idat;
-		(void) ioctlf(fp, AUDIO_SETINFO, (void *)&tmpinfo, l);
+		DPRINTF(("%s: SNDCTL_DSP_CHANNELS > %d\n", __func__, idat));
+		error = ioctlf(fp, AUDIO_SETINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_SETINFO %d\n",
+			     __func__, error));
+			goto out;
+		}
 		/* fall into ... */
 	case OSS_SOUND_PCM_READ_CHANNELS:
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
 			goto out;
+		}
 		idat = tmpinfo.play.channels;
+		DPRINTF(("%s: SOUND_PCM_READ_CHANNELS < %d\n", __func__, idat));
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SOUND_PCM_READ_CHANNELS %d = %d\n",
+			     __func__, idat, error));
 			goto out;
+		}
 		break;
 	case OSS_SOUND_PCM_WRITE_FILTER:
 	case OSS_SOUND_PCM_READ_FILTER:
 		error = EINVAL; /* XXX unimplemented */
+		DPRINTF(("%s: SOUND_PCM_{READ,WRITE}_FILTER filter\n",
+		     __func__));
 		goto out;
 	case OSS_SNDCTL_DSP_SUBDIVIDE:
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_SUBDIVIDE %d\n",
+			     __func__, error));
 			goto out;
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		setblocksize(fp, &tmpinfo, l);
-		if (error)
+		}
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
 			goto out;
+		}
+		setblocksize(fp, &tmpinfo);
 		if (idat == 0)
 			idat = tmpinfo.play.buffer_size / tmpinfo.blocksize;
 		idat = (tmpinfo.play.buffer_size / idat) & -4;
 		AUDIO_INITINFO(&tmpinfo);
 		tmpinfo.blocksize = idat;
-		error = ioctlf(fp, AUDIO_SETINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_SETINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_SETINFO %d\n",
+			     __func__, error));
 			goto out;
+		}
 		idat = tmpinfo.play.buffer_size / tmpinfo.blocksize;
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_SUBDIVIDE %d = %d\n",
+			     __func__, idat, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_SETFRAGMENT:
 		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: DSP_SETFRAGMENT %d\n",
+			     __func__, error));
 			goto out;
+		}
 		if ((idat & 0xffff) < 4 || (idat & 0xffff) > 17) {
+			DPRINTF(("%s: DSP_SETFRAGMENT bad ival%d\n",
+			     __func__, idat));
 			error = EINVAL;
 			goto out;
 		}
 		tmpinfo.blocksize = 1 << (idat & 0xffff);
 		tmpinfo.hiwat = (idat >> 16) & 0x7fff;
-		DPRINTF(("oss_audio: SETFRAGMENT blksize=%d, hiwat=%d\n",
-			 tmpinfo.blocksize, tmpinfo.hiwat));
+		DPRINTF(("%s: SNDCTL_DSP_SETFRAGMENT blksize=%d, "
+		    "hiwat=%d\n", __func__, tmpinfo.blocksize, tmpinfo.hiwat));
 		if (tmpinfo.hiwat == 0)	/* 0 means set to max */
 			tmpinfo.hiwat = 65536;
-		(void) ioctlf(fp, AUDIO_SETINFO, (void *)&tmpinfo, l);
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_SETINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_SETINFO %d\n",
+			     __func__, error));
 			goto out;
+		}
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
+			goto out;
+		}
 		u = tmpinfo.blocksize;
 		for(idat = 0; u > 1; idat++, u >>= 1)
 			;
 		idat |= (tmpinfo.hiwat & 0x7fff) << 16;
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_SETFRAGMENT  %d = %d\n",
+			     __func__, idat, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_GETFMTS:
-		for(idat = 0, tmpenc.index = 0;
-		    ioctlf(fp, AUDIO_GETENC, (void *)&tmpenc, l) == 0;
+		for (idat = 0, tmpenc.index = 0;
+		    ioctlf(fp, AUDIO_GETENC, &tmpenc) == 0;
 		    tmpenc.index++) {
 			switch(tmpenc.encoding) {
 			case AUDIO_ENCODING_ULAW:
@@ -389,92 +592,140 @@ oss_ioctl_audio(struct lwp *l, const struct oss_sys_ioctl_args *uap, register_t 
 			case AUDIO_ENCODING_ADPCM:
 				idat |= OSS_AFMT_IMA_ADPCM;
 				break;
+			case AUDIO_ENCODING_AC3:
+				idat |= OSS_AFMT_AC3;
+				break;
 			default:
+				DPRINTF(("%s: SNDCTL_DSP_GETFMTS unknown %d\n",
+				    __func__, tmpenc.encoding));
 				break;
 			}
 		}
-		DPRINTF(("oss_sys_ioctl: SNDCTL_DSP_GETFMTS = %x\n", idat));
+		DPRINTF(("%s: SNDCTL_DSP_GETFMTS < 0x%x\n",
+		    __func__, idat));
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_GETFMTS = %x = %d\n",
+			    __func__, idat, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_GETOSPACE:
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
 			goto out;
-		setblocksize(fp, &tmpinfo, l);
+		}
+		setblocksize(fp, &tmpinfo);
 		bufinfo.fragsize = tmpinfo.blocksize;
-		bufinfo.fragments = tmpinfo.hiwat -
-		    (tmpinfo.play.seek + tmpinfo.blocksize - 1) /
+		bufinfo.fragments = (tmpinfo.hiwat * tmpinfo.blocksize -
+		    (tmpinfo.play.seek + tmpinfo.blocksize -1)) /
 		    tmpinfo.blocksize;
 		bufinfo.fragstotal = tmpinfo.hiwat;
-		bufinfo.bytes =
-		    tmpinfo.hiwat * tmpinfo.blocksize - tmpinfo.play.seek;
+		bufinfo.bytes = bufinfo.fragments * tmpinfo.blocksize;
 		error = copyout(&bufinfo, SCARG(uap, data), sizeof bufinfo);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_GETOSPACE = %d\n",
+			    __func__, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_GETISPACE:
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
 			goto out;
-		setblocksize(fp, &tmpinfo, l);
+		}
+		setblocksize(fp, &tmpinfo);
 		bufinfo.fragsize = tmpinfo.blocksize;
-		bufinfo.fragments = tmpinfo.hiwat -
-		    (tmpinfo.record.seek + tmpinfo.blocksize - 1) /
-		    tmpinfo.blocksize;
-                bufinfo.fragstotal = tmpinfo.hiwat;
-		bufinfo.bytes =
-		    tmpinfo.hiwat * tmpinfo.blocksize - tmpinfo.record.seek;
-		DPRINTF(("oss_sys_ioctl: SNDCTL_DSP_GETxSPACE = %d %d %d %d\n",
-			 bufinfo.fragsize, bufinfo.fragments,
-			 bufinfo.fragstotal, bufinfo.bytes));
+		bufinfo.fragments = tmpinfo.record.seek / tmpinfo.blocksize;
+		bufinfo.fragstotal = tmpinfo.hiwat;
+		bufinfo.bytes = bufinfo.fragments * tmpinfo.blocksize;
 		error = copyout(&bufinfo, SCARG(uap, data), sizeof bufinfo);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_GETISPACE %d %d %d %d = %d\n",
+			     __func__, bufinfo.fragsize, bufinfo.fragments,
+			     bufinfo.fragstotal, bufinfo.bytes, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_NONBLOCK:
 		idat = 1;
-		error = ioctlf(fp, FIONBIO, (void *)&idat, l);
-		if (error)
+		error = ioctlf(fp, FIONBIO, &idat);
+		if (error) {
+			DPRINTF(("%s: SENDCLT_DSP_NONBLOCK %d\n",
+			     __func__, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_GETCAPS:
-		error = ioctlf(fp, AUDIO_GETPROPS, (void *)&idata, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETPROPS, &idata);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETPROPS %d\n",
+			     __func__, error));
 			goto out;
+		}
 		idat = OSS_DSP_CAP_TRIGGER; /* pretend we have trigger */
 		if (idata & AUDIO_PROP_FULLDUPLEX)
 			idat |= OSS_DSP_CAP_DUPLEX;
 		if (idata & AUDIO_PROP_MMAP)
 			idat |= OSS_DSP_CAP_MMAP;
-		DPRINTF(("oss_sys_ioctl: SNDCTL_DSP_GETCAPS = %x\n", idat));
+		DPRINTF(("%s: SNDCL_DSP_GETCAPS %s duplex, %smmap\n",
+		     __func__, (idat & OSS_DSP_CAP_DUPLEX) ? "full" : "half",
+		     (idat & OSS_DSP_CAP_MMAP) ? "" : "no "));
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_GETCAPS %x = %d\n", __func__,
+			    idat, error));
 			goto out;
+		}
 		break;
 #if 0
 	case OSS_SNDCTL_DSP_GETTRIGGER:
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
 			goto out;
+		}
 		idat = (tmpinfo.play.pause ? 0 : OSS_PCM_ENABLE_OUTPUT) |
 		       (tmpinfo.record.pause ? 0 : OSS_PCM_ENABLE_INPUT);
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_SETRIGGER %x = %d\n",
+			    __func__, idat, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_SETTRIGGER:
-		(void) ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, p);
-		error = copyin(SCARG(uap, data), &idat, sizeof idat);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo, p);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
 			goto out;
+		}
+		error = copyin(SCARG(uap, data), &idat, sizeof idat);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			     __func__, error));
+			goto out;
+		}
 		tmpinfo.play.pause = (idat & OSS_PCM_ENABLE_OUTPUT) == 0;
 		tmpinfo.record.pause = (idat & OSS_PCM_ENABLE_INPUT) == 0;
-		(void) ioctlf(fp, AUDIO_SETINFO, (void *)&tmpinfo, l);
-		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		error = ioctlf(fp, AUDIO_SETINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_SETINFO %d\n",
+			     __func__, error));
 			goto out;
+		}
+		error = copyout(&idat, SCARG(uap, data), sizeof idat);
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_SETRIGGER %x = %d\n",
+			    __func__, idat, error));
+			goto out;
+		}
 		break;
 #else
 	case OSS_SNDCTL_DSP_GETTRIGGER:
@@ -482,60 +733,100 @@ oss_ioctl_audio(struct lwp *l, const struct oss_sys_ioctl_args *uap, register_t 
 		/* XXX Do nothing for now. */
 		idat = OSS_PCM_ENABLE_OUTPUT;
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		goto out;
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_{GET,SET}RIGGER %x = %d\n",
+			    __func__, idat, error));
+			goto out;
+		}
+		break;
 #endif
 	case OSS_SNDCTL_DSP_GETIPTR:
-		error = ioctlf(fp, AUDIO_GETIOFFS, (void *)&tmpoffs, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETIOFFS, &tmpoffs);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETIOFFS %d\n",
+			     __func__, error));
 			goto out;
+		}
 		cntinfo.bytes = tmpoffs.samples;
 		cntinfo.blocks = tmpoffs.deltablks;
 		cntinfo.ptr = tmpoffs.offset;
 		error = copyout(&cntinfo, SCARG(uap, data), sizeof cntinfo);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_GETIPTR %d\n",
+			    __func__, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_GETOPTR:
-		error = ioctlf(fp, AUDIO_GETOOFFS, (void *)&tmpoffs, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETOOFFS, &tmpoffs);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETOOFFS %d\n",
+			     __func__, error));
 			goto out;
+		}
 		cntinfo.bytes = tmpoffs.samples;
 		cntinfo.blocks = tmpoffs.deltablks;
 		cntinfo.ptr = tmpoffs.offset;
 		error = copyout(&cntinfo, SCARG(uap, data), sizeof cntinfo);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_GETOPTR %d\n",
+			    __func__, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_SETDUPLEX:
 		idat = 1;
-		error = ioctlf(fp, AUDIO_SETFD, (void *)&idat, l);
-		goto out;
+		error = ioctlf(fp, AUDIO_SETFD, &idat);
+		if (error) {
+			DPRINTF(("%s: AUDIO_SETFD %d = %d\n",
+			    __func__, idat, error));
+			goto out;
+		}
+		break;
 	case OSS_SNDCTL_DSP_MAPINBUF:
+		DPRINTF(("%s: Unimplemented SNDCTL_DSP_MAPINBUF\n",
+		    __func__));
+		error = EINVAL;
+		goto out;
 	case OSS_SNDCTL_DSP_MAPOUTBUF:
+		DPRINTF(("%s: Unimplemented SNDCTL_DSP_MAPOUTBUF\n",
+		    __func__));
+		error = EINVAL;
+		goto out;
 	case OSS_SNDCTL_DSP_SETSYNCRO:
+		DPRINTF(("%s: Unimplemented SNDCTL_DSP_GETSYNCHRO\n",
+		    __func__));
 		error = EINVAL;
 		goto out;
 	case OSS_SNDCTL_DSP_GETODELAY:
-		error = ioctlf(fp, AUDIO_GETBUFINFO, (void *)&tmpinfo, l);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETBUFINFO, &tmpinfo);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETBUFINFO %d\n",
+			    __func__, error));
 			goto out;
+		}
 		idat = tmpinfo.play.seek + tmpinfo.blocksize / 2;
 		error = copyout(&idat, SCARG(uap, data), sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: SNDCTL_DSP_GETODELAY %d\n",
+			    __func__, error));
 			goto out;
+		}
 		break;
 	case OSS_SNDCTL_DSP_PROFILE:
 		/* This gives just a hint to the driver,
 		 * implementing it as a NOP is ok
 		 */
+		DPRINTF(("%s: SNDCTL_DSP_PROFILE\n", __func__));
 		break;
 	default:
+		DPRINTF(("%s: Unimplemented 0x%lx\n", __func__, com));
 		error = EINVAL;
 		goto out;
 	}
 
  out:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return error;
 }
 
@@ -605,7 +896,7 @@ enum_to_mask(struct audiodevinfo *di, int enm)
  * to collect the information.
  */
 static struct audiodevinfo *
-getdevinfo(struct file *fp, struct lwp *l)
+getdevinfo(file_t *fp)
 {
 	mixer_devinfo_t mi;
 	int i, j, e;
@@ -635,22 +926,24 @@ getdevinfo(struct file *fp, struct lwp *l)
 /*		{ AudioNmixerout,	?? },*/
 		{ 0, -1 }
 	};
-	int (*ioctlf)(struct file *, u_long, void *, struct lwp *) =
-	    fp->f_ops->fo_ioctl;
+	int (*ioctlf)(file_t *, u_long, void *) = fp->f_ops->fo_ioctl;
 	struct vnode *vp;
 	struct vattr va;
 	static struct audiodevinfo devcache;
 	struct audiodevinfo *di = &devcache;
-	int mlen, dlen;
+	int error, mlen, dlen;
 
 	/*
 	 * Figure out what device it is so we can check if the
 	 * cached data is valid.
 	 */
-	vp = (struct vnode *)fp->f_data;
+	vp = fp->f_vnode;
 	if (vp->v_type != VCHR)
 		return 0;
-	if (VOP_GETATTR(vp, &va, l->l_cred))
+	vn_lock(vp, LK_SHARED | LK_RETRY);
+	error = VOP_GETATTR(vp, &va, kauth_cred_get());
+	VOP_UNLOCK(vp);
+	if (error)
 		return 0;
 	if (di->done && di->dev == va.va_rdev)
 		return di;
@@ -671,7 +964,7 @@ getdevinfo(struct file *fp, struct lwp *l)
 	}
 	for(i = 0; i < NETBSD_MAXDEVS; i++) {
 		mi.index = i;
-		if (ioctlf(fp, AUDIO_MIXER_DEVINFO, (void *)&mi, l) < 0)
+		if (ioctlf(fp, AUDIO_MIXER_DEVINFO, &mi) < 0)
 			break;
 		switch(mi.type) {
 		case AUDIO_MIXER_VALUE:
@@ -699,7 +992,7 @@ getdevinfo(struct file *fp, struct lwp *l)
 	}
 	for(i = 0; i < NETBSD_MAXDEVS; i++) {
 		mi.index = i;
-		if (ioctlf(fp, AUDIO_MIXER_DEVINFO, (void *)&mi, l) < 0)
+		if (ioctlf(fp, AUDIO_MIXER_DEVINFO, &mi) < 0)
 			break;
 		if (strcmp(mi.label.name, AudioNsource) != 0)
 			continue;
@@ -737,9 +1030,7 @@ oss_ioctl_mixer(struct lwp *lwp, const struct oss_sys_ioctl_args *uap, register_
 		syscallarg(u_long) com;
 		syscallarg(void *) data;
 	} */
-	struct proc *p = lwp->l_proc;
-	struct file *fp;
-	struct filedesc *fdp;
+	file_t *fp;
 	u_long com;
 	struct audiodevinfo *di;
 	mixer_ctrl_t mc;
@@ -749,13 +1040,10 @@ oss_ioctl_mixer(struct lwp *lwp, const struct oss_sys_ioctl_args *uap, register_
 	int i;
 	int error;
 	int l, r, n, e;
-	int (*ioctlf)(struct file *, u_long, void *, struct lwp *);
+	int (*ioctlf)(file_t *, u_long, void *);
 
-	fdp = p->p_fd;
-	if ((fp = fd_getfile(fdp, SCARG(uap, fd))) == NULL)
-		return (EBADF);
-
-	FILE_USE(fp);
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
+		return error;
 
 	if ((fp->f_flag & (FREAD | FWRITE)) == 0) {
 		error = EBADF;
@@ -763,11 +1051,11 @@ oss_ioctl_mixer(struct lwp *lwp, const struct oss_sys_ioctl_args *uap, register_
 	}
 
 	com = SCARG(uap, com);
-	DPRINTF(("oss_ioctl_mixer: com=%08lx\n", com));
+	DPRINTF(("%s: com=%s\n", __func__, compat_ossaudio_getcmd(com)));
 
 	retval[0] = 0;
 
-	di = getdevinfo(fp, lwp);
+	di = getdevinfo(fp);
 	if (di == 0) {
 		error = EINVAL;
 		goto out;
@@ -780,33 +1068,49 @@ oss_ioctl_mixer(struct lwp *lwp, const struct oss_sys_ioctl_args *uap, register_
 		break;
 	case OSS_SOUND_MIXER_INFO:
 	case OSS_SOUND_OLD_MIXER_INFO:
-		error = ioctlf(fp, AUDIO_GETDEV, (void *)&adev, lwp);
-		if (error)
+		error = ioctlf(fp, AUDIO_GETDEV, &adev);
+		if (error) {
+			DPRINTF(("%s: AUDIO_GETDEV %d\n",
+			    __func__, error));
 			goto out;
+		}
 		omi.modify_counter = 1;
 		strncpy(omi.id, adev.name, sizeof omi.id);
 		strncpy(omi.name, adev.name, sizeof omi.name);
 		error = copyout(&omi, SCARG(uap, data), OSS_IOCTL_SIZE(com));
-		goto out;
+		if (error) {
+			DPRINTF(("%s: OSS_SOUND_MIXER_INFO %d\n",
+			    __func__, error));
+			goto out;
+		}
+		break;
 	case OSS_SOUND_MIXER_READ_RECSRC:
 		if (di->source == -1) {
+			DPRINTF(("%s: OSS_SOUND_MIXER_READ_RECSRC bad source\n",
+			    __func__));
 			error = EINVAL;
 			goto out;
 		}
 		mc.dev = di->source;
 		if (di->caps & OSS_SOUND_CAP_EXCL_INPUT) {
 			mc.type = AUDIO_MIXER_ENUM;
-			error = ioctlf(fp, AUDIO_MIXER_READ, (void *)&mc, lwp);
-			if (error)
+			error = ioctlf(fp, AUDIO_MIXER_READ, &mc);
+			if (error) {
+				DPRINTF(("%s: AUDIO_MIXER_READ %d\n",
+				    __func__, error));
 				goto out;
+			}
 			e = opaque_to_enum(di, NULL, mc.un.ord);
 			if (e >= 0)
 				idat = 1 << di->rdevmap[e];
 		} else {
 			mc.type = AUDIO_MIXER_SET;
-			error = ioctlf(fp, AUDIO_MIXER_READ, (void *)&mc, lwp);
-			if (error)
+			error = ioctlf(fp, AUDIO_MIXER_READ, &mc);
+			if (error) {
+				DPRINTF(("%s: AUDIO_MIXER_READ %d\n",
+				    __func__, error));
 				goto out;
+			}
 			e = opaque_to_enum(di, NULL, mc.un.mask);
 			if (e >= 0)
 				idat = 1 << di->rdevmap[e];
@@ -827,13 +1131,18 @@ oss_ioctl_mixer(struct lwp *lwp, const struct oss_sys_ioctl_args *uap, register_
 	case OSS_SOUND_MIXER_WRITE_RECSRC:
 	case OSS_SOUND_MIXER_WRITE_R_RECSRC:
 		if (di->source == -1) {
+			DPRINTF(("%s: OSS_SOUND_MIXER_WRITE_RECSRC bad "
+			    "source\n", __func__));
 			error = EINVAL;
 			goto out;
 		}
 		mc.dev = di->source;
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
-		if (error)
+		if (error) {
+			DPRINTF(("%s: OSS_SOUND_MIXER_WRITE_RECSRC %d\n",
+			    __func__, error));
 			goto out;
+		}
 		if (di->caps & OSS_SOUND_CAP_EXCL_INPUT) {
 			mc.type = AUDIO_MIXER_ENUM;
 			for(i = 0; i < OSS_SOUND_MIXER_NRDEVICES; i++)
@@ -842,6 +1151,8 @@ oss_ioctl_mixer(struct lwp *lwp, const struct oss_sys_ioctl_args *uap, register_
 			if (i >= OSS_SOUND_MIXER_NRDEVICES ||
 			    di->devmap[i] == -1) {
 				error = EINVAL;
+				DPRINTF(("%s: OSS_SOUND_MIXER_WRITE_RECSRC "
+				    "bad index %d\n", __func__, i));
 				goto out;
 			}
 			mc.un.ord = enum_to_ord(di, di->devmap[i]);
@@ -851,69 +1162,94 @@ oss_ioctl_mixer(struct lwp *lwp, const struct oss_sys_ioctl_args *uap, register_
 			for(i = 0; i < OSS_SOUND_MIXER_NRDEVICES; i++) {
 				if (idat & (1 << i)) {
 					if (di->devmap[i] == -1) {
+						DPRINTF(("%s: OSS_SOUND_MIXER_"
+						    "WRITE_RECSRC bad devmap "
+						    "%d\n", __func__, i));
 						error = EINVAL;
 						goto out;
 					}
-					mc.un.mask |= enum_to_mask(di, di->devmap[i]);
+					mc.un.mask |= enum_to_mask(di,
+					    di->devmap[i]);
 				}
 			}
 		}
-		error = ioctlf(fp, AUDIO_MIXER_WRITE, (void *)&mc, lwp);
+		error = ioctlf(fp, AUDIO_MIXER_WRITE, &mc);
+		if (error) {
+			DPRINTF(("%s: AUDIO_MIXER_WRITE %d\n",
+			    __func__, error));
+			goto out;
+		}
 		goto out;
 	default:
 		if (OSS_MIXER_READ(OSS_SOUND_MIXER_FIRST) <= com &&
 		    com < OSS_MIXER_READ(OSS_SOUND_MIXER_NRDEVICES)) {
 			n = OSS_GET_DEV(com);
 			if (di->devmap[n] == -1) {
+				DPRINTF(("%s: 0x%lx bad devmap %d\n",
+				    __func__, com, n));
 				error = EINVAL;
 				goto out;
 			}
 		    doread:
 			mc.dev = di->devmap[n];
 			mc.type = AUDIO_MIXER_VALUE;
-			mc.un.value.num_channels = di->stereomask & (1<<n) ? 2 : 1;
-			error = ioctlf(fp, AUDIO_MIXER_READ, (void *)&mc, lwp);
-			if (error)
+			mc.un.value.num_channels = di->stereomask &
+			    (1 << n) ? 2 : 1;
+			error = ioctlf(fp, AUDIO_MIXER_READ, &mc);
+			if (error) {
+				DPRINTF(("%s: AUDIO_MIXER_READ %d\n",
+				    __func__, error));
 				goto out;
+			}
 			if (mc.un.value.num_channels != 2) {
-				l = r = mc.un.value.level[AUDIO_MIXER_LEVEL_MONO];
+				l = r =
+				    mc.un.value.level[AUDIO_MIXER_LEVEL_MONO];
 			} else {
 				l = mc.un.value.level[AUDIO_MIXER_LEVEL_LEFT];
 				r = mc.un.value.level[AUDIO_MIXER_LEVEL_RIGHT];
 			}
 			idat = TO_OSSVOL(l) | (TO_OSSVOL(r) << 8);
-			DPRINTF(("OSS_MIXER_READ  n=%d (dev=%d) l=%d, r=%d, idat=%04x\n",
-				 n, di->devmap[n], l, r, idat));
+			DPRINTF(("%s: n=%d (dev=%d) l=%d, r=%d, idat=%04x\n",
+				 __func__, n, di->devmap[n], l, r, idat));
 			break;
 		} else if ((OSS_MIXER_WRITE_R(OSS_SOUND_MIXER_FIRST) <= com &&
-			   com < OSS_MIXER_WRITE_R(OSS_SOUND_MIXER_NRDEVICES)) ||
-			   (OSS_MIXER_WRITE(OSS_SOUND_MIXER_FIRST) <= com &&
-			   com < OSS_MIXER_WRITE(OSS_SOUND_MIXER_NRDEVICES))) {
+		    com < OSS_MIXER_WRITE_R(OSS_SOUND_MIXER_NRDEVICES)) ||
+		    (OSS_MIXER_WRITE(OSS_SOUND_MIXER_FIRST) <= com &&
+		    com < OSS_MIXER_WRITE(OSS_SOUND_MIXER_NRDEVICES))) {
 			n = OSS_GET_DEV(com);
 			if (di->devmap[n] == -1) {
+				DPRINTF(("%s: 0x%lx bad devmap %d\n",
+				    __func__, com, n));
 				error = EINVAL;
 				goto out;
 			}
 			error = copyin(SCARG(uap, data), &idat, sizeof idat);
-			if (error)
+			if (error) {
+				DPRINTF(("%s: 0x%lx error %d\n",
+				    __func__, com, error));
 				goto out;
+			}
 			l = FROM_OSSVOL( idat       & 0xff);
 			r = FROM_OSSVOL((idat >> 8) & 0xff);
 			mc.dev = di->devmap[n];
 			mc.type = AUDIO_MIXER_VALUE;
-			if (di->stereomask & (1<<n)) {
+			if (di->stereomask & (1 << n)) {
 				mc.un.value.num_channels = 2;
 				mc.un.value.level[AUDIO_MIXER_LEVEL_LEFT] = l;
 				mc.un.value.level[AUDIO_MIXER_LEVEL_RIGHT] = r;
 			} else {
 				mc.un.value.num_channels = 1;
-				mc.un.value.level[AUDIO_MIXER_LEVEL_MONO] = (l+r)/2;
+				mc.un.value.level[AUDIO_MIXER_LEVEL_MONO] =
+				    (l + r) / 2;
 			}
-			DPRINTF(("OSS_MIXER_WRITE n=%d (dev=%d) l=%d, r=%d, idat=%04x\n",
-				 n, di->devmap[n], l, r, idat));
-			error = ioctlf(fp, AUDIO_MIXER_WRITE, (void *)&mc, lwp);
-			if (error)
+			DPRINTF(("%s: n=%d (dev=%d) l=%d, r=%d, idat=%04x\n",
+			     __func__, n, di->devmap[n], l, r, idat));
+			error = ioctlf(fp, AUDIO_MIXER_WRITE, &mc);
+			if (error) {
+				DPRINTF(("%s: AUDIO_MIXER_WRITE %d\n",
+				    __func__, error));
 				goto out;
+			}
 			if (OSS_MIXER_WRITE(OSS_SOUND_MIXER_FIRST) <= com &&
 			   com < OSS_MIXER_WRITE(OSS_SOUND_MIXER_NRDEVICES)) {
 				error = 0;
@@ -921,16 +1257,15 @@ oss_ioctl_mixer(struct lwp *lwp, const struct oss_sys_ioctl_args *uap, register_
 			}
 			goto doread;
 		} else {
-#ifdef AUDIO_DEBUG
-			printf("oss_audio: unknown mixer ioctl %04lx\n", com);
-#endif
+			DPRINTF(("%s: Unknown mixer ioctl 0x%lx\n", __func__,
+			    com));
 			error = EINVAL;
 			goto out;
 		}
 	}
 	error = copyout(&idat, SCARG(uap, data), sizeof idat);
  out:
-	FILE_UNUSE(fp, lwp);
+ 	fd_putfile(SCARG(uap, fd));
 	return error;
 }
 
@@ -943,22 +1278,17 @@ oss_ioctl_sequencer(struct lwp *l, const struct oss_sys_ioctl_args *uap, registe
 		syscallarg(u_long) com;
 		syscallarg(void *) data;
 	} */
-	struct proc *p = l->l_proc;
-	struct file *fp;
-	struct filedesc *fdp;
+	file_t *fp;
 	u_long com;
 	int idat, idat1;
 	struct synth_info si;
 	struct oss_synth_info osi;
 	struct oss_seq_event_rec oser;
 	int error;
-	int (*ioctlf)(struct file *, u_long, void *, struct lwp *);
+	int (*ioctlf)(file_t *, u_long, void *);
 
-	fdp = p->p_fd;
-	if ((fp = fd_getfile(fdp, SCARG(uap, fd))) == NULL)
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
 		return (EBADF);
-
-	FILE_USE(fp);
 
 	if ((fp->f_flag & (FREAD | FWRITE)) == 0) {
 		error = EBADF;
@@ -966,24 +1296,24 @@ oss_ioctl_sequencer(struct lwp *l, const struct oss_sys_ioctl_args *uap, registe
 	}
 
 	com = SCARG(uap, com);
-	DPRINTF(("oss_ioctl_sequencer: com=%08lx\n", com));
+	DPRINTF(("%s: com=%s\n", __func__, compat_ossaudio_getcmd(com)));
 
 	retval[0] = 0;
 
 	ioctlf = fp->f_ops->fo_ioctl;
 	switch (com) {
 	case OSS_SEQ_RESET:
-		error = ioctlf(fp, SEQUENCER_RESET, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_RESET, &idat);
 		goto out;
 	case OSS_SEQ_SYNC:
-		error = ioctlf(fp, SEQUENCER_SYNC, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_SYNC, &idat);
 		goto out;
 	case OSS_SYNTH_INFO:
 		error = copyin(SCARG(uap, data), &osi, sizeof osi);
 		if (error)
 			goto out;
 		si.device = osi.device;
-		error = ioctlf(fp, SEQUENCER_INFO, (void *)&si, l);
+		error = ioctlf(fp, SEQUENCER_INFO, &si);
 		if (error)
 			goto out;
 		strncpy(osi.name, si.name, sizeof osi.name);
@@ -1025,31 +1355,31 @@ oss_ioctl_sequencer(struct lwp *l, const struct oss_sys_ioctl_args *uap, registe
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
-		error = ioctlf(fp, SEQUENCER_CTRLRATE, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_CTRLRATE, &idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
 		break;
 	case OSS_SEQ_GETOUTCOUNT:
-		error = ioctlf(fp, SEQUENCER_GETOUTCOUNT, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_GETOUTCOUNT, &idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
 		break;
 	case OSS_SEQ_GETINCOUNT:
-		error = ioctlf(fp, SEQUENCER_GETINCOUNT, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_GETINCOUNT, &idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
 		break;
 	case OSS_SEQ_NRSYNTHS:
-		error = ioctlf(fp, SEQUENCER_NRSYNTHS, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_NRSYNTHS, &idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
 		break;
 	case OSS_SEQ_NRMIDIS:
-		error = ioctlf(fp, SEQUENCER_NRMIDIS, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_NRMIDIS, &idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
@@ -1058,30 +1388,30 @@ oss_ioctl_sequencer(struct lwp *l, const struct oss_sys_ioctl_args *uap, registe
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
-		error = ioctlf(fp, SEQUENCER_THRESHOLD, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_THRESHOLD, &idat);
 		goto out;
 	case OSS_MEMAVL:
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
-		error = ioctlf(fp, SEQUENCER_MEMAVL, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_MEMAVL, &idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
 		break;
 	case OSS_SEQ_PANIC:
-		error = ioctlf(fp, SEQUENCER_PANIC, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_PANIC, &idat);
 		goto out;
 	case OSS_SEQ_OUTOFBAND:
 		error = copyin(SCARG(uap, data), &oser, sizeof oser);
 		if (error)
 			goto out;
-		error = ioctlf(fp, SEQUENCER_OUTOFBAND, (void *)&oser, l);
+		error = ioctlf(fp, SEQUENCER_OUTOFBAND, &oser);
 		if (error)
 			goto out;
 		break;
 	case OSS_SEQ_GETTIME:
-		error = ioctlf(fp, SEQUENCER_GETTIME, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_GETTIME, &idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
@@ -1090,25 +1420,25 @@ oss_ioctl_sequencer(struct lwp *l, const struct oss_sys_ioctl_args *uap, registe
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
-		error = ioctlf(fp, SEQUENCER_TMR_TIMEBASE, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_TMR_TIMEBASE, &idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
 		break;
 	case OSS_TMR_START:
-		error = ioctlf(fp, SEQUENCER_TMR_START, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_TMR_START, &idat);
 		goto out;
 	case OSS_TMR_STOP:
-		error = ioctlf(fp, SEQUENCER_TMR_STOP, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_TMR_STOP, &idat);
 		goto out;
 	case OSS_TMR_CONTINUE:
-		error = ioctlf(fp, SEQUENCER_TMR_CONTINUE, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_TMR_CONTINUE, &idat);
 		goto out;
 	case OSS_TMR_TEMPO:
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
-		error = ioctlf(fp, SEQUENCER_TMR_TEMPO, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_TMR_TEMPO, &idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
@@ -1119,7 +1449,7 @@ oss_ioctl_sequencer(struct lwp *l, const struct oss_sys_ioctl_args *uap, registe
 			goto out;
 		idat = 0;
 		if (idat1 & OSS_TMR_INTERNAL) idat |= SEQUENCER_TMR_INTERNAL;
-		error = ioctlf(fp, SEQUENCER_TMR_SOURCE, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_TMR_SOURCE, &idat);
 		if (error)
 			goto out;
 		idat1 = idat;
@@ -1130,23 +1460,25 @@ oss_ioctl_sequencer(struct lwp *l, const struct oss_sys_ioctl_args *uap, registe
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
-		error = ioctlf(fp, SEQUENCER_TMR_METRONOME, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_TMR_METRONOME, &idat);
 		goto out;
 	case OSS_TMR_SELECT:
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
 		retval[0] = idat;
-		error = ioctlf(fp, SEQUENCER_TMR_SELECT, (void *)&idat, l);
+		error = ioctlf(fp, SEQUENCER_TMR_SELECT, &idat);
 		goto out;
 	default:
+		DPRINTF(("%s: Unknown sequencer command 0x%lx\n", __func__,
+		    com));
 		error = EINVAL;
 		goto out;
 	}
 
 	error = copyout(&idat, SCARG(uap, data), sizeof idat);
  out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return error;
 }
 
@@ -1155,7 +1487,7 @@ oss_ioctl_sequencer(struct lwp *l, const struct oss_sys_ioctl_args *uap, registe
  * If not, set it to be.
  */
 static void
-setblocksize(struct file *fp, struct audio_info *info, struct lwp *l)
+setblocksize(file_t *fp, struct audio_info *info)
 {
 	struct audio_info set;
 	int s;
@@ -1165,7 +1497,7 @@ setblocksize(struct file *fp, struct audio_info *info, struct lwp *l)
 			;
 		AUDIO_INITINFO(&set);
 		set.blocksize = s;
-		fp->f_ops->fo_ioctl(fp, AUDIO_SETINFO, (void *)&set, l);
-		fp->f_ops->fo_ioctl(fp, AUDIO_GETBUFINFO, (void *)info, l);
+		fp->f_ops->fo_ioctl(fp, AUDIO_SETINFO, &set);
+		fp->f_ops->fo_ioctl(fp, AUDIO_GETBUFINFO, info);
 	}
 }

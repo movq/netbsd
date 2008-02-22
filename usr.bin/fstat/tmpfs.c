@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs.c,v 1.4 2006/05/27 09:14:03 yamt Exp $	*/
+/*	$NetBSD: tmpfs.c,v 1.11 2017/06/09 00:13:29 chs Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tmpfs.c,v 1.4 2006/05/27 09:14:03 yamt Exp $");
+__RCSID("$NetBSD: tmpfs.c,v 1.11 2017/06/09 00:13:29 chs Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -42,6 +35,7 @@ __RCSID("$NetBSD: tmpfs.c,v 1.4 2006/05/27 09:14:03 yamt Exp $");
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/vnode.h>
+#define __EXPOSE_MOUNT
 #include <sys/mount.h>
 
 #include <fs/tmpfs/tmpfs.h>
@@ -68,7 +62,7 @@ tmpfs_filestat(struct vnode *vp, struct filestat *fsp)
 	}
 
 	fsp->fsid = mt.mnt_stat.f_fsidx.__fsid_val[0];
-	fsp->fileid = (long)tn.tn_id;
+	fsp->fileid = tn.tn_id;
 	fsp->mode = tn.tn_mode | getftype(vp->v_type);
 	fsp->size = tn.tn_size;
 	switch (tn.tn_type) {

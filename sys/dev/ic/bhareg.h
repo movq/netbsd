@@ -1,4 +1,4 @@
-/*	$NetBSD: bhareg.h,v 1.19 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: bhareg.h,v 1.21 2017/02/26 23:30:14 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -173,6 +166,7 @@ struct bha_mbx_in {
 #define BHA_MBI_ABORT	0x2	/* aborted ccb */
 #define BHA_MBI_UNKNOWN	0x3	/* Tried to abort invalid CCB */
 #define BHA_MBI_ERROR	0x4	/* Completed with error */
+#define BHA_MBI_BADCCB	0x5	/* invalid CCB */
 
 #if	defined(BIG_DMA)
 WARNING...THIS WON'T WORK(won't fit on 1 page)

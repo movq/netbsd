@@ -1,4 +1,4 @@
-/*	$NetBSD: link_aout.h,v 1.20 2005/02/03 04:39:32 perry Exp $	*/
+/*	$NetBSD: link_aout.h,v 1.23 2016/01/23 01:26:14 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,7 +52,7 @@
 
 struct sod {	/* Shared Object Descriptor */
 	long	sod_name;		/* name (relative to load address) */
-	u_int	sod_library  : 1,	/* Searched for by library rules */
+	unsigned int sod_library  : 1,	/* Searched for by library rules */
 		sod_reserved : 31;
 	short	sod_major;		/* major version number */
 	short	sod_minor;		/* minor version number */
@@ -78,7 +71,7 @@ struct so_map {		/* Shared Object Map */
 	struct so_map	*som_next;	/* Next map in chain */
 	struct sod	*som_sod;	/* Sod responsible for this map */
 	caddr_t		som_sodbase;	/* Base address of this sod */
-	u_int		som_write : 1;	/* Text is currently writable */
+	unsigned int	som_write : 1;	/* Text is currently writable */
 	struct _dynamic	*som_dynamic;	/* _dynamic structure */
 	caddr_t		som_spd;	/* Private data */
 };
@@ -92,7 +85,7 @@ struct so_map {		/* Shared Object Map */
  */
 struct nzlist {
 	struct nlist	nlist;
-	u_long		nz_size;
+	unsigned long	nz_size;
 #define nz_un		nlist.n_un
 #define nz_strx		nlist.n_un.n_strx
 #define nz_name		nlist.n_un.n_name

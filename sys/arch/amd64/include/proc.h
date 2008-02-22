@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.9 2008/01/08 13:15:02 yamt Exp $	*/
+/*	$NetBSD: proc.h,v 1.22 2017/02/25 13:34:21 kamil Exp $	*/
 
 /*
  * Copyright (c) 1991 Regents of the University of California.
@@ -34,33 +34,41 @@
 #ifndef _AMD64_PROC_H
 #define _AMD64_PROC_H
 
-#include <sys/user.h> /* for sizeof(struct user) */
+#ifdef __x86_64__
+
 #include <machine/frame.h>
+#include <machine/pcb.h>
 
 /*
  * Machine-dependent part of the lwp structure for amd64.
  */
+struct pmap;
+struct vm_page;
+
 struct mdlwp {
 	struct	trapframe *md_regs;	/* registers on current frame */
+	struct pmap *md_gc_pmap;	/* pmap being garbage collected */
+	struct vm_page *md_gc_ptp;	/* pages from pmap g/c */
 	int	md_flags;		/* machine-dependent flags */
 	volatile int md_astpending;
 };
 
+#define	MDL_COMPAT32		0x0008	/* i386, always return via iret */
+#define	MDL_IRET		0x0010	/* force return via iret, not sysret */
+
 struct mdproc {
 	int	md_flags;
 					/* Syscall handling function */
-	void	(*md_syscall) __P((struct trapframe *));
+	void	(*md_syscall)(struct trapframe *);
 };
 
 /* md_flags */
-#define	MDP_USEDFPU	0x0001	/* has used the FPU */
-#define MDP_COMPAT	0x0002	/* x86 compatibility process */
-#define MDP_SYSCALL	0x0004	/* entered kernel via syscall ins */
 #define MDP_USEDMTRR	0x0008	/* has set volatile MTRRs */
-#define MDP_IRET	0x0010	/* return via iret, not sysret */
 
-#define	UAREA_USER_OFFSET	(USPACE - ALIGN(sizeof(struct user)))
-#define	KSTACK_LOWEST_ADDR(l)	((void *)USER_TO_UAREA((l)->l_addr))
-#define	KSTACK_SIZE		UAREA_USER_OFFSET
+#else	/*	__x86_64__	*/
+
+#include <i386/proc.h>
+
+#endif	/*	__x86_64__	*/
 
 #endif /* _AMD64_PROC_H */

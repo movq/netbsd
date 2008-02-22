@@ -1,4 +1,4 @@
-/* $NetBSD: au_himem_space.c,v 1.7 2007/02/28 04:21:53 thorpej Exp $ */
+/* $NetBSD: au_himem_space.c,v 1.14 2012/01/27 18:52:57 para Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -46,13 +46,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: au_himem_space.c,v 1.7 2007/02/28 04:21:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: au_himem_space.c,v 1.14 2012/01/27 18:52:57 para Exp $");
 
 /*
  * This provides mappings for the upper I/O regions used on some
@@ -84,8 +77,8 @@ __KERNEL_RCSID(0, "$NetBSD: au_himem_space.c,v 1.7 2007/02/28 04:21:53 thorpej E
 #include <sys/endian.h>
 #include <uvm/uvm.h>
 
-#include <machine/bus.h>
-#include <machine/locore.h>
+#include <sys/bus.h>
+#include <mips/locore.h>
 #include <mips/alchemy/include/au_himem_space.h>
 
 #define	TRUNC_PAGE(x)	((x) & ~(PAGE_SIZE - 1))
@@ -232,7 +225,7 @@ au_himem_map(void *cookie, bus_addr_t addr, bus_size_t size,
 	 * calculation is the offset into the first page, plus the
 	 * intended size, rounded up to a whole number of pages.
 	 */
-	realsz = ROUND_PAGE((addr % PAGE_SIZE) + size);
+	realsz = ROUND_PAGE((addr & PAGE_MASK) + size);
 
 	va = uvm_km_alloc(kernel_map,
 	    realsz, PAGE_SIZE, UVM_KMF_VAONLY | UVM_KMF_NOWAIT);
@@ -241,12 +234,12 @@ au_himem_map(void *cookie, bus_addr_t addr, bus_size_t size,
 	}
 
 	/* virtual address in handle (offset appropriately) */
-	*bshp = va + (addr % PAGE_SIZE);
+	*bshp = va + (addr & PAGE_MASK);
 
 	/* map the pages in the kernel pmap */
 	s = splhigh();
 	while (realsz) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
 		pa += PAGE_SIZE;
 		va += PAGE_SIZE;
 		realsz -= PAGE_SIZE;
@@ -276,7 +269,7 @@ au_himem_unmap(void *cookie, bus_space_handle_t bsh, bus_size_t size, int acct)
 	int			s;
 
 	va = (vaddr_t)TRUNC_PAGE(bsh);
-	realsz = (vsize_t)ROUND_PAGE((bsh % PAGE_SIZE) + size);
+	realsz = (vsize_t)ROUND_PAGE((bsh & PAGE_MASK) + size);
 
 	s = splhigh();
 
@@ -301,7 +294,7 @@ au_himem_unmap(void *cookie, bus_space_handle_t bsh, bus_size_t size, int acct)
 
 	if (acct) {
 		bus_addr_t		addr;
-		addr = ((pa - c->c_physoff) + (bsh % PAGE_SIZE));
+		addr = ((pa - c->c_physoff) + (bsh & PAGE_MASK));
 		extent_free(c->c_extent, addr, size, EX_NOWAIT);
 	}
 }
@@ -344,15 +337,17 @@ au_himem_alloc(void *cookie, bus_addr_t start, bus_addr_t end,
 {
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)cookie;
 	int			err;
+	u_long			addr;
 
 	err = extent_alloc_subregion(c->c_extent, start, end, size,
-	    align, boundary, EX_FAST | EX_NOWAIT, addrp);
+	    align, boundary, EX_FAST | EX_NOWAIT, &addr);
 	if (err) {
 		return err;
 	}
-	err = au_himem_map(cookie, *addrp, size, flags, bshp, 0);
+	err = au_himem_map(cookie, addr, size, flags, bshp, 0);
 	if (err)
-		extent_free(c->c_extent, *addrp, size, EX_NOWAIT);
+		extent_free(c->c_extent, addr, size, EX_NOWAIT);
+	*addrp = addr;
 	return err;
 }
 
@@ -377,7 +372,7 @@ inline uint8_t
 au_himem_r_1(void *v, bus_space_handle_t h, bus_size_t o)
 {
 	wbflush();
-	return (*(volatile uint8_t *)(h + o));
+	return (*(volatile uint8_t *)(intptr_t)(h + o));
 }
 
 inline uint16_t
@@ -387,7 +382,7 @@ au_himem_r_2(void *v, bus_space_handle_t h, bus_size_t o)
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
 	wbflush();
-	val = (*(volatile uint16_t *)(h + o));
+	val = (*(volatile uint16_t *)(intptr_t)(h + o));
 	return (c->c_swswap ? bswap16(val) : val);
 }
 
@@ -398,7 +393,7 @@ au_himem_r_4(void *v, bus_space_handle_t h, bus_size_t o)
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
 	wbflush();
-	val = (*(volatile uint32_t *)(h + o));
+	val = (*(volatile uint32_t *)(intptr_t)(h + o));
 	return (c->c_swswap ? bswap32(val) : val);
 }
 
@@ -409,7 +404,7 @@ au_himem_r_8(void *v, bus_space_handle_t h, bus_size_t o)
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
 	wbflush();
-	val = (*(volatile uint64_t *)(h + o));
+	val = (*(volatile uint64_t *)(intptr_t)(h + o));
 	return (c->c_swswap ? bswap64(val) : val);
 }
 
@@ -417,7 +412,7 @@ inline void
 au_himem_w_1(void *v, bus_space_handle_t h, bus_size_t o, uint8_t val)
 {
 
-	*(volatile uint8_t *)(h + o) = val;
+	*(volatile uint8_t *)(intptr_t)(h + o) = val;
 	wbflush();
 }
 
@@ -426,7 +421,7 @@ au_himem_w_2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t val)
 {
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
-	*(volatile uint16_t *)(h + o) = c->c_swswap ? bswap16(val) : val;
+	*(volatile uint16_t *)(intptr_t)(h + o) = c->c_swswap ? bswap16(val) : val;
 	wbflush();
 }
 
@@ -435,7 +430,7 @@ au_himem_w_4(void *v, bus_space_handle_t h, bus_size_t o, uint32_t val)
 {
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
-	*(volatile uint32_t *)(h + o) = c->c_swswap ? bswap32(val) : val;
+	*(volatile uint32_t *)(intptr_t)(h + o) = c->c_swswap ? bswap32(val) : val;
 	wbflush();
 }
 
@@ -444,7 +439,7 @@ au_himem_w_8(void *v, bus_space_handle_t h, bus_size_t o, uint64_t val)
 {
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
-	*(volatile uint64_t *)(h + o) = c->c_swswap ? bswap64(val) : val;
+	*(volatile uint64_t *)(intptr_t)(h + o) = c->c_swswap ? bswap64(val) : val;
 	wbflush();
 }
 
@@ -455,7 +450,7 @@ au_himem_rs_2(void *v, bus_space_handle_t h, bus_size_t o)
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
 	wbflush();
-	val = (*(volatile uint16_t *)(h + o));
+	val = (*(volatile uint16_t *)(intptr_t)(h + o));
 	return (c->c_hwswap ? bswap16(val) : val);
 }
 
@@ -466,7 +461,7 @@ au_himem_rs_4(void *v, bus_space_handle_t h, bus_size_t o)
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
 	wbflush();
-	val = (*(volatile uint32_t *)(h + o));
+	val = (*(volatile uint32_t *)(intptr_t)(h + o));
 	return (c->c_hwswap ? bswap32(val) : val);
 }
 
@@ -477,7 +472,7 @@ au_himem_rs_8(void *v, bus_space_handle_t h, bus_size_t o)
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
 	wbflush();
-	val = (*(volatile uint64_t *)(h + o));
+	val = (*(volatile uint64_t *)(intptr_t)(h + o));
 	return (c->c_hwswap ? bswap64(val) : val);
 }
 
@@ -486,7 +481,7 @@ au_himem_ws_2(void *v, bus_space_handle_t h, bus_size_t o, uint16_t val)
 {
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
-	*(volatile uint16_t *)(h + o) = c->c_hwswap ? bswap16(val) : val;
+	*(volatile uint16_t *)(intptr_t)(h + o) = c->c_hwswap ? bswap16(val) : val;
 	wbflush();
 }
 
@@ -495,7 +490,7 @@ au_himem_ws_4(void *v, bus_space_handle_t h, bus_size_t o, uint32_t val)
 {
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
-	*(volatile uint32_t *)(h + o) = c->c_hwswap ? bswap32(val) : val;
+	*(volatile uint32_t *)(intptr_t)(h + o) = c->c_hwswap ? bswap32(val) : val;
 	wbflush();
 }
 
@@ -504,7 +499,7 @@ au_himem_ws_8(void *v, bus_space_handle_t h, bus_size_t o, uint64_t val)
 {
 	au_himem_cookie_t	*c = (au_himem_cookie_t *)v;
 
-	*(volatile uint64_t *)(h + o) = c->c_hwswap ? bswap64(val) : val;
+	*(volatile uint64_t *)(intptr_t)(h + o) = c->c_hwswap ? bswap64(val) : val;
 	wbflush();
 }
 
@@ -669,11 +664,11 @@ AU_HIMEM_SR(uint64_t,8)
 void									\
 __CONCAT(au_himem_c_,BYTES)(void *v,					\
     bus_space_handle_t h1, bus_size_t o1, bus_space_handle_t h2,	\
-    bus_space_handle_t o2, bus_size_t cnt)				\
+    bus_size_t o2, bus_size_t cnt)					\
 {									\
 	volatile TYPE *src, *dst;					\
-	src = (volatile TYPE *)(h1 + o1);				\
-	dst = (volatile TYPE *)(h2 + o2);				\
+	src = (volatile TYPE *)(intptr_t)(h1 + o1);			\
+	dst = (volatile TYPE *)(intptr_t)(h2 + o2);			\
 									\
 	if (src >= dst) {						\
 		while (cnt-- > 0)					\
@@ -706,7 +701,7 @@ au_himem_space_init(bus_space_tag_t bst, const char *name,
 	c->c_physoff = physoff;
 
 	/* allocate extent manager */
-	c->c_extent = extent_create(name, start, end, M_DEVBUF,
+	c->c_extent = extent_create(name, start, end,
 	    NULL, 0, EX_NOWAIT);
 	if (c->c_extent == NULL)
 		panic("au_himem_space_init: %s: cannot create extent", name);

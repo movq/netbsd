@@ -1,4 +1,4 @@
-/*	$NetBSD: winblk.c,v 1.5 2006/01/25 18:28:26 christos Exp $	*/
+/*	$NetBSD: winblk.c,v 1.7 2011/09/23 16:00:15 nonaka Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura.
@@ -58,7 +58,7 @@
 #endif
 
 #define	islower(c)	('a' <= (c) && (c) <= 'z')
-#define	toupper(c)	(islower(c) ? ((c) - 'a' + 'A') : (c))
+#define	_toupper(c)	(islower(c) ? ((c) - 'a' + 'A') : (c))
 
 #define	BLKSZ	512
 
@@ -142,9 +142,9 @@ winblkopen(struct open_file *f, ...)
 		goto end;
 	}
 	wsprintf(wdevname, TEXT("%C%C%C%d:"),
-		toupper(devname[0]),
-		toupper(devname[1]),
-		toupper(devname[2]),
+		_toupper(devname[0]),
+		_toupper(devname[1]),
+		_toupper(devname[2]),
 		unit);
 	DEBUG_PRINTF((TEXT("winblk.open: block device name is '%s'\n"),
 		      wdevname));
@@ -193,7 +193,6 @@ winblkopen(struct open_file *f, ...)
 #endif /* DEBUG */
 
 	if (!(ctx->di.di_flags & DISK_INFO_FLAG_MBR) ||
-	     (ctx->di.di_flags & DISK_INFO_FLAG_CHS_UNCERTAIN) ||
 	     (ctx->di.di_flags & DISK_INFO_FLAG_UNFORMATTED) ||
 	     (ctx->di.di_bytes_per_sect != BLKSZ)) {
 		win_printf(TEXT("invalid flags\n"));

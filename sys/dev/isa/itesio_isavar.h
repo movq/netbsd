@@ -1,8 +1,8 @@
-/*	$NetBSD: itesio_isavar.h,v 1.4 2007/12/29 06:05:11 xtraeme Exp $	*/
+/*	$NetBSD: itesio_isavar.h,v 1.11 2017/09/12 09:54:45 msaitoh Exp $	*/
 /*	$OpenBSD: itvar.h,v 1.2 2003/11/05 20:57:10 grange Exp $	*/
 
 /*
- * Copyright (c) 2006-2007 Juan Romero Pardines <juan@xtrarom.org>
+ * Copyright (c) 2006-2007 Juan Romero Pardines <xtraeme@netbsd.org>
  * Copyright (c) 2003 Julien Bordet <zejames@greyhats.org>
  * All rights reserved.
  *
@@ -57,10 +57,17 @@
 #define ITESIO_CHIPID2	0x21	/* Chip ID 2 */
 #define ITESIO_DEVREV	0x22	/* Device Revision */
 
+#define ITESIO_ID8628	0x8628
 #define ITESIO_ID8705	0x8705
 #define ITESIO_ID8712	0x8712
 #define ITESIO_ID8716	0x8716
 #define ITESIO_ID8718	0x8718
+#define ITESIO_ID8720	0x8720
+#define ITESIO_ID8721	0x8721
+#define ITESIO_ID8726	0x8726
+#define ITESIO_ID8728	0x8728
+#define ITESIO_ID8771	0x8771
+#define ITESIO_ID8772	0x8772
 
 /* 
  * Control registers for the Environmental Controller, relative
@@ -138,9 +145,8 @@
 
 struct itesio_softc {
 	bus_space_tag_t 	sc_iot;
-	bus_space_handle_t 	sc_ioh;
 
-	bus_space_tag_t		sc_ec_iot;
+	bus_space_handle_t 	sc_pnp_ioh;
 	bus_space_handle_t	sc_ec_ioh;
 
 	struct sysmon_wdog	sc_smw;

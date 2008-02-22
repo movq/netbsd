@@ -1,4 +1,4 @@
-/* $NetBSD: sysmon_envsys_tables.c,v 1.4 2007/12/07 11:47:50 xtraeme Exp $ */
+/* $NetBSD: sysmon_envsys_tables.c,v 1.13 2018/05/27 01:39:00 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysmon_envsys_tables.c,v 1.4 2007/12/07 11:47:50 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysmon_envsys_tables.c,v 1.13 2018/05/27 01:39:00 thorpej Exp $");
 
 #include <sys/types.h>
 
@@ -36,7 +36,7 @@ __KERNEL_RCSID(0, "$NetBSD: sysmon_envsys_tables.c,v 1.4 2007/12/07 11:47:50 xtr
 /*
  * Available units type descriptions.
  */
-static const struct sme_description_table sme_units_description[] = {
+static const struct sme_descr_entry sme_units_description[] = {
 	{ ENVSYS_STEMP,		PENVSYS_TYPE_TEMP,	"Temperature" },
 	{ ENVSYS_SFANRPM,	PENVSYS_TYPE_FAN,	"Fan" },
 	{ ENVSYS_SVOLTS_AC,	PENVSYS_TYPE_VOLTAGE,	"Voltage AC" },
@@ -51,13 +51,15 @@ static const struct sme_description_table sme_units_description[] = {
 	{ ENVSYS_DRIVE,		PENVSYS_TYPE_DRIVE,	"Drive" },
 	{ ENVSYS_BATTERY_CAPACITY, PENVSYS_TYPE_BATTERY,"Battery capacity" },
 	{ ENVSYS_BATTERY_CHARGE, -1,			"Battery charge" },
+	{ ENVSYS_SRELHUMIDITY,	-1,			"relative Humidity" },
+	{ ENVSYS_LUX,		-1,			"Illuminance" },
 	{ -1,			-1,			"unknown" }
 };
 
 /*
  * Available sensor state descriptions.
  */
-static const struct sme_description_table sme_state_description[] = {
+static const struct sme_descr_entry sme_state_description[] = {
 	{ ENVSYS_SVALID,	-1, 	"valid" },
 	{ ENVSYS_SINVALID,	-1, 	"invalid" },
 	{ ENVSYS_SCRITICAL,	-1, 	"critical" },
@@ -71,25 +73,28 @@ static const struct sme_description_table sme_state_description[] = {
 /*
  * Available drive state descriptions.
  */
-static const struct sme_description_table sme_drivestate_description[] = {
+static const struct sme_descr_entry sme_drivestate_description[] = {
 	{ ENVSYS_DRIVE_EMPTY,		-1, 	"unknown" },
 	{ ENVSYS_DRIVE_READY,		-1, 	"ready" },
 	{ ENVSYS_DRIVE_POWERUP,		-1, 	"powering up" },
 	{ ENVSYS_DRIVE_ONLINE,		-1, 	"online" },
+	{ ENVSYS_DRIVE_OFFLINE, 	-1, 	"offline" },
 	{ ENVSYS_DRIVE_IDLE,		-1, 	"idle" },
 	{ ENVSYS_DRIVE_ACTIVE,		-1, 	"active" },
+	{ ENVSYS_DRIVE_BUILD,		-1,	"building" },
 	{ ENVSYS_DRIVE_REBUILD,		-1, 	"rebuilding" },
 	{ ENVSYS_DRIVE_POWERDOWN,	-1, 	"powering down" },
 	{ ENVSYS_DRIVE_FAIL,		-1, 	"failed" },
 	{ ENVSYS_DRIVE_PFAIL,		-1, 	"degraded" },
 	{ ENVSYS_DRIVE_MIGRATING,	-1,	"migrating" },
+	{ ENVSYS_DRIVE_CHECK,		-1,	"checking" },
 	{ -1,				-1, 	"unknown" }
 };
 
 /*
  * Available battery capacity descriptions.
  */
-static const struct sme_description_table sme_batterycap_description[] = {
+static const struct sme_descr_entry sme_batterycap_description[] = {
 	{ ENVSYS_BATTERY_CAPACITY_NORMAL,	-1,	"NORMAL" },
 	{ ENVSYS_BATTERY_CAPACITY_WARNING,	-1, 	"WARNING" },
 	{ ENVSYS_BATTERY_CAPACITY_CRITICAL,	-1, 	"CRITICAL" },
@@ -98,26 +103,62 @@ static const struct sme_description_table sme_batterycap_description[] = {
 };
 
 /*
- * Returns the table associated with type.
+ * Available indicator descriptions.
  */
-const struct sme_description_table *
-sme_get_description_table(int type)
-{
-	const struct sme_description_table *ud = sme_units_description;
-	const struct sme_description_table *sd = sme_state_description;
-	const struct sme_description_table *dd = sme_drivestate_description;
-	const struct sme_description_table *bd = sme_batterycap_description;
+static const struct sme_descr_entry sme_indicator_description[] = {
+	{ ENVSYS_INDICATOR_FALSE,		-1,	"FALSE" },
+	{ ENVSYS_INDICATOR_TRUE,		-1, 	"TRUE" },
+	{ -1,					-1, 	"UNKNOWN" }
+};
 
-	switch (type) {
+static const struct sme_descr_entry *
+sme_find_table(enum sme_descr_type table_id)
+{
+	switch (table_id) {
 	case SME_DESC_UNITS:
-		return ud;
+		return sme_units_description;
+		break;
 	case SME_DESC_STATES:
-		return sd;
+		return sme_state_description;
+		break;
 	case SME_DESC_DRIVE_STATES:
-		return dd;
+		return sme_drivestate_description;
+		break;
 	case SME_DESC_BATTERY_CAPACITY:
-		return bd;
+		return sme_batterycap_description;
+		break;
+	case SME_DESC_INDICATOR:
+		return sme_indicator_description;
+		break;
 	default:
 		return NULL;
 	}
+}
+
+/*
+ * Returns the entry from specified table with type == key
+ */
+const struct sme_descr_entry *
+sme_find_table_entry(enum sme_descr_type table_id, int key)
+{
+	const struct sme_descr_entry *table = sme_find_table(table_id);
+
+	if (table != NULL)
+		for (; table->type != -1; table++)
+			if (table->type == key)
+				return table;
+
+	return NULL;
+}
+
+const struct sme_descr_entry *
+sme_find_table_desc(enum sme_descr_type table_id, const char *str)
+{
+	const struct sme_descr_entry *table = sme_find_table(table_id);
+
+	if (table != NULL)
+		for (; table->type != -1; table++)
+			if (strcmp(table->desc, str) == 0)
+				return table;
+	return NULL;
 }

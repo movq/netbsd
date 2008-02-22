@@ -1,4 +1,4 @@
-LIST OF CHANGES FROM PREVIOUS RELEASES:			<$Revision: 1.78 $>
+LIST OF CHANGES FROM PREVIOUS RELEASES:			<$Revision: 1.140 $>
 
 
 Changes from 386bsd 0.1 + patchkit 0.2.2 to NetBSD 0.8:
@@ -675,10 +675,10 @@ Changes from NetBSD 0.9 to NetBSD 1.0:
 	add bootpd to othersrc. Add bootp service nos to/etc/services. (brezak)
 	add -x flag to strip. Removes local syms, stabs, and compiler idents
 		symbols. (brezak)
-	machine independant changes to VM to be able to handle machines with
+	machine independent changes to VM to be able to handle machines with
 		non-contiguous memory from Wolfgang Solfrank. Machines that
 		need this use "option MACHINE_NONCONTIG". (brezak)
-	i386: machine dependant changes for non-contiguous memory. WARNING-
+	i386: machine dependent changes for non-contiguous memory. WARNING-
 		you will need a new config for this. (brezak)
 	i386: boot program changes to load the symbols table from the image,
 		be able to boot omagic executables, pass a few more
@@ -1465,7 +1465,7 @@ Changes from NetBSD 0.9 to NetBSD 1.0:
 	fix m_adj() in uipc_mbuf.c to adjust m_pkthdr.len in the correct
 		mbuf (deraadt)
 	implement better locking in mbuf.h, and fix cltom() macro (deraadt)
-	i386: 3c509 driver support for promiscious and multicast, and a few
+	i386: 3c509 driver support for promiscuous and multicast, and a few
 		other misc fixes (deraadt)
 	sparc: make swap work, make keyboard repeat work for ^@ (deraadt)
 	fix talk(1) to not trounce it arguments (deraadt)
@@ -1817,7 +1817,7 @@ Changes from NetBSD 1.0 to NetBSD 1.1:
 	libsa: Added a machine-independent `twiddler' to libsa.  Also made the
 		libsa exec() more useful. [mycroft 19950220]
 	yppasswd(1): Added yppasswd as a link to passwd. (phil)
-	audio: Added new machine independant audio subsystem. Drivers for i386
+	audio: Added new machine independent audio subsystem. Drivers for i386
 		SoundBlaster (SB, SB16 and SBPRO), PAS (In SB emulation),
 		and Windows Sound System. Thanx to John Kohl, Jeff Chilton,
 		George Michaelson, and Havard Eidnes. (brezak)
@@ -2791,7 +2791,7 @@ Changes from NetBSD 1.2 to NetBSD 1.3:
 		options PFIL_HOOKS.  [mrg 19960905]
 	getpgid(2): added getpgid(2) system call, as per SVR4.  [mrg 19960905]
 	reboot(2): changed reboot(2) system call to take a string of boot
-		commands, to be handled by the machine dependant boot()
+		commands, to be handled by the machine dependent boot()
 		function.  current only the sparc and sun3 ports use
 		this.  [mrg 19960905]
 	poll(2): added poll(2) system call.  [mycroft 19960907]
@@ -4840,7 +4840,7 @@ Changes from NetBSD 1.4 to NetBSD 1.5:
 		These routines now expect the protocol header to be included
 		with the packet, not stripped off.  [thorpej 19990518]
 	kernel: make the kernel buffer allocation routine allocsys() machine
-		independant; all ports now support the BUFCACHE option.
+		independent; all ports now support the BUFCACHE option.
 		[lukem 19990519].
 	sparc:  finally NetBSD works Ok on HyperSPARC machines [pk 19990521]
 	mips:	reduce extraneous kernel space TLB exceptions by preserving
@@ -7793,7 +7793,7 @@ Changes from NetBSD 2.0 to NetBSD 3.0:
 	/etc/postinstall: check for obsolete minor/teeny shared libraries.
 		[lukem 20040812]
 	kernel: Add extensions to the autoconf(9) framework to allow device
-		detachment and bus rescans in a bus independant way, and
+		detachment and bus rescans in a bus independent way, and
 		for better support of driver LKMs.  [drochner 20040819]
 	libc: Add optimized ffs(3) implementation for ARM architecture 5.
 		[rearnsha 20040821]
@@ -8146,7 +8146,7 @@ Changes from NetBSD 3.0 to NetBSD 4.0:
 		devices are automatically created when they are configured.
 		[cube 20060201]
 	fs/udf: added UDF file system support for optical media and block
-		devices like harddisc partions and vnd's.
+		devices like harddisc partitions and vnd's.
 		[reinoud 20060202]
 	binutils: updated to FSF binutils 2.16.1 release.  [skrll 20060202]
 	i386: Add support for the Multiboot Specification.  [jmmv 20060203]
@@ -8635,3 +8635,3599 @@ Changes from NetBSD 3.0 to NetBSD 4.0:
 	msk(4): Add support for Marvell 88CO55 gigabit ethernet, which 
 		is used by newer iMacs [manu 20071022]
 	cobalt: Add netboot support via tlp0 to bootloader.  [tsutsui 20071030]
+	aac(4): Added IBM ServeRAID 8k support. [sborrill 20080508]
+
+Changes from NetBSD 4.0 to NetBSD 5.0:
+	evbppc: Add support for Xilinx Virtex II-Pro/4-FX. [freza 20061202]
+	mac68k: Add support for four more NuBus video cards, including the
+		VillageTronic MacPicasso 340. [hauke 20061206]
+	puc(4): Add support for Perle Systems 4 and 8 ports modem boards.
+		[manu 20071209]
+	arm: Add support for NPE Ethernet on IXP425. [scw 20061210]
+	arm: Add support for IXP425 watchdog timer. [scw 20061210]
+	libutil: Add flags_to_string(3) and string_to_flags(3),
+		moved from ls(1). [christos 20061214]
+	arm: Add support for i2c, i2s, pcmcia, and ohci of PXA2x0.
+		Ported from OpenBSD as part of zaurus port by NONAKA Kimihiro.
+		[peter 20061217]
+	zaurus: Add support for Sharp C3x00 PDA. [ober 20061217]
+	kernel: Merge yamt-splraseipl branch, which provides splraiseipl(9)
+		and makeiplcookie(9). [yamt 20061221]
+	sgimips: Add support for Set Engineering's GIO Fast Ethernet board.
+		[rumble 20061223]
+	sgimips: Add support for the SGI Light/Entry/Starter LG1/LG2
+		framebuffers found in Indigo systems. [rumble 20061226]
+	nfs: Remove NQNFS support from kernel. [yamt 20061227]
+	kernel, srtconfig(1): First import of the source-address-based routing
+		pseudo-device.  [mouse 20061229]
+	sgimips: Add i8254 timecounter(9) support for use on IP12.
+		[rumble 20061229]
+	mount_psshfs(8): Add puffs sshfs. [pooka 20061229]
+	njata(4): Add support for Workbit CF32A CF adapter,
+		aka BUFFALO RCF-CBA2.  [ichiro 20061231]
+	amd64, i386: Report and work around some of the known errata for
+		Athlon 64 and Opteron processors. [ad 20070101]
+	i386: Add fatboot, sub-512 byte bootloader that can be written into
+		the first sector of a FAT16 filesystem and will load
+		the secondary bootloader from it. [dsl 20070101]
+	kernel: Make mount(2) and unmount(2) use kauth(9) for security
+		policy.  One incompatible change is that an unprivileged
+		mount without the MNT_NOSUID and MNT_NODEV flags
+		will now fail, whereas previously those flags were
+		automatically added.  [elad 20070102]
+	udf: Implement read-only access to UDF 2.50 and UDF 2.60 discs
+		that use metadata partition mappings. [reinoud 20070104]
+	i386: Add support for Microsoft Xbox. [jmcneill 20070105]
+	ntp: Import ntp 4.2.4 (20061228). Tracking of network interface
+		address changes is now supported - no more ntpd
+		restarts when interface addresses are re-configured
+		(WLAN/DSL/ppp/...). [kardel 20070106]
+	config(1): Introduce a new -L option, generates a lint configuration.
+		[cube 20070108]
+	umass(4): Add a quirk for the Sony Cybershot USB camera.
+		From Mihai Chelaru. [christos 20070109]
+	kernel: Global 'securelevel' variable removed; it is now internal to
+		the secmodel. [elad 20070110]
+	gcc(1): Updated to version 4.1.2-20070110. [mrg 20070111]
+	zaurus: Add MI todr(9) and timecounter(9) support. [ober 20070112]
+	acpitools: Added from FreeBSD via fvdl. [christos 20070114]
+	kernel: Add syscalls for POSIX Real-time library. [ad 20070116]
+	adb(4): Add new and simplified MI ADB drivers. [macallan 20070117]
+	macppc: Add a driver for the SGS 7433 mixer found in some G3 Macs.
+		[macallan 20070117]
+	viaenv(4): Add support for the VIA VT8231 hardware monitor and
+		remove viapm(4) code. From OpenBSD. [xtraeme 20070120]
+	scsictl(8): Added setspeed command, to set the highest speed that the
+		optical drive should use for reading data,
+		contributed by Kimura Fuyuki. [bouyer 20070122]
+	msk(4): Pull support for some devices and many bug fixes from OpenBSD.
+		[msaitoh 20070130]
+	uplcom(4): Add support for Willcom WS002IN PHS device
+		(Prolific Technology PL2303X). [msaitoh 20070131]
+	zaurus: Updates to allow Zaurus screen to rotate 90 degrees to a usable
+		state with the keyboard. From OpenBSD. [ober,peter 20070202]
+	security(8): Add support for per-user /tmp. [elad 20070204]
+	ugensa(4): Add support Novatel Merlin, used in VZ V620.
+		From John Nielsen on freebsd-mobile. [gdt 20070205]
+	i386, amd64: Add cmos(4), driver for x86 CMOS RAM. [dyoung 20070206]
+	find(1): Add -delete option from FreeBSD. [elad 20070206]
+	rum(4): Add support for MELCO WLI-U2-SG54HP and PLANEX GW-US54Mini2.
+		[elad 20070206]
+	kernel: Merge the newlock2 branch. Introduces a number of new
+		kernel synchronization primitives, improves scalability
+		on MP systems, and replaces the existing SA threads model
+		with a 1:1 threading model. [ad 20070209]
+	news68k: Implement generic softintr(9) support. [tsutsui 20070210]
+	ubsa(4): Add support for CDMA modems sold by Eurotel (now O2).
+		[salo 20070210]
+	refuse: Added FUSE (file system in userspace) compatibility
+		functionality, layered on top of libpuffs. [agc 20070211]
+	i386: Added an opencrypto provider for VIA ACE (AES encryption
+		instructions), ported from OpenBSD. [daniel 20070217]
+	shark: Add generic softintr(9) support. [matt 20070218]
+	kernel: Add code to support per-system call statistics. [dsl 20070218]
+	sdiff(1): Replaced by OpenBSD sdiff(1) (public domain). [rmind 20070219]
+	sgimips: Support the sq(4) interface on the Challenge S's IOPLUS
+		mezzanine. [rumble 20070219]
+	btuart(4): Add support for Bluetooth HCI UART (H4) driver.
+		[kiyohara 20070221]
+	btuartd(8): Add support for Bluetooth HCI UART (H4) daemon.
+		[kiyohara 20070221]
+	bus_dma(9): Add a pair of new bus_dma(9) functions,
+		bus_dmatag_subregion(9) and bus_dmatag_destroy(9)
+		that allow a device to restrict the bus address range.
+		[mrg 20070221]
+	kernel: Replace the Mach-derived boolean_t type with the C99 bool type.
+		[thorpej 20070221]
+	arm: Add PXA2x0 RTC driver. [nonaka 20070225]
+	mutex(9), rwlock(9): Support priority inheritance. [yamt 20070226]
+	eeprom(8): Add the missing kernel bits on arm and powerpc that kept
+		eeprom from actually changing firmware settings.
+		[macallan 20070228]
+	MAKEDEV(8), MAKEDEV.local(8): Let MAKEDEV.local use functions
+		defined in MAKEDEV. [apb 20070303]
+	dkscan_bsdlabel(8): Add a tool to scan disks for BSD disklabels.
+		[martin 20070301]
+	MAKEDEV(8), init(8): Make MAKEDEV(8) create the mfs /dev rather than
+		init(8). [dsl 20070302]
+	x68k: Add generic softintr(9) support. [tsutsui 20070304]
+	luna68k: Add generic softintr(9) support. [tsutsui 20070304]
+	misc: Remove all use of caddr_t, which should be replaced with
+		appropriate pointer types. [christos 20070304]
+	file(1): Update to 4.20.  [pooka 20070304]
+	cesfic: Add generic softintr(9) support. [tsutsui 20070305]
+	hfs: Add read-only Apple HFS+ file system support. [dillo 20070305]
+	ipv6: Add ipv6 fast forward. [liamjfoy 20070307]
+	amd64, i386: Add support for the High Precision Event Timer driver.
+		[njoly 20070308]
+	next68k: Add generic softintr(9) support. [tsutsui 20070308]
+	openssh: Import 4.6. [christos 20070310]
+	aiboost(4): ASUS AI Booster ACPI Hardware monitor driver,
+		adapted from FreeBSD for envsys(4). [xtraeme 20070313]
+	evbmips: Add Infineon ADM5120 port. [dyoung 20070320]
+	kernel: Import of DRM (Direct Rendering Manager). Not yet enabled
+		by default. [drochner 20070320]
+	i386, amd64: Intel(R) On Demand Clock Modulation driver, to save
+		power and overheating in CPUs supporting the Thermal
+		Monitor feature (TM). Adapted from OpenBSD/FreeBSD.
+		See options(4) for more information. [xtraeme 20070320]
+	atari: Implement generic softintr(9) (untested). [tsutsui 20070321]
+	pkill(1): Add the -l (long format) option. [erh 20070321]
+	viadrm(4): Import viadrm(4) from DRI git. [jmcneill 20070323]
+	macppc: Add experimental Apple UniNorth AGP driver. [macallan 20070325]
+	agp(4): Add AGPv3 support to VIA AGP driver from FreeBSD.
+		[jmcneill 20070327]
+	libc: Add support for LC_TIME. [manu 20070328]
+	vax: Turn on generation of PIC code. [matt 20070331]
+	genfb(4): Generic framebuffer console driver with PCI and SBus
+		frontends. [macallan 20070411]
+	sgimips: Add support for SGI O2 PS/2 controller macekbc(4) and
+		onboard display adapter crmfb(4). [jmcneill 20070412]
+	sgimips: Import mavb(4) audio device driver for SGI O2 from
+		OpenBSD. [jmcneill 20070412]
+	sparc64: Add support for hardware monitoring on
+		Ultra Enterprise 450. See envctrl(4). [tnn 20070414]
+	puffs(4): Support NFS exporting puffs file servers. [pooka 20070416]
+	adb(4): Add a very simple driver for ADB button devices.
+		[macallan 20070416]
+	xargs(1): Bring in xargs from FreeBSD to gain -I, -J etc. but keep our
+		GNU compatible exit values. [christos 20070418]
+	mount_9p(8): Add support to mount a 9P file service with puffs.
+		[pooka 20070421]
+	kernel: Remove the CHECK_ALT_xxx() defines and emul_find() used
+		to locate files within an emulation's root directory.
+		Instead get namei() to check the emulation root first.
+		[dsl 20070422]
+	pax(1): Add a '-V' flag to pax for verbose summary without listing.
+		[christos 20070423]
+	prep: Add support for the MTX604 RAVEN based machine. Other RAVEN
+		based machines are also likely to work now. [garbled 20070426]
+	kernel: Added support for POSIX Asynchronous I/O. [rmind 20070430]
+	scan_ffs(8): Add a "-b" option to search a partition for valid
+		alternate superblocks. [perseant 20070501]
+	puffs(3): Add puffs_framebuf(3), which abstracts the buffer
+		management and event loop for networked file systems
+		using puffs_cc(3). Convert mount_psshfs(8) and
+		mount_9p(8) to use it. [pooka 20070505]
+	wd33c93: Enable Fast SCSI transfers for WD33C93B parts with
+		appropriate input clocks. [rumble 20070508]
+	kernel: Add the TFTPROOT kernel option for TFTP'ing root RAMdisk
+		at root mount time. [manu 20070508]
+	services(5), protocols(5): Pull iana-generated services and protocols
+		files using: http://www.sethwklein.net/projects/iana-etc/ .
+		[christos 20070508]
+	pf(4): Make 'nat' and 'rdr' translation rules obey state
+		policy flags ('if-bound', 'group-bound', 'floating').
+		Extend pf.conf(5) syntax to express the translation-state
+		policies. [dyoung 20070510]
+	gdb(1): Add target kvm support for amd64. [fvdl 20070515]
+	kernel: yamt-idlelwp branch was merged.
+		1. separate context switching and thread scheduling.
+		2. implement idle lwp.
+		3. clean up related MD/MI interfaces.
+		4. make scheduler(s) modular.
+		[yamt 20070518]
+	sh3: Implement fast path TLB miss handling. [uwe 20070518]
+	ld.elf_so(1): Support Solaris $ORIGIN etc. expansions in paths.
+		[christos 20070518]
+	uslsa(4): Added CP210x USB-RS232 ucom driver, as submitted by
+		Jonathan A. Kollasch in PR kern/33496. [dogcow 20070520]
+	procfs: Extend the Linux emulation of /proc to include
+		/proc/stat, /proc/loadavg and /proc/<pid>/statm.
+		[agc 20070524]
+	top(1): Allow a single process to be selected by pid.
+		Add a 'thread mode' that displays LWPs.
+		[ad 20070524]
+	isp(4): Major update to isp(4) driver, including 4Gb (24XX) card
+		support and new firmware sets. [mjacob 20070524]
+	libcurses: Merge in wide curses work done by Ruibiao Qui as a
+		Google Summer of Code project. [blymn 20070529]
+	split(1): Add a new command-line option "-n chunk_count", that splits
+		the input file into chunk_count smaller files.
+		[jschauma 20070531]
+	smsc(4): Added a driver for the hardware monitoring portion of
+		the SMSC LPC47B397. [blymn 20070601]
+	powerpc: Add booted_kernel and booted_device sysctl. [nisimura 20070601]
+	file(1): Update to 4.21. [pooka 20070607]
+	zyd(4): Added OpenBSD's driver. Supports ZyDAS ZD1211/ZD1211B
+		USB IEEE 802.11b/g wireless network device. [kiyohara 20070609]
+	mac68k: Switch sn(4) Ethernet on mac68k to using MI SONIC driver.
+		[tsutsui 20070610]
+	tcp(4): Per socket keepalive timer settings. Ability to change
+		connection timeout. [christos 20070620].
+	gdb(1): Remove gdb 5.3. [skrll 20070621]
+	newgrp(1): Add POSIX (IEEE Std 1003.1, 2004 / Open Group Base
+		Specifications Issue 6) User Portability Utility to change
+		effective group ID. [ginsbach 20070621]
+	gcc(1): Updated to version 4.1.3-20070620.  [mrg 20070621]
+	df(1): Fix -P option, and add -g (in gigabytes) option.
+		[christos 20070624]
+	ntp: Updated to version 4.2.4p2. [kardel 20070624]
+	tcpdrop(8): Ported by anon ymous (from FreeBSD/OpenBSD).
+		[christos 20070625]
+	fast_ipsec(4): Add support for IPsec NAT-T. [degroote 20070627]
+	efs: Added read-only Silicon Graphics EFS file system. [rumble 20070629]
+	svhlabel(8): Add a tool to update disklabel(5) from SGI Volume Header,
+		like mbrlabel(8) for MBR label. [rumble 20070629]
+	envsys(4), sysmon_envsys(9): Imported envsys2. New API with the
+		following features:
+		- Cleaned up the API for simplicity and efficiency.
+		- Ability to send capacity/critical/warning events to powerd(8).
+		- Added support for a 'dictionary based communication channel'
+		  between sysmon_power(9) and powerd(8), that means there is
+		  no 32 bytes event size event restriction anymore.
+		- Binary compatibility with old envstat(8) and powerd(8) via
+		  COMPAT_40.
+		And more, please see envsys(4) and sysmon_envsys(9) for more
+		information.
+		[xtraeme 20070701]
+	libutil: Add estrndup(3). [pooka 20070701]
+	i386: Add support for VIA Esther. From FreeBSD. [christos 20070703]
+	mount_puffsportal: Add experimental version of portalfs
+		based on puffs(3).  [pooka 20070708]
+	i386: Add gcscehci(4) driver for the EHCI controller found in the AMD
+		Geode CS5536 companion controllers. [jmcneill 20070708]
+	nfsmb(4): Add support for NVIDIA nForce 2/3/4 SMBus controller and
+		SMBus driver. [kiyohara 20070711]
+	kernel: Implement per-CPU work-queues support for workqueue(9)
+		interface. [rmind 20070712]
+	dbri(4): Added support for audio input. [macallan 20070712]
+	sgimips: Add hardware cursor support to crmfb(4) on O2.
+		[macallan 20070715]
+	kernel: Add a native mremap(2) system call based on the UVM
+		implementation for COMPAT_LINUX(8). [joerg 20070717]
+	find(1): Add the '-E' option to interpret regexes as extended regexes.
+		[daniel 20070719]
+	alpha: Add timecounter(9) support and switch to MI todr(9)
+		with MI mc146818 driver. [tsutsui 20070721]
+	tcpdump(8): Import tcpdump-3.9.7. [drochner 20070724]
+	ichsmb(4): Add support for Intel ICH SMBus controller.
+		[kiyohara 20070728]
+	shark: Add dhclient(8) to the install disk image to be able to
+		configure network interfaces through DHCP.  [jmmv 20070729]
+	zaurus: Added support to detect AC adapter and charge battery.
+		[nonaka 20070729]
+	libarchive: Import libarchive-2.2.5. [joerg 20070729]
+	sparc: The cgfourteen(4) driver now supports wscons. [macallan 20070730]
+	shark: Switched the installation disk to use wscons instead of
+		pccons. [jmmv 20070731]
+	tcp(4): TCP socket buffers automatic sizing, ported from FreeBSD.
+		[rmind 20070802]
+	agp(4): Add support agp_amd64. Imported from FreeBSD.
+		[kiyohara 20070804]
+	cpuctl(8): A new utility which allows setting CPUs online/offline.
+		[ad 20070804]
+	libpthread: Make some significant performance improvements around
+		thread synchronization, and fix a minor problem with
+		detaching running threads. [ad 20070804]
+	rump: Add the Runnable Userspace Meta Program framework to sys/rump.
+		These are programs which compile in a part from the standard
+		kernel sources and run in userspace.  Their main use is
+		testing/debugging. Currently supported are a number of
+		file systems (e.g. ffs) through puffs(3). [pooka 20070805]
+	wscons(4): Add scrollback support to vcons, this should work with
+		any framebuffer console driver that uses vcons.
+		[macallan 20070805]
+	libarchive: Import libarchive-2.2.6. [joerg 20070806]
+	wtf(6): Search pkgsrc's help database when ran inside a package
+		directory. [hubertf 20070806]
+	libpthread: Another performance improvement, and a fix for an issue
+		that could cause threaded applications to hang under rare
+		circumstances. [ad 20070807]
+	mount_sysctlfs(8): sysctl(3) to file system translator. [pooka 20070809]
+	bge(4): Add support for BCM5786. [taca 20070810]
+	agp(4): Add agp support for i965Q. [markd 20070815]
+	slhci(4): Replace to Matthew Orgass's slhci(4). [kiyohara 20070815]
+	spdmem(4): Add Serial Presence Detect driver/support. This decodes
+		technical specifications stored in the eeprom on common types
+		of memory modules. [tnn 20070818]
+	uplcom(4): Add support for SMART Technologies-badged Prolific
+		USB-Serial converter. [sborrill 20070818]
+	amiga: Add wdc(4) frontent for the buddha and catweazle Z2 hardware.
+		[is 20070820]
+	btbc(4): Add support for AnyCom BlueCard. [kiyohara 20070820]
+	libm: Add C99 complex support (float/double). [drochner 20070820]
+	amd64: Enable LFS from sysinstall. [skd 20070821]
+	atactl(8): Improve SATA support. [bouyer 20070821]
+	agten(4): Add support for Fujitsu AG-10e graphics cards working as
+		accelerated framebuffer console. [macallan 20070826]
+	ichlpcib(4): The driver has added support for the TCO (watchdog) on
+		ICH6 or newer chipsets plus timecounter support. Also it can
+		be used on EM64T systems running the amd64 port. Adapted from
+		FreeBSD and OpenBSD. [xtraeme 20070826]
+	wlanctl(8): Add -p flag that only plints public (i.e. non-encrypted)
+		nodes. [dogcow 20070829]
+	ag10e(4): Add XFree86 driver to run the AG-10e in 24bit with
+		acceleration. [macallan 20070830]
+	viaide(4): Attach to the VIA CX700 IDE and NVIDIA MCP67 IDE and SATA
+		controllers. [xtraeme 20070831]
+	uchcom(4): Add support for WinChipHead CH341/340 USB-Serial adapter.
+		[tshiozak 20070903]
+	amd64, i386: cgd(4) is part of GENERIC. [joerg 20070906]
+	libpthread: scalability and performance enhancements. The MySQL
+		sysbench benchmark in read-only mode now scales to 900
+		simultaneous client threads on a 4xCPU i386 system before
+		serious performance drop-off occurs. [ad 20070907]
+	btconfig(8): Add a new option 'rssi' to enable/disable inquiry
+		results with RSSI, and add recognition of the
+		"inquiry result with RSSI" packets. [plunky 20070907]
+	kernel: Added support for POSIX message queues. [rmind 20070907]
+	aps(4): driver for IBM Thinkpad Active Protection System,
+		provides support for some sensors exported through
+		the envsys(4) framework. Ported by Pierre Pronchery
+		from OpenBSD. [xtraeme 20070911]
+	pcc(1): Import pcc-070920. [abs 20070920]
+	libutil: Add raise_default_signal(3) -- raise the default signal
+		handler. [lukem 20070925]
+	i386, amd64: pcc is now able to compile most of the i386 kernel.
+		a number of changes have been made for LKM and
+		preemption safety. [ad 20070927]
+	i386: i386 bootblocks are now able to boot amd64 kernels.
+		support for a.out kernels has been removed. [ad 20070927]
+	kernel: Added support for kernel core dumps to RAID 1 sets.
+		[oster 20071004]
+	kernel: The new socket option SO_NOHEADER tells the network
+		stack to strip the protocol header from packets
+		received on a raw socket. [dyoung 20071005]
+	gre(4): Available encapsulations increase to IPv6, UDP in
+		IPv6, and UDP in IPv4.  The Mobile IP encapsulation
+		is no more. [dyoung 20071005]
+	malloc(3): Replace the default memory allocator with 'jemalloc',
+		designed to perform well in both single- and multi-
+		threaded processes. This provides a significant
+		performance boost for many threaded workloads that
+		make use of malloc, such as MySQL. [ad 20071006]
+	kernel: A new SCHED_M2 scheduler, improves the performance on
+		MP systems, supports real-time and time-sharing classes,
+		ready for the CPU affinity. [rmind 20071009]
+	umidi(4): Add quirks to support Roland UA25, UA4FX and SonicCell.
+		[xtraeme 20071014]
+	kse(4): Add multicast filter support. [nisimura 20071014]
+	httpd(8): Import bozohttpd-20060517. [tls 20071016]
+	powerpc, prep, pmppc, evbppc, macppc, ibmnws, bebox, sandpoint, ofppc:
+		Merge ppcoea-renovation branch. [garbled 20071017]
+	prep: Convert to generic powerpc PCI framework. [garbled 20071017]
+	powerpc: New generic interrupt handler framework. [macallan 20071017]
+	macppc: Switch to generic powerpc interrupt framework.
+		[macallan 20071017]
+	prep: Convert to generic powerpc ISA framework. [garbled 20071017]
+	bebox: Convert to generic soft interrupts. [matt 20071017]
+	prep: Switch to generic powerpc interrupt framework. [garbled 20071017]
+	powerpc: New generic shared timecounters-based clock routines.
+		[garbled 20071017]
+	prep: Convert to generic powerpc clock. [garbled 20071017]
+	sandpoint: Convert to generic soft interrupts. [nisimura 20071017]
+	sandpoint: Switch to generic powerpc interrupt framework.
+		[nisimura 20071017]
+	sandpoint: Convert to generic powerpc clock/PCI/ISA framework.
+		[nisimura 20071017]
+	macppc: Convert to generic powerpc clock/PCI framework.
+		[macallan 20071017]
+	pmppc: Convert to generic powerpc clock/PCI/interrupt framework.
+		[garbled 20071017]
+	pmppc: Remove pmppc as a port, and move it to a supported board under
+		evbppc. [garbled 20071017]
+	ibmnws: Convert to generic powerpc clock.c/PCI/interrupt framework.
+		[rjs 20071017]
+	mvmeppc: Convert to generic powerpc clock.c/PCI/interrupt framework.
+		[garbled 20071017]
+	powerpc: Add shared PReP memory maps. [garbled 20071017]
+	sandpoint: DHCP/NFS bootloader. [nisimura 20071017]
+	macppc: Convert to generic powerpc bus_dma(9). [matt 20071017]
+	macppc: Convert to generic powerpc bus_space(9). [garbled 20071017]
+	powerpc: Generic powerpc OpenFirmware code. [garbled 20071017]
+	ofppc: Completely rewrite ofppc port from scratch. [garbled 20071017]
+	bebox: Convert to generic powerpc PCI/ISA framework. [ober 20071017]
+	macppc: Use genfb(4) as the default framebuffer instead of ofb.
+		[macallan 20071017]
+	macppc: Switch to new ADB subsystem. [macallan 20071017]
+	macppc: Add support for bus speed control found in some Intrepid-based
+		*Books like the 800MHz iBook G4. [macallan 20071017] 
+	powerpc: New generic powerpc IPI framework. [garbled 20071017]
+	macppc: Convert to generic powerpc IPI framework. [garbled 20071017]
+	powerpc: New generic powerpc SMP support framework. [garbled 20071017]
+	macppc: Convert to generic powerpc SMP framework. [macallan 20071017]
+	prep: Convert to generic powerpc IPI/SMP framework. [garbled 20071017]
+	amd64, i386: Merge amd64 and i386 pmap. Also always use
+		large pages if available. [yamt 20071018]
+	amd64: Add lkm(4) support for compat_linux(8) and exec_linux_elf.
+		[njoly 20071019]
+	rccide: Add support for the ServerWorks HT-1000 IDE Controller.
+		From OpenBSD. [xtraeme 20071024]
+	svwsata(4): Add support for another ServerWorks HT-1000 SATA
+		Controller. From OpenBSD. [xtraeme 20071024]
+	ofppc: New ofwpci configuration methods, add rtas device.
+		[garbled 20071025]
+	compat_linux32: Add missing chown's syscalls family members.
+		This makes chown(1)/chgrp(1) works under compat linux32.
+		[njoly 20071027]
+	pcc(1): Import pcc-071027. [ragge 20071027]
+	shark: Removed pccons(4), obsoleted by wscons(4). [jmmv 20071028]
+	coretemp(4): Driver for Intel Core's on-die thermal sensor,
+		available on Core or newer CPUs. Ported from FreeBSD.
+		[xtraeme 20071029]
+	i386, amd64: Added support for Intel 82G965 chipset. [jnemeth 20071030]
+	kernel: Support for dynamic changing of SysV message queues and
+		semaphores limits. [rmind 20071104]
+	ofppc: Stop using ofbus driver, rewrite console code [garbled 20071104]
+	r128fb(4): New accelerated console driver for ATI Rage 128 graphics
+		controllers. [macallan 20071107]
+	ofppc, macppc: Convert to shared ofw_autoconf. [garbled 20071107]
+	nsclpcsio(4): Added support for the VLM logical device. This provides
+		14 voltage sensors in addition to the previous 3 temperature
+		sensors provided in the TMS logical device. From OpenBSD.
+		[xtraeme 20071109]
+	btkey(1): A new utility to manage Bluetooth link keys in OS and
+		and device storage. [plunky 20071109]
+	putter(9): A Pass-to-Userspace Transporter, a generic request-response
+		handler for kernel-attached userspace daemons (e.g. puffs(4)).
+		[pooka 20071110]
+	pad(4): Added the pseudo-audio device driver, for feeding back raw
+		PCM data to userland. [jmcneill 20071111]
+	hp700: Fix kernel profiling on HPPA. [skrll 20071112]
+	atf(7): Initial import of the Automated Testing Framework, version 0.3.
+		Provides a framework to easily define and run test cases for
+		the NetBSD operating system.  Work until 0.1 sponsored by
+		Google Summer of Code 2007 and mentored by martin.
+		[jmmv 20071112]
+	sysinst(8): Add support to install the new tests.tgz set.
+		[jmmv 20071112]
+	tests: Converted the regress/bin tree to use ATF and migrated it
+		to tests/util. [jmmv 20071112]
+	tests: Converted the regress/sys/fs/tmpfs tree to use ATF and
+		migrated it to tests/fs/tmpfs. [jmmv 20071112]
+	tests: Converted the regress/games tree to use ATF and migrated it
+		to tests/games. [jmmv 20071112]
+	ahcisata(4): Add support for ATAPI devices. [bouyer 20071112]
+	nfsmb(4): Support more recent NVIDIA chips. [xtraeme 20071114]
+	viaide(4): Add support for NVIDIA MCP73/77 IDE controllers.
+		[xtraeme 20071114]
+	nfe(4): Add support for NVIDIA MCP67/73 Ethernet controllers.
+		[xtraeme 20071114]
+	i386: Remove I486_CPU, I586_CPU, I686_CPU options. [ad 20071114]
+	i386: Remove pccons(4). [ad 20071114]
+	i386: Remove support for 80386 level CPUs. PR port-i386/36163.
+		[ad 20071115]
+	newfs_ext2fs(8): Add a native newfs_ext2fs(8) command.
+		Closes PR bin/16175. [tsutsui 20071117]
+	libc: Enable posix_memalign(3). [ad 20071119]
+	i386, amd64: Add support for boot.cfg(5) to configure the bootloader.
+		This includes optionally displaying menus, altering banner
+		text and changing options such as timeouts and console device
+		which previously required use of installboot.
+		[sborrill 20071120]
+	pud(4): Add a driver via which it is possible to implement
+		block and character devices in userspace. [pooka 20071120]
+	xen: Added support for amd64 architecture, both as dom0 and domU.
+		[bouyer 20071122]
+	i386: Create a boot.cfg(5) on the install CD to allow the end-user to
+		select either the standard or non-ACPI kernel easily.
+		[sborrill 20071123]
+	agp(4): Add AGP support for Intel Q35/G33/Q33. [markd 20071124]
+	rum(4): Add support for COREGA CG-WLUSB2GL and ABOCOM WUG2700.
+		[kiyohara 20071125]
+	kernel: Add various atomic ops. Mostly pulled from
+		thorpej-atomic branch.  [ad 20071128]
+	cobalt: Add support for booting from UFS2 partition to bootloader.
+		[tsutsui 20071201]
+	libsa: Add ext2fs support. [tsutsui 20071201]
+	cobalt: Add support for booting from ext2fs partition to bootloader.
+		[tsutsui 20071201]
+	bcsp(4): Add support for BlueCore Serial Protocol. [kiyohara 20071202]
+	arc: Add support for booting from UFS2 partition to bootloader.
+		[tsutsui 20071202]
+	toolchain: Install the linker scripts on amd64, which allows to
+		link x86 32bits objects using the native ld(1).
+		[bouyer 20071202]
+	kernel: Change interrupt handling:
+		- Reduce available SPL levels for hardware devices to
+		NONE, VM, SCHED, HIGH.
+		- Acquire kernel_lock only for interrupts at IPL_VM.
+		- Implement threaded soft interrupts.
+		[ad 20071203]
+	nfsmb(4): Make nfsmb(4) work on newer MCPs, including MCP55.
+		[xtraeme 20071204]
+	arcmsr(4): Areca Technology Corporation SATA RAID controller driver,
+		ported from OpenBSD. [xtraeme 20071204]
+	symlink(7): Implement a new magic string for magic symlinks, @ruid,
+		which expands to the real user id of the process and
+		use this magic string for per-user tmp. [mjf 20071204]
+	fxp(4): Fix some TX timeout and RX pool corruption problems.
+		Mostly from OpenBSD. [tsutsui 20071208]
+	kernel: Added a new power management framework, see pmf(9) for details.
+		[jmcneill,joerg 20071209]
+	acpi(4): Updated ACPI-CA to 20070320. [jmcneill 20071209]
+	ofppc: Convert to shared powerpc major numbers. [garbled 20071210]
+	ofppc: Added support for the bplan/Genesi Pegasos II. [garbled 20071210]
+	sandpoint: Convert to shared powerpc major numbers. [nisimura 20071211]
+	queue(3): Add TAILQ_CONCAT() and STAILQ_CONCAT(), from FreeBSD.
+		[elad 20071211]
+	macppc: Convert to shared powerpc major numbers. [macallan 20071211]
+	ddb(4): Add a "whatis" command, inspired from Solaris. [yamt 20071213]
+	libc: Add dehumanize_number(3). [christos 20071214]
+	sgimips: Add support for booting from UFS2 to bootloader.
+		[tsutsui 20071215]
+	MAKEDEV(8): Use pax(1) in preference to mknod(8) to create device
+		nodes more efficiently; use mount_tmpfs(8) in preference to
+		mount_mfs(8) when creating a memory file system. [apb 20071215]
+	ifconfig(8): Add 'list scan' to ifconfig, which list access point in
+		the neighbourhood. [adegroot 20071216]
+	nfe(4): Handle a quirk of newer MCP6x chips on reading MAC address.
+		[tsutsui 20071217]
+	rs6000: New port of NetBSD to the MCA based IBM RS/6000 7006-41T.
+		[garbled 20071217]
+	openssh: Import 4.7. [christos 20071217]
+	i386, amd64: Add support for ACPI S3 (suspend-to-RAM) on MP systems.
+		[joerg 20071218]
+	sparc64: Add support for Sun PGX32 / TechSource Raptor GFX 8P to
+		genfb ( mostly workarounds for firmware bugs ), also build
+		XFree86's glint driver for accelerated X. [macallan 20071219]
+	amd64: Remove GENERIC.MP and enable SMP by default. [ad 20071220]
+	newsyslog(8): newsyslog.conf flag 'J' will bzip2 logfiles.
+		[dogcow 20071221]
+	thinkpad(4): Add driver for IBM/Lenovo Thinkpad hotkeys and
+		brightness controls. [jmcneill 20071221]
+	fdisk(8): Report the first active partition. [apb 20071223]
+	compat_linux32: Add getpgid(2) syscall. [njoly 20071224]
+	compat_linux32: Add old_uname() syscall. [njoly 20071224]
+	i386: Make SMP the default and remove GENERIC.MP. [ad 20071225]
+	i386: Add initial version of calling VGA POST from vga_resume.
+		[joerg 20071225]
+	compat_linux32: Add readdir() syscall. [njoly 20071226]
+	kernel: Address Space Layout Randomization support in the kernel and
+		dynamic linker, see security(8). [elad,christos 20071226]
+	msdosfs: Significantly improved writing speed (up to 16x faster).
+		[reinoud 20071228]
+	itesio(4): Added support for the Watchdog Timer. [xtraeme 20071229]
+	makphy(4): Recognize Marvell 88E1116 Gigabit PHY. [wiz 20071229]
+	usermode: Add port of the NetBSD kernel to userspace.
+		[jmcneill 20071229]
+	hp700: Kernels are now compiled with -O2. [skrll 20071230]
+	compat_hpux: Removed. [ad 20071231]
+	systrace(1): Removed. [ad 20071231]
+	arm: Add support for kernel crashdump to arm32. [chris 20080101]
+	tprof: Add tprof, a simple performance monitor based profiler,
+		inspired from linux oprofile.  it's still very experimental.
+		[yamt 20080102]
+	kernel: Merge the vmlocking2 branch, which makes VM system,
+		trap handling and file system framework MP safe, and
+		also replaces simple_lock(9) with mutex(9). [ad 20080102]
+	bioctl(8): Rewritten to handle new features like creating/removing
+		hot-spare, pass-through disks and RAID volumes, start/stop
+		consistency checks in volumes and others. [xtraeme 20080102]
+	arcmsr(4): Added support to create/remove hot-spare, pass-through
+		disks and RAID volumes, start/stop consistency checks
+		in volumes as well as showing information about physical
+		disks (even if they are marked as hot-spare, pass-through
+		or unused). [xtraeme 20080102]
+	ofppc: Support intallation and RAID bootable root. [mrg 20080102]
+	mpt(4): Fix performance problems for old revisions of the Symbios
+		53c1030. Patch supplied by Patrick Welche in PR kern/30531.
+		[tron 20080103]
+	pmax: Add timecounter(9) and generic todr(9) support. [joerg 20080103]
+	msdosfs: Add large read / readahead support by Paul Ripke
+		(introduce run-length detection to msdosfs_bmap(),
+		from FreeBSD).  [christos 20080105]
+	gem(4): Add support for Sun PCI SX fibre cards.  [jdc 20080105]
+	amiga: Add timecounter(9) support and coutner-based delay(9) from i386.
+		[mhitch 20080106]
+	mvme68k: Add timecounter(9) support. [tsutsui 20080107]
+	vax: Add timecounter(9) support. [joerg 20080107]
+	evbppc: Add timecounter(9) support. [joerg 20080108]
+	sbmips: Add timecounter(9) support. [simonb 20080108]
+	atari: Convert atari to generic todr(9) and timecounter(9).
+		[joerg 20080108]
+	xen: Switch xen to generic todr(9). [joerg 20080108]
+	kernel: All platforms have been converted to use generic todr(9).
+		[gdamore,joerg 20080108]
+	ulpt(4): Implement non-blocking read. [gdt 20080108]
+	gcscpcib(4): Added driver for the AMD CS5535 and CS5536 Companion
+		Device with support for Timecounter, Watchdog Timer and
+		GPIO. Adapted from OpenBSD by Yojiro UO. [xtraeme 20080109]
+	pc532: Port deleted. [simonb 20080109]
+	algor: Fix delay(9) issue and now P5064 kernel works on gxemul.
+		[tsutsui 20080109]
+	ofppc: Fix ofwboot to work on an IBM CHRP-based RS/6000.
+		[garbled 20080109]
+	i386: Add sparse kernel core dumps (minidumps) for this platform
+		using a backwards-compatible on-disk core format. Not
+		turned on by default yet. Similar to FreeBSD minidumps but
+		simpler in implementation. Implementation by Jed Davis and
+		Devon O'Dell, contributed to NetBSD by Coyote Point Systems.
+		[tls 20080110]
+	hppa: Added gdb(1) support. [skrll 20080110]
+	wm(4): Add Inter PRO/1000 PT Quad Port Server Adapter. [ragge 20080111]
+	auvia(4): Make this work on big endian machines. [tsutsui 20080114]
+	kernel: Implementation of processor-sets and affinity. [rmind 20080115]
+	libpthread: POSIX real-time extensions. [rmind 20080115]
+	savecore(8): Use the raw device to read crashdumps. [ad 20080115]
+	compat_linux(8): Cleanup and fix uid16 functions. [njoly 20080115]
+	i386: Remove options MATH_EMULATE. [ad 20080116]
+	schedctl(8): A new program to control scheduling of processes and
+		threads. [rmind 20080115]
+	kernel: Added a new framework for kernel modules, enabled through the
+		MODULAR kernel option and used through the modctl(2) system
+		call.  [ad 20080116]
+	modules: Added new versions of modload(8), modstat(8) and modunload(8)
+		that use modctl(2).  Not built by default.  [ad 20080116]
+	bktr(4): Added amd64 support. [jmcneill 20080116]
+	amd64, i386: Fix clock accounting problem in i8254_get_timeout()
+		so that auich(4) sample rate is detected correctly.
+		[chuck 20080116]
+	ofppc: Add support for the IBM 7044-270. [garbled 20080117]
+	make(1): Implement -dl (aka LOUD) to override '@' at the start of
+		script lines. [sjg 20080119]
+	amd64, i386: Add mbr(8) variants that directly access a serial port.
+		[dsl 20080119]
+	fdisk(8): Fix possible division by zero errors. [tsutsui 20080120]
+	evbarm: Convert to evbarm to timecounter(9). [joerg 20080120]
+	kernel: All platforms have been converted to use timecounter(9).
+		[joerg 20080120]
+	elansc(4): Attach two new devices elanpex(4) and elanpar(4) to
+		the AMD Elan SC520 System Controller. [dyoung 20080121]
+	usb(4): Add uhmodem(4) driver for Huawei E220 wireless modem.
+		[ichiro 20080121]
+	compat_linux32: Add ossaudio(3) support. [jmcneill 20080121]
+	xen: Added support for the i386 PAE extention to Xen3 domU
+		[bouyer 20080123]
+	uhub(4): The device attachment function has been optimized to
+		improve system startup time. [jmcneill 20080124]
+	kernel: The interface for IP checksumming was changed to reduce
+		duplication and more general use. [joerg 20080125]
+	acorn32: Add support to support code for Kinetic card. [chris 20080126]
+	nfe(4): Wakeup some newer chips from powerdown mode.
+		From FreeBSD/Linux driver via OpenBSD. [tsutsui 20080126]
+	sgimips: Enable bootinfo passed from bootloader so that now kernel
+		symbol table and ksyms(4) are usable. [tsutsui 20080126]
+	hpcmips: Fix silent hangup problem on TX3922 machines.
+		From Risto Sainio. [tsutsui 20080126]
+	hostapd(8), wpa_supplicant(8): Upgrade to 0.6.2 [christos 20080126]
+	openpam(3): upgrade to 20071221 [christos 20080126]
+	sysinst(8): Fix MD set tweaking so that the appropriate (or specified)
+		kernel is installed properly.  This should fix IP3x
+		installation issues on sgimips. [rumble 20080128]
+	ukbd(4): Add support for function keys F16 to F19 as present on
+		e.g. the new Apple aluminum keyboard. [tron 20080129]
+	azalia(4): Analog Devices AD1984 codec support has been improved
+		to support headphones and 4 channel playback, and now
+		exposes an outputs.master mixer control that mirrors the
+		inputs.dac mixer control to make libossaudio happy.
+		[jmcneill 20080130]
+	kernel: Add Mersenne Twister PRNG implementation. [matt 20080131]
+	sgimips: Enable fireware devices in GENERIC. [sekiya 20080202]
+	arc: Add sysinst(8) support. [tsutsui 20080202]
+	cobalt: Add sysinst(8) support. [tsutsui 20080202]
+	compat_linux32: Fix the linux32 emulations of fcntl() locking.
+		[dsl 20080202]
+	compat_linux32: Implement pread(2) and pwrite(2). [dsl 20080202]
+	gcc(1): Updated to version 4.1.3-20080202.  [mrg 20080202]
+	hp700: Add bootinfo support. [skrll 20080203]
+	acorn32: Fix-up boot32 to work on A7000+. [chris 20080203]
+	atf(7): Import 0.4.  [jmmv 20080204]
+	sgimips: Add hardware acceleration for crmfb. [macallan 20080205]
+	modules: Added the MKMODULAR option to the build system to easily
+		enable the build of the new kernel modules framework.
+		[jmmv 20080209]
+	iwn(4): Added a driver for the Intel Pro/Wireless Lan 4965AGN          
+		Mini-PCI Adapter, ported from OpenBSD. [ober 20080209]
+	pcc(1): Import PCC 0.9.9-080210. [ragge 20080210]
+	uhmodem(4): Add suport for NTT DoCoMo A2502 3G/HSDPA modem.
+		[ichiro 20080211]
+	libc: Enable atomic_ops(3) in userspace. [ad 20080210]
+	ofppc: Add support for the 7046-B50. [garbled 20080213]
+	unionfs: Import FreeBSD's updated unionfs, still work in progress.
+		[ad 20080218]
+	udav(4): Add support for Shantou ADM8515. [drochner 20080219]
+	brgphy(4): Add BCM5708C support. [markd 20080220]
+	compat_linux32: Add mlock(2) and munlock(2) syscalls. [njoly 20080220]
+	powerpc: Add tuned assembler from IBM for memcpy(3), memmove(3) and
+		memcmp(3).  [garbled 20080221]
+	libc: Replace O(nm) versions of strspn(3), strcspn(3) and strpbrk(3)
+		with O(n+m) implementations based on the suggestions I made
+		for DragonFly's libc ages ago. [joerg 20080222]
+	puc(4): Add support for I-O DATA RSA-PCI 2 port serial board.
+		[tsutsui 20080222]
+	monop(6): Save and restore format changed; compatibility with old
+		save files broken, but they were not usable anyway.
+		[dholland 20080223]
+	mfi(4): Added support for LSI SAS1078 and Dell PERC 6, from OpenBSD.
+		[xtraeme 20080225]
+	libarchive: Import libarchive-2.4.13. [joerg 20080226]
+	cobalt: Add netboot support for 21041 on Qube 2700. [tsutsui 20080301]
+	httpd(8): Import bozohttpd-20080303. [mrg 20080303]
+	share/mk: Set linker warnings to be fatal if $WARNS>0.  [lukem 20080303]
+	cobalt: Print startup and shutdown messages on LCD panel.
+		[tsutsui 20080304]
+	libprop: Implement prop_dictionary_make_immutable(3). [cube 20080305]
+	amd64, i386: Allow to get a DDB session on a VGA console if the system
+		crashed while X11 was running. [drochner 20080312]
+	cac(4): Initial bio(4) support; only volume status is handled.
+		[mhitch 20080314]
+	sparc64: SMP support now works on some models. [nakayama 20080314]
+	arm: Add VFP support. [rearnsha 20080315]
+	cobalt: Add bootloader support for optional Z85C30 serial on Qube 2700.
+		[tsutsui 20080316]
+	re(4): Make hardware vlan(4) tag insertion/extraction work properly.
+		[tsutsui 20080318]
+	bzip2(1): Upgrade to 1.0.5. [christos 20080318]
+	cobalt: Fix a botched spl(9) bug which could cause network freeze
+		on traffic between two network interfaces. [tsutsui 20080318]
+	iconv(1): Allow SUSv3 syntax. [tnozaki 20080320]
+	libcurses: Add termattrs() and term_attrs(). [jdc 20080321]
+	kerberos(8): Upgrade to Heimdal-1.1. [mlelstv 20080322]
+	kernel: Merge yamt-lazymbuf branch. This changes the way to share
+		mbuf external storage so that it can work without kernel_lock.
+		[yamt 20080324]
+	piixpm(4): Add support for SMBus controllers for ATI SB600, SB700,
+		SB800. [jmcneill 20080326]
+	uhmodem(4): Add support for E620 on Vodafone. [ichiro 20080327]
+	siop(4): Add support for the non-PCI NCR 53c720/770 in big-endian mode.
+		From OpenBSD. [skrll 20080327]
+	cobalt: Add kernel support for optional Z85C30 serial on Qube 2700.
+		[tsutsui 20080327]
+	lii(4): Added a driver for the Atheros L2 Fast-Ethernet controller,
+		notably found on Asus's EeePC. [cube 20080328]
+	libarchive: Import libarchive-2.5.0b. [joerg 20080330]
+	hp700: Add support for NCR 53C720 found on various machines and
+		attachments. From OpenBSD. [skrll 20080330]
+	azalia(4): Added support for the Realtek ALC662-GR codec as found
+		in the EeePC. [jmcneill 20080331]
+	asus(4): Added a driver for ASUS ACPI hotkeys as found in the EeePC.
+		[jmcneill 20080331]
+	zaurus: Add sysinst(8) support. [chris 20080401]
+	isv(4): Add support for the IDEC Supervision/16 image capture board
+		for ISA. [dyoung 20080402]
+	puc(4): Support for Digi International 4 and 8 port boards,
+		from OpenBSD. [riz 20080403]
+	finsio(4): Added a driver for the Fintek Super I/O chips, supporting
+		the Hardware Monitor device. Adapted from OpenBSD.
+		[xtraeme 20080403]
+	compat_linux32: Add msync(2) syscall. [njoly 20080404]
+	sparc: Add support booting from UFS2 partition. [tsutsui 20080405]
+	hp700: Add support for the SCSI NCR 53C720 SCSI controller found in
+		early HP 9000s for the attachment of an Fast-Wide (16-bit)
+		SCSI-2 bus, utilizing HVD signalling via the siop(4)
+		driver. [skrll 20080405]
+	sun2: Provide RAS based atomic_cas_32() function by reusing old
+		_lock_cas() implementation for m68010. Now sun2 kernel
+		compiles and even works on mutiuser. [tsutsui 20080405]
+	openssh: Import 5.0. [christos 20080406]
+	ofppc: Support for SMP added. [garbled 20080408]
+	opencrypto(9): Improve performance to 84,000 short modular math ops/sec
+		by adding asynchronous operation and batched submit/
+		retrieve of requests/results.  Rewrite manual page to
+		make it easier to write new code to the API.  Donated
+		by Coyote Point Systems, Inc. [tls 20080410]
+	kernel: Make IP, TCP, UDP, and ICMP statistics per-CPU.
+		The stats are collated when the user requests them via sysctl.
+		[thorpej 20080412]
+	acpi(4): Updated ACPI-CA to 20080321. [jmcneill 20080412]
+	landisk: Add sysinst(8) support. [skrll 20080414]
+	libcurses: Add getwin() and putwin(). [jdc 20080414]
+	kernel: Make IP6, ICMP6, UDP6, RAW6, PIM6, CARP, ARP, and IGMP
+		statistics per-CPU.  [thorpej 20080415]
+	compat_linux32: Add sys_clock{getres,gettime,settime} syscalls.
+		[njoly 20080417]
+	shark: Support for X on rev. 4 sharks is back [macallan 20080419]
+	agp(4): Add missing AGP support for ALI M1689 chipset. [njoly 20080419]
+	nfe(4): Fix problem on receiving jumbo frames. [cube 20080420]
+	libc, kernel: Add posix_madvise(2). [rmind 20080422]
+	gcc(1): Fix compilation of native sh3 gcc on 64-bit build machines.
+		[uwe 20080422]
+	amdtemp(4): AMD CPU Temperature driver. Adapted from OpenBSD.
+		[cegger 20080423]
+	netiso: Remove obsolete TPCONS support. [plunky 20080423]
+	kernel: Merge the socket locking patch, which makes socket layer and
+		unix protocols MP safe and allows protocol processing
+		interrupts to safely block on locks. [ad 20080424]
+	compat_linux(8): Add IPC_64 support for semctl IPC_STAT/IPC_SET.
+		[njoly 20080424]
+	lint(1): Add preliminary _Complex support. [christos 20080425]
+	arm: merge armv6 kernel support from matt-armv6 branch.
+		[matt 20080427]
+	kernel: Add MI code to support in-kernel preemption. [ad 20080428]
+	prep: Support for floppy controller/drive. [garbled 20080428]
+	amd64, i386: Add support for kernel preemption to i386 and amd64.
+		[ad 20080428]
+	gpio(4): Extend with open/close to handle request/release the
+		ppbus(4) on open/close. From Hans Rosenfeld. [cegger 20080429]
+	ppbus(4): Extend to attach on gpiobus. From Hans Rosenfeld.
+		[cegger 20080429]
+	prep: Bootable ISO now built automatically. [garbled 20080430]
+	i386: Make MULTIPROCESSOR mandatory. [ad 20080430]
+	i386: Build INSTALL kernel from GENERIC, and update boot menu to allow
+		disabling ACPI and/or SMP. [ad 20080430]
+	atf(7): Import 0.5.  [jmmv 20080501]
+	tests: Convert the tests in the tests/ hierarchy that were written in
+		C++ to C, making use of the libatf-c library that comes with
+		the ATF 0.5 just imported.  [jmmv 20080501]
+	hpqlb(4): Hotkey driver for HP notebooks. [cegger 20080501]
+	i386: Put the GENERIC kernel onto i386 installation CDs and load
+		a kernel module from the boot loader to provide the miniroot.
+		[ad 20080502]
+	drm(4): Added amd64 support. [jmcneill 20080504]
+	landisk: Fix MD bus_dmamap_load(9) so that NFS write works with re(4).
+		[uwe 20080506]
+	twa(4): Add support for 3ware 9650 and 9690 based on patches
+		contributed by Wasabi Systems. [joerg 20080508]
+	openssl(1): Imported 20080509 current snapshot. [christos 20080509]
+	ftp(1): Add epsv6 and epsv to disable extended passive mode for ipv6
+		or both ipv4 and ip v6 respectively. [skd 20080510]
+	libarchive: Import libarchive-2.5.3b. [joerg 20080511]
+	getent(1): Added support for "netgroup" database. [tron 20080514]
+	udf: Added write support for the UDF file system. [reinoud 20080514]
+	event(3): Updated libevent to 1.4.4-stable. [peter 20080516]
+	ypserv(8): disabled libwrap address to hostname lookups to avoid
+		the chance of ypserv blocking for an extended period of
+		time due a long DNS timeout [chuck 20080516]
+	amd64: Added support for PCI_BUS_FIXUP and PCI_ADDR_FIXUP kernel
+		options. [jmcneill 20080517]
+	acpidalb(4): Direct Application Launch Buttons. [cegger 20080518]
+	wscons(4): Add support for the Colemak keyboard layout. [ghen 20080520]
+	ipf(8): Updated to version 4.1.29. [darrenr 20080520]
+	compat_linux32: Add compat linux32 IPC syscall support,
+		for shared memory and and semaphores. [njoly 20080520]
+	openldap: Import 2.4.9. [lukem 20080522]
+	postfix(1): Enable LDAP support for tables (see ldap_table(5))
+		[lukem 20080522]
+	amd(8): Enable LDAP support for amd maps. [lukem 20080522]
+	mac68k: Added support for Creative Systems Inc Hurdler CPI 
+		NuBus parallel printer card. [hauke 20080522]
+	siisata(4): A driver for Silicon Image SteelVine SATA-II controllers
+		(SiI3124, SiI3132, and SiI3531) [jnemeth 20080523]
+	dhcpcd(8): Import dhcpcd 4.0.0-beta5. [joerg 20080524]
+	kernel: Device attach and detach notifications are now exposed
+		via /dev/drvctl [jmcneill 20080525]
+	awk(1): Import 20070501 [christos 20080525]
+	amd64, i386: Add detection of errata for AMD Family 10h steppings
+		A and 2. [chris 20080525]
+	amd64, i386: Check for erratum 261 on AMD Family 10h Stepping 3
+		processors. [chris 20080525]
+	libarchive: Import libarchive-2.5.4b. [joerg 20080525]
+	ciss(4): Add bio(4) support, heavily from OpenBSD. [mhitch 20080525]
+	uberry(4): A driver to allow RIM BlackBerries to charge from the USB
+		port [christos 20080525]
+	openssl(1): Enable Camellia. [christos 20080526]
+	cobalt: Make bootloader print boot banner and a loading kernel name
+		onto LCD. [tsutsui 20080528]
+	bebox: Support genfb(4) console. [kiyohara 20080530]
+	libprop: Add prop_array_util(3) functions. [haad 20080603]
+	openssl(1): Fix two Denial of Service vulnerabilities in OpenSSL.
+		Fixes CVE-2008-1672. [tonnerre 20080605]
+	sh3: Support single-stepping in ddb(4). [uwe 20080606]
+	pf(4): Updated to OpenBSD 4.2 PF [yamt,peter,christos,joerg 20080618]
+	sk(4), msk(4): Fix lock panic on receiving jumbo packets.
+		[cube 20080620]
+	bind: Import 9.5.0 [christos 20080621]
+	psrset(8): Utility to control processor sets [ad 20080622]
+	postfix(1): Import 2.5.2 [christos 20080622]
+	ssh-hpn: Apply 5.0p1 13 v3 [christos 20080622]
+	libc: Add getlogin_r(3). [ad 20080625]
+	usb(4): Add appropriate bus_dmamap_sync(9) calls to uhci(4), ohci(4)
+		and ehci(4) to avoid CPU from reordering loads and stores
+		against DMA descriptors. This fixes "host controller process
+		error/host controller halted" errors. [bouyer 20080628]
+	arm: Add AT91 support. [matt 20080703]
+	bind: Import 9.5.0-P1. [christos 20080710]
+	top(1): Import top 3.8beta1 [christos 20080715]
+	share/mk: Set assembler warnings to be fatal if $WARNS>0.
+		[lukem 20080721]
+	compat_linux32: Add linux32_getifconf. [njoly 20080723]
+	dhcpcd(8): Import 4.0.0rc3. [joerg 20080727]
+	uvm_map(9): Switch from using <sys/tree.h> to <sys/rb.h>.
+		[matt 20080728]
+	rump(3): Install rump library and file system modules
+		into /usr/lib [pooka 20080729]
+	ukfs(3): Install ukfs library for standalone file system access
+		[pooka 20080729]
+	p2k(3): Install puffs to kernel vfs adaption library on puffs-enabled
+		base systems [pooka 20080729]
+	rump_fs: Install rump versions of kernel file system servers with a
+		puffs-enabled base system [pooka 20080729]
+	amd64, i386: VGA_POST in GENERIC can replace vbetool after resume
+		(machdep.acpi_vbios_reset=2) and allows basic diagnostic
+		after a panic in X with "call ddb_vgapost" [joerg 20080731]
+	wapbl(4): Add support for metadata journaling for FFS.  Contributed
+		by Wasabi Systems, Inc. [simonb 20080731]
+	newfs(8): Handle 't' suffix for terabytes for number arguments.
+		[simonb 20080801]
+	ehci(4): Add isochronous transfer support, contributed by
+		Jeremy Morse as part of his Google Summer of Code 2008 project.
+		[jmcneill 20080802]
+	ip(4): Add accept filters, ported from FreeBSD by Coyote Point Systems.
+		See accept_filter(9), accf_data(9) and accf_http(9) for more
+		information. [tls 20080804]
+	libc: Add C99 functions imaxabs(3) and imaxdiv(3). [matt 20080804]
+	build.sh: Add support for using BUILDSEED to yield
+		reproduceable c++ builds [perry 20080805]
+	sockopt(9): New kernel API for passing socket options [plunky 20080806]
+	vax: Add accelerated driver for SPX graphics found in some VAXstations.
+		Contributed by Blaz Antonic. [hans 20080812]
+	openldap: Import 2.4.11. [lukem 20080813]
+	bind: Import 9.5.0-P2. [he 20080815]
+	wm(4): Fix a bug on receiving a jumbo frame which leads to a panic
+		in sbcompress(). Contributed by Wasabi Systems.
+		[simonb 20080815]
+	btpand(8): a Bluetooth Personal Area Networking profile
+		daemon [plunky 20080817]
+	agp(4): Add AGP support for Intel 946GZ. [matthias 20080819]
+	ataraid(4): Add support for NVIDIA MediaShield from FreeBSD.
+		[tacha 20080820]
+	fss(4): Add snapshot support for logging ffs file systems.
+		[hannken 20080822]
+	agp(4): Add AGP support for Intel 945GME chipset,
+		found on Acer Aspire One. [tnn 20080822]
+	ntp: Import 4.2.4p5. [kardel 20080823]
+	re(4): Add support for the Realtek 8102E/8102EL PCIe 10/100 Ethernet
+		devices. From FreeBSD. [tnn 20080823]
+	sgimips: Misc bug fixes and improvements to mec(4) Ethernet on O2.
+		[tsutsui 20080823]
+	pcc(1): Import pcc 0.9.9 080824. [gmcgarry 20080824]
+	bge(4): Add support for BCM5906(M) chips contributed by
+		Karl Uwe Lockhoff. [cegger 20080825]
+	grep(1): Issue a warning if -r is used without supplying an argument.
+		[lukem 20080828]
+	hostapd(8), wpa_supplicant(8): Upgrade to 0.6.4 [christos 20080830]
+	postfix(1): Import 2.5.4 [christos 20080830]
+	fsck_ffs(8): add -x/-X options which allows to run fsck_ffs -n on
+		a snapshot of a live filesystem. [bouyer 20080830]
+	daily.conf(5): add a run_fsck_flags configuration variable 
+		to pass extra options to the daily fsck -n.
+		[bouyer 20080830]
+	file(1): Update to 4.26.  [christos 20080830]
+	nvi(1): 1.81 with internationalization is now the default, replacing
+		1.79 [christos 20080831]
+	gcc(1): Import GCC 4.1-branch from 20080831 / svn 139820. [mrg 20080831]
+	texinfo(1): Update to 4.8 (last GPLv2 version) [christos 20080902]
+	sysinst(8): Add Colemak and Dvorak keyboard support. [ghen 20080903]
+	od(1): Support -the "-A addressformat" flag. From FreeBSD.
+		[drochner 20080903]
+	compat_linux32: Fix getdents(2). [njoly 20080904]
+	db(1): Add support for encoding or decoding VIS_HTTPSTYLE, and
+		for tuning the page size of the database.  [lukem 20080905]
+	ataraid(4): Add JMicron RAID support contributed by Juan RP.
+		[tron 20080905]
+	video(4): Add video4linux2 compatible capture interface, part of
+		Patrick Mahoney's Google Summer of Code 2008 project.
+		[jmcneill 20080906]
+	pseye(4): Add support for the Sony PLAYSTATION(R) Eye USB webcam.
+		[jmcneill 20080906]
+	ugensa(4): Add support for Novatel Wireless Ovation U727.
+		[rmind 20080906]
+	umass(4): Add support for Sony GPS GPS-CS1 devices.
+		[rmind 20080906]
+	uftdi(4): Add support for Sealevel SeaPORT+4 USB to Serial adaptor.
+		[rmind 20080906]
+	com(4): Add support for PCMCIA Sierra Wireless Aircard 850.
+		[rmind 20080906]
+	ixpide(4): Add support for ATI SB700/SB800 controllers.
+		[rmind 20080906]
+	puc(4): Add support for B&B Electronics MIPort serial cards.
+		[rmind 20080906]
+	viaide(4): Add support for VIA CX700M2 IDE controller. [rmind 20080906]
+	uvideo(4): Add support for USB Video Class capture devices, part of
+		Patrick Mahoney's Google Summer of Code 2008 project.
+		[jmcneill 20080908]
+	bnx(4): Add support for SerDes controllers. From OpenBSD.
+		[mhitch 20080909]
+	ataraid(4): Add Intel MatrixRAID controller support contributed
+		by Juan RP. [tron 20080911]
+	altq(4): Add support for source address hashing in the WFQ scheduler.
+		[joerg 20080911]
+	cgd(4): Change default iv to encblkno1; encblkno (the old iv) used
+		to encrypt things 8 times leading to a 20% performance loss
+		for no real security benefit [christos 20080912]
+	ftpd(8): Fix large command handling to prevent CSRF-like attacks
+		(CVE-2008-4247). [lukem 20080913]
+	etcupdate(8): Remove the "-b binarydir" and "-s srcdir/etc"
+		options which were deprecated in NetBSD-4.0.  Deprecate
+		the "-s tgz1:tgz2" option; please use "-s tgz1 -s tgz2"
+		instead.  [apb 20080914]
+	postinstall(8): Deprecate the "-s tgz1:tgz2" option; please use
+		"-s tgz1 -s tgz2" instead.  [apb 20080914]
+	ataraid(4): Add support for status reports via bio(4) contributed
+		by Juan RP. [tron 20080915]
+	gem(4): Add support for Sun SBus SX fibre cards.  [jdc 20080915]
+	zoneinfo: Import tzdata2008f. [kleink 20080915]
+	ataraid(4): Add support for multiple volumes attached to
+		Intel MatrixRAID controllers contributed by Juan RP.
+		[tron 20080916]
+	sed(1): Add a -r flag that is an alias for -E, for compatibility
+		with GNU sed. [perry 20080916]
+	compat_linux32: Fix linux32_shmat() so that nspluginwrapper works
+		on amd64. [scw 20080917]
+	patch(1): Merge improved version from DragonFly.
+		patch -b behaves as specified by POSIX. [joerg 20080919]
+	am-utils: Upgrade to 6.2a3 to add new fs flags (log,symperm,...)
+		and efs and tmpfs. [christos 20080919]
+	libarchive: Import libarchive-2.5.5. [joerg 20080919]
+	dhcpcd(8): Import dhcpcd-4.0.1. [joerg 20080919]
+	rc.conf(5): ifconfig_xxN variables may now have multi-line
+		values, just like /etc/ifconfig.xxN files, and
+		semicolons may be used instead of line breaks.
+		[apb 20080920]
+	uvideo(4): Add bulk endpoint support found in some cameras (like
+		the one in the ASUS Eee PC). [jmcneill,mjf 20080921]
+	gcc(1): Build and install a libgcov. [skrll 20080923]
+	fss(4): Build modular fss(4) driver. [hannken 20080923]
+	c99(1): Implement as wrapper for cc to run in C99 compatible mode.
+		[hubertf 20080924]
+	ls(1): -n now implies -l.  [lukem 20080925]
+	ps(1): Add the -A option, to display information about all processes.
+		[apb 20080926]
+	i386: Enable boot.cfg(5) support on install floppies. [tsutsui 20080926]
+	lint(1): Add support for long double _Complex (C99). [matt 20080926]
+	spdmem(4): Add support for DDR3. [pgoyette 20080928]
+	libpthread: Add PTHREAD__COMPAT flag which builds a libpthread
+		that can be dropped into a NetBSD 2/3/4 chroot.
+		This makes threading work in the chroot when using
+		a NetBSD 5 kernel, no other modifications required.
+		[ad 20080929]
+	esl(4): Removed unmaintained driver. [jmcneill 20080930]
+	libfetch: Import libfetch-2.16 from pkgsrc. [joerg 20080930]
+	fss(4): Make fss(4) D_MPSAFE. [hannken 20081001]
+	ichsmb(4), piixide(4): Add ICH10 support, from Brad du Plessis.
+		[christos 20081001]
+	dbcool(4): Replace chip-specific drivers for ADT7463, ADT7467, and
+		ADM1030 with generic dBCool(tm) driver. [pgoyette 20081002]
+	aac(4): Add support for >2TB arrays and implement raw I/O mode which
+		is a prerequisite for this [sborrill 20081002]
+	inet6: Implement improved checking for MTU values on ICMP
+		'Packet Too Big Messages'. Fixes CVE-2008-3530.
+		[adrianp 20081003]
+	compat_linux(8), compat_linux32: Fix compat linux/linux32 nice(2).
+		[njoly 20081003]
+	zoneinfo: Import tzdata2008g. [kleink 20081006]
+	libfetch: Update to libfetch-2.17. [joerg 20081007]
+	libpthread: Diagnostic assertions are now disabled by default.
+		Application errors will be reported only by error return
+		from pthread APIs. The assertions can be re-enabled by
+		setting the PTHREAD_DIAGASSERT environment variable
+		correctly. [ad 20081008]
+	fsck_ext2fs(8), fsck_ffs(8), fsck_lfs(8): Disable userid to username
+		lookups by default and add -U flag to perform them.
+		[christos 20081009]
+	i386, amd64: Add support for the multiboot protocol to boot(8).
+		This allows booting Xen without GRUB. [rjs,joerg 20081011]
+	jme(4): Add a driver for the JMicron Technologies JME250 Gigabit
+		Ethernet and JME260 Fast Ethernet controllers.
+		[bouyer 20081011]
+	lm(4): Add an i2c attachment for the LM78 family of
+		temp sensor/fan controllers. [pgoyette 20081012]
+	jme(4): Add support for jumbo frames. [bouyer 20081013]
+	zoneinfo: Import tzdata2008h. [kleink 20081013]
+	amd64, i386: Recognize CD-ROM as a booted device,
+		for one CD-ROM systems. [tsutsui 20081014]
+	arm: Add FA526 support. [matt 20081014]
+	kernel: Merge wrstuden-revivesa branch which provides
+		compatibility support for the Scheduler Activations.
+		[wrstuden 20081015]
+	wm(4): Add support for more Ethernet ICH9 devices. [bouyer 20081015]
+	rump: Add networking support to rump.  Support is available in
+		libraries prefixed with librumpnet.  [pooka 20081016]
+	rump_nfs(8): Add support for a userspace NFS client.  [pooka 20081016]
+	thinkpad(4): Add fan sensor support, from Thomas E. Spanjaard.
+		[jmcneill 20081018]
+	ps(1): Use 'O' for LSONPROC like solaris instead of bundling LSIDL,
+		LSRUN, LSONPROC to 'R'. [christos 20081019]
+	compat_linux(8): Add native to linux siginfo si_code translation,
+		mostly for negative values. [njoly 20081019]
+	u3g(4): Add a driver for many 3G datacards to supersede ugensa(4) for
+		multi-port devices from FreeBSD. [joerg 20081019]
+	rum(4): Add support for Corega K.K CG-WLUSB2GPX. [jun 20081021]
+	uchcom(4): Add support for HL-340 usb2Serial addapter. [haad 20081022]
+	evbarm: Add initial BEAGLEBOARD support. [matt 20081022]
+	amd64: Add boot.cfg(5) files to bootcds. [tsutsui 20081022]
+	evbarm: Add support for Cortina Systems SL3516 eval board.
+		[matt 20081024]
+	kernel: If no usable init(8) program can be found, set the RB_ASKNAME
+		flag and prompt users for the init path, rather than panicking
+		with "no init". [tsutsui 20081025]
+	compat_linux(8): Add preliminary TLS support for i386. From FreeBSD.
+		[christos 20081025]
+	compat_linux(8): Fix futex support from FreeBSD. [christos 20081026]
+	sshd(8): Make sshd(8) find the xauth program, even with the new
+		/usr/X11R7. [hubertf 20081027]
+	ksh(1): Fix posix mode interpretation of backslashes inside
+		backquotes inside double quotes.  [apb 20081027]
+	amd64, sparc64: Add support for "cc -m32", including all 32 bit
+		libraries shipped with NetBSD.  [mrg 20081027]
+	atari: Fix ncr5380 SCSI freezing problem during boot, from T. Makinen.
+		[abs 20081028]
+	zoneinfo: Import tzdata2008i. [kleink 20081029]
+	i386: Reenable ichlpcib(4) by default. [joerg 20081029]
+	libfetch: Import libfetch-2.19 from pkgsrc. [joerg 20081029]
+	alipm(4), admtemp(4): Add drivers for Acer Labs M7101 Power Management
+		Controller and Analog Devices ADM1021 temperature sensor.
+		Ported from OpenBSD. [jkunz 20081029]
+	ipw(4),iwi(4),wpi(4),iwn(4): Ship firmware images by default.
+		For ipw(4) and iwi(4), the Intel EULA has to be accepted
+		by setting a sysctl.  [joerg 20081029]
+	nsp(4): Add NetOctave NSP2000 driver, contributed by NBMK Encryption
+		Technologies, ported from vendor FreeBSD SDK and integrated
+		with opencrypto by CoyotePoint Systems.
+		[darran 20081030]
+	etherip(4), tap(4): Allow etherip(4) and tap(4) to suspend and resume.
+		[hans 20081103]
+	bge(4): Fix constant freeze on BCM5906M. [cegger 20081110]
+	rc.d(8): Import rc.d/httpd script for httpd(8) daemon control.
+		[mishka 20081211]
+	amd64, i386: Add support for enhanced speedstep on Intel Atom CPUs.
+		[jmcneill 20081112]
+	azalia(4): Add support for Realtek ALC269 as found in Eee PC 1000HA.
+		[jmcneill 20081112]
+	compat_linux(8), compat_linux32: Fix nanosleep(2) on 64-bit archs.
+		[njoly 20081112]
+	compat_osf1(8): Make dynamic executables work again. [njoly 20081115]
+	man.conf(5): Also search /usr/X11R7, and do it before X11R6.
+		[hubertf 20081117]
+	atari: Fix atari sysinst based miniroot image, and retire old miniroot.
+		[abs 20081117]
+	i386: Add i386 specific COMPAT_30_PTHREAD option, which restore
+		binary compatibility with netbsd-3 libpthread.
+		[bouyer 20081118]
+	msk(4): Fix Yukon EC Ultra cold power up issue.
+		Also increase stability. [chris 20081118]
+	uplcom(4): Recognize Corega CG-USBRS232R as a serial device.
+		[jnemeth 20081120]
+	aic(4): Work around rbus resource allocation problem so aic PCMCIA
+		cards work again. [jnemeth 20081120]
+	vax: Fix Unibus support on VAX11/780 and 8600 models. [hans 20081120]
+	gcc(1): Fix jump table addressing in the M68k codegen. [phx, 20081120]
+	makefs(8): Make the allow-multidot option for cd9660 useful.
+		[ad 20081121]
+	compat_netbsd32(8): Implement netbsd32__sched_setparam(),
+		netbsd32__sched_getparam(), netbsd32__sched_setaffinity()
+		and netbsd32__sched_getaffinity(). [mrg 20081122]
+	ext2fs: Add support for 32 bit uid/gid fields in ext2. [mrg 20081123]
+	altq(4): Always use binuptime(9) and emulate 1GiHz counter instead of
+		MD cpu_counter() which isn't MP-safe. [tsutsui 20081125]
+	vge(4): Add ifconfig down and ALTQ support. [joerg 20081126]
+	wscons(4): Add wscons/vcons support for Sun cg3. [jdc 20081128]
+	ehci(4): Fix high-speed isoc USB transfers and add dma-sync of
+		data buffer before scheduling transfers. [jmorse 20081128]
+	sparc64: Fix boot device matching on U5/U10 machines to properly
+		distinguish cd0 from wd0. [martin 20081201]
+	efs: Improve stability of efs by adding specfs/fifofs support.
+		[rumble 20081201]
+	wm(4): Fix nasty EEPROM-trashing bug on ICH8 and ICH9 chipsets.
+		[sketch 20081202]
+	fxp(4): Add a workaround for hardware ip4csum-tx bug.
+		[tsutsui 20081203]
+	wscons(4): Add wscons/vcons support for Sun bw2. [jdc 20081205]
+	fss(4): Make persistent snapshots work again [hannken 20081207]
+	dhcpcd(8): Import 4.0.7. [roy 20081209]
+	mc146818(4): Fix an inverted logic which could cause possible
+		1 second spin on reading/updating clock. [kenh 20081211]
+	umass(4), usbdi(4): Fix PR#39651: two problems in umass(4).
+		[jmorse 20081212]
+	nvi(1): Added "expandtab" option.  [lukem 20081212]
+	wapbl(4): Don't deadlock on rename("foo/foo", "foo") in the case
+		where foo/foo is a directory. [dholland 20081213]
+	veriexec(4): Fix a NULL pointer dereference described in PR/39559.
+		[elad 20081214]
+	uvm(9): Fix PR kern/40027: pagedaemon loops on memory shortage.
+		[ad 20081213]
+	msdosfs: Remove pm_Head check to make an 8GB Memory Stick Pro Duo
+		formatted with a PSP work. [jmcneill 20081226]
+	newfs_msdos(8): Don't limit the number of drive heads with 255.
+		[jmcneill 20081226]
+	restore(8): Make restore work for Linux dump volumes by ignoring
+		extended attribute records on these volumes. [hannken 20081226]
+	atari: Fix hangup problem on loading md_root from floppy during
+		installation. [tsutsui 20081228]
+	atari: Numerous fixes to atari pmap, including a sync with amiga.
+		[tsutsui,tjam 20090101]
+	acorn26: Initialise cpu_info_store so that acorn26 kernel works.
+		[bjh21 20090103]
+	atari: Fix lost interrupt problem on Falcon wdc(4). [tsutsui 20090103]
+	rc.d(8): Add etc/rc.d/rndctl script. [apb 20090104]
+	evbarm: Misc fixes to make i80321-based boards booting.
+		[briggs 20090105]
+	openssl(1):  Correct error checking for DSA and ECDSA keys
+		(from FreeBSD). [tron 20090107]
+	atari: Fix bootloader issue caused by aggressive gcc4.
+		[tsutsui 20090106]
+	ntp: Import ntp 4.2.4p6. openssl API related security fix.
+		[kardel 20090108]
+	openssl(1): Fix CVE-2009-0025 from the official 9.5.1-P1 release.
+		[drochner 20090109]
+	mount(8): Warn that autoselecting nfs based on : or @ in the device
+		path will be removed in a future release. [pooka 20090111]
+	mount(8): Support mount -o rump, which uses the rump server instead of
+		using the kernel service. [pooka 20090111]
+	raid(4): Implement DIOCACHESYNC for RAIDframe. [oster 20090111]
+	dbcool(4): Add ADT7460 support. [pgoyette 20090114]
+	xen: Fix PCI_BUS_FIXUP/PCI_ADDR_FIXUP support on Xen. [bouyer 20090118]
+	m68k: Fix panic in FPE code caused by 040/060 specific FDADD
+		instruction on 020/030 machines.
+		[tsutsui 20090120]
+	atari: Merge ATARITT.in and FALCON.in, rename BOOT to SMALL030, and
+		remove BOOTX kernel. [abs 20090124]
+	evbppc: Fix sysinst(8) to refer proper WALNUT and OPENBLOCKS266
+		kernels. [abs 20090125]
+	m68k: Fix floating point handling regressions for m68k.
+		[martin 20090127]
+	dhcpcd(8): Import 4.0.8. [roy 20090128]
+	amd64, i386: Enable BUFQ_PRIOCSCAN by default. [ad 20090129]
+	bge(4): Make fibre cards work. [he 20090130]
+	dhcpcd(8): Import 4.0.9. [roy 20090131]
+	dhcpcd(8): Import 4.0.10. [roy 20090204]
+	atari: Add support for installation from GEMDOS partition.
+		[abs 20090206]
+	newport(4): Imported and adapted to NetBSD Xorg's xf86-video-newport
+		0.2.1 driver for SGI's NG1 / Newport graphics boards found
+		mostly in Indys. [macallan 20090213]
+	crime(4): add an Xorg driver for the CRIME rendering engine found in
+		SGI's O2 workstations. [macallan 20090219]
+	mount_procfs(8): Default to -o linux. [pooka 20090223]
+	sgimips: build Xorg by default [macallan 20090223]
+	wm(4): Add support for 82574L. [sborrill 20090227]
+	azalia(4): Add proper Realtek ALC268 support. [jmcneill 20090228]
+	wm(4): Fix the multicast hash bug on ICH9. [msaitoh 20090228]
+	compat_sa: Disable PTHREAD_CONCURRENCY until the bugs are fixed.
+		[christos 20090306]
+	build.sh: In build.sh and bsd.own.mk, if uname -p fails, or
+		prints "unknown", or prints something that does not
+		look like an identifier, then use uname -m instead.
+		[apb 20090306]
+	ddb(4): Change value for ddb.onpanic to 0 in sysctl.conf(5).
+		[martin 20090311]
+	compat_sa: Disable SA via sysctl.conf(5), to keep binary compatibility
+		for incomplete (kernel only) updates. [martin 20090312]
+	atari: Use separate free lists for TT and ST ram, and give TT
+		a lower id so all TT ram will be used before any ST ram.
+		[abs 20090313]
+	cpuctl(8): Print some L2 cache size properly. [tsutsui 20090316]
+	re(4): Fix reset issue on newer 8168C/8111C/8102E chipes.
+		[tsutsui 20090320]
+	wdc(4): Work around a problem with PCMCIA adapter drivers (eg for hpc*)
+		which attach pcmcia devices before interrupts are enabled.
+		[drochner 20090321]
+	savecore(8): Use ksyms(4) if it's available. [tls 20090321]
+	httpd(8): Fix redirection core dump as reported in PR#41042.
+		[reinoud 20080323]
+	rc.conf(5), rc.d(8): Add flags to rc.d/ipfilter. [hannken 20090323]
+	ahcisata(4): Handle quirks of more NVIDIA MCP65 SATA controllers.
+		[dholland 20090327]
+	openssl(1): Apply patches from upstream to fix security problems,
+		ASN1 printing crash (CVE-2009-0590),
+		Incorrect Error Checking During CMS verification
+		(CVE-2009-0591), and Invalid ASN1 clearing check
+		(CVE-2009-0789). [drochner 20090327]
+	zx(4): Use bus_space(9) to access registers so that this works on gcc4.
+		[tsutsui 20090327]
+	sysctl(8): Add sysctl -w name?=value syntax which doesn't print
+		an error even if name does not exist. [christos 20090401]
+
+Changes from NetBSD 5.0 to NetBSD 6.0:
+
+	syslog(3): Import Martin Schuette's Summer of Code project:
+		Reliable TCP connections, syslog protocol API,
+		encryption. [christos 20081031]
+	agp(4): Add support for Intel G35. [christos 20081108]
+	kernel: Add generic producer/consumer queue. [matt 20081111]
+	lkm: Removed. Superseded by the new module(7) framework. [ad 20081112]
+	module(7): Allow the POSIX semaphore code to be loaded as a module.
+		[ad 20081112]
+	module(7): Make compat_ossaudio a module. [ad 20081113]
+	module(7): Make compat_ndis a module. [ad 20081113]
+	build.sh: Add support for new MAKEVERBOSE levels 3 and 4.
+		[apb 20081113]
+	libfetch: Update to libfetch 2.20. Allow HTTP auth to be provided in
+		URL. [joerg 20081114]
+	module(7): Make POSIX AIO loadable as a module. [ad 20081114]
+	amd64, i386: Make boot loader autoload a kernel module corresponding
+		to the root file system type. [ad 20081119]
+	module(7): Make the emulations, exec formats, coredump, NFS, and
+		the NFS server into modules. [ad 20081119]
+	rump(3): Move VFS functionality away from librump to a new library:
+		librumpvfs [pooka 20081119]
+	kernel, libc: Add new ptree (Patricia / RADIX tree) implementation.
+		[matt 20081120]
+	i386: Switch the i386 installation CDs away from RAM disks and
+		instead use the CD-ROM as the root file system. [ad 20081121]
+	i386: Remove most compat and file system options from GENERIC
+		since they are also provided by modules. [ad 20081122]
+	nfs: Avoid noisy nfs_timer/nfs_reply DEBUG output that occurs
+		when the NFS server goes away. [mrg 20081123]
+	compat_osf1(8): Add getpgid, needed for Tru64 4.0g ksh.
+		[njoly 20081124]
+	module(7): Make PPP compressors modules. [cube 20081125]
+	i386: Make pxeboot(8) understand boot.cfg(5). [ad 20081125]
+	agp(4): Add support for the Intel G45 AGP. [christos 20081129]
+	compat_osf1(8): Fix getdirentries(2). [njoly 20081202]
+	module(7): Add a couple of sysctl(8) entries, kern.module.autoload and
+		kern.module.verbose. [ad 20081203]
+	module(7): Add a layerfs module. [ad 20081205]
+	libc: Add fdopendir(3), from Solaris/Linux. [ad 20081205]
+	compat_linux32: Add getresuid() and getresgid() syscalls.
+		[njoly 20081205]
+	ddb(4): Add 'show vmem' and 'show all vmems' commands.
+		[cegger 20081207]
+	re(4): Add support for a 8168C/8111C revision. [alc 20081208]
+	tabs(1): Add tabs utility, fixes PR bin/11227. [roy 20081211]
+	httpd(8): Add rc.d script to control httpd daemon. [mishka 20081211]
+	ath(4): Switch from the binary HAL to the open-source HAL released by
+		Sam Leffler. [alc 20081211]
+	compat_linux32: Add clock_nanosleep syscall. [njoly 20081212]
+	boot.cfg(5): Add an option to clear the screen. [christos 20081213]
+	pms(4): Add Elantech multi-touch trackpad support [jmcneill 20081213]
+	sparc: Switch to use wscons. [macallan 20081213]
+	snprintb(3), kprintf(9): Share snprintb(3) among kernel and libutil
+		and make it supersede bitmask_snprintf(9). [christos 20081216]
+	sup(1): Add -M user flag to specify the username to send mail to from
+		the command line. [christos 20081217]
+	malloc(9): Remove MALLOC() and FREE() macros. [cegger 20081217]
+	x68k:	pow(4) switches to use MI powerd(8) [isaki 20081220]
+	viaide(4): Add VT8237S Integrated SATA Controller support.
+		[nonaka 20081221]
+	lvm(8):	Add LVM functionality to NetBSD; this is done by dm(4) driver
+		in kernel and lvm2 tools made by RedHat. We use the same well
+		known interface as Linux does for managing LVM. [haad 20081222]
+	gcscaudio(4): Add AMD Geode CS5536 audio driver, from SHIMIZU Ryo.
+		[jmcneill 20081228]
+	rump: i386 and amd64 can use kernel module binaries [pooka 20081230]
+	mount_cd9660(8): Add nocasetrans option as a synonym for nomaplcase.
+		[christos 20090103]
+	rump: Include libkern in rumpkern. [pooka 20090104]
+	rc.d(8): Add a script for rndctl(8). [apb 20090104]
+	module(7): Add sysvbfs module. [pooka 20090105]
+	rump: Prepend all symbols within the rump virtual kernel image
+		with the string "rump".  This prevents conflicts with the
+		host system symbols.  [pooka 20090108]
+	bwi(4): Add a driver for Broadcom AirForce / Apple Airport Extreme
+		wireless network controllers. From Taylor Campbell.
+		[macallan 20090109]
+	rgephy(4): Support for RTL8211C(L) phy. From FreeBSD. [cegger 20090109]
+	rgephy(4): Support for flow control. From OpenBSD. [cegger 20090109]
+	makefs(8): Add support for encoding RISC OS metadata into
+		ISO 9660 file systems. [bjh21 20090110]
+	time_t, dev_t: Change time_t and dev_t to be 64 bit quantities. Fixed
+		POSIX issues in timeval and timespec. [christos 20090110]
+	make(1): Changes to the way .for loops are processed. [dsl 20090111]
+	mount(8): Add -o rump, which mounts the file system as a userspace
+		server via puffs and rump instead of using a
+		kernel driver. [pooka 20090111]
+	openpgpsdk: Initial import of openpgpsdk v0.9. [agc 20090112]
+	rump: Implement a virtual block device driver.  [pooka 20090113]
+	rump: Support __RENAME in syscall interfaces and expose the
+		non-compat symbol name in the header.  [pooka 20090113]
+	age(4):	Add a driver for Attansic/Atheros L1 Gigabit Ethernet.
+		From FreeBSD via OpenBSD. [cegger 20090116]
+	atphy(4): Add a driver for Attansic/Atheros F1 PHY.
+		From FreeBSD via OpenBSD. [cegger 20090116]
+	atf(7): Import 0.6.  [jmmv 20090119]
+	msdosfs: The default behavior when mounting empty file systems has
+		been changed. Previously, msdosfs would assume the -s flag
+		(short filenames) in this case; now msdosfs will assume the
+		-l flag (long filenames). [jmcneill 20090122]
+	openpgpsdk: Imported openpgpsdk 0.9 library (BSD-licensed) into
+		src/crypto/external. The command-line driver program, openpgp,
+		which is shipped with it has been mostly rewritten to be more
+		user-friendly. [agc 20090123]
+	X11: added support for X11FLAVOUR=xorg for NetBSD/alpha.  No support
+		for turbochannel graphic cards yet. [bouyer 20090124]
+	kernel: Add support for loading pseudo-device drivers. [haad 20090202]
+	module(7): Add a module for vnd(4) driver. [haad 20090205]
+	dkctl(8): Display cache, strategy, and list of wedges if no command
+		is specified in the command line. [uebayasi 20090207]
+	udf, mount_udf(8): add support for session opening/closing on
+		sequential media. Media can be closed on request on unmount by
+		passing the '-c' flag as mount option. [reinoud 20090208]
+	libc: Add RFC 2045 MIME Quoted-Printable support. [christos 20090210]
+	sgimips: Add Personal IRIS 4D/20 and 4D/25 (IP6 and IP10) support.
+		[rumble 20090212]
+	sk(4): Add support for flow control. [cegger 20090212]
+	nfe(4): Add support for flow control for MCP65. [cegger 20090212]
+	share/mk: Enable -Wsign-compare for $WARNS>=4.  [lukem 20090212]
+	tests(7): Converted the awk, basename, bzip2, config, cut, dirname,
+		grep, gzip, libcrypto, m4, make and sdiff tests to ATF.
+		Initial work from the GSoC 2008 project by Lukasz Strzygowski.
+		[jmmv 20090213]
+	libfetch: Import libfetch-2.22. [joerg 20090214]
+	openssh: Import 5.1. [christos 20090216]
+	amd64, i386: The bootloader has been enhanced to support framebuffer
+		consoles using VESA BIOS extensions. These changes allow the
+		x86 ports to work with the genfb(4) driver, and obsoletes
+		the i386-only vesafb(4) driver. [jmcneill 20090216]
+	lvm(8): Import new lvm2tools 2.02.44 version and libdevmapper 1.02.30.
+		[haad 20090218]
+	compat_linux(8), compat_linux32: Add IPC_64 support for all shmctl(2)
+		commands, not only for STAT/SET. [njoly 20090218]
+	i386: The vesafb(4) driver has been retired. [jmcneill 20090218]
+	tests(7): Converted some of the kernel tests, including kqueue and ipf,
+		to ATF.  Initial work from the GSoC 2008 project by Lukasz
+		Strzygowski.  [jmmv 20090220]
+	dhcpcd(8): Import dhcpcd-4.0.11. [roy 20090221]
+	softdep: The soft dependences / soft updates feature of the fast
+		file system (FFS) has been supplanted by meta data
+		journaling (logging).  Logging provides better reliability
+		and better performance for most applications.  Soft
+		dependencies will no longer be available from NetBSD 6.0
+		onwards.  We encourage users to enable logging on FFS file
+		systems. [ad 20090222]
+	i386, amd64: ucas (CAS for user-space address) support for i386/amd64.
+		[rmind 20090223]
+	dhcpcd(8): Import dhcpcd-4.0.12. [roy 20090226]
+	evbarm: Improved support for GPIO support on the EP93xx ARM processors.
+		[kenh 20090227]
+	rumpnet: Add virtual interface based on inter-process shared
+		memory.  [pooka 20090228]
+	ext2fs: Add support for >128 byte inode. From Frederic Sausmikat.
+		[christos 20090301]
+	zaurus: Add zboot from OpenBSD. [nonaka 20090302]
+	xen: Add PCI pass-through support for Xen3.  domain0 kernel gets a
+		pciback PCI drivers, to which device specified in the
+		pciback.hide boot parameter will attach.
+		DomU kernels gets a xpci device, to which PCI buses
+		will attach.  [bouyer 20090305]
+	xen: Add XEN3PAE_DOM0, an i386 domain0 kernel with PAE support.
+		requires an i386PAE or x86_64 hypervisor.  [bouyer 20090305]
+	ar(1): Add support to ar(1) for 'deterministic mode'.
+		[christos 20090306]
+	kernel: Compute kern.ipc.shmmaxpgs on startup based on physical
+		memory. Default can be overridden via sysctl. [joerg 20090306]
+	fxp(4): Add TCPv4/UDPv4 RX hardware checksum support for i82559 and
+		later chips. [tsutsui 20090307]
+	crash(8): Add a new utility to diagnose kernel crashes. Based upon
+		the in-kernel debugger (ddb). [ad 20090307]
+	piixide(4): Add support for 82965PM. [christos 20090309]
+	libfetch: Import libfetch-2.23. [joerg 20090310]
+	wm(4): Add support for 82567LF-3, and fix register access for ICH10DO.
+		[msaitoh 20090310]
+	module(7): Add tprof modules. [yamt 20090310]
+	zaurus: Add kloader(4) support. [nonaka 20090311]
+	altmem(4): Add 'alternative memory' disk device driver.
+		[jmcneill 20090312]
+	zaurus: Add only playback support to zaudio(4). [nonaka 20090313]
+	vnd(4): Implement DIOCCACHESYNC ioctl. [christos 20090314]
+	sgimips: Add TCPv4/UDPv4 RX hardware checksum support for mec(4)
+		Ethernet on O2. [tsutsui 20090316]
+	zoneinfo: Import tzdata2009c. [kleink 20090316]
+	am-utils: Import latest from head; adds udf support amd -uu
+		[christos 20090320]
+	re(4): Add hardware checksum support for newer PCIe 8168C/8111C/8102E
+		chips. [tsutsui 20090321]
+	eject(1): Turn on amd(8) support for eject. [christos 20090323]
+	i386: Use "i486" as GNU_ARCH for i386. [drochner 20090327]
+	kmem_alloc(9): Add more extensive runtime debugging facilities.
+		[ad 20090329]
+	wm(4): Add workaround for 82543GC. [msaitoh 20090329]
+	wm(4): Enable hardware vlan(4) support. [darran 20090331]
+	amd64, i386: Default to UFS2 on sysinst(8). [ad 20090404]
+	sysinst(8): Default to wapbl(4) log for ufs partitions. [ad 20090404]
+	pckbd(4): Add a Czech keyboard layout. [mkirby 20090406]
+	sysinst(8): Make installer reject UFS2 for root partition on ports
+		whose bootloaders don't support UFS2 boot. [tsutsui 20090407]
+	cvs(1): Import 1.12.13 [christos 20090408]
+	libc: Add glob_pattern_p(3) for new cvs(1). [christos 20090408]
+	mtree(8): Add -S option to sort entries.  [apb 20090408]
+	newfs_sysvbfs(8): Add support creating a file system to a regular file.
+		[pooka 20090409]
+	libc: Add memrchr(3). [christos 20090410]
+	bind: Update to 9.6.1-b1.  Full NSEC3 support, automatic zone
+		re-signing, new update-policy methods tcp-self and 6to4-self,
+		unbundle libbind, change the default pid file location from
+		/var/run to /var/run/{named,lwresd} for improved chroot/setuid
+		support. [christos 20090412]
+	libbind: Update to 6.0-rc1. Use md5 for randomid instead of
+		sequential id, add suppport for DS, SSHFP, RRSIG, NSEC, DNSKEY,
+		DHCID, NSEC3, NSEC3PARAM, HIP and DLV, various new API
+		functions.  [christos 20090412]
+	re(4): Add support for RTL8168CP and RTL8168D. [tsutsui 20090413]
+	makefs(8): Add an experimental source-only makefs based on rump
+		and fs-utils.  It currently supports FFS, ext2fs, FAT,
+		cd9660 and sysvbfs.  [pooka 20090414]
+	dhcpcd(8): Import dhcpcd-4.0.13 [roy 20090417]
+	zaurus: Add recoding support to zaudio(4). [nonaka 20090418]
+	httpd(8): Import bozohttpd-20090418. [mrg 20090418]
+	bge(4): Add misc quirk code for chip specific bugs.
+		From FreeBSD and OpenBSD.  [msaitoh 20090419]
+	queue(3): Add SLIST_FOREACH_SAFE, STAILQ_FOREACH_SAFE, STAILQ_LAST,
+		SIMPLEQ_CONCAT, and SIMPLEQ_LAST. [mschuett 20090420]
+	ale(4):	Add a driver for Attansic/Atheros L1E Gigabit Ethernet.
+		From OpenBSD and improvements from Kevin Lahey.
+		[cegger 20090420]
+	sdmmc(4): Add a driver for SD/MMC from OpenBSD. [nonaka 20090421]
+	landisk: Add UFS2 boot support. [tsutsui 20090421]
+	pmax: Add UFS2 boot support. [tsutsui 20090421]
+	uftdi(4): Add support for USB serial adapter REX-USB60F.
+		[taca 20090421]
+	netpgp(1): Import netpgp. This is a heavily-modified version of
+		openpgpsdk, and will replace it. [agc 20090423]
+	landisk: Enable to build a bootable install disk image.
+		[tsutsui 20090423]
+	compat_linux(8): Add IPC_64 support for all semctl(2)/msgctl(2).
+		[njoly 20090423]
+	zx(4): Add wscons support [macallan 20090423]
+	compat_linux32: Add IPC_64 support for all semctl(2),
+		following corresponding compat_linux(8) change.
+		[njoly 20090427]
+	dhcpcd(8): Import dhcpcd-5.0.0. [roy 20090428]
+	rc.d(8): Add an rc.d script for dhcpcd(8). [roy 20090428]
+	ichlpcib(4): Attach 82801IEM LPC Interface Bridge too. [njoly 20090429]
+	rump(3): Add support for remote system calls [pooka 20090429]
+	sh3: Add some support for SH7706. [nonaka 20090430]
+	hppa: Merge the nick-hppapmap branch which includes a port of the
+		OpenBSD pmap, improves support for machines without the
+		PA7100LC or PA7300LC CPUs, and much more.  [skrll 20090430]
+	libc: Add stpcpy(3), stpncpy(3), strnlen(3), all from FreeBSD.
+		[perry 20090501]
+	install(1): Add support for writing sha256, sha384, or sha512 hashes
+		to a METALOG.  [apb 20090501]
+	build: Use sha256 instead of sha1 hashes in METALOG and
+		/etc/mtree/set.* files.  [apb 20090501]
+	dhcpcd(8): Import dhcpcd-5.0.1 [roy 20090503]
+	hp700: Enable support for UFS2 boot. [tsutsui 20090503]
+	rpcgen(1): Add support for hyper and quad keywords. [ginsbach 20090506]
+	apropos(1): Add -S and -s support, for searching by machine and
+		section [wiz 20090508]
+	file(1): Import 5.03 [christos 20090508]
+	hp700: ucas (CAS for user-space address) support for hp700.
+		[skrll 20090508]
+	dhcpcd(8): Import dhcpcd-5.0.2 [roy 20090510]
+	dhcpcd(8): Import dhcpcd-5.0.3 [roy 20090511]
+	bluetooth(3): Update the Bluetooth service discovery API and merge it
+		into libbluetooth, retiring the separate libsdp.
+		[plunky 20090512]
+	dhcpcd(8): Import dhcpcd-5.0.4 [roy 20090514]
+	libc: Add the getdate(3) and getdate_err value, conforming to
+		IEEE Std 1003.1 (``POSIX.1'') and the Open Group Base
+		Specifications X/Open System Interfaces extension (``XSI'').
+		[ginsbach 20090514]
+	hp700: com at dino now works [skrll 20090518]
+	httpd(8): Import bozohttpd-20090522. [mrg 20090522]
+	libc: Add %s (seconds since the Epoch) to strptime(3) for symmetry
+		with strftime(3). [ginsbach 20090524]
+	kernel: File descriptor access performance improvements.
+		[ad 20090524]
+	i386, amd64: CPU topology detection support for AMD processors.
+		[rmind 20090526]
+	rumpnet: Add IPv6 support [pooka 20090527]
+	agr(4): Add support for layering vlans on top. Also allow LACP
+		to be disabled. [darran 20090529]
+	openssh: Import 5.2. [christos 20090607]
+	module(7): Add the capability to read an <module>.prop associated
+		with a module and merge a plist passed in by modload(8).
+		Also, add MODCTL_NO_PROP flag to prevent loading
+		<module>.prop. [jnemeth 20090609]
+	modload(8): Add various flags to assist in the creation and
+		maintenance of <module>.prop and/or to set MODCTL_NO_PROP.
+		[jnemeth 20090609]
+	ntp:	Import ntp-4-2-4p7. [kardel 20090613]
+	ehci(4): Add quirk for SB600/SB700 chipsets to workaround freeze
+		in USB subsystem. [cegger 20090615]
+	drm(4): Update to mesa-drm 85b9f737db0d2a845e4d7e2bbf9ad12ff9e2227c.
+		[mrg 20090619]
+	wake(8): New command to send Wake-on-LAN packets to machines on
+		the local Ethernet. [mbalmer 20090625]
+	cpu_reboot(9): tear down stacks of (pseudo-)devices and
+		filesystems in an orderly fashion during shutdown,
+		detaching the devices and unmounting the filesystems.
+		i386 and sparc64 are finished. [dyoung 20090625]
+	dhcpcd(8): Import dhcpcd-5.0.5 [roy 20090704]
+	dhcpcd(8): Import dhcpcd-5.0.6 [roy 20090708]
+	sysmon_envsys(9): Enhancements to allow access to driver-internal
+		limit values [pgoyette 20090710]
+	libc: Add getdelim(3) and getline(3) conforming to
+		IEEE Std 1003.1-2008 (``POSIX.1'') [roy 20090713]
+	ip(4): Add IP_RECVTTL option to let recvmsg(2) return the TTL
+		of the received datagram. [minskim 20090716]
+	ip(4): Add IP_MINTTL option to discard packets with a TTL
+		lower than the option value. [minskim 20090717]
+	openssl(1): Import SNAP-20090710 under the new crypto/external
+		framework [christos 20090719]
+	rumpdev: Support devices and kernel config framework.  [pooka 20090720]
+	gpio(4): Complete rework to integrate with kauth(9), allow for
+		runtime driver attachment, naming of individual pins.
+		[mbalmer 20090725]
+	gpiosim(4): New driver for development/testing purposes to simulate
+		a gpio(4) device.
+		[mbalmer 20090725]
+	gpioctl(8): New commandline syntax to reflect gpio(4) changes.
+		[mbalmer 20090725]
+	secmodel_44bsd(9), secmodel_securelevel(9): Add provisions to control
+		access to gpio(4) pins. [mbalmer 20090725]
+	mvsata(4): Support Marvell Hercules-I/II SATA Controllers
+		[kiyohara 20090727]
+	dhcpcd(8): Import dhcpcd-5.0.7. [roy 20090728]
+	bind: Update to 9.6.1-P1.  [christos 20090728]
+	xen: dropped Xen 2 support. [cegger 20090728]
+	libbluetooth: add device access API bt_dev(3). [plunky 20090803]
+	rumpfs: Add support for registering external files which are
+		accessed from the host OS fs namespace instead of from
+		inside the rump virtual kernel.  [pooka 20090803]
+	acpi(4): It is now possible to configure devices other than the lid
+		switch and sleep/power buttons as a method of waking the
+		machine from sleep. Any ACPI device node with a _PRW method
+		is now a candidate, and the device nodes are listed in the
+		hw.acpi.wake namespace. By default, the following device node
+		types are enabled as wakeup devices if the firmware supports
+		it: lid switch, sleep/power button, PC keyboard controller.
+		[jmcneill 20090804]
+	openssl(1): Import SNAP-20090805 to fix the namespace issues
+		(BLOCK, CSTRING, etc) [christos 20090805]
+	sparc: support wsdisplay and acceleration for tcx(4) [macallan 20090806]
+	rumpvfs: Use unmodified kernel vnode pager.  [pooka 20090806]
+	zfs: Import OpenSolaris zfs source code to NetBSD, add NetBSD
+		patches. [haad 20090808]
+	smsh(4): Add a SMSC LAN9118 Family Ethernet driver. [kiyohara 20090809]
+	evbarm: Support for Gumstix Verdex and Verdex Pro. [kiyohara 20090809]
+	gpioiic(4): New driver to create an I2C bus using GPIO pins in
+		bit-banging mode. [mbalmer 20090809]
+	mips/voyagerfb(4): a driver for the Gdium Liberty 1000's video
+		controller [macallan 20090812]
+	mips: removed a.out support [matt 20090812]
+	secmode_keylock, keylock, gpiolock(4): Add support for multi-position
+		keylocks. [mbalmer 20090814]
+	nbperf(1): A minimal perfect hash function generator. [joerg 20090815]
+	acpi(4): Updated ACPICA to 20090730. This release includes full
+		support for the ACPI 4.0 specification. [jmcneill 20090818]
+	iasl(1): The ACPICA ASL (ACPI Source Language) compiler/decompiler
+		is now included with i386 and amd64 installations.
+		[jmcneill 20090818]
+	amd64, i386: Suspend and resume is now supported when using the
+		genfb(4) display driver. [jmcneill 20090823]
+	sparc/tcx(4): imported the xf86-video-suntcx driver and added hardware
+		acceleration [macallan 20090827]
+	unzip(1): A libarchive-based unzip frontend, emulating most of
+		infozip's command line. [joerg 20090903]
+	rumpcrypto: Add rump component for kernel crypto routines.
+		[pooka 20090903]
+	sparc/zx(4): imported the xf86-video-sunleo 1.2.0 driver from Xorg
+		[macallan 20090905]
+	hdaudio(4): New standards-compliant Intel High Definition Audio driver
+		written to replace azalia(4). [sborrill 20090906]
+	rump_smbfs(8): Support smbfs as a userspace server.  [pooka 20090906]
+	sets: Move kernel modules out of base.tgz and into a new modules.tgz.
+		[jnemeth 20090907]
+	sysinst(8): Install the new modules.tgz set. [jnemeth 20090907]
+	build.sh: Add a modules operation which builds kernel modules and
+		installs them into DESTDIR. [jnemeth 20090907]
+	sysctl(7): Add kern.boothowto variable.  [apb 20090911]
+	rc(8): Output is now logged to /var/run/rc.log.  A new rc_silent
+		option suppresses output to the console; it can be set
+		in rc.conf(5) or by booting in silent mode (e.g. "boot
+		netbsd -z" on i386 or amd64).  [apb 20090911]
+	kernel: remove POOL_INIT from the kernel, replace with dynamic
+		constructors which call pool_init().  [pooka 20090913]
+	pfsync(4): PFSYNC from OpenBSD 4.2 imported [degroote 20090914]
+	xen: add support for feature-flush-cache in block device backend.
+		Use it in block device frontend for DIOCCACHESYNC.
+		[bouyer 20090923]
+	ld.elf_so(1): Support dlinfo(), currently limited to RTLD_DI_LINKMAP.
+		[pooka 20090924]
+	rump(3): Support autoloading of modules from linksets.  [pooka 20090924]
+	gpio(4): Add the GPIO_PIN_PULSATE attribute to let a pin pulsate at
+		a hardware defined frequency and duty cycle. [mbalmer 20090925]
+	gpioctl(8): Support the new GPIO_PIN_PULSATE attribute for pins using
+		the "pulsate" keyword. [mbalmer 20090925]
+	xen: add support for request-rx-copy in the virtual network device
+		backend.  This is required by recent Xen linux kernels.
+		[bouyer 20090925]
+	ichlpcib(4): Add gpio(4) support. [jakllsch 20090927]
+	wb(4): Add a driver for Winbond W83L518D SD/MMC readers.
+		[jmcneill 20090930]
+	mdnsd(8), dns-sd(1), libdns_sd: import mDNSResponder 212.1
+		[tsarna 20090929]
+	sparc64/lom(4): Add a driver for LOMlite lights out management
+		hardware monitor and watchdog timer. [nakayama 20091002]
+	i386: Add support for enhanced speedstep on VIA C7 Esther CPUs.
+		[jmcneill 20091002]
+	acpiwmi(4): Add a driver for the ACPI WMI Mapper interface.
+		[jmcneill 20091002]
+	i386: Add support for VIA C7 temperature sensors. [jmcneill 20091002]
+	dhcpcd(8): Import dhcpcd-5.1.1. [roy 20091002]
+	libm: Add f{dim,max,min}{,f,l} from FreeBSD [christos 20091004]
+	ukfs(3): Support disklabel partitions.  [pooka 20091007]
+	man(1): Display manpage when specified with a path [cegger 20091007]
+	hdaudioctl(8): Add tool to manipulate hdaudio(4) devices
+		[sborrill 20091011]
+	rump(3): Create proper prototypes for varargs system calls.
+		[pooka 20091013]
+	rump(3): Introduce public interface specifications and autogenerate
+		entrypoint wrappers.  [pooka 20091014]
+	rump(3): Add a virtual CPU scheduler which maps the current thread
+		to an available virtual CPU on entry to the rump kernel.
+		[pooka 20091015]
+	dhcpcd(8): Import dhcpcd-5.1.2. [roy 20091016]
+	sysinst(8): Give the option to use tmpfs for /tmp in sysinst instead of
+		the older mfs on i386 and amd64. [ahoka 20091018]
+	kernel: Remove support for uarea swap-out. [rmind 20091021]
+	bind: Update to 9.7.0-b1. [christos 20091024]
+	dhcpcd(8): Import dhcpcd-5.1.3. [roy 20091025]
+	flex(1): Import flex-2.5.35 [christos 20091025]
+	routed(8): Merge 2.32 changes [christos 20091025]
+	m4(1): Import the OpenBSD one since it implements features from gm4
+		that the new flex wants [christos 20091026]
+	yacc(1): Import byacc-20091028 [christos 20091028]
+	sparc/pm2fb(4): A driver for Permedia2-based graphics cards like
+		Sun's PGX32 [macallan 20091028]
+	shark: xf86-video-igs: an Xorg driver for IGS CyberPro 20x0 graphics
+		controllers, currently only for rev. 5 sharks
+		[macallan 20091110]
+	raid(4): RAIDframe parity maps, which greatly improve parity rewrite
+		times after unclean shutdown; jld's GSoC 2009 project.
+		[jld 20091117]
+	bnx(4): Added support for Broadcom BCM5709 and BCM5716 chips.
+		[bouyer 20091118]
+	build.sh: Add "rumptest" for fast testing of rump compilation
+		and linking.  It is useful mostly for developers.
+		[pooka 20091118]
+	resolvconf(8): Import openreslv-3.3.3. [roy 20091121]
+	rump(3): Load rump virtual kernel symbol table at boot.  This enables
+		the use of the kernel linker in a rump kernel.
+		[pooka 20091126]
+	ums(4): Added touchpanel support. [mbalmer 20091127]
+	ws(4): Added the xf86-input-ws input driver for touchpanels that
+		report absolute position data through wscons(4), e.g. those
+		support by ums(4). [mbalmer 20091128]
+	sparc64:  Add real UltraSPARC-III* CPU support.  [mrg 20091130]
+	build.sh: Handle externally added programs and libraries and create
+		sets.  [uebayasi 20091130]
+	udl(4): Add a driver for DisplayLink DL-1x0/1x5 based USB LCDs and
+		USB-VGA adaptors. Ported from OpenBSD by FUKAUMI Naoki
+		with many modification. [tsutsui 20091130]
+	rump(3): Support binding threads to a specific CPU.  [pooka 20091201]
+	lvm(8): Import new lvm2tools 2.02.56 version and libdevmapper 1.02.40.
+		[haad 20091202]
+	resolvconf(8): Import openreslv-3.3.4. [roy 20091204]
+	playstation2: Port deleted.  [pooka 20091205]
+	mount_portal(8): Remove the kernel portalfs driver and replace
+		mount_portal with a version implemented using puffs.
+		[pooka 20091205]
+	network: Add "net.inet.icmp.bmcastecho" sysctl(7) support, to disable
+		ICMP replies to the broadcast address. [christos 20091207]
+	ntp:	Import ntp-4-2-4p8. [kardel 20091208]
+	zaurus: Add support Xorg. [nonaka 20091213]
+	mips: First merge of the matt-nb5-mips64 branch.  Added support for
+		64-bit MIPS processors (O32, N32, N64 ABIs are supported).
+		Added support for RMI XLS6ATX_7A board and XL SoC family.
+		[matt 20091214]
+	sysinst(8): Make SHA1 the default option for cyphers.  [ahoka 20091216]
+	atf(7): Import 0.7.  [jmmv 20091222]
+	dhcpcd(8): Import dhcpcd-5.1.4. [roy 20091223]
+	bind: Update to 9.7.0-rc1. [christos 20091226]
+	openssl(1): Import SNAP-20091226 [christos 20091226]
+	openssh: Import 5.3. [christos 20091226]
+	sparc/gfb(4): Add a driver for Sun XVR-1000 graphics boards
+		[macallan 20091229]
+	wm(4): Add support for i82583V	[msaitoh 20091230]
+	libc: Import tzcode2009k [mlelstv 20091231]
+	cas(4): Add a driver for Sun Cassini and Cassini+ Ethernet hardware.
+		From OpenBSD [jdc 20100107]
+	mount_psshfs(8): Add -u and -g for uid/gid remapping.  [pooka 20100107]
+	puffs(3): Support unmounting the file system from the
+		file server.  [pooka 20100107]
+	cobalt: Add LBA48 support to bootloader so that it can safely load
+		a kernel from NetBSD partition beyond >137GB boundary.
+		[tsutsui 20100110]
+	mount_puffs(8): Add a utility for querying puffs arguments
+		to make mount -vv work for puffs mounts.  [pooka 20100114]
+	sparc: Add apc(4), a driver for the Aurora Personality Chip (APC)
+		found on SPARCstation-4/5 and qemu. Allows to idle the
+		CPU when in the idle loop.  [bouyer 20100115]
+	tn3270: Removed from base [roy 20100116]	
+	macppc: Add support for new-style kernel modules.  [jmmv 20100118]
+	shark: Add support for new-style kernel modules.  [jmmv 20100118]
+	wscons(4): Add fonts for eastern european languages.  [ahoka 20100118]
+	daily.conf(5): Add fetch_pkg_vulnerabilities to keep the packages
+		vulnerabilities database up to date, if it exists.
+		[jmmv 20100119]
+	security.conf(5): Add check_pkg_vulnerabilities and
+		check_pkg_signatures to validate the installed packages
+		against the vulnerabilities database and the expected
+		checksums for their files.  [jmmv 20100119]
+	bpf(9): Make bpf interface with an ops vector backed by stubs
+		if bpf is not present in the kernel.  The client
+		linkage is now always the same.  [pooka 20100119]
+	network: Make TCP window size autoscaling the default.  [pooka 20100126]
+	dhcpcd(8): Import dhcpcd-5.1.5. [roy 20100131]
+	amigappc: A CSPPC system with ahsc(4) or cbiiisc(4) boots into
+		multiuser for the first time. [phx 20100202]
+	terminfo(3): Import my terminfo implementation to replace termcap.
+		[roy 20100203]
+	config(1): Add an experimental "ioconf" keyword which makes config
+		output only the device attachment tree in ioconf.c instead
+		of the entire kernel build infrastructure.  [pooka 20100203]
+	acpismbus(4): Add my experimental ACPI SMBus Control Method
+		Interface driver. [pgoyette 20100206]
+	uthum(4): Add a driver for TEMPer and TEMPerHUM usb thermometers.
+		Adapted from OpenBSD [tonio 20100206]
+	network: Derive the mbuf cluster (NMBCLUSTERS) at boot time from
+		the available memory.  The default can be raised by changing
+		kern.mbuf.nmbclusters. [joerg 20100208]
+	mfi(4): Add support for LSI's newer (GEN2) RAID controller from
+		OpenBSD. [msaitoh 20100209]
+	aibs(4): New driver for ASUSTeK AI Booster (ACPI ASOC ATK0110)
+		hardware monitor with limit support.	[cnst 20100209]
+	wm(4): Add support for Intel 82575, 82576 and 82580 Ethernet.
+		[msaitoh 20100216]
+	u3g(4): Support Huawei K3765.  [pooka 20100219]
+	wbsio(4): New driver for Winbond Super I/O attachment of
+		lm(4) on any port.	[cnst 20100221]
+	wcfb(4): A driver for 3Dlabs Wildcat graphics cards [macallan 20100224]
+	netstat(8): Add -h which humanizes numbers from -bi.  [pooka 20100224]
+	ld.elf_so(1): Implement negative symbol lookup cache [roy 20100227]
+	dhcpcd(8): Import dhcpcd-5.2.1. [roy 20100227]
+	ddb(4): Add 'mach frame' for hp700.  [skrll 20100302]
+	ne(4): Add proper support for NE2000 8 bit mode. [tsutsui 20090303]
+	module(7): Remove all kernel compile time #defines indicating file
+		system support (e.g. fs_ffs.h / -DFFS).  [pooka 20100303]
+	module(7): Make it possible to disable builtin modules and
+		re-enable them.  [pooka 20100305]
+	uhso(4): Add a driver for Option N.V. Wireless WAN modems.
+		[plunky 20100306]
+	openldap: Update to 2.4.21.  [lukem 20100308]
+	config(1): Add experimental "pseudo-root" keyword which can
+		be used to specify any interface as the local root.
+		When used in conjunction with ioconf, this creates
+		the device tree from the pseudo-root downward (pseudo-root
+		itself not included).  [pooka 20100308]
+	atari: Add support for the SMC Elite Ultra Ethernet with
+		the SMC_TT VME-ISA bridge. [tsutsui 20100313]
+	aibs(4): Remove aiboost(4) as obsolete and redundant
+		since the introduction of aibs(4).	[cnst 20100319]
+	rump(3): Support bluetooth.  [pooka 20100322]
+	sparc/cgtwelve(4): A driver for Sun CG12 / Matrox SG3 graphics boards
+		[macallan 20100323]
+	rump(3): Support unionfs, layerfs, nullfs and umapfs.  [pooka 20100330]
+	dhcpcd(8): Import dhcpcd-5.2.2. [roy 20100331]
+	nca(4): Added PCI attachment for Domex DMX-3191D SCSI board.
+		[jakllsch 20100401]
+	dbcool(4): Added support for ADM1031 therman sensor / fan controller
+		[macallan 20100401]
+	atari: Add support for the EtherNEC, ISA NE2000 based Ethernet
+		connected to Atari ROM cartridge slot. [tsutsui 20100401]
+	agp(4): Add support for the Intel 82855GM AGP port. [jakllsch 20100404]
+	sdmmc(4): Add support for SD 4bit bus width. [nonaka 20100406]
+	evbsh3: Add support for Alpha Project MS104-SH4, TAC T-SH7706LAN Rev.3
+		and TAC T-SH7706LSR Rev.1. [nonaka 20100407]
+	acpi(4): Updated ACPICA to 20100121. [jruoho 20100408]
+	fss(4): Add snapshot support for MSDOS file systems. [hannken 20100409]
+	fsck_msdos(8): add -x option which allows to run fsck_msdos -n on
+		a snapshot of a live file system. [hannken 20100411]
+	rump(3): Support file system snapshots.  [pooka 20100412]
+	hpcarm: Add support for Sharp W-ZERO3 series. [nonaka 20100417]
+	acpi(4): The sysctl(8) tree was reorganized into hw.acpi.
+		[jruoho 20100419]
+	acpiwmi(4): Add four mappings; wmidell(4), wmieeepc(4),
+		wmihp(4), and wmimsi(4). [jruoho 20100419]
+	kernel: Enforce RLIMIT_FSIZE above the file system.  This fixes
+		the feature for some file systems.  [pooka 20100423]
+	libc: Added a space-efficient write-once database (cdbr(3), cdbw(3)).
+		The database cache for services(5) has been updated to use
+		this. services_mkdb(8) can still be used to create the old
+		format. [joerg 20100425]
+	rump(3): Autoload host kernel modules from /stand/arch/modules on
+		x86 archs.  [pooka 20100426]
+	rump(3): Properly support virtual SMP on x86 hosts and default to
+		the same number of CPUs as on the host (configurable
+		with RUMP_NCPU).  [pooka 20100428]
+	tftpd(8): Add -c so files can be uploaded without requiring them
+		to be created before the upload. See the section on security 
+		considerations before enabling. [hubertf 20100429]
+	hp700: Add support for elroy(4), astro(4) and ssio(4) based 64-bit
+		machines running in 32-bit mode. [skrll 20100430]
+	rump(3): Autogenerate /dev device nodes.  [pooka 20100430]
+	rump(3): Support audio(9).  [pooka 20100501]
+	hpcsh: Add sysinst(8) support. [tsutsui 20100503]
+	sandpoint: Added support for Marvell-SKnet in netboot.
+		[phx 20100503]
+	news68k: Switch NetBSD/news68k to using 8KB/page in kernel.
+		It slightly improves performance on NWS-1750D.
+		[tsutsui 20100504]
+	xen: Enable no-execute bit feature for i386pae and amd64 kernels.
+		[jym 20100505]
+	cron(8): Import 4.1 from isc. [christos 20100506]
+	atf(7): Import 0.8.  [jmmv 20100508]
+	httpd(8): Import bozohttpd-20100509.  [mrg 20100509]
+	rump(3): Add uniprocessor locking routines.  They can be used in
+		virtual uniprocessor configurations for a significant
+		performance boost.  [pooka 20100518]
+	puffs(3): Support extended attributes.  [pooka 20100521]
+	btmagic(4): Added Apple Magic Mouse driver.  [plunky 20100522]
+	X11: Updated many packages, notably: Mesa 7.7.1, xextproto 7.1.1,
+		libXext 1.1.1, libXi 1.3 (XInput2), libX11 1.3.3, pixman 0.18.2,
+		xinput 1.5.1, xf86-input-keyboard 1.4.0, xf86-input-mouse 1.5.0,
+		xf86-video-ati 6.13.0, xf86-video-mga 1.4.12,
+		xf86-video-nv 2.1.17, xf86-video-siliconmotion 1.7.4,
+		xf86-video-vesa 2.3.0, xf86-video-vmware-11.0.1.  [mrg 20100523]
+	radeondrm(4): Ported across several updates from FreeBSD drm, Mesa 7.7.1
+		r600 (Radeon HD 3000/4000 series) driver now works.
+		[mrg 20100523]
+	X11: Added support for xf86-video-geode and xf86-video-openchrome.
+		[mrg 20100527]
+	rump(3): Implement a pagedaemon which releases weakly referenced
+		memory in case of a memory shortage.  [pooka 20100603]
+	atf(7): Import 0.9.  [jmmv 20100604]
+	dhcpcd(8): Import dhcpcd-5.2.4. [roy 20100604]
+	vnode(9): Remove member v_vnlock. [hannken 20100605]
+	acpi(4): Updated ACPICA to 20100528. [jruoho 20100606]
+	hp700/lcd(4): Driver for hp700 lcds added. [skrll 20100601]
+	ofppc: Support Gigabit Ethernet Controller for MV64361 on PegasosII
+		by mvgbe@gt.  [kiyohara 20100609]
+	arm: Added support for Cortex-A8 CPUs. [jmcneill 20100616]
+	atf(7): Add support for expected test failures.  [pooka 20100616]
+	vnsubr(9): Remove recursive vnode locks. [hannken 20100618]
+	mkubootimage(1): Added tool to generate u-boot kernel images.
+		[jmcneill 20100618]
+	httpd(8): Import bozohttpd-20100621. [mrg 20100621]
+	kernel: Add high-priority xcall(9) support. [rmind 20100622]
+	hp700: Add support for uturn(4) based machines. [skrll 20100624]
+	autoconf(9): Add config_mountroot(9), which defers device configuration
+		after mountroot(), like config_interrupt(9) that defers
+		configuration after interrupts are enabled. [tsutsui 20100625]
+	wm(4): Add support for Intel I340 Ethernet. [msaitoh 20100625]
+	hpcarm: Use rtc_offset passed from hpcboot. [tsutsui 20100626]
+	network: Add mpls(4) - MultiProtocol Label Switching support
+		[kefren 20100626]
+	kue(4): Fix unaligned memory access to make kue(4) work on
+		ARM and MIPS machines. [tsutsui 20100627]
+	atf(7): Import 0.10.  [jmmv 20100703]
+	upgt(4): Add a driver for Conexant/Intersil PrismGT SoftMAC USB
+		IEEE 802.11b/g WLAN device, ported from OpenBSD by
+		FUKAUMI Naoki. [tsutsui 20100704]
+	compat_linux(8): Update linux emulation to support the most
+		commonly used linux 2.6.x kernel features.
+		We now claim to be linux kernel version 2.6.18.  [chs 20100706]
+	kernel: Add direct select()/poll() support. [rmind 20100708]
+	prep: Support Xserver.  It's tested only on-board s3(864).
+		[kiyohara 20100712]
+	hpcarm: Bump MAXPARTITIONS from 8 to 16. [tsutsui 20100717]
+	tests(7): Convert the libposix, libprop, libpthread, librt, libskey and
+		libutil tests to ATF.  [jmmv 20100716]
+	tests(7): Convert the include and csu tests to ATF.  [jmmv 20100717]
+	tests(7): Convert the lint1 and libobjc tests to ATF.  [jmmv 20100718]
+	amd64, i386: Intel Firmware Hub Random Number Generator support moved
+		from pchb(4) to fwhrng(4) at ichlpcib(4).  [jakllsch 20100723]
+	tests(7): Add NFS (client and server) to VFS tests [pooka 20100726]
+	i386: Add PAE support. [jym 20100727]
+	hpcarm, hpcmips, hpcsh: Switch to using Xorg servers and binaries.
+		[tsutsui 20100731]
+	bebox: Support xserver.  It tested only s3(TRIO 64V+).
+		[kiyohara 20100801]
+	tests(7): Convert the sort tests to ATF.  [jmmv 20100801]
+	wpa: New wpa_supplicant(8) and hostapd(8) 0.7.2 [christos 20100804]
+	tests(7): Add elementary tests for the audio subsystem.
+		[pooka 20100804]
+	hpcarm: Improve console speed on W-ZERO3 machines using
+		write through mapping for framebuffer memory.
+		[tsutsui 20100808]
+	bind: Update to 9.7.2b1. [christos 20100806]
+	newfs(8): Add -G parameter to allow creating test images.
+		[pooka 20100809]
+	rump(3): Support carp(4) in the networking stack.  [pooka 20100810]
+	acpicpu(4): Add a driver for ACPI-based processor functionality.
+		[jruoho 20100815]
+	network: Added NPF - a new packet filter. [rmind 20100822]
+	rump(3): Add rumpdev_scsipi.  [pooka 20100823]
+	rump(3): Add a virtual SCSI target used for testing of scsipi(9)
+		and SCSI devices.  [pooka 20100823]
+	tests(7): Convert the libdes tests to ATF.  [jmmv 20100825]
+	awk(1): upgrade to 20100523 [christos 20100826]
+	ntp: switch build to ntp 4.2.6 (imported 20091213 in external/bsd/ntp)
+		[kardel 20100827]
+	rump(3): Support setuid(2), geteuid(2), etc.  [pooka 20100830]
+	dreamcast: Fix a long standing GD-ROM driver bug so that file system
+		on GD-ROM works properly.  The problem is reported and tracked
+		by Yasushi Oshima. [tsutsui 20100831]
+	omapfb(4): a simple driver for OMAP 3xxx on-chip video, especially the
+		Beagleboard [macallan 20100831]
+	rump_lwproc(3): Add an interface for process/thread management
+		in a rump kernel.  [pooka 20100901]
+	hpcarm: Add an install kernel for JORNADA720 and make sysinst(8)
+		choose a proper default kernel per running installation kernel.
+		[tsutsui 20100904]
+	acpi(4): The ACPI driver will no longer attach if the BIOS release
+		year is 2000 or older. To override this behaviour, set
+		acpi_force_load=1 or add options ACPI_BLACKLIST_YEAR=0 to your
+		kernel config. [jmcneill 20100906]
+	rump(3): Significantly improve VM performance for large objects.
+		[pooka 20100907]
+	rump(3): Make the pagedaemon flush VFS objects and drain the
+		kmem/kernel_map in case of memory shortage.  [pooka 20100908]
+	amd64, i386: Enable Ext2fs support in bootloader. [tsutsui 20100911]
+	m68k: Re-enable m68k optimized in_cksum routine.  Makes
+		~5% improvements of ttcp(1) xfer rates. [tsutsui 20100919]
+	sparc: Re-enable sparc optimized in_cksum routine. [tsutsui 20100920]
+	httpd(8): Import bozohttpd-20100920. [mrg 20100921]
+	aue(4): Add support for I-O DATA ETX-US2. [tsutsui 20100925]
+	evbarm: Support Marvell Sheevaplug and some Marvell SoC NAS box.
+		[kiyohara 20101002]
+	build: Use consistent kernel names in distribution, i.e. rename kernels
+		from "netbsd.aout-GENERIC.gz" to "netbsd-GENERIC.aout.gz" etc.
+		[tsutsui 20101004]
+	dreamcast: Build and put a raw binary format kernel into distribution.
+		[tsutsui 20101004]
+	dhcpcd(8): Import dhcpcd-5.2.8. [roy 20101007]
+	xinit(1): Disable PAM on ports which have legacy non-XFree86 servers
+		so that xinit(1) can properly quit Xserver after xinitrc script
+		exits. [tsutsui 20101010]
+	acpivga(4): Add a driver for ACPI video extensions.  [gsutre 20101012]
+	dreamcast: Add a stub for kernels with options MODULAR.
+		[tsutsui 20101013]
+	m68k: Fix kobj relocation functions so that MODULAR kernel work
+		on m68k ports.  [tsutsui 20101014]
+	sun3: Make common module(7) binaries work on both sun3 and sun3x.
+		[tsutsui 20101015]
+	virt(4): Make interface a cloner.  [pooka 20101019]
+	atf(7): Import 0.11.  [jmmv 20101020]
+	rump_sp(7): Initial import of remote rump kernel access
+		protocol.  [pooka 20101027]
+	lua(1): Import of Lua 5.1.4. [mbalmer 20101031]
+	raidframe(4): Support greater than 2TB devices.  [mrg 20101101]
+	xz(1): Import of XZ 5.0.0. [joerg 20101102]
+	otus(4): Port the Atheros AR9001U from OpenBSD (Anon Ymous)
+		[christos 20101103]
+	rumpclient(3): Add a clientside library for remote rump kernel
+		access.  [pooka 20101104]
+	fujbp(4), fujhk(4): Add brightness and hotkey drivers
+		for Fujitsu laptops. [gsutre 20101105]
+	rump_sp(7): Support local domain sockets.  [pooka 20101105]
+	schide(4): Add Intel SCH IDE driver from OpenBSD.
+		[jakllsch 20101106]
+	atf(7): Import 0.12.  [jmmv 20101107]
+	hp700: Update sti(4) from OpenBSD and add pci(4) attachment.
+		[skrll 20101109]
+	nside(4): Add a driver for the National Semiconductor PC87415 IDE
+		controller. [skrll 20101110]
+	tests(7): Add basic tests for cgd(4).  [pooka 20101111]
+	dreamcast: Switch to using Xorg servers and binaries.
+		[tsutsui 20101112]
+	et(4): Add a driver for Agere/LSI ET1310/ET1301 10/100/Gigabit
+		Ethernet device [jnemeth 20101112]
+	etphy(4): Add a driver for the Agere/LSI ET1011 TruePHY Gigabit
+		Ethernet PHY [jnemeth 20101112]
+	arm: Add support for i.MX51 SoC.
+		[bsh 20101113]
+	evbarm: Add initial support for Sharp NetWalker MID.
+		[bsh 20101113]
+	ifconfig(8): Add the "linkstr" command which can be used to communicate
+		an arbitrary string with the interface driver.  [pooka 20101115]
+	shmif(4): Convert to a cloner interface.  [pooka 20101115]
+	module(7): Allow disabling autoloading a specific module by setting
+		noautoload property.  [jnemeth 20101118]
+	openssh: Import 5.6. [adam 20101121]
+	dhcpcd(8): Import dhcpcd-5.2.9. [roy 20101127]
+	module(7): Rename <module>.prop to <module>.plist.  [jnemeth 20101127]
+	rump_sp(7): Add worker thread caching and significantly improve
+		performance.  [pooka 20101129]
+	ukbd(4): Support for Apple notebook keyboards: swapped keys on ISO
+		keyboards, Apple FN key, simulate AltGr with FN-Alt,
+		generate special keycodes for the hotkeys. [phx 20101130]
+	rump(3): Implement mutex_owner() and use it to improve pagedaemon
+		performance on multiprocessor systems.  [pooka 20101201]
+	bind: Update to 9.7.2-P3. Bug and security fixes since 9.7.2b1. See
+		src/external/bsd/bind/dist/CHANGES [christos 20101202]
+	passwd.conf(5): Set the default local cipher for passwords to 'sha1'.
+		[jmmv 20101201]
+	raid(4):  Add support for non 512-byte sector devices.  [mrg 20101203]
+	sysinst(8): Drop the question to select a password cipher algorithm.
+		[jmmv 20101204]
+	pcap(3): Update libpcap to 1.1.1; see
+		src/external/bsd/libpcap/dist/CHANGES for the list of changes
+		[christos 20101205]
+	tcpdump(8): Update to 4.1.1; see src/external/bsd/tcpdump/dist/CHANGES
+		for the list of changes [christos 20101205]
+	prenice(1): Add new command to change process priorities based upon
+		the command name, like pkill(1) and pgrep(1).  [mrg 20101205]
+	rump_allserver(1): Add a rump server which uses rump_sp(7) and
+		serves all available kernel components.  [pooka 20101205]
+	rumpnet_bridge: Add a bridge(4) component.  [pooka 20101208]
+	rumpnet_agr: Add an agr(4) component.  [pooka 20101208]
+	bnx(4): Add support for Broadcom BCM5709S (SerDes) chip. [jym 20101210]
+	openldap: Import 2.4.23. [adam 20101212]
+	rump.halt(1): Add a utility to halt a rump kernel.  [pooka 20101212]
+	rump_server(1): Add a modular version of rump_allserver(1)
+		which can load the specified components dynamically.
+		[pooka 20101213]
+	libc: Provide a re-entrant and thread-safe set of timezone API's that
+		don't require locking and can operate on user-specified
+		timezones as opposed to having to alter the environment
+		to change a timezone. [christos 20101216]
+	amigappc: Made onboard serial interface work. [phx 20101219]
+	yacc(1): Import byacc-20101127 [christos 20091223]
+	dm(4): Make LVM use non 512-byte sector devices. [mlelstv 20101223]
+	auvitek(4): Add a driver for Auvitek AU0828 family USB video
+		capture controllers. [jmcneill 20101227]
+	ofppc: Support for RDB partitions. [phx 20101231]
+	tests(7): Add r/o file system tests to the VFS testing framework.
+		[pooka 20101231]
+	rump_lwproc(3): Support a variant of rfork().  [pooka 20110102]
+	dhcpcd(8): Import dhcpcd-5.2.10. [roy 20110103]
+	rump_server(1): Add -c to control the number of virtual CPUs
+		configured into the kernel server.  [pooka 20110103]
+	resize_ffs(8): support byteswapped file systems, and support
+		growing ufs2 file systems. [riz 20110104]
+	rump(3): Support SMP on all architectures regardless of if
+		the host supports it.  [pooka 20110104]
+	acpipmtr(4): Add a driver for ACPI power meters. [jruoho 20110105]
+	rumpclient(3): Support clients that fork(2).  [pooka 20110105]
+	amd64, i386: Booting from a disk with a GUID Partition Table is
+		now possible. [jakllsch 20110106]
+	rump(3): Support LOCKDEBUG.  [pooka 20110106]
+	rumphijack(3): Add a system call hijacking library which can be
+		used to run unmodified binaries against kernel services
+		provided by rump_server(1).  [pooka 20110107]
+	sigqueue(2): Implement sigqueue/sigqueueinfo [christos 20110109]
+	shmif_dumpbus(1): Add a utility for converting the contents of
+		an shmif(4) busfile into pcap(3).  [pooka 20110112]
+	tests(7): Add union mount tests to the VFS test framework.
+		[pooka 20110113]
+	amiga: Add a driver for BlizzardPPC 603e+ SCSI [phx 20110114]
+	powerpc: Add support for using secure PLT (thereby allowing data
+		and bss of powerpc programs and shared library to be set
+		non-executable). [matt 20110115]
+	acpiwdrt(4): Add a driver for ACPI Watchdog Resource Tables.
+		[jmcneill 20110117]
+	isns(3): Add a library providing iSNS (IETF RFC 4171) protocol
+		support, contributed by Wasabi Systems. [agc 20110117]
+	rump(3): Rework rump syscall compat.  The interface provided
+		by a newer NetBSD version is now always compatible
+		with a client compiled on an older version.  [pooka 20110117]
+	powerpc: Added support for Book E Freescale MPC85xx (e500 core)
+		processors.  Added "fast" software interrupts support and
+		SOFTFLOAT for PowerPC (Book E only), reworked FPU/VEC support
+		for e500 SPE, other improvements. [matt 20110118]
+	atactl(8): Fix mislabelled S.M.A.R.T. lifetime temperature record
+		reading. [nisimura 20110119]
+	rump.dhcpclient(1): Add a very simple DHCP client for rump kernels.
+		Unlike other DHCP clients, it does not assume it is the
+		only DHCP client running on the host.  [pooka 20110120]
+	pcf8563rtc(4): Add a todr(9) driver for NXP PCF8563 [jakllsch 20110124]
+	rumpclient(3): Support server reconnect in case of a severed
+		connection.  This makes things like rebooting a kernel
+		server from under an application possible.  [pooka 20110124]
+	emips: Initial commit of the eMIPS port [pooka 20110126]
+	vte(4): add a driver for the R6040 fast ethernet controller found in
+		RDC's vortex86 and PMX-1000 system-on-chip.  [bouyer 20110126]
+	kernel: add kern.evcnt sysctl [matt 20110129]
+	vmstat(1): add support for getting evcnts and boottime for sysctl.
+		Allow unprived vmstat to function is everything wanted is
+		available via sysctl. [matt 20110129]
+	route: make routing socket interface 64-bit clean. [matt 20110131]
+	dhcpcd(8): Import dhcpcd-5.2.11. [roy 20110204]
+	hp300: Switch NetBSD/hp300 to wscons(4) with rasops(9).
+		Simply ported from OpenBSD/hp300.  [tsutsui 20110206]
+	rumphijack(3): Improve select(2) emulation.  Commit was done
+		through a rump TCP/IP stack.  [pooka 20110211]
+	hp300: Add support for framebuffers on HP362 and HP382.
+		[tsutsui 20110212]
+	hp300: Add support for Apollo Domain keyboard. From OpenBSD.
+		[tsutsui 20110212]
+	disklabel(8): Disable COMPAT_386BSD_MBRPART. The related kernel
+		compat option was disabled by default four years ago, and
+		NetBSD has not used partition id 165 (0xA5) for much longer.
+		Meanwhile the presence of this code in disklabel can
+		cause sysinst to clobber FreeBSD installs on the same
+		disk. Those with very, very old NetBSD installations may
+		need to use fdisk(8) to change the NetBSD partition ids
+		from 165 (0xA5) to 169 (0xA9). [dholland 20110212]
+	rumpclient(3): Support clients that execve(2).  [pooka 20110214]
+	hp700: Add support for HIL devices. From OpenBSD. [tsutsui 20110215]
+	bind: Update to 9.8.0rc1: Response policy zones (RPZ) and DNS64 support.
+		[christos 20110215]
+	kernel: Add PCU (Per-CPU Unit) interface to unify synchronization of
+		per CPU context, like lazy FPU management. [rmind 20110217]
+	acpi(4): Updated ACPICA to 20110211. [jruoho 20110217]
+	rumphijack(3): Support hijacking of pathname-based system calls.
+		[pooka 20110217]
+	rumphijack(3): Allow clients to specify system calls to hijack
+		and how by setting the RUMPHIJACK environment variable.
+		[pooka 20110218]
+	ath(4): Add support for AR9280 devices. [jmcneill 20110220]
+	mips: Second merge of matt-nb5-mips64 branch.  Added SMP support for
+		MIPS architecture.  Rewritten interrupt handling to be much
+		more efficient, added "fast" software interrupts and kernel
+		preemption.  Added support for RMI (NetLogic) XLS/XLR models.
+		Major clean up for MIPS port. [matt 20110220]
+	mips: Converted MIPS to use PCU to manage FPU. [matt 20110220]
+	ath(4): Add support for AR9285 devices. [cegger 20110221]
+	libsaslc(3): Complete integration of libsaslc written for GSoC 2010
+		by Mateusz Kocielski, improved and integrated with Postfix
+		by Anon Ymous. Supported mechs are: ANONYMOUS, CRAM-MD5,
+		DIGEST-MD5, EXTERNAL, GSSAPI, LOGIN, PLAIN [christos 20110221]
+	alc(4):	Add a driver for Atheros AR813x/AR815x Ethernet.
+		[jmcneill 20110222]
+	ukfs(3): Support reverse-endian disklabels.  [pooka 20110222]
+	flash(9): Add subsystem to handle Flash devices. [ahoka 20110226]
+	nand(9): Add subsystem to handle NAND controllers. [ahoka 20110226]
+	evbarm: Add driver for OMAP NAND controllers. [ahoka 20110226]
+	postfix(1): Import version 2.8.1 [tron 20110302]
+	atf-run(1): In case a test program dumps core, dump the stack
+		trace from the core file as part of test output.
+		[pooka 20110302]
+	ffs: merge the bouyer-quota2 branch. This adds a new on-disk format
+		to store disk quota usage and limits, integrated with ffs
+		metadata. Usage is checked by fsck_ffs (no more quotacheck)
+		and is covered by the WAPBL journal. Enabled with kernel
+		option QUOTA2, turned on with tunefs(8) on a per-filesystem
+		basis. mount_mfs(8) can also turn quotas on.
+		[bouyer 20110306]
+	quotactl(2): quotactl system call interface changed to support the
+		bouyer-quota2 branch. Quotas are no longer limited to
+		32-bit values. [bouyer 20110306]
+	repquota(8): added -x option to dump quotas for backup or
+		transfer purposes. [bouyer 20110306]
+	quotactl(8): Added tool to manipulate quotas via proplib XML bundles.
+		This can be used (among other things) to restore backups
+		created with repquota -x. [bouyer 20110306]
+	tmux(1): First import of tmux (version 1.4).  [jmmv 20110310]
+	powerpc: add TLS (thread local storage) support.  [matt 20110311]
+	sh3: add TLS (thread local storage) support.  [joerg 20110312]
+	x86: add TLS (thread local storage) support.  [joerg 20110312]
+	mips: add TLS (thread local storage) support.  [matt 20110314]
+	mips: add MIPS32R2 and MIPS64R2 support.  [matt 20110314]
+	shmif_dumpbus(1): Make endian-independent.  [pooka 20110314]
+	sparc64: Add initial support for Fujitsu SPARC64 systems, not yet
+		stable.  Mostly from OpenBSD.  [mrg 20110315]
+	hppa: add TLS support.  [skrll 20110317]
+	gdtoa: Import the latest [christos 20110319]
+	sandpoint: D-Link DSM-G600 support. [phx 20110319]
+	shark: chipsfb(4) now works on shark. [macallan 20110323]
+	postfix(1): Import version 2.8.2 [tron 20110323]
+	sparc: add TLS (thread local storage) support.  [martin 20110330]
+	sparc64: add TLS (thread local storage) support.  [martin 20110330]
+	alpha: add TLS (thread local storage) support.  [skrll 20110331]
+	atf(7): Import 0.13.  [jmmv 20110331]
+	ssh-askpass(1): Updated to 1.2.0. [mbalmer 20110403]
+	rdcide(4): add a driver for the IDE controller found in RDC's
+		vortex86 and PMX-1000 system-on-chip.  [bouyer 20110404]
+	rdcpcib(4): add a driver for the PCI/ISA bridge and watchdog timer
+		found in RDC's vortex86 and PMX-1000 system-on-chip.
+		[bouyer 20110404]
+	s390rtc(4): Add a todr(9) driver for Seiko Instruments S-35390A.
+		[phx 20110404]
+	sandpoint: QNAP support. [phx 20110405]
+	dhcpcd(8): Import dhcpcd-5.2.12. [roy 20110406]
+	sparc64: Add EDID (Extended Display Identification Data) reading,
+		and video mode setting support, to ffb(4). [jdc 20110408]
+	x68k: Fix hangup on floppy access. [tsutsui 20110410]
+	kernel: Bug fixes and improvements to POSIX semaphore. [rmind 20110411]
+	kerberos(8): Upgrade to Heimdal-1.5pre1. [elric 20110416]
+	kernel: Support for Darwin, Mach, IRIX and PECOFF emulation was
+		retired. [joerg 20110426]
+	balloon(4): Balloon driver now enabled for all Xen kernels.
+		[jym 20110429]
+	powerpc: Converted PowerPC to use PCU to manage FPU/AltiVec/SPE.
+		[matt 20110502]
+	x68k: Fix a buffercache overrun bug that causes unexpected panic
+		during sysinst. [tsutsui 20110505]
+	perfuse: Add the PUFFS RElay to FUSE library, which bridges the kernel
+		 level API for FUSE filesystems with native PUFFS. 
+		 [manu 20110509]
+	postfix(1): Import version 2.8.3 [tron 20110511]
+	file(1): Import 5.07 [christos 20110512]
+	m68k: Fix a regression bug in FPU_EMULATE code that causes weird awk(1)
+		behavior. [tsutsui 20110514]
+	wm(4): Add support for Intel 82579 with 6 series chipset(PCH2).
+		[msaitoh 20110524]
+	userconf(4), boot.cfg(5), boot(8), i386, amd64: Support userconf(4)
+		command in boot.cfg(5)/boot(8) on i386/amd64.
+		[uebayasi 20110526]
+	kernel: add SOCK_SEQPACKET for local sockets [manu 20110529]
+	bind: Update to 9.8.0-P2: Security fixes. [spz 20110529]
+	makefs(8): Fix a corrupted RRIP entry problem in deep directories on
+		cd9660 fs with rockridge extension. [tsutsui 20110529]
+	tmpfs: Many fixes and some performance improvements. [rmind 20110529]
+	compat_linux(8), compat_linux32: Add fadvise64() and fadvise64_64()
+		syscalls. [alnsn 20110530]
+	powerpc: Initial SMP support for MPC85xx, reworked and unified IPI
+		code, various other improvements. [matt 20110605]
+	ktrace(1): Add a new trace point to list all open file descriptors
+		after exec(3). [alnsn 20110601]
+	alpha: Converted Alpha to use PCU to manage FPU. [matt 20110607]
+	sparc: enable options MODULAR in the GENERIC* kernels.  [mrg 20110611]
+	kernel: Merge of the rmind-uvmplock branch. [rmind 20110612]
+	resolvconf(8): import openresolv-3.4.2 [roy 20110613]
+	openssl(1): Import openssl-1.0.1-stable-SNAP-20110605 [spz 20110605]
+	powerpc: Switch to using direct-mapped uareas (pcb + kernel stacks).
+		[matt 20110613]
+	atf(7): Import 0.14.  [jmmv 20110614]
+	evbppc: Enable builds for OEA, ibm4xx and Book-E modules.
+		[mrg 20110615]
+	powerpc: the generic PIC code now supports matt@'s fast softintr
+		code [macallan 20110615]
+	alpha: support for Avalon A12 removed [matt 20110617]
+	sparc64: Add fast softint(9) support. [nakayama 20110618]
+	zaurus: Add ioexp driver for SL-C1000. [nonaka 20110619]
+	mpc: Import mpc 0.9.  [mrg 20110619]
+	mpfr: Import mpfr 3.0.1.  [mrg 20110619]
+	GMP: Import GNU MP 5.0.2.  [mrg 20110619]
+	sandpoint: Add support for booting from RAID 1 [jdc 20110620]
+	gcc(1): Import version 4.5.3.  [mrg 20110620]
+	ld.elf_so(1): Support ELF symbol versioning. [nonaka 20110625]
+	kernel: Add new system calls pipe2(2), dup3(2), paccept(2), kqueue1(2)
+		and flags SOCK_CLOEXEC/SOCK_NONBLOCK to socket(2), and
+		socketpair(2), as well as fcntl(2) F_DUPFD_CLOEXEC, and
+		a MSG_CMSG_CLOEXEC flag to recvfrom(2) to be able to set
+		close-on-exec to all newly created file descriptors
+		[christos 20110626]
+	userland: Add an 'e' mode character to popen(3), and fopen(3) to set
+		close on exec to opened file descriptors. [christos 20110626]
+	acpi(4): Updated ACPICA to 20110623. [jruoho 20110628]
+	vnd(4): Allow vnd(4) to be backed by a sparse file. [hannken 20110629]
+	less(1): Import version 444. [tron 20110703]
+	bind: Update to 9.8.0-P4: Security fixes. [spz 20110705]
+	mips: Rework Atheros MIPS-based SoC support.  Add initial support
+		for AR71xx (24K) and AR9344 (74K) SoCs. [matt 20110707]
+	dtv(4): Add digital TV framework. [jmcneill 20110709]
+	auvitek(4): Add digital capture support. [jmcneill 20110709]
+	cxdtv(4): Add driver for Conexant CX23880-based DTV cards.
+		[jakllsch 20110711]
+	hpacel(4): Add a driver for HP 3D DriveGuard; a LIS3LV02DL-based
+		accelerometer. [jruoho 20110713]
+	emdtv(4): Add a driver for Empia EM28xx family USB video
+		capture controllers. [jmcneill 20110715]
+	luna68k: Build a faked a.out kernel using elf2aout(8) tool
+		and a linker script derived from cats and shark so that
+		now LUNA's firmware can load -current kernels directly
+		after almost a decade since luna68k was switched to using
+		ELF format by default.  [tsutsui 20110716]
+	luna68k: Fix stride handling in bus_space(9) multi and region ops
+		to make spc(4) SCSI work properly. [tsutsui 20110716]
+	luna68k: Use the original OMRON font derived from 4.4BSD-Lite/luna68k
+		rather than gallant19 which is used on Sun workstations.
+		[tsutsui 20110716]
+	luna68k: Build a ramdisk based INSTALL kernel with sysinst(8).
+		[tsutsui 20110716]
+	urndis(4): Add driver for Microsoft RNDIS-based USB networking devices,
+		such as Android-based phones. From OpenBSD. [jakllsch 20110720]
+	openssh: Import 5.8. [christos 20110724]
+	mips: Add support for ralink RT3883 SoC from CradlePoint Technologies.
+		[matt 20110729]
+	sparc64: Add support for Enterprise systems (Ex[45]00) systems, from
+		OpenBSD.  [mrg 20110729]
+	postfix(1): Import version 2.8.4 [tron 20110731]
+	sparc64: Switch to GCC 4.5.3  [mrg 20110802]
+	mips: Switch to GCC 4.5.3  [matt 20110804]
+	powerpc: Switch to GCC 4.5.3  [matt 20110804]
+	amiga: Add basic PCI support. [rkujawa 20110804]
+	amiga/p5pb(4): Add driver for Phase5 PCI bridge, as present on
+		CyberVision PPC and BlizzardVision PPC. [rkujawa 20110804]
+	modload(8): A module name must contain at least one / character when
+		the module is to be loaded from a filesystem path, it must not
+		contain a / character when the module is to be loaded from
+		the system module area. [mbalmer 20110806]
+	amd64: Switch to GCC 4.5.3  [mrg 20110806]
+	i386: Switch to GCC 4.5.3  [mrg 20110806]
+	userland: Over 50 new manual pages. [jruoho 20110809]
+	pwdog(4): A new driver for QUANCOM Electronic PWDOG1 watchdog timer
+		cards. [mbalmer 20110811]
+	gpio(4), gpiosim(4): Build as modules. [mbalmer 20110812]
+	mips: add support for MIPS DSP v2 ASE. [matt 20110815]
+	sparc: Switch to GCC 4.5.3  [mrg 20110817]
+	tmux(1): Import of tmux 1.5.  [jmmv 20110817]
+	devpubd(8): Add a device publishing daemon, written by Jared D.
+		McNeill.  [mrg 20110827]
+	libc: Apply tzcode2011i [christos 20110904]
+	zoneinfo: Import tzdata2011i. [christos 20110904]
+	openssh: Import 5.9. [christos 20110907]
+	postfix(1): Import version 2.8.5 [tron 20110910]
+	build: Both the source tree and the obj directories will be cleaned
+		by "make clean" or "make cleandir".  [apb 20110910]
+	wpa: New wpa_supplicant(8) and hostapd(8) 0.7.3 [christos 20110910]
+	yacc(1): Import byacc-20110908 [christos 20110910]
+	traceroute(8): Updated to 1.4a12 [christos 20110910]
+	bind: Update to 9.9.0a1 [christos 20110911]
+	file(1): Update to 5.09 [christos 20110916]
+	amiga/mppb(4): Add driver for Prometheus Zorro III to PCI bridge.
+		[rkujawa 20110917]
+	xen: Provide experimental support for suspend/resume in
+		NetBSD domUs. [jym 20110920]
+	tty(4): Provide a sysctl and ioctl to dynamically change the tty buffer
+		sizes [christos 20110923]
+	udp(4): Commit Vlad Balan's Google SoC project. This implements
+		RFC6056 port selection algorithms. The selection can
+		be done at the global level via sysctl(7), or at the socket
+		level via setsockopt(2) [christos 20110923]
+	binutils: updated to FSF binutils 2.21.1a.  [christos 20110924]
+	gdb(1): Updated to 7.3.1.  [christos 20110924]
+	audiocfg(1): New tool to control default audio defaults, by Jared
+		D. McNeill.  [mrg 20111006]
+	gcc(1): Obsolete libgcc_pic.  [mrg 20111006]
+	amd64: Switch to GDB 7.3.1.  [christos 20111008]
+	i386: Switch to GDB 7.3.1.  [christos 20111008]
+	zoneinfo: Import tzdata2011l. [apb 20111010]
+	x68k: Fix bootloader failure on X68030+060turbo. [tsutsui 20111011]
+	sqlite: Import of pre-release of SQLite 3.6.9 [joerg 20111013]
+	m68k: Add hyperbotic and trigonometric functions to m68k FPE.
+		[tsutsui,isaki 20111015]
+	vmt(4): Add a VMware Tools driver, from OpenBSD. [jmcneill 20111017]
+	zoneinfo: Import tzdata2011m. [apb 20111024]
+	sparc: Switch to GDB 7.3.1.  [mrg 20111024]
+	sparc64: Switch to GDB 7.3.1.  [mrg 20111024]
+	arm: Switch to GDB 7.3.1.  [mrg 20111024]
+	powerpc: Switch to GDB 7.3.1.  [mrg 20111024]
+	amiga/efa(4): Add driver for ELBOX FastATA 1200. [rkujawa 20111028]
+	postfix(1): Import version 2.8.6 [tron 20111028]
+	virtio(4): Add virtio driver. Speeds up I/O under KVM platform.
+		[hannken 20111030]
+	zoneinfo: Import tzdata2011n. [apb 20111102]
+	tre: Incorporate library. Adds agrep. This library provides
+		regcomp/regexec/regerror/regfree as a binary compatible
+		regex library with libc. Using -ltre will use the tre
+		regex functions. The library also has support for
+		approximate regex as well as wide char versions of
+		the regex functions. To access these we are going to
+		need to either add tre.h in /usr/include, or enhance
+		regex.h and provide more tre_ -> libc names aliases.
+		[christos 20111105]
+	sparc64: Add support for PCI-E based systems Ultra25/45, pyro(4)
+		ported from OpenBSD.  [mrg 20111108]
+	postfix(1): Import version 2.8.7 [tron 20111109]
+	asm: Add assembly language examples in share/examples/asm/.
+		These provide the end user with some ready-to-use sample
+		code for a variety of platforms, showcasing how to interact
+		with NetBSD system calls, APIs and binaries.  [jmmv 20111111]
+	luna68k: Finally complete LUNA-II support. [tsutsui 20111112]
+	gpiopwm(4): A new driver to pulse GPIO pins in software.
+		[mbalmer 20111113]
+	httpd(8): Import bozohttpd-20111118. [mrg 20111118]
+	x68k: Remove pow(4) and rtcalarm(8) [isaki 20111119]
+	news68k: Add preliminary PROM function based framebuffer text console
+		support. [tsutsui 20111120]
+	arm: Add TLS (thread local storage) support.  [joerg 20111118]
+	m68k: Add TLS (thread local storage) support.  [joerg 20111122]
+	audio(9): Audio drivers are now MP-safe. [jmcneill 20111123]
+	xbdback(4): driver is now MP-SAFE. [jym 20111123]
+	rndctl(8): implement boot-time save/restore of kernel RNG state.
+		[tls 20111123]
+	resolvconf(8): import openresolv-3.4.5 [roy 20111124]
+	mount_chfs(8): Add mount_chfs(8), a tool for mounting CHFS volumes.
+		[ahoka 20111124]
+	chfs: Add CHFS, a file system for flash(9) devices. [ahoka 20111124]
+	x68k: Add x68k/powsw(4), a revised power switch driver [isaki 20111127]
+	rtadvd(8): Add RDNSS and DNSSL support (RFC6106) [roy 20111210]
+	isibootd(8): Add isibootd(8), a dumb netboot server command for
+		OMRON luna68k machines.  [tsutsui 20111217]
+	libsa: Allow libsa to have a file system dependent ls command and
+		add ls command support for ext2fs.  From Evgeniy Ivanov.
+		[tsutsui 20111225]
+	openpam: Import lycopsida-20111218 [christos 20111225]
+	viaide(4): VT6410 PATA RAID controller support (without RAID).
+		[phx 20111228]
+	sandpoint: Iomega Storcenter support. [phx 20111228]
+	fincore(1): Add a utility to query file cache. [yamt 20120104]
+	tprof(8), tpfmt(1): Add a sampling-based profiler. [yamt 20120104]
+	amd64: Add direct map support (mapping of all physical memory
+		using large pages). [chs 20111204]
+	adventure(6): New save file format. Please regenerate (restore
+		and re-save) any old save files. [dholland 20120107]
+	ipsec(4): Make FAST_IPSEC the default IPSEC implementation.
+		[drochner 20120109]
+	x86, xen: Add cpu ucode loading support via cpuctl(8). [cegger 20120113]
+	sandpoint: Netronix NH-230/231 and compatible NAS are supported.
+		[phx 20120114]
+	atf(7): Import 0.15.  [jmmv 20120116]
+	amiga/p5pb(4): DCE Computer G-REX 1200 and G-REX 4000 PCI bridges are
+		now supported. [rkujawa 20120119]
+	build.sh: Add live-image and install-image targets.  [tsutsui 20120122]
+	tpm(4):	 Add a Trusted Computing Module driver from bsssd
+		[christos 20120122]
+	macppc/valkyriefb(4) and macppc/videopll(4): drivers to support the
+		onboard video circuitry found in for example the Performa 6360.
+		[macallan 20120123]
+	dhcpcd(8): Import dhcpcd-5.5.0 [roy 20120125]
+	x86: Stop building boot ROM images for old NICs. [jnemeth 20120127]
+	kernel: Major improvements to uvm_map(9), uvm_km(9), kmem(9)
+		and vmem(9) layers. [para 20120127]
+	kernel: Remove ltsleep(9) and wakeup_one(9). [rmind 20120128]
+	TrouSerS: Import trousers-0.3.8 [christos 20120127]
+	tpm-tools: Import tpm-tools-1.3.7.1 [christos 20120128]
+	ifconfig(8): When invoked without arguments, ifconfig(8) shows a list
+		of all network interfaces in the system instead of the
+		usage [mbalmer 20120128]
+	zaurus: Add PXA25x based Zaurus SL-C700/750/760/860 support
+		ported by TOYOKURA Atsushi. [tsutsui 20120129]
+	evbarm: Add FriendlyARM Mini2440 support. Code was written by Paul
+		Fleischer. [nisimura 20120130]
+	libquota(3): Add a new library, libquota, for control of and access to
+		disk quotas, extending the file-system-independent interface
+		added with the bouyer-quota2 branch. [dholland 20120201]
+	quotactl(2): Removed quotactl(2) interface, replaced with new
+		private __quotactl(2) interface. All user code should use
+		the libquota(3) API. [dholland 20120201]
+	repquota(8): The repquota -x dump format is now tabular, not XML.
+		[dholland 20120201]
+	mac68k: Add timecounter(9) support to the CSI Hurdler Centronics
+		Parallel Interface mac68k/cpi(4) driver. [hauke 20120201]
+	ntp: import ntp 4.2.6p5.
+		[kardel 20120201]
+	dhcpcd(8): Import dhcpcd-5.5.3 [roy 20120202]
+	dhcpcd(8): Import dhcpcd-5.5.4 [roy 20120206]
+	userland: New apropos(1) implementation using SQLite Full Text Index
+		[joerg 20120207]
+	userland: Man pages are formatted with mandoc(1) by default.
+		[joerg 20120207]
+	posix_spawn(3): Import Charles Zhang's summer of code project.
+		[martin 20120212]
+	quotactl(8): quotactl(8) was removed in favor of quotadump(8) and
+		quotarestore(8). [dholland 20120212]
+	quotadump(8): Added quotadump, which is the same as repquota -x,
+		for creating backups of quota information.
+		[dholland 20120212]
+	quotarestore(8): New quota tool quotarestore for loading backups
+		created with quotadump. [dholland 20120212]
+	postfix(1): Import version 2.8.8 [tron 20120217]
+	postinstall(8): Added pwd_mkdb item, to run "pwd_mkdb -V 1
+		/etc/master.passwd" if necessary.  [apb 20120217]
+	pkg_install(1): Import version 20120128 [tron 20120219]
+	zoneinfo: Import tzdata2012a. [apb 20120301]
+	zoneinfo: Import tzdata2012b. [apb 20120302]
+	re(4): Add support for RTL8168E-VL. [nonaka 20120302]
+	amdtemp(4): Add support for Family 12h. [nonaka 20120302]
+	postfix(1): Add support for SQLite tables. [tron 20120304]
+	kernel: Add urtwn(4), a driver for Realtek RTL8188CU/RTL8192CU USB IEEE
+		802.11b/g/n wireless network devices, ported from OpenBSD.
+		[nonaka 20120325]
+	sysinst(8): Use 1MB alignment rather than the default 63 sectors for
+		fdisk partition boundary for >128GB disks, as fdisk(8) does.
+		[tsutsui 20120407]
+	kernel:	Rewrite most of the entropy-gathering and entropy-distributing
+		code, separating the rnd(4) pseudodevice from the bitstream
+		generation code (now cprng(9)) and entropy-pool code (rnd(9))
+		[tls 20120417]
+	x68k: Make floppy driver actually work with proper bounce buffer
+		xfer ops on machines with extended high memories.
+		[tsutsui 20120506]
+	wm(4): Add support for Intel I350 Ethernet. [msaitoh 20120525]
+	i386: Make xf86-video-intel driver work on Atom N455 + GMA3150
+		graphics chipset. [tsutsui 20120608]
+	postfix(1): Import version 2.8.11 [tron 20120609]
+	newfs(8), sysinst(8): Use 32KB/4KB for default block/fragment size
+		on >= 128 GB partitions for modern AFT disks.
+		[tsutsui 20120630]
+	amd64, i386: Fix PR/46583, BIOS bootloader problems with partitions
+		that start above 1TB. [tsutsui 20120703]
+	luna68k: Switch luna68k wscons framebuffer driver to using
+		rasops(9) APIs instead of deprecated rcons(4).
+		This allows "options FONT_foo" in kernel config files.
+		[tsutsui 20120720]
+	zoneinfo: Import tzdata2012d. [apb 20120722]
+	luna68k: Fix hangup after reboot(2) problem.  [tsutsui 20120723]
+	evbarm: Add initial support for the RaspberryPi. [skrll 20120726]
+	luna68k: Handle bootarg strings passed from firmware prompt properly
+		on LUNA-II. [tsutsui 20120728]
+	zoneinfo: Import tzdata2012e. [apb 20120808]
+	postfix(1): Import version 2.8.12 [tron 20120810]
+
+Changes from NetBSD 6.0 to NetBSD 7.0:
+	window(1): Removed from the base system in favor of tmux(1).  Use the
+		pkgsrc/misc/window package from now on.  [jmmv 20120215]
+	pkg_add(1): Imported 20120221 version from pkgsrc. [wiz 20120221]
+	file(1): Upgraded to 5.11. [christos 20120222]
+	evbmips: Add support for Lemote Yeeloong Notebook. [nonaka 20120302]
+	dbsym(8): Add option -p. [bsh 20120319]
+	dhcpcd(8): Import dhcpcd-5.5.5. [roy 20120323]
+	ipf: Upgrade to 5.1.1 with new build framework, no module and
+		test support yet. [christos 20120323]
+	pcc: Upgrade to 1.1.0.DEVEL 20120325. [plunky 20120325]
+	openresolv(8): Import openresolv-3.5.1. [roy 20120327]
+	dhcpcd(8): Import dhcpcd-5.5.6. [roy 20120328]
+	apple: Recognize the apple disk partitioning scheme, and auto-discover
+		wedges. Fix iPod disk mounting, by adding quirk.
+		[christos 20120306]
+	fstab(5): Add NAME=wedgename for fs_spec and routines to parse it. Now
+		wedges can be used in /etc/fstab, even in dynamic environments
+		where disks come and go and wedges get renumbered.
+		[christos 20120306]
+	pdisk(8): Make it work for 64 bit hosts, and make it MI.
+		[christos 20120306]
+	amiga: Add clockport(4) layer and a driver for A1200 on-board clockport
+		a1k2cp(4). [rkujawa 20120417]
+	kernel: Add mpii(4), a driver for LSI Logic Fusion-MPT Message Passing
+		Interface II SAS controllers.  [bouyer 20120419]
+	kernel: Add support for 256 CPUs on amd64. [rmind 20120420]
+	OpenSSH: Imported 6.0. [christos 20120501]
+	bzip2(1): Imported 1.0.6. [wiz 20120507]
+	kernel: Add a genfs_rename abstraction to help file systems correctly
+		implement rename, and use it for tmpfs, ffs, and ext2fs.
+		[riastradh 20120508]
+	amiga: Rework X-Surf driver as xsurf(4). Add support for clockport(4)
+		on top of xsurf(4). [rkujawa 20120515]
+	backtrace(3): Add <execinfo.h> and the backtrace family of functions
+		[christos 20120526]
+	kernel: Add run(4), a driver for Ralink Technology
+		RT2700U/RT2800U/RT3000U USB IEEE 802.11a/b/g/n wireless
+		network devices, ported from OpenBSD. [nonaka 20120530]
+	bind: Update to 9.9.1-P1 to fix the recent rdata exploit.
+		[christos 20120604]
+	empb(4): Add ELBOX Mediator PCI 1200 driver. [rkujawa 20120604]
+	kernel: Add a new RLIMIT_NTHR limit to limit the number of processes
+		per user and the corresponding kern.maxlwp sysctl. Expose
+		kern.uidinfo.* via sysctl. [christos 20120608]
+	usb(9): Added support for SMP to the USB subsytem.  By Jared D.
+		McNeill and myself.  [mrg 20120609]
+	kernel: Add sendmmsg and recvmmsg support. [christos 20120621]
+	kernel: Add sysctls to avoid ipv6 DoS attacks (from OpenBSD):
+		net.inet6.ip6.neighborgcthresh = 2048
+		net.inet6.ip6.maxifprefixes = 16
+		net.inet6.ip6.maxifdefrouters = 16
+		net.inet6.ip6.maxdynroutes = 4096
+		[christos 20120622]
+	ata(4): Added support for sata Port MultiPliers (PMP)
+		[bouyer 20120702]
+	kernel, libc: Add MurmurHash2 function. [rmind 20120708]
+	atf(7): Import 0.16.  [jmmv 20120711]
+	dhcpcd(8): Import dhcpcd-5.6.1. [roy 20120712]
+	kernel: Add support for sensors to provide entropy to rnd(4)
+		[pgoyette 20120715]
+	tdvfb(4): Add 3Dfx Voodoo2 driver. [rkujawa 20120719]
+	tdvfb(4): Add 3Dfx Voodoo Graphics (aka Voodoo1) support.
+		[rkujawa 20120720]
+	kernel: Change mii_statchg to take "struct ifnet *" instead of
+		"device_t". [matt 20120722]
+	pr(1): Add support for POSIX -f and -p options. [ginsbach 20120724]
+	powerpc: Add support for FPU emulation on BookE. [matt 20120722]
+	OpenSSL: Imported 1.0.1c. [christos 20120726]
+	kernel: safepri is dead; replaced by macro IPL_SAFEPRI. [matt 20120727]
+	kernel: Add malo(4), a driver for Marvell Libertas IEEE 802.11b/g
+		wireless network devices, ported from OpenBSD.
+		[degroote 20120730]
+	kernel, libc: Add modctl(MODCTL_EXISTS, ...) to determine if modules
+		can be loaded. [jnemeth 20120803]
+	modstat(8): Add -A, -a, and -e options for testing module loadability.
+		[jnemeth 20120803]
+	uatp(4): Add driver for USB Apple trackpads. [riastradh 20120804]
+	libc: Update to tzcode2012e. [christos 20120809]
+	evbarm: Add support for the Beaglebone (TI AM335x-based board).
+		[matt 20120820]
+	evbarm: Add support for BEAGLEBOARDXM (TI DM37XX cpus) boards.
+		[matt 20120822]
+	mfi(8): Added tagged queuing support.  [bouyer 20120823]
+	mfi(8): Added support for LSI SAS2208-based controllers.
+		[bouyer 20120823]
+	mkdep(1): Add -P option.  [jmmv 20120826]
+	share/mk: Add placeholder test programs (with some very basic test
+		cases within) for common bsd.*.mk modules.  [jmmv 20120826]
+	arm: Add Cortex-A9 support (a9tmr, a9wdt, armgic, armperiph).  Add
+		initial MP support (can boot 2nd cpu but dies quickly).  Add
+		L1 SuperSection support for ARMv6/ARMv7.  Add support for 
+		BCM5301X SoC.  Add initial support for OMAP4430 and partial
+		support for Freescale i.MX6.  Add new common boot/kvminit
+		code.  [matt 20120831]
+	dhcpcd(8): Import dhcpcd-5.6.2. [roy 20120903]
+	bge(4): Add support for BCM57762, found in Apple's Thunderbolt to
+		Gigabit Ethernet Adapter. PR/46961. [tsutsui 20120917]
+	mfi(4): Add a command pass-through ioctl, and associated COMPAT_LINUX
+		support. This allows to use the LSI MegaCLI linux binary
+		on a NetBSD host.  [bouyer 20120919]
+	zoneinfo: Import tzdata2012f. [apb 20120927]
+	kernel: Add clock_nanosleep(2). [christos 20121001]
+	wpa: New wpa_supplicant(8) and hostapd(8) 1.0. [christos 20121007]
+	x68k: Add network bootloader for Neptune-X and Nereid Ethernet.
+		[tsutsui,isaki 20121012]
+	x68k: Add support for formatting floppy. [tsutsui 20121014]
+	zoneinfo: Import tzdata2012g. [apb 20121018]
+	kernel: Added experimental support for the (mostly SSD specific)
+		"discard", or ATA "TRIM" command to wd(4) and ffs
+		[drochner 20121019]
+	libc: Import tzcode2012g. [christos 20121023]
+	zoneinfo: Import tzdata2012h. [apb 20121027]
+	libc: Update to tzcode2012h. [christos 20121028]
+	kernel: Import sljit and add BPF JIT compiler. [alnsn 20121028]
+	flock(1): Add a utility to provide locks to shell scripts similar
+		to shlock(1). [christos 20121101]
+	zoneinfo: Import tzdata2012i. [apb 20121104]
+	voodoofb(4): Add 3Dfx Voodoo Banshee support. [rkujawa 20121109]
+	zoneinfo: Import tzdata2012j. [apb 20121113]
+	msm6242b(4): Add MI OKI MSM6242B driver. [rkujawa 20121114]
+	amiga: A2000-style RTCs are now driven by the msm6242b(4) driver.
+		[rkujawa 20121114]
+	xsurf(4): Add X-Surf IDE controller support. [rkujawa 20121119]
+	z3rambd(4): Add driver for Zorro III RAM boards as block devices.
+		[rkujawa 20121126]
+	bind: Update to 9.9.2-P1 to fix the DNS64 vulnerability.
+		[spz 20121204]
+	arm: ARMFPE support had bitrotted and has been removed. [matt 20121205]
+	dhcpcd(8): Import dhcpcd-5.6.4. [roy 20121206]
+	openresolv(8): Import openresolv-3.5.3. [roy 20121206]
+	arm: Fix EHCI support for OMAP3.  [jmcneill 20121211]
+	arm: Enable direct-mapped poolpage support.  [matt 20121211]
+	arm: Enable VFP-based pmap page zero/copy ops.  [matt 20121211]
+	OpenSSH: Import 6.1. [christos 20121212]
+	ptcd(4): Add a driver for the Protech PS3100 cash drawer port.
+		[mbalmer 20121216]
+	ibmcd(4): Add a driver for the IBM 4810 BSP cash drawer port.
+		[mbalmer 20121217]
+	postfix(1): Import version 2.8.13. [tron 20121218]
+	dhcpcd(8): Import dhcpcd-5.6.6. [roy 20121219]
+	arm: Support NEON in userland. [matt 20121226]
+	kernel: Allow MD kernel code to use PCUs. [matt 20121226]
+	units(1): Add -l and -L options.  [apb 20130101]
+	postfix(1): Import version 2.9.5. [tron 20130102]
+	file(1): Upgraded to 5.12. [christos 20130103]
+	luna68k: Add native bootloader. Based on 4.4BSD-Lite2/luna68k
+		"Stinger" loader. [tsutsui 20130105]
+	kernel: Add dotg(4), a driver for Synopsys DesignWare USB OTG,
+		ported from FreeBSD. [skrll 20130109]
+	kernel: Add usmsc(4), a driver for SMSC LAN95xx USB LAN devices, 
+		ported from OpenBSD. [skrll 20130109]
+	atactl(8): Add support for ATA SECURITY commands including setting
+		firmware passwords and erasing disks. [riastradh 20130109]
+	hp300: Add support for sti(4) framebuffer at sgc bus on some 425t.
+		Ported by kiyohara@ from OpenBSD. [tsutsui 20130111]
+	arm: Kill userland FPA support, replace with VFP. [matt 20130111]
+	luna68k: Add netboot support. [tsutsui 20130113]
+	luna68k: Fix bootloader to make secondary SPC SCSI on LUNA-II work
+		properly.  [tsutsui 20130114]
+	libdwarf: Sync with FreeBSD. [christos 20130117]
+	empm(4): Add driver for power manager present on Mediator 1200 TX and
+		SX bridges. [rkujawa 20130128]
+	amiga: Support software power-off with empm(4). [rkujawa 20130128]
+	dhcpcd(8): Import dhcpcd-5.6.7. [roy 20130128]
+	em4k(4): Add driver for Mediator 4000 PCI bridges. [rkujawa 20130129]
+	makefs(8): Add support for msdos, creating filesystems at an offset,
+		merging directories with common files.  [christos 20130202]
+	OpenSSL: Update to 1.0.1d. [christos 20130205]
+	sparc: Add hardware acceleration for cgfourteen(4) using SX
+		[macallan 20130207]
+	OpenSSL: Update to 1.0.1e. [christos 20130212]
+	atf(7): Import 0.17.  [jmmv 20130215]
+	lutok: Import 0.2.  This is a new import that provides a C++ wrapper
+		for the Lua API and will be used by Kyua.  Its build depends
+		on the MKKYUA knob.  [jmmv 20130216]
+	kyua(1): Import kyua-testers 0.1.  This is a new import that provides
+		scriptable utilities to invoke test programs that implement
+		different interfaces.  [jmmv 20130217]
+	services(5), protocols(5): Pull iana-generated services and protocols
+		[christos 20130221]
+	kyua(1): Import kyua-cli 0.6.  This is a new import that provides the
+		command-line interface to Kyua.  Its build depends on the
+		MKKYUA knob.  [jmmv 20130223]
+	kyua(1): Import kyua-atf-compat 0.1.  This is a new import that
+		provides the last piece of Kyua, namely a compatibility
+		version of atf-run and atf-report that use kyua(1) internally.
+		[jmmv 20130223]
+	kernel: Retire OSI protocol support.  [joerg 20130301]
+	libc: Update to tzcode2013a. [christos 20130302]
+	zoneinfo: Import tzdata2013a. [apb 20130303]
+	zoneinfo: Import tzdata2013b. [apb 20130312]
+	libc: Update to tzcode2013b. [christos 20130315]
+	brgphy(4): Add support for BCM5756, BCM5717C, BCM5719C, BCM5720C and
+		BCM57780. [msaitoh 20130315]
+	vmt(4): Synchronize the clock periodically to ensure it remains
+		up-to-date even when the host is suspended.  [jmmv 20130316]
+	file(1): Upgraded to 5.14. [christos 20130323]
+	dhcp: Upgrade to 4.2.5. [christos 20130324]
+	vchiq(4): Add support for Broadcom VideoCore IV firmware interface.
+		[jmcneill 20130325]
+	vcaudio(4): Add support for Broadcom VideoCore IV audio service.
+		[jmcneill 20130325]
+	OpenSSH: Import 6.2. [christos 20130329]
+	mdocml: Import 1.12.1. [christos 20130402]
+	openpam(3): Import 20120526 (Micrampelis). [christos 20130405]
+	flex: Import 2.5.37. [christos 20130405]
+	byacc: Import 20130304. [christos 20130405]
+	libpcap: Import 1.3.0. [christos 20130406]
+	tcpdump(8): Import 4.3.0. [christos 20130406]
+	libevent: Upgrade 2.0.21-stable. [christos 20130411]
+	wm(4): Add support for I210 and I211. [msaitoh 20130419]
+	m68k: Add inverse trigonometric functions, hyperbolic arctangent,
+		exponential and power functions to m68k FPE.  As a result,
+		m68k FPE supports all mathematics functions. [isaki 20130420]
+	tps65217pmic(4): Add support for TPS65217 PMIC as found on BeagleBone
+		and other AM335x based boards. [rkujawa 20130425]
+	amiga: Add minimal support for Thylacine USB card using slhci(4).
+		Works at least with some keyboards and mice. [rkujawa 20130428]
+	epoc32: Add new port NetBSD/epoc32. [kiyohara 20130428]
+	arm: Make all arm ports with a common MACHINE_ARCH generate the same
+		userspace.  All sets are the same except for etc.tgz.
+		[matt 20130501]
+	disklabel(8): This is now a MI tool like installboot.  [matt 20130503]
+	vndcompress(1): Add support for restarting after interrupt.
+		[riastradh 20130503]
+	mcp980x(4): Add driver for Microchip MCP9800/1/2/3 I2C temperature
+		sensor. [rkujawa 20130507]
+	zoneinfo: Import tzdata2013c. [apb 20130508]
+	arm: Add support for Marvell Armada XP SoCs. From Marvell and Semihalf.
+		[rkujawa 20130530]
+	wm(4): Add support for I217 and I218. [msaitoh 20130602]
+	X11: Updated all Xorg packages that could be, for Xorg SA 2003-05-23,
+		and general.  [mrg 20130605]
+	ipsec(4): FAST_IPSEC is now named IPSEC, old IPSEC is gone.
+		[christos 20130605]
+	kernel: Add driver soekrisgpio for Soekris net6501 
+		Ported by kardel@ from a patch for OpenBSD. [kardel 20130609]
+	cgfourteen: Both kernel and Xorg driver now support hardware
+		acceleration using SX. [macallan 20130619]
+	dhcpcd(8): Import dhcpcd-6.0.0. [roy 20130621]
+	zoneinfo: Import tzdata2013d. [apb 20130707]
+	bge(4): Add support for Altima AC1003, Apple BCM5701,
+		Broadcom BCM5787F, BCM5787G, BCM5787F, BCM5719, BCM5720,
+		BCM57766, BCM57782 and BCM57786. [msaitoh 20130708]
+	openresolv(8): Import openresolv-3.5.6. [roy 20130712]
+	libc: Update to tzcode2013d. [christo 20130717]
+	wpa: Import wpa_supplicant and hostapd 1.1. [adam 20130717]
+	dhcpcd(8): Import dhcpcd-6.0.3. [roy 20130719]
+	coldfire: Add userland and toolchain support for FreeScale Coldfire
+		CPUs (which implement a subset of m68k instructions and
+		addressing modes). [matt 20130719]
+	bind: Update to 9.9.3-P2 to fix CVE-2013-4854 remote query can cause
+		named to terminate. [christos 20130727]
+	iwn(4): Add support for Centrino Wireless-N 1030 and Centrino
+		Advanced-N 6230. [prlw1 20130728]
+	dhcpcd(8): Import dhcpcd-6.0.5. [roy 20130803]
+	makefs(8): Added UDF support for makefs(8). It allows for the creation
+		of images for both read-only, rewritable or recordable media.
+		[reinoud 20130805]
+	xsh(4): Add driver for Individual Computers X-Surf 100 network interface
+		card. [rkujawa 20130808]
+	postfix(1): Import version 2.9.7. [tron 20130821]
+	libc: Add consttime_memequal and explicit_memset for crypto
+		applications. [riastradh 20130828]
+	kernel: Add BPF coprocessor support (BPF_COP/BPF_COPX instructions).
+		[rmind 20130829]
+	npf: Convert NPF to use BPF byte-code by default.  Many other
+		improvements. [rmind 20130929]
+	less(1): Import version 458. [tron 20130804]
+	mpl115a(4): Add driver for Freescale MPL115A2 I2C absolute pressure 
+		sensor. [rkujawa 20130908]
+	dhcpcd(8): Import dhcpcd-6.1.0. [roy 20130920]
+	alpha: Add support for AlphaStation DS15.  Ported from OpenBSD via
+		PR port-alpha/48148 by nullnilaki. [tsutsui 20130923]
+	postfix(1): Import version 2.10.2. [tron 20130925]
+	binutils: Updated to FSF binutils 2.23.2.  [christos 20130929]
+	getaddrinfo(1): Add utility for querying the system's name resolver.
+		[riastradh 20130929]
+	gdb(1): Updated to 7.6.1.  [christos 20131003]
+	httpd(8): Added Lua scripting for content creation. [mbalmer 20131012]
+	lutok: Update to 0.3.  [jmmv 20131018]
+	kyua-cli: Update to 0.7.  [jmmv 20131018]
+	netstat(1): Accept -faddress_family[,family ...]. [bad 20131019]
+	systat(1): Accept shell patterns to select drives. [bad 20131019]
+	gffb: Add a driver for NVIDIA GeForce2 MX graphics controllers.
+		[macallan 20131023]
+	axen(4): Add a driver for ASIX AX88178a and AX88179 Ethernet interface.
+		Ported from OpenBSD. [nonaka 20131026]
+	x68k: Support upto 1008 MB extended memory that is found on the XM6i
+		emulator. [tsutsui 20131027]
+	OpenSSH: Imported 6.4. [christos 20131108]
+	x86: Default rounding mode of the x87 changed to long double precision.
+		[joerg 20131111]
+	zless(1): Added via lastest version of zmore(1) from OpenBSD
+		[pettai 20131112]
+	libm: Added basic long double support for elementary functions.
+		Most transcendent functions are stubbed out. [joerg 20131119]
+	nvi(1): Upgrade to the latest git source. [christos 20131122]
+	MPC: Updated to MPC 1.0.1.  [mrg 20131128]
+	MPFR: Updated to MPFR 3.1.2.  [mrg 20131128]
+	GMP: Updated to GMP 5.1.3.  [mrg 20131129]
+	file(1): Updated to 5.16. [christos 20131201]
+	librt: Added shm_open(3) and shm_unlink(3). [rmind 20131219]
+	acafh(4): Added driver for Individual Computers ACA500. Enjoy NetBSD
+		on an Amiga 500.  [rkujawa 20131222] 
+	libc: Update to tzcode2013i. [christos 20131226]
+	zoneinfo: Import tzdata2013i. [apb 20131226]
+	acpi(4): Updated ACPICA to 20131218. [christos 20131227]
+	openpam(3): Import 20130907 (Nummularia). [christos 20131227]
+	ntp: Import ntp 4.2.7p404.  [christos 20131227]
+	luna68k: Add preleminary support of 4bpp framebuffer.
+		[tsutsui 20131227]
+	wm(4): Add support for I354 (C2000 Internal) Ethernet
+		[msaitoh 20131230]
+	tcpdump(8): Import 4.5.1. [christos 20131231]
+	libpcap: Import 1.5.2. [christos 20131231]
+	bind: Update to 9.9.5b1. [christos 20131231]
+	wpa: Import wpa_supplicant and hostapd 2.0. [christos 20140102]
+	dhcpcd(8): Import dhcpcd-6.2.0. [roy 20140103]
+	luna68k: Make bootloader to detect booted device on ROM monitor's
+		load command and set proper default boot device.
+		[tsutsui 20140105]
+	luna68k: Reorganize bootloader device configuration.  I.e. use
+		(controller * 10 + id) for sd unit number, rather than
+		static numbers against probed disks at ID 5 and 6.
+		[tsutsui 20140110]
+	luna68k: Add support to pass boothowto and boot device info from
+		bootloader to kernel. [tsutsui 20140111]
+	OpenSSL: Imported 1.0.1f. [christos 20130111]
+	postfix(1): Import version 2.10.3. [tron 20140118]
+	igmafb(4): Added framebuffer driver for Intel Graphics
+		[mlelstv 20140121]
+	vndcompress(1): Add support for constant memory, so 32-bit systems
+		should in theory now be able to compress or uncompress
+		multi-terabyte disks. [riastradh 20140122]
+	ohci(4): Support the National Semiconductor PC87560 as found in
+		many hppa machines. [skrll 20140128]
+	ews4800mips: Switch to X11FLAVOUR=Xorg. Untested. [tsutsui 20140131]
+	newsmips: Switch to X11FLAVOUR=Xorg. Untested. [tsutsui 20140131]
+	npf: Added support for CDB based tables. [rmind 20140206]
+	npf: Added support for static (stateless) NAT. [rmind 20140207]
+	atf(7): Import atf 0.19.  [jmmv 20140208]
+	atf(7): Import atf 0.20.  [jmmv 20140211]
+	npf: Added support for IPv6-to-IPv6 Network Prefix Translation
+		(NPTv6), as per RFC 6296. [rmind 20140213]
+	sqlite3: Import 3.8.3.1. [christos 20140216]
+	luna68k: Make sysinst to create a boot UFS partition and install
+		the native bootloader during installation. [tsutsui 20140219]
+	dhcpcd(8): Import dhcpcd-6.3.0. [roy 20140225]
+	mcp48x1dac(4): Add preliminary support for Microchip MCP48x1 family of
+		Digital-to-Analog converters. [rkujawa 20140225]
+	micphy(4): Add Micrel PHY (KSZ9021RN). [ozaki-r 20140226]
+	bind: Update to 9.10.0b1. [christos 20130228]
+	dhcpcd(8): Import dhcpcd-6.3.1. [roy 20140301]
+	x68k: Switch to X11FLAVOUR=Xorg, including X68k monolithic server.
+		[tsutsui 20140301]
+	macppc: Add support for ppc601-based machines
+		from scole_mail via PR48600. [macallan 20140303]
+	hppa: Switched to GCC 4.8.  [skrll 20140306]
+	sparc: Switched to GCC 4.8.  [mrg 20140306]
+	sparc64: Switched to GCC 4.8.  [mrg 20140306]
+	alpha: Switched to GCC 4.8.  [martin 20140307]
+	arm: Switched to GCC 4.8.  [skrll 20140307]
+	elftoolchain: Import FreeBSD-2014-03-08. [christos 20140309]
+	amd64: Switched to GCC 4.8.  [christos 20140311]
+	dhcpcd(8): Import dhcpcd-6.3.2. [roy 20140314]
+	rtsx(4): Add a driver for Realtek RTS5209/RTS5229 Card Reader.
+		Ported from OpenBSD. [nonaka 20140319]
+	mdnsd(8), dns-sd(1), libdns_sd: Import mDNSResponder 258.14
+		[pettai 20140324]
+	arm: Add support for ARMv6+ MMU features ASIDS, XN, split TTBR.
+		add support for SMP. [matt 20140330]
+	applesmc(4): Add drivers for the Apple System Management Controller.
+		[riastradh 20140401]
+	ptyfs: Allow multiple mounts and support proper device visibility
+		in chroots (Ilya Zykov). [christos 20140404]
+	i386: Switched to GCC 4.8.  [christos 20140404]
+	mcp23s17gpio(4): Add Microchip MCP23S17 16-bit GPIO chip driver.
+		e.g. Raspberry Pi interface boards. [kardel 20140406]
+	OpenSSL: Imported 1.0.1g. [christos 20140407]
+	sparc64: Switched to TOPDOWN_VM. [martin 20140414]
+	hp300: Fix broken apci console support of bootloader. [tsutsui 20140410]
+	hp300: Add sti(4) at sgc screen console support to bootloader.
+		[tsutsui 20140413]
+	hp300: Add HP9000/425e RTC support. [tsutsui 20140419]
+	ubsec(4): Add support for AES-CBC modes and BCM586x chips.
+		[bad 20140419]
+	hp300: Add proper consinit(9) support for sti(4) at sgc framebuffer on
+		HP9000/425e. [tsutsui 20140420]
+	bcmgpio(4): Add BCM2835 GPIO obio driver.
+		[kardel 20140422]
+	kerberos(8): Update to latest Heimdal-1-5-branch.
+		[pettai 20140424]
+	hp300: Make the Apollo Domain keyboard actually work.
+		[tsutsui 20140424]
+	hp300: Enable sti(4) driver for HP9000/425e console graphics on
+		install kernels. [tsutsui 20140430]
+	libc: Update to tzcode2014c. [christos 20140513]
+	zoneinfo: Import tzdata2014c. [apb 20140515]
+	ossaudio(3): Add initial OSSv4 support. [nat 20140517]
+	hythygtemp(4): Add HYT-221/271/939 humidity/temperature iic sensor
+		driver.	[kardel 20140518]
+	envsys(4): Add %rH (relative Humidity) to sensor framework. 
+		[kardel 20140518]
+	gcc(1): Import version 4.8.3.  [skrll 20140527]
+	openldap: Import 2.4.39. [tron 20140528]
+	libc: Update to tzcode2014d. [christos 20140528]
+	alpha: Fix wrong disk cylinder detection during sysinst installation
+		onto a disk disklabel'ed by Tru64 as reported in PR/48697.
+		[tsutsui 20140602]
+	OpenSSL: Imported 1.0.1h. [christos 20140605]
+	vax: Switch to GCC 4.8. [matt 20140605]
+	vmx(4): Add VMware VMXNET3 driver, from OpenBSD. [hikaru 20140610]
+	etcupdate(8): Add destdir support.  [apb 20140612]
+	file(1): Upgraded to 5.19. [christos 20140612]
+	zoneinfo: Import tzdata2014e. [apb 20140613]
+	libc: Update to tzcode2014e. [christos 20140614]
+	dhcpcd(8): Import dhcpcd-6.4.0. [roy 20140614]
+	pigz(1): Update to pigz-2.3.1. [tls 20140615]
+	gdb(1): Updated to 7.7.1.  [christos 20140622]
+	kernel: Fix, improve and enable KMEM_SIZE on development kernels.
+		[maxv 20140623]
+	m68k: Use "-O2 -fno-reorder-blocks" for the default optimization
+		by default to avoid unexpected code size growth by
+		-freorder-blocks option on m68k. [tsutsui 20140705]
+	m68k: Use "-O2 -fno-reorder-blocks" for most kernels as userland.
+		[tsutsui 20140705]
+	/usr/share/doc: Install formatted docs instead of nroff sources,
+		and reorganize. [dholland 20140705]
+	x68k: Make bootloader probe actual memory size and warn if memory size
+		value stored in SRAM is different, for machines with dead
+		battery.  [tsutsui 20140706]
+	postfix(1): Import version 2.11.1. [tron 20140706]
+	bind: Import version 9.10.0-P2. [spz 20140708]
+	dhcp: Import version 4.3.0. [spz 20140712]
+	luna68k: Add ANSI text color support for 8bpp color framebuffer.
+		[tsutsui 20140713]
+	dhcpcd(8): Import dhcpcd-6.4.2. [roy 20140714]
+	wskbd(4): Added belgian keyboard layouts (KB_BE) to pckbd(4) and
+		ukbd(4). [mbalmer 20140714]
+	tiotg(4): Added a driver for the Texas Instruments AM335x SoC's
+		USB OTG controller. [bouyer 20140716]
+	tifb(4): Added an experimental driver for the Texas Instruments AM335x
+		SoC's graphic controller. [bouyer 20140716]
+	lua(1): Updated to 5.3 work3. [lneto 20140719]
+	luna68k: Add WSDISPLAY_COMPAT_RAWKBD support so that keyboard on
+		Xserver works without xmodmap(1) tweaks. [tsutsui 20140720]
+	urtwn(4): Add support for Realtek RTL8188EUS and RTL8188ETV chipsets.
+		Ported from FreeBSD. [nonaka 20140720]
+	luna68k: Make wsfb Xserver work as monochrome server even with
+		4bpp/8bpp color framebuffers. [tsutsui 20140721]
+	wm(4): Add internal SERDES support older than 82575.
+		[msaitoh 20140722]
+	kernel: Fix, improve and enable KMEM_REDZONE on development kernels.
+		[maxv 20140722]
+	kernel: Many improvements in the ELF binary loader - performance,
+		correctness and security. [maxv 20140722]
+	tmux(1): Import of tmux 1.9a.  [christos 20140724]
+	kernel: Added fdiscard and posix_fallocate system calls.
+		[dholland 20140725]
+	evbarm: Add support for the Kobo touch (i.MX50). [hkenken 20140725]
+	luna68k: Reset console ANSI color palette properly after returning to
+		WSDISPLAYIO_MODE_EMUL, i.e. on exiting Xserver.
+		[tsutsui 20140725]
+	atari: Adjust VM related constants so that larger packages can be built
+		on TT030. [tsutsui 20140726]
+	sun3: Move bootloader address to allow loading growing GENERIC kernels.
+		[tsutsui 20140726]
+	dhcpcd(8): Import dhcpcd-6.4.3. [roy 20140730]
+	timeout(1): Import from FreeBSD. [christos 20140801]
+	build: New BUILDINFO variable may be passed to build.sh, and exposed
+		in /etc/release, as well as in sysctl kern.buildinfo.
+		[apb 20140803]
+	x68k: Add a 'switch' command to bootloader to display and modify
+		SRAM parameters as NetBSD's memswitch(8) and Human68k's
+		SWITCH.X commands. [isaki 20140805]
+	zoneinfo: Import tzdata2014f. [apb 20140806]
+	ekermit(1): Add BSD-licenced ekermit, and remove GPL-licenced
+		gkermit. [apb 20140808]
+	rescue(8): Add /rescue/ekermit. [apb 20140809]
+	rnd(4): Suck in much more entropy early in boot and thereafter:
+		autoconf timings, all sysctl settings (including hostname),
+		contents of early network packets, environmental sensor
+		values generically rather than as per-driver special cases.
+		[tls 20140810]
+	cprng_fast(9): Replace slow/broken mutex-protected kernel
+		_arc4random() with new cprng_fast implemenation
+		from riastradh@ using per-cpu instances of chacha8.
+		[tls 20140810]
+	OpenSSL: Update to 1.0.1i. [spz 20140810]
+	kernel: Add MODULAR infrastructure for Xen kernels. [jnemeth 20140810]
+	hp300: Add arcofi(4) audio driver for the HP "Audio1" device found on
+		HP9000/425e.  Ported from OpenBSD.  [tsutsui 20140824]
+	rnd(9): Add explicit enable/disable hooks for callout-driven
+		sources (be more power friendly). [tls 20141026]
+	rnd(9): Make "skew" source polled so it runs only when there
+		is entropy demand. [tls 20141026]
+	rnd(9):	Adjust entropy collection from polled sources so it's
+		processed sooner. [tls 20141026]
+	viornd(4):	Add driver for VirtIO entropy source available on
+			QEMU, KVM, and Google Compute Engine.  From OpenBSD.
+			[tls 20141026]
+	postfix(1): Import version 2.11.3. [tron 20150124]
+	postfix(1): Import version 2.11.4. [tron 20150221]
+	service(8): Import adapted script from FreeBSD [ast 20150322]
+	malloc(9): Interface obsoleted and cleaned up. [maxv 20150325]
+	ixg(4): Add X540 support [msaitoh 20150327]
+	veriexec(4): Several improvements and bug fixes. [maxv 20150519]
+
+Changes from NetBSD 7.0 to NetBSD 8.0:
+	libc: Update to tzcode2014f. [christos 20140815]
+	gmake:	Update to gmake-3.81 in external/gpl2/gmake and remove 
+		gnu/dist/gmake (3.80) [christos 20140818]
+	module(7): Create MODULAR_DEFAULT_AUTOLOAD config flag to control
+		whether module autoloading is on by default.
+		[jnemeth 20140824]
+	kernel: Option SYMTAB_SPACE has been replaced with COPY_SYMTAB.
+		The related changes to src/sys/conf require a rebuild of
+		config(1). [joerg 20140824]
+	zoneinfo: Import tzdata2014g. [apb 20140831]
+	wm(4): Add internal SERDES support for 82575 and newer controllers.
+		[msaitoh 20140903]
+	or1k: Add new port.  [matt 20140903]
+	awindma(4): Add support for Allwinner A10/A20 DMA controller.
+		[jmcneill 20140906]
+	awinac(4): Add support for Allwinner A10/A20 audio codec.
+		[jmcneill 20140906]
+	awinrtc(4): Add support for Allwinner A10/A20 real-time clock.
+		[jmcneill 20140907]
+	awinmmc(4): Use DMA for MMC transfers. [jmcneill 20140908]
+	axp20x(4): Add AXP20x PMU driver. [jmcneill 20140909]
+	rtsol(8): Removed in favour of dhcpcd. [roy 20140911]
+	rtsold(8): Removed in favour of dhcpcd. [roy 20140911]
+	dhcpcd(8): Import dhcpcd-6.4.5. [roy 20140918]
+	arm: Add support for i.MX6 SoC. [ryo 20140925]
+	gpt(8): Completed overhaul, including adding follwing subcommands:
+		resize, set, unset, backup, restore, and resizedisk.
+		[jnemeth 20140926]
+	dhcpcd(8): Import dhcpcd-6.4.7. [roy 20140927]
+	mpt(4): added bio(4) support. [jmcneill 20140927]
+	gpt(8): added type subcommand to modify partition type.
+		[jnemeth 20140927]
+	zoneinfo: Import tzdata2014h. [apb 20141004]
+	dhcpcd(8): Import dhcpcd-6.5.0. [roy 20141006]
+	libc: Update to tzcode2014h. [christos 20141007]
+	file(1): Upgraded to 5.20. [christos 20141010]
+	arm: Add support for Allwinner A31 SoC. [jmcneill 20141010]
+	awiniic(4): Add support for Allwinner A31 SoC. [jmcneill 20141012]
+	awinp2wi(4): Add support for Allwinner A31 Push-Pull Two Wire
+		Interface. [jmcneill 20141012]
+	axp22x(4): Add AXP22x PMU driver. [jmcneill 20141012]
+	awinrtc(4): Add support for Allwinner A31 real-time clock.
+		[jmcneill 20141012]
+	awindma(4): Add support for Allwinner A31 DMA controller.
+		[jmcneill 20141013]
+	awinac(4): Add support for Allwinner A31 audio codec.
+		[jmcneill 20141013]
+	motg(4): Add support for Allwinner A10/A20 SoC. [jmcneill 20141015]
+	wpa: Import wpa_supplicant and hostapd 2.3. [christos 20141016]
+	dhcpcd(8): Import dhcpcd-6.5.1. [roy 20141018]
+	OpenSSH: Imported 6.7. [christos 20141018]
+	resolvconf(8): Import openresolv-3.6.0 [roy 20141020]
+	gcc: Support -fsanitize=address [christos 20141022]
+	zoneinfo: Import tzdata2014i. [apb 20141023]
+	libc: Update to tzcode2014i. [christos 20141023]
+	openpam(3): update to 20140912 (ourouparia) [christos 20141024]
+	pppd(8): updated to version 2.4.7. [christos 20141025]
+	acpi(4): Updated ACPICA to 20140926. [christos 20141025]
+	dhcpcd(8): Import dhcpcd-6.6.0 [roy 20141029]
+	resolvconf(8): Import openresolv-3.6.1 [roy 20141029]
+	rtsx(4): Add support for Realtek RTS5227/RTL8402/RTL8411/RTL8411B.
+		[nonaka 20141029]
+	flex(1): Import flex-2.5.37 [christos 20141029]
+	iwn(4): Add support for Intel Centrino Wireless-N
+		100/105/130/135/2200/2230. From OpenBSD. [nonaka 20141030]
+	awge(4): Add support for gigabit ethernet found on various
+		Allwinner SOCs. [martin 20141101]
+	dhcpcd(8): Import dhcpcd-6.6.1. [roy 20141107]
+	awinhdmi(4): Add support for Allwinner A20/A31 HDMI controller.
+		[jmcneill 20141110]
+	awintcon(4): Add support for Allwinner A20/A31 TV/LCD controller.
+		[jmcneill 20141110]
+	awindebe(4): Add support for Allwinner A20/A31 Display engine
+		backend (DE-BE). [jmcneill 20141110]
+	awinhdmiaudio(4): Add support for Allwinner A20/A31 HDMI audio
+		controller. [jmcneill 20141111]
+	dhcpcd(8): Import dhcpcd-6.6.2. [roy 20141114]
+	awinir(4): Add support for Allwinner A20/A31 IR receiver.
+		[jmcneill 20141115]
+	zoneinfo: Import tzdata2014j. [apb 20141116]
+	libc: Change arc4random(3) to use ChaCha20 and per-thread state.
+		[riastradh 20141116]
+	libc: Update to tzcode2014j. [christos 20141117]
+	libpcap: Import 1.6.2. [christos 20141119]
+	tcpdump(8): Import 4.6.2. [christos 20141119]
+	dhcpcd(8): Import dhcpcd-6.6.4. [roy 20141126]
+	dhcpcd(8): Import dhcpcd-6.6.5. [roy 20141209]
+	bind: Import version 9.10.1-P1. [christos 20141209]
+	dhcpcd(8): Import dhcpcd-6.6.6. [roy 20141217]
+	powerpc: Switch to GCC 4.8. [matt 20141218]
+	dhcpcd(8): Import dhcpcd-6.6.7. [roy 20141219]
+	ntp: Import ntp 4.2.8. [christos 20141219]
+	midirecord(1): Add program to record MIDI files.  [mrg 20141229]
+	file: update to 5.22 security limits [christos 20150102]
+	byacc: update to 20141128 for more bison compat [christos 20150103]
+	mgx: driver for Southland Media Systems (now Quantum 3D) MGX SBus
+		graphics devices [macallan 20150106]
+	gcc: Import GCC 4.8.4.  [mrg 20150109]
+	openssl: Import openssl 1.0.1k [spz 20150113]
+	am-utils: Upgrade to 6.2; adds nfsv4, lustre (which we can't use)
+		nfs3 rpc support for amfs [christos 20150117]
+	arm: Add support for Zynq SoC. [hkenken 20150123]
+	evbarm: Add support for the PARALLELLA (Zynq). [hkenken 20150123]
+	blacklist: Added daemon and library [christos 20150125]
+	libevent: Import libevent 2.0.22 [spz 20150129]
+	dhcpcd(8): Import dhcpcd-6.7.1. [roy 20150130]
+	zoneinfo: Import tzdata2015a. [apb 20150131]
+	libc: Import tzcode2015a. [christos 20150131]
+	tetris(6): Add down key support, as 'n'.  [mrg 20150218]
+	bind: patch to version 9.10.1-P2. [spz 20150221]
+	network: introduce RTF_LOCAL for local address routes. [roy 20150226]
+	evbarm: Add support for RPI2. [skrll 20150304]
+	evbarm: Add support for ODROID-C1. [jmcneill 20150304]
+	dtrace: Add syscall support [christos 20150307]
+	dtrace: Add lockstat support [riastradh, christos 20150308]
+	zoneinfo: Import tzdata2015b. [apb 20150321]
+	openssl: Import openssl 1.0.1m [spz 20150323]
+	libc: Update to tzcode2015b. [christos 20150324]
+	dhcpcd(8): Import dhcpcd-6.8.1. [roy 20150327]
+	libpcap: Import 1.7.2. [christos 20150331]
+	tcpdump(8): Import 4.7.3. [christos 20150331]
+	wpa: Import wpa_supplicant and hostapd 2.4. [christos 20150401]
+	OpenSSH: Imported 6.8. [christos 20150403]
+	btmagic(4): add Magic Trackpad support [bouyer 20150406]
+	ntp: Import ntp 4.2.8p2. [christos 20150407]
+	acpi(4): Updated ACPICA to 20150410. [christos 20150413]
+	evbarm: add a driver for EDMA controller on AM335x SoC.
+		Add DMA support to the sdhc controllers on AM335x SoC.
+		Enable DMA for sdhc0 and sdhc1 on BEAGLEBONE [bouyer 20150414]
+	xz(1): Import of XZ 5.2.1. [christos 20150417]
+	x86: Support MSI/MSI-X. [knakahara 20150427]
+	libc: Update to tzcode2015d. [christos 20150428]
+	openresolv(8): Import openresolv-3.7.0 [roy 20150501]
+	netinet: Added IN_IFF_TENTATIVE, IN_IFF_DUPLICATED and IN_IFF_DETACHED.
+		IPV4 addresses now perform DAD using ARP as described in
+		RFC 5227. [roy 20150502]
+	amd64: Bump CHILD_MAX and OPEN_MAX.  [mrg 20150507]
+	i386: Bump CHILD_MAX and OPEN_MAX.  [mrg 20150507]
+	aarch64: Bump CHILD_MAX and OPEN_MAX.  [mrg 20150507]
+	evbarm: Bump CHILD_MAX and OPEN_MAX.  [mrg 20150507]
+	sparc64: Bump CHILD_MAX and OPEN_MAX.  [mrg 20150507]
+	dhcpcd(8): Import dhcpcd-6.9.0. [roy 20150517]
+	FFS: General improvements in the superblock parser. [maxv 20150523]
+	openssl: Import openssl 1.0.1n [christos 20150612]
+	openssl: Import openssl 1.0.1o [christos 20150616]
+	zoneinfo: Import tzdata2015e. [apb 20150621]
+	nfssvc(2): Support 32-bit system calls for the NFS server.
+		[mrg 20150622]
+	gcc: Import GCC 4.8.5.  [mrg 20150624]
+	OpenSSH: Imported 6.9. [christos 20150630]
+	bind: Import version 9.10.2-P2. [christos 20150708]
+	dhcpcd: Import dhcpcd 6.9.1. [roy 20150709]
+	iostat(8): Support fnmatch(3) patterns for disknames.  [mrg 20150709]
+	openssl: Import openssl 1.0.1p [christos 20150709]
+	ntp: Import ntp 4.2.8p3. [christos 20150710]
+	X11: Delete XFree86 sources.  [mrg 20150723]
+	arm: Add support for NVIDIA Tegra K1 SoC. [jmcneill 20150725]
+	evbarm: Add support for NVIDIA Jetson TK1. [jmcneill 20150725]
+	bind: Import version 9.10.2-P3. [christos 20150728]
+	kernel: Several bug fixes and improvements in the PaX subsystem.
+		[maxv 20150804]
+	sdmmc(4): Add support for UHS-I and MMC HS200 transfer modes.
+		[jmcneill 20150808]
+	sdhc(4): Add support for UHS-I and MMC HS200 transfer modes.
+		[jmcneill 20150808]
+	amlogicsdhc(4): Add support for UHS-I and MMC HS200 transfer modes.
+		[jmcneill 20150808]
+	zoneinfo: Import tzdata2015f. [apb 20150811]
+	OpenSSH: Imported 7.0. [christos 20150813]
+	libc: Update to tzcode2015f. [christos 20150813]
+	intrctl(8): Add interrupt distribution control utility.
+		[knakahara 20150817]
+	gdb(1): Updated to 7.9.1.  [christos 20150818]
+	acpi(4): Updated ACPICA to 20150717. [christos 20150818]
+	mcp3kadc(4): Driver for Microchip 3x0x SAR ADC chips. [phx 20150818]
+	OpenSSH: Imported 7.1. [christos 20150821]
+	dhcpcd: Import dhcpcd 6.9.2. [roy 20150821]
+	rtwn(4): Add a driver for Realtek RTL8188CE/RTL8192CE PCIe IEEE
+		802.11b/g/n wireless network devices, ported from OpenBSD.
+		[nonaka 20150827]
+	arp(4): Remove net.inet.arp.{prune,refresh} sysctl. [ozaki-r 20150831]
+	bind: Import version 9.10.2-P4. [christos 20150903]
+	dhcpcd: Import dhcpcd 6.9.3. [roy 20150904]
+	ftp(1): SNI support for https.  [wiz 20150912]
+	netstat(1): Now knows how tall the display is.  [mrg 20150919]
+	atactl(8): Add smart codes 210, 246, 247 and 248.  [mrg 20150920]
+	libproc, librtld_db: Added from FreeBSD [christos 20150924]
+	dtrace: Updated from FreeBSD [christos 20150924]
+	resolvconf: Import openresolv-3.7.1 [roy 20150929]
+	x86: Add PCI Extended Configuration Space support [nonaka 20151002]
+	pci(3): Decode Extended Capability in PCI Extended Configuration Space.
+		[nonaka 20151002]
+	lua: Updated to Lua 5.3.1 [mbalmer 20151008]
+	libc: Update to tzcode2015g. [christos 20151009]
+	wm(4): Support RX multiqueue. [knakahara,msaitoh 20151013]
+	ntp: Import ntp 4.2.8p4. [christos 20151023]
+	scdebug: Add a way to have system call debug logs go to a kernel
+		history.  [mrg 20151028]
+	vioscsi(4): Add driver for virtio SCSI devices [christos 20151030]
+	omapgpio(4): Add support for TI AM335x GPIO. [jmcneill 20151101]
+	libc/ti-rpc: Remove FD_SETSIZE limit; provide MT support for svc_run()
+		to be run by multiple threads each thread handling the fd's it
+		created. Provide support for a poll based svc_run() and the
+		global variables svc_pollfd and svc_pollfd_max.
+		[christos 20151107]
+	amiga: wsdisplay(4) virtual terminals are working on CV64 and
+		CV64/3D. [phx 20151112]
+	amiga: Build the Xorg server with wsfb(4) driver.
+		Added wsfb(4) support for CV64 and CV64/3D graphics cards.
+		[phx 20151112]
+	cpuctl(8): Most commands can specify more than one CPU now.
+		[mrg 20151115]
+	ndp: net.inet6.ip6.neighborgcthresh is now per interface basis.
+		[ozaki-r 20151125]
+	dhcpcd: Import dhcpcd 6.9.4. [roy 20151130]
+	openssl: Import openssl 1.0.1q [christos 20151206]
+	ip6addrctl: Import from FreeBSD [christos 20151212]
+	adm1026hm(4): Add driver for ADM1026 i2c hardware monitor
+		[jdc 20151216]
+	bind: Import version 9.10.3-P2. [christos 20151216]
+	mdocml: Import 1.13.3. [christos 20151217]
+	sortinfo(1): Add utility to sort texinfo dir files [christos 20151218]
+	x86: Add support for SMEP on amd64 and i386. [maxv 20151219]
+	raidframe: Now built as a kernel module; it can be built-in at
+		kernel build time, or (for MODULAR kernels) loaded as
+		needed. [pgoyette 20151226]
+	admtemp(4): Add chip temperature limits for envsys(4) [jdc 20160103]
+	lmtemp(4): Add chip temperature limits for envsys(4) [jdc 20160103]
+	ismt(4): Add another Intel Chipset internal SMBus driver.
+		[msaitoh 20160105]
+	dhcpcd: Import dhcpcd 6.10.0. [roy 20160107]
+	ntp: Import ntp 4.2.8p5. [christos 20160108]
+	flex(1): Import flex-2.6.0 [christos 20160109]
+	acpi(4): Updated ACPICA to 20160108. [christos 20160109]
+	byacc: update to 20150711 [christos 20160109]
+	tmux(1): Import of tmux 2.1 [christos 20160110]
+	dhcp: Import version 4.3.3. [christos 20160110]
+	gettext: Upgrade to 0.16.1 [christos 20160112]
+	bind: Import version 9.10.3-P3. [christos 20160119]
+	dhcpcd: Import dhcpcd 6.10.1. [roy 20160120]
+	gcc: Import GCC 5.3.0.  [mrg 20160123]
+	lua: Updated to 5.3.2 [lneto 20160128]
+	openssl: Import openssl 1.0.1r [christos 20160130]
+	gdb(1): Updated to 7.10.1.  [christos 20160202]
+	network: Packet input processing (except for bpf) never runs in
+		hardware interrupt. [ozaki-r 20160209]
+	elftoolchain: Import FreeBSD-2016-02-19. [christos 20160219]
+	openresolv: Import openresolv-3.7.3. [roy 20160222]
+	mv(1): Add SIGINFO support. [mrg 20160228]
+	openssl: Import openssl 1.0.1s - disable weak (export) ciphers and SSLv2
+		[christos 20160301]
+	bind: Import version 9.10.3-P4. [christos 20160309]
+	OpenSSH: Imported 7.2. [christos 20160310]
+	libc: Update to tzcode2016b. [christos 20160315]
+	zoneinfo: Import tzdata2016b. [christos 20160315]
+	wpa_supplicant(8): Added interface matching rules [roy 20160323]
+	lua: Applied second and third patch from http://lua.org/bugs.html
+		[mbalmer 20160325]
+	i386: Add a GENERIC_PAE kernel that supports >4GB systems.  [mrg 20160326]
+	network: Drop the concept of cloning/cloned routes [ozaki-r 20160404]
+	network: Remove RTF_CLONING, RTF_XRESOLVE, RTF_LLINFO, RTF_CLONED and
+		RTM_RESOLVE [ozaki-r 20160404]
+	network: Add RTF_CONNECTED as a substitute of RTF_CLONING
+		[ozaki-r 20160404]
+	route(8): Remove -xresolve, -[no]cloned and -llinfo options and add
+		[no]connected option (same as -[no]cloning) [ozaki-r 20160404]
+	route(8): Remove 'c' and 'L' flags and 'C' is now for connected routes
+		[ozaki-r 20160404]
+	netstat(1): Remove 'c' and 'L' flags and 'C' is now for connected routes
+		[ozaki-r 20160404]
+	route(8): route show doesn't contain nexthop caches [ozaki-r 20160404]
+	netstat(1): netstat -r doesn't contain nexthop caches [ozaki-r 20160404]
+	network: Separate nexthop caches from routing table. [ozaki-r 20160404]
+	libutil: added pidfile_lock, pidfile_read, pidfile_read [roy 20160410]
+	dhcpcd(8): Import dhcpcd-6.10.2 [roy 20160410]
+	openresolv(8): Import openresolv-3.8.0 [roy 20160411]
+	ddb(4): rename show arptab to show routes [ozaki-r 20160413]
+	bridge(4): Device is now MP-safe. [ozaki-r 20160108]
+	dhcpcd(8): Import dhcpcd-6.10.3 [roy 20160420]
+	usb(4) subsystem: Merge nick-nhusb [skrll 20160423]
+		- API / infra changes to support memory management changes.
+		- Memory management improvements and bug fixes.
+		- HCDs should now be MP safe
+		- conversion to KERNHIST based debug
+		- FS/LS isoc support on ehci(4).
+		- conversion to kmem(9)
+		- Some USB 3 support - mostly from Takahiro HAYASHI (t-hash).
+		- interrupt transfers now get proper DMA operations
+		- general bug fixes
+		    - kern/48308
+		    - uhub status notification improvements
+		    - umass(4) probe fix (applied to HEAD already)
+		    - ohci(4) short transfer fix
+	nvme(4): Add a driver for Non-Volatile Memory Host Controller Interface
+		devices, ported from OpenBSD. [nonaka 20160501]
+	ntp: Import ntp 4.2.8p7. [christos 20160501]
+	openssl: Import openssl 1.0.1t - security fixes [christos 20160503]
+	acpi(4): Updated ACPICA to 20160422. [christos 20160504]
+	dhcpcd(8): Import dhcpcd-6.11.0 [roy 20160509]
+	x86: Map the kernel image segments independently with fine-grained
+		permissions on amd64 and i386 (W^X). [maxv 20160514]
+	x86: Use processor-specific features to optimize memory access time to
+		the kernel image on amd64 and i386. [maxv 20160515]
+	arm: Add support for i.MX7 SoC. [ryo 20160517]
+	wm(4): Support TX multiqueue. [knakahara 20160519]
+	bind: Import version 9.10.4-P1. [christos 20160526]
+	network: Change hostzerobroadcast default to "no". This has has been
+		the default for many years (broadcast to all ones instead to
+		all zeroes), but might affect some really old machines out
+		there [christos 20160527]
+	zoneinfo: Import tzdata2016d. [agc 20160531]
+	ntp: Import ntp 4.2.8p8. [christos 20160603]
+	ext2fs: Add ext4 extent support from FreeBSD, ported and contributed by
+		Hrishikesh Goyal (GSoc 2016) [christos 20160603]
+	sys_info: Import a script to return version information for system
+		libraries and utilities [agc 20160604]
+	nvmectl(8): Added NVM Express control utility. [nonaka 20160604]
+	gcc: Import GCC 5.4.0.  [mrg 20160606]
+	dhcpcd(8): Import dhcpcd-6.11.1. [roy 20160617]
+	nfs: Support NFS server with COMAPT_NETBSD32.  [mrg 20160622]
+	ext2fs: Add ext4 htree index support from FreeBSD, ported and
+		contributed by Hrishikesh Goyal (GSoc 2016). [christos 20160624]
+	mdocml: Import 1.13.4. [christos 20160715]
+	acpi(4): Updated ACPICA to 20160527. [christos 20160718]
+	kernel: Use fine-grained permissions for kernel modules segments
+		(W^X). [maxv 20160720]
+	amd64: Prevent NULL from being mappable in kernel mode. [maxv 20160722]
+	amd64: Use fine-grained permissions for architecture-specific memory
+		areas (W^X). [maxv 20160725]
+	sdtemp(4): Add support for Atmel AT30TS00, AT30TSE004, Giantec
+		GT30TS00, GT34TS02, Microchip MCP9804, MCP98244, IDT
+		TS3000GB[02], TS3001GB2, TSE200[24]GB2 and On Semiconductor
+		CAT34TS04. [msaitoh 20160726]
+	sdtemp(4): Add JEDEC TSE2004av support. [msaitoh 20160728]
+	xorg-server: Import xorg-server 1.18.4.  [mrg 20160801]
+	OpenSSH: Imported 7.3. [christos 20160802]
+	xen: Map the kernel image segments independently with fine-grained
+		permissions (W^X). [maxv 20160802]
+	ext2fs: Add ext4 extra_inode support. [jdolecek 20160803]
+	kernel: Provide an efficient way to prevent NULL from being mappable
+		in userland processes. [maxv 20160806]
+	ext2fs: Actually fill file type for readdir(4) and friends.
+		[jdolecek 20160615]
+	zoneinfo: Import tzdata2016f. [kre 20160807]
+	tcu(4): Add support for flxd TC-USB TURBOchannel USB and GPIO option.
+		[flxd 20160811]
+	ext2fs: Add read-only ext4 extended attribute support.
+		[jdolecek 20160612]
+	dhcpcd(8): Import dhcpcd-6.11.3. [roy 20160815]
+	ext2fs: Add ext4 dir_nlink support, supporting up to 64000 file hard
+		links, and unlimited directory links. [jdolecek 20160815]
+	ext2fs: Add ext4 gdt_csum/uninit_bg support. [jdolecek 20160815]
+	unbound: Import 1.5.9. [christos 20160820]
+	tmux(1): Import of tmux 2.2 [christos 20160831]
+	lua: updated to 5.3.3 and applied all three patches from 
+		http://lua.org/bugs.html [salazar 20160908]
+	libc: Update to tzcode2016f. [christos 20160916]
+	nvme(4): NVMe driver is now MPSAFE. [jdolecek 20160918]
+	pci(4): Introduce a better drvname method. [mrg 20160924]
+	zoneinfo: Import tzdata2016g.  [kre 20160929]
+	libc: Add <stdalign.h> and <stdnoreturn.h>. [kamil 20161002]
+	c11: Import cc(1) wrapper for C11. [kamil 20161003]
+	libc: Add the C11 static_assert macro in <assert.h>. [kamil 20161003]
+	mntva(4): Add driver for MNTMN VA2000 FPGA-based graphics card for
+		Amiga computers with Zorro slot. Supports accelerated wsdisplay
+		console and wsfb-based X11. [rkujawa 20161003]
+	libc: Add the timespec_get function and TIME_UTC definition in the
+		<time.h> header. Enable unconditionally the timespec struct
+		definition in <time.h>. Changes conform to the C11 standard.
+		[kamil 20161004]
+	bind: Import version 9.10.4-P3. [christos 20161004]
+	atactl(8): Add smart code 249.  [mrg 20161004]
+	mips: Add support for MediaTek MT7628 SoC [ryo 20161006]
+	libc: Update to tzcode2016g. [christos 20161007]
+	dhcpcd(8): Import dhcpcd-6.11.4 [roy 20161009]
+	urtwn(4): Add support for Realtek 8192EU [nat 20161012]
+	gdb(1): Updated to 7.12.  [christos 20161012]
+	libc: Add the wcsnlen(3) function in <wchar.h>. [kamil 20161015]
+	libc: Update to tzcode2016h. [christos 20161020]
+	zoneinfo: Import tzdata2016h.  [kre 20161020]
+	binutils: Updated to FSF binutils 2.27.  [christos 20161026]
+	wapbl(4): Improved truncate performance, and stability [jdolecek 20161028]
+	bind: Import version 9.10.4-P4. [christos 20161101]
+	zoneinfo: Import tzdata2016i.  [kre 20161103]
+	libc: Update to tzcode2016i. [christos 20161104]
+	acpi(4): Updated ACPICA to 20160930. [christos 20161111]
+	scsictl(8): Add "getrealloc" and "setrealloc" commands to get/set
+		automatic reallocation parameters/enables for error recovery.
+		[flxd 20161119]
+	scsipi(9): Make scsipi framework MPSAFE. [mlelstv 20161120]
+	umass(4): mark MPSAFE. [skrll 20161121]
+	wpa: Import wpa_supplicant and hostapd 2.6. [christos 20161121]
+	ntp: Import ntp 4.2.8p9. [christos 20161121]
+	zoneinfo: Import tzdata2016j.  [kre 20161124]
+	systat(1): Add -b option to dump once and exit.  [mrg 20161202]
+	luna68k: Preliminary support for LUNA's HD647180X I/O processor
+		(a.k.a. XP). [tsutsui 20161203]
+	axe(4): added support for AX88772A and AX88772B chipsets (from
+		FreeBSD) [skrll 20161204]
+	ixg(4): Add X55x support [msaitoh 20161205]
+	audio(4): Audio sub-system changes - in kernel mixing [nat 20161208]
+	speaker(4):Synthesized beep for platforms with audio [nat 20161208]
+	crash(8): Add sparc support.  [mrg 20161210]
+	cgd(4): Add aes-xts. [alnsn 20161211]
+	options(4): Remove KSTACK_CHECK_DR0. [kamil 20161213]
+	ptrace(2): Add hardware assisted breakpoint/watchpoint API:
+		PT_READ_WATCHPOINT, PT_WRITE_WATCHPOINT and
+		PT_COUNT_WATCHPOINTS [kamil 20161215]
+	rtadvd(8): Support -p <pidfile> option. [ozaki-r 20161216]
+	xen: Add support for kernel modules. [maxv 20161216]
+	mips64: Use N64 binaries where kvm is required, fixing fstat, netstat,
+		systat, crash, pstat and kgmon.  [mrg 20161222]
+	OpenSSH: Imported 7.4. [christos 20161224]
+	dreamcast: Add preliminary "G1-ATA" IDE HDD support. [tsutsui 20161229]
+	resolvconf(8): Import openresolv-3.9.0 [roy 20161230]
+	flex(1): Import flex-2.6.3 [christos 20170102]
+	ptrace(2): Add new si_code value of SIGTRAP: TRAP_EXEC [kamil 20170107]
+	ptrace(2): Add signal information accessors API:
+		PT_GET_SIGINFO and PT_SET_SIGINFO [kamil 20170107]
+	nsd(8): Add the NSD Authoritative DNS server [christos 20170107]
+	zlib(3): Import 1.2.10 [christos 20170109]
+	ptrace(2): Add new si_code value of SIGTRAP: TRAP_CHLD [kamil 20170110]
+	ptrace(2): Add new options in EVENT_MASK: PTRACE_VFORK and
+		PTRACE_VFORK_DONE [kamil 20170113]
+	ptrace(2): Add new options in EVENT_MASK: PTRACE_LWP_CREATE and
+		PTRACE_LWP_EXIT [kamil 20170114]
+	siginfo(2): Add new si_code for SIGTRAP: TRAP_LWP [kamil 20170114]
+	libpcap: Import 1.8.1. [christos 20170124]
+	tcpdump(8): Import 4.8.1. [christos 20170124]
+	acpi(4): Updated ACPICA to 20170119. [christos 20170125]
+	bta2dpd(8): Add new bluetooth A2DP daemon. [nat 20170129]
+	kerberos(8): Update to latest Heimdal-HEAD [christos 20170128]
+	libevent: Import libevent 2.1.18 [christos 20170131]
+	nc(1): Add a netcat utility from OpenBSD [christos 20170206]
+	pthread_dbg(3): Removed from the base distribution. [kamil 20170208]
+	ixg(4): Support TX/RX multiqueue [msaitoh 20170208]
+	ixv(4): Add Intel 10G Ethernet virtual function driver.
+		[msaitoh 20170208]
+	bind: Import version 9.10.4-P6. [christos 20170208]
+	openldap: Import 2.4.44. [christos 20170208]
+	libc: Add accept4 function for compatibility [maya 20170208]
+	bpf(4): Make it MP-safe [ozaki-r 20170209]
+	file(1): Upgraded to 5.30. [christos 20170210]
+	byacc: update to 20170201 [christos 20170211]
+	postfix(1): Import version 3.1.4. [christos 20170213]
+	l2tp(4): Add L2TPv3 interface. [knakahara 20170216]
+	siginfo(2): Add new si_code for SIGTRAP: TRAP_DBREG [kamil 20170217]
+	disklabel(5): Add DISKLABEL_EI (``Endian-Independent'' disklabel)
+		kernel option to machines that support Master Boot Record
+		(MBR). [rin 20170219]
+	ptrace(2): Add new API replacing PT_WATCHPOINT for Debug Registers:
+		PT_GETDBREGS and PT_SETDBREGS [kamil 20170223]
+	dk(4): Add DKWEDGE_METHOD_RDB option to enable Amiga Rigid Disk Block
+		(RDB) partitioning detection method. [rin 20170226]
+	siginfo(2): Add new si_code values for SIGTRAP: TRAP_SCE and TRAP_SCX
+		[kamil 20170228]
+	zoneinfo: Import tzdata2017a.  [kre 20170301]
+	vioscsi(4): Allocate bus dma maps on attach, improves stability
+		and performance, adresses kern/52043 [jdolecek 20170307]
+	luna68k: Add a driver for LUNA's front panel LCD.  Ported from
+		OpenBSD/luna88k. [tsutsui 20170309]
+	sqlite3: Import 3.17.0. [christos 20170311]
+	libc: Update to tzcode2017a. [christos 20170311]
+	x86: Revamp the PMC (Performance-Monitoring Counter) support.
+		[maxv 20170311]
+	mdocml: Import 1.14.1. [christos 20170318]
+	sh(1): Arithmetic parser imported from dash (via FreeBSD)
+		adding support for all required operators, as well
+		as being smaller and faster.  [kre 20170320]
+	zoneinfo: Import tzdata2017b.  [kre 20170321]
+	virtio(4): Refactor child driver attach code for better modularization
+		[jdolecek 20170325]
+	vioscsi(4): Use MSI/MSI-X, reduce disk probe time [jdolecek 20170325]
+	dhcpcd(8): Import dhcpcd-7.0.0-beta2 [roy 20170402]
+	ptrace(2): Add operations to single step specified threads:
+		PT_SETSTEP and PT_CLEARSTEP [kamil 20170408]
+	route(4): Add RO_MSGFILTER [roy 20170411]
+	dc(1): Import from OpenBSD (replaced GPL version) [christos 20170410]
+	bind: Import version 9.10.4-P8. [christos 20170413]
+	ntp: Import ntp 4.2.8p10. [christos 20170413]
+	dhcpcd: Import dhcpcd 7.0.0-beta3 [roy 20170414]
+	OpenSSH: Imported 7.5. [christos 20170418]
+	tmux(1): Import of tmux 2.4 [christos 20170423]
+	libc: Update to tzcode2017b. [christos 20170425]
+	lua: Updated to Lua 5.3.4. [mbalmer 20170426]
+	acpi(4): Updated ACPICA to 20170303. [christos 20170430]
+	openpam(3): update to 20170430 (resedacea) [christos 20170506]
+	dhcpcd: Import dhcpcd 7.0.0-rc1 [roy 20170510]
+	vioscsi(4): Stability fixes [jdolecek 20170515]
+	localcount(9): Add localcount ref-count primitives [pgoyette 20170519]
+	openssl: Remove MKCRYPTO_RC5 option now that the patents have expired.
+		[riastradh 20170521]
+	src: Remove MKCRYPTO option and always include cryptography.
+		[riastradh 20170521]
+	file(1): Upgraded to 5.31. [christos 20170524]
+	can(4): Added a socketcan implementation, a socket layer for
+		CAN busses. [bouyer 20170527]
+	vlan(4): Make it MP-safe from s-yamaguchi@IIJ [knakahara 20170607]
+	opencrypto(9): Complete MP-ification [knakahara 20170731]
+	ipsec(4): Make it MP-safe [ozaki-r 20170809]
+	evbmips: Merge sbmips port into evbmips. [mrg 20170815]
+	amd64: Backport SVS (Meltdown mitigation). [maxv 20180404]
+	x86: Backport retpoline (SpectreV2 mitigation). [mrg 20180411]
+	amd64: Backport SMAP. [maxv 20180414]
+	x86: Backport SpectreV2 mitigations (hardware). [maxv 20180609]
+	x86: Backport SpectreV4 mitigations. [maxv 20180609]

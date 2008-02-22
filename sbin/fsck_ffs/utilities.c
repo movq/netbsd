@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.54 2007/02/08 21:36:58 drochner Exp $	*/
+/*	$NetBSD: utilities.c,v 1.65 2017/02/08 16:11:40 rin Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)utilities.c	8.6 (Berkeley) 5/19/95";
 #else
-__RCSID("$NetBSD: utilities.c,v 1.54 2007/02/08 21:36:58 drochner Exp $");
+__RCSID("$NetBSD: utilities.c,v 1.65 2017/02/08 16:11:40 rin Exp $");
 #endif
 #endif /* not lint */
 
@@ -46,6 +46,7 @@ __RCSID("$NetBSD: utilities.c,v 1.54 2007/02/08 21:36:58 drochner Exp $");
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 #include <ufs/ufs/ufs_bswap.h>
+#include <ufs/ufs/quota2.h>
 
 #include <ctype.h>
 #include <err.h>
@@ -59,12 +60,11 @@ __RCSID("$NetBSD: utilities.c,v 1.54 2007/02/08 21:36:58 drochner Exp $");
 #include "fsutil.h"
 #include "fsck.h"
 #include "extern.h"
+#include "exitvalues.h"
 
 long	diskreads, totalreads;	/* Disk cache statistics */
 
 static void rwerror(const char *, daddr_t);
-
-extern int returntosingle;
 
 int
 ftypeok(union dinode *dp)
@@ -137,14 +137,16 @@ bufinit(void)
 	pbp = pdirbp = (struct bufarea *)0;
 	bufp = malloc((unsigned int)sblock->fs_bsize);
 	if (bufp == 0)
-		errx(EEXIT, "cannot allocate buffer pool");
+		errexit("cannot allocate buffer pool");
 	cgblk.b_un.b_buf = bufp;
 	initbarea(&cgblk);
+#ifndef NO_APPLE_UFS
 	bufp = malloc((unsigned int)APPLEUFS_LABEL_SIZE);
 	if (bufp == 0)
-		errx(EEXIT, "cannot allocate buffer pool");
+		errexit("cannot allocate buffer pool");
 	appleufsblk.b_un.b_buf = bufp;
 	initbarea(&appleufsblk);
+#endif
 	bufhead.b_next = bufhead.b_prev = &bufhead;
 	bufcnt = MAXBUFSPACE / sblock->fs_bsize;
 	if (bufcnt < MINBUFS)
@@ -160,7 +162,7 @@ bufinit(void)
 					free(bufp);
 				break;
 			}
-			errx(EEXIT, "cannot allocate buffer pool");
+			errexit("cannot allocate buffer pool");
 		}
 		bp->b_un.b_buf = bufp;
 		bp->b_prev = &bufhead;
@@ -181,13 +183,13 @@ getdatablk(daddr_t blkno, long size)
 	struct bufarea *bp;
 
 	for (bp = bufhead.b_next; bp != &bufhead; bp = bp->b_next)
-		if (bp->b_bno == fsbtodb(sblock, blkno))
+		if (bp->b_bno == FFS_FSBTODB(sblock, blkno))
 			goto foundit;
 	for (bp = bufhead.b_prev; bp != &bufhead; bp = bp->b_prev)
 		if ((bp->b_flags & B_INUSE) == 0)
 			break;
 	if (bp == &bufhead)
-		errx(EEXIT, "deadlocked buffer pool");
+		errexit("deadlocked buffer pool");
 	/* fall through */
 foundit:
 	getblk(bp, blkno, size);
@@ -206,7 +208,7 @@ getblk(struct bufarea *bp, daddr_t blk, long size)
 {
 	daddr_t dblk;
 
-	dblk = fsbtodb(sblock, blk);
+	dblk = FFS_FSBTODB(sblock, blk);
 	totalreads++;
 	if (bp->b_bno != dblk) {
 		flush(fswritefd, bp);
@@ -241,7 +243,7 @@ flush(int fd, struct bufarea *bp)
 		if (needswap)
 			ffs_csum_swap(ccsp, ccsp, size);
 		bwrite(fswritefd, (char *)ccsp,
-		    fsbtodb(sblock, sblock->fs_csaddr + j * sblock->fs_frag),
+		    FFS_FSBTODB(sblock, sblock->fs_csaddr + j * sblock->fs_frag),
 		    size);
 		if (needswap)
 			ffs_csum_swap(ccsp, ccsp, size);
@@ -256,14 +258,20 @@ rwerror(const char *mesg, daddr_t blk)
 		printf("\n");
 	pfatal("CANNOT %s: BLK %lld", mesg, (long long)blk);
 	if (reply("CONTINUE") == 0)
-		exit(EEXIT);
+		exit(FSCK_EXIT_CHECK_FAILED);
 }
 
 void
-ckfini(void)
+ckfini(int noint)
 {
 	struct bufarea *bp, *nbp;
-	int ofsmodified, cnt = 0;
+	int cnt = 0;
+
+	if (!noint) {
+		if (doinglevel2)
+			return;
+		markclean = 0;
+	}
 
 	if (fswritefd < 0) {
 		(void)close(fsreadfd);
@@ -281,8 +289,10 @@ ckfini(void)
 		sbdirty();
 		flush(fswritefd, &sblk);
 	}
+#ifndef NO_APPLE_UFS
 	flush(fswritefd, &appleufsblk);
 	free(appleufsblk.b_un.b_buf);
+#endif
 	flush(fswritefd, &cgblk);
 	free(cgblk.b_un.b_buf);
 	for (bp = bufhead.b_prev; bp && bp != &bufhead; bp = nbp) {
@@ -293,7 +303,7 @@ ckfini(void)
 		free((char *)bp);
 	}
 	if (bufhead.b_size != cnt)
-		errx(EEXIT, "Panic: lost %d buffers", bufhead.b_size - cnt);
+		errexit("Panic: lost %d buffers", bufhead.b_size - cnt);
 	pbp = pdirbp = (struct bufarea *)0;
 	if (markclean && (sblock->fs_clean & FS_ISCLEAN) == 0) {
 		/*
@@ -308,11 +318,7 @@ ckfini(void)
 			sblock->fs_pendingblocks = 0;
 			sblock->fs_pendinginodes = 0;
 			sbdirty();
-			ofsmodified = fsmodified;
 			flush(fswritefd, &sblk);
-#if LITE2BORKEN
-			fsmodified = ofsmodified;
-#endif
 			if (!preen)
 				printf(
 				    "\n***** FILE SYSTEM MARKED CLEAN *****\n");
@@ -321,6 +327,7 @@ ckfini(void)
 	if (debug)
 		printf("cache missed %ld of %ld (%d%%)\n", diskreads,
 		    totalreads, (int)(diskreads * 100 / totalreads));
+	cleanup_wapbl();
 	(void)close(fsreadfd);
 	(void)close(fswritefd);
 }
@@ -334,7 +341,8 @@ bread(int fd, char *buf, daddr_t blk, long size)
 
 	offset = blk;
 	offset *= dev_bsize;
-	if (pread(fd, buf, (int)size, offset) == size)
+	if ((pread(fd, buf, (int)size, offset) == size) &&
+	    read_wapbl(buf, size, blk) == 0)
 		return (0);
 	rwerror("READ", blk);
 	errs = 0;
@@ -416,10 +424,18 @@ allocblk(long frags)
 				clrbit(cg_blksfree(cgp, 0), baseblk + k);
 			}
 			n_blks += frags;
-			if (frags == sblock->fs_frag)
+			if (frags == sblock->fs_frag) {
 				cgp->cg_cs.cs_nbfree--;
-			else
+				sblock->fs_cstotal.cs_nbfree--;
+				sblock->fs_cs(fs, cg).cs_nbfree--;
+				ffs_clusteracct(sblock, cgp,
+				    ffs_fragstoblks(sblock, baseblk), -1);
+			} else {
 				cgp->cg_cs.cs_nffree -= frags;
+				sblock->fs_cstotal.cs_nffree -= frags;
+				sblock->fs_cs(fs, cg).cs_nffree -= frags;
+			}
+			sbdirty();
 			cgdirty();
 			return (i + j);
 		}
@@ -435,6 +451,7 @@ freeblk(daddr_t blkno, long frags)
 {
 	struct inodesc idesc;
 
+	memset(&idesc, 0, sizeof(idesc));
 	idesc.id_blkno = blkno;
 	idesc.id_numfrags = frags;
 	(void)pass4check(&idesc);
@@ -452,7 +469,7 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 	static int busy = 0;
 	struct inostat *info;
 
-	if (curdir == ino && ino == ROOTINO) {
+	if (curdir == ino && ino == UFS_ROOTINO) {
 		(void)strlcpy(namebuf, "/", namebuflen);
 		return;
 	}
@@ -471,7 +488,7 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 		idesc.id_parent = curdir;
 		goto namelookup;
 	}
-	while (ino != ROOTINO) {
+	while (ino != UFS_ROOTINO) {
 		idesc.id_number = ino;
 		idesc.id_func = findino;
 		idesc.id_name = "..";
@@ -493,50 +510,9 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 		ino = idesc.id_number;
 	}
 	busy = 0;
-	if (ino != ROOTINO)
+	if (ino != UFS_ROOTINO)
 		*--cp = '?';
 	memmove(namebuf, cp, (size_t)(&namebuf[MAXPATHLEN] - cp));
-}
-
-void
-catch(int sig)
-{
-	if (!doinglevel2) {
-		markclean = 0;
-		ckfini();
-	}
-	exit(12);
-}
-
-/*
- * When preening, allow a single quit to signal
- * a special exit after filesystem checks complete
- * so that reboot sequence may be interrupted.
- */
-void
-catchquit(int sig)
-{
-	int errsave = errno;
-
-	printf("returning to single-user after file system check\n");
-	returntosingle = 1;
-	(void)signal(SIGQUIT, SIG_DFL);
-	errno = errsave;
-}
-
-/*
- * Ignore a single quit signal; wait and flush just in case.
- * Used by child processes in preen.
- */
-void
-voidquit(int sig)
-{
-	int errsave = errno;
-
-	sleep(1);
-	(void)signal(SIGQUIT, SIG_IGN);
-	(void)signal(SIGQUIT, SIG_DFL);
-	errno = errsave;
 }
 
 /*
@@ -573,7 +549,7 @@ dofix(struct inodesc *idesc, const char *msg)
 		return (0);
 
 	default:
-		errx(EEXIT, "UNKNOWN INODESC FIX MODE %d", idesc->id_fix);
+		errexit("UNKNOWN INODESC FIX MODE %d", idesc->id_fix);
 	}
 	/* NOTREACHED */
 	return (0);
@@ -605,7 +581,7 @@ inoinfo(ino_t inum)
 	int iloff;
 
 	if (inum > maxino)
-		errx(EEXIT, "inoinfo: inumber %llu out of range",
+		errexit("inoinfo: inumber %llu out of range",
 		    (unsigned long long)inum);
 	ilp = &inostathead[inum / sblock->fs_ipg];
 	iloff = inum % sblock->fs_ipg;
@@ -626,7 +602,7 @@ sb_oldfscompat_read(struct fs *fs, struct fs **fssave)
 		if (!*fssave)
 			*fssave = malloc(sizeof(struct fs));
 		if (!*fssave)
-			errx(EEXIT, "cannot allocate space for compat store");
+			errexit("cannot allocate space for compat store");
 		memmove(*fssave, fs, sizeof(struct fs));
 
 		if (debug)
@@ -722,4 +698,76 @@ sb_oldfscompat_write(struct fs *fs, struct fs *fssave)
 	memmove(&fs->fs_old_postbl_start, &fssave->fs_old_postbl_start,
 	    ((fs->fs_old_postblformat == FS_42POSTBLFMT) ?
 	    512 : 256));
+}
+
+struct uquot *
+find_uquot(struct uquot_hash *uq_hash, uint32_t uid, int alloc)
+{
+	struct uquot *uq;
+	SLIST_FOREACH(uq, &uq_hash[uid & q2h_hash_mask], uq_entries) {
+		if (uq->uq_uid == uid)
+			return uq;
+	}
+	if (!alloc)
+		return NULL;
+	uq = malloc(sizeof(struct uquot));
+	if (uq == NULL)
+		errexit("cannot allocate quota entry");
+	memset(uq, 0, sizeof(struct uquot));
+	uq->uq_uid = uid;
+	SLIST_INSERT_HEAD(&uq_hash[uid & q2h_hash_mask], uq, uq_entries);
+	return uq;
+}
+
+void
+remove_uquot(struct uquot_hash *uq_hash, struct uquot *uq)
+{
+	SLIST_REMOVE(&uq_hash[uq->uq_uid & q2h_hash_mask],
+	    uq, uquot, uq_entries);
+}
+
+void
+update_uquot(ino_t inum, uid_t uid, gid_t gid, int64_t bchange, int64_t ichange)
+{
+	/* simple uquot cache: remember the last used */
+	static struct uquot *uq_u = NULL;
+	static struct uquot *uq_g = NULL;
+
+	if (inum < UFS_ROOTINO)
+		return;
+	if (is_journal_inode(inum))
+		return;
+	if (is_quota_inode(inum))
+		return;
+	
+	if (uquot_user_hash == NULL)
+		return;
+		
+	if (uq_u == NULL || uq_u->uq_uid != uid)
+		uq_u = find_uquot(uquot_user_hash, uid, 1);
+	uq_u->uq_b += bchange;
+	uq_u->uq_i += ichange;
+	if (uq_g == NULL || uq_g->uq_uid != gid)
+		uq_g = find_uquot(uquot_group_hash, gid, 1);
+	uq_g->uq_b += bchange;    
+	uq_g->uq_i += ichange;
+}
+
+int
+is_quota_inode(ino_t inum)
+{
+
+	if ((sblock->fs_flags & FS_DOQUOTA2) == 0)
+		return 0;
+
+	if (sblock->fs_quota_magic != Q2_HEAD_MAGIC)
+		return 0;
+	
+	if (sblock->fs_quotafile[USRQUOTA] == inum)
+		return 1;
+
+	if (sblock->fs_quotafile[GRPQUOTA] == inum) 
+		return 1;
+
+	return 0;
 }

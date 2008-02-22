@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_misc.c,v 1.98 2008/01/23 15:04:38 elad Exp $	*/
+/*	$NetBSD: ibcs2_misc.c,v 1.115 2017/08/09 18:55:21 maxv Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_misc.c,v 1.98 2008/01/23 15:04:38 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_misc.c,v 1.115 2017/08/09 18:55:21 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -134,10 +134,6 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_misc.c,v 1.98 2008/01/23 15:04:38 elad Exp $")
 
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
-
-#if defined(__i386__)
-#include <i386/include/reg.h>
-#endif
 
 #include <compat/ibcs2/ibcs2_types.h>
 #include <compat/ibcs2/ibcs2_dirent.h>
@@ -208,32 +204,18 @@ ibcs2_sys_ulimit(struct lwp *l, const struct ibcs2_sys_ulimit_args *uap, registe
 int
 ibcs2_sys_waitsys(struct lwp *l, const struct ibcs2_sys_waitsys_args *uap, register_t *retval)
 {
-#if defined(__i386__)
 	/* {
 		syscallarg(int) a1;
 		syscallarg(int) a2;
 		syscallarg(int) a3;
 	} */
-#endif
-	int error;
-	int pid, options, status, was_zombie;
+	int error, options, status, pid;
 
-#if defined(__i386__)
-#define WAITPID_EFLAGS	0x8c4	/* OF, SF, ZF, PF */
-	if ((l->l_md.md_regs->tf_eflags & WAITPID_EFLAGS) == WAITPID_EFLAGS) {
-		/* waitpid */
-		pid = SCARG(uap, a1);
-		options = SCARG(uap, a3);
-	} else {
-#endif
-		/* wait */
-		pid = WAIT_ANY;
-		options = 0;
-#if defined(__i386__)
-	}
-#endif
+	/* wait */
+	pid = WAIT_ANY;
+	options = 0;
 
-	error = do_sys_wait(l, &pid, &status, options, NULL, &was_zombie);
+	error = do_sys_wait(&pid, &status, options, NULL);
 	retval[0] = pid;
 	retval[1] = status;
 	return error;
@@ -371,14 +353,13 @@ ibcs2_sys_getdents(struct lwp *l, const struct ibcs2_sys_getdents_args *uap, reg
 		syscallarg(char *) buf;
 		syscallarg(int) nbytes;
 	} */
-	struct proc *p = l->l_proc;
 	struct dirent *bdp;
 	struct vnode *vp;
 	char *inp, *tbuf;	/* BSD-format */
 	int len, reclen;	/* BSD-format */
 	char *outp;		/* iBCS2-format */
 	int resid, ibcs2_reclen;/* iBCS2-format */
-	struct file *fp;
+	file_t *fp;
 	struct uio auio;
 	struct iovec aiov;
 	struct ibcs2_dirent idb;
@@ -388,14 +369,14 @@ ibcs2_sys_getdents(struct lwp *l, const struct ibcs2_sys_getdents_args *uap, reg
 	off_t *cookiebuf = NULL, *cookie;
 	int ncookies;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	if ((fp->f_flag & FREAD) == 0) {
 		error = EBADF;
 		goto out1;
 	}
-	vp = (struct vnode *)fp->f_data;
+	vp = fp->f_vnode;
 	if (vp->v_type != VDIR) {
 		error = EINVAL;
 		goto out1;
@@ -429,8 +410,10 @@ again:
 	for (cookie = cookiebuf; len > 0; len -= reclen) {
 		bdp = (struct dirent *)inp;
 		reclen = bdp->d_reclen;
-		if (reclen & 3)
-			panic("ibcs2_getdents: bad reclen");
+		if (reclen & 3) {
+			error = EIO;
+			goto out;
+		}
 		if (cookie && (*cookie >> 32) != 0) {
 			compat_offseterr(vp, "ibcs2_getdents");
 			error = EINVAL;
@@ -474,19 +457,23 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == SCARG(uap, buf))
+	if (outp == SCARG(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
 out1:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -498,14 +485,13 @@ ibcs2_sys_read(struct lwp *l, const struct ibcs2_sys_read_args *uap, register_t 
 		syscallarg(char *) buf;
 		syscallarg(u_int) nbytes;
 	} */
-	struct proc *p = l->l_proc;
 	struct dirent *bdp;
 	struct vnode *vp;
 	char *inp, *tbuf;	/* BSD-format */
 	int len, reclen;	/* BSD-format */
 	char *outp;		/* iBCS2-format */
 	int resid, ibcs2_reclen;/* iBCS2-format */
-	struct file *fp;
+	file_t *fp;
 	struct uio auio;
 	struct iovec aiov;
 	struct ibcs2_direct {
@@ -519,8 +505,8 @@ ibcs2_sys_read(struct lwp *l, const struct ibcs2_sys_read_args *uap, register_t 
 	off_t off;			/* true file offset */
 	int ncookies;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0) {
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0) {
 		if (error == EINVAL)
 			return sys_read(l, (const void *)uap, retval);
 		else
@@ -530,9 +516,9 @@ ibcs2_sys_read(struct lwp *l, const struct ibcs2_sys_read_args *uap, register_t 
 		error = EBADF;
 		goto out1;
 	}
-	vp = fp->f_data;
+	vp = fp->f_vnode;
 	if (vp->v_type != VDIR) {
-		FILE_UNUSE(fp, l);
+		fd_putfile(SCARG(uap, fd));
 		return sys_read(l, (const void *)uap, retval);
 	}
 	buflen = min(MAXBSIZE, max(DEV_BSIZE, (size_t)SCARG(uap, nbytes)));
@@ -605,18 +591,22 @@ again:
 		resid -= ibcs2_reclen;
 	}
 	/* if we squished out the whole block, try again */
-	if (outp == SCARG(uap, buf))
+	if (outp == SCARG(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;		/* update the vnode offset */
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
 out1:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -635,11 +625,8 @@ ibcs2_sys_mknod(struct lwp *l, const struct ibcs2_sys_mknod_args *uap, register_
 		SCARG(&ap, mode) = SCARG(uap, mode);
 		return sys_mkfifo(l, &ap, retval);
 	} else {
-		struct sys_mknod_args ap;
-		SCARG(&ap, path) = SCARG(uap, path);
-		SCARG(&ap, mode) = SCARG(uap, mode);
-		SCARG(&ap, dev) = SCARG(uap, dev);
-		return sys_mknod(l, &ap, retval);
+		return do_sys_mknod(l, SCARG(uap, path), SCARG(uap, mode),
+		    SCARG(uap, dev), retval, UIO_USERSPACE);
 	}
 }
 
@@ -943,19 +930,20 @@ ibcs2_sys_times(struct lwp *l, const struct ibcs2_sys_times_args *uap, register_
 	} */
 	struct tms tms;
 	struct timeval t;
-	struct rusage *ru;
+	struct rusage ru, *rup;
 #define CONVTCK(r)      (r.tv_sec * hz + r.tv_usec / (1000000 / hz))
 
-	ru = &l->l_proc->p_stats->p_ru;
-	mutex_enter(&l->l_proc->p_smutex);
-	calcru(l->l_proc, &ru->ru_utime, &ru->ru_stime, NULL, NULL);
-	mutex_exit(&l->l_proc->p_smutex);
-	tms.tms_utime = CONVTCK(ru->ru_utime);
-	tms.tms_stime = CONVTCK(ru->ru_stime);
+	ru = l->l_proc->p_stats->p_ru;
+	mutex_enter(l->l_proc->p_lock);
+	calcru(l->l_proc, &ru.ru_utime, &ru.ru_stime, NULL, NULL);
+	rulwps(l->l_proc, &ru);
+	mutex_exit(l->l_proc->p_lock);
+	tms.tms_utime = CONVTCK(ru.ru_utime);
+	tms.tms_stime = CONVTCK(ru.ru_stime);
 
-	ru = &l->l_proc->p_stats->p_cru;
-	tms.tms_cutime = CONVTCK(ru->ru_utime);
-	tms.tms_cstime = CONVTCK(ru->ru_stime);
+	rup = &l->l_proc->p_stats->p_cru;
+	tms.tms_cutime = CONVTCK(rup->ru_utime);
+	tms.tms_cstime = CONVTCK(rup->ru_stime);
 
 	microtime(&t);
 	*retval = CONVTCK(t);
@@ -1043,7 +1031,9 @@ ibcs2_sys_pgrpsys(struct lwp *l, const struct ibcs2_sys_pgrpsys_args *uap, regis
 
 	switch (SCARG(uap, type)) {
 	case 0:			/* getpgrp */
+		mutex_enter(proc_lock);
 		*retval = p->p_pgrp->pg_id;
+		mutex_exit(proc_lock);
 		return 0;
 
 	case 1:			/* setpgrp */
@@ -1053,7 +1043,9 @@ ibcs2_sys_pgrpsys(struct lwp *l, const struct ibcs2_sys_pgrpsys_args *uap, regis
 		SCARG(&sa, pid) = 0;
 		SCARG(&sa, pgid) = 0;
 		sys_setpgid(l, &sa, retval);
+		mutex_enter(proc_lock);
 		*retval = p->p_pgrp->pg_id;
+		mutex_exit(proc_lock);
 		return 0;
 	    }
 
@@ -1075,6 +1067,8 @@ ibcs2_sys_pgrpsys(struct lwp *l, const struct ibcs2_sys_pgrpsys_args *uap, regis
 }
 
 /*
+ * See http://docsrv.sco.com:507/en/man/html.S/plock.S.html
+ *
  * XXX - need to check for nested calls
  */
 
@@ -1089,9 +1083,12 @@ ibcs2_sys_plock(struct lwp *l, const struct ibcs2_sys_plock_args *uap, register_
 #define IBCS2_TEXTLOCK	2
 #define IBCS2_DATALOCK	4
 
-	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-	    NULL) != 0)
-		return EPERM;
+	/*
+	 * NOTE: This is a privileged operation. Normally it would require root
+	 * access. When implementing, please make sure to use an appropriate
+	 * kauth(9) request. See the man-page for more information.
+	 */
+
 	switch(SCARG(uap, cmd)) {
 	case IBCS2_UNLOCK:
 	case IBCS2_PROCLOCK:
@@ -1102,6 +1099,9 @@ ibcs2_sys_plock(struct lwp *l, const struct ibcs2_sys_plock_args *uap, register_
 	return EINVAL;
 }
 
+/*
+ * See http://docsrv.sco.com:507/en/man/html.S/uadmin.S.html
+ */
 int
 ibcs2_sys_uadmin(struct lwp *l, const struct ibcs2_sys_uadmin_args *uap, register_t *retval)
 {
@@ -1153,11 +1153,12 @@ ibcs2_sys_uadmin(struct lwp *l, const struct ibcs2_sys_uadmin_args *uap, registe
 	case SCO_A_CLOCK:
 	case SCO_A_SETCONFIG:
 	case SCO_A_GETDEV:
-		/* XXX Use proper kauth(9) requests when updating this. */
-		error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
-		if (error)
-			return (error);
+		/*
+		 * NOTE: These are all privileged operations, that otherwise
+		 * would require root access or similar. When implementing,
+		 * please use appropriate kauth(9) requests. See the man-page
+		 * for more information.
+		 */
 
 		if (SCARG(uap, cmd) != SCO_A_GETDEV)
 			return 0;
@@ -1195,15 +1196,14 @@ xenix_sys_rdchk(struct lwp *l, const struct xenix_sys_rdchk_args *uap, register_
 	/* {
 		syscallarg(int) fd;
 	} */
-	struct file *fp;
+	file_t *fp;
 	int nbytes;
 	int error;
 
-	if ((fp = fd_getfile(l->l_proc->p_fd, SCARG(uap, fd))) == NULL)
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
 		return (EBADF);
-	FILE_USE(fp);
-	error = (*fp->f_ops->fo_ioctl)(fp, FIONREAD, &nbytes, l);
-	FILE_UNUSE(fp, l);
+	error = (*fp->f_ops->fo_ioctl)(fp, FIONREAD, &nbytes);
+	fd_putfile(SCARG(uap, fd));
 
 	if (error != 0)
 		return error;
@@ -1222,7 +1222,7 @@ xenix_sys_chsize(struct lwp *l, const struct xenix_sys_chsize_args *uap, registe
 	struct sys_ftruncate_args sa;
 
 	SCARG(&sa, fd) = SCARG(uap, fd);
-	SCARG(&sa, pad) = 0;
+	SCARG(&sa, PAD) = 0;
 	SCARG(&sa, length) = SCARG(uap, size);
 	return sys_ftruncate(l, &sa, retval);
 }
@@ -1239,7 +1239,7 @@ xenix_sys_nap(struct lwp *l, const struct xenix_sys_nap_args *uap, register_t *r
 
 	rqt.tv_sec = 0;
 	rqt.tv_nsec = SCARG(uap, millisec) * 1000;
-	error = nanosleep1(l, &rqt, &rmt);
+	error = nanosleep1(l, CLOCK_MONOTONIC, 0, &rqt, &rmt);
 	/* If interrupted we can either report EINTR, or the time left */
 	if (error != 0 && error != EINTR)
 		return error;
@@ -1349,11 +1349,11 @@ ibcs2_sys_settimeofday(struct lwp *l, const struct ibcs2_sys_settimeofday_args *
 	/* {
 		syscallarg(struct timeval *) tp;
 	} */
-	struct sys_settimeofday_args ap;
+	struct compat_50_sys_settimeofday_args ap;
 
 	SCARG(&ap, tv) = SCARG(uap, tp);
 	SCARG(&ap, tzp) = NULL;
-	return sys_settimeofday(l, &ap, retval);
+	return compat_50_sys_settimeofday(l, &ap, retval);
 }
 
 int
@@ -1437,5 +1437,5 @@ xenix_sys_locking(struct lwp *l, const struct xenix_sys_locking_args *uap, regis
 	fl.l_start = 0;
 	fl.l_whence = SEEK_CUR;
 
-	return do_fcntl_lock(l, SCARG(uap, fd), cmd, &fl);
+	return do_fcntl_lock(SCARG(uap, fd), cmd, &fl);
 }

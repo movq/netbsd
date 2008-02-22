@@ -1,4 +1,4 @@
-/*	$NetBSD: devicename.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
+/*	$NetBSD: devicename.c,v 1.9 2017/06/25 12:04:37 maxv Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -30,6 +30,8 @@
 /* __FBSDID("$FreeBSD: src/sys/boot/ia64/libski/devicename.c,v 1.2 2003/09/08 09:11:32 obrien Exp $"); */
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
+#include <lib/libkern/libkern.h>
 #include <sys/disklabel.h>
 
 #include <bootstrap.h>
@@ -89,7 +91,7 @@ ski_parsedev(struct ski_devdesc **dev, const char *devspec, const char **path)
 	struct devsw	*dv;
 	int dv_type;
 	int		i, unit, slice, partition, err;
-	char		*cp;
+	char		*cp = NULL;
 	const char	*np;
 
 	/* minimum length check */
@@ -144,6 +146,10 @@ ski_parsedev(struct ski_devdesc **dev, const char *devspec, const char **path)
 				cp++;
 			}
 		}
+		if (cp == NULL) {
+			err = EINVAL;
+			goto fail;
+		}
 		if (*cp && (*cp != ':')) {
 			err = EINVAL;
 			goto fail;
@@ -166,6 +172,10 @@ ski_parsedev(struct ski_devdesc **dev, const char *devspec, const char **path)
 				err = EUNIT;
 				goto fail;
 			}
+		}
+		if (cp == NULL) {
+			err = EINVAL;
+			goto fail;
 		}
 		if (*cp && (*cp != ':')) {
 			err = EINVAL;
@@ -201,25 +211,32 @@ ski_fmtdev(void *vdev)
 {
 	struct ski_devdesc *dev = (struct ski_devdesc *)vdev;
 	static char	buf[128];	/* XXX device length constant? */
-	char		*cp;
+	size_t len, buflen = sizeof(buf);
     
 	switch(dev->d_type) {
 	case DEVT_NONE:
-		strcpy(buf, "(no device)");
+		strlcpy(buf, "(no device)", buflen);
 		break;
 
 	case DEVT_DISK:
-		cp = buf;
-		cp += sprintf(cp, "%s%d", dev->d_dev->dv_name, dev->d_kind.skidisk.unit);
-		if (dev->d_kind.skidisk.slice > 0)
-			cp += sprintf(cp, "s%d", dev->d_kind.skidisk.slice);
-		if (dev->d_kind.skidisk.partition >= 0)
-			cp += sprintf(cp, "%c", dev->d_kind.skidisk.partition + 'a');
-		strcat(cp, ":");
+		len = snprintf(buf, buflen, "%s%d", dev->d_dev->dv_name, dev->d_kind.skidisk.unit);
+		if (len > buflen)
+			len = buflen;
+		if (dev->d_kind.skidisk.slice > 0) {
+			len += snprintf(buf + len, buflen - len, "s%d", dev->d_kind.skidisk.slice);
+			if (len > buflen)
+				len = buflen;
+		}
+		if (dev->d_kind.skidisk.partition >= 0) {
+			len += snprintf(buf + len, buflen - len, "%c", dev->d_kind.skidisk.partition + 'a');
+			if (len > buflen)
+				len = buflen;
+		}
+		strlcat(buf, ":", buflen - len);
 		break;
 
 	case DEVT_NET:
-		sprintf(buf, "%s%d:", dev->d_dev->dv_name, dev->d_kind.netif.unit);
+		snprintf(buf, buflen, "%s%d:", dev->d_dev->dv_name, dev->d_kind.netif.unit);
 		break;
 	}
 	return(buf);

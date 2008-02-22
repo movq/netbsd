@@ -1,4 +1,4 @@
-.\"	$NetBSD: fopen.3,v 1.23 2005/05/25 16:01:24 kleink Exp $
+.\"	$NetBSD: fopen.3,v 1.35 2017/11/04 08:53:23 kre Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\"     @(#)fopen.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd June 4, 1993
+.Dd November 3, 2017
 .Dt FOPEN 3
 .Os
 .Sh NAME
@@ -62,45 +62,90 @@ and associates a stream with it.
 The argument
 .Fa mode
 points to a string beginning with one of the following
-sequences (Additional characters may follow these sequences.):
-.Bl -tag -width indent
-.It Dq Li r
-Open for reading.
-.It Dq Li r+
-Open for reading and writing.
-.It Dq Li w
-Open for writing.
-Truncate file to zero length or create file.
-.It Dq Li w+
-Open for reading and writing.
-Truncate file to zero length or create file.
+sequences, which may be followed by additional modifiers
+as indicated below:
+.Bl -tag -width 4n
 .It Dq Li a
-Append; open for writing.
+Append; open an existing or new file for writing in append mode.
 The file is created if it does not exist.
 .It Dq Li a+
-Append; open for reading and writing.
+Open for reading and writing in append mode.
 The file is created if it does not exist.
+.It Dq Li r
+Read; open an existing file for reading.
+.It Dq Li r+
+Open an existing file for reading and writing.
+.It Dq Li w
+Write; open an empty file for writing.
+Truncate an existing file to zero length or create a new file.
+.It Dq Li w+
+Open an empty file for reading and writing.
+Truncate file to zero length or create file.
 .El
 .Pp
-The
+After one of those, the
 .Fa mode
-string can also include the letter ``b'' either as a last character or
-as a character between the characters in any of the two-character strings
-described above.
+string can also include one or more of the following modifier letters:
+.Bl -tag -width 4n
+.It Sq b
+The letter
+.Sq b
+may appear either as a last character or as a character between the
+characters in any of the two-character strings described above.
 This is strictly for compatibility with
-.St -ansiC
-and has no effect; the ``b'' is ignored.
-.Pp
-The letter ``f'' in the mode string restricts fopen to regular
-files; if the file opened is not a regular file,
-.Fn fopen
-will fail.
+.St -ansiC ,
+where it means open in
+.Dq binary
+mode which is identical to text mode here,
+so has no effect; the
+.Sq b
+is ignored.
+.It Sq e
+The letter
+.Sq e
+in the mode string sets the close-on-exec
+.Pq Dv O_CLOEXEC
+flag of the file descriptor, which means that it will not be available
+after an
+.Xr exec 3
+system call.
 This is a non
 .St -ansiC
 extension.
+.It Sq f
+The letter
+.Sq f
+in the mode string restricts
+.Fn fopen
+to regular files; if the file opened is not a regular file,
+.Fn fopen
+will close it, and fail.
+This is a non
+.St -ansiC
+extension.
+.It Sq l
+The letter
+.Sq l
+in the mode string turns the don't-follow-symlinks
+.Pq Dv O_NOFOLLOW
+flag of the file descriptor, which means that if the last path component
+is a symbolic link, it will not be followed.
+This is a non
+.St -ansiC
+extension.
+.It Sq x
+The letter
+.Sq x
+in the mode turns on exclusive open mode to the file
+.Pq Dv O_EXCL
+which means that the file will not be created if it already exists.
+In that case
+.Fn fopen
+will fail.
+.El
 .Pp
 Any created files will have mode
-.Pf \\*q Dv S_IRUSR
+.Pf \*q Dv S_IRUSR
 \&|
 .Dv S_IWUSR
 \&|
@@ -110,11 +155,11 @@ Any created files will have mode
 \&|
 .Dv S_IROTH
 \&|
-.Dv S_IWOTH Ns \\*q
+.Dv S_IWOTH Ns \*q
 .Pq Li 0666 ,
 as modified by the process'
-umask value (see
-.Xr umask 2 ) .
+.Xr umask 2
+value.
 .Pp
 Opening a file with append mode causes all subsequent writes to it
 to be forced to the then current end of file, regardless of intervening
@@ -170,34 +215,35 @@ standard text stream
 .Em stdin ,
 or
 .Em stdout ) .
+.Pp
+Input and output against the opened stream will be fully buffered, unless
+it refers to an interactive terminal device, or a different kind of buffering
+is specified in the environment.
+See
+.Xr setvbuf 3
+for additional details.
 .Sh RETURN VALUES
 Upon successful completion
 .Fn fopen ,
 .Fn fdopen
 and
 .Fn freopen
-return a
-.Tn FILE
-pointer.
+return a FILE pointer.
 Otherwise,
 .Dv NULL
 is returned and the global variable
 .Va errno
 is set to indicate the error.
 .Sh ERRORS
+The functions may fail if:
 .Bl -tag -width Er
-.It Bq Er EINVAL
-The
-.Fa mode
-provided to
-.Fn fopen ,
-.Fn fdopen ,
-or
-.Fn freopen
-was invalid.
 .It Bq Er EFTYPE
 The file is not a regular file and the character ``f'' is specified
 in the mode.
+.It Bq Er EINVAL
+The specified
+.Fa mode
+was invalid.
 .El
 .Pp
 The
@@ -248,13 +294,10 @@ The
 .Fn fopen
 and
 .Fn freopen
-functions
-conform to
+functions conform to
 .St -ansiC .
-The
-.Fn fdopen
-function conforms to
-.St -p1003.1-90 .
+All three functions are specified in
+.St -p1003.1-2008 .
 .Sh CAVEATS
 Proper code using
 .Fn fdopen

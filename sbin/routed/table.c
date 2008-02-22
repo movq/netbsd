@@ -1,4 +1,4 @@
-/*	$NetBSD: table.c,v 1.22 2004/07/06 23:36:24 mycroft Exp $	*/
+/*	$NetBSD: table.c,v 1.28 2018/02/06 09:33:07 mrg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -36,7 +36,7 @@
 #include "defs.h"
 
 #ifdef __NetBSD__
-__RCSID("$NetBSD: table.c,v 1.22 2004/07/06 23:36:24 mycroft Exp $");
+__RCSID("$NetBSD: table.c,v 1.28 2018/02/06 09:33:07 mrg Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
@@ -298,7 +298,7 @@ ag_check(naddr	dst,
 	naddr xaddr;
 	int x;
 
-	NTOHL(dst);
+	dst = ntohl(dst);
 
 	/* Punt non-contiguous subnet masks.
 	 *
@@ -667,7 +667,7 @@ masktrim(struct sockaddr_in_new *ap)
 		ap->sin_len = 0;
 		return;
 	}
-	cp = (char *)(&ap->sin_addr.s_addr+1);
+	cp = (char *)&ap->sin_addr.s_addr + sizeof(ap->sin_addr.s_addr);
 	while (*--cp == 0)
 		continue;
 	ap->sin_len = cp - (char*)ap + 1;
@@ -778,6 +778,7 @@ static struct khash {
 #define	    KS_DYNAMIC	0x080		/* result of redirect */
 #define	    KS_DELETED	0x100		/* already deleted from kernel */
 #define	    KS_CHECK	0x200
+#define	    KS_LOCAL	0x400
 	time_t	k_keep;
 #define	    K_KEEP_LIM	30
 	time_t	k_redirect_time;	/* when redirected route 1st seen */
@@ -924,11 +925,13 @@ rtm_add(struct rt_msghdr *rtm,
 	}
 	k->k_state &= ~(KS_DELETE | KS_ADD | KS_CHANGE | KS_DEL_ADD
 			| KS_DELETED | KS_GATEWAY | KS_STATIC
-			| KS_NEW | KS_CHECK);
+			| KS_NEW | KS_CHECK | KS_LOCAL);
 	if (rtm->rtm_flags & RTF_GATEWAY)
 		k->k_state |= KS_GATEWAY;
 	if (rtm->rtm_flags & RTF_STATIC)
 		k->k_state |= KS_STATIC;
+	if (rtm->rtm_flags & RTF_LOCAL)
+		k->k_state |= KS_LOCAL;
 
 	if (0 != (rtm->rtm_flags & (RTF_DYNAMIC | RTF_MODIFIED))) {
 		if (INFO_AUTHOR(info) != 0
@@ -964,7 +967,7 @@ rtm_add(struct rt_msghdr *rtm,
 	/* If it is not a static route, quit until the next comparison
 	 * between the kernel and daemon tables, when it will be deleted.
 	 */
-	if (!(k->k_state & KS_STATIC)) {
+	if (!(k->k_state & KS_STATIC) && !(k->k_state & KS_LOCAL)) {
 		k->k_state |= KS_DELETE;
 		LIM_SEC(need_kern, k->k_keep);
 		return;
@@ -1106,18 +1109,17 @@ flush_kern(void)
 		    || INFO_DST(&info)->sa_family != AF_INET)
 			continue;
 
-		/* ignore ARP table entries on systems with a merged route
-		 * and ARP table.
-		 */
-		if (rtm->rtm_flags & RTF_LLINFO)
-			continue;
-
-#if defined(RTF_CLONED) && defined(__bsdi__)
 		/* ignore cloned routes
 		 */
+#if defined(RTF_CLONED) && defined(__bsdi__)
 		if (rtm->rtm_flags & RTF_CLONED)
 			continue;
 #endif
+#if defined(RTF_WASCLONED) && defined(__FreeBSD__)
+		if (rtm->rtm_flags & RTF_WASCLONED)
+			continue;
+#endif
+ 
 
 		/* ignore multicast addresses
 		 */
@@ -1268,13 +1270,14 @@ read_rt(void)
 			continue;
 		}
 
-		if (m.r.rtm.rtm_flags & RTF_LLINFO) {
-			trace_act("ignore ARP %s", str);
-			continue;
-		}
-
 #if defined(RTF_CLONED) && defined(__bsdi__)
 		if (m.r.rtm.rtm_flags & RTF_CLONED) {
+			trace_act("ignore cloned %s", str);
+			continue;
+		}
+#endif
+#if defined(RTF_WASCLONED) && defined(__FreeBSD__)
+		if (m.r.rtm.rtm_flags & RTF_WASCLONED) {
 			trace_act("ignore cloned %s", str);
 			continue;
 		}
@@ -1289,11 +1292,12 @@ read_rt(void)
 			gate = 0;
 		}
 
-		if (INFO_AUTHOR(&info) != 0)
+		if (INFO_AUTHOR(&info) != 0) {
 			snprintf(strp, str + sizeof(str) - strp,
 			    " by authority of %s",
 			    saddr_ntoa(INFO_AUTHOR(&info)));
 			strp += strlen(strp);
+		}
 
 		switch (m.r.rtm.rtm_type) {
 		case RTM_ADD:
@@ -1363,7 +1367,7 @@ kern_out(struct ag_info *ag)
 		return;
 	}
 
-	if (k->k_state & KS_STATIC)
+	if ((k->k_state & KS_STATIC) || (k->k_state & KS_LOCAL))
 		return;
 
 	/* modify existing kernel entry if necessary */
@@ -1508,6 +1512,12 @@ fix_kern(void)
 			/* Do not touch static routes */
 			if (k->k_state & KS_STATIC) {
 				kern_check_static(k,0);
+				pk = &k->k_next;
+				continue;
+			}
+
+			/* Do not touch local routes */
+			if (k->k_state & KS_LOCAL) {
 				pk = &k->k_next;
 				continue;
 			}
@@ -1740,6 +1750,8 @@ rtadd(naddr	dst,
 	rt->rt_poison_metric = HOPCNT_INFINITY;
 	rt->rt_seqno = update_seqno;
 
+	if (++total_routes == MAX_ROUTES)
+		msglog("have maximum (%d) routes", total_routes);
 	if (TRACEACTIONS)
 		trace_add_del("Add", rt);
 
@@ -1751,9 +1763,6 @@ rtadd(naddr	dst,
 		msglog("rnh_addaddr() failed for %s mask=%#lx",
 		       naddr_ntoa(dst), (u_long)mask);
 		free(rt);
-	} else {
-		if (++total_routes == MAX_ROUTES)
-			msglog("have maximum (%d) routes", total_routes);
 	}
 }
 
@@ -2130,11 +2139,11 @@ age(naddr bad_gate)
 		if (ifp->int_act_time != NEVER
 		    && now.tv_sec - ifp->int_act_time > EXPIRE_TIME) {
 			msglog("remote interface %s to %s timed out after"
-			       " %ld:%ld",
+			       " %lld:%lld",
 			       ifp->int_name,
 			       naddr_ntoa(ifp->int_dstaddr),
-			       (now.tv_sec - ifp->int_act_time)/60,
-			       (now.tv_sec - ifp->int_act_time)%60);
+			       (long long)(now.tv_sec - ifp->int_act_time)/60,
+			       (long long)(now.tv_sec - ifp->int_act_time)%60);
 			if_sick(ifp);
 		}
 

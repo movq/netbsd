@@ -1,4 +1,4 @@
-/*	$NetBSD: null.c,v 1.24 2007/11/30 19:02:28 pooka Exp $	*/
+/*	$NetBSD: null.c,v 1.33 2011/11/25 15:02:02 manu Exp $	*/
 
 /*
  * Copyright (c) 2007  Antti Kantee.  All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: null.c,v 1.24 2007/11/30 19:02:28 pooka Exp $");
+__RCSID("$NetBSD: null.c,v 1.33 2011/11/25 15:02:02 manu Exp $");
 #endif /* !lint */
 
 /*
@@ -36,6 +36,7 @@ __RCSID("$NetBSD: null.c,v 1.24 2007/11/30 19:02:28 pooka Exp $");
  */
 
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 
 #include <assert.h>
@@ -45,6 +46,7 @@ __RCSID("$NetBSD: null.c,v 1.24 2007/11/30 19:02:28 pooka Exp $");
 #include <puffs.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 
 PUFFSOP_PROTOS(puffs_null)
@@ -67,8 +69,8 @@ processvattr(const char *path, const struct vattr *va, int regular)
 			return errno;
 
 	/* sloppy */
-	if (va->va_atime.tv_sec != (unsigned)PUFFS_VNOVAL
-	    || va->va_mtime.tv_sec != (unsigned)PUFFS_VNOVAL) {
+	if (va->va_atime.tv_sec != (time_t)PUFFS_VNOVAL
+	    || va->va_mtime.tv_sec != (time_t)PUFFS_VNOVAL) {
 		TIMESPEC_TO_TIMEVAL(&tv[0], &va->va_atime);
 		TIMESPEC_TO_TIMEVAL(&tv[1], &va->va_mtime);
 
@@ -165,6 +167,8 @@ puffs_null_setops(struct puffs_ops *pops)
 	PUFFSOP_SET(pops, puffs_null, fs, statvfs);
 	PUFFSOP_SETFSNOP(pops, unmount);
 	PUFFSOP_SETFSNOP(pops, sync);
+	PUFFSOP_SET(pops, puffs_null, fs, fhtonode);
+	PUFFSOP_SET(pops, puffs_null, fs, nodetofh);
 
 	PUFFSOP_SET(pops, puffs_null, node, lookup);
 	PUFFSOP_SET(pops, puffs_null, node, create);
@@ -196,8 +200,101 @@ puffs_null_fs_statvfs(struct puffs_usermount *pu, struct statvfs *svfsb)
 	return 0;
 }
 
+/*
+ * XXX: this is the stupidest crap ever, but:
+ * getfh() returns the fhandle type, when we are expected to deliver
+ * the fid type.  Just adjust it a bit and stop whining.
+ *
+ * Yes, this really really needs fixing.  Yes, *REALLY*.
+ */
+#define FHANDLE_HEADERLEN 8
+struct kernfid {
+	unsigned short	fid_len;		/* length of data in bytes */
+	unsigned short	fid_reserved;		/* compat: historic align */
+	char		fid_data[0];		/* data (variable length) */
+};
+
+/*ARGSUSED*/
+static void *
+fhcmp(struct puffs_usermount *pu, struct puffs_node *pn, void *arg)
+{
+	struct kernfid *kf1, *kf2;
+
+	if ((kf1 = pn->pn_data) == NULL)
+		return NULL;
+	kf2 = arg;
+
+	if (kf1->fid_len != kf2->fid_len)
+		return NULL;
+
+	/*LINTED*/
+	if (memcmp(kf1, kf2, kf1->fid_len) == 0)
+		return pn;
+	return NULL;
+}
+
+/*
+ * This routine only supports file handles which have been issued while
+ * the server was alive.  Not really stable ones, that is.
+ */
+/*ARGSUSED*/
 int
-puffs_null_node_lookup(struct puffs_usermount *pu, void *opc,
+puffs_null_fs_fhtonode(struct puffs_usermount *pu, void *fid, size_t fidsize,
+	struct puffs_newinfo *pni)
+{
+	struct puffs_node *pn_res;
+
+	pn_res = puffs_pn_nodewalk(pu, fhcmp, fid);
+	if (pn_res == NULL)
+		return ENOENT;
+
+	puffs_newinfo_setcookie(pni, pn_res);
+	puffs_newinfo_setvtype(pni, pn_res->pn_va.va_type);
+	puffs_newinfo_setsize(pni, (voff_t)pn_res->pn_va.va_size);
+	puffs_newinfo_setrdev(pni, pn_res->pn_va.va_rdev);
+	return 0;
+}
+
+/*ARGSUSED*/
+int
+puffs_null_fs_nodetofh(struct puffs_usermount *pu, puffs_cookie_t opc,
+	void *fid, size_t *fidsize)
+{
+	struct puffs_node *pn = opc;
+	struct kernfid *kfid;
+	void *bounce;
+	int rv;
+
+	rv = 0;
+	bounce = NULL;
+	if (*fidsize) {
+		bounce = malloc(*fidsize + FHANDLE_HEADERLEN);
+		if (!bounce)
+			return ENOMEM;
+		*fidsize += FHANDLE_HEADERLEN;
+	}
+	if (getfh(PNPATH(pn), bounce, fidsize) == -1)
+		rv = errno;
+	else
+		memcpy(fid, (uint8_t *)bounce + FHANDLE_HEADERLEN,
+		    *fidsize - FHANDLE_HEADERLEN);
+	kfid = fid;
+	if (rv == 0) {
+		*fidsize = kfid->fid_len;
+		pn->pn_data = malloc(*fidsize);
+		if (pn->pn_data == NULL)
+			abort(); /* lazy */
+		memcpy(pn->pn_data, fid, *fidsize);
+	} else {
+		*fidsize -= FHANDLE_HEADERLEN;
+	}
+	free(bounce);
+
+	return rv;
+}
+
+int
+puffs_null_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct puffs_newinfo *pni, const struct puffs_cn *pcn)
 {
 	struct puffs_node *pn = opc, *pn_res;
@@ -236,7 +333,7 @@ puffs_null_node_lookup(struct puffs_usermount *pu, void *opc,
 
 /*ARGSUSED*/
 int
-puffs_null_node_create(struct puffs_usermount *pu, void *opc,
+puffs_null_node_create(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct puffs_newinfo *pni, const struct puffs_cn *pcn,
 	const struct vattr *va)
 {
@@ -255,7 +352,7 @@ puffs_null_node_create(struct puffs_usermount *pu, void *opc,
 
 /*ARGSUSED*/
 int
-puffs_null_node_mknod(struct puffs_usermount *pu, void *opc,
+puffs_null_node_mknod(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct puffs_newinfo *pni, const struct puffs_cn *pcn,
 	const struct vattr *va)
 {
@@ -274,8 +371,8 @@ puffs_null_node_mknod(struct puffs_usermount *pu, void *opc,
 
 /*ARGSUSED*/
 int
-puffs_null_node_getattr(struct puffs_usermount *pu, void *opc, struct vattr *va,
-	const struct puffs_cred *pcred)
+puffs_null_node_getattr(struct puffs_usermount *pu, puffs_cookie_t opc,
+	struct vattr *va, const struct puffs_cred *pcred)
 {
 	struct puffs_node *pn = opc;
 	struct stat sb;
@@ -289,7 +386,7 @@ puffs_null_node_getattr(struct puffs_usermount *pu, void *opc, struct vattr *va,
 
 /*ARGSUSED*/
 int
-puffs_null_node_setattr(struct puffs_usermount *pu, void *opc,
+puffs_null_node_setattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 	const struct vattr *va, const struct puffs_cred *pcred)
 {
 	struct puffs_node *pn = opc;
@@ -306,28 +403,43 @@ puffs_null_node_setattr(struct puffs_usermount *pu, void *opc,
 
 /*ARGSUSED*/
 int
-puffs_null_node_fsync(struct puffs_usermount *pu, void *opc,
+puffs_null_node_fsync(struct puffs_usermount *pu, puffs_cookie_t opc,
 	const struct puffs_cred *pcred, int how,
 	off_t offlo, off_t offhi)
 {
 	struct puffs_node *pn = opc;
 	int fd, rv;
 	int fflags;
+	struct stat sb;
 
 	rv = 0;
-	fd = writeableopen(PNPATH(pn));
-	if (fd == -1)
+	if (stat(PNPATH(pn), &sb) == -1)
 		return errno;
+	if (S_ISDIR(sb.st_mode)) {
+		DIR *dirp;
+		if ((dirp = opendir(PNPATH(pn))) == 0)
+			return errno;
+		fd = dirfd(dirp);
+		if (fd == -1)
+			return errno;
 
-	if (how & PUFFS_FSYNC_DATAONLY)
-		fflags = FDATASYNC;
-	else
-		fflags = FFILESYNC;
-	if (how & PUFFS_FSYNC_CACHE)
-		fflags |= FDISKSYNC;
+		if (fsync(fd) == -1)
+			rv = errno;
+	} else {
+		fd = writeableopen(PNPATH(pn));
+		if (fd == -1)
+			return errno;
 
-	if (fsync_range(fd, fflags, offlo, offhi - offlo) == -1)
-		rv = errno;
+		if (how & PUFFS_FSYNC_DATAONLY)
+			fflags = FDATASYNC;
+		else
+			fflags = FFILESYNC;
+		if (how & PUFFS_FSYNC_CACHE)
+			fflags |= FDISKSYNC;
+
+		if (fsync_range(fd, fflags, offlo, offhi - offlo) == -1)
+			rv = errno;
+	}
 
 	close(fd);
 
@@ -336,8 +448,8 @@ puffs_null_node_fsync(struct puffs_usermount *pu, void *opc,
 
 /*ARGSUSED*/
 int
-puffs_null_node_remove(struct puffs_usermount *pu, void *opc, void *targ,
-	const struct puffs_cn *pcn)
+puffs_null_node_remove(struct puffs_usermount *pu, puffs_cookie_t opc,
+	puffs_cookie_t targ, const struct puffs_cn *pcn)
 {
 	struct puffs_node *pn_targ = targ;
 
@@ -350,8 +462,8 @@ puffs_null_node_remove(struct puffs_usermount *pu, void *opc, void *targ,
 
 /*ARGSUSED*/
 int
-puffs_null_node_link(struct puffs_usermount *pu, void *opc, void *targ,
-	const struct puffs_cn *pcn)
+puffs_null_node_link(struct puffs_usermount *pu, puffs_cookie_t opc,
+	puffs_cookie_t targ, const struct puffs_cn *pcn)
 {
 	struct puffs_node *pn_targ = targ;
 
@@ -363,20 +475,25 @@ puffs_null_node_link(struct puffs_usermount *pu, void *opc, void *targ,
 
 /*ARGSUSED*/
 int
-puffs_null_node_rename(struct puffs_usermount *pu, void *opc, void *src,
-	const struct puffs_cn *pcn_src, void *targ_dir, void *targ,
+puffs_null_node_rename(struct puffs_usermount *pu, puffs_cookie_t opc,
+	puffs_cookie_t src, const struct puffs_cn *pcn_src,
+	puffs_cookie_t targ_dir, puffs_cookie_t targ,
 	const struct puffs_cn *pcn_targ)
 {
+	struct puffs_node *pn_targ = targ;
 
 	if (rename(PCNPATH(pcn_src), PCNPATH(pcn_targ)) == -1)
 		return errno;
+
+        if (pn_targ)
+		puffs_pn_remove(pn_targ);
 
 	return 0;
 }
 
 /*ARGSUSED*/
 int
-puffs_null_node_mkdir(struct puffs_usermount *pu, void *opc,
+puffs_null_node_mkdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct puffs_newinfo *pni, const struct puffs_cn *pcn,
 	const struct vattr *va)
 {
@@ -393,8 +510,8 @@ puffs_null_node_mkdir(struct puffs_usermount *pu, void *opc,
 
 /*ARGSUSED*/
 int
-puffs_null_node_rmdir(struct puffs_usermount *pu, void *opc, void *targ,
-	const struct puffs_cn *pcn)
+puffs_null_node_rmdir(struct puffs_usermount *pu, puffs_cookie_t opc,
+	puffs_cookie_t targ, const struct puffs_cn *pcn)
 {
 	struct puffs_node *pn_targ = targ;
 
@@ -407,7 +524,7 @@ puffs_null_node_rmdir(struct puffs_usermount *pu, void *opc, void *targ,
 
 /*ARGSUSED*/
 int
-puffs_null_node_symlink(struct puffs_usermount *pu, void *opc,
+puffs_null_node_symlink(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct puffs_newinfo *pni, const struct puffs_cn *pcn,
 	const struct vattr *va, const char *linkname)
 {
@@ -424,7 +541,7 @@ puffs_null_node_symlink(struct puffs_usermount *pu, void *opc,
 
 /*ARGSUSED*/
 int
-puffs_null_node_readlink(struct puffs_usermount *pu, void *opc,
+puffs_null_node_readlink(struct puffs_usermount *pu, puffs_cookie_t opc,
 	const struct puffs_cred *pcred, char *linkname, size_t *linklen)
 {
 	struct puffs_node *pn = opc;
@@ -440,7 +557,7 @@ puffs_null_node_readlink(struct puffs_usermount *pu, void *opc,
 
 /*ARGSUSED*/
 int
-puffs_null_node_readdir(struct puffs_usermount *pu, void *opc,
+puffs_null_node_readdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct dirent *de, off_t *off, size_t *reslen,
 	const struct puffs_cred *pcred, int *eofflag, off_t *cookies,
 	size_t *ncookies)
@@ -451,6 +568,7 @@ puffs_null_node_readdir(struct puffs_usermount *pu, void *opc,
 	off_t i;
 	int rv;
 
+	*ncookies = 0;
 	dp = opendir(PNPATH(pn));
 	if (dp == NULL)
 		return errno;
@@ -464,8 +582,13 @@ puffs_null_node_readdir(struct puffs_usermount *pu, void *opc,
 	 */
 	while (i--) {
 		rv = readdir_r(dp, &entry, &result);
-		if (rv || !result)
+		if (rv != 0)
 			goto out;
+
+		if (!result) {
+			*eofflag = 1;
+			goto out;
+		}
 	}
 
 	for (;;) {
@@ -473,8 +596,10 @@ puffs_null_node_readdir(struct puffs_usermount *pu, void *opc,
 		if (rv != 0)
 			goto out;
 
-		if (!result)
+		if (!result) {
+			*eofflag = 1;
 			goto out;
+		}
 
 		if (_DIRENT_SIZE(result) > *reslen)
 			goto out;
@@ -484,6 +609,7 @@ puffs_null_node_readdir(struct puffs_usermount *pu, void *opc,
 		de = _DIRENT_NEXT(de);
 
 		(*off)++;
+		PUFFS_STORE_DCOOKIE(cookies, ncookies, *off);
 	}
 
  out:
@@ -493,9 +619,9 @@ puffs_null_node_readdir(struct puffs_usermount *pu, void *opc,
 
 /*ARGSUSED*/
 int
-puffs_null_node_read(struct puffs_usermount *pu, void *opc, uint8_t *buf,
-	off_t offset, size_t *buflen, const struct puffs_cred *pcred,
-	int ioflag)
+puffs_null_node_read(struct puffs_usermount *pu, puffs_cookie_t opc,
+	uint8_t *buf, off_t offset, size_t *buflen,
+	const struct puffs_cred *pcred, int ioflag)
 {
 	struct puffs_node *pn = opc;
 	ssize_t n;
@@ -525,9 +651,9 @@ puffs_null_node_read(struct puffs_usermount *pu, void *opc, uint8_t *buf,
 
 /*ARGSUSED*/
 int
-puffs_null_node_write(struct puffs_usermount *pu, void *opc, uint8_t *buf,
-	off_t offset, size_t *buflen, const struct puffs_cred *pcred,
-	int ioflag)
+puffs_null_node_write(struct puffs_usermount *pu, puffs_cookie_t opc,
+	uint8_t *buf, off_t offset, size_t *buflen,
+	const struct puffs_cred *pcred, int ioflag)
 {
 	struct puffs_node *pn = opc;
 	ssize_t n;

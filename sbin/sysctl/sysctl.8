@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysctl.8,v 1.157 2006/12/04 08:59:13 pavel Exp $
+.\"	$NetBSD: sysctl.8,v 1.162 2011/08/03 01:47:40 christos Exp $
 .\"
 .\" Copyright (c) 2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,7 +54,7 @@
 .\"
 .\"	@(#)sysctl.8	8.1 (Berkeley) 6/6/93
 .\"
-.Dd December 4, 2006
+.Dd August 2, 2011
 .Dt SYSCTL 8
 .Os
 .Sh NAME
@@ -69,7 +62,7 @@
 .Nd get or set kernel state
 .Sh SYNOPSIS
 .Nm sysctl
-.Op Fl AdeMn
+.Op Fl AdeMnq
 .Oo
 .Fl r |
 .Fl x
@@ -82,7 +75,7 @@
 .Fl x
 .Oc
 .Fl w
-.Ar name Ns Li = Ns Ar value ...
+.Ar name Ns Li [?]= Ns Ar value ...
 .Nm sysctl
 .Op Fl en
 .Oo
@@ -192,8 +185,11 @@ For example, to save the pagesize in variable psize, use:
 set psize=`sysctl -n hw.pagesize`
 .Ed
 .It Fl q
-Used to indicate that nothing should be printed for writes unless an
+Used to indicate that nothing should be printed for reads or writes unless an
 error is detected.
+For reads, not finding a variable does not print an error, but exits with
+an error code.
+This is useful just for testing that a variable exists.
 .It Fl r
 Raw output form.
 Values printed are in their raw binary forms as retrieved directly
@@ -209,6 +205,10 @@ Sets the MIB style name given to the value given.
 The MIB style name and value must be separated by
 .Ql =
 with no whitespace.
+To prevent an error if the MIB style name does not exist (as would be the
+case with optional kernel components), one can separate the MIB style name
+and the value with
+.Ql ?= .
 Only integral and string values can be set via this method.
 .It Fl x
 Makes
@@ -379,16 +379,6 @@ This is the default for nodes that instrument data.
 .Dq Writable .
 The data instrumented by the given node is writable at any time.
 This is the default for nodes that can have children.
-.It 1
-.Dq Read-only at securelevel 1 .
-The data instrumented by this node is writable until the securelevel
-reaches or passes securelevel 1.
-Examples of this include some network tunables.
-.It 2
-.Dq Read-only at securelevel 2 .
-The data instrumented by this node is writable until the securelevel
-reaches or passes securelevel 2.
-An example of this is the per-process core filename setting.
 .El
 .Pp
 .It

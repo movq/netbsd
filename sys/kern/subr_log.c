@@ -1,7 +1,7 @@
-/*	$NetBSD: subr_log.c,v 1.47 2008/01/05 14:07:26 ad Exp $	*/
+/*	$NetBSD: subr_log.c,v 1.58 2018/04/01 19:01:08 christos Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_log.c,v 1.47 2008/01/05 14:07:26 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_log.c,v 1.58 2018/04/01 19:01:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,6 +80,10 @@ __KERNEL_RCSID(0, "$NetBSD: subr_log.c,v 1.47 2008/01/05 14:07:26 ad Exp $");
 #include <sys/select.h>
 #include <sys/poll.h> 
 #include <sys/intr.h>
+#include <sys/sysctl.h>
+#include <sys/ktrace.h>
+
+static int sysctl_msgbuf(SYSCTLFN_PROTO);
 
 static void	logsoftintr(void *);
 
@@ -142,6 +139,19 @@ loginit(void)
 	cv_init(&log_cv, "klog");
 	log_sih = softint_establish(SOFTINT_CLOCK | SOFTINT_MPSAFE,
 	    logsoftintr, NULL);
+
+	sysctl_createv(NULL, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_INT, "msgbufsize",
+		       SYSCTL_DESCR("Size of the kernel message buffer"),
+		       sysctl_msgbuf, 0, NULL, 0,
+		       CTL_KERN, KERN_MSGBUFSIZE, CTL_EOL);
+	sysctl_createv(NULL, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_INT, "msgbuf",
+		       SYSCTL_DESCR("Kernel message buffer"),
+		       sysctl_msgbuf, 0, NULL, 0,
+		       CTL_KERN, KERN_MSGBUF, CTL_EOL);
 }
 
 /*ARGSUSED*/
@@ -279,8 +289,12 @@ filt_logread(struct knote *kn, long hint)
 	return rv;
 }
 
-static const struct filterops logread_filtops =
-	{ 1, NULL, filt_logrdetach, filt_logread };
+static const struct filterops logread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_logrdetach,
+	.f_event = filt_logread,
+};
 
 static int
 logkqfilter(dev_t dev, struct knote *kn)
@@ -311,7 +325,7 @@ logwakeup(void)
 
 	if (!cold && log_open) {
 		mutex_spin_enter(&log_lock);
-		selnotify(&log_selp, NOTE_SUBMIT);
+		selnotify(&log_selp, 0, NOTE_SUBMIT);
 		if (log_async)
 			softint_schedule(log_sih);
 		cv_broadcast(&log_cv);
@@ -332,7 +346,6 @@ logsoftintr(void *cookie)
 static int
 logioctl(dev_t dev, u_long com, void *data, int flag, struct lwp *lwp)
 {
-	struct proc *p = lwp->l_proc;
 	long l;
 
 	switch (com) {
@@ -357,16 +370,50 @@ logioctl(dev_t dev, u_long com, void *data, int flag, struct lwp *lwp)
 
 	case TIOCSPGRP:
 	case FIOSETOWN:
-		return fsetown(p, &log_pgid, com, data);
+		return fsetown(&log_pgid, com, data);
 
 	case TIOCGPGRP:
 	case FIOGETOWN:
-		return fgetown(p, log_pgid, com, data);
+		return fgetown(log_pgid, com, data);
 
 	default:
 		return (EPASSTHROUGH);
 	}
 	return (0);
+}
+
+static void
+logskip(struct kern_msgbuf *mbp)
+{
+	/*
+	 * Move forward read pointer to the next line
+	 * in the buffer.  Note that the buffer is
+	 * a ring buffer so we should reset msg_bufr
+	 * to 0 when msg_bufr exceeds msg_bufs.
+	 *
+	 * To prevent to loop forever, give up if we
+	 * cannot find a newline in mbp->msg_bufs
+	 * characters (the max size of the buffer).
+	 */
+	for (int i = 0; i < mbp->msg_bufs; i++) {
+		char c0 = mbp->msg_bufc[mbp->msg_bufr];
+		if (++mbp->msg_bufr >= mbp->msg_bufs)
+			mbp->msg_bufr = 0;
+		if (c0 == '\n')
+			break;
+	}
+}
+
+static void
+logaddchar(struct kern_msgbuf *mbp, int c)
+{
+	mbp->msg_bufc[mbp->msg_bufx++] = c;
+	if (mbp->msg_bufx < 0 || mbp->msg_bufx >= mbp->msg_bufs)
+		mbp->msg_bufx = 0;
+
+	/* If the buffer is full, keep the most recent data. */
+	if (mbp->msg_bufr == mbp->msg_bufx)
+		logskip(mbp);
 }
 
 void
@@ -376,36 +423,122 @@ logputchar(int c)
 
 	if (!cold)
 		mutex_spin_enter(&log_lock);
-	if (msgbufenabled) {
-		mbp = msgbufp;
-		if (mbp->msg_magic != MSG_MAGIC) {
-			/*
-			 * Arguably should panic or somehow notify the
-			 * user...  but how?  Panic may be too drastic,
-			 * and would obliterate the message being kicked
-			 * out (maybe a panic itself), and printf
-			 * would invoke us recursively.  Silently punt
-			 * for now.  If syslog is running, it should
-			 * notice.
-			 */
-			msgbufenabled = 0;
-		} else {
-			mbp->msg_bufc[mbp->msg_bufx++] = c;
-			if (mbp->msg_bufx < 0 || mbp->msg_bufx >= mbp->msg_bufs)
-				mbp->msg_bufx = 0;
-			/* If the buffer is full, keep the most recent data. */
-			if (mbp->msg_bufr == mbp->msg_bufx) {
-				 if (++mbp->msg_bufr >= mbp->msg_bufs)
-					mbp->msg_bufr = 0;
-			}
-		}
+
+	if (!msgbufenabled)
+		goto out;
+
+	mbp = msgbufp;
+	if (mbp->msg_magic != MSG_MAGIC) {
+		/*
+		 * Arguably should panic or somehow notify the
+		 * user...  but how?  Panic may be too drastic,
+		 * and would obliterate the message being kicked
+		 * out (maybe a panic itself), and printf
+		 * would invoke us recursively.  Silently punt
+		 * for now.  If syslog is running, it should
+		 * notice.
+		 */
+		msgbufenabled = 0;
+		goto out;
+
 	}
+
+	logaddchar(mbp, c);
+
+out:
 	if (!cold)
 		mutex_spin_exit(&log_lock);
 }
 
+/*
+ * sysctl helper routine for kern.msgbufsize and kern.msgbuf. For the
+ * former it merely checks the message buffer is set up. For the latter,
+ * it also copies out the data if necessary.
+ */
+static int
+sysctl_msgbuf(SYSCTLFN_ARGS)
+{
+	char *where = oldp;
+	size_t len, maxlen;
+	long beg, end;
+	extern kmutex_t log_lock;
+	int error;
+
+	if (!logenabled(msgbufp)) {
+		msgbufenabled = 0;
+		return (ENXIO);
+	}
+
+	switch (rnode->sysctl_num) {
+	case KERN_MSGBUFSIZE: {
+		struct sysctlnode node = *rnode;
+		int msg_bufs = (int)msgbufp->msg_bufs;
+		node.sysctl_data = &msg_bufs;
+		return (sysctl_lookup(SYSCTLFN_CALL(&node)));
+	}
+	case KERN_MSGBUF:
+		break;
+	default:
+		return (EOPNOTSUPP);
+	}
+
+	if (newp != NULL)
+		return (EPERM);
+
+	if (oldp == NULL) {
+		/* always return full buffer size */
+		*oldlenp = msgbufp->msg_bufs;
+		return (0);
+	}
+
+	sysctl_unlock();
+
+	/*
+	 * First, copy from the write pointer to the end of
+	 * message buffer.
+	 */
+	error = 0;
+	mutex_spin_enter(&log_lock);
+	maxlen = MIN(msgbufp->msg_bufs, *oldlenp);
+	beg = msgbufp->msg_bufx;
+	end = msgbufp->msg_bufs;
+	mutex_spin_exit(&log_lock);
+
+	while (maxlen > 0) {
+		len = MIN(end - beg, maxlen);
+		if (len == 0)
+			break;
+		/* XXX unlocked, but hardly matters. */
+		error = copyout(&msgbufp->msg_bufc[beg], where, len);
+		ktrmibio(-1, UIO_READ, where, len, error);
+		if (error)
+			break;
+		where += len;
+		maxlen -= len;
+
+		/*
+		 * ... then, copy from the beginning of message buffer to
+		 * the write pointer.
+		 */
+		beg = 0;
+		end = msgbufp->msg_bufx;
+	}
+
+	sysctl_relock();
+	return (error);
+}
+
 const struct cdevsw log_cdevsw = {
-	logopen, logclose, logread, nowrite, logioctl,
-	nostop, notty, logpoll, nommap, logkqfilter,
-	D_OTHER | D_MPSAFE
+	.d_open = logopen,
+	.d_close = logclose,
+	.d_read = logread,
+	.d_write = nowrite,
+	.d_ioctl = logioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = logpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = logkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER | D_MPSAFE
 };

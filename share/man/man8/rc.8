@@ -1,6 +1,6 @@
-.\" 	$NetBSD: rc.8,v 1.30 2007/04/06 14:20:17 apb Exp $
+.\" 	$NetBSD: rc.8,v 1.39 2017/10/14 21:21:51 lukem Exp $
 .\"
-.\" Copyright (c) 2000-2004 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2000-2017 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by the NetBSD
-.\"	Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,16 +27,18 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 6, 2007
+.Dd October 15, 2017
 .Dt RC 8
 .Os
 .Sh NAME
 .Nm rc ,
+.Nm rc.local ,
 .Nm rc.shutdown ,
 .Nm rc.d/
 .Nd startup and shutdown scripts
 .Sh SYNOPSIS
 .Nm rc
+.Nm rc.local
 .Nm rc.shutdown
 .Nm rc.d/
 .Sh DESCRIPTION
@@ -59,6 +54,12 @@ is starting the automatic reboot process,
 .Nm
 is invoked with the argument of
 .Sq autoboot .
+.Pp
+.Nm rc.local
+is a command script to which local boot-time actions can be added.
+It is (nearly) the last thing invoked by
+.Nm rc
+during a normal boot.
 .Pp
 .Nm rc.shutdown
 is the command script which shuts down various services, and is invoked by
@@ -119,10 +120,31 @@ which sets
 .Dv $1
 to
 .Sq start ,
-and sources the script in a subshell.
+and sources the script in a sub-shell.
 If the script has a
 .Sq .sh
 suffix then it is sourced directly into the current shell.
+.It
+The output from the above steps is sent to a post-processor.
+If
+.Sy rc_silent
+is false, then the post-processor displays the output.
+If
+.Sy rc_silent
+is true, then the post-processor invokes the command specified in
+.Va rc_silent_cmd
+once for each line, without otherwise displaying the output.
+Useful values for
+.Va rc_silent_cmd
+include
+.Dq \&:
+to display nothing at all, and
+.Dq twiddle
+to display a spinning symbol on the console.
+Regardless of the value of
+.Sy rc_silent ,
+the post-processor saves the output in
+.Pa /var/run/rc.log .
 .El
 .Ss Operation of rc.shutdown
 .Bl -enum
@@ -153,7 +175,7 @@ which sets
 .Dv $1
 to
 .Sq stop ,
-and sources the script in a subshell.
+and sources the script in a sub-shell.
 If the script has a
 .Sq .sh
 suffix then it is sourced directly into the current shell.
@@ -176,7 +198,7 @@ Ensure basic network services are running, including general
 network configuration
 .Pq Pa network
 and
-.Pa dhclient .
+.Pa dhcpcd .
 .It Pa SERVERS
 Ensure basic services (such as
 .Pa NETWORKING ,
@@ -209,20 +231,20 @@ as well as before services which might run commands as users
 and
 .Pa sendmail ) .
 .El
-.It Pa foo.sh
-Scripts that are to be sourced into the current shell rather than a subshell
+.It Pa inline.sh
+Scripts that are sourced into the current shell rather than a sub-shell
 have a
 .Sq Pa .sh
 suffix.
 Extreme care must be taken in using this, as the startup sequence will
-terminate if the script does.
+terminate if the script causes the current shell process to terminate.
 .Pa /etc/rc.d/bootconf.sh
 uses this behaviour to allow the user to select a different
 configuration (including
 .Pa /etc/rc.conf )
 early in the boot.
-.It Pa bar
-Scripts that are sourced in a subshell.
+.It Pa service
+Scripts that are sourced in a sub-shell.
 The boot does not stop if such a script terminates with a non-zero status,
 but a script can stop the boot if necessary by invoking the
 .Fn stop_boot
@@ -309,6 +331,8 @@ Startup script called by
 .Xr init 8 .
 .It Pa /etc/rc.d/
 Directory containing control scripts for each service.
+.It Pa /etc/rc.local
+Local startup script.
 .It Pa /etc/rc.shutdown
 Shutdown script called by
 .Xr shutdown 8 .
@@ -318,6 +342,9 @@ Contains
 functions used by various scripts.
 .It Pa /etc/rc.conf
 System startup configuration file.
+.It Pa /var/run/rc.log
+Log file created by
+.Nm .
 .El
 .Sh SEE ALSO
 .Xr rc.conf 5 ,
@@ -326,6 +353,14 @@ System startup configuration file.
 .Xr rcorder 8 ,
 .Xr reboot 8 ,
 .Xr shutdown 8
+.Rs
+.%A Luke Mewburn
+.%T The Design and Implementation of the NetBSD rc.d system
+.%I USENIX Association
+.%B Proceedings of the FREENIX Track: 2001 USENIX Annual Technical Conference
+.%D June 25-30, 2001
+.%U http://www.usenix.org/publications/library/proceedings/usenix01/freenix01/full_papers/mewburn/mewburn.pdf
+.Re
 .Sh HISTORY
 The
 .Nm
@@ -338,3 +373,9 @@ support was implemented in
 by
 .An Luke Mewburn
 .Aq lukem@NetBSD.org .
+The post-processor, support for
+.Va rc_silent ,
+and saving output to a file, was implemented in
+.Nx 6.0
+by
+.An Alan Barrett .

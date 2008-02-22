@@ -1,9 +1,8 @@
-#	$NetBSD: bsd.info.mk,v 1.38 2006/03/16 18:43:34 jwise Exp $
+#	$NetBSD: bsd.info.mk,v 1.41 2015/12/18 18:57:56 christos Exp $
 
 .include <bsd.init.mk>
 
 ##### Basic targets
-cleandir:	cleaninfo
 realinstall:	infoinstall
 
 ##### Default values
@@ -23,7 +22,7 @@ realall:	${INFOFILES}
 
 .txi.info .texi.info .texinfo.info:
 	${_MKTARGET_CREATE}
-	${TOOL_MAKEINFO} ${INFOFLAGS} --no-split -o ${.TARGET} ${.IMPSRC}
+	${TOOL_MAKEINFO} ${INFOFLAGS} --no-split --no-version-header -o ${.TARGET} ${.IMPSRC}
 
 .endif # ${MKINFO} != "no"
 
@@ -48,6 +47,8 @@ __infoinstall: .USE
 		do sleep 1; done;					\
 	${TOOL_INSTALL_INFO} -d ${INFODIRFILE} -r ${.TARGET} 2> /dev/null; \
 	${TOOL_INSTALL_INFO} -d ${INFODIRFILE} ${.TARGET};		\
+	${TOOL_SORTINFO} < ${INFODIRFILE} > ${INFODIRFILE}.tmp;		\
+	mv -f ${INFODIRFILE}.tmp ${INFODIRFILE};			\
 	rm -f ${INFODIRFILE}.lock
 
 
@@ -78,15 +79,11 @@ infoinstall::	${_F}
 .endif # ${MKINFO} != "no"
 
 ##### Clean rules
-CLEANFILES+=	${INFOFILES}
-
-cleaninfo: .PHONY
-.if !empty(CLEANFILES)
-	rm -f ${CLEANFILES}
-.endif
+CLEANDIRFILES+=	${INFOFILES}
 
 ##### Pull in related .mk logic
 .include <bsd.obj.mk>
 .include <bsd.sys.mk>
+.include <bsd.clean.mk>
 
 ${TARGETS}:	# ensure existence

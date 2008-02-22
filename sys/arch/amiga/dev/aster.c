@@ -1,4 +1,4 @@
-/*	$NetBSD: aster.c,v 1.20 2003/01/01 00:28:57 thorpej Exp $ */
+/*	$NetBSD: aster.c,v 1.23 2012/10/27 17:17:26 chs Exp $ */
 
 /*-
  * Copyright (c) 1998,2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aster.c,v 1.20 2003/01/01 00:28:57 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aster.c,v 1.23 2012/10/27 17:17:26 chs Exp $");
 
 /*
  * zbus ISDN Blaster, ISDN Master driver.
@@ -49,8 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: aster.c,v 1.20 2003/01/01 00:28:57 thorpej Exp $");
 #include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/param.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <amiga/include/cpu.h>
 
@@ -62,24 +54,23 @@ __KERNEL_RCSID(0, "$NetBSD: aster.c,v 1.20 2003/01/01 00:28:57 thorpej Exp $");
 
 
 struct aster_softc {
-	struct device sc_dev;
 	struct bus_space_tag sc_bst;
 };
 
-int astermatch(struct device *, struct cfdata *, void *);
-void asterattach(struct device *, struct device *, void *);
-int asterprint(void *auxp, const char *);
+int astermatch(device_t, cfdata_t, void *);
+void asterattach(device_t, device_t, void *);
+int asterprint(void *, const char *);
 
-CFATTACH_DECL(aster, sizeof(struct aster_softc),
+CFATTACH_DECL_NEW(aster, sizeof(struct aster_softc),
     astermatch, asterattach, NULL, NULL);
 
 int
-astermatch(struct device *parent, struct cfdata *cfp, void *auxp)
+astermatch(device_t parent, cfdata_t cf, void *aux)
 {
 
 	struct zbus_args *zap;
 
-	zap = auxp;
+	zap = aux;
 
 	if (zap->manid == 5001 && zap->prodid == 1)	/* VMC ISDN Blaster */
 		return (1);
@@ -101,14 +92,14 @@ astermatch(struct device *parent, struct cfdata *cfp, void *auxp)
 }
 
 void
-asterattach(struct device *parent, struct device *self, void *auxp)
+asterattach(device_t parent, device_t self, void *aux)
 {
 	struct aster_softc *astrsc;
 	struct zbus_args *zap;
 	struct supio_attach_args supa;
 
-	astrsc = (struct aster_softc *)self;
-	zap = auxp;
+	astrsc = device_private(self);
+	zap = aux;
 
 	astrsc->sc_bst.base = (u_long)zap->va + 0;
 	astrsc->sc_bst.absm = &amiga_bus_stride_2;
@@ -153,10 +144,11 @@ asterattach(struct device *parent, struct device *self, void *auxp)
 }
 
 int
-asterprint(void *auxp, const char *pnp)
+asterprint(void *aux, const char *pnp)
 {
 	struct supio_attach_args *supa;
-	supa = auxp;
+
+	supa = aux;
 
 	if (pnp == NULL)
 		return(QUIET);

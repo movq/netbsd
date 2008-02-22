@@ -1,4 +1,4 @@
-/*	$NetBSD: rarpd.c,v 1.55 2006/05/12 01:20:33 mrg Exp $	*/
+/*	$NetBSD: rarpd.c,v 1.60 2018/02/13 10:17:04 martin Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -9,26 +9,23 @@
  * retain the above copyright notice and this paragraph in its entirety, (2)
  * distributions including binary code include the above copyright notice and
  * this paragraph in its entirety in the documentation or other materials
- * provided with the distribution, and (3) all advertising materials mentioning
- * features or use of this software display the following acknowledgement:
- * ``This product includes software developed by the University of California,
- * Lawrence Berkeley Laboratory and its contributors.'' Neither the name of
+ * provided with the distribution.  Neither the name of
  * the University nor the names of its contributors may be used to endorse
  * or promote products derived from this software without specific prior
  * written permission.
+ *
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-    "@(#) Copyright (c) 1990 The Regents of the University of California.\n\
- All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: rarpd.c,v 1.55 2006/05/12 01:20:33 mrg Exp $");
+__RCSID("$NetBSD: rarpd.c,v 1.60 2018/02/13 10:17:04 martin Exp $");
 #endif
 
 
@@ -92,44 +89,41 @@ struct if_info {
  * The list of all interfaces that are being listened to.  rarp_loop()
  * "selects" on the descriptors in this list.
  */
-struct if_info *iflist;
+static struct if_info *iflist;
 
-u_int32_t choose_ipaddr(u_int32_t **, u_int32_t, u_int32_t);
-void	debug(const char *,...)
-	__attribute__((__format__(__printf__, 1, 2)));
-void	init_some(char *name);
-void	init_one(char *, u_int32_t);
-u_int32_t	ipaddrtonetmask(u_int32_t);
-void	lookup_eaddr(char *, u_char *);
-void	lookup_ipaddr(char *, u_int32_t *, u_int32_t *);
-int	main(int, char **);
-void	rarp_loop(void);
-int	rarp_open(char *);
-void	rarp_process(struct if_info *, u_char *);
-void	rarp_reply(struct if_info *, struct ether_header *, u_int32_t,
-		   struct hostent *);
-void	rarperr(int, const char *,...)
-	__attribute__((__format__(__printf__, 2, 3)));
+static u_int32_t choose_ipaddr(u_int32_t **, u_int32_t, u_int32_t);
+static void	debug(const char *,...) __printflike(1, 2);
+static void	init_some(char *name);
+static void	init_one(char *, u_int32_t);
+static u_int32_t	ipaddrtonetmask(u_int32_t);
+static void	lookup_eaddr(char *, u_char *);
+static void	lookup_ipaddr(char *, u_int32_t *, u_int32_t *);
+static void	rarp_loop(void) __dead;
+static int	rarp_open(char *);
+static void	rarp_process(struct if_info *, u_char *);
+static void	rarp_reply(struct if_info *, struct ether_header *, u_int32_t,
+			   struct hostent *);
+static void	rarperr(int, const char *,...) __printflike(2, 3);
 
 #if defined(__NetBSD__)
 #include "mkarp.h"
 #else
-void	update_arptab(u_char *, u_int32_t);
+static void	update_arptab(u_char *, u_int32_t);
 #endif
 
-void	usage(void);
+__dead static void	usage(void);
 
 static int	bpf_open(void);
 static int	rarp_check(u_char *, int);
 
 #ifdef REQUIRE_TFTPBOOT
-int	rarp_bootable(u_int32_t);
+static int	rarp_bootable(u_int32_t);
 #endif
 
-int     aflag = 0;		/* listen on "all" interfaces  */
-int     dflag = 0;		/* print debugging messages */
-int     fflag = 0;		/* don't fork */
-int	lflag = 0;		/* log all replies */
+static int aflag = 0;		/* listen on "all" interfaces  */
+static int dflag = 0;		/* print debugging messages */
+static int fflag = 0;		/* don't fork */
+static int lflag = 0;		/* log all replies */
 
 int
 main(int argc, char **argv)
@@ -192,7 +186,7 @@ main(int argc, char **argv)
  * Add 'ifname' to the interface list.  Lookup its IP address and network
  * mask and Ethernet address, and open a BPF file for it.
  */
-void
+static void
 init_one(char *ifname, u_int32_t ipaddr)
 {
 	struct if_info *h;
@@ -240,7 +234,7 @@ init_one(char *ifname, u_int32_t ipaddr)
  * configuration list.  A "candidate" is up, not loopback and not
  * point to point.
  */
-void
+static void
 init_some(char *name)
 {
 	struct ifaddrs *ifap, *ifa, *p;
@@ -270,7 +264,7 @@ init_some(char *name)
 	freeifaddrs(ifap);
 }
 
-void
+static void
 usage(void)
 {
 	(void) fprintf(stderr, "Usage: %s -a [-d|-f] [-l]\n", getprogname());
@@ -296,7 +290,7 @@ bpf_open(void)
  * Open a BPF file and attach it to the interface named 'device'.
  * Set immediate mode, and set a filter that accepts only RARP requests.
  */
-int
+static int
 rarp_open(char *device)
 {
 	int     fd;
@@ -378,13 +372,13 @@ rarp_check(u_char *p, int len)
 	struct ether_arp *ap = (struct ether_arp *) (p + sizeof(*ep));
 #endif
 
-	if (len < sizeof(*ep) + sizeof(*ap)) {
+	if (len < (int)(sizeof(*ep) + sizeof(*ap))) {
 		rarperr(NONFATAL, "truncated request");
 		return 0;
 	}
 #ifdef __NetBSD__
 	/* now that we know the fixed part of the ARP hdr is there: */
-	if (len < sizeof(*ap) + 2 * ap->ar_hln + 2 * ap->ar_pln) {
+	if (len < (int)(sizeof(*ap) + 2 * ap->ar_hln + 2 * ap->ar_pln)) {
 		rarperr(NONFATAL, "truncated request");
 		return 0;
 	}
@@ -420,7 +414,7 @@ rarp_check(u_char *p, int len)
 	}
 	{
 #ifdef __NetBSD__
-		caddr_t tha = ar_tha(ap);
+		uint8_t *tha = ar_tha(ap);
 
 		if (!tha || memcmp(ar_sha(ap), tha, 6) != 0) {
 #else
@@ -437,7 +431,7 @@ rarp_check(u_char *p, int len)
  * Loop indefinitely listening for RARP requests on the
  * interfaces in 'iflist'.
  */
-void
+static void
 rarp_loop(void)
 {
 	u_char *buf, *bp, *ep;
@@ -527,7 +521,7 @@ rarp_loop(void)
  * This check is made by looking in the tftp directory for the
  * configuration file.
  */
-int
+static int
 rarp_bootable(u_int32_t addr)
 {
 	struct dirent *dent;
@@ -563,7 +557,7 @@ rarp_bootable(u_int32_t addr)
  * is on network 'net'; 'netmask' is a mask indicating the network portion
  * of the address.
  */
-u_int32_t
+static u_int32_t
 choose_ipaddr(u_int32_t **alist, u_int32_t net, u_int32_t netmask)
 {
 
@@ -577,7 +571,7 @@ choose_ipaddr(u_int32_t **alist, u_int32_t net, u_int32_t netmask)
  * Answer the RARP request in 'pkt', on the interface 'ii'.  'pkt' has
  * already been checked for validity.  The reply is overlaid on the request.
  */
-void
+static void
 rarp_process(struct if_info *ii, u_char *pkt)
 {
 	struct ether_header *ep;
@@ -634,7 +628,7 @@ rarp_process(struct if_info *ii, u_char *pkt)
  * Lookup the ethernet address of the interface attached to the BPF
  * file descriptor 'fd'; return it in 'eaddr'.
  */
-void
+static void
 lookup_eaddr(char *ifname, u_char *eaddr)
 {
 	struct ifaddrs *ifap, *ifa;
@@ -665,7 +659,7 @@ lookup_eaddr(char *ifname, u_char *eaddr)
 /*
  * Lookup the IP address and network mask of the interface named 'ifname'.
  */
-void
+static void
 lookup_ipaddr(char *ifname, u_int32_t *addrp, u_int32_t *netmaskp)
 {
 	int     fd;
@@ -716,7 +710,7 @@ lookup_ipaddr(char *ifname, u_int32_t *addrp, u_int32_t *netmaskp)
  * address of the guy being booted (he cannot answer the ARP).
  */
 #ifndef __NetBSD__
-void
+static void
 update_arptab(u_char *ep, u_int32_t ipaddr)
 {
 	struct arpreq request;
@@ -776,7 +770,7 @@ update_arptab(u_char *ep, u_int32_t ipaddr)
  * address pair (arp_spa, arp_sha) may eliminate the need for a subsequent
  * ARP request.
  */
-void
+static void
 rarp_reply(struct if_info *ii, struct ether_header *ep, u_int32_t ipaddr,
 	   struct hostent *hp)
 {
@@ -847,7 +841,7 @@ rarp_reply(struct if_info *ii, struct ether_header *ep, u_int32_t ipaddr,
  * Get the netmask of an IP address.  This routine is used if
  * SIOCGIFNETMASK doesn't work.
  */
-u_int32_t
+static u_int32_t
 ipaddrtonetmask(u_int32_t addr)
 {
 
@@ -864,7 +858,7 @@ ipaddrtonetmask(u_int32_t addr)
 
 #include <stdarg.h>
 
-void
+static void
 rarperr(int fatal, const char *fmt,...)
 {
 	va_list ap;
@@ -887,7 +881,7 @@ rarperr(int fatal, const char *fmt,...)
 	/* NOTREACHED */
 }
 
-void
+static void
 debug(const char *fmt,...)
 {
 	va_list ap;

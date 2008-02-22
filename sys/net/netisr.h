@@ -1,4 +1,4 @@
-/* $NetBSD: netisr.h,v 1.37 2007/12/03 15:34:33 ad Exp $ */
+/* $NetBSD: netisr.h,v 1.45 2017/05/27 21:02:56 bouyer Exp $ */
 
 /*
  * Copyright (c) 1980, 1986, 1989, 1993
@@ -48,13 +48,14 @@
 
 #if defined(_KERNEL)
 
-#if !defined(_LKM)
+#if defined(_KERNEL_OPT)
 #include "opt_inet.h"
 #include "opt_atalk.h"
-#include "opt_iso.h"
+#include "opt_mpls.h"
 #include "opt_natm.h"
+#include "opt_can.h"
 #include "arp.h"
-#endif /* !defined(_LKM) */
+#endif /* defined(_KERNEL_OPT) */
 
 #if !defined(_LOCORE)
 
@@ -81,15 +82,18 @@
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
 #endif
-#ifdef ISO
-#include <netiso/iso.h>
-#include <netiso/clnp.h>
+#ifdef MPLS
+#include <netmpls/mpls_var.h>
 #endif
 #ifdef NATM
 #include <netnatm/natm.h>
 #endif
 #ifdef NETATALK
 #include <netatalk/at_extern.h>
+#endif
+#ifdef CAN
+#include <netcan/can.h>
+#include <netcan/can_var.h>
 #endif
 
 #endif /* !defined(_LOCORE) */
@@ -103,15 +107,15 @@
  * on the lowest level routine of each protocol.
  */
 #define	NETISR_IP	2		/* same as AF_INET */
-#define	NETISR_NS	6		/* same as AF_NS */
-#define	NETISR_ISO	7		/* same as AF_ISO */
 #define	NETISR_CCITT	10		/* same as AF_CCITT */
 #define	NETISR_ATALK	16		/* same as AF_APPLETALK */
-#define	NETISR_IPX	23		/* same as AF_IPX */
 #define	NETISR_IPV6	24		/* same as AF_INET6 */
 #define	NETISR_ISDN	26		/* same as AF_E164 */
 #define	NETISR_NATM	27		/* same as AF_NATM */
 #define	NETISR_ARP	28		/* same as AF_ARP */
+#define	NETISR_MPLS	33		/* same as AF_MPLS */
+#define	NETISR_CAN	35		/* same as AF_CAN */
+#define	NETISR_MAX	AF_MAX
 
 #if !defined(_LOCORE) && defined(_KERNEL)
 /* XXX Legacy netisr support. */

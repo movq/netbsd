@@ -1,4 +1,4 @@
-/*	$NetBSD: ypserv_proc.c,v 1.12 2007/08/22 16:49:17 christos Exp $	*/
+/*	$NetBSD: ypserv_proc.c,v 1.18 2018/01/17 03:16:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypserv_proc.c,v 1.12 2007/08/22 16:49:17 christos Exp $");
+__RCSID("$NetBSD: ypserv_proc.c,v 1.18 2018/01/17 03:16:10 christos Exp $");
 #endif
 
 #include <sys/stat.h>
@@ -168,10 +163,11 @@ ypproc_match_2_svc(void *argp, struct svc_req *rqstp)
 	    "key %.*s", clientstr, TORF(secure), k->domain, k->map,
 	    k->keydat.dsize, k->keydat.dptr));
 
-	if (secure && securecheck(caller))
+	if (secure && securecheck(caller)) {
+		memset(&res, 0, sizeof(res));
 		res.status = YP_YPERR;
-	else
-		res = ypdb_get_record(k->domain, k->map, k->keydat, FALSE);
+	} else
+		res = ypdb_get_record(k->domain, k->map, k->keydat, secure);
 
 	return ((void *)&res);
 }
@@ -195,9 +191,10 @@ ypproc_first_2_svc(void *argp, struct svc_req *rqstp)
 	    "first_2: request from %.500s, secure %s, domain %s, map %s",
 	    clientstr, TORF(secure), k->domain, k->map));
 
-	if (secure && securecheck(caller))
+	if (secure && securecheck(caller)) {
+		memset(&res, 0, sizeof(res));
 		res.status = YP_YPERR;
-	else
+	} else
 		res = ypdb_get_first(k->domain, k->map, FALSE);
 
 	return ((void *)&res);
@@ -223,9 +220,10 @@ ypproc_next_2_svc(void *argp, struct svc_req *rqstp)
 	    "key %.*s", clientstr, TORF(secure), k->domain, k->map,
 	    k->keydat.dsize, k->keydat.dptr));
 
-	if (secure && securecheck(caller))
+	if (secure && securecheck(caller)) {
+		memset(&res, 0, sizeof(res));
 		res.status = YP_YPERR;
-	else
+	} else
 		res = ypdb_get_next(k->domain, k->map, k->keydat, FALSE);
 
 	return ((void *)&res);
@@ -331,6 +329,7 @@ ypproc_all_2_svc(void *argp, struct svc_req *rqstp)
 	(void)memset(&res, 0, sizeof(res));
 
 	if (secure && securecheck(caller)) {
+		memset(&res, 0, sizeof(res));
 		res.ypresp_all_u.val.status = YP_YPERR;
 		return (&res);
 	}
@@ -342,7 +341,7 @@ ypproc_all_2_svc(void *argp, struct svc_req *rqstp)
 
 	case 0:
 		/* CHILD: send result, then exit */
-		if (!svc_sendreply(rqstp->rq_xprt, ypdb_xdr_get_all, (void *)k))
+		if (!svc_sendreply(rqstp->rq_xprt, (xdrproc_t)ypdb_xdr_get_all, (void *)k))
 			svcerr_systemerr(rqstp->rq_xprt);
 
 		/* Note: no need to free args; we're exiting. */
@@ -357,7 +356,7 @@ void *
 ypproc_master_2_svc(void *argp, struct svc_req *rqstp)
 {
 	static struct ypresp_master res;
-	static char *nopeer = "";
+	static const char *nopeer = "";
 	struct sockaddr *caller = svc_getrpccaller(rqstp->rq_xprt)->buf;
 	struct ypreq_nokey *k = argp;
 	int secure;
@@ -373,9 +372,10 @@ ypproc_master_2_svc(void *argp, struct svc_req *rqstp)
 	    "master_2: request from %.500s, secure %s, domain %s, map %s",
 	    clientstr, TORF(secure), k->domain, k->map));
 
-	if (secure && securecheck(caller))
+	if (secure && securecheck(caller)) {
+		memset(&res, 0, sizeof(res));
 		res.status = YP_YPERR;
-	else
+	} else
 		res = ypdb_get_master(k->domain, k->map);
 
 	/*
@@ -389,7 +389,7 @@ ypproc_master_2_svc(void *argp, struct svc_req *rqstp)
 	 * xdr_string in ypserv_xdr.c may be a better place?
 	 */
 	if (res.master == NULL)
-		res.master = nopeer;
+		res.master = __UNCONST(nopeer);
 
 	return ((void *)&res);
 }
@@ -414,12 +414,15 @@ ypproc_order_2_svc(void *argp, struct svc_req *rqstp)
 	    "order_2: request from %.500s, secure %s, domain %s, map %s",
 	    clientstr, TORF(secure), k->domain, k->map));
 
-	if (secure && securecheck(caller))
+	if (secure && securecheck(caller)) {
+		memset(&res, 0, sizeof(res));
 		res.status = YP_YPERR;
-	else if (_yp_invalid_map(k->map))
+	} else if (_yp_invalid_map(k->map)) {
+		memset(&res, 0, sizeof(res));
 		res.status = YP_NOMAP;
-	else
+	} else {
 		res = ypdb_get_order(k->domain, k->map);
+	}
 
 	return ((void *)&res);
 }
@@ -451,7 +454,7 @@ ypproc_maplist_2_svc(void *argp, struct svc_req *rqstp)
 	(void)snprintf(domain_path, sizeof(domain_path), "%s/%s", YP_DB_PATH,
 	    domain);
 
-	res.list = NULL;
+	memset(&res, 0, sizeof(res));
 	status = YP_TRUE;
 
 	if ((stat(domain_path, &finfo) != 0) || !S_ISDIR(finfo.st_mode)) {
@@ -481,14 +484,12 @@ ypproc_maplist_2_svc(void *argp, struct svc_req *rqstp)
 		suffix = (char *)&dp->d_name[dp->d_namlen - 3];
 		if (strcmp(suffix, ".db") == 0) {
 			/* Found one. */
-			m = (struct ypmaplist *)
-			    malloc(sizeof(struct ypmaplist));
+			m = calloc(1, sizeof(struct ypmaplist));
 			if (m == NULL) {
 				status = YP_YPERR;
 				goto out;
 			}
 
-			(void)memset(m, 0, sizeof(m));
 			(void)strlcpy(m->ypml_name, dp->d_name,
 			    (size_t)(dp->d_namlen - 2));
 			m->ypml_next = res.list;

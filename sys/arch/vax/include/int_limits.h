@@ -1,4 +1,4 @@
-/*	$NetBSD: int_limits.h,v 1.6 2007/10/17 19:57:48 garbled Exp $	*/
+/*	$NetBSD: int_limits.h,v 1.9 2014/08/13 22:31:07 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,9 @@
 #ifndef _VAX_INT_LIMITS_H_
 #define _VAX_INT_LIMITS_H_
 
+#ifdef __SIG_ATOMIC_MAX__
+#include <sys/common_int_limits.h>
+#else
 /*
  * 7.18.2 Limits of specified-width integer types
  */
@@ -121,23 +117,16 @@
  */
 
 /* limits of ptrdiff_t */
-#ifdef __ELF__
 #define	PTRDIFF_MIN	(-0x7fffffffL-1)		/* ptrdiff_t	  */
 #define	PTRDIFF_MAX	0x7fffffffL			/* ptrdiff_t	  */
-#else
-#define	PTRDIFF_MIN	(-0x7fffffff-1)			/* ptrdiff_t	  */
-#define	PTRDIFF_MAX	0x7fffffff			/* ptrdiff_t	  */
-#endif
 
 /* limits of sig_atomic_t */
 #define	SIG_ATOMIC_MIN	(-0x7fffffff-1)			/* sig_atomic_t	  */
 #define	SIG_ATOMIC_MAX	0x7fffffff			/* sig_atomic_t	  */
 
 /* limit of size_t */
-#ifdef __ELF__
 #define	SIZE_MAX	0xffffffffUL			/* size_t	  */
-#else
-#define	SIZE_MAX	0xffffffffU			/* size_t	  */
-#endif
+
+#endif /* !__SIG_ATOMIC_MAX__ */
 
 #endif /* !_VAX_INT_LIMITS_H_ */

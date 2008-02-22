@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.h,v 1.8 2003/08/07 11:14:51 agc Exp $	*/
+/*	$NetBSD: hash.h,v 1.12 2017/05/31 21:07:03 maya Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -78,8 +78,8 @@
  * 	which maintains hash tables.
  */
 
-#ifndef	_HASH
-#define	_HASH
+#ifndef	_HASH_H
+#define	_HASH_H
 
 /*
  * The following defines one entry in the hash table.
@@ -89,8 +89,7 @@ typedef struct Hash_Entry {
     struct Hash_Entry *next;		/* Used to link together all the
     					 * entries associated with the same
 					 * bucket. */
-    ClientData	      clientData;	/* Arbitrary piece of data associated
-    					 * with key. */
+    void	      *clientPtr;	/* Arbitrary pointer */
     unsigned	      namehash;		/* hash value of key */
     char	      name[1];		/* key string */
 } Hash_Entry;
@@ -119,11 +118,11 @@ typedef struct Hash_Search {
  */
 
 /*
- * ClientData Hash_GetValue(h)
+ * void * Hash_GetValue(h)
  *     Hash_Entry *h;
  */
 
-#define Hash_GetValue(h) ((h)->clientData)
+#define Hash_GetValue(h) ((h)->clientPtr)
 
 /*
  * Hash_SetValue(h, val);
@@ -131,7 +130,7 @@ typedef struct Hash_Search {
  *     char *val;
  */
 
-#define Hash_SetValue(h, val) ((h)->clientData = (ClientData) (val))
+#define Hash_SetValue(h, val) ((h)->clientPtr = (val))
 
 /*
  * Hash_Size(n) returns the number of words in an object of n bytes
@@ -147,4 +146,4 @@ void Hash_DeleteEntry(Hash_Table *, Hash_Entry *);
 Hash_Entry *Hash_EnumFirst(Hash_Table *, Hash_Search *);
 Hash_Entry *Hash_EnumNext(Hash_Search *);
 
-#endif /* _HASH */
+#endif /* _HASH_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: tip.c,v 1.48 2007/03/09 23:45:21 hubertf Exp $	*/
+/*	$NetBSD: tip.c,v 1.59 2016/09/05 00:40:30 sevan Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,15 +34,15 @@
 #include <libgen.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tip.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: tip.c,v 1.48 2007/03/09 23:45:21 hubertf Exp $");
+__RCSID("$NetBSD: tip.c,v 1.59 2016/09/05 00:40:30 sevan Exp $");
 #endif /* not lint */
 
 /*
@@ -54,12 +54,11 @@ __RCSID("$NetBSD: tip.c,v 1.48 2007/03/09 23:45:21 hubertf Exp $");
 #include "tip.h"
 #include "pathnames.h"
 
-static void	tipusage(void);
+__dead static void	tipusage(void);
 
 int	escape(void);
-int	main(int, char **);
-void	intprompt(int);
-void	tipin(void);
+__dead static void	intprompt(int);
+__dead static void	tipin(void);
 
 char	PNbuf[256];			/* This limits the size of a number */
 
@@ -73,27 +72,27 @@ main(int argc, char *argv[])
 	char *p;
 	const char *q;
 	char sbuf[12];
-	static char brbuf[16];
+	int cmdlineBR;
 	int fcarg;
 
+	setprogname(argv[0]);
 	gid = getgid();
 	egid = getegid();
 	uid = getuid();
 	euid = geteuid();
-	if (equal(basename(argv[0]), "cu")) {
+	if (strcmp(getprogname(), "cu") == 0) {
 		cumode = 1;
 		cumain(argc, argv);
 		goto cucommon;
 	}
 
-	if (argc > 4) {
+	if (argc > 4)
 		tipusage();
-	}
-	if (!isatty(0)) {
-		(void)fprintf(stderr, "%s: must be interactive\n", getprogname());
-		exit(1);
-	}
 
+	if (!isatty(0))
+		errx(EXIT_FAILURE, "must be interactive");
+
+	cmdlineBR = 0;
 	while((c = getopt(argc, argv, "v0123456789")) != -1) {
 		switch(c) {
 
@@ -103,8 +102,8 @@ main(int argc, char *argv[])
 
 		case '0': case '1': case '2': case '3': case '4':
 		case '5': case '6': case '7': case '8': case '9':
-			(void)snprintf(brbuf, sizeof(brbuf) -1, "%s%c", brbuf, c);
-			BR = atoi(brbuf);
+			cmdlineBR = cmdlineBR * 10 + (c - '0');
+			BR = cmdlineBR;
 			break;
 
 		default:
@@ -149,11 +148,10 @@ notnumber:
 	(void)signal(SIGTERM, cleanup);
 
 	if ((i = hunt(System)) == 0) {
-		(void)printf("all ports busy\n");
-		exit(3);
+		errx(3, "all ports busy");
 	}
 	if (i == -1) {
-		errx(3, "link down\n");
+		errx(3, "link down");
 	}
 	setbuf(stdout, NULL);
 
@@ -178,7 +176,7 @@ notnumber:
 		}
 	}
 	if ((q = tip_connect()) != NULL) {
-		errx(1, "\07%s\n[EOT]\n", q);
+		errx(1, "\07%s\n[EOT]", q);
 	}
 	if (!HW) {
 		if (ttysetup((speed_t)number(value(BAUDRATE))) != 0) {
@@ -262,7 +260,7 @@ cleanup(int dummy __unused)
 
 	if (odisc)
 		(void)ioctl(0, TIOCSETD, &odisc);
-	exit(0);
+	_exit(0);
 }
 
 /*
@@ -320,7 +318,7 @@ prompt(const char *s, char *volatile p, size_t l)
 /*
  * Interrupt service routine during prompting
  */
-void
+static void
 /*ARGSUSED*/
 intprompt(int dummy __unused)
 {
@@ -334,7 +332,7 @@ intprompt(int dummy __unused)
 /*
  * ****TIPIN   TIPIN****
  */
-void
+static void
 tipin(void)
 {
 	char gch, bol = 1;
@@ -496,7 +494,9 @@ ttysetup(speed_t spd)
 	cntrl.c_cc[VMIN] = 1;
 	cntrl.c_cc[VTIME] = 0;
 	if (boolean(value(TAND)))
-		cntrl.c_iflag |= IXOFF;
+		cntrl.c_iflag |= IXOFF|IXON;
+	else
+		cntrl.c_iflag &= ~(IXOFF|IXON);
 	return tcsetattr(FD, TCSAFLUSH, &cntrl);
 }
 
@@ -510,7 +510,7 @@ static char partab[0200];
 void
 xpwrite(int fd, char *buf, size_t n)
 {
-	int i;
+	size_t i;
 	char *bp;
 
 	bp = buf;
@@ -543,7 +543,7 @@ setparity(const char *defparity)
 		value(PARITY) = curpar = strdup(defparity);
 	}
 	parity = value(PARITY);
-	if (equal(parity, "none")) {
+	if (strcmp(parity, "none") == 0) {
 		bits8 = 1;
 		return;
 	}
@@ -551,13 +551,13 @@ setparity(const char *defparity)
 	flip = 0;
 	clr = 0377;
 	set = 0;
-	if (equal(parity, "odd"))
+	if (strcmp(parity, "odd") == 0)
 		flip = 0200;			/* reverse bit 7 */
-	else if (equal(parity, "zero"))
+	else if (strcmp(parity, "zero") == 0)
 		clr = 0177;			/* turn off bit 7 */
-	else if (equal(parity, "one"))
+	else if (strcmp(parity, "one") == 0)
 		set = 0200;			/* turn on bit 7 */
-	else if (!equal(parity, "even")) {
+	else if (strcmp(parity, "even") != 0) {
 		(void)fprintf(stderr, "%s: unknown parity value\r\n", parity);
 		(void)fflush(stderr);
 	}

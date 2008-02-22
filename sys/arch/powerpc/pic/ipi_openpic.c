@@ -1,4 +1,4 @@
-/* $NetBSD: ipi_openpic.c,v 1.2 2007/10/17 19:56:45 garbled Exp $ */
+/* $NetBSD: ipi_openpic.c,v 1.8 2016/05/26 17:38:05 macallan Exp $ */
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,27 +29,26 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipi_openpic.c,v 1.2 2007/10/17 19:56:45 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipi_openpic.c,v 1.8 2016/05/26 17:38:05 macallan Exp $");
 
 #include "opt_multiprocessor.h"
 #include <sys/param.h>
-#include <sys/malloc.h>
 #include <sys/kernel.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/pio.h>
 #include <powerpc/openpic.h>
-#include <powerpc/atomic.h>
 
-#include <arch/powerpc/pic/picvar.h>
-#include <arch/powerpc/pic/ipivar.h>
+#include <powerpc/pic/picvar.h>
+#include <powerpc/pic/ipivar.h>
 
 #ifdef MULTIPROCESSOR
 
 extern struct ipi_ops ipiops;
-extern volatile u_long IPI[CPU_MAXNUM];
-static void openpic_send_ipi(int, u_long);
+static void openpic_send_ipi(cpuid_t, uint32_t);
 static void openpic_establish_ipi(int, int, void *);
 
 void
@@ -68,50 +60,50 @@ setup_openpic_ipi(void)
 	ipiops.ppc_establish_ipi = openpic_establish_ipi;
 	ipiops.ppc_ipi_vector = IPI_VECTOR;
 
-	x = openpic_read(OPENPIC_IPI_VECTOR(1));
+	/* Some (broken) openpic's byteswap on read, but not write. */
+	openpic_write(OPENPIC_IPI_VECTOR(0), OPENPIC_IMASK);
+	x = openpic_read(OPENPIC_IPI_VECTOR(0));
+	if (x != OPENPIC_IMASK)
+		x = bswap32(openpic_read(OPENPIC_IPI_VECTOR(1)));
+	else
+		x = openpic_read(OPENPIC_IPI_VECTOR(1));
 	x &= ~(OPENPIC_IMASK | OPENPIC_PRIORITY_MASK | OPENPIC_VECTOR_MASK);
 	x |= (15 << OPENPIC_PRIORITY_SHIFT) | ipiops.ppc_ipi_vector;
 	openpic_write(OPENPIC_IPI_VECTOR(1), x);
 }
 
 static void
-openpic_send_ipi(int target, u_long mesg)
+openpic_send_ipi(cpuid_t target, uint32_t mesg)
 {
-	int cpumask = 0, i;
+	struct cpu_info * const ci = curcpu();
+	uint32_t cpumask = 0;
 
-	switch(target) {
-		case IPI_T_ALL:
-			for (i = 0; i < ncpu; i++) {
-				cpumask |= 1 << i;
-				atomic_setbits_ulong(&IPI[i], mesg);
+	switch (target) {
+		case IPI_DST_ALL:
+		case IPI_DST_NOTME:
+			for (u_int i = 0; i < ncpu; i++) {
+				struct cpu_info * const dst_ci = cpu_lookup(i);
+				if (target == IPI_DST_ALL || dst_ci != ci) {
+					cpumask |= 1 << cpu_index(dst_ci);
+					atomic_or_32(&dst_ci->ci_pending_ipis,
+					    mesg);
+				}
 			}
 			break;
-		case IPI_T_NOTME:
-			for (i = 0; i < ncpu; i++) {
-				if (i != cpu_number())
-					cpumask |= 1 << i;
-				atomic_setbits_ulong(&IPI[i], mesg);
-			}
+		default: {
+			struct cpu_info * const dst_ci = cpu_lookup(target);
+			cpumask = 1 << cpu_index(dst_ci);
+			atomic_or_32(&dst_ci->ci_pending_ipis, mesg);
 			break;
-		default:
-			cpumask = 1 << target;
-			atomic_setbits_ulong(&IPI[target], mesg);
+		}
 	}
-	openpic_write(OPENPIC_IPI(cpu_number(), 1), cpumask);
+	openpic_write(OPENPIC_IPI(cpu_index(ci), 1), cpumask);
 }
 
 static void
 openpic_establish_ipi(int type, int level, void *ih_args)
 {
-/*
- * XXX
- * for now we catch IPIs early in pic_handle_intr() so no need to do anything
- * here
- */
-#if 0
-	intr_establish(ipiops.ppc_ipi_vector, type, level, ppcipi_intr,
-	    ih_args);
-#endif
+	intr_establish(ipiops.ppc_ipi_vector, type, level, ipi_intr, ih_args);
 }
 
 #endif /*MULTIPROCESSOR*/

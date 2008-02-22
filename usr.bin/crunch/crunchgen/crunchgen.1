@@ -1,4 +1,4 @@
-.\"	$NetBSD: crunchgen.1,v 1.27 2006/10/26 10:49:35 wiz Exp $
+.\"	$NetBSD: crunchgen.1,v 1.35 2018/06/21 10:55:54 kamil Exp $
 .\"
 .\" Copyright (c) 1994 University of Maryland
 .\" All Rights Reserved.
@@ -24,7 +24,7 @@
 .\"			   Computer Science Department
 .\"			   University of Maryland at College Park
 .\"
-.Dd October 18, 2006
+.Dd June 21, 2018
 .Dt CRUNCHGEN 1
 .Os
 .Sh NAME
@@ -32,28 +32,14 @@
 .Nd generates build environment for a crunched binary
 .Sh SYNOPSIS
 .Nm
-.Op Fl fOoq
-.Bk -words
+.Op Fl fOopqs
 .Op Fl c Ar c-file-name
-.Ek
-.Bk -words
 .Op Fl D Ar src-root
-.Ek
-.Bk -words
 .Op Fl d Ar build-options
-.Ek
-.Bk -words
 .Op Fl e Ar exec-file-name
-.Ek
-.Bk -words
 .Op Fl L Ar lib-dir
-.Ek
-.Bk -words
 .Op Fl m Ar makefile-name
-.Ek
-.Bk -words
 .Op Fl v Ar var-spec
-.Ek
 .Ar conf-file
 .Sh DESCRIPTION
 A crunched binary is a program made up of many other programs linked
@@ -114,7 +100,7 @@ The default flags are -Os.
 Set crunched binary executable file name to
 .Ar exec-file-name .
 The default name is
-.Dq Aq conf-name .
+.Dq Aq Mt conf-name .
 .It Fl f
 Flush cache.
 Forces the recalculation of cached parameters.
@@ -138,9 +124,13 @@ the program objects into a single relocatable.
 Use existing object files.
 Rather than rebuilding object files via reach-over
 makefiles, instead search for and use existing object files.
+.It Fl p
+Produce static pie (position independent executables).
 .It Fl q
 Quiet operation.
 Status messages are suppressed.
+.It Fl s
+Enable sanitization.
 .It Fl v Ar varspec
 Append a variable specification to the on-the fly generated Makefile.
 .El
@@ -229,7 +219,7 @@ and if that is not found, the
 .Ar srcdir
 itself becomes the
 .Ar objdir .
-.br
+.Pp
 .Nm Note :
 This option only takes effect if the -o option to use existing object files is also
 specified.
@@ -286,6 +276,28 @@ If they are not valid for a particular program, that
 program is skipped in the
 .Ar objs
 target.
+.Pp
+The makefile produced by
+.Nm
+strips certain sections from the final binary to reduce its size.
+This includes:
+.Bl -tag -width ".Li .eh_frame_hdr"
+.It Li .eh_frame
+Unwinding tables for exceptions and backtraces.
+.It Li .eh_frame_hdr
+Index of the
+.Li .eh_frame
+section.
+.It Li .note
+Optional data for the kernel and/or runtime linker.
+.It Li .comment
+Comments in the binary.
+.It Li .ident
+Embedded source revisions used by
+.Xr ident 1 .
+.It Li .copyright
+Embedded copyright notes.
+.El
 .Sh ENVIRONMENT
 .Bl -tag -width MAKEOBJDIRPREFIX
 .It Ev MAKEOBJDIRPREFIX
@@ -293,7 +305,7 @@ If the environment variable
 .Ev MAKEOBJDIRPREFIX
 is set, the object directory will be prefixed with the path contained in this
 environment variable.
-.br
+.Pp
 .Nm Note :
 This variable is only used if the -o option to use existing object files is also
 specified.
@@ -304,7 +316,7 @@ is set, it is used as the name of the machine type, when accessing object
 directories of the form obj.MACHINE.
 If it is not set, it defaults to the machine type returned by
 .Xr uname 3 .
-.br
+.Pp
 .Nm Note :
 This option is only used if the -o option to use existing object files is also
 specified.
@@ -324,7 +336,6 @@ Here is an example
 .Em crunchgen
 input conf file, named
 .Dq Pa kcopy.conf :
-.Pp
 .Bd -literal -offset indent
 srcdirs /usr/src/bin /usr/src/sbin
 
@@ -348,7 +359,6 @@ line.
 The crunched binary
 .Dq kcopy
 can be built as follows:
-.Pp
 .Bd -literal -offset indent
 % crunchgen -m Makefile kcopy.conf    # gen Makefile and kcopy.c
 % make objs             # build the component programs' .o files
@@ -367,9 +377,10 @@ and hard-linked to the names of the component programs.
 .Sh AUTHORS
 .Nm
 was written by
-.An James da Silva Aq jds@cs.umd.edu .
+.An James da Silva Aq Mt jds@cs.umd.edu .
 .Pp
-Copyright (c) 1994 University of Maryland.  All Rights Reserved.
+Copyright (c) 1994 University of Maryland.
+All Rights Reserved.
 .Sh BUGS
 While
 .Nm
@@ -392,7 +403,6 @@ some other arrangements made.
 If a program directory being searched for is found, but contains
 no objects, other directories are not searched.
 This causes the following directive to fail:
-.Pp
 .Bd -literal -offset indent
 srcdirs /usr/src/usr.bin /usr/src/usr.bin/less
 progs less gzip
@@ -410,7 +420,6 @@ fails to find objects for the
 program.
 To avoid this problem, list specific srcdirs first, and
 the more general ones later, for e.g.:
-.Pp
 .Bd -literal -offset indent
 srcdirs /usr/src/usr.bin/less /usr/src/usr.bin
 progs less gzip

@@ -1,4 +1,4 @@
-/*	$NetBSD: err.h,v 1.14 2005/02/03 04:39:32 perry Exp $	*/
+/*	$NetBSD: err.h,v 1.17 2014/01/16 17:22:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -34,33 +34,34 @@
 #ifndef _ERR_H_
 #define	_ERR_H_
 
-/*
- * Don't use va_list in the err/warn prototypes.   Va_list is typedef'd in two
- * places (<machine/varargs.h> and <machine/stdarg.h>), so if we include one
- * of them here we may collide with the utility's includes.  It's unreasonable
- * for utilities to have to include one of them to include err.h, so we get
- * _BSD_VA_LIST_ from <machine/ansi.h> and use it.
- */
-#include <machine/ansi.h>
 #include <sys/cdefs.h>
+#include <stdarg.h>
 
 __BEGIN_DECLS
 __dead void	err(int, const char *, ...)
-		    __attribute__((__noreturn__, __format__(__printf__, 2, 3)));
-__dead void	verr(int, const char *, _BSD_VA_LIST_)
-		    __attribute__((__noreturn__, __format__(__printf__, 2, 0)));
+		     __printflike(2, 3) __dead;
+__dead void	verr(int, const char *, va_list)
+		    __printflike(2, 0) __dead;
 __dead void	errx(int, const char *, ...)
-		    __attribute__((__noreturn__, __format__(__printf__, 2, 3)));
-__dead void	verrx(int, const char *, _BSD_VA_LIST_)
-		    __attribute__((__noreturn__, __format__(__printf__, 2, 0)));
+		     __printflike(2, 3) __dead;
+__dead void	verrx(int, const char *, va_list)
+		    __printflike(2, 0) __dead;
+__dead void	errc(int, int, const char *, ...)
+		     __printflike(3, 4) __dead;
+__dead void	verrc(int, int, const char *, va_list)
+		    __printflike(3, 0) __dead;
 void		warn(const char *, ...)
-		    __attribute__((__format__(__printf__, 1, 2)));
-void		vwarn(const char *, _BSD_VA_LIST_)
-		    __attribute__((__format__(__printf__, 1, 0)));
+		    __printflike(1, 2);
+void		vwarn(const char *, va_list)
+		    __printflike(1, 0);
 void		warnx(const char *, ...)
-		    __attribute__((__format__(__printf__, 1, 2)));
-void		vwarnx(const char *, _BSD_VA_LIST_)
-		    __attribute__((__format__(__printf__, 1, 0)));
+		    __printflike(1, 2);
+void		vwarnx(const char *, va_list)
+		    __printflike(1, 0);
+void		warnc(int, const char *, ...)
+		    __printflike(2, 3);
+void		vwarnc(int, const char *, va_list)
+		    __printflike(2, 0);
 __END_DECLS
 
 #endif /* !_ERR_H_ */

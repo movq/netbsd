@@ -1,4 +1,4 @@
-/*	$NetBSD: vga_pci.c,v 1.38 2007/12/25 14:22:26 joerg Exp $	*/
+/*	$NetBSD: vga_pci.c,v 1.55 2016/07/07 06:55:41 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.38 2007/12/25 14:22:26 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.55 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,10 +51,14 @@ __KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.38 2007/12/25 14:22:26 joerg Exp $");
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
+#include <dev/pci/wsdisplay_pci.h>
 
 #include "opt_vga.h"
 
 #ifdef VGA_POST
+#  if defined(__i386__) || defined(__amd64__)
+#    include "acpica.h"
+#  endif
 #include <x86/vga_post.h>
 #endif
 
@@ -79,15 +83,18 @@ struct vga_pci_softc {
 #ifdef VGA_POST
 	struct vga_post *sc_posth;
 #endif
+
+	struct pci_attach_args sc_paa;
 };
 
-static int	vga_pci_match(struct device *, struct cfdata *, void *);
-static void	vga_pci_attach(struct device *, struct device *, void *);
+static int	vga_pci_match(device_t, cfdata_t, void *);
+static void	vga_pci_attach(device_t, device_t, void *);
+static int	vga_pci_rescan(device_t, const char *, const int *);
 static int	vga_pci_lookup_quirks(struct pci_attach_args *);
-static bool	vga_pci_resume(device_t dv);
+static bool	vga_pci_resume(device_t dv, const pmf_qual_t *);
 
-CFATTACH_DECL(vga_pci, sizeof(struct vga_pci_softc),
-    vga_pci_match, vga_pci_attach, NULL, NULL);
+CFATTACH_DECL2_NEW(vga_pci, sizeof(struct vga_pci_softc),
+    vga_pci_match, vga_pci_attach, NULL, NULL, vga_pci_rescan, NULL);
 
 static int	vga_pci_ioctl(void *, u_long, void *, int, struct lwp *);
 static paddr_t	vga_pci_mmap(void *, off_t, int);
@@ -102,6 +109,8 @@ static const struct {
 	int quirks;
 } vga_pci_quirks[] = {
 	{PCI_ID_CODE(PCI_VENDOR_SILMOTION, PCI_PRODUCT_SILMOTION_SM712),
+	 VGA_QUIRK_NOFASTSCROLL},
+	{PCI_ID_CODE(PCI_VENDOR_CYRIX, PCI_PRODUCT_CYRIX_CX5530_VIDEO),
 	 VGA_QUIRK_NOFASTSCROLL},
 };
 
@@ -131,8 +140,7 @@ vga_pci_lookup_quirks(struct pci_attach_args *pa)
 }
 
 static int
-vga_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+vga_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	int potential;
@@ -173,21 +181,19 @@ vga_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-vga_pci_attach(struct device *parent, struct device *self, void *aux)
+vga_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct vga_pci_softc *psc = (void *) self;
+	struct vga_pci_softc *psc = device_private(self);
 	struct vga_softc *sc = &psc->sc_vga;
 	struct pci_attach_args *pa = aux;
-	char devinfo[256];
 	int bar, reg;
 
+	sc->sc_dev = self;
 	psc->sc_pc = pa->pa_pc;
 	psc->sc_pcitag = pa->pa_tag;
+	psc->sc_paa = *pa;
 
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_naive("\n");
-	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
-	    PCI_REVISION(pa->pa_class));
+	pci_aprint_devinfo(pa, NULL);
 
 	/*
 	 * Gather info about all the BARs.  These are used to allow
@@ -209,8 +215,8 @@ vga_pci_attach(struct device *parent, struct device *self, void *aux)
 		if (PCI_MAPREG_MEM_TYPE(psc->sc_bars[bar].vb_type) ==
 		    PCI_MAPREG_MEM_TYPE_64BIT) {
 			/* XXX */
-			aprint_error("%s: WARNING: ignoring 64-bit BAR @ 0x%02x\n",
-			    sc->sc_dev.dv_xname, reg);
+			aprint_error_dev(self,
+			    "WARNING: ignoring 64-bit BAR @ 0x%02x\n", reg);
 			bar++;
 			continue;
 		}
@@ -220,8 +226,8 @@ vga_pci_attach(struct device *parent, struct device *self, void *aux)
 		     &psc->sc_bars[bar].vb_base,
 		     &psc->sc_bars[bar].vb_size,
 		     &psc->sc_bars[bar].vb_flags))
-			aprint_error("%s: WARNING: strange BAR @ 0x%02x\n",
-			       sc->sc_dev.dv_xname, reg);
+			aprint_error_dev(self,
+			    "WARNING: strange BAR @ 0x%02x\n", reg);
 	}
 
 	/* XXX Expansion ROM? */
@@ -230,9 +236,11 @@ vga_pci_attach(struct device *parent, struct device *self, void *aux)
 			  vga_pci_lookup_quirks(pa), &vga_pci_funcs);
 
 #ifdef VGA_POST
-	psc->sc_posth = vga_post_init(pa->pa_bus, pa->pa_device, pa->pa_function);
+	psc->sc_posth = vga_post_init(pa->pa_bus, pa->pa_device,
+	    pa->pa_function);
 	if (psc->sc_posth == NULL)
-		aprint_error_dev(self, "WARNING: could not prepare POST handler\n");
+		aprint_error_dev(self,
+		    "WARNING: could not prepare POST handler\n");
 #endif
 
 	/*
@@ -245,15 +253,28 @@ vga_pci_attach(struct device *parent, struct device *self, void *aux)
 	config_found_ia(self, "drm", aux, vga_drm_print);
 }
 
-static bool
-vga_pci_resume(device_t dv)
+static int
+vga_pci_rescan(device_t self, const char *ifattr, const int *locators)
 {
+	struct vga_pci_softc *psc = device_private(self);
+
+	config_found_ia(self, "drm", &psc->sc_paa, vga_drm_print);
+
+	return 0;
+}
+
+static bool
+vga_pci_resume(device_t dv, const pmf_qual_t *qual)
+{
+#if defined(VGA_POST) && NACPICA > 0
+	extern int acpi_md_vbios_reset;
+#endif
 	struct vga_pci_softc *sc = device_private(dv);
 
 	vga_resume(&sc->sc_vga);
 
-#ifdef VGA_POST
-	if (sc->sc_posth != NULL)
+#if defined(VGA_POST) && NACPICA > 0
+	if (sc->sc_posth != NULL && acpi_md_vbios_reset == 2)
 		vga_post_call(sc->sc_posth);
 #endif
 
@@ -273,8 +294,8 @@ int
 vga_drm_print(void *aux, const char *pnp)
 {
 	if (pnp)
-		aprint_normal("direct rendering for %s", pnp);
-	return (UNSUPP);
+		aprint_normal("drm at %s", pnp);
+	return (UNCONF);
 }
 
 
@@ -288,11 +309,15 @@ vga_pci_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 	/* PCI config read/write passthrough. */
 	case PCI_IOC_CFGREAD:
 	case PCI_IOC_CFGWRITE:
-		return (pci_devioctl(psc->sc_pc, psc->sc_pcitag,
-		    cmd, data, flag, l));
+		return pci_devioctl(psc->sc_pc, psc->sc_pcitag,
+		    cmd, data, flag, l);
+
+	case WSDISPLAYIO_GET_BUSID:
+		return wsdisplayio_busid_pci(vc->softc->sc_dev,
+		    psc->sc_pc, psc->sc_pcitag, data);
 
 	default:
-		return (EPASSTHROUGH);
+		return EPASSTHROUGH;
 	}
 }
 
@@ -329,6 +354,16 @@ vga_pci_mmap(void *v, off_t offset, int prot)
 		return (bus_space_mmap(vc->hdl.vh_memt, IOM_BEGIN,
 		    (offset - IOM_BEGIN), prot, 0));
 
+#ifdef PCI_MAGIC_IO_RANGE
+	/* allow to map our IO space on non-x86 machines */
+	if ((offset >= PCI_MAGIC_IO_RANGE) &&
+	    (offset < PCI_MAGIC_IO_RANGE + 0x10000)) {
+		return bus_space_mmap(vc->hdl.vh_iot,
+		    offset - PCI_MAGIC_IO_RANGE,
+		    0, prot, BUS_SPACE_MAP_LINEAR);	
+	}
+#endif
+	
 	/* Range not found. */
 	return (-1);
 }

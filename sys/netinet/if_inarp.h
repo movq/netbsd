@@ -1,4 +1,4 @@
-/*	$NetBSD: if_inarp.h,v 1.39 2007/03/04 06:03:20 christos Exp $	*/
+/*	$NetBSD: if_inarp.h,v 1.51 2017/02/21 03:58:24 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -34,12 +34,14 @@
 #ifndef _NETINET_IF_INARP_H_
 #define _NETINET_IF_INARP_H_
 
+#include <sys/queue.h>		/* for LIST_ENTRY */
+#include <netinet/in.h>		/* for struct in_addr */
+
 struct llinfo_arp {
 	LIST_ENTRY(llinfo_arp) la_list;
 	struct	rtentry *la_rt;
 	struct	mbuf *la_hold;		/* last packet until resolved/timeout */
 	long	la_asked;		/* last time we QUERIED for this addr */
-#define la_timer la_rt->rt_rmx.rmx_expire /* deletion time in seconds */
 };
 
 struct sockaddr_inarp {
@@ -53,28 +55,32 @@ struct sockaddr_inarp {
 #define SIN_PROXY 1
 };
 
-/*
- * IP and ethernet specific routing flags
- */
-#define	RTF_USETRAILERS	RTF_PROTO1	/* use trailers */
-#define	RTF_ANNOUNCE	RTF_PROTO2	/* announce new arp entry */
-
 #ifdef _KERNEL
+
+/* ARP timings from RFC5227 */
+#define PROBE_WAIT               1
+#define PROBE_NUM                3
+#define PROBE_MIN                1
+#define PROBE_MAX                2
+#define ANNOUNCE_WAIT            2
+#define ANNOUNCE_NUM             2
+#define ANNOUNCE_INTERVAL        2
+#define MAX_CONFLICTS           10
+#define RATE_LIMIT_INTERVAL     60
+#define DEFEND_INTERVAL         10
+
 extern struct ifqueue arpintrq;
 void arp_ifinit(struct ifnet *, struct ifaddr *);
-void arp_rtrequest(int, struct rtentry *, struct rt_addrinfo *);
-int arpresolve(struct ifnet *, struct rtentry *, struct mbuf *,
-		    const struct sockaddr *, u_char *);
+void arp_rtrequest(int, struct rtentry *, const struct rt_addrinfo *);
+int arpresolve(struct ifnet *, const struct rtentry *, struct mbuf *,
+    const struct sockaddr *, void *, size_t);
 void arpintr(void);
-void arprequest(struct ifnet *, const struct in_addr *, const struct in_addr *,
-    const u_int8_t *);
+void arpannounce(struct ifnet *, struct ifaddr *, const uint8_t *);
 void arp_drain(void);
 int arpioctl(u_long, void *);
 void arpwhohas(struct ifnet *, struct in_addr *);
 
 void revarpinput(struct mbuf *);
-void in_revarpinput(struct mbuf *);
-void revarprequest(struct ifnet *);
 int revarpwhoarewe(struct ifnet *, struct in_addr *, struct in_addr *);
 #endif
 

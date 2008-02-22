@@ -1,4 +1,4 @@
-/*	$NetBSD: ofisascr.c,v 1.6 2005/12/11 12:19:05 christos Exp $	*/
+/*	$NetBSD: ofisascr.c,v 1.10 2011/06/06 16:29:15 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofisascr.c,v 1.6 2005/12/11 12:19:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofisascr.c,v 1.10 2011/06/06 16:29:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -50,21 +50,18 @@ __KERNEL_RCSID(0, "$NetBSD: ofisascr.c,v 1.6 2005/12/11 12:19:05 christos Exp $"
 #include <dev/isa/isavar.h>
 #include <shark/shark/sequoia.h>
 
-int ofisascrprobe __P((struct device *, struct cfdata *, void *));
-void ofisascrattach __P((struct device *, struct device *, void *));
+int ofisascrprobe(device_t, cfdata_t, void *);
+void ofisascrattach(device_t, device_t, void *);
 
 
-CFATTACH_DECL(ofisascr, sizeof(struct device),
+CFATTACH_DECL_NEW(ofisascr, 0,
     ofisascrprobe, ofisascrattach, NULL, NULL);
 
 extern struct cfdriver ofisascr_cd;
 
 
 int
-ofisascrprobe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ofisascrprobe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	char type[64];
@@ -83,9 +80,7 @@ ofisascrprobe(parent, cf, aux)
 
 
 void
-ofisascrattach(parent, dev, aux)
-	struct device *parent, *dev;
-	void *aux;
+ofisascrattach(device_t parent, device_t dev, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	struct isa_attach_args ia;

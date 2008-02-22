@@ -1,4 +1,4 @@
-/*	$NetBSD: debug.h,v 1.2 2007/02/09 21:55:37 ad Exp $	*/
+/*	$NetBSD: debug.h,v 1.4 2012/04/15 19:07:40 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,7 +41,7 @@ void	debug_init(void);
 void	freecheck_out(void **, void *);
 void	freecheck_in(void **, void *);
 
-#ifdef DEBUG
+#if defined(DEBUG) && defined(_HARDKERNEL)
 #define	FREECHECK_OUT(h, a)	freecheck_out((h), (a))
 #define	FREECHECK_IN(h, a)	freecheck_in((h), (a))
 #else

@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.24 2007/12/03 15:34:06 ad Exp $ */
+/*	$NetBSD: isr.c,v 1.29 2017/03/31 08:38:13 msaitoh Exp $ */
 
 /*
  * This file was taken from mvme68k/mvme68k/isr.c
@@ -22,13 +22,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.24 2007/12/03 15:34:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.29 2017/03/31 08:38:13 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -285,7 +278,7 @@ isrdispatch_autovec(struct clockframe *frame)
 
 	intrcnt[ipl]++; /* XXXSCW: Will go away soon */
 	next68k_irq_evcnt[ipl].ev_count++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 #ifdef INTRLOG
 	log[logptr].ipl = ipl;
 	log[logptr].intrstat = *intrstat;
@@ -336,13 +329,13 @@ isrdispatch_autovec(struct clockframe *frame)
 
 		printf("isrdispatch_autovec: stray level %d interrupt\n", ipl);
 
-		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)),
-				 NEXT_INTR_BITS, sbuf, sizeof(sbuf));
-		printf("  *intrstat = 0x%s\n", sbuf);
+		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS,
+		    (*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)));
+		printf("  *intrstat = %s\n", sbuf);
 
-		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRMASK)),
-				 NEXT_INTR_BITS, sbuf, sizeof(sbuf));
-		printf("  *intrmask = 0x%s\n", sbuf);
+		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS,
+		    (*(volatile u_long *)IIOV(NEXT_P_INTRMASK)));
+		printf("  *intrmask = %s\n", sbuf);
 	}
 #endif
 
@@ -377,7 +370,7 @@ isrdispatch_vectored(int ipl, struct clockframe *frame)
 
 	intrcnt[ipl]++; /* XXXSCW: Will go away soon */
 	next68k_irq_evcnt[ipl].ev_count++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	if (isr->isr_func == NULL) {
 		printf("isrdispatch_vectored: no handler for vec 0x%x\n",
@@ -407,19 +400,13 @@ spurintr(void *arg)
 }
 #endif
 
-const int ipl2psl_table[NIPL] = {
-	[IPL_NONE]       = PSL_IPL0,
-	[IPL_SOFTCLOCK]  = PSL_IPL1,
-	[IPL_SOFTNET]    = PSL_IPL1,
-	[IPL_SOFTSERIAL] = PSL_IPL1,
-	[IPL_SOFTBIO]    = PSL_IPL1,
-	[IPL_VM]         = PSL_IPL6,
-	[IPL_SCHED]      = PSL_IPL7,
+const uint16_t ipl2psl_table[NIPL] = {
+	[IPL_NONE]       = PSL_S | PSL_IPL0,
+	[IPL_SOFTCLOCK]  = PSL_S | PSL_IPL1,
+	[IPL_SOFTNET]    = PSL_S | PSL_IPL1,
+	[IPL_SOFTSERIAL] = PSL_S | PSL_IPL1,
+	[IPL_SOFTBIO]    = PSL_S | PSL_IPL1,
+	[IPL_VM]         = PSL_S | PSL_IPL6,
+	[IPL_SCHED]      = PSL_S | PSL_IPL7,
+	[IPL_HIGH]       = PSL_S | PSL_IPL7,
 };
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._psl = ipl2psl_table[ipl] | PSL_S};
-}

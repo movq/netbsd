@@ -1,4 +1,4 @@
-/*	$NetBSD: tcopy.c,v 1.14 2008/01/09 05:48:59 lukem Exp $	*/
+/*	$NetBSD: tcopy.c,v 1.17 2011/09/06 18:32:26 joerg Exp $	*/
 
 /*
  * Copyright (c) 1985, 1987, 1993, 1995
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1985, 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1985, 1987, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tcopy.c	8.3 (Berkeley) 1/23/95";
 #endif
-__RCSID("$NetBSD: tcopy.c,v 1.14 2008/01/09 05:48:59 lukem Exp $");
+__RCSID("$NetBSD: tcopy.c,v 1.17 2011/09/06 18:32:26 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -61,28 +61,26 @@ __RCSID("$NetBSD: tcopy.c,v 1.14 2008/01/09 05:48:59 lukem Exp $");
 #define	MAXREC	(64 * 1024)
 #define	NOCOUNT	(-2)
 
-int	filen, guesslen, maxblk = MAXREC;
-long	lastrec, record;
-off_t	size, tsize;
-FILE	*msg = stdout;
+static int	filen, guesslen, maxblk = MAXREC;
+static long	lastrec, record;
+static off_t	size, tsize;
+static FILE	*msg = stdout;
 
-void	*getspace __P((int));
-void	 intr __P((int));
-int	 main __P((int, char **));
-void	 usage __P((void));
-void	 verify __P((int, int, char *));
-void	 writeop __P((int, int));
+static void	*getspace(int);
+__dead static void	 intr(int);
+__dead static void	 usage(void);
+static void	 verify(int, int, char *);
+static void	 writeop(int, int);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch, needeof, nw, inp, outp;
 	ssize_t lastnread, nread;
 	enum {READ, VERIFY, COPY, COPYVERIFY} op = READ;
 	sig_t oldsig;
-	char *buff, *inf;
+	char *buff;
+	const char *inf;
 
 	outp = 0;
 	inf = NULL;
@@ -232,10 +230,8 @@ r1:		guesslen = 0;
 	exit(0);
 }
 
-void
-verify(inp, outp, outb)
-	int inp, outp;
-	char *outb;
+static void
+verify(int inp, int outp, char *outb)
 {
 	int eot, inmaxblk, inn, outmaxblk, outn;
 	char *inb;
@@ -290,9 +286,8 @@ r2:		if (inn != outn) {
 	exit(1);
 }
 
-void
-intr(signo)
-	int signo;
+static void
+intr(int signo)
 {
 	if (record) {
 		if (record - lastrec > 1)
@@ -306,9 +301,8 @@ intr(signo)
 	exit(1);
 }
 
-void *
-getspace(blk)
-	int blk;
+static void *
+getspace(int blk)
 {
 	void *bp;
 
@@ -318,9 +312,8 @@ getspace(blk)
 	return (bp);
 }
 
-void
-writeop(fd, type)
-	int fd, type;
+static void
+writeop(int fd, int type)
 {
 	struct mtop op;
 
@@ -330,8 +323,8 @@ writeop(fd, type)
 		err(6, "tape op");
 }
 
-void
-usage()
+static void
+usage(void)
 {
 
 	fprintf(stderr, "usage: tcopy [-cvx] [-s maxblk] src [dest]\n");

@@ -1,4 +1,4 @@
-/* $NetBSD: wlanctl.c,v 1.10 2007/12/22 00:58:15 dyoung Exp $ */
+/* $NetBSD: wlanctl.c,v 1.14 2014/04/22 15:55:16 christos Exp $ */
 /*-
  * Copyright (c) 2005 David Young.  All rights reserved.
  *
@@ -56,7 +56,6 @@ struct flagname {
 };
 
 struct cmdflags {
-	int	cf_v;	/* verbose */
 	int	cf_a;	/* all 802.11 interfaces */
   	int     cf_p;   /* public (i.e. non-private) dests */
 };
@@ -69,13 +68,13 @@ static void		print_capinfo(u_int16_t);
 static void		print_channel(u_int16_t, u_int16_t, u_int16_t);
 static void		print_node_flags(u_int32_t);
 static void		print_rateset(struct ieee80211_rateset *, int);
-static void		usage(void);
+__dead static void	usage(void);
 
 static void
 print_rateset(struct ieee80211_rateset *rs, int txrate)
 {
 	int i, rate;
-	const char *fmt, *basic;
+	const char *basic;
 
 	printf("\trates");
 
@@ -85,12 +84,11 @@ print_rateset(struct ieee80211_rateset *rs, int txrate)
 			basic = "*";
 		else
 			basic = "";
-		if (i == txrate)
-			fmt = " [%s%d.%d]";
-		else
-			fmt = " %s%d.%d";
 		rate = 5 * (rs->rs_rates[i] & IEEE80211_RATE_VAL);
-		printf(fmt, basic, rate / 10, rate % 10);
+		if (i == txrate)
+			printf(" [%s%d.%d]", basic, rate / 10, rate % 10);
+		else
+			printf(" %s%d.%d", basic, rate / 10, rate % 10);
 	}
 	printf("\n");
 }
@@ -98,7 +96,7 @@ print_rateset(struct ieee80211_rateset *rs, int txrate)
 static void
 print_flags(u_int32_t flags, const struct flagname *flagnames, u_int nname)
 {
-	int i;
+	u_int i;
 	const char *delim;
 	delim = "<";
 
@@ -115,7 +113,7 @@ print_flags(u_int32_t flags, const struct flagname *flagnames, u_int nname)
 static void
 print_node_flags(u_int32_t flags)
 {
-	const static struct flagname nodeflags[] = {
+	static const struct flagname nodeflags[] = {
 		  {IEEE80211_NODE_SYSCTL_F_BSS, "bss"}
 		, {IEEE80211_NODE_SYSCTL_F_STA, "sta"}
 		, {IEEE80211_NODE_SYSCTL_F_SCAN, "scan"}
@@ -128,7 +126,7 @@ print_node_flags(u_int32_t flags)
 static void
 print_capinfo(u_int16_t capinfo)
 {
-	const static struct flagname capflags[] = {
+	static const struct flagname capflags[] = {
 		{IEEE80211_CAPINFO_ESS, "ess"},
 		{IEEE80211_CAPINFO_IBSS, "ibss"},
 		{IEEE80211_CAPINFO_CF_POLLABLE, "cf pollable"},
@@ -158,7 +156,7 @@ ether_string(u_int8_t *addr)
 static void
 print_channel(u_int16_t chanidx, u_int16_t freq, u_int16_t flags)
 {
-	const static struct flagname chanflags[] = {
+	static const struct flagname chanflags[] = {
 		{IEEE80211_CHAN_TURBO, "turbo"},
 		{IEEE80211_CHAN_CCK, "cck"},
 		{IEEE80211_CHAN_OFDM, "ofdm"},
@@ -180,7 +178,8 @@ print_channel(u_int16_t chanidx, u_int16_t freq, u_int16_t flags)
  * hdr_type: header type: IEEE80211_SYSCTL_T_NODE -> generic node,
  *                        IEEE80211_SYSCTL_T_RSSADAPT -> rssadapt(9) info,
  *                        IEEE80211_SYSCTL_T_DRVSPEC -> driver specific.
- * cf:       command flags, cf_v != 0 -> verbose
+ * cf:       command flags: cf_a != 0 -> all 802.11 interfaces
+ *                          cf_p != 0 -> public dests
  */
 static int
 dump_nodes(const char *ifname_arg, int hdr_type, struct cmdflags *cf)
@@ -288,8 +287,10 @@ dump_nodes(const char *ifname_arg, int hdr_type, struct cmdflags *cf)
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [ -p ] [ -v ] -a\n"
-	    "\t[ -v ] interface [ interface ... ]\n", getprogname());
+	fprintf(stderr,
+	    "Usage: %s [ -p ] -a\n"
+	    "       %s [ -p ] interface [ interface ... ]\n",
+	    getprogname(), getprogname());
 	exit(EXIT_FAILURE);
 }
 
@@ -300,16 +301,13 @@ parse_args(int *argcp, char ***argvp, struct cmdflags *cf)
 
 	(void)memset(cf, 0, sizeof(*cf));
 
-	while ((ch = getopt(*argcp, *argvp, "apv")) != -1) {
+	while ((ch = getopt(*argcp, *argvp, "ap")) != -1) {
 		switch (ch) {
 		case 'a':
 			cf->cf_a = 1;
 			break;
 		case 'p':
 			cf->cf_p = 1;
-			break;
-		case 'v':
-			cf->cf_v = 1;
 			break;
 		default:
 			warnx("unknown option -%c", ch);

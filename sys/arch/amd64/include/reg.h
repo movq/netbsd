@@ -1,4 +1,4 @@
-/*	$NetBSD: reg.h,v 1.6 2008/01/05 12:08:51 dsl Exp $	*/
+/*	$NetBSD: reg.h,v 1.10 2017/02/23 03:34:22 kamil Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -37,14 +37,10 @@
 #ifndef _AMD64_REG_H_
 #define _AMD64_REG_H_
 
-#include <machine/fpu.h>
-#include <machine/mcontext.h>
+#ifdef __x86_64__
 
-/*
- * XXX
- * The #defines aren't used in the kernel, but some user-level code still
- * expects them.
- */
+#include <x86/fpu.h>
+#include <machine/mcontext.h>
 
 /*
  * Registers accessible to ptrace(2) syscall for debugger use.
@@ -57,18 +53,26 @@ struct reg {
 };
 
 struct fpreg {
-	struct fxsave64 fxstate;
+	struct fxsave fxstate;
 };
 
-#define fp_fcw		fxstate.fx_fcw
-#define fp_fsw		fxstate.fx_fsw
-#define fp_ftw		fxstate.fx_ftw
-#define fp_fop		fxstate.fx_fop
-#define fp_rip		fxstate.fx_rip
-#define fp_rdp		fxstate.fx_rdp
-#define fp_mxcsr	fxstate.fx_mxcsr
-#define fp_mxcsr_mask	fxstate.fx_mxcsr_mask
-#define fp_st		fxstate.fx_st
-#define fp_xmm		fxstate.fx_xmm
+/*
+ * Debug Registers
+ *
+ * DR0-DR3  Debug Address Registers
+ * DR4-DR5  Reserved
+ * DR6      Debug Status Register
+ * DR7      Debug Control Register
+ * DR8-DR15 Reserved
+ */
+struct dbreg {
+	long	dr[16];
+};
+
+#else	/*	__x86_64__	*/
+
+#include <i386/reg.h>
+
+#endif	/*	__x86_64__	*/
 
 #endif /* !_AMD64_REG_H_ */

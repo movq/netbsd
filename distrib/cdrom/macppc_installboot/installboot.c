@@ -1,8 +1,7 @@
-/*	$NetBSD: installboot.c,v 1.1 2006/09/17 03:56:03 tsutsui Exp $	*/
+/*	$NetBSD: installboot.c,v 1.5 2014/03/27 16:34:37 apb Exp $	*/
 
 /*-
- * Copyright (C) 2005 Izumi Tsutsui
- * All rights reserved.
+ * Copyright (c) 2005 Izumi Tsutsui.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -26,6 +23,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
 
 #include <err.h>
 #include <fcntl.h>
@@ -117,11 +118,11 @@ main(int argc, char **argv)
 
 	params->stage2 = argv[3];
 
-	bb = malloc(MACPPC_BOOT_BLOCK_MAX_SIZE);
+	bb = calloc(1, MACPPC_BOOT_BLOCK_MAX_SIZE);
 	if (bb == NULL)
-		err(1, "Allocating %ul bytes for bbinfo");
+		err(1, "Allocating %ul bytes for bbinfo",
+		    MACPPC_BOOT_BLOCK_MAX_SIZE);
 
-	memset(bb, 0, sizeof(bb));
 	rv = read(params->s1fd, bb, params->s1stat.st_size);
 
 	if (rv == -1)

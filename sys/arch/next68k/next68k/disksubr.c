@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.22 2007/10/17 19:56:04 garbled Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.28 2015/01/02 19:42:06 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.22 2007/10/17 19:56:04 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.28 2015/01/02 19:42:06 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,9 +59,7 @@ static const char *parse_nextstep_label(struct next68k_disklabel *,
 static int build_nextstep_label(struct next68k_disklabel *, struct disklabel *);
 
 static unsigned short
-nextstep_checksum(buf, limit)
-	unsigned char *buf;
-	unsigned char *limit;
+nextstep_checksum(unsigned char *buf, unsigned char *limit)
 {
 	int sum = 0;
 
@@ -74,10 +72,7 @@ nextstep_checksum(buf, limit)
 }
 
 static const char *
-parse_nextstep_label(ondisk, lp, osdep)
-	struct next68k_disklabel *ondisk;
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+parse_nextstep_label(struct next68k_disklabel *ondisk, struct disklabel *lp, struct cpu_disklabel *osdep)
 {
 	int i, t, nbp;
 	unsigned short *checksum;
@@ -94,7 +89,7 @@ parse_nextstep_label(ondisk, lp, osdep)
 	
 	osdep->od_version = ondisk->cd_version;
 	lp->d_magic = lp->d_magic2 = DISKMAGIC;
-	lp->d_type = DTYPE_SCSI;
+	lp->d_type = DKTYPE_SCSI;
 	lp->d_subtype = 0;
 	if (sizeof (lp->d_typename) > sizeof (ondisk->cd_name))
 		lp->d_typename[sizeof (ondisk->cd_name)] = '\0';
@@ -169,16 +164,14 @@ parse_nextstep_label(ondisk, lp, osdep)
 }
 
 static int
-build_nextstep_label(ondisk, lp)
-	struct next68k_disklabel *ondisk;
-	struct disklabel *lp;
+build_nextstep_label(struct next68k_disklabel *ondisk, struct disklabel *lp)
 {
 	int i, t, nbp;
 	int front_porch = NEXT68K_LABEL_DEFAULTFRONTPORCH;
 	unsigned short *checksum;
 
 
-	memset (ondisk, 0, sizeof (ondisk));
+	memset (ondisk, 0, sizeof (*ondisk));
 
 	ondisk->cd_version = NEXT68K_LABEL_CD_V3;
 	/* ondisk->cd_label_blkno = 0; */
@@ -279,7 +272,7 @@ build_nextstep_label(ondisk, lp)
 				p->cp_minfree = 5; /* set some default */
 			p->cp_cpg = lp->d_partitions[nbp].p_cpg;
 		} else {
-			memset (p, 0, sizeof(p));
+			memset (p, 0, sizeof(*p));
 			p->cp_size = -1;
 			p->cp_offset = -1;
 			p->cp_bsize = -1;
@@ -317,11 +310,7 @@ build_nextstep_label(ondisk, lp)
  * string on failure.
  */
 const char *
-readdisklabel(dev, strat, lp, osdep)
-	dev_t dev;
-	void (*strat)(struct buf *);
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, struct cpu_disklabel *osdep)
 {
 	struct buf *bp;
 	struct disklabel *dlp;
@@ -411,10 +400,7 @@ readdisklabel(dev, strat, lp, osdep)
  * Check new disk label for sensibility before setting it.
  */
 int
-setdisklabel(olp, nlp, openmask, osdep)
-	struct disklabel *olp, *nlp;
-	u_long openmask;
-	struct cpu_disklabel *osdep;
+setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask, struct cpu_disklabel *osdep)
 {
 	int i;
 	struct partition *opp, *npp;
@@ -452,11 +438,7 @@ setdisklabel(olp, nlp, openmask, osdep)
  * Write disk label back to device after modification.
  */
 int
-writedisklabel(dev, strat, lp, osdep)
-	dev_t dev;
-	void (*strat)(struct buf *);
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp, struct cpu_disklabel *osdep)
 {
 	struct buf *bp;
 #if 0

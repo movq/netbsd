@@ -1,4 +1,4 @@
-/*	$NetBSD: ophandlers.c,v 1.9 2007/01/16 17:32:04 hubertf Exp $	*/
+/*	$NetBSD: ophandlers.c,v 1.13 2013/07/02 11:59:46 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,13 +49,13 @@ extern	int verbose;
 
 static	char err_str[BUFSIZE];
 
-static	void op_notsupp (struct extabent *, struct opiocdesc *, char *);
+static	void op_notsupp (const struct extabent *, struct opiocdesc *, char *);
 
 /*
  * There are several known fields that I either don't know how to
  * deal with or require special treatment.
  */
-static	struct extabent opextab[] = {
+static	const struct extabent opextab[] = {
 	{ "security-password",		op_notsupp },
 	{ "security-mode",		op_notsupp },
 	{ "oem-logo",			op_notsupp },
@@ -76,8 +69,7 @@ static	struct extabent opextab[] = {
 };
 
 void
-op_action(keyword, arg)
-	char *keyword, *arg;
+op_action(char *keyword, char *arg)
 {
 	char	*cp;
 
@@ -86,9 +78,8 @@ op_action(keyword, arg)
 	return;
 }
 
-#if defined(__sparc__) && !defined(__arch64__)
 int
-check_for_openprom()
+check_for_openprom(void)
 {
 	int fd, rv, optnode;
 
@@ -102,14 +93,12 @@ check_for_openprom()
 
 	return (rv == 0);
 }
-#endif
 
 char *
-op_handler(keyword, arg)
-	char *keyword, *arg;
+op_handler(char *keyword, char *arg)
 {
 	struct opiocdesc opio;
-	struct extabent *ex;
+	const struct extabent *ex;
 	char opio_buf[BUFSIZE];
 	int fd, optnode;
 
@@ -121,8 +110,10 @@ op_handler(keyword, arg)
 		if (strcmp(ex->ex_keyword, keyword) == 0)
 			break;
 
-	if (ioctl(fd, OPIOCGETOPTNODE, (char *)&optnode) < 0)
+	if (ioctl(fd, OPIOCGETOPTNODE, (char *)&optnode) < 0) {
+		(void)close(fd);
 		BARF("OPIOCGETOPTNODE", strerror(errno));
+	}
 
 	memset(&opio_buf[0], 0, sizeof(opio_buf));
 	memset(&opio, 0, sizeof(opio));
@@ -136,8 +127,10 @@ op_handler(keyword, arg)
 
 			opio.op_buf = &opio_buf[0];
 			opio.op_buflen = sizeof(opio_buf);
-			if (ioctl(fd, OPIOCGET, (char *)&opio) < 0)
+			if (ioctl(fd, OPIOCGET, (char *)&opio) < 0) {
+				(void)close(fd);
 				BARF("OPIOCGET", strerror(errno));
+			}
 
 			if (opio.op_buflen <= 0) {
 				printf("nothing available for %s\n", keyword);
@@ -157,8 +150,10 @@ op_handler(keyword, arg)
 			opio.op_buflen = strlen(arg);
 		}
 
-		if (ioctl(fd, OPIOCSET, (char *)&opio) < 0)
+		if (ioctl(fd, OPIOCSET, (char *)&opio) < 0) {
+			(void)close(fd);
 			BARF("invalid keyword", keyword);
+		}
 
 		if (verbose) {
 			printf("new: ");
@@ -170,8 +165,10 @@ op_handler(keyword, arg)
 	} else {
 		opio.op_buf = &opio_buf[0];
 		opio.op_buflen = sizeof(opio_buf);
-		if (ioctl(fd, OPIOCGET, (char *)&opio) < 0)
+		if (ioctl(fd, OPIOCGET, (char *)&opio) < 0) {
+			(void)close(fd);
 			BARF("OPIOCGET", strerror(errno));
+		}
 
 		if (opio.op_buflen <= 0) {
 			(void)snprintf(err_str, sizeof err_str,
@@ -191,10 +188,7 @@ op_handler(keyword, arg)
 
 /* ARGSUSED */
 static void
-op_notsupp(exent, opiop, arg)
-	struct extabent *exent;
-	struct opiocdesc *opiop;
-	char *arg;
+op_notsupp(const struct extabent *exent, struct opiocdesc *opiop, char *arg)
 {
 
 	warnx("property `%s' not yet supported", exent->ex_keyword);
@@ -205,10 +199,10 @@ op_notsupp(exent, opiop, arg)
  * (Really!  This is the only way I could get it to work!)
  */
 void
-op_dump()
+op_dump(void)
 {
 	struct opiocdesc opio1, opio2;
-	struct extabent *ex;
+	const struct extabent *ex;
 	char buf1[BUFSIZE], buf2[BUFSIZE], buf3[BUFSIZE], buf4[BUFSIZE];
 	int fd, optnode;
 

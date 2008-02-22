@@ -1,4 +1,4 @@
-|	$NetBSD: vectors.s,v 1.14 2007/10/17 19:58:05 garbled Exp $
+|	$NetBSD: vectors.s,v 1.18 2014/03/14 20:24:24 tsutsui Exp $
 
 | Copyright (c) 1988 University of Utah
 | Copyright (c) 1990, 1993
@@ -12,11 +12,7 @@
 | 2. Redistributions in binary form must reproduce the above copyright
 |    notice, this list of conditions and the following disclaimer in the
 |    documentation and/or other materials provided with the distribution.
-| 3. All advertising materials mentioning features or use of this software
-|    must display the following acknowledgement:
-|	This product includes software developed by the University of
-|	California, Berkeley and its contributors.
-| 4. Neither the name of the University nor the names of its contributors
+| 3. Neither the name of the University nor the names of its contributors
 |    may be used to endorse or promote products derived from this software
 |    without specific prior written permission.
 |
@@ -39,8 +35,8 @@
 GLOBAL(vectab)
 	.long	0x4ef80000	/* 0: jmp 0x0000:w (unused reset SSP) */
 	VECTOR_UNUSED		/* 1: NOT USED (reset PC) */
-	VECTOR(buserr)		/* 2: bus error */
-	VECTOR(addrerr)		/* 3: address error */
+	VECTOR_UNUSED		/* 2: bus error (set per CPU types) */
+	VECTOR_UNUSED		/* 3: address error (set per CPU types) */
 	VECTOR(illinst)		/* 4: illegal instruction */
 	VECTOR(zerodiv)		/* 5: zero divide */
 	VECTOR(chkinst)		/* 6: CHK instruction */
@@ -121,8 +117,8 @@ GLOBAL(vectab)
 	VECTOR(intiotrap)	/* 62: unassigned, reserved */
 	VECTOR(intiotrap)	/* 63: unassigned, reserved */
 	VECTOR(intiotrap)	/* 64: MFP GPIP0 RTC alarm */
-	VECTOR(powtrap)		/* 65: MFP GPIP1 ext. power switch */
-	VECTOR(powtrap)		/* 66: MFP GPIP2 front power switch */
+	VECTOR(intiotrap)	/* 65: MFP GPIP1 ext. power switch */
+	VECTOR(intiotrap)	/* 66: MFP GPIP2 front power switch */
 	VECTOR(intiotrap)	/* 67: MFP GPIP3 FM sound generator */
 	VECTOR(intiotrap)	/* 68: MFP timer-D */
 	VECTOR(timertrap)	/* 69: MFP timer-C */
@@ -202,8 +198,8 @@ GLOBAL(vectab)
 	BADTRAP16		/* 192-207: user interrupt vectors */
 	BADTRAP16		/* 208-223: user interrupt vectors */
 	BADTRAP16		/* 224-239: user interrupt vectors */
-	VECTOR(com0trap)	/* 240: unassigned, reserved */
-	VECTOR(com1trap)	/* 241: unassigned, reserved */
+	VECTOR(intiotrap)	/* 240: PSX16550, port1 */
+	VECTOR(intiotrap)	/* 241: PSX16550, port2 */
 	VECTOR(intiotrap)	/* 242: unassigned, reserved */
 	VECTOR(intiotrap)	/* 243: unassigned, reserved */
 	VECTOR(intiotrap)	/* 244: unassigned, reserved */

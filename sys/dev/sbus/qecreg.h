@@ -1,4 +1,4 @@
-/*	$NetBSD: qecreg.h,v 1.2 1999/01/16 12:46:08 pk Exp $	*/
+/*	$NetBSD: qecreg.h,v 1.4 2009/09/19 11:53:42 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -65,16 +58,17 @@
 
 /*
  * QEC registers layout
- *-
-struct qecregs {
-	u_int32_t	qec_ctrl;	// control
-	u_int32_t	qec_stat;	// status
-	u_int32_t	qec_psize;	// packet size
-	u_int32_t	qec_msize;	// local-mem size (64K)
-	u_int32_t	qec_rsize;	// receive partition size
-	u_int32_t	qec_tsize;	// transmit partition size
-};
  */
+#if 0
+struct qecregs {
+	uint32_t	qec_ctrl;	/* control			*/
+	uint32_t	qec_stat;	/* status			*/
+	uint32_t	qec_psize;	/* packet size			*/
+	uint32_t	qec_msize;	/* local-mem size (64K)		*/
+	uint32_t	qec_rsize;	/* receive partition size	*/
+	uint32_t	qec_tsize;	/* transmit partition size	*/
+};
+#endif
 #define QEC_QRI_CTRL	(0*4)
 #define QEC_QRI_STAT	(1*4)
 #define QEC_QRI_PSIZE	(2*4)
@@ -108,8 +102,8 @@ struct qecregs {
  * Transmit & receive buffer descriptor.
  */
 struct qec_xd {
-	volatile u_int32_t	xd_flags;	/* see below */
-	volatile u_int32_t	xd_addr;	/* Buffer address (DMA) */
+	volatile uint32_t	xd_flags;	/* see below */
+	volatile uint32_t	xd_addr;	/* Buffer address (DMA) */
 };
 #define QEC_XD_OWN	0x80000000	/* ownership: 1=hw, 0=sw */
 #define QEC_XD_SOP	0x40000000	/* start of packet marker (xmit) */

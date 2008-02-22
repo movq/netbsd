@@ -27,7 +27,7 @@
  *	i4b daemon - config file processing
  *	-----------------------------------
  *
- *	$Id: rc_config.c,v 1.24 2006/09/27 21:39:15 christos Exp $ 
+ *	$Id: rc_config.c,v 1.27 2018/02/04 09:01:12 mrg Exp $ 
  *
  * $FreeBSD$
  *
@@ -74,7 +74,7 @@ struct isdn_ctrl_state * cur_ctrl = NULL;
  *	called from main to read and process config file
  *---------------------------------------------------------------------------*/
 void
-configure(char *filename, int reread)
+configure(const char *filename, int reread)
 {
 	extern void reset_scanner(FILE *inputfile);
 	
@@ -454,13 +454,13 @@ cfg_setval(int keyword)
 			FILE *fp;
 			int s, l;
 			int n;
-			DBGL(DL_RCCF, (logit(LL_DBG, "entry %s: budget-callbacksfile = %s", yylval.str)));
+			DBGL(DL_RCCF, (logit(LL_DBG, "entry %s: budget-callbacksfile = %s", current_cfe->name, yylval.str)));
 			fp = fopen(yylval.str, "r");
 			if (fp != NULL)
 			{
 				if ((fscanf(fp, "%d %d %d", (int *)&s, (int *)&l, &n)) != 3)
 				{
-					DBGL(DL_RCCF, (logit(LL_DBG, "entry %d: initializing budget-callbacksfile %s", current_cfe->name, yylval.str)));
+					DBGL(DL_RCCF, (logit(LL_DBG, "entry %s: initializing budget-callbacksfile %s", current_cfe->name, yylval.str)));
 					fclose(fp);
 					fp = fopen(yylval.str, "w");
 					if (fp != NULL) {
@@ -1134,7 +1134,7 @@ parse_valid(char *dt)
 			ret = sscanf(dt, "%d:%d-%d:%d", &fromhr, &frommin, &tohr, &tomin);
 			if (ret !=4)
 			{
-				logit(LL_ERR, "ERROR parsing config file: timespec [%s] error at line %d!", *dt, lineno);
+				logit(LL_ERR, "ERROR parsing config file: timespec [%s] error at line %d!", dt, lineno);
 				config_error_flag++;
 				return;
 			}
@@ -1142,7 +1142,7 @@ parse_valid(char *dt)
 			if (fromhr < 0 || fromhr > 24 || tohr < 0 || tohr > 24 ||
 			   frommin < 0 || frommin > 59 || tomin < 0 || tomin > 59)
 			{
-				logit(LL_ERR, "ERROR parsing config file: invalid time [%s] at line %d!", *dt, lineno);
+				logit(LL_ERR, "ERROR parsing config file: invalid time [%s] at line %d!", dt, lineno);
 				config_error_flag++;
 				return;
 			}
@@ -1331,11 +1331,11 @@ print_config(void)
 #endif
 	struct cfg_entry *cep = NULL;
 	int i, j;
-	time_t clock;
+	time_t now;
 	char mytime[64];
 
-	time(&clock);
-	strlcpy(mytime, ctime(&clock), sizeof(mytime));
+	time(&now);
+	strlcpy(mytime, ctime(&now), sizeof(mytime));
 	mytime[strlen(mytime)-1] = '\0';
 
 	fprintf(PFILE, "#---------------------------------------------------------------------------\n");
@@ -1376,7 +1376,7 @@ print_config(void)
 	m_rights = monitor_next_rights(NULL);
 	if (m_rights != NULL)
 	{
-		char *s = "error\n";
+		const char *s = "error\n";
 		char b[512];
 
 		for ( ; m_rights != NULL; m_rights = monitor_next_rights(m_rights))
@@ -1564,20 +1564,19 @@ print_config(void)
 			for (j = 0; j < cep->remote_numbers_count; j++)
 				fprintf(PFILE, "remote-phone-dialout  = %s\t\t# telephone number %d for dialing out to remote\n", cep->remote_numbers[j].number, j+1);
 
-				fprintf(PFILE, "remdial-handling      = ");
+			fprintf(PFILE, "remdial-handling      = ");
 	
-				switch (cep->remote_numbers_handling)
-				{
-				case RNH_NEXT:
-					fprintf(PFILE, "next\t\t# use next number after last successful for new dial\n");
-					break;
-				case RNH_LAST:
-					fprintf(PFILE, "last\t\t# use last successful number for new dial\n");
-					break;
-				case RNH_FIRST:
-					fprintf(PFILE, "first\t\t# always start with first number for new dial\n");
-					break;
-				}
+			switch (cep->remote_numbers_handling)
+			{
+			case RNH_NEXT:
+				fprintf(PFILE, "next\t\t# use next number after last successful for new dial\n");
+				break;
+			case RNH_LAST:
+				fprintf(PFILE, "last\t\t# use last successful number for new dial\n");
+				break;
+			case RNH_FIRST:
+				fprintf(PFILE, "first\t\t# always start with first number for new dial\n");
+				break;
 			}
 
 			if (cep->local_phone_dialout[0])
@@ -1617,7 +1616,7 @@ print_config(void)
 		}
 
 		{
-			char *s;
+			const char *s;
 			switch (cep->ppp_expect_auth)
 			{
 			case AUTH_NONE:
@@ -1677,7 +1676,7 @@ print_config(void)
 			fprintf(PFILE, "autoupdown = no\n");
 
 		{
-			char *s;
+			const char *s;
 			fprintf(PFILE, "idletime-outgoing     = %d\t\t# outgoing call idle timeout\n", cep->idle_time_out);
 
 			switch ( cep->shorthold_algorithm )
@@ -1752,6 +1751,7 @@ print_config(void)
 					fprintf(PFILE, "downtime              = %d\t\t# time device is switched off\n", cep->downtime);
 				}
 			}
+		}
 	}
 	fprintf(PFILE, "\n");	
 }

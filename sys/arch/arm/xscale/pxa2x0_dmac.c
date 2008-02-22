@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_dmac.c,v 1.5 2007/03/04 05:59:38 christos Exp $	*/
+/*	$NetBSD: pxa2x0_dmac.c,v 1.13 2015/02/05 13:27:18 nonaka Exp $	*/
 
 /*
  * Copyright (c) 2003, 2005 Wasabi Systems, Inc.
@@ -41,18 +41,19 @@
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/queue.h>
 
 #include <uvm/uvm_param.h>	/* For PAGE_SIZE */
 
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/dmover/dmovervar.h>
 
 #include <arm/xscale/pxa2x0reg.h>
 #include <arm/xscale/pxa2x0var.h>
+#include <arm/xscale/pxa2x0cpu.h>
 
 #include <arm/xscale/pxa2x0_dmac.h>
 
@@ -103,8 +104,9 @@ struct dmac_xfer_state {
 	struct dmac_xfer_state_head *dxs_queue;
 	u_int dxs_channel;
 #define	DMAC_NO_CHANNEL	(~0)
-	u_int32_t dxs_dcmd;
+	uint32_t dxs_dcmd;
 	struct dmac_desc_segs dxs_segs[2];
+	bool dxs_misaligned_flag;
 };
 
 
@@ -161,7 +163,7 @@ struct dmac_dmover {
 #endif
 
 struct pxadmac_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_bust;
 	bus_dma_tag_t sc_dmat;
 	bus_space_handle_t sc_bush;
@@ -189,11 +191,11 @@ struct pxadmac_softc {
 	 * Channel Priority Allocation
 	 */
 	struct {
-		u_int8_t p_first;
-		u_int8_t p_pri[DMAC_N_CHANNELS];
+		uint8_t p_first;
+		uint8_t p_pri[DMAC_N_CHANNELS];
 	} sc_prio[DMAC_N_PRIORITIES];
 #define	DMAC_PRIO_END		(~0)
-	u_int8_t sc_channel_priority[DMAC_N_CHANNELS];
+	uint8_t sc_channel_priority[DMAC_N_CHANNELS];
 
 	/*
 	 * DMA descriptor management
@@ -214,10 +216,10 @@ struct pxadmac_softc {
 #endif
 };
 
-static int	pxadmac_match(struct device *, struct cfdata *, void *);
-static void	pxadmac_attach(struct device *, struct device *, void *);
+static int	pxadmac_match(device_t, cfdata_t, void *);
+static void	pxadmac_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pxadmac, sizeof(struct pxadmac_softc),
+CFATTACH_DECL_NEW(pxadmac, sizeof(struct pxadmac_softc),
     pxadmac_match, pxadmac_attach, NULL, NULL);
 
 static struct pxadmac_softc *pxadmac_sc;
@@ -234,7 +236,7 @@ static void dmac_dmover_run(struct dmover_backend *);
 static void dmac_dmover_done(struct dmac_xfer *, int);
 #endif
 
-static inline u_int32_t
+static inline uint32_t
 dmac_reg_read(struct pxadmac_softc *sc, int reg)
 {
 
@@ -242,7 +244,7 @@ dmac_reg_read(struct pxadmac_softc *sc, int reg)
 }
 
 static inline void
-dmac_reg_write(struct pxadmac_softc *sc, int reg, u_int32_t val)
+dmac_reg_write(struct pxadmac_softc *sc, int reg, uint32_t val)
 {
 
 	bus_space_write_4(sc->sc_bust, sc->sc_bush, reg, val);
@@ -276,7 +278,7 @@ dmac_free_channel(struct pxadmac_softc *sc, dmac_priority_t priority,
 }
 
 static int
-pxadmac_match(struct device *parent, struct cfdata *cf, void *aux)
+pxadmac_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pxaip_attach_args *pxa = aux;
 
@@ -290,13 +292,14 @@ pxadmac_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-pxadmac_attach(struct device *parent, struct device *self, void *aux)
+pxadmac_attach(device_t parent, device_t self, void *aux)
 {
-	struct pxadmac_softc *sc = (struct pxadmac_softc *)self;
+	struct pxadmac_softc *sc = device_private(self);
 	struct pxaip_attach_args *pxa = aux;
 	struct pxa2x0_dma_desc *dd;
 	int i, nsegs;
 
+	sc->sc_dev = self;
 	sc->sc_bust = pxa->pxa_iot;
 	sc->sc_dmat = pxa->pxa_dmat;
 
@@ -304,7 +307,7 @@ pxadmac_attach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(sc->sc_bust, pxa->pxa_addr, pxa->pxa_size, 0,
 	    &sc->sc_bush)) {
-		aprint_error("%s: Can't map registers!\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "Can't map registers!\n");
 		return;
 	}
 
@@ -318,8 +321,9 @@ pxadmac_attach(struct device *parent, struct device *self, void *aux)
 		dmac_reg_write(sc, DMAC_DRCMR(i), 0);
 		sc->sc_active[i] = NULL;
 	}
-	dmac_reg_write(sc, DMAC_DINT,
-	    dmac_reg_read(sc, DMAC_DINT) & DMAC_DINT_MASK);
+	if (!CPU_IS_PXA270)
+		dmac_reg_write(sc, DMAC_DINT,
+		    dmac_reg_read(sc, DMAC_DINT) & DMAC_DINT_MASK);
 
 	/*
 	 * Initialise the request queues
@@ -459,20 +463,20 @@ dmac_dmover_attach(struct pxadmac_softc *sc)
 		 * small buffers here, since we set up the DMAC source
 		 * descriptor with 'ds_addr_hold' set to true.
 		 */
-		if (bus_dmamem_alloc(sc->sc_dmat,
-				arm_pdcache_line_size, arm_pdcache_line_size, 0,
+		if (bus_dmamem_alloc(sc->sc_dmat, arm_pcache.dcache_line_size,
+				arm_pcache.dcache_line_size, 0,
 				&ds->ds_zero_seg, 1, &dummy, BUS_DMA_NOWAIT) ||
-		    bus_dmamem_alloc(sc->sc_dmat,
-				arm_pdcache_line_size, arm_pdcache_line_size, 0,
+		    bus_dmamem_alloc(sc->sc_dmat, arm_pcache.dcache_line_size,
+				arm_pcache.dcache_line_size, 0,
 				&ds->ds_fill_seg, 1, &dummy, BUS_DMA_NOWAIT)) {
 			panic("dmac_dmover_attach: bus_dmamem_alloc failed");
 		}
 
 		if (bus_dmamem_map(sc->sc_dmat, &ds->ds_zero_seg, 1,
-				arm_pdcache_line_size, &ds->ds_zero_va,
+				arm_pcache.dcache_line_size, &ds->ds_zero_va,
 				BUS_DMA_NOWAIT) ||
 		    bus_dmamem_map(sc->sc_dmat, &ds->ds_fill_seg, 1,
-				arm_pdcache_line_size, &ds->ds_fill_va,
+				arm_pcache.dcache_line_size, &ds->ds_fill_va,
 				BUS_DMA_NOWAIT)) {
 			panic("dmac_dmover_attach: bus_dmamem_map failed");
 		}
@@ -480,7 +484,7 @@ dmac_dmover_attach(struct pxadmac_softc *sc)
 		/*
 		 * Make sure the zero-fill source buffer really is zero filled
 		 */
-		memset(ds->ds_zero_va, 0, arm_pdcache_line_size);
+		memset(ds->ds_zero_va, 0, arm_pcache.dcache_line_size);
 	}
 
 	dmover_backend_register(&sc->sc_dmover.dd_backend);
@@ -587,7 +591,7 @@ dmac_dmover_run(struct dmover_backend *dmb)
 			 * Simply load up the pre-zeroed source buffer
 			 */
 			if (bus_dmamap_load(sc->sc_dmat, ds->ds_src_dmap,
-			    ds->ds_zero_va, arm_pdcache_line_size, NULL,
+			    ds->ds_zero_va, arm_pcache.dcache_line_size, NULL,
 			    BUS_DMA_NOWAIT | BUS_DMA_STREAMING | BUS_DMA_READ))
 				goto error;
 
@@ -604,10 +608,10 @@ dmac_dmover_run(struct dmover_backend *dmb)
 			 * burst size (which is hardcoded to 8 for dmover).
 			 */
 			memset(ds->ds_fill_va, dreq->dreq_immediate[0],
-			    arm_pdcache_line_size);
+			    arm_pcache.dcache_line_size);
 
 			if (bus_dmamap_load(sc->sc_dmat, ds->ds_src_dmap,
-			    ds->ds_fill_va, arm_pdcache_line_size, NULL,
+			    ds->ds_fill_va, arm_pcache.dcache_line_size, NULL,
 			    BUS_DMA_NOWAIT | BUS_DMA_STREAMING | BUS_DMA_READ))
 				goto error;
 
@@ -738,11 +742,11 @@ dmac_dmover_done(struct dmac_xfer *dx, int error)
 #endif
 
 struct dmac_xfer *
-pxa2x0_dmac_allocate_xfer(int flags)
+pxa2x0_dmac_allocate_xfer(void)
 {
 	struct dmac_xfer_state *dxs;
 
-	dxs = malloc(sizeof(struct dmac_xfer_state), M_DEVBUF, flags);
+	dxs = kmem_alloc(sizeof(*dxs), KM_SLEEP);
 
 	return ((struct dmac_xfer *)dxs);
 }
@@ -750,32 +754,52 @@ pxa2x0_dmac_allocate_xfer(int flags)
 void
 pxa2x0_dmac_free_xfer(struct dmac_xfer *dx)
 {
+	struct dmac_xfer_state *dxs = (struct dmac_xfer_state *)dx;
 
 	/*
 	 * XXX: Should verify the DMAC is not actively using this
 	 * structure before freeing...
 	 */
-	free(dx, M_DEVBUF);
+	kmem_free(dxs, sizeof(*dxs));
 }
 
 static inline int
-dmac_validate_desc(struct dmac_xfer_desc *xd, size_t *psize)
+dmac_validate_desc(struct dmac_xfer_desc *xd, size_t *psize,
+    bool *misaligned_flag)
 {
+	bus_dma_segment_t *dma_segs = xd->xd_dma_segs;
+	bus_addr_t periph_end;
+	bus_size_t align;
 	size_t size;
-	int i;
+	int i, nsegs = xd->xd_nsegs;
 
 	/*
 	 * Make sure the transfer parameters are acceptable.
 	 */
 
 	if (xd->xd_addr_hold &&
-	    (xd->xd_nsegs != 1 || xd->xd_dma_segs[0].ds_len == 0))
+	    (nsegs != 1 || dma_segs[0].ds_len == 0))
 		return (EINVAL);
 
-	for (i = 0, size = 0; i < xd->xd_nsegs; i++) {
-		if (xd->xd_dma_segs[i].ds_addr & 0x7)
-			return (EFAULT);
-		size += xd->xd_dma_segs[i].ds_len;
+	periph_end = CPU_IS_PXA270 ? PXA270_PERIPH_END : PXA250_PERIPH_END;
+	for (i = 0, size = 0; i < nsegs; i++) {
+		if (dma_segs[i].ds_addr >= PXA2X0_PERIPH_START &&
+		    dma_segs[i].ds_addr + dma_segs[i].ds_len < periph_end)
+			/* Internal Peripherals. */
+			align = 0x03;
+		else /* Companion-Chip/External Peripherals/External Memory. */
+			align = 0x07;
+		/*
+		 * XXXX:
+		 * Also PXA27x has more constraints by pairs Source/Target.
+		 */
+
+		if (dma_segs[i].ds_addr & align) {
+			if (!CPU_IS_PXA270)
+				return (EFAULT);
+			*misaligned_flag = true;
+		}
+		size += dma_segs[i].ds_len;
 	}
 
 	*psize = size;
@@ -784,11 +808,11 @@ dmac_validate_desc(struct dmac_xfer_desc *xd, size_t *psize)
 
 static inline int
 dmac_init_desc(struct dmac_desc_segs *ds, struct dmac_xfer_desc *xd,
-    size_t *psize)
+    size_t *psize, bool *misaligned_flag)
 {
 	int err;
 
-	if ((err = dmac_validate_desc(xd, psize)))
+	if ((err = dmac_validate_desc(xd, psize, misaligned_flag)))
 		return (err);
 
 	ds->ds_curseg = xd->xd_dma_segs;
@@ -813,14 +837,18 @@ pxa2x0_dmac_start_xfer(struct dmac_xfer *dx)
 	src = &dxs->dxs_desc[DMAC_DESC_SRC];
 	dst = &dxs->dxs_desc[DMAC_DESC_DST];
 
-	if ((err = dmac_init_desc(&dxs->dxs_segs[DMAC_DESC_SRC], src, &size)))
+	dxs->dxs_misaligned_flag = false;
+
+	if ((err = dmac_init_desc(&dxs->dxs_segs[DMAC_DESC_SRC], src, &size,
+	    &dxs->dxs_misaligned_flag)))
 		return (err);
 	if (src->xd_addr_hold == false &&
 	    dxs->dxs_loop_notify != DMAC_DONT_LOOP &&
 	    (size % dxs->dxs_loop_notify) != 0)
 		return (EINVAL);
 
-	if ((err = dmac_init_desc(&dxs->dxs_segs[DMAC_DESC_DST], dst, &size)))
+	if ((err = dmac_init_desc(&dxs->dxs_segs[DMAC_DESC_DST], dst, &size,
+	    &dxs->dxs_misaligned_flag)))
 		return (err);
 	if (dst->xd_addr_hold == false &&
 	    dxs->dxs_loop_notify != DMAC_DONT_LOOP &&
@@ -829,8 +857,8 @@ pxa2x0_dmac_start_xfer(struct dmac_xfer *dx)
 
 	SLIST_INIT(&dxs->dxs_descs);
 	dxs->dxs_channel = DMAC_NO_CHANNEL;
-	dxs->dxs_dcmd = (((u_int32_t)dxs->dxs_dev_width) << DCMD_WIDTH_SHIFT) |
-	    (((u_int32_t)dxs->dxs_burst_size) << DCMD_SIZE_SHIFT);
+	dxs->dxs_dcmd = (((uint32_t)dxs->dxs_dev_width) << DCMD_WIDTH_SHIFT) |
+	    (((uint32_t)dxs->dxs_burst_size) << DCMD_SIZE_SHIFT);
 
 	switch (dxs->dxs_flow) {
 	case DMAC_FLOW_CTRL_NONE:
@@ -873,7 +901,7 @@ pxa2x0_dmac_abort_xfer(struct dmac_xfer *dx)
 	struct dmac_xfer_state *ndxs, *dxs = (struct dmac_xfer_state *)dx;
 	struct dmac_desc *desc, *ndesc;
 	struct dmac_xfer_state_head *queue;
-	u_int32_t rv;
+	uint32_t rv;
 	int s, timeout, need_start = 0;
 
 	s = splbio();
@@ -976,6 +1004,17 @@ dmac_start(struct pxadmac_softc *sc, dmac_priority_t priority)
 		 */
 		KDASSERT(sc->sc_active[channel] == NULL);
 		SIMPLEQ_REMOVE_HEAD(&sc->sc_queue[priority], dxs_link);
+
+		/* set DMA alignment register */
+		if (CPU_IS_PXA270) {
+			uint32_t dalgn;
+
+			dalgn = dmac_reg_read(sc, DMAC_DALGN);
+			dalgn &= ~(1U << channel);
+			if (dxs->dxs_misaligned_flag)
+				dalgn |= (1U << channel);
+			dmac_reg_write(sc, DMAC_DALGN, dalgn);
+		}
 
 		dxs->dxs_channel = channel;
 		sc->sc_active[channel] = dxs;
@@ -1156,7 +1195,7 @@ dmac_channel_intr(struct pxadmac_softc *sc, u_int channel)
 {
 	struct dmac_xfer_state *dxs;
 	struct dmac_desc *desc, *ndesc;
-	u_int32_t dcsr;
+	uint32_t dcsr;
 	u_int rv = 0;
 
 	dcsr = dmac_reg_read(sc, DMAC_DCSR(channel));
@@ -1165,15 +1204,17 @@ dmac_channel_intr(struct pxadmac_softc *sc, u_int channel)
 		dmac_reg_write(sc, DMAC_DCSR(channel), dcsr & ~DCSR_RUN);
 
 	if ((dxs = sc->sc_active[channel]) == NULL) {
-		printf("%s: Stray DMAC interrupt for unallocated channel %d\n",
-		    sc->sc_dev.dv_xname, channel);
+		aprint_error_dev(sc->sc_dev,
+		    "Stray DMAC interrupt for unallocated channel %d\n",
+		    channel);
 		return (0);
 	}
 
 	/*
 	 * Clear down the interrupt in the DMA Interrupt Register
 	 */
-	dmac_reg_write(sc, DMAC_DINT, (1u << channel));
+	if (!CPU_IS_PXA270)
+		dmac_reg_write(sc, DMAC_DINT, (1u << channel));
 
 	/*
 	 * If this is a looping request, invoke the 'done' callback and
@@ -1267,7 +1308,7 @@ static int
 dmac_intr(void *arg)
 {
 	struct pxadmac_softc *sc = arg;
-	u_int32_t rv, mask;
+	uint32_t rv, mask;
 	u_int chan, pri;
 
 	rv = dmac_reg_read(sc, DMAC_DINT);

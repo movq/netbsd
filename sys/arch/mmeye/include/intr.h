@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.9 2007/12/03 15:33:57 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.12 2018/04/19 21:50:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,8 +35,9 @@
  * Number of interrupt source 
  * TMU0, TMU1, TMU2
  * MMEYE(com * 2 + mmeyepcmcia(controller + card) * 2)
+ * SCIF * 4, SCI * 4
  */
-#define _INTR_N		9
+#define _INTR_N		17
 
 /* Interrupt priority levels */
 #define	IPL_VM		12
@@ -55,14 +49,14 @@ typedef struct {
 	ipl_t _ipl;
 } ipl_cookie_t;
 
-static inline ipl_cookie_t
+static __inline ipl_cookie_t
 makeiplcookie(ipl_t ipl)
 {
 
 	return (ipl_cookie_t){._ipl = ipl << 4};
 }
 
-static inline int
+static __inline int
 splraiseipl(ipl_cookie_t icookie)
 {
 

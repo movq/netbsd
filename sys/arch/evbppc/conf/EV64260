@@ -1,8 +1,8 @@
-#	$NetBSD: EV64260,v 1.34 2007/03/14 12:27:22 drochner Exp $
+#	$NetBSD: EV64260,v 1.71 2018/02/05 15:18:10 maxv Exp $
 #
 #	MVP -- Motorola's Multiprocessing Verification Platform
 #
-include		"arch/evbppc/conf/std.ev64260"
+include 	"arch/evbppc/conf/std.ev64260"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
@@ -13,22 +13,25 @@ maxusers	32
 #options 	UVMHIST
 #options 	UVMHIST_PRINT
 
+#options 	MULTIPROCESSOR		# Discovery II/III support
+
 # PowerPC options
 options		ALTIVEC
 #options 	CLOCKBASE=100000000	# EVB64260
 options 	CLOCKBASE=133000000	# EVB64260A
 
 # Marvell options
-options 	GT_MPP_INTERRUPTS=0x2c600000
-options 	GT_MPP_WATCHDOG=0x03000000
 options 	MPSC_CONSOLE=0
 options 	GT_MPSC_DEFAULT_BAUD_RATE=9600
-#options 	GT_BASE=0x14000000	# PMON low
-options 	GT_BASE=0xF8000000	# PPCBoot
 options 	GT_MPSC_FREQUENCY="(cpu_timebase*4)"
 options 	GT_MPSC_CLOCK_SOURCE="BRG_BCR_CLKS_TCLK"
-options 	PCI0_GPPINTS=0xffffff1b,PCI1_GPPINTS=0xffffff1d
-options 	PCI0_SKIPMASK="(~0x180)",PCI1_SKIPMASK="(~0x180)"
+options 	GT_MPP_WATCHDOG=0x03000000
+options 	GT_DEVBUS
+#options 	GT_ECC
+options 	GT_COMM
+options 	GT_WATCHDOG
+
+# EV64260 options
 options 	OBIO0_STRIDE=0,OBIO1_STRIDE=2,OBIO2_STRIDE=2,OBIO3_STRIDE=2
 
 # Options for necessary to use MD
@@ -44,9 +47,6 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
-#options 	SHMMAXPGS=1024	# 1024 pages is the default
-
-#options 	LKM		# loadable kernel modules
 
 #options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -57,26 +57,14 @@ options 	DIAGNOSTIC	# cheap kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
-options 	SYMTAB_SPACE=300000	# size for embedded symbol table
+makeoptions	COPY_SYMTAB=1	# size for embedded symbol table
 
 #makeoptions	DEFCOPTS="-g"	# compile full symbol table
 makeoptions	DEBUG="-g"
 
 # Compatibility options
-#options 	COMPAT_09	# NetBSD 0.9,
-#options 	COMPAT_10	# NetBSD 1.0,
-#options 	COMPAT_11	# NetBSD 1.1,
-#options 	COMPAT_12	# NetBSD 1.2,
-#options 	COMPAT_13	# NetBSD 1.3,
-#options 	COMPAT_14	# NetBSD 1.4,
-#options 	COMPAT_15	# NetBSD 1.5,
-options 	COMPAT_16	# NetBSD 1.6,
-options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options 	COMPAT_43	# and 4.3BSD
+include 	"conf/compat_netbsd16.config"
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
-#options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
 file-system 	FFS		# UFS
@@ -90,16 +78,16 @@ file-system 	MSDOSFS		# MS-DOS file system
 #file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 #file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 #file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
-#options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 #options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
@@ -113,23 +101,16 @@ options 	NFS_BOOT_RWSIZE=1024
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
-#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
-#options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-#options        DIRECTED_BROADCAST      # allow broadcasts through routers
-#options 	ISO,TPIP	# OSI
-#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
 #options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
-#options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
-#options 	NMBCLUSTERS=1024
 
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
@@ -142,8 +123,9 @@ options 	PCI_NETBSD_CONFIGURE	# Do not rely on BIOS/whatever to configure PCI de
 
 # wscons options
 #options 	WSEMUL_SUN		# sun terminal emulation
-options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_DEFAULTSCREENS=1
+#options 	WSEMUL_VT100		# VT100 / VT220 emulation
+#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+#options 	WSDISPLAY_DEFAULTSCREENS=1
 
 # Kernel root file system and dump configuration.
 config		netbsd	root on ? type ?
@@ -156,40 +138,42 @@ mainbus0	at root
 
 cpu*		at mainbus0
 
-gt0		at mainbus0		# Discovery system controller
+# Discovery system controller
+#gt0	at mainbus0 addr 0x14000000	# PMON low
+gt0	at mainbus0 addr 0xf8000000	# PPCBoot
 
 # PCI busses
-gtpci0		at gt0 unit 0		# 64-bit, 66MHz
-gtpci1		at gt0 unit 1		# 64-bit, 66MHz
-
-pci*		at gtpci?
+gtpci*	at gt? unit ?			# 64-bit, 66MHz
+pci*	at gtpci?
 
 # 16550s off CS2
-obio0		at gt0 unit 0		# Chip Select 0
-obio1		at gt0 unit 1		# Chip Select 1
-obio2		at gt0 unit 2		# Chip Select 2
-com0		at obio2 offset 0x0020 size 8 irq 85
-com1		at obio2 offset 0x0000 size 8 irq 86
-obio3		at gt0 unit 3		# Chip Select 3
-obio4		at gt0 unit 4		# Boot Chip Select
+obio0	at gt0 unit 0			# Chip Select 0
+obio1	at gt0 unit 1			# Chip Select 1
+obio2	at gt0 unit 2			# Chip Select 2
+com0	at obio2 offset 0x0020 size 8 irq 85
+com1	at obio2 offset 0x0000 size 8 irq 86
+obio3	at gt0 unit 3			# Chip Select 3
+obio4	at gt0 unit 4			# Boot Chip Select
 
 # UARTs
-gtmpsc0 	at gt0 unit 0		# Serial #0
-gtmpsc1 	at gt0 unit 1		# Serial #1
+gtmpsc*	at gt? offset ?			# Multi-Protocol Serial Controller
+					#   with Serial Direct Memory Access
 
 # Ethernet and PHY
-gfe0		at gt0 unit 0 flags 1	# Ethernet #0 (RMMI)
-gfe1		at gt0 unit 1 flags 1	# Ethernet #1 (RMMI)
-gfe2		at gt0 unit 2 flags 1	# Ethernet #2 (RMMI)
+gfec*	at gt? offset ?			# Ethernet (RMMI)
+gfe*	at gfec? port ? irq ?		# Ethernet port #0/#1/#2
 
 # I2C
-gtiic0		at gt0 unit 0		# I2C controller
-iic*		at gtiic?
+gttwsi*	at gt? offset ? irq ?		# Two-Wire Serial Interface
+iic*	at gttwsi?
+
+# DMA
+gtidmac* at gt? offset ? irq ?		# IDMA Controller
 
 # PCI devices
-ppb*		at pci? dev ? function ?	# PCI-PCI bridges
-pci*		at ppb? bus ?
-#pcib*		at pci? dev ? function ?	# VIA 82C686B
+pchb*	at pci? dev ? function ?	# PCI Host Bridge
+ppb*	at pci? dev ? function ?	# PCI-PCI Bridges
+pci*	at ppb? bus ?
 
 #ehci*	at pci?	dev ? function ?	# Enhanced Host Controller
 #ohci*	at pci?	dev ? function ?	# Open Host Controller
@@ -236,6 +220,8 @@ cd*		at scsibus? target ? lun ?
 #auvia*	at pci? dev ? function ?	# VIA VT82C686A integrated AC'97 Audio
 #audio*	at auvia?
 
+#spkr*	at audio?		# PC speaker (synthesized)
+
 pciide* 	at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
 acardide*	at pci? dev ? function ?	# Acard IDE controllers
 aceride* 	at pci? dev ? function ?	# Acer Lab IDE controllers
@@ -255,11 +241,11 @@ atabus* 	at ata? channel ?
 wd*		at atabus? drive ? flags 0x0000
 
 #pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	ccd		4	# concatenated/striped disk devices
-#pseudo-device	raid		4	# RAIDframe disk driver
+#pseudo-device	ccd			# concatenated/striped disk devices
+#pseudo-device	raid			# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-#pseudo-device	fss		4	# file system snapshot device
-pseudo-device	md		1	# memory disk device
+#pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# memory disk device
 pseudo-device	loop			# network loopback
 pseudo-device	bpfilter		# packet filter
 #pseudo-device	ipfilter		# IP filter (firewall) and NAT
@@ -272,7 +258,8 @@ pseudo-device	bpfilter		# packet filter
 #pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 #pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 #pseudo-device	wsmux			# ick
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
+pseudo-device	swdmover		# softare dmover(9) back-end
+pseudo-device	dmoverio		# /dev/dmover dmover(9) interface

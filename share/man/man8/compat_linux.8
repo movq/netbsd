@@ -1,4 +1,4 @@
-.\"	$NetBSD: compat_linux.8,v 1.36 2007/12/02 21:45:59 wiz Exp $
+.\"	$NetBSD: compat_linux.8,v 1.40 2017/10/02 12:55:10 wiz Exp $
 .\"
 .\" Copyright (c) 1995 Frank van der Linden
 .\" All rights reserved.
@@ -29,7 +29,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 30, 2007
+.Dd September 29, 2017
 .Dt COMPAT_LINUX 8
 .Os
 .Sh NAME
@@ -135,15 +135,12 @@ Example: you have just ftp-ed the Linux binary of Doom.
 Put it on the Linux system you have access to, and check which shared libraries it
 needs by running
 .Sq ldd linuxxdoom :
-.Pp
-.Bl -tag -width 123 -compact -offset indent
-.It (me@linux) ldd linuxxdoom
-.nf
-libXt.so.3 (DLL Jump 3.1) =\*[Gt] /usr/X11/lib/libXt.so.3.1.0
-libX11.so.3 (DLL Jump 3.1) =\*[Gt] /usr/X11/lib/libX11.so.3.1.0
-libc.so.4 (DLL Jump 4.5pl26) =\*[Gt] /lib/libc.so.4.6.29
-.fi
-.El
+.Bd -literal -offset indent
+(me@linux) ldd linuxxdoom
+     libXt.so.3 (DLL Jump 3.1) => /usr/X11/lib/libXt.so.3.1.0
+     libX11.so.3 (DLL Jump 3.1) => /usr/X11/lib/libX11.so.3.1.0
+     libc.so.4 (DLL Jump 4.5pl26) => /lib/libc.so.4.6.29
+.Ed
 .Pp
 You would need go get all the files from the last column, and
 put them under
@@ -187,17 +184,16 @@ So, if you have these libraries on your system:
 .Pa /emul/linux/lib/libc.so.4.6.27
 .It
 .Pa /emul/linux/lib/libc.so.4
--\*[Gt]
+->
 .Pa /emul/linux/lib/libc.so.4.6.27
 .El
 .Pp
 and you find that the
 .Ic ldd
 output for a new binary you want to install is:
-.nf
-.Pp
-libc.so.4 (DLL Jump 4.5pl26) =\*[Gt] /lib/libc.so.4.6.29
-.fi
+.Bd -literal
+libc.so.4 (DLL Jump 4.5pl26) => /lib/libc.so.4.6.29
+.Ed
 .Pp
 you won't need to worry about copying
 .Pa /lib/libc.so.4.6.29
@@ -209,7 +205,7 @@ you with:
 .Pa /emul/linux/lib/libc.so.4.6.29
 .It
 .Pa /emul/linux/lib/libc.so.4
--\*[Gt]
+->
 .Pa /emul/linux/lib/libc.so.4.6.29
 .El
 .Pp
@@ -323,7 +319,7 @@ it should produce something like:
 .Pp
 .Bl -tag -width 123 -compact -offset indent
 .It (me@netbsd) ldd-linux `which ldd-linux`
-libc.so.4 (DLL Jump 4.5pl26) =\*[Gt] /lib/libc.so.4.6.29
+libc.so.4 (DLL Jump 4.5pl26) => /lib/libc.so.4.6.29
 .El
 .Pp
 This being done, you are ready to install new Linux binaries.
@@ -343,7 +339,7 @@ of shared libraries that the program depends on, in the
 form
 .Aq majorname
 .Pq Aq jumpversion
-=\*[Gt]
+=>
 .Aq fullname .
 .Pp
 If it prints
@@ -353,8 +349,8 @@ instead of
 it means that you need an extra library.
 Which library this is, is shown in
 .Aq majorname ,
-which will be of the form libXXXX.so.\*[Lt]N\*[Gt]
-You will need to find a libXXXX.so.\*[Lt]N\*[Gt].\*[Lt]mm\*[Gt] on a
+which will be of the form libXXXX.so.<N>
+You will need to find a libXXXX.so.<N>.<mm> on a
 Linux ftp site, and install it on your system.
 The XXXX (name) and
 .Aq N
@@ -369,7 +365,7 @@ Set up linux specific devices:
 .br
 .It (me@netbsd) cp LINUX_MAKEDEV /emul/linux/dev
 .br
-.It (me@netbsd) cd /emul/linux/dev \*[Am]\*[Am] sh LINUX_MAKEDEV all
+.It (me@netbsd) cd /emul/linux/dev && sh LINUX_MAKEDEV all
 .El
 .El
 .Ss Setting up procfs
@@ -397,9 +393,7 @@ for further information.
 .Ss Setting up other files
 Newer version of Linux use
 .Pa /etc/nsswitch.conf
-for network information, such as
-.Tn NIS
-and DNS.
+for network information, such as NIS and DNS.
 You must create or get a valid copy of this file and put it in
 .Pa /emul/linux/etc .
 .Ss Finding the necessary files
@@ -455,7 +449,6 @@ The fastest way to look something up is to retrieve all the files in the
 contents subdirectory, and grep through them for the file you need.
 Here is an example of a list of files that you might need, and
 in which contents-file you will find it by grepping through them:
-.Pp
 .Bd -literal -offset indent
 Needed                  Package
 
@@ -477,7 +470,6 @@ it will tell you on which
 the package is,
 in our case it will tell us in which subdirectory we need to look.
 For our example, we would find the following locations:
-.Pp
 .Bd -literal -offset indent
 Package                 Location
 
@@ -525,24 +517,35 @@ directory, namely:
 .Bl -item -compact
 .It
 .Pa /emul/linux/dev/console
--\*[Gt]
+->
 .Pa /dev/tty
 .It
 .Pa /emul/linux/dev/mouse
--\*[Gt] whatever device your mouse is connected to
+-> whatever device your mouse is connected to
 .It
 .Pa /emul/linux/dev/ttyS0
--\*[Gt]
+->
 .Pa /dev/tty00
 .It
 .Pa /emul/linux/dev/ttyS1
--\*[Gt]
+->
 .Pa /dev/tty01
 .El
 .Pp
 Be warned: the first link mentioned here makes SVGAlib binaries
 work, but may confuse others, so you may have to remove it again at
 some point.
+.Sh CAVEATS
+When using a modular kernel (see
+.Xr module 7 ) ,
+the linux and linux32 emulations are not activated automatically (for
+security reasons).
+To activate the emulation, set the appropriate
+.Xr sysctl 8 Ap s :
+.Bd -literal
+sysctl -w emul.linux.enabled=1
+sysctl -w emul.linux32.enabled=1
+.Ed
 .Sh BUGS
 The information about Linux distributions may become outdated.
 .Pp
@@ -551,7 +554,7 @@ shadow root when the symbolic link itself was found by an absolute
 pathname inside the shadow root.
 This is not consistent.
 .Pp
-Linux executables cannot handle directory offset cookies \*[Gt] 32 bits.
+Linux executables cannot handle directory offset cookies > 32 bits.
 Should such an offset occur, you will see the message
 .Dq linux_getdents: dir offset too large for emulated program .
 Currently, this can only

@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_mskvar.h,v 1.3 2006/12/28 16:34:42 kettenis Exp $	*/
-/*	$NetBSD: if_mskvar.h,v 1.4 2007/03/04 06:02:22 christos Exp $	*/
+/*	$NetBSD: if_mskvar.h,v 1.14 2018/06/13 19:37:23 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -88,11 +81,7 @@
 #ifndef _DEV_PCI_IF_MSKVAR_H_
 #define _DEV_PCI_IF_MSKVAR_H_
 
-#include "rnd.h"
-
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 struct sk_jpool_entry {
 	int                             slot;
@@ -195,16 +184,18 @@ struct sk_if_softc;
 
 /* Softc for the Yukon-II controller. */
 struct sk_softc {
-	struct device		sk_dev;		/* generic device */
+	device_t		sk_dev;
 	bus_space_handle_t	sk_bhandle;	/* bus space handle */
 	bus_space_tag_t		sk_btag;	/* bus space tag */
+	bus_size_t		sk_bsize;	/* bus space size */
 	void			*sk_intrhand;	/* irq handler handle */
+	pci_chipset_tag_t	sk_pc;
+	u_int8_t		sk_fibertype;
 	u_int8_t		sk_type;
 	u_int8_t		sk_rev;
 	u_int32_t		sk_workaround;
 	u_int8_t		sk_macs;	/* # of MACs */
 	const char		*sk_name;
-	u_int32_t		sk_rboff;	/* RAMbuffer offset */
 	u_int32_t		sk_ramsize;	/* amount of RAM on NIC */
 	u_int32_t		sk_intrmask;
 	struct sysctllog	*sk_clog;
@@ -214,15 +205,16 @@ struct sk_softc {
 	struct sk_if_softc	*sk_if[2];
 	struct msk_status_desc	*sk_status_ring;
 	bus_dmamap_t		sk_status_map;
+	bus_dma_segment_t	sk_status_seg;
+	int			sk_status_nseg;
 	int			sk_status_idx;
-#if NRND > 0
-	rndsource_element_t     rnd_source;
-#endif
+	int			sk_status_own_idx;
+	krndsource_t     rnd_source;
 };
 
 /* Softc for each logical interface */
 struct sk_if_softc {
-	struct device		sk_dev;		/* generic device */
+	device_t		sk_dev;
 	struct ethercom		sk_ethercom;	/* interface info */
 	struct mii_data		sk_mii;
 	u_int8_t		sk_enaddr[ETHER_ADDR_LEN]; /* station addr */
@@ -237,9 +229,12 @@ struct sk_if_softc {
 	struct msk_chain_data	sk_cdata;
 	struct msk_ring_data	*sk_rdata;
 	bus_dmamap_t		sk_ring_map;
+	bus_dma_segment_t	sk_ring_seg;
+	int			sk_ring_nseg;
 	int			sk_status_idx;
 	struct sk_softc		*sk_softc;	/* parent controller */
 	int			sk_if_flags;
+	kmutex_t		sk_jpool_mtx;
 	LIST_HEAD(__sk_jfreehead, sk_jpool_entry)	sk_jfree_listhead;
 	LIST_HEAD(__sk_jinusehead, sk_jpool_entry)	sk_jinuse_listhead;
 	SIMPLEQ_HEAD(__sk_txmaphead, sk_txmap_entry)	sk_txmap_head;

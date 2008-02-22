@@ -1,4 +1,11 @@
-/*	$NetBSD: param.h,v 1.8 2008/01/08 13:15:02 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.25 2018/03/16 08:21:56 maxv Exp $	*/
+
+#ifdef __x86_64__
+
+#ifndef XEN
+/* Must be defined before cpu.h */
+#define	MAXCPUS		256
+#endif
 
 #ifdef _KERNEL
 #include <machine/cpu.h>
@@ -10,19 +17,6 @@
 #define	MACHINE_ARCH	"x86_64"
 #define MID_MACHINE	MID_X86_64
 
-/*
- * Round p (pointer or byte index) up to a correctly-aligned value
- * for all data types (int, long, ...).   The result is u_int and
- * must be cast to any desired pointer type.
- *
- * ALIGNED_POINTER is a boolean macro that checks whether an address
- * is valid to fetch data elements of type t from on this architecture.
- * This does not reflect the optimal alignment, just the possibility
- * (within reasonable limits). 
- *
- */
-#define ALIGNBYTES		(sizeof(long) - 1)
-#define ALIGN(p)		(((u_long)(p) + ALIGNBYTES) &~ALIGNBYTES)
 #define ALIGNED_POINTER(p,t)	1
 
 #define ALIGNBYTES32		(sizeof(int) - 1)
@@ -33,16 +27,23 @@
 #define	PGOFSET		(NBPG-1)	/* byte offset into page */
 #define	NPTEPG		(NBPG/(sizeof (pt_entry_t)))
 
+#define	MAXIOMEM	0xffffffffffff
+
+/*
+ * Maximum physical memory supported by the implementation.
+ */
+#define MAXPHYSMEM	0x100000000000ULL /* 16TB */
+
 /*
  * XXXfvdl change this (after bootstrap) to take # of bits from
  * config info into account.
  */
 #define	KERNBASE	0xffffffff80000000 /* start of kernel virtual space */
-#define	KERNTEXTOFF	0xffffffff80100000 /* start of kernel text */
+#define	KERNTEXTOFF	0xffffffff80200000 /* start of kernel text */
 #define	BTOPKERNBASE	((u_long)KERNBASE >> PGSHIFT)
 
 #define KERNTEXTOFF_HI	0xffffffff
-#define KERNTEXTOFF_LO	0x80100000
+#define KERNTEXTOFF_LO	0x80200000
 
 #define KERNBASE_HI	0xffffffff
 #define KERNBASE_LO	0x80000000
@@ -56,12 +57,15 @@
 
 #define	SSIZE		1		/* initial stack size/NBPG */
 #define	SINCR		1		/* increment of stack/NBPG */
-#define	UPAGES		3		/* pages of u-area */
+#ifdef DIAGNOSTIC
+#define	UPAGES		5		/* pages of u-area (1 for redzone) */
+#else
+#define	UPAGES		4		/* pages of u-area */
+#endif
 #define	USPACE		(UPAGES * NBPG)	/* total size of u-area */
-#define	INTRSTACKSIZE	4096
 
 #ifndef MSGBUFSIZE
-#define MSGBUFSIZE	8*NBPG		/* default message buffer size */
+#define MSGBUFSIZE	(16*NBPG)	/* default message buffer size */
 #endif
 
 /*
@@ -80,18 +84,6 @@
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	4096		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#endif
-#endif
-
 #ifndef NFS_RSIZE
 #define NFS_RSIZE       32768
 #endif
@@ -100,11 +92,12 @@
 #endif
 
 /*
- * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
+ * Minimum size of the kernel kmem_arena in PAGE_SIZE-sized
  * logical pages.
+ * No enforced maximum on amd64.
  */
 #define	NKMEMPAGES_MIN_DEFAULT	((8 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((1 *1024 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MAX_UNLIMITED 1
 
 /*
  * XXXfvdl the PD* stuff is different from i386.
@@ -124,6 +117,11 @@
 
 #define btop(x)				x86_btop(x)
 #define ptob(x)				x86_ptob(x)
-#define round_pdr(x)			x86_round_pdr(x)
 
 #define mstohz(ms) ((ms + 0UL) * hz / 1000)
+
+#else	/*	__x86_64__	*/
+
+#include <i386/param.h>
+
+#endif	/*	__x86_64__	*/

@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39io.c,v 1.20 2006/03/08 02:10:04 christos Exp $ */
+/*	$NetBSD: tx39io.c,v 1.23 2012/10/27 17:17:54 chs Exp $ */
 
 /*-
  * Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tx39io.c,v 1.20 2006/03/08 02:10:04 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tx39io.c,v 1.23 2012/10/27 17:17:54 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,10 +52,10 @@ __KERNEL_RCSID(0, "$NetBSD: tx39io.c,v 1.20 2006/03/08 02:10:04 christos Exp $")
 
 #define	ISBITSET(x, s)	((x) & (1 << (s)))
 
-int	tx39io_match(struct device *, struct cfdata *, void *);
-void	tx39io_attach(struct device *, struct device *, void *);
+int	tx39io_match(device_t, cfdata_t, void *);
+void	tx39io_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(tx39io, sizeof(struct tx39io_softc),
+CFATTACH_DECL_NEW(tx39io, sizeof(struct tx39io_softc),
     tx39io_match, tx39io_attach, NULL, NULL);
 
 /* IO/MFIO common */
@@ -93,7 +86,7 @@ static int tx392x_io_intr_map(int *, int, int);
 #endif
 #if defined TX391X && defined TX392X
 #define	tx39_io_intr_map(t, s, p, m)					\
-	(IS_TX391X(t)
+	(IS_TX391X(t)							\
 	    ? tx391x_io_intr_map(s, p, m) : tx392x_io_intr_map(s, p, m))
 #elif defined TX391X
 #define	tx39io_intr_map(t, s, p, m)	tx391x_io_intr_map(s, p, m)
@@ -105,20 +98,21 @@ static void io_dump(hpcio_chip_t);
 static void __print_port_status(struct tx39io_port_status *, int);
 
 int
-tx39io_match(struct device *parent, struct cfdata *cf, void *aux)
+tx39io_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (ATTACH_FIRST); /* 1st attach group of txsim */
 }
 
 void
-tx39io_attach(struct device *parent, struct device *self, void *aux)
+tx39io_attach(device_t parent, device_t self, void *aux)
 {
 	struct txsim_attach_args *ta = aux;
-	struct tx39io_softc *sc = (void *)self;
+	struct tx39io_softc *sc = device_private(self);
 	tx_chipset_tag_t tc;
 	struct hpcio_chip *io_hc = &sc->sc_io_ops;
 	struct hpcio_chip *mfio_hc = &sc->sc_mfio_ops;
 
+	sc->sc_dev = self;
 	tc = sc->sc_tc = ta->ta_tc;
 
 	printf("\n");
@@ -230,7 +224,7 @@ mfio_out(hpcio_chip_t arg, int port, int onoff)
 #ifdef DIAGNOSTIC
 	if (!(sc->sc_stat_mfio.dir & pos)) {
 		panic("%s: MFIO%d is not output port.",
-		      sc->sc_dev.dv_xname, port);
+		      device_xname(sc->sc_dev), port);
 	}
 #endif
 	reg = tx_conf_read(tc, TX39_IOMFIODATAOUT_REG);
@@ -312,7 +306,7 @@ tx391x_io_out(hpcio_chip_t arg, int port, int onoff)
 	pos = 1 << port;
 #ifdef DIAGNOSTIC
 	if (!(sc->sc_stat_io.dir & pos))
-		panic("%s: IO%d is not output port.", sc->sc_dev.dv_xname,
+		panic("%s: IO%d is not output port.", device_xname(sc->sc_dev),
 		      port);
 #endif
 	reg = tx_conf_read(tc, TX39_IOCTRL_REG);
@@ -383,7 +377,7 @@ tx392x_io_out(hpcio_chip_t arg, int port, int onoff)
 {
 	struct tx39io_softc *sc = arg->hc_sc;
 #ifdef DIAGNOSTIC
-	const char *devname =  sc->sc_dev.dv_xname;
+	const char *devname =  device_xname(sc->sc_dev);
 #endif
 	tx_chipset_tag_t tc = sc->sc_tc;
 	txreg_t reg, pos, iostat;

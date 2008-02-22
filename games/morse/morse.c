@@ -1,4 +1,4 @@
-/*	$NetBSD: morse.c,v 1.14 2008/01/28 06:18:23 dholland Exp $	*/
+/*	$NetBSD: morse.c,v 1.18 2018/01/16 06:20:24 maya Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)morse.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: morse.c,v 1.14 2008/01/28 06:18:23 dholland Exp $");
+__RCSID("$NetBSD: morse.c,v 1.18 2018/01/16 06:20:24 maya Exp $");
 #endif
 #endif /* not lint */
 
@@ -91,7 +91,7 @@ static const char
 	"--..",
 };
 
-const struct punc {
+static const struct punc {
 	char c;
 	const char *morse;
 } other[] = {
@@ -107,21 +107,20 @@ const struct punc {
 	{ '"', ".-..-." },
 	{ '=', "-...-" },
 	{ '+', ".-.-." },
+	{ '_', "..--.-" },
 	{ '\0', NULL }
 };
 
 int	main(int, char *[]);
-void	morse(int);
-void	decode(const char *);
-void	show(const char *);
+static void morse(int);
+static void decode(const char *);
+static void show(const char *);
 
 static int sflag;
 static int dflag;
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int ch;
 	char *p;
@@ -201,8 +200,7 @@ main(argc, argv)
 }
 
 void
-decode(s)
-	const char *s;
+decode(const char *s)
 {
 	int i;
 	
@@ -231,8 +229,7 @@ decode(s)
 }
 
 void
-morse(c)
-	int c;
+morse(int c)
 {
 	int i;
 
@@ -255,8 +252,7 @@ morse(c)
 }
 
 void
-show(s)
-	const char *s;
+show(const char *s)
 {
 	if (sflag)
 		printf(" %s", s);

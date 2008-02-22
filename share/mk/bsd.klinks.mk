@@ -1,66 +1,56 @@
-#	$NetBSD: bsd.klinks.mk,v 1.1 2007/08/05 21:43:24 pooka Exp $
+#	$NetBSD: bsd.klinks.mk,v 1.14 2017/12/06 02:06:45 christos Exp $
 #
+
+.include <bsd.own.mk>
+
+KLINK_MACHINE?=	${MACHINE}
 
 ##### Default values
 .if !defined(S)
-.if defined(NETBSDSRCDIR)
+.   if defined(NETBSDSRCDIR)
 S=	${NETBSDSRCDIR}/sys
-.elif defined(BSDSRCDIR)
+.   elif defined(BSDSRCDIR)
 S=	${BSDSRCDIR}/sys
-.else
+.   else
 S=	/sys
-.endif
-.endif
-
-CLEANFILES+=	machine ${MACHINE_CPU}
-.if ${MACHINE} == "sun2" || ${MACHINE} == "sun3"
-CLEANFILES+=	sun68k
-.elif ${MACHINE} == "sparc64"
-CLEANFILES+=	sparc
-.elif ${MACHINE} == "i386"
-CLEANFILES+=	x86
-.elif ${MACHINE} == "amd64"
-CLEANFILES+=	x86
-CFLAGS+=	-mcmodel=kernel
+.   endif
 .endif
 
-.if defined(XEN_BUILD) || ${MACHINE} == "xen"
-CLEANFILES+=	xen xen-ma/machine # xen-ma
+KLINKFILES+=	${MACHINE_CPU} ${KLINK_MACHINE}
+
+.if ${KLINK_MACHINE} == "sun2" || ${KLINK_MACHINE} == "sun3"
+KLINKFILES+=	sun68k
+.elif ${KLINK_MACHINE} == "sparc64"
+KLINKFILES+=	sparc
+.elif ${KLINK_MACHINE} == "i386"
+KLINKFILES+=	x86
+.elif ${KLINK_MACHINE} == "amd64"
+KLINKFILES+=	x86 i386
+.elif ${KLINK_MACHINE} == "evbmips"
+KLINKFILES+=	algor sbmips
+.elif ${MACHINE_CPU} == "aarch64"
+KLINKFILES+=	arm
+.elif defined(XEN_BUILD) || ${KLINK_MACHINE} == "xen"
+KLINKFILES+=	xen
+CLEANFILES+=	xen-ma/machine # xen-ma
 CPPFLAGS+=	-I${.OBJDIR}/xen-ma
-.if ${MACHINE_CPU} == "i386"
-CLEANFILES+=	x86
 .endif
-.endif
+
+CLEANFILES+= machine ${KLINKFILES}
 
 # XXX.  This should be done a better way.  It's @'d to reduce visual spew.
 # XXX   .BEGIN is used to make sure the links are done before anything else.
-.if make(depend) || make(all) || make(dependall)
+.if !make(obj) && !make(clean) && !make(cleandir)
 .BEGIN:
-	@rm -f machine && \
-	    ln -s $S/arch/${MACHINE}/include machine
-	@rm -f ${MACHINE_CPU} && \
-	    ln -s $S/arch/${MACHINE_CPU}/include ${MACHINE_CPU}
-# XXX. it gets worse..
-.if ${MACHINE} == "sun2" || ${MACHINE} == "sun3"
-	@rm -f sun68k && \
-	    ln -s $S/arch/sun68k/include sun68k
-.endif
-.if ${MACHINE} == "sparc64"
-	@rm -f sparc && \
-	    ln -s $S/arch/sparc/include sparc
-.endif
-.if ${MACHINE} == "amd64"
-	@rm -f x86 && \
-	    ln -s $S/arch/x86/include x86
-.endif
-.if ${MACHINE_CPU} == "i386"
-	@rm -f x86 && \
-	    ln -s $S/arch/x86/include x86
-.endif
-.if defined(XEN_BUILD) || ${MACHINE} == "xen"
-	@rm -f xen && \
-	    ln -s $S/arch/xen/include xen
-	@rm -rf xen-ma && mkdir xen-ma && \
+	-@rm -f machine && \
+	    ln -s $S/arch/${KLINK_MACHINE}/include machine
+.   for kl in ${KLINKFILES}
+	-@if [ -d $S/arch/${kl}/include ]; then \
+	    rm -f ${kl} && ln -s $S/arch/${kl}/include ${kl}; \
+	fi
+.   endfor
+.   if defined(XEN_BUILD) || ${KLINK_MACHINE} == "xen"
+	-@rm -rf xen-ma && mkdir xen-ma && \
 	    ln -s ../${XEN_BUILD:U${MACHINE_ARCH}} xen-ma/machine
-.endif
+.   endif
 .endif

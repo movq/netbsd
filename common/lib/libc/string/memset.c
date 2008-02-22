@@ -1,4 +1,4 @@
-/*	$NetBSD: memset.c,v 1.2 2007/06/04 18:19:27 christos Exp $	*/
+/*	$NetBSD: memset.c,v 1.11 2018/02/06 09:28:48 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)memset.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: memset.c,v 1.2 2007/06/04 18:19:27 christos Exp $");
+__RCSID("$NetBSD: memset.c,v 1.11 2018/02/06 09:28:48 mrg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -49,6 +49,9 @@ __RCSID("$NetBSD: memset.c,v 1.2 2007/06/04 18:19:27 christos Exp $");
 #include <string.h>
 #else
 #include <lib/libkern/libkern.h>
+#if defined(BZERO) && defined(_STANDALONE)
+#include <lib/libsa/stand.h>
+#endif
 #include <machine/limits.h>
 #endif 
 
@@ -57,9 +60,10 @@ __RCSID("$NetBSD: memset.c,v 1.2 2007/06/04 18:19:27 christos Exp $");
 
 #ifdef _FORTIFY_SOURCE
 #undef bzero
-#undef memset
 #endif
+#undef memset
 
+#ifndef __OPTIMIZE_SIZE__
 #ifdef BZERO
 #define	RETURN	return
 #define	VAL	0
@@ -72,6 +76,26 @@ bzero(void *dst0, size_t length)
 #define	VAL	c0
 #define	WIDEVAL	c
 
+#if defined(__ARM_EABI__)
+void __aeabi_memset(void *, size_t, int);
+void __aeabi_memclr(void *, size_t);
+
+__strong_alias(__aeabi_memset4, __aebi_memset)
+__strong_alias(__aeabi_memset8, __aebi_memset)
+
+void
+__aeabi_memset(void *dst0, size_t length, int c)
+{
+	memset(dst0, c, length);
+}
+
+void
+__aeabi_memclr(void *dst0, size_t length)
+{
+	memset(dst0, 0, length);
+}
+#endif
+
 void *
 memset(void *dst0, int c0, size_t length)
 #endif
@@ -81,8 +105,6 @@ memset(void *dst0, int c0, size_t length)
 	u_int c;
 #endif
 	u_char *dst;
-
-	_DIAGASSERT(dst0 != 0);
 
 	dst = dst0;
 	/*
@@ -141,3 +163,23 @@ memset(void *dst0, int c0, size_t length)
 		} while (--t != 0);
 	RETURN;
 }
+#else /* __OPTIMIZE_SIZE__ */
+#ifdef BZERO
+void
+bzero(void *dstv, size_t length)
+{
+	u_char *dst = dstv;
+	while (length-- > 0)
+		*dst++ = 0;
+}
+#else
+void *
+memset(void *dstv, int c, size_t length)
+{
+	u_char *dst = dstv;
+	while (length-- > 0)
+		*dst++ = c;
+	return dstv;
+}
+#endif /* BZERO */
+#endif /* __OPTIMIZE_SIZE__ */

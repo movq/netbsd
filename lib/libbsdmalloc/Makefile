@@ -1,13 +1,14 @@
-# $NetBSD: Makefile,v 1.2 2003/07/10 11:27:45 lukem Exp $
+# $NetBSD: Makefile,v 1.4 2012/03/21 10:08:30 matt Exp $
 
 NOMAN=1
+
+WARNS=	2
 
 .include <bsd.own.mk>
 
 LIB=	bsdmalloc
 SRCS=	malloc.c
 
-CPPFLAGS= -D_REENTRANT
-CPPFLAGS= -I${.CURDIR}/../libc/include/
+CPPFLAGS+= -D_REENT -D_REENTRANT -I${.CURDIR}/../libc/include/
 
 .include <bsd.lib.mk>

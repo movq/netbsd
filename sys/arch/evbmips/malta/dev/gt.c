@@ -1,4 +1,4 @@
-/*	$NetBSD: gt.c,v 1.10 2006/04/06 06:20:37 simonb Exp $	*/
+/*	$NetBSD: gt.c,v 1.15 2015/10/02 05:22:50 msaitoh Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,13 +36,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.10 2006/04/06 06:20:37 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.15 2015/10/02 05:22:50 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <dev/pci/pcivar.h>
+
+#include <mips/cpuregs.h>
 
 #include <evbmips/malta/maltareg.h>
 #include <evbmips/malta/maltavar.h>
@@ -58,8 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.10 2006/04/06 06:20:37 simonb Exp $");
 #define	PCI_CONF_LOCK(s)	(s) = splhigh()
 #define	PCI_CONF_UNLOCK(s)	splx((s))
 
-static void	gt_attach_hook(struct device *, struct device *,
-		    struct pcibus_attach_args *);
+static void	gt_attach_hook(device_t, device_t, struct pcibus_attach_args *);
 static int	gt_bus_maxdevs(void *, int);
 static pcitag_t	gt_make_tag(void *, int, int, int);
 static void	gt_decompose_tag(void *, pcitag_t, int *, int *, int *);
@@ -80,34 +81,27 @@ gt_pci_init(pci_chipset_tag_t pc, struct gt_config *mcp)
 }
 
 static void
-gt_attach_hook(struct device *parent, struct device *self,
-    struct pcibus_attach_args *pba)
+gt_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 
 	/* Nothing to do... */
 }
 
-static int	gt_match(struct device *, struct cfdata *, void *);
-static void	gt_attach(struct device *, struct device *, void *);
+static int	gt_match(device_t, cfdata_t, void *);
+static void	gt_attach(device_t, device_t, void *);
 static int	gt_print(void *aux, const char *pnp);
 
-CFATTACH_DECL(gt, sizeof(struct device),
+CFATTACH_DECL_NEW(gt, 0,
     gt_match, gt_attach, NULL, NULL);
 
 static int
-gt_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+gt_match(device_t parent, cfdata_t match, void *aux)
 {
 	return 1;
 }
 
 static void
-gt_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+gt_attach(device_t parent, device_t self, void *aux)
 {
 	struct malta_config *mcp = &malta_configuration;
 	struct pcibus_attach_args pba;
@@ -115,7 +109,7 @@ gt_attach(parent, self, aux)
 	printf("\n");
 
 #if NPCI > 0
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 	pba.pba_iot = &mcp->mc_iot;
@@ -129,9 +123,7 @@ gt_attach(parent, self, aux)
 }
 
 static int
-gt_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+gt_print(void *aux, const char *pnp)
 {
 	/* XXX */
 	return 0;
@@ -172,6 +164,9 @@ gt_conf_read(void *v, pcitag_t tag, int offset)
 	pcireg_t data;
 	int bus, dev, func, s;
 
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return ((pcireg_t) -1);
+
 	gt_decompose_tag(NULL /* XXX */, tag, &bus, &dev, &func);
 
 	/* The galileo has problems accessing device 31. */
@@ -203,6 +198,9 @@ static void
 gt_conf_write(void *v, pcitag_t tag, int offset, pcireg_t data)
 {
 	int bus, dev, func, s;
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return;
 
 	gt_decompose_tag(NULL /* XXX */, tag, &bus, &dev, &func);
 

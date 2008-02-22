@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_irq.S,v 1.10 2008/01/06 03:45:27 matt Exp $	*/
+/*	$NetBSD: ofw_irq.S,v 1.15 2013/12/02 18:36:10 joerg Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -40,9 +40,9 @@
  */
 
 #include "assym.h"
-#include <machine/asm.h>
-#include <machine/cpu.h>
-#include <machine/frame.h>
+#include <arm/asm.h>
+#include <arm/locore.h>
+
 #include <machine/irqhandler.h>
 
 	.text
@@ -75,12 +75,6 @@
 Ldisabled_mask:
 	.word	_C_LABEL(disabled_mask)
 
-Lcurrent_spl_level:	
-	.word	_C_LABEL(current_spl_level)
-
-Lcurrent_intr_depth:
-	.word	_C_LABEL(cpu_info_store) + CI_IDEPTH
-
 Lspl_masks:
 	.word	_C_LABEL(spl_masks)
 
@@ -100,8 +94,10 @@ AST_ALIGNMENT_FAULT_LOCALS
 /*
  * Regsister usage
  *
+ *  r4	- Address of cpu_info (on entry)
+ *  r5  - Pointer to handler pointer list
  *  r6  - Address of current handler
- *  r7  - Pointer to handler pointer list
+ *  r7  - pspr mode (must be preserved)
  *  r8  - Current IRQ requests.
  *  r9  - Used to count through possible IRQ bits.
  *  r10 - Base address of IOMD
@@ -169,13 +165,13 @@ ASENTRY_NP(irq_entry)
 	PUSHFRAMEINSVC			/* Push an interrupt frame */
 
 	/*
-	 *  Can't field this interrupt now if priority is _SPL_CLOCK
+	 *  Can't field this interrupt now if priority is IPL_CLOCK
 	 *  or higher.  For now, we'll just ignore the interrupt.
 	 *  Soon, we will have to schedule it for later action.
 	 */
 	ldr	r0, Lcurrent_spl_level
-	ldr	r0, [r0]
-	cmp	r0, #_SPL_CLOCK
+	ldr	r0, [r4, #CI_CPL]
+	cmp	r0, #IPL_CLOCK
 	blt	ofwtakeint
 
 	PULLFRAMEFROMSVCANDEXIT
@@ -204,10 +200,9 @@ ofwtakeint:
 	 * each time the interrupt handler is nested.
 	 */
 
-	ldr	r0, Lcurrent_intr_depth
-	ldr	r1, [r0]
+	ldr	r1, [r4, #CI_INTR_DEPTH]
 	add	r1, r1, #1
-	str	r1, [r0]
+	str	r1, [r4, #CI_INTR_DEPTH]
 
 	/* Block the current requested interrupts */
 	ldr	r1, Ldisabled_mask
@@ -228,36 +223,36 @@ ofwtakeint:
 	 * This would benefit from a special ffs type routine
 	 */
 
-	mov	r9, #(_SPL_LEVELS - 1)
-	ldr	r7, Lspl_masks
+	mov	r9, #(NIPL - 1)
+	ldr	r5, Lspl_masks
 
 Lfind_highest_ipl:
-	ldr	r2, [r7, r9, lsl #2]
+	ldr	r2, [r5, r9, lsl #2]
 	tst	r8, r2
 	subeq	r9, r9, #1
 	beq	Lfind_highest_ipl
 
 	/* r9 = SPL level of highest priority interrupt */
 	add	r9, r9, #1
-	ldr	r2, [r7, r9, lsl #2]
+	ldr	r2, [r5, r9, lsl #2]
 	mvn	r2, r2
 	orr	r0, r0, r2
 
 	str	r0, [r1]	
 
 	ldr	r0, Lcurrent_spl_level
-	ldr	r1, [r0]
-	str	r9, [r0]
+	ldr	r1, [r4, #CI_CPL]
+	str	r9, [r4, #CI_CPL]
 	stmfd	sp!, {r1}
 
 	/* Update the irq masks */
 	bl	_C_LABEL(irq_setmasks)
 
-	mrs     r0, cpsr_all		/* Enable IRQ's */
+	mrs     r0, cpsr		/* Enable IRQ's */
 	bic	r0, r0, #I32_bit
 	msr	cpsr_all, r0
 
-	ldr	r7, Lirqhandlers
+	ldr	r5, Lirqhandlers
 	mov	r9, #0x00000001
 
 irqloop:
@@ -265,16 +260,23 @@ irqloop:
 	tst	r8, r9			/* Is a bit set ? */
 	beq	nextirq			/* No ? try next bit */
 
-	ldr	r6, [r7]		/* Get address of first handler structure */
+	ldr	r6, [r5]		/* Get address of first handler structure */
 
 	teq	r6, #0x00000000		/* Do we have a handler */
 	moveq	r0, r8			/* IRQ requests as arg 0 */
 	beq	_C_LABEL(stray_irqhandler) /* call special handler */
 
-	ldr	r0, Lcnt
-	ldr	r1, [r0, #(V_INTR)]
-	add	r1, r1, #0x00000001
-	str	r1, [r0, #(V_INTR)]
+	ldr	r1, [r4, #(CI_CC_NINTR)]
+	ldr	r2, [r4, #(CI_CC_NINTR+4)]
+#ifdef _ARMEL
+	adds	r1, r1, #0x00000001
+	adc	r2, r2, #0x00000000
+#else
+	adds	r2, r2, #0x00000001
+	adc	r1, r1, #0x00000000
+#endif
+	str	r1, [r4, #(CI_CC_NINTR)]
+	str	r2, [r4, #(CI_CC_NINTR+4)]
 
 irqchainloop:
 	ldr	r0, [r6, #(IH_ARG)]	/* Get argument pointer */
@@ -299,14 +301,13 @@ irqdone:
 	stmia   r3, {r1-r2}		/* store ev_count */
 
 nextirq:
-	add	r7, r7, #0x00000004	/* update pointer to handlers */
+	add	r5, r5, #0x00000004	/* update pointer to handlers */
 	mov	r9, r9, lsl #1		/* move on to next bit */
 	teq	r9, #(1 << 24)		/* done the last bit ? */
 	bne	irqloop			/* no - loop back. */
 
 	ldmfd	sp!, {r2}
-	ldr	r1, Lcurrent_spl_level
-	str	r2, [r1]
+	str	r2, [r4, #CI_CPL]
 
 	/* Restore previous disabled mask */
 	ldmfd	sp!, {r2}
@@ -317,15 +318,14 @@ nextirq:
 	bl	_C_LABEL(dosoftints)	/* Handle the soft interrupts */
 
 	/* Kill IRQ's in preparation for exit */
-	mrs     r0, cpsr_all
+	mrs     r0, cpsr
 	orr     r0, r0, #(I32_bit)
 	msr     cpsr_all, r0
 
 	/* Decrement the nest count */
-	ldr	r0, Lcurrent_intr_depth
-	ldr	r1, [r0]
+	ldr	r1, [r4, #CI_INTR_DEPTH]
 	sub	r1, r1, #1
-	str	r1, [r0]
+	str	r1, [r4, #CI_INTR_DEPTH]
 
 	LOCK_CAS_CHECK
 
@@ -341,9 +341,6 @@ ENTRY(irq_setmasks)
 	/* Do nothing */
 	mov	pc, lr
 
-
-Lcnt:
-	.word	_C_LABEL(uvmexp)
 
 Lirqhandlers:
 	.word	_C_LABEL(irqhandlers)	/* Pointer to array of irqhandlers */
@@ -449,7 +446,7 @@ _C_LABEL(dotickgrovelling):
 	str	r1, [r0, #0]			/* plug spsr */
 
 	/* Sneak into SVC mode to get sp and lr */
-	mrs	r3, cpsr_all
+	mrs	r3, cpsr
 	bic	r3, r3, #(PSR_MODE)
 	orr	r3, r3, #(PSR_SVC32_MODE)
 	msr	cpsr_all, r3

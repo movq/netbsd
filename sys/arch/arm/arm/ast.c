@@ -1,4 +1,4 @@
-/*	$NetBSD: ast.c,v 1.13 2007/11/05 20:43:01 ad Exp $	*/
+/*	$NetBSD: ast.c,v 1.30 2018/01/24 09:04:44 skrll Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe
@@ -41,44 +41,58 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ast.c,v 1.13 2007/11/05 20:43:01 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ast.c,v 1.30 2018/01/24 09:04:44 skrll Exp $");
 
 #include "opt_ddb.h"
 
 #include <sys/param.h>
+#include <sys/cpu.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/acct.h>
 #include <sys/systm.h>
+#include <sys/atomic.h>
 #include <sys/kernel.h>
 #include <sys/signal.h>
-#include <sys/vmmeter.h>
 #include <sys/userret.h>
+#include <sys/vmmeter.h>
 
-#include <machine/cpu.h>
-#include <machine/frame.h>
-
-#include <arm/cpufunc.h>
+#include <arm/locore.h>
 
 #include <uvm/uvm_extern.h>
-
-#ifdef acorn26
-#include <machine/machdep.h>
-#endif
 
 /*
  * Prototypes
  */
-void ast __P((struct trapframe *));
+void ast(struct trapframe *);
  
-int astpending;
-
 void
 userret(struct lwp *l)
 {
+#if defined(ARM_MMU_EXTENDED)
+	/*
+	 * If our ASID got released, access via TTBR0 will have been disabled.
+	 * So if it is disabled, activate the lwp again to get a new ASID.
+	 */
+#ifdef __HAVE_PREEMPTION
+	kpreempt_disable();
+#endif
+	KASSERTMSG(curcpu()->ci_pmap_cur == l->l_proc->p_vmspace->vm_map.pmap,
+	    "%p vs %p", curcpu()->ci_pmap_cur,
+	    l->l_proc->p_vmspace->vm_map.pmap);
+	if (__predict_false(armreg_ttbcr_read() & TTBCR_S_PD0)) {
+		pmap_activate(l);
+	}
+	KASSERT(!(armreg_ttbcr_read() & TTBCR_S_PD0));
+#ifdef __HAVE_PREEMPTION
+	kpreempt_enable();
+#endif
+#endif
 
 	/* Invoke MI userret code */
 	mi_userret(l);
+
+	KASSERT(VALID_R15_PSR(lwp_trapframe(l)->tf_pc,
+	    lwp_trapframe(l)->tf_spsr));
 }
 
 
@@ -91,39 +105,32 @@ userret(struct lwp *l)
 void
 ast(struct trapframe *tf)
 {
-	struct lwp *l = curlwp;
-	struct proc *p;
+	struct lwp * const l = curlwp;
 
-#ifdef acorn26
-	/* Enable interrupts if they were enabled before the trap. */
-	if ((tf->tf_r15 & R15_IRQ_DISABLE) == 0)
-		int_on();
-#else
 	/* Interrupts were restored by exception_exit. */
+
+	KASSERT(VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
+
+#ifdef __HAVE_PREEMPTION
+	kpreempt_disable();
 #endif
+	struct cpu_info * const ci = curcpu();
 
-	uvmexp.traps++;
-	uvmexp.softs++;
+	ci->ci_data.cpu_ntrap++;
 
-#ifdef DEBUG
-	if (l == NULL)
-		panic("ast: no curlwp!");
-	if (&l->l_addr->u_pcb == 0)
-		panic("ast: no pcb!");
-#endif	
-
-	p = l->l_proc;
+	KDASSERT(ci->ci_cpl == IPL_NONE);
+	const int want_resched = ci->ci_want_resched;
+#ifdef __HAVE_PREEMPTION
+	kpreempt_enable();
+#endif
 
 	if (l->l_pflag & LP_OWEUPC) {
 		l->l_pflag &= ~LP_OWEUPC;
-		ADDUPROF(p);
+		ADDUPROF(l);
 	}
 
 	/* Allow a forced task switch. */
-	if (curcpu()->ci_want_resched)
+	if (want_resched)
 		preempt();
-
 	userret(l);
 }
-
-/* End of ast.c */

@@ -1,4 +1,4 @@
-/*	$NetBSD: esmvar.h,v 1.15 2007/12/09 20:28:08 jmcneill Exp $	*/
+/*	$NetBSD: esmvar.h,v 1.18 2011/11/23 23:07:35 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Matt Fredette
@@ -150,10 +150,13 @@ struct esm_chinfo {
 };
 
 struct esm_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
+	kmutex_t		sc_lock;
+	kmutex_t		sc_intr_lock;
 
 	bus_space_tag_t		st;
 	bus_space_handle_t	sh;
+	bus_size_t		sz;
 
 	pcitag_t		tag;
 	pci_chipset_tag_t	pc;
@@ -217,17 +220,11 @@ int	esm_set_params(void *, int, int, audio_params_t *, audio_params_t *,
 int	esm_set_port(void *, mixer_ctrl_t *);
 int	esm_get_port(void *, mixer_ctrl_t *);
 int	esm_query_devinfo(void *, mixer_devinfo_t *);
-void	*esm_malloc(void *, int, size_t, struct malloc_type *, int);
-void	esm_free(void *, void *, struct malloc_type *);
+void	*esm_malloc(void *, int, size_t);
+void	esm_free(void *, void *, size_t);
 size_t	esm_round_buffersize(void *, int, size_t);
 paddr_t	esm_mappage(void *, void *, off_t, int);
 int	esm_get_props(void *);
-
-int	esm_match(struct device *, struct cfdata *, void *);
-void	esm_attach(struct device *, struct device *, void *);
-int	esm_intr(void *);
-
-int	esm_allocmem(struct esm_softc *, size_t, size_t,
-	    struct esm_dma *);
+void	esm_get_locks(void *, kmutex_t **, kmutex_t **);
 
 enum esm_quirk_flags	esm_get_quirks(pcireg_t);

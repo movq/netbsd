@@ -1,4 +1,4 @@
-/*	$NetBSD: dd.c,v 1.40 2007/04/29 20:23:34 msaitoh Exp $	*/
+/*	$NetBSD: dd.c,v 1.51 2016/09/05 01:00:07 sevan Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -35,15 +35,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)dd.c	8.5 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: dd.c,v 1.40 2007/04/29 20:23:34 msaitoh Exp $");
+__RCSID("$NetBSD: dd.c,v 1.51 2016/09/05 01:00:07 sevan Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,6 +57,7 @@ __RCSID("$NetBSD: dd.c,v 1.40 2007/04/29 20:23:34 msaitoh Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,10 +70,8 @@ __RCSID("$NetBSD: dd.c,v 1.40 2007/04/29 20:23:34 msaitoh Exp $");
 static void dd_close(void);
 static void dd_in(void);
 static void getfdtype(IO *);
-static int redup_clean_fd(int);
+static void redup_clean_fd(IO *);
 static void setup(void);
-
-int main(int, char *[]);
 
 IO		in, out;		/* input/output state */
 STAT		st;			/* statistics */
@@ -80,16 +79,44 @@ void		(*cfunc)(void);		/* conversion function */
 uint64_t	cpy_cnt;		/* # of blocks to copy */
 static off_t	pending = 0;		/* pending seek if sparse */
 u_int		ddflags;		/* conversion options */
+#ifdef NO_IOFLAG
+#define		iflag	O_RDONLY
+#define		oflag	O_CREAT
+#else
+u_int		iflag = O_RDONLY;	/* open(2) flags for input file */
+u_int		oflag = O_CREAT;	/* open(2) flags for output file */
+#endif /* NO_IOFLAG */
 uint64_t	cbsz;			/* conversion block size */
 u_int		files_cnt = 1;		/* # of files to copy */
 uint64_t	progress = 0;		/* display sign of life */
 const u_char	*ctab;			/* conversion table */
 sigset_t	infoset;		/* a set blocking SIGINFO */
+const char	*msgfmt = "posix";	/* default summary() message format */
+
+/*
+ * Ops for stdin/stdout and crunch'd dd.  These are always host ops.
+ */
+static const struct ddfops ddfops_stdfd = {
+	.op_open = open,
+	.op_close = close,
+	.op_fcntl = fcntl,
+	.op_ioctl = ioctl,
+	.op_fstat = fstat,
+	.op_fsync = fsync,
+	.op_ftruncate = ftruncate,
+	.op_lseek = lseek,
+	.op_read = read,
+	.op_write = write,
+};
+extern const struct ddfops ddfops_prog;
 
 int
 main(int argc, char *argv[])
 {
 	int ch;
+
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
 
 	while ((ch = getopt(argc, argv, "")) != -1) {
 		switch (ch) {
@@ -102,6 +129,10 @@ main(int argc, char *argv[])
 	argv += (optind - 1);
 
 	jcl(argv);
+#ifndef CRUNCHOPS
+	if (ddfops_prog.op_init && ddfops_prog.op_init() == -1)
+		err(1, "prog init");
+#endif
 	setup();
 
 	(void)signal(SIGINFO, summaryx);
@@ -122,18 +153,25 @@ main(int argc, char *argv[])
 static void
 setup(void)
 {
+#ifdef CRUNCHOPS
+	const struct ddfops *prog_ops = &ddfops_stdfd;
+#else
+	const struct ddfops *prog_ops = &ddfops_prog;
+#endif
 
 	if (in.name == NULL) {
 		in.name = "stdin";
 		in.fd = STDIN_FILENO;
+		in.ops = &ddfops_stdfd;
 	} else {
-		in.fd = open(in.name, O_RDONLY, 0);
+		in.ops = prog_ops;
+		in.fd = ddop_open(in, in.name, iflag, 0);
 		if (in.fd < 0)
 			err(EXIT_FAILURE, "%s", in.name);
 			/* NOTREACHED */
 
 		/* Ensure in.fd is outside the stdio descriptor range */
-		in.fd = redup_clean_fd(in.fd);
+		redup_clean_fd(&in);
 	}
 
 	getfdtype(&in);
@@ -147,17 +185,33 @@ setup(void)
 		/* No way to check for read access here. */
 		out.fd = STDOUT_FILENO;
 		out.name = "stdout";
+		out.ops = &ddfops_stdfd;
 	} else {
+		out.ops = prog_ops;
+
+#ifndef NO_IOFLAG
+		if ((oflag & O_TRUNC) && (ddflags & C_SEEK)) {
+			errx(EXIT_FAILURE, "oflag=trunc is incompatible "
+			     "with seek or oseek operands, giving up.");
+			/* NOTREACHED */
+		}
+		if ((oflag & O_TRUNC) && (ddflags & C_NOTRUNC)) {
+			errx(EXIT_FAILURE, "oflag=trunc is incompatible "
+			     "with conv=notrunc operand, giving up.");
+			/* NOTREACHED */
+		}
+#endif /* NO_IOFLAG */
 #define	OFLAGS \
-    (O_CREAT | (ddflags & (C_SEEK | C_NOTRUNC) ? 0 : O_TRUNC))
-		out.fd = open(out.name, O_RDWR | OFLAGS, DEFFILEMODE);
+    (oflag | (ddflags & (C_SEEK | C_NOTRUNC) ? 0 : O_TRUNC))
+		out.fd = ddop_open(out, out.name, O_RDWR | OFLAGS, DEFFILEMODE);
 		/*
 		 * May not have read access, so try again with write only.
 		 * Without read we may have a problem if output also does
 		 * not support seeks.
 		 */
 		if (out.fd < 0) {
-			out.fd = open(out.name, O_WRONLY | OFLAGS, DEFFILEMODE);
+			out.fd = ddop_open(out, out.name, O_WRONLY | OFLAGS,
+			    DEFFILEMODE);
 			out.flags |= NOREAD;
 		}
 		if (out.fd < 0) {
@@ -166,7 +220,7 @@ setup(void)
 		}
 
 		/* Ensure out.fd is outside the stdio descriptor range */
-		out.fd = redup_clean_fd(out.fd);
+		redup_clean_fd(&out);
 	}
 
 	getfdtype(&out);
@@ -176,7 +230,10 @@ setup(void)
 	 * record oriented I/O, only need a single buffer.
 	 */
 	if (!(ddflags & (C_BLOCK|C_UNBLOCK))) {
-		if ((in.db = malloc(out.dbsz + in.dbsz - 1)) == NULL) {
+		size_t dbsz = out.dbsz;
+		if (!(ddflags & C_BS))
+			dbsz += in.dbsz - 1;
+		if ((in.db = malloc(dbsz)) == NULL) {
 			err(EXIT_FAILURE, NULL);
 			/* NOTREACHED */
 		}
@@ -201,7 +258,7 @@ setup(void)
 	 * kinds of output files, tapes, for example.
 	 */
 	if ((ddflags & (C_OF | C_SEEK | C_NOTRUNC)) == (C_OF | C_SEEK))
-		(void)ftruncate(out.fd, (off_t)out.offset * out.dbsz);
+		(void)ddop_ftruncate(out, out.fd, (off_t)out.offset * out.dbsz);
 
 	/*
 	 * If converting case at the same time as another conversion, build a
@@ -247,13 +304,15 @@ getfdtype(IO *io)
 	struct mtget mt;
 	struct stat sb;
 
-	if (fstat(io->fd, &sb)) {
+	if (io->ops->op_fstat(io->fd, &sb)) {
 		err(EXIT_FAILURE, "%s", io->name);
 		/* NOTREACHED */
 	}
 	if (S_ISCHR(sb.st_mode))
-		io->flags |= ioctl(io->fd, MTIOCGET, &mt) ? ISCHR : ISTAPE;
-	else if (lseek(io->fd, (off_t)0, SEEK_CUR) == -1 && errno == ESPIPE)
+		io->flags |= io->ops->op_ioctl(io->fd, MTIOCGET, &mt)
+		    ? ISCHR : ISTAPE;
+	else if (io->ops->op_lseek(io->fd, (off_t)0, SEEK_CUR) == -1
+	    && errno == ESPIPE)
 		io->flags |= ISPIPE;		/* XXX fixed in 4.4BSD */
 }
 
@@ -263,29 +322,29 @@ getfdtype(IO *io)
  * accidentally outputting completion or error messages into the
  * output file that were intended for the tty.
  */
-static int
-redup_clean_fd(int fd)
+static void
+redup_clean_fd(IO *io)
 {
+	int fd = io->fd;
 	int newfd;
 
 	if (fd != STDIN_FILENO && fd != STDOUT_FILENO &&
 	    fd != STDERR_FILENO)
 		/* File descriptor is ok, return immediately. */
-		return fd;
+		return;
 
 	/*
 	 * 3 is the first descriptor greater than STD*_FILENO.  Any
 	 * free descriptor valued 3 or above is acceptable...
 	 */
-	newfd = fcntl(fd, F_DUPFD, 3);
+	newfd = io->ops->op_fcntl(fd, F_DUPFD, 3);
 	if (newfd < 0) {
 		err(EXIT_FAILURE, "dupfd IO");
 		/* NOTREACHED */
 	}
 
-	close(fd);
-
-	return newfd;
+	io->ops->op_close(fd);
+	io->fd = newfd;
 }
 
 static void
@@ -312,7 +371,7 @@ dd_in(void)
 				(void)memset(in.dbp, 0, in.dbsz);
 		}
 
-		n = read(in.fd, in.dbp, in.dbsz);
+		n = ddop_read(in, in.fd, in.dbp, in.dbsz);
 		if (n == 0) {
 			in.dbrcnt = 0;
 			return;
@@ -339,7 +398,7 @@ dd_in(void)
 			 * in sector size chunks.
 			 */
 			if (!(in.flags & (ISPIPE|ISTAPE)) &&
-			    lseek(in.fd, (off_t)in.dbsz, SEEK_CUR))
+			    ddop_lseek(in, in.fd, (off_t)in.dbsz, SEEK_CUR))
 				warn("%s", in.name);
 
 			/* If sync not specified, omit block and continue. */
@@ -351,7 +410,7 @@ dd_in(void)
 			++st.in_full;
 
 		/* Handle full input blocks. */
-		} else if (n == in.dbsz) {
+		} else if ((uint64_t)n == in.dbsz) {
 			in.dbcnt += in.dbrcnt = n;
 			++st.in_full;
 
@@ -421,17 +480,18 @@ dd_close(void)
 		dd_out(1);
 
 	/*
-	 * Reporting nfs write error may be defered until next
+	 * Reporting nfs write error may be deferred until next
 	 * write(2) or close(2) system call.  So, we need to do an
 	 * extra check.  If an output is stdout, the file structure
-	 * may be shared among with other processes and close(2) just
+	 * may be shared with other processes and close(2) just
 	 * decreases the reference count.
 	 */
-	if (out.fd == STDOUT_FILENO && fsync(out.fd) == -1 && errno != EINVAL) {
+	if (out.fd == STDOUT_FILENO && ddop_fsync(out, out.fd) == -1
+	    && errno != EINVAL) {
 		err(EXIT_FAILURE, "fsync stdout");
 		/* NOTREACHED */
 	}
-	if (close(out.fd) == -1) {
+	if (ddop_close(out, out.fd) == -1) {
 		err(EXIT_FAILURE, "close");
 		/* NOTREACHED */
 	}
@@ -480,12 +540,12 @@ dd_out(int force)
 				}
 			}
 			if (pending != 0) {
-				if (lseek(out.fd, pending, SEEK_CUR) ==
-				    -1)
+				if (ddop_lseek(out,
+				    out.fd, pending, SEEK_CUR) == -1)
 					err(EXIT_FAILURE, "%s: seek error creating sparse file",
 					    out.name);
 			}
-			nw = bwrite(out.fd, outp, cnt);
+			nw = bwrite(&out, outp, cnt);
 			if (nw <= 0) {
 				if (nw == 0)
 					errx(EXIT_FAILURE,
@@ -505,7 +565,7 @@ dd_out(int force)
 			outp += nw;
 			st.bytes += nw;
 			if (nw == n) {
-				if (n != out.dbsz)
+				if ((uint64_t)n != out.dbsz)
 					++st.out_part;
 				else
 					++st.out_full;
@@ -541,14 +601,14 @@ dd_out(int force)
  * A protected against SIGINFO write
  */
 ssize_t
-bwrite(int fd, const void *buf, size_t len)
+bwrite(IO *io, const void *buf, size_t len)
 {
 	sigset_t oset;
 	ssize_t rv;
 	int oerrno;
 
 	(void)sigprocmask(SIG_BLOCK, &infoset, &oset);
-	rv = write(fd, buf, len);
+	rv = io->ops->op_write(io->fd, buf, len);
 	oerrno = errno;
 	(void)sigprocmask(SIG_SETMASK, &oset, NULL);
 	errno = oerrno;

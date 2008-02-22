@@ -1,4 +1,4 @@
-/*	$NetBSD: supmsg.c,v 1.15 2006/12/20 16:33:35 christos Exp $	*/
+/*	$NetBSD: supmsg.c,v 1.18 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -80,7 +80,7 @@ msgsignon(void)
 {
 	int x;
 
-	if (server) {
+	if (isserver) {
 		x = readmsg(MSGSIGNON);
 		if (x == SCMOK)
 			x = readint(&protver);
@@ -109,7 +109,7 @@ msgsignonack(void)
 {
 	int x;
 
-	if (server) {
+	if (isserver) {
 		x = writemsg(MSGSIGNONACK);
 		if (x == SCMOK)
 			x = writeint(PROTOVERSION);
@@ -156,7 +156,7 @@ msgsetup(void)
 {
 	int x;
 
-	if (server) {
+	if (isserver) {
 		x = readmsg(MSGSETUP);
 		if (x != SCMOK)
 			return (x);
@@ -187,7 +187,7 @@ msgsetup(void)
 			x = readint(&newonly);
 		if (x == SCMOK) {
 			if (protver < 6)
-				release = (char *) NULL;
+				release = NULL;
 			else
 				x = readstring(&release);
 		}
@@ -233,7 +233,7 @@ msgsetup(void)
 int 
 msgsetupack(void)
 {
-	if (server)
+	if (isserver)
 		return (writemint(MSGSETUPACK, setupack));
 	return (readmint(MSGSETUPACK, &setupack));
 }
@@ -245,7 +245,7 @@ extern char *crypttest;		/* encryption test string */
 int 
 msgcrypt(void)
 {
-	if (server)
+	if (isserver)
 		return (readmstr(MSGCRYPT, &crypttest));
 	return (writemstr(MSGCRYPT, crypttest));
 }
@@ -253,7 +253,7 @@ msgcrypt(void)
 int 
 msgcryptok(void)
 {
-	if (server)
+	if (isserver)
 		return (writemnull(MSGCRYPTOK));
 	return (readmnull(MSGCRYPTOK));
 }
@@ -270,7 +270,7 @@ int
 msglogin(void)
 {
 	int x;
-	if (server) {
+	if (isserver) {
 		x = readmsg(MSGLOGIN);
 		if (x == SCMOK)
 			x = readstring(&logcrypt);
@@ -298,7 +298,7 @@ int
 msglogack(void)
 {
 	int x;
-	if (server) {
+	if (isserver) {
 		x = writemsg(MSGLOGACK);
 		if (x == SCMOK)
 			x = writeint(logack);
@@ -323,6 +323,7 @@ msglogack(void)
 extern TREE *refuseT;		/* tree of files to refuse */
 
 static int 
+/*ARGSUSED*/
 refuseone(TREE * t, void *v __unused)
 {
 	return (writestring(t->Tname));
@@ -332,7 +333,7 @@ int
 msgrefuse(void)
 {
 	int x;
-	if (server) {
+	if (isserver) {
 		char *name;
 		x = readmsg(MSGREFUSE);
 		if (x == SCMOK)
@@ -352,7 +353,7 @@ msgrefuse(void)
 		if (x == SCMOK)
 			x = Tprocess(refuseT, refuseone, NULL);
 		if (x == SCMOK)
-			x = writestring((char *) NULL);
+			x = writestring(NULL);
 		if (x == SCMOK)
 			x = writemend();
 	}
@@ -365,6 +366,7 @@ extern TREE *listT;		/* tree of files to list */
 extern time_t scantime;		/* time that collection was scanned */
 
 static int 
+/*ARGSUSED*/
 listone(TREE * t, void *v __unused)
 {
 	int x;
@@ -383,12 +385,12 @@ int
 msglist(void)
 {
 	int x;
-	if (server) {
+	if (isserver) {
 		x = writemsg(MSGLIST);
 		if (x == SCMOK)
 			x = Tprocess(listT, listone, NULL);
 		if (x == SCMOK)
-			x = writestring((char *) NULL);
+			x = writestring(NULL);
 		if (x == SCMOK)
 			x = writeint((int) scantime);
 		if (x == SCMOK)
@@ -430,6 +432,7 @@ msglist(void)
 extern TREE *needT;		/* tree of files to need */
 
 static int 
+/*ARGSUSED*/
 needone(TREE * t, void *v __unused)
 {
 	int x;
@@ -443,7 +446,7 @@ int
 msgneed(void)
 {
 	int x;
-	if (server) {
+	if (isserver) {
 		char *name;
 		int update;
 		TREE *t;
@@ -469,7 +472,7 @@ msgneed(void)
 		if (x == SCMOK)
 			x = Tprocess(needT, needone, NULL);
 		if (x == SCMOK)
-			x = writestring((char *) NULL);
+			x = writestring(NULL);
 		if (x == SCMOK)
 			x = writemend();
 	}
@@ -481,6 +484,7 @@ msgneed(void)
 extern TREE *denyT;		/* tree of files to deny */
 
 static int 
+/*ARGSUSED*/
 denyone(TREE * t, void *v __unused)
 {
 	return (writestring(t->Tname));
@@ -490,12 +494,12 @@ int
 msgdeny(void)
 {
 	int x;
-	if (server) {
+	if (isserver) {
 		x = writemsg(MSGDENY);
 		if (x == SCMOK)
 			x = Tprocess(denyT, denyone, NULL);
 		if (x == SCMOK)
-			x = writestring((char *) NULL);
+			x = writestring(NULL);
 		if (x == SCMOK)
 			x = writemend();
 	} else {
@@ -522,7 +526,7 @@ msgdeny(void)
 int 
 msgsend(void)
 {
-	if (server)
+	if (isserver)
 		return (readmnull(MSGSEND));
 	return (writemnull(MSGSEND));
 }
@@ -532,6 +536,7 @@ msgsend(void)
 extern TREE *upgradeT;		/* pointer to file being upgraded */
 
 static int 
+/*ARGSUSED*/
 writeone(TREE * t, void *v __unused)
 {
 	return (writestring(t->Tname));
@@ -546,11 +551,11 @@ msgrecv(int (*xferfile)(TREE *, va_list), ...)
 	TREE *t = upgradeT;
 
 	va_start(args, xferfile);
-	if (server) {
+	if (isserver) {
 		x = writemsg(MSGRECV);
 		if (t == NULL) {
 			if (x == SCMOK)
-				x = writestring((char *) NULL);
+				x = writestring(NULL);
 			if (x == SCMOK)
 				x = writemend();
 			va_end(args);
@@ -577,11 +582,11 @@ msgrecv(int (*xferfile)(TREE *, va_list), ...)
 		if (x == SCMOK)
 			x = Tprocess(t->Tlink, writeone, NULL);
 		if (x == SCMOK)
-			x = writestring((char *) NULL);
+			x = writestring(NULL);
 		if (x == SCMOK)
 			x = Tprocess(t->Texec, writeone, NULL);
 		if (x == SCMOK)
-			x = writestring((char *) NULL);
+			x = writestring(NULL);
 		if (x == SCMOK)
 			x = (*xferfile) (t, args);
 		if (x == SCMOK)
@@ -664,7 +669,7 @@ msgdone(void)
 		printf("Error, msgdone should not have been called.");
 		return (SCMERR);
 	}
-	if (server) {
+	if (isserver) {
 		x = readmsg(MSGDONE);
 		if (x == SCMOK)
 			x = readint(&doneack);
@@ -705,7 +710,7 @@ msgxpatch(void)
 	int x;
 	int i;
 
-	if (server) {
+	if (isserver) {
 		x = readmsg(MSGXPATCH);
 		if (x != SCMOK)
 			return (x);
@@ -746,7 +751,7 @@ extern int docompress;		/* Compress file before sending? */
 int 
 msgcompress(void)
 {
-	if (server)
+	if (isserver)
 		return (readmint(MSGCOMPRESS, &docompress));
 	return (writemint(MSGCOMPRESS, docompress));
 }

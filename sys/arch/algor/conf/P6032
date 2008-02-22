@@ -1,4 +1,4 @@
-#	$NetBSD: P6032,v 1.45 2008/01/09 15:45:27 tsutsui Exp $
+#	$NetBSD: P6032,v 1.76 2017/09/14 07:58:38 mrg Exp $
 #
 # Algorithmics P-6032 kernel.
 #
@@ -7,7 +7,7 @@ include	"arch/algor/conf/std.algor"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"P6032-$Revision: 1.45 $"
+#ident 		"P6032-$Revision: 1.76 $"
 
 maxusers 32
 
@@ -23,9 +23,10 @@ options 	NTP			# kernel PLL for NTP
 # Diagnostic/debugging support options
 options 	DIAGNOSTIC		# Cheap kernel consistency checks
 options 	DDB			# kernel debugger
+pseudo-device	ksyms
 makeoptions	DEBUG="-g"
 #makeoptions	DEBUGLIST="pattern1 pattern2 ..."
-options 	SYMTAB_SPACE=350000
+makeoptions	COPY_SYMTAB=1
 
 # File systems
 file-system	FFS		# Fast file system
@@ -41,33 +42,22 @@ file-system	PTYFS		# /dev/pts/N support
 
 # File system options
 options 	NFSSERVER	# Sun NFS-compatible file system server
-#options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+#options 	FFS_EI		# FFS Endian Independent support
+options 	WAPBL		# File system journaling support
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
 options 	INET		# Internet protocol suite
 options 	INET6		# IPV6
 options 	IPSEC		# IP security
-options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
-options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 
-# 4.3BSD compatibility.  Should be optional, but necessary for now.
-options 	COMPAT_43
+# JIT compiler for bpfilter
+#options	SLJIT
+#options	BPFJIT
 
 # Binary compatibility with previous versions of NetBSD.
-#options 	COMPAT_09
-options 	COMPAT_10
-options 	COMPAT_11
-options 	COMPAT_12
-options 	COMPAT_13
-options 	COMPAT_14
-options 	COMPAT_15
-options 	COMPAT_16
-options 	COMPAT_20
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+include 	"conf/compat_netbsd10.config"
 
 # System V-like message queues
 options 	SYSVMSG
@@ -77,10 +67,8 @@ options 	SYSVSEM
 
 # System V-like shared memory
 options 	SYSVSHM
-#options 	SHMMAXPGS=1024		# 1024 pages is the default
 
 # Loadable Kernel Modules
-options 	LKM
 
 # Disable kernel security.
 #options 	INSECURE
@@ -102,6 +90,7 @@ options 	NFS_BOOT_DHCP		# superset of BOOTP
 
 # WS console uses SUN or VT100 terminal emulation
 #options 	WSEMUL_VT100
+#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 config		netbsd	root on ? type ?
 #config		netbsd	root on sd0 type ffs
@@ -219,7 +208,7 @@ mcclock* at	isa? port 0x70
 #pms*	at	pckbc?				# PS/2-style mouse (aux port)
 #attimer*	at	isa?			# AT Timer
 #pcppi*	at	isa?				# PC prog. periph. interface
-#spkr0	at	pcppi?				# IBM BASIC emulation
+#spkr*	at	pcppi?				# IBM BASIC emulation
 #isabeep0 at	pcppi?				# "keyboard" beep
 #midi*	at	pcppi?
 com*	at	isa? port 0x3f8 irq 4		# standard serial ports
@@ -246,6 +235,7 @@ fdc0	at	isa? port 0x3f0 irq 6 drq 2	# floppy controller
 #wss*	at	isa? port 0x530 irq 9 drq 0	# Windows Sound System
 #wss*	at	isapnp?
 #audio*	at	wss?
+#spkr*	at	audio?				# PC speaker (synthesized)
 #midi*	at	wss?
 #sb*	at	isa? port 0x220 irq 5 drq 1	# SoundBlaster
 #sb*	at	isapnp?
@@ -343,6 +333,9 @@ fd*	at	fdc? drive ?
 #umodem*	at uhub? port ? configuration ?
 #ucom*	at umodem?
 
+# Option N.V. Wireless WAN modems
+#uhso*	at uhub? port ? configuration ?
+
 # USB Mass Storage
 #umass*	at uhub? port ? configuration ? interface ?
 #atapibus* at umass?
@@ -379,14 +372,14 @@ fd*	at	fdc? drive ?
 #wsmouse*	at	pms?
 
 pseudo-device	bpfilter
-pseudo-device	ccd		4
-#pseudo-device	cgd		4	# cryptographic disk devices
-#pseudo-device	raid		4		# RAIDframe disk driver
+pseudo-device	ccd		
+#pseudo-device	cgd			# cryptographic disk devices
+#pseudo-device	raid			# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-#pseudo-device	fss		4	# file system snapshot device
-pseudo-device	ipfilter	1
-pseudo-device	loop		1
-pseudo-device	md		1
+#pseudo-device	fss			# file system snapshot device
+pseudo-device	ipfilter
+pseudo-device	loop		
+pseudo-device	md		
 pseudo-device	ppp		
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	sl		
@@ -396,7 +389,6 @@ pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith			# IPv[46] tcp relay translation i/f
 pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	vlan			# IEEE 802.1q encapsulation
-pseudo-device	sequencer	1	# MIDI sequencer
-pseudo-device	rnd			# /dev/random and in-kernel generator
+pseudo-device	sequencer		# MIDI sequencer
 #options 	RND_COM			# use "com" randomness too
 pseudo-device	clockctl		# user control of clock subsystem

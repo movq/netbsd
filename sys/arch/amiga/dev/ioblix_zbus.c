@@ -1,4 +1,4 @@
-/*	$NetBSD: ioblix_zbus.c,v 1.13 2005/12/11 12:16:28 christos Exp $ */
+/*	$NetBSD: ioblix_zbus.c,v 1.19 2012/10/27 17:17:29 chs Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,19 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ioblix_zbus.c,v 1.13 2005/12/11 12:16:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioblix_zbus.c,v 1.19 2012/10/27 17:17:29 chs Exp $");
 
 /* IOBlix Zorro driver */
 /* XXX to be done: we need to probe the com clock speed! */
 
 #include <sys/types.h>
 
-#include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/conf.h>
 #include <sys/systm.h>
 #include <sys/param.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <amiga/include/cpu.h>
 
@@ -59,27 +51,27 @@ __KERNEL_RCSID(0, "$NetBSD: ioblix_zbus.c,v 1.13 2005/12/11 12:16:28 christos Ex
 #include <amiga/dev/supio.h>
 #include <amiga/dev/zbusvar.h>
 
+#include "opt_iobzclock.h"
 
 struct iobz_softc {
-	struct device sc_dev;
 	struct bus_space_tag sc_bst;
 };
 
-int iobzmatch(struct device *, struct cfdata *, void *);
-void iobzattach(struct device *, struct device *, void *);
-int iobzprint(void *auxp, const char *);
+int iobzmatch(device_t, cfdata_t, void *);
+void iobzattach(device_t, device_t, void *);
+int iobzprint(void *, const char *);
 void iobz_shutdown(void *);
 
-CFATTACH_DECL(iobl_zbus, sizeof(struct iobz_softc),
+CFATTACH_DECL_NEW(iobl_zbus, sizeof(struct iobz_softc),
     iobzmatch, iobzattach, NULL, NULL);
 
 int
-iobzmatch(struct device *parent, struct cfdata *cfp, void *auxp)
+iobzmatch(device_t parent, cfdata_t cf, void *aux)
 {
 
 	struct zbus_args *zap;
 
-	zap = auxp;
+	zap = aux;
 
 	if (zap->manid != 4711)
 		return (0);
@@ -95,10 +87,10 @@ struct iobz_devs {
 	unsigned off;
 	int arg;
 } iobzdevices[] = {
-	{ "com", 0x100, 24000000 },	/* XXX see below */
-	{ "com", 0x108, 24000000 },
-	{ "com", 0x110, 24000000 },
+	{ "com", 0x108, 24000000 },	/* XXX see below */
+	{ "com", 0x100, 24000000 },
 	{ "com", 0x118, 24000000 },
+	{ "com", 0x110, 24000000 },
 	{ "lpt", 0x200, 0 },
 	{ "lpt", 0x300, 0 },
 	{ 0, 0, 0}
@@ -110,7 +102,7 @@ struct iobz_devs {
 int iobzclock = IOBZCLOCK;		/* patchable! */
 
 void
-iobzattach(struct device *parent, struct device *self, void *auxp)
+iobzattach(device_t parent, device_t self, void *aux)
 {
 	struct iobz_softc *iobzsc;
 	struct iobz_devs  *iobzd;
@@ -120,8 +112,8 @@ iobzattach(struct device *parent, struct device *self, void *auxp)
 	volatile u_int8_t *p;
 
 
-	iobzsc = (struct iobz_softc *)self;
-	zap = auxp;
+	iobzsc = device_private(self);
+	zap = aux;
 
 	if (parent)
 		printf("\n");
@@ -137,7 +129,7 @@ iobzattach(struct device *parent, struct device *self, void *auxp)
 	while (iobzd->name) {
 		supa.supio_name = iobzd->name;
 		supa.supio_iobase = iobzd->off;
-		supa.supio_arg = iobzclock /* XXX iobzd->arg */;
+		supa.supio_arg = iobzd->arg ? iobzclock : 0 /* XXX iobzd->arg */;
 		config_found(self, &supa, iobzprint); /* XXX */
 		++iobzd;
 	}
@@ -148,10 +140,10 @@ iobzattach(struct device *parent, struct device *self, void *auxp)
 }
 
 int
-iobzprint(void *auxp, const char *pnp)
+iobzprint(void *aux, const char *pnp)
 {
 	struct supio_attach_args *supa;
-	supa = auxp;
+	supa = aux;
 
 	if (pnp == NULL)
 		return(QUIET);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ttext2.c,v 1.8 2005/07/01 01:12:39 jmc Exp $	*/
+/*	$NetBSD: ttext2.c,v 1.10 2013/10/19 17:23:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)ttext2.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: ttext2.c,v 1.8 2005/07/01 01:12:39 jmc Exp $");
+__RCSID("$NetBSD: ttext2.c,v 1.10 2013/10/19 17:23:08 christos Exp $");
 #endif
 #endif				/* not lint */
 
@@ -127,16 +127,14 @@ const char   *const lastch[] = {
 
 
 int
-text(const char *const *txt)
+wrtext(const char *const *txt)
 {
-	const char  *const *begin;
 	const char   *a;
 	char    b;
 	const char   *c;
 	int     i;
 
 	fixtty(&noech);
-	begin = txt;
 	while (*txt) {
 		a = *(txt++);
 		if (*a != '\0') {
@@ -157,7 +155,7 @@ text(const char *const *txt)
 							clear();
 					} else
 						writec('\n');
-					text(list);
+					wrtext(list);
 					writel(prompt);
 					continue;
 				}
@@ -187,7 +185,6 @@ text(const char *const *txt)
 			fixtty(&noech);
 			if (tflag)
 				curmove(curr, 0);
-			begin = txt;
 		}
 	}
 	fixtty(&raw);

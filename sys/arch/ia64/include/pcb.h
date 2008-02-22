@@ -1,4 +1,4 @@
-/*	$NetBSD: pcb.h,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
+/*	$NetBSD: pcb.h,v 1.3 2017/04/08 18:04:34 scole Exp $	*/
 
 /*-
  * Copyright (c) 2003,2004 Marcel Moolenaar
@@ -45,7 +45,7 @@ struct pcb {
 	struct _callee_saved_fp	pcb_preserved_fp;
 	struct _high_fp		pcb_high_fp;
 	struct pcpu		*pcb_fpcpu;
-	struct simplelock	pcb_fpcpu_slock;
+	kmutex_t		pcb_fpcpu_slock;
 
 
 	/* IA32 specific registers. */
@@ -67,8 +67,9 @@ struct pcb {
 struct trapframe;
 
 void makectx(struct trapframe *, struct pcb *);
-/*void restorectx(struct pcb *) __dead2;*/
-int swapctx(struct pcb *old, struct pcb *new);
+/* XXX not sure about the attributes, for now use equivalent to freebsd */
+void restorectx(struct pcb *) __attribute__ ((__noreturn__)); /* same as __dead2? */
+int swapctx(struct pcb *old, struct pcb *new) __returns_twice;
 
 void ia32_restorectx(struct pcb *);
 void ia32_savectx(struct pcb *);

@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_sockio.c,v 1.33 2007/12/08 18:36:26 dsl Exp $	 */
+/*	$NetBSD: svr4_sockio.c,v 1.39 2016/07/20 07:37:51 ozaki-r Exp $	 */
 
 /*-
- * Copyright (c) 1995 The NetBSD Foundation, Inc.
+ * Copyright (c) 1995, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.33 2007/12/08 18:36:26 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.39 2016/07/20 07:37:51 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -50,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.33 2007/12/08 18:36:26 dsl Exp $")
 #include <sys/socket.h>
 #include <sys/mount.h>
 #include <net/if.h>
-#include <sys/malloc.h>
 
 #include <sys/syscallargs.h>
 
@@ -95,20 +87,21 @@ svr4_count_ifnum(struct ifnet *ifp)
 {
 	struct ifaddr *ifa;
 	int ifnum = 0;
+	int s = pserialize_read_enter();
 
-	IFADDR_FOREACH(ifa, ifp)
+	IFADDR_READER_FOREACH(ifa, ifp)
 		ifnum++;
 
+	pserialize_read_exit(s);
 	return MAX(1, ifnum);
 }
 
 int
-svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
+svr4_sock_ioctl(file_t *fp, struct lwp *l, register_t *retval,
     int fd, u_long cmd, void *data)
 {
 	int error;
-	int (*ctl)(struct file *, u_long,  void *, struct lwp *) =
-			fp->f_ops->fo_ioctl;
+	int (*ctl)(file_t *, u_long,  void *) = fp->f_ops->fo_ioctl;
 
 	*retval = 0;
 
@@ -117,6 +110,7 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 		{
 			struct ifnet *ifp;
 			struct svr4_lifnum lifnum;
+			int s;
 
 			error = copyin(data, &lifnum, sizeof(lifnum));
 			if (error)
@@ -124,8 +118,10 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 
 			lifnum.lifn_count = 0;
 			/* XXX: We don't pay attention to family or flags */
-			IFNET_FOREACH(ifp)
+			s = pserialize_read_enter();
+			IFNET_READER_FOREACH(ifp)
 				lifnum.lifn_count += svr4_count_ifnum(ifp);
+			pserialize_read_exit(s);
 
 			DPRINTF(("SIOCGLIFNUM [family=%d,flags=%d,count=%d]\n",
 			    lifnum.lifn_family, lifnum.lifn_flags,
@@ -137,6 +133,7 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 		{
 			struct ifnet *ifp;
 			int ifnum = 0;
+			int s;
 
 			/*
 			 * This does not return the number of physical
@@ -150,8 +147,10 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 			 * entry per physical interface?
 			 */
 
-			IFNET_FOREACH(ifp)
+			s = pserialize_read_enter();
+			IFNET_READER_FOREACH(ifp)
 				ifnum += svr4_count_ifnum(ifp);
+			pserialize_read_exit(s);
 
 			DPRINTF(("SIOCGIFNUM %d\n", ifnum));
 			return copyout(&ifnum, data, sizeof(ifnum));
@@ -168,8 +167,7 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 			(void) strncpy(br.ifr_name, sr.svr4_ifr_name,
 			    sizeof(br.ifr_name));
 
-			if ((error = (*ctl)(fp, SIOCGIFFLAGS,
-					    (void *) &br, l)) != 0) {
+			if ((error = (*ctl)(fp, SIOCGIFFLAGS, &br)) != 0) {
 				DPRINTF(("SIOCGIFFLAGS %s: error %d\n",
 					 sr.svr4_ifr_name, error));
 				return error;
@@ -193,8 +191,7 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 				(unsigned long)sizeof(struct svr4_ifreq),
 				sc.svr4_ifc_len));
 
-			if ((error = (*ctl)(fp, OOSIOCGIFCONF,
-					    (void *) &sc, l)) != 0)
+			if ((error = (*ctl)(fp, OOSIOCGIFCONF, &sc)) != 0)
 				return error;
 
 			DPRINTF(("SIOCGIFCONF\n"));

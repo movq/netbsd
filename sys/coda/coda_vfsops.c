@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_vfsops.c,v 1.64 2008/01/28 14:31:15 dholland Exp $	*/
+/*	$NetBSD: coda_vfsops.c,v 1.86 2017/04/04 07:36:38 hannken Exp $	*/
 
 /*
  *
@@ -45,13 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.64 2008/01/28 14:31:15 dholland Exp $");
-
-#ifdef	_LKM
-#define	NVCODA 4
-#else
-#include <vcoda.h>
-#endif
+__KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.86 2017/04/04 07:36:38 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.64 2008/01/28 14:31:15 dholland Ex
 #include <sys/proc.h>
 #include <sys/select.h>
 #include <sys/kauth.h>
+#include <sys/module.h>
 
 #include <coda/coda.h>
 #include <coda/cnode.h>
@@ -74,16 +69,13 @@ __KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.64 2008/01/28 14:31:15 dholland Ex
 /* for VN_RDEV */
 #include <miscfs/specfs/specdev.h>
 #include <miscfs/genfs/genfs.h>
+ 
+MODULE(MODULE_CLASS_VFS, coda, "vcoda");
 
-MALLOC_DEFINE(M_CODA, "coda", "Coda file system structures and tables");
-
-int codadebug = 0;
-
-int coda_vfsop_print_entry = 0;
 #define ENTRY if(coda_vfsop_print_entry) myprintf(("Entered %s\n",__func__))
 
-struct vnode *coda_ctlvp;
-struct coda_mntinfo coda_mnttbl[NVCODA]; /* indexed by minor device number */
+extern struct vnode *coda_ctlvp;
+extern struct coda_mntinfo coda_mnttbl[NVCODA]; /* indexed by minor device number */
 
 /* structure to keep statistics of internally generated/satisfied calls */
 
@@ -103,33 +95,45 @@ const struct vnodeopv_desc * const coda_vnodeopv_descs[] = {
 };
 
 struct vfsops coda_vfsops = {
-    MOUNT_CODA,
-    256,		/* This is the pathname, unlike every other fs */
-    coda_mount,
-    coda_start,
-    coda_unmount,
-    coda_root,
-    (void *)eopnotsupp,	/* vfs_quotactl */
-    coda_nb_statvfs,
-    coda_sync,
-    coda_vget,
-    (void *)eopnotsupp,	/* vfs_fhtovp */
-    (void *)eopnotsupp,	/* vfs_vptofh */
-    coda_init,
-    NULL,		/* vfs_reinit */
-    coda_done,
-    (int (*)(void)) eopnotsupp,
-    (int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
-    vfs_stdextattrctl,
-    (void *)eopnotsupp,	/* vfs_suspendctl */
-    genfs_renamelock_enter,
-    genfs_renamelock_exit,
-    coda_vnodeopv_descs,
-    0,			/* vfs_refcount */
-    { NULL, NULL },	/* vfs_list */
+	.vfs_name = MOUNT_CODA,
+	.vfs_min_mount_data = 256,
+			/* This is the pathname, unlike every other fs */
+	.vfs_mount = coda_mount,
+	.vfs_start = coda_start,
+	.vfs_unmount = coda_unmount,
+	.vfs_root = coda_root,
+	.vfs_quotactl = (void *)eopnotsupp,
+	.vfs_statvfs = coda_nb_statvfs,
+	.vfs_sync = coda_sync,
+	.vfs_vget = coda_vget,
+	.vfs_loadvnode = coda_loadvnode,
+	.vfs_fhtovp = (void *)eopnotsupp,
+	.vfs_vptofh = (void *)eopnotsupp,
+	.vfs_init = coda_init,
+	.vfs_done = coda_done,
+	.vfs_mountroot = (void *)eopnotsupp,
+	.vfs_snapshot = (void *)eopnotsupp,
+	.vfs_extattrctl = vfs_stdextattrctl,
+	.vfs_suspendctl = genfs_suspendctl,
+	.vfs_renamelock_enter = genfs_renamelock_enter,
+	.vfs_renamelock_exit = genfs_renamelock_exit,
+	.vfs_fsync = (void *)eopnotsupp,
+	.vfs_opv_descs = coda_vnodeopv_descs
 };
 
-VFS_ATTACH(coda_vfsops);
+static int
+coda_modcmd(modcmd_t cmd, void *arg)
+{
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		return vfs_attach(&coda_vfsops);
+	case MODULE_CMD_FINI:
+		return vfs_detach(&coda_vfsops);
+	default:
+		return ENOTTY;
+	}
+}
 
 int
 coda_vfsopstats_init(void)
@@ -159,7 +163,6 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
     size_t *data_len)
 {
     struct lwp *l = curlwp;
-    struct nameidata nd;
     struct vnode *dvp;
     struct cnode *cp;
     dev_t dev;
@@ -170,6 +173,8 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
     CodaFid ctlfid = CTL_FID;
     int error;
 
+    if (data == NULL)
+	return EINVAL;
     if (vfsp->mnt_flag & MNT_GETARGS)
 	return EINVAL;
     ENTRY;
@@ -193,9 +198,8 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
      */
     /* Ensure that namei() doesn't run off the filename buffer */
     ((char *)data)[*data_len - 1] = 0;
-    NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, data);
-    error = namei(&nd);
-    dvp = nd.ni_vp;
+    error = namei_simple_kernel((char *)data, NSM_FOLLOW_NOEMULROOT,
+		&dvp);
 
     if (error) {
 	MARK_INT_FAIL(CODA_MOUNT_STATS);
@@ -223,7 +227,7 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
 	return(ENXIO);
     }
 
-    if (minor(dev) >= NVCODA || minor(dev) < 0) {
+    if (minor(dev) >= NVCODA) {
 	MARK_INT_FAIL(CODA_MOUNT_STATS);
 	return(ENXIO);
     }
@@ -243,7 +247,7 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
     vfsp->mnt_stat.f_fsidx.__fsid_val[0] = 0;
     vfsp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_CODA);
     vfsp->mnt_stat.f_fsid = vfsp->mnt_stat.f_fsidx.__fsid_val[0];
-    vfsp->mnt_stat.f_namemax = MAXNAMLEN;
+    vfsp->mnt_stat.f_namemax = CODA_MAXNAMLEN;
     mi->mi_vfsp = vfsp;
 
     /*
@@ -255,12 +259,7 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
     rtvp = CTOV(cp);
     rtvp->v_vflag |= VV_ROOT;
 
-/*  cp = make_coda_node(&ctlfid, vfsp, VCHR);
-    The above code seems to cause a loop in the cnode links.
-    I don't totally understand when it happens, it is caught
-    when closing down the system.
- */
-    cp = make_coda_node(&ctlfid, 0, VCHR);
+    cp = make_coda_node(&ctlfid, vfsp, VCHR);
 
     coda_ctlvp = CTOV(cp);
 
@@ -316,6 +315,7 @@ coda_unmount(struct mount *vfsp, int mntflags)
 	mi->mi_started = 0;
 
 	vrele(mi->mi_rootvp);
+	vrele(coda_ctlvp);
 
 	active = coda_kill(vfsp, NOT_DOWNCALL);
 	mi->mi_rootvp->v_vflag &= ~VV_ROOT;
@@ -372,13 +372,19 @@ coda_root(struct mount *vfsp, struct vnode **vpp)
     error = venus_root(vftomi(vfsp), l->l_cred, l->l_proc, &VFid);
 
     if (!error) {
+	struct cnode *cp = VTOC(mi->mi_rootvp);
+
 	/*
-	 * Save the new rootfid in the cnode, and rehash the cnode into the
-	 * cnode hash with the new fid key.
+	 * Save the new rootfid in the cnode, and rekey the cnode
+	 * with the new fid key.
 	 */
-	coda_unsave(VTOC(mi->mi_rootvp));
-	VTOC(mi->mi_rootvp)->c_fid = VFid;
-	coda_save(VTOC(mi->mi_rootvp));
+	error = vcache_rekey_enter(vfsp, mi->mi_rootvp,
+	    &invalfid, sizeof(CodaFid), &VFid, sizeof(CodaFid));
+	if (error)
+	        goto exit;
+	cp->c_fid = VFid;
+	vcache_rekey_exit(vfsp, mi->mi_rootvp,
+	    &invalfid, sizeof(CodaFid), &cp->c_fid, sizeof(CodaFid));
 
 	*vpp = mi->mi_rootvp;
 	vref(*vpp);
@@ -476,6 +482,31 @@ coda_vget(struct mount *vfsp, ino_t ino,
     return (EOPNOTSUPP);
 }
 
+int
+coda_loadvnode(struct mount *mp, struct vnode *vp,
+    const void *key, size_t key_len, const void **new_key)
+{
+	CodaFid fid;
+	struct cnode *cp;
+	extern int (**coda_vnodeop_p)(void *);
+
+	KASSERT(key_len == sizeof(CodaFid));
+	memcpy(&fid, key, key_len);
+
+	cp = kmem_zalloc(sizeof(*cp), KM_SLEEP);
+	mutex_init(&cp->c_lock, MUTEX_DEFAULT, IPL_NONE);
+	cp->c_fid = fid;
+	cp->c_vnode = vp;
+	vp->v_op = coda_vnodeop_p;
+	vp->v_tag = VT_CODA;
+	vp->v_type = VNON;
+	vp->v_data = cp;
+
+	*new_key = &cp->c_fid;
+
+	return 0;
+}
+
 /*
  * fhtovp is now what vget used to be in 4.3-derived systems.  For
  * some silly reason, vget is now keyed by a 32 bit ino_t, rather than
@@ -541,11 +572,7 @@ coda_done(void)
 
 SYSCTL_SETUP(sysctl_vfs_coda_setup, "sysctl vfs.coda subtree setup")
 {
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
+
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "coda",
@@ -597,23 +624,20 @@ getNewVnode(struct vnode **vpp)
 		      NULL, NULL);
 }
 
-#include <ufs/ufs/quota.h>
-#include <ufs/ufs/ufsmount.h>
-/* get the mount structure corresponding to a given device.  Assume
- * device corresponds to a UFS. Return NULL if no device is found.
+/* Get the mount structure corresponding to a given device.
+ * Return NULL if no device is found or the device is not mounted.
  */
 struct mount *devtomp(dev_t dev)
 {
-    struct mount *mp, *nmp;
+    struct mount *mp;
+    struct vnode *vp;
 
-    for (mp = mountlist.cqh_first; mp != (void*)&mountlist; mp = nmp) {
-	nmp = mp->mnt_list.cqe_next;
-	if ((!strcmp(mp->mnt_op->vfs_name, MOUNT_UFS)) &&
-	    ((VFSTOUFS(mp))->um_dev == (dev_t) dev)) {
-	    /* mount corresponds to UFS and the device matches one we want */
-	    return(mp);
-	}
+    if (spec_node_lookup_by_dev(VBLK, dev, &vp) == 0) {
+	mp = spec_node_getmountedfs(vp);
+	vrele(vp);
+    } else {
+	mp = NULL;
     }
-    /* mount structure wasn't found */
-    return(NULL);
+
+    return mp;
 }

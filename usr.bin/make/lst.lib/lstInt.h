@@ -1,4 +1,4 @@
-/*	$NetBSD: lstInt.h,v 1.15 2008/02/05 16:39:26 joerg Exp $	*/
+/*	$NetBSD: lstInt.h,v 1.22 2014/09/07 20:55:34 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -41,8 +41,8 @@
 #ifndef _LSTINT_H_
 #define _LSTINT_H_
 
-#include	  "../make.h"
 #include	  "../lst.h"
+#include	  "../make_malloc.h"
 
 typedef struct ListNode {
 	struct ListNode	*prevPtr;   /* previous element in list */
@@ -51,14 +51,12 @@ typedef struct ListNode {
 				     * node may not be deleted until count
 				     * goes to 0 */
  	    	    	flags:8;    /* Node status flags */
-	ClientData	datum;	    /* datum associated with this element */
+	void		*datum;	    /* datum associated with this element */
 } *ListNode;
 /*
  * Flags required for synchronization
  */
 #define LN_DELETED  	0x0001      /* List node should be removed when done */
-
-#define NilListNode	((ListNode)-1)
 
 typedef enum {
     Head, Middle, Tail, Unknown
@@ -74,36 +72,34 @@ typedef struct	List {
  */
 	Where	  	atEnd;	  /* Where in the list the last access was */
 	Boolean	  	isOpen;	  /* true if list has been Lst_Open'ed */
-	ListNode  	curPtr;	  /* current node, if open. NilListNode if
+	ListNode  	curPtr;	  /* current node, if open. NULL if
 				   * *just* opened */
 	ListNode  	prevPtr;  /* Previous node, if open. Used by
 				   * Lst_Remove */
 } *List;
 
-#define NilList	  	((List)-1)
-
 /*
  * PAlloc (var, ptype) --
  *	Allocate a pointer-typedef structure 'ptype' into the variable 'var'
  */
-#define	PAlloc(var,ptype)	var = (ptype) emalloc(sizeof *(var))
+#define	PAlloc(var,ptype)	var = (ptype) bmake_malloc(sizeof *(var))
 
 /*
  * LstValid (l) --
  *	Return TRUE if the list l is valid
  */
-#define LstValid(l)	((Lst)(l) != NILLST)
+#define LstValid(l)	((Lst)(l) != NULL)
 
 /*
  * LstNodeValid (ln, l) --
  *	Return TRUE if the LstNode ln is valid with respect to l
  */
-#define LstNodeValid(ln, l)	((ln) != NILLNODE)
+#define LstNodeValid(ln, l)	((ln) != NULL)
 
 /*
  * LstIsEmpty (l) --
  *	TRUE if the list l is empty.
  */
-#define LstIsEmpty(l)	(((List)(l))->firstPtr == NilListNode)
+#define LstIsEmpty(l)	(((List)(l))->firstPtr == NULL)
 
 #endif /* _LSTINT_H_ */

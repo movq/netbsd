@@ -1,4 +1,4 @@
-/*	$NetBSD: start_pxe.S,v 1.4 2005/11/11 21:42:13 dsl Exp $	*/
+/*	$NetBSD: start_pxe.S,v 1.6 2011/03/18 17:46:26 jakllsch Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -34,7 +34,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-	
+
 /*
  * PXE startup
  * parts from sys/arch/i386/stand/lib/crt/bootsect/start_bootsect.S
@@ -63,13 +63,15 @@ _C_LABEL(boot_params):
 	ljmp	$0x7c0, $2f
 2:
 	# set up %ds
-	xorl	%eax, %eax
 	mov	%cs, %ax
 	mov	%ax, %ds
 
-	# set up %ss and %esp
-	mov	%ax, %ss
-	movl	$0xfffc, %esp		/* stack at top of 64k segment */
+	# set up %ss and %sp
+	movl	$_end, %eax		/* top of bss */
+	shrl	$4, %eax		/* as a segment */
+	addw	$0x1001, %ax		/* and + 64k */
+	movw	%ax, %ss		/* for stack */
+	movw	$0xfffc, %sp		/* %sp at top of it */
 
 	call	gdt_fixup
 
@@ -89,8 +91,7 @@ _C_LABEL(boot_params):
 	/* ...and call main()! */
 	call	_C_LABEL(main)
 
-	.globl	_C_LABEL(exit)
-_C_LABEL(exit):
+ENTRY(_rtt)
 	call	_C_LABEL(prot_to_real)
 	.code16
 	movw	$efail, %si

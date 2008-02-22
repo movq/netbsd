@@ -1,4 +1,4 @@
-/* $NetBSD: pic_cpc700.c,v 1.2 2007/10/17 19:54:19 garbled Exp $ */
+/* $NetBSD: pic_cpc700.c,v 1.6 2011/07/01 19:03:09 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,17 +30,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_cpc700.c,v 1.2 2007/10/17 19:54:19 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_cpc700.c,v 1.6 2011/07/01 19:03:09 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <machine/pio.h>
 #include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arch/powerpc/pic/picvar.h>
 
@@ -56,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: pic_cpc700.c,v 1.2 2007/10/17 19:54:19 garbled Exp $
 
 static void cpc700_pic_enable_irq(struct pic_ops *, int, int);
 static void cpc700_pic_disable_irq(struct pic_ops *, int);
-static int  cpc700_get_irq(struct pic_ops *);
+static int  cpc700_get_irq(struct pic_ops *, int);
 static void cpc700_ack_irq(struct pic_ops *, int);
 
 struct cpc700_ops {
@@ -100,7 +91,7 @@ cpc700_pic_disable_irq(struct pic_ops *pic, int irq)
 }
 
 static int
-cpc700_get_irq(struct pic_ops *pic)
+cpc700_get_irq(struct pic_ops *pic, int dummy)
 {
 	int irq;
 

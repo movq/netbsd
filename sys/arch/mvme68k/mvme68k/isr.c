@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.31 2008/01/12 09:54:29 tsutsui Exp $	*/
+/*	$NetBSD: isr.c,v 1.33 2010/12/20 00:25:39 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.31 2008/01/12 09:54:29 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.33 2010/12/20 00:25:39 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -264,7 +257,7 @@ isrdispatch_autovec(struct clockframe *frame)
 
 	intrcnt[ipl]++;	/* XXXSCW: Will go away soon */
 	mvme68k_irq_evcnt[ipl].ev_count++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	list = &isr_autovec[ipl];
 	if (list->lh_first == NULL) {
@@ -318,7 +311,7 @@ isrdispatch_vectored(int ipl, struct clockframe *frame)
 
 	intrcnt[ipl]++;	/* XXXSCW: Will go away soon */
 	mvme68k_irq_evcnt[ipl].ev_count++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	if (isr->isr_func == NULL) {
 		printf("%s: no handler for vec 0x%x\n", __func__, frame->vec);

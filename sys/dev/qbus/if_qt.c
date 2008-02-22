@@ -1,4 +1,4 @@
-/*	$NetBSD: if_qt.c,v 1.13 2008/01/04 21:58:51 joerg Exp $	*/
+/*	$NetBSD: if_qt.c,v 1.23 2018/06/26 06:48:02 msaitoh Exp $	*/
 /*
  * Copyright (c) 1992 Steven M. Schultz
  * All rights reserved.
@@ -80,10 +80,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qt.c,v 1.13 2008/01/04 21:58:51 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qt.c,v 1.23 2018/06/26 06:48:02 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,6 +100,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_qt.c,v 1.13 2008/01/04 21:58:51 joerg Exp $");
 #include <net/if_ether.h>
 #include <net/netisr.h>
 #include <net/route.h>
+#include <net/bpf.h>
 
 #ifdef INET
 #include <sys/domain.h>
@@ -109,12 +109,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_qt.c,v 1.13 2008/01/04 21:58:51 joerg Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #endif
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
-
 
 #include <sys/bus.h>
 
@@ -138,8 +132,9 @@ struct	qt_cdata {
 };
 
 struct	qt_softc {
-	struct	device sc_dev;		/* Configuration common part */
+	device_t sc_dev;		/* Configuration common part */
 	struct	ethercom is_ec;		/* common part - must be first  */
+	struct uba_softc *sc_uh;
 	struct	evcnt sc_intrcnt;	/* Interrupt counting */
 #define	is_if	is_ec.ec_if		/* network-visible interface	*/
 	u_int8_t is_addr[ETHER_ADDR_LEN]; /* hardware Ethernet address	*/
@@ -165,8 +160,8 @@ struct	qt_softc {
 	short	vector;			/* Interrupt vector assigned	*/
 };
 
-static	int qtmatch(struct device *, struct cfdata *, void *);
-static	void qtattach(struct device *, struct device *, void *);
+static	int qtmatch(device_t, cfdata_t, void *);
+static	void qtattach(device_t, device_t, void *);
 static	void qtintr(void *);
 static	int qtinit(struct ifnet *);
 static	int qtioctl(struct ifnet *, u_long, void *);
@@ -179,7 +174,7 @@ static	void qttint(struct qt_softc *sc);
 
 /* static	void qtrestart(struct qt_softc *sc); */
 
-CFATTACH_DECL(qt, sizeof(struct qt_softc),
+CFATTACH_DECL_NEW(qt, sizeof(struct qt_softc),
     qtmatch, qtattach, NULL, NULL);
 
 /*
@@ -197,19 +192,18 @@ CFATTACH_DECL(qt, sizeof(struct qt_softc),
 
 #define loint(x)	((int)(x) & 0xffff)
 #define hiint(x)	(((int)(x) >> 16) & 0x3f)
-#define	XNAME		sc->sc_dev.dv_xname
 
 /*
  * Check if this card is a turbo delqa.
  */
 int
-qtmatch(struct device *parent, struct cfdata *cf, void *aux)
+qtmatch(device_t parent, cfdata_t cf, void *aux)
 {
-	struct	qt_softc ssc;
-	struct	qt_softc *sc = &ssc;
-	struct	uba_attach_args *ua = aux;
-	struct	uba_softc *ubasc = (struct uba_softc *)parent;
-	struct	qt_init *qi;
+	struct qt_softc ssc;
+	struct qt_softc *sc = &ssc;
+	struct uba_attach_args *ua = aux;
+	struct uba_softc *uh = device_private(parent);
+	struct qt_init *qi;
 	struct ubinfo ui;
 
 	sc->sc_iot = ua->ua_iot;
@@ -219,11 +213,11 @@ qtmatch(struct device *parent, struct cfdata *cf, void *aux)
 
 	/* Force the card to interrupt */
 	ui.ui_size = sizeof(struct qt_init);
-	if (ubmemalloc((void *)parent, &ui, 0))
+	if (ubmemalloc(uh, &ui, 0))
 		return 0; /* Failed */
 	qi = (struct qt_init *)ui.ui_vaddr;
 	memset(qi, 0, sizeof(struct qt_init));
-	qi->vector = ubasc->uh_lastiv - 4;
+	qi->vector = uh->uh_lastiv - 4;
 	qi->options = INIT_OPTIONS_INT;
 
 	QT_WCSR(CSR_IBAL, loint(ui.ui_baddr));
@@ -232,7 +226,7 @@ qtmatch(struct device *parent, struct cfdata *cf, void *aux)
 	delay(100000); /* Wait some time for interrupt */
 	QT_WCSR(CSR_SRQR, 3); /* Stop card */
 
-	ubmemfree((void *)parent, &ui);
+	ubmemfree(uh, &ui);
 
 	return 10;
 }
@@ -252,22 +246,24 @@ qtmatch(struct device *parent, struct cfdata *cf, void *aux)
 */
 
 void
-qtattach(struct device *parent, struct device *self, void *aux)
-	{
-	struct	uba_softc *ubasc = (struct uba_softc *)parent;
-	register struct qt_softc *sc = device_private(self);
-	register struct ifnet *ifp = &sc->is_if;
+qtattach(device_t parent, device_t self, void *aux)
+{
+	struct qt_softc *sc = device_private(self);
+	struct ifnet *ifp = &sc->is_if;
 	struct uba_attach_args *ua = aux;
+
+	sc->sc_dev = self;
 
 	uba_intr_establish(ua->ua_icookie, ua->ua_cvec, qtintr, sc,
 	    &sc->sc_intrcnt);
 	evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
-	    sc->sc_dev.dv_xname, "intr");
+	    device_xname(sc->sc_dev), "intr");
 
+	sc->sc_uh = device_private(parent);
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_ioh = ua->ua_ioh;
-	ubasc->uh_lastiv -= 4;
-	sc->vector = ubasc->uh_lastiv;
+	sc->sc_uh->uh_lastiv -= 4;
+	sc->vector = sc->sc_uh->uh_lastiv;
 
 /*
  * Now allocate the buffers and initialize the buffers.  This should _never_
@@ -281,7 +277,7 @@ qtattach(struct device *parent, struct device *self, void *aux)
 	sc->is_addr[4] = QT_RCSR(8);
 	sc->is_addr[5] = QT_RCSR(10);
 
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strcpy(ifp->if_xname, device_xname(sc->sc_dev));
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST|IFF_MULTICAST;
 	ifp->if_ioctl = qtioctl;
@@ -291,16 +287,15 @@ qtattach(struct device *parent, struct device *self, void *aux)
 	IFQ_SET_READY(&ifp->if_snd);
 
 	printf("\n%s: delqa-plus in Turbo mode, hardware address %s\n",
-	    XNAME, ether_sprintf(sc->is_addr));
+	    device_xname(sc->sc_dev), ether_sprintf(sc->is_addr));
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->is_addr);
-	}
+}
 
 int
-qtturbo(sc)
-	register struct qt_softc *sc;
-	{
-	register int i;
+qtturbo(struct qt_softc *sc)
+{
+	int i;
 
 /*
  * Issue the software reset.  Delay 150us.  The board should now be in
@@ -314,11 +309,8 @@ qtturbo(sc)
 	QT_WCSR(CSR_SRR, 0x8001);	/* MS | ITB */
 	i = QT_RCSR(CSR_SRR);
 	QT_WCSR(CSR_SRR, 0x8000);	/* Turn off ITB, set DELQA select */
-	if	(i != 0x8001)
-		{
-		printf("qt !-YM\n");
+	if (i != 0x8001)
 		return(0);
-		}
 /*
  * Board is a DELQA-YM.  Send the commands to enable Turbo mode.  Delay
  * 1 second, testing the SRR register every millisecond to see if the
@@ -338,18 +330,18 @@ qtturbo(sc)
 		return(0);
 		}
 	return(1);
-	}
+}
 
 int
 qtinit(struct ifnet *ifp)
-	{
-	register struct qt_softc *sc = ifp->if_softc;
-	register struct qt_init *iniblk;
+{
+	struct qt_softc *sc = ifp->if_softc;
+	struct qt_init *iniblk;
 	struct ifrw *ifrw;
 	struct ifxmt *ifxp;
 	struct	qt_rring *rp;
 	struct	qt_tring *tp;
-	register int i, error;
+	int i, error;
 
 	if (ifp->if_flags & IFF_RUNNING) {
 		/* Cancel any pending I/O. */
@@ -357,16 +349,14 @@ qtinit(struct ifnet *ifp)
 	}
 
 	if (sc->sc_ib == NULL) {
-		if (if_ubaminit(&sc->sc_ifuba,
-		    (void *)device_parent(&sc->sc_dev),
+		if (if_ubaminit(&sc->sc_ifuba, sc->sc_uh,
 		    MCLBYTES, sc->sc_ifr, NRCV, sc->sc_ifw, NXMT)) {
-			printf("%s: can't initialize\n", XNAME);
+			printf("%s: can't initialize\n", device_xname(sc->sc_dev));
 			ifp->if_flags &= ~IFF_UP;
 			return 0;
 		}
 		sc->sc_ui.ui_size = sizeof(struct qt_cdata);
-		if ((error = ubmemalloc((void *)device_parent(&sc->sc_dev),
-		    &sc->sc_ui, 0))) {
+		if ((error = ubmemalloc(sc->sc_uh, &sc->sc_ui, 0))) {
 			printf(": failed ubmemalloc(), error = %d\n", error);
 			return error;
 		}
@@ -376,7 +366,7 @@ qtinit(struct ifnet *ifp)
 /*
  * Fill in most of the INIT block: vector, options (interrupt enable), ring
  * locations.  The physical address is copied from the ROMs as part of the
- * -YM testing proceedure.  The CSR is saved here rather than in qtinit()
+ * -YM testing procedure.  The CSR is saved here rather than in qtinit()
  * because the qtturbo() routine needs it.
  *
  * The INIT block must be quadword aligned.  Using malloc() guarantees click
@@ -452,8 +442,8 @@ void
 qtstart(struct ifnet *ifp)
 	{
 	int	len, nxmit;
-	register struct qt_softc *sc = ifp->if_softc;
-	register struct qt_tring *rp;
+	struct qt_softc *sc = ifp->if_softc;
+	struct qt_tring *rp;
 	struct	mbuf *m = NULL;
 
 	for (nxmit = sc->nxmit; nxmit < NXMT; nxmit++) {
@@ -465,10 +455,7 @@ qtstart(struct ifnet *ifp)
 		if ((rp->tmd3 & TMD3_OWN) == 0)
 			panic("qtstart");
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m, BPF_D_OUT);
 
 		len = if_ubaput(&sc->sc_ifuba, &sc->sc_ifw[sc->xnext], m);
 		if (len < MINPACKETSIZE)
@@ -521,7 +508,7 @@ qtintr(void *arg)
 void
 qttint(struct qt_softc *sc)
 	{
-	register struct qt_tring *rp;
+	struct qt_tring *rp;
 
 	while (sc->nxmit > 0)
 		{
@@ -540,8 +527,8 @@ qttint(struct qt_softc *sc)
 			{
 #ifdef QTDEBUG
 			char buf[100];
-			bitmask_snprintf(rp->tmd2, TMD2_BITS, buf, 100);
-			printf("%s: tmd2 %s\n", XNAME, buf);
+			snprintb(buf, sizeof(buf), TMD2_BITS, rp->tmd2);
+			printf("%s: tmd2 %s\n", device_xname(sc->sc_dev), buf);
 #endif
 			sc->is_if.if_oerrors++;
 			}
@@ -559,8 +546,8 @@ qttint(struct qt_softc *sc)
 
 void
 qtrint(struct qt_softc *sc)
-	{
-	register struct qt_rring *rp;
+{
+	struct qt_rring *rp;
 	struct ifnet *ifp = &sc->is_ec.ec_if;
 	struct mbuf *m;
 	int	len;
@@ -570,7 +557,7 @@ qtrint(struct qt_softc *sc)
 		rp = &sc->sc_ib->qc_r[(int)sc->rindex];
 		if     ((rp->rmd0 & (RMD0_STP|RMD0_ENP)) != (RMD0_STP|RMD0_ENP))
 			{
-			printf("%s: chained packet\n", XNAME);
+			printf("%s: chained packet\n", device_xname(sc->sc_dev));
 			sc->is_if.if_ierrors++;
 			goto rnext;
 			}
@@ -581,10 +568,10 @@ qtrint(struct qt_softc *sc)
 			{
 #ifdef QTDEBUG
 			char buf[100];
-			bitmask_snprintf(rp->rmd0, RMD0_BITS, buf, 100);
-			printf("%s: rmd0 %s\n", XNAME, buf);
-			bitmask_snprintf(rp->rmd2, RMD2_BITS, buf, 100);
-			printf("%s: rmd2 %s\n", XNAME, buf);
+			snprintb(buf, sizeof(buf), RMD0_BITS, rp->rmd0);
+			printf("%s: rmd0 %s\n", device_xname(sc->sc_dev), buf);
+			snprintb(buf, sizeof(buf), RMD2_BITS, rp->rmd2);
+			printf("%s: rmd2 %s\n", device_xname(sc->sc_dev), buf);
 #endif
 			sc->is_if.if_ierrors++;
 			goto rnext;
@@ -595,11 +582,7 @@ qtrint(struct qt_softc *sc)
 			sc->is_if.if_ierrors++;
 			goto rnext;
 		}
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
-		(*ifp->if_input)(ifp, m);
+		if_percpuq_enqueue(ifp->if_percpuq, m);
 rnext:
 		--sc->nrcv;
 		rp->rmd3 = 0;
@@ -611,11 +594,8 @@ rnext:
 	}
 
 int
-qtioctl(ifp, cmd, data)
-	register struct ifnet *ifp;
-	u_long	cmd;
-	void *	data;
-	{
+qtioctl(struct ifnet *ifp, u_long cmd, void *data)
+{
 	int s, error;
 
 	s = splnet();
@@ -632,14 +612,12 @@ qtioctl(ifp, cmd, data)
 }
 
 void
-qtsrr(sc, srrbits)
-	struct qt_softc *sc;
-	int	srrbits;
-	{
+qtsrr(struct qt_softc *sc, int srrbits)
+{
 	char buf[100];
-	bitmask_snprintf(srrbits, SRR_BITS, buf, sizeof buf);
-	printf("%s: srr=%s\n", sc->sc_dev.dv_xname, buf);
-	}
+	snprintb(buf, sizeof(buf), SRR_BITS, srrbits);
+	printf("%s: srr=%s\n", device_xname(sc->sc_dev), buf);
+}
 
 /*
  * Stop activity on the interface.
@@ -679,7 +657,7 @@ qtstop(struct ifnet *ifp, int disable)
 
 void
 qtreset(sc)
-	register struct qt_softc *sc;
+	struct qt_softc *sc;
 	{
 
 	qtturbo(sc);

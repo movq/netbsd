@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.7 2006/02/16 20:17:14 perry Exp $	*/
+/*	$NetBSD: bus.h,v 1.9 2012/05/07 18:16:38 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -597,5 +590,10 @@ __NEWS68K_copy_region_N(4)
 #define	BUS_SPACE_BARRIER_WRITE	0x02		/* force write barrier */
 
 #define BUS_SPACE_ALIGNED_POINTER(p, t) ALIGNED_POINTER(p, t)
+
+/*
+ * There is no bus_dma(9)'fied bus drivers on this port.
+ */
+#define __HAVE_NO_BUS_DMA
 
 #endif /* _NEWS68K_BUS_H_ */

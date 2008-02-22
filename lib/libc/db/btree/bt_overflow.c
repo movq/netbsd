@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_overflow.c,v 1.13 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_overflow.c,v 1.22 2016/09/24 21:31:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_overflow.c	8.5 (Berkeley) 7/16/94";
-#else
-__RCSID("$NetBSD: bt_overflow.c,v 1.13 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_overflow.c,v 1.22 2016/09/24 21:31:25 christos Exp $");
 
 #include "namespace.h"
 #include <sys/param.h>
@@ -74,7 +72,7 @@ __RCSID("$NetBSD: bt_overflow.c,v 1.13 2007/02/03 23:46:09 christos Exp $");
  *
  * Parameters:
  *	t:	tree
- *	p:	pointer to { pgno_t, u_int32_t }
+ *	p:	pointer to { pgno_t, uint32_t }
  *	buf:	storage address
  *	bufsz:	storage size
  *
@@ -86,11 +84,11 @@ __ovfl_get(BTREE *t, void *p, size_t *ssz, void **buf, size_t *bufsz)
 {
 	PAGE *h;
 	pgno_t pg;
-	u_int32_t sz, nb, plen;
+	uint32_t sz, nb, plen;
 	size_t temp;
 
-	memmove(&pg, p, sizeof(pgno_t));
-	memmove(&sz, (char *)p + sizeof(pgno_t), sizeof(u_int32_t));
+	memmove(&pg, p, sizeof(pg));
+	memmove(&sz, (char *)p + sizeof(pgno_t), sizeof(uint32_t));
 	*ssz = sz;
 
 #ifdef DEBUG
@@ -99,9 +97,10 @@ __ovfl_get(BTREE *t, void *p, size_t *ssz, void **buf, size_t *bufsz)
 #endif
 	/* Make the buffer bigger as necessary. */
 	if (*bufsz < sz) {
-		*buf = (char *)(*buf == NULL ? malloc(sz) : realloc(*buf, sz));
-		if (*buf == NULL)
+		void *nbuf = realloc(*buf, sz);
+		if (nbuf == NULL)
 			return (RET_ERROR);
+		*buf = nbuf;
 		*bufsz = sz;
 	}
 
@@ -110,8 +109,8 @@ __ovfl_get(BTREE *t, void *p, size_t *ssz, void **buf, size_t *bufsz)
 	 * into the buffer.  Never copy more than the data's length.
 	 */
 	temp = t->bt_psize - BTDATAOFF;
-	_DBFIT(temp, u_int32_t);
-	plen = (u_int32_t)temp;
+	_DBFIT(temp, uint32_t);
+	plen = (uint32_t)temp;
 	for (p = *buf;; p = (char *)p + nb, pg = h->nextpg) {
 		if ((h = mpool_get(t->bt_mp, pg, 0)) == NULL)
 			return (RET_ERROR);
@@ -143,7 +142,7 @@ __ovfl_put(BTREE *t, const DBT *dbt, pgno_t *pg)
 	PAGE *h, *last;
 	void *p;
 	pgno_t npg;
-	u_int32_t sz, nb, plen;
+	uint32_t sz, nb, plen;
 	size_t temp;
 
 	/*
@@ -151,13 +150,13 @@ __ovfl_put(BTREE *t, const DBT *dbt, pgno_t *pg)
 	 * number of the first page in the chain.
 	 */
 	temp = t->bt_psize - BTDATAOFF;
-	_DBFIT(temp, u_int32_t);
-	plen = (u_int32_t)temp;
+	_DBFIT(temp, uint32_t);
+	plen = (uint32_t)temp;
 	last = NULL;
 	p = dbt->data;
 	temp = dbt->size;
-	_DBFIT(temp, u_int32_t);
-	sz = temp;
+	_DBFIT(temp, uint32_t);
+	sz = (uint32_t)temp;
 	for (;; p = (char *)p + plen, last = h) {
 		if ((h = __bt_new(t, &npg)) == NULL)
 			return (RET_ERROR);
@@ -189,7 +188,7 @@ __ovfl_put(BTREE *t, const DBT *dbt, pgno_t *pg)
  *
  * Parameters:
  *	t:	tree
- *	p:	pointer to { pgno_t, u_int32_t }
+ *	p:	pointer to { pgno_t, uint32_t }
  *
  * Returns:
  *	RET_ERROR, RET_SUCCESS
@@ -199,11 +198,11 @@ __ovfl_delete(BTREE *t, void *p)
 {
 	PAGE *h;
 	pgno_t pg;
-	u_int32_t sz, plen;
+	uint32_t sz, plen;
 	size_t temp;
 
-	(void)memmove(&pg, p, sizeof(pgno_t));
-	(void)memmove(&sz, (char *)p + sizeof(pgno_t), sizeof(u_int32_t));
+	(void)memmove(&pg, p, sizeof(pg));
+	(void)memmove(&sz, (char *)p + sizeof(pgno_t), sizeof(uint32_t));
 
 #ifdef DEBUG
 	if (pg == P_INVALID || sz == 0)
@@ -220,8 +219,8 @@ __ovfl_delete(BTREE *t, void *p)
 
 	/* Step through the chain, calling the free routine for each page. */
 	temp = t->bt_psize - BTDATAOFF;
-	_DBFIT(temp, u_int32_t);
-	plen = (u_int32_t)temp;
+	_DBFIT(temp, uint32_t);
+	plen = (uint32_t)temp;
 	for (;; sz -= plen) {
 		pg = h->nextpg;
 		__bt_free(t, h);

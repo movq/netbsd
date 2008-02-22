@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.26 2007/10/17 19:53:45 garbled Exp $
+#	$NetBSD: genassym.cf,v 1.32 2011/01/14 02:06:24 rmind Exp $
 
 #-
 # Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
 #  2. Redistributions in binary form must reproduce the above copyright
 #     notice, this list of conditions and the following disclaimer in the
 #     documentation and/or other materials provided with the distribution.
-#  3. All advertising materials mentioning features or use of this software
-#     must display the following acknowledgement:
-#         This product includes software developed by the NetBSD
-#         Foundation, Inc. and its contributors.
-#  4. Neither the name of The NetBSD Foundation nor the names of its
-#     contributors may be used to endorse or promote products derived
-#     from this software without specific prior written permission.
 # 
 #  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 #  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,7 +40,6 @@ include <sys/proc.h>
 include <sys/mbuf.h>
 include <sys/msgbuf.h>
 include <sys/syscall.h>
-include <sys/user.h>
 
 include <uvm/uvm_extern.h>
 
@@ -59,7 +51,7 @@ endif
 include <machine/cpu.h>
 include <machine/trap.h>
 include <machine/psl.h>
-include <machine/reg.h>
+include <machine/pcb.h>
 include <machine/vmparam.h>
 include <machine/pte.h>
 include <machine/iomap.h>
@@ -82,7 +74,7 @@ define	M68060			1
 endif
 
 # lwp & proc fields and values
-define	L_ADDR			offsetof(struct lwp, l_addr)
+define	L_PCB			offsetof(struct lwp, l_addr)
 define	L_PRIORITY		offsetof(struct lwp, l_priority)
 define	L_STAT			offsetof(struct lwp, l_stat)
 define	L_WCHAN			offsetof(struct lwp, l_wchan)
@@ -100,7 +92,7 @@ define	LSRUN			LSRUN
 define	LSONPROC		LSONPROC
 
 # interrupt/fault metering
-define	UVMEXP_INTRS		offsetof(struct uvmexp, intrs)
+define	CI_NINTR		offsetof(struct cpu_info, ci_data.cpu_nintr)
 
 # general constants
 define	UPAGES			UPAGES
@@ -173,7 +165,6 @@ define  PCB_FLAGS		offsetof(struct pcb, pcb_flags)
 define	PCB_PS			offsetof(struct pcb, pcb_ps)
 define	PCB_USP			offsetof(struct pcb, pcb_usp)
 define	PCB_REGS		offsetof(struct pcb, pcb_regs)
-define	PCB_CMAP2		offsetof(struct pcb, pcb_cmap2)
 define	PCB_ONFAULT		offsetof(struct pcb, pcb_onfault)
 define	PCB_FPCTX		offsetof(struct pcb, pcb_fpregs)
 define	SIZEOF_PCB		sizeof(struct pcb)

@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p5064_bus_io.c,v 1.4 2005/12/11 12:16:08 christos Exp $	*/
+/*	$NetBSD: algor_p5064_bus_io.c,v 1.7 2011/07/09 16:03:00 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: algor_p5064_bus_io.c,v 1.4 2005/12/11 12:16:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: algor_p5064_bus_io.c,v 1.7 2011/07/09 16:03:00 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,20 +44,21 @@ __KERNEL_RCSID(0, "$NetBSD: algor_p5064_bus_io.c,v 1.4 2005/12/11 12:16:08 chris
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/locore.h>
+#include <mips/locore.h>
 
 #include <algor/algor/algor_p5064reg.h>
 #include <algor/algor/algor_p5064var.h>
 
 #define	CHIP		algor_p5064
+#define	CHIP_IO
 
 #define	CHIP_EX_MALLOC_SAFE(v)	(((struct p5064_config *)(v))->ac_mallocsafe)
-#define	CHIP_IO_EXTENT(v)	(((struct p5064_config *)(v))->ac_io_ex)
+#define	CHIP_EXTENT(v)		(((struct p5064_config *)(v))->ac_io_ex)
 
 /* IO region 1 */
-#define	CHIP_IO_W1_BUS_START(v)	0x00000000UL
-#define	CHIP_IO_W1_BUS_END(v)	0x00ffffffUL
-#define	CHIP_IO_W1_SYS_START(v)	P5064_PCIIO
-#define	CHIP_IO_W1_SYS_END(v)	(P5064_PCIIO + 0x00ffffffUL)
+#define	CHIP_W1_BUS_START(v)	0x00000000UL
+#define	CHIP_W1_BUS_END(v)	0x00ffffffUL
+#define	CHIP_W1_SYS_START(v)	P5064_PCIIO
+#define	CHIP_W1_SYS_END(v)	(P5064_PCIIO + 0x00ffffffUL)
 
-#include <algor/pci/pci_alignstride_bus_io_chipdep.c>
+#include <mips/mips/bus_space_alignstride_chipdep.c>

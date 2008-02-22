@@ -1,4 +1,4 @@
-/*	$NetBSD: iwic_bchan.c,v 1.6 2007/10/19 12:00:50 ad Exp $	*/
+/*	$NetBSD: iwic_bchan.c,v 1.9 2014/03/23 02:53:12 christos Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Dave Boyce. All rights reserved.
@@ -38,7 +38,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iwic_bchan.c,v 1.6 2007/10/19 12:00:50 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iwic_bchan.c,v 1.9 2014/03/23 02:53:12 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -78,7 +78,6 @@ iwic_bchan_xirq(struct iwic_softc *sc, int chan_no)
 	int irq_stat;
 	struct iwic_bchan *chan;
 	int cmd = 0;
-	int activity = 0;
 
 	chan = &sc->sc_bchan[chan_no];
 
@@ -94,12 +93,12 @@ iwic_bchan_xirq(struct iwic_softc *sc, int chan_no)
 
 	if (irq_stat & B_EXIR_RDOV)
 	{
-		NDBGL1(L1_H_XFRERR, "%s: EXIR B-channel Receive Data Overflow", sc->sc_dev.dv_xname);
+		NDBGL1(L1_H_XFRERR, "%s: EXIR B-channel Receive Data Overflow", device_xname(sc->sc_dev));
 	}
 
 	if (irq_stat & B_EXIR_XDUN)
 	{
-		NDBGL1(L1_H_XFRERR, "%s: EXIR B-channel Transmit Data Underrun", sc->sc_dev.dv_xname);
+		NDBGL1(L1_H_XFRERR, "%s: EXIR B-channel Transmit Data Underrun", device_xname(sc->sc_dev));
 		cmd |= (B_CMDR_XRST);	/*XXX must retransmit frame ! */
 	}
 
@@ -117,11 +116,11 @@ iwic_bchan_xirq(struct iwic_softc *sc, int chan_no)
 		if(error)
 		{
 			if(error & B_STAR_RDOV)
-				NDBGL1(L1_H_XFRERR, "%s: B-channel Receive Data Overflow", sc->sc_dev.dv_xname);
+				NDBGL1(L1_H_XFRERR, "%s: B-channel Receive Data Overflow", device_xname(sc->sc_dev));
 			if(error & B_STAR_CRCE)
-				NDBGL1(L1_H_XFRERR, "%s: B-channel CRC Error", sc->sc_dev.dv_xname);
+				NDBGL1(L1_H_XFRERR, "%s: B-channel CRC Error", device_xname(sc->sc_dev));
 			if(error & B_STAR_RMB)
-				NDBGL1(L1_H_XFRERR, "%s: B-channel Receive Message Aborted", sc->sc_dev.dv_xname);
+				NDBGL1(L1_H_XFRERR, "%s: B-channel Receive Message Aborted", device_xname(sc->sc_dev));
 		}
 
 		/* all error conditions checked, now decide and take action */
@@ -175,8 +174,6 @@ iwic_bchan_xirq(struct iwic_softc *sc, int chan_no)
 
 				(*chan->l4_driver->bch_rx_data_ready)(chan->l4_driver_softc);
 
-
-				activity = ACT_RX;
 
 				/* mark buffer ptr as unused */
 
@@ -252,8 +249,7 @@ iwic_bchan_xirq(struct iwic_softc *sc, int chan_no)
 
 				/* silence detection */
 
-				if(!(isdn_bchan_silence(chan->in_mbuf->m_data, chan->in_mbuf->m_len)))
-					activity = ACT_RX;
+				isdn_bchan_silence(chan->in_mbuf->m_data, chan->in_mbuf->m_len);
 
 #if defined (__FreeBSD__) && __FreeBSD__ > 4
 				(void) IF_HANDOFF(&chan->rx_queue, chan->in_mbuf, NULL);
@@ -311,7 +307,6 @@ iwic_bchan_xirq(struct iwic_softc *sc, int chan_no)
 	{
 		/* transmit fifo empty, new data can be written to fifo */
 
-		int activity1 = -1;
 		int len;
 		int nextlen;
 
@@ -344,12 +339,7 @@ iwic_bchan_xirq(struct iwic_softc *sc, int chan_no)
 
 				if(chan->bprot == BPROT_NONE)
 				{
-					if(!(isdn_bchan_silence(chan->out_mbuf_cur->m_data, chan->out_mbuf_cur->m_len)))
-						activity1 = ACT_TX;
-				}
-				else
-				{
-					activity1 = ACT_TX;
+					isdn_bchan_silence(chan->out_mbuf_cur->m_data, chan->out_mbuf_cur->m_len);
 				}
 			}
 		}
@@ -417,7 +407,7 @@ iwic_bchannel_setup(isdn_layer1token t, int chan_no, int bprot, int activate)
 	int s = splnet();
 
 	NDBGL1(L1_BCHAN, "%s: chan %d, bprot %d, activate %d",
-	    sc->sc_dev.dv_xname, chan_no, bprot, activate);
+	    device_xname(sc->sc_dev), chan_no, bprot, activate);
 
 	/* general part */
 
@@ -543,7 +533,7 @@ iwic_bchannel_start(isdn_layer1token t,int h_chan)
 
 	s = splnet();				/* enter critical section */
 
-	NDBGL1(L1_BCHAN, "%s: channel %d", sc->sc_dev.dv_xname, h_chan);
+	NDBGL1(L1_BCHAN, "%s: channel %d", device_xname(sc->sc_dev), h_chan);
 
 	if(chan->state & ST_TX_ACTIVE)		/* already running ? */
 	{

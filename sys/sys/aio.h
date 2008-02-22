@@ -1,4 +1,4 @@
-/*	$NetBSD: aio.h,v 1.6 2007/11/28 19:30:55 rmind Exp $	*/
+/*	$NetBSD: aio.h,v 1.13 2016/04/09 19:55:33 riastradh Exp $	*/
 
 /*
  * Copyright (c) 2007, Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -13,21 +13,24 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
 #ifndef _SYS_AIO_H_
 #define _SYS_AIO_H_
+
+#include <sys/types.h>
+#include <sys/signal.h>
 
 /* Returned by aio_cancel() */
 #define AIO_CANCELED		0x1
@@ -67,7 +70,7 @@ struct aiocb {
 
 /* Default limits of allowed AIO operations */
 #define AIO_LISTIO_MAX		512
-#define AIO_MAX			AIO_LISTIO_MAX * 16
+#define AIO_MAX			(AIO_LISTIO_MAX * 16)
 
 #include <sys/condvar.h>
 #include <sys/lwp.h>
@@ -113,11 +116,10 @@ struct aioproc {
 	struct lwp *aio_worker;		/* AIO worker thread */
 };
 
+extern u_int aio_listio_max;
 /* Prototypes */
-void	aio_sysinit(void);
-int	aio_init(struct proc *);
-void	aio_exit(struct proc *, struct aioproc *);
-void	aio_print_jobs(void (*pr)(const char *, ...));
+void	aio_print_jobs(void (*)(const char *, ...) __printflike(1, 2));
+int	aio_suspend1(struct lwp *, struct aiocb **, int, struct timespec *);
 
 #endif /* _KERNEL */
 

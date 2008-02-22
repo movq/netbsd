@@ -1,4 +1,4 @@
-/* $NetBSD: memcmp.S,v 1.1 2008/02/21 17:35:47 garbled Exp $ */
+/* $NetBSD: memcmp.S,v 1.4 2013/07/04 20:57:59 matt Exp $ */
 
 /* stropt/memcmp.S, pl_string_common, pl_linux 10/11/04 11:45:35
  * ==========================================================================
@@ -49,11 +49,7 @@
  * ==========================================================================
  */
 
-#define _NOREGNAMES
 #include <machine/asm.h>
-#ifdef _KERNEL
-#include <assym.h>
-#endif
 
         .text
         .align 4
@@ -210,7 +206,7 @@ bbb:
 
 	cmplw	%r8, %r6
 
-	bdnzt+	eq, bbb
+	bdnzt	eq, bbb
 
 	bne	all_done
 
@@ -271,3 +267,4 @@ finish_lt:
 	addi	%r3,0,1			/* Greater than result		*/
 
 	blr
+END(memcmp)

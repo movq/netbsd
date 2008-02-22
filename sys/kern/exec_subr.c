@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_subr.c,v 1.60 2008/01/28 20:09:06 ad Exp $	*/
+/*	$NetBSD: exec_subr.c,v 1.82 2017/07/02 16:41:33 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1996 Christopher G. Demetriou
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_subr.c,v 1.60 2008/01/28 20:09:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_subr.c,v 1.82 2017/07/02 16:41:33 joerg Exp $");
 
 #include "opt_pax.h"
 
@@ -45,12 +45,9 @@ __KERNEL_RCSID(0, "$NetBSD: exec_subr.c,v 1.60 2008/01/28 20:09:06 ad Exp $");
 #include <sys/mman.h>
 #include <sys/resourcevar.h>
 #include <sys/device.h>
-
-#ifdef PAX_MPROTECT
 #include <sys/pax.h>
-#endif /* PAX_MPROTECT */
 
-#include <uvm/uvm.h>
+#include <uvm/uvm_extern.h>
 
 #define	VMCMD_EVCNT_DECL(name)					\
 static struct evcnt vmcmd_ev_##name =				\
@@ -64,6 +61,15 @@ VMCMD_EVCNT_DECL(calls);
 VMCMD_EVCNT_DECL(extends);
 VMCMD_EVCNT_DECL(kills);
 
+#ifdef DEBUG_STACK
+#define DPRINTF(a) uprintf a
+#else
+#define DPRINTF(a)
+#endif
+
+unsigned int user_stack_guard_size = 1024 * 1024;
+unsigned int user_thread_stack_guard_size = 64 * 1024;
+
 /*
  * new_vmcmd():
  *	create a new vmcmd structure and fill in its fields based
@@ -74,12 +80,14 @@ VMCMD_EVCNT_DECL(kills);
 void
 new_vmcmd(struct exec_vmcmd_set *evsp,
     int (*proc)(struct lwp * l, struct exec_vmcmd *),
-    u_long len, u_long addr, struct vnode *vp, u_long offset,
+    vsize_t len, vaddr_t addr, struct vnode *vp, u_long offset,
     u_int prot, int flags)
 {
-	struct exec_vmcmd    *vcp;
+	struct exec_vmcmd *vcp;
 
 	VMCMD_EVCNT_INCR(calls);
+	KASSERT(proc != vmcmd_map_pagedvn || (vp->v_iflag & VI_TEXT));
+	KASSERT(vp == NULL || vp->v_usecount > 0);
 
 	if (evsp->evs_used >= evsp->evs_cnt)
 		vmcmdset_extend(evsp);
@@ -150,6 +158,19 @@ kill_vmcmds(struct exec_vmcmd_set *evsp)
  *	appropriate for handling demand-paged text and data segments.
  */
 
+static int
+vmcmd_get_prot(struct lwp *l, const struct exec_vmcmd *cmd, vm_prot_t *prot,
+    vm_prot_t *maxprot)
+{
+
+	*prot = cmd->ev_prot;
+	*maxprot = PAX_MPROTECT_MAXPROTECT(l, *prot, 0, UVM_PROT_ALL);
+
+	if ((*prot & *maxprot) != *prot)
+		return EACCES;
+	return PAX_MPROTECT_VALIDATE(l, *prot);
+}
+
 int
 vmcmd_map_pagedvn(struct lwp *l, struct exec_vmcmd *cmd)
 {
@@ -165,20 +186,17 @@ vmcmd_map_pagedvn(struct lwp *l, struct exec_vmcmd *cmd)
 	 * map the vnode in using uvm_map.
 	 */
 
-        if (cmd->ev_len == 0)
-                return(0);
-        if (cmd->ev_offset & PAGE_MASK)
-                return(EINVAL);
+	if (cmd->ev_len == 0)
+		return 0;
+	if (cmd->ev_offset & PAGE_MASK)
+		return EINVAL;
 	if (cmd->ev_addr & PAGE_MASK)
-		return(EINVAL);
+		return EINVAL;
 	if (cmd->ev_len & PAGE_MASK)
-		return(EINVAL);
+		return EINVAL;
 
-	prot = cmd->ev_prot;
-	maxprot = UVM_PROT_ALL;
-#ifdef PAX_MPROTECT
-	pax_mprotect(l, &prot, &maxprot);
-#endif /* PAX_MPROTECT */
+	if ((error = vmcmd_get_prot(l, cmd, &prot, &maxprot)) != 0)
+		return error;
 
 	/*
 	 * check the file system's opinion about mmapping the file
@@ -190,11 +208,8 @@ vmcmd_map_pagedvn(struct lwp *l, struct exec_vmcmd *cmd)
 
 	if ((vp->v_vflag & VV_MAPPED) == 0) {
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-		mutex_enter(&vp->v_interlock);
 		vp->v_vflag |= VV_MAPPED;
-		vp->v_iflag |= VI_MAPPED;
-		mutex_exit(&vp->v_interlock);
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 	}
 
 	/*
@@ -259,11 +274,8 @@ vmcmd_readvn(struct lwp *l, struct exec_vmcmd *cmd)
 	if (error)
 		return error;
 
-	prot = cmd->ev_prot;
-	maxprot = VM_PROT_ALL;
-#ifdef PAX_MPROTECT
-	pax_mprotect(l, &prot, &maxprot);
-#endif /* PAX_MPROTECT */
+	if ((error = vmcmd_get_prot(l, cmd, &prot, &maxprot)) != 0)
+		return error;
 
 #ifdef PMAP_NEED_PROCWR
 	/*
@@ -286,7 +298,7 @@ vmcmd_readvn(struct lwp *l, struct exec_vmcmd *cmd)
 				round_page(cmd->ev_addr + cmd->ev_len),
 				maxprot, true);
 		if (error)
-			return (error);
+			return error;
 	}
 
 	if (prot != maxprot) {
@@ -295,7 +307,7 @@ vmcmd_readvn(struct lwp *l, struct exec_vmcmd *cmd)
 				round_page(cmd->ev_addr + cmd->ev_len),
 				prot, false);
 		if (error)
-			return (error);
+			return error;
 	}
 
 	return 0;
@@ -319,17 +331,16 @@ vmcmd_map_zero(struct lwp *l, struct exec_vmcmd *cmd)
 	cmd->ev_addr -= diff;			/* required by uvm_map */
 	cmd->ev_len += diff;
 
-	prot = cmd->ev_prot;
-	maxprot = UVM_PROT_ALL;
-#ifdef PAX_MPROTECT
-	pax_mprotect(l, &prot, &maxprot);
-#endif /* PAX_MPROTECT */
+	if ((error = vmcmd_get_prot(l, cmd, &prot, &maxprot)) != 0)
+		return error;
 
 	error = uvm_map(&p->p_vmspace->vm_map, &cmd->ev_addr,
 			round_page(cmd->ev_len), NULL, UVM_UNKNOWN_OFFSET, 0,
 			UVM_MAPFLAG(prot, maxprot, UVM_INH_COPY,
 			UVM_ADV_NORMAL,
 			UVM_FLAG_FIXED|UVM_FLAG_COPYONW));
+	if (cmd->ev_flags & VMCMD_STACK)
+		curproc->p_vmspace->vm_issize += atop(round_page(cmd->ev_len));
 	return error;
 }
 
@@ -372,31 +383,46 @@ exec_read_from(struct lwp *l, struct vnode *vp, u_long off, void *bf,
 int
 exec_setup_stack(struct lwp *l, struct exec_package *epp)
 {
-	u_long max_stack_size;
-	u_long access_linear_min, access_size;
-	u_long noaccess_linear_min, noaccess_size;
+	vsize_t max_stack_size;
+	vaddr_t access_linear_min;
+	vsize_t access_size;
+	vaddr_t noaccess_linear_min;
+	vsize_t noaccess_size;
 
 #ifndef	USRSTACK32
 #define USRSTACK32	(0x00000000ffffffffL&~PGOFSET)
 #endif
+#ifndef MAXSSIZ32
+#define MAXSSIZ32	(MAXSSIZ >> 2)
+#endif
 
 	if (epp->ep_flags & EXEC_32) {
 		epp->ep_minsaddr = USRSTACK32;
-		max_stack_size = MAXSSIZ;
+		max_stack_size = MAXSSIZ32;
 	} else {
 		epp->ep_minsaddr = USRSTACK;
 		max_stack_size = MAXSSIZ;
 	}
 
-#ifdef PAX_ASLR
-	pax_aslr_stack(l, epp, &max_stack_size);
-#endif /* PAX_ASLR */
+	DPRINTF(("ep_minsaddr=%#jx max_stack_size=%#jx\n",
+	    (uintmax_t)epp->ep_minsaddr, (uintmax_t)max_stack_size));
+
+	pax_aslr_stack(epp, &max_stack_size);
+
+	DPRINTF(("[RLIMIT_STACK].lim_cur=%#jx max_stack_size=%#jx\n",
+	    (uintmax_t)l->l_proc->p_rlimit[RLIMIT_STACK].rlim_cur,
+	    (uintmax_t)max_stack_size));
+	epp->ep_ssize = MIN(l->l_proc->p_rlimit[RLIMIT_STACK].rlim_cur,
+	    max_stack_size);
 
 	l->l_proc->p_stackbase = epp->ep_minsaddr;
 	
-	epp->ep_maxsaddr = (u_long)STACK_GROW(epp->ep_minsaddr,
-		max_stack_size);
-	epp->ep_ssize = l->l_proc->p_rlimit[RLIMIT_STACK].rlim_cur;
+	epp->ep_maxsaddr = (vaddr_t)STACK_GROW(epp->ep_minsaddr,
+	    max_stack_size);
+
+	DPRINTF(("ep_ssize=%#jx ep_minsaddr=%#jx ep_maxsaddr=%#jx\n",
+	    (uintmax_t)epp->ep_ssize, (uintmax_t)epp->ep_minsaddr,
+	    (uintmax_t)epp->ep_maxsaddr));
 
 	/*
 	 * set up commands for stack.  note that this takes *two*, one to
@@ -407,17 +433,35 @@ exec_setup_stack(struct lwp *l, struct exec_package *epp)
 	 * addition of another mapping proc, which is unnecessary
 	 */
 	access_size = epp->ep_ssize;
-	access_linear_min = (u_long)STACK_ALLOC(epp->ep_minsaddr, access_size);
+	access_linear_min = (vaddr_t)STACK_ALLOC(epp->ep_minsaddr, access_size);
 	noaccess_size = max_stack_size - access_size;
-	noaccess_linear_min = (u_long)STACK_ALLOC(STACK_GROW(epp->ep_minsaddr,
+	noaccess_linear_min = (vaddr_t)STACK_ALLOC(STACK_GROW(epp->ep_minsaddr,
 	    access_size), noaccess_size);
-	if (noaccess_size > 0) {
-		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, noaccess_size,
-		    noaccess_linear_min, NULL, 0, VM_PROT_NONE);
+
+	DPRINTF(("access_size=%#jx, access_linear_min=%#jx, "
+	    "noaccess_size=%#jx, noaccess_linear_min=%#jx\n",
+	    (uintmax_t)access_size, (uintmax_t)access_linear_min,
+	    (uintmax_t)noaccess_size, (uintmax_t)noaccess_linear_min));
+
+	if (user_stack_guard_size > 0) {
+#ifdef __MACHINE_STACK_GROWS_UP
+		vsize_t guard_size = MIN(VM_MAXUSER_ADDRESS - epp->ep_maxsaddr, user_stack_guard_size);
+		if (guard_size > 0)
+			NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, guard_size,
+			    epp->ep_maxsaddr, NULL, 0, VM_PROT_NONE);
+#else
+		NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, user_stack_guard_size,
+		    epp->ep_maxsaddr - user_stack_guard_size, NULL, 0, VM_PROT_NONE);
+#endif
 	}
-	KASSERT(access_size > 0);
-	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_zero, access_size,
-	    access_linear_min, NULL, 0, VM_PROT_READ | VM_PROT_WRITE);
+	if (noaccess_size > 0 && noaccess_size <= MAXSSIZ) {
+		NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, noaccess_size,
+		    noaccess_linear_min, NULL, 0, VM_PROT_NONE, VMCMD_STACK);
+	}
+	KASSERT(access_size > 0 && access_size <= MAXSSIZ);
+	NEW_VMCMD2(&epp->ep_vmcmds, vmcmd_map_zero, access_size,
+	    access_linear_min, NULL, 0, VM_PROT_READ | VM_PROT_WRITE,
+	    VMCMD_STACK);
 
 	return 0;
 }

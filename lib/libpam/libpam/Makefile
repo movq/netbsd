@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.7 2008/01/27 01:27:05 christos Exp $
+# $NetBSD: Makefile,v 1.19 2017/05/21 15:28:41 riastradh Exp $
 #-
 # Copyright (c) 1998 Juniper Networks, Inc.
 # All rights reserved.
@@ -40,30 +40,40 @@ NOPROFILE=	# Don't build a profiling library
 
 .include <bsd.own.mk>
 
-DIST=   ${NETBSDSRCDIR}/dist/openpam
+DIST=   ${NETBSDSRCDIR}/external/bsd/openpam/dist
 LIB=	pam
 NOPROFILE=
 
-WARNS=	3
+WARNS=	6
 # 233: Struct/union never defined
 LINTFLAGS+= -Sw -X 233
 
-CPPFLAGS+= -DLIB_MAJ=${SHLIB_MAJOR}
+CPPFLAGS+= -DLIB_MAJ=${SHLIB_MAJOR} -DHAVE_CONFIG_H -I${.CURDIR}
 
 SRCS=	openpam_borrow_cred.c \
+	openpam_check_owner_perms.c \
 	openpam_configure.c \
+	openpam_constants.c \
 	openpam_dispatch.c \
 	openpam_dynamic.c \
+	openpam_features.c \
 	openpam_findenv.c \
 	openpam_free_data.c \
 	openpam_free_envlist.c \
+	openpam_get_feature.c \
 	openpam_get_option.c \
 	openpam_load.c \
 	openpam_log.c \
 	openpam_nullconv.c \
 	openpam_readline.c \
+	openpam_readlinev.c \
+	openpam_readword.c \
 	openpam_restore_cred.c \
+	openpam_set_feature.c \
 	openpam_set_option.c \
+	openpam_straddch.c \
+	openpam_strlset.c \
+	openpam_subst.c \
 	openpam_ttyconv.c \
 	pam_acct_mgmt.c \
 	pam_authenticate.c \
@@ -93,18 +103,26 @@ SRCS=	openpam_borrow_cred.c \
 # Local additions
 SRCS+=	pam_debug_log.c
 
-MAN=	openpam.3 \
+MAN=	\
+	openpam.3 \
 	openpam_borrow_cred.3 \
 	openpam_free_data.3 \
 	openpam_free_envlist.3 \
+	openpam_get_feature.3 \
 	openpam_get_option.3 \
 	openpam_log.3 \
 	openpam_nullconv.3 \
 	openpam_readline.3 \
+	openpam_readlinev.3 \
+	openpam_readword.3 \
 	openpam_restore_cred.3 \
+	openpam_set_feature.3 \
 	openpam_set_option.3 \
+	openpam_straddch.3 \
+	openpam_subst.3 \
 	openpam_ttyconv.3 \
 	pam.3 \
+	pam.conf.5 \
 	pam_acct_mgmt.3 \
 	pam_authenticate.3 \
 	pam_chauthtok.3 \
@@ -165,23 +183,30 @@ STATIC_MODULES+= pam_afslog pam_krb5 pam_ksu
 STATIC_MODULES+= pam_skey
 .endif
 
-.if (${MKCRYPTO} != "no")
 STATIC_MODULES+= pam_ssh
-.endif
  
 MODULE_DIR=../modules
+# XXX
+.ifdef _CURDIR
+PAM_DIR=${_CURDIR}
+.else
+PAM_DIR=${.CURDIR}
+.endif
 .for MOD in ${STATIC_MODULES}
-MODOBJDIR!=	cd ${.CURDIR}/${MODULE_DIR}/${MOD} && ${PRINTOBJDIR}
+MODOBJDIR!=	cd ${PAM_DIR}/${MODULE_DIR}/${MOD} && ${PRINTOBJDIR}
 STATIC_MODULE_LIBS:= ${STATIC_MODULE_LIBS} ${MODOBJDIR}/lib${MOD}.a
 .endfor
 
 # XXX Using ${.ALLSRC} in the ld command causes openpam_static.c to be
 # XXX used.  Why??!!  --thorpej
 openpam_static_modules.o: openpam_static.o ${STATIC_MODULE_LIBS}
-	${LD} -o ${.TARGET} -r --whole-archive openpam_static.o \
-	    ${STATIC_MODULE_LIBS}
+	${CC} ${LDFLAGS} -nostdlib -o ${.TARGET} -r -Wl,--whole-archive \
+	    openpam_static.o ${STATIC_MODULE_LIBS}
+
+CWARNFLAGS.clang+=	-Wno-error=tautological-pointer-compare
 
 .include <bsd.lib.mk>
 .PATH.h: ${DIST}/include
-.PATH.c: ${DIST}/lib
+.PATH.c: ${DIST}/lib/libpam
 .PATH.3: ${DIST}/doc/man
+.PATH.5: ${DIST}/doc/man

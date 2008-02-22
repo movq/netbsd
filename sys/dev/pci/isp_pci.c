@@ -1,4 +1,4 @@
-/* $NetBSD: isp_pci.c,v 1.103 2007/06/26 20:58:27 mjacob Exp $ */
+/* $NetBSD: isp_pci.c,v 1.119 2016/07/14 04:00:46 msaitoh Exp $ */
 /*
  * Copyright (C) 1997, 1998, 1999 National Aeronautics & Space Administration
  * All rights reserved.
@@ -38,13 +38,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isp_pci.c,v 1.103 2007/06/26 20:58:27 mjacob Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isp_pci.c,v 1.119 2016/07/14 04:00:46 msaitoh Exp $");
 
 #include <dev/ic/isp_netbsd.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
-#include <uvm/uvm_extern.h>
 #include <sys/reboot.h>
 
 static uint32_t isp_pci_rd_reg(struct ispsoftc *, int);
@@ -61,7 +60,7 @@ static void isp_pci_wr_reg_1080(struct ispsoftc *, int, uint32_t);
 static int
 isp_pci_rd_isr(struct ispsoftc *, uint32_t *, uint16_t *, uint16_t *);
 #endif
-#if !defined(ISP_DISABLE_2300_SUPPORT)
+#if !(defined(ISP_DISABLE_2300_SUPPORT) && defined(ISP_DISABLE_2322_SUPPORT))
 static int
 isp_pci_rd_isr_2300(struct ispsoftc *, uint32_t *, uint16_t *, uint16_t *);
 #endif
@@ -70,12 +69,9 @@ static uint32_t isp_pci_rd_reg_2400(struct ispsoftc *, int);
 static void isp_pci_wr_reg_2400(struct ispsoftc *, int, uint32_t);
 static int
 isp_pci_rd_isr_2400(struct ispsoftc *, uint32_t *, uint16_t *, uint16_t *);
-static int isp2400_pci_dmasetup(struct ispsoftc *, XS_T *, ispreq_t *,
-    uint32_t *, uint32_t);
 #endif
 static int isp_pci_mbxdma(struct ispsoftc *);
-static int isp_pci_dmasetup(struct ispsoftc *, XS_T *, ispreq_t *,
-    uint32_t *, uint32_t);
+static int isp_pci_dmasetup(struct ispsoftc *, XS_T *, void *);
 static void isp_pci_dmateardown(struct ispsoftc *, XS_T *, uint32_t);
 static void isp_pci_reset0(struct ispsoftc *);
 static void isp_pci_reset1(struct ispsoftc *);
@@ -119,19 +115,27 @@ static int isp_pci_intr(void *);
 
 #if	defined(ISP_DISABLE_2300_SUPPORT) || defined(ISP_DISABLE_FW)
 #define	ISP_2300_RISC_CODE	NULL
-#define	ISP_2322_RISC_CODE	NULL
 #else
 #define	ISP_2300_RISC_CODE	(const uint16_t *) isp_2300_risc_code
 #include <dev/microcode/isp/asm_2300.h>
+#endif
+#if	defined(ISP_DISABLE_2322_SUPPORT) || defined(ISP_DISABLE_FW)
+#define	ISP_2322_RISC_CODE	NULL
+#else
 #define	ISP_2322_RISC_CODE	(const uint16_t *) isp_2322_risc_code
 #include <dev/microcode/isp/asm_2322.h>
 #endif
 
 #if	defined(ISP_DISABLE_2400_SUPPORT) || defined(ISP_DISABLE_FW)
 #define	ISP_2400_RISC_CODE	NULL
+#define	ISP_2500_RISC_CODE	NULL
 #else
+#define	ISP_2500
+#define	ISP_2400
 #define	ISP_2400_RISC_CODE	(const uint32_t *) isp_2400_risc_code
+#define	ISP_2500_RISC_CODE	(const uint32_t *) isp_2500_risc_code
 #include <dev/microcode/isp/asm_2400.h>
+#include <dev/microcode/isp/asm_2500.h>
 #endif
 
 #ifndef	ISP_DISABLE_1020_SUPPORT
@@ -219,7 +223,7 @@ static struct ispmdvec mdvec_2200 = {
 };
 #endif
 
-#ifndef	ISP_DISABLE_2300_SUPPORT
+#ifndef ISP_DISABLE_2300_SUPPORT
 static struct ispmdvec mdvec_2300 = {
 	isp_pci_rd_isr_2300,
 	isp_pci_rd_reg,
@@ -236,18 +240,49 @@ static struct ispmdvec mdvec_2300 = {
 };
 #endif
 
+#ifndef ISP_DISABLE_2322_SUPPORT
+static struct ispmdvec mdvec_2322 = {
+	isp_pci_rd_isr_2300,
+	isp_pci_rd_reg,
+	isp_pci_wr_reg,
+	isp_pci_mbxdma,
+	isp_pci_dmasetup,
+	isp_pci_dmateardown,
+	isp_pci_reset0,
+	isp_pci_reset1,
+	isp_pci_dumpregs,
+	ISP_2322_RISC_CODE,
+	0,
+	0
+};
+#endif
+
 #ifndef	ISP_DISABLE_2400_SUPPORT
 static struct ispmdvec mdvec_2400 = {
 	isp_pci_rd_isr_2400,
 	isp_pci_rd_reg_2400,
 	isp_pci_wr_reg_2400,
 	isp_pci_mbxdma,
-	isp2400_pci_dmasetup,
+	isp_pci_dmasetup,
 	isp_pci_dmateardown,
 	isp_pci_reset0,
 	isp_pci_reset1,
 	NULL,
 	ISP_2400_RISC_CODE,
+	0,
+	0
+};
+static struct ispmdvec mdvec_2500 = {
+	isp_pci_rd_isr_2400,
+	isp_pci_rd_reg_2400,
+	isp_pci_wr_reg_2400,
+	isp_pci_mbxdma,
+	isp_pci_dmasetup,
+	isp_pci_dmateardown,
+	isp_pci_reset0,
+	isp_pci_reset1,
+	NULL,
+	ISP_2500_RISC_CODE,
 	0,
 	0
 };
@@ -309,6 +344,10 @@ static struct ispmdvec mdvec_2400 = {
 #define	PCI_PRODUCT_QLOGIC_ISP2432	0x2432
 #endif
 
+#ifndef	PCI_PRODUCT_QLOGIC_ISP2532
+#define	PCI_PRODUCT_QLOGIC_ISP2532	0x2532
+#endif
+
 #ifndef	PCI_PRODUCT_QLOGIC_ISP6312
 #define	PCI_PRODUCT_QLOGIC_ISP6312	0x6312
 #endif
@@ -356,6 +395,9 @@ static struct ispmdvec mdvec_2400 = {
 #define	PCI_QLOGIC_ISP2432	\
 	((PCI_PRODUCT_QLOGIC_ISP2432 << 16) | PCI_VENDOR_QLOGIC)
 
+#define	PCI_QLOGIC_ISP2532	\
+	((PCI_PRODUCT_QLOGIC_ISP2532 << 16) | PCI_VENDOR_QLOGIC)
+
 #define	PCI_QLOGIC_ISP6312	\
 	((PCI_PRODUCT_QLOGIC_ISP6312 << 16) | PCI_VENDOR_QLOGIC)
 
@@ -369,8 +411,8 @@ static struct ispmdvec mdvec_2400 = {
 #define	PCI_DFLT_LTNCY	0x40
 #define	PCI_DFLT_LNSZ	0x10
 
-static int isp_pci_probe(struct device *, struct cfdata *, void *);
-static void isp_pci_attach(struct device *, struct device *, void *);
+static int isp_pci_probe(device_t, cfdata_t, void *);
+static void isp_pci_attach(device_t, device_t, void *);
 
 struct isp_pcisoftc {
 	struct ispsoftc		pci_isp;
@@ -383,16 +425,11 @@ struct isp_pcisoftc {
 	int16_t			pci_poff[_NREG_BLKS];
 };
 
-CFATTACH_DECL(isp_pci, sizeof (struct isp_pcisoftc),
+CFATTACH_DECL_NEW(isp_pci, sizeof (struct isp_pcisoftc),
     isp_pci_probe, isp_pci_attach, NULL, NULL);
 
-#ifdef	DEBUG
-const char vstring[] =
-    "Qlogic ISP Driver, NetBSD (pci) Platform Version %d.%d Core Version %d.%d";
-#endif
-
 static int
-isp_pci_probe(struct device *parent, struct cfdata *match, void *aux)
+isp_pci_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	switch (pa->pa_id) {
@@ -422,14 +459,17 @@ isp_pci_probe(struct device *parent, struct cfdata *match, void *aux)
 #ifndef	ISP_DISABLE_2300_SUPPORT
 	case PCI_QLOGIC_ISP2300:
 	case PCI_QLOGIC_ISP2312:
-	case PCI_QLOGIC_ISP2322:
 	case PCI_QLOGIC_ISP6312:
+#endif
+#ifndef	ISP_DISABLE_2322_SUPPORT
+	case PCI_QLOGIC_ISP2322:
 	case PCI_QLOGIC_ISP6322:
 		return (1);
 #endif
 #ifndef	ISP_DISABLE_2400_SUPPORT
 	case PCI_QLOGIC_ISP2422:
 	case PCI_QLOGIC_ISP2432:
+	case PCI_QLOGIC_ISP2532:
 		return (1);
 #endif
 	default:
@@ -437,17 +477,13 @@ isp_pci_probe(struct device *parent, struct cfdata *match, void *aux)
 	}
 }
 
-
 static void
-isp_pci_attach(struct device *parent, struct device *self, void *aux)
+isp_pci_attach(device_t parent, device_t self, void *aux)
 {
-#ifdef	DEBUG
-	static char oneshot = 1;
-#endif
 	static const char nomem[] = "\n%s: no mem for sdparam table\n";
 	uint32_t data, rev, linesz = PCI_DFLT_LNSZ;
 	struct pci_attach_args *pa = aux;
-	struct isp_pcisoftc *pcs = (struct isp_pcisoftc *) self;
+	struct isp_pcisoftc *pcs = device_private(self);
 	struct ispsoftc *isp = &pcs->pci_isp;
 	bus_space_tag_t st, iot, memt;
 	bus_space_handle_t sh, ioh, memh;
@@ -456,9 +492,12 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 	const char *dstring;
 	const char *intrstr;
 	int ioh_valid, memh_valid;
+	size_t mamt;
+	char intrbuf[PCI_INTRSTR_LEN];
 
-	ioh_valid = (pci_mapreg_map(pa, IO_MAP_REG,
-	    PCI_MAPREG_TYPE_IO, 0,
+	isp->isp_osinfo.dev = self;
+
+	ioh_valid = (pci_mapreg_map(pa, IO_MAP_REG, PCI_MAPREG_TYPE_IO, 0,
 	    &iot, &ioh, NULL, NULL) == 0);
 
 	mem_type = pci_mapreg_type(pa->pa_pc, pa->pa_tag, MEM_MAP_REG);
@@ -478,10 +517,13 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 		st = iot;
 		sh = ioh;
 	} else {
-		printf(": unable to map device registers\n");
+		aprint_error(": unable to map device registers\n");
 		return;
 	}
 	dstring = "\n";
+
+	isp->isp_nchan = 1;
+	mamt = 0;
 
 	pcs->pci_st = st;
 	pcs->pci_sh = sh;
@@ -494,17 +536,13 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 	pcs->pci_poff[DMA_BLOCK >> _BLK_REG_SHFT] = DMA_REGS_OFF;
 	rev = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_CLASS_REG) & 0xff;
 
+
 #ifndef	ISP_DISABLE_1020_SUPPORT
 	if (pa->pa_id == PCI_QLOGIC_ISP) {
 		dstring = ": QLogic 1020 Fast Wide SCSI HBA\n";
 		isp->isp_mdvec = &mdvec;
 		isp->isp_type = ISP_HA_SCSI_UNKNOWN;
-		isp->isp_param = malloc(sizeof (sdparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, sizeof (sdparam));
+		mamt = sizeof (sdparam);
 	}
 #endif
 #ifndef	ISP_DISABLE_1080_SUPPORT
@@ -512,12 +550,7 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 		dstring = ": QLogic 1080 Ultra-2 Wide SCSI HBA\n";
 		isp->isp_mdvec = &mdvec_1080;
 		isp->isp_type = ISP_HA_SCSI_1080;
-		isp->isp_param = malloc(sizeof (sdparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, sizeof (sdparam));
+		mamt = sizeof (sdparam);
 		pcs->pci_poff[DMA_BLOCK >> _BLK_REG_SHFT] =
 		    ISP1080_DMA_REGS_OFF;
 	}
@@ -525,13 +558,8 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 		dstring = ": QLogic Dual Channel Ultra Wide SCSI HBA\n";
 		isp->isp_mdvec = &mdvec_1080;
 		isp->isp_type = ISP_HA_SCSI_1240;
-		isp->isp_param =
-		    malloc(2 * sizeof (sdparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, 2 * sizeof (sdparam));
+		isp->isp_nchan++;
+		mamt = sizeof (sdparam) * 2;
 		pcs->pci_poff[DMA_BLOCK >> _BLK_REG_SHFT] =
 		    ISP1080_DMA_REGS_OFF;
 	}
@@ -539,13 +567,8 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 		dstring = ": QLogic Dual Channel Ultra-2 Wide SCSI HBA\n";
 		isp->isp_mdvec = &mdvec_1080;
 		isp->isp_type = ISP_HA_SCSI_1280;
-		isp->isp_param =
-		    malloc(2 * sizeof (sdparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, 2 * sizeof (sdparam));
+		isp->isp_nchan++;
+		mamt = sizeof (sdparam) * 2;
 		pcs->pci_poff[DMA_BLOCK >> _BLK_REG_SHFT] =
 		    ISP1080_DMA_REGS_OFF;
 	}
@@ -555,12 +578,7 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 		dstring = ": QLogic Ultra-3 Wide SCSI HBA\n";
 		isp->isp_mdvec = &mdvec_12160;
 		isp->isp_type = ISP_HA_SCSI_10160;
-		isp->isp_param = malloc(sizeof (sdparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, sizeof (sdparam));
+		mamt = sizeof (sdparam);
 		pcs->pci_poff[DMA_BLOCK >> _BLK_REG_SHFT] =
 		    ISP1080_DMA_REGS_OFF;
 	}
@@ -568,13 +586,8 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 		dstring = ": QLogic Dual Channel Ultra-3 Wide SCSI HBA\n";
 		isp->isp_mdvec = &mdvec_12160;
 		isp->isp_type = ISP_HA_SCSI_12160;
-		isp->isp_param =
-		    malloc(2 * sizeof (sdparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, 2 * sizeof (sdparam));
+		isp->isp_nchan++;
+		mamt = sizeof (sdparam) * 2;
 		pcs->pci_poff[DMA_BLOCK >> _BLK_REG_SHFT] =
 		    ISP1080_DMA_REGS_OFF;
 	}
@@ -584,12 +597,7 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 		dstring = ": QLogic FC-AL HBA\n";
 		isp->isp_mdvec = &mdvec_2100;
 		isp->isp_type = ISP_HA_FC_2100;
-		isp->isp_param = malloc(sizeof (fcparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, sizeof (fcparam));
+		mamt = sizeof (fcparam);
 		pcs->pci_poff[MBOX_BLOCK >> _BLK_REG_SHFT] =
 		    PCI_MBOX_REGS2100_OFF;
 		if (rev < 3) {
@@ -608,12 +616,7 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 		dstring = ": QLogic FC-AL and Fabric HBA\n";
 		isp->isp_mdvec = &mdvec_2200;
 		isp->isp_type = ISP_HA_FC_2200;
-		isp->isp_param = malloc(sizeof (fcparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, sizeof (fcparam));
+		mamt = sizeof (fcparam);
 		pcs->pci_poff[MBOX_BLOCK >> _BLK_REG_SHFT] =
 		    PCI_MBOX_REGS2100_OFF;
 		data = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_CLASS_REG);
@@ -634,28 +637,20 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 			isp->isp_port = pa->pa_function;
 		}
 		isp->isp_type = ISP_HA_FC_2312;
-		isp->isp_param = malloc(sizeof (fcparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, sizeof (fcparam));
+		mamt = sizeof (fcparam);
 		pcs->pci_poff[MBOX_BLOCK >> _BLK_REG_SHFT] =
 		    PCI_MBOX_REGS2300_OFF;
 		data = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_CLASS_REG);
 	}
+#endif
+#ifndef	ISP_DISABLE_2322_SUPPORT
 	if (pa->pa_id == PCI_QLOGIC_ISP2322 ||
 	    pa->pa_id == PCI_QLOGIC_ISP6322) {
-		isp->isp_mdvec = &mdvec_2300;
+		isp->isp_mdvec = &mdvec_2322;
 		dstring = ": QLogic FC-AL and 2Gbps Fabric PCI-E HBA\n";
 		isp->isp_type = ISP_HA_FC_2322;
 		isp->isp_port = pa->pa_function;
-		isp->isp_param = malloc(sizeof (fcparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, sizeof (fcparam));
+		mamt = sizeof (fcparam);
 		pcs->pci_poff[MBOX_BLOCK >> _BLK_REG_SHFT] =
 		    PCI_MBOX_REGS2300_OFF;
 		data = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_CLASS_REG);
@@ -671,17 +666,43 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 			dstring = ": QLogic FC-AL and 4Gbps Fabric PCI-E HBA\n";
 		}
 		isp->isp_type = ISP_HA_FC_2400;
-		isp->isp_param = malloc(sizeof (fcparam), M_DEVBUF, M_NOWAIT);
-		if (isp->isp_param == NULL) {
-			printf(nomem, isp->isp_name);
-			return;
-		}
-		memset(isp->isp_param, 0, sizeof (fcparam));
+		isp->isp_port = pa->pa_function;
+		mamt = sizeof (fcparam);
+		pcs->pci_poff[MBOX_BLOCK >> _BLK_REG_SHFT] =
+		    PCI_MBOX_REGS2400_OFF;
+		data = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_CLASS_REG);
+	}
+	if (pa->pa_id == PCI_QLOGIC_ISP2532) {
+		isp->isp_mdvec = &mdvec_2500;
+		dstring = ": QLogic FC-AL and 8Gbps Fabric PCI-E HBA\n";
+		isp->isp_type = ISP_HA_FC_2500;
+		isp->isp_port = pa->pa_function;
+		mamt = sizeof (fcparam);
 		pcs->pci_poff[MBOX_BLOCK >> _BLK_REG_SHFT] =
 		    PCI_MBOX_REGS2400_OFF;
 		data = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_CLASS_REG);
 	}
 #endif
+	if (mamt == 0) {
+		return;
+	}
+
+	isp->isp_param = malloc(mamt, M_DEVBUF, M_NOWAIT);
+	if (isp->isp_param == NULL) {
+		aprint_error(nomem, device_xname(self));
+		return;
+	}
+	memset(isp->isp_param, 0, mamt);
+	mamt = sizeof (struct scsipi_channel) * isp->isp_nchan;
+	isp->isp_osinfo.chan = malloc(mamt, M_DEVBUF, M_NOWAIT);
+	if (isp->isp_osinfo.chan == NULL) {
+		free(isp->isp_param, M_DEVBUF);
+		aprint_error(nomem, device_xname(self));
+		return;
+	}
+	memset(isp->isp_osinfo.chan, 0, mamt);
+	isp->isp_osinfo.adapter.adapt_nchannels = isp->isp_nchan;
+
 	/*
 	 * Set up logging levels.
 	 */
@@ -696,19 +717,10 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 #endif
 #endif
 	if (isp->isp_dblev & ISP_LOGCONFIG) {
-		printf("\n");
+		aprint_normal("\n");
 	} else {
-		printf(dstring);
+		aprint_normal("%s", dstring);
 	}
-
-#ifdef	DEBUG
-	if (oneshot) {
-		oneshot = 0;
-		isp_prt(isp, ISP_LOGCONFIG, vstring,
-		    ISP_PLATFORM_VERSION_MAJOR, ISP_PLATFORM_VERSION_MINOR,
-		    ISP_CORE_VERSION_MAJOR, ISP_CORE_VERSION_MINOR);
-	}
-#endif
 
 	isp->isp_dmatag = pa->pa_dmat;
 	isp->isp_revision = rev;
@@ -726,9 +738,6 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 	data |= PCI_COMMAND_PARITY_ENABLE | PCI_COMMAND_SERR_ENABLE;
 	if (IS_2300(isp)) {	/* per QLogic errata */
 		data &= ~PCI_COMMAND_INVALIDATE_ENABLE;
-	}
-	if (IS_23XX(isp)) {
-		isp->isp_touched = 1;
 	}
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG, data);
 
@@ -748,36 +757,33 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCIR_ROMADDR, data);
 
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", isp->isp_name);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		free(isp->isp_param, M_DEVBUF);
+		free(isp->isp_osinfo.chan, M_DEVBUF);
 		return;
 	}
-	intrstr = pci_intr_string(pa->pa_pc, ih);
+	intrstr = pci_intr_string(pa->pa_pc, ih, intrbuf, sizeof(intrbuf));
 	if (intrstr == NULL)
 		intrstr = "<I dunno>";
 	pcs->pci_ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO,
 	    isp_pci_intr, isp);
 	if (pcs->pci_ih == NULL) {
-		printf("%s: couldn't establish interrupt at %s\n",
-			isp->isp_name, intrstr);
+		aprint_error_dev(self, "couldn't establish interrupt at %s\n",
+			intrstr);
 		free(isp->isp_param, M_DEVBUF);
+		free(isp->isp_osinfo.chan, M_DEVBUF);
 		return;
 	}
 
-	printf("%s: interrupting at %s\n", isp->isp_name, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
-	if (IS_FC(isp)) {
-		DEFAULT_NODEWWN(isp) = 0x400000007F000002ULL;
-		DEFAULT_PORTWWN(isp) = 0x400000007F000002ULL;
-	}
-
-	isp->isp_confopts = self->dv_cfdata->cf_flags;
-	isp->isp_role = ISP_DEFAULT_ROLES;
+	isp->isp_confopts = device_cfdata(self)->cf_flags;
 	ISP_LOCK(isp);
-	isp_reset(isp);
+	isp_reset(isp, 1);
 	if (isp->isp_state != ISP_RESETSTATE) {
 		ISP_UNLOCK(isp);
 		free(isp->isp_param, M_DEVBUF);
+		free(isp->isp_osinfo.chan, M_DEVBUF);
 		return;
 	}
 	isp_init(isp);
@@ -785,6 +791,7 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 		isp_uninit(isp);
 		ISP_UNLOCK(isp);
 		free(isp->isp_param, M_DEVBUF);
+		free(isp->isp_osinfo.chan, M_DEVBUF);
 		return;
 	}
 	/*
@@ -792,12 +799,6 @@ isp_pci_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	ISP_UNLOCK(isp);
 	isp_attach(isp);
-	if (isp->isp_state != ISP_RUNSTATE) {
-		ISP_LOCK(isp);
-		isp_uninit(isp);
-		free(isp->isp_param, M_DEVBUF);
-		ISP_UNLOCK(isp);
-	}
 }
 
 #define	IspVirt2Off(a, x)	\
@@ -875,7 +876,7 @@ isp_pci_rd_isr(struct ispsoftc *isp, uint32_t *isrp,
 }
 #endif
 
-#ifndef	ISP_DISABLE_2300_SUPPORT
+#if !(defined(ISP_DISABLE_2300_SUPPORT) || defined(ISP_DISABLE_2322_SUPPORT))
 static int
 isp_pci_rd_isr_2300(struct ispsoftc *isp, uint32_t *isrp,
     uint16_t *semap, uint16_t *mbox0p)
@@ -906,7 +907,7 @@ isp_pci_rd_isr_2300(struct ispsoftc *isp, uint32_t *isrp,
 		return (1);
 	case ISPR2HST_RIO_16:
 		*isrp = r2hisr & 0xffff;
-		*mbox0p = ASYNC_RIO1;
+		*mbox0p = ASYNC_RIO16_1;
 		*semap = 1;
 		return (1);
 	case ISPR2HST_FPOST:
@@ -1005,10 +1006,10 @@ isp_pci_rd_reg_2400(ispsoftc_t *isp, int regoff)
 	case BIU2400_REQOUTP:
 	case BIU2400_RSPINP:
 	case BIU2400_RSPOUTP:
-	case BIU2400_PRI_RQINP:
-	case BIU2400_PRI_RSPINP:
+	case BIU2400_PRI_REQINP:
+	case BIU2400_PRI_REQOUTP:
 	case BIU2400_ATIO_RSPINP:
-	case BIU2400_ATIO_REQINP:
+	case BIU2400_ATIO_RSPOUTP:
 	case BIU2400_HCCR:
 	case BIU2400_GPIOD:
 	case BIU2400_GPIOE:
@@ -1035,14 +1036,13 @@ isp_pci_wr_reg_2400(ispsoftc_t *isp, int regoff, uint32_t val)
 {
 	struct isp_pcisoftc *pcs = (struct isp_pcisoftc *) isp;
 	int block = regoff & _BLK_REG_MASK;
-	volatile int junk;
 
 	switch (block) {
 	case BIU_BLOCK:
 		break;
 	case MBOX_BLOCK:
 		BXW2(pcs, IspVirt2Off(pcs, regoff), val);
-		junk = BXR2(pcs, IspVirt2Off(pcs, regoff));
+		(void)BXR2(pcs, IspVirt2Off(pcs, regoff));
 		return;
 	case SXP_BLOCK:
 		isp_prt(isp, ISP_LOGWARN, "SXP_BLOCK write at 0x%x", regoff);
@@ -1069,16 +1069,16 @@ isp_pci_wr_reg_2400(ispsoftc_t *isp, int regoff, uint32_t val)
 	case BIU2400_REQOUTP:
 	case BIU2400_RSPINP:
 	case BIU2400_RSPOUTP:
-	case BIU2400_PRI_RQINP:
-	case BIU2400_PRI_RSPINP:
+	case BIU2400_PRI_REQINP:
+	case BIU2400_PRI_REQOUTP:
 	case BIU2400_ATIO_RSPINP:
-	case BIU2400_ATIO_REQINP:
+	case BIU2400_ATIO_RSPOUTP:
 	case BIU2400_HCCR:
 	case BIU2400_GPIOD:
 	case BIU2400_GPIOE:
 	case BIU2400_HSEMA:
 		BXW4(pcs, IspVirt2Off(pcs, regoff), val);
-		junk = BXR4(pcs, IspVirt2Off(pcs, regoff));
+		(void)BXR4(pcs, IspVirt2Off(pcs, regoff));
 		break;
 	default:
 		isp_prt(isp, ISP_LOGERR,
@@ -1214,13 +1214,17 @@ isp_pci_mbxdma(struct ispsoftc *isp)
 		 */
 		dbound = 0;
 	}
-	len = isp->isp_maxcmds * sizeof (XS_T *);
-	isp->isp_xflist = (XS_T **) malloc(len, M_DEVBUF, M_WAITOK);
+	len = isp->isp_maxcmds * sizeof (isp_hdl_t);
+	isp->isp_xflist = (isp_hdl_t *) malloc(len, M_DEVBUF, M_WAITOK);
 	if (isp->isp_xflist == NULL) {
 		isp_prt(isp, ISP_LOGERR, "cannot malloc xflist array");
 		return (1);
 	}
 	memset(isp->isp_xflist, 0, len);
+	for (len = 0; len < isp->isp_maxcmds - 1; len++) {
+		isp->isp_xflist[len].cmd = &isp->isp_xflist[len+1];
+	}
+	isp->isp_xffree = isp->isp_xflist;
 	len = isp->isp_maxcmds * sizeof (bus_dmamap_t);
 	pcs->pci_xfer_dmap = (bus_dmamap_t *) malloc(len, M_DEVBUF, M_WAITOK);
 	if (pcs->pci_xfer_dmap == NULL) {
@@ -1298,8 +1302,8 @@ isp_pci_mbxdma(struct ispsoftc *isp)
 	 * Allocate and map an FC scratch area
 	 */
 	fcp = isp->isp_param;
-	len = ISP2100_SCRLEN;
-	if (bus_dmamem_alloc(dmat, len, PAGE_SIZE, 0, &sg, 1, &rs,
+	len = ISP_FC_SCRLEN;
+	if (bus_dmamem_alloc(dmat, len, sizeof (uint64_t), 0, &sg, 1, &rs,
 	    BUS_DMA_NOWAIT)) {
 		goto dmafail;
 	}
@@ -1330,266 +1334,73 @@ dmafail:
 }
 
 static int
-isp_pci_dmasetup(struct ispsoftc *isp, struct scsipi_xfer *xs, ispreq_t *rq,
-    uint32_t *nxtip, uint32_t optr)
+isp_pci_dmasetup(struct ispsoftc *isp, struct scsipi_xfer *xs, void *arg)
 {
 	struct isp_pcisoftc *pcs = (struct isp_pcisoftc *)isp;
+	ispreq_t *rq = arg;
 	bus_dmamap_t dmap;
-	uint32_t starti = isp->isp_reqidx, nxti = *nxtip;
-	ispreq_t *qep;
-	int segcnt, seg, error, ovseg, seglim, drq;
+	bus_dma_segment_t *dm_segs;
+	uint32_t nsegs, hidx;
+	isp_ddir_t ddir;
 
-	qep = (ispreq_t *) ISP_QUEUE_ENTRY(isp->isp_rquest, starti);
-	dmap = pcs->pci_xfer_dmap[isp_handle_index(rq->req_handle)];
-	if (xs->datalen == 0) {
-		rq->req_seg_count = 1;
-		goto mbxsync;
-	}
-	if (xs->xs_control & XS_CTL_DATA_IN) {
-		drq = REQFLAG_DATA_IN;
-	} else {
-		drq = REQFLAG_DATA_OUT;
-	}
-
-	if (IS_FC(isp)) {
-		seglim = ISP_RQDSEG_T2;
-		((ispreqt2_t *)rq)->req_totalcnt = xs->datalen;
-		((ispreqt2_t *)rq)->req_flags |= drq;
-	} else {
-		rq->req_flags |= drq;
-		if (XS_CDBLEN(xs) > 12) {
-			seglim = 0;
-		} else {
-			seglim = ISP_RQDSEG;
-		}
-	}
-	error = bus_dmamap_load(isp->isp_dmatag, dmap, xs->data, xs->datalen,
-	    NULL, ((xs->xs_control & XS_CTL_NOSLEEP) ?
-	    BUS_DMA_NOWAIT : BUS_DMA_WAITOK) | BUS_DMA_STREAMING |
-	    ((xs->xs_control & XS_CTL_DATA_IN) ? BUS_DMA_READ : BUS_DMA_WRITE));
-	if (error) {
-		isp_prt(isp, ISP_LOGWARN, "unable to load DMA (%d)", error);
+	hidx = isp_handle_index(isp, rq->req_handle);
+	if (hidx == ISP_BAD_HANDLE_INDEX) {
 		XS_SETERR(xs, HBA_BOTCH);
-		if (error == EAGAIN || error == ENOMEM)
-			return (CMD_EAGAIN);
-		else
-			return (CMD_COMPLETE);
+		return (CMD_COMPLETE);
 	}
+	dmap = pcs->pci_xfer_dmap[hidx];
+	if (xs->datalen == 0) {
+		ddir = ISP_NOXFR;
+		nsegs = 0;
+		dm_segs = NULL;
+	 } else {
+		int error;
+		uint32_t flag, flg2;
 
-	segcnt = dmap->dm_nsegs;
-
-	isp_prt(isp, ISP_LOGDEBUG2, "%d byte %s %p in %d segs",
-	    xs->datalen, (xs->xs_control & XS_CTL_DATA_IN)? "read to" :
-	    "write from", xs->data, segcnt);
-
-	for (seg = 0, rq->req_seg_count = 0;
-	    seglim && seg < segcnt && rq->req_seg_count < seglim;
-	    seg++, rq->req_seg_count++) {
-		if (IS_FC(isp)) {
-			ispreqt2_t *rq2 = (ispreqt2_t *)rq;
-			rq2->req_dataseg[rq2->req_seg_count].ds_count =
-			    dmap->dm_segs[seg].ds_len;
-			rq2->req_dataseg[rq2->req_seg_count].ds_base =
-			    dmap->dm_segs[seg].ds_addr;
-		} else {
-			rq->req_dataseg[rq->req_seg_count].ds_count =
-			    dmap->dm_segs[seg].ds_len;
-			rq->req_dataseg[rq->req_seg_count].ds_base =
-			    dmap->dm_segs[seg].ds_addr;
+		if (sizeof (bus_addr_t) > 4) {
+			if (rq->req_header.rqs_entry_type == RQSTYPE_T2RQS) {
+				rq->req_header.rqs_entry_type = RQSTYPE_T3RQS;
+			} else if (rq->req_header.rqs_entry_type == RQSTYPE_REQUEST) {
+				rq->req_header.rqs_entry_type = RQSTYPE_A64;
+			}
 		}
-		isp_prt(isp, ISP_LOGDEBUG2, "seg0.[%d]={0x%lx,%lu}",
-		    rq->req_seg_count, (long) dmap->dm_segs[seg].ds_addr,
-		    (unsigned long) dmap->dm_segs[seg].ds_len);
-	}
 
-	if (seg == segcnt) {
-		goto dmasync;
-	}
-
-	do {
-		uint32_t onxti;
-		ispcontreq_t *crq, *cqe, local;
-
-		crq = &local;
-
-		cqe = (ispcontreq_t *) ISP_QUEUE_ENTRY(isp->isp_rquest, nxti);
-		onxti = nxti;
-		nxti = ISP_NXT_QENTRY(onxti, RQUEST_QUEUE_LEN(isp));
-		if (nxti == optr) {
-			isp_prt(isp, ISP_LOGERR, "Request Queue Overflow++");
-			bus_dmamap_unload(isp->isp_dmatag, dmap);
+		if (xs->xs_control & XS_CTL_DATA_IN) {
+			flg2 = BUS_DMASYNC_PREREAD;
+			flag = BUS_DMA_READ;
+			ddir = ISP_FROM_DEVICE;
+		} else {
+			flg2 = BUS_DMASYNC_PREWRITE;
+			flag = BUS_DMA_WRITE;
+			ddir = ISP_TO_DEVICE;
+		}
+		error = bus_dmamap_load(isp->isp_dmatag, dmap, xs->data,
+		    xs->datalen, NULL, ((xs->xs_control & XS_CTL_NOSLEEP) ?
+			BUS_DMA_NOWAIT :
+			BUS_DMA_WAITOK) | BUS_DMA_STREAMING | flag);
+		if (error) {
+			isp_prt(isp, ISP_LOGWARN, "unable to load DMA (%d)",
+			    error);
 			XS_SETERR(xs, HBA_BOTCH);
-			return (CMD_EAGAIN);
+			if (error == EAGAIN || error == ENOMEM) {
+				return (CMD_EAGAIN);
+			} else {
+				return (CMD_COMPLETE);
+			}
 		}
-		rq->req_header.rqs_entry_count++;
-		memset((void *)crq, 0, sizeof (*crq));
-		crq->req_header.rqs_entry_count = 1;
-		crq->req_header.rqs_entry_type = RQSTYPE_DATASEG;
-
-		for (ovseg = 0; seg < segcnt && ovseg < ISP_CDSEG;
-		    rq->req_seg_count++, seg++, ovseg++) {
-			crq->req_dataseg[ovseg].ds_count =
-			    dmap->dm_segs[seg].ds_len;
-			crq->req_dataseg[ovseg].ds_base =
-			    dmap->dm_segs[seg].ds_addr;
-			isp_prt(isp, ISP_LOGDEBUG2, "seg%d.[%d]={0x%lx,%lu}",
-			    rq->req_header.rqs_entry_count - 1,
-			    rq->req_seg_count, (long)dmap->dm_segs[seg].ds_addr,
-			    (unsigned long) dmap->dm_segs[seg].ds_len);
-		}
-		isp_put_cont_req(isp, crq, cqe);
-		MEMORYBARRIER(isp, SYNC_REQUEST, onxti, QENTRY_LEN);
-	} while (seg < segcnt);
-
-
-dmasync:
-	bus_dmamap_sync(isp->isp_dmatag, dmap, 0, dmap->dm_mapsize,
-	    (xs->xs_control & XS_CTL_DATA_IN) ?  BUS_DMASYNC_PREREAD :
-	    BUS_DMASYNC_PREWRITE);
-
-mbxsync:
-	switch (rq->req_header.rqs_entry_type) {
-	case RQSTYPE_REQUEST:
-		isp_put_request(isp, rq, qep);
-		break;
-	case RQSTYPE_CMDONLY:
-		isp_put_extended_request(isp, (ispextreq_t *)rq,
-		    (ispextreq_t *)qep);
-		break;
-	case RQSTYPE_T2RQS:
-		if (FCPARAM(isp)->isp_2klogin) {
-			isp_put_request_t2e(isp,
-			    (ispreqt2e_t *) rq, (ispreqt2e_t *) qep);
-		} else {
-			isp_put_request_t2(isp,
-			    (ispreqt2_t *) rq, (ispreqt2_t *) qep);
-		}
-		break;
-	}
-	*nxtip = nxti;
-	return (CMD_QUEUED);
-}
-
-
-#if !defined(ISP_DISABLE_2400_SUPPORT)
-static int
-isp2400_pci_dmasetup(struct ispsoftc *isp, struct scsipi_xfer *xs,
-    ispreq_t *ispreq, uint32_t *nxtip, uint32_t optr)
-{
-	struct isp_pcisoftc *pcs = (struct isp_pcisoftc *)isp;
-	bus_dmamap_t dmap;
-	bus_dma_segment_t *dm_segs, *eseg;
-	uint32_t starti = isp->isp_reqidx, nxti = *nxtip;
-	ispreqt7_t *rq;
-	void *qep;
-	int nseg, datalen, error, seglim;
-
-	rq = (ispreqt7_t *) ispreq;
-	qep = ISP_QUEUE_ENTRY(isp->isp_rquest, starti);
-	dmap = pcs->pci_xfer_dmap[isp_handle_index(rq->req_handle)];
-	if (xs->datalen == 0) {
-		rq->req_seg_count = 1;
-		goto mbxsync;
+		dm_segs = dmap->dm_segs;
+		nsegs = dmap->dm_nsegs;
+		bus_dmamap_sync(isp->isp_dmatag, dmap, 0, dmap->dm_mapsize,
+		    flg2);
 	}
 
-	error = bus_dmamap_load(isp->isp_dmatag, dmap, xs->data, xs->datalen,
-	    NULL, ((xs->xs_control & XS_CTL_NOSLEEP) ?
-	    BUS_DMA_NOWAIT : BUS_DMA_WAITOK) | BUS_DMA_STREAMING |
-	    ((xs->xs_control & XS_CTL_DATA_IN) ? BUS_DMA_READ : BUS_DMA_WRITE));
-	if (error) {
-		isp_prt(isp, ISP_LOGWARN, "unable to load DMA (%d)", error);
-		XS_SETERR(xs, HBA_BOTCH);
-		if (error == EAGAIN || error == ENOMEM) {
-			return (CMD_EAGAIN);
-		} else {
-			return (CMD_COMPLETE);
-		}
-	}
-
-	nseg = dmap->dm_nsegs;
-	dm_segs = dmap->dm_segs;
-
-	isp_prt(isp, ISP_LOGDEBUG2, "%d byte %s %p in %d segs",
-	    xs->datalen, (xs->xs_control & XS_CTL_DATA_IN)? "read to" :
-	    "write from", xs->data, nseg);
-
-	/*
-	 * We're passed an initial partially filled in entry that
-	 * has most fields filled in except for data transfer
-	 * related values.
-	 *
-	 * Our job is to fill in the initial request queue entry and
-	 * then to start allocating and filling in continuation entries
-	 * until we've covered the entire transfer.
-	 */
-	rq->req_header.rqs_entry_type = RQSTYPE_T7RQS;
-	rq->req_dl = xs->datalen;
-	datalen = xs->datalen;
-	if (xs->xs_control & XS_CTL_DATA_IN) {
-		rq->req_alen_datadir = 0x2;
+	if (isp_send_cmd(isp, rq, dm_segs, nsegs, xs->datalen, ddir)
+	    != CMD_QUEUED) {
+		return (CMD_EAGAIN);
 	} else {
-		rq->req_alen_datadir = 0x1;
+		return (CMD_QUEUED);
 	}
-
-	eseg = dm_segs + nseg;
-
-	rq->req_dataseg.ds_base = DMA_LO32(dm_segs->ds_addr);
-	rq->req_dataseg.ds_basehi = DMA_HI32(dm_segs->ds_addr);
-	rq->req_dataseg.ds_count = dm_segs->ds_len;
-
-	datalen -= dm_segs->ds_len;
-
-	dm_segs++;
-	rq->req_seg_count++;
-
-	while (datalen > 0 && dm_segs != eseg) {
-		uint32_t onxti;
-		ispcontreq64_t local, *crq = &local, *cqe;
-
-		cqe = (ispcontreq64_t *) ISP_QUEUE_ENTRY(isp->isp_rquest, nxti);
-		onxti = nxti;
-		nxti = ISP_NXT_QENTRY(onxti, RQUEST_QUEUE_LEN(isp));
-		if (nxti == optr) {
-			isp_prt(isp, ISP_LOGDEBUG0, "Request Queue Overflow++");
-			return (CMD_EAGAIN);
-		}
-		rq->req_header.rqs_entry_count++;
-		MEMZERO((void *)crq, sizeof (*crq));
-		crq->req_header.rqs_entry_count = 1;
-		crq->req_header.rqs_entry_type = RQSTYPE_A64_CONT;
-
-		seglim = 0;
-		while (datalen > 0 && seglim < ISP_CDSEG64 && dm_segs != eseg) {
-			crq->req_dataseg[seglim].ds_base =
-			    DMA_LO32(dm_segs->ds_addr);
-			crq->req_dataseg[seglim].ds_basehi =
-			    DMA_HI32(dm_segs->ds_addr);
-			crq->req_dataseg[seglim].ds_count =
-			    dm_segs->ds_len;
-			rq->req_seg_count++;
-			dm_segs++;
-			seglim++;
-			datalen -= dm_segs->ds_len;
-		}
-		if (isp->isp_dblev & ISP_LOGDEBUG1) {
-			isp_print_bytes(isp, "Continuation", QENTRY_LEN, crq);
-		}
-		isp_put_cont64_req(isp, crq, cqe);
-		MEMORYBARRIER(isp, SYNC_REQUEST, onxti, QENTRY_LEN);
-	}
-	*nxtip = nxti;
-
-
-	bus_dmamap_sync(isp->isp_dmatag, dmap, 0, dmap->dm_mapsize,
-	    (xs->xs_control & XS_CTL_DATA_IN) ?  BUS_DMASYNC_PREREAD :
-	    BUS_DMASYNC_PREWRITE);
-
-mbxsync:
-	isp_put_request_t7(isp, rq, qep);
-	*nxtip = nxti;
-	return (CMD_QUEUED);
 }
-#endif
 
 static int
 isp_pci_intr(void *arg)
@@ -1614,7 +1425,15 @@ static void
 isp_pci_dmateardown(struct ispsoftc *isp, XS_T *xs, uint32_t handle)
 {
 	struct isp_pcisoftc *pcs = (struct isp_pcisoftc *)isp;
-	bus_dmamap_t dmap = pcs->pci_xfer_dmap[isp_handle_index(handle)];
+	uint32_t hidx;
+	bus_dmamap_t dmap;
+
+	hidx = isp_handle_index(isp, handle);
+	if (hidx == ISP_BAD_HANDLE_INDEX) {
+		isp_xs_prt(isp, xs, ISP_LOGERR, "bad handle on teardown");
+		return;
+	}
+	dmap = pcs->pci_xfer_dmap[hidx];
 	bus_dmamap_sync(isp->isp_dmatag, dmap, 0, dmap->dm_mapsize,
 	    xs->xs_control & XS_CTL_DATA_IN ?
 	    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
@@ -1643,7 +1462,7 @@ isp_pci_dumpregs(struct ispsoftc *isp, const char *msg)
 {
 	struct isp_pcisoftc *pcs = (struct isp_pcisoftc *)isp;
 	if (msg)
-		printf("%s: %s\n", isp->isp_name, msg);
+		printf("%s: %s\n", device_xname(isp->isp_osinfo.dev), msg);
 	if (IS_SCSI(isp))
 		printf("    biu_conf1=%x", ISP_READ(isp, BIU_CONF1));
 	else

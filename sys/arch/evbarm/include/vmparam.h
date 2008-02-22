@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.24 2007/10/25 13:03:03 yamt Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.32 2018/04/01 04:35:05 ryo Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -29,10 +29,16 @@
  * SUCH DAMAGE.
  */
 
-#ifndef	_ARM32_VMPARAM_H_
-#define	_ARM32_VMPARAM_H_
+#ifndef	_EVBARM_VMPARAM_H_
+#define	_EVBARM_VMPARAM_H_
 
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(_KMEMUSER)
+
+#ifdef __aarch64__
+
+#include <aarch64/vmparam.h>
+
+#else
 
 #include <arm/arm32/vmparam.h>
 
@@ -44,12 +50,11 @@
  * The line between user space and kernel space
  * Mappings >= KERNEL_BASE are constant across all processes
  */
-#define	KERNEL_BASE		0xc0000000
-
-/*
- * Override the default pager_map size, there's not enough KVA.
- */
-#define PAGER_MAP_DEFAULT_SIZE		(4 * 1024 * 1024)
+#ifdef KERNEL_BASE_EXT
+#define	KERNEL_BASE		KERNEL_BASE_EXT
+#else
+#define	KERNEL_BASE		0x80000000
+#endif
 
 /*
  * Size of User Raw I/O map
@@ -76,23 +81,20 @@
 #define	VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
 
 /*
- * this indicates that we can't add RAM to the VM system after the
- * vm system is init'd.
- */
-
-#define	VM_PHYSSEG_NOADD
-
-/*
- * we support 2 free lists:
+ * we support 3 free lists:
  *
  *	- DEFAULT for all systems
- *	- ISADMA for the ISA DMA range on Sharks only
+ *	- ISADMA for the ISA DMA range (could be unused)
+ *	- DIRECTMAP for systems with direct KVA mapped pages
  */
 
-#define	VM_NFREELIST		2
+#define	VM_NFREELIST		3
 #define	VM_FREELIST_DEFAULT	0
 #define	VM_FREELIST_ISADMA	1
+#define	VM_FREELIST_DIRECTMAP	2
 
-#endif /* _KERNEL */
+#endif
 
-#endif	/* _ARM32_VMPARAM_H_ */
+#endif /* _KERNEL || _KMEMUSER */
+
+#endif	/* _EVBARM_VMPARAM_H_ */

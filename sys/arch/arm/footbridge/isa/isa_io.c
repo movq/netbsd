@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_io.c,v 1.3 2003/03/23 14:12:26 chris Exp $	*/
+/*	$NetBSD: isa_io.c,v 1.9 2018/03/16 17:56:31 ryo Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,11 +38,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_io.c,v 1.3 2003/03/23 14:12:26 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_io.c,v 1.9 2018/03/16 17:56:31 ryo Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pio.h>
 #include <machine/isa_machdep.h>
 
@@ -63,79 +63,79 @@ bs_protos(bs_notimpl);
  */
 struct bus_space isa_io_bs_tag = {
 	/* cookie */
-	NULL, /* initialized below */
+	.bs_cookie = NULL, /* initialized below */
 
 	/* mapping/unmapping */
-	isa_bs_map,
-	isa_bs_unmap,
-	isa_bs_subregion,
+	.bs_map = isa_bs_map,
+	.bs_unmap = isa_bs_unmap,
+	.bs_subregion = isa_bs_subregion,
 
 	/* allocation/deallocation */
-	isa_bs_alloc,
-	isa_bs_free,
+	.bs_alloc = isa_bs_alloc,
+	.bs_free = isa_bs_free,
 
 	/* get kernel virtual address */
-	isa_bs_vaddr,
+	.bs_vaddr = isa_bs_vaddr,
 
 	/* mmap bus space for userland */
-	bs_notimpl_bs_mmap,		/* XXX possible even? XXX */
+	.bs_mmap = bs_notimpl_bs_mmap,		/* XXX possible even? XXX */
 
 	/* barrier */
-	isa_bs_barrier,
+	.bs_barrier = isa_bs_barrier,
 
 	/* read (single) */
-	isa_bs_r_1,
-	isa_bs_r_2,
-	isa_bs_r_4,
-	bs_notimpl_bs_r_8,
+	.bs_r_1 = isa_bs_r_1,
+	.bs_r_2 = isa_bs_r_2,
+	.bs_r_4 = isa_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
 
 	/* read multiple */
-	isa_bs_rm_1,
-	isa_bs_rm_2,
-	isa_bs_rm_4,
-	bs_notimpl_bs_rm_8,
+	.bs_rm_1 = isa_bs_rm_1,
+	.bs_rm_2 = isa_bs_rm_2,
+	.bs_rm_4 = isa_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
 
 	/* read region */
-	isa_bs_rr_1,
-	isa_bs_rr_2,
-	isa_bs_rr_4,
-	bs_notimpl_bs_rr_8,
+	.bs_rr_1 = isa_bs_rr_1,
+	.bs_rr_2 = isa_bs_rr_2,
+	.bs_rr_4 = isa_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
 
 	/* write (single) */
-	isa_bs_w_1,
-	isa_bs_w_2,
-	isa_bs_w_4,
-	bs_notimpl_bs_w_8,
+	.bs_w_1 = isa_bs_w_1,
+	.bs_w_2 = isa_bs_w_2,
+	.bs_w_4 = isa_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
 
 	/* write multiple */
-	isa_bs_wm_1,
-	isa_bs_wm_2,
-	isa_bs_wm_4,
-	bs_notimpl_bs_wm_8,
+	.bs_wm_1 = isa_bs_wm_1,
+	.bs_wm_2 = isa_bs_wm_2,
+	.bs_wm_4 = isa_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
 
 	/* write region */
-	isa_bs_wr_1,
-	isa_bs_wr_2,
-	isa_bs_wr_4,
-	bs_notimpl_bs_wr_8,
+	.bs_wr_1 = isa_bs_wr_1,
+	.bs_wr_2 = isa_bs_wr_2,
+	.bs_wr_4 = isa_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
 
 	/* set multiple */
-	bs_notimpl_bs_sm_1,
-	bs_notimpl_bs_sm_2,
-	bs_notimpl_bs_sm_4,
-	bs_notimpl_bs_sm_8,
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
 
 	/* set region */
-	bs_notimpl_bs_sr_1,
-	isa_bs_sr_2,
-	bs_notimpl_bs_sr_4,
-	bs_notimpl_bs_sr_8,
+	.bs_sr_1 = bs_notimpl_bs_sr_1,
+	.bs_sr_2 = isa_bs_sr_2,
+	.bs_sr_4 = bs_notimpl_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
 
 	/* copy */
-	bs_notimpl_bs_c_1,
-	bs_notimpl_bs_c_2,
-	bs_notimpl_bs_c_4,
-	bs_notimpl_bs_c_8,
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = bs_notimpl_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
 };
 
 /*
@@ -144,87 +144,85 @@ struct bus_space isa_io_bs_tag = {
  */
 struct bus_space isa_mem_bs_tag = {
 	/* cookie */
-        NULL, /* initialized below */
+	.bs_cookie = NULL, /* initialized below */
 
 	/* mapping/unmapping */
-	isa_bs_map,
-	isa_bs_unmap,
-	isa_bs_subregion,
+	.bs_map = isa_bs_map,
+	.bs_unmap = isa_bs_unmap,
+	.bs_subregion = isa_bs_subregion,
 
 	/* allocation/deallocation */
-	isa_bs_alloc,
-	isa_bs_free,
+	.bs_alloc = isa_bs_alloc,
+	.bs_free = isa_bs_free,
 
 	/* get kernel virtual address */
-	isa_bs_vaddr,
+	.bs_vaddr = isa_bs_vaddr,
 
 	/* mmap bus space for userland */
-	bs_notimpl_bs_mmap,		/* XXX open for now ... XXX */
+	.bs_mmap = bs_notimpl_bs_mmap,		/* XXX open for now ... XXX */
 
 	/* barrier */
-	isa_bs_barrier,
+	.bs_barrier = isa_bs_barrier,
 
 	/* read (single) */
-	isa_bs_r_1,
-	isa_bs_r_2,
-	isa_bs_r_4,
-	bs_notimpl_bs_r_8,
+	.bs_r_1 = isa_bs_r_1,
+	.bs_r_2 = isa_bs_r_2,
+	.bs_r_4 = isa_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
 
 	/* read multiple */
-	isa_bs_rm_1,
-	isa_bs_rm_2,
-	isa_bs_rm_4,
-	bs_notimpl_bs_rm_8,
+	.bs_rm_1 = isa_bs_rm_1,
+	.bs_rm_2 = isa_bs_rm_2,
+	.bs_rm_4 = isa_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
 
 	/* read region */
-	isa_bs_rr_1,
-	isa_bs_rr_2,
-	isa_bs_rr_4,
-	bs_notimpl_bs_rr_8,
+	.bs_rr_1 = isa_bs_rr_1,
+	.bs_rr_2 = isa_bs_rr_2,
+	.bs_rr_4 = isa_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
 
 	/* write (single) */
-	isa_bs_w_1,
-	isa_bs_w_2,
-	isa_bs_w_4,
-	bs_notimpl_bs_w_8,
+	.bs_w_1 = isa_bs_w_1,
+	.bs_w_2 = isa_bs_w_2,
+	.bs_w_4 = isa_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
 
 	/* write multiple */
-	isa_bs_wm_1,
-	isa_bs_wm_2,
-	isa_bs_wm_4,
-	bs_notimpl_bs_wm_8,
+	.bs_wm_1 = isa_bs_wm_1,
+	.bs_wm_2 = isa_bs_wm_2,
+	.bs_wm_4 = isa_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
 
 	/* write region */
-	isa_bs_wr_1,
-	isa_bs_wr_2,
-	isa_bs_wr_4,
-	bs_notimpl_bs_wr_8,
+	.bs_wr_1 = isa_bs_wr_1,
+	.bs_wr_2 = isa_bs_wr_2,
+	.bs_wr_4 = isa_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
 
 	/* set multiple */
-	bs_notimpl_bs_sm_1,
-	bs_notimpl_bs_sm_2,
-	bs_notimpl_bs_sm_4,
-	bs_notimpl_bs_sm_8,
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
 
 	/* set region */
-	bs_notimpl_bs_sr_1,
-	isa_bs_sr_2,
-	bs_notimpl_bs_sr_4,
-	bs_notimpl_bs_sr_8,
+	.bs_sr_1 = bs_notimpl_bs_sr_1,
+	.bs_sr_2 = isa_bs_sr_2,
+	.bs_sr_4 = bs_notimpl_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
 
 	/* copy */
-	bs_notimpl_bs_c_1,
-	bs_notimpl_bs_c_2,
-	bs_notimpl_bs_c_4,
-	bs_notimpl_bs_c_8,
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = bs_notimpl_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
 };
 
 /* bus space functions */
 
 void
-isa_io_init(isa_io_addr, isa_mem_addr)
-	vm_offset_t isa_io_addr;
-	vm_offset_t isa_mem_addr;
+isa_io_init(vaddr_t isa_io_addr, vaddr_t isa_mem_addr)
 {
 	isa_io_bs_tag.bs_cookie = (void *)isa_io_addr;
 	isa_mem_bs_tag.bs_cookie = (void *)isa_mem_addr;
@@ -235,45 +233,33 @@ isa_io_init(isa_io_addr, isa_mem_addr)
  * (e.g. X servers) need to map ISA space directly.  use these
  * functions sparingly!
  */
-vm_offset_t
+vaddr_t
 isa_io_data_vaddr(void)
 {
-	return (vm_offset_t)isa_io_bs_tag.bs_cookie;
+	return (vaddr_t)isa_io_bs_tag.bs_cookie;
 }
 
-vm_offset_t
+vaddr_t
 isa_mem_data_vaddr(void)
 {
-	return (vm_offset_t)isa_mem_bs_tag.bs_cookie;
+	return (vaddr_t)isa_mem_bs_tag.bs_cookie;
 }
 
 int
-isa_bs_map(t, bpa, size, cacheable, bshp)
-	void *t;
-	bus_addr_t bpa;
-	bus_size_t size;
-	int cacheable;
-	bus_space_handle_t *bshp;
+isa_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int cacheable, bus_space_handle_t *bshp)
 {
 	*bshp = bpa + (bus_addr_t)t;
 	return(0);
 }
 
 void
-isa_bs_unmap(t, bsh, size)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+isa_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 {
 	/* Nothing to do. */
 }
 
 int
-isa_bs_subregion(t, bsh, offset, size, nbshp)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, size;
-	bus_space_handle_t *nbshp;
+isa_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
 {
 /*	printf("isa_subregion(tag=%p, bsh=%lx, off=%lx, sz=%lx)\n",
 	    t, bsh, offset, size);*/
@@ -282,42 +268,35 @@ isa_bs_subregion(t, bsh, offset, size, nbshp)
 }
 
 int
-isa_bs_alloc(t, rstart, rend, size, alignment, boundary, cacheable,
-    bpap, bshp)
-	void *t;
-	bus_addr_t rstart, rend;
-	bus_size_t size, alignment, boundary;
-	int cacheable;
-	bus_addr_t *bpap;
-	bus_space_handle_t *bshp;
+isa_bs_alloc(
+	void *t,
+	bus_addr_t rstart,
+	bus_addr_t rend,
+	bus_size_t size,
+	bus_size_t alignment,
+	bus_size_t boundary,
+	int cacheable,
+	bus_addr_t *bpap,
+	bus_space_handle_t *bshp)
 {
 	panic("isa_alloc(): Help!");
 }
 
 void    
-isa_bs_free(t, bsh, size)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+isa_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
 {
 	panic("isa_free(): Help!");
 }
 
 void *
-isa_bs_vaddr(t, bsh)
-	void *t;
-	bus_space_handle_t bsh;
+isa_bs_vaddr(void *t, bus_space_handle_t bsh)
 {
 
 	return ((void *)bsh);
 }
 
 void
-isa_bs_barrier(t, bsh, offset, len, flags)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, len;
-	int flags;
+isa_bs_barrier(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t len, int flags)
 {
 	/* just return */
 }	

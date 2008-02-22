@@ -1,4 +1,4 @@
-/*	$NetBSD: console.c,v 1.13 2006/01/20 04:30:03 uwe Exp $	*/
+/*	$NetBSD: console.c,v 1.15 2009/03/18 10:22:30 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.13 2006/01/20 04:30:03 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.15 2009/03/18 10:22:30 cegger Exp $");
 
 #include "opt_kgdb.h"
 #include "biconsdev.h"
@@ -135,7 +128,7 @@ static void enable_bicons(void);
 #endif
 
 void
-consinit()
+consinit(void)
 {
 	if (initialized)
 		return;
@@ -221,7 +214,7 @@ set_console(void (*init_func)(struct consdev *),
 }
 
 static void
-disable_console()
+disable_console(void)
 {
 	struct consdev *cp;	
 
@@ -238,7 +231,7 @@ cn_nonprobe(struct consdev *cp)
 
 #if NBICONSDEV > 0
 static void
-enable_bicons()
+enable_bicons(void)
 {
 
 	bootinfo->bi_cnuse = BI_CNUSE_BUILTIN;

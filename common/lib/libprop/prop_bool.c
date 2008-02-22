@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_bool.c,v 1.14 2008/01/05 01:15:02 ad Exp $	*/
+/*	$NetBSD: prop_bool.c,v 1.17 2009/01/03 18:31:33 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,14 +40,13 @@ struct _prop_bool {
 static struct _prop_bool _prop_bool_true;
 static struct _prop_bool _prop_bool_false;
 
-_PROP_MUTEX_DECL_STATIC(_prop_bool_initialized_mutex)
-static bool	_prop_bool_initialized;
-
-static int		_prop_bool_free(prop_stack_t, prop_object_t *);
+static _prop_object_free_rv_t
+		_prop_bool_free(prop_stack_t, prop_object_t *);
 static bool	_prop_bool_externalize(
 				struct _prop_object_externalize_context *,
 				void *);
-static bool	_prop_bool_equals(prop_object_t, prop_object_t,
+static _prop_object_equals_rv_t
+		_prop_bool_equals(prop_object_t, prop_object_t,
 				  void **, void **,
 				  prop_object_t *, prop_object_t *);
 
@@ -69,7 +61,7 @@ static const struct _prop_object_type _prop_object_type_bool = {
 	((x) != NULL && (x)->pb_obj.po_type == &_prop_object_type_bool)
 
 /* ARGSUSED */
-static int
+static _prop_object_free_rv_t
 _prop_bool_free(prop_stack_t stack, prop_object_t *obj)
 {
 	/*
@@ -92,7 +84,7 @@ _prop_bool_externalize(struct _prop_object_externalize_context *ctx,
 }
 
 /* ARGSUSED */
-static bool
+static _prop_object_equals_rv_t
 _prop_bool_equals(prop_object_t v1, prop_object_t v2,
     void **stored_pointer1, void **stored_pointer2,
     prop_object_t *next_obj1, prop_object_t *next_obj2)
@@ -114,27 +106,29 @@ _prop_bool_equals(prop_object_t v1, prop_object_t v2,
 		return (_PROP_OBJECT_EQUALS_FALSE);
 }
 
+_PROP_ONCE_DECL(_prop_bool_init_once)
+
+static int
+_prop_bool_init(void)
+{
+
+	_prop_object_init(&_prop_bool_true.pb_obj,
+	    &_prop_object_type_bool);
+	_prop_bool_true.pb_value = true;
+
+	_prop_object_init(&_prop_bool_false.pb_obj,
+	    &_prop_object_type_bool);
+	_prop_bool_false.pb_value = false;
+
+	return 0;
+}
+
 static prop_bool_t
 _prop_bool_alloc(bool val)
 {
 	prop_bool_t pb;
 
-	if (! _prop_bool_initialized) {
-		_PROP_MUTEX_LOCK(_prop_bool_initialized_mutex);
-		if (! _prop_bool_initialized) {
-			_prop_object_init(&_prop_bool_true.pb_obj,
-					  &_prop_object_type_bool);
-			_prop_bool_true.pb_value = true;
-
-			_prop_object_init(&_prop_bool_false.pb_obj,
-					  &_prop_object_type_bool);
-			_prop_bool_false.pb_value = false;
-
-			_prop_bool_initialized = true;
-		}
-		_PROP_MUTEX_UNLOCK(_prop_bool_initialized_mutex);
-	}
-
+	_PROP_ONCE_RUN(_prop_bool_init_once, _prop_bool_init);
 	pb = val ? &_prop_bool_true : &_prop_bool_false;
 	prop_object_retain(pb);
 

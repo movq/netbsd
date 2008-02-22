@@ -1,4 +1,4 @@
-/* $NetBSD: irongatevar.h,v 1.3 2000/11/29 06:29:10 thorpej Exp $ */
+/* $NetBSD: irongatevar.h,v 1.6 2012/02/06 02:14:14 matt Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,14 +47,14 @@ struct irongate_config {
 	struct alpha_bus_dma_tag ic_dmat_pci;
 	struct alpha_bus_dma_tag ic_dmat_isa;
 
-	u_int32_t ic_rev;
+	uint32_t ic_rev;
 
 	struct extent *ic_io_ex, *ic_mem_ex;
 	int	ic_mallocsafe;
 };
 
 struct irongate_softc {
-	struct	device sc_dev;
+	device_t sc_dev;
 
 	struct	irongate_config *sc_icp;
 };

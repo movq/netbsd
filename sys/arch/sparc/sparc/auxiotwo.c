@@ -1,4 +1,4 @@
-/*	$NetBSD: auxiotwo.c,v 1.8 2005/11/14 03:30:49 uwe Exp $	*/
+/*	$NetBSD: auxiotwo.c,v 1.11 2012/07/29 00:04:05 matt Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auxiotwo.c,v 1.8 2005/11/14 03:30:49 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auxiotwo.c,v 1.11 2012/07/29 00:04:05 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,20 +48,23 @@ __KERNEL_RCSID(0, "$NetBSD: auxiotwo.c,v 1.8 2005/11/14 03:30:49 uwe Exp $");
 #include <sparc/sparc/auxiotwo.h>
 #include <sparc/sparc/vaddrs.h>
 
+volatile u_char *auxiotwo_reg;
+u_char auxiotwo_regval;
+
 static int serial_refcount;
 static int serial_power;
 
-static int auxiotwomatch(struct device *, struct cfdata *, void *);
-static void auxiotwoattach(struct device *, struct device *, void *);
+static int auxiotwomatch(device_t, cfdata_t, void *);
+static void auxiotwoattach(device_t, device_t, void *);
 
-CFATTACH_DECL(auxiotwo_obio, sizeof(struct device),
+CFATTACH_DECL_NEW(auxiotwo_obio, 0,
      auxiotwomatch, auxiotwoattach, NULL, NULL);
 
 /*
  * The OPENPROM calls this "auxio2".
  */
 static int
-auxiotwomatch(struct device *parent, struct cfdata *cf, void *aux)
+auxiotwomatch(device_t parent, cfdata_t cf, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 
@@ -79,7 +75,7 @@ auxiotwomatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-auxiotwoattach(struct device *parent, struct device *self, void *aux)
+auxiotwoattach(device_t parent, device_t self, void *aux)
 {
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;

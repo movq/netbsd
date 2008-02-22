@@ -1,4 +1,4 @@
-/*	$NetBSD: hpibvar.h,v 1.18 2007/03/04 05:59:48 christos Exp $	*/
+/*	$NetBSD: hpibvar.h,v 1.21 2012/10/13 06:12:23 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -171,7 +164,7 @@ struct dmaqueue;
  * Software state per HP-IB bus.
  */
 struct hpibbus_softc {
-	struct	device sc_dev;		/* generic device glue */
+	device_t sc_dev;		/* generic device glue */
 	struct	hpib_controller *sc_ops; /* controller ops vector */
 	volatile int sc_flags;		/* misc flags */
 	struct	dmaqueue *sc_dq;
@@ -213,8 +206,8 @@ void	hpibawait(int);
 int	hpibswait(int, int);
 int	hpibid(int, int);
 
-int	hpibreq(struct device *, struct hpibqueue *);
-void	hpibfree(struct device *, struct hpibqueue *);
+int	hpibreq(device_t, struct hpibqueue *);
+void	hpibfree(device_t, struct hpibqueue *);
 
 int	hpibintr(void *);
 int	hpibdevprint(void *, const char *);

@@ -1,7 +1,7 @@
-/*	$NetBSD: linux_ioctl.c,v 1.52 2007/12/20 23:02:54 dsl Exp $	*/
+/*	$NetBSD: linux_ioctl.c,v 1.58 2014/03/23 06:03:38 dholland Exp $	*/
 
 /*-
- * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_ioctl.c,v 1.52 2007/12/20 23:02:54 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_ioctl.c,v 1.58 2014/03/23 06:03:38 dholland Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "sequencer.h"
@@ -70,6 +63,10 @@ __KERNEL_RCSID(0, "$NetBSD: linux_ioctl.c,v 1.52 2007/12/20 23:02:54 dsl Exp $")
 #include <compat/ossaudio/ossaudio.h>
 #define LINUX_TO_OSS(v) ((const void *)(v))	/* do nothing, same ioctl() encoding */
 
+#include <dev/ic/mfiio.h>
+#define LINUX_MEGARAID_CMD	_LINUX_IOWR('M', 1, struct mfi_ioc_packet)
+#define LINUX_MEGARAID_GET_AEN	_LINUX_IOW('M', 3, struct mfi_ioc_aen)
+
 /*
  * Most ioctl command are just converted to their NetBSD values,
  * and passed on. The ones that take structure pointers and (flag)
@@ -87,7 +84,28 @@ linux_sys_ioctl(struct lwp *l, const struct linux_sys_ioctl_args *uap, register_
 
 	switch (LINUX_IOCGROUP(SCARG(uap, com))) {
 	case 'M':
-		error = oss_ioctl_mixer(l, LINUX_TO_OSS(uap), retval);
+		switch(SCARG(uap, com)) {
+		case LINUX_MEGARAID_CMD:
+		case LINUX_MEGARAID_GET_AEN:
+		{
+			struct sys_ioctl_args ua;
+			u_long com = 0;
+			if (SCARG(uap, com) & IOC_IN)
+				com |= IOC_OUT;
+			if (SCARG(uap, com) & IOC_OUT)
+				com |= IOC_IN;
+			SCARG(&ua, fd) = SCARG(uap, fd);
+			SCARG(&ua, com) = SCARG(uap, com);
+			SCARG(&ua, com) &= ~IOC_DIRMASK;
+			SCARG(&ua, com) |= com;
+			SCARG(&ua, data) = SCARG(uap, data);
+			error = sys_ioctl(l, (const void *)&ua, retval);
+			break;
+		}
+		default:
+			error = oss_ioctl_mixer(l, LINUX_TO_OSS(uap), retval);
+			break;
+		}
 		break;
 	case 'Q':
 		error = oss_ioctl_sequencer(l, LINUX_TO_OSS(uap), retval);
@@ -95,6 +113,23 @@ linux_sys_ioctl(struct lwp *l, const struct linux_sys_ioctl_args *uap, register_
 	case 'P':
 		error = oss_ioctl_audio(l, LINUX_TO_OSS(uap), retval);
 		break;
+	case 'V':	/* video4linux2 */
+	case 'd':	/* drm */
+	{
+		struct sys_ioctl_args ua;
+		u_long com = 0;
+		if (SCARG(uap, com) & IOC_IN)
+			com |= IOC_OUT;
+		if (SCARG(uap, com) & IOC_OUT)
+			com |= IOC_IN;
+		SCARG(&ua, fd) = SCARG(uap, fd);
+		SCARG(&ua, com) = SCARG(uap, com);
+		SCARG(&ua, com) &= ~IOC_DIRMASK;
+		SCARG(&ua, com) |= com;
+		SCARG(&ua, data) = SCARG(uap, data);
+		error = sys_ioctl(l, (const void *)&ua, retval);
+		break;
+	}
 	case 'r': /* VFAT ioctls; not yet supported */
 		error = ENOSYS;
 		break;
@@ -113,33 +148,37 @@ linux_sys_ioctl(struct lwp *l, const struct linux_sys_ioctl_args *uap, register_
 #if NSEQUENCER > 0
 /* XXX XAX 2x check this. */
 		/*
-		 * Both termios and the MIDI sequncer use 'T' to identify
+		 * Both termios and the MIDI sequencer use 'T' to identify
 		 * the ioctl, so we have to differentiate them in another
 		 * way.  We do it by indexing in the cdevsw with the major
 		 * device number and check if that is the sequencer entry.
 		 */
+		bool is_sequencer = false;
 		struct file *fp;
-		struct filedesc *fdp;
 		struct vnode *vp;
 		struct vattr va;
 		extern const struct cdevsw sequencer_cdevsw;
 
-		fdp = l->l_proc->p_fd;
-		if ((fp = fd_getfile(fdp, SCARG(uap, fd))) == NULL)
+		if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
 			return EBADF;
-		FILE_USE(fp);
 		if (fp->f_type == DTYPE_VNODE &&
 		    (vp = (struct vnode *)fp->f_data) != NULL &&
-		    vp->v_type == VCHR &&
-		    VOP_GETATTR(vp, &va, l->l_cred) == 0 &&
-		    cdevsw_lookup(va.va_rdev) == &sequencer_cdevsw) {
+		    vp->v_type == VCHR) {
+			vn_lock(vp, LK_SHARED | LK_RETRY);
+			error = VOP_GETATTR(vp, &va, l->l_cred);
+			VOP_UNLOCK(vp);
+			if (error == 0 &&
+			    cdevsw_lookup(va.va_rdev) == &sequencer_cdevsw)
+				is_sequencer = true;
+		}
+		if (is_sequencer) {
 			error = oss_ioctl_sequencer(l, (const void *)LINUX_TO_OSS(uap),
 						   retval);
 		}
 		else {
 			error = linux_ioctl_termios(l, uap, retval);
 		}
-		FILE_UNUSE(fp, l);
+		fd_putfile(SCARG(uap, fd));
 #else
 		error = linux_ioctl_termios(l, uap, retval);
 #endif

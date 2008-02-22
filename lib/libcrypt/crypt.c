@@ -1,4 +1,4 @@
-/*	$NetBSD: crypt.c,v 1.26 2007/01/17 23:24:22 hubertf Exp $	*/
+/*	$NetBSD: crypt.c,v 1.34 2015/06/17 00:15:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)crypt.c	8.1.1.1 (Berkeley) 8/18/93";
 #else
-__RCSID("$NetBSD: crypt.c,v 1.26 2007/01/17 23:24:22 hubertf Exp $");
+__RCSID("$NetBSD: crypt.c,v 1.34 2015/06/17 00:15:26 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -287,24 +287,20 @@ typedef union {
 	{ C_block tblk; permute(cpp,&tblk,p,4); LOAD (d,d0,d1,tblk); }
 #endif /* LARGEDATA */
 
-STATIC	init_des __P((void));
-STATIC	init_perm __P((C_block [64/CHUNKBITS][1<<CHUNKBITS],
-		       const unsigned char [64], int, int));
+STATIC	init_des(void);
+STATIC	init_perm(C_block [64/CHUNKBITS][1<<CHUNKBITS],
+		       const unsigned char [64], int, int);
 #ifndef LARGEDATA
-STATIC	permute __P((const unsigned char *, C_block *, C_block *, int));
+STATIC	permute(const unsigned char *, C_block *, C_block *, int);
 #endif
 #ifdef DEBUG
-STATIC	prtab __P((const char *, unsigned char *, int));
+STATIC	prtab(const char *, unsigned char *, int);
 #endif
 
 
 #ifndef LARGEDATA
 STATIC
-permute(cp, out, p, chars_in)
-	const unsigned char *cp;
-	C_block *out;
-	C_block *p;
-	int chars_in;
+permute(const unsigned char *cp, C_block *out, C_block *p, int chars_in)
 {
 	DCL_BLOCK(D,D0,D1);
 	C_block *tp;
@@ -449,8 +445,6 @@ static const unsigned char itoa64[] =		/* 0..63 => ascii-64 */
 /* =====  Tables that are initialized at run time  ==================== */
 
 
-static unsigned char a64toi[128];	/* ascii-64 => 0..63 */
-
 /* Initial key schedule permutation */
 static C_block	PC1ROT[64/CHUNKBITS][1<<CHUNKBITS];
 
@@ -473,15 +467,42 @@ static C_block	CF6464[64/CHUNKBITS][1<<CHUNKBITS];
 static C_block	constdatablock;			/* encryption constant */
 static char	cryptresult[1+4+4+11+1];	/* encrypted result */
 
+/*
+ * We match the behavior of UFC-crypt on systems where "char" is signed by
+ * default (the majority), regardless of char's signedness on our system.
+ */
+static inline int
+ascii_to_bin(char ch)
+{
+	signed char sch = ch;
+	int retval;
+
+	if (sch >= 'a')
+		retval = sch - ('a' - 38);
+	else if (sch >= 'A') 
+		retval = sch - ('A' - 12);
+	else
+		retval = sch - '.';
+
+	return retval & 0x3f;
+}
+
+/*
+ * When we choose to "support" invalid salts, nevertheless disallow those
+ * containing characters that would violate the passwd file format.
+ */
+static inline int
+ascii_is_unsafe(char ch)
+{
+	return !ch || ch == '\n' || ch == ':';
+}
 
 /*
  * Return a pointer to static data consisting of the "setting"
  * followed by an encryption produced by the "key" and "setting".
  */
-char *
-crypt(key, setting)
-	const char *key;
-	const char *setting;
+static char *
+__crypt(const char *key, const char *setting)
 {
 	char *encp;
 	int32_t i;
@@ -508,7 +529,7 @@ crypt(key, setting)
 			key++;
 		keyblock.b[i] = t;
 	}
-	if (des_setkey((char *)keyblock.b))	/* also initializes "a64toi" */
+	if (des_setkey((char *)keyblock.b))
 		return (NULL);
 
 	encp = &cryptresult[0];
@@ -535,11 +556,14 @@ crypt(key, setting)
 		/* get iteration count */
 		num_iter = 0;
 		for (i = 4; --i >= 0; ) {
-			if ((t = (unsigned char)setting[i]) == '\0')
-				t = '.';
-			encp[i] = t;
-			num_iter = (num_iter<<6) | a64toi[t];
+			int value = ascii_to_bin(setting[i]);
+			if (itoa64[value] != setting[i])
+				return NULL;
+			encp[i] = setting[i];
+			num_iter = (num_iter << 6) | value;
 		}
+		if (num_iter == 0)
+			return NULL;
 		setting += 4;
 		encp += 4;
 		salt_size = 4;
@@ -547,14 +571,17 @@ crypt(key, setting)
 	default:
 		num_iter = 25;
 		salt_size = 2;
+		if (ascii_is_unsafe(setting[0]) || ascii_is_unsafe(setting[1]))
+			return NULL;
 	}
 
 	salt = 0;
 	for (i = salt_size; --i >= 0; ) {
-		if ((t = (unsigned char)setting[i]) == '\0')
-			t = '.';
-		encp[i] = t;
-		salt = (salt<<6) | a64toi[t];
+		int value = ascii_to_bin(setting[i]);
+		if (salt_size > 2 && itoa64[value] != setting[i])
+			return NULL;
+		encp[i] = setting[i];
+		salt = (salt << 6) | value;
 	}
 	encp += salt_size;
 	if (des_cipher((char *)(void *)&constdatablock,
@@ -586,6 +613,15 @@ crypt(key, setting)
 	return (cryptresult);
 }
 
+char *
+crypt(const char *key, const char *salt)
+{
+	char *res = __crypt(key, salt);
+	if (res)
+		return res;
+	/* How do I handle errors ? Return "*0" or "*1" */
+	return __UNCONST(salt[0] == '*' && salt[1] == '0' ? "*1" : "*0");
+}
 
 /*
  * The Key Schedule, filled in by des_setkey() or setkey().
@@ -597,8 +633,7 @@ static C_block	KS[KS_SIZE];
  * Set up the key schedule from the key.
  */
 int
-des_setkey(key)
-	const char *key;
+des_setkey(const char *key)
 {
 	DCL_BLOCK(K, K0, K1);
 	C_block *help, *ptabp;
@@ -632,11 +667,7 @@ des_setkey(key)
  * compiler and machine architecture.
  */
 int
-des_cipher(in, out, salt, num_iter)
-	const char *in;
-	char *out;
-	long salt;
-	int num_iter;
+des_cipher(const char *in, char *out, long salt, int num_iter)
 {
 	/* variables that we want in registers, most important first */
 #if defined(pdp11)
@@ -754,18 +785,12 @@ des_cipher(in, out, salt, num_iter)
  * done at compile time, if the compiler were capable of that sort of thing.
  */
 STATIC
-init_des()
+init_des(void)
 {
 	int i, j;
 	int32_t k;
 	int tableno;
 	static unsigned char perm[64], tmp32[32];	/* "static" for speed */
-
-	/*
-	 * table that converts chars "./0-9A-Za-z"to integers 0-63.
-	 */
-	for (i = 0; i < 64; i++)
-		a64toi[itoa64[i]] = i;
 
 	/*
 	 * PC1ROT - bit reverse, then PC1, then Rotate, then PC2.
@@ -898,10 +923,8 @@ init_des()
  * "perm" must be all-zeroes on entry to this routine.
  */
 STATIC
-init_perm(perm, p, chars_in, chars_out)
-	C_block perm[64/CHUNKBITS][1<<CHUNKBITS];
-	const unsigned char p[64];
-	int chars_in, chars_out;
+init_perm(C_block perm[64/CHUNKBITS][1<<CHUNKBITS], const unsigned char p[64],
+    int chars_in, int chars_out)
 {
 	int i, j, k, l;
 
@@ -922,8 +945,7 @@ init_perm(perm, p, chars_in, chars_out)
  * "setkey" routine (for backwards compatibility)
  */
 int
-setkey(key)
-	const char *key;
+setkey(const char *key)
 {
 	int i, j, k;
 	C_block keyblock;
@@ -943,9 +965,7 @@ setkey(key)
  * "encrypt" routine (for backwards compatibility)
  */
 int
-encrypt(block, flag)
-	char *block;
-	int flag;
+encrypt(char *block, int flag)
 {
 	int i, j, k;
 	C_block cblock;
@@ -972,10 +992,7 @@ encrypt(block, flag)
 
 #ifdef DEBUG
 STATIC
-prtab(s, t, num_rows)
-	const char *s;
-	unsigned char *t;
-	int num_rows;
+prtab(const char *s, unsigned char *t, int num_rows)
 {
 	int i, j;
 
@@ -994,12 +1011,14 @@ prtab(s, t, num_rows)
 #include <err.h>
 
 int
-main (int argc, char *argv[])
+main(int argc, char *argv[])
 {
-    if (argc < 2)
-	errx(1, "Usage: %s password [salt]\n", argv[0]);
+	if (argc < 2) {
+		fprintf(stderr, "Usage: %s password [salt]\n", getprogname());
+		return EXIT_FAILURE;
+	}
 
-    printf("%s\n", crypt(argv[1], (argc > 2) ? argv[2] : argv[1]));
-    exit(0);
+	printf("%s\n", crypt(argv[1], (argc > 2) ? argv[2] : argv[1]));
+	return EXIT_SUCCESS;
 }
 #endif

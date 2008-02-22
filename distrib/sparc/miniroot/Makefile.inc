@@ -1,14 +1,14 @@
-#	$NetBSD: Makefile.inc,v 1.12 2004/06/13 05:27:18 sjg Exp $
+#	$NetBSD: Makefile.inc,v 1.29 2018/03/29 13:25:11 joerg Exp $
 
-IMAGESIZE=	8192k
-MAKEFS_FLAGS=   -o density=4k
+IMAGESIZE=	9800k
+DBG=		${${ACTIVE_CC} == "clang":? -Oz -fomit-frame-pointer : -Os } -fno-unwind-tables
+
+MAKEFS_FLAGS+=   -o density=4k
 IMAGEENDIAN=	be
-MAKEDEVTARGETS=	all
+MAKEDEVTARGETS=	all ipty
 LISTS+=		${DISTRIBDIR}/common/list.sysinst
 IMAGEDEPENDS+=	${ARCHDIR}/../install.md ${ARCHDIR}/dot.profile \
-		${ARCHDIR}/termcap.src \
-		${DESTDIR}/etc/disktab \
-		${DESTDIR}/usr/mdec/boot ${DESTDIR}/usr/share/misc/magic \
+		${DESTDIR}/usr/mdec/boot \
 		${KERNOBJDIR}/GENERIC/netbsd
 
 IMAGEPOSTBUILD=	${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} \

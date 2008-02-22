@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctlbyname.c,v 1.3 2005/06/12 05:21:27 lukem Exp $ */
+/*	$NetBSD: sysctlbyname.c,v 1.7 2010/12/13 23:10:13 pooka Exp $ */
 
 /*-
  * Copyright (c) 2003,2004 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,23 +31,30 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: sysctlbyname.c,v 1.3 2005/06/12 05:21:27 lukem Exp $");
+__RCSID("$NetBSD: sysctlbyname.c,v 1.7 2010/12/13 23:10:13 pooka Exp $");
 #endif /* LIBC_SCCS and not lint */
 
+#ifndef RUMP_ACTION
 #include "namespace.h"
+#endif
 #include <sys/param.h>
 #include <sys/sysctl.h>
 
+#ifdef RUMP_ACTION
+#include <rump/rump_syscalls.h>
+#define sysctl(a,b,c,d,e,f) rump_sys___sysctl(a,b,c,d,e,f)
+#else
 #ifdef __weak_alias
 __weak_alias(sysctlbyname,_sysctlbyname)
+#endif
 #endif
 
 /*
  * trivial sysctlbyname() function for the "lazy".
  */
 int
-sysctlbyname(const char *gname, void *oldp, size_t *oldlenp, void *newp,
-	     size_t newlen)
+sysctlbyname(const char *gname, void *oldp, size_t *oldlenp,
+	     const void *newp, size_t newlen)
 {
 	int name[CTL_MAXNAME], rc;
 	u_int namelen;

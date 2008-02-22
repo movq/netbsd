@@ -1,4 +1,4 @@
-/* $NetBSD: ics2101.c,v 1.14 2007/10/19 12:00:17 ad Exp $ */
+/* $NetBSD: ics2101.c,v 1.17 2011/11/23 23:07:32 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ics2101.c,v 1.14 2007/10/19 12:00:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ics2101.c,v 1.17 2011/11/23 23:07:32 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,9 +70,7 @@ static void ics2101_mix_doit(struct ics2101_softc *, u_int, u_int, u_int,
 
 
 static void
-ics2101_mix_doit(sc, chan, side, value, flags)
-	struct ics2101_softc *sc;
-	u_int chan, side, value, flags;
+ics2101_mix_doit(struct ics2101_softc *sc, u_int chan, u_int side, u_int value, u_int flags)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	unsigned char flip_left[6] = {0x01, 0x01, 0x01, 0x02, 0x01, 0x02};
@@ -87,7 +78,6 @@ ics2101_mix_doit(sc, chan, side, value, flags)
 	unsigned char ctrl_addr;
 	unsigned char attn_addr;
 	unsigned char normal;
-	int s;
 
 	if (/* chan < ICSMIX_CHAN_0 || */ chan > ICSMIX_CHAN_5)
 		return;
@@ -128,30 +118,22 @@ ics2101_mix_doit(sc, chan, side, value, flags)
 			normal = 0x02;
 	}
 
-	s = splaudio();
-
 	bus_space_write_1(iot, sc->sc_selio_ioh, sc->sc_selio, ctrl_addr);
 	bus_space_write_1(iot, sc->sc_dataio_ioh, sc->sc_dataio, normal);
 
 	bus_space_write_1(iot, sc->sc_selio_ioh, sc->sc_selio, attn_addr);
 	bus_space_write_1(iot, sc->sc_dataio_ioh, sc->sc_dataio, (unsigned char) value);
-
-	splx(s);
 }
 
 void
-ics2101_mix_mute(sc, chan, side, domute)
-	struct ics2101_softc *sc;
-	unsigned int chan, side, domute;
+ics2101_mix_mute(struct ics2101_softc *sc, unsigned int chan, unsigned int side, unsigned int domute)
 {
     ics2101_mix_doit(sc, chan, side, 0,
 		     domute ? ICS_MUTE|ICS_MUTE_MUTED : ICS_MUTE);
 }
 
 void
-ics2101_mix_attenuate(sc, chan, side, value)
-	struct ics2101_softc *sc;
-	unsigned int chan, side, value;
+ics2101_mix_attenuate(struct ics2101_softc *sc, unsigned int chan, unsigned int side, unsigned int value)
 {
     ics2101_mix_doit(sc, chan, side, value, ICS_VALUE);
 }

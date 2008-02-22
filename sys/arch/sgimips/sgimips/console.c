@@ -1,4 +1,4 @@
-/*	$NetBSD: console.c,v 1.36 2007/04/12 13:10:59 jmcneill Exp $	*/
+/*	$NetBSD: console.c,v 1.45 2015/09/30 19:46:27 macallan Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,15 +28,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.36 2007/04/12 13:10:59 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.45 2015/09/30 19:46:27 macallan Exp $");
 
 #include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/termios.h>
+#include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/machtype.h>
 
 #include <dev/cons.h>
@@ -53,6 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: console.c,v 1.36 2007/04/12 13:10:59 jmcneill Exp $"
 #include <sgimips/mace/macereg.h>
 
 #include "com.h"
+#include "scn.h"
 #include "zsc.h"
 #include "gio.h"
 #include "pckbc.h"
@@ -64,6 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: console.c,v 1.36 2007/04/12 13:10:59 jmcneill Exp $"
 #endif
 int comcnmode = CONMODE;
 
+extern struct consdev scn_cn;
 extern struct consdev zs_cn;
 
 extern void	zs_kgdb_init(void);
@@ -73,17 +76,18 @@ extern int	crmfb_probe(void);
 #endif
 
 void		kgdb_port_init(void);
+static int	scn_serial_init(const char *);
 static int	zs_serial_init(const char *);
 static int	gio_video_init(const char *);
 static int	mace_serial_init(const char *);
 
 void
-consinit()
+consinit(void)
 {
 	const char *consdev;
 	
 	/* Ask ARCS what it is using for console output. */
-	consdev = ARCBIOS->GetEnvironmentVariable("ConsoleOut");
+	consdev = arcbios_GetEnvironmentVariable("ConsoleOut");
 
 	if (consdev == NULL) {
 		printf("WARNING: ConsoleOut environment variable not set\n");
@@ -91,6 +95,11 @@ consinit()
 	}
 
 	switch (mach_type) {
+	case MACH_SGI_IP6 | MACH_SGI_IP10:
+		if (scn_serial_init(consdev))
+			return;
+		break;
+
 	case MACH_SGI_IP12:
 	case MACH_SGI_IP20:
 	case MACH_SGI_IP22:
@@ -106,9 +115,10 @@ consinit()
 #if notyet
 #if (NPCKBC > 0)
 			/* XXX Hardcoded iotag, MACE address XXX */
-			pckbc_cnattach(SGIMIPS_BUS_SPACE_NORMAL,
+			mace_init_bus();
+			pckbc_cnattach(mace_isa_memt,
 			    MACE_BASE + 0x320000, 8,
-			    PCKBC_KBD_SLOT);
+			    PCKBC_KBD_SLOT, 0);
 #endif
 #endif
 			return;
@@ -124,6 +134,22 @@ consinit()
 	}
 
 	printf("Using ARCS for console I/O.\n");
+}
+
+static int
+scn_serial_init(const char *consdev)
+{
+#if (NSCN > 0)
+	if ((strlen(consdev) == 9) && (!strncmp(consdev, "serial", 6)) &&
+	    (consdev[7] == '0' || consdev[7] == '1')) {
+		cn_tab = &scn_cn;
+		(*cn_tab->cn_init)(cn_tab);
+			
+		return (1);
+	}
+#endif
+	
+	return (0);
 }
 
 static int
@@ -166,10 +192,10 @@ gio_video_init(const char *consdev)
 		case MACH_SGI_IP22:
 #if (NPCKBC > 0)
 			/* XXX Hardcoded iotag, HPC address XXX */
-			pckbc_cnattach(SGIMIPS_BUS_SPACE_HPC,
+			pckbc_cnattach(normal_memt,
 			    HPC_BASE_ADDRESS_0 +
 			    HPC3_PBUS_CH6_DEVREGS + IOC_KB_REGS, KBCMDP,
-			    PCKBC_KBD_SLOT);
+			    PCKBC_KBD_SLOT, 0);
 #endif
 			break;
 		}
@@ -192,7 +218,7 @@ mace_serial_init(const char *consdev)
 	if ((strlen(consdev) == 9) && (!strncmp(consdev, "serial", 6)) &&
 	    (consdev[7] == '0' || consdev[7] == '1')) {
 		/* Get comm speed from ARCS */
-		dbaud = ARCBIOS->GetEnvironmentVariable("dbaud");
+		dbaud = arcbios_GetEnvironmentVariable("dbaud");
 		speed = strtoul(dbaud, NULL, 10);
 		base = (consdev[7] == '0') ? MACE_ISA_SER1_BASE :
 		    MACE_ISA_SER2_BASE;
@@ -200,7 +226,8 @@ mace_serial_init(const char *consdev)
 		delay(10000);
 
 		/* XXX: hardcoded MACE iotag */
-		if (comcnattach(3, MIPS_PHYS_TO_KSEG1(MACE_BASE + base),
+		mace_init_bus();
+		if (comcnattach(mace_isa_memt, MACE_BASE + base,
 		    speed, COM_FREQ, COM_TYPE_NORMAL, comcnmode) == 0)
 			return (1);
 	}
@@ -211,13 +238,15 @@ mace_serial_init(const char *consdev)
 
 #if defined(KGDB)
 void
-kgdb_port_init()
+kgdb_port_init(void)
 {
 # if (NCOM > 0)
 #  define KGDB_DEVMODE ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)
-	if (mach_type == MACH_SGI_IP32)
-		com_kgdb_attach(3, 0xbf398000, 9600, COM_FREQ, COM_TYPE_NORMAL,
+	if (mach_type == MACH_SGI_IP32) {
+		mace_init_bus();
+		com_kgdb_attach(mace_isa_memt, 0xbf398000, 9600, COM_FREQ, COM_TYPE_NORMAL,
 		    KGDB_DEVMODE);
+	}
 # endif	/* (NCOM > 0) */
 
 # if (NZSC > 0)

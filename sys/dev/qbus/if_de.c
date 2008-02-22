@@ -1,4 +1,4 @@
-/*	$NetBSD: if_de.c,v 1.22 2007/10/19 12:01:08 ad Exp $	*/
+/*	$NetBSD: if_de.c,v 1.34 2018/06/26 06:48:02 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989 Regents of the University of California.
@@ -45,13 +45,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -64,8 +57,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)if_de.c	7.12 (Berkeley) 12/16/90
  */
 
 /*
@@ -81,10 +72,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.22 2007/10/19 12:01:08 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.34 2018/06/26 06:48:02 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,15 +90,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_de.c,v 1.22 2007/10/19 12:01:08 ad Exp $");
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_dl.h>
+#include <net/bpf.h>
 
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
-#endif
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
 #endif
 
 #include <sys/bus.h>
@@ -151,42 +137,43 @@ struct	de_cdata {
  * efficiently.
  */
 struct	de_softc {
-	struct	device sc_dev;		/* Configuration common part */
-	struct	evcnt sc_intrcnt;	/* Interrupt counting */
-	struct	ethercom sc_ec;		/* Ethernet common part */
+	device_t sc_dev;		/* Configuration common part */
+	struct uba_softc *sc_uh;	/* our parent */
+	struct evcnt sc_intrcnt;	/* Interrupt counting */
+	struct ethercom sc_ec;		/* Ethernet common part */
 #define sc_if	sc_ec.ec_if		/* network-visible interface */
 	bus_space_tag_t sc_iot;
 	bus_addr_t sc_ioh;
 	bus_dma_tag_t sc_dmat;
-	int	sc_flags;
+	int sc_flags;
 #define	DSF_MAPPED	1
 	struct ubinfo sc_ui;
 	struct de_cdata *sc_dedata;	/* Control structure */
 	struct de_cdata *sc_pdedata;	/* Bus-mapped control structure */
-	struct	ifubinfo sc_ifuba;	/* UNIBUS resources */
-	struct	ifrw sc_ifr[NRCV];	/* UNIBUS receive buffer maps */
-	struct	ifxmt sc_ifw[NXMT];	/* UNIBUS receive buffer maps */
+	struct ifubinfo sc_ifuba;	/* UNIBUS resources */
+	struct ifrw sc_ifr[NRCV];	/* UNIBUS receive buffer maps */
+	struct ifxmt sc_ifw[NXMT];	/* UNIBUS receive buffer maps */
 
-	int	sc_xindex;		/* UNA index into transmit chain */
-	int	sc_rindex;		/* UNA index into receive chain */
-	int	sc_xfree;		/* index for next transmit buffer */
-	int	sc_nxmit;		/* # of transmits in progress */
+	int sc_xindex;			/* UNA index into transmit chain */
+	int sc_rindex;			/* UNA index into receive chain */
+	int sc_xfree;			/* index for next transmit buffer */
+	int sc_nxmit;			/* # of transmits in progress */
 	void *sc_sh;			/* shutdownhook cookie */
 };
 
-static	int dematch(struct device *, struct cfdata *, void *);
-static	void deattach(struct device *, struct device *, void *);
+static	int dematch(device_t, cfdata_t, void *);
+static	void deattach(device_t, device_t, void *);
 static	void dewait(struct de_softc *, const char *);
 static	int deinit(struct ifnet *);
 static	int deioctl(struct ifnet *, u_long, void *);
-static	void dereset(struct device *);
+static	void dereset(device_t);
 static	void destop(struct ifnet *, int);
 static	void destart(struct ifnet *);
 static	void derecv(struct de_softc *);
 static	void deintr(void *);
 static	void deshutdown(void *);
 
-CFATTACH_DECL(de, sizeof(struct de_softc),
+CFATTACH_DECL_NEW(de, sizeof(struct de_softc),
     dematch, deattach, NULL, NULL);
 
 #define DE_WCSR(csr, val) \
@@ -206,7 +193,7 @@ CFATTACH_DECL(de, sizeof(struct de_softc),
  * to accept packets.  We get the ethernet address here.
  */
 void
-deattach(struct device *parent, struct device *self, void *aux)
+deattach(device_t parent, device_t self, void *aux)
 {
 	struct uba_attach_args *ua = aux;
 	struct de_softc *sc = device_private(self);
@@ -215,6 +202,8 @@ deattach(struct device *parent, struct device *self, void *aux)
 	int csr1, error;
 	const char *c;
 
+	sc->sc_dev = self;
+	sc->sc_uh = device_private(parent);
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_ioh = ua->ua_ioh;
 	sc->sc_dmat = ua->ua_dmat;
@@ -242,7 +231,7 @@ deattach(struct device *parent, struct device *self, void *aux)
 	dewait(sc, "reset");
 
 	sc->sc_ui.ui_size = sizeof(struct de_cdata);
-	if ((error = ubmemalloc((struct uba_softc *)parent, &sc->sc_ui, 0)))
+	if ((error = ubmemalloc(sc->sc_uh, &sc->sc_ui, 0)))
 		return printf(": failed ubmemalloc(), error = %d\n", error);
 	sc->sc_dedata = (struct de_cdata *)sc->sc_ui.ui_vaddr;
 
@@ -258,17 +247,16 @@ deattach(struct device *parent, struct device *self, void *aux)
 	DE_WLOW(CMD_GETCMD);
 	dewait(sc, "read addr ");
 
-	bcopy((void *)&sc->sc_dedata->dc_pcbb.pcbb2, myaddr, sizeof (myaddr));
-	printf("\n%s: %s, hardware address %s\n", sc->sc_dev.dv_xname, c,
-		ether_sprintf(myaddr));
+	memcpy(myaddr, (void *)&sc->sc_dedata->dc_pcbb.pcbb2, sizeof (myaddr));
+	printf(": %s, hardware address %s\n", c, ether_sprintf(myaddr));
 
 	uba_intr_establish(ua->ua_icookie, ua->ua_cvec, deintr, sc,
 	    &sc->sc_intrcnt);
-	uba_reset_establish(dereset, &sc->sc_dev);
+	uba_reset_establish(dereset, sc->sc_dev);
 	evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
-	    sc->sc_dev.dv_xname, "intr");
+	    device_xname(sc->sc_dev), "intr");
 
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strcpy(ifp->if_xname, device_xname(sc->sc_dev));
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST|IFF_SIMPLEX|IFF_MULTICAST|IFF_ALLMULTI;
 	ifp->if_ioctl = deioctl;
@@ -279,7 +267,7 @@ deattach(struct device *parent, struct device *self, void *aux)
 
 	if_attach(ifp);
 	ether_ifattach(ifp, myaddr);
-	ubmemfree((struct uba_softc *)parent, &sc->sc_ui);
+	ubmemfree(sc->sc_uh, &sc->sc_ui);
 
 	sc->sc_sh = shutdownhook_establish(deshutdown, sc);
 }
@@ -299,7 +287,7 @@ destop(struct ifnet *ifp, int a)
  * Reset of interface after UNIBUS reset.
  */
 void
-dereset(struct device *dev)
+dereset(device_t dev)
 {
 	struct de_softc *sc = (void *)dev;
 
@@ -328,17 +316,16 @@ deinit(struct ifnet *ifp)
 	if (ifp->if_flags & IFF_RUNNING)
 		return 0;
 	if ((sc->sc_flags & DSF_MAPPED) == 0) {
-		if (if_ubaminit(&sc->sc_ifuba,
-		    (void *)device_parent(&sc->sc_dev),
-		    MCLBYTES, sc->sc_ifr, NRCV, sc->sc_ifw, NXMT)) {
-			printf("%s: can't initialize\n", sc->sc_dev.dv_xname);
+		if (if_ubaminit(&sc->sc_ifuba, sc->sc_uh, MCLBYTES,
+				sc->sc_ifr, NRCV, sc->sc_ifw, NXMT)) {
+			aprint_error_dev(sc->sc_dev, " can't initialize\n");
 			ifp->if_flags &= ~IFF_UP;
 			return 0;
 		}
 		sc->sc_ui.ui_size = sizeof(struct de_cdata);
-		if ((error = ubmemalloc((void *)device_parent(&sc->sc_dev),
-		    &sc->sc_ui, 0))) {
-			printf(": unable to ubmemalloc(), error = %d\n", error);
+		if ((error = ubmemalloc(sc->sc_uh, &sc->sc_ui, 0))) {
+			aprint_error(": unable to ubmemalloc(), error = %d\n",
+			    error);
 			return 0;
 		}
 		sc->sc_pdedata = (struct de_cdata *)sc->sc_ui.ui_baddr;
@@ -439,10 +426,7 @@ destart(struct ifnet *ifp)
 		rp = &dc->dc_xrent[sc->sc_xfree];
 		if (rp->r_flags & XFLG_OWN)
 			panic("deuna xmit in progress");
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m, BPF_D_OUT);
 
 		len = if_ubaput(&sc->sc_ifuba, &sc->sc_ifw[sc->sc_xfree], m);
 		rp->r_slen = len;
@@ -546,7 +530,6 @@ derecv(struct de_softc *sc)
 	dc = sc->sc_dedata;
 	rp = &dc->dc_rrent[sc->sc_rindex];
 	while ((rp->r_flags & RFLG_OWN) == 0) {
-		sc->sc_if.if_ipackets++;
 		len = (rp->r_lenerr&RERR_MLEN) - ETHER_CRC_LEN;
 		/* check for errors */
 		if ((rp->r_flags & (RFLG_ERRS|RFLG_FRAM|RFLG_OFLO|RFLG_CRC)) ||
@@ -560,12 +543,8 @@ derecv(struct de_softc *sc)
 			sc->sc_if.if_ierrors++;
 			goto next;
 		}
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
 
-		(*ifp->if_input)(ifp, m);
+		if_percpuq_enqueue(ifp->if_percpuq, m);
 
 		/* hang the receive buffer again */
 next:		rp->r_lenerr = 0;
@@ -604,23 +583,25 @@ deioctl(struct ifnet *ifp, u_long cmd, void *data)
 void
 dewait(struct de_softc *sc, const char *fn)
 {
-	int csr0;
+	int csr0, csr1;
 
 	while ((DE_RCSR(DE_PCSR0) & PCSR0_INTR) == 0)
 		;
 	csr0 = DE_RCSR(DE_PCSR0);
 	DE_WHIGH(csr0 >> 8);
 	if (csr0 & PCSR0_PCEI) {
-		char bits[64];
-		printf("%s: %s failed, csr0=%s ", sc->sc_dev.dv_xname, fn,
-		    bitmask_snprintf(csr0, PCSR0_BITS, bits, sizeof(bits)));
-		printf("csr1=%s\n", bitmask_snprintf(DE_RCSR(DE_PCSR1),
-		    PCSR1_BITS, bits, sizeof(bits)));
+		char bits0[64];
+		char bits1[64];
+		csr1 = DE_RCSR(DE_PCSR1);
+		snprintb(bits0, sizeof(bits0), PCSR0_BITS, csr0);
+		snprintb(bits1, sizeof(bits1), PCSR1_BITS, csr1);
+		aprint_error_dev(sc->sc_dev, "%s failed, csr0=%s csr1=%s\n",
+		    fn, bits0, bits1);
 	}
 }
 
 int
-dematch(struct device *parent, struct cfdata *cf, void *aux)
+dematch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct uba_attach_args *ua = aux;
 	struct de_softc ssc;

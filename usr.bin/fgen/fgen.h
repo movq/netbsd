@@ -1,4 +1,4 @@
-/*	$NetBSD: fgen.h,v 1.5 2001/10/05 22:36:02 eeh Exp $	*/
+/*	$NetBSD: fgen.h,v 1.9 2010/02/08 20:14:55 eeh Exp $	*/
 /*
  * fgen.h -- stuff for the fcode tokenizer.
  *
@@ -13,11 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Eduardo Horvath.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -41,14 +36,14 @@ struct tok {
 };
 
 #define TOKEN struct tok
-#define YY_DECL TOKEN* yylex __P((void))
+#define YY_DECL TOKEN* yylex(void)
 
-#define FCODE	0xF00DBABE
-#define MACRO	0xFEEDBABE
+#define FCODE	0x000FC0DE
+#define MACRO	0x0000F00D
 
 /* Defined fcode and string. */
 struct fcode {
-	char *name;
+	const char *name;
 	long num;
 	int type;
 	struct fcode *l;
@@ -57,8 +52,8 @@ struct fcode {
 
 /* macro instruction as separate words */
 struct macro {
-	char *name;
-	char *equiv;
+	const char *name;
+	const char *equiv;
 	int type;
 	struct macro *l;
 	struct macro *r;
@@ -87,12 +82,12 @@ enum toktypes {
 	TOK_PSTRING, 
 	TOK_TOKENIZE,
 	TOK_COMMENT, 
-	TOK_ENDCOMMENT,
 	TOK_COLON, 
 	TOK_SEMICOLON, 
 	TOK_TOSTRING,
 	
 	/* These are special */
+	TOK_ABORT_S,
 	TOK_AGAIN,
 	TOK_ALIAS,
 	TOK_GETTOKEN,
@@ -106,9 +101,12 @@ enum toktypes {
 	TOK_DEFER,
 	TOK_DO,
 	TOK_ELSE,
+	TOK_END0,
 	TOK_ENDCASE,
 	TOK_ENDOF,
 	TOK_EXTERNAL,
+	TOK_FCODE_VERSION2,
+	TOK_FCODE_END,
 	TOK_FIELD,
 	TOK_HEADERLESS,
 	TOK_HEADERS,
@@ -116,14 +114,16 @@ enum toktypes {
 	TOK_LEAVE,
 	TOK_LOOP,
 	TOK_OF,
+	TOK_OFFSET16,
 	TOK_REPEAT,
+	TOK_STARTX,
 	TOK_THEN,
 	TOK_TO,
 	TOK_UNTIL,
 	TOK_VALUE,
 	TOK_VARIABLE,
+	TOK_VERSION1,
 	TOK_WHILE,
-	TOK_OFFSET16,
 
 	/* Tokenizer directives */
 	TOK_BEGTOK,

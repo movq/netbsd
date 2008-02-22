@@ -1,4 +1,4 @@
-/*	$NetBSD: getconf.c,v 1.31 2008/01/15 03:37:12 rmind Exp $	*/
+/*	$NetBSD: getconf.c,v 1.35 2013/12/19 19:11:50 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: getconf.c,v 1.31 2008/01/15 03:37:12 rmind Exp $");
+__RCSID("$NetBSD: getconf.c,v 1.35 2013/12/19 19:11:50 rmind Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -107,7 +100,7 @@ static const struct conf_variable conf_table[] =
   { "RE_DUP_MAX",		SYSCONF,	_SC_RE_DUP_MAX		},
 
   /* Optional Facility Configuration Values */
-  { "POSIX2_C_BIND",		SYSCONF,	_SC_2_C_BIND		},
+  { "_POSIX2_C_BIND",		SYSCONF,	_SC_2_C_BIND		},
   { "POSIX2_C_DEV",		SYSCONF,	_SC_2_C_DEV		},
   { "POSIX2_CHAR_TERM",		SYSCONF,	_SC_2_CHAR_TERM		},
   { "POSIX2_FORT_DEV",		SYSCONF,	_SC_2_FORT_DEV		},
@@ -150,10 +143,11 @@ static const struct conf_variable conf_table[] =
   { "_POSIX_MEMLOCK",		SYSCONF,	_SC_MEMLOCK		},
   { "_POSIX_MEMLOCK_RANGE",	SYSCONF,	_SC_MEMLOCK_RANGE	},
   { "_POSIX_MEMORY_PROTECTION",	SYSCONF,	_SC_MEMORY_PROTECTION	},
-  { "_POSIX_MESSAGE_PASSING",	SYSCONF,	_POSIX_MESSAGE_PASSING	},
+  { "_POSIX_MESSAGE_PASSING",	SYSCONF,	_SC_MESSAGE_PASSING	},
   { "_POSIX_MONOTONIC_CLOCK",	SYSCONF,	_SC_MONOTONIC_CLOCK	},
   { "_POSIX_PRIORITY_SCHEDULING", SYSCONF,	_SC_PRIORITY_SCHEDULING },
   { "_POSIX_SEMAPHORES",	SYSCONF,	_SC_SEMAPHORES		},
+  { "_POSIX_SHARED_MEMORY_OBJECTS", SYSCONF,	_SC_SHARED_MEMORY_OBJECTS },
   { "_POSIX_SYNCHRONIZED_IO",	SYSCONF,	_SC_SYNCHRONIZED_IO	},
   { "_POSIX_TIMERS",		SYSCONF,	_SC_TIMERS		},
 

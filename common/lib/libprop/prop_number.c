@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_number.c,v 1.16 2008/01/05 01:15:02 ad Exp $	*/
+/*	$NetBSD: prop_number.c,v 1.30 2016/06/28 06:47:35 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,9 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/rbtree.h>
 #include <prop/prop_number.h>
 #include "prop_object_impl.h"
-#include "prop_rb_impl.h"
 
 #if defined(_KERNEL)
 #include <sys/systm.h>
@@ -50,40 +43,45 @@
 #include <stdlib.h>
 #endif
 
+struct _prop_number_value {
+	union {
+		int64_t  pnu_signed;
+		uint64_t pnu_unsigned;
+	} pnv_un;
+#define	pnv_signed	pnv_un.pnu_signed
+#define	pnv_unsigned	pnv_un.pnu_unsigned
+	unsigned int	pnv_is_unsigned	:1,
+					:31;
+};
+
 struct _prop_number {
 	struct _prop_object	pn_obj;
 	struct rb_node		pn_link;
-	struct _prop_number_value {
-		union {
-			int64_t  pnu_signed;
-			uint64_t pnu_unsigned;
-		} pnv_un;
-#define	pnv_signed	pnv_un.pnu_signed
-#define	pnv_unsigned	pnv_un.pnu_unsigned
-		unsigned int	pnv_is_unsigned	:1,
-						:31;
-	} pn_value;
+	struct _prop_number_value pn_value;
 };
-
-#define	RBNODE_TO_PN(n)							\
-	((struct _prop_number *)					\
-	 ((uintptr_t)n - offsetof(struct _prop_number, pn_link)))
 
 _PROP_POOL_INIT(_prop_number_pool, sizeof(struct _prop_number), "propnmbr")
 
-static int		_prop_number_free(prop_stack_t, prop_object_t *);
+static _prop_object_free_rv_t
+		_prop_number_free(prop_stack_t, prop_object_t *);
 static bool	_prop_number_externalize(
 				struct _prop_object_externalize_context *,
 				void *);
-static bool	_prop_number_equals(prop_object_t, prop_object_t,
+static _prop_object_equals_rv_t
+		_prop_number_equals(prop_object_t, prop_object_t,
 				    void **, void **,
 				    prop_object_t *, prop_object_t *);
+
+static void _prop_number_lock(void);
+static void _prop_number_unlock(void);
 
 static const struct _prop_object_type _prop_object_type_number = {
 	.pot_type	=	PROP_TYPE_NUMBER,
 	.pot_free	=	_prop_number_free,
 	.pot_extern	=	_prop_number_externalize,
 	.pot_equals	=	_prop_number_equals,
+	.pot_lock       =       _prop_number_lock,
+	.pot_unlock     =    	_prop_number_unlock,
 };
 
 #define	prop_object_is_number(x)	\
@@ -122,50 +120,75 @@ _prop_number_compare_values(const struct _prop_number_value *pnv1,
 }
 
 static int
-_prop_number_rb_compare_nodes(const struct rb_node *n1,
-			      const struct rb_node *n2)
+/*ARGSUSED*/
+_prop_number_rb_compare_nodes(void *ctx _PROP_ARG_UNUSED,
+			      const void *n1, const void *n2)
 {
-	const prop_number_t pn1 = RBNODE_TO_PN(n1);
-	const prop_number_t pn2 = RBNODE_TO_PN(n2);
+	const struct _prop_number *pn1 = n1;
+	const struct _prop_number *pn2 = n2;
 
-	return (_prop_number_compare_values(&pn1->pn_value, &pn2->pn_value));
+	return _prop_number_compare_values(&pn1->pn_value, &pn2->pn_value);
 }
 
 static int
-_prop_number_rb_compare_key(const struct rb_node *n,
-			    const void *v)
+/*ARGSUSED*/
+_prop_number_rb_compare_key(void *ctx _PROP_ARG_UNUSED,
+			    const void *n, const void *v)
 {
-	const prop_number_t pn = RBNODE_TO_PN(n);
+	const struct _prop_number *pn = n;
 	const struct _prop_number_value *pnv = v;
 
-	return (_prop_number_compare_values(&pn->pn_value, pnv));
+	return _prop_number_compare_values(&pn->pn_value, pnv);
 }
 
-static const struct rb_tree_ops _prop_number_rb_tree_ops = {
+static const rb_tree_ops_t _prop_number_rb_tree_ops = {
 	.rbto_compare_nodes = _prop_number_rb_compare_nodes,
-	.rbto_compare_key   = _prop_number_rb_compare_key,
+	.rbto_compare_key = _prop_number_rb_compare_key,
+	.rbto_node_offset = offsetof(struct _prop_number, pn_link),
+	.rbto_context = NULL
 };
 
 static struct rb_tree _prop_number_tree;
-static bool _prop_number_tree_initialized;
-
 _PROP_MUTEX_DECL_STATIC(_prop_number_tree_mutex)
 
 /* ARGSUSED */
-static int
+static _prop_object_free_rv_t
 _prop_number_free(prop_stack_t stack, prop_object_t *obj)
 {
 	prop_number_t pn = *obj;
 
-	_PROP_MUTEX_LOCK(_prop_number_tree_mutex);
-	_prop_rb_tree_remove_node(&_prop_number_tree, &pn->pn_link);
-	_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
+	rb_tree_remove_node(&_prop_number_tree, pn);
 
 	_PROP_POOL_PUT(_prop_number_pool, pn);
 
 	return (_PROP_OBJECT_FREE_DONE);
 }
 
+_PROP_ONCE_DECL(_prop_number_init_once)
+
+static int
+_prop_number_init(void)
+{
+
+	_PROP_MUTEX_INIT(_prop_number_tree_mutex);
+	rb_tree_init(&_prop_number_tree, &_prop_number_rb_tree_ops);
+	return 0;
+}
+
+static void 
+_prop_number_lock(void)
+{
+	/* XXX: init necessary? */
+	_PROP_ONCE_RUN(_prop_number_init_once, _prop_number_init);
+	_PROP_MUTEX_LOCK(_prop_number_tree_mutex);
+}
+
+static void
+_prop_number_unlock(void)
+{
+	_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
+}
+	
 static bool
 _prop_number_externalize(struct _prop_object_externalize_context *ctx,
 			 void *v)
@@ -178,9 +201,11 @@ _prop_number_externalize(struct _prop_object_externalize_context *ctx,
 	 * we output in decimal.
 	 */
 	if (pn->pn_value.pnv_is_unsigned)
-		sprintf(tmpstr, "0x%" PRIx64, pn->pn_value.pnv_unsigned);
+		snprintf(tmpstr, sizeof(tmpstr), "0x%" PRIx64,
+		    pn->pn_value.pnv_unsigned);
 	else
-		sprintf(tmpstr, "%" PRIi64, pn->pn_value.pnv_signed);
+		snprintf(tmpstr, sizeof(tmpstr), "%" PRIi64,
+		    pn->pn_value.pnv_signed);
 
 	if (_prop_object_externalize_start_tag(ctx, "integer") == false ||
 	    _prop_object_externalize_append_cstring(ctx, tmpstr) == false ||
@@ -191,7 +216,7 @@ _prop_number_externalize(struct _prop_object_externalize_context *ctx,
 }
 
 /* ARGSUSED */
-static bool
+static _prop_object_equals_rv_t
 _prop_number_equals(prop_object_t v1, prop_object_t v2,
     void **stored_pointer1, void **stored_pointer2,
     prop_object_t *next_obj1, prop_object_t *next_obj2)
@@ -212,7 +237,7 @@ _prop_number_equals(prop_object_t v1, prop_object_t v2,
 	 * cannot be equal because they would have had pointer equality.
 	 */
 	if (num1->pn_value.pnv_is_unsigned == num2->pn_value.pnv_is_unsigned)
-		return (_PROP_OBJECT_EQUALS_TRUE);
+		return (_PROP_OBJECT_EQUALS_FALSE);
 
 	/*
 	 * We now have one signed value and one unsigned value.  We can
@@ -249,26 +274,20 @@ _prop_number_equals(prop_object_t v1, prop_object_t v2,
 static prop_number_t
 _prop_number_alloc(const struct _prop_number_value *pnv)
 {
-	prop_number_t opn, pn;
-	struct rb_node *n;
+	prop_number_t opn, pn, rpn;
+
+	_PROP_ONCE_RUN(_prop_number_init_once, _prop_number_init);
 
 	/*
 	 * Check to see if this already exists in the tree.  If it does,
 	 * we just retain it and return it.
 	 */
 	_PROP_MUTEX_LOCK(_prop_number_tree_mutex);
-	if (! _prop_number_tree_initialized) {
-		_prop_rb_tree_init(&_prop_number_tree,
-				   &_prop_number_rb_tree_ops);
-		_prop_number_tree_initialized = true;
-	} else {
-		n = _prop_rb_tree_find(&_prop_number_tree, pnv);
-		if (n != NULL) {
-			opn = RBNODE_TO_PN(n);
-			prop_object_retain(opn);
-			_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
-			return (opn);
-		}
+	opn = rb_tree_find_node(&_prop_number_tree, pnv);
+	if (opn != NULL) {
+		prop_object_retain(opn);
+		_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
+		return (opn);
 	}
 	_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
 
@@ -289,17 +308,17 @@ _prop_number_alloc(const struct _prop_number_value *pnv)
 	 * we have to check again if it is in the tree.
 	 */
 	_PROP_MUTEX_LOCK(_prop_number_tree_mutex);
-	n = _prop_rb_tree_find(&_prop_number_tree, pnv);
-	if (n != NULL) {
-		opn = RBNODE_TO_PN(n);
+	opn = rb_tree_find_node(&_prop_number_tree, pnv);
+	if (opn != NULL) {
 		prop_object_retain(opn);
 		_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
 		_PROP_POOL_PUT(_prop_number_pool, pn);
 		return (opn);
 	}
-	_prop_rb_tree_insert_node(&_prop_number_tree, &pn->pn_link);
+	rpn = rb_tree_insert_node(&_prop_number_tree, pn);
+	_PROP_ASSERT(rpn == pn);
 	_PROP_MUTEX_UNLOCK(_prop_number_tree_mutex);
-	return (pn);
+	return (rpn);
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: byte_swap.h,v 1.8 2006/01/30 22:46:36 dsl Exp $	*/
+/*	$NetBSD: byte_swap.h,v 1.11 2014/03/18 18:20:41 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,8 +42,14 @@ static __inline uint16_t __byte_swap_u16_variable(uint16_t);
 static __inline uint16_t
 __byte_swap_u16_variable(uint16_t var)
 {
+#if defined(__mcfisac__)
+	__asm volatile ("swap %0; byterev %0" : "=d"(var) : "0" (var));
+#elif defined(__mcoldfire__)
+	return (var >> 8) || (var << 8);
+#else
 	__asm volatile ("rorw #8, %0" : "=d" (var) : "0" (var));
 	return (var);
+#endif
 }
 
 #define	__BYTE_SWAP_U32_VARIABLE __byte_swap_u32_variable
@@ -58,8 +57,15 @@ static __inline uint32_t __byte_swap_u32_variable(uint32_t);
 static __inline uint32_t
 __byte_swap_u32_variable(uint32_t var)
 {
+#if defined(__mcfisac__)
+	__asm volatile ("byterev %0" : "=d"(var) : "0" (var));
+#elif defined(__mcoldfire__)
+	return (var >> 24) | (var << 24) | ((var & 0x00ff0000) >> 8)
+	    | ((var << 8) & 0x00ff0000);
+#else
 	__asm volatile (
 		"rorw #8, %0; swap %0; rorw #8, %0" : "=d" (var) : "0" (var));
+#endif
 	return (var);
 }
 

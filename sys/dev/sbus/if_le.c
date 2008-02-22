@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le.c,v 1.34 2007/10/19 12:01:11 ad Exp $	*/
+/*	$NetBSD: if_le.c,v 1.40 2010/01/19 22:07:43 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,10 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.34 2007/10/19 12:01:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.40 2010/01/19 22:07:43 pooka Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,6 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.34 2007/10/19 12:01:11 ad Exp $");
 #include <dev/ic/am7990reg.h>
 #include <dev/ic/am7990var.h>
 
+#include "ioconf.h"
+
 /*
  * LANCE registers.
  */
@@ -75,7 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_le.c,v 1.34 2007/10/19 12:01:11 ad Exp $");
 
 struct	le_softc {
 	struct	am7990_softc	sc_am7990;	/* glue to MI code */
-	struct	sbusdev		sc_sd;		/* sbus device */
 	bus_space_tag_t		sc_bustag;
 	bus_dma_tag_t		sc_dmatag;
 	bus_dmamap_t		sc_dmamap;
@@ -84,8 +77,8 @@ struct	le_softc {
 
 #define MEMSIZE 0x4000		/* LANCE memory size */
 
-int	lematch_sbus(struct device *, struct cfdata *, void *);
-void	leattach_sbus(struct device *, struct device *, void *);
+int	lematch_sbus(device_t, cfdata_t, void *);
+void	leattach_sbus(device_t, device_t, void *);
 
 /*
  * Media types supported.
@@ -93,24 +86,20 @@ void	leattach_sbus(struct device *, struct device *, void *);
 static int lemedia[] = {
 	IFM_ETHER|IFM_10_5,
 };
-#define NLEMEDIA	(sizeof(lemedia) / sizeof(lemedia[0]))
+#define NLEMEDIA	__arraycount(lemedia)
 
-CFATTACH_DECL(le_sbus, sizeof(struct le_softc),
+CFATTACH_DECL_NEW(le_sbus, sizeof(struct le_softc),
     lematch_sbus, leattach_sbus, NULL, NULL);
-
-extern struct cfdriver le_cd;
 
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
 #endif
 
-static void lewrcsr(struct lance_softc *, u_int16_t, u_int16_t);
-static u_int16_t lerdcsr(struct lance_softc *, u_int16_t);
+static void lewrcsr(struct lance_softc *, uint16_t, uint16_t);
+static uint16_t lerdcsr(struct lance_softc *, uint16_t);
 
 static void
-lewrcsr(sc, port, val)
-	struct lance_softc *sc;
-	u_int16_t port, val;
+lewrcsr(struct lance_softc *sc, uint16_t port, uint16_t val)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 	bus_space_tag_t t = lesc->sc_bustag;
@@ -129,10 +118,8 @@ lewrcsr(sc, port, val)
 #endif
 }
 
-static u_int16_t
-lerdcsr(sc, port)
-	struct lance_softc *sc;
-	u_int16_t port;
+static uint16_t
+lerdcsr(struct lance_softc *sc, uint16_t port)
 {
 	struct le_softc *lesc = (struct le_softc *)sc;
 	bus_space_tag_t t = lesc->sc_bustag;
@@ -144,10 +131,7 @@ lerdcsr(sc, port)
 
 
 int
-lematch_sbus(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+lematch_sbus(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -155,16 +139,15 @@ lematch_sbus(parent, cf, aux)
 }
 
 void
-leattach_sbus(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+leattach_sbus(device_t parent, device_t self, void *aux)
 {
-	struct sbus_attach_args *sa = aux;
-	struct le_softc *lesc = (struct le_softc *)self;
+	struct le_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
+	struct sbus_attach_args *sa = aux;
 	bus_dma_tag_t dmatag;
-	struct sbusdev *sd;
+	cfdriver_t lebufcd;
 
+	sc->sc_dev = self;
 	lesc->sc_bustag = sa->sa_bustag;
 	lesc->sc_dmatag = dmatag = sa->sa_dmatag;
 
@@ -173,7 +156,7 @@ leattach_sbus(parent, self, aux)
 			 sa->sa_offset,
 			 sa->sa_size,
 			 0, &lesc->sc_reg) != 0) {
-		printf("%s @ sbus: cannot map registers\n", self->dv_xname);
+		aprint_error(": cannot map registers\n");
 		return;
 	}
 
@@ -183,31 +166,52 @@ leattach_sbus(parent, self, aux)
 	 * a pre-historic ROM that doesn't establish le<=>lebuffer
 	 * parent-child relationships.
 	 */
-	for (sd = ((struct sbus_softc *)parent)->sc_sbdev; sd != NULL;
-	     sd = sd->sd_bchain) {
+	lebufcd = config_cfdriver_lookup("lebuffer");
+	if (lebufcd != NULL) {
+		int unit;
 
-		struct lebuf_softc *lebuf = (struct lebuf_softc *)sd->sd_dev;
+		/* Check all possible lebuffer units */
+		for (unit = 0; unit < lebufcd->cd_ndevs; unit++) {
+			device_t lebufdev;
+			struct lebuf_softc *lebufsc;
 
-		if (strncmp("lebuffer", sd->sd_dev->dv_xname, 8) != 0)
-			continue;
+			/* Check if unit is valid */
+			lebufdev = device_lookup(lebufcd, unit);
+			if (lebufdev == NULL)
+				continue;
 
-		if (lebuf->attached != 0)
-			continue;
+			/* Check if we have a common sbus parent */
+			if (parent != device_parent(lebufdev))
+				continue;
+			lebufsc = device_private(lebufdev);
 
-		sc->sc_mem = lebuf->sc_buffer;
-		sc->sc_memsize = lebuf->sc_bufsiz;
-		sc->sc_addr = 0; /* Lance view is offset by buffer location */
-		lebuf->attached = 1;
+			/*
+			 * Check if this lebuffer unit is attached
+			 * but unused by its child, if_le_lebuffer.
+			 * XXX: this won't work if lebuffer is configured
+			 *      but not le at lebuffer?
+			 */
+			if (lebufsc->sc_buffer == 0 || lebufsc->attached != 0)
+				continue;
 
-		/* That old black magic... */
-		sc->sc_conf3 = prom_getpropint(sa->sa_node,
-					  "busmaster-regval",
-					  LE_C3_BSWP | LE_C3_ACON | LE_C3_BCON);
-		break;
+			/* Assume this lebuffer is my pair */
+			sc->sc_mem = lebufsc->sc_buffer;
+			sc->sc_memsize = lebufsc->sc_bufsiz;
+
+			/* Lance view is offset by buffer location */
+			sc->sc_addr = 0;
+
+			/* Denote it */
+			aprint_normal(" (%s)", device_xname(lebufdev));
+			lebufsc->attached = 1;
+
+			/* That old black magic... */
+			sc->sc_conf3 = prom_getpropint(sa->sa_node,
+			    "busmaster-regval",
+			    LE_C3_BSWP | LE_C3_ACON | LE_C3_BCON);
+			break;
+		}
 	}
-
-	lesc->sc_sd.sd_reset = (void *)lance_reset;
-	sbus_establish(&lesc->sc_sd, &sc->sc_dev);
 
 	if (sc->sc_mem == 0) {
 		bus_dma_segment_t seg;
@@ -221,8 +225,7 @@ leattach_sbus(parent, self, aux)
 		if ((error = bus_dmamap_create(dmatag, MEMSIZE, 1, MEMSIZE, 0,
 						BUS_DMA_NOWAIT|BUS_DMA_24BIT,
 						&lesc->sc_dmamap)) != 0) {
-			printf("%s: DMA map create error %d\n",
-				self->dv_xname, error);
+			aprint_error(": DMA map create error %d\n", error);
 			return;
 		}
 
@@ -230,8 +233,8 @@ leattach_sbus(parent, self, aux)
 		if ((error = bus_dmamem_alloc(dmatag, MEMSIZE, 0, 0,
 					 &seg, 1, &rseg,
 					 BUS_DMA_NOWAIT|BUS_DMA_24BIT)) != 0){
-			printf("%s: DMA buffer allocation error %d\n",
-				self->dv_xname, error);
+			aprint_error(": DMA buffer allocation error %d\n",
+			    error);
 			return;
 		}
 
@@ -239,17 +242,15 @@ leattach_sbus(parent, self, aux)
 		if ((error = bus_dmamem_map(dmatag, &seg, rseg, MEMSIZE,
 				       (void **)&sc->sc_mem,
 				       BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-			printf("%s: DMA buffer map error %d\n",
-				self->dv_xname, error);
+			aprint_error(": DMA buffer map error %d\n", error);
 			bus_dmamem_free(lesc->sc_dmatag, &seg, rseg);
 			return;
 		}
 
 		/* Load DMA buffer */
-		if ((error = bus_dmamap_load(dmatag, lesc->sc_dmamap, sc->sc_mem,
-		    MEMSIZE, NULL, BUS_DMA_NOWAIT)) != 0) {
-			printf("%s: DMA buffer map load error %d\n",
-				self->dv_xname, error);
+		if ((error = bus_dmamap_load(dmatag, lesc->sc_dmamap,
+		    sc->sc_mem, MEMSIZE, NULL, BUS_DMA_NOWAIT)) != 0) {
+			aprint_error(": DMA buffer map load error %d\n", error);
 			bus_dmamem_free(dmatag, &seg, rseg);
 			bus_dmamem_unmap(dmatag, sc->sc_mem, MEMSIZE);
 			return;

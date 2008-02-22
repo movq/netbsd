@@ -1,4 +1,4 @@
-.\"    $NetBSD: pax.1,v 1.55 2007/12/02 21:13:23 wiz Exp $
+.\"    $NetBSD: pax.1,v 1.69 2017/07/03 21:33:23 wiz Exp $
 .\"
 .\" Copyright (c) 1992 Keith Muller.
 .\" Copyright (c) 1992, 1993
@@ -33,7 +33,7 @@
 .\"
 .\"	@(#)pax.1	8.4 (Berkeley) 4/18/94
 .\"
-.Dd April 23, 2007
+.Dd August 12, 2016
 .Dt PAX 1
 .Os
 .Sh NAME
@@ -42,28 +42,15 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl 0cdjnOVvz
-.Bk -words
 .Op Fl E Ar limit
-.Ek
-.Bk -words
 .Op Fl f Ar archive
-.Ek
-.Bk -words
 .Op Fl N Ar dbdir
-.Ek
-.Bk -words
 .Op Fl s Ar replstr
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl U Ar user
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl G Ar group
 .Ar ...\&
-.Ek
-.Bk -words
 .Oo
 .Fl T
 .Sm off
@@ -72,41 +59,23 @@
 .Sm on
 .Oc
 .Ar ...\&
-.Ek
 .Op Ar pattern ...\&
 .Nm
 .Fl r
 .Op Fl AcDdijknOuVvYZz
-.Bk -words
 .Op Fl E Ar limit
-.Ek
-.Bk -words
 .Op Fl f Ar archive
-.Ek
-.Bk -words
 .Op Fl N Ar dbdir
-.Ek
-.Bk -words
 .Op Fl o Ar options
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl p Ar string
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl s Ar replstr
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl U Ar user
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl G Ar group
 .Ar ...\&
-.Ek
-.Bk -words
 .Oo
 .Fl T
 .Sm off
@@ -115,44 +84,26 @@
 .Sm on
 .Oc
 .Ar ...\&
-.Ek
 .Op Ar pattern ...\&
 .Nm
 .Fl w
 .Op Fl AdHijLMOPtuVvXz
-.Bk -words
 .Op Fl b Ar blocksize
-.Ek
 .Oo
 .Op Fl a
 .Op Fl f Ar archive
 .Oc
-.Bk -words
 .Op Fl x Ar format
-.Ek
-.Bk -words
 .Op Fl B Ar bytes
-.Ek
-.Bk -words
 .Op Fl N Ar dbdir
-.Ek
-.Bk -words
 .Op Fl o Ar options
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl s Ar replstr
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl U Ar user
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl G Ar group
 .Ar ...\&
-.Ek
-.Bk -words
 .Oo
 .Fl T
 .Sm off
@@ -162,32 +113,20 @@
 .Sm on
 .Oc
 .Ar ...\&
-.Ek
 .Op Ar file ...\&
 .Nm
 .Fl r
 .Fl w
 .Op Fl ADdHijkLlMnOPtuVvXYZz
-.Bk -words
 .Op Fl N Ar dbdir
-.Ek
-.Bk -words
 .Op Fl p Ar string
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl s Ar replstr
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl U Ar user
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Fl G Ar group
 .Ar ...\&
-.Ek
-.Bk -words
 .Oo
 .Fl T
 .Sm off
@@ -197,10 +136,7 @@
 .Sm on
 .Oc
 .Ar ...\&
-.Ek
-.Bk -words
 .Op Ar file ...\&
-.Ek
 .Ar directory
 .Sh DESCRIPTION
 .Nm
@@ -642,7 +578,7 @@ As in
 .Cm old
 is a basic regular expression and
 .Cm new
-can contain an ampersand (\*[Am]), \\n (where n is a digit) back-references,
+can contain an ampersand (&), \en (where n is a digit) back-references,
 or subexpression matching.
 The
 .Cm old
@@ -668,7 +604,7 @@ The optional trailing
 will cause the final result of a successful substitution to be written to
 .Dv standard error
 in the following format:
-.Dl Ao "original pathname" Ac \*[Gt]\*[Gt] Ao "new pathname" Ac
+.Dl Ao "original pathname" Ac >> Ao "new pathname" Ac
 File or archive member names that substitute to the empty string
 are not selected and will be skipped.
 .It Fl t
@@ -804,6 +740,25 @@ as the result of any specific archive format restrictions.
 The individual archive formats may impose additional restrictions on use.
 Typical archive format restrictions include (but are not limited to):
 file pathname length, file size, link pathname length and the type of the file.
+.It Fl Fl gnu
+Recognize GNU tar extensions.
+.It Fl Fl timestamp Ar timestamp
+Store all modification times in the archive with the
+.Ar timestamp
+given instead of the actual modification time of the individual archive member
+so that repeatable builds are possible.
+The
+.Ar timestamp
+can be a
+.Pa pathname ,
+where the timestamps are derived from that file, a parseable date for
+.Xr parsedate 3
+(this option is not yet available in the tools build), or an integer value
+interpreted as the number of seconds from the Epoch.
+.It Fl Fl xz
+Use
+.Xr xz 1
+compression, when reading or writing archive files.
 .It Fl z
 Use
 .Xr gzip 1
@@ -877,7 +832,7 @@ Select a file based on its
 name, or when starting with a
 .Cm # ,
 a numeric gid.
-A '\\' can be used to escape the
+A '\e' can be used to escape the
 .Cm # .
 Multiple
 .Fl G
@@ -1016,11 +971,11 @@ Time comparisons using both file times is useful when
 is used to create a time based incremental archive (only files that were
 changed during a specified time range will be archived).
 .Pp
-A time range is made up of six different fields and each field must contain two
-digits.
+A time range is made up of seven different fields and each field must contain
+two digits.
 The format is:
 .Dl [[[[[cc]yy]mm]dd]hh]mm[\&.ss]
-Where
+where
 .Cm cc
 is the first two digits of the year (the century),
 .Cm yy
@@ -1059,7 +1014,7 @@ Select a file based on its
 name, or when starting with a
 .Cm # ,
 a numeric uid.
-A '\\' can be used to escape the
+A '\e' can be used to escape the
 .Cm # .
 Multiple
 .Fl U
@@ -1089,9 +1044,9 @@ pathname created after all the file name modifications have completed.
 .It Fl 0
 Use the nul character instead of \en as the file separator when reading
 files from standard input.
-.It Fl -force-local
+.It Fl Fl force-local
 Do not interpret filenames that contain a `:' as remote files.
-.It Fl -insecure
+.It Fl Fl insecure
 Normally
 .Nm
 ignores filenames that contain
@@ -1101,6 +1056,9 @@ With this option,
 files that contain
 .Dq ..
 can be processed.
+.It Fl Fl use-compress-program
+Use the named program as the program to decompress the input or compress
+the output.
 .El
 .Pp
 The options that operate on the names of files or archive members
@@ -1257,11 +1215,11 @@ When running as root, one may also wish to preserve file
 ownership when copying directory trees.
 This can be done with the following commands:
 .Dl cd olddir
-.Dl pax -rw -pe .\ .../newdir
+.Dl pax -rw -pe .\ ../newdir
 which will copy the contents of
 .Pa olddir
 into
-.Pa .../newdir ,
+.Pa ../newdir ,
 preserving ownership, permissions and access times.
 .Pp
 The command:
@@ -1332,7 +1290,15 @@ and
 operations are extensions to the
 .Tn POSIX
 standard.
+.Sh HISTORY
+A
+.Nm
+utility appeared in
+.Bx 4.4 .
 .Sh AUTHORS
-Keith Muller at the University of California, San Diego.
-Luke Mewburn implemented
+.An -nosplit
+.An Keith Muller
+at the University of California, San Diego.
+.An Luke Mewburn
+implemented
 .Fl M .

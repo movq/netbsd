@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.57 2006/12/14 20:09:35 he Exp $
+#	$NetBSD: Makefile,v 1.65 2018/02/25 00:16:48 mrg Exp $
 #	@(#)Makefile	8.2 (Berkeley) 4/4/94
 
 .include <bsd.own.mk>
@@ -11,26 +11,33 @@ LDADD+=	-lcrypt -lutil
 MAN=	ftpd.conf.5 ftpusers.5 ftpd.8
 MLINKS=	ftpusers.5 ftpchroot.5
 
+SRCS+=	pfilter.c
+LDADD+=	-lblacklist
+DPADD+=	${LIBBLACKLIST}
+
+.if defined(NO_INTERNAL_LS)
+CPPFLAGS+=-DNO_INTERNAL_LS
+.else
 # for `internal' ls
 SRCS+=	ls.c cmp.c print.c util.c
 .PATH:	${NETBSDSRCDIR}/bin/ls
+.endif
 
 .if (${USE_INET6} != "no")
 CPPFLAGS+=-DINET6
 .endif
 
-WARNS=2
-
+.if (${USE_PAM} != "no")
+CPPFLAGS+=-DUSE_PAM
+DPADD+= ${LIBPAM} ${PAM_STATIC_DPADD}
+LDADD+= -lpam ${PAM_STATIC_LDADD}
+.else	# USE_PAM == no
 .if (${USE_SKEY} != "no")
 CPPFLAGS+=-DSKEY
 DPADD+= ${LIBSKEY}
 LDADD+= -lskey
 .endif
-.if (${USE_PAM} != "no")
-CPPFLAGS+=-DUSE_PAM
-DPADD+= ${LIBPAM} ${PAM_STATIC_DPADD}
-LDADD+= -lpam ${PAM_STATIC_LDADD}
-.endif
+.endif	# USE_PAM == no
 
 ftpd.o ftpcmd.o: version.h
 
@@ -40,12 +47,8 @@ ftpd.o ftpcmd.o: version.h
 #
 #SRCS+=	k5login.c
 #CPPFLAGS+=-DKERBEROS5
-#CPPFLAGS+=-DKERBEROS5 -I${DESTDIR}/usr/include/krb5
-#DPADD+=	${LIBKRB5} ${LIBASN1}
-#LDADD+= -lkrb5 -lasn1
-#
-#DPADD+=	${LIBCRYPTO} ${{LIBCRYPT} ${LIBROKEN} ${LIBCOM_ERR}
-#LDADD+=	-lcrypto -lcrypt -lroken -lcom_err
+#LDADD+= ${LIBKRB5_LDADD}
+#DPADD+= ${LIBKRB5_DPADD}
 #
 #.endif
 

@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: nsparser.y,v 1.9 2004/01/25 16:38:15 lukem Exp $	*/
+/*	$NetBSD: nsparser.y,v 1.12 2012/03/20 17:44:18 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nsparser.y,v 1.9 2004/01/25 16:38:15 lukem Exp $");
+__RCSID("$NetBSD: nsparser.y,v 1.12 2012/03/20 17:44:18 matt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -52,7 +45,7 @@ __RCSID("$NetBSD: nsparser.y,v 1.9 2004/01/25 16:38:15 lukem Exp $");
 #include <syslog.h>
 
 
-static	void	_nsaddsrctomap __P((const char *));
+static	void	_nsaddsrctomap(const char *);
 
 static	ns_dbt		curdbt;
 static	ns_src		cursrc;
@@ -161,10 +154,10 @@ Action
 %%
 
 static void
-_nsaddsrctomap(elem)
-	const char *elem;
+_nsaddsrctomap(const char *elem)
 {
-	int		i, lineno;
+	unsigned int	i;
+	int		lineno;
 
 	_DIAGASSERT(elem != NULL);
 

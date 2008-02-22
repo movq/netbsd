@@ -1,4 +1,4 @@
-/*	$NetBSD: ultrix_pathname.c,v 1.33 2008/01/05 19:14:09 dsl Exp $	*/
+/*	$NetBSD: ultrix_pathname.c,v 1.39 2014/09/05 09:21:55 matt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ultrix_pathname.c,v 1.33 2008/01/05 19:14:09 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ultrix_pathname.c,v 1.39 2014/09/05 09:21:55 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -173,17 +173,17 @@ ultrix_sys_open(struct lwp *l, const struct ultrix_sys_open_args *uap, register_
 
 	/* XXXSMP */
 	if (!ret && !noctty && SESS_LEADER(p) && !(p->p_lflag & PL_CONTROLT)) {
-		struct filedesc *fdp = p->p_fd;
-		struct file *fp;
+		file_t *fp;
+		int fd;
 
-		fp = fd_getfile(fdp, *retval);
+		fd = (int)*retval;
+		fp = fd_getfile(fd);
 
 		/* ignore any error, just give it a try */
 		if (fp != NULL) {
-			FILE_USE(fp);
 			if (fp->f_type == DTYPE_VNODE)
-				(fp->f_ops->fo_ioctl)(fp, TIOCSCTTY, (void *)0, l);
-			FILE_UNUSE(fp, l);
+				(fp->f_ops->fo_ioctl)(fp, TIOCSCTTY, NULL);
+			fd_putfile(fd);
 		}
 	}
 	return ret;
@@ -191,15 +191,15 @@ ultrix_sys_open(struct lwp *l, const struct ultrix_sys_open_args *uap, register_
 
 
 struct ultrix_statfs {
-	long	f_type;		/* type of info, zero for now */
-	long	f_bsize;	/* fundamental file system block size */
-	long	f_blocks;	/* total blocks in file system */
-	long	f_bfree;	/* free blocks */
-	long	f_bavail;	/* free blocks available to non-super-user */
-	long	f_files;	/* total file nodes in file system */
-	long	f_ffree;	/* free file nodes in fs */
+	int32_t	f_type;		/* type of info, zero for now */
+	int32_t	f_bsize;	/* fundamental file system block size */
+	int32_t	f_blocks;	/* total blocks in file system */
+	int32_t	f_bfree;	/* free blocks */
+	int32_t	f_bavail;	/* free blocks available to non-super-user */
+	int32_t	f_files;	/* total file nodes in file system */
+	int32_t	f_ffree;	/* free file nodes in fs */
 	fsid_t	f_fsid;		/* file system id */
-	long	f_spare[7];	/* spare for later */
+	int32_t	f_spare[7];	/* spare for later */
 };
 
 /*
@@ -232,16 +232,16 @@ ultrix_sys_statfs(struct lwp *l, const struct ultrix_sys_statfs_args *uap, regis
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
-	struct nameidata nd;
+	struct vnode *vp;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(uap, path));
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return error;
 
-	mp = nd.ni_vp->v_mount;
+	mp = vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(nd.ni_vp);
+	vrele(vp);
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		return error;
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
@@ -256,23 +256,22 @@ ultrix_sys_statfs(struct lwp *l, const struct ultrix_sys_statfs_args *uap, regis
 int
 ultrix_sys_fstatfs(struct lwp *l, const struct ultrix_sys_fstatfs_args *uap, register_t *retval)
 {
-	struct proc *p = l->l_proc;
-	struct file *fp;
+	file_t *fp;
 	struct mount *mp;
 	struct statvfs *sp;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return error;
-	mp = ((struct vnode *)fp->f_data)->v_mount;
+	mp = fp->f_vnode->v_mount;
 	sp = &mp->mnt_stat;
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		goto out;
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
 	error = ultrixstatfs(sp, (void *)SCARG(uap, buf));
  out:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return error;
 }
 
@@ -284,5 +283,7 @@ ultrix_sys_mknod(struct lwp *l, const struct ultrix_sys_mknod_args *uap, registe
 		return sys_mkfifo(l, (const struct sys_mkfifo_args *)uap,
 		    retval);
 
-	return sys_mknod(l, (const struct sys_mknod_args *)uap, retval);
+	return compat_50_sys_mknod(l,
+				   (const struct compat_50_sys_mknod_args *)uap,
+				   retval);
 }

@@ -1,10 +1,10 @@
-/*	$NetBSD: if.h,v 1.7 2006/03/05 23:47:08 rpaulo Exp $	*/
+/*	$NetBSD: if.h,v 1.11 2018/04/20 10:39:37 roy Exp $	*/
 /*	$KAME: if.h,v 1.12 2003/09/21 07:17:03 itojun Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -16,7 +16,7 @@
  * 3. Neither the name of the project nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE PROJECT AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -32,26 +32,23 @@
 
 #define RTADV_TYPE2BITMASK(type) (0x1 << type)
 
-extern struct if_msghdr **iflist;
-extern size_t ifblock_size;
-extern char *ifblock;
-
 struct nd_opt_hdr;
-struct sockaddr_dl *if_nametosdl __P((char *));
-int if_getmtu __P((char *));
-int if_getflags __P((int, int));
-int lladdropt_length __P((struct sockaddr_dl *));
-void lladdropt_fill __P((struct sockaddr_dl *, struct nd_opt_hdr *));
-char *get_next_msg __P((char *, char *, int, size_t *, int));
-struct in6_addr *get_addr __P((char *));
-int get_rtm_ifindex __P((char *));
-int get_ifm_ifindex __P((char *));
-int get_ifam_ifindex __P((char *));
-int get_ifm_flags __P((char *));
-int get_prefixlen __P((char *));
-int prefixlen __P((u_char *, u_char *));
-int rtmsg_type __P((char *));
-int ifmsg_type __P((char *));
-int rtmsg_len __P((char *));
-int ifmsg_len __P((char *));
-void init_iflist __P((void));
+struct sockaddr_dl *if_nametosdl(const char *);
+int if_getmtu(const char *);
+int if_getflags(int, int);
+int lladdropt_length(struct sockaddr_dl *);
+void lladdropt_fill(struct sockaddr_dl *, struct nd_opt_hdr *);
+char *get_next_msg(char *, char *, int, size_t *, int);
+struct in6_addr *get_addr(char *);
+int get_rtm_ifindex(char *);
+int get_ifm_ifindex(char *);
+int get_ifam_ifindex(char *);
+int get_ifm_flags(char *);
+#ifdef RTM_IFANNOUNCE
+int get_ifan_ifindex(char *);
+int get_ifan_what(char *);
+#endif
+int get_prefixlen(char *);
+int prefixlen(const unsigned char *, const unsigned char *);
+int rtmsg_type(char *);
+int rtmsg_len(char *);

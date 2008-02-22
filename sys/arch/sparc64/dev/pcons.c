@@ -1,4 +1,4 @@
-/*	$NetBSD: pcons.c,v 1.28 2007/11/19 18:51:43 ad Exp $	*/
+/*	$NetBSD: pcons.c,v 1.34 2014/07/25 08:10:35 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2000 Eduardo E. Horvath
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcons.c,v 1.28 2007/11/19 18:51:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcons.c,v 1.34 2014/07/25 08:10:35 dholland Exp $");
 
 #include "opt_ddb.h"
 
@@ -61,10 +61,10 @@ __KERNEL_RCSID(0, "$NetBSD: pcons.c,v 1.28 2007/11/19 18:51:43 ad Exp $");
 
 #include <sparc64/dev/cons.h>
 
-static int pconsmatch(struct device *, struct cfdata *, void *);
-static void pconsattach(struct device *, struct device *, void *);
+static int pconsmatch(device_t, cfdata_t, void *);
+static void pconsattach(device_t, device_t, void *);
 
-CFATTACH_DECL(pcons, sizeof(struct pconssoftc),
+CFATTACH_DECL_NEW(pcons, sizeof(struct pconssoftc),
     pconsmatch, pconsattach, NULL, NULL);
 
 extern struct cfdriver pcons_cd;
@@ -78,8 +78,18 @@ dev_type_tty(pconstty);
 dev_type_poll(pconspoll);
 
 const struct cdevsw pcons_cdevsw = {
-	pconsopen, pconsclose, pconsread, pconswrite, pconsioctl,
-	nostop, pconstty, pconspoll, nommap, ttykqfilter, D_TTY
+	.d_open = pconsopen,
+	.d_close = pconsclose,
+	.d_read = pconsread,
+	.d_write = pconswrite,
+	.d_ioctl = pconsioctl,
+	.d_stop = nostop,
+	.d_tty = pconstty,
+	.d_poll = pconspoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 static struct cnm_state pcons_cnm_state;
@@ -88,7 +98,7 @@ static int pconsprobe(void);
 extern struct consdev *cn_tab;
 
 static int
-pconsmatch(struct device *parent, struct cfdata *match, void *aux)
+pconsmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	extern int  prom_cngetc(dev_t);
@@ -100,9 +110,10 @@ pconsmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-pconsattach(struct device *parent, struct device *self, void *aux)
+pconsattach(device_t parent, device_t self, void *aux)
 {
-	struct pconssoftc *sc = (struct pconssoftc *) self;
+	struct pconssoftc *sc = device_private(self);
+	sc->of_dev = self;
 
 	printf("\n");
 	if (!pconsprobe())
@@ -121,19 +132,13 @@ int
 pconsopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct pconssoftc *sc;
-	int unit = minor(dev);
 	struct tty *tp;
-	struct proc *p;
-
-	p = l->l_proc;
 	
-	if (unit >= pcons_cd.cd_ndevs)
-		return ENXIO;
-	sc = pcons_cd.cd_devs[unit];
+	sc = device_lookup_private(&pcons_cd, minor(dev));
 	if (!sc)
 		return ENXIO;
 	if (!(tp = sc->of_tty))
-		sc->of_tty = tp = ttymalloc();
+		sc->of_tty = tp = tty_alloc();
 	tp->t_oproc = pconsstart;
 	tp->t_param = pconsparam;
 	tp->t_dev = dev;
@@ -163,7 +168,7 @@ pconsopen(dev_t dev, int flag, int mode, struct lwp *l)
 int
 pconsclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct pconssoftc *sc = pcons_cd.cd_devs[minor(dev)];
+	struct pconssoftc *sc = device_lookup_private(&pcons_cd,minor(dev));
 	struct tty *tp = sc->of_tty;
 
 	callout_stop(&sc->sc_poll_ch);
@@ -176,7 +181,7 @@ pconsclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 pconsread(dev_t dev, struct uio *uio, int flag)
 {
-	struct pconssoftc *sc = pcons_cd.cd_devs[minor(dev)];
+	struct pconssoftc *sc = device_lookup_private(&pcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 	
 	return (*tp->t_linesw->l_read)(tp, uio, flag);
@@ -185,7 +190,7 @@ pconsread(dev_t dev, struct uio *uio, int flag)
 int
 pconswrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct pconssoftc *sc = pcons_cd.cd_devs[minor(dev)];
+	struct pconssoftc *sc = device_lookup_private(&pcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 	
 	return (*tp->t_linesw->l_write)(tp, uio, flag);
@@ -194,7 +199,7 @@ pconswrite(dev_t dev, struct uio *uio, int flag)
 int
 pconspoll(dev_t dev, int events, struct lwp *l)
 {
-	struct pconssoftc *sc = pcons_cd.cd_devs[minor(dev)];
+	struct pconssoftc *sc = device_lookup_private(&pcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
  
 	return ((*tp->t_linesw->l_poll)(tp, events, l));
@@ -203,7 +208,7 @@ pconspoll(dev_t dev, int events, struct lwp *l)
 int
 pconsioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct pconssoftc *sc = pcons_cd.cd_devs[minor(dev)];
+	struct pconssoftc *sc = device_lookup_private(&pcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 	int error;
 	
@@ -215,7 +220,7 @@ pconsioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 struct tty *
 pconstty(dev_t dev)
 {
-	struct pconssoftc *sc = pcons_cd.cd_devs[minor(dev)];
+	struct pconssoftc *sc = device_lookup_private(&pcons_cd, minor(dev));
 
 	return sc->of_tty;
 }
@@ -271,7 +276,7 @@ pcons_poll(void *aux)
 }
 
 int
-pconsprobe()
+pconsprobe(void)
 {
 
 	return (prom_stdin() && prom_stdout());
@@ -280,19 +285,19 @@ pconsprobe()
 void
 pcons_cnpollc(dev_t dev, int on)
 {
-	struct pconssoftc *sc = NULL;
+	struct pconssoftc *sc;
 
-	if (pcons_cd.cd_devs) 
-		sc = pcons_cd.cd_devs[minor(dev)];
+	sc = device_lookup_private(&pcons_cd, minor(dev));
+	if (sc == NULL)
+		return;
 
 	if (on) {
-		if (!sc) return;
 		if (sc->of_flags & OFPOLL)
 			callout_stop(&sc->sc_poll_ch);
 		sc->of_flags &= ~OFPOLL;
 	} else {
                 /* Resuming kernel. */
-		if (sc && !(sc->of_flags & OFPOLL)) {
+		if (!(sc->of_flags & OFPOLL)) {
 			sc->of_flags |= OFPOLL;
 			callout_reset(&sc->sc_poll_ch, 1, pcons_poll, sc);
 		}
@@ -301,6 +306,7 @@ pcons_cnpollc(dev_t dev, int on)
 
 void pcons_dopoll(void);
 void
-pcons_dopoll() {
-		pcons_poll((void*)pcons_cd.cd_devs[0]);
+pcons_dopoll(void)
+{
+		pcons_poll(device_lookup_private(&pcons_cd, 0));
 }

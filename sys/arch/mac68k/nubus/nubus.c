@@ -1,4 +1,4 @@
-/*	$NetBSD: nubus.c,v 1.62 2007/03/07 13:54:49 tsutsui Exp $	*/
+/*	$NetBSD: nubus.c,v 1.65 2014/10/18 08:33:26 snj Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Allen Briggs.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nubus.c,v 1.62 2007/03/07 13:54:49 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nubus.c,v 1.65 2014/10/18 08:33:26 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,8 +58,8 @@ static int	nubus_debug = 0 /* | NDB_PROBE | NDB_FOLLOW | NDB_ARITH */ ;
 #endif
 
 static int	nubus_print(void *, const char *);
-static int	nubus_match(struct device *, struct cfdata *, void *);
-static void	nubus_attach(struct device *, struct device *, void *);
+static int	nubus_match(device_t, cfdata_t, void *);
+static void	nubus_attach(device_t, device_t, void *);
 static int	nubus_video_resource(int);
 
 static int	nubus_probe_slot(bus_space_tag_t, bus_space_handle_t, int,
@@ -77,11 +77,11 @@ static u_int16_t nubus_read_2(bus_space_tag_t, bus_space_handle_t, u_int8_t,
 static u_int32_t nubus_read_4(bus_space_tag_t, bus_space_handle_t, u_int8_t,
 		    u_long);
 
-CFATTACH_DECL(nubus, sizeof(struct nubus_softc),
+CFATTACH_DECL_NEW(nubus, sizeof(struct nubus_softc),
     nubus_match, nubus_attach, NULL, NULL);
 
 static int
-nubus_match(struct device *parent, struct cfdata *cf, void *aux)
+nubus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	static int nubus_matched = 0;
 
@@ -94,7 +94,7 @@ nubus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-nubus_attach(struct device *parent, struct device *self, void *aux)
+nubus_attach(device_t parent, device_t self, void *aux)
 {
 	struct nubus_attach_args na_args;
 	struct mainbus_attach_args *mba;
@@ -124,7 +124,7 @@ nubus_attach(struct device *parent, struct device *self, void *aux)
 			if (nubus_debug & NDB_PROBE)
 				printf("%s: failed to map slot %x, "
 				    "address %p (in use?)\n",
-				    self->dv_xname, i,
+				    device_xname(self), i,
 				    (void *)NUBUS_SLOT2PA(i));
 #endif
 			continue;
@@ -302,7 +302,7 @@ nubus_video_resource(int slot)
 
 /*
  * Probe a given nubus slot.  If a card is there and we can get the
- * format block from it's clutching decl. ROMs, fill the format block
+ * format block from its clutching decl. ROMs, fill the format block
  * and return non-zero.  If we can't find a card there with a valid
  * decl. ROM, return 0.
  *
@@ -724,7 +724,7 @@ nubus_get_smem_addr_rangelist(bus_space_tag_t bst, bus_space_handle_t bsh,
 	 * malloc a block of (blocklen) bytes
 	 * caller must recycle block after use  
 	 */
-	MALLOC(blocklist,void *,blocklen,M_TEMP,M_WAITOK);
+	blocklist = malloc(blocklen,M_TEMP,M_WAITOK);
 	
 	/* read ((blocklen - 4) / 8) (length,offset) pairs into block */
 	nubus_get_ind_data(bst, bsh, fmt, dirent, blocklist, blocklen);

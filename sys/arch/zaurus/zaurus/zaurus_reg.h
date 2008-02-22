@@ -1,4 +1,4 @@
-/*	$NetBSD: zaurus_reg.h,v 1.2 2006/12/17 16:07:11 peter Exp $	*/
+/*	$NetBSD: zaurus_reg.h,v 1.6 2018/02/08 09:05:18 dholland Exp $	*/
 /*	$OpenBSD: zaurus_reg.h,v 1.7 2005/12/14 14:39:38 uwe Exp $	*/
 /*	NetBSD: lubbock_reg.h,v 1.1 2003/06/18 10:51:15 bsh Exp */
 
@@ -49,7 +49,8 @@
 #define ZAURUS_FFUART_VBASE	0xfd600000
 #define ZAURUS_BTUART_VBASE	0xfd700000
 #define ZAURUS_STUART_VBASE	0xfd800000
-#define ZAURUS_VBASE_FREE	0xfd900000
+#define ZAURUS_POWMAN_VBASE	0xfd900000
+#define ZAURUS_VBASE_FREE	0xfda00000
 
 #define ioreg_read(a)		(*(volatile uint32_t *)(a))
 #define ioreg_write(a,v)	(*(volatile uint32_t *)(a)=(v))
@@ -62,7 +63,7 @@
  * Magic numbers for the C860 (PXA255) and C3000 (PXA27x).
  */
 
-/* physical adresses of companion chips */
+/* physical addresses of companion chips */
 #define C860_SCOOP0_BASE		0x10800000
 #define C3000_SCOOP0_BASE		0x10800000
 #define C3000_SCOOP1_BASE		0x08800040
@@ -73,11 +74,20 @@
 #define C3000_CF1_IRQ			106
 
 /* processor GPIO pins */
+#define C860_GPIO_SD_DETECT_PIN		9
+#define C860_RC_IRQ_PIN			4	/* remote control */
+#define C860_GPIO_SD_WP_PIN		7
 #define C860_CF0_IRQ_PIN		14
+#define C860_GPIO_SD_POWER_PIN		33
 #define	C3000_GPIO_SD_DETECT_PIN	9
 #define C3000_RC_IRQ_PIN		13	/* remote control */
 #define	C3000_GPIO_SD_WP_PIN		81
 #define C3000_CF1_IRQ_PIN		93
 #define C3000_CF0_IRQ_PIN		94
+
+/* USB related pins */
+#define C3000_USB_DEVICE_PIN		35	/* Client cable is connected */
+#define C3000_USB_HOST_PIN		41	/* Host cable is connected */
+#define C3000_USB_HOST_POWER_PIN	37	/* host provides power for USB */
 
 #endif /* _ZAURUS_REG_H */

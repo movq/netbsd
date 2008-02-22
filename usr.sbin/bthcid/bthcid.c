@@ -1,4 +1,4 @@
-/*	$NetBSD: bthcid.c,v 1.3 2007/01/25 20:33:41 plunky Exp $	*/
+/*	$NetBSD: bthcid.c,v 1.6 2011/08/27 22:26:05 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -30,10 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.\n"
-	    "@(#) Copyright (c) 2001-2002 Maksim Yevmenkin <m_evmenkin@yahoo.com>\n"
-	    "All rights reserved.\n");
-__RCSID("$NetBSD: bthcid.c,v 1.3 2007/01/25 20:33:41 plunky Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.\
+  Copyright (c) 2001-2002 Maksim Yevmenkin m_evmenkin@yahoo.com.\
+  All rights reserved.");
+__RCSID("$NetBSD: bthcid.c,v 1.6 2011/08/27 22:26:05 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>
@@ -49,31 +49,30 @@ __RCSID("$NetBSD: bthcid.c,v 1.3 2007/01/25 20:33:41 plunky Exp $");
 
 #include "bthcid.h"
 
-const	char	*socket_name = BTHCID_SOCKET_NAME;
-	int	 detach = 1;
+static const char	*socket_name = BTHCID_SOCKET_NAME;
+static int		 detach = 1;
 
 static struct event	sighup_ev;
 static struct event	sigint_ev;
 static struct event	sigterm_ev;
 
-static void	process_signal(int, short, void *);
-static void	usage(void);
+__dead static void	process_signal(int, short, void *);
+__dead static void	usage(void);
 
 int
 main(int argc, char *argv[])
 {
-	bdaddr_t	bdaddr;
+	const char	*device;
 	int		ch;
 	mode_t		mode;
 
-	bdaddr_copy(&bdaddr, BDADDR_ANY);
+	device = NULL;
 	mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
 
 	while ((ch = getopt(argc, argv, "d:fm:ns:h")) != -1) {
 		switch (ch) {
 		case 'd':
-			if (!bt_devaddr(optarg, &bdaddr))
-				err(EXIT_FAILURE, "%s", optarg);
+			device = optarg;
 			break;
 
 		case 'f':
@@ -130,8 +129,8 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	if (init_hci(&bdaddr) < 0) {
-		syslog(LOG_ERR, "init_hci(%s)", bt_ntoa(&bdaddr, NULL));
+	if (init_hci(device) < 0) {
+		syslog(LOG_ERR, "init_hci(%s)", device);
 		exit(EXIT_FAILURE);
 	}
 
@@ -172,7 +171,7 @@ usage(void)
 {
 
 	fprintf(stderr,
-	    "Usage: %s [-fhn] [-c config] [-d devaddr] [-m mode] [-s path]\n"
+	    "Usage: %s [-fhn] [-c config] [-d device] [-m mode] [-s path]\n"
 	    "Where:\n"
 	    "\t-c config   specify config filename\n"
 	    "\t-d device   specify device address\n"

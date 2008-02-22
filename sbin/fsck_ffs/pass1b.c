@@ -1,4 +1,4 @@
-/*	$NetBSD: pass1b.c,v 1.21 2005/01/20 15:29:40 xtraeme Exp $	*/
+/*	$NetBSD: pass1b.c,v 1.23 2013/01/22 09:39:12 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass1b.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass1b.c,v 1.21 2005/01/20 15:29:40 xtraeme Exp $");
+__RCSID("$NetBSD: pass1b.c,v 1.23 2013/01/22 09:39:12 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -78,12 +78,14 @@ pass1b(void)
 		progress_bar(cdevname(), "phase 1b", c, sblock->fs_ncg);
 #endif /* PROGRESS */
 		for (i = 0; i < sblock->fs_ipg; i++, inumber++) {
-			if (inumber < ROOTINO)
+			if (inumber < UFS_ROOTINO)
 				continue;
 			dp = ginode(inumber);
 			if (dp == NULL)
 				continue;
 			idesc.id_number = inumber;
+			idesc.id_uid = iswap32(DIP(dp, uid));
+			idesc.id_gid = iswap32(DIP(dp, gid));
 			if (inoinfo(inumber)->ino_state != USTATE &&
 			    (ckinode(dp, &idesc) & STOP))
 				return;

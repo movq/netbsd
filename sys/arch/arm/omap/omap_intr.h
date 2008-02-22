@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_intr.h,v 1.2 2008/01/06 01:37:54 matt Exp $ */
+/*	$NetBSD: omap_intr.h,v 1.10 2014/02/04 18:51:16 matt Exp $ */
 
 /*
  * Redistribution and use in source and binary forms, with or without
@@ -40,10 +40,11 @@
 
 #ifndef _LOCORE
 
+#include <sys/device_if.h>
+
 #include <arm/cpu.h>
 #include <arm/armreg.h>
 #include <arm/cpufunc.h>
-#include <machine/atomic.h>
 
 #define OMAP_IRQ_MIN			0
 #define OMAP_NIRQ			(OMAP_INT_L1_NIRQ + OMAP_INT_L2_NIRQ)
@@ -117,13 +118,6 @@ extern uint32_t omap_spl_masks[NIPL][OMAP_NBANKS];
 /* Array of globally-off masks while interrupts processed. */
 extern uint32_t omap_global_masks[OMAP_NBANKS];
 
-#ifdef __HAVE_FAST_SOFTINTS
-/* Array to translate from software interrupt numbers to an irq number. */
-extern int omap_si_to_irq[OMAP_FREE_IRQ_NUM];
-#endif
-
-extern volatile int current_spl_level;
-
 /*
  * Direct access is being done because 1) it's faster and 2) the interrupt
  * controller code is still very tied to the OMAP so we don't really have
@@ -140,7 +134,7 @@ omap_splx(int new)
 	uint32_t *masks = &omap_spl_masks[new][0];
 	int psw = disable_interrupts(I32_bit);
 
-	current_spl_level = new;
+	set_curcpl(new);
 
 #if OMAP_NBANKS != 5
 #error Revisit loop unrolling in omap_splx()
@@ -150,14 +144,15 @@ omap_splx(int new)
 	write_icu(bases[2], OMAP_INTB_MIR, masks[2] | omap_global_masks[2]);
 	write_icu(bases[3], OMAP_INTB_MIR, masks[3] | omap_global_masks[3]);
 	write_icu(bases[4], OMAP_INTB_MIR, masks[4] | omap_global_masks[4]);
+	cpu_dosoftints();
 	restore_interrupts(psw);
 }
 
 static inline int
 omap_splraise(int ipl)
 {
-	int old = current_spl_level;
-	if (ipl > current_spl_level)
+	const int old = curcpl();
+	if (ipl > old)
 		omap_splx(ipl);
 	return (old);
 }
@@ -165,41 +160,14 @@ omap_splraise(int ipl)
 static inline int
 omap_spllower(int ipl)
 {
-	int old = current_spl_level;
+	const int old = curcpl();
 	omap_splx(ipl);
 	return(old);
 }
 
-#ifdef __HAVE_FAST_SOFTINTS
-static inline void
-omap_setsoftintr(int si)
-{
-	const omap_intr_info_t *info;
-
-	KDASSERT(si < OMAP_FREE_IRQ_NUM);
-
-	int irqno = omap_si_to_irq[si];
-	KDASSERT(irqno >= OMAP_IRQ_MIN);
-	KDASSERT(irqno < OMAP_NIRQ);
-
-	info = &omap_intr_info[irqno];
-	KDASSERT(info->trig != INVALID);
-
-#if OMAP_INT_FREE1 < OMAP_INT_L1_NIRQ
-	/* Level 1 Interrupt Controller needs a zero before the one. */
-	write_icu(info->bank_base, OMAP_INTB_SISR, 0);
-#endif
-	write_icu(info->bank_base, OMAP_INTB_SISR, info->mask);
-}
-#endif
-
-
 int	_splraise(int);
 int	_spllower(int);
 void	splx(int);
-#ifdef __HAVE_FAST_SOFTINTS
-void	_setsoftintr(int);
-#endif
 
 #if !defined(EVBARM_SPL_NOINLINE)
 #define splx(new)		omap_splx(new)
@@ -213,8 +181,13 @@ void	_setsoftintr(int);
 void omap_irq_handler(void *);
 void *omap_intr_establish(int, int, const char *, int (*)(void *), void *);
 void omap_intr_disestablish(void *);
-int omapintc_match(struct device *, struct cfdata *, void *);
-void omapintc_attach(struct device *, struct device *, void *);
+/* XXX MARTY -- This is a hack to work around the circular dependency
+ * between sys/device.h and omap_intr.h  It should be removed when
+ * the circular dependency is fixed and the declaration repaired.
+ */
+struct cfdata;
+int omapintc_match(device_t, struct cfdata *, void *);
+void omapintc_attach(device_t, device_t, void *);
 
 #endif /* ! _LOCORE */
 

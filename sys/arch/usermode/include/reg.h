@@ -1,4 +1,4 @@
-/* $NetBSD: reg.h,v 1.1 2007/12/29 14:38:35 jmcneill Exp $ */
+/* $NetBSD: reg.h,v 1.4 2018/05/18 20:09:32 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,10 +29,20 @@
 #ifndef _ARCH_USERMODE_INCLUDE_REG_H
 #define _ARCH_USERMODE_INCLUDE_REG_H
 
+#include "machine/mcontext.h"
+
+/* registers are already in the right order since they follow mcontext.h */
 struct reg {
+	__gregset_t regs;
 };
 
+/* registers are already in the right order since they follow mcontext.h */
 struct fpreg {
+        __fpregset_t fpregs;
+};
+
+/* x86_64 only */
+struct dbreg {
 };
 
 #endif /* !_ARCH_USERMODE_INCLUDE_REG_H */

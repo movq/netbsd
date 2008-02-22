@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.4 2006/02/04 11:23:45 dsl Exp $
+#	$NetBSD: Makefile.inc,v 1.12 2018/06/13 16:05:14 christos Exp $
 
 #	$OpenBSD: Makefile.inc,v 1.4 2001/03/29 03:58:17 mickey Exp $
 #
@@ -15,13 +15,13 @@ SPMATH_PROF=	${SPMATHDST}/spmath.po
 SPMATHMAKE= \
 	cd ${SPMATHDIR} && MAKEOBJDIRPREFIX= && unset MAKEOBJDIRPREFIX && \
 	  MAKEOBJDIR=${SPMATHDST} ${MAKE} \
-	    CC='${CC}' CFLAGS='${CFLAGS}' \
-	    SPMATHCPPFLAGS='${CPPFLAGS:S@^-I.@-I. -I../../.@g}'\
-	    AS='${AS}' AFLAGS='${AFLAGS}' \
-	    LD='${LD}' STRIP='${STRIP}' \
-	    CPP='${CPP}' STRIP='${STRIP}' AR='${AR}' \
-	    NM='${NM}' LORDER='${LORDER}' \
-	    XMACHINE='${MACHINE}' XMACHINE_ARCH='${MACHINE_ARCH}'
+	    CC=${CC:q} CFLAGS=${CFLAGS:q} \
+	    SPMATHCPPFLAGS=${CPPFLAGS:S@^-I.@-I. -I../../.@g:q} \
+	    AS=${AS:q} AFLAGS=${AFLAGS:q} \
+	    LD=${LD:q} STRIP=${STRIP:q} \
+	    CPP=${CPP:q} STRIP=${STRIP:q} AR=${AR:q} \
+	    NM=${NM:q} LORDER=${LORDER:q} \
+	    XMACHINE=${MACHINE:q} XMACHINE_ARCH=${MACHINE_ARCH:q}
 
 ${SPMATH}:	.NOTMAIN .MAKE __always_make_spmath
 	@echo making sure the spmath library is up to date...

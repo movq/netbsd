@@ -1,4 +1,4 @@
-/*	$NetBSD: rtc.c,v 1.3 2008/01/10 15:17:40 tsutsui Exp $	*/
+/*	$NetBSD: rtc.c,v 1.8 2011/07/01 18:48:37 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.3 2008/01/10 15:17:40 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.8 2011/07/01 18:48:37 dyoung Exp $");
 
 /*
  * Clock driver for 'rtc' - mc146818 driver.
@@ -67,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.3 2008/01/10 15:17:40 tsutsui Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 
 #include <dev/clock_subr.h>
@@ -77,10 +77,10 @@ __KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.3 2008/01/10 15:17:40 tsutsui Exp $");
 #include <dev/ebus/ebusreg.h>
 #include <dev/ebus/ebusvar.h>
 
-static int	rtc_ebus_match(struct device *, struct cfdata *, void *);
-static void	rtc_ebus_attach(struct device *, struct device *, void *);
+static int	rtc_ebus_match(device_t, cfdata_t, void *);
+static void	rtc_ebus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(rtc_ebus, sizeof(struct mc146818_softc),
+CFATTACH_DECL_NEW(rtc_ebus, sizeof(struct mc146818_softc),
     rtc_ebus_match, rtc_ebus_attach, NULL, NULL);
 
 u_int rtc_read_reg(struct mc146818_softc *, u_int);
@@ -89,7 +89,7 @@ u_int rtc_getcent(struct mc146818_softc *);
 void rtc_setcent(struct mc146818_softc *, u_int);
 
 static int
-rtc_ebus_match(struct device *parent, struct cfdata *cf, void *aux)
+rtc_ebus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ebus_attach_args *ea = aux;
 
@@ -129,13 +129,14 @@ rtc_write_reg(struct mc146818_softc *sc, u_int reg, u_int val)
 
 /* ARGSUSED */
 static void
-rtc_ebus_attach(struct device *parent, struct device *self, void *aux)
+rtc_ebus_attach(device_t parent, device_t self, void *aux)
 {
-	struct mc146818_softc *sc = (void *)self;
+	struct mc146818_softc *sc = device_private(self);
 	struct ebus_attach_args *ea = aux;
 	char *model;
 	int sz;
 
+	sc->sc_dev = self;
 	sc->sc_bst = ea->ea_bustag;
 
 	/* hard code to 8K? */
@@ -143,10 +144,9 @@ rtc_ebus_attach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(sc->sc_bst,
 			 EBUS_ADDR_FROM_REG(&ea->ea_reg[0]),
-			 sz,
-			 BUS_SPACE_MAP_LINEAR,
+			 sz, 0,
 			 &sc->sc_bsh) != 0) {
-		printf("%s: can't map register\n", self->dv_xname);
+		aprint_error(": can't map register\n");
 		return;
 	}
 
@@ -165,7 +165,8 @@ rtc_ebus_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_setcent = rtc_setcent;
 	mc146818_attach(sc);
 
-	printf(": %s\n", model);
+	aprint_normal(": %s\n", model);
+	aprint_naive(": Clock\n");
 
 	/*
 	 * Turn interrupts off, just in case. (Although they shouldn't
@@ -188,16 +189,13 @@ rtc_ebus_attach(struct device *parent, struct device *self, void *aux)
 #define MC_CENT 0x32
 
 u_int
-rtc_getcent(sc)
-	struct mc146818_softc *sc;
+rtc_getcent(struct mc146818_softc *sc)
 {
 
 	return rtc_read_reg(sc, MC_CENT);
 }
 void 
-rtc_setcent(sc, cent)
-	struct mc146818_softc *sc;
-	u_int cent;
+rtc_setcent(struct mc146818_softc *sc, u_int cent)
 {
 
 	rtc_write_reg(sc, MC_CENT, cent);

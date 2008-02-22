@@ -1,4 +1,4 @@
-.\" $NetBSD: veriexec.8,v 1.1 2008/02/18 10:37:20 elad Exp $
+.\" $NetBSD: veriexec.8,v 1.8 2018/01/17 12:49:06 sevan Exp $
 .\"
 .\" Copyright (c) 2008 Elad Efrat <elad@NetBSD.org>
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd February 18, 2008
+.Dd September 13, 2017
 .Dt VERIEXEC 8
 .Os
 .Sh NAME
@@ -65,14 +65,18 @@ below), this list can be loaded manually using
 .Ed
 .Ss Kernel Configuration
 .Em Veriexec
-requires a pseudo-device to run:
+requires a kernel with
+.Xr fileassoc 9
+support and a pseudo-device to run:
 .Bd -literal -offset indent
-pseudo-device veriexec 1
+options FILEASSOC
+pseudo-device veriexec
 .Ed
 .Pp
 Additionally, one or more options for digital fingerprint algorithm support:
 .Bd -literal -offset indent
 options VERIFIED_EXEC_FP_SHA256
+options VERIFIED_EXEC_FP_SHA384
 options VERIFIED_EXEC_FP_SHA512
 .Ed
 .Pp
@@ -80,7 +84,6 @@ Some kernels already enable
 .Em Veriexec
 by default.
 See your kernel's config file for more information.
-.Pp
 .Ss RC Configuration
 .Em Veriexec
 also allows loading signatures and setting the strict level (see below) during
@@ -165,7 +168,7 @@ exports runtime information that may be useful for various purposes.
 It reports the currently supported fingerprinting algorithms, for example:
 .Bd -literal -offset indent
 # /sbin/sysctl kern.veriexec.algorithms
-kern.veriexec.algorithms = RMD160 SHA256 SHA384 SHA512 SHA1 MD5
+kern.veriexec.algorithms = SHA256 SHA384 SHA512
 .Ed
 .Pp
 It reports the current verbosity and strict levels, for example:
@@ -194,4 +197,4 @@ Other information may be retrieved using
 .Xr veriexecctl 8 ,
 .Xr veriexecgen 8
 .Sh AUTHORS
-.An Elad Efrat Aq elad@NetBSD.org
+.An Elad Efrat Aq Mt elad@NetBSD.org

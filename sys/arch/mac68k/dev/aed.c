@@ -1,4 +1,4 @@
-/*	$NetBSD: aed.c,v 1.26 2007/12/03 15:33:52 ad Exp $	*/
+/*	$NetBSD: aed.c,v 1.34 2017/10/25 08:12:37 maya Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Bradley A. Grantham.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.26 2007/12/03 15:33:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.34 2017/10/25 08:12:37 maya Exp $");
 
 #include "opt_adb.h"
 
@@ -57,8 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.26 2007/12/03 15:33:52 ad Exp $");
 /*
  * Function declarations.
  */
-static int	aedmatch(struct device *, struct cfdata *, void *);
-static void	aedattach(struct device *, struct device *, void *);
+static int	aedmatch(device_t, cfdata_t, void *);
+static void	aedattach(device_t, device_t, void *);
 static void	aed_emulate_mouse(adb_event_t *);
 static void	aed_kbdrpt(void *);
 static void	aed_dokeyupdown(adb_event_t *);
@@ -72,7 +67,7 @@ static struct aed_softc *aed_sc;
 static int aed_options = 0 | AED_MSEMUL;
 
 /* Driver definition */
-CFATTACH_DECL(aed, sizeof(struct aed_softc),
+CFATTACH_DECL_NEW(aed, sizeof(struct aed_softc),
     aedmatch, aedattach, NULL, NULL);
 
 extern struct cfdriver aed_cd;
@@ -85,12 +80,22 @@ dev_type_poll(aedpoll);
 dev_type_kqfilter(aedkqfilter);
 
 const struct cdevsw aed_cdevsw = {
-	aedopen, aedclose, aedread, nullwrite, aedioctl,
-	nostop, notty, aedpoll, nommap, aedkqfilter,
+	.d_open = aedopen,
+	.d_close = aedclose,
+	.d_read = aedread,
+	.d_write = nullwrite,
+	.d_ioctl = aedioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = aedpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = aedkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 static int
-aedmatch(struct device *parent, struct cfdata *cf, void *aux)
+aedmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
 	static int aed_matched;
@@ -104,12 +109,13 @@ aedmatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-aedattach(struct device *parent, struct device *self, void *aux)
+aedattach(device_t parent, device_t self, void *aux)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
-	struct aed_softc *sc = (struct aed_softc *)self;
+	struct aed_softc *sc = device_private(self);
 
 	callout_init(&sc->sc_repeat_ch, 0);
+	selinit(&sc->sc_selinfo);
 
 	sc->origaddr = aa_args->origaddr;
 	sc->adbaddr = aa_args->adbaddr;
@@ -123,7 +129,7 @@ aedattach(struct device *parent, struct device *self, void *aux)
 	sc->sc_repeating = -1;          /* not repeating */
 
 	/* Pull in the options flags. */ 
-	sc->sc_options = (device_cfdata(&sc->sc_dev)->cf_flags | aed_options);
+	sc->sc_options = (device_cfdata(self)->cf_flags | aed_options);
 
 	sc->sc_ioproc = NULL;
 	
@@ -401,7 +407,7 @@ aed_enqevent(adb_event_t *event)
 	    AED_MAX_EVENTS] = *event;
 	aed_sc->sc_evq_len++;
 
-	selnotify(&aed_sc->sc_selinfo, 0);
+	selnotify(&aed_sc->sc_selinfo, 0, 0);
 	if (aed_sc->sc_ioproc)
 		psignal(aed_sc->sc_ioproc, SIGIO);
 
@@ -414,7 +420,7 @@ aedopen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct aed_softc *sc;
 	int s;
 
-	sc = device_lookup(&aed_cd, minor(dev));
+	sc = device_lookup_private(&aed_cd, minor(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -543,11 +549,8 @@ aedioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		/* Do nothing for now */
 		break;
 
-	case ADBIOC_LISTENCMD:{
-		adb_listencmd_t *lc;
-
-		lc = (void *)data;
-	}
+	case ADBIOC_LISTENCMD:
+		/* adb_listencmd_t *lc = data; */
 
 	default:
 		return (EINVAL);
@@ -594,11 +597,19 @@ filt_aedread(struct knote *kn, long hint)
 	return (kn->kn_data > 0);
 }
 
-static const struct filterops aedread_filtops =
-	{ 1, NULL, filt_aedrdetach, filt_aedread };
+static const struct filterops aedread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_aedrdetach,
+	.f_event = filt_aedread,
+};
 
-static const struct filterops aed_seltrue_filtops =
-	{ 1, NULL, filt_aedrdetach, filt_seltrue };
+static const struct filterops aed_seltrue_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_aedrdetach,
+	.f_event = filt_seltrue,
+};
 
 int
 aedkqfilter(dev_t dev, struct knote *kn)

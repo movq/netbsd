@@ -1,13 +1,13 @@
-#	$NetBSD: Makefile,v 1.11 2007/02/09 21:55:00 ad Exp $
+#	$NetBSD: Makefile,v 1.15 2015/12/21 17:02:32 christos Exp $
 
 INCSDIR=/usr/include/algor
 
-INCS=	ansi.h aout_machdep.h asm.h autoconf.h \
-	bswap.h bsd-aout.h bus.h \
+INCS=	ansi.h asm.h autoconf.h \
+	bswap.h \
 	cdefs.h cpu.h \
 	disklabel.h \
 	ecoff_machdep.h elf_machdep.h endian.h endian_machdep.h \
-	float.h \
+	fenv.h float.h \
 	ieee.h ieeefp.h \
 	int_const.h int_fmtio.h int_limits.h int_mwgwtypes.h int_types.h \
 	intr.h \
@@ -18,9 +18,9 @@ INCS=	ansi.h aout_machdep.h asm.h autoconf.h \
 	param.h pcb.h pci_machdep.h \
 	pmap.h pmc.h proc.h profile.h psl.h pte.h ptrace.h \
 	reg.h regdef.h regnum.h reloc.h rwlock.h \
-	setjmp.h signal.h stdarg.h \
+	setjmp.h signal.h \
 	trap.h types.h \
-	varargs.h vmparam.h \
+	vmparam.h \
 	wchar_limits.h
 
 .include <bsd.kinc.mk>

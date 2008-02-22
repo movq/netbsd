@@ -1,4 +1,4 @@
-/*	$NetBSD: shpcic_machdep.c,v 1.1 2006/09/01 21:26:18 uwe Exp $	*/
+/*	$NetBSD: shpcic_machdep.c,v 1.7 2014/03/29 19:28:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shpcic_machdep.c,v 1.1 2006/09/01 21:26:18 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shpcic_machdep.c,v 1.7 2014/03/29 19:28:29 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,7 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: shpcic_machdep.c,v 1.1 2006/09/01 21:26:18 uwe Exp $
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pciconf.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 #include <machine/pci_machdep.h>
 
@@ -81,7 +81,7 @@ shpcic_get_bus_dma_tag(void)
 }
 
 void
-landisk_pci_attach_hook(struct device *parent, struct device *self,
+landisk_pci_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 
@@ -89,7 +89,7 @@ landisk_pci_attach_hook(struct device *parent, struct device *self,
 }
 
 int
-landisk_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+landisk_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int pin = pa->pa_intrpin;
 	int line = pa->pa_intrline;
@@ -118,16 +118,14 @@ bad:
 }
 
 const char *
-landisk_pci_intr_string(void *v, pci_intr_handle_t ih)
+landisk_pci_intr_string(void *v, pci_intr_handle_t ih, char *buf, size_t len)
 {
-	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
-
 	if (ih == 0)
 		panic("pci_intr_string: bogus handle 0x%x", ih);
 
-	sprintf(irqstr, "irq %d", ih);
+	snprintf(buf, len, "irq %d", ih);
 
-	return (irqstr);
+	return buf;
 }
 
 const struct evcnt *
@@ -189,6 +187,8 @@ struct _bus_space landisk_pci_bus_io =
 	.bs_alloc = shpcic_iomem_alloc,
 	.bs_free = shpcic_iomem_free,
 
+	.bs_mmap = shpcic_iomem_mmap,
+
 	.bs_r_1 = shpcic_io_read_1,
 	.bs_r_2 = shpcic_io_read_2,
 	.bs_r_4 = shpcic_io_read_4,
@@ -236,6 +236,8 @@ struct _bus_space landisk_pci_bus_mem =
 
 	.bs_alloc = shpcic_iomem_alloc,
 	.bs_free = shpcic_iomem_free,
+
+	.bs_mmap = shpcic_iomem_mmap,
 
 	.bs_r_1 = shpcic_mem_read_1,
 	.bs_r_2 = shpcic_mem_read_2,

@@ -1,4 +1,4 @@
-/*	$NetBSD: users.c,v 1.13 2004/01/05 23:23:37 jmmv Exp $	*/
+/*	$NetBSD: users.c,v 1.17 2016/09/05 00:40:30 sevan Exp $	*/
 
 /*
  * Copyright (c) 1980, 1987, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1987, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)users.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: users.c,v 1.13 2004/01/05 23:23:37 jmmv Exp $");
+__RCSID("$NetBSD: users.c,v 1.17 2016/09/05 00:40:30 sevan Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -53,12 +53,8 @@ __RCSID("$NetBSD: users.c,v 1.13 2004/01/05 23:23:37 jmmv Exp $");
 
 #include "utmpentry.h"
 
-int	main __P((int, char **));
-
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int ncnt = 0;
 	int ch;
@@ -78,6 +74,14 @@ main(argc, argv)
 
 	if (ncnt == 0)
 		return 0;
+
+	/*
+	 * XXX the utmp list belongs to getutentries and we shouldn't
+	 * sort it in place. Since we don't call endutentries and we
+	 * don't call getutentries again it doesn't matter, but it's
+	 * untidy. Maybe give getutentries a sort function? It has to
+	 * sort anyway if it's merging utmp and utmpx data.
+	 */
 
 	from = ehead;
 	ehead = NULL;

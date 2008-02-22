@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.x68k,v 1.61 2008/02/12 18:26:48 joerg Exp $
+#	$NetBSD: Makefile.x68k,v 1.65 2018/02/25 00:27:16 mrg Exp $
 #
 # Makefile for NetBSD
 #
@@ -32,7 +32,7 @@ GENASSYM_CONF=	${X68K}/x68k/genassym.cf
 ## (2) compile settings
 ##
 CPPFLAGS+=	-Dx68k
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+AFLAGS+=	-x assembler-with-cpp
 CMACHFLAGS?=	-m68020-60 -Wa,-m68030 -Wa,-m68851
 CFLAGS+=	${CMACHFLAGS} -msoft-float
 
@@ -50,7 +50,8 @@ KERN_AS=	obj
 # for the Motorola 68060 Software Support Package
 .include "$S/arch/m68k/060sp/Makefile.inc"
 
-MD_OBJS=	locore.o ${FPSP}
+MD_OBJS=	locore.o
+MD_LIBS=	${FPSP}
 MD_CFILES=
 MD_SFILES=	${X68K}/x68k/locore.s
 
@@ -64,6 +65,8 @@ copy.o copypage.o lock_stubs.o: assym.h
 ##
 TEXTADDR?=	0
 LINKFORMAT=	-n
+
+.include "$S/arch/m68k/conf/Makefile.kern.m68k.inc"
 
 ##
 ## (6) port specific target dependencies
@@ -84,7 +87,8 @@ intio.o vm_machdep.o: Makefile
 ## (7) misc settings
 ##
 
-
+# XXX work around gcc 4.5 issue
+COPTS.machdep.c += -O1
 
 ##
 ## (8) config(8) generated machinery

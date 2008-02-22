@@ -1,4 +1,4 @@
-/*	$NetBSD: bfs.c,v 1.10 2007/12/15 00:39:35 perry Exp $	*/
+/*	$NetBSD: bfs.c,v 1.18 2014/12/26 15:22:15 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: bfs.c,v 1.10 2007/12/15 00:39:35 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bfs.c,v 1.18 2014/12/26 15:22:15 hannken Exp $");
 #define	BFS_DEBUG
 
 #include <sys/param.h>
@@ -263,10 +256,12 @@ bfs_file_read(const struct bfs *bfs, const char *fname, void *buf, size_t bufsz,
 
 	p = buf;
 	n = end - start;
-	bfs->io->read_n(bfs->io, p, start, n);
+	if (!bfs->io->read_n(bfs->io, p, start, n))
+		return EIO;
 	/* last sector */
 	n *= DEV_BSIZE;
-	bfs->io->read(bfs->io, tmpbuf, end);
+	if (!bfs->io->read(bfs->io, tmpbuf, end))
+		return EIO;
 	memcpy(p + n, tmpbuf, sz - n);
 
 	if (read_size)
@@ -295,7 +290,7 @@ bfs_file_write(struct bfs *bfs, const char *fname, void *buf,
 			return ENOENT;
 		}
 		attr = inode->attr;	/* copy old attribute */
-		bfs_file_delete(bfs, name);
+		bfs_file_delete(bfs, name, false);
 		if ((err = bfs_file_create(bfs, name, buf, bufsz, &attr)) != 0)
 			return err;
 	} else {
@@ -313,7 +308,7 @@ bfs_file_write(struct bfs *bfs, const char *fname, void *buf,
 }
 
 int
-bfs_file_delete(struct bfs *bfs, const char *fname)
+bfs_file_delete(struct bfs *bfs, const char *fname, bool keep_inode)
 {
 	struct bfs_inode *inode;
 	struct bfs_dirent *dirent;
@@ -321,16 +316,18 @@ bfs_file_delete(struct bfs *bfs, const char *fname)
 	if (!bfs_dirent_lookup_by_name(bfs, fname, &dirent))
 		return ENOENT;
 
-	if (!bfs_inode_lookup(bfs, dirent->inode, &inode))
+	if (!keep_inode && !bfs_inode_lookup(bfs, dirent->inode, &inode))
 		return ENOENT;
 
 	memset(dirent, 0, sizeof *dirent);
-	memset(inode, 0, sizeof *inode);
-	bfs->n_inode--;
 	bfs->n_dirent--;
-
 	bfs_writeback_dirent(bfs, dirent, false);
-	bfs_writeback_inode(bfs, inode);
+
+	if (!keep_inode) {
+		memset(inode, 0, sizeof *inode);
+		bfs->n_inode--;
+		bfs_writeback_inode(bfs, inode);
+	}
 	DPRINTF(bfs->debug, "%s: \"%s\" deleted.\n", __func__, fname);
 
 	return 0;
@@ -342,16 +339,11 @@ bfs_file_rename(struct bfs *bfs, const char *from_name, const char *to_name)
 	struct bfs_dirent *dirent;
 	int err = 0;
 
-	if (strlen(to_name) > BFS_FILENAME_MAXLEN) {
-		err =  ENAMETOOLONG;
-		goto out;
-	}
 	if (!bfs_dirent_lookup_by_name(bfs, from_name, &dirent)) {
 		err = ENOENT;
 		goto out;
 	}
 
-	bfs_file_delete(bfs, to_name);
 	strncpy(dirent->name, to_name, BFS_FILENAME_MAXLEN);
 	bfs_writeback_dirent(bfs, dirent, false);
 
@@ -572,6 +564,24 @@ bfs_inode_lookup(const struct bfs *bfs, ino_t n, struct bfs_inode **iinode)
 	return true;
 }
 
+int
+bfs_inode_delete(struct bfs *bfs, ino_t ino)
+{
+	struct bfs_inode *inode;
+
+	if (!bfs_inode_lookup(bfs, ino, &inode))
+		return ENOENT;
+
+	memset(inode, 0, sizeof *inode);
+	bfs->n_inode--;
+
+	bfs_writeback_inode(bfs, inode);
+	DPRINTF(bfs->debug, "%s: %lld deleted.\n", __func__, (long long)ino);
+
+	return 0;
+}
+
+
 size_t
 bfs_file_size(const struct bfs_inode *inode)
 {
@@ -638,7 +648,7 @@ bfs_inode_set_attr(const struct bfs *bfs, struct bfs_inode *inode,
 	if (from != NULL) {
 		if (from->uid != (uid_t)-1)
 			to->uid = from->uid;
-		if (from->gid != (uid_t)-1)
+		if (from->gid != (gid_t)-1)
 			to->gid = from->gid;
 		if (from->mode != (mode_t)-1)
 			to->mode = from->mode;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp12x0var.h,v 1.7 2005/12/11 12:16:50 christos Exp $ */
+/*	$NetBSD: ixp12x0var.h,v 1.11 2012/11/12 18:00:37 skrll Exp $ */
 /*
  * Copyright (c) 2002
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,12 +33,12 @@
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 
 struct ixp12x0_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;
 
 	/* Handles for the PCI */
@@ -75,9 +69,9 @@ struct intrhand {
 struct intrq {
 	TAILQ_HEAD(, intrhand) iq_list;	/* handler list */
 	struct evcnt iq_ev;		/* event counter */
-	u_int32_t iq_mask;		/* IRQs to mask while handling */
-	u_int32_t iq_pci_mask;		/* PCI IRQs to mask while handling */
-	u_int32_t iq_levels;		/* IPL_*'s this IRQ has */
+	uint32_t iq_mask;		/* IRQs to mask while handling */
+	uint32_t iq_pci_mask;		/* PCI IRQs to mask while handling */
+	uint32_t iq_levels;		/* IPL_*'s this IRQ has */
 	char iq_name[IRQNAMESIZE];	/* interrupt name */
 	int iq_ist;			/* share type */
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: pioc.c,v 1.12 2005/12/11 12:16:05 christos Exp $	*/     
+/*	$NetBSD: pioc.c,v 1.18 2012/10/27 17:17:23 chs Exp $	*/     
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -41,14 +41,14 @@
 /*#define PIOC_DEBUG*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pioc.c,v 1.12 2005/12/11 12:16:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pioc.c,v 1.18 2012/10/27 17:17:23 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <arm/mainbus/mainbus.h>
 #include <acorn32/mainbus/piocreg.h>
 #include <acorn32/mainbus/piocvar.h>
@@ -70,7 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: pioc.c,v 1.12 2005/12/11 12:16:05 christos Exp $");
  */
 
 struct pioc_softc {
-	struct device		sc_dev;			/* device node */
 	bus_space_tag_t		sc_iot;			/* bus tag */
 	bus_space_handle_t	sc_ioh;			/* bus handle */
 	bus_addr_t		sc_iobase;		/* IO base address */
@@ -91,20 +90,20 @@ bus_space_tag_t comconstag = &mainbus_bs_tag;
 
 /* Prototypes for functions */
 
-static int  piocmatch	 __P((struct device *, struct cfdata *, void *));
-static void piocattach	 __P((struct device *, struct device *, void *));
-static int  piocprint	 __P((void *aux, const char *name));
+static int  piocmatch(device_t, cfdata_t, void *);
+static void piocattach(device_t, device_t, void *);
+static int  piocprint(void *aux, const char *name);
 #if 0
-static int  piocsearch	 __P((struct device *, struct cfdata *, void *));
+static int  piocsearch(device_t, cfdata_t, void *);
 #endif
-static int  piocsubmatch __P((struct device *, struct cfdata *,
-			      const int *, void *));
-static void piocgetid	 __P((bus_space_tag_t iot, bus_space_handle_t ioh,
-			      int config_entry, int *id, int *revision));
+static int  piocsubmatch(device_t, cfdata_t,
+			      const int *, void *);
+static void piocgetid(bus_space_tag_t iot, bus_space_handle_t ioh,
+			      int config_entry, int *id, int *revision);
 
 /* device attach and driver structure */
 
-CFATTACH_DECL(pioc, sizeof(struct pioc_softc),
+CFATTACH_DECL_NEW(pioc, sizeof(struct pioc_softc),
     piocmatch, piocattach, NULL, NULL);
 
 /*
@@ -115,12 +114,7 @@ CFATTACH_DECL(pioc, sizeof(struct pioc_softc),
  */
 
 static void
-piocgetid(iot, ioh, config_entry, id, revision)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	int config_entry;
-	int *id;
-	int *revision;
+piocgetid(bus_space_tag_t iot, bus_space_handle_t ioh, int config_entry, int *id, int *revision)
 {
 	/*
 	 * Put the chip info configuration mode and read the ID and revision
@@ -137,7 +131,7 @@ piocgetid(iot, ioh, config_entry, id, revision)
 }
 
 /*
- * int piocmatch(struct device *parent, struct cfdata *cf, void *aux)
+ * int piocmatch(device_t parent, cfdata_t cf, void *aux)
  *
  * Put the controller into config mode and probe the ID to see if
  * we recognise it.
@@ -146,10 +140,7 @@ piocgetid(iot, ioh, config_entry, id, revision)
  */ 
  
 static int
-piocmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+piocmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *mb = aux;
 	bus_space_tag_t iot;
@@ -189,9 +180,7 @@ out:
  */
 
 static int
-piocprint(aux, name)
-	void *aux;
-	const char *name;
+piocprint(void *aux, const char *name)
 {
 	struct pioc_attach_args *pa = aux;
 
@@ -213,7 +202,7 @@ piocprint(aux, name)
 
 #if 0
 /*
- * int piocsearch(struct device *parent, struct cfdata *cf, void *aux)
+ * int piocsearch(device_t parent, cfdata_t cf, void *aux)
  *
  * search function used to probe and attach the child devices.
  *
@@ -222,13 +211,9 @@ piocprint(aux, name)
  */
 
 static int
-piocsearch(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+piocsearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct pioc_softc *sc = (struct pioc_softc *)parent;
+	struct pioc_softc *sc = device_private(parent);
 	struct pioc_attach_args pa;
 	int tryagain;
 
@@ -259,7 +244,7 @@ piocsearch(parent, cf, ldesc, aux)
 #endif
 
 /*
- * int piocsubmatch(struct device *parent, struct cfdata *cf, void *aux)
+ * int piocsubmatch(device_t parent, cfdata_t cf, void *aux)
  *
  * search function used to probe and attach the child devices.
  *
@@ -268,11 +253,7 @@ piocsearch(parent, cf, ldesc, aux)
  */
 
 static int
-piocsubmatch(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+piocsubmatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct pioc_attach_args *pa = aux;
 	int tryagain;
@@ -295,20 +276,17 @@ piocsubmatch(parent, cf, ldesc, aux)
 }
 
 /*
- * void piocattach(struct device *parent, struct device *dev, void *aux)
+ * void piocattach(device_t parent, device_t dev, void *aux)
  *
  * Identify the PIOC and read the config registers into the softc.
  * Search and configure all children
  */
   
 static void
-piocattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+piocattach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args *mb = aux;
-	struct pioc_softc *sc = (struct pioc_softc *)self;
+	struct pioc_softc *sc = device_private(self);
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	int id, rev;
@@ -319,14 +297,14 @@ piocattach(parent, self, aux)
 	iot = sc->sc_iot = mb->mb_iot;
 
 	if (bus_space_map(iot, sc->sc_iobase, PIOC_SIZE, 0, &ioh))
-		panic("%s: couldn't map I/O space", self->dv_xname);
+		panic("%s: couldn't map I/O space", device_xname(self));
 	sc->sc_ioh = ioh;
 
 	piocgetid(iot, ioh, PIOC_CM_ENTER_665, &id, &rev);
 	if (id != PIOC_CM_ID_665)
 		piocgetid(iot, ioh, PIOC_CM_ENTER_666, &id, &rev);
 	
-	printf("\n%s: ", self->dv_xname);
+	printf("\n%s: ", device_xname(self));
 
 	/* Do we recognise it ? */
 	switch (id) {
@@ -365,7 +343,7 @@ piocattach(parent, self, aux)
 	bus_space_write_1(iot, ioh, PIOC_CM_SELECT_REG, PIOC_CM_EXIT);
 
 #ifdef PIOC_DEBUG
-	printf("%s: ", self->dv_xname);
+	printf("%s: ", device_xname(self));
 
 	for (loop = 0; loop < PIOC_CM_REGS; ++loop)
 		printf("%02x ", sc->sc_config[loop]);

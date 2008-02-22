@@ -1,4 +1,4 @@
-/*	$NetBSD: i82557var.h,v 1.38 2007/12/13 19:58:43 degroote Exp $	*/
+/*	$NetBSD: i82557var.h,v 1.52 2015/04/13 16:33:24 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,6 +60,7 @@
  */
 
 #include <sys/callout.h>
+#include <sys/rndsource.h>
 
 /*
  * Misc. definitions for the Intel i82557 fast Ethernet controller
@@ -139,6 +133,11 @@ struct fxp_control_data {
 	 * The NIC statistics.
 	 */
 	struct fxp_stats fcd_stats;
+
+	/*
+	 * TX pad buffer for ip4csum-tx bug workaround.
+	 */
+	uint8_t fcd_txpad[FXP_IP4CSUMTX_PADLEN];
 };
 
 #define	txd_tbd	txd_u.txdu_tbd
@@ -151,6 +150,7 @@ struct fxp_control_data {
 #define	FXP_CDMCSOFF	FXP_CDOFF(fcd_mcscb)
 #define	FXP_CDUCODEOFF	FXP_CDOFF(fcd_ucode)
 #define	FXP_CDSTATSOFF	FXP_CDOFF(fcd_stats)
+#define	FXP_CDTXPADOFF	FXP_CDOFF(fcd_txpad)
 
 /*
  * Software state for transmit descriptors.
@@ -164,9 +164,10 @@ struct fxp_txsoft {
  * Software state per device.
  */
 struct fxp_softc {
-	struct device sc_dev;		/* generic device structures */
+	device_t sc_dev;
 	bus_space_tag_t sc_st;		/* bus space tag */
 	bus_space_handle_t sc_sh;	/* bus space handle */
+	bus_size_t sc_size;		/* bus space size */
 	bus_dma_tag_t sc_dmat;		/* bus dma tag */
 	struct ethercom sc_ethercom;	/* ethernet common part */
 	void *sc_ih;			/* interrupt handler cookie */
@@ -192,7 +193,7 @@ struct fxp_softc {
 	bus_dmamap_t sc_rxmaps[FXP_NRFABUFS]; /* free receive buffer DMA maps */
 	int	sc_rxfree;		/* free map index */
 	int	sc_rxidle;		/* # of seconds RX has been idle */
-	u_int16_t sc_txcmd;		/* transmit command (LITTLE ENDIAN) */
+	uint16_t sc_txcmd;		/* transmit command (LITTLE ENDIAN) */
 
 	/*
 	 * Control data structures.
@@ -220,11 +221,12 @@ struct fxp_softc {
 #define	FXPF_MWI		0x0010	/* enable PCI MWI */
 #define	FXPF_READ_ALIGN		0x0020	/* align read access w/ cacheline */
 #define	FXPF_WRITE_ALIGN	0x0040	/* end write on cacheline */
-#define	FXPF_EXT_TXCB		0x0080	/* enable extended TxCB */
+#define	FXPF_EXT_TXCB		0x0080	/* has extended TxCB */
 #define	FXPF_UCODE_LOADED	0x0100	/* microcode is loaded */
-#define	FXPF_EXT_RFA		0x0200	/* enable extended RFD */
-#define	FXPF_IPCB		0x0400	/* use IPCB */
+#define	FXPF_EXT_RFA		0x0200	/* has extended RFD and IPCB (82550) */
 #define	FXPF_RECV_WORKAROUND	0x0800	/* receiver lock-up workaround */
+#define	FXPF_FC			0x1000	/* has flow control */
+#define	FXPF_82559_RXCSUM	0x2000	/* has 82559 compat RX checksum */
 
 	int	sc_int_delay;		/* interrupt delay */
 	int	sc_bundle_max;		/* max packet bundle */
@@ -240,10 +242,7 @@ struct fxp_softc {
 	void	(*sc_disable)(struct fxp_softc *);
 
 	int	sc_eeprom_size;		/* log2 size of EEPROM */
-#if NRND > 0
-	rndsource_element_t rnd_source;	/* random source */
-#endif
-
+	krndsource_t rnd_source;	/* random source */
 };
 
 #ifdef FXP_EVENT_COUNTERS
@@ -257,6 +256,7 @@ struct fxp_softc {
 
 #define	FXP_CDTXADDR(sc, x)	((sc)->sc_cddma + FXP_CDTXOFF((x)))
 #define	FXP_CDTBDADDR(sc, x)	((sc)->sc_cddma + FXP_CDTBDOFF((x)))
+#define	FXP_CDTXPADADDR(sc)	((sc)->sc_cddma + FXP_CDTXPADOFF)
 
 #define	FXP_CDTX(sc, x)		(&(sc)->sc_control_data->fcd_txdescs[(x)])
 
@@ -307,7 +307,7 @@ do {									\
 	bus_dmamap_t __rxmap = M_GETCTX((m), bus_dmamap_t);		\
 	struct mbuf *__p_m;						\
 	struct fxp_rfa *__rfa, *__p_rfa;				\
-	u_int32_t __v;							\
+	uint32_t __v;							\
 									\
 	(m)->m_data = (m)->m_ext.ext_buf + (sc)->sc_rfa_size +		\
 	    RFA_ALIGNMENT_FUDGE;					\
@@ -324,8 +324,8 @@ do {									\
 	/* NOTE: the RFA is misaligned, so we must copy. */		\
 	/* BIG_ENDIAN: no need to swap to store 0xffffffff */		\
 	__v = 0xffffffff;						\
-	memcpy((void *)&__rfa->link_addr, &__v, sizeof(__v));		\
-	memcpy((void *)&__rfa->rbd_addr, &__v, sizeof(__v));		\
+	memcpy(__UNVOLATILE(&__rfa->link_addr), &__v, sizeof(__v));	\
+	memcpy(__UNVOLATILE(&__rfa->rbd_addr), &__v, sizeof(__v));	\
 									\
 	FXP_RFASYNC((sc), (m),						\
 	    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);			\
@@ -338,7 +338,7 @@ do {									\
 		    RFA_ALIGNMENT_FUDGE);				\
 		FXP_RFASYNC((sc), __p_m,				\
 		    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);	\
-		memcpy((void *)&__p_rfa->link_addr, &__v,		\
+		memcpy(__UNVOLATILE(&__p_rfa->link_addr), &__v,		\
 		    sizeof(__v));					\
 		__p_rfa->rfa_control &= htole16(~(FXP_RFA_CONTROL_EL|	\
 		    FXP_RFA_CONTROL_S));				\
@@ -363,8 +363,8 @@ do {									\
 	bus_space_write_4((sc)->sc_st, (sc)->sc_sh, (reg), (val))
 
 void	fxp_attach(struct fxp_softc *);
-int	fxp_activate(struct device *, enum devact);
-int	fxp_detach(struct fxp_softc *);
+int	fxp_activate(device_t, enum devact);
+int	fxp_detach(struct fxp_softc *, int);
 int	fxp_intr(void *);
 
 int	fxp_enable(struct fxp_softc*);

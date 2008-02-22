@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.65 2005/12/11 12:19:36 christos Exp $	*/
+/*	$NetBSD: conf.c,v 1.68 2015/07/05 02:10:53 matt Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -32,51 +32,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: conf.c,v 1.65 2005/12/11 12:19:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: conf.c,v 1.68 2015/07/05 02:10:53 matt Exp $");
 
 #include "opt_cputype.h"
 
 #include <sys/param.h>
 #include <sys/conf.h>
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 /*
  * Console routines for VAX console.
  */
 #include <dev/cons.h>
 
-#include "smg.h"
-#include "lcspx.h"
 #include "lcg.h"
+#include "qv.h"
+#include "smg.h"
+#include "spx.h"
 #include "wskbd.h"
-#if NSMG > 0
-#if NWSKBD > 0
-#define smgcngetc wskbd_cngetc
-#else
-static int
-smgcngetc(dev_t dev)
-{
-	return 0;
-}
-#endif
 
-#define smgcnputc wsdisplay_cnputc
-#define	smgcnpollc nullcnpollc
-#endif
-#if NLCSPX > 0
-#if NWSKBD > 0
-#define lcspxcngetc wskbd_cngetc
-#else
-static int
-lcspxcngetc(dev_t dev)
-{
-	return 0;
-}
-#endif
-
-#define lcspxcnputc wsdisplay_cnputc
-#define lcspxcnpollc nullcnpollc
-#endif
 #if NLCG > 0
 #if NWSKBD > 0
 #define lcgcngetc wskbd_cngetc
@@ -90,15 +64,57 @@ lcgcngetc(dev_t dev)
 
 #define lcgcnputc wsdisplay_cnputc
 #define lcgcnpollc nullcnpollc
+#endif /* NLCG > 0 */
+#if NQV > 0
+#if NWSKBD > 0
+#define qvcngetc wskbd_cngetc
+#else
+static int
+qvcngetc(dev_t dev)
+{
+	return 0;
+}
 #endif
+
+#define qvcnputc wsdisplay_cnputc
+#define qvcnpollc nullcnpollc
+#endif /* NQV > 0 */
+#if NSMG > 0
+#if NWSKBD > 0
+#define smgcngetc wskbd_cngetc
+#else
+static int
+smgcngetc(dev_t dev)
+{
+	return 0;
+}
+#endif
+
+#define smgcnputc wsdisplay_cnputc
+#define	smgcnpollc nullcnpollc
+#endif /* NSMG > 0 */
+#if NSPX > 0
+#if NWSKBD > 0
+#define spxcngetc wskbd_cngetc
+#else
+static int
+spxcngetc(dev_t dev)
+{
+	return 0;
+}
+#endif
+
+#define spxcnputc wsdisplay_cnputc
+#define spxcnpollc nullcnpollc
+#endif /* NSPX > 0 */
 
 cons_decl(gen);
 cons_decl(dz);
 cons_decl(qd);
-cons_decl(smg);
-cons_decl(lcspx);
 cons_decl(lcg);
-#include "qv.h"
+cons_decl(qv);
+cons_decl(spx);
+cons_decl(smg);
 #include "qd.h"
 
 struct	consdev constab[]={
@@ -111,20 +127,20 @@ struct	consdev constab[]={
 #endif
 #if VAX650 || VAX630 || VAXANY
 #if NQV
-	cons_init(qv),	/* QVSS/QDSS bit-mapped console driver */
+	cons_init(qv),	/* QVSS bit-mapped console driver */
 #endif
 #if NQD
 	cons_init(qd),
 #endif
 #endif
+#if NLCG
+	cons_init(lcg),
+#endif
 #if NSMG
 	cons_init(smg),
 #endif
-#if NLCSPX
-	cons_init(lcspx),
-#endif
-#if NLCG
-	cons_init(lcg),
+#if NSPX
+	cons_init(spx),
 #endif
 
 #ifdef notyet

@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs.c,v 1.1 2008/02/02 17:01:03 tsutsui Exp $	*/
+/*	$NetBSD: ext2fs.c,v 1.9 2013/06/23 02:06:06 dholland Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -44,13 +39,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,8 +58,8 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: ext2fs.c,v 1.1 2008/02/02 17:01:03 tsutsui Exp $");
+#if !defined(__lint)
+__RCSID("$NetBSD: ext2fs.c,v 1.9 2013/06/23 02:06:06 dholland Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -120,7 +108,7 @@ ext2fs_read_disk_block(ib_params *params, uint64_t blkno, int size,
 	assert(size > 0);
 	assert(blk != NULL);
 
-	rv = pread(params->fsfd, blk, size, blkno * DEV_BSIZE);
+	rv = pread(params->fsfd, blk, size, blkno * params->sectorsize);
 	if (rv == -1) {
 		warn("Reading block %llu in `%s'", 
 		    (unsigned long long)blkno, params->filesystem);
@@ -139,7 +127,7 @@ ext2fs_read_sblock(ib_params *params, struct m_ext2fs *fs)
 {
 	uint8_t sbbuf[SBSIZE];
 
-	if (ext2fs_read_disk_block(params, SBOFF / DEV_BSIZE, SBSIZE,
+	if (ext2fs_read_disk_block(params, SBOFF / params->sectorsize, SBSIZE,
 	    sbbuf) == 0)
 
 	e2fs_sbload((void *)sbbuf, &fs->e2fs);
@@ -181,7 +169,7 @@ ext2fs_read_gdblock(ib_params *params, struct m_ext2fs *fs)
 	gdpb = fs->e2fs_bsize / sizeof(struct ext2_gd);
 
 	for (i = 0; i < fs->e2fs_ngdb; i++) {
-		if (ext2fs_read_disk_block(params, fsbtodb(fs,
+		if (ext2fs_read_disk_block(params, EXT2_FSBTODB(fs,
 		    fs->e2fs.e2fs_first_dblock + 1 /* superblock */ + i),
 		    SBSIZE, gdbuf) == 0)
 			return 0;
@@ -248,7 +236,7 @@ ext2fs_find_disk_blocks(ib_params *params, ino_t ino,
 
 	/* Read the inode. */
 	if (ext2fs_read_disk_block(params,
-		fsbtodb(fs, ino_to_fsba(fs, ino)) + params->fstype->offset,
+		EXT2_FSBTODB(fs, ino_to_fsba(fs, ino)) + params->fstype->offset,
 		fs->e2fs_bsize, inodebuf))
 		return 0;
 	inode = (void *)inodebuf;
@@ -260,12 +248,12 @@ ext2fs_find_disk_blocks(ib_params *params, ino_t ino,
 	lblk = 0;
 	level_i = 0;
 	level[0].blknums = &inode->e2di_blocks[0];
-	level[0].blkcount = NDADDR;
-	level[1].blknums = &inode->e2di_blocks[NDADDR + 0];
+	level[0].blkcount = UFS_NDADDR;
+	level[1].blknums = &inode->e2di_blocks[UFS_NDADDR + 0];
 	level[1].blkcount = 1;
-	level[2].blknums = &inode->e2di_blocks[NDADDR + 1];
+	level[2].blknums = &inode->e2di_blocks[UFS_NDADDR + 1];
 	level[2].blkcount = 1;
-	level[3].blknums = &inode->e2di_blocks[NDADDR + 2];
+	level[3].blknums = &inode->e2di_blocks[UFS_NDADDR + 2];
 	level[3].blkcount = 1;
 
 	/* Walk the data blocks. */
@@ -300,23 +288,23 @@ ext2fs_find_disk_blocks(ib_params *params, ino_t ino,
 			if (blk == 0)
 				memset(level[level_i].diskbuf, 0, MAXBSIZE);
 			else if (ext2fs_read_disk_block(params, 
-				fsbtodb(fs, blk) + params->fstype->offset,
+				EXT2_FSBTODB(fs, blk) + params->fstype->offset,
 				fs->e2fs_bsize, level[level_i].diskbuf) == 0)
 				return 0;
 			/* XXX ondisk32 */
 			level[level_i].blknums = 
 			    (uint32_t *)level[level_i].diskbuf;
-			level[level_i].blkcount = NINDIR(fs);
+			level[level_i].blkcount = EXT2_NINDIR(fs);
 			continue;
 		}
 
 		/* blk is the next direct level block. */
 #if 0
 		fprintf(stderr, "ino %lu db %lu blksize %lu\n", ino, 
-		    fsbtodb(fs, blk), sblksize(fs, inode->di_size, lblk));
+		    EXT2_FSBTODB(fs, blk), ext2_sblksize(fs, inode->di_size, lblk));
 #endif
 		rv = (*callback)(params, state, 
-		    fsbtodb(fs, blk) + params->fstype->offset, fs->e2fs_bsize);
+		    EXT2_FSBTODB(fs, blk) + params->fstype->offset, fs->e2fs_bsize);
 		lblk++;
 		nblk--;
 		if (rv != 1)
@@ -450,6 +438,8 @@ ext2fs_findstage2(ib_params *params, uint32_t *maxblk, ib_block *blocks)
 	if (strchr(params->stage2, '/') != NULL) {
 		warnx("The secondary bootstrap `%s' must be in /",
 		    params->stage2);
+		warnx("(Path must be relative to the file system in `%s')",
+		    params->filesystem);
 		return 0;
 	}
 
@@ -459,6 +449,8 @@ ext2fs_findstage2(ib_params *params, uint32_t *maxblk, ib_block *blocks)
 	if (rv != 2) {
 		warnx("Could not find secondary bootstrap `%s' in `%s'",
 		    params->stage2, params->filesystem);
+		warnx("(Path must be relative to the file system in `%s')",
+		    params->filesystem);
 		return 0;
 	}
 

@@ -1,4 +1,4 @@
-/* $NetBSD: daicctl.h,v 1.6 2008/02/16 07:26:54 matt Exp $ */
+/* $NetBSD: daicctl.h,v 1.8 2018/01/23 21:06:24 sevan Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,10 +31,10 @@
 
 #define PATH_ISDN_DEV	"/dev/isdn"
 
-extern void download __P((int fd, int controller, char *filename));
-extern void simpccard __P((char *controller, int insert));
-extern void xlog __P((int fd, int controller));
-extern void xversion __P((int fd, int controller));
-extern void istat __P((int fd, int controller));
-extern void passthrough __P((int fd, int controller));
+extern void download(int fd, int controller, char *filename);
+extern void simpccard(char *controller, int insert);
+extern void xlog(int fd, int controller);
+extern void xversion(int fd, int controller);
+extern void istat(int fd, int controller);
+extern void passthrough(int fd, int controller);
 

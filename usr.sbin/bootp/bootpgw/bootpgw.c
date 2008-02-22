@@ -27,7 +27,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootpgw.c,v 1.13 2007/05/27 16:31:42 tls Exp $");
+__RCSID("$NetBSD: bootpgw.c,v 1.16 2017/05/04 16:26:09 sevan Exp $");
 #endif
 
 /*
@@ -84,10 +84,9 @@ __RCSID("$NetBSD: bootpgw.c,v 1.13 2007/05/27 16:31:42 tls Exp $");
  * Externals, forward declarations, and global variables
  */
 
-static void usage(void);
+__dead static void usage(void);
 static void handle_reply(void);
 static void handle_request(void);
-int main(int, char **);
 
 /*
  * IP port numbers for client and server obtained from /etc/services
@@ -126,7 +125,6 @@ char *servername;
 
 char myhostname[MAXHOSTNAMELEN + 1];
 struct in_addr my_ip_addr;
-
 
 
 
@@ -449,7 +447,7 @@ main(int argc, char **argv)
 			report(LOG_INFO, "recvd pkt from IP addr %s",
 				   inet_ntoa(clnt_addr.sin_addr));
 		}
-		if (n < sizeof(struct bootp)) {
+		if (n < (int)sizeof(struct bootp)) {
 			if (debug) {
 				report(LOG_INFO, "received short packet");
 			}

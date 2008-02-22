@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-# $NetBSD: newvers_stand.sh,v 1.4 2000/08/23 07:15:20 mrg Exp $
+# $NetBSD: newvers_stand.sh,v 1.9 2017/04/08 19:53:54 christos Exp $
 #
 # Copyright (c) 2000 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -16,13 +16,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the NetBSD
-#	Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,43 +33,48 @@
 # bootblock build on various architectures.
 #
 # Called as:
-#	sh ${S}/conf/newvers_stand.sh [-NDM] VERSION_FILE ARCH [EXTRA_MSG]
+#	sh ${S}/conf/newvers_stand.sh [-dkn] [-D <date>] [-m <machine>] VERSION_TEMPLATE [EXTRA_MSG]
 
-add_name=yes
-add_date=yes
-add_maker=yes
+cwd=$(dirname "$0")
+
+add_name=true
+add_date=true
+add_kernrev=true
+machine="unknown"
+dateargs=
 
 # parse command args
-while getopts "NDM?" OPT; do
+while getopts "m:D:dknm:" OPT; do
 	case $OPT in
-	N)	add_name=no;;
-	D)	add_date=no;;
-	M)	add_maker=no;;
-	?)	echo "Syntax: newvers_stand.sh [-NDM] VERSION_TEMPLATE ARCH EXTRA_COMMENT" >&2
+	D)	dateargs="-r $OPTARG";;
+	d)	add_date=false;;
+	k)	add_kernrev=false;;
+	m)	machine=${OPTARG};;
+	n)	add_name=false;;
+	*)	echo "Usage: newvers_stand.sh [-dkn] [-D <date>] [-m <machine>] VERSION_TEMPLATE EXTRA_COMMENT" >&2
 		exit 1;;
 	esac
 done
 
-shift `expr $OPTIND - 1`
+shift $(expr $OPTIND - 1)
 
-r=`awk -F: '$1 ~ /^[0-9.]*$/ { it = $1; } END { print it }' $1`
+r=$(awk -F: '$1 ~ /^[0-9.]*$/ { it = $1; } END { print it }' "$1")
+shift
+t=$(LC_ALL=C TZ=UTC date $dateargs)
 
-# always add revision info
-echo "const char bootprog_rev[] = \"${r}\";" > vers.c
-
-if [ $add_name = yes ]; then
-	a="$2"		# architecture name
-	extra=${3:+" $3"}
-
-	echo "const char bootprog_name[] = \"NetBSD/${a}${extra}\";" >> vers.c
+if $add_date; then
+	echo "const char bootprog_rev[] = \"${r} (${t})\";" > vers.c
+else
+	echo "const char bootprog_rev[] = \"${r}\";" > vers.c
 fi
 
-if [ $add_date = yes ]; then
-	t=`date`
-	echo "const char bootprog_date[] = \"${t}\";" >> vers.c
+if $add_name; then
+	extra=${1:+" $1"}
+
+	echo "const char bootprog_name[] = \"NetBSD/${machine}${extra}\";" >> vers.c
 fi
 
-if [ $add_maker = yes ]; then
-	u=${USER-root} h=`hostname`
-	echo "const char bootprog_maker[] = \"${u}@${h}\";" >> vers.c
+if $add_kernrev; then
+	osr=$(sh "${cwd}/osrelease.sh")
+	echo "const char bootprog_kernrev[] = \"${osr}\";" >> vers.c
 fi

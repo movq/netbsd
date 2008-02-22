@@ -1,4 +1,4 @@
-/*	$NetBSD: consinit.c,v 1.10 2007/11/22 16:17:03 bouyer Exp $	*/
+/*	$NetBSD: consinit.c,v 1.16 2012/10/13 17:58:55 jdc Exp $	*/
 /*	NetBSD: consinit.c,v 1.4 2004/03/13 17:31:34 bjh21 Exp 	*/
 
 /*
@@ -28,14 +28,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.10 2007/11/22 16:17:03 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: consinit.c,v 1.16 2012/10/13 17:58:55 jdc Exp $");
 
 #include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/bootinfo.h>
 
 #include "xencons.h"
@@ -141,7 +141,7 @@ int comkgdbmode = KGDB_DEVMODE;
  * it shouldn't be called from init386 either.
  */
 void
-consinit()
+consinit(void)
 {
 	static int initted = 0;
 	union xen_cmdline_parseinfo xcp;
@@ -153,7 +153,7 @@ consinit()
 	xen_parse_cmdline(XEN_PARSE_CONSOLE, &xcp);
 	
 #if (NVGA > 0)
-	if (xen_start_info.flags & SIF_PRIVILEGED) {
+	if (xendomain_is_privileged()) {
 #ifdef CONS_OVERRIDE
 		if (strcmp(default_consinfo.devname, "tty0") == 0 ||
 		    strcmp(default_consinfo.devname, "pc") == 0) {
@@ -162,12 +162,12 @@ consinit()
 		    strcmp(xcp.xcp_console, "pc") == 0) { /* NetBSD name */
 #endif /* CONS_OVERRIDE */
 			int error;
-			vga_cnattach(X86_BUS_SPACE_IO, X86_BUS_SPACE_MEM,
+			vga_cnattach(x86_bus_space_io, x86_bus_space_mem,
 			    -1, 1);
 			error = ENODEV;
 #if (NPCKBC > 0)
-			error = pckbc_cnattach(X86_BUS_SPACE_IO, IO_KBD, KBCMDP,
-			    PCKBC_KBD_SLOT);
+			error = pckbc_cnattach(x86_bus_space_io, IO_KBD, KBCMDP,
+			    PCKBC_KBD_SLOT, 0);
 #endif
 #if (NUKBD > 0)
 			if (error)
@@ -189,11 +189,11 @@ consinit()
 
 #ifdef KGDB
 void
-kgdb_port_init()
+kgdb_port_init(void)
 {
 #if (NCOM > 0)
 	if(!strcmp(kgdb_devname, "com")) {
-		bus_space_tag_t tag = X86_BUS_SPACE_IO;
+		bus_space_tag_t tag = x86_bus_space_io;
 
 		com_kgdb_attach(tag, comkgdbaddr, comkgdbrate, COM_FREQ, 
 		    COM_TYPE_NORMAL, comkgdbmode);

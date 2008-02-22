@@ -1,4 +1,4 @@
-/* $NetBSD: if_skreg.h,v 1.11 2007/01/31 09:56:26 msaitoh Exp $ */
+/* $NetBSD: if_skreg.h,v 1.21 2018/06/14 07:19:47 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -211,6 +204,8 @@
 #define SK_CSR_BUSCLOCK			0x0200 /* 1 == 33/66 MHz, = 33 */
 #define SK_CSR_ASF_OFF			0x1000
 #define SK_CSR_ASF_ON			0x2000
+#define SK_CSR_WOL_OFF			__BIT(14)
+#define SK_CSR_WOL_ON			__BIT(15)
 
 /* SK_LED register */
 #define SK_LED_GREEN_OFF		0x01
@@ -393,8 +388,15 @@
 #define SK_YUKON_LP		0xB2
 #define SK_YUKON_XL		0xB3
 #define SK_YUKON_EC_U		0xB4
+#define SK_YUKON_EX		0xB5
 #define SK_YUKON_EC		0xB6
 #define SK_YUKON_FE		0xB7
+#define SK_YUKON_FE_P		0xB8
+#define SK_YUKON_SUPR		0xB9
+#define SK_YUKON_ULTRA2		0xBA
+#define SK_YUKON_OPTIMA		0xBC
+#define SK_YUKON_PRM		0xBD
+#define SK_YUKON_OPTIMA2	0xBE
 #define SK_YUKON_FAMILY(x) ((x) & 0xB0)
 
 #define SK_IS_GENESIS(sc) \
@@ -402,7 +404,7 @@
 #define SK_IS_YUKON(sc) \
     ((sc)->sk_type >= SK_YUKON && (sc)->sk_type <= SK_YUKON_LP)
 #define SK_IS_YUKON2(sc) \
-    ((sc)->sk_type >= SK_YUKON_XL && (sc)->sk_type <= SK_YUKON_FE)
+    ((sc)->sk_type >= SK_YUKON_XL && (sc)->sk_type <= SK_YUKON_OPTIMA2)
 
 /* Known revisions in SK_CONFIG */
 #define SK_YUKON_LITE_REV_A0	0x0 /* invented, see test in skc_attach */
@@ -421,9 +423,22 @@
 #define SK_YUKON_EC_U_REV_A0	0x1
 #define SK_YUKON_EC_U_REV_A1	0x2
 #define SK_YUKON_EC_U_REV_B0	0x3
+#define SK_YUKON_EC_U_REV_B1	0x5
 
 #define SK_YUKON_FE_REV_A1	0x1
-#define SK_YUKON_FE_REV_A2	0x3
+#define SK_YUKON_FE_REV_A2	0x2
+
+#define SK_YUKON_FE_P_REV_A0	0x0
+
+#define SK_YUKON_EX_REV_A0	0x1
+#define SK_YUKON_EX_REV_B0	0x2
+
+#define SK_YUKON_SUPR_REV_A0	0x0
+#define SK_YUKON_SUPR_REV_B0	0x1
+#define SK_YUKON_SUPR_REV_B1	0x3
+
+#define SK_YUKON_PRM_REV_Z1	0x1
+#define SK_YUKON_PRM_REV_A0	0x2
 
 /* Workaround */
 #define SK_WA_43_418	0x01
@@ -434,6 +449,7 @@
 #define SK_IMCTL_START		0x04
 
 /* Number of ticks per usec for interrupt moderation */
+#define SK_IMTIMER_TICKS_YUKON_FE_P	50
 #define SK_IMTIMER_TICKS_GENESIS	53
 #define SK_IMTIMER_TICKS_YUKON		156
 #define SK_IMTIMER_TICKS_YUKON_EC	125
@@ -1063,7 +1079,7 @@
 #define SK_RBCTL_STORENFWD_OFF	0x10
 #define SK_RBCTL_STORENFWD_ON	0x20
 
-/* Block 24 -- RX MAC FIFO 1 regisrers and LINK_SYNC counter */
+/* Block 24 -- RX MAC FIFO 1 registers and LINK_SYNC counter */
 #define SK_RXF1_END		0x0C00
 #define SK_RXF1_WPTR		0x0C04
 #define SK_RXF1_RPTR		0x0C0C
@@ -1112,7 +1128,7 @@
 
 #define SK_RFCTL_FIFO_THRESHOLD 0x0a    /* flush threshold (default) */
 
-/* Block 25 -- RX MAC FIFO 2 regisrers and LINK_SYNC counter */
+/* Block 25 -- RX MAC FIFO 2 registers and LINK_SYNC counter */
 #define SK_RXF2_END		0x0C80
 #define SK_RXF2_WPTR		0x0C84
 #define SK_RXF2_RPTR		0x0C8C
@@ -1158,7 +1174,7 @@
 #define SK_LINKLED_BLINK_OFF		0x0010
 #define SK_LINKLED_BLINK_ON		0x0020
 
-/* Block 26 -- TX MAC FIFO 1 regisrers  */
+/* Block 26 -- TX MAC FIFO 1 registers  */
 #define SK_TXF1_END		0x0D00
 #define SK_TXF1_WPTR		0x0D04
 #define SK_TXF1_RPTR		0x0D0C
@@ -1197,7 +1213,7 @@
 #define SK_TFCTL_RESET_CLEAR	0x00000002	/* MAC FIFO Reset Clear */
 #define SK_TFCTL_RESET_SET	0x00000001	/* MAC FIFO Reset Set */
 
-/* Block 27 -- TX MAC FIFO 2 regisrers  */
+/* Block 27 -- TX MAC FIFO 2 registers  */
 #define SK_TXF2_END		0x0D80
 #define SK_TXF2_WPTR		0x0D84
 #define SK_TXF2_RPTR		0x0D8C
@@ -1327,6 +1343,9 @@
 #define SK_PAT_CTR6		0x0f3e	/* Pattern Counter 6 */
 #define SK_PAT_CTR7		0x0f3f	/* Pattern Counter 7 */
 
+#define SK_GMAC_BYP_MACSECRX	0x00002000	/* Bypass macsec for Rx */
+#define SK_GMAC_BYP_MACSECTX	0x00000800	/* Bypass macsec for Tx */
+#define SK_GMAC_BYP_RETR_FIFO	0x00000200	/* Bypass retransmit FIFO */
 #define SK_GMAC_LOOP_ON		0x00000020	/* Loopback mode for testing */
 #define SK_GMAC_LOOP_OFF	0x00000010	/* purposes */
 #define SK_GMAC_PAUSE_ON	0x00000008	/* enable forward of pause */
@@ -1511,9 +1530,27 @@
 #define SK_PCI_VPD_NEXTPTR	0x0051
 #define SK_PCI_VPD_ADDR		0x0052
 #define SK_PCI_VPD_DATA		0x0054
+#define SK_PCI_OURREG3		0x0080 /* Yukon EC U */
+#define SK_PCI_OURREG4		0x0084
+#define SK_PCI_OURREG5		0x0088
 
 #define SK_Y2_REG1_PHY1_COMA	0x10000000
 #define SK_Y2_REG1_PHY2_COMA	0x20000000
+
+/* SK_PCI_OURREG2 32bits */
+#define SK_REG2_REV_DESC	0x00000004 /* revert byte order in descriptor */
+
+/* SK_PCI_OURREG4 32bits (Yukon-ECU only) */
+#define SK_Y2_REG4_TIMER_VALUE_MSK	(0xff << 16)
+#define SK_Y2_REG4_FORCE_ASPM_REQUEST	__BIT(15)	
+#define SK_Y2_REG4_ASPM_GPHY_LINK_DOWN	__BIT(14)
+#define SK_Y2_REG4_ASPM_INT_FIFO_EMPTY	__BIT(13)
+#define SK_Y2_REG4_ASPM_CLKRUN_REQUEST	__BIT(12)
+#define SK_Y2_REG4_ASPM_FORCE_CLKREQ_ENA	__BIT(4)
+#define SK_Y2_REG4_ASPM_CLKREQ_PAD	__BIT(3)
+#define SK_Y2_REG4_ASPM_A1_MODE_SELECT	__BIT(2)
+#define SK_Y2_REG4_CLK_GATE_PEX_UNIT_ENA	__BIT(1)
+#define SK_Y2_REG4_CLK_GATE_ROOT_COR_ENA	__BIT(0)
 
 #define SK_PSTATE_MASK		0x0003
 #define SK_PSTATE_D0		0x0000
@@ -2308,4 +2345,6 @@ struct msk_status_desc {
 #define XM_RESAB_FDMODESEL	0x0020
 #define XM_RESAB_HDMODESEL	0x0040
 #define XM_RESAB_PAUSEBITS	0x0180
+
+#define SK_HASH_BITS		6
 #endif /* _DEV_PCI_IF_SKREG_H_ */

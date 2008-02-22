@@ -1,4 +1,4 @@
-/*	$NetBSD: uuencode.c,v 1.12 2006/09/24 15:32:48 elad Exp $	*/
+/*	$NetBSD: uuencode.c,v 1.16 2014/09/06 18:58:35 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)uuencode.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: uuencode.c,v 1.12 2006/09/24 15:32:48 elad Exp $");
+__RCSID("$NetBSD: uuencode.c,v 1.16 2014/09/06 18:58:35 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,10 +60,9 @@ __RCSID("$NetBSD: uuencode.c,v 1.12 2006/09/24 15:32:48 elad Exp $");
 #include <string.h>
 #include <unistd.h>
 
-int main(int, char *[]);
 static void encode(void);
 static void base64_encode(void);
-static void usage(void);
+__dead static void usage(void);
 
 int
 main(int argc, char *argv[])
@@ -196,7 +195,8 @@ encode(void)
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "usage: %s [-m] [infile] remotefile\n",
+	(void)fprintf(stderr,
+		      "usage: %s [-m] [inputfile] headername > encodedfile\n",
 		      getprogname());
 	exit(1);
 }

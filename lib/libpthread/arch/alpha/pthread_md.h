@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.h,v 1.4 2007/10/08 16:04:43 skrll Exp $	*/
+/*	$NetBSD: pthread_md.h,v 1.7 2011/01/25 19:12:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,10 +34,10 @@
 
 #define	PTHREAD__ASM_RASOPS
 
-static inline long
+static inline unsigned long
 pthread__sp(void)
 {
-	long ret;
+	unsigned long ret;
 
 	__asm("mov $30, %0" : "=r" (ret));
 
@@ -52,7 +45,6 @@ pthread__sp(void)
 }
 
 #define pthread__uc_sp(ucp) ((ucp)->uc_mcontext.__gregs[_REG_SP])
-#define pthread__uc_pc(ucp) ((ucp)->uc_mcontext.__gregs[_REG_PC])
 
 /*
  * Set initial, sane values for registers whose values aren't just
@@ -61,33 +53,5 @@ pthread__sp(void)
  */
 #define _INITCONTEXT_U_MD(ucp)						\
 	(ucp)->uc_mcontext.__gregs[_REG_PS] = 0x0008;
-#define STACKSPACE 32	/* 4 quad values */
-/*
- * Conversions between struct reg and struct mcontext. Used by
- * libpthread_dbg.
- */
-
-#define PTHREAD_UCONTEXT_TO_REG(reg, uc) do {				\
-	memcpy(&(reg)->r_regs, &(uc)->uc_mcontext.__gregs,		\
-		31 * sizeof(__greg_t));					\
-	(reg)->r_regs[R_ZERO] = (uc)->uc_mcontext.__gregs[_REG_PC];    	\
-	} while (/*CONSTCOND*/0)
-
-#define PTHREAD_REG_TO_UCONTEXT(uc, reg) do {				\
-	memcpy(&(uc)->uc_mcontext.__gregs, &(reg)->r_regs,		\
-		31 * sizeof(__greg_t));					\
-	(uc)->uc_mcontext.__gregs[_REG_PC] = (reg)->r_regs[R_ZERO];    	\
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_CPU) & ~_UC_USER;       	\
-	} while (/*CONSTCOND*/0)
-
-#define PTHREAD_UCONTEXT_TO_FPREG(freg, uc)       			\
-	memcpy((freg), &(uc)->uc_mcontext.__fpregs,			\
-	    sizeof(struct fpreg))					\
-
-#define PTHREAD_FPREG_TO_UCONTEXT(uc, freg) do {       	       		\
-	memcpy(&(uc)->uc_mcontext.__fpregs, (freg),			\
-	    sizeof(struct fpreg));					\
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_FPU) & ~_UC_USER;       	\
-	} while (/*CONSTCOND*/0)
 
 #endif /* _LIB_PTHREAD_ALPHA_MD_H */

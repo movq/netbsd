@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_dagffrd.c,v 1.18 2006/11/16 01:33:23 christos Exp $	*/
+/*	$NetBSD: rf_dagffrd.c,v 1.20 2016/12/11 05:27:00 nat Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_dagffrd.c,v 1.18 2006/11/16 01:33:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_dagffrd.c,v 1.20 2016/12/11 05:27:00 nat Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -133,11 +133,15 @@ rf_CreateNonredundantDAG(RF_Raid_t *raidPtr,
 	RF_DagNode_t *tmpNode, *tmpdiskNode;
 	RF_PhysDiskAddr_t *pda = asmap->physInfo;
 	int     (*doFunc) (RF_DagNode_t *), (*undoFunc) (RF_DagNode_t *);
-	int     i, n, totalNumNodes;
+	int     i, n;
 	const char   *name;
 
 	n = asmap->numStripeUnitsAccessed;
 	dag_h->creator = "NonredundantDAG";
+
+	doFunc = rf_NullNodeFunc;
+	undoFunc = rf_NullNodeUndoFunc;
+	name = NULL;
 
 	RF_ASSERT(RF_IO_IS_R_OR_W(type));
 	switch (type) {
@@ -179,7 +183,6 @@ rf_CreateNonredundantDAG(RF_Raid_t *raidPtr,
          * 1 terminator node
          */
 	RF_ASSERT(n > 0);
-	totalNumNodes = n + 3;
 
 	for (i = 0; i < n; i++) {
 		tmpNode = rf_AllocDAGNode();
@@ -326,7 +329,7 @@ CreateMirrorReadDAG(RF_Raid_t *raidPtr, RF_AccessStripeMap_t *asmap,
 	RF_DagNode_t *tmpNode, *tmpreadNode;
 	RF_PhysDiskAddr_t *data_pda = asmap->physInfo;
 	RF_PhysDiskAddr_t *parity_pda = asmap->parityInfo;
-	int     i, n, totalNumNodes;
+	int     i, n;
 
 	n = asmap->numStripeUnitsAccessed;
 	dag_h->creator = "RaidOneReadDAG";
@@ -351,7 +354,6 @@ CreateMirrorReadDAG(RF_Raid_t *raidPtr, RF_AccessStripeMap_t *asmap,
          * 1 terminator node
          */
 	RF_ASSERT(n > 0);
-	totalNumNodes = n + 3;
 
 	for (i = 0; i < n; i++) {
 		tmpNode = rf_AllocDAGNode();

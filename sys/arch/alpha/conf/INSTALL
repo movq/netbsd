@@ -1,8 +1,8 @@
-# $NetBSD: INSTALL,v 1.94 2007/01/01 15:36:16 pavel Exp $
+# $NetBSD: INSTALL,v 1.110 2017/09/14 07:58:38 mrg Exp $
 #
 # Alpha INSTALL kernel.
 
-include		"arch/alpha/conf/std.alpha"
+include 	"arch/alpha/conf/std.alpha"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
@@ -14,6 +14,7 @@ maxusers 8
 options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# Force root on ram-disk
 options 	MEMORY_DISK_ROOT_SIZE=9300	# 4 Megabytes
+options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 # CPU Support
 options 	DEC_2000_300	# "Jensen":	2000/300 (DECpc AXP 150)
@@ -38,6 +39,7 @@ options 	API_UP1000	# EV6:		Alpha Processor, Inc. UP1000
 
 # Diagnostic/debugging support options
 options 	DDB			# kernel debugger
+pseudo-device	ksyms
 #makeoptions	DEBUG="-g"
 
 # File systems
@@ -45,30 +47,17 @@ file-system	FFS		# Fast file system
 file-system	CD9660		# ISO-9660 CD-ROM FS (w/RockRidge extensions)
 file-system	MSDOSFS		# MS-DOS-compatible file system
 file-system	NFS		# Sun NFS-compatible file system client
-file-system	KERNFS		# Kernel variable file system (/kern)
 
 # File system options
 #options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	WAPBL		# File system journaling support
 
 # Networking options
 options 	INET		# IP + ICMP + TCP + UDP
 
-# 4.3BSD compatibility.  Should be optional, but necessary for now.
-options 	COMPAT_43
-
 # Binary compatibility with previous versions of NetBSD.
-#options 	COMPAT_09
-options 	COMPAT_10
-options 	COMPAT_11
-options 	COMPAT_12
-options 	COMPAT_13
-options 	COMPAT_14
-options 	COMPAT_15
-options 	COMPAT_16
-options 	COMPAT_20
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+include 	"conf/compat_netbsd10.config"
 
 # Misc. options
 #options 	EISAVERBOSE		# recognize "unknown" EISA devices
@@ -90,6 +79,7 @@ options 	NFS_BOOT_DHCP		# superset of BOOTP
 
 # WS console uses SUN or VT100 terminal emulation
 options 	WSEMUL_VT100
+#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 config		netbsd	root on ? type ?
 
@@ -181,6 +171,9 @@ pci*	at	dwlpx?
 pci*	at	mcpcia?
 pci*	at	tsp?
 pci*	at	ttwopci?
+
+# AGP support
+agp*	at	irongate?
 
 # PCI devices
 adv*	at	pci? dev ? function ?		# AdvanSys SCSI
@@ -338,11 +331,14 @@ wsmouse*	at	vsms?
 wskbd*		at	pckbd?
 wsmouse*	at	pms?
 
-pseudo-device	loop		1
-pseudo-device	md		1
+pseudo-device	raid			# RAIDframe disk driver
+options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
+
+pseudo-device	bpfilter
+pseudo-device	loop
+pseudo-device	md		
 pseudo-device	ppp		
-pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
+pseudo-device	pty			# pseudo-terminals
 pseudo-device	sl		
 
-pseudo-device	rnd			# /dev/random and in-kernel generator
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.28 2008/01/05 19:11:53 dsl Exp $ */
+/*	$NetBSD: linux_machdep.c,v 1.56 2018/01/01 08:03:43 maxv Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.28 2008/01/05 19:11:53 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.56 2018/01/01 08:03:43 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -42,24 +42,25 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.28 2008/01/05 19:11:53 dsl Exp $
 #include <sys/exec.h>
 #include <sys/proc.h>
 #include <sys/ptrace.h> /* for process_read_fpregs() */
-#include <sys/user.h>
-#include <sys/wait.h>
 #include <sys/ucontext.h>
 #include <sys/conf.h>
 
 #include <machine/reg.h>
 #include <machine/pcb.h>
-#include <machine/fpu.h>
 #include <machine/mcontext.h>
 #include <machine/specialreg.h>
 #include <machine/vmparam.h>
+#include <machine/cpufunc.h>
+#include <x86/include/sysarch.h>
 
 /* 
  * To see whether wscons is configured (for virtual console ioctl calls).
  */
 #if defined(_KERNEL_OPT)
+#include "opt_user_ldt.h"
 #include "wsdisplay.h"
 #endif
+
 #if (NWSDISPLAY > 0)
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplay_usl_io.h>
@@ -80,24 +81,21 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.28 2008/01/05 19:11:53 dsl Exp $
 static void linux_buildcontext(struct lwp *, void *, void *);
 
 void
-linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct trapframe *tf;
 
-	/* If we were using the FPU, forget about it. */
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-		fpusave_lwp(l, 0);
+#ifdef USER_LDT
+	pmap_ldt_cleanup(l);
+#endif
 
-	l->l_md.md_flags &= ~MDP_USEDFPU;
+	fpu_save_area_clear(l, __NetBSD_NPXCW__);
 	pcb->pcb_flags = 0;
-	pcb->pcb_savefpu.fp_fxsave.fx_fcw = __NetBSD_NPXCW__;
-	pcb->pcb_savefpu.fp_fxsave.fx_mxcsr = __INITIAL_MXCSR__;
-	pcb->pcb_savefpu.fp_fxsave.fx_mxcsr_mask = __INITIAL_MXCSR_MASK__;
-	pcb->pcb_fs = 0;
-	pcb->pcb_gs = 0;
 
 	l->l_proc->p_flag &= ~PK_32;
+
+	l->l_md.md_flags = MDL_IRET;
 
 	tf = l->l_md.md_regs;
 	tf->tf_rax = 0;
@@ -120,10 +118,9 @@ linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 	tf->tf_rflags = PSL_USERSET;
 	tf->tf_cs = GSEL(GUCODE_SEL, SEL_UPL);
 	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
-	tf->tf_ds = 0;
+	tf->tf_ds = GSEL(GUDATA_SEL, SEL_UPL);
 	tf->tf_es = 0;
-	tf->tf_fs = 0;
-	tf->tf_gs = 0;
+	cpu_segregs64_zero(l);
 
 	return;
 }
@@ -133,11 +130,12 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct sigacts *ps = p->p_sigacts;
 	int onstack, error;
 	int sig = ksi->ksi_signo;
 	struct linux_rt_sigframe *sfp, sigframe;
-	struct linux__fpstate *fpsp, fpstate;
+	struct linux__fpstate *fpsp;
 	struct fpreg fpregs;
 	struct trapframe *tf = l->l_md.md_regs;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
@@ -156,15 +154,9 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	else
 		sp = (char *)tf->tf_rsp - 128;
 
-	/* 
-	 * Save FPU state, if any 
-	 */
-	if (l->l_md.md_flags & MDP_USEDFPU) {
-		sp = (char *)
-		    (((long)sp - sizeof(struct linux__fpstate)) & ~0xfUL);
-		fpsp = (struct linux__fpstate *)sp;
-	} else
-		fpsp = NULL;
+	/* Save FPU state */
+	sp = (char *) (((long)sp - sizeof (*fpsp)) & ~0xfUL);
+	fpsp = (struct linux__fpstate *)sp;
 
 	/* 
 	 * Populate the rt_sigframe 
@@ -173,7 +165,7 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	    ((((long)sp - sizeof(struct linux_rt_sigframe)) & ~0xfUL) - 8);
 	sfp = (struct linux_rt_sigframe *)sp;
 
-	bzero(&sigframe, sizeof(sigframe));
+	memset(&sigframe, 0, sizeof(sigframe));
 	if (ps->sa_sigdesc[sig].sd_vers != 0)
 		sigframe.pretcode = 
 		    (char *)(u_long)ps->sa_sigdesc[sig].sd_tramp;
@@ -213,101 +205,45 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	sigframe.uc.luc_mcontext.rsp = tf->tf_rsp;
 	sigframe.uc.luc_mcontext.rip = tf->tf_rip;
 	sigframe.uc.luc_mcontext.eflags = tf->tf_rflags;
-	sigframe.uc.luc_mcontext.cs = tf->tf_cs;
-	sigframe.uc.luc_mcontext.gs = tf->tf_gs;
-	sigframe.uc.luc_mcontext.fs = tf->tf_fs;
+	sigframe.uc.luc_mcontext.cs = GSEL(GUCODE_SEL, SEL_UPL);
+	sigframe.uc.luc_mcontext.gs = tf->tf_gs & 0xFFFF;
+	sigframe.uc.luc_mcontext.fs = tf->tf_fs & 0xFFFF;
 	sigframe.uc.luc_mcontext.err = tf->tf_err;
 	sigframe.uc.luc_mcontext.trapno = tf->tf_trapno;
 	native_to_linux_sigset(&lmask, mask);
 	sigframe.uc.luc_mcontext.oldmask = lmask.sig[0];
-	sigframe.uc.luc_mcontext.cr2 = (long)l->l_addr->u_pcb.pcb_onfault;
+	sigframe.uc.luc_mcontext.cr2 = (long)pcb->pcb_onfault;
 	sigframe.uc.luc_mcontext.fpstate = fpsp;
 	native_to_linux_sigset(&sigframe.uc.luc_sigmask, mask);
-
-	/* 
-	 * the siginfo structure
-	 */
-	sigframe.info.lsi_signo = native_to_linux_signo[sig];
-	sigframe.info.lsi_errno = native_to_linux_errno[ksi->ksi_errno];
-	sigframe.info.lsi_code = ksi->ksi_code;
-
-	/* XXX This is a rought conversion, taken from i386 code */
-	switch (sigframe.info.lsi_signo) {
-	case LINUX_SIGILL:
-	case LINUX_SIGFPE:
-	case LINUX_SIGSEGV:
-	case LINUX_SIGBUS:
-	case LINUX_SIGTRAP:
-		sigframe.info._sifields._sigfault._addr = ksi->ksi_addr;
-		break;
-	case LINUX_SIGCHLD:
-		sigframe.info._sifields._sigchld._pid = ksi->ksi_pid;
-		sigframe.info._sifields._sigchld._uid = ksi->ksi_uid;
-		sigframe.info._sifields._sigchld._utime = ksi->ksi_utime;
-		sigframe.info._sifields._sigchld._stime = ksi->ksi_stime;
-
-		if (WCOREDUMP(ksi->ksi_status)) {
-			sigframe.info.lsi_code = LINUX_CLD_DUMPED;
-			sigframe.info._sifields._sigchld._status =
-			    _WSTATUS(ksi->ksi_status);
-		} else if (_WSTATUS(ksi->ksi_status)) {
-			sigframe.info.lsi_code = LINUX_CLD_KILLED;
-			sigframe.info._sifields._sigchld._status =
-			    _WSTATUS(ksi->ksi_status);
-		} else {
-			sigframe.info.lsi_code = LINUX_CLD_EXITED;
-			sigframe.info._sifields._sigchld._status =
-			    ((ksi->ksi_status & 0xff00U) >> 8);
-		}
-		break;
-	case LINUX_SIGIO:
-		sigframe.info._sifields._sigpoll._band = ksi->ksi_band;
-		sigframe.info._sifields._sigpoll._fd = ksi->ksi_fd;
-		break;
-	default:
-		sigframe.info._sifields._sigchld._pid = ksi->ksi_pid;
-		sigframe.info._sifields._sigchld._uid = ksi->ksi_uid;
-		if ((sigframe.info.lsi_signo == LINUX_SIGALRM) ||
-		    (sigframe.info.lsi_signo >= LINUX_SIGRTMIN))
-			sigframe.info._sifields._timer._sigval.sival_ptr =
-			     ksi->ksi_value.sival_ptr;
-		break;
-	}
-
+	native_to_linux_siginfo(&sigframe.info, &ksi->ksi_info);
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = 0;
 
 	/* 
 	 * Save FPU state, if any 
 	 */
 	if (fpsp != NULL) {
-		(void)process_read_fpregs(l, &fpregs);
-		bzero(&fpstate, sizeof(fpstate));
-		fpstate.cwd = fpregs.fp_fcw;
-		fpstate.swd = fpregs.fp_fsw;
-		fpstate.twd = fpregs.fp_ftw;
-		fpstate.fop = fpregs.fp_fop;
-		fpstate.rip = fpregs.fp_rip;
-		fpstate.rdp = fpregs.fp_rdp;
-		fpstate.mxcsr = fpregs.fp_mxcsr;
-		fpstate.mxcsr_mask = fpregs.fp_mxcsr_mask;
-		memcpy(&fpstate.st_space, &fpregs.fp_st, 
-		    sizeof(fpstate.st_space));
-		memcpy(&fpstate.xmm_space, &fpregs.fp_xmm, 
-		    sizeof(fpstate.xmm_space));
-		error = copyout(&fpstate, fpsp, sizeof(fpstate));
+		size_t fp_size = sizeof fpregs;
+		/* The netbsd and linux structures both match the fxsave data */
+		(void)process_read_fpregs(l, &fpregs, &fp_size);
+		error = copyout(&fpregs, fpsp, sizeof(*fpsp));
 	}
 
 	if (error == 0)
 		error = copyout(&sigframe, sp, sizeof(sigframe));
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		sigexit(l, SIGILL);
 		return;
-	}	
+	}
+
+	if ((vaddr_t)catcher >= VM_MAXUSER_ADDRESS) {
+		sigexit(l, SIGILL);
+		return;
+	}
 
 	linux_buildcontext(l, catcher, sp);
 	tf->tf_rdi = sigframe.info.lsi_signo;
@@ -379,25 +315,24 @@ linux_sys_rt_sigreturn(struct lwp *l, const void *v, register_t *retval)
 	struct linux_ucontext *luctx;
 	struct trapframe *tf = l->l_md.md_regs;
 	struct linux_sigcontext *lsigctx;
-	struct linux__fpstate fpstate;
 	struct linux_rt_sigframe frame, *fp;
 	ucontext_t uctx;
 	mcontext_t *mctx;
-	struct fxsave64 *fxarea;
+	struct fxsave *fxarea;
 	int error;
 
 	fp = (struct linux_rt_sigframe *)(tf->tf_rsp - 8);
 	if ((error = copyin(fp, &frame, sizeof(frame))) != 0) {
-		mutex_enter(&l->l_proc->p_smutex);
+		mutex_enter(l->l_proc->p_lock);
 		sigexit(l, SIGILL);
 		return error;
 	}
 	luctx = &frame.uc;
 	lsigctx = &luctx->luc_mcontext;
 
-	bzero(&uctx, sizeof(uctx));
+	memset(&uctx, 0, sizeof(uctx));
 	mctx = (mcontext_t *)&uctx.uc_mcontext;
-	fxarea = (struct fxsave64 *)&mctx->__fpregs;
+	fxarea = (struct fxsave *)&mctx->__fpregs;
 
 	/* 
 	 * Set the flags. Linux always have CPU, stack and signal state,
@@ -433,50 +368,38 @@ linux_sys_rt_sigreturn(struct lwp *l, const void *v, register_t *retval)
 	mctx->__gregs[_REG_RCX] = lsigctx->rcx;
 	mctx->__gregs[_REG_RIP] = lsigctx->rip;
 	mctx->__gregs[_REG_RFLAGS] = lsigctx->eflags;
-	mctx->__gregs[_REG_CS] = lsigctx->cs;
-	mctx->__gregs[_REG_GS] = lsigctx->gs;
-	mctx->__gregs[_REG_FS] = lsigctx->fs;
+	mctx->__gregs[_REG_CS] = lsigctx->cs & 0xFFFF;
+	mctx->__gregs[_REG_GS] = lsigctx->gs & 0xFFFF;
+	mctx->__gregs[_REG_FS] = lsigctx->fs & 0xFFFF;
 	mctx->__gregs[_REG_ERR] = lsigctx->err;
 	mctx->__gregs[_REG_TRAPNO] = lsigctx->trapno;
-	mctx->__gregs[_REG_ES] = tf->tf_es;
-	mctx->__gregs[_REG_DS] = tf->tf_ds;
+	mctx->__gregs[_REG_ES] = tf->tf_es & 0xFFFF;
+	mctx->__gregs[_REG_DS] = tf->tf_ds & 0xFFFF;
 	mctx->__gregs[_REG_RSP] = lsigctx->rsp; /* XXX */
-	mctx->__gregs[_REG_SS] = tf->tf_ss;
+	mctx->__gregs[_REG_SS] = tf->tf_ss & 0xFFFF;
 
 	/*
 	 * FPU state 
 	 */
 	if (lsigctx->fpstate != NULL) {
-		error = copyin(lsigctx->fpstate, &fpstate, sizeof(fpstate));
+		/* Both structures match the fxstate data */
+		error = copyin(lsigctx->fpstate, fxarea, sizeof(*fxarea));
 		if (error != 0) {
-			mutex_enter(&l->l_proc->p_smutex);
+			mutex_enter(l->l_proc->p_lock);
 			sigexit(l, SIGILL);
 			return error;
 		}
-
-		fxarea->fx_fcw = fpstate.cwd;
-		fxarea->fx_fsw = fpstate.swd;
-		fxarea->fx_ftw = fpstate.twd;
-		fxarea->fx_fop = fpstate.fop;
-		fxarea->fx_rip = fpstate.rip;
-		fxarea->fx_rdp = fpstate.rdp;
-		fxarea->fx_mxcsr = fpstate.mxcsr;
-		fxarea->fx_mxcsr_mask = fpstate.mxcsr_mask;
-		memcpy(&fxarea->fx_st, &fpstate.st_space, 
-		    sizeof(fxarea->fx_st));
-		memcpy(&fxarea->fx_xmm, &fpstate.xmm_space, 
-		    sizeof(fxarea->fx_xmm));
 	}
 
 	/*
 	 * And the stack
 	 */
 	uctx.uc_stack.ss_flags = 0;
-	if (luctx->luc_stack.ss_flags & LINUX_SS_ONSTACK);
-		uctx.uc_stack.ss_flags = SS_ONSTACK;
+	if (luctx->luc_stack.ss_flags & LINUX_SS_ONSTACK)
+		uctx.uc_stack.ss_flags |= SS_ONSTACK;
 
-	if (luctx->luc_stack.ss_flags & LINUX_SS_DISABLE);
-		uctx.uc_stack.ss_flags = SS_DISABLE;
+	if (luctx->luc_stack.ss_flags & LINUX_SS_DISABLE)
+		uctx.uc_stack.ss_flags |= SS_DISABLE;
 
 	uctx.uc_stack.ss_sp = luctx->luc_stack.ss_sp;
 	uctx.uc_stack.ss_size = luctx->luc_stack.ss_size;
@@ -484,9 +407,9 @@ linux_sys_rt_sigreturn(struct lwp *l, const void *v, register_t *retval)
 	/*
 	 * And let setucontext deal with that.
 	 */
-	mutex_enter(&l->l_proc->p_smutex);
+	mutex_enter(l->l_proc->p_lock);
 	error = setucontext(l, &uctx);
-	mutex_exit(&l->l_proc->p_smutex);
+	mutex_exit(l->l_proc->p_lock);
 	if (error)
 		return error;
 
@@ -494,63 +417,27 @@ linux_sys_rt_sigreturn(struct lwp *l, const void *v, register_t *retval)
 }
 
 int
-linux_sys_arch_prctl(struct lwp *l, const struct linux_sys_arch_prctl_args *uap, register_t *retval)
+linux_sys_arch_prctl(struct lwp *l,
+    const struct linux_sys_arch_prctl_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) code;
 		syscallarg(unsigned long) addr;
 	} */
-	struct pcb *pcb = &l->l_addr->u_pcb;
-	struct trapframe *tf = l->l_md.md_regs;
-	int error;
-	uint64_t taddr;
+	void *addr = (void *)SCARG(uap, addr);
 
 	switch(SCARG(uap, code)) {
 	case LINUX_ARCH_SET_GS:
-		taddr = SCARG(uap, addr);
-		if (taddr >= VM_MAXUSER_ADDRESS)
-			return EINVAL;
-		pcb->pcb_gs = taddr;
-		pcb->pcb_flags |= PCB_GS64;
-		if (l == curlwp)
-			wrmsr(MSR_KERNELGSBASE, taddr);
-		break;
+		return x86_set_sdbase(addr, 'g', l, true);
 
 	case LINUX_ARCH_GET_GS:
-		if (pcb->pcb_flags & PCB_GS64)
-			taddr = pcb->pcb_gs;
-		else {
-			error = memseg_baseaddr(l, tf->tf_fs, NULL, 0, &taddr);
-			if (error != 0)
-				return error;
-		}
-		error = copyout(&taddr, (char *)SCARG(uap, addr), 8);
-		if (error != 0)
-			return error;
-		break;
+		return x86_get_sdbase(addr, 'g');
 
 	case LINUX_ARCH_SET_FS:
-		taddr = SCARG(uap, addr);
-		if (taddr >= VM_MAXUSER_ADDRESS)
-			return EINVAL;
-		pcb->pcb_fs = taddr;
-		pcb->pcb_flags |= PCB_FS64;
-		if (l == curlwp)
-			wrmsr(MSR_FSBASE, taddr);
-		break;
+		return x86_set_sdbase(addr, 'f', l, true);
 
 	case LINUX_ARCH_GET_FS:
-		if (pcb->pcb_flags & PCB_FS64)
-			taddr = pcb->pcb_fs;
-		else {
-			error = memseg_baseaddr(l, tf->tf_fs, NULL, 0, &taddr);
-			if (error != 0)
-				return error;
-		}
-		error = copyout(&taddr, (char *)SCARG(uap, addr), 8);
-		if (error != 0)
-			return error;
-		break;
+		return x86_get_sdbase(addr, 'f');
 
 	default:
 #ifdef DEBUG_LINUX
@@ -559,15 +446,14 @@ linux_sys_arch_prctl(struct lwp *l, const struct linux_sys_arch_prctl_args *uap,
 #endif
 		return EINVAL;
 	}
-
-	return 0;
+	/* NOTREACHED */
 }
 
 const int linux_vsyscall_to_syscall[] = {
 	LINUX_SYS_gettimeofday,
 	LINUX_SYS_time,
-	LINUX_SYS_nosys,
-	LINUX_SYS_nosys,
+	LINUX_SYS_nosys,	/* nosys */
+	LINUX_SYS_nosys,	/* nosys */
 };
 
 int
@@ -575,7 +461,7 @@ linux_usertrap(struct lwp *l, vaddr_t trapaddr, void *arg)
 {
 	struct trapframe *tf = arg;
 	uint64_t retaddr;
-	int vsyscallnr;
+	size_t vsyscallnr;
 
 	/*
 	 * Check for a vsyscall. %rip must be the fault address,
@@ -605,6 +491,8 @@ linux_usertrap(struct lwp *l, vaddr_t trapaddr, void *arg)
 	 */
 	if (copyin((void *)tf->tf_rsp, &retaddr, sizeof retaddr) != 0)
 		return 0;
+	if ((vaddr_t)retaddr >= VM_MAXUSER_ADDRESS)
+		return 0;
 	tf->tf_rip = retaddr;
 	tf->tf_rax = linux_vsyscall_to_syscall[vsyscallnr];
 	tf->tf_rsp += 8;	/* "pop" the return address */
@@ -628,27 +516,7 @@ linux_buildcontext(struct lwp *l, void *catcher, void *f)
 	tf->tf_ds = GSEL(GUDATA_SEL, SEL_UPL);
 	tf->tf_rip = (u_int64_t)catcher;
 	tf->tf_cs = GSEL(GUCODE_SEL, SEL_UPL);
-	tf->tf_rflags &= ~(PSL_T|PSL_VM|PSL_AC);
+	tf->tf_rflags &= ~PSL_CLEARSIG;
 	tf->tf_rsp = (u_int64_t)f;
 	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
-}
-
-void *
-linux_get_newtls(struct lwp *l)
-{
-	struct trapframe *tf = l->l_md.md_regs;
-
-	return (void *)tf->tf_r8;
-}
-
-int
-linux_set_newtls(struct lwp *l, void *tls)
-{
-	struct linux_sys_arch_prctl_args cup;
-	register_t retval;
-
-	SCARG(&cup, code) = LINUX_ARCH_SET_FS;
-	SCARG(&cup, addr) = (unsigned long)tls;
-
-	return linux_sys_arch_prctl(l, &cup, &retval);
 }

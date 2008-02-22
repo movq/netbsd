@@ -1,4 +1,4 @@
-/* $NetBSD: sig_machdep.c,v 1.14 2007/12/20 23:02:43 dsl Exp $	 */
+/* $NetBSD: sig_machdep.c,v 1.22 2017/05/22 16:53:05 ragge Exp $	 */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -57,11 +57,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  * 
@@ -83,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.14 2007/12/20 23:02:43 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.22 2017/05/22 16:53:05 ragge Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -94,62 +90,23 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.14 2007/12/20 23:02:43 dsl Exp $")
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/extent.h>
+#include <sys/cpu.h>
 #include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/time.h>
 #include <sys/signal.h>
-#include <sys/kernel.h>
-#include <sys/msgbuf.h>
-#include <sys/buf.h>
-#include <sys/mbuf.h>
-#include <sys/reboot.h>
-#include <sys/conf.h>
-#include <sys/device.h>
-#include <sys/exec.h>
-#include <sys/mount.h>
-#include <sys/syscallargs.h>
-#include <sys/ptrace.h>
-#include <sys/ksyms.h>
 
-#include <dev/cons.h>
-
-#if defined(COMPAT_13) || defined(COMPAT_ULTRIX)
-#include <compat/sys/signal.h>
-#include <compat/sys/signalvar.h>
-#endif
-
-#include <uvm/uvm_extern.h>
-#include <sys/sysctl.h>
-
-#include <machine/sid.h>
-#include <machine/pte.h>
-#include <machine/mtpr.h>
-#include <machine/cpu.h>
 #include <machine/macros.h>
-#include <machine/nexus.h>
-#include <machine/trap.h>
 #include <machine/reg.h>
-#include <machine/db_machdep.h>
-#include <machine/scb.h>
-#include <vax/vax/gencons.h>
 
 #ifdef DDB
+#include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
 #endif
-typedef vaddr_t (*sig_setupstack_t)(const ksiginfo_t *, const sigset_t *,
+
+typedef vaddr_t (*sig_setupstack_t)(const struct ksiginfo *, const sigset_t *,
 	int, struct lwp *, struct trapframe *, vaddr_t, int, vaddr_t);
 
-#if defined(COMPAT_13) || defined(COMPAT_ULTRIX) || defined(COMPAT_IBCS2)
-static vaddr_t setupstack_oldsigcontext(const ksiginfo_t *, const sigset_t *,
-	int, struct lwp *, struct trapframe *, vaddr_t, int, vaddr_t);
-#endif
-#if defined(COMPAT_16) || defined(COMPAT_ULTRIX)
-static vaddr_t setupstack_sigcontext2(const ksiginfo_t *, const sigset_t *,
-	int, struct lwp *, struct trapframe *, vaddr_t, int, vaddr_t);
-#endif
-static vaddr_t setupstack_siginfo3(const ksiginfo_t *, const sigset_t *,
+static vaddr_t setupstack_siginfo3(const struct ksiginfo *, const sigset_t *,
 	int, struct lwp *, struct trapframe *, vaddr_t, int, vaddr_t);
 
 const static sig_setupstack_t sig_setupstacks[] = {
@@ -167,216 +124,6 @@ const static sig_setupstack_t sig_setupstacks[] = {
 #endif
 	setupstack_siginfo3,		/* 3 */
 };
-
-#if defined(COMPAT_13) || defined(COMPAT_ULTRIX) || defined(COMPAT_IBCS2)
-int
-compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */
-	struct proc *p = l->l_proc;
-	struct trapframe *scf;
-	struct sigcontext13 *ucntx;
-	struct sigcontext13 ksc;
-	sigset_t mask;
-
-	scf = l->l_addr->u_pcb.framep;
-	ucntx = SCARG(uap, sigcntxp);
-	if (copyin((void *)ucntx, (void *)&ksc, sizeof(struct sigcontext)))
-		return EINVAL;
-
-	/* Compatibility mode? */
-	if ((ksc.sc_ps & (PSL_IPL | PSL_IS)) ||
-	    ((ksc.sc_ps & (PSL_U | PSL_PREVU)) != (PSL_U | PSL_PREVU)) ||
-	    (ksc.sc_ps & PSL_CM)) {
-		return (EINVAL);
-	}
-
-	mutex_enter(&p->p_smutex);
-	if (ksc.sc_onstack & SS_ONSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
-	else
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-
-	native_sigset13_to_sigset(&ksc.sc_mask, &mask);
-	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
-
-	scf->fp = ksc.sc_fp;
-	scf->ap = ksc.sc_ap;
-	scf->pc = ksc.sc_pc;
-	scf->sp = ksc.sc_sp;
-	scf->psl = ksc.sc_ps;
-	return (EJUSTRETURN);
-}
-
-struct otrampframe {
-	unsigned sig;	/* Signal number */
-	unsigned code;	/* Info code */
-	vaddr_t	scp;	/* Pointer to struct sigcontext */
-	unsigned r0, r1, r2, r3, r4, r5; /* Registers saved when interrupt */
-	register_t pc;	/* Address of signal handler */
-	vaddr_t	arg;	/* Pointer to first (and only) sigreturn argument */
-};
-
-static vaddr_t
-setupstack_oldsigcontext(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
-	struct lwp *l, struct trapframe *tf, vaddr_t sp, int onstack,
-	vaddr_t handler)
-{
-	struct sigcontext sigctx;
-	struct otrampframe tramp;
-	struct proc *p = l->l_proc;
-	bool error;
-
-	sigctx.sc_pc = tf->pc;
-	sigctx.sc_ps = tf->psl;
-	sigctx.sc_ap = tf->ap;
-	sigctx.sc_fp = tf->fp; 
-	sigctx.sc_sp = tf->sp; 
-	sigctx.sc_onstack = onstack ? SS_ONSTACK : 0;
-	sigctx.sc_mask = *mask;
-	sp -= sizeof(struct sigcontext);
-
-#if defined(COMPAT_13) || defined(COMPAT_ULTRIX)
-	native_sigset_to_sigset13(mask, &sigctx.__sc_mask13);
-#endif
-
-	tramp.sig = ksi->ksi_signo;
-	tramp.code = (register_t)ksi->ksi_addr;
-	/* Set up positions for structs on stack */
-	tramp.scp = sp;
-	/* r0..r5 are saved by the popr in the sigcode snippet but we need
-	   to zero them anyway.  */
-	tramp.r0 = tramp.r1 = tramp.r2 = tramp.r3 = tramp.r4 = tramp.r5 = 0;
-	tramp.pc = (register_t)handler;
-	tramp.arg = sp;
-	sendsig_reset(l, ksi->ksi_signo);
-	mutex_exit(&p->p_smutex);
-
-	/* Point stack pointer at pc in trampoline.  */
-	sp =- 8;
-
-	error = copyout(&tramp, (char *)tramp.scp - sizeof(tramp), sizeof(tramp)) != 0 ||
-	    copyout(&sigctx, (void *)tramp.scp, sizeof(sigctx)) != 0;
-
-	mutex_enter(&p->p_smutex);
-	if (error)
-		return 0;
-
-	return sp;
-}
-#endif /* COMPAT_13 || COMPAT_ULTRIX || COMPAT_IBCS2 */
-
-#if defined(COMPAT_16) || defined(COMPAT_ULTRIX)
-int
-compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigreturn14_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(struct sigcontext *) sigcntxp;
-	} */
-	struct proc *p = l->l_proc;
-	struct trapframe *scf;
-	struct sigcontext *ucntx;
-	struct sigcontext ksc;
-
-	scf = l->l_addr->u_pcb.framep;
-	ucntx = SCARG(uap, sigcntxp);
-
-	if (copyin((void *)ucntx, (void *)&ksc, sizeof(struct sigcontext)))
-		return EINVAL;
-	/* Compatibility mode? */
-	if ((ksc.sc_ps & (PSL_IPL | PSL_IS)) ||
-	    ((ksc.sc_ps & (PSL_U | PSL_PREVU)) != (PSL_U | PSL_PREVU)) ||
-	    (ksc.sc_ps & PSL_CM)) {
-		return (EINVAL);
-	}
-
-	mutex_enter(&p->p_smutex);
-	if (ksc.sc_onstack & SS_ONSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
-	else
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	/* Restore signal mask. */
-	(void) sigprocmask1(l, SIG_SETMASK, &ksc.sc_mask, 0);
-	mutex_exit(&p->p_smutex);
-
-	scf->fp = ksc.sc_fp;
-	scf->ap = ksc.sc_ap;
-	scf->pc = ksc.sc_pc;
-	scf->sp = ksc.sc_sp;
-	scf->psl = ksc.sc_ps;
-	return (EJUSTRETURN);
-}
-
-/*
- * Brief description of how sendsig() works:
- * A struct sigcontext is allocated on the user stack. The relevant
- * registers are saved in it. Below it is a struct trampframe constructed, it
- * is actually an argument list for callg. The user
- * stack pointer is put below all structs.
- *
- * The registers will contain when the signal handler is called:
- * pc, psl	- Obvious
- * sp		- An address below all structs
- * fp 		- The address of the signal handler
- * ap		- The address to the callg frame
- *
- * The trampoline code will save r0-r5 before doing anything else.
- */
-struct trampoline2 {
-	unsigned int narg;	/* Argument count (== 3) */
-	unsigned int sig;	/* Signal number */
-	unsigned int code;	/* Info code */
-	vaddr_t scp;		/* Pointer to struct sigcontext */
-};
-
-
-static vaddr_t
-setupstack_sigcontext2(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
-	struct lwp *l, struct trapframe *tf, vaddr_t sp, int onstack,
-	vaddr_t handler)
-{
-	struct trampoline2 tramp;
-	struct sigcontext sigctx;
-	struct proc *p = l->l_proc;
-	bool error;
-
-	/* The sigcontext struct will be passed back to sigreturn().  */
-	sigctx.sc_pc = tf->pc;
-	sigctx.sc_ps = tf->psl;
-	sigctx.sc_ap = tf->ap;
-	sigctx.sc_fp = tf->fp;
-	sigctx.sc_sp = tf->sp;
-	sigctx.sc_onstack = onstack ? SS_ONSTACK : 0;
-	sigctx.sc_mask = *mask;
-	sp -= sizeof(struct sigcontext);
-
-	/* Arguments given to the signal handler.  */
-	tramp.narg = 3;
-	tramp.sig = ksi->ksi_signo;
-	tramp.code = (register_t)ksi->ksi_addr;
-	tramp.scp = sp;
-	sp -= sizeof(tramp);
-	sendsig_reset(l, ksi->ksi_signo);
-	mutex_exit(&p->p_smutex);
-
-	/* Store the handler in the trapframe.  */
-	tf->fp = handler;
-
-	/* Copy out the sigcontext and trampoline.  */
-	error = (copyout(&sigctx, (char *)tramp.scp, sizeof(sigctx)) != 0 ||
-	    copyout(&tramp, (char *)sp, sizeof(tramp)) != 0);
-
-	mutex_enter(&p->p_smutex);
-	if (error)
-		return 0;
-
-	/* return updated stack pointer */
-	return sp;
-}
-#endif	/* COMPAT_16 || COMPAT_ULTRIX */
 
 /*
  * Brief description of how sendsig() works:
@@ -401,12 +148,12 @@ struct trampoline3 {
 };
 
 static vaddr_t
-setupstack_siginfo3(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
+setupstack_siginfo3(const struct ksiginfo *ksi, const sigset_t *mask, int vers,
 	struct lwp *l, struct trapframe *tf, vaddr_t sp, int onstack,
 	vaddr_t handler)
 {
 	struct trampoline3 tramp;
-	struct proc *p = l->l_proc;
+	struct proc * const p = l->l_proc;
 	ucontext_t uc;
 	bool error;
 
@@ -425,17 +172,17 @@ setupstack_siginfo3(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
 	uc.uc_link = l->l_ctxlink;
 	memset(&uc.uc_stack, 0, sizeof(uc.uc_stack));
 	sendsig_reset(l, ksi->ksi_signo);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	cpu_getmcontext(l, &uc.uc_mcontext, &uc.uc_flags);
 
-	tf->fp = handler;
+	tf->tf_fp = handler;
 
 	/* Copy the context to the stack.  */
 	error = (copyout(&uc, (char *)tramp.ucp, sizeof(uc)) != 0 ||
 	    copyout(&ksi->ksi_info, (char *)tramp.sip, sizeof(ksi->ksi_info)) != 0 ||
 	    copyout(&tramp, (char *)sp, sizeof(tramp)) != 0);
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (error)
 		sigexit(l, SIGILL);
 
@@ -443,13 +190,13 @@ setupstack_siginfo3(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
 };
 
 void
-sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
+sendsig_sighelper(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	struct lwp *l = curlwp;
-	struct proc *p = l->l_proc;
-	struct trapframe *tf = l->l_addr->u_pcb.framep;
-	struct sigaltstack *ss = &l->l_sigstk;
-	const struct sigact_sigdesc *sd =
+	struct lwp * const l = curlwp;
+	struct proc * const p = l->l_proc;
+	struct trapframe * const tf = l->l_md.md_utf;
+	struct sigaltstack * const ss = &l->l_sigstk;
+	const struct sigact_sigdesc * const sd =
 	    &p->p_sigacts->sa_sigdesc[ksi->ksi_signo];
 	vaddr_t sp;
 	int onstack;
@@ -458,7 +205,7 @@ sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	/* Figure what stack we are running on.  */
 	onstack = (ss->ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 	    (sd->sd_sigact.sa_flags & SA_ONSTACK) != 0;
-	sp = onstack ? ((vaddr_t)ss->ss_sp + ss->ss_size) : tf->sp;
+	sp = onstack ? ((vaddr_t)ss->ss_sp + ss->ss_size) : tf->tf_sp;
 
 	if (sd->sd_vers > 3 || (setup = sig_setupstacks[sd->sd_vers]) == NULL)
 		goto nosupport;
@@ -469,13 +216,13 @@ sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 		goto nosupport;
 
 	if (sd->sd_vers == 0)
-		tf->pc = (register_t)p->p_sigctx.ps_sigcode;
+		tf->tf_pc = (register_t)p->p_sigctx.ps_sigcode;
 	else
-		tf->pc = (register_t)sd->sd_tramp;
+		tf->tf_pc = (register_t)sd->sd_tramp;
 
-	tf->psl = PSL_U | PSL_PREVU;
-	tf->sp = sp;
-	tf->ap = sp;
+	tf->tf_psl = PSL_U | PSL_PREVU;
+	tf->tf_sp = sp;
+	tf->tf_ap = sp;
 
 	if (onstack)
 		ss->ss_flags |= SS_ONSTACK;

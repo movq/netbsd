@@ -1,9 +1,14 @@
-#	$NetBSD: Makefile,v 1.12 2003/07/10 10:34:16 lukem Exp $
+#	$NetBSD: Makefile,v 1.14 2017/02/11 03:07:06 christos Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 .include <bsd.kernobj.mk>
+
+.if ${MKREPRO_TIMESTAMP:Uno} != "no"
+MAKEFS_TIMESTAMP=-T "${MKREPRO_TIMESTAMP}"
+PAX_TIMESTAMP=--timestamp "${MKREPRO_TIMESTAMP}"
+.endif
 
 INSTKERNOBJ!=	cd ${.CURDIR}/../ramdisk-kernel && ${PRINTOBJDIR}
 
@@ -24,11 +29,11 @@ boot.vax: ${DESTDIR}/usr/mdec/boot
 
 ${IMAGE}: ${IMAGEDEPENDS}
 	cat ${XXBOOT} > ${IMAGE}.tmp
-	${TOOL_PAX} -O -w -x ustar boot.vax netbsd.gz | dd of=${IMAGE}.tmp seek=16
+	${TOOL_PAX} ${PAX_TIMESTAMP} -O -w -x ustar boot.vax netbsd.gz | dd of=${IMAGE}.tmp seek=16
 	dd if=${IMAGE}.tmp of=${IMAGE} bs=${IMAGESIZE} conv=sync
 
 release: check_RELEASEDIR .WAIT ${IMAGE}
 	${RELEASE_INSTALL} ${IMAGE} \
-	    ${RELEASEDIR}/${MACHINE}/installation/bootfs
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/bootfs
 
 .include <bsd.prog.mk>

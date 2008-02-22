@@ -1,4 +1,4 @@
-/*	$NetBSD: iyonix_pci.c,v 1.5 2007/10/17 19:55:03 garbled Exp $	*/
+/*	$NetBSD: iyonix_pci.c,v 1.8 2014/03/29 19:28:28 christos Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -40,14 +40,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iyonix_pci.c,v 1.5 2007/10/17 19:55:03 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iyonix_pci.c,v 1.8 2014/03/29 19:28:28 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <iyonix/iyonix/iyonixreg.h>
 #include <iyonix/iyonix/iyonixvar.h>
@@ -61,8 +61,9 @@ __KERNEL_RCSID(0, "$NetBSD: iyonix_pci.c,v 1.5 2007/10/17 19:55:03 garbled Exp $
 #include <sys/extent.h>
 #include <dev/pci/pciconf.h>
 
-int	iyonix_pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
-const char *iyonix_pci_intr_string(void *, pci_intr_handle_t);
+int	iyonix_pci_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
+const char *iyonix_pci_intr_string(void *, pci_intr_handle_t, char *, size_t);
 const struct evcnt *iyonix_pci_intr_evcnt(void *, pci_intr_handle_t);
 void	*iyonix_pci_intr_establish(void *, pci_intr_handle_t,
 	    int, int (*func)(void *), void *);
@@ -83,7 +84,7 @@ iyonix_pci_init(pci_chipset_tag_t pc, void *cookie)
 }
 
 int
-iyonix_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+iyonix_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	struct i80321_softc *sc = pa->pa_pc->pc_intr_v;
 	int b, d, f;
@@ -130,10 +131,11 @@ iyonix_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 }
 
 const char *
-iyonix_pci_intr_string(void *v, pci_intr_handle_t ih)
+iyonix_pci_intr_string(void *v, pci_intr_handle_t ih, char *buf, size_t len)
 {
 
-	return (i80321_irqnames[ih]);
+	strlcpy(buf, i80321_irqnames[ih], len);
+	return buf;
 }
 
 const struct evcnt *

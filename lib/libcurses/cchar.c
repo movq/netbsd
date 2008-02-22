@@ -1,4 +1,4 @@
-/*   $NetBSD: cchar.c,v 1.3 2007/05/29 11:10:56 blymn Exp $ */
+/*   $NetBSD: cchar.c,v 1.6 2017/01/06 13:53:18 roy Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cchar.c,v 1.3 2007/05/29 11:10:56 blymn Exp $");
+__RCSID("$NetBSD: cchar.c,v 1.6 2017/01/06 13:53:18 roy Exp $");
 #endif						  /* not lint */
 
 #include <string.h>
@@ -46,11 +46,11 @@ __RCSID("$NetBSD: cchar.c,v 1.3 2007/05/29 11:10:56 blymn Exp $");
 
 /*
  * getcchar --
- *	get a wide character string and rendition from a cchar_t
+ *	get a wide-character string and rendition from a cchar_t
  */
 int
 getcchar(const cchar_t *wcval, wchar_t *wch, attr_t *attrs,
-					 short *color_pair, void *opts)
+         short *color_pair, void *opts)
 {
 #ifndef HAVE_WCHAR
 	return ERR;
@@ -58,20 +58,20 @@ getcchar(const cchar_t *wcval, wchar_t *wch, attr_t *attrs,
 	wchar_t *wp;
 	size_t len;
 
-	if ( opts )
+	if (opts)
 		return ERR;
 
 	len = (wp = wmemchr(wcval->vals, L'\0', CCHARW_MAX))
 		? wp - wcval->vals : CCHARW_MAX;
 
 	if (wch == NULL)
-		return (int) len;
+		return (int)len;
 	if (attrs == 0 || color_pair == 0)
 		return ERR;
 	if (len > 0) {
 		*attrs = wcval->attributes;
-		*color_pair = COLOR_PAIR( wcval -> attributes );
-		wmemcpy(wch, wcval->vals, (unsigned) len);
+		*color_pair = COLOR_PAIR(wcval ->attributes);
+		wmemcpy(wch, wcval->vals, (unsigned)len);
 		wch[len] = L'\0';
 	}
 	return OK;
@@ -80,11 +80,11 @@ getcchar(const cchar_t *wcval, wchar_t *wch, attr_t *attrs,
 
 /*
  * setcchar --
- *	set cchar_t from a wide character string and rendition
+ *	set cchar_t from a wide-character string and rendition
  */
 int
 setcchar(cchar_t *wcval, const wchar_t *wch, const attr_t attrs,
-					 short color_pair, const void *opts)
+	 short color_pair, const void *opts)
 {
 #ifndef HAVE_WCHAR
 	return ERR;
@@ -110,11 +110,29 @@ setcchar(cchar_t *wcval, const wchar_t *wch, const attr_t attrs,
 
 	memset(wcval, 0, sizeof(*wcval));
 	if (len != 0) {
-		wcval -> attributes = attrs | color_pair;
-		wcval -> elements = 1;
+		wcval->attributes = attrs | color_pair;
+		wcval->elements = 1;
 		memcpy(&wcval->vals, wch, len * sizeof(wchar_t));
 	}
 
 	return OK;
 #endif /* HAVE_WCHAR */
+}
+
+void
+__cursesi_chtype_to_cchar(chtype in, cchar_t *out)
+{
+	unsigned int idx;
+
+	if (in & __ACS_IS_WACS) {
+		idx = in & __CHARTEXT;
+		if (idx < NUM_ACS) {
+			memcpy(out, &_wacs_char[idx], sizeof(cchar_t));
+			out->attributes |= in & __ATTRIBUTES;
+			return;
+		}
+	}
+	out->vals[0] = in & __CHARTEXT;
+	out->attributes = in & __ATTRIBUTES;
+	out->elements = 1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.306 2008/02/09 16:59:48 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.566 2018/06/26 06:50:52 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -39,6 +39,10 @@
 #ifndef _SYS_PARAM_H_
 #define	_SYS_PARAM_H_
 
+#ifdef _KERNEL_OPT
+#include "opt_param.h"
+#endif
+
 /*
  * Historic BSD #defines -- probably will remain untouched for all time.
  */
@@ -63,7 +67,7 @@
  *	2.99.9		(299000900)
  */
 
-#define	__NetBSD_Version__	499005400	/* NetBSD 4.99.54 */
+#define	__NetBSD_Version__	899002100	/* NetBSD 8.99.21 */
 
 #define __NetBSD_Prereq__(M,m,p) (((((M) * 100000000) + \
     (m) * 1000000) + (p) * 100) <= __NetBSD_Version__)
@@ -82,18 +86,30 @@
 
 #define	NetBSD	199905		/* NetBSD version (year & month). */
 
+/*
+ * There macros determine if we are running in protected mode or not.
+ *   _HARDKERNEL: code uses kernel namespace and runs in hw priviledged mode
+ *   _SOFTKERNEL: code uses kernel namespace but runs without hw priviledges
+ */
+#if defined(_KERNEL) && !defined(_RUMPKERNEL)
+#define _HARDKERNEL
+#endif
+#if defined(_KERNEL) && defined(_RUMPKERNEL)
+#define _SOFTKERNEL
+#endif
+
 #include <sys/null.h>
 
-#ifndef _LOCORE
+#ifndef __ASSEMBLER__
 #include <sys/inttypes.h>
 #include <sys/types.h>
-#endif
 
 /*
  * Machine-independent constants (some used in following include files).
  * Redefined constants are from POSIX 1003.1 limits file.
  *
  * MAXCOMLEN should be >= sizeof(ac_comm) (see <acct.h>)
+ * MAXHOSTNAMELEN should be >= (_POSIX_HOST_NAME_MAX + 1) (see <limits.h>)
  * MAXLOGNAME should be >= UT_NAMESIZE (see <utmp.h>)
  */
 #include <sys/syslimits.h>
@@ -118,6 +134,10 @@
 #endif /* (MAXUPRC - 0) < CHILD_MAX */
 #endif /* !defined(MAXUPRC) */
 
+/* Macros for min/max. */
+#define	MIN(a,b)	((/*CONSTCOND*/(a)<(b))?(a):(b))
+#define	MAX(a,b)	((/*CONSTCOND*/(a)>(b))?(a):(b))
+
 /* More types and definitions used throughout the kernel. */
 #ifdef _KERNEL
 #include <sys/cdefs.h>
@@ -126,6 +146,7 @@
 #include <sys/resource.h>
 #include <sys/ucred.h>
 #include <sys/uio.h>
+#include <uvm/uvm_param.h>
 #ifndef NPROC
 #define	NPROC	(20 + 16 * MAXUSERS)
 #endif
@@ -136,6 +157,13 @@
 #define	NVNODE	(NPROC + NTEXT + 100)
 #define	NVNODE_IMPLICIT
 #endif
+#ifndef VNODE_KMEM_MAXPCT
+#define	VNODE_KMEM_MAXPCT	60
+#endif
+#ifndef BUFCACHE_VA_MAXPCT
+#define	BUFCACHE_VA_MAXPCT	20
+#endif
+#define	VNODE_COST	2048			/* assumed space in bytes */
 #endif /* _KERNEL */
 
 /* Signals. */
@@ -157,6 +185,9 @@
 #define	dbtob(x)	((x) << DEV_BSHIFT)
 #define	btodb(x)	((x) >> DEV_BSHIFT)
 
+#ifndef COHERENCY_UNIT
+#define	COHERENCY_UNIT		64
+#endif
 #ifndef CACHE_LINE_SIZE
 #define	CACHE_LINE_SIZE		64
 #endif
@@ -181,6 +212,11 @@
  * allocated memory.
  */
 #if defined(_KERNEL) || defined(__EXPOSE_STACK)
+
+#ifndef STACK_ALIGNBYTES
+#define STACK_ALIGNBYTES	__ALIGNBYTES
+#endif
+
 #ifdef __MACHINE_STACK_GROWS_UP
 #define	STACK_GROW(sp, _size)		(((char *)(void *)(sp)) + (_size))
 #define	STACK_SHRINK(sp, _size)		(((char *)(void *)(sp)) - (_size))
@@ -196,7 +232,28 @@
 #define	STACK_ALLOC(sp, _size)		(((char *)(void *)(sp)) - (_size))
 #define	STACK_MAX(p, _size)		((char *)(void *)(p))
 #endif
+#define	STACK_LEN_ALIGN(len, bytes)	(((len) + (bytes)) & ~(bytes))
+
 #endif /* defined(_KERNEL) || defined(__EXPOSE_STACK) */
+
+/*
+ * Round p (pointer or byte index) up to a correctly-aligned value for all
+ * data types (int, long, ...).   The result is u_int and must be cast to
+ * any desired pointer type.
+ *
+ * ALIGNED_POINTER is a boolean macro that checks whether an address
+ * is valid to fetch data elements of type t from on this architecture.
+ * This does not reflect the optimal alignment, just the possibility
+ * (within reasonable limits).
+ *
+ */
+#define ALIGNBYTES	__ALIGNBYTES
+#ifndef ALIGN
+#define	ALIGN(p)		(((uintptr_t)(p) + ALIGNBYTES) & ~ALIGNBYTES)
+#endif
+#ifndef ALIGNED_POINTER
+#define	ALIGNED_POINTER(p,t)	((((uintptr_t)(p)) & (sizeof(t) - 1)) == 0)
+#endif
 
 /*
  * Historic priority levels.  These are meaningless and remain only
@@ -272,12 +329,6 @@
 #define	CMASK	022		/* default file mask: S_IWGRP|S_IWOTH */
 #define	NODEV	(dev_t)(-1)	/* non-existent device */
 
-#define	CBLOCK	64		/* Clist block size, must be a power of 2. */
-#define	CBQSIZE	(CBLOCK/NBBY)	/* Quote bytes/cblock - can do better. */
-				/* Data chars/clist. */
-#define	CBSIZE	(CBLOCK - (int)sizeof(struct cblock *) - CBQSIZE)
-#define	CROUND	(CBLOCK - 1)	/* Clist rounding. */
-
 /*
  * File system parameters and macros.
  *
@@ -300,9 +351,20 @@
  * maximum number of symbolic links that may be expanded in a path name.
  * It should be set high enough to allow all legitimate uses, but halt
  * infinite loops reasonably quickly.
+ *
+ * MAXSYMLINKS should be >= _POSIX_SYMLOOP_MAX (see <limits.h>)
  */
 #define	MAXPATHLEN	PATH_MAX
 #define	MAXSYMLINKS	32
+
+/*
+ * This is the maximum individual filename component length enforced by
+ * namei. Filesystems cannot exceed this limit. The upper bound for that
+ * limit is NAME_MAX. We don't bump it for now, for compatibility with
+ * old binaries during the time where MAXNAMLEN was 511 and NAME_MAX was
+ * 255
+ */
+#define	KERNEL_NAME_MAX	255
 
 /* Bit map related macros. */
 #define	setbit(a,i)	((a)[(i)/NBBY] |= 1<<((i)%NBBY))
@@ -316,12 +378,26 @@
 #endif
 #define	roundup(x, y)	((((x)+((y)-1))/(y))*(y))
 #define	rounddown(x,y)	(((x)/(y))*(y))
-#define	roundup2(x, m)	(((x) + m - 1) & ~(m - 1))
-#define	powerof2(x)	((((x)-1)&(x))==0)
 
-/* Macros for min/max. */
-#define	MIN(a,b)	(((a)<(b))?(a):(b))
-#define	MAX(a,b)	(((a)>(b))?(a):(b))
+/*
+ * Rounding to powers of two.  The naive definitions of roundup2 and
+ * rounddown2,
+ *
+ *	#define	roundup2(x,m)	(((x) + ((m) - 1)) & ~((m) - 1))
+ *	#define	rounddown2(x,m)	((x) & ~((m) - 1)),
+ *
+ * exhibit a quirk of integer arithmetic in C because the complement
+ * happens in the type of m, not in the type of x.  So if unsigned int
+ * is 32-bit, and m is an unsigned int while x is a uint64_t, then
+ * roundup2 and rounddown2 would have the unintended effect of clearing
+ * the upper 32 bits of the result(!).  These definitions avoid the
+ * pitfalls of C arithmetic depending on the types of x and m, and
+ * additionally avoid multiply evaluating their arguments.
+ */
+#define	roundup2(x,m)	((((x) - 1) | ((m) - 1)) + 1)
+#define	rounddown2(x,m)	((x) & ~((__typeof__(x))((m) - 1)))
+
+#define	powerof2(x)	((((x)-1)&(x))==0)
 
 /*
  * Constants for setting the parameters of the kernel memory allocator.
@@ -401,6 +477,12 @@
 	    ((t +0u) / hz) * 1000u : \
 	    ((t +0u) * 1000u) / hz)
 #endif
+
+#define	hz2bintime(t)	(ms2bintime(hztoms(t)))
+
+extern const int schedppq;
+extern size_t coherency_unit;
+
 #endif /* _KERNEL */
 
 /*
@@ -411,5 +493,6 @@
 #ifndef MIN_LWP_ALIGNMENT
 #define	MIN_LWP_ALIGNMENT	32
 #endif
+#endif /* !__ASSEMBLER__ */
 
 #endif /* !_SYS_PARAM_H_ */

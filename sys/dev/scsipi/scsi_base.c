@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_base.c,v 1.87 2006/11/16 01:33:26 christos Exp $	*/
+/*	$NetBSD: scsi_base.c,v 1.92 2017/06/17 22:35:50 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsi_base.c,v 1.87 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsi_base.c,v 1.92 2017/06/17 22:35:50 mlelstv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: scsi_base.c,v 1.87 2006/11/16 01:33:26 christos Exp 
 #include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsipi_base.h>
 
+static void scsi_print_xfer_mode(struct scsipi_periph *);
 /*
  * Do a scsi operation, asking a device to run as SCSI-II if it can.
  */
@@ -108,8 +102,8 @@ scsi_print_addr(struct scsipi_periph *periph)
 	struct scsipi_adapter *adapt = chan->chan_adapter;
 
 	printf("%s(%s:%d:%d:%d): ", periph->periph_dev != NULL ?
-	    periph->periph_dev->dv_xname : "probe",
-	    adapt->adapt_dev->dv_xname,
+	    device_xname(periph->periph_dev) : "probe",
+	    device_xname(adapt->adapt_dev),
 	    chan->chan_channel, periph->periph_target,
 	    periph->periph_lun);
 }
@@ -117,9 +111,161 @@ scsi_print_addr(struct scsipi_periph *periph)
 /*
  * Kill off all pending xfers for a periph.
  *
- * Must be called at splbio().
+ * Must be called with channel lock held
  */
 void
 scsi_kill_pending(struct scsipi_periph *periph)
 {
+	struct scsipi_xfer *xs;
+
+	TAILQ_FOREACH(xs, &periph->periph_xferq, device_q) {
+		callout_stop(&xs->xs_callout);
+		scsi_print_addr(periph);
+		printf("killed ");
+		scsipi_print_cdb(xs->cmd);
+		xs->error = XS_DRIVER_STUFFUP;
+		scsipi_done(xs);
+	}
+}
+
+/*
+ * scsi_print_xfer_mode:
+ *
+ *	Print a parallel SCSI periph's capabilities.
+ */
+static void
+scsi_print_xfer_mode(struct scsipi_periph *periph)
+{
+	int period, freq, speed, mbs;
+
+	aprint_normal_dev(periph->periph_dev, "");
+	if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
+		period = scsipi_sync_factor_to_period(periph->periph_period);
+		aprint_normal("sync (%d.%02dns offset %d)",
+		    period / 100, period % 100, periph->periph_offset);
+	} else
+		aprint_normal("async");
+
+	if (periph->periph_mode & PERIPH_CAP_WIDE32)
+		aprint_normal(", 32-bit");
+	else if (periph->periph_mode & (PERIPH_CAP_WIDE16 | PERIPH_CAP_DT))
+		aprint_normal(", 16-bit");
+	else
+		aprint_normal(", 8-bit");
+
+	if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
+		freq = scsipi_sync_factor_to_freq(periph->periph_period);
+		speed = freq;
+		if (periph->periph_mode & PERIPH_CAP_WIDE32)
+			speed *= 4;
+		else if (periph->periph_mode &
+		    (PERIPH_CAP_WIDE16 | PERIPH_CAP_DT))
+			speed *= 2;
+		mbs = speed / 1000;
+		if (mbs > 0) {
+			aprint_normal(" (%d.%03dMB/s)", mbs,
+			    speed % 1000);
+		} else
+			aprint_normal(" (%dKB/s)", speed % 1000);
+	}
+
+	aprint_normal(" transfers");
+
+	if (periph->periph_mode & PERIPH_CAP_TQING)
+		aprint_normal(", tagged queueing");
+
+	aprint_normal("\n");
+}
+
+/*
+ * scsi_async_event_xfer_mode:
+ *
+ *	Update the xfer mode for all parallel SCSI periphs sharing the
+ *	specified I_T Nexus.
+ */
+void
+scsi_async_event_xfer_mode(struct scsipi_channel *chan, void *arg)
+{
+	struct scsipi_xfer_mode *xm = arg;
+	struct scsipi_periph *periph;
+	int lun, announce, mode, period, offset;
+
+	for (lun = 0; lun < chan->chan_nluns; lun++) {
+		periph = scsipi_lookup_periph_locked(chan, xm->xm_target, lun);
+		if (periph == NULL)
+			continue;
+		announce = 0;
+
+		/*
+		 * Clamp the xfer mode down to this periph's capabilities.
+		 */
+		mode = xm->xm_mode & periph->periph_cap;
+		if (mode & PERIPH_CAP_SYNC) {
+			period = xm->xm_period;
+			offset = xm->xm_offset;
+		} else {
+			period = 0;
+			offset = 0;
+		}
+
+		/*
+		 * If we do not have a valid xfer mode yet, or the parameters
+		 * are different, announce them.
+		 */
+		if ((periph->periph_flags & PERIPH_MODE_VALID) == 0 ||
+		    periph->periph_mode != mode ||
+		    periph->periph_period != period ||
+		    periph->periph_offset != offset)
+			announce = 1;
+
+		periph->periph_mode = mode;
+		periph->periph_period = period;
+		periph->periph_offset = offset;
+		periph->periph_flags |= PERIPH_MODE_VALID;
+
+		if (announce)
+			scsi_print_xfer_mode(periph);
+	}
+}
+
+/*
+ * scsipi_async_event_xfer_mode:
+ *
+ *	Update the xfer mode for all SAS/FC periphs sharing the
+ *	specified I_T Nexus.
+ */
+void
+scsi_fc_sas_async_event_xfer_mode(struct scsipi_channel *chan, void *arg)
+{
+	struct scsipi_xfer_mode *xm = arg;
+	struct scsipi_periph *periph;
+	int lun, announce, mode;
+
+	for (lun = 0; lun < chan->chan_nluns; lun++) {
+		periph = scsipi_lookup_periph_locked(chan, xm->xm_target, lun);
+		if (periph == NULL)
+			continue;
+		announce = 0;
+
+		/*
+		 * Clamp the xfer mode down to this periph's capabilities.
+		 */
+		mode = xm->xm_mode & periph->periph_cap;
+		/*
+		 * If we do not have a valid xfer mode yet, or the parameters
+		 * are different, announce them.
+		 */
+		if ((periph->periph_flags & PERIPH_MODE_VALID) == 0 ||
+		    periph->periph_mode != mode)
+			announce = 1;
+
+		periph->periph_mode = mode;
+		periph->periph_flags |= PERIPH_MODE_VALID;
+
+		if (announce &&
+		    (periph->periph_mode & PERIPH_CAP_TQING) != 0) {
+			aprint_normal_dev(periph->periph_dev,
+			    "tagged queueing\n");
+		}
+	}
 }

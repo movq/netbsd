@@ -20,7 +20,15 @@ _proxy:*:21:
 _timedc:*:22:
 _sdpd:*:23:
 _httpd:*:24:
+_mdnsd:*:25:
+_tests:*:26:
+_tcpdump:*:27:
+_tss:*:28:
+_gpio:*:29:
+_rtadvd:*:30:
 guest:*:31:root
+_unbound:*:32:
+_nsd:*:33:
 nobody:*:39:
 utmp:*:45:
 authpf:*:72:

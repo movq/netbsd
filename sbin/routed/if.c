@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.26 2007/08/14 03:39:19 dyoung Exp $	*/
+/*	$NetBSD: if.c,v 1.31 2017/10/02 11:02:19 maya Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -37,7 +37,7 @@
 #include "pathnames.h"
 
 #ifdef __NetBSD__
-__RCSID("$NetBSD: if.c,v 1.26 2007/08/14 03:39:19 dyoung Exp $");
+__RCSID("$NetBSD: if.c,v 1.31 2017/10/02 11:02:19 maya Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
@@ -286,7 +286,7 @@ iflookup(naddr addr)
 naddr					/* host byte order */
 std_mask(naddr addr)			/* network byte order */
 {
-	NTOHL(addr);			/* was a host, not a network */
+	addr = ntohl(addr);		/* was a host, not a network */
 
 	if (addr == 0)			/* default route has mask 0 */
 		return 0;
@@ -374,7 +374,7 @@ ripv1_mask_host(naddr addr,		/* in network byte order */
 int					/* 0=bad */
 check_dst(naddr addr)
 {
-	NTOHL(addr);
+	addr = ntohl(addr);
 
 	if (IN_CLASSA(addr)) {
 		if (addr == 0)
@@ -641,6 +641,9 @@ rt_xaddrs(struct rt_addrinfo *info,
 #ifdef _HAVE_SA_LEN
 	static struct sockaddr sa_zero;
 #endif
+#if defined(__NetBSD__) && defined(RT_ROUNDUP)
+#define ROUNDUP(a) RT_ROUNDUP(a)
+#else
 #ifdef sgi
 #define ROUNDUP(a) ((a) > 0 ? (1 + (((a) - 1) | (sizeof(__uint64_t) - 1))) \
 		    : sizeof(__uint64_t))
@@ -648,6 +651,7 @@ rt_xaddrs(struct rt_addrinfo *info,
 #define ROUNDUP(a) ((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) \
 		    : sizeof(long))
 #endif
+#endif /* defined(__NetBSD__) && defined(RT_ROUNDUP) */
 
 
 	memset(info, 0, sizeof(*info));
@@ -693,7 +697,7 @@ ifinit(void)
 	struct rt_entry *rt;
 	size_t needed;
 	int mib[6];
-	struct if_msghdr *ifm;
+	struct if_msghdr ifm;
 	struct ifa_msghdr *ifam, *ifam_lim, *ifam2;
 	int in, ierr, out, oerr;
 	struct intnet *intnetp;
@@ -751,25 +755,24 @@ ifinit(void)
 		if (ifam->ifam_type == RTM_IFINFO) {
 			const struct sockaddr_dl *sdl;
 
-			ifm = (struct if_msghdr *)ifam;
+			memcpy(&ifm, ifam, sizeof ifm);
 			/* make prototype structure for the IP aliases
 			 */
 			memset(&ifs0, 0, sizeof(ifs0));
 			ifs0.int_rip_sock = -1;
-			ifs0.int_index = ifm->ifm_index;
-			ifs0.int_if_flags = ifm->ifm_flags;
+			ifs0.int_index = ifm.ifm_index;
+			ifs0.int_if_flags = ifm.ifm_flags;
 			ifs0.int_state = IS_CHECKED;
 			ifs0.int_query_time = NEVER;
 			ifs0.int_act_time = now.tv_sec;
 			ifs0.int_data.ts = now.tv_sec;
-			ifs0.int_data.ipackets = ifm->ifm_data.ifi_ipackets;
-			ifs0.int_data.ierrors = ifm->ifm_data.ifi_ierrors;
-			ifs0.int_data.opackets = ifm->ifm_data.ifi_opackets;
-			ifs0.int_data.oerrors = ifm->ifm_data.ifi_oerrors;
-#ifdef sgi
-			ifs0.int_data.odrops = ifm->ifm_data.ifi_odrops;
-#endif
-			sdl = (const struct sockaddr_dl *)(ifm + 1);
+			ifs0.int_data.ipackets = ifm.ifm_data.ifi_ipackets;
+			ifs0.int_data.ierrors = ifm.ifm_data.ifi_ierrors;
+			ifs0.int_data.opackets = ifm.ifm_data.ifi_opackets;
+			ifs0.int_data.oerrors = ifm.ifm_data.ifi_oerrors;
+
+			sdl = (const struct sockaddr_dl *)
+				((struct if_msghdr *)ifam + 1);
 			/* NUL-termination by memset, above. */
 			memcpy(ifs0.int_name, sdl->sdl_data,
 				MIN(sizeof(ifs0.int_name) - 1, sdl->sdl_nlen));
@@ -981,9 +984,10 @@ ifinit(void)
 				} else if (now.tv_sec>(ifp->int_data.ts
 						       + CHECK_BAD_INTERVAL)) {
 					trace_act("interface %s has been off"
-						  " %ld seconds; forget it",
+						  " %lld seconds; forget it",
 						  ifp->int_name,
-						  now.tv_sec-ifp->int_data.ts);
+						  (long long)now.tv_sec -
+						  ifp->int_data.ts);
 					ifdel(ifp);
 					ifp = 0;
 				}
@@ -1005,16 +1009,7 @@ ifinit(void)
 			ierr = ifs.int_data.ierrors - ifp->int_data.ierrors;
 			out = ifs.int_data.opackets - ifp->int_data.opackets;
 			oerr = ifs.int_data.oerrors - ifp->int_data.oerrors;
-#ifdef sgi
-			/* Through at least IRIX 6.2, PPP and SLIP
-			 * count packets dropped by the filters.
-			 * But FDDI rings stuck non-operational count
-			 * dropped packets as they wait for improvement.
-			 */
-			if (!(ifp->int_if_flags & IFF_POINTOPOINT))
-				oerr += (ifs.int_data.odrops
-					 - ifp->int_data.odrops);
-#endif
+
 			/* If the interface just awoke, restart the counters.
 			 */
 			if (ifp->int_data.ts == 0) {

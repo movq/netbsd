@@ -1,11 +1,11 @@
-/*	$NetBSD: sl811hsreg.h,v 1.2 2007/08/15 03:53:10 kiyohara Exp $	*/
+/*	$NetBSD: sl811hsreg.h,v 1.6 2016/09/24 15:06:29 skrll Exp $	*/
 
 /*
  * Not (c) 2007 Matthew Orgass
- * This file is public domain, meaning anyone can make any use of part or all 
- * of this file including copying into other works without credit.  Any use, 
- * modified or not, is solely the responsibility of the user.  If this file is 
- * part of a collection then use in the collection is governed by the terms of 
+ * This file is public domain, meaning anyone can make any use of part or all
+ * of this file including copying into other works without credit.  Any use,
+ * modified or not, is solely the responsibility of the user.  If this file is
+ * part of a collection then use in the collection is governed by the terms of
  * the collection.
  */
 
@@ -13,8 +13,9 @@
  * ScanLogic SL811HS USB Host Controller
  */
 
-/* note: pcmcia attachment uses 4 byte port with data repeated the last three 
- * bytes; using 0x2 instead of 0x1 solves bus corruption on the Vadem Clio 
+/*
+ * note: pcmcia attachment uses 4 byte port with data repeated the last three
+ * bytes; using 0x2 instead of 0x1 solves bus corruption on the Vadem Clio
  * C-1000.  The main driver does not use these IDX and PORT values.
  */
 #define SL11_IDX_ADDR	(0x00)
@@ -75,8 +76,21 @@
 #define SL11_EPSTAT_OVERFLOW	(0x20)
 #define SL11_EPSTAT_NAK		(0x40)
 #define SL11_EPSTAT_STALL	(0x80)
-#define SL11_EPSTAT_STATBITS	(0xf7)
-#define SL11_EPSTAT_ERRBITS	(0xf6)
+#define SL11_EPSTAT_STATBITS	( \
+    SL11_EPSTAT_ACK | \
+    SL11_EPSTAT_ERROR | \
+    SL11_EPSTAT_TIMEOUT | \
+    SL11_EPSTAT_SETUP | \
+    SL11_EPSTAT_OVERFLOW | \
+    SL11_EPSTAT_NAK | \
+    SL11_EPSTAT_STALL \
+    )
+#define SL11_EPSTAT_ERRBITS	( \
+    SL11_EPSTAT_ERROR | \
+    SL11_EPSTAT_TIMEOUT | \
+    SL11_EPSTAT_NAK | \
+    SL11_EPSTAT_STALL \
+    )
 
 #define SL11_CTRL_ENABLESOF	(0x01)
 /* #define SL11_CTRL_EOF2		(0x04) XXX ? Reserved in 1.5 */

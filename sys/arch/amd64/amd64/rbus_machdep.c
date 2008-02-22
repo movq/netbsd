@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.1 2005/12/21 22:35:41 rjs Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.7 2017/08/15 09:25:00 maxv Exp $	*/
 
 /*
  * Copyright (c) 1999
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by HAYAKAWA Koichi.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.1 2005/12/21 22:35:41 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.7 2017/08/15 09:25:00 maxv Exp $");
 
 #include "opt_pcifixup.h"
 
@@ -39,11 +34,9 @@ __KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.1 2005/12/21 22:35:41 rjs Exp $")
 #include <sys/systm.h>
 #include <sys/extent.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <sys/sysctl.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/cardbus/rbus.h>
 
 #include <sys/device.h>
@@ -51,6 +44,9 @@ __KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.1 2005/12/21 22:35:41 rjs Exp $")
 #include <dev/isa/isavar.h>
 
 #include <dev/pci/pcivar.h>
+#if defined(PCI_ADDR_FIXUP)
+#include <arch/x86/pci/pci_addr_fixup.h>
+#endif
 
 #ifndef RBUS_IO_BASE
 #define	RBUS_IO_BASE	0x4000
@@ -96,11 +92,11 @@ rbus_pccbb_parent_mem(struct pci_attach_args *pa)
 	 * which is not recognised by the kernel as already reserved.
 	 */
 
-	if (start < rbus_min_start) 
+	if (start < rbus_min_start)
 		start = rbus_min_start;
 
 	size = ex->ex_end - start;
-  
+
 	return rbus_new_root_share(pa->pa_memt, ex, start, size, 0);
 }
 
@@ -127,7 +123,7 @@ rbus_pccbb_parent_io(struct pci_attach_args *pa)
 
 	ret = rbus_new_root_share(pa->pa_iot, ex, start, size, 0);
 	if (ret == NULL)
-	  panic("failed to alloc I/O space");
+		panic("failed to alloc I/O space");
 
 	return ret;
 }

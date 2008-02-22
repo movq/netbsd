@@ -1,4 +1,4 @@
-/*	$NetBSD: sdvar.h,v 1.29 2007/07/09 21:01:22 ad Exp $	*/
+/*	$NetBSD: sdvar.h,v 1.38 2016/12/10 10:26:38 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,11 +49,11 @@
 #ifndef _DEV_SCSIPI_SDVAR_H_
 #define _DEV_SCSIPI_SDVAR_H_
 
+#ifdef _KERNEL_OPT
 #include "opt_scsi.h"
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
 #endif
+
+#include <dev/dkvar.h>
 
 #ifndef	SDRETRIES
 #define	SDRETRIES	4
@@ -70,39 +63,31 @@
 #define	SD_IO_TIMEOUT	(60 * 1000)
 #endif
 
+struct disk_parms {
+	u_long	heads;			/* number of heads */
+	u_long	cyls;			/* number of cylinders */
+	u_long	sectors;		/* number of sectors/track */
+	u_long	blksize;		/* number of bytes/sector */
+	u_long	rot_rate;		/* rotational rate, in RPM */
+	u_int64_t disksize;		/* total number sectors */
+	u_int64_t disksize512;		/* total number sectors */
+};
+
 struct sd_softc {
-	struct device sc_dev;
-	struct disk sc_dk;
+	struct dk_softc sc_dksc;
 
 	int flags;
-#define	SDF_WLABEL	0x04		/* label is writable */
-#define	SDF_LABELLING	0x08		/* writing label */
 #define	SDF_ANCIENT	0x10		/* disk is ancient; for minphys */
 #define	SDF_DIRTY	0x20		/* disk is dirty; needs cache flush */
 #define	SDF_FLUSHING	0x40		/* flushing, for sddone() */
 
 	struct scsipi_periph *sc_periph;/* contains our targ, lun, etc. */
 
-	struct disk_parms {
-		u_long	heads;		/* number of heads */
-		u_long	cyls;		/* number of cylinders */
-		u_long	sectors;	/* number of sectors/track */
-		u_long	blksize;	/* number of bytes/sector */
-		u_long	rot_rate;	/* rotational rate, in RPM */
-		u_int64_t disksize;	/* total number sectors */
-		u_int64_t disksize512;	/* total number sectors */
-	} params;
+	struct disk_parms params;
 
-	struct bufq_state *buf_queue;
 	callout_t sc_callout;
 	u_int8_t type;
 	char name[16]; /* product name, for default disklabel */
-
-	void *sc_sdhook;		/* our shutdown hook */
-
-#if NRND > 0
-	rndsource_element_t rnd_source;
-#endif
 };
 
 #define	SDGP_RESULT_OK		0	/* parameters obtained */

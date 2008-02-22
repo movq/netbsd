@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.27 2007/10/17 19:58:04 garbled Exp $
+#	$NetBSD: genassym.cf,v 1.34 2014/03/08 17:44:37 tsutsui Exp $
 
 #
 # Copyright (c) 1982, 1990, 1993
@@ -12,11 +12,7 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the University of
-#	California, Berkeley and its contributors.
-# 4. Neither the name of the University nor the names of its contributors
+# 3. Neither the name of the University nor the names of its contributors
 #    may be used to endorse or promote products derived from this software
 #    without specific prior written permission.
 #
@@ -45,7 +41,6 @@ include <sys/proc.h>
 include <sys/mbuf.h>
 include <sys/msgbuf.h>
 include <sys/syscall.h>
-include <sys/user.h>
 
 include <uvm/uvm.h>
 
@@ -56,7 +51,7 @@ endif
 
 include <machine/cpu.h>
 include <machine/psl.h>
-include <machine/reg.h>
+include <machine/pcb.h>
 include <machine/pte.h>
 include <machine/bootinfo.h>
 
@@ -108,7 +103,7 @@ define	PGSHIFT			PGSHIFT
 define	USRSTACK		USRSTACK
 
 # lwp & proc fields and values
-define	L_ADDR			offsetof(struct lwp, l_addr)
+define	L_PCB			offsetof(struct lwp, l_addr)
 define	L_PRIORITY		offsetof(struct lwp, l_priority)
 define	L_STAT			offsetof(struct lwp, l_stat)
 define	L_WCHAN			offsetof(struct lwp, l_wchan)
@@ -126,7 +121,7 @@ define	LSRUN			LSRUN
 define	LSONPROC		LSONPROC
 
 # interrupt/fault metering
-define	UVMEXP_INTRS		offsetof(struct uvmexp, intrs)
+define	CI_NINTR		offsetof(struct cpu_info, ci_data.cpu_nintr)
 
 define	T_BUSERR		T_BUSERR
 define	T_ADDRERR		T_ADDRERR
@@ -163,6 +158,8 @@ define	SPL6			PSL_S | PSL_IPL6
 # magic
 define	FC_USERD		FC_USERD
 define	FC_SUPERD		FC_SUPERD
+define	DC_FREEZE		DC_FREEZE
+define	CACHE40_ON		CACHE40_ON
 define	CACHE_ON		CACHE_ON
 define	CACHE_OFF		CACHE_OFF
 define	CACHE_CLR		CACHE_CLR
@@ -219,9 +216,6 @@ define	SYS_compat_13_sigreturn13 SYS_compat_13_sigreturn13
 # errno
 define	EFAULT			EFAULT
 define	ENAMETOOLONG		ENAMETOOLONG
-
-# UVM
-define	UVM_PAGE_IDLE_ZERO	offsetof(struct uvm, page_idle_zero)
 
 # SVR4 binary compatibility
 ifdef COMPAT_SVR4

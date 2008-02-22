@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.18 2007/10/27 19:51:30 plunky Exp $ */
+/*	$NetBSD: apm.c,v 1.21 2011/11/25 12:51:28 joerg Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,13 +51,13 @@
 #define	FALSE 0
 #define	TRUE 1
 
-void	usage(void);
-void	zzusage(void);
-int	do_zzz(const char *, enum apm_action);
-int	open_socket(const char *);
-int	send_command(int, struct apm_command *, struct apm_reply *);
+__dead static void	usage(void);
+__dead static void	zzusage(void);
+static int	do_zzz(const char *, enum apm_action);
+static int	open_socket(const char *);
+static int	send_command(int, struct apm_command *, struct apm_reply *);
 
-void
+static void
 usage(void)
 {
 
@@ -73,7 +66,7 @@ usage(void)
 	exit(1);
 }
 
-void
+static void
 zzusage(void)
 {
 
@@ -82,7 +75,7 @@ zzusage(void)
 	exit(1);
 }
 
-int
+static int
 send_command(int fd,
     struct apm_command *cmd,
     struct apm_reply *reply)
@@ -103,7 +96,7 @@ send_command(int fd,
 	return (0);
 }
 
-int
+static int
 do_zzz(const char *pn, enum apm_action action)
 {
 	struct apm_command command;
@@ -129,7 +122,7 @@ do_zzz(const char *pn, enum apm_action action)
 	exit(send_command(fd, &command, &reply));
 }
 
-int
+static int
 open_socket(const char *sockname)
 {
 	struct sockaddr_un s_un;
@@ -157,7 +150,7 @@ main(int argc, char *argv[])
 	struct apm_command command;
 	struct apm_reply reply;
 	struct apm_power_info *api = &reply.batterystate;
-	char *sockname = _PATH_APM_SOCKET;
+	const char *sockname = _PATH_APM_SOCKET;
 	enum apm_action action = NONE;
 	int ch, doac, dobstate, domin, dopct, dostatus, fd, nodaemon,
 	    rval, verbose;

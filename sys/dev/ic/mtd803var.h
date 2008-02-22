@@ -1,4 +1,4 @@
-/* $NetBSD: mtd803var.h,v 1.5 2007/03/04 06:01:59 christos Exp $ */
+/* $NetBSD: mtd803var.h,v 1.10 2015/04/13 16:33:24 riastradh Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,7 @@
 
 #include <sys/device.h>
 #include <sys/socket.h>
+#include <sys/rndsource.h>
 #include <net/if.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
@@ -65,7 +59,7 @@ struct mtd_desc {
 
 /* Softc struct */
 struct mtd_softc {
-	struct device		dev;
+	device_t		dev;
 	struct mii_data		mii;
 	struct ethercom		ethercom;
 	bus_space_tag_t		bus_tag;
@@ -81,9 +75,7 @@ struct mtd_softc {
 	void *			buf;
 	bus_dmamap_t		buf_dma_map;
 
-#if NRND > 0
-	rndsource_element_t	rnd_src;
-#endif
+	krndsource_t	rnd_src;
 };
 
 

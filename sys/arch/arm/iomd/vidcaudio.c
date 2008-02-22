@@ -1,4 +1,4 @@
-/*	$NetBSD: vidcaudio.c,v 1.45 2007/02/22 05:14:05 thorpej Exp $	*/
+/*	$NetBSD: vidcaudio.c,v 1.55 2016/12/13 20:18:06 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Melvin Tang-Richardson
@@ -65,7 +65,7 @@
 
 #include <sys/param.h>	/* proc.h */
 
-__KERNEL_RCSID(0, "$NetBSD: vidcaudio.c,v 1.45 2007/02/22 05:14:05 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vidcaudio.c,v 1.55 2016/12/13 20:18:06 christos Exp $");
 
 #include <sys/audioio.h>
 #include <sys/conf.h>   /* autoconfig functions */
@@ -84,7 +84,6 @@ __KERNEL_RCSID(0, "$NetBSD: vidcaudio.c,v 1.45 2007/02/22 05:14:05 thorpej Exp $
 
 #include <machine/intr.h>
 #include <machine/machdep.h>
-#include <arm/arm32/katelib.h>
 
 #include <arm/iomd/vidcaudiovar.h>
 #include <arm/iomd/iomdreg.h>
@@ -105,8 +104,14 @@ extern int *vidc_base;
 #define DPRINTF(x)
 #endif
 
+#define WriteWord(a, b) \
+*((volatile unsigned int *)(a)) = (b)
+
+#define ReadWord(a) \
+(*((volatile unsigned int *)(a)))
+
 struct vidcaudio_softc {
-	struct	device sc_dev;
+	device_t	sc_dev;
 
 	irqhandler_t	sc_ih;
 	int	sc_dma_intr;
@@ -114,16 +119,19 @@ struct vidcaudio_softc {
 	int	sc_is16bit;
 
 	size_t	sc_pblksize;
-	vm_offset_t	sc_poffset;
-	vm_offset_t	sc_pbufsize;
+	vaddr_t	sc_poffset;
+	vaddr_t	sc_pbufsize;
 	paddr_t	*sc_ppages;
 	void	(*sc_pintr)(void *);
 	void	*sc_parg;
 	int	sc_pcountdown;
+
+	kmutex_t	sc_lock;
+	kmutex_t	sc_intr_lock;
 };
 
-static int  vidcaudio_probe(struct device *, struct cfdata *, void *);
-static void vidcaudio_attach(struct device *, struct device *, void *);
+static int  vidcaudio_probe(device_t , cfdata_t , void *);
+static void vidcaudio_attach(device_t , device_t , void *);
 static void vidcaudio_close(void *);
 
 static int vidcaudio_intr(void *);
@@ -132,11 +140,12 @@ static void vidcaudio_ctrl(int);
 static void vidcaudio_stereo(int, int);
 static stream_filter_factory_t mulaw_to_vidc;
 static stream_filter_factory_t mulaw_to_vidc_stereo;
-static int mulaw_to_vidc_fetch_to(stream_fetcher_t *, audio_stream_t *, int);
-static int mulaw_to_vidc_stereo_fetch_to(stream_fetcher_t *,
+static int mulaw_to_vidc_fetch_to(struct audio_softc *, stream_fetcher_t *,
+    audio_stream_t *, int);
+static int mulaw_to_vidc_stereo_fetch_to(struct audio_softc *, stream_fetcher_t *,
     audio_stream_t *, int);
 
-CFATTACH_DECL(vidcaudio, sizeof(struct vidcaudio_softc),
+CFATTACH_DECL_NEW(vidcaudio, sizeof(struct vidcaudio_softc),
     vidcaudio_probe, vidcaudio_attach, NULL, NULL);
 
 static int    vidcaudio_query_encoding(void *, struct audio_encoding *);
@@ -154,6 +163,7 @@ static int    vidcaudio_set_port(void *, mixer_ctrl_t *);
 static int    vidcaudio_get_port(void *, mixer_ctrl_t *);
 static int    vidcaudio_query_devinfo(void *, mixer_devinfo_t *);
 static int    vidcaudio_get_props(void *);
+static void   vidcaudio_get_locks(void *, kmutex_t **, kmutex_t **);
 
 static struct audio_device vidcaudio_device = {
 	"ARM VIDC",
@@ -189,10 +199,11 @@ static const struct audio_hw_if vidcaudio_hw_if = {
 	vidcaudio_trigger_output,
 	vidcaudio_trigger_input,
 	NULL,
+	vidcaudio_get_locks,
 };
 
 static int
-vidcaudio_probe(struct device *parent, struct cfdata *cf, void *aux)
+vidcaudio_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	int id;
 
@@ -212,12 +223,12 @@ vidcaudio_probe(struct device *parent, struct cfdata *cf, void *aux)
 
 
 static void
-vidcaudio_attach(struct device *parent, struct device *self, void *aux)
+vidcaudio_attach(device_t parent, device_t self, void *aux)
 {
-	struct vidcaudio_softc *sc;
-	struct device *beepdev;
+	struct vidcaudio_softc *sc = device_private(self);
+	device_t beepdev;
 
-	sc  = (void *)self;
+	sc->sc_dev = self;
 	switch (IOMD_ID) {
 #ifndef EB7500ATX
 	case RPC600_IOMD_ID:
@@ -240,15 +251,18 @@ vidcaudio_attach(struct device *parent, struct device *self, void *aux)
 	else
 		aprint_normal(": 8-bit internal DAC\n");
 
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_AUDIO);
+
 	/* Install the irq handler for the DMA interrupt */
 	sc->sc_ih.ih_func = vidcaudio_intr;
 	sc->sc_ih.ih_arg = sc;
 	sc->sc_ih.ih_level = IPL_AUDIO;
-	sc->sc_ih.ih_name = self->dv_xname;
+	sc->sc_ih.ih_name = device_xname(self);
 
 	if (irq_claim(sc->sc_dma_intr, &sc->sc_ih) != 0) {
 		aprint_error("%s: couldn't claim IRQ %d\n",
-		    self->dv_xname, sc->sc_dma_intr);
+		    device_xname(self), sc->sc_dma_intr);
 		return;
 	}
 
@@ -322,13 +336,14 @@ mulaw_to_vidc(struct audio_softc *sc, const audio_params_t *from,
 }
 
 static int
-mulaw_to_vidc_fetch_to(stream_fetcher_t *self, audio_stream_t *dst, int max_used)
+mulaw_to_vidc_fetch_to(struct audio_softc *sc, stream_fetcher_t *self,
+		       audio_stream_t *dst, int max_used)
 {
 	stream_filter_t *this;
 	int m, err;
 
 	this = (stream_filter_t *)self;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used)))
 		return err;
 	m = dst->end - dst->start;
 	m = min(m, max_used);
@@ -347,15 +362,15 @@ mulaw_to_vidc_stereo(struct audio_softc *sc, const audio_params_t *from,
 }
 
 static int
-mulaw_to_vidc_stereo_fetch_to(stream_fetcher_t *self, audio_stream_t *dst,
-			      int max_used)
+mulaw_to_vidc_stereo_fetch_to(struct audio_softc *sc, stream_fetcher_t *self,
+			      audio_stream_t *dst, int max_used)
 {
 	stream_filter_t *this;
 	int m, err;
 
 	this = (stream_filter_t *)self;
 	max_used = (max_used + 1) & ~1;
-	if ((err = this->prev->fetch_to(this->prev, this->src, max_used / 2)))
+	if ((err = this->prev->fetch_to(sc, this->prev, this->src, max_used / 2)))
 		return err;
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
@@ -394,7 +409,7 @@ vidcaudio_set_params(void *addr, int setmode, int usemode,
 		vidcaudio_ctrl(SCR_SERIAL);
 		hw.sample_rate = 705600 / 4 / sample_period;
 		hw.channels = 2;
-		pfil->append(pfil, aurateconv, &hw);
+		pfil->prepend(pfil, aurateconv, &hw);
 	} else {
 		/* VIDC20ish, u-law, 8-channel */
 		if (p->encoding != AUDIO_ENCODING_ULAW || p->precision != 8)
@@ -468,7 +483,8 @@ vidcaudio_trigger_output(void *addr, void *start, void *end, int blksize,
 	if (sc->sc_ppages != NULL)
 		free(sc->sc_ppages, M_DEVBUF);
 	sc->sc_ppages = malloc(npages * sizeof(paddr_t), M_DEVBUF, M_WAITOK);
-	if (sc->sc_ppages == NULL) return ENOMEM;
+	if (sc->sc_ppages == NULL)
+		return ENOMEM;
 	for (i = 0; i < npages; i++)
 		if (!pmap_extract(pmap_kernel(),
 		    (vaddr_t)start + i * PAGE_SIZE, &sc->sc_ppages[i]))
@@ -556,6 +572,15 @@ vidcaudio_get_props(void *addr)
 }
 
 static void
+vidcaudio_get_locks(void *opaque, kmutex_t **intr, kmutex_t **thread)
+{
+	struct vidcaudio_softc *sc = opaque;
+
+	*intr = &sc->sc_intr_lock;
+	*thread = &sc->sc_lock;
+}
+
+static void
 vidcaudio_rate(int rate)
 {
 
@@ -585,10 +610,14 @@ vidcaudio_intr(void *arg)
 	paddr_t pnext, pend;
 
 	sc = arg;
+	mutex_spin_enter(&sc->sc_intr_lock);
+
 	status = IOMD_READ_BYTE(IOMD_SD0ST);
 	DPRINTF(("I[%x]", status));
-	if ((status & IOMD_DMAST_INT) == 0)
+	if ((status & IOMD_DMAST_INT) == 0) {
+		mutex_spin_exit(&sc->sc_intr_lock);
 		return 0;
+	}
 
 	pnext = sc->sc_ppages[sc->sc_poffset >> PGSHIFT] |
 	    (sc->sc_poffset & PGOFSET);
@@ -621,5 +650,6 @@ vidcaudio_intr(void *arg)
 	else
 		(*sc->sc_pintr)(sc->sc_parg);
 
+	mutex_spin_exit(&sc->sc_intr_lock);
 	return 1;
 }

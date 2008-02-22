@@ -1,4 +1,4 @@
-/*	$NetBSD: ioasic.c,v 1.15 2002/10/02 04:15:10 thorpej Exp $	*/
+/*	$NetBSD: ioasic.c,v 1.22 2013/11/10 20:09:53 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.15 2002/10/02 04:15:10 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.22 2013/11/10 20:09:53 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.15 2002/10/02 04:15:10 thorpej Exp $");
 #include <dev/tc/ioasicreg.h>
 #include <dev/tc/ioasicvar.h>
 
-#include <machine/sysconf.h>
+#include <pmax/sysconf.h>
 
 #include <pmax/pmax/pmaxtype.h>
 #include <pmax/pmax/kmin.h>
@@ -95,10 +95,10 @@ static int kn03_builtin_ndevs = ARRAY_SIZEOF(kn03_ioasic_devs) - 3;
 static int kn03_ioasic_ndevs = ARRAY_SIZEOF(kn03_ioasic_devs);
 #endif
 
-static int	ioasicmatch __P((struct device *, struct cfdata *, void *));
-static void	ioasicattach __P((struct device *, struct device *, void *));
+static int	ioasicmatch(device_t, cfdata_t, void *);
+static void	ioasicattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ioasic, sizeof(struct ioasic_softc),
+CFATTACH_DECL_NEW(ioasic, sizeof(struct ioasic_softc),
     ioasicmatch, ioasicattach, NULL, NULL);
 
 tc_addr_t ioasic_base;	/* XXX XXX XXX */
@@ -107,10 +107,7 @@ tc_addr_t ioasic_base;	/* XXX XXX XXX */
 int ioasicfound;
 
 static int
-ioasicmatch(parent, cfdata, aux)
-	struct device *parent;
-	struct cfdata *cfdata;
-	void *aux;
+ioasicmatch(device_t parent, cfdata_t cfdata, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -125,21 +122,20 @@ ioasicmatch(parent, cfdata, aux)
 }
 
 static void
-ioasicattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ioasicattach(device_t parent, device_t self, void *aux)
 {
-	struct ioasic_softc *sc = (struct ioasic_softc *)self;
+	struct ioasic_softc *sc = device_private(self);
 	struct tc_attach_args *ta = aux;
 	struct ioasic_dev *ioasic_devs;
 	int ioasic_ndevs, builtin_ndevs;
 
 	ioasicfound = 1;
 
+	sc->sc_dev = self;
 	sc->sc_bst = ta->ta_memt;
 	if (bus_space_map(ta->ta_memt, ta->ta_addr,
 			0x400000, 0, &sc->sc_bsh)) {
-		printf("%s: unable to map device\n", sc->sc_dv.dv_xname);
+		printf("%s: unable to map device\n", device_xname(self));
 		return;
 	}
 	sc->sc_dmat = ta->ta_dmat;
@@ -183,6 +179,8 @@ ioasicattach(parent, self, aux)
 	for (i = 0; i < ioasic_ndevs; i++)
 		imsk &= ~ioasic_devs[i].iad_intrbits;
 	bus_space_write_4(sc->sc_bst, sc->sc_bsh, IOASIC_IMSK, imsk);
+#else
+	__USE(ioasic_ndevs);
 #endif
 
 	/*
@@ -192,9 +190,7 @@ ioasicattach(parent, self, aux)
 }
 
 const struct evcnt *
-ioasic_intr_evcnt(dev, cookie)
-	struct device *dev;
-	void *cookie;
+ioasic_intr_evcnt(device_t dev, void *cookie)
 {
 
 	/* XXX for now, no evcnt parent reported */
@@ -202,12 +198,8 @@ ioasic_intr_evcnt(dev, cookie)
 }
 
 void
-ioasic_intr_establish(dev, cookie, level, handler, val)
-	struct device *dev;
-	void *cookie;
-	int level;
-	int (*handler) __P((void *));
-	void *val;
+ioasic_intr_establish(device_t dev, void *cookie, int level,
+    int (*handler)(void *), void *val)
 {
 	(*platform.intr_establish)(dev, cookie, level, handler, val);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: realprot.S,v 1.6 2005/12/11 12:17:48 christos Exp $	*/
+/*	$NetBSD: realprot.S,v 1.11 2013/12/24 19:00:56 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,8 +34,7 @@
  */
 
 #include <machine/asm.h>
-
-#define	CR0_PE		1
+#include <x86/specialreg.h>
 
 	.text
 	.align  16
@@ -70,7 +62,7 @@ bootcodeseg = . - gdt
 	/* boot data segment, base will be patched */
 bootdataseg = . - gdt
 	.word	0xffff, 0
-	.byte	0, 0x92, 0x4f, 0
+	.byte	0, 0x92, 0xcf, 0
 
 	/* 16 bit real mode, base will be patched */
 bootrealseg = . - gdt
@@ -97,18 +89,18 @@ stkdif:	.long	0			/* diff. between real and prot sp */
 	.global	gdt_fixup
 gdt_fixup:
 	.code16
-	push	%ax
-	push	%dx
+	pushl	%eax
+	pushl	%edx
 
 	xorl	%eax, %eax
 	mov	%cs, %ax
 	mov	%ax, ourseg
 	/* sort out stuff for %ss != %ds */
+	xorl	%edx, %edx
 	movw	%ss, %dx
 	movw	%dx, stkseg
-	subw	%ax, %dx
-	shll	$16, %edx
-	shrl	$12, %edx
+	subl	%eax, %edx
+	shll	$4, %edx
 	movl	%edx, stkdif
 
 	/* fix up GDT entries for bootstrap */
@@ -128,8 +120,8 @@ gdt_fixup:
 	addl	$gdt, %eax
 	movl	%eax, gdtarg+2
 
-	pop	%dx
-	pop	%ax
+	popl	%edx
+	popl	%eax
 	ret
 
 /*
@@ -191,33 +183,31 @@ ENTRY(real_to_prot)
 /*
  * EPIA_HACK
  *
- * VIA C3 processors don't seem to correctly switch back to executing
- * 16 bit code after the switch to real mode and subsequent jump.
+ * VIA C3 processors (Eden, Samuel 2) don't seem to correctly switch back to
+ * executing 16 bit code after the switch to real mode and subsequent jump.
  *
  * It is speculated that the CPU is prefetching and decoding branch
  * targets and not invalidating this buffer on the long jump.
+ * Further investication indicates that the caching of return addresses
+ * is most likely the problem.
  *
- * The precise reason for this hack working is still unknown, but
- * it was determined experimentally on two theories:
- * 1) Flush the pipeline with NOPs
- * 2) call/ret after the return from prot_to_real seems to improve matters,
- *    perhaps by making more work for the branch prediction/prefetch logic.
+ * Previous versions just used some extra call/ret and a few NOPs, these
+ * only helped a bit, but booting compressed kernels would still fail.
  *
- * Neither of these individually are effective, but this combination is
- * determined experimentally to be sufficient.
+ * Trashing the return address stack (by doing 'call' without matched 'ret')
+ * Seems to fix things completely. 1 iteration isn't enough, 16 is plenty.
  */
 ENTRY(prot_to_real)
-#ifdef EPIA_HACK
-	.code32
-	call prot_to_real_main
-	.code16
-	call epia_nops
-	retl
-
-prot_to_real_main:
-#endif
 	.code32
 	pushl	%eax
+#ifdef EPIA_HACK
+	push	%ecx
+	push	$0x10
+	pop	%ecx
+1:	call	trash_return_cache
+	loop	1b
+	pop	%ecx
+#endif
 
 	/*
 	 * Load the segment registers while still in protected mode.
@@ -267,10 +257,6 @@ xreal:
 	jne	1f
 	pop	%bp
 
-#ifdef EPIA_HACK
-	call epia_nops
-#endif
-
 	sti
 	popl	%eax
 	retl
@@ -290,15 +276,10 @@ dump_eax_buff:
 	. = . + 16
 
 #ifdef EPIA_HACK
-epia_nops:
-	.code16
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	ret
+trash_return_cache:
+	.code32
+	pop	%eax
+	jmp	*%eax
 #endif
 
 /* vtophys(void *)

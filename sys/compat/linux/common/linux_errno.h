@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_errno.h,v 1.12 2005/12/11 12:20:19 christos Exp $	*/
+/*	$NetBSD: linux_errno.h,v 1.15 2014/11/22 15:47:42 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,7 +66,6 @@
 #define LINUX_EPIPE		32
 #define LINUX_EDOM		33
 #define LINUX_ERANGE		34
-#define LINUX_EDEADLK		35
 
 
 /* Error numbers after here vary wildly    */
@@ -93,8 +85,12 @@
 #elif defined(__amd64__)
 #include <compat/linux/arch/amd64/linux_errno.h>
 #else
-#include <compat/linux/arch/i386/linux_errno.h> /* XXX:Allow kdump to compile */
+#define LINUX_SCERR_SIGN -
+#include <compat/linux/common/linux_errno_generic.h>
 #endif
+
+/* Linux has no ENOTSUP error code.  */
+#define LINUX_ENOTSUP		LINUX_EOPNOTSUPP
 
 extern const int native_to_linux_errno[];
 

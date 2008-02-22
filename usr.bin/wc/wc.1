@@ -1,4 +1,4 @@
-.\"	$NetBSD: wc.1,v 1.13 2003/08/07 11:17:15 agc Exp $
+.\"	$NetBSD: wc.1,v 1.17 2017/07/03 21:34:22 wiz Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"     from: @(#)wc.1	8.2 (Berkeley) 4/19/94
 .\"
-.Dd April 19, 1994
+.Dd February 18, 2010
 .Dt WC 1
 .Os
 .Sh NAME
@@ -41,7 +41,7 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl c | Fl m
-.Op Fl lw
+.Op Fl Llw
 .Op Ar file ...
 .Sh DESCRIPTION
 The
@@ -50,7 +50,7 @@ utility displays the number of lines, words, bytes and characters contained in e
 input
 .Ar file
 (or standard input, by default) to the standard output.
-A line is defined as a string of characters delimited by a \*[Lt]newline\*[Gt]
+A line is defined as a string of characters delimited by a <newline>
 character,
 and a word is defined as a string of characters delimited by white space
 characters.
@@ -65,6 +65,9 @@ The following options are available:
 .Bl -tag -width Ds
 .It Fl c
 The number of bytes in each input file
+is written to the standard output.
+.It Fl L
+The number of characters in the longest line of each input file
 is written to the standard output.
 .It Fl l
 The number of lines in each input file
@@ -81,9 +84,8 @@ When an option is specified,
 .Nm
 only
 reports the
-information requested by that option. The
-default action is equivalent to all the
-flags
+information requested by that option.
+The default action is equivalent to all the flags
 .Fl clw
 having been specified.
 .Pp
@@ -102,17 +104,18 @@ input file of the form:
 .Bd -literal -offset indent
 lines	 words	bytes	file_name
 .Ed
-.Pp
-The
-.Nm
-utility exits 0 on success, and \*[Gt]0 if an error occurs.
-.Sh SEE ALSO
-.Xr iswspace 3
+.Sh EXIT STATUS
+.Ex -std wc
 .Sh COMPATIBILITY
 Historically, the
 .Nm
 utility was documented to define a word as a ``maximal string of
-characters delimited by \*[Lt]space\*[Gt], \*[Lt]tab\*[Gt] or \*[Lt]newline\*[Gt] characters''.
+characters delimited by
+.Aq space ,
+.Aq tab
+or
+.Aq newline
+characters''.
 The implementation, however, didn't handle non-printing characters
 correctly so that ``  ^D^E  '' counted as 6 spaces, while ``foo^D^Ebar''
 counted as 8 characters.
@@ -125,6 +128,17 @@ This implementation defines a ``word'' in terms of the
 .Xr iswspace 3
 function, as required by
 .St -p1003.2 .
+.Pp
+The
+.Fl L
+option is a non-standard extension, compatible with the
+.Fl L
+option of the GNU and
+.Fx
+.Nm
+utilities.
+.Sh SEE ALSO
+.Xr iswspace 3
 .Sh STANDARDS
 The
 .Nm

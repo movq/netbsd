@@ -1,4 +1,4 @@
-.\"	$NetBSD: tr.1,v 1.16 2006/09/17 12:19:01 wiz Exp $
+.\"	$NetBSD: tr.1,v 1.22 2017/07/03 21:34:22 wiz Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"     @(#)tr.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd March 23, 2004
+.Dd May 29, 2013
 .Dt TR 1
 .Os
 .Sh NAME
@@ -64,8 +64,8 @@ The following options are available:
 .Bl -tag -width Ds
 .It Fl c
 Complements the set of characters in
-.Ar string1 ,
-that is
+.Ar string1 ;
+that is,
 .Fl c Ar \&ab
 includes every character except for
 .Sq a
@@ -142,14 +142,14 @@ the octal sequence to the full 3 octal digits.
 A backslash followed by certain special characters maps to special
 values.
 .sp
-.Bl -column
-.It \ea	\*[Lt]alert character\*[Gt]
-.It \eb	\*[Lt]backspace\*[Gt]
-.It \ef	\*[Lt]form-feed\*[Gt]
-.It \en	\*[Lt]newline\*[Gt]
-.It \er	\*[Lt]carriage return\*[Gt]
-.It \et	\*[Lt]tab\*[Gt]
-.It \ev	\*[Lt]vertical tab\*[Gt]
+.Bl -column cc
+.It \ea	<alert character>
+.It \eb	<backspace>
+.It \ef	<form-feed>
+.It \en	<newline>
+.It \er	<carriage return>
+.It \et	<tab>
+.It \ev	<vertical tab>
 .El
 .sp
 A backslash followed by any other character maps to that character.
@@ -159,36 +159,36 @@ Represents the range of characters between the range endpoints, inclusively.
 Represents all characters belonging to the defined character class.
 Class names are:
 .sp
-.Bl -column
-.It alnum	\*[Lt]alphanumeric characters\*[Gt]
-.It alpha	\*[Lt]alphabetic characters\*[Gt]
-.It blank	\*[Lt]blank characters\*[Gt]
-.It cntrl	\*[Lt]control characters\*[Gt]
-.It digit	\*[Lt]numeric characters\*[Gt]
-.It graph	\*[Lt]graphic characters\*[Gt]
-.It lower	\*[Lt]lower-case alphabetic characters\*[Gt]
-.It print	\*[Lt]printable characters\*[Gt]
-.It punct	\*[Lt]punctuation characters\*[Gt]
-.It space	\*[Lt]space characters\*[Gt]
-.It upper	\*[Lt]upper-case characters\*[Gt]
-.It xdigit	\*[Lt]hexadecimal characters\*[Gt]
+.Bl -column xdigit
+.It alnum	<alphanumeric characters>
+.It alpha	<alphabetic characters>
+.It blank	<blank characters>
+.It cntrl	<control characters>
+.It digit	<numeric characters>
+.It graph	<graphic characters>
+.It lower	<lower-case alphabetic characters>
+.It print	<printable characters>
+.It punct	<punctuation characters>
+.It space	<space characters>
+.It upper	<upper-case characters>
+.It xdigit	<hexadecimal characters>
 .El
 .Pp
-\." All classes may be used in
-\." .Ar string1 ,
-\." and in
-\." .Ar string2
-\." when both the
-\." .Fl d
-\." and
-\." .Fl s
-\." options are specified.
-\." Otherwise, only the classes ``upper'' and ``lower'' may be used in
-\." .Ar string2
-\." and then only when the corresponding class (``upper'' for ``lower''
-\." and vice-versa) is specified in the same relative position in
-\." .Ar string1 .
-\." .Pp
+.\" All classes may be used in
+.\" .Ar string1 ,
+.\" and in
+.\" .Ar string2
+.\" when both the
+.\" .Fl d
+.\" and
+.\" .Fl s
+.\" options are specified.
+.\" Otherwise, only the classes ``upper'' and ``lower'' may be used in
+.\" .Ar string2
+.\" and then only when the corresponding class (``upper'' for ``lower''
+.\" and vice-versa) is specified in the same relative position in
+.\" .Ar string1 .
+.\" .Pp
 With the exception of the
 .Dq upper
 and
@@ -227,18 +227,17 @@ expression is only valid when it occurs in
 .Ar string2 .
 If
 .Ar n
-is omitted or is zero, it is interpreted as large enough to extend
+is omitted or is zero, it is interpreted as large enough to extend the
 .Ar string2
 sequence to the length of
 .Ar string1 .
 If
 .Ar n
-has a leading zero, it is interpreted as an octal value, otherwise,
-it's interpreted as a decimal value.
+has a leading zero, it is interpreted as an octal value;
+otherwise, it is interpreted as a decimal value.
 .El
 .Sh EXIT STATUS
-.Nm
-exits 0 on success, and \*[Gt]0 if an error occurs.
+.Ex -std
 .Sh EXAMPLES
 The following examples are shown as given to the shell:
 .Pp
@@ -246,18 +245,18 @@ Create a list of the words in
 .Ar file1 ,
 one per line, where a word is taken to be a maximal string of letters:
 .sp
-.D1 Li "tr -cs \*q[:alpha:]\*q \*q\en\*q \*[Lt] file1"
+.D1 Li "tr -cs \*q[:alpha:]\*q \*q\en\*q < file1"
 .sp
 Translate the contents of
 .Ar file1
 to upper-case:
 .sp
-.D1 Li "tr \*q[:lower:]\*q \*q[:upper:]\*q \*[Lt] file1"
+.D1 Li "tr \*q[:lower:]\*q \*q[:upper:]\*q < file1"
 .sp
 Strip out non-printable characters from
 .Ar file1 :
 .sp
-.D1 Li "tr -cd \*q[:print:]\*q \*[Lt] file1"
+.D1 Li "tr -cd \*q[:print:]\*q < file1"
 .Sh COMPATIBILITY
 .At V
 has historically implemented character ranges using the syntax
@@ -319,6 +318,9 @@ and
 .Fl s
 options were ignored unless two strings were specified.
 This implementation will not permit illegal syntax.
+.Sh SEE ALSO
+.Xr dd 1 ,
+.Xr sed 1
 .Sh STANDARDS
 The
 .Nm
@@ -334,7 +336,7 @@ has less characters than
 is permitted by POSIX but is not required.
 Shell scripts attempting to be portable to other POSIX systems should use
 the
-.Dq [#*]
+.Dq [#*n]
 convention instead of relying on this behavior.
 .Sh BUGS
 .Nm

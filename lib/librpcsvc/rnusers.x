@@ -36,7 +36,7 @@
 %#ifndef __lint__
 %/*static char sccsid[] = "from: @(#)rnusers.x 1.2 87/09/20 Copyr 1987 Sun Micro";*/
 %/*static char sccsid[] = "from: @(#)rnusers.x	2.1 88/08/01 4.0 RPCSRC";*/
-%__RCSID("$NetBSD: rnusers.x,v 1.13 2006/05/11 17:11:57 mrg Exp $");
+%__RCSID("$NetBSD: rnusers.x,v 1.15 2013/12/20 21:04:09 christos Exp $");
 %#endif /* not __lint__ */
 #endif
 
@@ -82,12 +82,12 @@
 %
 %#include <sys/cdefs.h>
 %__BEGIN_DECLS
-%bool_t xdr_utmp __P((XDR *, struct ru_utmp *));
-%bool_t xdr_utmpptr __P((XDR *, struct ru_utmp **));
-%bool_t xdr_utmparr __P((XDR *, struct utmparr *));
-%bool_t xdr_utmpidle __P((XDR *, struct utmpidle *));
-%bool_t xdr_utmpidleptr __P((XDR *, struct utmpidle **));
-%bool_t xdr_utmpidlearr __P((XDR *, struct utmpidlearr *));
+%bool_t xdr_utmp(XDR *, struct ru_utmp *);
+%bool_t xdr_utmpptr(XDR *, struct ru_utmp **);
+%bool_t xdr_utmparr(XDR *, struct utmparr *);
+%bool_t xdr_utmpidle(XDR *, struct utmpidle *);
+%bool_t xdr_utmpidleptr(XDR *, struct utmpidle **);
+%bool_t xdr_utmpidlearr(XDR *, struct utmpidlearr *);
 %__END_DECLS
 %
 %#define RUSERSVERS_1 ((u_long)1)
@@ -146,7 +146,7 @@
 %{
 %
 %	if (!xdr_reference(xdrs, (char **) objpp, (u_int)sizeof(struct ru_utmp),
-%			   xdr_utmp))
+%			   (xdrproc_t)xdr_utmp))
 %		return (FALSE);
 %	return (TRUE);
 %}
@@ -159,7 +159,7 @@
 %
 %	if (!xdr_array(xdrs, (char **)(void *)&objp->uta_arr,
 %		       (u_int *)&objp->uta_cnt, MAXUSERS,
-%		       (u_int)sizeof(struct utmp *), xdr_utmpptr))
+%		       (u_int)sizeof(struct utmp *), (xdrproc_t)xdr_utmpptr))
 %		return (FALSE);
 %	return (TRUE);
 %}
@@ -184,7 +184,8 @@
 %{
 %
 %	if (!xdr_reference(xdrs, (char **) objpp,
-%			   (u_int)sizeof(struct utmpidle), xdr_utmpidle))
+%			   (u_int)sizeof(struct utmpidle),
+%			   (xdrproc_t)xdr_utmpidle))
 %		return (FALSE);
 %	return (TRUE);
 %}
@@ -197,7 +198,8 @@
 %
 %	if (!xdr_array(xdrs, (char **)(void *)&objp->uia_arr,
 %	 	       (u_int *)&objp->uia_cnt, MAXUSERS,
-%		       (u_int)sizeof(struct utmpidle *), xdr_utmpidleptr))
+%		       (u_int)sizeof(struct utmpidle *),
+%		       (xdrproc_t)xdr_utmpidleptr))
 %		return (FALSE);
 %	return (TRUE);
 %}

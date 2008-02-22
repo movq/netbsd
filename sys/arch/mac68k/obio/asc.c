@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.51 2007/10/17 19:55:16 garbled Exp $	*/
+/*	$NetBSD: asc.c,v 1.58 2017/10/12 09:48:53 flxd Exp $	*/
 
 /*
  * Copyright (C) 1997 Scott Reynolds
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.51 2007/10/17 19:55:16 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.58 2017/10/12 09:48:53 flxd Exp $");
 
 #include <sys/types.h>
 #include <sys/errno.h>
@@ -105,10 +105,10 @@ static void	asc_intr_enable(void);
 static void	asc_intr(void *);
 #endif
 
-static int	ascmatch(struct device *, struct cfdata *, void *);
-static void	ascattach(struct device *, struct device *, void *);
+static int	ascmatch(device_t, cfdata_t, void *);
+static void	ascattach(device_t, device_t, void *);
 
-CFATTACH_DECL(asc, sizeof(struct asc_softc),
+CFATTACH_DECL_NEW(asc, sizeof(struct asc_softc),
     ascmatch, ascattach, NULL, NULL);
 
 extern struct cfdriver asc_cd;
@@ -121,17 +121,30 @@ dev_type_ioctl(ascioctl);
 dev_type_mmap(ascmmap);
 
 const struct cdevsw asc_cdevsw = {
-	ascopen, ascclose, ascread, ascwrite, ascioctl,
-	nostop, notty, nopoll, ascmmap, nokqfilter,
+	.d_open = ascopen,
+	.d_close = ascclose,
+	.d_read = ascread,
+	.d_write = ascwrite,
+	.d_ioctl = ascioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = ascmmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
+static const uint8_t easc_version_tab[] = { 0xb0 };
+
 static int
-ascmatch(struct device *parent, struct cfdata *cf, void *aux)
+ascmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct obio_attach_args *oa = (struct obio_attach_args *)aux;
 	bus_addr_t addr;
 	bus_space_handle_t bsh;
 	int rval = 0;
+	uint8_t ver;
 
 	if (oa->oa_addr != (-1))
 		addr = (bus_addr_t)oa->oa_addr;
@@ -145,9 +158,20 @@ ascmatch(struct device *parent, struct cfdata *cf, void *aux)
 	if (bus_space_map(oa->oa_tag, addr, MAC68K_ASC_LEN, 0, &bsh))
 		return (0);
 
-	if (mac68k_bus_space_probe(oa->oa_tag, bsh, 0, 1))
+	if (mac68k_bus_space_probe(oa->oa_tag, bsh, 0, 1)) {
 		rval = 1;
-	else
+
+		/*
+		 * Enhanced Apple Sound Chip (EASC) does not support wavetable
+		 * mode, exclude it for now.
+		 */
+		ver = bus_space_read_1(oa->oa_tag, bsh, 0x800);
+		for (size_t i = 0; i < __arraycount(easc_version_tab); i++)
+			if (ver == easc_version_tab[i]) {
+				rval = 0;
+				break;
+			}
+	} else
 		rval = 0;
 
 	bus_space_unmap(oa->oa_tag, bsh, MAC68K_ASC_LEN);
@@ -156,13 +180,14 @@ ascmatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-ascattach(struct device *parent, struct device *self, void *aux)
+ascattach(device_t parent, device_t self, void *aux)
 {
-	struct asc_softc *sc = (struct asc_softc *)self;
+	struct asc_softc *sc = device_private(self);
 	struct obio_attach_args *oa = (struct obio_attach_args *)aux;
 	bus_addr_t addr;
 	int i;
 
+	sc->sc_dev = self;
 	sc->sc_tag = oa->oa_tag;
 	if (oa->oa_addr != (-1))
 		addr = (bus_addr_t)oa->oa_addr;
@@ -212,11 +237,9 @@ int
 ascopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct asc_softc *sc;
-	int unit;
 
-	unit = ASCUNIT(dev);
-	sc = asc_cd.cd_devs[unit];
-	if (unit >= asc_cd.cd_ndevs)
+	sc = device_lookup_private(&asc_cd, ASCUNIT(dev));
+	if (sc == NULL)
 		return (ENXIO);
 	if (sc->sc_open)
 		return (EBUSY);
@@ -230,7 +253,7 @@ ascclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct asc_softc *sc;
 
-	sc = asc_cd.cd_devs[ASCUNIT(dev)];
+	sc = device_lookup_private(&asc_cd, ASCUNIT(dev));
 	sc->sc_open = 0;
 
 	return (0);
@@ -251,11 +274,13 @@ ascwrite(dev_t dev, struct uio *uio, int ioflag)
 int
 ascioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct asc_softc *sc;
 	int error;
+#ifdef not_yet
+	struct asc_softc *sc;
 	int unit = ASCUNIT(dev);
 
-	sc = asc_cd.cd_devs[unit];
+	sc = device_lookup_private(&asc_cd, unit);
+#endif
 	error = 0;
 
 	switch (cmd) {
@@ -269,11 +294,10 @@ ascioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 paddr_t
 ascmmap(dev_t dev, off_t off, int prot)
 {
-	int unit = ASCUNIT(dev);
 	struct asc_softc *sc;
 	paddr_t pa;
 
-	sc = asc_cd.cd_devs[unit];
+	sc = device_lookup_private(&asc_cd, ASCUNIT(dev));
 	if ((u_int)off < MAC68K_ASC_LEN) {
 		(void) pmap_extract(pmap_kernel(), (vaddr_t)sc->sc_handle.base,
 		    &pa);

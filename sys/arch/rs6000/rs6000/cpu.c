@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.1 2007/12/17 19:09:42 garbled Exp $	*/
+/*	$NetBSD: cpu.c,v 1.4 2011/07/18 17:26:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,26 +30,26 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.1 2007/12/17 19:09:42 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.4 2011/07/18 17:26:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <machine/autoconf.h>
-#include <machine/bus.h>
 #include <machine/cpu.h>
 
-int cpumatch(struct device *, struct cfdata *, void *);
-void cpuattach(struct device *, struct device *, void *);
+int cpumatch(device_t, cfdata_t, void *);
+void cpuattach(device_t, device_t, void *);
 
-CFATTACH_DECL(cpu, sizeof(struct device),
+CFATTACH_DECL_NEW(cpu, 0,
     cpumatch, cpuattach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
 
 int
-cpumatch(struct device *parent, struct cfdata *cfdata, void *aux)
+cpumatch(device_t parent, cfdata_t cfdata, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -68,7 +61,7 @@ cpumatch(struct device *parent, struct cfdata *cfdata, void *aux)
 }
 
 void
-cpuattach(struct device *parent, struct device *self, void *aux)
+cpuattach(device_t parent, device_t self, void *aux)
 {
 	struct cpu_info *ci;
 

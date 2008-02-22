@@ -1,6 +1,7 @@
-/*	$NetBSD: cpu.h,v 1.40 2007/10/17 19:56:04 garbled Exp $	*/
+/*	$NetBSD: cpu.h,v 1.48 2016/12/17 14:36:30 flxd Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,65 +37,24 @@
  *
  *	@(#)cpu.h	8.4 (Berkeley) 1/5/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: cpu.h 1.16 91/03/25$
- *
- *	@(#)cpu.h	8.4 (Berkeley) 1/5/94
- */
-
 
 #ifndef _MACHINE_CPU_H_
 #define _MACHINE_CPU_H_
 
-#if defined(_KERNEL)
-
 #if defined(_KERNEL_OPT)
 #include "opt_lockdebug.h"
+#include "opt_m68k_arch.h"
 #endif
-
-/*
- * Exported definitions unique to next68k/68k cpu support.
- */
 
 /*
  * Get common m68k definitions.
  */
 #include <m68k/cpu.h>
 
+#if defined(_KERNEL)
+/*
+ * Exported definitions unique to next68k/68k cpu support.
+ */
 #define	M68K_MMU_MOTOROLA
 
 /*
@@ -102,33 +62,9 @@
  */
 #include <machine/intr.h>
 
-#include <sys/cpu_data.h>
-struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
-	cpuid_t	ci_cpuid;
-	int	ci_mtx_count;
-	int	ci_mtx_oldspl;
-	int	ci_want_resched;
-};
-
-extern struct cpu_info cpu_info_store;
-
-#define	curcpu()			(&cpu_info_store)
-
-/*
- * definitions of cpu-dependent requirements
- * referenced in generic code
- */
-#define	cpu_swapin(p)			/* nothing */
-#define cpu_swapout(p)			/* nothing */
-#define	cpu_number()			0
-
-void	cpu_proc_fork(struct proc *, struct proc *);
-
-
 /*
  * Arguments to hardclock and gatherstats encapsulate the previous
- * machine state in an opaque clockframe.  One the hp300, we use
+ * machine state in an opaque clockframe.  On the next68k, we use
  * what the hardware pushes on an interrupt (frame format 0).
  */
 struct clockframe {
@@ -154,12 +90,15 @@ extern volatile unsigned int interrupt_depth;
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-#define	cpu_need_resched(ci, flags)	\
-	do { ci->ci_want_resched = 1; aston(); } while (/* CONSTCOND */0)
+#define	cpu_need_resched(ci,flags)	do {	\
+	__USE(flags); 				\
+	ci->ci_want_resched = 1;		\
+	aston();				\
+} while (/*CONSTCOND*/0)
 
 /*
  * Give a profiling tick to the current process when the user profiling
- * buffer pages are invalid.  On the sun3, request an ast to send us
+ * buffer pages are invalid.  On the next68k, request an ast to send us
  * through trap, marking the proc as needing a profiling tick.
  */
 #define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, aston())
@@ -176,12 +115,7 @@ extern	int	astpending;	/* need to trap before returning to user mode */
 
 extern	void (*vectab[])(void);
 
-struct fpframe;
-
 /* locore.s functions */
-void	m68881_save(struct fpframe *);
-void	m68881_restore(struct fpframe *);
-
 int	suline(void *, void *);
 void	loadustp(int);
 

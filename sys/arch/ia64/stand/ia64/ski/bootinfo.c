@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
+/*	$NetBSD: bootinfo.c,v 1.4 2012/12/27 20:21:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -37,7 +37,6 @@
 #include <sys/boot_flag.h>
 #include <sys/exec_elf.h>
 #include <sys/lock.h>
-#include <sys/lkm.h>
 
 #include <machine/vmparam.h>
 #include <machine/elf_machdep.h>
@@ -45,6 +44,7 @@
 
 
 #include "bootstrap.h"
+#include "libski.h"
 
 /*
  * Return a 'boothowto' value corresponding to the kernel arguments in

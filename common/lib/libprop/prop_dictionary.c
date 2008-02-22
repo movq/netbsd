@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_dictionary.c,v 1.22 2008/01/05 01:15:02 ad Exp $	*/
+/*	$NetBSD: prop_dictionary.c,v 1.41 2016/06/28 05:21:15 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,11 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "prop_object_impl.h"
 #include <prop/prop_array.h>
 #include <prop/prop_dictionary.h>
 #include <prop/prop_string.h>
-#include "prop_object_impl.h"
-#include "prop_rb_impl.h"
+
+#include <sys/rbtree.h>
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <errno.h>
@@ -72,10 +66,6 @@ struct _prop_dictionary_keysym {
 	char 				pdk_key[1];
 	/* actually variable length */
 };
-
-#define	RBNODE_TO_PDK(n)						\
-	((struct _prop_dictionary_keysym *)				\
-	 ((uintptr_t)n - offsetof(struct _prop_dictionary_keysym, pdk_link)))
 
 	/* pdk_key[1] takes care of the NUL */
 #define	PDK_SIZE_16		(sizeof(struct _prop_dictionary_keysym) + 16)
@@ -111,15 +101,29 @@ _PROP_POOL_INIT(_prop_dictionary_pool, sizeof(struct _prop_dictionary),
 _PROP_MALLOC_DEFINE(M_PROP_DICT, "prop dictionary",
 		    "property dictionary container object")
 
-static int		_prop_dictionary_free(prop_stack_t, prop_object_t *);
-static void		_prop_dictionary_emergency_free(prop_object_t);
+static _prop_object_free_rv_t
+		_prop_dictionary_free(prop_stack_t, prop_object_t *);
+static void	_prop_dictionary_emergency_free(prop_object_t);
 static bool	_prop_dictionary_externalize(
 				struct _prop_object_externalize_context *,
 				void *);
-static bool	_prop_dictionary_equals(prop_object_t, prop_object_t,
+static _prop_object_equals_rv_t
+		_prop_dictionary_equals(prop_object_t, prop_object_t,
 				        void **, void **,
 					prop_object_t *, prop_object_t *);
 static void	_prop_dictionary_equals_finish(prop_object_t, prop_object_t);
+static prop_object_iterator_t
+		_prop_dictionary_iterator_locked(prop_dictionary_t);
+static prop_object_t
+		_prop_dictionary_iterator_next_object_locked(void *);
+static prop_object_t
+		_prop_dictionary_get_keysym(prop_dictionary_t,
+					    prop_dictionary_keysym_t, bool);
+static prop_object_t
+		_prop_dictionary_get(prop_dictionary_t, const char *, bool);
+
+static void _prop_dictionary_lock(void);
+static void _prop_dictionary_unlock(void);
 
 static const struct _prop_object_type _prop_object_type_dictionary = {
 	.pot_type		=	PROP_TYPE_DICTIONARY,
@@ -128,13 +132,17 @@ static const struct _prop_object_type _prop_object_type_dictionary = {
 	.pot_extern		=	_prop_dictionary_externalize,
 	.pot_equals		=	_prop_dictionary_equals,
 	.pot_equals_finish	=	_prop_dictionary_equals_finish,
+	.pot_lock 	        =       _prop_dictionary_lock,
+	.pot_unlock 	        =       _prop_dictionary_unlock,		
 };
 
-static int		_prop_dict_keysym_free(prop_stack_t, prop_object_t *);
+static _prop_object_free_rv_t
+		_prop_dict_keysym_free(prop_stack_t, prop_object_t *);
 static bool	_prop_dict_keysym_externalize(
 				struct _prop_object_externalize_context *,
 				void *);
-static bool	_prop_dict_keysym_equals(prop_object_t, prop_object_t,
+static _prop_object_equals_rv_t
+		_prop_dict_keysym_equals(prop_object_t, prop_object_t,
 					 void **, void **,
 					 prop_object_t *, prop_object_t *);
 
@@ -165,34 +173,48 @@ struct _prop_dictionary_iterator {
  */
 
 static int
-_prop_dict_keysym_rb_compare_nodes(const struct rb_node *n1,
-				   const struct rb_node *n2)
+/*ARGSUSED*/
+_prop_dict_keysym_rb_compare_nodes(void *ctx _PROP_ARG_UNUSED,
+				   const void *n1, const void *n2)
 {
-	const prop_dictionary_keysym_t pdk1 = RBNODE_TO_PDK(n1);
-	const prop_dictionary_keysym_t pdk2 = RBNODE_TO_PDK(n2);
+	const struct _prop_dictionary_keysym *pdk1 = n1;
+	const struct _prop_dictionary_keysym *pdk2 = n2;
 
-	return (strcmp(pdk1->pdk_key, pdk2->pdk_key));
+	return strcmp(pdk1->pdk_key, pdk2->pdk_key);
 }
 
 static int
-_prop_dict_keysym_rb_compare_key(const struct rb_node *n,
-				 const void *v)
+/*ARGSUSED*/
+_prop_dict_keysym_rb_compare_key(void *ctx _PROP_ARG_UNUSED,
+				 const void *n, const void *v)
 {
-	const prop_dictionary_keysym_t pdk = RBNODE_TO_PDK(n);
+	const struct _prop_dictionary_keysym *pdk = n;
 	const char *cp = v;
 
-	return (strcmp(pdk->pdk_key, cp));
+	return strcmp(pdk->pdk_key, cp);
 }
 
-static const struct rb_tree_ops _prop_dict_keysym_rb_tree_ops = {
+static const rb_tree_ops_t _prop_dict_keysym_rb_tree_ops = {
 	.rbto_compare_nodes = _prop_dict_keysym_rb_compare_nodes,
-	.rbto_compare_key   = _prop_dict_keysym_rb_compare_key,
+	.rbto_compare_key = _prop_dict_keysym_rb_compare_key,
+	.rbto_node_offset = offsetof(struct _prop_dictionary_keysym, pdk_link),
+	.rbto_context = NULL
 };
 
 static struct rb_tree _prop_dict_keysym_tree;
-static bool _prop_dict_keysym_tree_initialized;
 
+_PROP_ONCE_DECL(_prop_dict_init_once)
 _PROP_MUTEX_DECL_STATIC(_prop_dict_keysym_tree_mutex)
+
+static int
+_prop_dict_init(void)
+{
+
+	_PROP_MUTEX_INIT(_prop_dict_keysym_tree_mutex);
+	rb_tree_init(&_prop_dict_keysym_tree,
+			   &_prop_dict_keysym_rb_tree_ops);
+	return 0;
+}
 
 static void
 _prop_dict_keysym_put(prop_dictionary_keysym_t pdk)
@@ -209,15 +231,12 @@ _prop_dict_keysym_put(prop_dictionary_keysym_t pdk)
 }
 
 /* ARGSUSED */
-static int
+static _prop_object_free_rv_t
 _prop_dict_keysym_free(prop_stack_t stack, prop_object_t *obj)
 {
 	prop_dictionary_keysym_t pdk = *obj;
 
-	_PROP_MUTEX_LOCK(_prop_dict_keysym_tree_mutex);
-	_prop_rb_tree_remove_node(&_prop_dict_keysym_tree, &pdk->pdk_link);
-	_PROP_MUTEX_UNLOCK(_prop_dict_keysym_tree_mutex);
-
+	rb_tree_remove_node(&_prop_dict_keysym_tree, pdk);
 	_prop_dict_keysym_put(pdk);
 
 	return _PROP_OBJECT_FREE_DONE;
@@ -243,7 +262,7 @@ _prop_dict_keysym_externalize(struct _prop_object_externalize_context *ctx,
 }
 
 /* ARGSUSED */
-static bool
+static _prop_object_equals_rv_t
 _prop_dict_keysym_equals(prop_object_t v1, prop_object_t v2,
     void **stored_pointer1, void **stored_pointer2,
     prop_object_t *next_obj1, prop_object_t *next_obj2)
@@ -264,27 +283,21 @@ _prop_dict_keysym_equals(prop_object_t v1, prop_object_t v2,
 static prop_dictionary_keysym_t
 _prop_dict_keysym_alloc(const char *key)
 {
-	prop_dictionary_keysym_t opdk, pdk;
-	const struct rb_node *n;
+	prop_dictionary_keysym_t opdk, pdk, rpdk;
 	size_t size;
+
+	_PROP_ONCE_RUN(_prop_dict_init_once, _prop_dict_init);
 
 	/*
 	 * Check to see if this already exists in the tree.  If it does,
 	 * we just retain it and return it.
 	 */
 	_PROP_MUTEX_LOCK(_prop_dict_keysym_tree_mutex);
-	if (! _prop_dict_keysym_tree_initialized) {
-		_prop_rb_tree_init(&_prop_dict_keysym_tree,
-				   &_prop_dict_keysym_rb_tree_ops);
-		_prop_dict_keysym_tree_initialized = true;
-	} else {
-		n = _prop_rb_tree_find(&_prop_dict_keysym_tree, key);
-		if (n != NULL) {
-			opdk = RBNODE_TO_PDK(n);
-			prop_object_retain(opdk);
-			_PROP_MUTEX_UNLOCK(_prop_dict_keysym_tree_mutex);
-			return (opdk);
-		}
+	opdk = rb_tree_find_node(&_prop_dict_keysym_tree, key);
+	if (opdk != NULL) {
+		prop_object_retain(opdk);
+		_PROP_MUTEX_UNLOCK(_prop_dict_keysym_tree_mutex);
+		return (opdk);
 	}
 	_PROP_MUTEX_UNLOCK(_prop_dict_keysym_tree_mutex);
 
@@ -316,22 +329,20 @@ _prop_dict_keysym_alloc(const char *key)
 	 * we have to check again if it is in the tree.
 	 */
 	_PROP_MUTEX_LOCK(_prop_dict_keysym_tree_mutex);
-	n = _prop_rb_tree_find(&_prop_dict_keysym_tree, key);
-	if (n != NULL) {
-		opdk = RBNODE_TO_PDK(n);
+	opdk = rb_tree_find_node(&_prop_dict_keysym_tree, key);
+	if (opdk != NULL) {
 		prop_object_retain(opdk);
 		_PROP_MUTEX_UNLOCK(_prop_dict_keysym_tree_mutex);
 		_prop_dict_keysym_put(pdk);
 		return (opdk);
 	}
-	_prop_rb_tree_insert_node(&_prop_dict_keysym_tree, &pdk->pdk_link);
+	rpdk = rb_tree_insert_node(&_prop_dict_keysym_tree, pdk);
+	_PROP_ASSERT(rpdk == pdk);
 	_PROP_MUTEX_UNLOCK(_prop_dict_keysym_tree_mutex);
-	return (pdk);
+	return (rpdk);
 }
 
-int dont_free = 1;
-
-static int
+static _prop_object_free_rv_t
 _prop_dictionary_free(prop_stack_t stack, prop_object_t *obj)
 {
 	prop_dictionary_t pd = *obj;
@@ -375,9 +386,27 @@ _prop_dictionary_free(prop_stack_t stack, prop_object_t *obj)
 	--pd->pd_count;
 	pdk = pd->pd_array[pd->pd_count].pde_key;
 	_PROP_ASSERT(pdk != NULL);
+
 	prop_object_release(pdk);
+
 	*obj = po;
 	return (_PROP_OBJECT_FREE_RECURSE);
+}
+
+
+static void
+_prop_dictionary_lock(void)
+{
+
+	/* XXX: once necessary or paranoia? */
+	_PROP_ONCE_RUN(_prop_dict_init_once, _prop_dict_init);
+	_PROP_MUTEX_LOCK(_prop_dict_keysym_tree_mutex);
+}
+
+static void
+_prop_dictionary_unlock(void)
+{
+	_PROP_MUTEX_UNLOCK(_prop_dict_keysym_tree_mutex);
 }
 
 static void
@@ -416,15 +445,16 @@ _prop_dictionary_externalize(struct _prop_object_externalize_context *ctx,
 	    _prop_object_externalize_append_char(ctx, '\n') == false)
 		goto out;
 
-	pi = prop_dictionary_iterator(pd);
+	pi = _prop_dictionary_iterator_locked(pd);
 	if (pi == NULL)
 		goto out;
 	
 	ctx->poec_depth++;
 	_PROP_ASSERT(ctx->poec_depth != 0);
 
-	while ((pdk = prop_object_iterator_next(pi)) != NULL) {
-		po = prop_dictionary_get_keysym(pd, pdk);
+	while ((pdk = _prop_dictionary_iterator_next_object_locked(pi))
+	    != NULL) {
+		po = _prop_dictionary_get_keysym(pd, pdk, true);
 		if (po == NULL ||
 		    _prop_object_externalize_start_tag(ctx, "key") == false ||
 		    _prop_object_externalize_append_encoded_cstring(ctx,
@@ -454,7 +484,7 @@ _prop_dictionary_externalize(struct _prop_object_externalize_context *ctx,
 }
 
 /* ARGSUSED */
-static bool
+static _prop_object_equals_rv_t
 _prop_dictionary_equals(prop_object_t v1, prop_object_t v2,
     void **stored_pointer1, void **stored_pointer2,
     prop_object_t *next_obj1, prop_object_t *next_obj2)
@@ -462,7 +492,7 @@ _prop_dictionary_equals(prop_object_t v1, prop_object_t v2,
 	prop_dictionary_t dict1 = v1;
 	prop_dictionary_t dict2 = v2;
 	uintptr_t idx;
-	bool rv = _PROP_OBJECT_EQUALS_FALSE;
+	_prop_object_equals_rv_t rv = _PROP_OBJECT_EQUALS_FALSE;
 
 	if (dict1 == dict2)
 		return (_PROP_OBJECT_EQUALS_TRUE);
@@ -494,8 +524,8 @@ _prop_dictionary_equals(prop_object_t v1, prop_object_t v2,
 	*stored_pointer1 = (void *)(idx + 1);
 	*stored_pointer2 = (void *)(idx + 1);
 
-	*next_obj1 = &dict1->pd_array[idx].pde_objref;
-	*next_obj2 = &dict2->pd_array[idx].pde_objref;
+	*next_obj1 = dict1->pd_array[idx].pde_objref;
+	*next_obj2 = dict2->pd_array[idx].pde_objref;
 
 	if (!prop_dictionary_keysym_equals(dict1->pd_array[idx].pde_key,
 					   dict2->pd_array[idx].pde_key))
@@ -572,15 +602,13 @@ _prop_dictionary_expand(prop_dictionary_t pd, unsigned int capacity)
 }
 
 static prop_object_t
-_prop_dictionary_iterator_next_object(void *v)
+_prop_dictionary_iterator_next_object_locked(void *v)
 {
 	struct _prop_dictionary_iterator *pdi = v;
 	prop_dictionary_t pd = pdi->pdi_base.pi_obj;
 	prop_dictionary_keysym_t pdk = NULL;
 
 	_PROP_ASSERT(prop_object_is_dictionary(pd));
-
-	_PROP_RWLOCK_RDLOCK(pd->pd_rwlock);
 
 	if (pd->pd_version != pdi->pdi_base.pi_version)
 		goto out;	/* dictionary changed during iteration */
@@ -594,23 +622,44 @@ _prop_dictionary_iterator_next_object(void *v)
 	pdi->pdi_index++;
 
  out:
+	return (pdk);
+}
+
+static prop_object_t
+_prop_dictionary_iterator_next_object(void *v)
+{
+	struct _prop_dictionary_iterator *pdi = v;
+	prop_dictionary_t pd _PROP_ARG_UNUSED = pdi->pdi_base.pi_obj;
+	prop_dictionary_keysym_t pdk;
+
+	_PROP_ASSERT(prop_object_is_dictionary(pd));
+
+	_PROP_RWLOCK_RDLOCK(pd->pd_rwlock);
+	pdk = _prop_dictionary_iterator_next_object_locked(pdi);
 	_PROP_RWLOCK_UNLOCK(pd->pd_rwlock);
 	return (pdk);
 }
 
 static void
-_prop_dictionary_iterator_reset(void *v)
+_prop_dictionary_iterator_reset_locked(void *v)
 {
 	struct _prop_dictionary_iterator *pdi = v;
 	prop_dictionary_t pd = pdi->pdi_base.pi_obj;
 
 	_PROP_ASSERT(prop_object_is_dictionary(pd));
 
-	_PROP_RWLOCK_RDLOCK(pd->pd_rwlock);
-
 	pdi->pdi_index = 0;
 	pdi->pdi_base.pi_version = pd->pd_version;
+}
 
+static void
+_prop_dictionary_iterator_reset(void *v)
+{
+	struct _prop_dictionary_iterator *pdi = v;
+	prop_dictionary_t pd _PROP_ARG_UNUSED = pdi->pdi_base.pi_obj;
+
+	_PROP_RWLOCK_RDLOCK(pd->pd_rwlock);
+	_prop_dictionary_iterator_reset_locked(pdi);
 	_PROP_RWLOCK_UNLOCK(pd->pd_rwlock);
 }
 
@@ -696,6 +745,20 @@ prop_dictionary_copy_mutable(prop_dictionary_t opd)
 }
 
 /*
+ * prop_dictionary_make_immutable --
+ *	Set the immutable flag on that dictionary.
+ */
+void
+prop_dictionary_make_immutable(prop_dictionary_t pd)
+{
+
+	_PROP_RWLOCK_WRLOCK(pd->pd_rwlock);
+	if (prop_dictionary_is_immutable(pd) == false)
+		pd->pd_flags |= PD_F_IMMUTABLE;
+	_PROP_RWLOCK_UNLOCK(pd->pd_rwlock);
+}
+
+/*
  * prop_dictionary_count --
  *	Return the number of objects stored in the dictionary.
  */
@@ -737,13 +800,8 @@ prop_dictionary_ensure_capacity(prop_dictionary_t pd, unsigned int capacity)
 	return (rv);
 }
 
-/*
- * prop_dictionary_iterator --
- *	Return an iterator for the dictionary.  The dictionary is retained by
- *	the iterator.
- */
-prop_object_iterator_t
-prop_dictionary_iterator(prop_dictionary_t pd)
+static prop_object_iterator_t
+_prop_dictionary_iterator_locked(prop_dictionary_t pd)
 {
 	struct _prop_dictionary_iterator *pdi;
 
@@ -757,9 +815,25 @@ prop_dictionary_iterator(prop_dictionary_t pd)
 	pdi->pdi_base.pi_reset = _prop_dictionary_iterator_reset;
 	prop_object_retain(pd);
 	pdi->pdi_base.pi_obj = pd;
-	_prop_dictionary_iterator_reset(pdi);
+	_prop_dictionary_iterator_reset_locked(pdi);
 
 	return (&pdi->pdi_base);
+}
+
+/*
+ * prop_dictionary_iterator --
+ *	Return an iterator for the dictionary.  The dictionary is retained by
+ *	the iterator.
+ */
+prop_object_iterator_t
+prop_dictionary_iterator(prop_dictionary_t pd)
+{
+	prop_object_iterator_t pi;
+
+	_PROP_RWLOCK_RDLOCK(pd->pd_rwlock);
+	pi = _prop_dictionary_iterator_locked(pd);
+	_PROP_RWLOCK_UNLOCK(pd->pd_rwlock);
+	return (pi);
 }
 
 /*
@@ -832,12 +906,8 @@ _prop_dict_lookup(prop_dictionary_t pd, const char *key,
 	return (NULL);
 }
 
-/*
- * prop_dictionary_get --
- *	Return the object stored with specified key.
- */
-prop_object_t
-prop_dictionary_get(prop_dictionary_t pd, const char *key)
+static prop_object_t
+_prop_dictionary_get(prop_dictionary_t pd, const char *key, bool locked)
 {
 	const struct _prop_dict_entry *pde;
 	prop_object_t po = NULL;
@@ -845,14 +915,45 @@ prop_dictionary_get(prop_dictionary_t pd, const char *key)
 	if (! prop_object_is_dictionary(pd))
 		return (NULL);
 
-	_PROP_RWLOCK_RDLOCK(pd->pd_rwlock);
+	if (!locked)
+		_PROP_RWLOCK_RDLOCK(pd->pd_rwlock);
 	pde = _prop_dict_lookup(pd, key, NULL);
 	if (pde != NULL) {
 		_PROP_ASSERT(pde->pde_objref != NULL);
 		po = pde->pde_objref;
 	}
+	if (!locked)
+		_PROP_RWLOCK_UNLOCK(pd->pd_rwlock);
+	return (po);
+}
+/*
+ * prop_dictionary_get --
+ *	Return the object stored with specified key.
+ */
+prop_object_t
+prop_dictionary_get(prop_dictionary_t pd, const char *key)
+{
+	prop_object_t po = NULL;
+
+	if (! prop_object_is_dictionary(pd))
+		return (NULL);
+
+	_PROP_RWLOCK_RDLOCK(pd->pd_rwlock);
+	po = _prop_dictionary_get(pd, key, true);
 	_PROP_RWLOCK_UNLOCK(pd->pd_rwlock);
 	return (po);
+}
+
+static prop_object_t
+_prop_dictionary_get_keysym(prop_dictionary_t pd, prop_dictionary_keysym_t pdk,
+    bool locked)
+{
+
+	if (! (prop_object_is_dictionary(pd) &&
+	       prop_object_is_dictionary_keysym(pdk)))
+		return (NULL);
+
+	return (_prop_dictionary_get(pd, pdk->pdk_key, locked));
 }
 
 /*
@@ -863,11 +964,7 @@ prop_object_t
 prop_dictionary_get_keysym(prop_dictionary_t pd, prop_dictionary_keysym_t pdk)
 {
 
-	if (! (prop_object_is_dictionary(pd) &&
-	       prop_object_is_dictionary_keysym(pdk)))
-		return (NULL);
-
-	return (prop_dictionary_get(pd, pdk->pdk_key));
+	return (_prop_dictionary_get_keysym(pd, pdk, false));
 }
 
 /*
@@ -1004,7 +1101,9 @@ _prop_dictionary_remove(prop_dictionary_t pd, struct _prop_dict_entry *pde,
 	pd->pd_count--;
 	pd->pd_version++;
 
+
 	prop_object_release(pdk);
+
 	prop_object_release(po);
 }
 
@@ -1095,7 +1194,7 @@ prop_dictionary_keysym_equals(prop_dictionary_keysym_t pdk1,
 {
 	if (!prop_object_is_dictionary_keysym(pdk1) ||
 	    !prop_object_is_dictionary_keysym(pdk2))
-		return (_PROP_OBJECT_EQUALS_FALSE);
+		return (false);
 
 	return (prop_object_equals(pdk1, pdk2));
 }

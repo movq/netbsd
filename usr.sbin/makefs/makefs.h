@@ -1,4 +1,4 @@
-/*	$NetBSD: makefs.h,v 1.19 2006/10/10 01:55:45 dbj Exp $	*/
+/*	$NetBSD: makefs.h,v 1.36 2015/11/25 00:48:49 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -92,6 +92,7 @@ typedef struct {
 	uint32_t	 nlink;		/* number of links to this entry */
 	enum fi_flags	 flags;		/* flags used by fs specific code */
 	struct stat	 st;		/* stat entry */
+	void		*fsuse;		/* for storing FS dependent info */
 } fsinode;
 
 typedef struct _fsnode {
@@ -102,6 +103,8 @@ typedef struct _fsnode {
 	uint32_t	 type;		/* type of entry */
 	fsinode		*inode;		/* actual inode data */
 	char		*symlink;	/* symlink target */
+	const char	*root;		/* root path */
+	char		*path;		/* directory name */
 	char		*name;		/* file name */
 	int		flags;		/* misc flags */
 } fsnode;
@@ -109,11 +112,37 @@ typedef struct _fsnode {
 #define	FSNODE_F_HASSPEC	0x01	/* fsnode has a spec entry */
 
 /*
+ * option_t - contains option name, description, pointer to location to store
+ * result, and range checks for the result. Used to simplify fs specific
+ * option setting
+ */
+typedef enum {
+	OPT_STRARRAY,
+	OPT_STRPTR,
+	OPT_STRBUF,
+	OPT_BOOL,
+	OPT_INT8,
+	OPT_INT16,
+	OPT_INT32,
+	OPT_INT64
+} opttype_t;
+
+typedef struct {
+	char		letter;		/* option letter NUL for none */
+	const char	*name;		/* option name */
+	void		*value;		/* where to stuff the value */
+	opttype_t	type;		/* type of entry */
+	long long	minimum;	/* minimum for value */
+	long long	maximum;	/* maximum for value */
+	const char	*desc;		/* option description */
+} option_t;
+
+/*
  * fsinfo_t - contains various settings and parameters pertaining to
  * the image, including current settings, global options, and fs
  * specific options
  */
-typedef struct {
+typedef struct makefs_fsinfo {
 		/* current settings */
 	off_t	size;		/* total size */
 	off_t	inodes;		/* number of inodes */
@@ -129,50 +158,48 @@ typedef struct {
 	off_t	minsize;	/* minimum size image should be */
 	off_t	maxsize;	/* maximum size image can be */
 	off_t	freefiles;	/* free file entries to leave */
-	int	freefilepc;	/* free file % */
 	off_t	freeblocks;	/* free blocks to leave */
+	off_t	offset;		/* offset from start of file */
+	int	freefilepc;	/* free file % */
 	int	freeblockpc;	/* free block % */
 	int	needswap;	/* non-zero if byte swapping needed */
 	int	sectorsize;	/* sector size */
+	int	sparse;		/* sparse image, don't fill it with zeros */
+	int	replace;	/* replace files when merging */
 
 	void	*fs_specific;	/* File system specific additions. */
+	option_t *fs_options;	/* File system specific options */
 } fsinfo_t;
 
 
-/*
- * option_t - contains option name, description, pointer to location to store
- * result, and range checks for the result. Used to simplify fs specific
- * option setting
- */
-typedef struct {
-	const char	*name;		/* option name */
-	int		*value;		/* where to stuff the value */
-	int		minimum;	/* minimum for value */
-	int		maximum;	/* maximum for value */
-	const char	*desc;		/* option description */
-} option_t;
 
 
 void		apply_specfile(const char *, const char *, fsnode *, int);
-void		dump_fsnodes(const char *, fsnode *);
+void		dump_fsnodes(fsnode *);
 const char *	inode_type(mode_t);
-int		set_option(option_t *, const char *, const char *);
-fsnode *	walk_dir(const char *, fsnode *);
+int		set_option(const option_t *, const char *, char *, size_t);
+int		set_option_var(const option_t *, const char *, const char *,
+    char *, size_t);
+fsnode *	walk_dir(const char *, const char *, fsnode *, fsnode *, int);
 void		free_fsnodes(fsnode *);
+option_t *	copy_opts(const option_t *);
 
-void		ffs_prep_opts(fsinfo_t *);
-int		ffs_parse_opts(const char *, fsinfo_t *);
-void		ffs_cleanup_opts(fsinfo_t *);
-void		ffs_makefs(const char *, const char *, fsnode *, fsinfo_t *);
+#define DECLARE_FUN(fs)							\
+void		fs ## _prep_opts(fsinfo_t *);				\
+int		fs ## _parse_opts(const char *, fsinfo_t *);		\
+void		fs ## _cleanup_opts(fsinfo_t *);			\
+void		fs ## _makefs(const char *, const char *, fsnode *, fsinfo_t *)
 
-void		cd9660_prep_opts(fsinfo_t *);
-int		cd9660_parse_opts(const char *, fsinfo_t *);
-void		cd9660_cleanup_opts(fsinfo_t *);
-void		cd9660_makefs(const char *, const char *, fsnode *, fsinfo_t *);
-
+DECLARE_FUN(ffs);
+DECLARE_FUN(cd9660);
+DECLARE_FUN(chfs);
+DECLARE_FUN(v7fs);
+DECLARE_FUN(msdos);
+DECLARE_FUN(udf);
 
 extern	u_int		debug;
 extern	struct timespec	start_time;
+extern	struct stat stampst;
 
 /*
  * If -x is specified, we want to exclude nodes which do not appear
@@ -219,8 +246,9 @@ extern	struct timespec	start_time;
 		struct timeval end, td;			\
 		gettimeofday(&end, NULL);		\
 		timersub(&end, &(x), &td);		\
-		printf("%s took %ld.%06ld seconds\n",	\
-		    (d), td.tv_sec, td.tv_usec);	\
+		printf("%s took %lld.%06ld seconds\n",	\
+		    (d), (long long)td.tv_sec,		\
+		    (long)td.tv_usec);			\
 	}
 
 

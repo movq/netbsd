@@ -1,4 +1,4 @@
-/*	$NetBSD: su.c,v 1.66 2007/10/17 21:05:39 christos Exp $	*/
+/*	$NetBSD: su.c,v 1.72 2015/06/16 22:54:11 christos Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -31,16 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-    "@(#) Copyright (c) 1988 The Regents of the University of California.\n\
- All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)su.c	8.3 (Berkeley) 4/2/94";*/
 #else
-__RCSID("$NetBSD: su.c,v 1.66 2007/10/17 21:05:39 christos Exp $");
+__RCSID("$NetBSD: su.c,v 1.72 2015/06/16 22:54:11 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -113,7 +112,10 @@ main(int argc, char **argv)
 	enum { UNSET, YES, NO } iscsh = UNSET;
 	const char *user, *shell, *avshell;
 	char *username, **np;
-	char *userpass, *class;
+#ifdef SU_ROOTAUTH
+	char *userpass;
+#endif
+	char *class;
 	char shellbuf[MAXPATHLEN], avshellbuf[MAXPATHLEN];
 	time_t pw_warntime = _PASSWORD_WARNDAYS * SECSPERDAY;
 #ifdef LOGIN_CAP
@@ -123,6 +125,7 @@ main(int argc, char **argv)
 	char *gname;
 #endif
 
+	(void)setprogname(argv[0]);
 	asme = asthem = fastlogin = 0;
 	gohome = 1;
 	shell = class = NULL;
@@ -186,7 +189,9 @@ main(int argc, char **argv)
 	if (pwd == NULL)
 		errx(EXIT_FAILURE, "who are you?");
 	username = estrdup(pwd->pw_name);
+#ifdef SU_ROOTAUTH
 	userpass = estrdup(pwd->pw_passwd);
+#endif
 
 	if (asme) {
 		if (pwd->pw_shell && *pwd->pw_shell) {
@@ -226,7 +231,7 @@ main(int argc, char **argv)
 		pwd->pw_class = class;
 	}
 	if ((lc = login_getclass(pwd->pw_class)) == NULL)
-		errx(EXIT_FAILURE, "Unknown class %s\n", pwd->pw_class);
+		errx(EXIT_FAILURE, "Unknown class %s", pwd->pw_class);
 
 	pw_warntime = (time_t)login_getcaptime(lc, "password-warn",
 	    _PASSWORD_WARNDAYS * SECSPERDAY,
@@ -399,7 +404,7 @@ main(int argc, char **argv)
 
 #ifdef BSD4_4
 	if (pwd->pw_change || pwd->pw_expire)
-		(void)gettimeofday(&tp, (struct timezone *)NULL);
+		(void)gettimeofday(&tp, NULL);
 	if (pwd->pw_change) {
 		if (tp.tv_sec >= pwd->pw_change) {
 			(void)printf("%s -- %s's password has expired.\n",
@@ -462,7 +467,7 @@ kerberos5(char *username, const char *user, uid_t uid)
 		warnx("kerberos5: not in %s's ACL.", user);
 		goto fail;
 	}
-	ret = krb5_cc_gen_new(context, &krb5_mcc_ops, &ccache);
+	ret = krb5_cc_new_unique(context, krb5_mcc_ops.prefix, NULL, &ccache);
 	if (ret)
 		goto fail;
 	ret = krb5_verify_user_lrealm(context, princ, ccache, NULL, TRUE,
@@ -482,7 +487,7 @@ kerberos5(char *username, const char *user, uid_t uid)
 		}
 		goto fail;
 	}
-	ret = krb5_cc_gen_new(context, &krb5_fcc_ops, &ccache2);
+	ret = krb5_cc_new_unique(context, krb5_mcc_ops.prefix, NULL, &ccache2);
 	if (ret) {
 		krb5_cc_destroy(context, ccache);
 		goto fail;

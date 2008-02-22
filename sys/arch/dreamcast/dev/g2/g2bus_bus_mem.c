@@ -1,4 +1,4 @@
-/*	$NetBSD: g2bus_bus_mem.c,v 1.13 2006/08/07 17:36:53 tsutsui Exp $	*/
+/*	$NetBSD: g2bus_bus_mem.c,v 1.16 2011/07/19 15:52:29 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,20 +39,21 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: g2bus_bus_mem.c,v 1.13 2006/08/07 17:36:53 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: g2bus_bus_mem.c,v 1.16 2011/07/19 15:52:29 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/bus.h>
 
 #include <machine/cpu.h>
-#include <machine/bus.h>
 
 #include <dreamcast/dev/g2/g2busvar.h>
 
 int	g2bus_bus_mem_map(void *, bus_addr_t, bus_size_t, int,
 	    bus_space_handle_t *);
 void	g2bus_bus_mem_unmap(void *, bus_space_handle_t, bus_size_t);
+paddr_t	g2bus_bus_mem_mmap(void *, bus_addr_t, off_t, int, int);
 
 uint8_t g2bus_bus_mem_read_1(void *, bus_space_handle_t, bus_size_t);
 uint16_t g2bus_bus_mem_read_2(void *, bus_space_handle_t, bus_size_t);
@@ -121,6 +115,7 @@ g2bus_bus_mem_init(struct g2bus_softc *sc)
 
 	t->dbs_map = g2bus_bus_mem_map;
 	t->dbs_unmap = g2bus_bus_mem_unmap;
+	t->dbs_mmap = g2bus_bus_mem_mmap;
 
 	t->dbs_r_1 = g2bus_bus_mem_read_1;
 	t->dbs_r_2 = g2bus_bus_mem_read_2;
@@ -158,6 +153,14 @@ g2bus_bus_mem_unmap(void *v, bus_space_handle_t sh, bus_size_t size)
 
 	KASSERT(sh >= SH3_P2SEG_BASE && sh <= SH3_P2SEG_END);
 	/* Nothing to do. */
+}
+
+paddr_t
+g2bus_bus_mem_mmap(void *v, bus_addr_t addr, off_t offset, int prot, int flags)
+{
+
+	/* XXX not implemented */
+	return -1;
 }
 
 /*

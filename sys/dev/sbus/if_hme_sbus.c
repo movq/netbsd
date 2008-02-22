@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hme_sbus.c,v 1.22 2007/10/19 12:01:11 ad Exp $	*/
+/*	$NetBSD: if_hme_sbus.c,v 1.33 2009/09/17 16:28:12 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_hme_sbus.c,v 1.22 2007/10/19 12:01:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_hme_sbus.c,v 1.33 2009/09/17 16:28:12 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,20 +60,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_hme_sbus.c,v 1.22 2007/10/19 12:01:11 ad Exp $");
 
 struct hmesbus_softc {
 	struct	hme_softc	hsc_hme;	/* HME device */
-	struct	sbusdev		hsc_sbus;	/* SBus device */
+	/* sbus specific stuff here */
 };
 
-int	hmematch_sbus(struct device *, struct cfdata *, void *);
-void	hmeattach_sbus(struct device *, struct device *, void *);
+int	hmematch_sbus(device_t, cfdata_t, void *);
+void	hmeattach_sbus(device_t, device_t, void *);
 
-CFATTACH_DECL(hme_sbus, sizeof(struct hmesbus_softc),
+CFATTACH_DECL_NEW(hme_sbus, sizeof(struct hmesbus_softc),
     hmematch_sbus, hmeattach_sbus, NULL, NULL);
 
 int
-hmematch_sbus(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+hmematch_sbus(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -90,29 +80,28 @@ hmematch_sbus(parent, cf, aux)
 }
 
 void
-hmeattach_sbus(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+hmeattach_sbus(device_t parent, device_t self, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
-	struct hmesbus_softc *hsc = (void *)self;
+	struct hmesbus_softc *hsc = device_private(self);
 	struct hme_softc *sc = &hsc->hsc_hme;
-	struct sbusdev *sd = &hsc->hsc_sbus;
-	u_int32_t burst, sbusburst;
+	struct sbus_softc *sbsc = device_private(parent);
+	uint32_t burst, sbusburst;
 	int node;
 
+	sc->sc_dev = self;
 	node = sa->sa_node;
 
 	/* Pass on the bus tags */
 	sc->sc_bustag = sa->sa_bustag;
 	sc->sc_dmatag = sa->sa_dmatag;
 
-	printf(": Sun Happy Meal Ethernet (%s)\n",
+	aprint_normal(": Sun Happy Meal Ethernet (%s)\n",
 	    sa->sa_name);
 
 	if (sa->sa_nreg < 5) {
-		printf("%s: only %d register sets\n",
-			self->dv_xname, sa->sa_nreg);
+		aprint_error_dev(self, "only %d register sets\n",
+		    sa->sa_nreg);
 		return;
 	}
 
@@ -131,7 +120,7 @@ hmeattach_sbus(parent, self, aux)
 			 sa->sa_reg[0].oa_base,
 			 (bus_size_t)sa->sa_reg[0].oa_size,
 			 0, &sc->sc_seb) != 0) {
-		printf("%s: cannot map SEB registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map SEB registers\n");
 		return;
 	}
 	if (sbus_bus_map(sa->sa_bustag,
@@ -139,7 +128,7 @@ hmeattach_sbus(parent, self, aux)
 			 sa->sa_reg[1].oa_base,
 			 (bus_size_t)sa->sa_reg[1].oa_size,
 			 0, &sc->sc_etx) != 0) {
-		printf("%s: cannot map ETX registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map ETX registers\n");
 		return;
 	}
 	if (sbus_bus_map(sa->sa_bustag,
@@ -147,7 +136,7 @@ hmeattach_sbus(parent, self, aux)
 			 sa->sa_reg[2].oa_base,
 			 (bus_size_t)sa->sa_reg[2].oa_size,
 			 0, &sc->sc_erx) != 0) {
-		printf("%s: cannot map ERX registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map ERX registers\n");
 		return;
 	}
 	if (sbus_bus_map(sa->sa_bustag,
@@ -155,7 +144,7 @@ hmeattach_sbus(parent, self, aux)
 			 sa->sa_reg[3].oa_base,
 			 (bus_size_t)sa->sa_reg[3].oa_size,
 			 0, &sc->sc_mac) != 0) {
-		printf("%s: cannot map MAC registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map MAC registers\n");
 		return;
 	}
 	if (sbus_bus_map(sa->sa_bustag,
@@ -163,12 +152,9 @@ hmeattach_sbus(parent, self, aux)
 			 sa->sa_reg[4].oa_base,
 			 (bus_size_t)sa->sa_reg[4].oa_size,
 			 0, &sc->sc_mif) != 0) {
-		printf("%s: cannot map MIF registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map MIF registers\n");
 		return;
 	}
-
-	sd->sd_reset = (void *)hme_reset;
-	sbus_establish(sd, self);
 
 	prom_getether(node, sc->sc_enaddr);
 
@@ -176,7 +162,7 @@ hmeattach_sbus(parent, self, aux)
 	 * Get transfer burst size from PROM and pass it on
 	 * to the back-end driver.
 	 */
-	sbusburst = ((struct sbus_softc *)parent)->sc_burst;
+	sbusburst = sbsc->sc_burst;
 	if (sbusburst == 0)
 		sbusburst = SBUS_BURST_32 - 1; /* 1->16 */
 

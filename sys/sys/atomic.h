@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic.h,v 1.9 2008/02/11 15:20:41 ad Exp $	*/
+/*	$NetBSD: atomic.h,v 1.13 2015/01/08 22:27:18 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,6 +37,7 @@
 #include <stdint.h>
 #endif
 
+__BEGIN_DECLS
 /*
  * Atomic ADD
  */
@@ -95,6 +89,13 @@ unsigned long	atomic_cas_ulong(volatile unsigned long *, unsigned long,
 				 unsigned long);
 void *		atomic_cas_ptr(volatile void *, void *, void *);
 uint64_t	atomic_cas_64(volatile uint64_t *, uint64_t, uint64_t);
+
+/*
+ * This operations will be provided for userland, but may not be
+ * implemented efficiently.
+ */
+uint16_t	atomic_cas_16(volatile uint16_t *, uint16_t, uint16_t);
+uint8_t 	atomic_cas_8(volatile uint8_t *, uint8_t, uint8_t);
 
 /*
  * Non-interlocked atomic COMPARE-AND-SWAP.
@@ -154,5 +155,13 @@ void		membar_exit(void);
 void		membar_producer(void);
 void		membar_consumer(void);
 void		membar_sync(void);
+
+#ifdef	__HAVE_MEMBAR_DATADEP_CONSUMER
+void		membar_datadep_consumer(void);
+#else
+#define	membar_datadep_consumer()	((void)0)
+#endif
+
+__END_DECLS
 
 #endif /* ! _SYS_ATOMIC_H_ */

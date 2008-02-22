@@ -1,4 +1,4 @@
-/* $NetBSD: exec.c,v 1.27 2007/12/15 19:44:37 perry Exp $ */
+/* $NetBSD: exec.c,v 1.31 2016/03/16 22:35:44 christos Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.3 (Berkeley) 5/23/95";
 #else
-__RCSID("$NetBSD: exec.c,v 1.27 2007/12/15 19:44:37 perry Exp $");
+__RCSID("$NetBSD: exec.c,v 1.31 2016/03/16 22:35:44 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,11 +87,13 @@ static Char *expath;		/* Path for exerr */
 #define	HSHSIZ 8192	/* 1k bytes */
 #define HSHMASK	(HSHSIZ - 1)
 #define HSHMUL 243
-static char xhash[HSHSIZ / 8];
+static unsigned char xhash[HSHSIZ / 8];
 
 #define hash(a, b) (((a) * HSHMUL + (b)) & HSHMASK)
+/* these macros eval their arguments multiple times, so be careful */
 #define bit(h, b) ((h)[(b) >> 3] & 1 << ((b) & 7))	/* bit test */
-#define bis(h, b) ((h)[(b) >> 3] |= 1 << ((b) & 7))	/* bit set */
+#define bis(h, b) ((h)[(b) >> 3] = \
+    (unsigned char)((1 << ((b) & 7)) | (h)[(b) >> 3]))/* bit set */
 static int hits, misses;
 
 /* Dummy search path for just absolute search when no path */
@@ -440,7 +442,8 @@ dohash(Char **v, struct command *t)
     struct varent *pathv;
     DIR *dirp;
     Char **pv;
-    int cnt, hashval, i;
+    size_t cnt;
+    int hashval, i;
 
     i = 0;
     havhash = 1;
@@ -664,13 +667,13 @@ tellmewhat(struct wordent *lexp, Char *str)
 	case '"':
 	    qc = *s2++;
 	    while (*s2 && *s2 != qc)
-		*s1++ = *s2++ | QUOTE;
+		*s1++ = (Char)(*s2++ | QUOTE);
 	    if (*s2)
 		s2++;
 	    break;
 	case '\\':
 	    if (*++s2)
-		*s1++ = *s2++ | QUOTE;
+		*s1++ = (Char)(*s2++ | QUOTE);
 	    break;
 	default:
 	    *s1++ = *s2++;

@@ -1,4 +1,4 @@
-/*	$NetBSD: skifs.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
+/*	$NetBSD: skifs.c,v 1.4 2009/07/20 04:59:04 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 2001 Doug Rabson
@@ -32,6 +32,7 @@
 #include <sys/param.h>
 #include <sys/time.h>
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
 
 #include "bootstrap.h"
 #include "libski.h"
@@ -118,7 +119,7 @@ skifs_seek(struct open_file *f, off_t offset, int where)
 int
 skifs_stat(struct open_file *f, struct stat *sb)
 {
-	bzero(sb, sizeof(*sb));
+	memset(sb, 0, sizeof(*sb));
 	sb->st_mode = S_IFREG | S_IRUSR;
 	return 0;
 }

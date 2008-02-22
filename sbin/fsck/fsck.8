@@ -1,4 +1,4 @@
-.\"	$NetBSD: fsck.8,v 1.32 2007/02/23 19:32:16 rumble Exp $
+.\"	$NetBSD: fsck.8,v 1.40 2016/09/11 09:09:54 wiz Exp $
 .\"
 .\" Copyright (c) 1996 Christos Zoulas.  All rights reserved.
 .\"
@@ -10,11 +10,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"	This product includes software developed by Christos Zoulas.
-.\" 4. The name of the author may not be used to endorse or promote products
-.\"    derived from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 .\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,7 +22,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 12, 2004
+.Dd September 11, 2016
 .Dt FSCK 8
 .Os
 .Sh NAME
@@ -39,6 +34,7 @@
 .Op Fl l Ar maxparallel
 .Op Fl T Ar fstype:fsoptions
 .Op Fl t Ar fstype
+.Op Fl x Ar mountpoint
 .Op special | node ...
 .Sh DESCRIPTION
 The
@@ -51,7 +47,9 @@ file or in the command line for consistency.
 It is normally used in the script
 .Pa /etc/rc
 during automatic reboot.
-If no file systems are specified, and ``preen'' mode is enabled (
+If no file systems are specified, and
+.Dq preen
+mode is enabled (
 .Fl p
 option)
 .Nm
@@ -99,14 +97,8 @@ will check all file systems listed in
 .Pa /etc/fstab
 according to their pass number, and will make minor repairs without
 human intervention.
-Any major problems will cause
-.Nm
-to exit with a non-zero
-.Xr exit 3
-code, so as to alert any invoking program or script that human
-intervention is required.
 .It Fl q
-Quiet mode, do not output any messages for clean filesystems.
+Quiet mode, do not output any messages for clean file systems.
 .It Fl T Ar fstype:fsoptions
 List of comma separated file system specific options for the specified
 file system type, in the same format as
@@ -122,6 +114,14 @@ then invoke
 for the file system types that are not specified in the list.
 .It Fl v
 Print the commands before executing them.
+.It Fl x Ar mountpoint
+Exclude the file system which has a
+.Ar mountpoint
+the same as in
+.Pa /etc/fstab .
+Used only in
+.Dq preen
+mode.
 .It Fl y
 Causes
 .Nm
@@ -133,6 +133,40 @@ as the answer to all operator questions.
 .It Pa /etc/fstab
 file system table
 .El
+.Sh EXIT STATUS
+.Nm
+exits with
+.Dv 0
+on success.
+Any major problems will cause
+.Nm
+to exit with the following non-zero
+.Xr exit 3
+codes, so as to alert any invoking program or script that human
+intervention is required.
+.Bl -tag -width XXXX
+.It Dv 1
+Usage problem.
+.It Dv 2
+Unresolved errors while checking the file system.
+Re-running
+.Nm
+on the file system(s) is required.
+.It Dv 4
+The root file system was changed in the process of checking, and updating the
+mount was unsuccessful.
+A reboot (without sync) is required.
+.It Dv 8
+The file system check has failed, and a subsequent check is required
+that will require human intervention.
+.It Dv 12
+.Nm
+exited because of the result of a signal (usually
+.Dv SIGINT
+or
+.Dv SIGQUIT
+from the terminal).
+.El
 .Sh SEE ALSO
 .Xr fstab 5 ,
 .Xr fsck_ext2fs 8 ,
@@ -140,3 +174,13 @@ file system table
 .Xr fsck_lfs 8 ,
 .Xr fsck_msdos 8 ,
 .Xr mount 8
+.Sh HISTORY
+A
+.Nm
+utility appeared in
+.Bx 4.0 .
+It was reimplemented as a file system independent wrapper in
+.Nx 1.3 .
+The original file system specific utility became
+.Xr fsck_ffs 8
+at this point.

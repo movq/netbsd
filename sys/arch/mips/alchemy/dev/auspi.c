@@ -1,4 +1,4 @@
-/* $NetBSD: auspi.c,v 1.3 2007/02/28 04:21:53 thorpej Exp $ */
+/* $NetBSD: auspi.c,v 1.8 2012/01/04 02:36:26 kiyohara Exp $ */
 
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -42,19 +42,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auspi.c,v 1.3 2007/02/28 04:21:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auspi.c,v 1.8 2012/01/04 02:36:26 kiyohara Exp $");
 
 #include "locators.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/kernel.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
 #include <sys/errno.h>
+#include <sys/kernel.h>
 #include <sys/proc.h>
-
-#include <machine/bus.h>
-#include <machine/cpu.h>
+#include <sys/systm.h>
 
 #include <mips/alchemy/include/aubusvar.h>
 #include <mips/alchemy/include/auvar.h>
@@ -67,7 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: auspi.c,v 1.3 2007/02/28 04:21:53 thorpej Exp $");
 #include <dev/spi/spivar.h>
 
 struct auspi_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	struct aupsc_controller	sc_psc;		/* parent controller ops */
 	struct spi_controller	sc_spi;		/* SPI implementation ops */
 	struct auspi_machdep	sc_md;		/* board-specific support */
@@ -87,11 +86,11 @@ struct auspi_softc {
 
 #define	STATIC
 
-STATIC int auspi_match(struct device *, struct cfdata *, void *);
-STATIC void auspi_attach(struct device *, struct device *, void *);
+STATIC int auspi_match(device_t, struct cfdata *, void *);
+STATIC void auspi_attach(device_t, device_t, void *);
 STATIC int auspi_intr(void *);
 
-CFATTACH_DECL(auspi, sizeof(struct auspi_softc),
+CFATTACH_DECL_NEW(auspi, sizeof(struct auspi_softc),
     auspi_match, auspi_attach, NULL, NULL);
 
 /* SPI service routines */
@@ -110,7 +109,7 @@ STATIC void auspi_sched(struct auspi_softc *);
 	bus_space_write_4(sc->sc_psc.psc_bust, sc->sc_psc.psc_bush, x, v)
 
 int
-auspi_match(struct device *parent, struct cfdata *cf, void *aux)
+auspi_match(device_t parent, struct cfdata *cf, void *aux)
 {
 	struct aupsc_attach_args *aa = aux;
 
@@ -121,12 +120,14 @@ auspi_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-auspi_attach(struct device *parent, struct device *self, void *aux)
+auspi_attach(device_t parent, device_t self, void *aux)
 {
 	struct auspi_softc *sc = device_private(self);
 	struct aupsc_attach_args *aa = aux;
 	struct spibus_attach_args sba;
 	const struct auspi_machdep *md;
+
+	sc->sc_dev = self;
 
 	if ((md = auspi_machdep(aa->aupsc_addr)) != NULL) {
 		sc->sc_md = *md;
@@ -158,10 +159,10 @@ auspi_attach(struct device *parent, struct device *self, void *aux)
 	PUTREG(sc, AUPSC_SPIMSK, SPIMSK_ALL);
 
 	/* enable device interrupts */
-	sc->sc_ih = au_intr_establish(aa->aupsc_irq, 0, IPL_SERIAL, IST_LEVEL,
+	sc->sc_ih = au_intr_establish(aa->aupsc_irq, 0, IPL_BIO, IST_LEVEL,
 	    auspi_intr, sc);
 
-	(void) config_found_ia(&sc->sc_dev, "spibus", &sba, spibus_print);
+	(void) config_found_ia(self, "spibus", &sba, spibus_print);
 }
 
 int
@@ -375,15 +376,15 @@ auspi_intr(void *arg)
 
 	if (ev & SPIMSK_MM) {
 		printf("%s: multiple masters detected!\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		err = EIO;
 	}
 	if (ev & SPIMSK_RO) {
-		printf("%s: receive overflow\n", sc->sc_dev.dv_xname);
+		printf("%s: receive overflow\n", device_xname(sc->sc_dev));
 		err = EIO;
 	}
 	if (ev & SPIMSK_TU) {
-		printf("%s: transmit underflow\n", sc->sc_dev.dv_xname);
+		printf("%s: transmit underflow\n", device_xname(sc->sc_dev));
 		err = EIO;
 	}
 	if (err) {
@@ -408,7 +409,7 @@ auspi_intr(void *arg)
 			if ((sc->sc_wchunk != NULL) ||
 			    (sc->sc_rchunk != NULL)) {
 				printf("%s: partial transfer?\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 				err = EIO;
 			} 
 			auspi_done(sc, err);
@@ -428,7 +429,7 @@ auspi_transfer(void *arg, struct spi_transfer *st)
 	int			s;
 
 	/* make sure we select the right chip */
-	s = splserial();
+	s = splbio();
 	spi_transq_enqueue(&sc->sc_q, st);
 	if (sc->sc_running == 0) {
 		auspi_sched(sc);

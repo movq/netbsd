@@ -1,4 +1,4 @@
-/*	$NetBSD: ofcons.c,v 1.33 2007/11/19 18:51:48 ad Exp $	*/
+/*	$NetBSD: ofcons.c,v 1.45 2014/07/25 08:10:37 dholland Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.33 2007/11/19 18:51:48 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.45 2014/07/25 08:10:37 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.33 2007/11/19 18:51:48 ad Exp $");
 #include <dev/ofw/openfirm.h>
 
 struct ofcons_softc {
-	struct device of_dev;
 	struct tty *of_tty;
 	struct callout sc_poll_ch;
 	int of_flags;
@@ -62,10 +61,10 @@ cons_decl(ofcons_);
 
 static int stdin, stdout;
 
-static int ofcons_match(struct device *, struct cfdata *, void *);
-static void ofcons_attach(struct device *, struct device *, void *);
+static int ofcons_match(device_t, cfdata_t, void *);
+static void ofcons_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(ofcons, sizeof(struct ofcons_softc),
+CFATTACH_DECL_NEW(ofcons, sizeof(struct ofcons_softc),
     ofcons_match, ofcons_attach, NULL, NULL);
 
 extern struct cfdriver ofcons_cd;
@@ -79,17 +78,24 @@ dev_type_tty(ofcons_tty);
 dev_type_poll(ofcons_poll);
 
 const struct cdevsw ofcons_cdevsw = {
-	ofcons_open, ofcons_close, ofcons_read, ofcons_write, ofcons_ioctl,
-	nostop, ofcons_tty, ofcons_poll, nommap, ttykqfilter, D_TTY
+	.d_open = ofcons_open,
+	.d_close = ofcons_close,
+	.d_read = ofcons_read,
+	.d_write = ofcons_write,
+	.d_ioctl = ofcons_ioctl,
+	.d_stop = nostop,
+	.d_tty = ofcons_tty,
+	.d_poll = ofcons_poll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 static int ofcons_probe(void);
 
 static int
-ofcons_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ofcons_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 
@@ -102,9 +108,7 @@ ofcons_match(parent, match, aux)
 }
 
 static void
-ofcons_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ofcons_attach(device_t parent, device_t self, void *aux)
 {
 	struct ofcons_softc *sc = device_private(self);
 
@@ -118,22 +122,16 @@ static int ofcons_param(struct tty *, struct termios *);
 static void ofcons_pollin(void *);
 
 int
-ofcons_open(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+ofcons_open(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct ofcons_softc *sc;
-	int unit = minor(dev);
 	struct tty *tp;
 
-	if (unit >= ofcons_cd.cd_ndevs)
-		return ENXIO;
-	sc = ofcons_cd.cd_devs[unit];
+	sc = device_lookup_private(&ofcons_cd, minor(dev));
 	if (!sc)
 		return ENXIO;
 	if (!(tp = sc->of_tty))
-		sc->of_tty = tp = ttymalloc();
+		sc->of_tty = tp = tty_alloc();
 	tp->t_oproc = ofcons_start;
 	tp->t_param = ofcons_param;
 	tp->t_dev = dev;
@@ -160,12 +158,9 @@ ofcons_open(dev, flag, mode, l)
 }
 
 int
-ofcons_close(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+ofcons_close(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct ofcons_softc *sc = ofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&ofcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 
 	callout_stop(&sc->sc_poll_ch);
@@ -176,49 +171,35 @@ ofcons_close(dev, flag, mode, l)
 }
 
 int
-ofcons_read(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+ofcons_read(dev_t dev, struct uio *uio, int flag)
 {
-	struct ofcons_softc *sc = ofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&ofcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 
 	return (*tp->t_linesw->l_read)(tp, uio, flag);
 }
 
 int
-ofcons_write(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+ofcons_write(dev_t dev, struct uio *uio, int flag)
 {
-	struct ofcons_softc *sc = ofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&ofcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 
 	return (*tp->t_linesw->l_write)(tp, uio, flag);
 }
 
 int
-ofcons_poll(dev, events, l)
-	dev_t dev;
-	int events;
-	struct lwp *l;
+ofcons_poll(dev_t dev, int events, struct lwp *l)
 {
-	struct ofcons_softc *sc = ofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&ofcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 
 	return ((*tp->t_linesw->l_poll)(tp, events, l));
 }
 int
-ofcons_ioctl(dev, cmd, data, flag, l)
-	dev_t dev;
-	u_long cmd;
-	void *data;
-	int flag;
-	struct lwp *l;
+ofcons_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct ofcons_softc *sc = ofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&ofcons_cd, minor(dev));
 	struct tty *tp = sc->of_tty;
 	int error;
 
@@ -228,17 +209,15 @@ ofcons_ioctl(dev, cmd, data, flag, l)
 }
 
 struct tty *
-ofcons_tty(dev)
-	dev_t dev;
+ofcons_tty(dev_t dev)
 {
-	struct ofcons_softc *sc = ofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&ofcons_cd, minor(dev));
 
 	return sc->of_tty;
 }
 
 static void
-ofcons_start(tp)
-	struct tty *tp;
+ofcons_start(struct tty *tp)
 {
 	int s, len;
 	u_char buf[OFBURSTLEN];
@@ -250,7 +229,7 @@ ofcons_start(tp)
 	}
 	tp->t_state |= TS_BUSY;
 	splx(s);
-	len = q_to_b(cl, buf, OFBURSTLEN);
+	len = q_to_b(&tp->t_outq, buf, OFBURSTLEN);
 	OF_write(stdout, buf, len);
 	s = spltty();
 	tp->t_state &= ~TS_BUSY;
@@ -262,9 +241,7 @@ ofcons_start(tp)
 }
 
 static int
-ofcons_param(tp, t)
-	struct tty *tp;
-	struct termios *t;
+ofcons_param(struct tty *tp, struct termios *t)
 {
 	tp->t_ispeed = t->c_ispeed;
 	tp->t_ospeed = t->c_ospeed;
@@ -273,8 +250,7 @@ ofcons_param(tp, t)
 }
 
 static void
-ofcons_pollin(aux)
-	void *aux;
+ofcons_pollin(void *aux)
 {
 	struct ofcons_softc *sc = aux;
 	struct tty *tp = sc->of_tty;
@@ -288,7 +264,7 @@ ofcons_pollin(aux)
 }
 
 static int
-ofcons_probe()
+ofcons_probe(void)
 {
 	int chosen;
 	char stdinbuf[4], stdoutbuf[4];
@@ -311,8 +287,7 @@ ofcons_probe()
 }
 
 void
-ofcons_cnprobe(cd)
-	struct consdev *cd;
+ofcons_cnprobe(struct consdev *cd)
 {
 	int maj;
 
@@ -325,14 +300,12 @@ ofcons_cnprobe(cd)
 }
 
 void
-ofcons_cninit(cd)
-	struct consdev *cd;
+ofcons_cninit(struct consdev *cd)
 {
 }
 
 int
-ofcons_cngetc(dev)
-	dev_t dev;
+ofcons_cngetc(dev_t dev)
 {
 	unsigned char ch = '\0';
 	int l;
@@ -344,9 +317,7 @@ ofcons_cngetc(dev)
 }
 
 void
-ofcons_cnputc(dev, c)
-	dev_t dev;
-	int c;
+ofcons_cnputc(dev_t dev, int c)
 {
 	char ch = c;
 
@@ -354,11 +325,9 @@ ofcons_cnputc(dev, c)
 }
 
 void
-ofcons_cnpollc(dev, on)
-	dev_t dev;
-	int on;
+ofcons_cnpollc(dev_t dev, int on)
 {
-	struct ofcons_softc *sc = ofcons_cd.cd_devs[minor(dev)];
+	struct ofcons_softc *sc = device_lookup_private(&ofcons_cd, minor(dev));
 
 	if (!sc)
 		return;

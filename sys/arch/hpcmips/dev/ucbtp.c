@@ -1,4 +1,4 @@
-/*	$NetBSD: ucbtp.c,v 1.17 2007/03/04 05:59:52 christos Exp $ */
+/*	$NetBSD: ucbtp.c,v 1.21 2012/10/27 17:17:53 chs Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ucbtp.c,v 1.17 2007/03/04 05:59:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ucbtp.c,v 1.21 2012/10/27 17:17:53 chs Exp $");
 
 #include "opt_use_poll.h"
 
@@ -115,9 +108,9 @@ enum ucbadc_state {
 };
 
 struct ucbtp_softc {
-	struct device sc_dev;
-	struct device *sc_sib; /* parent (TX39 SIB module) */
-	struct device *sc_ucb; /* parent (UCB1200 module) */
+	device_t sc_dev;
+	device_t sc_sib; /* parent (TX39 SIB module) */
+	device_t sc_ucb; /* parent (UCB1200 module) */
 	tx_chipset_tag_t sc_tc;
 
 	enum ucbts_stat sc_stat;
@@ -158,11 +151,11 @@ struct ucbtp_softc {
 	int sm_rw_retry; /* retry counter for r/w */
 
 	/* wsmouse */
-	struct device *sc_wsmousedev;
+	device_t sc_wsmousedev;
 };
 
-int	ucbtp_match(struct device *, struct cfdata *, void *);
-void	ucbtp_attach(struct device *, struct device *, void *);
+int	ucbtp_match(device_t, cfdata_t, void *);
+void	ucbtp_attach(device_t, device_t, void *);
 
 int	ucbtp_sibintr(void *);
 int	ucbtp_poll(void *);
@@ -174,7 +167,7 @@ int	ucbtp_enable(void *);
 int	ucbtp_ioctl(void *, u_long, void *, int, struct lwp *);
 void	ucbtp_disable(void *);
 
-CFATTACH_DECL(ucbtp, sizeof(struct ucbtp_softc),
+CFATTACH_DECL_NEW(ucbtp, sizeof(struct ucbtp_softc),
     ucbtp_match, ucbtp_attach, NULL, NULL);
 
 const struct wsmouse_accessops ucbtp_accessops = {
@@ -237,7 +230,7 @@ struct calibration_sample_table {
 };
 
 struct wsmouse_calibcoords *
-calibration_sample_lookup()
+calibration_sample_lookup(void)
 {
 	struct calibration_sample_table *tab;
 	platid_mask_t mask;
@@ -282,20 +275,21 @@ ucbtp_calibration(struct ucbtp_softc *sc)
 }
 
 int
-ucbtp_match(struct device *parent, struct cfdata *cf, void *aux)
+ucbtp_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (1);
 }
 
 void
-ucbtp_attach(struct device *parent, struct device *self, void *aux)
+ucbtp_attach(device_t parent, device_t self, void *aux)
 {
 	struct ucb1200_attach_args *ucba = aux;
-	struct ucbtp_softc *sc = (void*)self;
+	struct ucbtp_softc *sc = device_private(self);
 	struct wsmousedev_attach_args wsmaa;
 	tx_chipset_tag_t tc;
 
+	sc->sc_dev = self;
 	tc = sc->sc_tc = ucba->ucba_tc;
 	sc->sc_sib = ucba->ucba_sib;
 	sc->sc_ucb = ucba->ucba_ucb;
@@ -367,7 +361,7 @@ ucbtp_sibintr(void *arg)
 		sc->sc_pollh = tx39_poll_establish(sc->sc_tc, 1, IST_EDGE,
 		    ucbtp_poll, sc);
 		if (!sc->sc_pollh) {
-			printf("%s: can't poll\n", sc->sc_dev.dv_xname);
+			printf("%s: can't poll\n", device_xname(sc->sc_dev));
 		}
 	}
 
@@ -460,7 +454,7 @@ ucbtp_adc_async(void *arg)
 			break;
 		case UCBADC_MEASUREMENT_PRESSURE:
 			sc->sm_measurement = UCBADC_MEASUREMENT_X;
-			/* measument complete. pass down to wsmouse_input */
+			/* measurement complete. pass down to wsmouse_input */
 			sc->sm_state = UCBADC_ADC_INPUT;
 			break;
 		}

@@ -1,4 +1,4 @@
-/*	$NetBSD: aout.c,v 1.9 2005/12/11 12:17:00 christos Exp $	*/
+/*	$NetBSD: aout.c,v 1.12 2009/03/18 16:00:10 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,7 +44,6 @@
 
 #include <lib/libsa/stand.h>
 #include <atari_stand.h>
-#include <string.h>
 #include <libkern.h>
 #include <sys/exec_aout.h>
 
@@ -138,7 +130,7 @@ aout_load(int fd, osdsc_t *od, char **errp, int loadsyms)
 	if ((read(fd, (char *)(od->kstart), ehdr.a_text) != ehdr.a_text)
 	    ||(read(fd,(char *)(od->kstart+textsz),ehdr.a_data) != ehdr.a_data))
 		goto error;
-	bzero(od->kstart + textsz + ehdr.a_data, ehdr.a_bss);
+	memset(od->kstart + textsz + ehdr.a_data, 0, ehdr.a_bss);
 
 	/*
 	 * Read symbol and string table

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_pcmcia.c,v 1.19 2007/10/19 12:01:05 ad Exp $	*/
+/*	$NetBSD: if_tr_pcmcia.c,v 1.27 2016/11/27 00:21:43 maya Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *  This product includes software developed by Soren S. Jorvang.
- *  This product includes software developed by Onno van der Linden.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -41,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_pcmcia.c,v 1.19 2007/10/19 12:01:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_pcmcia.c,v 1.27 2016/11/27 00:21:43 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,20 +87,20 @@ struct tr_pcmcia_softc {
 	struct	pcmcia_function *sc_pf;
 };
 
-static int	tr_pcmcia_match(struct device *, struct cfdata *, void *);
-static void	tr_pcmcia_attach(struct device *, struct device *, void *);
-static int	tr_pcmcia_detach(struct device *, int);
+static int	tr_pcmcia_match(device_t, cfdata_t, void *);
+static void	tr_pcmcia_attach(device_t, device_t, void *);
+static int	tr_pcmcia_detach(device_t, int);
 static int	tr_pcmcia_enable(struct tr_softc *);
 static int	tr_pcmcia_mediachange(struct tr_softc *);
 static void	tr_pcmcia_mediastatus(struct tr_softc *, struct ifmediareq *);
 static void	tr_pcmcia_disable(struct tr_softc *);
 static void	tr_pcmcia_setup(struct tr_softc *);
 
-CFATTACH_DECL(tr_pcmcia, sizeof(struct tr_pcmcia_softc),
+CFATTACH_DECL_NEW(tr_pcmcia, sizeof(struct tr_pcmcia_softc),
     tr_pcmcia_match, tr_pcmcia_attach, tr_pcmcia_detach, tr_activate);
 
 static int
-tr_pcmcia_match(struct device *parent, struct cfdata *match,
+tr_pcmcia_match(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
@@ -121,9 +115,9 @@ tr_pcmcia_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-tr_pcmcia_attach(struct device *parent, struct device *self, void *aux)
+tr_pcmcia_attach(device_t parent, device_t self, void *aux)
 {
-	struct tr_pcmcia_softc *psc = (void *)self;
+	struct tr_pcmcia_softc *psc = device_private(self);
 	struct tr_softc *sc = &psc->sc_tr;
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
@@ -135,39 +129,40 @@ tr_pcmcia_attach(struct device *parent, struct device *self, void *aux)
 
 	pcmcia_function_init(pa->pf, cfe);
 	if (pcmcia_function_enable(pa->pf) != 0) {
-		printf("%s: function enable failed\n", self->dv_xname);
+		aprint_error_dev(self, "function enable failed\n");
 		return;
 	}
 
 	if (pcmcia_io_alloc(pa->pf, cfe->iospace[0].start,
-	    cfe->iospace[0].length, cfe->iospace[0].length, &psc->sc_pioh) != 0) {
-		printf("%s: can't allocate pio space\n", self->dv_xname);
+	    cfe->iospace[0].length, cfe->iospace[0].length, &psc->sc_pioh)
+	    != 0) {
+		aprint_error_dev(self, "can't allocate pio space\n");
 		goto fail1;
 	}
 	if (pcmcia_io_map(psc->sc_pf, PCMCIA_WIDTH_IO8,	/* XXX _AUTO? */
 	    &psc->sc_pioh, &psc->sc_pio_window) != 0) {
-		printf("%s: can't map pio space\n", self->dv_xname);
+		aprint_error_dev(self, "can't map pio space\n");
 		goto fail2;
 	}
 
 	if (pcmcia_mem_alloc(psc->sc_pf, TR_SRAM_SIZE, &psc->sc_sramh) != 0) {
-		printf("%s: can't allocate sram space\n", self->dv_xname);
+		aprint_error_dev(self, "can't allocate sram space\n");
 		goto fail3;
 	}
         if (pcmcia_mem_map(psc->sc_pf, PCMCIA_MEM_COMMON, TR_PCMCIA_SRAM_ADDR,
 	    TR_SRAM_SIZE, &psc->sc_sramh, &offset, &psc->sc_sram_window) != 0) {
-                printf("%s: can't map sram space\n", self->dv_xname);
+		aprint_error_dev(self, "can't map sram space\n");
 		goto fail4;
         }
 
 	if (pcmcia_mem_alloc(psc->sc_pf, TR_MMIO_SIZE, &psc->sc_mmioh) != 0) {
-		printf("%s: can't allocate mmio space\n", self->dv_xname);
+		aprint_error_dev(self, "can't allocate mmio space\n");
 		goto fail5;
 		return;
 	}
         if (pcmcia_mem_map(psc->sc_pf, PCMCIA_MEM_COMMON, TR_PCMCIA_MMIO_ADDR,
 	    TR_MMIO_SIZE, &psc->sc_mmioh, &offset, &psc->sc_mmio_window) != 0) {
-                printf("%s: can't map mmio space\n", self->dv_xname);
+		aprint_error_dev(self, "can't map mmio space\n");
 		goto fail6;
         }
 
@@ -211,20 +206,19 @@ fail1:
 }
 
 static int
-tr_pcmcia_enable(sc)
-	struct tr_softc *sc;
+tr_pcmcia_enable(struct tr_softc *sc)
 {
 	struct tr_pcmcia_softc *psc = (struct tr_pcmcia_softc *) sc;
 	int ret;
 
 	sc->sc_ih = pcmcia_intr_establish(psc->sc_pf, IPL_NET, tr_intr, psc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-			psc->sc_tr.sc_dev.dv_xname);
+		aprint_error_dev(psc->sc_tr.sc_dev,
+		    "couldn't establish interrupt\n");
 		return 1;
 	}
 
-        ret = pcmcia_function_enable(psc->sc_pf);
+	ret = pcmcia_function_enable(psc->sc_pf);
 	if (ret != 0)
 		return ret;
 
@@ -239,8 +233,7 @@ tr_pcmcia_enable(sc)
 }
 
 static void
-tr_pcmcia_disable(sc)
-	struct tr_softc *sc;
+tr_pcmcia_disable(struct tr_softc *sc)
 {
 	struct tr_pcmcia_softc *psc = (struct tr_pcmcia_softc *) sc;
 
@@ -249,8 +242,7 @@ tr_pcmcia_disable(sc)
 }
 
 static int
-tr_pcmcia_mediachange(sc)
-	struct tr_softc *sc;
+tr_pcmcia_mediachange(struct tr_softc *sc)
 {
 	int setspeed = 0;
 
@@ -288,9 +280,7 @@ tr_pcmcia_mediachange(sc)
  * XXX Copy of tropic_mediastatus()
  */
 static void
-tr_pcmcia_mediastatus(sc, ifmr)
-	struct tr_softc *sc;
-	struct ifmediareq *ifmr;
+tr_pcmcia_mediastatus(struct tr_softc *sc, struct ifmediareq *ifmr)
 {
 	struct ifmedia	*ifm = &sc->sc_media;
 
@@ -298,11 +288,9 @@ tr_pcmcia_mediastatus(sc, ifmr)
 }
 
 int
-tr_pcmcia_detach(self, flags)
-	struct device *self;
-	int flags;
+tr_pcmcia_detach(device_t self, int flags)
 {
-	struct tr_pcmcia_softc *psc = (struct tr_pcmcia_softc *)self;
+	struct tr_pcmcia_softc *psc = device_private(self);
 	int rv;
 
 	rv = tr_detach(self, flags);
@@ -320,8 +308,7 @@ tr_pcmcia_detach(self, flags)
 }
 
 static void
-tr_pcmcia_setup(sc)
-	struct tr_softc *sc;
+tr_pcmcia_setup(struct tr_softc *sc)
 {
 	int s;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.92 2008/02/08 16:53:34 kiyohara Exp $	*/
+/*	$NetBSD: machdep.c,v 1.107 2013/04/21 15:42:11 kiyohara Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,50 +32,37 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.92 2008/02/08 16:53:34 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.107 2013/04/21 15:42:11 kiyohara Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 
+#define _POWERPC_BUS_DMA_PRIVATE
+
 #include <sys/param.h>
-#include <sys/buf.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-#include <sys/exec.h>
-#include <sys/extent.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
-#include <sys/mbuf.h>
 #include <sys/mount.h>
-#include <sys/msgbuf.h>
-#include <sys/proc.h>
 #include <sys/reboot.h>
-#include <sys/syscallargs.h>
-#include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-#include <sys/ksyms.h>
+#include <sys/vnode.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <net/netisr.h>
-
-#include <machine/bootinfo.h>
+#include <machine/bebox.h>
 #include <machine/autoconf.h>
-#define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/pmap.h>
+#include <machine/bootinfo.h>
 #include <machine/powerpc.h>
-#include <machine/trap.h>
 
-#include <powerpc/oea/bat.h>
 #include <powerpc/pic/picvar.h> 
+#include <powerpc/pio.h>
+#include <powerpc/prep_bus.h>
+#include <powerpc/psl.h>
 
 #include <dev/cons.h>
-
-#include "ksyms.h"
 
 #include "vga.h"
 #if (NVGA > 0)
@@ -104,15 +91,13 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.92 2008/02/08 16:53:34 kiyohara Exp $"
  * Global variables used here and there
  */
 char bootinfo[BOOTINFO_MAXSIZE];
-paddr_t bebox_mb_reg;		/* BeBox MotherBoard register */
-#define	OFMEMREGIONS	32
-struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
+#define	MEMREGIONS	2
+struct mem_region physmemr[MEMREGIONS], availmemr[MEMREGIONS];
 char bootpath[256];
-paddr_t avail_end;			/* XXX temporary */
 struct pic_ops *isa_pic;
-int isa_pcmciamask = 0x8b28;		/* XXXX */
 extern int primary_pic;
 void initppc(u_long, u_long, u_int, void *);
+static void disable_device(const char *);
 void setup_bebox_intr(void);
 
 extern void *startsym, *endsym;
@@ -140,7 +125,6 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 		availmemr[0].start = (endkernel + PGOFSET) & ~PGOFSET;
 		availmemr[0].size = meminfo->memsize - availmemr[0].start;
 	}
-	avail_end = physmemr[0].start + physmemr[0].size;    /* XXX temporary */
 
 	/*
 	 * Get CPU clock
@@ -157,11 +141,6 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 		ns_per_tick = 1000000000 / ticks_per_sec;
 	}
 
-
-	/*
-	 * boothowto
-	 */
-	/*	boothowto = args; */
 	prep_initppc(startkernel, endkernel, args);
 }
 
@@ -169,14 +148,8 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
  * Machine dependent startup code.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
-	/*
-	 * BeBox Mother Board's Register Mapping
-	 */
-	bebox_mb_reg = (vaddr_t) mapiodev(BEBOX_INTR_REG, PAGE_SIZE);
-	if (!bebox_mb_reg)
-		panic("cpu_startup: no room for interrupt register");
 
 	/*
 	 * Do common VM initialization
@@ -191,7 +164,7 @@ cpu_startup()
 	/*
 	 * set up i8259 as a cascade on BeInterruptController irq 26.
 	 */
-	intr_establish(16 + 26, IST_LEVEL, IPL_NONE, pic_handle_intr, isa_pic);
+	intr_establish(16 + 26, IST_LEVEL, IPL_HIGH, pic_handle_intr, isa_pic);
 
 	oea_install_extint(pic_ext_intr);
 
@@ -199,17 +172,6 @@ cpu_startup()
 	 * Now that we have VM, malloc's are OK in bus_space.
 	 */
 	bus_space_mallocok();
-
-	/*
-	 * Now allow hardware interrupts.
-	 */
-	{
-		int msr;
-
-		splhigh();
-		__asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0"
-		    : "=r"(msr) : "K"(PSL_EE));
-	}
 }
 
 /*
@@ -217,8 +179,7 @@ cpu_startup()
  * Look up information in bootinfo of boot loader.
  */
 void *
-lookup_bootinfo(type)
-	int type;
+lookup_bootinfo(int type)
 {
 	struct btinfo_common *bt;
 	struct btinfo_common *help = (struct btinfo_common *)bootinfo;
@@ -234,12 +195,27 @@ lookup_bootinfo(type)
 	return (NULL);
 }
 
+static void
+disable_device(const char *name)
+{
+	extern struct cfdata cfdata[];
+	int i;
+
+	for (i = 0; cfdata[i].cf_name != NULL; i++)
+		if (strcmp(cfdata[i].cf_name, name) == 0) {
+			if (cfdata[i].cf_fstate == FSTATE_NOTFOUND)
+				cfdata[i].cf_fstate = FSTATE_DNOTFOUND;
+			else if (cfdata[i].cf_fstate == FSTATE_STAR)
+				cfdata[i].cf_fstate = FSTATE_DSTAR;
+		}
+}
+
 /*
  * consinit
  * Initialize system console.
  */
 void
-consinit()
+consinit(void)
 {
 	struct btinfo_console *consinfo;
 	static int initted;
@@ -251,37 +227,45 @@ consinit()
 	consinfo = (struct btinfo_console *)lookup_bootinfo(BTINFO_CONSOLE);
 	if (!consinfo)
 		panic("not found console information in bootinfo");
-	
-#if (NPC > 0) || (NVGA > 0)
-	if (!strcmp(consinfo->devname, "vga")) {
-#if (NVGA > 0)
-		if (!vga_cnattach(&prep_io_space_tag, &prep_mem_space_tag,
-		    -1, 1))
-			goto dokbd;
-#endif
-#if (NPC > 0)
-		pccnattach();
-#endif
-#if (NVGA > 0)
-dokbd:
-#endif
+
+	/*
+	 * We need to disable genfb or vga, because foo_match() return
+	 * the same value.
+	 */
+	if (!strcmp(consinfo->devname, "be")) {
+		/*
+		 * We use Framebuffer for initialized by BootROM of BeBox.
+		 * In this case, our console will be attached more late. 
+		 */
 #if (NPCKBC > 0)
 		pckbc_cnattach(&genppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT);
+		    PCKBC_KBD_SLOT, 0);
+#endif
+		disable_device("vga");
+		return;
+	}
+
+	disable_device("genfb");
+
+#if (NVGA > 0)
+	if (!strcmp(consinfo->devname, "vga")) {
+		vga_cnattach(&prep_io_space_tag, &prep_mem_space_tag, -1, 1);
+#if (NPCKBC > 0)
+		pckbc_cnattach(&genppc_isa_io_space_tag, IO_KBD, KBCMDP,
+		    PCKBC_KBD_SLOT, 0);
 #endif
 		return;
 	}
-#endif /* PC | VGA */
+#endif
 
 #if (NCOM > 0)
 	if (!strcmp(consinfo->devname, "com")) {
 	   	bus_space_tag_t tag = &genppc_isa_io_space_tag;
 
 		if(comcnattach(tag, consinfo->addr, consinfo->speed,
-			COM_FREQ, COM_TYPE_NORMAL,
-			((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)))
+		    COM_FREQ, COM_TYPE_NORMAL,
+		    ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)))
 			panic("can't init serial console");
-
 		return;
 	}
 #endif
@@ -307,12 +291,14 @@ cpu_reboot(int howto, char *what)
 	splhigh();
 	if (howto & RB_HALT) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("halted\n\n");
 
 	}
 	if (!cold && (howto & RB_DUMP))
 		oea_dumpsys();
 	doshutdownhooks();
+	pmf_system_shutdown(boothowto);
 	printf("rebooting\n\n");
 	if (what && *what) {
 		if (strlen(what) > sizeof str - 5)
@@ -331,5 +317,12 @@ cpu_reboot(int howto, char *what)
 	*ap++ = 0;
 	if (ap[-2] == '-')
 		*ap1 = 0;
+
+	/* Left and Right LED on.  Max 15 for both LED. */
+#define LEFT_LED(x)	(((x) & 0xf) << 4)
+#define RIGHT_LED(x)	(((x) & 0xf))
+
+	outb(PREP_BUS_SPACE_IO + 0x0c00, LEFT_LED(15) | RIGHT_LED(15));
+
 	while (1);
 }

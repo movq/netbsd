@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_rh.c,v 1.50 2007/10/17 19:53:16 garbled Exp $ */
+/*	$NetBSD: grf_rh.c,v 1.57 2014/01/22 00:25:16 christos Exp $ */
 
 /*
  * Copyright (c) 1994 Markus Wild
@@ -34,9 +34,10 @@
 #include "opt_retina.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_rh.c,v 1.50 2007/10/17 19:53:16 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_rh.c,v 1.57 2014/01/22 00:25:16 christos Exp $");
 
 #include "grfrh.h"
+#include "ite.h"
 #if NGRFRH > 0
 
 /*
@@ -1528,24 +1529,24 @@ int rh_default_gfx = 4;
 static struct MonDef *current_mon;	/* EVIL */
 
 int  rh_mode(struct grf_softc *, u_long, void *, u_long, int);
-void grfrhattach(struct device *, struct device *, void *);
+void grfrhattach(device_t, device_t, void *);
 int  grfrhprint(void *, const char *);
-int  grfrhmatch(struct device *, struct cfdata *, void *);
+int  grfrhmatch(device_t, cfdata_t, void *);
 
-CFATTACH_DECL(grfrh, sizeof(struct grf_softc),
+CFATTACH_DECL_NEW(grfrh, sizeof(struct grf_softc),
     grfrhmatch, grfrhattach, NULL, NULL);
 
 static struct cfdata *cfdata;
 
 int
-grfrhmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+grfrhmatch(device_t parent, cfdata_t cf, void *aux)
 {
 #ifdef RETINACONSOLE
 	static int rhconunit = -1;
 #endif
 	struct zbus_args *zap;
 
-	zap = auxp;
+	zap = aux;
 
 	if (amiga_realconfig == 0)
 #ifdef RETINACONSOLE
@@ -1556,7 +1557,7 @@ grfrhmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 			((zap->prodid != 16) && (zap->prodid != 19)))
 		return(0);
 #ifdef RETINACONSOLE
-	if (amiga_realconfig == 0 || rhconunit != cfp->cf_unit) {
+	if (amiga_realconfig == 0 || rhconunit != cf->cf_unit) {
 #endif
 		if ((unsigned)rh_default_mon >= rh_mon_max ||
 		    monitor_defs[rh_default_mon].DEP == 8)
@@ -1566,8 +1567,8 @@ grfrhmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 			return(0);
 #ifdef RETINACONSOLE
 		if (amiga_realconfig == 0) {
-			rhconunit = cfp->cf_unit;
-			cfdata = cfp;
+			rhconunit = cf->cf_unit;
+			cfdata = cf;
 		}
 	}
 #endif
@@ -1575,44 +1576,52 @@ grfrhmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 }
 
 void
-grfrhattach(struct device *pdp, struct device *dp, void *auxp)
+grfrhattach(device_t parent, device_t self, void *aux)
 {
 	static struct grf_softc congrf;
+	struct device temp;
 	struct zbus_args *zap;
 	struct grf_softc *gp;
 
-	zap = auxp;
+	zap = aux;
 
-	if (dp == NULL)
+	if (self == NULL) {
 		gp = &congrf;
-	else
-		gp = (struct grf_softc *)dp;
-	if (dp != NULL && congrf.g_regkva != 0) {
+		gp->g_device = &temp;
+		temp.dv_private = gp;
+	} else {
+		gp = device_private(self);
+		gp->g_device = self;
+	}
+
+	if (self != NULL && congrf.g_regkva != 0) {
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
-		bcopy(&congrf.g_display, &gp->g_display,
+		memcpy(&gp->g_display, &congrf.g_display,
 		    (char *)&gp[1] - (char *)&gp->g_display);
 	} else {
 		gp->g_regkva = (volatile void *)zap->va;
 		gp->g_fbkva = (volatile char *)zap->va + LM_OFFSET;
 		gp->g_unit = GRF_RETINAIII_UNIT;
 		gp->g_mode = rh_mode;
-		gp->g_conpri = grfrh_cnprobe();
 		gp->g_flags = GF_ALIVE;
+#if NITE > 0
+		gp->g_conpri = grfrh_cnprobe();
 		grfrh_iteinit(gp);
+#endif
 		(void)rh_load_mon(gp, current_mon);
 	}
-	if (dp != NULL)
+	if (self != NULL)
 		printf("\n");
 	/*
 	 * attach grf
 	 */
-	amiga_config_found(cfdata, &gp->g_device, gp, grfrhprint);
+	amiga_config_found(cfdata, gp->g_device, gp, grfrhprint);
 }
 
 int
-grfrhprint(void *auxp, const char *pnp)
+grfrhprint(void *aux, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("ite at %s", pnp);
@@ -1891,9 +1900,7 @@ rh_getspritepos(struct grf_softc *gp, struct grf_position *pos)
 }
 
 int
-rh_setspritepos (gp, pos)
-	struct grf_softc *gp;
-	struct grf_position *pos;
+rh_setspritepos (struct grf_softc *gp, struct grf_position *pos)
 {
 	RZ3SetHWCloc (gp, pos->x, pos->y);
 	return(0);
@@ -1902,10 +1909,9 @@ rh_setspritepos (gp, pos)
 int
 rh_getspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *info)
 {
-	volatile unsigned char *ba, *fb;
+	volatile unsigned char *ba;
 
 	ba = gp->g_regkva;
-	fb = gp->g_fbkva;
 	if (info->set & GRFSPRSET_ENABLE)
 		info->enable = RSeq (ba, SEQ_ID_CURSOR_CONTROL) & 0x01;
 	if (info->set & GRFSPRSET_POS)
@@ -1995,13 +2001,12 @@ rh_getspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *info)
 int
 rh_setspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *info)
 {
-	volatile unsigned char *ba, *fb;
+	volatile unsigned char *ba;
 #if 0
 	u_char control;
 #endif
 
 	ba = gp->g_regkva;
-	fb = gp->g_fbkva;
 
 	if (info->set & GRFSPRSET_SHAPE) {
 		/*

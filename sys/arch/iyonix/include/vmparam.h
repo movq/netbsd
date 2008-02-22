@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.3 2007/10/25 13:03:04 yamt Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.7 2017/11/02 09:42:44 skrll Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -32,7 +32,7 @@
 #ifndef	_IYONIX_VMPARAM_H_
 #define	_IYONIX_VMPARAM_H_
 
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(_KMEMUSER)
 
 #include <arm/arm32/vmparam.h>
 
@@ -45,11 +45,6 @@
  * Mappings >= KERNEL_BASE are constant across all processes
  */
 #define	KERNEL_BASE		0xf0000000
-
-/*
- * Override the default pager_map size, there's not enough KVA.
- */
-#define PAGER_MAP_DEFAULT_SIZE		(4 * 1024 * 1024)
 
 /*
  * Size of User Raw I/O map
@@ -76,23 +71,16 @@
 #define	VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
 
 /*
- * this indicates that we can't add RAM to the VM system after the
- * vm system is init'd.
- */
-
-#define	VM_PHYSSEG_NOADD
-
-/*
  * we support 2 free lists:
  *
  *	- DEFAULT for all systems
- *	- ISADMA for the ISA DMA range on Sharks only
+ *	- ISADMA for the ISA DMA range
  */
 
 #define	VM_NFREELIST		2
 #define	VM_FREELIST_DEFAULT	0
 #define	VM_FREELIST_ISADMA	1
 
-#endif /* _KERNEL */
+#endif /* _KERNEL || _KMEMUSER */
 
 #endif	/* _IYONIX_VMPARAM_H_ */

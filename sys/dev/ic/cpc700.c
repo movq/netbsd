@@ -1,4 +1,4 @@
-/*	$NetBSD: cpc700.c,v 1.12 2007/10/19 11:59:50 ad Exp $	*/
+/*	$NetBSD: cpc700.c,v 1.19 2012/01/27 18:53:07 para Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpc700.c,v 1.12 2007/10/19 11:59:50 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpc700.c,v 1.19 2012/01/27 18:53:07 para Exp $");
 
 #include "pci.h"
 #include "opt_pci.h"
@@ -86,7 +79,7 @@ union attach_args {
 
 
 void
-cpc_attach(struct device *self, pci_chipset_tag_t pc, bus_space_tag_t mem,
+cpc_attach(device_t self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 	   bus_space_tag_t pciio, bus_dma_tag_t tag, int attachpci,
 	   uint freq);
 
@@ -111,7 +104,7 @@ cpc_print(void *aux, const char *pnp)
 }
 
 static int
-cpc_submatch(struct device *parent, struct cfdata *cf,
+cpc_submatch(device_t parent, cfdata_t cf,
 	     const int *ldesc, void *aux)
 {
 	struct cpcbus_attach_args *caa = aux;
@@ -126,7 +119,7 @@ cpc_submatch(struct device *parent, struct cfdata *cf,
  * Attach the cpc.
  */
 void
-cpc_attach(struct device *self, pci_chipset_tag_t pc, bus_space_tag_t mem,
+cpc_attach(device_t self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 	   bus_space_tag_t pciio, bus_dma_tag_t dma, int attachpci,
 	   uint freq)
 {
@@ -161,7 +154,7 @@ cpc_attach(struct device *self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 	the_cpc_tag = mem;
 	if (bus_space_map(mem, CPC_UIC_BASE, CPC_UIC_SIZE, 0,
 			  &the_cpc_handle)) {
-		printf("%s: can't map i/o space\n", self->dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		return;
 	}
 
@@ -180,8 +173,8 @@ cpc_attach(struct device *self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 	aa.pba.pba_iot = pciio;
 	aa.pba.pba_memt = mem;
 	aa.pba.pba_dmat = dma;
-	aa.pba.pba_pc = 0;
-	aa.pba.pba_flags = PCI_FLAGS_MEM_ENABLED | PCI_FLAGS_IO_ENABLED;
+	aa.pba.pba_pc = pc;
+	aa.pba.pba_flags = PCI_FLAGS_MEM_OKAY | PCI_FLAGS_IO_OKAY;
 	aa.pba.pba_bus = 0;
 
 	/* Save PCI error condition reg. */
@@ -198,9 +191,9 @@ cpc_attach(struct device *self, pci_chipset_tag_t pc, bus_space_tag_t mem,
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	ioext  = extent_create("pciio",  CPC_PCI_IO_START, CPC_PCI_IO_END,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", CPC_PCI_MEM_BASE, CPC_PCI_MEM_END,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 
 	pci_configure_bus(0, ioext, memext, NULL, 0, 32);
 

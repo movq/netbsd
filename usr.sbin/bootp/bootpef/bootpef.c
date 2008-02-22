@@ -22,7 +22,7 @@ SOFTWARE.
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootpef.c,v 1.7 2007/05/27 16:31:41 tls Exp $");
+__RCSID("$NetBSD: bootpef.c,v 1.11 2017/05/04 16:26:09 sevan Exp $");
 #endif
 
 
@@ -82,15 +82,14 @@ __RCSID("$NetBSD: bootpef.c,v 1.7 2007/05/27 16:31:41 tls Exp $");
  */
 
 static void mktagfile(struct host *);
-static void usage(void);
-int main(int, char **);
+__dead static void usage(void);
 
 
 /*
  * General
  */
 
-char *progname;
+const char *progname;
 char *chdir_path;
 int debug = 0;					/* Debugging flag (level) */
 byte *buffer;
@@ -99,7 +98,7 @@ byte *buffer;
  * Globals below are associated with the bootp database file (bootptab).
  */
 
-char *bootptab = CONFIG_FILE;
+const char *bootptab = CONFIG_FILE;
 
 
 /*
@@ -306,7 +305,7 @@ mktagfile(struct host *hp)
 		return;
 	}
 	len = vp - buffer;
-	if (len != fwrite(buffer, 1, len, fp)) {
+	if ((size_t)len != fwrite(buffer, 1, len, fp)) {
 		report(LOG_ERR, "write failed on \"%s\" : %s",
 			   hp->exten_file->string, get_errmsg());
 	}

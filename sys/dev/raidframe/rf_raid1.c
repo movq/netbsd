@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_raid1.c,v 1.30 2007/03/04 06:02:39 christos Exp $	*/
+/*	$NetBSD: rf_raid1.c,v 1.35 2013/09/15 12:47:26 martin Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_raid1.c,v 1.30 2007/03/04 06:02:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_raid1.c,v 1.35 2013/09/15 12:47:26 martin Exp $");
 
 #include "rf_raid.h"
 #include "rf_raid1.h"
@@ -171,11 +171,11 @@ void
 rf_RAID1DagSelect(RF_Raid_t *raidPtr, RF_IoType_t type,
 		  RF_AccessStripeMap_t *asmap, RF_VoidFuncPtr *createFunc)
 {
-	RF_RowCol_t fcol, oc;
+	RF_RowCol_t fcol, oc __unused;
 	RF_PhysDiskAddr_t *failedPDA;
 	int     prior_recon;
 	RF_RowStatus_t rstat;
-	RF_SectorNum_t oo;
+	RF_SectorNum_t oo __unused;
 
 
 	RF_ASSERT(RF_IO_IS_R_OR_W(type));
@@ -378,18 +378,18 @@ rf_VerifyParityRAID1(RF_Raid_t *raidPtr, RF_RaidAddr_t raidAddr,
 		rf_PrintDAGList(rd_dag_h);
 	}
 #endif
-	RF_LOCK_MUTEX(mcpair->mutex);
+	RF_LOCK_MCPAIR(mcpair);
 	mcpair->flag = 0;
-	RF_UNLOCK_MUTEX(mcpair->mutex);
+	RF_UNLOCK_MCPAIR(mcpair);
 
 	rf_DispatchDAG(rd_dag_h, (void (*) (void *)) rf_MCPairWakeupFunc,
 	    (void *) mcpair);
 
-	RF_LOCK_MUTEX(mcpair->mutex);
+	RF_LOCK_MCPAIR(mcpair);
 	while (mcpair->flag == 0) {
 		RF_WAIT_MCPAIR(mcpair);
 	}
-	RF_UNLOCK_MUTEX(mcpair->mutex);
+	RF_UNLOCK_MCPAIR(mcpair);
 
 	if (rd_dag_h->status != rf_enable) {
 		RF_ERRORMSG("Unable to verify raid1 parity: can't read stripe\n");
@@ -485,7 +485,7 @@ rf_VerifyParityRAID1(RF_Raid_t *raidPtr, RF_RaidAddr_t raidAddr,
 			wrBlock->succedents[i]->params[0].p = pda;
 			wrBlock->succedents[i]->params[1].p = pda->bufPtr;
 			wrBlock->succedents[i]->params[2].v = psID;
-			wrBlock->succedents[0]->params[3].v = RF_CREATE_PARAM3(RF_IO_NORMAL_PRIORITY, which_ru);
+			wrBlock->succedents[i]->params[3].v = RF_CREATE_PARAM3(RF_IO_NORMAL_PRIORITY, which_ru);
 		}
 #if RF_ACC_TRACE > 0
 		memset((char *) &tracerec, 0, sizeof(tracerec));
@@ -497,19 +497,19 @@ rf_VerifyParityRAID1(RF_Raid_t *raidPtr, RF_RaidAddr_t raidAddr,
 			rf_PrintDAGList(wr_dag_h);
 		}
 #endif
-		RF_LOCK_MUTEX(mcpair->mutex);
+		RF_LOCK_MCPAIR(mcpair);
 		mcpair->flag = 0;
-		RF_UNLOCK_MUTEX(mcpair->mutex);
+		RF_UNLOCK_MCPAIR(mcpair);
 
 		/* fire off the write DAG */
 		rf_DispatchDAG(wr_dag_h, (void (*) (void *)) rf_MCPairWakeupFunc,
 		    (void *) mcpair);
 
-		RF_LOCK_MUTEX(mcpair->mutex);
+		RF_LOCK_MCPAIR(mcpair);
 		while (!mcpair->flag) {
-			RF_WAIT_COND(mcpair->cond, mcpair->mutex);
+			RF_WAIT_MCPAIR(mcpair);
 		}
-		RF_UNLOCK_MUTEX(mcpair->mutex);
+		RF_UNLOCK_MCPAIR(mcpair);
 		if (wr_dag_h->status != rf_enable) {
 			RF_ERRORMSG("Unable to correct RAID1 parity in VerifyParity\n");
 			goto done;
@@ -581,12 +581,12 @@ rf_SubmitReconBufferRAID1(RF_ReconBuffer_t *rbuf, int keep_it,
 	}
 	RF_LOCK_PSS_MUTEX(raidPtr, rbuf->parityStripeID);
 
-	RF_LOCK_MUTEX(reconCtrlPtr->rb_mutex);
+	rf_lock_mutex2(reconCtrlPtr->rb_mutex);
 	while(reconCtrlPtr->rb_lock) {
-		ltsleep(&reconCtrlPtr->rb_lock, PRIBIO, "reconctlcnmhs", 0, &reconCtrlPtr->rb_mutex);
+		rf_wait_cond2(reconCtrlPtr->rb_cv, reconCtrlPtr->rb_mutex);
 	}
 	reconCtrlPtr->rb_lock = 1;
-	RF_UNLOCK_MUTEX(reconCtrlPtr->rb_mutex);
+	rf_unlock_mutex2(reconCtrlPtr->rb_mutex);
 
 	pssPtr = rf_LookupRUStatus(raidPtr, reconCtrlPtr->pssTable,
 	    rbuf->parityStripeID, rbuf->which_ru, RF_PSS_NONE, NULL);
@@ -688,10 +688,10 @@ rf_SubmitReconBufferRAID1(RF_ReconBuffer_t *rbuf, int keep_it,
 
 out:
 	RF_UNLOCK_PSS_MUTEX(raidPtr, rbuf->parityStripeID);
-	RF_LOCK_MUTEX(reconCtrlPtr->rb_mutex);
+	rf_lock_mutex2(reconCtrlPtr->rb_mutex);
 	reconCtrlPtr->rb_lock = 0;
-	wakeup(&reconCtrlPtr->rb_lock);
-	RF_UNLOCK_MUTEX(reconCtrlPtr->rb_mutex);
+	rf_broadcast_cond2(reconCtrlPtr->rb_cv);
+	rf_unlock_mutex2(reconCtrlPtr->rb_mutex);
 #if RF_DEBUG_RECON
 	if (rf_reconbufferDebug) {
 		printf("raid%d: RAID1 rbuf submission: returning %d\n",
@@ -700,3 +700,10 @@ out:
 #endif
 	return (retcode);
 }
+
+RF_HeadSepLimit_t
+rf_GetDefaultHeadSepLimitRAID1(RF_Raid_t *raidPtr)
+{
+	return (10);
+}
+

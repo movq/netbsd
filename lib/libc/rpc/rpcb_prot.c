@@ -1,32 +1,34 @@
-/*	$NetBSD: rpcb_prot.c,v 1.9 2006/05/11 17:11:57 mrg Exp $	*/
+/*	$NetBSD: rpcb_prot.c,v 1.12 2017/05/03 21:39:27 christos Exp $	*/
 
 /*
- * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
- * unrestricted use provided that this legend is included on all tape
- * media and as a part of the software program in whole or part.  Users
- * may copy or modify Sun RPC without charge, but are not authorized
- * to license or distribute it to anyone else except as part of a product or
- * program developed by the user.
- * 
- * SUN RPC IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING THE
- * WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
- * 
- * Sun RPC is provided with no support and without any obligation on the
- * part of Sun Microsystems, Inc. to assist in its use, correction,
- * modification or enhancement.
- * 
- * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
- * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY SUN RPC
- * OR ANY PART THEREOF.
- * 
- * In no event will Sun Microsystems, Inc. be liable for any lost revenue
- * or profits or other special, indirect and consequential damages, even if
- * Sun has been advised of the possibility of such damages.
- * 
- * Sun Microsystems, Inc.
- * 2550 Garcia Avenue
- * Mountain View, California  94043
+ * Copyright (c) 2010, Oracle America, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the "Oracle America, Inc." nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *   FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ *   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *   GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
  * Copyright (c) 1986-1991 by Sun Microsystems Inc. 
@@ -39,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)rpcb_prot.c 1.9 89/04/21 Copyr 1984 Sun Micro";
 #else
-__RCSID("$NetBSD: rpcb_prot.c,v 1.9 2006/05/11 17:11:57 mrg Exp $");
+__RCSID("$NetBSD: rpcb_prot.c,v 1.12 2017/05/03 21:39:27 christos Exp $");
 #endif
 #endif
 
@@ -56,6 +58,7 @@ __RCSID("$NetBSD: rpcb_prot.c,v 1.9 2006/05/11 17:11:57 mrg Exp $");
 #include <rpc/types.h>
 #include <rpc/xdr.h>
 #include <rpc/rpcb_prot.h>
+#include <rpc/rpc_com.h>
 
 #include <assert.h>
 
@@ -72,9 +75,7 @@ __weak_alias(xdr_netbuf,_xdr_netbuf)
 
 
 bool_t
-xdr_rpcb(xdrs, objp)
-	XDR *xdrs;
-	RPCB *objp;
+xdr_rpcb(XDR *xdrs, RPCB *objp)
 {
 
 	_DIAGASSERT(objp != NULL);
@@ -85,13 +86,13 @@ xdr_rpcb(xdrs, objp)
 	if (!xdr_u_int32_t(xdrs, &objp->r_vers)) {
 		return (FALSE);
 	}
-	if (!xdr_string(xdrs, &objp->r_netid, (u_int)~0)) {
+	if (!xdr_string(xdrs, &objp->r_netid, RPC_MAXDATASIZE)) {
 		return (FALSE);
 	}
-	if (!xdr_string(xdrs, &objp->r_addr, (u_int)~0)) {
+	if (!xdr_string(xdrs, &objp->r_addr, RPC_MAXDATASIZE)) {
 		return (FALSE);
 	}
-	if (!xdr_string(xdrs, &objp->r_owner, (u_int)~0)) {
+	if (!xdr_string(xdrs, &objp->r_owner, RPC_MAXDATASIZE)) {
 		return (FALSE);
 	}
 	return (TRUE);
@@ -121,9 +122,7 @@ xdr_rpcb(xdrs, objp)
  */
 
 bool_t
-xdr_rpcblist_ptr(xdrs, rp)
-	XDR *xdrs;
-	rpcblist_ptr *rp;
+xdr_rpcblist_ptr(XDR *xdrs, rpcblist_ptr *rp)
 {
 	/*
 	 * more_elements is pre-computed in case the direction is
@@ -180,9 +179,7 @@ xdr_rpcblist_ptr(xdrs, rp)
  * functionality to xdr_rpcblist_ptr().
  */
 bool_t
-xdr_rpcblist(xdrs, rp)
-	XDR *xdrs;
-	RPCBLIST **rp;
+xdr_rpcblist(XDR *xdrs, RPCBLIST **rp)
 {
 	bool_t	dummy;
 
@@ -192,35 +189,31 @@ xdr_rpcblist(xdrs, rp)
 
 
 bool_t
-xdr_rpcb_entry(xdrs, objp)
-	XDR *xdrs;
-	rpcb_entry *objp;
+xdr_rpcb_entry(XDR *xdrs, rpcb_entry *objp)
 {
 
 	_DIAGASSERT(objp != NULL);
 
-	if (!xdr_string(xdrs, &objp->r_maddr, (u_int)~0)) {
+	if (!xdr_string(xdrs, &objp->r_maddr, RPC_MAXDATASIZE)) {
 		return (FALSE);
 	}
-	if (!xdr_string(xdrs, &objp->r_nc_netid, (u_int)~0)) {
+	if (!xdr_string(xdrs, &objp->r_nc_netid, RPC_MAXDATASIZE)) {
 		return (FALSE);
 	}
 	if (!xdr_u_int32_t(xdrs, &objp->r_nc_semantics)) {
 		return (FALSE);
 	}
-	if (!xdr_string(xdrs, &objp->r_nc_protofmly, (u_int)~0)) {
+	if (!xdr_string(xdrs, &objp->r_nc_protofmly, RPC_MAXDATASIZE)) {
 		return (FALSE);
 	}
-	if (!xdr_string(xdrs, &objp->r_nc_proto, (u_int)~0)) {
+	if (!xdr_string(xdrs, &objp->r_nc_proto, RPC_MAXDATASIZE)) {
 		return (FALSE);
 	}
 	return (TRUE);
 }
 
 bool_t
-xdr_rpcb_entry_list_ptr(xdrs, rp)
-	XDR *xdrs;
-	rpcb_entry_list_ptr *rp;
+xdr_rpcb_entry_list_ptr(XDR *xdrs, rpcb_entry_list_ptr *rp)
 {
 	/*
 	 * more_elements is pre-computed in case the direction is
@@ -278,9 +271,7 @@ xdr_rpcb_entry_list_ptr(xdrs, rp)
  * written for XDR_ENCODE direction only
  */
 bool_t
-xdr_rpcb_rmtcallargs(xdrs, p)
-	XDR *xdrs;
-	struct rpcb_rmtcallargs *p;
+xdr_rpcb_rmtcallargs(XDR *xdrs, struct rpcb_rmtcallargs *p)
 {
 	struct r_rpcb_rmtcallargs *objp =
 	    (struct r_rpcb_rmtcallargs *)(void *)p;
@@ -332,16 +323,14 @@ xdr_rpcb_rmtcallargs(xdrs, p)
  * written for XDR_DECODE direction only
  */
 bool_t
-xdr_rpcb_rmtcallres(xdrs, p)
-	XDR *xdrs;
-	struct rpcb_rmtcallres *p;
+xdr_rpcb_rmtcallres(XDR *xdrs, struct rpcb_rmtcallres *p)
 {
 	bool_t dummy;
 	struct r_rpcb_rmtcallres *objp = (struct r_rpcb_rmtcallres *)(void *)p;
 
 	_DIAGASSERT(p != NULL);
 
-	if (!xdr_string(xdrs, &objp->addr, (u_int)~0)) {
+	if (!xdr_string(xdrs, &objp->addr, RPC_MAXDATASIZE)) {
 		return (FALSE);
 	}
 	if (!xdr_u_int(xdrs, &objp->results.results_len)) {
@@ -352,9 +341,7 @@ xdr_rpcb_rmtcallres(xdrs, p)
 }
 
 bool_t
-xdr_netbuf(xdrs, objp)
-	XDR *xdrs;
-	struct netbuf *objp;
+xdr_netbuf(XDR *xdrs, struct netbuf *objp)
 {
 	bool_t dummy;
 
@@ -363,6 +350,11 @@ xdr_netbuf(xdrs, objp)
 	if (!xdr_u_int32_t(xdrs, (u_int32_t *) &objp->maxlen)) {
 		return (FALSE);
 	}
+
+	if (objp->maxlen > RPC_MAXDATASIZE) {
+		return (FALSE);
+	}
+
 	dummy = xdr_bytes(xdrs, (char **)(void *)&(objp->buf),
 			(u_int *)&(objp->len), objp->maxlen);
 	return (dummy);

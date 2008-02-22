@@ -1,4 +1,4 @@
-/* $NetBSD: pass4.c,v 1.16 2006/11/09 19:36:36 christos Exp $	 */
+/* $NetBSD: pass4.c,v 1.27 2015/09/01 06:15:02 dholland Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -32,12 +32,13 @@
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/mount.h>
-#include <ufs/ufs/inode.h>
 
 #define vnode uvnode
 #define buf ubuf
 #define panic call_panic
 #include <ufs/lfs/lfs.h>
+#include <ufs/lfs/lfs_accessors.h>
+#include <ufs/lfs/lfs_inode.h>
 
 #include <err.h>
 #include <stdlib.h>
@@ -50,8 +51,6 @@
 #include "fsutil.h"
 #include "fsck.h"
 #include "extern.h"
-
-extern SEGUSE *seg_table;
 
 static int check_orphan(struct inodesc *idp);
 
@@ -81,14 +80,14 @@ pass4(void)
 {
 	ino_t inumber;
 	struct zlncnt *zlnp;
-	struct ufs1_dinode *dp;
+	union lfs_dinode *dp;
 	struct inodesc idesc;
 	int n;
 
 	memset(&idesc, 0, sizeof(struct inodesc));
 	idesc.id_type = ADDR;
 	idesc.id_func = pass4check;
-	for (inumber = ROOTINO; inumber <= lastino; inumber++) {
+	for (inumber = ULFS_ROOTINO; inumber <= lastino; inumber++) {
 		idesc.id_number = inumber;
 		switch (statemap[inumber]) {
 
@@ -118,7 +117,7 @@ pass4(void)
 			if (check_orphan(&idesc))
 				break;
 			dp = ginode(inumber);
-			if (dp->di_size == 0) {
+			if (lfs_dino_getsize(fs, dp) == 0) {
 				const char * msg = (lncntp[inumber] ?
 					"ZERO LENGTH" : "UNREF ZERO LENGTH");
 				clri(&idesc, msg, 1);
@@ -137,7 +136,7 @@ pass4(void)
 			break;
 
 		default:
-			err(EEXIT, "BAD STATE %d FOR INODE I=%llu\n",
+			err(EEXIT, "BAD STATE %d FOR INODE I=%llu",
 			    statemap[inumber], (unsigned long long)inumber);
 		}
 	}
@@ -153,8 +152,8 @@ pass4check(struct inodesc * idesc)
 	struct ubuf *bp;
 	int sn;
 
-	sn = dtosn(fs, blkno);
-	for (ndblks = fragstofsb(fs, idesc->id_numfrags); ndblks > 0; blkno++, ndblks--) {
+	sn = lfs_dtosn(fs, blkno);
+	for (ndblks = idesc->id_numfrags; ndblks > 0; blkno++, ndblks--) {
 		if (chkrange(blkno, 1)) {
 			res = SKIP;
 		} else if (testbmap(blkno) || preen) {
@@ -170,10 +169,10 @@ pass4check(struct inodesc * idesc)
 			if (dlp == 0) {
 				clrbmap(blkno);
 				LFS_SEGENTRY(sup, fs, sn, bp);
-				sup->su_nbytes -= fsbtob(fs, 1);
+				sup->su_nbytes -= lfs_fsbtob(fs, 1);
 				VOP_BWRITE(bp);
-				seg_table[sn].su_nbytes -= fsbtob(fs, 1);
-				++fs->lfs_bfree;
+				seg_table[sn].su_nbytes -= lfs_fsbtob(fs, 1);
+				lfs_sb_addbfree(fs, 1);
 				n_blks--;
 			}
 		}

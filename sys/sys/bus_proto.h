@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_proto.h,v 1.1 2007/09/26 19:48:39 ad Exp $	*/
+/*	$NetBSD: bus_proto.h,v 1.7 2013/02/04 13:18:35 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2001, 2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -163,9 +156,9 @@ void	bus_space_read_region_stream_4(bus_space_tag_t, bus_space_handle_t,
 				       bus_size_t, uint32_t *, bus_size_t);
 
 void	bus_space_read_multi_8(bus_space_tag_t, bus_space_handle_t,
-			       bus_size_t, uint32_t *, bus_size_t);
+			       bus_size_t, uint64_t *, bus_size_t);
 void	bus_space_read_multi_stream_8(bus_space_tag_t, bus_space_handle_t,
-				      bus_size_t, uint32_t *, bus_size_t);
+				      bus_size_t, uint64_t *, bus_size_t);
 void	bus_space_read_region_8(bus_space_tag_t, bus_space_handle_t,
 			        bus_size_t, uint64_t *, bus_size_t);
 void	bus_space_read_region_stream_8(bus_space_tag_t, bus_space_handle_t,
@@ -231,10 +224,10 @@ void	bus_space_write_region_stream_4(bus_space_tag_t, bus_space_handle_t,
 				        bus_size_t);
 
 void	bus_space_write_multi_8(bus_space_tag_t, bus_space_handle_t,
-			        bus_size_t, const uint32_t *,
+			        bus_size_t, const uint64_t *,
 			        bus_size_t);
 void	bus_space_write_multi_stream_8(bus_space_tag_t, bus_space_handle_t,
-				       bus_size_t, const uint32_t *,
+				       bus_size_t, const uint64_t *,
 				       bus_size_t);
 void	bus_space_write_region_8(bus_space_tag_t, bus_space_handle_t,
 			         bus_size_t, const uint64_t *,
@@ -244,36 +237,70 @@ void	bus_space_write_region_stream_8(bus_space_tag_t, bus_space_handle_t,
 				        bus_size_t);
 
 void	bus_space_set_multi_1(bus_space_tag_t, bus_space_handle_t,
-			      bus_size_t, u_int8_t, size_t);
+			      bus_size_t, u_int8_t, bus_size_t);
 void	bus_space_set_multi_2(bus_space_tag_t, bus_space_handle_t,
-			      bus_size_t, u_int16_t, size_t);
+			      bus_size_t, u_int16_t, bus_size_t);
 void	bus_space_set_multi_4(bus_space_tag_t, bus_space_handle_t,
-			      bus_size_t, u_int32_t, size_t);
+			      bus_size_t, u_int32_t, bus_size_t);
 void	bus_space_set_multi_8(bus_space_tag_t, bus_space_handle_t,
-			      bus_size_t, u_int64_t, size_t);
+			      bus_size_t, u_int64_t, bus_size_t);
 
+void	bus_space_set_multi_stream_1(bus_space_tag_t, bus_space_handle_t,
+			      bus_size_t, u_int8_t, bus_size_t);
+void	bus_space_set_multi_stream_2(bus_space_tag_t, bus_space_handle_t,
+			      bus_size_t, u_int16_t, bus_size_t);
+void	bus_space_set_multi_stream_4(bus_space_tag_t, bus_space_handle_t,
+			      bus_size_t, u_int32_t, bus_size_t);
+void	bus_space_set_multi_stream_8(bus_space_tag_t, bus_space_handle_t,
+			      bus_size_t, u_int64_t, bus_size_t);
 
 void	bus_space_set_region_1(bus_space_tag_t, bus_space_handle_t,
-			       bus_size_t, u_int8_t, size_t);
+			       bus_size_t, u_int8_t, bus_size_t);
 void	bus_space_set_region_2(bus_space_tag_t, bus_space_handle_t,
-			       bus_size_t, u_int16_t, size_t);
+			       bus_size_t, u_int16_t, bus_size_t);
 void	bus_space_set_region_4(bus_space_tag_t, bus_space_handle_t,
-			       bus_size_t, u_int32_t, size_t);
+			       bus_size_t, u_int32_t, bus_size_t);
 void	bus_space_set_region_8(bus_space_tag_t, bus_space_handle_t,
-			       bus_size_t, u_int64_t, size_t);
+			       bus_size_t, u_int64_t, bus_size_t);
+
+void	bus_space_set_region_stream_1(bus_space_tag_t, bus_space_handle_t,
+			       bus_size_t, u_int8_t, bus_size_t);
+void	bus_space_set_region_stream_2(bus_space_tag_t, bus_space_handle_t,
+			       bus_size_t, u_int16_t, bus_size_t);
+void	bus_space_set_region_stream_4(bus_space_tag_t, bus_space_handle_t,
+			       bus_size_t, u_int32_t, bus_size_t);
+void	bus_space_set_region_stream_8(bus_space_tag_t, bus_space_handle_t,
+			       bus_size_t, u_int64_t, bus_size_t);
 
 void	bus_space_copy_region_1(bus_space_tag_t, bus_space_handle_t,
 				bus_size_t, bus_space_handle_t,
-				bus_size_t, size_t);
+				bus_size_t, bus_size_t);
 void	bus_space_copy_region_2(bus_space_tag_t, bus_space_handle_t,
 				bus_size_t, bus_space_handle_t,
-				bus_size_t, size_t);
+				bus_size_t, bus_size_t);
 void	bus_space_copy_region_4(bus_space_tag_t, bus_space_handle_t,
 				bus_size_t, bus_space_handle_t,
-				bus_size_t, size_t);
+				bus_size_t, bus_size_t);
 void	bus_space_copy_region_8(bus_space_tag_t, bus_space_handle_t,
 				bus_size_t, bus_space_handle_t,
-				bus_size_t, size_t);
+				bus_size_t, bus_size_t);
+
+void	bus_space_copy_region_stream_1(bus_space_tag_t, bus_space_handle_t,
+				bus_size_t, bus_space_handle_t,
+				bus_size_t, bus_size_t);
+void	bus_space_copy_region_stream_2(bus_space_tag_t, bus_space_handle_t,
+				bus_size_t, bus_space_handle_t,
+				bus_size_t, bus_size_t);
+void	bus_space_copy_region_stream_4(bus_space_tag_t, bus_space_handle_t,
+				bus_size_t, bus_space_handle_t,
+				bus_size_t, bus_size_t);
+void	bus_space_copy_region_stream_8(bus_space_tag_t, bus_space_handle_t,
+				bus_size_t, bus_space_handle_t,
+				bus_size_t, bus_size_t);
+
+bool	bus_space_is_equal(bus_space_tag_t, bus_space_tag_t);
+bool	bus_space_handle_is_equal(bus_space_tag_t, bus_space_handle_t,
+    bus_space_handle_t);
 
 /*
  * bus_dma(9)
@@ -292,6 +319,8 @@ void	bus_space_copy_region_8(bus_space_tag_t, bus_space_handle_t,
 #define	BUS_DMA_READ		0x100	/* mapping is device -> memory only */
 #define	BUS_DMA_WRITE		0x200	/* mapping is memory -> device only */
 #define	BUS_DMA_NOCACHE		0x400	/* hint: map non-cached memory */
+#define	BUS_DMA_PREFETCHABLE	0x800	/* hint: map non-cached but allow 
+					 * things like write combining */
 
 /* Operations performed by bus_dmamap_sync(). */
 #define	BUS_DMASYNC_PREREAD	0x01	/* pre-read synchronization */
@@ -320,12 +349,12 @@ int	bus_dmamem_alloc(bus_dma_tag_t, bus_size_t, bus_size_t,
 void	bus_dmamem_free(bus_dma_tag_t, bus_dma_segment_t *, int);
 int	bus_dmamem_map(bus_dma_tag_t, bus_dma_segment_t *, int,
 		       size_t, void **, int);
-void	bus_dmamem_unmap(bus_dma_tag_t, void *kva, size_t);
+void	bus_dmamem_unmap(bus_dma_tag_t, void *, size_t);
 paddr_t	bus_dmamem_mmap(bus_dma_tag_t, bus_dma_segment_t *, int,
 			off_t, int, int);
 
 int	bus_dmatag_subregion(bus_dma_tag_t, bus_addr_t, bus_addr_t,
 			     bus_dma_tag_t *, int);
 void	bus_dmatag_destroy(bus_dma_tag_t);
-                   
+
 #endif	/* _SYS_BUS_PROTO_H_ */

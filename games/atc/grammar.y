@@ -1,4 +1,4 @@
-/*	$NetBSD: grammar.y,v 1.9 2005/07/01 00:48:34 jmc Exp $	*/
+/*	$NetBSD: grammar.y,v 1.12 2015/06/19 06:02:31 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -57,19 +57,27 @@
 }
 
 %{
-#include "include.h"
-
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)grammar.y	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: grammar.y,v 1.9 2005/07/01 00:48:34 jmc Exp $");
+__RCSID("$NetBSD: grammar.y,v 1.12 2015/06/19 06:02:31 dholland Exp $");
 #endif
 #endif /* not lint */
 
-int	errors = 0;
-int	line = 1;
+#include <stdio.h>
+
+#include "def.h"
+#include "struct.h"
+#include "extern.h"
+#include "tunable.h"
+
+int line = 1;
+
+static int errors = 0;
+
+static int yyerror(const char *);
 %}
 
 %%
@@ -172,10 +180,10 @@ Bpoint:
 		{
 		if (sp->num_beacons % REALLOC == 0) {
 			if (sp->beacon == NULL)
-				sp->beacon = (BEACON *) malloc((sp->num_beacons
+				sp->beacon = malloc((sp->num_beacons
 					+ REALLOC) * sizeof (BEACON));
 			else
-				sp->beacon = (BEACON *) realloc(sp->beacon,
+				sp->beacon = realloc(sp->beacon,
 					(sp->num_beacons + REALLOC) * 
 					sizeof (BEACON));
 			if (sp->beacon == NULL)
@@ -202,10 +210,10 @@ Epoint:
 
 		if (sp->num_exits % REALLOC == 0) {
 			if (sp->exit == NULL)
-				sp->exit = (EXIT *) malloc((sp->num_exits + 
+				sp->exit = malloc((sp->num_exits + 
 					REALLOC) * sizeof (EXIT));
 			else
-				sp->exit = (EXIT *) realloc(sp->exit,
+				sp->exit = realloc(sp->exit,
 					(sp->num_exits + REALLOC) * 
 					sizeof (EXIT));
 			if (sp->exit == NULL)
@@ -235,10 +243,10 @@ Apoint:
 
 		if (sp->num_airports % REALLOC == 0) {
 			if (sp->airport == NULL)
-				sp->airport=(AIRPORT *)malloc((sp->num_airports
+				sp->airport = malloc((sp->num_airports
 					+ REALLOC) * sizeof(AIRPORT));
 			else
-				sp->airport = (AIRPORT *) realloc(sp->airport,
+				sp->airport = realloc(sp->airport,
 					(sp->num_airports + REALLOC) * 
 					sizeof(AIRPORT));
 			if (sp->airport == NULL)
@@ -265,10 +273,10 @@ Lline:
 		{
 		if (sp->num_lines % REALLOC == 0) {
 			if (sp->line == NULL)
-				sp->line = (LINE *) malloc((sp->num_lines + 
+				sp->line = malloc((sp->num_lines + 
 					REALLOC) * sizeof (LINE));
 			else
-				sp->line = (LINE *) realloc(sp->line,
+				sp->line = realloc(sp->line,
 					(sp->num_lines + REALLOC) *
 					sizeof (LINE));
 			if (sp->line == NULL)
@@ -284,7 +292,7 @@ Lline:
 	;
 %%
 
-void
+static void
 check_edge(int x, int y)
 {
 	if (!(x == 0) && !(x == sp->width - 1) && 
@@ -292,7 +300,7 @@ check_edge(int x, int y)
 		yyerror("edge value not on edge.");
 }
 
-void
+static void
 check_point(int x, int y)
 {
 	if (x < 1 || x >= sp->width - 1)
@@ -301,7 +309,7 @@ check_point(int x, int y)
 		yyerror("Y value out of range.");
 }
 
-void
+static void
 check_linepoint(int x, int y)
 {
 	if (x < 0 || x >= sp->width)
@@ -310,7 +318,7 @@ check_linepoint(int x, int y)
 		yyerror("Y value out of range.");
 }
 
-void
+static void
 check_line(int px1, int py1, int px2, int py2)
 {
 	int	d1, d2;
@@ -325,7 +333,7 @@ check_line(int px1, int py1, int px2, int py2)
 		yyerror("Bad line endpoints.");
 }
 
-int
+static int
 yyerror(const char *s)
 {
 	fprintf(stderr, "\"%s\": line %d: %s\n", filename, line, s);
@@ -334,7 +342,7 @@ yyerror(const char *s)
 	return (errors);
 }
 
-void
+static void
 check_edir(int x, int y, int dir)
 {
 	int	bad = 0;
@@ -366,7 +374,7 @@ check_edir(int x, int y, int dir)
 		yyerror("Bad direction for entrance at exit.");
 }
 
-int
+static int
 checkdefs(void)
 {
 	int	error = 0;

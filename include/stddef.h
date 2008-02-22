@@ -1,4 +1,4 @@
-/*	$NetBSD: stddef.h,v 1.15 2006/08/21 16:58:29 thorpej Exp $	*/
+/*	$NetBSD: stddef.h,v 1.20 2016/03/20 16:26:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -38,14 +38,17 @@
 #include <sys/featuretest.h>
 #include <machine/ansi.h>
 
+#ifdef	_BSD_PTRDIFF_T_
 typedef	_BSD_PTRDIFF_T_	ptrdiff_t;
+#undef	_BSD_PTRDIFF_T_
+#endif
 
 #ifdef	_BSD_SIZE_T_
 typedef	_BSD_SIZE_T_	size_t;
 #undef	_BSD_SIZE_T_
 #endif
 
-#ifdef	_BSD_WCHAR_T_
+#if defined(_BSD_WCHAR_T_) && !defined(__cplusplus)
 typedef	_BSD_WCHAR_T_	wchar_t;
 #undef	_BSD_WCHAR_T_
 #endif
@@ -63,5 +66,13 @@ typedef	_BSD_WCHAR_T_	wchar_t;
 #define	offsetof(type, member) __offsetof__((reinterpret_cast<size_t> \
     (&reinterpret_cast<const volatile char &>(static_cast<type *>(0)->member))))
 #endif  
+
+#if (__STDC_VERSION__ - 0) >= 201112L || (__cplusplus - 0) >= 201103L
+typedef union {
+	void *_v;
+	long double _ld;
+	long long int _ll;
+} max_align_t;
+#endif
  
 #endif /* _STDDEF_H_ */

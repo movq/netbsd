@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_amd64.c,v 1.3 2008/01/04 21:18:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_amd64.c,v 1.8 2015/04/04 15:08:40 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -35,8 +35,6 @@ __KERNEL_RCSID(0, "$NetBSD: agp_amd64.c,v 1.3 2008/01/04 21:18:00 ad Exp $");
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/agpio.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -199,26 +197,28 @@ agp_amd64_via_match(const struct pci_attach_args *pa)
 }
 
 int
-agp_amd64_attach(struct device *parent, struct device *self, void *aux)
+agp_amd64_attach(device_t parent, device_t self, void *aux)
 {
-	struct agp_softc *sc = (void *)self;
+	struct agp_softc *sc = device_private(self);
 	struct agp_amd64_softc *asc;
 	struct pci_attach_args *pa = aux;
 	struct agp_gatt *gatt;
 	pcitag_t tag;
 	pcireg_t id, attbase, apctrl;
 	int maxdevs, i, n;
+	int error;
 
 	asc = malloc(sizeof(struct agp_amd64_softc), M_AGP, M_NOWAIT | M_ZERO);
 	if (asc == NULL) {
 		aprint_error(": can't allocate softc\n");
-		return ENOMEM;
+		error = ENOMEM;
+		goto fail0;
 	}
 
 	if (agp_map_aperture(pa, sc, AGP_APBASE) != 0) {
 		aprint_error(": can't map aperture\n");
-		free(asc, M_AGP);
-		return ENXIO;
+		error = ENXIO;
+		goto fail1;
 	}
 
 	maxdevs = pci_bus_maxdevs(pa->pa_pc, 0);
@@ -226,18 +226,22 @@ agp_amd64_attach(struct device *parent, struct device *self, void *aux)
 		tag = pci_make_tag(pa->pa_pc, 0, i, 3);
 		id = pci_conf_read(pa->pa_pc, tag, PCI_ID_REG);
 		if (PCI_VENDOR(id) == PCI_VENDOR_AMD &&
-		    PCI_PRODUCT(id) == PCI_PRODUCT_AMD_AMD64_MISC) {
+		    (PCI_PRODUCT(id) == PCI_PRODUCT_AMD_AMD64_MISC ||
+		     PCI_PRODUCT(id) == PCI_PRODUCT_AMD_AMD64_F10_MISC)) {
 			asc->mctrl_tag[n] = tag;
 			n++;
 		}
 	}
-	if (n == 0)
-		return ENXIO;
+	if (n == 0) {
+		aprint_error(": No Miscellaneous Control unit found.\n");
+		error = ENXIO;
+		goto fail1;
+	}
 	asc->n_mctrl = n;
 
 	aprint_normal(": %d Miscellaneous Control unit(s) found.\n",
 	    asc->n_mctrl);
-	aprint_normal("%s", sc->as_dev.dv_xname);
+	aprint_normal("%s", device_xname(self));
 
 	sc->as_chipc = asc;
 	sc->as_methods = &agp_amd64_methods;
@@ -255,8 +259,8 @@ agp_amd64_attach(struct device *parent, struct device *self, void *aux)
 		 * aperture so that the gatt size reduces.
 		 */
 		if (AGP_SET_APERTURE(sc, AGP_GET_APERTURE(sc) / 2)) {
-			agp_generic_detach(sc);
-			return ENOMEM;
+			error = ENOMEM;
+			goto fail1;
 		}
 	}
 	asc->gatt = gatt;
@@ -264,15 +268,21 @@ agp_amd64_attach(struct device *parent, struct device *self, void *aux)
 	switch (PCI_VENDOR(sc->as_id)) {
 	case PCI_VENDOR_ALI:
 		agp_amd64_uli_init(sc);
-		if (agp_amd64_uli_set_aperture(sc, asc->initial_aperture))
-			return ENXIO;
+		if (agp_amd64_uli_set_aperture(sc, asc->initial_aperture)) {
+			/* XXX Back out agp_amd64_uli_init?  */
+			error = ENXIO;
+			goto fail2;
+		}
 		break;
 
 	case PCI_VENDOR_NVIDIA:
 		asc->ctrl_tag = AGP_AMD64_NVIDIA_PCITAG(pa->pa_pc);
 		agp_amd64_nvidia_init(sc);
-		if (agp_amd64_nvidia_set_aperture(sc, asc->initial_aperture))
-			return ENXIO;
+		if (agp_amd64_nvidia_set_aperture(sc, asc->initial_aperture)) {
+			/* XXX Back out agp_amd64_nvidia_init?  */
+			error = ENXIO;
+			goto fail2;
+		}
 		break;
 
 	case PCI_VENDOR_VIATECH:
@@ -281,8 +291,11 @@ agp_amd64_attach(struct device *parent, struct device *self, void *aux)
 			asc->ctrl_tag = AGP_AMD64_VIA_PCITAG(pa->pa_pc);
 			agp_amd64_via_init(sc);
 			if (agp_amd64_via_set_aperture(sc,
-			    asc->initial_aperture))
-				return ENXIO;
+			    asc->initial_aperture)) {
+				/* XXX Back out agp_amd64_via_init?  */
+				error = ENXIO;
+				goto fail2;
+			}
 		}
 		break;
 	}
@@ -303,7 +316,14 @@ agp_amd64_attach(struct device *parent, struct device *self, void *aux)
 
 	agp_flush_cache();
 
+	/* Success!  */
 	return 0;
+
+fail2:	agp_free_gatt(sc, gatt);
+fail1:	free(asc, M_AGP);
+fail0:	agp_generic_detach(sc);
+	KASSERT(error);
+	return error;
 }
 
 

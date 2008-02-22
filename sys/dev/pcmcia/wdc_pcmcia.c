@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_pcmcia.c,v 1.109 2007/10/19 12:01:06 ad Exp $ */
+/*	$NetBSD: wdc_pcmcia.c,v 1.126 2017/10/20 07:06:08 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_pcmcia.c,v 1.109 2007/10/19 12:01:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_pcmcia.c,v 1.126 2017/10/20 07:06:08 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -72,7 +65,6 @@ struct wdc_pcmcia_softc {
 	struct wdc_softc sc_wdcdev;
 	struct ata_channel *wdc_chanlist[1];
 	struct ata_channel ata_channel;
-	struct ata_queue wdc_chqueue;
 	struct wdc_regs wdc_regs;
 
 	struct pcmcia_function *sc_pf;
@@ -89,14 +81,14 @@ struct wdc_pcmcia_softc {
 #define bus_space_write_region_stream_4 bus_space_write_region_4
 #endif /* __BUS_SPACE_HAS_STREAM_METHODS */
 
-static int wdc_pcmcia_match(struct device *, struct cfdata *, void *);
+static int wdc_pcmcia_match(device_t, cfdata_t, void *);
 static int wdc_pcmcia_validate_config_io(struct pcmcia_config_entry *);
 static int wdc_pcmcia_validate_config_memory(struct pcmcia_config_entry *);
-static void wdc_pcmcia_attach(struct device *, struct device *, void *);
-static int wdc_pcmcia_detach(struct device *, int);
+static void wdc_pcmcia_attach(device_t, device_t, void *);
+static int wdc_pcmcia_detach(device_t, int);
 
-CFATTACH_DECL(wdc_pcmcia, sizeof(struct wdc_pcmcia_softc),
-    wdc_pcmcia_match, wdc_pcmcia_attach, wdc_pcmcia_detach, wdcactivate);
+CFATTACH_DECL_NEW(wdc_pcmcia, sizeof(struct wdc_pcmcia_softc),
+    wdc_pcmcia_match, wdc_pcmcia_attach, wdc_pcmcia_detach, NULL);
 
 static const struct wdc_pcmcia_product {
 	struct pcmcia_product wdc_product;
@@ -169,15 +161,14 @@ static const struct wdc_pcmcia_product {
 static const size_t wdc_pcmcia_nproducts =
     sizeof(wdc_pcmcia_products) / sizeof(wdc_pcmcia_products[0]);
 
-static int	wdc_pcmcia_enable(struct device *, int);
+static int	wdc_pcmcia_enable(device_t, int);
 static void	wdc_pcmcia_datain_memory(struct ata_channel *, int, void *,
 					 size_t);
 static void	wdc_pcmcia_dataout_memory(struct ata_channel *, int, void *,
 					  size_t);
 
 static int
-wdc_pcmcia_match(struct device *parent, struct cfdata *match,
-    void *aux)
+wdc_pcmcia_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -212,10 +203,9 @@ wdc_pcmcia_validate_config_memory(struct pcmcia_config_entry *cfe)
 }
 
 static void
-wdc_pcmcia_attach(struct device *parent, struct device *self,
-    void *aux)
+wdc_pcmcia_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_pcmcia_softc *sc = (void *)self;
+	struct wdc_pcmcia_softc *sc = device_private(self);
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
 	struct wdc_regs *wdr;
@@ -224,6 +214,9 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 	int i;
 	int error;
 
+	aprint_naive("\n");
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_pf = pa->pf;
 
 	error = pcmcia_function_configure(pa->pf,
@@ -233,8 +226,7 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 		error = pcmcia_function_configure(pa->pf,
 		    wdc_pcmcia_validate_config_memory);
 	if (error) {
-		aprint_error("%s: configure failed, error=%d\n", self->dv_xname,
-		    error);
+		aprint_error_dev(self, "configure failed, error=%d\n", error);
 		return;
 	}
 
@@ -275,14 +267,13 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 		    wdr->cmd_baseioh,
 		    offset + i, i == 0 ? 4 : 1,
 		    &wdr->cmd_iohs[i]) != 0) {
-			aprint_error("%s: can't subregion I/O space\n",
-			    self->dv_xname);
+			aprint_error_dev(self, "can't subregion I/O space\n");
 			goto fail;
 		}
 	}
 
 	if (cfe->iftype == PCMCIA_IFTYPE_MEMORY) {
-		aprint_normal("%s: memory mapped mode\n", self->dv_xname);
+		aprint_normal_dev(self, "memory mapped mode\n");
 		wdr->data32iot = cfe->memspace[0].handle.memt;
 		if (bus_space_subregion(cfe->memspace[0].handle.memt,
 		    cfe->memspace[0].handle.memh, offset + 1024, 1024,
@@ -292,7 +283,7 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 		sc->sc_wdcdev.dataout_pio = wdc_pcmcia_dataout_memory;
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_NOIRQ;
 	} else {
-		aprint_normal("%s: i/o mapped mode\n", self->dv_xname);
+		aprint_normal_dev(self, "i/o mapped mode\n");
 		wdr->data32iot = wdr->cmd_iot;
 		wdr->data32ioh = wdr->cmd_iohs[wd_data];
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA32;
@@ -304,11 +295,11 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
 	sc->ata_channel.ch_channel = 0;
 	sc->ata_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
-	sc->ata_channel.ch_queue = &sc->wdc_chqueue;
+
 	wdcp = pcmcia_product_lookup(pa, wdc_pcmcia_products,
 	    wdc_pcmcia_nproducts, sizeof(wdc_pcmcia_products[0]), NULL);
-	sc->ata_channel.ch_ndrive = wdcp ? wdcp->wdc_ndrive : 2;
-	wdc_init_shadow_regs(&sc->ata_channel);
+	sc->sc_wdcdev.wdc_maxdrives = wdcp ? wdcp->wdc_ndrive : 2;
+	wdc_init_shadow_regs(wdr);
 
 	error = wdc_pcmcia_enable(self, 1);
 	if (error)
@@ -324,11 +315,15 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 	 * and probe properly, so give them half a second.
 	 * See PR 25659 for details.
 	 */
-	config_pending_incr();
+	config_pending_incr(self);
 	tsleep(wdc_pcmcia_attach, PWAIT, "wdcattach", hz / 2);
 
 	wdcattach(&sc->ata_channel);
-	config_pending_decr();
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "unable to establish power handler\n");
+
+	config_pending_decr(self);
 	ata_delref(&sc->ata_channel);
 	sc->sc_state = WDC_PCMCIA_ATTACHED;
 	return;
@@ -338,13 +333,15 @@ fail:
 }
 
 static int
-wdc_pcmcia_detach(struct device *self, int flags)
+wdc_pcmcia_detach(device_t self, int flags)
 {
-	struct wdc_pcmcia_softc *sc = (struct wdc_pcmcia_softc *)self;
+	struct wdc_pcmcia_softc *sc = device_private(self);
 	int error;
 
 	if (sc->sc_state != WDC_PCMCIA_ATTACHED)
 		return (0);
+
+	pmf_device_deregister(self);
 
 	if ((error = wdcdetach(self, flags)) != 0)
 		return (error);
@@ -355,10 +352,24 @@ wdc_pcmcia_detach(struct device *self, int flags)
 }
 
 static int
-wdc_pcmcia_enable(struct device *self, int onoff)
+wdc_pcmcia_enable(device_t self, int onoff)
 {
-	struct wdc_pcmcia_softc *sc = (void *)self;
+	struct wdc_pcmcia_softc *sc = device_private(self);
 	int error;
+
+#if 1
+	/*
+	 * XXX temporary kludge: we need to allow enabling while (cold)
+	 * for some hpc* ports which attach pcmcia devices too early.
+	 * This is problematic because pcmcia code uses tsleep() in
+	 * the attach code path, but it seems to work somehow.
+	 */
+	if (doing_shutdown)
+		return (EIO);
+#else
+	if (cold || doing_shutdown)
+		return (EIO);
+#endif
 
 	if (onoff) {
 		/* Establish the interrupt handler. */
@@ -392,7 +403,7 @@ wdc_pcmcia_datain_memory(struct ata_channel *chp, int flags, void *buf,
 		size_t n;
 
 		n = min(len, 1024);
-		if ((flags & DRIVE_CAP32) && (n & 3) == 0)
+		if ((flags & ATA_DRIVE_CAP32) && (n & 3) == 0)
 			bus_space_read_region_stream_4(wdr->data32iot,
 			    wdr->data32ioh, 0, buf, n >> 2);
 		else
@@ -413,7 +424,7 @@ wdc_pcmcia_dataout_memory(struct ata_channel *chp, int flags, void *buf,
 		size_t n;
 
 		n = min(len, 1024);
-		if ((flags & DRIVE_CAP32) && (n & 3) == 0)
+		if ((flags & ATA_DRIVE_CAP32) && (n & 3) == 0)
 			bus_space_write_region_stream_4(wdr->data32iot,
 			    wdr->data32ioh, 0, buf, n >> 2);
 		else

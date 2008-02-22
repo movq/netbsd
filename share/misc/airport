@@ -1,7 +1,10 @@
-#	$NetBSD: airport,v 1.30 2006/03/02 13:43:52 tron Exp $
+#	$NetBSD: airport,v 1.67 2017/09/15 19:20:11 mbalmer Exp $
 #	@(#)airport	8.1 (Berkeley) 6/8/93
 #
-# Some of this information from http://www.mapping.com/airportcodes.html.
+# Some of this information is from http://www.mapping.com/airportcodes.html.
+#
+# Note that these are three letter IATA codes, most airports also have a
+# four letter ICAO code, e.g. Bern is BRN (IATA) and LSZB (ICAO).
 #
 # Airport Code : Airport
 AAA:Anaa, French Polynesia
@@ -56,7 +59,7 @@ ACB:Bellaire (Antrim County Airport), MI, USA
 ACC:Accra (Kotoka), Ghana
 ACD:Acandi, Colombia
 ACE:Arrecife (Lanzarote), Canary Islands, Spain
-ACH:Altenrhein (Rorshach), Switzerland
+ACH:Altenrhein (Rorschach), Switzerland
 ACI:Alderney, Channel Islands
 ACJ:Americus (Souther Field), GA, USA
 ACK:Nantucket Memorial Airport, MA, USA
@@ -622,7 +625,6 @@ BEN:Benghazi (Benina), Libya
 BEO:Newcastle (Belmont Airport), NSW, Australia
 BEP:Bellary, India
 BEQ:Bury St. Edmunds, England, UK
-BER:All Airports around Berlin, Germany
 BES:Brest (Guipavas), France
 BET:Bethel Airport, AK, USA
 BEU:Bedourie, Queensland, Australia
@@ -760,7 +762,7 @@ BKF:Lake Brooks Seaplane Base, AK, USA
 BKH:Kekana, Kauai, HI, USA
 BKI:Kota Kinabalu, Sabah, Malaysia
 BKJ:Boke, Guinea
-BKK:Bangkok [Don Muang International Airport], Thailand
+BKK:Bangkok [Suvarnabhumi International Airport], Thailand
 BKL:Cleveland Lakefront, Ohio, USA
 BKM:Bakalalan, Sarawak, Malaysia
 BKN:Birni n'Konni, Niger
@@ -918,7 +920,7 @@ BRJ:Bright, Victoria, Australia
 BRK:Bourke, New South Wales, Australia
 BRL:Burlington Municipal Airport, IA, USA
 BRM:Barquisimeto, Venezuela
-BRN:Bern-Belp, Switzerland
+BRN:Bern Airport, Bern-Belp, Switzerland
 BRO:Brownsville/South Padre Island, TX, USA
 BRP:Biaru, Papua New Guinea
 BRQ:Brno, Czech Republic
@@ -942,7 +944,7 @@ BSH:Brighton, England
 BSI:Blairsville (Jim Shearer South Airport), PA, USA
 BSJ:Bairnsdale, Victoria, Australia
 BSK:Biskra, Algeria
-BSL:Basel Europort, Switzerland
+BSL:EuroAirport Basel-Mulhouse-Freiburg, Switzerland
 BSM:Bergstrom Air Rescue Service, TX, USA
 BSN:Bossangoa, Central African Republic
 BSO:Basco, Philippines
@@ -1422,7 +1424,7 @@ CNY:Moab (Canyonlands Field), UT, USA
 CNZ:Cangamba, Angola
 COA:Columbia Airport, CA, USA
 COB:Coolibah, Northern Territory, Australia
-COC:Concordia (Comodoro Pierres), Argentina
+COC:Concordia (Comodoro Pierrestegui), Entre Rios, Argentina
 COD:Cody (Yellowstone Regional Airport), WY, USA
 COE:Coeur d'Alene Terminal, ID, USA
 COF:Cocoa Beach (Patrick Air Force), FL, USA
@@ -1795,6 +1797,7 @@ DMB:Zhambyl, Kazakhstan
 DMD:Doomadgee Mission, Queensland, Australia
 DME:Moscow (Domodemovo), Russia
 DMF:Montgomery (National Guard), AL, USA
+DMK:Don Muang International Airport, Bangkok, Thailand
 DMN:Deming Municipal Airport, NM, USA
 DMO:Sedalia Memorial Airport, MO, USA
 DMR:Dhamar, Yemen
@@ -1944,7 +1947,7 @@ EAG:Eagle Grove Municipal Airport, IA, USA
 EAH:El Arish, Egypt
 EAM:Nejran, Saudi Arabia
 EAN:Wheatland (Phifer Airfield), WY, USA
-EAP:Basel/Mulhouse (EuroAirport), CH/[80]FR
+EAP:EuroAirport Basel-Mulhouse-Freiburg, Switzerland/France
 EAR:Kearney Municipal Airport, NE, USA
 EAS:San Sebastian, Spain
 EAT:Wenatchee (Pangborn Memorial), WA, USA
@@ -2237,7 +2240,7 @@ FDA:Fundacion, Colombia
 FDB:Principe da Beira, RO, Brazil
 FDE:Foerde (Bringeland), Norway
 FDF:Fort De France, MQ
-FDH:Friedrichshafen (Lowenthal), Germany
+FDH:Bodensee-Airport Friedrichshafen, Germany
 FDK:Frederick Municipal Airport, MD, USA
 FDP:Fariopur, Bangladesh
 FDR:Frederick Municipal Airport, OK, USA
@@ -2649,7 +2652,7 @@ GOE:Gonaila, Papua New Guinea
 GOF:San Angelo (Goodfellow AFB), TX, USA
 GOH:Godthab, Nuuk, Greenland
 GOI:Goa, India
-GOJ:Nizhniy Novgorod (Sormavo), Russia
+GOJ:Nizhniy Novgorod (Sormovo), Russia
 GOK:Guthrie Municipal Airport, OK, USA
 GOL:Gold Beach Municipal Airport, OR, USA
 GOM:Goma, Dem. Rep. of the Congo
@@ -2836,6 +2839,7 @@ HBZ:Heber Springs Municipal Airport, AR, USA
 HCA:Big Spring, TX, USA
 HCB:Shoal Cove, AK, USA
 HCD:Hutchinson (Butler Field), MN, USA
+HCJ:Hechi Jinchengjiang Airport, China
 HCM:Ell, Somalia
 HCQ:Halls Creek, Western Australia, Australia
 HCR:Holy Cross Airport, AK, USA
@@ -2852,7 +2856,7 @@ HDL:Holikachuk, AK, USA
 HDM:Hamadan, Iran
 HDN:Steamboat Springs (Hayden), CO, USA
 HDO:Hondo Municipal Airport, TX, USA
-HDY:Hat Yai (Hatyai) [Songkhia], Thailand
+HDY:Hat Yai (Hatyai) [Songkhla], Thailand
 HEA:Herat, Afghanistan
 HEB:Henzada, Myanmar
 HED:Herendeen Bay Airport, AK, USA
@@ -3142,6 +3146,7 @@ ICA:Icabaru, Venezuela
 ICI:Cicia, Fiji
 ICK:Nieuw Nickerie (New Nickerie), Suriname
 ICL:Clarinda (Schenck Field), IA, USA
+ICN:Incheon, South Korea
 ICR:Nicaro, Cuba
 ICT:Wichita Mid-Continent, Kansas, USA
 ICY:Icy Bay Airport, AK, USA
@@ -3192,6 +3197,7 @@ IJD:Willimantic (Windham Airport), CT, USA
 IJK:Izhevsk, Udmurtia, Russia
 IJU:Ijui, RS, Brazil
 IJX:Jacksonville Municipal Airport, IL, USA
+IKA:Imam Khomeini International Airport, Ahmadabad, Tehran, Iran
 IKB:Wilkesboro (Wilkes County Airport), NC, USA
 IKI:Iki, Japan
 IKK:Kankakee (Greater Kankakee Airport), IL, USA
@@ -3403,13 +3409,14 @@ JCI:Kansas City (Johnson County Airport), MO, USA
 JCJ:Cheju, South Korea
 JCK:Julia Creek, Queensland, Australia
 JCM:Jacobina, BA, Brazil
-JCN:Inchon (Heliport), South Korea
+JCN:Incheon (Heliport), South Korea
 JCR:Jacareacanga, PR, Brazil
 JCT:Junction (Kimble County Airport), TX, USA
 JCX:Los Angeles (Citicorp Heliport), CA, USA
 JCY:Johnson City Airport, TX, USA
 JDA:John Day State Airport, OR, USA
 JDB:Dallas (Downtown Heliport), TX, USA
+JDC:Jingdezhen-Luojia Airport
 JDF:Juiz do Fora, MG, Brazil
 JDH:Jodhpur, India
 JDM:Miami (Heliport), FL, USA
@@ -3726,7 +3733,7 @@ KGX:Grayling Airport, AK, USA
 KGY:Kingaroy, Queensland, Australia
 KGZ:Glacier Creek Airport, AK, USA
 KHA:Khaneh, Iran
-KHC:Kerch, Krym (Crimea), Ukraine
+KHC:Kerch, Ukraine
 KHE:Kherson, Mykolayiv, Ukraine
 KHG:Kashi, China
 KHH:Kaohsiung International, Taiwan
@@ -3988,7 +3995,7 @@ KUB:Kuala Belait, Brunei
 KUC:Kuria, Kiribati
 KUD:Kudat, Sabah, Malaysia
 KUE:Kukundu, Solomon Islands
-KUF:Samara, Russia
+KUF:Samara (Kurumoch), Russia
 KUG:Kubin Island, Australia
 KUH:Kushiro, Japan
 KUI:Kawau Island, New Zealand
@@ -4077,6 +4084,7 @@ LAH:Labuha, Indonesia
 LAI:Lannion, France
 LAJ:Lages, SC, Brazil
 LAK:Aklavik Airport, NT, Canada
+LAKU:Shaikh Zayed International Airport, Kukes, Albania
 LAL:Lakeland Regional Airport, FL, USA
 LAM:Los Alamos Airport, NM, USA
 LAN:Lansing Capital City, Michigan, USA
@@ -4238,7 +4246,7 @@ LIO:Limon, Costa Rica
 LIP:Lins, SP, Brazil
 LIQ:Lisala, Zaire
 LIR:Liberia (Tomas Guardia), Costa Rica
-LIS:Aeroporto da Portela de Sacavem, Lisboa, Portugal
+LIS:Portela, Lisbon, Portugal
 LIT:Little Rock Regional, Arkansas, USA
 LIV:Livingood, AK, USA
 LIW:Loikaw, Myanmar
@@ -4794,7 +4802,7 @@ MLD:Malad City Airport, ID, USA
 MLE:Male, Hulule, Maldives
 MLF:Milford Municipal Airport, UT, USA
 MLG:Malang, Indonesia
-MLH:Basel/Mulhouse EuroAirport, France
+MLH:EuroAirport Basel-Mulhouse-Freiburg, France
 MLI:Moline Quad City, Alabama, USA
 MLJ:Milledgeville (Baldwin County Airport), GA, USA
 MLK:Malta Airport, MT, USA
@@ -4810,7 +4818,7 @@ MLT:Millinocket Municipal Airport, ME, USA
 MLU:Monroe Regional Airport, LA, USA
 MLV:Merluna, Queensland, Australia
 MLW:Monrovia (Spriggs Payne), Liberia
-MLX:Malatva, Turkey
+MLX:Malatya, Turkey
 MLY:Manley Hot Springs Airport, AK, USA
 MLZ:Melo, Uruguay
 MMA:Malmo, Sweden
@@ -5799,7 +5807,7 @@ PAL:Palanquero, Colombia
 PAM:Panama City (Tyndall Air Force Base), FL, USA
 PAN:Pattani, Thailand
 PAO:Palo Alto Municipal, California, USA
-PAP:Port-au-Prince, Haiti
+PAP:Aeroport international Toussaint Louverture, Port-au-Prince, Haiti
 PAQ:Palmer Municipal Airport, AK, USA
 PAR:All Airports around Paris, France
 PAS:Paros, Greece
@@ -5889,7 +5897,7 @@ PET:Pelotas, RS, Brazil
 PEU:Puerto Lenpira, Honduras
 PEW:Peshawar, Pakistan
 PEY:Penong, South Australia, Australia
-PEZ:Penza, Penza, Russia
+PEZ:Penza (Ternovka), Russia
 PFA:Paf Warren, AK, USA
 PFB:Passo Fundo, RS, Brazil
 PFC:Pacific City (State Airport), OR, USA
@@ -6124,7 +6132,7 @@ PRC:Prescott (Ernest Love Field), AZ, USA
 PRD:Pardoo, Western Australia, Australia
 PRE:Pore, Colombia
 PRF:Port Johnson, AK, USA
-PRG:Prague [Ruzyne], Czech Republic
+PRG:Prague [Ruzyne] (Vaclav Havel airport Prague), Czech Republic
 PRH:Phrae, Thailand
 PRI:Praslin Island, Seychelles
 PRJ:Capri, Italy
@@ -6441,7 +6449,7 @@ QSN:San Nicolas de Bari, Cuba
 QSO:Sousse, Tunisia
 QSP:Sancti Spiritu, Cuba
 QSR:Salerno, Italy
-QSS:Alhegro/Sassari, Sardinia, Italy
+QSS:Alghero/Sassari, Sardinia, Italy
 QSZ:Shizuoka City, Japan
 QTA:Atibaia, SP, Brazil
 QTD:Timbauba, PE, Brazil
@@ -6704,7 +6712,7 @@ ROR:Koror (Airai), Palau
 ROS:Rosario, Argentina
 ROT:Rotorua, New Zealand
 ROU:Ruse, Bulgaria
-ROV:Rostov, Russia
+ROV:Rostov-na-Donu, Russia
 ROW:Roswell (Industrial Air Center), NM, USA
 ROX:Roseau Municipal Airport, MN, USA
 ROY:Rio Mayo, Argentina
@@ -6871,7 +6879,7 @@ SCK:Stockton Metropolitan Airport, CA, USA
 SCL:Santiago, Chile
 SCM:Scammon Bay Airport, AK, USA
 SCN:Saarbrucken (Ensheim), Germany
-SCO:Aqtan (Shevchenko), Mangghystan, Kazakhstan
+SCO:Aktau (Shevchenko), Mangystau, Kazakhstan
 SCP:St.-Crepin, France
 SCQ:Santiago de Compostela (Santiago), Spain
 SCR:Scranton Municipal Airport, PA, USA
@@ -7025,7 +7033,7 @@ SIL:Sila, Papua New Guinea
 SIM:Simbai, Papua New Guinea
 SIN:Singapore
 SIO:Smithton, Tasmania, Australia
-SIP:Simferopol, Adygea, Ukraine
+SIP:Simferopol, Ukraine
 SIQ:Singkep (Dabo Airport), Indonesia
 SIR:Sion (Sitten), Switzerland
 SIS:Sishen, South Africa
@@ -7296,7 +7304,7 @@ STK:Sterling (Crosson Field), CO, USA
 STL:St. Louis/Lambert International, Missouri, USA
 STM:Santarem, PA, Brazil
 STN:London (Stansted), UK
-STO:All Airports around Stockholm, Sweden
+STO:All airports around Stockholm, Sweden
 STP:St. Paul (Holman Field), MN, USA
 STQ:St. Marys Municipal Airport, PA, USA
 STR:Stuttgart (Echterdingen), Germany
@@ -7316,7 +7324,7 @@ SUE:Sturgeon Bay (Door County), WI, USA
 SUF:Lamezia Terme, Italy
 SUG:Surigao, Philippines
 SUH:Sur, Oman
-SUI:Sokhumi, Abkhazia, Georgia
+SUI:Sukhum, Abkhazia
 SUJ:Satu Mare, Romania
 SUK:Samchok, South Korea
 SUL:Sui, Pakistan
@@ -7500,6 +7508,7 @@ TCL:Tuscaloosa Municipal Airport, AL, USA
 TCM:Tacoma (McChord Air Force), WA, USA
 TCN:Tehuacan, Mexico
 TCO:Tumaco, Colombia
+TCP:Taba International Airport, Egypt
 TCQ:Tacna (Coronel Carlos Ciriani), Peru
 TCS:Truth or Consequences, NM, USA
 TCT:Takotna Airport, AK, USA
@@ -7589,9 +7598,10 @@ THR:Theran (Qualeh Morgeh Airport), Iran
 THT:Tamchakett, Mauritania
 THU:Thule (Air Base), Greenland
 THV:York Airport, PA, USA
+THX:Turukhansk, Krasnoyarsk Krai, Russia
 THY:Thohoyandou, Venda, South Africa
 THZ:Tahoua, Niger
-TIA:Tirana, Albania
+TIA:Tirana International Airport, Albania
 TIB:Tibu, Colombia
 TIC:Tinak Airport, Marshall Islands
 TID:Tiaret (Bou Chekif), Algeria
@@ -7920,7 +7930,7 @@ UBB:Mabuiag Island, Queensland, Australia
 UBE:Cumberland (Municipal Airport), WI, USA
 UBI:Buin, Papua New Guinea
 UBJ:Ube, Japan
-UBP:Ubon Ratchathni, Thailand
+UBP:Ubon Ratchathani, Thailand
 UBS:Columbus (Lowndes County Airport), MS, USA
 UBT:Ubatuba, Brazil
 UBU:Kalumburu, Western Australia, Australia
@@ -7991,7 +8001,7 @@ ULP:Quilpie, Queensland, Australia
 ULQ:Tulua, Colombia
 ULS:Mulatos, Colombia
 ULU:Gulu, Uganda
-ULY:Simbirsk (Ulyanovsk), Russia
+ULV:Ulyanovsk (Barataevka), Russia
 UMA:Punta de Maisi, Cuba
 UMB:Umnak, AK, USA
 UMC:Umba, Papua New Guinea
@@ -8049,7 +8059,7 @@ USH:Ushuaia, Argentina
 USI:Mabaruma, Guyana
 USK:Usinsk, Russia
 USL:Useless Loop, Western Australia, Australia
-USM:Koh Samui, Thailand
+USM:Ko Samui, Thailand
 USN:Ulsan, South Korea
 USO:Usino, Papua New Guinea
 UST:St. Augustine Airport, FL, USA
@@ -8167,7 +8177,7 @@ VIH:Rolla/Vichy (Rolla National Airport), MO, USA
 VIJ:Virgin Gorda (Valley), British Virgin Islands
 VIK:Kavik, AK, USA
 VIL:Dakhla (Villa Cisneros), Western Sahara
-VIN:Vinnytsya, Russia
+VIN:Vinnytsya, Ukraine
 VIQ:Viqueque, Indonesia
 VIS:Visalia Municipal Airport, CA, USA
 VIT:Vitoria, Spain
@@ -8212,13 +8222,13 @@ VNS:Varanasi, India
 VNW:Van Wert County Airport, OH, USA
 VNX:Vilanculos, Mozambique
 VNY:Los Angeles (Van Nuys Airport), CA, USA
-VOG:Volgograd (Stalingrad), Russia
+VOG:Volgograd (Gumrak, Stalingrad), Russia
 VOH:Vohemar, Madagascar
 VOI:Voinjama, Liberia
 VOK:Camp Douglas (Volk Field), WI, USA
 VOL:Volos, Greece
 VOT:Votuporanga, SP, Brazil
-VOZ:Voronezh, Voronezh, Russia
+VOZ:Voronezh (Chertovitskoe), Russia
 VPC:Cartersville Airport, GA, USA
 VPE:Ondjiva (Ngiva), Angola
 VPN:Vopnafjordur, Iceland
@@ -8905,7 +8915,7 @@ YOL:Yola, Nigeria
 YOO:Oshawa, ON, Canada
 YOP:Rainbow Lake, AB, Canada
 YOS:Owen Sound, ON, Canada
-YOW:McDonald-Cartier International, Ottawa
+YOW:Ottawa Macdonald-Cartier International Airport, Canada
 YOX:Rea Point, NT, Canada
 YPA:Prince Albert, SK, Canada
 YPB:Port Alberni, BC, Canada
@@ -9161,9 +9171,7 @@ ZBX:Branson (Table Rock Heliport), MO, USA
 ZBY:Sayaboury, Laos
 ZCC:Baden Baden (Railway Station), Germany
 ZCL:Zacatecas (General Leobardo Ruiz), Mexico
-ZCO:Temuco, Chile
-ZDJ:Bern, Switzerland
-ZDT:Chur, Switzerland
+ZCO:Maquehue Airport, Temuco, Chile
 ZEC:Seconda, South Africa
 ZEF:Elkin Municipal Airport, NC, USA
 ZEG:Senggo, Indonesia

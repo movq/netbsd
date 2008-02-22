@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.11 2007/12/15 19:44:50 perry Exp $	*/
+/*	$NetBSD: expand.c,v 1.14 2016/09/05 00:40:28 sevan Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)expand.c	8.1 (Berkeley) 6/9/93";
 #endif
-__RCSID("$NetBSD: expand.c,v 1.11 2007/12/15 19:44:50 perry Exp $");
+__RCSID("$NetBSD: expand.c,v 1.14 2016/09/05 00:40:28 sevan Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -55,7 +55,6 @@ size_t	nstops;
 size_t	tabstops[100];
 
 static	void	getstops(const char *);
-	int	main(int, char **);
 static	void	usage(void) __dead;
 
 int
@@ -160,7 +159,7 @@ getstops(const char *spec)
 			i = i * 10 + *cp++ - '0';
 		if (i <= 0 || i > 256)
 			errx(EXIT_FAILURE, "Too large tab stop spec `%d'", i);
-		if (nstops > 0 && i <= tabstops[nstops-1])
+		if (nstops > 0 && (size_t)i <= tabstops[nstops-1])
 			errx(EXIT_FAILURE, "Out of order tabstop spec `%d'", i);
 		if (nstops == sizeof(tabstops) / sizeof(tabstops[0]) - 1)
 			errx(EXIT_FAILURE, "Too many tabstops");

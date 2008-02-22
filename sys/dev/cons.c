@@ -1,6 +1,7 @@
-/*	$NetBSD: cons.c,v 1.65 2008/01/24 17:32:52 ad Exp $	*/
+/*	$NetBSD: cons.c,v 1.75 2015/05/29 16:26:45 macallan Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -37,52 +38,11 @@
  *	@(#)cons.c	8.2 (Berkeley) 1/12/94
  */
 
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: cons.c 1.7 92/01/21$
- *
- *	@(#)cons.c	8.2 (Berkeley) 1/12/94
- */
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cons.c,v 1.65 2008/01/24 17:32:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cons.c,v 1.75 2015/05/29 16:26:45 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/ioctl.h>
@@ -96,6 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: cons.c,v 1.65 2008/01/24 17:32:52 ad Exp $");
 
 #include <dev/cons.h>
 
+#include "nullcons.h"
+
 dev_type_open(cnopen);
 dev_type_close(cnclose);
 dev_type_read(cnread);
@@ -107,8 +69,18 @@ dev_type_kqfilter(cnkqfilter);
 static bool cn_redirect(dev_t *, int, int *);
 
 const struct cdevsw cons_cdevsw = {
-	cnopen, cnclose, cnread, cnwrite, cnioctl,
-	nostop, notty, cnpoll, nommap, cnkqfilter, D_TTY
+	.d_open = cnopen,
+	.d_close = cnclose,
+	.d_read = cnread,
+	.d_write = cnwrite,
+	.d_ioctl = cnioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = cnpoll,
+	.d_mmap = nommap,
+	.d_kqfilter = cnkqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 struct	tty *constty = NULL;	/* virtual console output device */
@@ -134,6 +106,11 @@ cnopen(dev_t dev, int flag, int mode, struct lwp *l)
 	 * open() calls.
 	 */
 	cndev = cn_tab->cn_dev;
+#if NNULLCONS > 0
+	if (cndev == NODEV) {
+		nullconsattach(0);
+	}
+#else /* NNULLCONS > 0 */
 	if (cndev == NODEV) {
 		/*
 		 * This is most likely an error in the console attach
@@ -142,6 +119,7 @@ cnopen(dev_t dev, int flag, int mode, struct lwp *l)
 		 */
 		panic("cnopen: no console device");
 	}
+#endif /* NNULLCONS > 0 */
 	if (dev == cndev) {
 		/*
 		 * This causes cnopen() to be called recursively, which
@@ -158,7 +136,7 @@ cnopen(dev_t dev, int flag, int mode, struct lwp *l)
 	error = vn_lock(cn_devvp[unit], LK_EXCLUSIVE | LK_RETRY);
 	if (error == 0) {
 		error = VOP_OPEN(cn_devvp[unit], flag, kauth_cred_get());
-		VOP_UNLOCK(cn_devvp[unit], 0);
+		VOP_UNLOCK(cn_devvp[unit]);
 	}
 	return error;
 }
@@ -179,7 +157,7 @@ cnclose(dev_t dev, int flag, int mode, struct lwp *l)
 	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	if (error == 0) {
 		error = VOP_CLOSE(vp, flag, kauth_cred_get());
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 	}
 	return error;
 }
@@ -224,8 +202,8 @@ cnioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	 * output from the "virtual" console.
 	 */
 	if (cmd == TIOCCONS && constty != NULL) {
-		error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
+		error = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_VIRTUAL, constty);
 		if (!error)
 			constty = NULL;
 		return (error);
@@ -279,7 +257,15 @@ cngetc(void)
 {
 	if (cn_tab == NULL)
 		return (0);
-	return ((*cn_tab->cn_getc)(cn_tab->cn_dev));
+	int s = splhigh();
+	for (;;) {
+		const int rv = (*cn_tab->cn_getc)(cn_tab->cn_dev);
+		if (rv >= 0) {
+			splx(s);
+			return rv;
+		}
+		docritpollhooks();
+	}
 }
 
 int
@@ -335,11 +321,29 @@ cnputc(int c)
 	if (cn_tab == NULL)
 		return;
 
+/*
+ * XXX
+ * for some reason this causes ARCS firmware to output an endless stream of
+ * whitespaces with n32 kernels, so use the pre-1.74 code for now until I can
+ * figure out why this happens
+ */
+#ifndef sgimips
+	if (c) {
+		if (c == '\n') {
+			(*cn_tab->cn_putc)(cn_tab->cn_dev, '\r');
+			docritpollhooks();
+		}
+		(*cn_tab->cn_putc)(cn_tab->cn_dev, c);
+	}
+#else
 	if (c) {
 		(*cn_tab->cn_putc)(cn_tab->cn_dev, c);
-		if (c == '\n')
+		if (c == '\n') {
+			docritpollhooks();
 			(*cn_tab->cn_putc)(cn_tab->cn_dev, '\r');
+		}
 	}
+#endif
 }
 
 void

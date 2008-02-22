@@ -1,4 +1,4 @@
-/*	$NetBSD: essvar.h,v 1.24 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: essvar.h,v 1.27 2014/08/16 13:01:33 nakayama Exp $	*/
 /*
  * Copyright 1997
  * Digital Equipment Corporation. All rights reserved.
@@ -33,7 +33,7 @@
  */
 
 /*
-** @(#) $RCSfile: essvar.h,v $ $Revision: 1.24 $ (SHARK) $Date: 2005/12/11 12:22:02 $
+** @(#) $RCSfile: essvar.h,v $ $Revision: 1.27 $ (SHARK) $Date: 2014/08/16 13:01:33 $
 **
 **++
 **
@@ -86,6 +86,11 @@
 
 #define ESS_1788_NDEVS		15
 
+#define ESS_SPATIALIZER		15
+#define ESS_SPATIALIZER_ENABLE	16
+
+#define ESS_18X9_NDEVS		17
+
 #define ESS_DAC_REC_VOL		15
 #define ESS_MIC_REC_VOL		16
 #define ESS_LINE_REC_VOL	17
@@ -123,13 +128,15 @@ struct ess_audio_channel
 
 struct ess_softc
 {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	isa_chipset_tag_t sc_ic;
 	bus_space_tag_t sc_iot;		/* tag */
 	bus_space_handle_t sc_ioh;	/* handle */
+	kmutex_t sc_lock;
+	kmutex_t sc_intr_lock;
 
-	struct callout sc_poll1_ch;	/* audio1 poll */
-	struct callout sc_poll2_ch;	/* audio2 poll */
+	callout_t sc_poll1_ch;		/* audio1 poll */
+	callout_t sc_poll2_ch;		/* audio2 poll */
 
 	int	sc_iobase;		/* I/O port base address */
 
@@ -163,6 +170,8 @@ struct ess_softc
 #define ESS_1888	10
 
 	u_int	sc_version;		/* Legacy ES688/ES1688 ID */
+
+	u_int	sc_spatializer;		/* spatializer enable */
 
 	/* game port on es1888 */
 	bus_space_tag_t sc_joy_iot;

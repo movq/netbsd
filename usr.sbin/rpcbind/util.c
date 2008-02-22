@@ -1,4 +1,5 @@
-/*	$NetBSD: util.c,v 1.14 2007/08/27 19:53:33 dsl Exp $	*/
+/*	$NetBSD: util.c,v 1.21 2017/08/16 08:44:40 christos Exp $	*/
+/* $FreeBSD: head/usr.sbin/rpcbind/util.c 300973 2016-05-29 20:28:01Z ngie $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,6 +47,12 @@
 #include <netconfig.h>
 #include <stdio.h>
 #include <arpa/inet.h>
+#include <err.h>
+
+#ifdef RPCBIND_RUMP
+#include <rump/rump.h>
+#include <rump/rump_syscalls.h>
+#endif
 
 #include "rpcbind.h"
 
@@ -62,13 +62,11 @@ static struct sockaddr_in6 *local_in6;
 #endif
 
 static int bitmaskcmp(void *, void *, void *, int);
-#ifdef INET6
-static void in6_fillscopeid(struct sockaddr_in6 *);
-#endif
 
 /*
  * For all bits set in "mask", compare the corresponding bits in
- * "dst" and "src", and see if they match.
+ * "dst" and "src", and see if they match. Returns 0 if the addresses
+ * match.
  */
 static int
 bitmaskcmp(void *dst, void *src, void *mask, int bytelen)
@@ -90,24 +88,9 @@ bitmaskcmp(void *dst, void *src, void *mask, int bytelen)
 	return 0;
 }
 
-/*
- * Taken from ifconfig.c
- */
-#ifdef INET6
-static void
-in6_fillscopeid(struct sockaddr_in6 *sin6)
-{
-        if (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr)) {
-                sin6->sin6_scope_id =
-                        ntohs(*(u_int16_t *)&sin6->sin6_addr.s6_addr[2]);
-                sin6->sin6_addr.s6_addr[2] = sin6->sin6_addr.s6_addr[3] = 0;
-        }
-}
-#endif
-
 char *
 addrmerge(struct netbuf *caller, char *serv_uaddr, char *clnt_uaddr,
-	  char *netid)
+    const char *netid)
 {
 	struct ifaddrs *ifap, *ifp, *bestif;
 #ifdef INET6
@@ -225,7 +208,7 @@ addrmerge(struct netbuf *caller, char *serv_uaddr, char *clnt_uaddr,
 			 */
 			realsin6 = (struct sockaddr_in6 *)clnt;
 			ifsin6 = (struct sockaddr_in6 *)ifap->ifa_addr;
-			in6_fillscopeid(ifsin6);
+			inet6_getscopeid(ifsin6, 1);
 			clntsin6 = (struct sockaddr_in6 *)clnt_sa;
 			servsin6 = (struct sockaddr_in6 *)serv_sa;
 			sin6mask = (struct sockaddr_in6 *)ifap->ifa_netmask;
@@ -317,7 +300,8 @@ network_init()
 #ifdef INET6
 	struct ifaddrs *ifap, *ifp;
 	struct ipv6_mreq mreq6;
-	int ifindex, s;
+	unsigned int ifindex;
+	int s;
 #endif
 	int ecode;
 	struct addrinfo hints, *res;
@@ -382,8 +366,9 @@ network_init()
 		if (setsockopt(s, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq6,
 		    sizeof mreq6) < 0)
 			if (debugging)
-				perror("setsockopt v6 multicast");
+				warn("setsockopt v6 multicast");
 	}
+	freeifaddrs(ifp);
 #endif
 
 	/* close(s); */

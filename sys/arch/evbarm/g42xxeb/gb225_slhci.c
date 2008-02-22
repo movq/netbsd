@@ -1,4 +1,4 @@
-/*	$NetBSD: gb225_slhci.c,v 1.3 2006/02/23 05:37:47 thorpej Exp $ */
+/*	$NetBSD: gb225_slhci.c,v 1.8 2012/11/12 18:00:38 skrll Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 
 #include <dev/usb/usb.h>
@@ -67,24 +60,24 @@ struct slhci_opio_softc {
 	void *sc_ih;
 };
 
-static int  slhci_opio_match(struct device *, struct cfdata *, void *);
-static void slhci_opio_attach(struct device *, struct device *, void *);
+static int  slhci_opio_match(device_t, cfdata_t, void *);
+static void slhci_opio_attach(device_t, device_t, void *);
 static void slhci_opio_enable_power(void *, int);
 static void slhci_opio_enable_intr(void *, int);
 static int  slhci_opio_intr(void *);
 
-CFATTACH_DECL(slhci_opio, sizeof(struct slhci_opio_softc),
+CFATTACH_DECL_NEW(slhci_opio, sizeof(struct slhci_opio_softc),
     slhci_opio_match, slhci_opio_attach, NULL, NULL);
 
 #define PORTSIZE	(SL11_PORTSIZE*4)
 
 static int
-slhci_opio_match(struct device *parent, struct cfdata *cf, void *aux)
+slhci_opio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct obio_attach_args *oba = aux;
 	bus_space_tag_t iot = &pxa2x0_a4x_bs_tag; /* Use special BS funcs */
 	bus_space_handle_t ioh;
-	struct obio_softc *bsc = (struct obio_softc *)device_parent(parent);
+	struct obio_softc *bsc = device_private(device_parent(parent));
 	struct pxa2x0_softc *psc;
 	int type;
 	uint32_t reg;
@@ -92,7 +85,7 @@ slhci_opio_match(struct device *parent, struct cfdata *cf, void *aux)
 	struct slhci_softc sc;
 
 	obio_peripheral_reset(bsc, 2, 0);
-	psc = (struct pxa2x0_softc *)device_parent(&bsc->sc_dev);
+	psc = device_private(device_parent(bsc->sc_dev));
 
 	reg = bus_space_read_4(psc->saip.sc_iot, psc->sc_memctl_ioh,
 	    MEMCTL_MSC2);
@@ -121,14 +114,14 @@ slhci_opio_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-slhci_opio_attach(struct device *parent, struct device *self, void *aux)
+slhci_opio_attach(device_t parent, device_t self, void *aux)
 {
-	struct slhci_opio_softc *sc = (struct slhci_opio_softc *)self;
+	struct slhci_opio_softc *sc = device_private(self);
 	struct obio_attach_args *oba = aux;
 	struct opio_softc *psc =
-	    (struct opio_softc *)device_parent(self);
+	    device_private(device_parent(self));
 	struct obio_softc *bsc =
-	    (struct obio_softc *)device_parent(&psc->sc_dev);
+	    device_private(device_parent(psc->sc_dev));
 	bus_space_tag_t iot = oba->oba_iot;
 	bus_space_handle_t ioh;
 
@@ -136,8 +129,7 @@ slhci_opio_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map I/O space */
 	if (bus_space_map(iot, oba->oba_addr, PORTSIZE, 0, &ioh)) {
-		printf("%s: can't map I/O space\n",
-			sc->sc_sc.sc_bus.bdev.dv_xname);
+		aprint_error_dev(self, "can't map I/O space\n");
 		return;
 	}
 
@@ -153,8 +145,7 @@ slhci_opio_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = obio_intr_establish(bsc, oba->oba_intr, IPL_BIO, 
 	    IST_LEVEL_HIGH, slhci_opio_intr, sc);
 	if( sc->sc_ih == NULL) {
-		printf("%s: can't establish interrupt\n",
-			sc->sc_sc.sc_bus.bdev.dv_xname);
+		aprint_error_dev(self, "can't establish interrupt\n");
 		return;
 	}
 
@@ -180,7 +171,7 @@ slhci_opio_enable_power(void *arg, int mode)
 #if 0
 	struct slhci_opio_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_sc.sc_iot;
-	u_int8_t r;
+	uint8_t r;
 
 	r = bus_space_read_1(iot, sc->sc_nch, NEREID_CTRL);
 	if (mode == POWER_ON)
@@ -198,8 +189,8 @@ slhci_opio_enable_intr(void *arg, int mode)
 	struct slhci_opio_softc *sc = arg;
 	struct obio_softc *bsc;
 
-	bsc = (struct obio_softc *)device_parent(
-	    device_parent(&sc->sc_sc.sc_bus.bdev));
+	bsc = device_private(device_parent(
+	    device_parent(sc->sc_sc.sc_bus.bdev)));
 
 	if (mode == INTR_ON)
 		obio_intr_unmask(bsc, sc->sc_ih);

@@ -1,4 +1,4 @@
-/*	$NetBSD: scores.c,v 1.17 2008/02/03 20:41:53 dholland Exp $	*/
+/*	$NetBSD: scores.c,v 1.21 2012/06/19 05:30:44 dholland Exp $	*/
 
 /*
  * scores.c			 Larn is copyrighted 1986 by Noah Morgan.
@@ -26,7 +26,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: scores.c,v 1.17 2008/02/03 20:41:53 dholland Exp $");
+__RCSID("$NetBSD: scores.c,v 1.21 2012/06/19 05:30:44 dholland Exp $");
 #endif				/* not lint */
 #include <sys/types.h>
 #include <sys/times.h>
@@ -64,7 +64,7 @@ struct wscofmt {		/* This is the structure for the winning
 
 struct log_fmt {		/* 102 bytes struct for the log file 				 */
 	long            score;	/* the players score 								 */
-	time_t          diedtime;	/* time when game was over 							 */
+	int32_t          diedtime;	/* time when game was over 							 */
 	short           cavelev;/* level in caves 									 */
 	short           diff;	/* difficulty player played at 						 */
 #ifdef EXTRA
@@ -102,13 +102,23 @@ static const char *whydead[] = {
 	"died a post mortem death", "wasted by a malloc() failure"
 };
 
+static int readboard(void);
+static int writeboard(void);
+static int winshou(void);
+static int shou(int);
+static int sortboard(void);
+static void newscore(long, char *, int, int);
+static void new1sub(long, int, char *, long);
+static void new2sub(long, int, char *, int);
+static void diedsub(int);
+
 /*
  * readboard() 	Function to read in the scoreboard into a static buffer
  *
  * returns -1 if unable to read in the scoreboard, returns 0 if all is OK
  */
-int
-readboard()
+static int
+readboard(void)
 {
 	int             i;
 
@@ -134,8 +144,8 @@ readboard()
  *
  * returns -1 if unable to write the scoreboard, returns 0 if all is OK
  */
-int
-writeboard()
+static int
+writeboard(void)
 {
 	int             i;
 
@@ -163,7 +173,7 @@ writeboard()
  * returns -1 if unable to write the scoreboard, returns 0 if all is OK
  */
 int
-makeboard()
+makeboard(void)
 {
 	int    i;
 	set_score_output();
@@ -190,7 +200,7 @@ makeboard()
  * the winners scoreboard.
  */
 int
-hashewon()
+hashewon(void)
 {
 	int    i;
 	c[HARDGAME] = 0;
@@ -213,8 +223,7 @@ hashewon()
  * Returns amount actually paid.
  */
 long 
-paytaxes(x)
-	long            x;
+paytaxes(long x)
 {
 	int    i;
 	long   amt;
@@ -246,8 +255,8 @@ paytaxes(x)
  *
  * Returns the number of players on scoreboard that were shown
  */
-int
-winshou()
+static int
+winshou(void)
 {
 	struct wscofmt *p;
 	int    i, j, count;
@@ -285,9 +294,8 @@ winshou()
  * Enter with 0 to list the scores, enter with 1 to list inventories too
  * Returns the number of players on scoreboard that were shown
  */
-int
-shou(x)
-	int             x;
+static int
+shou(int x)
 {
 	int    i, j, n, k;
 	int             count;
@@ -341,7 +349,7 @@ shou(x)
  */
 static char     esb[] = "The scoreboard is empty.\n";
 void
-showscores()
+showscores(void)
 {
 	int    i, j;
 	lflush();
@@ -363,7 +371,7 @@ showscores()
  * Returns nothing of value
  */
 void
-showallscores()
+showallscores(void)
 {
 	int    i, j;
 	lflush();
@@ -390,8 +398,8 @@ showallscores()
  *
  * Returns 0 if no sorting done, else returns 1
  */
-int
-sortboard()
+static int
+sortboard(void)
 {
 	int    i, j = 0, pos;
 	long            jdat;
@@ -429,11 +437,8 @@ sortboard()
  * 	died() reason # in whyded, and TRUE/FALSE in winner if a winner
  * ex.		newscore(1000, "player 1", 32, 0);
  */
-void
-newscore(score, whoo, whyded, winner)
-	long            score;
-	int             winner, whyded;
-	char           *whoo;
+static void
+newscore(long score, char *whoo, int whyded, int winner)
 {
 	int    i;
 	long            taxes;
@@ -498,11 +503,8 @@ newscore(score, whoo, whyded, winner)
  * 	slot in scoreboard in i, and the tax bill in taxes.
  * Returns nothing of value
  */
-void
-new1sub(score, i, whoo, taxes)
-	long            score, taxes;
-	int             i;
-	char           *whoo;
+static void
+new1sub(long score, int i, char *whoo, long taxes)
 {
 	struct wscofmt *p;
 	p = &winr[i];
@@ -525,11 +527,8 @@ new1sub(score, i, whoo, taxes)
  * 	died() reason # in whyded, and slot in scoreboard in i.
  * Returns nothing of value
  */
-void
-new2sub(score, i, whoo, whyded)
-	long            score;
-	int             i, whyded;
-	char           *whoo;
+static void
+new2sub(long score, int i, char *whoo, int whyded)
 {
 	int    j;
 	struct scofmt *p;
@@ -591,8 +590,7 @@ new2sub(score, i, whoo, whyded)
 
 static int      scorerror;
 void
-died(x)
-	int             x;
+died(int x)
 {
 	int    f, win;
 	char            ch;
@@ -732,7 +730,7 @@ invalid:
  * diedsub(x) Subroutine to print out the line showing the player when he is killed
  * 	int x;
  */
-void
+static void
 diedsub(int x)
 {
 	char   ch;
@@ -758,11 +756,14 @@ diedsub(int x)
  * diedlog() 	Subroutine to read a log file and print it out in ascii format
  */
 void
-diedlog()
+diedlog(void)
 {
 	int    n;
 	char  *p;
+	static char  q[] = "?";
 	struct stat     stbuf;
+	time_t t;
+
 	lcreat((char *) 0);
 	if (lopen(logfile) < 0) {
 		lprintf("Can't locate log file <%s>\n", logfile);
@@ -774,9 +775,13 @@ diedlog()
 	}
 	for (n = stbuf.st_size / sizeof(struct log_fmt); n > 0; --n) {
 		lrfill((char *) &logg, sizeof(struct log_fmt));
-		p = ctime(&logg.diedtime);
-		p[16] = '\n';
-		p[17] = 0;
+		t = logg.diedtime;
+		if ((p = ctime(&t)) == NULL)
+			p = q;
+		else {
+			p[16] = '\n';
+			p[17] = 0;
+		}
 		lprintf("Score: %ld, Diff: %ld,  %s %s on %ld at %s", (long) (logg.score), (long) (logg.diff), logg.who, logg.what, (long) (logg.cavelev), p + 4);
 #ifdef EXTRA
 		if (logg.moves <= 0)

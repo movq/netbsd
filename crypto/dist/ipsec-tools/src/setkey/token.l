@@ -1,4 +1,4 @@
-/*	$NetBSD: token.l,v 1.12 2007/07/18 12:07:53 vanhu Exp $	*/
+/*	$NetBSD: token.l,v 1.21 2018/05/28 19:52:18 maxv Exp $	*/
 
 /*	$KAME: token.l,v 1.44 2003/10/21 07:20:58 itojun Exp $	*/
 
@@ -111,9 +111,12 @@ hostname	{name}(({dot}{name})+{dot}?)?
 
 %s S_PL S_AUTHALG S_ENCALG
 
+%option noinput nounput
 %%
 
+
 add		{ return(ADD); }
+update		{ return(UPDATE); }
 delete		{ return(DELETE); }
 deleteall	{ return(DELETEALL); }
 get		{ return(GET); }
@@ -125,6 +128,7 @@ bye		{ return(EXIT); }
 
 	/* for management SPD */
 spdadd		{ return(SPDADD); }
+spdupdate	{ return(SPDUPDATE); }
 spddelete	{ return(SPDDELETE); }
 spddump		{ return(SPDDUMP); }
 spdflush	{ return(SPDFLUSH); }
@@ -220,6 +224,16 @@ tcp		{
 	yylval.num = SADB_X_EALG_CAMELLIACBC; BEGIN INITIAL; return(ALG_ENC); 
 #endif
 }
+<S_ENCALG>aes-gcm-16	{
+#ifdef SADB_X_EALG_AESGCM16
+	yylval.num = SADB_X_EALG_AESGCM16; BEGIN INITIAL; return(ALG_ENC);
+#endif
+}
+<S_ENCALG>aes-gmac	{
+#ifdef SADB_X_EALG_AESGMAC
+	yylval.num = SADB_X_EALG_AESGMAC; BEGIN INITIAL; return(ALG_ENC);
+#endif
+}
 
 	/* compression algorithms */
 {hyphen}C	{ return(F_COMP); }
@@ -244,6 +258,7 @@ nocyclic-seq	{ return(NOCYCLICSEQ); }
 {hyphen}bh	{ return(F_LIFEBYTE_HARD); }
 {hyphen}bs	{ return(F_LIFEBYTE_SOFT); }
 {hyphen}ctx	{ return(SECURITY_CTX); }
+{hyphen}esp_frag { return(F_ESPFRAG); }
 
 	/* ... */
 any		{ return(ANY); }
@@ -311,23 +326,20 @@ any		{ return(ANY); }
 %%
 
 void
-yyfatal(s)
-	const char *s;
+yyfatal(const char *s)
 {
 	yyerror(s);
 	exit(1);
 }
 
 void
-yyerror(s)
-	const char *s;
+yyerror(const char *s)
 {
 	printf("line %d: %s at [%s]\n", lineno, s, yytext);
 }
 
 int
-parse(fp)
-	FILE **fp;
+parse(FILE **fp)
 {
 	yyin = *fp;
 

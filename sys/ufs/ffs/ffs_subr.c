@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_subr.c,v 1.44 2007/01/29 01:52:46 hubertf Exp $	*/
+/*	$NetBSD: ffs_subr.c,v 1.49 2016/05/07 11:59:08 maxv Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -36,7 +36,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_subr.c,v 1.44 2007/01/29 01:52:46 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_subr.c,v 1.49 2016/05/07 11:59:08 maxv Exp $");
 
 #include <sys/param.h>
 
@@ -44,6 +44,9 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_subr.c,v 1.44 2007/01/29 01:52:46 hubertf Exp $"
 extern const int inside[], around[];
 extern const u_char * const fragtbl[];
 
+#ifndef _KERNEL
+#define FFS_EI /* always include byteswapped filesystems support */
+#endif
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 #include <ufs/ufs/ufs_bswap.h>
@@ -60,6 +63,7 @@ void    panic(const char *, ...)
 #include <sys/buf.h>
 #include <sys/inttypes.h>
 #include <sys/pool.h>
+#include <sys/fstrans.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
 #include <ufs/ufs/ufs_extern.h>
@@ -107,6 +111,27 @@ ffs_load_inode(struct buf *bp, struct inode *ip, struct fs *fs, ino_t ino)
 		ip->i_uid = ip->i_ffs2_uid;
 		ip->i_gid = ip->i_ffs2_gid;
 	}
+}
+
+int
+ffs_getblk(struct vnode *vp, daddr_t lblkno, daddr_t blkno, int size,
+    bool clearbuf, buf_t **bpp)
+{
+	int error = 0;
+
+	KASSERT(blkno >= 0 || blkno == FFS_NOBLK);
+
+	if ((*bpp = getblk(vp, lblkno, size, 0, 0)) == NULL)
+		return ENOMEM;
+	if (blkno != FFS_NOBLK)
+		(*bpp)->b_blkno = blkno;
+	if (clearbuf)
+		clrbuf(*bpp);
+	if ((*bpp)->b_blkno >= 0 && (error = fscow_run(*bpp, false)) != 0) {
+		brelse(*bpp, BC_INVAL);
+		*bpp = NULL;
+	}
+	return error;
 }
 
 #endif	/* _KERNEL */
@@ -249,4 +274,98 @@ ffs_setblock(struct fs *fs, u_char *cp, int32_t h)
 		panic("ffs_setblock: unknown fs_fragshift %d",
 		    (int)fs->fs_fragshift);
 	}
+}
+
+/*
+ * Update the cluster map because of an allocation or free.
+ *
+ * Cnt == 1 means free; cnt == -1 means allocating.
+ */
+void
+ffs_clusteracct(struct fs *fs, struct cg *cgp, int32_t blkno, int cnt)
+{
+	int32_t *sump;
+	int32_t *lp;
+	u_char *freemapp, *mapp;
+	int i, start, end, forw, back, map, bit;
+	const int needswap = UFS_FSNEEDSWAP(fs);
+
+	/* KASSERT(mutex_owned(&ump->um_lock)); */
+
+	if (fs->fs_contigsumsize <= 0)
+		return;
+	freemapp = cg_clustersfree(cgp, needswap);
+	sump = cg_clustersum(cgp, needswap);
+	/*
+	 * Allocate or clear the actual block.
+	 */
+	if (cnt > 0)
+		setbit(freemapp, blkno);
+	else
+		clrbit(freemapp, blkno);
+	/*
+	 * Find the size of the cluster going forward.
+	 */
+	start = blkno + 1;
+	end = start + fs->fs_contigsumsize;
+	if ((uint32_t)end >= ufs_rw32(cgp->cg_nclusterblks, needswap))
+		end = ufs_rw32(cgp->cg_nclusterblks, needswap);
+	mapp = &freemapp[start / NBBY];
+	map = *mapp++;
+	bit = 1 << (start % NBBY);
+	for (i = start; i < end; i++) {
+		if ((map & bit) == 0)
+			break;
+		if ((i & (NBBY - 1)) != (NBBY - 1)) {
+			bit <<= 1;
+		} else {
+			map = *mapp++;
+			bit = 1;
+		}
+	}
+	forw = i - start;
+	/*
+	 * Find the size of the cluster going backward.
+	 */
+	start = blkno - 1;
+	end = start - fs->fs_contigsumsize;
+	if (end < 0)
+		end = -1;
+	mapp = &freemapp[start / NBBY];
+	map = *mapp--;
+	bit = 1 << (start % NBBY);
+	for (i = start; i > end; i--) {
+		if ((map & bit) == 0)
+			break;
+		if ((i & (NBBY - 1)) != 0) {
+			bit >>= 1;
+		} else {
+			map = *mapp--;
+			bit = 1 << (NBBY - 1);
+		}
+	}
+	back = start - i;
+	/*
+	 * Account for old cluster and the possibly new forward and
+	 * back clusters.
+	 */
+	i = back + forw + 1;
+	if (i > fs->fs_contigsumsize)
+		i = fs->fs_contigsumsize;
+	ufs_add32(sump[i], cnt, needswap);
+	if (back > 0)
+		ufs_add32(sump[back], -cnt, needswap);
+	if (forw > 0)
+		ufs_add32(sump[forw], -cnt, needswap);
+
+	/*
+	 * Update cluster summary information.
+	 */
+	lp = &sump[fs->fs_contigsumsize];
+	for (i = fs->fs_contigsumsize; i > 0; i--)
+		if (ufs_rw32(*lp--, needswap) > 0)
+			break;
+#if defined(_KERNEL)
+	fs->fs_maxcluster[ufs_rw32(cgp->cg_cgx, needswap)] = i;
+#endif
 }

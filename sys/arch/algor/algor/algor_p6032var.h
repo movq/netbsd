@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p6032var.h,v 1.1 2001/06/22 06:02:54 thorpej Exp $	*/
+/*	$NetBSD: algor_p6032var.h,v 1.5 2011/07/08 18:48:56 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/pci/pcivar.h>
 #include <dev/isa/isavar.h>
 
@@ -45,14 +38,14 @@
 struct p6032_config {
 	struct bonito_config ac_bonito;
 
-	struct algor_bus_space ac_iot;
-	struct algor_bus_space ac_memt;
+	struct mips_bus_space ac_iot;
+	struct mips_bus_space ac_memt;
 
-	struct algor_bus_dma_tag ac_pci_dmat;
-	struct algor_bus_dma_tag ac_isa_dmat;
+	struct mips_bus_dma_tag ac_pci_dmat;
+	struct mips_bus_dma_tag ac_isa_dmat;
 
-	struct algor_pci_chipset ac_pc;
-	struct algor_isa_chipset ac_ic;
+	struct mips_pci_chipset ac_pc;
+	struct mips_isa_chipset ac_ic;
 
 	struct extent *ac_io_ex;
 	struct extent *ac_mem_ex;
@@ -85,7 +78,7 @@ void	algor_p6032_dma_init(struct p6032_config *);
 
 void	algor_p6032_intr_init(struct p6032_config *);
 
-void	algor_p6032_iointr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+void	algor_p6032_iointr(int, vaddr_t, uint32_t);
 
 void	algor_p6032_cal_timer(bus_space_tag_t, bus_space_handle_t);
 #endif /* _KERNEL */

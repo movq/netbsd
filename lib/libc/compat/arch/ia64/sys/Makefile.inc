@@ -1,3 +1,3 @@
-# $NetBSD: Makefile.inc,v 1.1 2006/09/23 17:38:03 cherry Exp $
+# $NetBSD: Makefile.inc,v 1.3 2016/06/30 09:14:30 mrg Exp $
 
-SRCS+=	compat___semctl.S
+SRCS+=	compat_Ovfork.S compat___semctl.S compat_quotactl.S

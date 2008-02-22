@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.10 2006/11/26 16:16:31 jmmv Exp $	*/
+/*	$NetBSD: extern.h,v 1.13 2013/05/03 16:05:12 matt Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Christos Zoulas.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,5 +32,12 @@ void	showpartition(FILE *, struct disklabel *, int, int);
 void	interact(struct disklabel *, int);
 int	list_fs_types(void);
 
+extern	u_int	maxpartitions;
 extern	char	specname[];
 extern	int	 Cflag;
+
+#ifdef HAVE_NBTOOL_CONFIG_H
+#define	dk_ioctl(f, cmd, arg)	(errno = ENOTTY, -1)
+#else
+int	dk_ioctl(int, u_long cmd, void *);
+#endif

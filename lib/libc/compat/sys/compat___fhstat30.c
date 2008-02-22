@@ -1,4 +1,4 @@
-/*	$NetBSD: compat___fhstat30.c,v 1.2 2006/08/04 16:30:22 yamt Exp $	*/
+/*	$NetBSD: compat___fhstat30.c,v 1.6 2013/10/04 21:07:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat___fhstat30.c,v 1.2 2006/08/04 16:30:22 yamt Exp $");
+__RCSID("$NetBSD: compat___fhstat30.c,v 1.6 2013/10/04 21:07:37 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
@@ -47,18 +40,18 @@ __RCSID("$NetBSD: compat___fhstat30.c,v 1.2 2006/08/04 16:30:22 yamt Exp $");
 #include <sys/types.h>
 #include <sys/mount.h>
 #include <compat/include/fstypes.h>
+#include <compat/sys/mount.h>
 
 __warn_references(fhstat,
-    "warning: reference to compatibility fhstat(); include <sys/mount.h> to generate correct reference")
+    "warning: reference to compatibility __fhstat30(); include <sys/mount.h> to generate correct reference")
 
-int	__fhstat30(const struct compat_30_fhandle *fhp, struct stat *sb);
-int	__fhstat40(const void *fhp, size_t fh_size, struct stat *sb);
+__strong_alias(__fhstat30, __compat___fhstat30)
 
 /*
  * Convert old fhstat() call to new calling convention
  */
 int
-__fhstat30(const struct compat_30_fhandle *fhp, struct stat *sb)
+__compat___fhstat30(const struct compat_30_fhandle *fhp, struct stat30 *sb)
 {
-	return __fhstat40(fhp, FHANDLE30_SIZE, sb);
+	return __compat___fhstat40(fhp, FHANDLE30_SIZE, sb);
 }

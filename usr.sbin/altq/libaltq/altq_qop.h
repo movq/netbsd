@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_qop.h,v 1.4 2006/11/26 11:38:07 peter Exp $	*/
+/*	$NetBSD: altq_qop.h,v 1.6 2011/08/16 12:49:13 christos Exp $	*/
 /*	$KAME: altq_qop.h,v 1.5 2002/02/12 10:14:01 kjc Exp $	*/
 /*
  * Copyright (C) 1999-2000
@@ -38,7 +38,7 @@ struct fltrinfo;
 
 /* queueing discipline specific command parsers */
 struct qdisc_parser {
-	char	*qname;
+	const char	*qname;
 	int	(*interface_parser)(const char *ifname, int argc, char **argv);
 	int	(*class_parser)(const char *ifname, const char *clname,
 				const char *parent, int argc, char **argv);
@@ -46,8 +46,8 @@ struct qdisc_parser {
 
 /* queueing discipline specific operations */
 struct qdisc_ops {
-	int	qdisc_type;	/* discipline type (e.g., ALTQT_CBQ) */
-	char	*qname;		/* discipline name (e.g., cbq) */
+	int		qdisc_type;	/* discipline type (e.g., ALTQT_CBQ) */
+	const char	*qname;		/* discipline name (e.g., cbq) */
 
 	/* interface operations */
 	int	(*attach)(struct ifinfo *);
@@ -217,7 +217,7 @@ int client_input(FILE *fp);
 #define QOPERR_MAX		18
 
 extern int	filter_dontwarn;/* supress warning for the current filter */
-extern char	*altqconfigfile;	/* config file name */
+extern const char *altqconfigfile;	/* config file name */
 extern const char *qop_errlist[];	/* error string list */
 extern struct qdisc_ops nop_qdisc;
 extern char *cur_ifname(void);
@@ -246,8 +246,14 @@ extern int	daemonize;	/* log_write uses stderr if daemonize is 0 */
 #endif /* !RSVPD */
 
 #ifdef INET6
-/* a macro to handle v6 address in 32-bit fields */
-#define IN6ADDR32(a, i)	(*(u_int32_t *)(&(a)->s6_addr[(i)<<2]))
+static inline uint32_t IN6ADDR32_GET(const struct in6_addr *a, size_t i) {
+    uint32_t ret;
+    memcpy(&ret, &(a)->s6_addr[i << 2], sizeof(ret));
+    return ret;
+}
+static inline void IN6ADDR32_SET(struct in6_addr *a, size_t i, uint32_t val) {
+    memcpy(&(a)->s6_addr[i << 2], &val, sizeof(val));
+}
 #endif
 
 #endif /* _ALTQ_QOP_H_ */

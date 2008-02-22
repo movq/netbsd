@@ -1,4 +1,4 @@
-/*	$NetBSD: fio.c,v 1.31 2007/10/29 23:20:38 christos Exp $	*/
+/*	$NetBSD: fio.c,v 1.43 2017/11/09 20:27:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,13 +34,15 @@
 #if 0
 static char sccsid[] = "@(#)fio.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: fio.c,v 1.31 2007/10/29 23:20:38 christos Exp $");
+__RCSID("$NetBSD: fio.c,v 1.43 2017/11/09 20:27:50 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include "rcv.h"
 #include "extern.h"
 #include "thread.h"
+#include "sig.h"
+#include <wordexp.h>
 
 /*
  * Mail -- a mail program
@@ -129,7 +131,8 @@ makemessage(FILE *f, int omsgCount, int nmsgCount)
 	size = (nmsgCount + 1) * sizeof(*nmessage);
 	nmessage = realloc(omessage, size);
 	if (nmessage == NULL)
-		err(1, "Insufficient memory for %d messages", nmsgCount);
+		err(EXIT_FAILURE,
+		    "Insufficient memory for %d messages", nmsgCount);
 	if (omsgCount == 0 || omessage == NULL)
 		dot = nmessage;
 	else
@@ -187,7 +190,7 @@ setptr(FILE *ibuf, off_t offset)
 	/* Get temporary file. */
 	(void)snprintf(linebuf, LINESIZE, "%s/mail.XXXXXX", tmpdir);
 	if ((c = mkstemp(linebuf)) == -1 ||
-	    (mestmp = Fdopen(c, "r+")) == NULL) {
+	    (mestmp = Fdopen(c, "ref+")) == NULL) {
 		(void)fprintf(stderr, "mail: can't open %s\n", linebuf);
 		exit(1);
 	}
@@ -215,10 +218,8 @@ setptr(FILE *ibuf, off_t offset)
 
 	for (;;) {
 		if (fgets(linebuf, LINESIZE, ibuf) == NULL) {
-			if (append(&this, mestmp)) {
-				warn("temporary file");
-				exit(1);
-			}
+			if (append(&this, mestmp))
+				err(EXIT_FAILURE, "temporary file");
 			makemessage(mestmp, omsgCount, nmsgCount);
 			return;
 		}
@@ -234,18 +235,14 @@ setptr(FILE *ibuf, off_t offset)
 			len--;
 		}
 		(void)fwrite(linebuf, sizeof(*linebuf), len, otf);
-		if (ferror(otf)) {
-			warn("/tmp");
-			exit(1);
-		}
-		if(len)
+		if (ferror(otf))
+			err(EXIT_FAILURE, "/tmp");
+		if (len)
 			linebuf[len - 1] = 0;
 		if (maybe && linebuf[0] == 'F' && ishead(linebuf)) {
 			nmsgCount++;
-			if (append(&this, mestmp)) {
-				warn("temporary file");
-				exit(1);
-			}
+			if (append(&this, mestmp))
+				err(EXIT_FAILURE, "temporary file");
 			message_init(&this, offset, MUSED|MNEW);
 			inhead = 1;
 		} else if (linebuf[0] == 0) {
@@ -274,7 +271,7 @@ setptr(FILE *ibuf, off_t offset)
 		this.m_lines++;
 		if (!inhead) {
 			int lines_plus_wraps = 1;
-			size_t linelen = strlen(linebuf);
+			int linelen = (int)strlen(linebuf);
 
 			if (screenwidth && (int)linelen > screenwidth) {
 				lines_plus_wraps = linelen / screenwidth;
@@ -305,7 +302,7 @@ putline(FILE *obuf, const char *linebuf, int outlf)
 	}
 	if (ferror(obuf))
 		return -1;
-	return c;
+	return (int)c;
 }
 
 /*
@@ -314,16 +311,34 @@ putline(FILE *obuf, const char *linebuf, int outlf)
  * include the newline at the end.
  */
 PUBLIC int
-mail_readline(FILE *ibuf, char *linebuf, int linesize)
+readline(FILE *ibuf, char *linebuf, int linesize, int no_restart)
 {
+	struct sigaction osa_sigtstp;
+	struct sigaction osa_sigttin;
+	struct sigaction osa_sigttou;
 	int n;
 
 	clearerr(ibuf);
+
+	sig_check();
+	if (no_restart) {
+		(void)sig_setflags(SIGTSTP, 0, &osa_sigtstp);
+		(void)sig_setflags(SIGTTIN, 0, &osa_sigttin);
+		(void)sig_setflags(SIGTTOU, 0, &osa_sigttou);
+	}
 	if (fgets(linebuf, linesize, ibuf) == NULL)
-		return -1;
-	n = strlen(linebuf);
-	if (n > 0 && linebuf[n - 1] == '\n')
-		linebuf[--n] = '\0';
+		n = -1;
+	else {
+		n = (int)strlen(linebuf);
+		if (n > 0 && linebuf[n - 1] == '\n')
+			linebuf[--n] = '\0';
+	}
+	if (no_restart) {
+		(void)sigaction(SIGTSTP, &osa_sigtstp, NULL);
+		(void)sigaction(SIGTTIN, &osa_sigttin, NULL);
+		(void)sigaction(SIGTTOU, &osa_sigttou, NULL);
+	}
+	sig_check();
 	return n;
 }
 
@@ -337,7 +352,7 @@ setinput(const struct message *mp)
 
 	(void)fflush(otf);
 	if (fseek(itf, (long)positionof(mp->m_block, mp->m_offset), SEEK_SET) < 0)
-		err(1, "fseek");
+		err(EXIT_FAILURE, "fseek");
 	return itf;
 }
 
@@ -356,35 +371,6 @@ rm(char *name)
 		return -1;
 	}
 	return unlink(name);
-}
-
-static int sigdepth;		/* depth of holdsigs() */
-static sigset_t nset, oset;
-/*
- * Hold signals SIGHUP, SIGINT, and SIGQUIT.
- */
-PUBLIC void
-holdsigs(void)
-{
-
-	if (sigdepth++ == 0) {
-		(void)sigemptyset(&nset);
-		(void)sigaddset(&nset, SIGHUP);
-		(void)sigaddset(&nset, SIGINT);
-		(void)sigaddset(&nset, SIGQUIT);
-		(void)sigprocmask(SIG_BLOCK, &nset, &oset);
-	}
-}
-
-/*
- * Release signals SIGHUP, SIGINT, and SIGQUIT.
- */
-PUBLIC void
-relsesigs(void)
-{
-
-	if (--sigdepth == 0)
-		(void)sigprocmask(SIG_SETMASK, &oset, NULL);
 }
 
 /*
@@ -407,14 +393,20 @@ fsize(FILE *iob)
 PUBLIC int
 getfold(char *name, size_t namesize)
 {
+	char unres[PATHSIZE], res[PATHSIZE];
 	char *folder;
 
 	if ((folder = value(ENAME_FOLDER)) == NULL)
 		return -1;
-	if (*folder == '/')
-		(void)strlcpy(name, folder, namesize);
+	if (*folder != '/') {
+		(void)snprintf(unres, sizeof(unres), "%s/%s", homedir, folder);
+		folder = unres;
+	}
+	if (realpath(folder, res) == NULL)
+		warn("Can't canonicalize folder `%s'", folder);
 	else
-		(void)snprintf(name, namesize, "%s/%s", homedir, folder);
+		folder = res;
+	(void)strlcpy(name, folder, namesize);
 	return 0;
 }
 
@@ -433,12 +425,10 @@ PUBLIC const char *
 expand(const char *name)
 {
 	char xname[PATHSIZE];
-	char cmdbuf[PATHSIZE];		/* also used for file names */
-	int pid, l;
-	char *cp;
-	const char *shellcmd;
-	int pivec[2];
-	struct stat sbuf;
+	char cmdbuf[PATHSIZE];
+	int e;
+	wordexp_t we; 
+	sigset_t nset, oset;
 
 	/*
 	 * The order of evaluation is "%" and "#" expand into constants.
@@ -454,7 +444,7 @@ expand(const char *name)
 		if (name[1] != 0)
 			break;
 		if (prevfile[0] == 0) {
-			(void)printf("No previous file\n");
+			warnx("No previous file");
 			return NULL;
 		}
 		return savestr(prevfile);
@@ -474,47 +464,54 @@ expand(const char *name)
 	}
 	if (strpbrk(name, "~{[*?$`'\"\\") == NULL)
 		return name;
-	if (pipe(pivec) < 0) {
-		warn("pipe");
-		return name;
-	}
-	(void)snprintf(cmdbuf, sizeof(cmdbuf), "echo %s", name);
-	if ((shellcmd = value(ENAME_SHELL)) == NULL)
-		shellcmd = _PATH_CSHELL;
-	pid = start_command(shellcmd, 0, -1, pivec[1], "-c", cmdbuf, NULL);
-	if (pid < 0) {
-		(void)close(pivec[0]);
-		(void)close(pivec[1]);
+
+	*xname = '\0';
+
+	sigemptyset(&nset);
+	sigaddset(&nset, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &nset, &oset);
+	e = wordexp(name, &we, WRDE_NOCMD);
+	sigprocmask(SIG_SETMASK, &oset, NULL);
+
+	switch (e) {
+	case 0: /* OK */
+		break;
+	case WRDE_NOSPACE:
+		warnx("Out of memory expanding `%s'", name);
+		return NULL;
+	case WRDE_BADVAL:
+	case WRDE_BADCHAR:
+	case WRDE_SYNTAX:
+		warnx("Syntax error expanding `%s'", name);
+		return NULL;
+	case WRDE_CMDSUB:
+		warnx("Command substitution not allowed expanding `%s'",
+		    name);
+		return NULL;
+	default:
+		warnx("Unknown expansion error %d expanding `%s'", e, name);
 		return NULL;
 	}
-	(void)close(pivec[1]);
-	l = read(pivec[0], xname, sizeof(xname));
-	(void)close(pivec[0]);
-	if (wait_child(pid) < 0 && WTERMSIG(wait_status) != SIGPIPE) {
-		(void)fprintf(stderr, "\"%s\": Expansion failed.\n", name);
-		return NULL;
+
+	switch (we.we_wordc) {
+	case 0:
+		warnx("No match for `%s'", name);
+		break;
+	case 1:
+		if (strlen(we.we_wordv[0]) >= PATHSIZE)
+			warnx("Expansion too long for `%s'", name);
+		strlcpy(xname, we.we_wordv[0], PATHSIZE);
+		break;
+	default:
+		warnx("Ambiguous expansion for `%s'", name);
+		break;
 	}
-	if (l < 0) {
-		warn("read");
+
+	wordfree(&we);
+	if (!*xname)
 		return NULL;
-	}
-	if (l == 0) {
-		(void)fprintf(stderr, "\"%s\": No match.\n", name);
-		return NULL;
-	}
-	if (l == sizeof(xname)) {
-		(void)fprintf(stderr, "\"%s\": Expansion buffer overflow.\n", name);
-		return NULL;
-	}
-	xname[l] = '\0';
-	for (cp = &xname[l-1]; *cp == '\n' && cp > xname; cp--)
-		continue;
-	cp[1] = '\0';
-	if (strchr(xname, ' ') && stat(xname, &sbuf) < 0) {
-		(void)fprintf(stderr, "\"%s\": Ambiguous.\n", name);
-		return NULL;
-	}
-	return savestr(xname);
+	else
+		return savestr(xname);
 }
 
 /*

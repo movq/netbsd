@@ -1,11 +1,11 @@
-#	$NetBSD: files.raidframe,v 1.5 2006/03/01 21:41:49 oster Exp $
+#	$NetBSD: files.raidframe,v 1.10 2018/01/18 00:32:49 mrg Exp $
 
 defflag			RAID_AUTOCONFIG
 defflag			RAID_DIAGNOSTIC
 
-defpseudo raid { }:		disk
+defpseudodev raid:		disk
 
-file	dev/raidframe/rf_acctrace.c		raid		needs-flag
+file	dev/raidframe/rf_acctrace.c		raid
 file	dev/raidframe/rf_alloclist.c		raid
 file	dev/raidframe/rf_aselect.c		raid
 file	dev/raidframe/rf_callback.c		raid
@@ -42,6 +42,7 @@ file	dev/raidframe/rf_paritylog.c		raid
 file	dev/raidframe/rf_paritylogDiskMgr.c	raid
 file	dev/raidframe/rf_paritylogging.c	raid
 file	dev/raidframe/rf_parityloggingdags.c	raid
+file	dev/raidframe/rf_paritymap.c		raid
 file	dev/raidframe/rf_parityscan.c		raid
 file	dev/raidframe/rf_pq.c			raid
 file	dev/raidframe/rf_pqdeg.c		raid
@@ -63,3 +64,6 @@ file	dev/raidframe/rf_states.c		raid
 file	dev/raidframe/rf_stripelocks.c		raid
 file	dev/raidframe/rf_strutils.c		raid
 file	dev/raidframe/rf_utils.c		raid
+file	dev/raidframe/rf_compat50.c		raid & compat_50
+file	dev/raidframe/rf_compat80.c		raid & compat_80
+file	dev/raidframe/rf_compat32.c		raid & compat_netbsd32

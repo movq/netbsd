@@ -1,4 +1,4 @@
-/*	$NetBSD: aic79xx_osm.h,v 1.14 2007/10/19 11:59:46 ad Exp $	*/
+/*	$NetBSD: aic79xx_osm.h,v 1.23 2013/04/03 14:40:41 christos Exp $	*/
 
 /*
  * NetBSD platform specific driver option settings, data structures,
@@ -32,9 +32,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $NetBSD: aic79xx_osm.h,v 1.14 2007/10/19 11:59:46 ad Exp $
+ * $NetBSD: aic79xx_osm.h,v 1.23 2013/04/03 14:40:41 christos Exp $
  *
- * //depot/aic7xxx/freebsd/dev/aic7xxx/aic79xx_osm.h#19 $$NetBSD: aic79xx_osm.h,v 1.14 2007/10/19 11:59:46 ad Exp $
+ * //depot/aic7xxx/freebsd/dev/aic7xxx/aic79xx_osm.h#19 $$NetBSD: aic79xx_osm.h,v 1.23 2013/04/03 14:40:41 christos Exp $
  *
  * $FreeBSD: src/sys/dev/aic7xxx/aic79xx_osm.h,v 1.9 2003/05/26 21:43:29 gibbs Exp $
  */
@@ -72,8 +72,7 @@
 #include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsi_iu.h>
 
-#include <uvm/uvm_extern.h>
-
+#include <dev/ic/aic7xxx_cam.h>
 
 /****************************** Platform Macros *******************************/
 #define	SIM_IS_SCSIBUS_B(ahd, sim)	\
@@ -85,7 +84,7 @@
 #define	SIM_PATH(ahd, sim)	\
 	(ahd->platform_data->path)
 #define BUILD_SCSIID(ahd, sim, target_id, our_id) \
-        ((((target_id) << TID_SHIFT) & TID) | (our_id))
+	((((target_id) << TID_SHIFT) & TID) | (our_id))
 
 
 #define SCB_GET_SIM(ahd, scb) \
@@ -389,7 +388,7 @@ void ahd_set_residual(struct scb *scb, u_long resid)
 static __inline
 void ahd_set_sense_residual(struct scb *scb, u_long resid)
 {
-  //scb->xs->sense.scsi_sense.extra_len = resid; /* ??? */
+	//scb->xs->sense.scsi_sense.extra_len = resid; /* ??? */
 }
 
 
@@ -426,7 +425,7 @@ ahd_release_simq(struct ahd_softc *ahd)
 static __inline void
 ahd_freeze_scb(struct scb *scb)
 {
-  	struct scsipi_xfer *xs = scb->xs;
+	struct scsipi_xfer *xs = scb->xs;
 
 	if (!(scb->flags & SCB_FREEZE_QUEUE)) {
 	 	scsipi_periph_freeze(xs->xs_periph, 1);
@@ -528,7 +527,7 @@ static __inline void	ahd_platform_dump_card_state(struct ahd_softc *);
 static __inline void
 ahd_print_path(struct ahd_softc *ahd, struct scb *scb)
 {
-	printf("%s:", ahd->sc_dev.dv_xname);
+	printf("%s:", device_xname(ahd->sc_dev));
 }
 
 static __inline void
@@ -548,7 +547,7 @@ void	  ahd_platform_free(struct ahd_softc *);
 int	  ahd_map_int(struct ahd_softc *);
 int	  ahd_attach(struct ahd_softc *);
 int	  ahd_softc_comp(struct ahd_softc *, struct ahd_softc *);
-int 	  ahd_detach(struct device *, int);
+int 	  ahd_detach(struct ahd_softc *, int);
 #define	ahd_platform_init(arg)
 
 
@@ -563,6 +562,6 @@ ahd_platform_flushwork(struct ahd_softc *ahd)
 
 /************************ Misc Function Declarations **************************/
 void	ahd_done(struct ahd_softc *, struct scb *);
-void	ahd_send_async(struct ahd_softc *, char , u_int, u_int, u_int, void *);
+void	ahd_send_async(struct ahd_softc *, char, u_int, u_int, ac_code, void *);
 
 #endif  /* _AIC79XX_NETBSD_H_ */

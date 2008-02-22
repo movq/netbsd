@@ -25,9 +25,9 @@
 .\" ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\" $NetBSD: cdce.4,v 1.5 2005/06/23 12:47:38 peter Exp $
+.\" $NetBSD: cdce.4,v 1.13 2016/12/19 15:03:59 ryoon Exp $
 .\"
-.Dd October 22, 2004
+.Dd December 19, 2016
 .Dt CDCE 4
 .Os
 .Sh NAME
@@ -39,12 +39,27 @@
 The
 .Nm
 driver provides support for USB Host-to-Host (aka USB-to-USB) bridges
-based on the USB Communication Device Class (CDC) and Ethernet subclass,
+and USB-to-Ethernet adapters based on the USB Communication Device Class (CDC)
+and Ethernet subclass,
 including the following:
 .Pp
 .Bl -bullet -compact
 .It
+Acer Labs USB 2.0 Data Link
+.It
+Anker A7611
+.It
+DIEWU USB-DW8152
+.It
+G.Mate YP3X00
+.It
+Motorola USBNET
+.It
+NetChip EthernetGadget
+.It
 Prolific PL-2501
+.It
+Realtek RTL8152B Ethernet controller
 .It
 Sharp Zaurus
 .El
@@ -98,11 +113,11 @@ is running low on mbufs.
 .Xr ifconfig 8
 .Rs
 .%T "Universal Serial Bus Class Definitions for Communication Devices"
-.%O http://www.usb.org/developers/devclass_docs/usbcdc11.pdf
+.%U http://www.usb.org/developers/devclass_docs/usbcdc11.pdf
 .Re
 .Rs
 .%T "Data sheet Prolific PL-2501 Host-to-Host Bridge/Network Controller"
-.%O http://tech.prolific.com.tw/visitor/fcabdl.asp?fid=20679530
+.%U http://tech.prolific.com.tw/visitor/fcabdl.asp?fid=20679530
 .Re
 .Sh HISTORY
 The
@@ -116,15 +131,15 @@ and
 The
 .Nm
 driver was written by
-.An Craig Boston Aq craig@tobuj.gank.org
+.An Craig Boston Aq Mt craig@tobuj.gank.org
 based on the
 .Xr aue 4
 driver written by
-.An Bill Paul Aq wpaul@windriver.com
+.An Bill Paul Aq Mt wpaul@windriver.com
 and ported to
 .Ox
 by
-.An Daniel Hartmeier Aq dhartmei@openbsd.org .
+.An Daniel Hartmeier Aq Mt dhartmei@openbsd.org .
 .Sh CAVEATS
 Many USB devices notoriously fail to report their class and interfaces
 correctly.

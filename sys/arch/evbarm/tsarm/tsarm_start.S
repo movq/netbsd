@@ -1,4 +1,4 @@
-/*	$NetBSD: tsarm_start.S,v 1.2 2005/12/11 12:17:11 christos Exp $ */
+/*	$NetBSD: tsarm_start.S,v 1.7 2011/01/31 06:28:05 matt Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -32,11 +26,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
 #include <machine/asm.h>
 #include <arm/armreg.h>
-#include <arm/arm32/pte.h>
+#include "assym.h"
 
 #include <arm/ep93xx/ep93xxreg.h>
+
+RCSID("$NetBSD: tsarm_start.S,v 1.7 2011/01/31 06:28:05 matt Exp $")
 
 	.section .start,"ax",%progbits
 
@@ -80,7 +77,7 @@ Lunmapped:
 
 	mov	r1, #(L1_TABLE_SIZE / 4)	/* 4096 entry */
 	mov	r2, #(L1_S_SIZE)		/* 1MB / section */
-	mov	r3, #(L1_S_AP(AP_KRW))		/* kernel read/write */
+	mov	r3, #(L1_S_AP_KRW)		/* kernel read/write */
 	orr	r3, r3, #(L1_TYPE_S)		/* L1 entry is section */
 1:
 	str	r3, [r0], #0x04
@@ -96,7 +93,7 @@ Lunmapped:
         add     r0, r0, #(0xc00 * 4)            /* offset to 0xc00xxxxx */
 
         mov     r1, #0x8                        /* 8MB */
-        mov     r3, #(L1_S_AP(AP_KRW))
+        mov     r3, #(L1_S_AP_KRW)
         orr     r3, r3, #(L1_TYPE_S)
 1:
         str     r3, [r0], #0x04
@@ -111,7 +108,7 @@ Lunmapped:
 
 	add	r0, r0, #(0xf00 * 4)		/* offset to 0xf0000000 */
 	mov	r3, #0x80000000
-	orr	r3, r3, #(L1_S_AP(AP_KRW))
+	orr	r3, r3, #(L1_S_AP_KRW)
 	orr	r3, r3, #(L1_TYPE_S)
 	str	r3, [r0], #4
 
@@ -120,7 +117,7 @@ Lunmapped:
 	 */
 	mov	r3, #0x80000000
 	add	r3, r3, #0x00800000
-	orr	r3, r3, #(L1_S_AP(AP_KRW))
+	orr	r3, r3, #(L1_S_AP_KRW)
 	orr	r3, r3, #(L1_TYPE_S)
 	str	r3, [r0], #0x4
 	add	r3, r3, r2
@@ -130,7 +127,7 @@ Lunmapped:
 	 * Step 5: Map VA 0xf0300000->0xf4300000 to PA 0x10000000->0x14000000.
 	 */
         mov     r1, #0x40                       /* 64MB */
-        mov     r3, #(L1_S_AP(AP_KRW))
+        mov     r3, #(L1_S_AP_KRW)
         orr     r3, r3, #(L1_TYPE_S)
 	orr	r3, r3, #0x10000000
 1:
@@ -143,7 +140,7 @@ Lunmapped:
 	 * Step 6: Map VA 0xf4300000->0xf8300000 to PA 0x20000000->0x24000000.
 	 */
         mov     r1, #0x40                       /* 64MB */
-        mov     r3, #(L1_S_AP(AP_KRW))
+        mov     r3, #(L1_S_AP_KRW)
         orr     r3, r3, #(L1_TYPE_S)
 	orr	r3, r3, #0x20000000
 1:

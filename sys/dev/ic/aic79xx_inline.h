@@ -1,4 +1,4 @@
-/*	$NetBSD: aic79xx_inline.h,v 1.15 2006/11/16 01:32:50 christos Exp $	*/
+/*	$NetBSD: aic79xx_inline.h,v 1.22 2013/04/27 13:25:09 kardel Exp $	*/
 
 /*
  * Inline routines shareable across OS platforms.
@@ -51,9 +51,9 @@
 #define _AIC79XX_INLINE_H_
 
 /******************************** Debugging ***********************************/
-static __inline char *ahd_name(struct ahd_softc *);
+static __inline const char *ahd_name(struct ahd_softc *);
 
-static __inline char *
+static __inline const char *
 ahd_name(struct ahd_softc *ahd)
 {
 	return (ahd->name);
@@ -393,7 +393,7 @@ ahd_sync_sense(struct ahd_softc *ahd, struct scb *scb, int op)
 {
 	ahd_dmamap_sync(ahd, ahd->parent_dmat,
 			scb->sense_map->dmamap,
-			/*offset*/scb->sense_busaddr,
+			/*offset*/scb->sense_busaddr - scb->sense_map->physaddr,
 			/*len*/AHD_SENSE_BUFSIZE, op);
 }
 
@@ -456,7 +456,7 @@ ahd_post_scb(struct ahd_softc *ahd, struct scb *scb)
 	if ((sgptr & SG_STATUS_VALID) != 0)
 		ahd_handle_scb_status(ahd, scb);
 	else
-        	ahd_done(ahd, scb);
+		ahd_done(ahd, scb);
 }
 
 static __inline void
@@ -881,7 +881,7 @@ ahd_check_cmdcmpltqueues(struct ahd_softc *ahd)
 static __inline int
 ahd_intr(void *arg)
 {
-	struct ahd_softc *ahd = (struct ahd_softc*)arg;
+	struct ahd_softc *ahd = arg;
 	u_int	intstat;
 
 	if ((ahd->pause & INTEN) == 0) {
@@ -969,8 +969,7 @@ ahd_intr(void *arg)
 }
 
 static __inline void
-ahd_minphys(bp)
-        struct buf *bp;
+ahd_minphys(struct buf *bp)
 {
 /*
  * Even though the card can transfer up to 16megs per command
@@ -979,10 +978,10 @@ ahd_minphys(bp)
  * discontinuous physically, hence the "page per segment" limit
  * enforced here.
  */
-        if (bp->b_bcount > AHD_MAXTRANSFER_SIZE) {
-                bp->b_bcount = AHD_MAXTRANSFER_SIZE;
-        }
-        minphys(bp);
+	if (bp->b_bcount > AHD_MAXTRANSFER_SIZE) {
+		bp->b_bcount = AHD_MAXTRANSFER_SIZE;
+	}
+	minphys(bp);
 }
 
 static __inline u_int32_t scsi_4btoul(u_int8_t *);
@@ -990,13 +989,13 @@ static __inline u_int32_t scsi_4btoul(u_int8_t *);
 static __inline u_int32_t
 scsi_4btoul(u_int8_t *bytes)
 {
-        u_int32_t rv;
+	u_int32_t rv;
 
-        rv = (bytes[0] << 24) |
-             (bytes[1] << 16) |
-             (bytes[2] << 8) |
-             bytes[3];
-        return (rv);
+	rv = (bytes[0] << 24) |
+	     (bytes[1] << 16) |
+	     (bytes[2] << 8) |
+	     bytes[3];
+	return (rv);
 }
 
 

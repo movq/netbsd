@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.21 2006/01/27 04:53:22 uwe Exp $	*/
+/*	$NetBSD: boot.c,v 1.29 2018/06/06 22:56:25 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -81,6 +74,7 @@
 
 #include <sys/param.h>
 #include <sys/boot_flag.h>
+#include <sys/disklabel.h>
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
@@ -98,11 +92,12 @@ extern void __syncicache(void *, size_t); /* in libkern */
 # define DPRINTF while (0) printf
 #endif
 
-char bootdev[128];
-char bootfile[128];
+char bootdev[MAXBOOTPATHLEN];
+char bootfile[MAXBOOTPATHLEN];
 int boothowto;
+bool floppyboot;
+int ofw_version = 0;
 
-static int ofw_version = 0;
 static const char *kernels[] = { "/netbsd", "/netbsd.gz", "/netbsd.macppc", NULL };
 
 static void
@@ -151,13 +146,44 @@ found:
 		BOOT_FLAG(*cp++, *howtop);
 }
 
+static bool
+is_floppyboot(const char *path, const char *defaultdev)
+{
+	char dev[MAXBOOTPATHLEN];
+	char nam[16];
+	int handle, rv;
+
+	if (parsefilepath(path, dev, NULL, NULL)) {
+		if (dev[0] == '\0' && defaultdev != NULL)
+			strlcpy(dev, defaultdev, sizeof(dev));
+
+		/* check properties */
+		handle = OF_finddevice(dev);
+		if (handle != -1) {
+			rv = OF_getprop(handle, "name", nam, sizeof(nam));
+			if (rv >= 0 &&
+			    (strcmp(nam, "swim3") == 0 ||
+			     strcmp(nam, "floppy") == 0))
+				return true;
+		}
+
+		/* also check devalias */
+		if (strcmp(dev, "fd") == 0)
+			return true;
+	}
+
+	return false;
+}
+
 static void
 chain(boot_entry_t entry, char *args, void *ssym, void *esym)
 {
 	extern char end[];
 	int l;
 
+#if !defined(HEAP_VARIABLE)
 	freeall();
+#endif
 
 	/*
 	 * Stash pointer to end of symbol table after the argument
@@ -184,8 +210,7 @@ _rtt(void)
 void
 main(void)
 {
-	extern char bootprog_name[], bootprog_rev[],
-		    bootprog_maker[], bootprog_date[];
+	extern char bootprog_name[], bootprog_rev[];
 	int chosen, options, openprom;
 	char bootline[512];		/* Should check size? */
 	char *cp;
@@ -195,7 +220,6 @@ main(void)
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 
 	/*
 	 * Figure out what version of Open Firmware...
@@ -243,11 +267,11 @@ main(void)
 	DPRINTF("bootline=%s\n", bootline);
 
 	for (;;) {
-		int i;
+		int i, loadflag;
 
 		if (boothowto & RB_ASKNAME) {
 			printf("Boot: ");
-			gets(bootline);
+			kgets(bootline, sizeof(bootline));
 			parseargs(bootline, &boothowto);
 		}
 
@@ -257,10 +281,17 @@ main(void)
 		}
 
 		for (i = 0; kernels[i]; i++) {
-			DPRINTF("Trying %s\n", kernels[i]);
+			floppyboot = is_floppyboot(kernels[i], bootdev);
+
+			DPRINTF("Trying %s%s\n", kernels[i],
+			    floppyboot ? " (floppyboot)" : "");
+
+			loadflag = LOAD_KERNEL;
+			if (floppyboot)
+				loadflag &= ~LOAD_BACKWARDS;
 
 			marks[MARK_START] = 0;
-			if (loadfile(kernels[i], marks, LOAD_KERNEL) >= 0)
+			if (loadfile(kernels[i], marks, loadflag) >= 0)
 				goto loaded;
 		}
 		boothowto |= RB_ASKNAME;
@@ -301,8 +332,8 @@ loaded:
 	esym = (void *)marks[MARK_END];
 
 	printf(" start=0x%x\n", entry);
-	__syncicache((void *) entry, (u_int) ssym - (u_int) entry);
-	chain((boot_entry_t) entry, bootline, ssym, esym);
+	__syncicache((void *)(uintptr_t)entry, (size_t)ssym - entry);
+	chain((boot_entry_t)(uintptr_t)entry, bootline, ssym, esym);
 
 	OF_exit();
 }

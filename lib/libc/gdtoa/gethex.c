@@ -1,4 +1,4 @@
-/* $NetBSD: gethex.c,v 1.3 2006/03/11 18:38:14 kleink Exp $ */
+/* $NetBSD: gethex.c,v 1.6 2013/04/19 10:41:53 joerg Exp $ */
 
 /****************************************************************
 
@@ -38,28 +38,23 @@ THIS SOFTWARE.
 #endif
 
  int
-#ifdef KR_headers
-gethex(sp, fpi, expt, bp, sign)
-	CONST char **sp; CONST FPI *fpi; Long *expt; Bigint **bp; int sign;
-#else
-gethex( CONST char **sp, CONST FPI *fpi, Long *expt, Bigint **bp, int sign)
-#endif
+gethex( CONST char **sp, CONST FPI *fpi, Long *expt, Bigint **bp, int sign, locale_t loc)
 {
 	Bigint *b;
-	CONST unsigned char *decpt, *s0, *s, *s1;
-	int esign, havedig, irv, k, n, nbits, up, zret;
+	CONST char *decpt, *s, *s0, *s1;
+	int big, esign, havedig, irv, j, k, n, n0, nbits, up, zret;
 	ULong L, lostbits, *x;
 	Long e, e1;
 #ifdef USE_LOCALE
-	unsigned char decimalpoint = *localeconv()->decimal_point;
-#else
-#define decimalpoint '.'
+	int i;
+	const char *decimalpoint = localeconv_l(loc)->decimal_point;
 #endif
 
-	if (!hexdig['0'])
+	if (!hexdig[(unsigned char)'0'])
 		hexdig_init_D2A();
+	*bp = 0;
 	havedig = 0;
-	s0 = *(CONST unsigned char **)sp + 2;
+	s0 = *(CONST char **)sp + 2;
 	while(s0[havedig] == '0')
 		havedig++;
 	s0 += havedig;
@@ -67,35 +62,54 @@ gethex( CONST char **sp, CONST FPI *fpi, Long *expt, Bigint **bp, int sign)
 	decpt = 0;
 	zret = 0;
 	e = 0;
-	if (!hexdig[*s]) {
+	if (hexdig[(unsigned char)*s])
+		havedig++;
+	else {
 		zret = 1;
-		if (*s != decimalpoint)
+#ifdef USE_LOCALE
+		for(i = 0; decimalpoint[i]; ++i) {
+			if (s[i] != decimalpoint[i])
+				goto pcheck;
+			}
+		decpt = s += i;
+#else
+		if (*s != '.')
 			goto pcheck;
 		decpt = ++s;
-		if (!hexdig[*s])
+#endif
+		if (!hexdig[(unsigned char)*s])
 			goto pcheck;
 		while(*s == '0')
 			s++;
-		if (hexdig[*s])
+		if (hexdig[(unsigned char)*s])
 			zret = 0;
 		havedig = 1;
 		s0 = s;
 		}
-	while(hexdig[*s])
+	while(hexdig[(unsigned char)*s])
 		s++;
-	if (*s == decimalpoint && !decpt) {
+#ifdef USE_LOCALE
+	if (*s == *decimalpoint && !decpt) {
+		for(i = 1; decimalpoint[i]; ++i) {
+			if (s[i] != decimalpoint[i])
+				goto pcheck;
+			}
+		decpt = s += i;
+#else
+	if (*s == '.' && !decpt) {
 		decpt = ++s;
-		while(hexdig[*s])
+#endif
+		while(hexdig[(unsigned char)*s])
 			s++;
-		}
+		}/*}*/
 	if (decpt)
 		e = -(((Long)(s-decpt)) << 2);
  pcheck:
 	s1 = s;
+	big = esign = 0;
 	switch(*s) {
 	  case 'p':
 	  case 'P':
-		esign = 0;
 		switch(*++s) {
 		  case '-':
 			esign = 1;
@@ -103,41 +117,104 @@ gethex( CONST char **sp, CONST FPI *fpi, Long *expt, Bigint **bp, int sign)
 		  case '+':
 			s++;
 		  }
-		if ((n = hexdig[*s]) == 0 || n > 0x19) {
+		if ((n = hexdig[(unsigned char)*s]) == 0 || n > 0x19) {
 			s = s1;
 			break;
 			}
 		e1 = n - 0x10;
-		while((n = hexdig[*++s]) !=0 && n <= 0x19)
+		while((n = hexdig[(unsigned char)*++s]) !=0 && n <= 0x19) {
+			if (e1 & 0xf8000000)
+				big = 1;
 			e1 = 10*e1 + n - 0x10;
+			}
 		if (esign)
 			e1 = -e1;
 		e += e1;
 	  }
 	*sp = __UNCONST(s);
+	if (!havedig)
+		*sp = (char*)__UNCONST(s0) - 1;
 	if (zret)
-		return havedig ? STRTOG_Zero : STRTOG_NoNumber;
-	n = s1 - s0 - 1;
-	for(k = 0; n > 7; n = (unsigned int)n >> 1)
+		return STRTOG_Zero;
+	if (big) {
+		if (esign) {
+			switch(fpi->rounding) {
+			  case FPI_Round_up:
+				if (sign)
+					break;
+				goto ret_tiny;
+			  case FPI_Round_down:
+				if (!sign)
+					break;
+				goto ret_tiny;
+			  }
+			goto retz;
+ ret_tiny:
+			b = Balloc(0);
+			b->wds = 1;
+			b->x[0] = 1;
+			goto dret;
+			}
+		switch(fpi->rounding) {
+		  case FPI_Round_near:
+			goto ovfl1;
+		  case FPI_Round_up:
+			if (!sign)
+				goto ovfl1;
+			goto ret_big;
+		  case FPI_Round_down:
+			if (sign)
+				goto ovfl1;
+			goto ret_big;
+		  }
+ ret_big:
+		nbits = fpi->nbits;
+		n0 = n = (unsigned int)nbits >> kshift;
+		if (nbits & kmask)
+			++n;
+		for(j = n, k = 0; (j = (unsigned int)j >> 1) != 0; ++k);
+		*bp = b = Balloc(k);
+		b->wds = n;
+		for(j = 0; j < n0; ++j)
+			b->x[j] = ALL_ON;
+		if (n > n0)
+			b->x[j] = ULbits >> (ULbits - (nbits & kmask));
+		*expt = fpi->emin;
+		return STRTOG_Normal | STRTOG_Inexlo;
+		}
+	n = (int)(s1 - s0) - 1;
+	for(k = 0; n > (1 << (kshift-2)) - 1; n = (unsigned int)n >> 1)
 		k++;
 	b = Balloc(k);
+	if (b == NULL)
+		return STRTOG_NoMemory;
 	x = b->x;
 	n = 0;
 	L = 0;
+#ifdef USE_LOCALE
+	for(i = 0; decimalpoint[i+1]; ++i);
+#endif
 	while(s1 > s0) {
-		if (*--s1 == decimalpoint)
+#ifdef USE_LOCALE
+		if (*--s1 == decimalpoint[i]) {
+			s1 -= i;
 			continue;
-		if (n == 32) {
+			}
+#else
+		if (*--s1 == '.')
+			continue;
+#endif
+		if (n == ULbits) {
 			*x++ = L;
 			L = 0;
 			n = 0;
 			}
-		L |= (hexdig[*s1] & 0x0f) << n;
+		L |= (hexdig[(unsigned char)*s1] & 0x0f) << n;
 		n += 4;
 		}
 	*x++ = L;
-	b->wds = n = x - b->x;
-	n = 32*n - hi0bits(L);
+	b->wds = n = (int)(x - b->x);
+	n = ULbits*n - hi0bits(L);
 	nbits = fpi->nbits;
 	lostbits = 0;
 	x = b->x;
@@ -148,7 +225,7 @@ gethex( CONST char **sp, CONST FPI *fpi, Long *expt, Bigint **bp, int sign)
 			k = n - 1;
 			if (x[(unsigned int)k>>kshift] & 1 << (k & kmask)) {
 				lostbits = 2;
-				if (k > 1 && any_on(b,k-1))
+				if (k > 0 && any_on(b,k))
 					lostbits = 3;
 				}
 			}
@@ -158,13 +235,18 @@ gethex( CONST char **sp, CONST FPI *fpi, Long *expt, Bigint **bp, int sign)
 	else if (n < nbits) {
 		n = nbits - n;
 		b = lshift(b, n);
+		if (b == NULL)
+			return STRTOG_NoMemory;
 		e -= n;
 		x = b->x;
 		}
 	if (e > fpi->emax) {
  ovfl:
 		Bfree(b);
-		*bp = 0;
+ ovfl1:
+#ifndef NO_ERRNO
+		errno = ERANGE;
+#endif
 		return STRTOG_Infinite | STRTOG_Overflow | STRTOG_Inexhi;
 		}
 	irv = STRTOG_Normal;
@@ -184,15 +266,22 @@ gethex( CONST char **sp, CONST FPI *fpi, Long *expt, Bigint **bp, int sign)
 			  case FPI_Round_down:
 				if (sign) {
  one_bit:
-					*expt = fpi->emin;
 					x[0] = b->wds = 1;
+ dret:
 					*bp = b;
+					*expt = fpi->emin;
+#ifndef NO_ERRNO
+					errno = ERANGE;
+#endif
 					return STRTOG_Denormal | STRTOG_Inexhi
 						| STRTOG_Underflow;
 					}
 			  }
 			Bfree(b);
-			*bp = 0;
+ retz:
+#ifndef NO_ERRNO
+			errno = ERANGE;
+#endif
 			return STRTOG_Zero | STRTOG_Inexlo | STRTOG_Underflow;
 			}
 		k = n - 1;
@@ -213,7 +302,7 @@ gethex( CONST char **sp, CONST FPI *fpi, Long *expt, Bigint **bp, int sign)
 			break;
 		  case FPI_Round_near:
 			if (lostbits & 2
-			 && (lostbits & 1) | (x[0] & 1))
+			 && (lostbits | x[0]) & 1)
 				up = 1;
 			break;
 		  case FPI_Round_up:
@@ -233,7 +322,7 @@ gethex( CONST char **sp, CONST FPI *fpi, Long *expt, Bigint **bp, int sign)
 				}
 			else if (b->wds > k
 			 || ((n = nbits & kmask) !=0
-			     && hi0bits(x[k-1]) < 32-n)) {
+			      && hi0bits(x[k-1]) < 32-n)) {
 				rshift(b,1);
 				if (++e > fpi->emax)
 					goto ovfl;

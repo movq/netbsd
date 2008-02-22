@@ -1,4 +1,4 @@
-/*	$NetBSD: irdaattach.c,v 1.6 2003/01/16 09:48:09 kleink Exp $	*/
+/*	$NetBSD: irdaattach.c,v 1.9 2011/08/30 19:07:07 joerg Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,15 +46,14 @@
 #include <unistd.h>
 #include <util.h>
 
-int	main(int, char **);
-void	usage(void);
+__dead static void	usage(void);
 
 int
 main(int argc, char **argv)
 {
 	int fd;
 	char *dev, devbuf[100];
-	char *donglename = "none";
+	const char *donglename = "none";
 	struct termios tty;
 	tcflag_t cflag = HUPCL;
 	int ch;
@@ -164,8 +156,8 @@ main(int argc, char **argv)
 		sigsuspend(&nsigset);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 
 	fprintf(stderr, "usage: %s [-d donglename] [-fhHlmnp] ttyname\n",

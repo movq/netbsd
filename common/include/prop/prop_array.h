@@ -1,7 +1,7 @@
-/*	$NetBSD: prop_array.h,v 1.5 2007/08/16 16:28:17 thorpej Exp $	*/
+/*     $NetBSD: prop_array.h,v 1.16 2017/01/29 02:07:44 christos Exp $    */
 
 /*-
- * Copyright (c) 2006 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,18 +66,104 @@ bool		prop_array_externalize_to_file(prop_array_t, const char *);
 prop_array_t	prop_array_internalize_from_file(const char *);
 
 #if defined(__NetBSD__)
-#if !defined(_KERNEL) && !defined(_STANDALONE)
-int		prop_array_send_ioctl(prop_array_t, int, unsigned long);
-int		prop_array_recv_ioctl(int, unsigned long, prop_array_t *);
-#elif defined(_KERNEL)
 struct plistref;
 
+#if !defined(_KERNEL) && !defined(_STANDALONE)
+bool		prop_array_externalize_to_pref(prop_array_t, struct plistref *);
+bool		prop_array_internalize_from_pref(const struct plistref *,
+		                                 prop_array_t *);
+int		prop_array_send_ioctl(prop_array_t, int, unsigned long);
+int		prop_array_recv_ioctl(int, unsigned long, prop_array_t *);
+int		prop_array_send_syscall(prop_array_t, struct plistref *);
+int		prop_array_recv_syscall(const struct plistref *,
+					prop_array_t *);
+#elif defined(_KERNEL)
+int		prop_array_copyin(const struct plistref *, prop_array_t *);
+int		prop_array_copyin_size(const struct plistref *, prop_array_t *,
+				       size_t);
+int		prop_array_copyout(struct plistref *, prop_array_t);
 int		prop_array_copyin_ioctl(const struct plistref *, const u_long,
 					prop_array_t *);
+int		prop_array_copyin_ioctl_size(const struct plistref *,
+					     const u_long, prop_array_t *,
+					     size_t);
 int		prop_array_copyout_ioctl(struct plistref *, const u_long,
 					 prop_array_t);
 #endif
 #endif /* __NetBSD__ */
+
+/*
+ * Utility routines to make it more convenient to work with values
+ * stored in dictionaries.
+ */
+bool		prop_array_get_bool(prop_array_t, unsigned int,
+					 bool *);
+bool		prop_array_set_bool(prop_array_t, unsigned int,
+					 bool);
+
+bool		prop_array_get_int8(prop_array_t, unsigned int,
+					 int8_t *);
+bool		prop_array_get_uint8(prop_array_t, unsigned int,
+					  uint8_t *);
+bool		prop_array_set_int8(prop_array_t, unsigned int,
+					 int8_t);
+bool		prop_array_set_uint8(prop_array_t, unsigned int,
+					  uint8_t);
+
+bool		prop_array_get_int16(prop_array_t, unsigned int,
+					  int16_t *);
+bool		prop_array_get_uint16(prop_array_t, unsigned int,
+					   uint16_t *);
+bool		prop_array_set_int16(prop_array_t, unsigned int,
+					  int16_t);
+bool		prop_array_set_uint16(prop_array_t, unsigned int,
+					   uint16_t);
+
+bool		prop_array_get_int32(prop_array_t, unsigned int,
+					  int32_t *);
+bool		prop_array_get_uint32(prop_array_t, unsigned int,
+					   uint32_t *);
+bool		prop_array_set_int32(prop_array_t, unsigned int,
+					  int32_t);
+bool		prop_array_set_uint32(prop_array_t, unsigned int,
+					   uint32_t);
+
+bool		prop_array_get_int64(prop_array_t, unsigned int,
+					  int64_t *);
+bool		prop_array_get_uint64(prop_array_t, unsigned int,
+					   uint64_t *);
+bool		prop_array_set_int64(prop_array_t, unsigned int,
+					  int64_t);
+bool		prop_array_set_uint64(prop_array_t, unsigned int,
+					   uint64_t);
+
+bool		prop_array_add_int8(prop_array_t, int8_t);
+bool		prop_array_add_uint8(prop_array_t, uint8_t);
+
+bool		prop_array_add_int16(prop_array_t, int16_t);
+bool		prop_array_add_uint16(prop_array_t, uint16_t);
+
+bool		prop_array_add_int32(prop_array_t, int32_t);
+bool		prop_array_add_uint32(prop_array_t, uint32_t);
+
+bool		prop_array_add_int64(prop_array_t, int64_t);
+bool		prop_array_add_uint64(prop_array_t, uint64_t);
+
+bool		prop_array_add_cstring(prop_array_t, const char *);
+bool		prop_array_get_cstring(prop_array_t, unsigned int,
+					     char **);
+bool		prop_array_set_cstring(prop_array_t, unsigned int,
+					    const char *);
+
+bool		prop_array_add_cstring_nocopy(prop_array_t, const char *);
+bool		prop_array_get_cstring_nocopy(prop_array_t,
+                                                   unsigned int,
+						   const char **);
+bool		prop_array_set_cstring_nocopy(prop_array_t,
+						   unsigned int,
+						   const char *);
+
+bool		prop_array_add_and_rel(prop_array_t, prop_object_t);
 
 __END_DECLS
 

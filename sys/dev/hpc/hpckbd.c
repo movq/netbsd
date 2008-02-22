@@ -1,4 +1,4 @@
-/*	$NetBSD: hpckbd.c,v 1.24 2007/10/19 11:59:43 ad Exp $ */
+/*	$NetBSD: hpckbd.c,v 1.32 2017/08/07 23:57:40 uwe Exp $ */
 
 /*-
  * Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,11 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.24 2007/10/19 11:59:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.32 2017/08/07 23:57:40 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <sys/malloc.h>
 
 #include <sys/tty.h>
 
@@ -86,21 +80,21 @@ struct hpckbd_core {
 	struct hpckbd_eventq	*hc_head, *hc_tail;
 	int			hc_nevents;
 	int			hc_enabled;
-	struct device		*hc_wskbddev;
-	struct hpckbd_softc*	hc_sc;	/* back link */
+	device_t		hc_wskbddev;
+	struct hpckbd_softc	*hc_sc;	/* back link */
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int			hc_rawkbd;
 #endif
 };
 
 struct hpckbd_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	struct hpckbd_core	*sc_core;
 	struct hpckbd_core	sc_coredata;
 };
 
-int	hpckbd_match(struct device *, struct cfdata *, void *);
-void	hpckbd_attach(struct device *, struct device *, void *);
+int	hpckbd_match(device_t, cfdata_t, void *);
+void	hpckbd_attach(device_t, device_t, void *);
 
 void	hpckbd_initcore(struct hpckbd_core *, struct hpckbd_ic_if *, int);
 void	hpckbd_initif(struct hpckbd_core *);
@@ -111,7 +105,7 @@ void	hpckbd_keymap_setup(struct hpckbd_core *, const keysym_t *, int);
 int	__hpckbd_input(void *, int, int);
 void	__hpckbd_input_hook(void *);
 
-CFATTACH_DECL(hpckbd, sizeof(struct hpckbd_softc),
+CFATTACH_DECL_NEW(hpckbd, sizeof(struct hpckbd_softc),
     hpckbd_match, hpckbd_attach, NULL, NULL);
 
 /* wskbd accessopts */
@@ -146,19 +140,20 @@ struct wskbd_mapdata hpckbd_keymapdata = {
 };
 
 int
-hpckbd_match(struct device *parent,
-	     struct cfdata *cf, void *aux)
+hpckbd_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (1);
 }
 
 void
-hpckbd_attach(struct device *parent, struct device *self, void *aux)
+hpckbd_attach(device_t parent, device_t self, void *aux)
 {
 	struct hpckbd_attach_args *haa = aux;
 	struct hpckbd_softc *sc = device_private(self);
 	struct hpckbd_ic_if *ic = haa->haa_ic;
 	struct wskbddev_attach_args wa;
+
+	sc->sc_dev = self;
 
 	/*
 	 * Initialize core if it isn't console
@@ -189,6 +184,9 @@ hpckbd_attach(struct device *parent, struct device *self, void *aux)
 	wa.accessops = &hpckbd_accessops;
 	wa.accesscookie = sc->sc_core;
 	sc->sc_core->hc_wskbddev = config_found(self, &wa, wskbddevprint);
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 int
@@ -262,6 +260,12 @@ hpckbd_getevent(struct hpckbd_core* hc, u_int *type, int *data)
 	return (1);
 }
 
+
+#ifdef hpcsh
+/*
+ * XXX: Use the old wrong code for now as hpcsh attaches console very
+ * early and it's convenient to be able to do early DDB on wscons.
+ */
 void
 hpckbd_keymap_setup(struct hpckbd_core *hc,
 		    const keysym_t *map, int mapsize)
@@ -274,9 +278,8 @@ hpckbd_keymap_setup(struct hpckbd_core *hc,
 	 * XXX The way this is done is really wrong.  The __UNCONST()
 	 * is a hint as to what is wrong.  This actually ends up modifying
 	 * initialized data which is marked "const".
-	 * The reason we get away with it here is apparently that text
-	 * and read-only data gets mapped read/write on the platforms
-	 * using this code.
+	 * The reason we get away with it here is that on sh3 kernel
+	 * is directly mapped.
 	 */
 	desc = (struct wscons_keydesc *)__UNCONST(hpckbd_keymapdata.keydesc);
 	for (i = 0; desc[i].name != 0; i++) {
@@ -288,6 +291,44 @@ hpckbd_keymap_setup(struct hpckbd_core *hc,
 
 	return;
 }
+
+#else
+
+void
+hpckbd_keymap_setup(struct hpckbd_core *hc,
+		    const keysym_t *map, int mapsize)
+{
+	int i;
+	const struct wscons_keydesc *desc;
+	static struct wscons_keydesc *ndesc = NULL;
+
+	/* 
+	 * fix keydesc table. Since it is const data, we must 
+	 * copy it once before changingg it.
+	 */
+
+	if (ndesc == NULL) {
+		size_t sz;
+
+		for (sz = 0; hpckbd_keymapdata.keydesc[sz].name != 0; sz++);
+
+		ndesc = malloc(sz * sizeof(*ndesc), M_DEVBUF, M_WAITOK);
+		memcpy(ndesc, hpckbd_keymapdata.keydesc, sz * sizeof(*ndesc));
+
+		hpckbd_keymapdata.keydesc = ndesc;
+	}
+
+	desc = hpckbd_keymapdata.keydesc;
+	for (i = 0; desc[i].name != 0; i++) {
+		if ((desc[i].name & KB_MACHDEP) && desc[i].map == NULL) {
+			ndesc[i].map = map;
+			ndesc[i].map_size = mapsize;
+		}
+	}
+
+	return;
+}
+#endif
 
 void
 hpckbd_keymap_lookup(struct hpckbd_core *hc)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ka660.c,v 1.8 2007/03/04 06:01:01 christos Exp $	*/
+/*	$NetBSD: ka660.c,v 1.12 2017/05/22 16:46:15 ragge Exp $	*/
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of 
- *     Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,71 +25,74 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka660.c,v 1.8 2007/03/04 06:01:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka660.c,v 1.12 2017/05/22 16:46:15 ragge Exp $");
 
 #include <sys/param.h>
-#include <sys/types.h>
+#include <sys/systm.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/systm.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/pte.h>
-#include <machine/cpu.h>
-#include <machine/mtpr.h>
 #include <machine/sid.h>
-#include <machine/pmap.h>
 #include <machine/nexus.h>
-#include <machine/uvax.h>
 #include <machine/ka410.h>
 #include <machine/ka420.h>
 #include <machine/clock.h>
 #include <machine/vsbus.h>
 
-#define KA660_CCR	37	/* Cache Control Register */
+#define KA660_CCR	37		/* Cache Control Register */
 #define KA660_CTAG	0x20150000	/* Cache Tags */
 #define KA660_CDATA	0x20150400	/* Cache Data */
 #define KA660_BEHR	0x20150800	/* Bank Enable/Hit Register */
-#define CCR_WWP 8	/* Write Wrong Parity */
-#define CCR_ENA 4	/* Cache Enable */
+#define CCR_WWP		8	/* Write Wrong Parity */
+#define CCR_ENA		4	/* Cache Enable */
 #define CCR_FLU 2	/* Cache Flush */
 #define CCR_DIA 1	/* Diagnostic mode */
 
-static void    ka660_conf(void);
-static void    ka660_memerr(void);
-static int     ka660_mchk(void *);
-static void    ka660_cache_enable(void);
+static void ka660_conf(void);
+static void ka660_memerr(void);
+static void ka660_cache_enable(void);
+static void ka660_attach_cpu(device_t);
+static int ka660_mchk(void *);
 
-struct vs_cpu *ka660_cpu;
+static const char * const ka660_devs[] = { "cpu", "sgec", "shac", "uba", NULL };
 
 /* 
  * Declaration of 660-specific calls.
  */
-struct cpu_dep ka660_calls = {
-	ka660_cache_enable,
-	ka660_mchk,
-	ka660_memerr, 
-	ka660_conf,
-	generic_gettime,
-	generic_settime,
-	6,	/* ~VUPS */
-	2,	/* SCB pages */
-	generic_halt,
-	generic_reboot,
+const struct cpu_dep ka660_calls = {
+	.cpu_steal_pages = ka660_cache_enable,	/* ewww */
+	.cpu_mchk	= ka660_mchk,
+	.cpu_memerr	= ka660_memerr, 
+	.cpu_conf	= ka660_conf,
+	.cpu_gettime	= generic_gettime,
+	.cpu_settime	= generic_settime,
+	.cpu_vups	= 6,	/* ~VUPS */
+	.cpu_scbsz	= 2,	/* SCB pages */
+	.cpu_halt	= generic_halt,
+	.cpu_reboot	= generic_reboot,
+	.cpu_devs	= ka660_devs,
+	.cpu_attach_cpu	= ka660_attach_cpu,
 };
 
 
 void
-ka660_conf()
+ka660_conf(void)
 {
-	printf("cpu0: KA660, microcode Rev. %d\n", vax_cpudata & 0377);
-
 	cpmbx = (struct cpmbx *)vax_map_physmem(0x20140400, 1);
 }
 
 void
-ka660_cache_enable()
+ka660_attach_cpu(device_t self)
+{
+	aprint_normal(
+	    ": %s, SOC (ucode rev. %d), 6KB L1 cache\n",
+	    "KA660",
+	    vax_cpudata & 0377);
+}
+
+void
+ka660_cache_enable(void)
 {
 	unsigned int *p;
 	int cnt, bnk, behrtmp;
@@ -126,14 +123,13 @@ ka660_cache_enable()
 }
 
 void
-ka660_memerr()
+ka660_memerr(void)
 {
 	printf("Memory err!\n");
 }
 
 int
-ka660_mchk(addr)
-	void *addr;
+ka660_mchk(void *addr)
 {
 	panic("Machine check");
 	return 0;

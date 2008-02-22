@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.19 2007/12/15 19:44:38 perry Exp $	*/
+/*	$NetBSD: log.c,v 1.23 2017/01/10 20:40:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -46,16 +46,30 @@
 #if 0
 static char sccsid[] = "@(#)log.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: log.c,v 1.19 2007/12/15 19:44:38 perry Exp $");
+__RCSID("$NetBSD: log.c,v 1.23 2017/01/10 20:40:53 christos Exp $");
 #endif
 #endif /* not lint */
 
-#include "include.h"
+#include <sys/types.h>
+#include <sys/utsname.h>
+#include <sys/stat.h>	/* for umask(2) */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <pwd.h>
+#include <err.h>
+
 #include "pathnames.h"
+#include "def.h"
+#include "struct.h"
+#include "extern.h"
+#include "tunable.h"
 
 static FILE *score_fp;
 
-int
+static int
 compar(const void *va, const void *vb)
 {
 	const SCORE	*a, *b;
@@ -78,19 +92,20 @@ compar(const void *va, const void *vb)
 #define MIN(t)		(((t) % SECAHOUR) / SECAMIN)
 #define SEC(t)		((t) % SECAMIN)
 
-const char *
+static const char *
 timestr(int t)
 {
 	static char	s[80];
 
 	if (DAY(t) > 0)
-		(void)sprintf(s, "%dd+%02dhrs", DAY(t), HOUR(t));
+		(void)snprintf(s, sizeof(s), "%dd+%02dhrs", DAY(t), HOUR(t));
 	else if (HOUR(t) > 0)
-		(void)sprintf(s, "%d:%02d:%02d", HOUR(t), MIN(t), SEC(t));
+		(void)snprintf(s, sizeof(s), "%d:%02d:%02d", HOUR(t), MIN(t),
+			SEC(t));
 	else if (MIN(t) > 0)
-		(void)sprintf(s, "%d:%02d", MIN(t), SEC(t));
+		(void)snprintf(s, sizeof(s), "%d:%02d", MIN(t), SEC(t));
 	else if (SEC(t) > 0)
-		(void)sprintf(s, ":%02d", SEC(t));
+		(void)snprintf(s, sizeof(s), ":%02d", SEC(t));
 	else
 		*s = '\0';
 

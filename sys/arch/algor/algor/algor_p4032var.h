@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p4032var.h,v 1.4 2001/06/22 05:57:27 thorpej Exp $	*/
+/*	$NetBSD: algor_p4032var.h,v 1.8 2011/07/08 18:48:55 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,18 +29,18 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/pci/pcivar.h>
 
 struct p4032_config {
-	struct algor_bus_space ac_lociot;
-	struct algor_bus_space ac_iot;
-	struct algor_bus_space ac_memt;
+	struct mips_bus_space ac_lociot;
+	struct mips_bus_space ac_iot;
+	struct mips_bus_space ac_memt;
 
-	struct algor_bus_dma_tag ac_pci_dmat;
-	struct algor_bus_dma_tag ac_pci_pf_dmat;
+	struct mips_bus_dma_tag ac_pci_dmat;
+	struct mips_bus_dma_tag ac_pci_pf_dmat;
 
-	struct algor_pci_chipset ac_pc;
+	struct mips_pci_chipset ac_pc;
 
 	struct extent *ac_io_ex;
 	struct extent *ac_mem_ex;
@@ -79,7 +72,7 @@ void	algor_p4032_dma_init(struct p4032_config *);
 
 void	algor_p4032_intr_init(struct p4032_config *);
 
-void	algor_p4032_iointr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+void	algor_p4032_iointr(int, vaddr_t, uint32_t);
 
 void	algor_p4032_cal_timer(bus_space_tag_t, bus_space_handle_t);
 #endif /* _KERNEL */

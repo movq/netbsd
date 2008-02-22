@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_bswap.c,v 1.32 2005/12/11 12:25:25 christos Exp $	*/
+/*	$NetBSD: ffs_bswap.c,v 1.40 2017/02/09 04:37:35 kre Exp $	*/
 
 /*
  * Copyright (c) 1998 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,7 +30,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_bswap.c,v 1.32 2005/12/11 12:25:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_bswap.c,v 1.40 2017/02/09 04:37:35 kre Exp $");
 
 #include <sys/param.h>
 #if defined(_KERNEL)
@@ -43,6 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_bswap.c,v 1.32 2005/12/11 12:25:25 christos Exp 
 #endif
 
 #include <ufs/ufs/dinode.h>
+#include <ufs/ufs/quota.h>
 #include <ufs/ufs/ufs_bswap.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
@@ -56,17 +52,18 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_bswap.c,v 1.32 2005/12/11 12:25:25 christos Exp 
 #endif
 
 void
-ffs_sb_swap(struct fs *o, struct fs *n)
+ffs_sb_swap(const struct fs *o, struct fs *n)
 {
-	int i;
-	u_int32_t *o32, *n32;
+	size_t i;
+	const u_int32_t *o32;
+	u_int32_t *n32;
 
 	/*
 	 * In order to avoid a lot of lines, as the first N fields (52)
 	 * of the superblock up to fs_fmod are u_int32_t, we just loop
 	 * here to convert them.
 	 */
-	o32 = (u_int32_t *)o;
+	o32 = (const u_int32_t *)o;
 	n32 = (u_int32_t *)n;
 	for (i = 0; i < offsetof(struct fs, fs_fmod) / sizeof(u_int32_t); i++)
 		n32[i] = bswap32(o32[i]);
@@ -80,6 +77,10 @@ ffs_sb_swap(struct fs *o, struct fs *n)
 	 * first half of the historic FS_42POSTBLFMT postbl table.
 	 */
 	n->fs_maxbsize = bswap32(o->fs_maxbsize);
+	/* XXX journal */
+	n->fs_quota_magic = bswap32(o->fs_quota_magic);
+	for (i = 0; i < MAXQUOTAS; i++)
+		n->fs_quotafile[i] = bswap64(o->fs_quotafile[i]);
 	n->fs_sblockloc = bswap64(o->fs_sblockloc);
 	ffs_csumtotal_swap(&o->fs_cstotal, &n->fs_cstotal);
 	n->fs_time = bswap64(o->fs_time);
@@ -119,8 +120,8 @@ ffs_dinode1_swap(struct ufs1_dinode *o, struct ufs1_dinode *n)
 
 	n->di_mode = bswap16(o->di_mode);
 	n->di_nlink = bswap16(o->di_nlink);
-	n->di_u.oldids[0] = bswap16(o->di_u.oldids[0]);
-	n->di_u.oldids[1] = bswap16(o->di_u.oldids[1]);
+	n->di_oldids[0] = bswap16(o->di_oldids[0]);
+	n->di_oldids[1] = bswap16(o->di_oldids[1]);
 	n->di_size = bswap64(o->di_size);
 	n->di_atime = bswap32(o->di_atime);
 	n->di_atimensec = bswap32(o->di_atimensec);
@@ -128,7 +129,8 @@ ffs_dinode1_swap(struct ufs1_dinode *o, struct ufs1_dinode *n)
 	n->di_mtimensec = bswap32(o->di_mtimensec);
 	n->di_ctime = bswap32(o->di_ctime);
 	n->di_ctimensec = bswap32(o->di_ctimensec);
-	memcpy(n->di_db, o->di_db, (NDADDR + NIADDR) * sizeof(u_int32_t));
+	memcpy(n->di_db, o->di_db, sizeof(n->di_db));
+	memcpy(n->di_ib, o->di_ib, sizeof(n->di_ib));
 	n->di_flags = bswap32(o->di_flags);
 	n->di_blocks = bswap32(o->di_blocks);
 	n->di_gen = bswap32(o->di_gen);
@@ -158,13 +160,15 @@ ffs_dinode2_swap(struct ufs2_dinode *o, struct ufs2_dinode *n)
 	n->di_kernflags = bswap32(o->di_kernflags);
 	n->di_flags = bswap32(o->di_flags);
 	n->di_extsize = bswap32(o->di_extsize);
-	memcpy(n->di_extb, o->di_extb, (NXADDR + NDADDR + NIADDR) * 8);
+	memcpy(n->di_extb, o->di_extb, sizeof(n->di_extb));
+	memcpy(n->di_db, o->di_db, sizeof(n->di_db));
+	memcpy(n->di_ib, o->di_ib, sizeof(n->di_ib));
 }
 
 void
 ffs_csum_swap(struct csum *o, struct csum *n, int size)
 {
-	int i;
+	size_t i;
 	u_int32_t *oint, *nint;
 
 	oint = (u_int32_t*)o;
@@ -175,7 +179,7 @@ ffs_csum_swap(struct csum *o, struct csum *n, int size)
 }
 
 void
-ffs_csumtotal_swap(struct csum_total *o, struct csum_total *n)
+ffs_csumtotal_swap(const struct csum_total *o, struct csum_total *n)
 {
 	n->cs_ndir = bswap64(o->cs_ndir);
 	n->cs_nbfree = bswap64(o->cs_nbfree);

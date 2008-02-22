@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.32 2003/04/02 07:53:58 thorpej Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.37 2013/01/07 16:58:09 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,6 +29,8 @@
 #ifndef _SUN3_VMPARAM_H_
 #define _SUN3_VMPARAM_H_ 1
 
+#define __USE_TOPDOWN_VM
+
 /*
  * We use 8K pages on both the sun3 and sun3x.  Override PAGE_*
  * to be compile-time constants.
@@ -44,20 +39,31 @@
 #define	PAGE_SIZE	(1 << PAGE_SHIFT)
 #define	PAGE_MASK	(PAGE_SIZE - 1)
 
+#define	USRSTACK	kernbase	/* for modules */
+#define	USRSTACK3	KERNBASE3	/* for asm not in modules */
+#define	USRSTACK3X	KERNBASE3X
+
 #ifdef	_SUN3_
 #include <machine/vmparam3.h>
 #endif	/* SUN3 */
 #ifdef	_SUN3X_
 #include <machine/vmparam3x.h>
 #endif	/* SUN3X */
-#ifdef	_LKM
-#define	USRSTACK KERNBASE
-/* Be conservative. If an LKM is gonna be built for sun3x, define this first */
-#ifndef MAXDSIZ
-#define MAXDSIZ         (32*1024*1024)          /* max data size */
+
+/* default for modules etc. */
+#if !defined(_SUN3_) && !defined(_SUN3X_)
+#include <machine/vmparam3.h>
 #endif
-extern	char KERNBASE[];
-#endif	/* _LKM */
+
+/*
+ * PTEs for mapping user space into the kernel for phyio operations.
+ * The actual limitation for physio requests will be the DVMA space,
+ * and that is fixed by hardware design at 1MB.  We could make the
+ * physio map larger than that, but it would not buy us much.
+ */
+#ifndef USRIOSIZE
+#define USRIOSIZE	128		/* 1 MB */
+#endif
 
 /* This is needed by some LKMs. */
 #define VM_PHYSSEG_MAX		4
@@ -68,16 +74,15 @@ extern	char KERNBASE[];
 
 /* user/kernel map constants */
 #define VM_MIN_ADDRESS		((vaddr_t)0)
-#define VM_MAX_ADDRESS		((vaddr_t)KERNBASE)
-#define VM_MAXUSER_ADDRESS	((vaddr_t)KERNBASE)
-#define VM_MIN_KERNEL_ADDRESS	((vaddr_t)KERNBASE)
-#define VM_MAX_KERNEL_ADDRESS	((vaddr_t)KERN_END)
+#define VM_MAX_ADDRESS		kernbase
+#define VM_MAXUSER_ADDRESS	kernbase
+#define VM_MIN_KERNEL_ADDRESS	kernbase
+#define VM_MAX_KERNEL_ADDRESS	kern_end
 
 /* virtual sizes (bytes) for various kernel submaps */
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)
 
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
-#define VM_PHYSSEG_NOADD	/* can't add RAM after vm_mem_init */
 
 #define	VM_NFREELIST		1
 #define	VM_FREELIST_DEFAULT	0

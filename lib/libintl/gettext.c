@@ -1,4 +1,4 @@
-/*	$NetBSD: gettext.c,v 1.25 2007/09/25 08:19:09 junyoung Exp $	*/
+/*	$NetBSD: gettext.c,v 1.29 2015/05/29 12:26:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 Citrus Project,
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: gettext.c,v 1.25 2007/09/25 08:19:09 junyoung Exp $");
+__RCSID("$NetBSD: gettext.c,v 1.29 2015/05/29 12:26:28 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>
@@ -51,6 +51,16 @@ __RCSID("$NetBSD: gettext.c,v 1.25 2007/09/25 08:19:09 junyoung Exp $");
 #include "plural_parser.h"
 #include "pathnames.h"
 
+/* GNU gettext added a hack to add some context to messages. If a message is
+ * used in multiple locations, it needs some amount of context to make the
+ * translation clear to translators. GNU gettext, rather than modifying the
+ * message format, concatenates the context, \004 and the message id.
+ */
+#define	MSGCTXT_ID_SEPARATOR	'\004'
+
+static const char *pgettext_impl(const char *, const char *, const char *,
+				const char *, unsigned long int, int);
+static char *concatenate_ctxt_id(const char *, const char *);
 static const char *lookup_category(int);
 static const char *split_locale(const char *);
 static const char *lookup_mofile(char *, size_t, const char *, const char *,
@@ -105,6 +115,73 @@ dngettext(const char *domainname, const char *msgid1, const char *msgid2,
 	return dcngettext(domainname, msgid1, msgid2, n, LC_MESSAGES);
 }
 
+const char *
+pgettext(const char *msgctxt, const char *msgid)
+{
+
+	return pgettext_impl(NULL, msgctxt, msgid, NULL, 1UL, LC_MESSAGES);
+}
+
+const char *
+dpgettext(const char *domainname, const char *msgctxt, const char *msgid)
+{
+
+	return pgettext_impl(domainname, msgctxt, msgid, NULL, 1UL, LC_MESSAGES);
+}
+
+const char *
+dcpgettext(const char *domainname, const char *msgctxt, const char *msgid,
+	int category)
+{
+
+	return pgettext_impl(domainname, msgctxt, msgid, NULL, 1UL, category);
+}
+
+const char *
+npgettext(const char *msgctxt, const char *msgid1, const char *msgid2,
+	unsigned long int n)
+{
+
+	return pgettext_impl(NULL, msgctxt, msgid1, msgid2, n, LC_MESSAGES);
+}
+
+const char *
+dnpgettext(const char *domainname, const char *msgctxt, const char *msgid1,
+	const char *msgid2, unsigned long int n)
+{
+
+	return pgettext_impl(domainname, msgctxt, msgid1, msgid2, n, LC_MESSAGES);
+}
+
+const char *
+dcnpgettext(const char *domainname, const char *msgctxt, const char *msgid1,
+	const char *msgid2, unsigned long int n, int category)
+{
+
+	return pgettext_impl(domainname, msgctxt, msgid1, msgid2, n, category);
+}
+
+static const char *
+pgettext_impl(const char *domainname, const char *msgctxt, const char *msgid1,
+	const char *msgid2, unsigned long int n, int category)
+{
+	char *msgctxt_id;
+	char *translation;
+	char *p;
+
+	if ((msgctxt_id = concatenate_ctxt_id(msgctxt, msgid1)) == NULL)
+		return msgid1;
+
+	translation = dcngettext(domainname, msgctxt_id,
+		msgid2, n, category);
+	free(msgctxt_id);
+
+	p = strchr(translation, '\004');
+	if (p)
+		return p + 1;
+	return translation;
+}
+
 /*
  * dcngettext() -
  * lookup internationalized message on database locale/category/domainname
@@ -125,6 +202,17 @@ dngettext(const char *domainname, const char *msgid1, const char *msgid2,
  * endian encoded file.  both endians are supported here, as the files are in
  * /usr/share/locale! (or we should move those files into /usr/libdata)
  */
+
+static char *
+concatenate_ctxt_id(const char *msgctxt, const char *msgid)
+{
+	char *ret;
+
+	if (asprintf(&ret, "%s%c%s", msgctxt, MSGCTXT_ID_SEPARATOR, msgid) == -1)
+		return NULL;
+
+	return ret;
+}
 
 static const char *
 lookup_category(int category)
@@ -215,6 +303,10 @@ lookup_mofile(char *buf, size_t len, const char *dir, const char *lpath,
 	char *p, *q;
 	char lpath_tmp[BUFSIZ];
 
+	/*
+	 * LANGUAGE is a colon separated list of locale names.
+	 */
+
 	strlcpy(lpath_tmp, lpath, sizeof(lpath_tmp));
 	q = lpath_tmp;
 	/* CONSTCOND */
@@ -303,8 +395,8 @@ static int
 get_sysdep_string_table(struct mosysdepstr_h **table_h, uint32_t *ofstable,
 			uint32_t nstrings, uint32_t magic, char *base)
 {
-	int i, j;
-	int count;
+	unsigned int i;
+	int j, count;
 	size_t l;
 	struct mosysdepstr *table;
 
@@ -398,7 +490,7 @@ setup_sysdep_stuffs(struct mo *mo, struct mohandle *mohandle, char *base)
 	uint32_t magic;
 	struct moentry *stable;
 	size_t l;
-	int i;
+	unsigned int i;
 	char *v;
 	uint32_t *ofstable;
 
@@ -480,7 +572,7 @@ mapit(const char *path, struct domainbinding *db)
 	struct moentry_h *p;
 	struct mo *mo;
 	size_t l, headerlen;
-	int i;
+	unsigned int i;
 	char *v;
 	struct mohandle *mohandle = &db->mohandle;
 
@@ -624,7 +716,8 @@ mapit(const char *path, struct domainbinding *db)
 		if (v)
 			*v = '\0';
 	}
-	if (_gettext_parse_plural(&mohandle->mo.mo_plural,
+	if (!mohandle->mo.mo_header ||
+	    _gettext_parse_plural(&mohandle->mo.mo_plural,
 				  &mohandle->mo.mo_nplurals,
 				  mohandle->mo.mo_header, headerlen))
 		mohandle->mo.mo_plural = NULL;
@@ -654,12 +747,13 @@ fail:
 static void
 free_sysdep_table(struct mosysdepstr_h **table, uint32_t nstring)
 {
-	uint32_t i;
 
-	for (i=0; i<nstring; i++) {
+	if (! table)
+		return;
+
+	for (uint32_t i = 0; i < nstring; i++) {
 		if (table[i]) {
-			if (table[i]->expanded)
-				free(table[i]->expanded);
+			free(table[i]->expanded);
 			free(table[i]);
 		}
 	}
@@ -675,26 +769,16 @@ unmapit(struct domainbinding *db)
 	if (mohandle->addr && mohandle->addr != MAP_FAILED)
 		munmap(mohandle->addr, mohandle->len);
 	mohandle->addr = NULL;
-	if (mohandle->mo.mo_otable)
-		free(mohandle->mo.mo_otable);
-	if (mohandle->mo.mo_ttable)
-		free(mohandle->mo.mo_ttable);
-	if (mohandle->mo.mo_charset)
-		free(mohandle->mo.mo_charset);
-	if (mohandle->mo.mo_htable)
-		free(mohandle->mo.mo_htable);
-	if (mohandle->mo.mo_sysdep_segs)
-		free(mohandle->mo.mo_sysdep_segs);
-	if (mohandle->mo.mo_sysdep_otable) {
-		free_sysdep_table(mohandle->mo.mo_sysdep_otable,
-				  mohandle->mo.mo_sysdep_nstring);
-	}
-	if (mohandle->mo.mo_sysdep_ttable) {
-		free_sysdep_table(mohandle->mo.mo_sysdep_ttable,
-				  mohandle->mo.mo_sysdep_nstring);
-	}
-	if (mohandle->mo.mo_plural)
-		_gettext_free_plural(mohandle->mo.mo_plural);
+	free(mohandle->mo.mo_otable);
+	free(mohandle->mo.mo_ttable);
+	free(mohandle->mo.mo_charset);
+	free(mohandle->mo.mo_htable);
+	free(mohandle->mo.mo_sysdep_segs);
+	free_sysdep_table(mohandle->mo.mo_sysdep_otable,
+	    mohandle->mo.mo_sysdep_nstring);
+	free_sysdep_table(mohandle->mo.mo_sysdep_ttable,
+	    mohandle->mo.mo_sysdep_nstring);
+	_gettext_free_plural(mohandle->mo.mo_plural);
 	memset(&mohandle->mo, 0, sizeof(mohandle->mo));
 	return 0;
 }
@@ -771,7 +855,7 @@ lookup_bsearch(const char *msgid, struct domainbinding *db, size_t *rlen)
 		/* avoid possible infinite loop, when the data is not sorted */
 		if (omiddle == middle)
 			break;
-		if (middle < 0 || middle >= mohandle->mo.mo_nstring)
+		if ((size_t)middle >= mohandle->mo.mo_nstring)
 			break;
 
 		n = strcmp(msgid, mohandle->mo.mo_otable[middle].off);
@@ -807,12 +891,21 @@ get_lang_env(const char *category_name)
 {
 	const char *lang;
 
-	/* 1. see LANGUAGE variable first. */
+	/*
+	 * 1. see LANGUAGE variable first.
+	 *
+	 * LANGUAGE is a GNU extension.
+	 * It's a colon separated list of locale names.
+	 */
 	lang = getenv("LANGUAGE");
 	if (lang)
 		return lang;
 
-	/* 2. if LANGUAGE isn't set, see LC_ALL, LC_xxx, LANG. */
+	/*
+	 * 2. if LANGUAGE isn't set, see LC_ALL, LC_xxx, LANG.
+	 *
+	 * It's essentially setlocale(LC_xxx, NULL).
+	 */
 	lang = getenv("LC_ALL");
 	if (!lang)
 		lang = getenv(category_name);
@@ -904,17 +997,15 @@ dcngettext(const char *domainname, const char *msgid1, const char *msgid2,
 	    domainname, db) == NULL)
 		goto fail;
 
-	if (odomainname)
-		free(odomainname);
-	if (ocname)
-		free(ocname);
+	free(odomainname);
+	free(ocname);
+
 	odomainname = strdup(domainname);
 	ocname = strdup(cname);
 	if (!odomainname || !ocname) {
-		if (odomainname)
-			free(odomainname);
-		if (ocname)
-			free(ocname);
+		free(odomainname);
+		free(ocname);
+
 		odomainname = ocname = NULL;
 	}
 	else

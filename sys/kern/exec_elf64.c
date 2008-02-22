@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf64.c,v 1.2 2001/11/12 15:25:03 lukem Exp $	*/
+/*	$NetBSD: exec_elf64.c,v 1.7 2017/01/25 17:56:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou
@@ -32,8 +32,74 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_elf64.c,v 1.2 2001/11/12 15:25:03 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_elf64.c,v 1.7 2017/01/25 17:56:45 christos Exp $");
 
 #define	ELFSIZE	64
 
-#include "exec_elf32.c"
+#include "exec_elf.c"
+
+#include <sys/module.h>
+
+#define ELF64_AUXSIZE (ELF_AUX_ENTRIES * sizeof(Aux64Info) \
+    + MAXPATHLEN + ALIGN(1))
+
+#ifdef COREDUMP
+#define	DEP	"coredump"
+#else
+#define	DEP	NULL
+#endif
+
+MODULE(MODULE_CLASS_EXEC, exec_elf64, DEP);
+
+static struct execsw exec_elf64_execsw[] = {
+	/* Native Elf64 */
+	{
+		.es_hdrsz = sizeof (Elf64_Ehdr),
+	  	.es_makecmds = exec_elf64_makecmds,
+	  	.u = {
+			.elf_probe_func = netbsd_elf64_probe,
+		},
+		.es_emul = &emul_netbsd,
+		.es_prio = EXECSW_PRIO_FIRST,
+		.es_arglen = ELF64_AUXSIZE,
+		.es_copyargs = elf64_copyargs,
+		.es_setregs = NULL,
+		.es_coredump = coredump_elf64,
+		.es_setup_stack = exec_setup_stack,
+	},
+#if EXEC_ELF_NOTELESS
+	/* Generic Elf64 -- run at NetBSD Elf64 */
+	{
+		.es_hdrsz = sizeof (Elf64_Ehdr),
+		.es_makecmds = exec_elf64_makecmds,
+		.u = {
+			.elf_probe_func = NULL,
+		},
+		.es_emul = &emul_netbsd,
+		.es_prio = EXECSW_PRIO_ANY,
+		.es_arglen = ELF64_AUXSIZE,
+		.es_copyargs = elf64_copyargs,
+		.es_setregs = NULL,
+		.es_coredump = coredump_elf64,
+		.es_setup_stack = exec_setup_stack,
+	},
+#endif
+};
+
+static int
+exec_elf64_modcmd(modcmd_t cmd, void *arg)
+{
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		return exec_add(exec_elf64_execsw,
+		    __arraycount(exec_elf64_execsw));
+
+	case MODULE_CMD_FINI:
+		return exec_remove(exec_elf64_execsw,
+		    __arraycount(exec_elf64_execsw));
+
+	default:
+		return ENOTTY;
+        }
+}

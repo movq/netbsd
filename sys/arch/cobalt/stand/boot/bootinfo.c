@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.c,v 1.5 2008/01/31 17:39:24 tsutsui Exp $	*/
+/*	$NetBSD: bootinfo.c,v 1.7 2010/01/10 09:34:45 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,8 +67,8 @@ void bi_add(void *new, int type, int size)
 		return;				/* XXX error? */
 
 	if (bootinfo != NULL) {
-		DPRINTF(("Adding %d of size %d @0x%x\n",
-					type, size, (char*)bi_next));
+		DPRINTF(("Adding %d of size %d @0x%lx\n",
+		    type, size, (u_long)bi_next));
 
 		bi = new;
 		bi->next = size;

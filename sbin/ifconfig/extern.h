@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.10 2006/08/26 18:14:28 christos Exp $	*/
+/*	$NetBSD: extern.h,v 1.14 2009/08/07 18:53:37 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -28,45 +28,66 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF 
  * SUCH DAMAGE.
  */
+#ifndef	_IFCONFIG_EXTERN_H
+#define	_IFCONFIG_EXTERN_H
+
+#include <prop/proplib.h>
+#include "util.h"
 
 #define	RIDADDR 0  
 #define	ADDR    1
 #define	MASK    2
 #define	DSTADDR 3
 
-struct afswtch {
-	const char *af_name;
-	short af_af;
-	void (*af_status)(int);
-	void (*af_getaddr)(const char *, int);
-	void (*af_getprefix)(const char *, int);
-	u_long af_difaddr;
-	u_long af_aifaddr;
-	u_long af_gifaddr;
-	void *af_ridreq;
-	void *af_addreq;
+typedef void (*usage_cb_t)(prop_dictionary_t);
+typedef void (*status_cb_t)(prop_dictionary_t, prop_dictionary_t);
+typedef void (*statistics_cb_t)(prop_dictionary_t);
+
+enum flag_type {
+	  FLAG_T_MOD = 0
+	, FLAG_T_CMD = 1
 };
 
-extern const struct afswtch *afp;
-extern struct ifreq ifr;
-extern int s;
-extern int explicit_prefix;
-extern int clearaddr;
-extern int newaddr;
-extern char name[30];
+typedef enum flag_type flag_type_t;
 
-extern u_short flags;
-extern int lflag;
-extern int zflag;
-#ifdef INET6
-extern int Lflag;
-#endif /* INET6 */
+struct statistics_func {
+	SIMPLEQ_ENTRY(statistics_func)	f_next;
+	statistics_cb_t			f_func;
+};
 
-extern struct ifreq ifr, ridreq;
-extern struct ifaliasreq addreq;
+struct usage_func {
+	SIMPLEQ_ENTRY(usage_func)	f_next;
+	usage_cb_t			f_func;
+};
 
-const struct afswtch *lookup_af_byname(const char *);
-const struct afswtch *lookup_af_bynum(int);
-const char *get_string(const char *, const char *, u_int8_t *, int *);
-void	print_string(const u_int8_t *, int);
-void    getsock(int);
+struct status_func {
+	SIMPLEQ_ENTRY(status_func)	f_next;
+	status_cb_t			f_func;
+};
+
+struct cmdloop_branch {
+	SIMPLEQ_ENTRY(cmdloop_branch)	b_next;
+	struct parser			*b_parser;
+};
+
+
+typedef struct statistics_func statistics_func_t;
+typedef struct status_func status_func_t;
+typedef struct usage_func usage_func_t;
+typedef struct cmdloop_branch cmdloop_branch_t;
+
+void cmdloop_branch_init(cmdloop_branch_t *, struct parser *);
+int register_family(struct afswtch *);
+int register_cmdloop_branch(cmdloop_branch_t *);
+void statistics_func_init(statistics_func_t *, statistics_cb_t);
+void status_func_init(status_func_t *, status_cb_t);
+void usage_func_init(usage_func_t *, usage_cb_t);
+int register_statistics(statistics_func_t *);
+int register_status(status_func_t *);
+int register_usage(usage_func_t *);
+int register_flag(int);
+bool get_flag(int);
+
+extern bool lflag, Nflag, vflag, zflag;
+
+#endif	/* _IFCONFIG_EXTERN_H */

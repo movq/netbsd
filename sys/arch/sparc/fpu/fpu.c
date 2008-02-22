@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu.c,v 1.25 2005/11/16 23:24:44 uwe Exp $ */
+/*	$NetBSD: fpu.c,v 1.27 2012/02/12 16:34:10 matt Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.25 2005/11/16 23:24:44 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.27 2012/02/12 16:34:10 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -127,13 +127,14 @@ extern struct emul emul_sunos;
  * unknown FPops do enter the queue, however.
  */
 int
-fpu_cleanup(l, fs)
-	struct lwp *l;
+fpu_cleanup(
+	struct lwp *l,
 #ifndef SUN4U
-	struct fpstate *fs;
+	struct fpstate *fs
 #else /* SUN4U */
-	struct fpstate64 *fs;
+	struct fpstate64 *fs
 #endif /* SUN4U */
+	)
 {
 	int i, fsr = fs->fs_fsr, error;
 	struct proc *p = l->l_proc;
@@ -255,11 +256,12 @@ fpu_emulate(l, tf, fs)
 		fetch instr from pc
 		decode
 		if (integer instr) {
+			struct pcb *pcb = lwp_getpcb(l);
 			/*
 			 * We do this here, rather than earlier, to avoid
 			 * losing even more badly than usual.
 			 */
-			if (l->l_addr->u_pcb.pcb_uw) {
+			if (pcb->pcb_uw) {
 				write_user_windows();
 				if (rwindow_save(l))
 					sigexit(l, SIGILL);

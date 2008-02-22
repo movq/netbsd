@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_ofisa.c,v 1.16 2007/10/19 12:00:37 ad Exp $	*/
+/*	$NetBSD: if_cs_ofisa.c,v 1.27 2016/12/09 17:18:35 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.16 2007/10/19 12:00:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.27 2016/12/09 17:18:35 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,10 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.16 2007/10/19 12:00:37 ad Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -70,17 +60,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.16 2007/10/19 12:00:37 ad Exp $");
 #include <dev/ic/cs89x0var.h>
 #include <dev/isa/cs89x0isavar.h>
 
-int	cs_ofisa_match(struct device *, struct cfdata *, void *);
-void	cs_ofisa_attach(struct device *, struct device *, void *);
+static int	cs_ofisa_match(device_t, cfdata_t, void *);
+static void	cs_ofisa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(cs_ofisa, sizeof(struct cs_softc_isa),
+CFATTACH_DECL_NEW(cs_ofisa, sizeof(struct cs_softc_isa),
     cs_ofisa_match, cs_ofisa_attach, NULL, NULL);
 
 int
-cs_ofisa_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+cs_ofisa_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofisa_attach_args *aa = aux;
 	static const char *const compatible_strings[] = {
@@ -101,22 +88,20 @@ cs_ofisa_match(parent, cf, aux)
 }
 
 void
-cs_ofisa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+cs_ofisa_attach(device_t parent, device_t self, void *aux)
 {
-	struct cs_softc *sc = device_private(self);
-	struct cs_softc_isa *isc = (void *)sc;
+	struct cs_softc_isa *isc = device_private(self);
+	struct cs_softc *sc = &isc->sc_cs;
 	struct ofisa_attach_args *aa = aux;
 	struct ofisa_reg_desc reg[2];
 	struct ofisa_intr_desc intr;
 	struct ofisa_dma_desc dma;
 	int i, n, *media, nmedia, defmedia;
 	bus_addr_t io_addr, mem_addr;
-	char *model = NULL;
 	const char *message = NULL;
 	u_int8_t enaddr[6];
 
+	sc->sc_dev = self;
 	isc->sc_ic = aa->ic;
 	sc->sc_iot = aa->iot;
 	sc->sc_memt = aa->memt;
@@ -140,29 +125,29 @@ cs_ofisa_attach(parent, self, aux)
 	n = cs_ofisa_md_reg_fixup(parent, self, aux, reg, 2, n);
 #endif
 	if (n < 1 || n > 2) {
-		printf(": error getting register data\n");
+		aprint_error(": error getting register data\n");
 		return;
 	}
 
 	for (i = 0; i < n; i++) {
 		if (reg[i].type == OFISA_REG_TYPE_IO) {
 			if (io_addr != (bus_addr_t) -1) {
-				printf(": multiple I/O regions\n");
+				aprint_error(": multiple I/O regions\n");
 				return;
 			}
 			if (reg[i].len != CS8900_IOSIZE) {
-				printf(": weird register size (%lu, expected %d)\n",
+				aprint_error(": weird register size (%lu, expected %d)\n",
 				    (unsigned long)reg[i].len, CS8900_IOSIZE);
 				return;
 			}
 			io_addr = reg[i].addr;
 		} else {
 			if (mem_addr != (bus_addr_t) -1) {
-				printf(": multiple memory regions\n");
+				aprint_error(": multiple memory regions\n");
 				return;
 			}
 			if (reg[i].len != CS8900_MEMSIZE) {
-				printf(": weird register size (%lu, expected %d)\n",
+				aprint_error(": weird register size (%lu, expected %d)\n",
 				    (unsigned long)reg[i].len, CS8900_MEMSIZE);
 				return;
 			}
@@ -175,13 +160,13 @@ cs_ofisa_attach(parent, self, aux)
 	n = cs_ofisa_md_intr_fixup(parent, self, aux, &intr, 1, n);
 #endif
 	if (n != 1) {
-		printf(": error getting interrupt data\n");
+		aprint_error(": error getting interrupt data\n");
 		return;
 	}
 	sc->sc_irq = intr.irq;
 
 	if (CS8900_IRQ_ISVALID(sc->sc_irq) == 0) {
-		printf(": invalid IRQ %d\n", sc->sc_irq);
+		aprint_error(": invalid IRQ %d\n", sc->sc_irq);
 		return;
 	}
 
@@ -194,12 +179,12 @@ cs_ofisa_attach(parent, self, aux)
 		isc->sc_drq = dma.drq;
 
 	if (io_addr == (bus_addr_t) -1) {
-		printf(": no I/O space\n");
+		aprint_error(": no I/O space\n");
 		return;
 	}
 	if (bus_space_map(sc->sc_iot, io_addr, CS8900_IOSIZE, 0,
 	    &sc->sc_ioh)) {
-		printf(": unable to map register space\n");
+		aprint_error(": unable to map register space\n");
 		return;
 	}
 
@@ -216,7 +201,7 @@ cs_ofisa_attach(parent, self, aux)
 	/* Dig MAC address out of the firmware. */
 	if (OF_getprop(aa->oba.oba_phandle, "mac-address", enaddr,
 	    sizeof(enaddr)) < 0) {
-		printf(": unable to get Ethernet address\n");
+		aprint_error(": unable to get Ethernet address\n");
 		return;
 	}
 
@@ -228,35 +213,23 @@ cs_ofisa_attach(parent, self, aux)
 	    &defmedia);
 #endif
 	if (media == NULL) {
-		printf(": unable to get media information\n");
+		aprint_error(": unable to get media information\n");
 		return;
 	}
 
-	n = OF_getproplen(aa->oba.oba_phandle, "model");
-	if (n > 0) {
-		model = alloca(n);
-		if (OF_getprop(aa->oba.oba_phandle, "model", model, n) != n)
-			model = NULL;	/* Safe; alloca is on-stack */
-	}
-	if (model != NULL)
-		printf(": %s\n", model);
-	else
-		printf("\n");
-
+	ofisa_print_model(self, aa->oba.oba_phandle);
 	if (message != NULL)
-		printf("%s: %s\n", sc->sc_dev.dv_xname, message);
+		aprint_normal(": %s\n", message);
 
 	if (defmedia == -1) {
-		printf("%s: unable to get default media\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to get default media\n");
 		defmedia = media[0];	/* XXX What to do? */
 	}
 
 	sc->sc_ih = isa_intr_establish(isc->sc_ic, sc->sc_irq, intr.share,
 	    IPL_NET, cs_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt\n");
 		return;
 	}
 

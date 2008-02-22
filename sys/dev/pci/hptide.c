@@ -1,4 +1,4 @@
-/*	$NetBSD: hptide.c,v 1.24 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: hptide.c,v 1.34 2013/10/07 19:51:55 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hptide.c,v 1.24 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hptide.c,v 1.34 2013/10/07 19:51:55 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,15 +36,15 @@ __KERNEL_RCSID(0, "$NetBSD: hptide.c,v 1.24 2007/02/09 21:55:27 ad Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_hpt_reg.h>
 
-static void hpt_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void hpt_chip_map(struct pciide_softc*, const struct pci_attach_args*);
 static void hpt_setup_channel(struct ata_channel*);
 static int  hpt_pci_intr(void *);
 
-static int  hptide_match(struct device *, struct cfdata *, void *);
-static void hptide_attach(struct device *, struct device *, void *);
+static int  hptide_match(device_t, cfdata_t, void *);
+static void hptide_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(hptide, sizeof(struct pciide_softc),
-    hptide_match, hptide_attach, NULL, NULL);
+CFATTACH_DECL_NEW(hptide, sizeof(struct pciide_softc),
+    hptide_match, hptide_attach, pciide_detach, NULL);
 
 static const struct pciide_product_desc pciide_triones_products[] =  {
 	{ PCI_PRODUCT_TRIONES_HPT302,
@@ -85,8 +80,7 @@ static const struct pciide_product_desc pciide_triones_products[] =  {
 };
 
 static int
-hptide_match(struct device *parent, struct cfdata *match,
-    void *aux)
+hptide_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -98,10 +92,12 @@ hptide_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-hptide_attach(struct device *parent, struct device *self, void *aux)
+hptide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_triones_products));
@@ -109,19 +105,18 @@ hptide_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static void
-hpt_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+hpt_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int i, compatchan, revision;
 	pcireg_t interface;
-	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
 	revision = PCI_REVISION(pa->pa_class);
-	aprint_normal("%s: Triones/Highpoint ",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "Triones/Highpoint ");
 	switch (sc->sc_pp->ide_product) {
 	case PCI_PRODUCT_TRIONES_HPT302:
 		aprint_normal("HPT302 IDE Controller\n");
@@ -174,8 +169,8 @@ hpt_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			interface |= PCIIDE_INTERFACE_PCI(1);
 	}
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 	sc->sc_wdcdev.sc_atac.atac_cap = ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
@@ -204,6 +199,7 @@ hpt_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		else
 			sc->sc_wdcdev.sc_atac.atac_udma_cap = 5;
 	}
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -215,7 +211,9 @@ hpt_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			   HPT370_CTRL1(i)) & HPT370_CTRL1_EN) == 0) {
 				aprint_normal(
 				    "%s: %s channel ignored (disabled)\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+				    device_xname(
+				      sc->sc_wdcdev.sc_atac.atac_dev),
+				    cp->name);
 				cp->ata_channel.ch_flags |= ATACH_DISABLED;
 				continue;
 			}
@@ -230,19 +228,19 @@ hpt_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			else if (pa->pa_function == 1)
 				compatchan = 1;
 			else {
-				aprint_error("%s: unexpected PCI function %d\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, pa->pa_function);
+				aprint_error_dev(
+				    sc->sc_wdcdev.sc_atac.atac_dev,
+				    "unexpected PCI function %d\n",
+				    pa->pa_function);
 				return;
 			}
 		}
 		if (pciide_chansetup(sc, i, interface) == 0)
 			continue;
 		if (interface & PCIIDE_INTERFACE_PCI(i)) {
-			pciide_mapregs_native(pa, cp, &cmdsize,
-			    &ctlsize, hpt_pci_intr);
+			pciide_mapregs_native(pa, cp, hpt_pci_intr);
 		} else {
-			pciide_mapregs_compat(pa, cp, compatchan,
-			    &cmdsize, &ctlsize);
+			pciide_mapregs_compat(pa, cp, compatchan);
 			if ((cp->ata_channel.ch_flags & ATACH_DISABLED) == 0)
 				pciide_map_compat_intr(pa, cp,
 				    sc->sc_cy_compatchan);
@@ -337,26 +335,26 @@ hpt_setup_channel(struct ata_channel *chp)
 	}
 
 	/* Per drive settings */
-	for (drive = 0; drive < chp->ch_ndrive; drive++) {
+	for (drive = 0; drive < chp->ch_ndrives; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if ((drvp->drive_flags & DRIVE) == 0)
+		if (drvp->drive_type == ATA_DRIVET_NONE)
 			continue;
 		before = pci_conf_read(sc->sc_pc, sc->sc_tag,
 					HPT_IDETIM(chp->ch_channel, drive));
 
 		/* add timing values, setup DMA if needed */
-		if (drvp->drive_flags & DRIVE_UDMA) {
+		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
 			/* use Ultra/DMA */
 			s = splbio();
-			drvp->drive_flags &= ~DRIVE_DMA;
+			drvp->drive_flags &= ~ATA_DRIVE_DMA;
 			splx(s);
 			if ((cable & HPT_CSEL_CBLID(chp->ch_channel)) != 0 &&
 			    drvp->UDMA_mode > 2)
 				drvp->UDMA_mode = 2;
 			after = tim_udma[drvp->UDMA_mode];
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
-		} else if (drvp->drive_flags & DRIVE_DMA) {
+		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
 			/*
 			 * use Multiword DMA.
 			 * Timings will be used for both PIO and DMA, so adjust
@@ -375,7 +373,7 @@ hpt_setup_channel(struct ata_channel *chp)
 		pci_conf_write(sc->sc_pc, sc->sc_tag,
 		    HPT_IDETIM(chp->ch_channel, drive), after);
 		ATADEBUG_PRINT(("%s: bus speed register set to 0x%08x "
-		    "(BIOS 0x%08x)\n", drvp->drv_softc->dv_xname,
+		    "(BIOS 0x%08x)\n", device_xname(drvp->drv_softc),
 		    after, before), DEBUG_PROBE);
 	}
 	if (idedma_ctl != 0) {
@@ -404,8 +402,8 @@ hpt_pci_intr(void *arg)
 		wdc_cp = &cp->ata_channel;
 		crv = wdcintr(wdc_cp);
 		if (crv == 0) {
-			printf("%s:%d: bogus intr\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, i);
+			aprint_error("%s:%d: bogus intr\n",
+			    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), i);
 			bus_space_write_1(sc->sc_dma_iot,
 			    cp->dma_iohs[IDEDMA_CTL], 0, dmastat);
 		} else

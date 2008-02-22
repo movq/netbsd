@@ -1,4 +1,4 @@
-/*	$NetBSD: if_esh_pci.c,v 1.22 2007/10/19 12:00:45 ad Exp $	*/
+/*	$NetBSD: if_esh_pci.c,v 1.32 2016/07/07 06:55:41 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -19,13 +19,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_esh_pci.c,v 1.22 2007/10/19 12:00:45 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_esh_pci.c,v 1.32 2016/07/07 06:55:41 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,22 +69,21 @@ __KERNEL_RCSID(0, "$NetBSD: if_esh_pci.c,v 1.22 2007/10/19 12:00:45 ad Exp $");
  * XXX These should be in a common file!
  */
 #define PCI_CONN		0x48    /* Connector type */
-#define PCI_CBIO		0x10    /* Configuration Base IO Address */
+#define PCI_CBIO PCI_BAR(0)    /* Configuration Base IO Address */
 
-#define MEM_MAP_REG	0x10
+#define MEM_MAP_REG PCI_BAR(0)
 
-static int	esh_pci_match(struct device *, struct cfdata *, void *);
-static void	esh_pci_attach(struct device *, struct device *, void *);
+static int	esh_pci_match(device_t, cfdata_t, void *);
+static void	esh_pci_attach(device_t, device_t, void *);
 static u_int8_t	esh_pci_bist_read(struct esh_softc *);
 static void	esh_pci_bist_write(struct esh_softc *, u_int8_t);
 
 
-CFATTACH_DECL(esh_pci, sizeof(struct esh_softc),
+CFATTACH_DECL_NEW(esh_pci, sizeof(struct esh_softc),
     esh_pci_match, esh_pci_attach, NULL, NULL);
 
 static int
-esh_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+esh_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -109,24 +101,26 @@ esh_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-esh_pci_attach(struct device *parent, struct device *self, void *aux)
+esh_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct esh_softc *sc = (void *)self;
+	struct esh_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
 	const char *model;
 	const char *intrstr = NULL;
+	char intrbuf[PCI_INTRSTR_LEN];
 
 	aprint_naive(": HIPPI controller\n");
 
 	if (pci_mapreg_map(pa, MEM_MAP_REG,
-			   PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT, 0,
-			   &sc->sc_iot, &sc->sc_ioh, NULL, NULL) != 0) {
-	    aprint_error(": unable to map memory device registers\n");
-	    return;
+	    PCI_MAPREG_TYPE_MEM | PCI_MAPREG_MEM_TYPE_32BIT, 0, &sc->sc_iot,
+	    &sc->sc_ioh, NULL, NULL) != 0) {
+		aprint_error(": unable to map memory device registers\n");
+		return;
 	}
 
+	sc->sc_dev = self;
 	sc->sc_dmat = pa->pa_dmat;
 
 	switch (PCI_PRODUCT(pa->pa_id)) {
@@ -155,21 +149,19 @@ esh_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, eshintr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
 }
 
 static u_int8_t

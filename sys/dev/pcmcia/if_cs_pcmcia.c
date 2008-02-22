@@ -1,4 +1,4 @@
-/* $NetBSD: if_cs_pcmcia.c,v 1.15 2007/10/19 12:01:04 ad Exp $ */
+/* $NetBSD: if_cs_pcmcia.c,v 1.22 2016/07/07 06:55:42 msaitoh Exp $ */
 
 /*-
  * Copyright (c)2001 YAMAMOTO Takashi,
@@ -27,18 +27,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_pcmcia.c,v 1.15 2007/10/19 12:01:04 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_pcmcia.c,v 1.22 2016/07/07 06:55:42 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/socket.h>
 #include <sys/queue.h>
-
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -54,14 +49,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_pcmcia.c,v 1.15 2007/10/19 12:01:04 ad Exp $")
 #include <dev/ic/cs89x0reg.h>
 #include <dev/ic/cs89x0var.h>
 
-#define DEVNAME(sc) ((sc)->sc_dev.dv_xname)
-
 struct cs_pcmcia_softc;
 
-static int cs_pcmcia_match(struct device *, struct cfdata *, void *);
+static int cs_pcmcia_match(device_t, cfdata_t, void *);
 static int cs_pcmcia_validate_config(struct pcmcia_config_entry *);
-static void cs_pcmcia_attach(struct device *, struct device *, void *);
-static int cs_pcmcia_detach(struct device *, int);
+static void cs_pcmcia_attach(device_t, device_t, void *);
+static int cs_pcmcia_detach(device_t, int);
 static int cs_pcmcia_enable(struct cs_softc *);
 static void cs_pcmcia_disable(struct cs_softc *);
 
@@ -74,11 +67,11 @@ struct cs_pcmcia_softc {
 #define	CS_PCMCIA_ATTACHED	3
 };
 
-CFATTACH_DECL(cs_pcmcia, sizeof(struct cs_pcmcia_softc),
+CFATTACH_DECL_NEW(cs_pcmcia, sizeof(struct cs_pcmcia_softc),
     cs_pcmcia_match, cs_pcmcia_attach, cs_pcmcia_detach, cs_activate);
 
 static int
-cs_pcmcia_match(struct device *parent, struct cfdata *match,
+cs_pcmcia_match(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
@@ -101,21 +94,21 @@ cs_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
 }
 
 static void
-cs_pcmcia_attach(struct device *parent, struct device *self, void *aux)
+cs_pcmcia_attach(device_t parent, device_t self, void *aux)
 {
-	struct cs_pcmcia_softc *psc = (void *)self;
-	struct cs_softc *sc = (void *)&psc->sc_cs;
+	struct cs_pcmcia_softc *psc = device_private(self);
+	struct cs_softc *sc = &psc->sc_cs;
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
 	struct pcmcia_function *pf;
 	int error;
 
+	sc->sc_dev = self;
 	pf = psc->sc_pf = pa->pf;
 
 	error = pcmcia_function_configure(pa->pf, cs_pcmcia_validate_config);
 	if (error) {
-		aprint_error("%s: configure failed, error=%d\n", self->dv_xname,
-		    error);
+		aprint_error_dev(self, "configure failed, error=%d\n", error);
 		return;
 	}
 
@@ -154,9 +147,9 @@ fail:
 }
 
 static int
-cs_pcmcia_detach(struct device *self, int flags)
+cs_pcmcia_detach(device_t self, int flags)
 {
-	struct cs_pcmcia_softc *psc = (void *)self;
+	struct cs_pcmcia_softc *psc = device_private(self);
 	struct cs_softc *sc = &psc->sc_cs;
 	int error;
 

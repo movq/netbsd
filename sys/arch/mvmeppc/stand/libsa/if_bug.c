@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bug.c,v 1.1 2002/02/27 21:02:27 scw Exp $	*/
+/*	$NetBSD: if_bug.c,v 1.4 2009/03/14 15:36:11 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,7 +50,7 @@
 static int	bug_match(struct netif *, void *);
 static int	bug_probe(struct netif *, void *);
 static void	bug_init(struct iodesc *, void *);
-static int	bug_get(struct iodesc *, void *, size_t, time_t);
+static int	bug_get(struct iodesc *, void *, size_t, saseconds_t);
 static int	bug_put(struct iodesc *, void *, size_t);
 static void	bug_end(struct netif *);
 
@@ -89,9 +82,7 @@ struct bug_softc {
 static struct bug_softc bug_softc;
 
 int
-bug_match(nif, machdep_hint)
-	struct netif *nif;
-	void   *machdep_hint;
+bug_match(struct netif *nif, void *machdep_hint)
 {
 
 	if (machdep_hint &&
@@ -103,18 +94,14 @@ bug_match(nif, machdep_hint)
 }
 
 int
-bug_probe(nif, machdep_hint)
-	struct netif *nif;
-	void   *machdep_hint;
+bug_probe(struct netif *nif, void *machdep_hint)
 {
 
 	return (0);
 }
 
 void
-bug_init(desc, machdep_hint)
-	struct iodesc *desc;
-	void   *machdep_hint;
+bug_init(struct iodesc *desc, void *machdep_hint)
 {
 	struct netif *nif = desc->io_netif;
 	struct bug_netio nio;
@@ -150,11 +137,7 @@ bug_init(desc, machdep_hint)
 }
 
 int
-bug_get(desc, pkt, len, timeout)
-	struct	iodesc *desc;
-	void	*pkt;
-	size_t	len;
-	time_t	timeout;
+bug_get(struct iodesc *desc, void *pkt, size_t len, saseconds_t timeout)
 {
 	struct netif *nif = desc->io_netif;
 	struct bug_softc *sc = nif->nif_devdata;
@@ -183,10 +166,7 @@ bug_get(desc, pkt, len, timeout)
 }
 
 int
-bug_put(desc, pkt, len)
-	struct	iodesc *desc;
-	void	*pkt;
-	size_t	len;
+bug_put(struct iodesc *desc, void *pkt, size_t len)
 {
 	struct netif *nif = desc->io_netif;
 	struct bug_softc *sc = nif->nif_devdata;
@@ -212,8 +192,7 @@ bug_put(desc, pkt, len)
 }
 
 void
-bug_end(nif)
-	struct netif *nif;
+bug_end(struct netif *nif)
 {
 	struct bug_netio nio;
 

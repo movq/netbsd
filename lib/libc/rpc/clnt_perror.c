@@ -1,32 +1,34 @@
-/*	$NetBSD: clnt_perror.c,v 1.27 2006/07/08 05:54:45 yamt Exp $	*/
+/*	$NetBSD: clnt_perror.c,v 1.30 2013/03/11 20:19:29 tron Exp $	*/
 
 /*
- * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
- * unrestricted use provided that this legend is included on all tape
- * media and as a part of the software program in whole or part.  Users
- * may copy or modify Sun RPC without charge, but are not authorized
- * to license or distribute it to anyone else except as part of a product or
- * program developed by the user.
- * 
- * SUN RPC IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING THE
- * WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
- * 
- * Sun RPC is provided with no support and without any obligation on the
- * part of Sun Microsystems, Inc. to assist in its use, correction,
- * modification or enhancement.
- * 
- * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
- * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY SUN RPC
- * OR ANY PART THEREOF.
- * 
- * In no event will Sun Microsystems, Inc. be liable for any lost revenue
- * or profits or other special, indirect and consequential damages, even if
- * Sun has been advised of the possibility of such damages.
- * 
- * Sun Microsystems, Inc.
- * 2550 Garcia Avenue
- * Mountain View, California  94043
+ * Copyright (c) 2010, Oracle America, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the "Oracle America, Inc." nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *   FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ *   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *   GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
@@ -35,7 +37,7 @@
 static char *sccsid = "@(#)clnt_perror.c 1.15 87/10/07 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)clnt_perror.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: clnt_perror.c,v 1.27 2006/07/08 05:54:45 yamt Exp $");
+__RCSID("$NetBSD: clnt_perror.c,v 1.30 2013/03/11 20:19:29 tron Exp $");
 #endif
 #endif
 
@@ -69,16 +71,16 @@ __weak_alias(clnt_sperror,_clnt_sperror)
 static char *buf;
 static size_t buflen;
 
-static char *_buf __P((void));
-static char *auth_errmsg __P((enum auth_stat));
+static char *_buf(void);
+static char *auth_errmsg(enum auth_stat);
 
 static char *
-_buf()
+_buf(void)
 {
 
 	buflen = 256;
 	if (buf == 0)
-		buf = (char *)malloc(buflen);
+		buf = malloc(buflen);
 	return (buf);
 }
 
@@ -86,9 +88,7 @@ _buf()
  * Print reply error info
  */
 char *
-clnt_sperror(rpch, s)
-	CLIENT *rpch;
-	const char *s;
+clnt_sperror(CLIENT *rpch, const char *s)
 {
 	struct rpc_err e;
 	char *err;
@@ -179,9 +179,7 @@ clnt_sperror(rpch, s)
 }
 
 void
-clnt_perror(rpch, s)
-	CLIENT *rpch;
-	const char *s;
+clnt_perror(CLIENT *rpch, const char *s)
 {
 
 	_DIAGASSERT(rpch != NULL);
@@ -222,8 +220,7 @@ static const char *const rpc_errlist[] = {
  * This interface for use by clntrpc
  */
 char *
-clnt_sperrno(stat)
-	enum clnt_stat stat;
+clnt_sperrno(enum clnt_stat stat)
 {
 	unsigned int errnum = stat;
 	const char *msg;
@@ -239,16 +236,14 @@ clnt_sperrno(stat)
 }
 
 void
-clnt_perrno(num)
-	enum clnt_stat num;
+clnt_perrno(enum clnt_stat num)
 {
 	(void) fprintf(stderr, "%s\n", clnt_sperrno(num));
 }
 
 
 char *
-clnt_spcreateerror(s)
-	const char *s;
+clnt_spcreateerror(const char *s)
 {
 	char *str;
 	size_t len, i;
@@ -298,8 +293,7 @@ clnt_spcreateerror(s)
 }
 
 void
-clnt_pcreateerror(s)
-	const char *s;
+clnt_pcreateerror(const char *s)
 {
 
 	_DIAGASSERT(s != NULL);
@@ -319,12 +313,11 @@ static const char *const auth_errlist[] = {
 };
 
 static char *
-auth_errmsg(stat)
-	enum auth_stat stat;
+auth_errmsg(enum auth_stat stat)
 {
 	unsigned int errnum = stat;
 
-	if (errnum < (sizeof(auth_errlist)/sizeof(auth_errlist[0])))
+	if (errnum < __arraycount(auth_errlist))
 		return __UNCONST(auth_errlist[errnum]);
 
 	return(NULL);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofisa.c,v 1.18 2007/10/19 12:00:38 ad Exp $	*/
+/*	$NetBSD: ofisa.c,v 1.25 2016/12/09 17:18:35 christos Exp $	*/
 
 /*
  * Copyright 1997, 1998
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofisa.c,v 1.18 2007/10/19 12:00:38 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofisa.c,v 1.25 2016/12/09 17:18:35 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,10 +51,10 @@ __KERNEL_RCSID(0, "$NetBSD: ofisa.c,v 1.18 2007/10/19 12:00:38 ad Exp $");
 
 #define	OFW_MAX_STACK_BUF_SIZE	256
 
-static int	ofisamatch(struct device *, struct cfdata *, void *);
-static void	ofisaattach(struct device *, struct device *, void *);
+static int	ofisamatch(device_t, cfdata_t, void *);
+static void	ofisaattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ofisa, sizeof(struct device),
+CFATTACH_DECL_NEW(ofisa, 0,
     ofisamatch, ofisaattach, NULL, NULL);
 
 extern struct cfdriver ofisa_cd;
@@ -62,9 +62,7 @@ extern struct cfdriver ofisa_cd;
 static int	ofisaprint(void *, const char *);
 
 static int
-ofisaprint(aux, pnp)
-	void *aux;
-	const char *pnp;
+ofisaprint(void *aux, const char *pnp)
 {
 	struct ofbus_attach_args *oba = aux;
 	char name[64];
@@ -78,10 +76,7 @@ ofisaprint(aux, pnp)
 }
 
 int
-ofisamatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ofisamatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	static const char *const compatible_strings[] = { "pnpPNP,a00", NULL };
@@ -99,9 +94,7 @@ ofisamatch(parent, cf, aux)
 }
 
 void
-ofisaattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ofisaattach(device_t parent, device_t self, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	struct isabus_attach_args iba;
@@ -127,7 +120,7 @@ ofisaattach(parent, self, aux)
 		if (ofisa_ignore_child(oba->oba_phandle, child))
 			continue;
 
-		bzero(&aa, sizeof aa);
+		memset(&aa, 0, sizeof aa);
 
 		aa.oba.oba_busname = "ofw";			/* XXX */
 		aa.oba.oba_phandle = child;
@@ -141,8 +134,7 @@ ofisaattach(parent, self, aux)
 }
 
 int
-ofisa_reg_count(phandle)
-	int phandle;
+ofisa_reg_count(int phandle)
 {
 	int len;
 
@@ -155,13 +147,10 @@ ofisa_reg_count(phandle)
 }
 
 int
-ofisa_reg_get(phandle, descp, ndescs)
-	int phandle;
-	struct ofisa_reg_desc *descp;
-	int ndescs;
+ofisa_reg_get(int phandle, struct ofisa_reg_desc *descp, int ndescs)
 {
-	char *buf, *bp;
-	int i, proplen, allocated, rv;
+	char *buf, *bp, small[OFW_MAX_STACK_BUF_SIZE];
+	int i, proplen, rv;
 
 	i = ofisa_reg_count(phandle);
 	if (i < 0)
@@ -172,10 +161,8 @@ ofisa_reg_get(phandle, descp, ndescs)
 	i = ndescs * 12;
 	if (i > OFW_MAX_STACK_BUF_SIZE) {
 		buf = malloc(i, M_TEMP, M_WAITOK);
-		allocated = 1;
 	} else {
-		buf = alloca(i);
-		allocated = 0;
+		buf = small;
 	}
 
 	if (OF_getprop(phandle, "reg", buf, i) != proplen) {
@@ -194,15 +181,13 @@ ofisa_reg_get(phandle, descp, ndescs)
 	rv = i;		/* number of descriptors processed (== ndescs) */
 
 out:
-	if (allocated)
+	if (buf != small)
 		free(buf, M_TEMP);
 	return (rv);
 }
 
 void
-ofisa_reg_print(descp, ndescs)
-	struct ofisa_reg_desc *descp;
-	int ndescs;
+ofisa_reg_print(struct ofisa_reg_desc *descp, int ndescs)
 {
 	int i;
 
@@ -219,8 +204,7 @@ ofisa_reg_print(descp, ndescs)
 }
 
 int
-ofisa_intr_count(phandle)
-	int phandle;
+ofisa_intr_count(int phandle)
 {
 	int len;
 
@@ -233,13 +217,10 @@ ofisa_intr_count(phandle)
 }
 
 int
-ofisa_intr_get(phandle, descp, ndescs)
-	int phandle;
-	struct ofisa_intr_desc *descp;
-	int ndescs;
+ofisa_intr_get(int phandle, struct ofisa_intr_desc *descp, int ndescs)
 {
-	char *buf, *bp;
-	int i, proplen, allocated, rv;
+	char *buf, *bp, small[OFW_MAX_STACK_BUF_SIZE];
+	int i, proplen, rv;
 
 	i = ofisa_intr_count(phandle);
 	if (i < 0)
@@ -250,10 +231,8 @@ ofisa_intr_get(phandle, descp, ndescs)
 	i = ndescs * 8;
 	if (i > OFW_MAX_STACK_BUF_SIZE) {
 		buf = malloc(i, M_TEMP, M_WAITOK);
-		allocated = 1;
 	} else {
-		buf = alloca(i);
-		allocated = 0;
+		buf = small;
 	}
 
 	if (OF_getprop(phandle, "interrupts", buf, i) != proplen) {
@@ -285,15 +264,13 @@ ofisa_intr_get(phandle, descp, ndescs)
 	rv = i;		/* number of descriptors processed (== ndescs) */
 
 out:
-	if (allocated)
+	if (buf != small)
 		free(buf, M_TEMP);
 	return (rv);
 }
 
 void
-ofisa_intr_print(descp, ndescs)
-	struct ofisa_intr_desc *descp;
-	int ndescs;
+ofisa_intr_print(struct ofisa_intr_desc *descp, int ndescs)
 {
 	int i;
 
@@ -309,8 +286,7 @@ ofisa_intr_print(descp, ndescs)
 }
 
 int
-ofisa_dma_count(phandle)
-	int phandle;
+ofisa_dma_count(int phandle)
 {
 	int len;
 
@@ -323,13 +299,10 @@ ofisa_dma_count(phandle)
 }
 
 int
-ofisa_dma_get(phandle, descp, ndescs)
-	int phandle;
-	struct ofisa_dma_desc *descp;
-	int ndescs;
+ofisa_dma_get(int phandle, struct ofisa_dma_desc *descp, int ndescs)
 {
-	char *buf, *bp;
-	int i, proplen, allocated, rv;
+	char *buf, *bp, small[OFW_MAX_STACK_BUF_SIZE];
+	int i, proplen, rv;
 
 	i = ofisa_dma_count(phandle);
 	if (i < 0)
@@ -340,10 +313,8 @@ ofisa_dma_get(phandle, descp, ndescs)
 	i = ndescs * 20;
 	if (i > OFW_MAX_STACK_BUF_SIZE) {
 		buf = malloc(i, M_TEMP, M_WAITOK);
-		allocated = 1;
 	} else {
-		buf = alloca(i);
-		allocated = 0;
+		buf = small;
 	}
 
 	if (OF_getprop(phandle, "dma", buf, i) != proplen) {
@@ -361,15 +332,13 @@ ofisa_dma_get(phandle, descp, ndescs)
 	rv = i;		/* number of descriptors processed (== ndescs) */
 
 out:
-	if (allocated)
+	if (buf != small)
 		free(buf, M_TEMP);
 	return (rv);
 }
 
 void
-ofisa_dma_print(descp, ndescs)
-	struct ofisa_dma_desc *descp;
-	int ndescs;
+ofisa_dma_print(struct ofisa_dma_desc *descp, int ndescs)
 {
 	char unkmode[16];
 	const char *modestr;
@@ -410,4 +379,30 @@ ofisa_dma_print(descp, ndescs)
 		    descp[i].busmaster ? " busmaster" : "");
 
 	}
+}
+
+void
+ofisa_print_model(device_t self, int phandle)
+{
+	char *model, small[OFW_MAX_STACK_BUF_SIZE];
+        int n = OF_getproplen(phandle, "model");
+
+        if (n <= 0)
+		return;
+
+	if (n > OFW_MAX_STACK_BUF_SIZE) {
+		model = malloc(n, M_TEMP, M_WAITOK);
+	} else {
+		model = small;
+	}
+
+	if (OF_getprop(phandle, "model", model, n) != n)
+		goto out;
+		
+	aprint_normal(": %s\n", model);
+	if (self)
+		aprint_normal_dev(self, "");
+out:
+	if (model != small)
+		free(model, M_TEMP);
 }

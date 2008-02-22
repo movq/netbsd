@@ -1,4 +1,4 @@
-/*	$NetBSD: depca_isa.c,v 1.12 2007/10/19 12:00:15 ad Exp $	*/
+/*	$NetBSD: depca_isa.c,v 1.16 2012/10/27 17:18:24 chs Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,10 +65,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: depca_isa.c,v 1.12 2007/10/19 12:00:15 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: depca_isa.c,v 1.16 2012/10/27 17:18:24 chs Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -107,8 +99,8 @@ __KERNEL_RCSID(0, "$NetBSD: depca_isa.c,v 1.12 2007/10/19 12:00:15 ad Exp $");
 #include <dev/ic/depcareg.h>
 #include <dev/ic/depcavar.h>
 
-int	depca_isa_probe(struct device *, struct cfdata *, void *);
-void	depca_isa_attach(struct device *, struct device *, void *);
+int	depca_isa_probe(device_t, cfdata_t, void *);
+void	depca_isa_attach(device_t, device_t, void *);
 
 struct depca_isa_softc {
 	struct depca_softc sc_depca;
@@ -116,14 +108,13 @@ struct depca_isa_softc {
 	int sc_irq;
 };
 
-CFATTACH_DECL(depca_isa, sizeof(struct depca_isa_softc),
+CFATTACH_DECL_NEW(depca_isa, sizeof(struct depca_isa_softc),
     depca_isa_probe, depca_isa_attach, NULL, NULL);
 
 void	*depca_isa_intr_establish(struct depca_softc *, struct lance_softc *);
 
 int
-depca_isa_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+depca_isa_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -153,8 +144,8 @@ depca_isa_probe(struct device *parent, struct cfdata *match,
 		return 0;
 
 	if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM ||
-	    (ia->ia_iomem[0].ir_size != 32*1024 &&
-	     ia->ia_iomem[0].ir_size != 64*1024))
+	    (ia->ia_iomem[0].ir_size != 32 * 1024 &&
+	     ia->ia_iomem[0].ir_size != 64 * 1024))
 		goto bad;
 
 	/* Map card RAM. */
@@ -199,13 +190,14 @@ depca_isa_probe(struct device *parent, struct cfdata *match,
 }
 
 void
-depca_isa_attach(struct device *parent, struct device *self, void *aux)
+depca_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct depca_softc *sc = (void *) self;
-	struct depca_isa_softc *isc = (void *) self;
+	struct depca_isa_softc *isc = device_private(self);
+	struct depca_softc *sc = &isc->sc_depca;
 	struct isa_attach_args *ia = aux;
 
-	printf("\n");
+	sc->sc_dev = self;
+	aprint_normal("\n");
 
 	sc->sc_iot = ia->ia_iot;
 	sc->sc_memt = ia->ia_memt;
@@ -214,12 +206,12 @@ depca_isa_attach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(sc->sc_iot, ia->ia_io[0].ir_addr, 16,
 	    0, &sc->sc_ioh) != 0) {
-		printf("%s: unable to map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map i/o space\n");
 		return;
 	}
 	if (bus_space_map(sc->sc_memt, ia->ia_iomem[0].ir_addr,
 	    ia->ia_iomem[0].ir_size, 0, &sc->sc_memh) != 0) {
-		printf("%s: unable to map memory space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map memory space\n");
 		return;
 	}
 
@@ -231,16 +223,16 @@ depca_isa_attach(struct device *parent, struct device *self, void *aux)
 }
 
 void *
-depca_isa_intr_establish(struct depca_softc *parent, struct lance_softc *child)
+depca_isa_intr_establish(struct depca_softc *sc, struct lance_softc *child)
 {
-	struct depca_isa_softc *isc = (void *) parent;
+	struct depca_isa_softc *isc = (struct depca_isa_softc *)sc;
 	void *rv;
 
 	rv = isa_intr_establish(isc->sc_ic, isc->sc_irq, IST_EDGE,
 	    IPL_NET, depca_intredge, child);
 	if (rv == NULL)
 		printf("%s: unable to establish interrupt\n",
-		    parent->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 
 	return (rv);
 }

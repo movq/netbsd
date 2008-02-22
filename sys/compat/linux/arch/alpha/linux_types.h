@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_types.h,v 1.4 2005/12/11 12:20:12 christos Exp $	*/
+/*	$NetBSD: linux_types.h,v 1.7 2013/12/27 14:17:11 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,6 +39,7 @@ typedef unsigned int linux_ino_t;
 typedef unsigned int linux_mode_t;
 typedef unsigned int linux_nlink_t;
 typedef long linux_time_t;
+typedef long linux_suseconds_t;
 typedef long linux_clock_t;
 typedef long linux_off_t;
 typedef int linux_pid_t;
@@ -71,6 +65,32 @@ struct linux_stat {
 	int			lst_blocks;
 	unsigned int		lst_flags;	/* unused */
 	unsigned int		lst_gen;	/* unused */
+};
+
+/* The stat64 structure increases the size of dev_t, blkcnt_t, adds
+   nanosecond resolution times, and padding for expansion.  */
+#define	LINUX_STAT64_HAS_NSEC	1
+struct linux_stat64 {
+	unsigned long		lst_dev;
+	unsigned long		lst_ino;
+	unsigned long		lst_rdev;
+	long			lst_size;
+	unsigned long		lst_blocks;
+
+	unsigned int		lst_mode;
+	unsigned int		lst_uid;
+	unsigned int		lst_gid;
+	unsigned int		lst_blksize;
+	unsigned int		lst_nlink;
+	unsigned int		__pad0;
+
+	unsigned long		lst_atime;
+	unsigned long		lst_atime_nsec; 
+	unsigned long		lst_mtime;
+	unsigned long		lst_mtime_nsec;
+	unsigned long		lst_ctime;
+	unsigned long		lst_ctime_nsec;
+	long			__pad1[3];
 };
 
 #endif /* !_ALPHA_LINUX_TYPES_H */

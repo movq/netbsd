@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.3 2008/01/28 18:24:21 garbled Exp $	*/
+/*	$NetBSD: pchb.c,v 1.9 2012/01/23 16:22:57 phx Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.3 2008/01/28 18:24:21 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.9 2012/01/23 16:22:57 phx Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pio.h>
 
 #include <dev/pci/pcivar.h>
@@ -59,14 +52,14 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.3 2008/01/28 18:24:21 garbled Exp $");
 
 #include "agp.h"
 
-int	pchbmatch(struct device *, struct cfdata *, void *);
-void	pchbattach(struct device *, struct device *, void *);
+int	pchbmatch(device_t, cfdata_t, void *);
+void	pchbattach(device_t, device_t, void *);
 
-CFATTACH_DECL(pchb, sizeof(struct device),
+CFATTACH_DECL_NEW(pchb, 0,
     pchbmatch, pchbattach, NULL, NULL);
 
 int
-pchbmatch(struct device *parent, struct cfdata *cf, void *aux)
+pchbmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -82,14 +75,14 @@ pchbmatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-mpc105_print(struct pci_attach_args *pa, struct device *self)
+mpc105_print(struct pci_attach_args *pa, device_t self)
 {
 	pcireg_t reg1, reg2;
 	const char *s1;
 
 	reg1 = pci_conf_read(pa->pa_pc, pa->pa_tag, MPC105_PICR1);
 	reg2 = pci_conf_read(pa->pa_pc, pa->pa_tag, MPC105_PICR2);
-	aprint_normal("%s: L2 cache: ", self->dv_xname);
+	aprint_normal_dev(self, "L2 cache: ");
 
 	switch (reg2 & MPC105_PICR2_L2_SIZE) {
 	case MPC105_PICR2_L2_SIZE_256K:
@@ -125,14 +118,14 @@ mpc105_print(struct pci_attach_args *pa, struct device *self)
 }
 
 static void
-mpc106_print(struct pci_attach_args *pa, struct device *self)
+mpc106_print(struct pci_attach_args *pa, device_t self)
 {
 	pcireg_t reg1, reg2;
 	const char *s1;
 
 	reg1 = pci_conf_read(pa->pa_pc, pa->pa_tag, MPC106_PICR1);
 	reg2 = pci_conf_read(pa->pa_pc, pa->pa_tag, MPC106_PICR2);
-	aprint_normal("%s: L2 cache: ", self->dv_xname);
+	aprint_normal_dev(self, "L2 cache: ");
 
 	switch (reg2 & MPC106_PICR2_L2_SIZE) {
 	case MPC106_PICR2_L2_SIZE_256K:
@@ -184,7 +177,7 @@ mpc106_print(struct pci_attach_args *pa, struct device *self)
 }
 
 static void
-ibm82660_print(struct pci_attach_args *pa, struct device *self)
+ibm82660_print(struct pci_attach_args *pa, device_t self)
 {
 	pcireg_t reg1;
 #ifdef PREP_BUS_SPACE_IO
@@ -202,9 +195,9 @@ ibm82660_print(struct pci_attach_args *pa, struct device *self)
 		else
 			s1 = "enabled";
 		if (reg2 & IBM_82660_SYSTEM_CTRL_L2_MI)
-			s2 = "(normal operation)";
+			s2 = " (normal operation)";
 		else
-			s2 = "(miss updates inhibited)";
+			s2 = " (miss updates inhibited)";
 	} else {
 		s1 = "disabled";
 		s2 = "";
@@ -216,29 +209,29 @@ ibm82660_print(struct pci_attach_args *pa, struct device *self)
 		s1 = "disabled";
 	s2 = "";
 #endif
-	aprint_normal("%s: L1: %s L2: %s %s\n", self->dv_xname,
+	aprint_normal_dev(self, "L1 %s L2 %s%s\n",
 	    (reg1 & IBM_82660_CACHE_STATUS_L1_EN) ? "enabled" : "disabled",
 	    s1, s2);
 
 	reg1 = pci_conf_read(pa->pa_pc, pa->pa_tag, IBM_82660_OPTIONS_1);
-	aprint_verbose("%s: MCP# assertion %s "
-	    "TEA# assertion %s\n", self->dv_xname,
+	aprint_verbose_dev(self, "MCP# assertion %s "
+	    "TEA# assertion %s\n",
 	    (reg1 & IBM_82660_OPTIONS_1_MCP) ? "enabled" : "disabled",
 	    (reg1 & IBM_82660_OPTIONS_1_TEA) ? "enabled" : "disabled");
-	aprint_verbose("%s: PCI/ISA I/O mapping %s\n", self->dv_xname,
+	aprint_verbose_dev(self, "PCI/ISA I/O mapping %s\n",
 	    (reg1 & IBM_82660_OPTIONS_1_ISA) ? "contiguous" : "non-contiguous");
 
 	reg1 = pci_conf_read(pa->pa_pc, pa->pa_tag, IBM_82660_OPTIONS_3);
-	aprint_normal("%s: DRAM %s (%s) SRAM %s\n", self->dv_xname,
+	aprint_normal_dev(self, "DRAM %s (%s) SRAM %s\n",
 	    (reg1 & IBM_82660_OPTIONS_3_DRAM) ? "EDO" : "standard",
 	    (reg1 & IBM_82660_OPTIONS_3_ECC) ? "ECC" : "parity",
 	    (reg1 & IBM_82660_OPTIONS_3_SRAM) ? "sync" : "async");
-	aprint_verbose("%s: Snoop mode %s\n", self->dv_xname,
+	aprint_verbose_dev(self, "Snoop mode %s\n",
 	    (reg1 & IBM_82660_OPTIONS_3_SNOOP) ? "603" : "601/604");
 }
 
 void
-pchbattach(struct device *parent, struct device *self, void *aux)
+pchbattach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
@@ -248,6 +241,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	volatile unsigned char *python;
 	uint32_t v;
 	
+	aprint_naive("\n");
 	aprint_normal("\n");
 
 	/*
@@ -257,7 +251,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	 */
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
+	aprint_normal_dev(self, "%s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
 	switch (PCI_VENDOR(pa->pa_id)) {
@@ -267,7 +261,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 			ibm82660_print(pa, self);
 			break;
 		case PCI_PRODUCT_IBM_PYTHON:
-			python = mapiodev(0xfeff6000, 0x60);
+			python = mapiodev(0xfeff6000, 0x60, false);
 			v = 0x88b78e01; /* taken from linux */
 			out32rb(python+0x30, v);
 			v = in32rb(python+0x30);

@@ -1,4 +1,4 @@
-/*	$NetBSD: nl.c,v 1.7 2006/05/10 21:53:48 mrg Exp $	*/
+/*	$NetBSD: nl.c,v 1.12 2013/09/17 20:00:50 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,10 +31,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1999\
+__COPYRIGHT("@(#) Copyright (c) 1999\
  The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: nl.c,v 1.7 2006/05/10 21:53:48 mrg Exp $");
+__RCSID("$NetBSD: nl.c,v 1.12 2013/09/17 20:00:50 wiz Exp $");
 #endif    
 
 #include <errno.h>
@@ -52,6 +44,7 @@ __RCSID("$NetBSD: nl.c,v 1.7 2006/05/10 21:53:48 mrg Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <err.h>
 
 typedef enum {
 	number_all,		/* number all lines */
@@ -77,9 +70,9 @@ struct numbering_property {
 #define NP_LAST		HEADER
 
 static struct numbering_property numbering_properties[NP_LAST + 1] = {
-	{ "footer",	number_none	},
-	{ "body",	number_nonempty	},
-	{ "header",	number_none	}
+	{ "footer",	number_none,	{ 0, 0, 0, 0 } },
+	{ "body",	number_nonempty, { 0, 0, 0, 0 } },
+	{ "header",	number_none,	{ 0, 0, 0, 0 } },
 };
 
 #define max(a, b)	((a) > (b) ? (a) : (b))
@@ -91,10 +84,9 @@ static struct numbering_property numbering_properties[NP_LAST + 1] = {
 #define INT_STRLEN_MAXIMUM \
 	((sizeof (int) * CHAR_BIT - 1) * 302 / 1000 + 2)
 
-static void	filter __P((void));
-int		main __P((int, char *[]));
-static void	parse_numbering __P((const char *, int));
-static void	usage __P((void));
+static void	filter(void);
+static void	parse_numbering(const char *, int);
+static void	usage(void) __attribute__((__noreturn__));
 
 /*
  * Pointer to dynamically allocated input line buffer, and its size.
@@ -106,6 +98,7 @@ static size_t buffersize;
  * Dynamically allocated buffer suitable for string representation of ints.
  */
 static char *intbuffer;
+static size_t intbuffersize;
 
 /*
  * Configurable parameters.
@@ -137,15 +130,12 @@ static int width = 6;
 
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int c;
 	long val;
 	unsigned long uval;
 	char *ep;
-	size_t intbuffersize;
 
 	(void)setlocale(LC_ALL, "");
 
@@ -171,10 +161,9 @@ main(argc, argv)
 				delim[1] = optarg[1];
 			/* at most two delimiter characters */
 			if (optarg[2] != '\0') {
-				(void)fprintf(stderr,
-				    "nl: invalid delim argument -- %s\n",
+				errx(EXIT_FAILURE,
+				    "invalid delim argument -- %s",
 				    optarg);
-				exit(EXIT_FAILURE);
 				/* NOTREACHED */
 			}
 			break;
@@ -188,22 +177,18 @@ main(argc, argv)
 			errno = 0;
 			val = strtol(optarg, &ep, 10);
 			if ((ep != NULL && *ep != '\0') ||
-			 ((val == LONG_MIN || val == LONG_MAX) && errno != 0)) {
-				(void)fprintf(stderr,
-				    "invalid incr argument -- %s\n", optarg);
-				exit(EXIT_FAILURE);
-			}
+			 ((val == LONG_MIN || val == LONG_MAX) && errno != 0))
+				errx(EXIT_FAILURE,
+				    "invalid incr argument -- %s", optarg);
 			incr = (int)val;
 			break;
 		case 'l':
 			errno = 0;
 			uval = strtoul(optarg, &ep, 10);
 			if ((ep != NULL && *ep != '\0') ||
-			    (uval == ULONG_MAX && errno != 0)) {
-				(void)fprintf(stderr,
-				    "invalid num argument -- %s\n", optarg);
-				exit(EXIT_FAILURE);
-			}
+			    (uval == ULONG_MAX && errno != 0))
+				errx(EXIT_FAILURE,
+				    "invalid num argument -- %s", optarg);
 			nblank = (unsigned int)uval;
 			break;
 		case 'n':
@@ -213,11 +198,9 @@ main(argc, argv)
 				format = FORMAT_RN;
 			} else if (strcmp(optarg, "rz") == 0) {
 				format = FORMAT_RZ;
-			} else {
-				(void)fprintf(stderr,
-				    "nl: illegal format -- %s\n", optarg);
-				exit(EXIT_FAILURE);
-			}
+			} else
+				errx(EXIT_FAILURE,
+				    "illegal format -- %s", optarg);
 			break;
 		case 's':
 			sep = optarg;
@@ -226,29 +209,23 @@ main(argc, argv)
 			errno = 0;
 			val = strtol(optarg, &ep, 10);
 			if ((ep != NULL && *ep != '\0') ||
-			 ((val == LONG_MIN || val == LONG_MAX) && errno != 0)) {
-				(void)fprintf(stderr,
-				    "invalid startnum value -- %s\n", optarg);
-				exit(EXIT_FAILURE);
-			}
+			 ((val == LONG_MIN || val == LONG_MAX) && errno != 0))
+				errx(EXIT_FAILURE,
+				    "invalid startnum value -- %s", optarg);
 			startnum = (int)val;
 			break;
 		case 'w':
 			errno = 0;
 			val = strtol(optarg, &ep, 10);
 			if ((ep != NULL && *ep != '\0') ||
-			 ((val == LONG_MIN || val == LONG_MAX) && errno != 0)) {
-				(void)fprintf(stderr,
-				    "invalid width value -- %s\n", optarg);
-				exit(EXIT_FAILURE);
-			}
+			 ((val == LONG_MIN || val == LONG_MAX) && errno != 0))
+				errx(EXIT_FAILURE,
+				    "invalid width value -- %s", optarg);
 			width = (int)val;
-			if (!(width > 0)) {
-				(void)fprintf(stderr,
-				    "nl: width argument must be > 0 -- %d\n",
+			if (!(width > 0))
+				errx(EXIT_FAILURE,
+				    "width argument must be > 0 -- %d",
 				    width);
-				 exit(EXIT_FAILURE);
-			}
 			break;
 		case '?':
 		default:
@@ -263,10 +240,9 @@ main(argc, argv)
 	case 0:
 		break;
 	case 1:
-		if (freopen(argv[0], "r", stdin) == NULL) {
-			perror(argv[0]);
-			exit(EXIT_FAILURE);
-		}
+		if (strcmp(argv[0], "-") != 0 &&
+		    freopen(argv[0], "r", stdin) == NULL)
+			err(EXIT_FAILURE, "Cannot open `%s'", argv[0]);
 		break;
 	default:
 		usage();
@@ -278,27 +254,23 @@ main(argc, argv)
 		val = LINE_MAX;
 	/* Allocate sufficient buffer space (including the terminating NUL). */
 	buffersize = (size_t)val + 1;
-	if ((buffer = malloc(buffersize)) == NULL) {
-		perror("cannot allocate input line buffer");
-		exit(EXIT_FAILURE);
-	}
+	if ((buffer = malloc(buffersize)) == NULL)
+		err(EXIT_FAILURE, "Cannot allocate input line buffer");
 
 	/* Allocate a buffer suitable for preformatting line number. */
-	intbuffersize = max(INT_STRLEN_MAXIMUM, width) + 1;	/* NUL */
-	if ((intbuffer = malloc(intbuffersize)) == NULL) {
-		perror("cannot allocate preformatting buffer");
-		exit(EXIT_FAILURE);
-	}
+	intbuffersize = max((int)INT_STRLEN_MAXIMUM, width) + 1; /* NUL */
+	if ((intbuffer = malloc(intbuffersize)) == NULL)
+		err(EXIT_FAILURE, "cannot allocate preformatting buffer");
 
 	/* Do the work. */
 	filter();
 
-	exit(EXIT_SUCCESS);
+	return EXIT_SUCCESS;
 	/* NOTREACHED */
 }
 
 static void
-filter()
+filter(void)
 {
 	int line;		/* logical line number */
 	int section;		/* logical page section */
@@ -357,8 +329,8 @@ filter()
 		}
 
 		if (donumber) {
-			/* Note: sprintf() is safe here. */
-			consumed = sprintf(intbuffer, format, width, line);
+			consumed = snprintf(intbuffer, intbuffersize, format,
+			    width, line);
 			(void)printf("%s",
 			    intbuffer + max(0, consumed - width));
 			line += incr;
@@ -367,18 +339,14 @@ filter()
 		}
 		(void)printf("%s%s", sep, buffer);
 
-		if (ferror(stdout)) {
-			perror("output error");
-			exit(EXIT_FAILURE);
-		}
+		if (ferror(stdout))
+			err(EXIT_FAILURE, "output error");
 nextline:
 		;
 	}
 
-	if (ferror(stdin)) {
-		perror("input error");
-		exit(EXIT_FAILURE);
-	}
+	if (ferror(stdin))
+		err(EXIT_FAILURE, "input error");
 }
 
 /*
@@ -386,9 +354,7 @@ nextline:
  */
 
 static void
-parse_numbering(argstr, section)
-	const char *argstr;
-	int section;
+parse_numbering(const char *argstr, int section)
 {
 	int error;
 	char errorbuf[NL_TEXTMAX];
@@ -416,27 +382,25 @@ parse_numbering(argstr, section)
 			(void)regerror(error,
 			    &numbering_properties[section].expr,
 			    errorbuf, sizeof (errorbuf));
-			(void)fprintf(stderr,
-			    "nl: %s expr: %s -- %s\n",
+			errx(EXIT_FAILURE,
+			    "%s expr: %s -- %s",
 			    numbering_properties[section].name, errorbuf,
 			    &argstr[1]);
-			exit(EXIT_FAILURE);
 		}
 		break;
 	default:
-		(void)fprintf(stderr,
-		    "nl: illegal %s line numbering type -- %s\n",
+		errx(EXIT_FAILURE,
+		    "illegal %s line numbering type -- %s",
 		    numbering_properties[section].name, argstr);
 		exit(EXIT_FAILURE);
 	}
 }
 
 static void
-usage()
+usage(void)
 {
-
-	(void)fprintf(stderr, "usage: nl [-p] [-b type] [-d delim] [-f type] \
-[-h type] [-i incr] [-l num]\n\t[-n format] [-s sep] [-v startnum] [-w width] \
-[file]\n");
+	(void)fprintf(stderr, "Usage: %s [-p] [-b type] [-d delim] [-f type] "
+	    "[-h type] [-i incr] [-l num]\n\t[-n format] [-s sep] "
+	    "[-v startnum] [-w width] [file]\n", getprogname());
 	exit(EXIT_FAILURE);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_exec.c,v 1.51 2007/12/04 18:40:21 dsl Exp $	*/
+/*	$NetBSD: sunos_exec.c,v 1.56 2018/05/06 13:40:51 kamil Exp $	*/
 
 /*
  * Copyright (c) 1993 Theo de Raadt
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos_exec.c,v 1.51 2007/12/04 18:40:21 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos_exec.c,v 1.56 2018/05/06 13:40:51 kamil Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -62,40 +62,40 @@ void syscall(void);
 
 struct uvm_object *emul_sunos_object;
 
-const struct emul emul_sunos = {
-	"sunos",
-	"/emul/sunos",
+struct emul emul_sunos = {
+	.e_name =		"sunos",
+	.e_path =		"/emul/sunos",
 #ifndef __HAVE_MINIMAL_EMUL
-	0,
-	NULL,
-	SUNOS_SYS_syscall,
-	SUNOS_SYS_NSYSENT,
+	.e_flags =		0,
+	.e_errno =		NULL,
+	.e_nosys =		SUNOS_SYS_syscall,
+	.e_nsysent =		SUNOS_SYS_NSYSENT,
 #endif
-	sunos_sysent,
+	.e_sysent =		sunos_sysent,
 #ifdef SYSCALL_DEBUG
-	sunos_syscallnames,
+	.e_syscallnames =	sunos_syscallnames,
 #else
-	NULL,
+	.e_syscallnames =	NULL,
 #endif
-	sunos_sendsig,
-	trapsignal,
-	NULL,
-	sunos_sigcode,
-	sunos_esigcode,
-	&emul_sunos_object,
-	setregs,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
+	.e_sendsig =		sunos_sendsig,
+	.e_trapsignal =		trapsignal,
+	.e_sigcode =		sunos_sigcode,
+	.e_esigcode =		sunos_esigcode,
+	.e_sigobject =		&emul_sunos_object,
+	.e_setregs =		setregs,
+	.e_proc_exec =		NULL,
+	.e_proc_fork =		NULL,
+	.e_proc_exit =		NULL,
+	.e_lwp_fork =		NULL,
+	.e_lwp_exit =		NULL,
 #ifdef __HAVE_SYSCALL_INTERN
-	sunos_syscall_intern,
+	.e_syscall_intern =	sunos_syscall_intern,
 #else
-	syscall,
+	.e_syscall_intern =	syscall,
 #endif
-	NULL,
-	NULL,
-
-	uvm_default_mapaddr,
+	.e_sysctlovly =		NULL,
+	.e_vm_default_addr =	uvm_default_mapaddr,
+	.e_usertrap =		NULL,
+	.e_ucsize =		0,
+	.e_startlwp =		NULL
 };

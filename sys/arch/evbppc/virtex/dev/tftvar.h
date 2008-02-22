@@ -1,4 +1,4 @@
-/* 	$NetBSD: tftvar.h,v 1.2 2007/03/04 05:59:46 christos Exp $ */
+/* 	$NetBSD: tftvar.h,v 1.4 2011/06/18 06:44:27 matt Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -33,9 +33,9 @@
 #define	_VIRTEX_DEV_TFTVAR_H_
 
 struct tft_softc {
-	struct device 		sc_dev;
+	device_t 		sc_dev;
 
-	void *		sc_image;
+	void *			sc_image;
 	size_t 			sc_size;
 
 	bus_space_tag_t 	sc_iot;
@@ -58,9 +58,6 @@ struct tft_softc {
 	/* splashscreen */
 #ifdef SPLASHSCREEN
 	struct splash_info 	sc_sp_info;
-#endif
-#ifdef SPLASHSCREEN_PROGRESS
-	struct splash_progress 	sc_sp_progress;
 #endif
 };
 

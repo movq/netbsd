@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.7 2005/12/11 12:16:46 christos Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.13 2018/04/01 04:35:04 ryo Exp $	*/
 
 /*
  * Copyright (c) 1994 Mark Brinicombe.
@@ -46,10 +46,32 @@
 #ifndef _ARM_DISKLABEL_H_
 #define _ARM_DISKLABEL_H_
 
-#define LABELSECTOR	1		/* sector containing label */
-#define LABELOFFSET	0		/* offset of label in sector */
-#define MAXPARTITIONS	8		/* number of partitions */
-#define RAW_PART	2		/* raw partition: XX?c */
+#ifndef LABELUSESMBR
+#define LABELUSESMBR		1	/* use MBR partitionning */
+#endif
+#define LABELSECTOR		1	/* sector containing label */
+#define LABELOFFSET		0	/* offset of label in sector */
+#define MAXPARTITIONS		16	/* number of partitions */
+#define OLDMAXPARTITIONS	8	/* old number of partitions */
+#ifndef RAW_PART
+#define RAW_PART		2	/* raw partition: XX?c */
+#endif
+
+
+#ifdef __HAVE_OLD_DISKLABEL
+/*
+ * We use the highest bit of the minor number for the partition number.
+ * This maintains backward compatibility with device nodes created before
+ * MAXPARTITIONS was increased.
+ */
+#define	__ARM_MAXDISKS	((1 << 20) / MAXPARTITIONS)
+#define	DISKUNIT(dev)	((minor(dev) / OLDMAXPARTITIONS) % __ARM_MAXDISKS)
+#define	DISKPART(dev)	((minor(dev) % OLDMAXPARTITIONS) + \
+    ((minor(dev) / (__ARM_MAXDISKS * OLDMAXPARTITIONS)) * OLDMAXPARTITIONS))
+#define	DISKMINOR(unit, part) \
+    (((unit) * OLDMAXPARTITIONS) + ((part) % OLDMAXPARTITIONS) + \
+     ((part) / OLDMAXPARTITIONS) * (__ARM_MAXDISKS * OLDMAXPARTITIONS))
+#endif
 
 #if HAVE_NBTOOL_CONFIG_H
 #include <nbinclude/sys/dkbad.h>
@@ -63,6 +85,7 @@
 
 struct cpu_disklabel {
 	struct mbr_partition mbrparts[MBR_PART_COUNT];
+#define __HAVE_DISKLABEL_DKBAD
 	struct dkbad bad;
 };
 
@@ -71,12 +94,12 @@ struct buf;
 struct disklabel;
 
 /* for readdisklabel.  rv != 0 -> matches, msg == NULL -> success */
-int	mbr_label_read __P((dev_t, void (*)(struct buf *), struct disklabel *,
-	    struct cpu_disklabel *, const char **, int *, int *));
+int	mbr_label_read(dev_t, void (*)(struct buf *), struct disklabel *,
+	    struct cpu_disklabel *, const char **, int *, int *);
 
 /* for writedisklabel.  rv == 0 -> dosen't match, rv > 0 -> success */
-int	mbr_label_locate __P((dev_t, void (*)(struct buf *),
-	    struct disklabel *, struct cpu_disklabel *, int *, int *));
+int	mbr_label_locate(dev_t, void (*)(struct buf *),
+	    struct disklabel *, struct cpu_disklabel *, int *, int *);
 #endif /* _KERNEL */
 
 #endif /* _ARM_DISKLABEL_H_ */

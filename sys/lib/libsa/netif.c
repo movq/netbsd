@@ -1,4 +1,4 @@
-/*	$NetBSD: netif.c,v 1.21 2007/11/24 13:20:56 isaki Exp $	*/
+/*	$NetBSD: netif.c,v 1.25 2013/10/20 17:16:57 christos Exp $	*/
 
 /*
  * Copyright (c) 1993 Adam Glass
@@ -74,7 +74,7 @@ netif_init(void)
 	}
 }
 
-int	netif_match __P((struct netif *, void *));
+int	netif_match(struct netif *, void *);
 
 int
 netif_match(struct netif *nif, void *machdep_hint)
@@ -92,7 +92,7 @@ netif_match(struct netif *nif, void *machdep_hint)
 struct netif *
 netif_select(void *machdep_hint)
 {
-	int d, u, unit_done, s;
+	int d, u, s;
 	struct netif_driver *drv;
 	struct netif cur_if;
 	static struct netif best_if;
@@ -113,7 +113,6 @@ netif_select(void *machdep_hint)
 
 		for (u = 0; u < drv->netif_nifs; u++) {
 			cur_if.nif_unit = u;
-			unit_done = 0;
 
 #ifdef NETIF_DEBUG
 			if (netif_debug)
@@ -192,7 +191,7 @@ netif_attach(struct netif *nif, struct iodesc *desc, void *machdep_hint)
 		    nif->nif_unit);
 #endif
 	drv->netif_init(desc, machdep_hint);
-	bzero(drv->netif_ifs[nif->nif_unit].dif_stats,
+	(void)memset(drv->netif_ifs[nif->nif_unit].dif_stats, 0,
 	    sizeof(struct netif_stats));
 }
 
@@ -214,7 +213,7 @@ netif_detach(struct netif *nif)
 }
 
 ssize_t
-netif_get(struct iodesc *desc, void *pkt, size_t len, time_t timo)
+netif_get(struct iodesc *desc, void *pkt, size_t len, saseconds_t timo)
 {
 	struct netif *nif = desc->io_netif;
 	struct netif_driver *drv = nif->nif_driver;
@@ -290,7 +289,7 @@ netif_open(void *machdep_hint)
 	return -1;
 
 fnd:
-	bzero(s, sizeof(*s));
+	(void)memset(s, 0, sizeof(*s));
 	netif_init();
 	nif = netif_select(machdep_hint);
 	if (!nif)

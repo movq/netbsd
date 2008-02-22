@@ -1,4 +1,4 @@
-/*	$NetBSD: bufq_impl.h,v 1.5 2006/02/16 20:17:20 perry Exp $	*/
+/*	$NetBSD: bufq_impl.h,v 1.10 2016/11/16 00:46:46 pgoyette Exp $	*/
 /*	NetBSD: bufq.h,v 1.3 2005/03/31 11:28:53 yamt Exp	*/
 /*	NetBSD: buf.h,v 1.75 2004/09/18 16:40:11 yamt Exp 	*/
 
@@ -18,13 +18,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -87,13 +80,15 @@ struct bufq_strat;
 struct bufq_state {
 	void (*bq_put)(struct bufq_state *, struct buf *);
 	struct buf *(*bq_get)(struct bufq_state *, int);
+	struct buf *(*bq_cancel)(struct bufq_state *, struct buf *);
+	void (*bq_fini)(struct bufq_state *);
 	void *bq_private;
 	int bq_flags;			/* Flags from bufq_alloc() */
-	const struct bufq_strat *bq_strat;
+	struct bufq_strat *bq_strat;
 };
 
 static __inline void *bufq_private(const struct bufq_state *) __unused;
-static __inline int buf_inorder(const struct buf *, const struct buf *, int)
+static __inline bool buf_inorder(const struct buf *, const struct buf *, int)
     __unused;
 
 #include <sys/null.h> /* for NULL */
@@ -107,11 +102,16 @@ bufq_private(const struct bufq_state *bufq)
 
 /*
  * Check if two buf's are in ascending order.
+ *
+ * this function consider a NULL buf is after any non-NULL buf.
+ *
+ * this function returns false if two are "same".
  */
-static __inline int
+static __inline bool
 buf_inorder(const struct buf *bp, const struct buf *bq, int sortby)
 {
 
+	KASSERT(bp != NULL || bq != NULL);
 	if (bp == NULL || bq == NULL)
 		return (bq == NULL);
 
@@ -128,12 +128,17 @@ struct bufq_strat {
 	const char *bs_name;
 	void (*bs_initfn)(struct bufq_state *);
 	int bs_prio;
+	int bs_refcnt;
+	SLIST_ENTRY(bufq_strat) bs_next;
 };
 
 #define	BUFQ_DEFINE(name, prio, initfn)			\
-static const struct bufq_strat bufq_strat_##name = {	\
+static struct bufq_strat bufq_strat_##name = {		\
 	.bs_name = #name,				\
-	.bs_prio = prio,					\
-	.bs_initfn = initfn				\
-};							\
-__link_set_add_rodata(bufq_strats, bufq_strat_##name)
+	.bs_prio = prio,				\
+	.bs_initfn = initfn,				\
+	.bs_refcnt = 0					\
+};
+
+int bufq_register(struct bufq_strat *);
+int bufq_unregister(struct bufq_strat *);

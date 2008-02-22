@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_tblout.c,v 1.11 2004/06/20 22:20:16 jmc Exp $	*/
+/*	$NetBSD: rpc_tblout.c,v 1.15 2016/01/23 02:33:09 dholland Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)rpc_tblout.c 1.4 89/02/22 (C) 1988 SMI";
 #else
-__RCSID("$NetBSD: rpc_tblout.c,v 1.11 2004/06/20 22:20:16 jmc Exp $");
+__RCSID("$NetBSD: rpc_tblout.c,v 1.15 2016/01/23 02:33:09 dholland Exp $");
 #endif
 #endif
 
@@ -66,13 +66,13 @@ static const char null_entry[] = "\t(char *(*)())0,\n\
  \t(xdrproc_t)xdr_void,\t\t0,\n";
 
 static const char tbl_nproc[] =
-    "u_int %s_nproc =\n\t(u_int)(sizeof(%s_table)/sizeof(%s_table[0]));\n\n";
+    "unsigned int %s_nproc =\n\t(unsigned int)(sizeof(%s_table)/sizeof(%s_table[0]));\n\n";
 
-static void write_table __P((definition *));
-static void printit __P((char *, char *));
+static void write_table(definition *);
+static void printit(const char *, const char *);
 
 void
-write_tables()
+write_tables(void)
 {
 	list   *l;
 	definition *def;
@@ -87,8 +87,7 @@ write_tables()
 }
 
 static void
-write_table(def)
-	definition *def;
+write_table(definition *def)
 {
 	version_list *vp;
 	proc_list *proc;
@@ -140,7 +139,7 @@ write_table(def)
 
 			/* argument info */
 			if (proc->arg_num > 1)
-				printit((char *) NULL, proc->args.argname);
+				printit(NULL, proc->args.argname);
 			else
 				/* do we have to do something special for
 				 * newstyle */
@@ -157,9 +156,7 @@ write_table(def)
 }
 
 static void
-printit(prefix, type)
-	char   *prefix;
-	char   *type;
+printit(const char *prefix, const char *type)
 {
 	int     len;
 	int     tabs;
@@ -175,7 +172,7 @@ printit(prefix, type)
 	if (streq(type, "void")) {
 		f_print(fout, "0");
 	} else {
-		f_print(fout, "(u_int)sizeof(");
+		f_print(fout, "(unsigned int)sizeof(");
 		/* XXX: should "follow" be 1 ??? */
 		ptype(prefix, type, 0);
 		f_print(fout, ")");

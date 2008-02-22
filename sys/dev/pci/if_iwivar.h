@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwivar.h,v 1.15 2007/12/09 20:28:09 jmcneill Exp $ */
+/*	$NetBSD: if_iwivar.h,v 1.19 2017/02/02 10:05:35 nonaka Exp $ */
 
 /*-
  * Copyright (c) 2004, 2005
@@ -26,6 +26,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include <sys/ioccom.h>
 
 struct iwi_firmware {
 	void	*boot;
@@ -123,6 +125,7 @@ struct iwi_softc {
 	struct iwi_firmware	fw;
 	const char		*sc_fwname;
 	char			*sc_blob;
+	size_t			sc_blobsize;
 
 	uint32_t		flags;
 #define IWI_FLAG_FW_CACHED	(1 << 0)
@@ -143,6 +146,7 @@ struct iwi_softc {
 	pci_chipset_tag_t	sc_pct;
 	pcitag_t		sc_pcitag;
 	bus_size_t		sc_sz;
+	void			*sc_soft_ih;
 
 	struct sysctllog	*sc_sysctllog;
 
@@ -153,7 +157,6 @@ struct iwi_softc {
 
 	int			sc_tx_timer;
 
-#if NBPFILTER > 0
 	struct bpf_if		*sc_drvbpf;
 
 	union {
@@ -169,7 +172,6 @@ struct iwi_softc {
 	} sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int			sc_txtap_len;
-#endif
 };
 
 #define	sc_if	sc_ec.ec_if

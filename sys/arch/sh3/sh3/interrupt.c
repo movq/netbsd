@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupt.c,v 1.23 2008/01/07 04:43:54 uwe Exp $	*/
+/*	$NetBSD: interrupt.c,v 1.29 2010/12/20 00:25:43 matt Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.23 2008/01/07 04:43:54 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.29 2010/12/20 00:25:43 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/intr.h>
 #include <sys/cpu.h>
-
-#include <uvm/uvm_extern.h>	/* uvmexp.intrs */
 
 #include <sh3/exception.h>
 #include <sh3/clock.h>
@@ -83,6 +74,7 @@ intc_init(void)
 #ifdef SH3
 	case CPU_PRODUCT_7709:
 	case CPU_PRODUCT_7709A:
+	case CPU_PRODUCT_7706:
 		_reg_write_2(SH7709_IPRC, 0);
 		_reg_write_2(SH7709_IPRD, 0);
 		_reg_write_2(SH7709_IPRE, 0);
@@ -175,6 +167,8 @@ intc_intr_disable(int evtcode)
 	case SH4_INTEVT_PCIPWON:
 	case SH4_INTEVT_PCIPWDWN:
 	case SH4_INTEVT_PCIERR:
+	case SH4_INTEVT_TMU3:
+	case SH4_INTEVT_TMU4:
 		intpri_intr_disable(evtcode);
 		break;
 #endif
@@ -206,6 +200,8 @@ intc_intr_enable(int evtcode)
 	case SH4_INTEVT_PCIPWON:
 	case SH4_INTEVT_PCIPWDWN:
 	case SH4_INTEVT_PCIERR:
+	case SH4_INTEVT_TMU3:
+	case SH4_INTEVT_TMU4:
 		intpri_intr_enable(evtcode);
 		break;
 #endif
@@ -218,7 +214,7 @@ intc_intr_enable(int evtcode)
  * int intc_intr_priority(int evtcode, int level)
  *	Setup interrupt priority register.
  *	SH7708, SH7708S, SH7708R, SH7750, SH7750S ... evtcode is INTEVT
- *	SH7709, SH7709A				  ... evtcode is INTEVT2
+ *	SH7709, SH7709A, SH7706			  ... evtcode is INTEVT2
  */
 static void
 intc_intr_priority(int evtcode, int level)
@@ -394,7 +390,9 @@ intc_unknown_intr(void *arg)
 {
 
 	printf("INTEVT=0x%x", _reg_read_4(SH_(INTEVT)));
-	if (cpu_product == CPU_PRODUCT_7709 || cpu_product == CPU_PRODUCT_7709A)
+	if (cpu_product == CPU_PRODUCT_7709 ||
+	    cpu_product == CPU_PRODUCT_7709A ||
+	    cpu_product == CPU_PRODUCT_7706)
 		printf(" INTEVT2=0x%x", _reg_read_4(SH7709_INTEVT2));
 	printf("\n");
 
@@ -562,80 +560,9 @@ intpri_intr_disable(int evtcode)
 }
 #endif /* SH4 */
 
-#ifdef __HAVE_FAST_SOFTINTS
-void
-softintr_init(void)
-{
-
-	/*
-	 * This runs at the lowest soft priority, so that when splx() sets
-	 * a higher priority it blocks all soft interrupts.  Effectively, we
-	 * have only a single soft interrupt level this way.
-	 */
-	intc_intr_establish(SH_INTEVT_TMU1_TUNI1, IST_LEVEL, IPL_SOFT,
-	    tmu1_intr, NULL);
-}
-
-void
-softintr_dispatch(int ipl)
-{
-
-
-	s = _cpu_intr_suspend();
-	/* XXX dispatch */
-	_cpu_intr_resume(s);
-}
-
-/*
- * Software interrupt is simulated with TMU one-shot timer.
- */
-static volatile u_int softpend;
-
-
-/*
- * Called by softintr_schedule() with interrupts blocked.
- */
-void
-setsoft(int ipl)
-{
-
-	softpend |= (1 << ipl);
-	_reg_bclr_1(SH_(TSTR), TSTR_STR1);
-	_reg_write_4(SH_(TCNT1), 0);
-	_reg_bset_1(SH_(TSTR), TSTR_STR1);
-}
-
-static int
-tmu1_intr(void *arg)
-{
-	u_int pend;
-	int s;
-
-	s = splhigh();
-	pend = softpend;
-	softpend = 0;
-	splx(s);
-
-	_reg_bclr_1(SH_(TSTR), TSTR_STR1);
-	_reg_bclr_2(SH_(TCR1), TCR_UNF);
-
-	if (pend & (1 << IPL_SOFTSERIAL))
-		softintr_dispatch(IPL_SOFTSERIAL);
-	if (pend & (1 << IPL_SOFTNET))
-		softintr_dispatch(IPL_SOFTNET);
-	if (pend & (1 << IPL_SOFTCLOCK))
-		softintr_dispatch(IPL_SOFTCLOCK);
-	if (pend & (1 << IPL_SOFT))
-		softintr_dispatch(IPL_SOFT);
-		
-	return (0);
-}
-#endif /* __HAVE_FAST_SOFTINTS */
-
 bool
 cpu_intr_p(void)
 {
-	register vaddr_t sp __asm("r15");
 
-	return sp <= intsp;	/* are we on interrupt stack? */
+	return curcpu()->ci_idepth >= 0;
 }

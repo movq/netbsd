@@ -1,6 +1,6 @@
-.\" $NetBSD: pthread_getspecific.3,v 1.2 2003/06/08 06:44:31 thorpej Exp $
+.\" $NetBSD: pthread_getspecific.3,v 1.6 2017/10/22 16:37:24 abhinav Exp $
 .\"
-.\" Copyright (c) 2002 The NetBSD Foundation, Inc.
+.\" Copyright (c) 2002, 2010 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\" Redistribution and use in source and binary forms, with or without
 .\" modification, are permitted provided that the following conditions
@@ -10,9 +10,7 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
+.\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
 .\" TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -57,39 +55,51 @@
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_getspecific.3,v 1.11 2002/09/16 19:29:28 mini Exp $
 .\"
-.Dd January 30, 2003
+.Dd July 9, 2010
 .Dt PTHREAD_GETSPECIFIC 3
 .Os
 .Sh NAME
-.Nm pthread_getspecific
-.Nd get a thread-specific data value
+.Nm pthread_getspecific ,
+.Nm pthread_setspecific
+.Nd thread-specific data value
 .Sh LIBRARY
 .Lb libpthread
 .Sh SYNOPSIS
 .In pthread.h
 .Ft void *
 .Fn pthread_getspecific "pthread_key_t key"
+.Ft int
+.Fn pthread_setspecific "pthread_key_t key" "const void *value"
 .Sh DESCRIPTION
 The
 .Fn pthread_getspecific
 function returns the value currently bound to the specified
 .Fa key
 on behalf of the calling thread.
+Conversely, the
+.Fn pthread_setspecific
+function associates a thread-specific value with a
+.Fa key
+obtained via a previous call to
+.Xr pthread_key_create 3 .
+Different threads have different values bound to each key.
+These values are typically pointers to blocks of dynamically
+allocated memory that have been reserved for use by the calling thread.
 .Pp
-The effect of calling
-.Fn pthread_getspecific
-with a
+Undefined behavior may follow if either function is called with a
 .Fa key
 value not obtained from
-.Fn pthread_key_create
-or after
+.Xr pthread_key_create 3 ,
+or if the call is made after
 .Fa key
 has been deleted with
-.Fn pthread_key_delete
-is undefined.
-.Pp
-.Fn pthread_getspecific
-may be called from a thread-specific data destructor function.
+.Xr pthread_key_delete 3 .
+It is possible to call either function from
+a thread-specific data destructor function.
+Note however that this is not well defined for the
+.Fn pthread_setspecific
+function;
+lost storage or infinite loops may occur.
 .Sh RETURN VALUES
 The
 .Fn pthread_getspecific
@@ -97,14 +107,18 @@ function will return the thread-specific data value associated with the given
 .Fa key .
 If no thread-specific data value is associated with
 .Fa key ,
-then the value NULL is returned.
+then the value
+.Dv NULL
+is returned.
+If successful, the
+.Fn pthread_setspecific
+function will return zero.
+Otherwise an error number will be returned to
+indicate the error.
 .Sh ERRORS
-None.
+No errors are defined for either function.
 .Sh SEE ALSO
-.Xr pthread_key_create 3 ,
-.Xr pthread_key_delete 3 ,
-.Xr pthread_setspecific 3
+.Xr pthread_key_create 3
 .Sh STANDARDS
-.Fn pthread_getspecific
-conforms to
-.St -p1003.1-96 .
+These functions conform to
+.St -p1003.1-2001 .

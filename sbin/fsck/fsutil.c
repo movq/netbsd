@@ -1,4 +1,4 @@
-/*	$NetBSD: fsutil.c,v 1.16 2006/08/26 18:14:28 christos Exp $	*/
+/*	$NetBSD: fsutil.c,v 1.26 2015/06/21 04:01:40 dholland Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -31,8 +31,19 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsutil.c,v 1.16 2006/08/26 18:14:28 christos Exp $");
+__RCSID("$NetBSD: fsutil.c,v 1.26 2015/06/21 04:01:40 dholland Exp $");
 #endif /* not lint */
+
+/*
+ * used by sbin/fsck
+ * used by sbin/fsck_ext2fs
+ * used by sbin/fsck_ffs
+ * used by sbin/fsck_lfs
+ * used by sbin/fsck_msdos
+ * used by sbin/fsck_v7fs
+ * used by sbin/fsdb
+ * used by usr.sbin/quotacheck
+ */
 
 #include <sys/param.h>
 
@@ -42,12 +53,18 @@ __RCSID("$NetBSD: fsutil.c,v 1.16 2006/08/26 18:14:28 christos Exp $");
 #include <stdarg.h>
 #include <errno.h>
 #include <fstab.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <err.h>
+#include <util.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 
 #include "fsutil.h"
+#include "exitvalues.h"
+
+volatile sig_atomic_t returntosingle;
 
 static const char *dev = NULL;
 static int hot = 0;
@@ -86,7 +103,8 @@ errexit(const char *fmt, ...)
 	va_start(ap, fmt);
 	(void) vfprintf(stderr, fmt, ap);
 	va_end(ap);
-	exit(8);
+	(void)fprintf(stderr, "\n");
+	exit(FSCK_EXIT_CHECK_FAILED);
 }
 
 void
@@ -114,7 +132,7 @@ vmsg(int fatal, const char *fmt, va_list ap)
 		(void) printf(
 		    "%s: UNEXPECTED INCONSISTENCY; RUN %s MANUALLY.\n",
 		    dev, getprogname());
-		exit(8);
+		exit(FSCK_EXIT_CHECK_FAILED);
 	}
 }
 
@@ -158,81 +176,68 @@ panic(const char *fmt, ...)
 	va_start(ap, fmt);
 	vmsg(1, fmt, ap);
 	va_end(ap);
-	exit(8);
-}
-
-const char *
-unrawname(const char *name)
-{
-	static char unrawbuf[MAXPATHLEN];
-	const char *dp;
-	struct stat stb;
-
-	if ((dp = strrchr(name, '/')) == 0)
-		return (name);
-	if (stat(name, &stb) < 0)
-		return (name);
-	if (!S_ISCHR(stb.st_mode))
-		return (name);
-	if (dp[1] != 'r')
-		return (name);
-	(void)snprintf(unrawbuf, sizeof(unrawbuf), "%.*s/%s",
-	    (int)(dp - name), name, dp + 2);
-	return (unrawbuf);
-}
-
-const char *
-rawname(const char *name)
-{
-	static char rawbuf[MAXPATHLEN];
-	const char *dp;
-
-	if ((dp = strrchr(name, '/')) == 0)
-		return (0);
-	(void)snprintf(rawbuf, sizeof(rawbuf), "%.*s/r%s",
-	    (int)(dp - name), name, dp + 1);
-	return (rawbuf);
+	exit(FSCK_EXIT_CHECK_FAILED);
 }
 
 const char *
 blockcheck(const char *origname)
 {
 	struct stat stslash, stblock, stchar;
-	const char *newname, *raw;
+	const char *newname, *raw, *cooked;
 	struct fstab *fsp;
 	int retried = 0;
+	ssize_t len;
+	char cbuf[MAXPATHLEN];
+	static char buf[MAXPATHLEN];
 
 	hot = 0;
 	if (stat("/", &stslash) < 0) {
 		perr("Can't stat `/'");
 		return (origname);
 	}
-	newname = origname;
+	len = readlink(origname, cbuf, sizeof(cbuf)-1);
+	if (len == -1) {
+		newname = origname;
+	} else {
+		cbuf[len] = '\0';
+		newname = cbuf;
+	}
 retry:
 	if (stat(newname, &stblock) < 0) {
 		perr("Can't stat `%s'", newname);
-		return (origname);
+		return origname;
 	}
 	if (S_ISBLK(stblock.st_mode)) {
 		if (stslash.st_dev == stblock.st_rdev)
 			hot++;
-		raw = rawname(newname);
+		raw = getdiskrawname(buf, sizeof(buf), newname);
+		if (raw == NULL) {
+			perr("Can't convert to raw `%s'", newname);
+			return origname;
+		}
 		if (stat(raw, &stchar) < 0) {
 			perr("Can't stat `%s'", raw);
-			return (origname);
+			return origname;
 		}
 		if (S_ISCHR(stchar.st_mode)) {
-			return (raw);
+			return raw;
 		} else {
-			printf("%s is not a character device\n", raw);
-			return (origname);
+			perr("%s is not a character device\n", raw);
+			return origname;
 		}
 	} else if (S_ISCHR(stblock.st_mode) && !retried) {
-		newname = unrawname(newname);
+		cooked = getdiskcookedname(cbuf, sizeof(cbuf), newname);
+		if (cooked == NULL) {
+			perr("Can't convert to cooked `%s'", newname);
+			return origname;
+		} else
+			newname = cooked;
 		retried++;
 		goto retry;
 	} else if ((fsp = getfsfile(newname)) != 0 && !retried) {
-		newname = fsp->fs_spec;
+		newname = getfsspecname(cbuf, sizeof(cbuf), fsp->fs_spec);
+		if (newname == NULL)
+			perr("%s", buf);
 		retried++;
 		goto retry;
 	}
@@ -240,5 +245,58 @@ retry:
 	 * Not a block or character device, just return name and
 	 * let the user decide whether to use it.
 	 */
-	return (origname);
+	return origname;
+}
+
+const char *
+print_mtime(time_t t)
+{
+	static char b[128];
+	char *p = ctime(&t);
+	if (p != NULL)
+		(void)snprintf(b, sizeof(b), "%12.12s %4.4s ", &p[4], &p[20]);
+	else
+		(void)snprintf(b, sizeof(b), "%lld ", (long long)t);
+	return b;
+}
+
+
+void
+catch(int n)
+{
+	if (ckfinish) (*ckfinish)(0);
+	_exit(FSCK_EXIT_SIGNALLED);
+}
+
+/*
+ * When preening, allow a single quit to signal
+ * a special exit after filesystem checks complete
+ * so that reboot sequence may be interrupted.
+ */
+void
+catchquit(int n)
+{
+	static const char msg[] =
+	    "returning to single-user after filesystem check\n";
+	int serrno = errno;
+
+	(void)write(STDOUT_FILENO, msg, sizeof(msg) - 1);
+	returntosingle = 1;
+	(void)signal(SIGQUIT, SIG_DFL);
+	errno = serrno;
+}
+
+/*
+ * Ignore a single quit signal; wait and flush just in case.
+ * Used by child processes in preen.
+ */
+void
+voidquit(int n)
+{
+	int serrno = errno;
+
+	sleep(1);
+	(void)signal(SIGQUIT, SIG_IGN);
+	(void)signal(SIGQUIT, SIG_DFL);
+	errno = serrno;
 }

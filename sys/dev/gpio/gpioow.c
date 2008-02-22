@@ -1,4 +1,4 @@
-/* $NetBSD: gpioow.c,v 1.3 2006/11/16 01:32:50 christos Exp $ */
+/* $NetBSD: gpioow.c,v 1.15 2017/10/28 04:53:56 riastradh Exp $ */
 /*	$OpenBSD: gpioow.c,v 1.1 2006/03/04 16:27:03 grange Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpioow.c,v 1.3 2006/11/16 01:32:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpioow.c,v 1.15 2017/10/28 04:53:56 riastradh Exp $");
 
 /*
  * 1-Wire bus bit-banging through GPIO pin.
@@ -28,32 +28,33 @@ __KERNEL_RCSID(0, "$NetBSD: gpioow.c,v 1.3 2006/11/16 01:32:50 christos Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/gpio.h>
+#include <sys/module.h>
 
 #include <dev/gpio/gpiovar.h>
 
 #include <dev/onewire/onewirevar.h>
 
+#include "ioconf.h"
+
 #define GPIOOW_NPINS		1
 #define GPIOOW_PIN_DATA		0
 
 struct gpioow_softc {
-	struct device		sc_dev;
-
 	void *			sc_gpio;
 	struct gpio_pinmap	sc_map;
-	int			__map[GPIOOW_NPINS];
+	int			_map[GPIOOW_NPINS];
 
 	struct onewire_bus	sc_ow_bus;
-	struct device *		sc_ow_dev;
+	device_t		sc_ow_dev;
 
 	int			sc_data;
 	int			sc_dying;
 };
 
-int	gpioow_match(struct device *, struct cfdata *, void *);
-void	gpioow_attach(struct device *, struct device *, void *);
-int	gpioow_detach(struct device *, int);
-int	gpioow_activate(struct device *, enum devact);
+int	gpioow_match(device_t, cfdata_t, void *);
+void	gpioow_attach(device_t, device_t, void *);
+int	gpioow_detach(device_t, int);
+int	gpioow_activate(device_t, enum devact);
 
 int	gpioow_ow_reset(void *);
 int	gpioow_ow_bit(void *, int);
@@ -63,10 +64,8 @@ void	gpioow_bb_tx(void *);
 int	gpioow_bb_get(void *);
 void	gpioow_bb_set(void *, int);
 
-CFATTACH_DECL(gpioow, sizeof(struct gpioow_softc),
+CFATTACH_DECL_NEW(gpioow, sizeof(struct gpioow_softc),
 	gpioow_match, gpioow_attach, gpioow_detach, gpioow_activate);
-
-extern struct cfdriver gpioow_cd;
 
 static const struct onewire_bbops gpioow_bbops = {
 	gpioow_bb_rx,
@@ -76,79 +75,89 @@ static const struct onewire_bbops gpioow_bbops = {
 };
 
 int
-gpioow_match(struct device *parent, struct cfdata *cf,
-    void *aux)
+gpioow_match(device_t parent, cfdata_t cf, void *aux)
 {
+	struct gpio_attach_args *ga = aux;
+
+	if (strcmp(ga->ga_dvname, cf->cf_name))
+		return 0;
+
+	if (ga->ga_offset == -1)
+		return 0;
+
+	/* Check that we have enough pins */
+	if (gpio_npins(ga->ga_mask) != GPIOOW_NPINS) {
+		aprint_debug("%s: invalid pin mask 0x%02x\n", cf->cf_name,
+		    ga->ga_mask);
+		return 0;
+	}
 	return 1;
 }
 
 void
-gpioow_attach(struct device *parent, struct device *self, void *aux)
+gpioow_attach(device_t parent, device_t self, void *aux)
 {
 	struct gpioow_softc *sc = device_private(self);
 	struct gpio_attach_args *ga = aux;
 	struct onewirebus_attach_args oba;
 	int caps;
 
-	/* Check that we have enough pins */
-	if (gpio_npins(ga->ga_mask) != GPIOOW_NPINS) {
-		printf(": invalid pin mask\n");
-		return;
-	}
-
 	/* Map pins */
 	sc->sc_gpio = ga->ga_gpio;
-	sc->sc_map.pm_map = sc->__map;
+	sc->sc_map.pm_map = sc->_map;
 	if (gpio_pin_map(sc->sc_gpio, ga->ga_offset, ga->ga_mask,
 	    &sc->sc_map)) {
-		printf(": can't map pins\n");
-		return;
+		aprint_error(": can't map pins\n");
+		goto finish;
 	}
 
 	/* Configure data pin */
 	caps = gpio_pin_caps(sc->sc_gpio, &sc->sc_map, GPIOOW_PIN_DATA);
 	if (!(caps & GPIO_PIN_OUTPUT)) {
-		printf(": data pin is unable to drive output\n");
-		goto fail;
+		aprint_error(": data pin is unable to drive output\n");
+		gpio_pin_unmap(sc->sc_gpio, &sc->sc_map);
+		goto finish;
 	}
 	if (!(caps & GPIO_PIN_INPUT)) {
-		printf(": data pin is unable to read input\n");
-		goto fail;
+		aprint_error(": data pin is unable to read input\n");
+		gpio_pin_unmap(sc->sc_gpio, &sc->sc_map);
+		goto finish;
 	}
-	printf(": DATA[%d]", sc->sc_map.pm_map[GPIOOW_PIN_DATA]);
+	aprint_normal(": DATA[%d]", sc->sc_map.pm_map[GPIOOW_PIN_DATA]);
 	sc->sc_data = GPIO_PIN_OUTPUT;
 	if (caps & GPIO_PIN_OPENDRAIN) {
-		printf(" open-drain");
+		aprint_normal(" open-drain");
 		sc->sc_data |= GPIO_PIN_OPENDRAIN;
 	} else if ((caps & GPIO_PIN_PUSHPULL) && (caps & GPIO_PIN_TRISTATE)) {
-		printf(" push-pull tri-state");
+		aprint_normal(" push-pull tri-state");
 		sc->sc_data |= GPIO_PIN_PUSHPULL;
 	}
 	if (caps & GPIO_PIN_PULLUP) {
-		printf(" pull-up");
+		aprint_normal(" pull-up");
 		sc->sc_data |= GPIO_PIN_PULLUP;
 	}
 	gpio_pin_ctl(sc->sc_gpio, &sc->sc_map, GPIOOW_PIN_DATA, sc->sc_data);
 
-	printf("\n");
+	aprint_normal("\n");
 
 	/* Attach 1-Wire bus */
 	sc->sc_ow_bus.bus_cookie = sc;
 	sc->sc_ow_bus.bus_reset = gpioow_ow_reset;
 	sc->sc_ow_bus.bus_bit = gpioow_ow_bit;
 
-	bzero(&oba, sizeof(oba));
+	memset(&oba, 0, sizeof(oba));
 	oba.oba_bus = &sc->sc_ow_bus;
 	sc->sc_ow_dev = config_found(self, &oba, onewirebus_print);
 
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error("%s: could not establish power handler\n",
+		    device_xname(self));
+finish:
 	return;
-
-fail:
-	gpio_pin_unmap(sc->sc_gpio, &sc->sc_map);
 }
 
 int
-gpioow_detach(struct device *self, int flags)
+gpioow_detach(device_t self, int flags)
 {
 	struct gpioow_softc *sc = device_private(self);
 	int rv = 0;
@@ -156,26 +165,25 @@ gpioow_detach(struct device *self, int flags)
 	if (sc->sc_ow_dev != NULL)
 		rv = config_detach(sc->sc_ow_dev, flags);
 
-	return (rv);
+	if (!rv) {
+		gpio_pin_unmap(sc->sc_gpio, &sc->sc_map);
+		pmf_device_deregister(self);
+	}
+	return rv;
 }
 
 int
-gpioow_activate(struct device *self, enum devact act)
+gpioow_activate(device_t self, enum devact act)
 {
 	struct gpioow_softc *sc = device_private(self);
-	int rv = 0;
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		if (sc->sc_ow_dev != NULL)
-			rv = config_deactivate(sc->sc_ow_dev);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-
-	return (rv);
 }
 
 int
@@ -238,4 +246,38 @@ gpioow_bb_set(void *arg, int value)
 
 	gpio_pin_write(sc->sc_gpio, &sc->sc_map, GPIOOW_PIN_DATA,
 	    value ? GPIO_PIN_HIGH : GPIO_PIN_LOW);
+}
+
+MODULE(MODULE_CLASS_DRIVER, gpioow, "gpio,onewire");
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+gpioow_modcmd(modcmd_t cmd, void *opaque)
+{
+	int error;
+
+	error = 0;
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+#ifdef _MODULE
+		error = config_init_component(cfdriver_ioconf_gpioow,
+		    cfattach_ioconf_gpioow, cfdata_ioconf_gpioow);
+		if (error)
+			aprint_error("%s: unable to init component\n",
+			    gpioow_cd.cd_name);
+#endif
+		break;
+	case MODULE_CMD_FINI:
+#ifdef _MODULE
+		config_fini_component(cfdriver_ioconf_gpioow,
+		    cfattach_ioconf_gpioow, cfdata_ioconf_gpioow);
+#endif
+		break;
+	default:
+		error = ENOTTY;
+	}
+	return error;
 }

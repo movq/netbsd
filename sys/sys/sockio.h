@@ -1,4 +1,4 @@
-/*	$NetBSD: sockio.h,v 1.26 2007/05/29 21:32:31 christos Exp $	*/
+/*	$NetBSD: sockio.h,v 1.33 2015/05/02 14:41:32 roy Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
@@ -72,6 +72,7 @@
 
 #define	SIOCAIFADDR	 _IOW('i', 26, struct ifaliasreq)/* add/chg IF alias */
 #define	SIOCGIFALIAS	_IOWR('i', 27, struct ifaliasreq)/* get IF alias */
+#define	SIOCGIFAFLAG_IN _IOWR('i', 39, struct ifreq)	 /* get addr flags */
 
 #define	SIOCALIFADDR	 _IOW('i', 28, struct if_laddrreq) /* add IF addr */
 #define	SIOCGLIFADDR	_IOWR('i', 29, struct if_laddrreq) /* get IF addr */
@@ -99,12 +100,11 @@
 #define	SIOCSLIFPHYADDR	 _IOW('i', 74, struct if_laddrreq) /* set gif addrs */
 #define	SIOCGLIFPHYADDR	_IOWR('i', 75, struct if_laddrreq) /* get gif addrs */
 
-#define	SIOCZIFDATA	_IOWR('i', 129, struct ifdatareq) /* get if_data then
-							     zero ctrs*/
-#define	SIOCGIFDATA	_IOWR('i', 128, struct ifdatareq) /* get if_data */
-
 #define	SIOCSIFMTU	 _IOW('i', 127, struct ifreq)	/* set ifnet mtu */
 #define	SIOCGIFMTU	_IOWR('i', 126, struct ifreq)	/* get ifnet mtu */
+
+/* 128 was SIOCGIFDATA */
+/* 129 was SIOCZIFDATA */
 
 /* 125 was SIOCSIFASYNCMAP */
 /* 124 was SIOCGIFASYNCMAP */
@@ -124,5 +124,22 @@
 
 #define	SIOCSVH		_IOWR('i', 130, struct ifreq)	/* set carp param */
 #define	SIOCGVH		_IOWR('i', 131, struct ifreq)	/* get carp param */
+#define	SIOCINITIFADDR	_IOWR('i', 132, struct ifaddr)
+
+#define	SIOCGIFDATA	_IOWR('i', 133, struct ifdatareq) /* get if_data */
+#define	SIOCZIFDATA	_IOWR('i', 134, struct ifdatareq) /* get if_data then
+							     zero ctrs*/
+
+#define SIOCGLINKSTR	_IOWR('i', 135, struct ifdrv)
+#define SIOCSLINKSTR	 _IOW('i', 136, struct ifdrv)
+
+/* 137 is SIOCGATHSTATS in athioctl.h */
+/* 138 is SIOCGATHDIAG in athioctl.h */
+
+#define	SIOCGETHERCAP	_IOWR('i', 139, struct eccapreq) /* get ethercap */
+#define SIOCGIFINDEX  _IOWR('i', 140, struct ifreq)   /* get ifnet index */
+
+#define	SIOCSETPFSYNC	_IOW('i', 247, struct ifreq)	
+#define	SIOCGETPFSYNC	_IOWR('i', 248, struct ifreq)
 
 #endif /* !_SYS_SOCKIO_H_ */

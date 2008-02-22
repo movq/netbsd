@@ -1,4 +1,4 @@
-/*	$NetBSD: printw.c,v 1.20 2007/01/21 13:25:36 jdc Exp $	*/
+/*	$NetBSD: printw.c,v 1.24 2017/01/06 13:53:18 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)printw.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: printw.c,v 1.20 2007/01/21 13:25:36 jdc Exp $");
+__RCSID("$NetBSD: printw.c,v 1.24 2017/01/06 13:53:18 roy Exp $");
 #endif
 #endif				/* not lint */
 
@@ -47,8 +47,6 @@ __RCSID("$NetBSD: printw.c,v 1.20 2007/01/21 13:25:36 jdc Exp $");
  * printw and friends.
  */
 
-static int __winwrite __P((void *, const char *, int));
-
 /*
  * printw --
  *	Printf on the standard screen.
@@ -60,9 +58,9 @@ printw(const char *fmt,...)
 	int     ret;
 
 	va_start(ap, fmt);
-	ret = vwprintw(stdscr, fmt, ap);
+	ret = vw_printw(stdscr, fmt, ap);
 	va_end(ap);
-	return (ret);
+	return ret;
 }
 /*
  * wprintw --
@@ -75,9 +73,9 @@ wprintw(WINDOW *win, const char *fmt,...)
 	int     ret;
 
 	va_start(ap, fmt);
-	ret = vwprintw(win, fmt, ap);
+	ret = vw_printw(win, fmt, ap);
 	va_end(ap);
-	return (ret);
+	return ret;
 }
 /*
  * mvprintw, mvwprintw --
@@ -91,11 +89,11 @@ mvprintw(int y, int x, const char *fmt,...)
 	int     ret;
 
 	if (move(y, x) != OK)
-		return (ERR);
+		return ERR;
 	va_start(ap, fmt);
-	ret = vwprintw(stdscr, fmt, ap);
+	ret = vw_printw(stdscr, fmt, ap);
 	va_end(ap);
-	return (ret);
+	return ret;
 }
 
 int
@@ -105,46 +103,47 @@ mvwprintw(WINDOW * win, int y, int x, const char *fmt,...)
 	int     ret;
 
 	if (wmove(win, y, x) != OK)
-		return (ERR);
+		return ERR;
 
 	va_start(ap, fmt);
-	ret = vwprintw(win, fmt, ap);
+	ret = vw_printw(win, fmt, ap);
 	va_end(ap);
-	return (ret);
+	return ret;
 }
 /*
  * Internal write-buffer-to-window function.
  */
-static int
-__winwrite(cookie, buf, n)
-	void   *cookie;
-	const char *buf;
-	int     n;
+static ssize_t
+winwrite(void   *cookie, const void *vbuf, size_t n)
 {
 	WINDOW *win;
-	int     c;
+	size_t     c;
+	const char *buf = vbuf;
 
-	for (c = n, win = cookie; --c >= 0;)
-	{
+	for (c = 0, win = cookie; c < n; c++) {
 #ifdef DEBUG
 		__CTRACE(__CTRACE_MISC, "__winwrite: %c\n", *buf);
 #endif
 		if (waddch(win, (chtype) (*buf++ & __CHARTEXT)) == ERR)
-			return (-1);
+			return -1;
 	}
-	return (n);
+	return (ssize_t)n;
 }
 /*
- * vwprintw --
+ * vw_printw --
  *	This routine actually executes the printf and adds it to the window.
  */
 int
-vwprintw(WINDOW *win, const char *fmt, _BSD_VA_LIST_ ap)
+vw_printw(WINDOW *win, const char *fmt, va_list ap)
 {
-	FILE   *f;
-
-	if ((f = funopen(win, NULL, __winwrite, NULL, NULL)) == NULL)
-		return (ERR);
-	(void) vfprintf(f, fmt, ap);
-	return (fclose(f) ? ERR : OK);
+	if (win->fp == NULL) {
+		win->fp = funopen2(win, NULL, winwrite, NULL, NULL, NULL);
+		if (win->fp == NULL)
+			return ERR;
+	}
+	vfprintf(win->fp, fmt, ap);
+	fflush(win->fp);
+	return OK;
 }
+
+__strong_alias(vwprintw, vw_printw)

@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_busclock.c,v 1.4 2008/01/04 21:17:44 ad Exp $	*/
+/*	$NetBSD: intel_busclock.c,v 1.24 2015/07/02 05:11:50 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,18 +30,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_busclock.c,v 1.4 2008/01/04 21:17:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_busclock.c,v 1.24 2015/07/02 05:11:50 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/device.h>
 #include <sys/cpu.h>
 
 #include <machine/specialreg.h>
 #include <machine/pio.h>
-#include <machine/cpufunc.h>
 
 #include <x86/cpuvar.h>
 #include <x86/cpufunc.h>
+#include <x86/est.h>
 
 int
 via_get_bus_clock(struct cpu_info *ci)
@@ -79,17 +73,60 @@ via_get_bus_clock(struct cpu_info *ci)
 }
 
 int
+viac7_get_bus_clock(struct cpu_info *ci)
+{
+	uint64_t msr;
+	int mult;
+
+	msr = rdmsr(MSR_PERF_STATUS);
+	mult = (msr >> 8) & 0xff;
+	if (mult == 0)
+		return 0;
+
+	return ((ci->ci_data.cpu_cc_freq + 10000000) / 10000000 * 10000000) /
+		 mult / 10000;
+}
+
+int
 p3_get_bus_clock(struct cpu_info *ci)
 {
 	uint64_t msr;
 	int bus, bus_clock = 0;
+	uint32_t model;
 
-	switch (CPUID2MODEL(ci->ci_signature)) {
+	model = CPUID_TO_MODEL(ci->ci_signature);
+		
+	switch (model) {
 	case 0x9: /* Pentium M (130 nm, Banias) */
 		bus_clock = 10000;
 		break;
+	case 0xc: /* Core i7, Atom, model 1 */
+		/*
+		 * Newer CPUs will GP when attemping to access MSR_FSB_FREQ.
+		 * In the long-term, use ACPI instead of all this.
+		 */
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
+		bus = (msr >> 0) & 0x7;
+		switch (bus) {
+		case 1:
+			bus_clock = 13333;
+			break;
+		default:
+			aprint_debug("%s: unknown Atom FSB_FREQ "
+			    "value %d", device_xname(ci->ci_dev), bus);
+			goto print_msr;
+		}
+		break;
 	case 0xd: /* Pentium M (90 nm, Dothan) */
-		msr = rdmsr(MSR_FSB_FREQ);
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
 		bus = (msr >> 0) & 0x7;
 		switch (bus) {
 		case 0:
@@ -106,7 +143,12 @@ p3_get_bus_clock(struct cpu_info *ci)
 		break;
 	case 0xe: /* Core Duo/Solo */
 	case 0xf: /* Core Xeon */
-		msr = rdmsr(MSR_FSB_FREQ);
+	case 0x17: /* Xeon [35]000, Core 2 Quad [89]00 */
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
 		bus = (msr >> 0) & 0x7;
 		switch (bus) {
 		case 5:
@@ -126,6 +168,9 @@ p3_get_bus_clock(struct cpu_info *ci)
 			break;
 		case 4:
 			bus_clock = 33333;
+			break;
+		case 6:
+			bus_clock = 40000;
 			break;
 		default:
 			aprint_debug("%s: unknown Core FSB_FREQ value %d",
@@ -153,16 +198,123 @@ p3_get_bus_clock(struct cpu_info *ci)
 		case 2:
 			bus_clock = 10000;
 			break;
+		case 3:
+			bus_clock = 10666;
+			break;
 		default:
 			aprint_debug("%s: unknown i686 EBL_CR_POWERON "
 			    "value %d ", device_xname(ci->ci_dev), bus);
 			goto print_msr;
 		}
 		break;
+	case 0x1c: /* Atom */
+	case 0x26:
+	case 0x27:
+	case 0x35:
+	case 0x36:
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
+		bus = (msr >> 0) & 0x7;
+		switch (bus) {
+		case 7:
+			bus_clock =  8333;
+			break;
+		case 5:
+			bus_clock = 10000;
+			break;
+		case 1:
+			bus_clock = 13333;
+			break;
+		case 3:
+			bus_clock = 16667;
+			break;
+		default:
+			aprint_debug("%s: unknown Atom FSB_FREQ value %d",
+			    device_xname(ci->ci_dev), bus);
+			goto print_msr;
+		}
+		break;
+	case 0x37: /* Silvermont */
+	case 0x4a:
+	case 0x4d:
+	case 0x5a:
+	case 0x5d:
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
+		bus = (msr >> 0) & 0x7;
+		switch (bus) {
+		case 4:
+			bus_clock =  8000;
+			break;
+		case 0:
+			bus_clock =  8333;
+			break;
+		case 1:
+			bus_clock = 10000;
+			break;
+		case 2:
+			bus_clock = 13333;
+			break;
+		case 3:
+			bus_clock = 11667;
+			break;
+		default:
+			aprint_debug("%s: unknown Silvermont FSB_FREQ value %d",
+			    device_xname(ci->ci_dev), bus);
+			goto print_msr;
+		}
+		break;
+	case 0x4c: /* Airmont */
+		if (rdmsr_safe(MSR_FSB_FREQ, &msr) == EFAULT) {
+			aprint_debug_dev(ci->ci_dev,
+			    "unable to determine bus speed");
+			goto print_msr;
+		}
+		bus = (msr >> 0) & 0x0f;
+		switch (bus) {
+		case 0:
+			bus_clock =  8333;
+			break;
+		case 1:
+			bus_clock = 10000;
+			break;
+		case 2:
+			bus_clock = 13333;
+			break;
+		case 3:
+			bus_clock = 11666;
+			break;
+		case 4:
+			bus_clock =  8000;
+			break;
+		case 5:
+			bus_clock =  9333;
+			break;
+		case 6:
+			bus_clock =  9000;
+			break;
+		case 7:
+			bus_clock =  8888;
+			break;
+		case 8:
+			bus_clock =  8750;
+			break;
+		default:
+			aprint_debug("%s: unknown Airmont FSB_FREQ value %d",
+			    device_xname(ci->ci_dev), bus);
+			goto print_msr;
+		}
+		break;
 	default:
-		aprint_debug("%s: unknown i686 model %d, can't get bus clock",
+		aprint_debug("%s: unknown i686 model %02x, can't get bus clock",
 		    device_xname(ci->ci_dev),
-		    CPUID2MODEL(ci->ci_signature));
+		    CPUID_TO_MODEL(ci->ci_signature));
 print_msr:
 		/*
 		 * Show the EBL_CR_POWERON MSR, so we'll at least have
@@ -182,7 +334,7 @@ p4_get_bus_clock(struct cpu_info *ci)
 	int bus, bus_clock = 0;
 
 	msr = rdmsr(MSR_EBC_FREQUENCY_ID);
-	if (CPUID2MODEL(ci->ci_signature) < 2) {
+	if (CPUID_TO_MODEL(ci->ci_signature) < 2) {
 		bus = (msr >> 21) & 0x7;
 		switch (bus) {
 		case 0:
@@ -195,15 +347,15 @@ p4_get_bus_clock(struct cpu_info *ci)
 			aprint_debug("%s: unknown Pentium 4 (model %d) "
 			    "EBC_FREQUENCY_ID value %d\n",
 			    device_xname(ci->ci_dev),
-			    CPUID2MODEL(ci->ci_signature), bus);
+			    CPUID_TO_MODEL(ci->ci_signature), bus);
 			break;
 		}
 	} else {
 		bus = (msr >> 16) & 0x7;
 		switch (bus) {
 		case 0:
-			bus_clock = (CPUID2MODEL(ci->ci_signature) == 2) ?
-			    10000 : 26666;
+			bus_clock = (CPUID_TO_MODEL(ci->ci_signature) == 2) ?
+			    10000 : 26667;
 			break;
 		case 1:
 			bus_clock = 13333;
@@ -212,13 +364,16 @@ p4_get_bus_clock(struct cpu_info *ci)
 			bus_clock = 20000;
 			break;
 		case 3:
-			bus_clock = 16666;
+			bus_clock = 16667;
+			break;
+		case 4:
+			bus_clock = 33333;
 			break;
 		default:
 			aprint_debug("%s: unknown Pentium 4 (model %d) "
 			    "EBC_FREQUENCY_ID value %d\n",
 			    device_xname(ci->ci_dev),
-			    CPUID2MODEL(ci->ci_signature), bus);
+			    CPUID_TO_MODEL(ci->ci_signature), bus);
 			break;
 		}
 	}

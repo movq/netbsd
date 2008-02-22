@@ -22,16 +22,9 @@ device	sbbrz: pcibus
 attach	sbbrz at zbbus
 file	arch/mips/sibyte/pci/sbbrz.c		sbbrz
 file	arch/mips/sibyte/pci/sbbrz_pci.c	sbbrz
+file	arch/mips/sibyte/pci/sbbrz_bus_io.c	sbbrz
+file	arch/mips/sibyte/pci/sbbrz_bus_mem.c	sbbrz
 
-# Instantiated SB-1250 PCI Host bridge
-device	sbpcihb
-attach	sbpcihb at pci
-file	arch/mips/sibyte/pci/sbpcihb.c		sbpcihb
-
-# SB-1250 LDT Host bridge (acts like ppb)
-device	sbldthb: pcibus
-attach	sbldthb at pci
-file	arch/mips/sibyte/pci/sbldthb.c		sbldthb
 
 # sbscd children
 
@@ -73,4 +66,7 @@ attach	xirtc at smbus
 device	m41t81rtc
 attach	m41t81rtc at smbus
 
-file	arch/sbmips/sbmips/rtc.c		xirtc | m41t81rtc
+# XXX move to arch/mips/sibyte?
+file	arch/evbmips/sbmips/rtc.c		xirtc | m41t81rtc
+
+file	arch/mips/sibyte/dev/sbbuswatch.c

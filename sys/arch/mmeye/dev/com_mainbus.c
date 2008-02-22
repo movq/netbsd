@@ -1,4 +1,4 @@
-/*	$NetBSD: com_mainbus.c,v 1.7 2006/07/13 22:56:01 gdamore Exp $	*/
+/*	$NetBSD: com_mainbus.c,v 1.12 2011/07/19 15:17:20 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_mainbus.c,v 1.7 2006/07/13 22:56:01 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_mainbus.c,v 1.12 2011/07/19 15:17:20 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,8 +36,8 @@ __KERNEL_RCSID(0, "$NetBSD: com_mainbus.c,v 1.7 2006/07/13 22:56:01 gdamore Exp 
 #include <sys/termios.h>
 #include <dev/cons.h>
 #include <sys/conf.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/intr.h>
 #include <machine/autoconf.h>
 #include <machine/mmeye.h>
@@ -66,39 +59,50 @@ struct com_mainbus_softc {
 	struct	com_softc sc_com;	/* real "com" softc */
 };
 
-int com_mainbus_match(struct device *, struct cfdata *, void *);
-void com_mainbus_attach(struct device *, struct device *, void *);
+int com_mainbus_match(device_t, cfdata_t , void *);
+void com_mainbus_attach(device_t, device_t, void *);
 void comcnprobe(struct consdev *);
 void comcninit(struct consdev *);
 
-CFATTACH_DECL(com_mainbus, sizeof(struct com_mainbus_softc),
+CFATTACH_DECL_NEW(com_mainbus, sizeof(struct com_mainbus_softc),
     com_mainbus_match, com_mainbus_attach, NULL, NULL);
 
 int
-com_mainbus_match(struct device *parent, struct cfdata *match, void *aux)
+com_mainbus_match(device_t parent, cfdata_t match, void *aux)
 {
-	extern struct cfdriver com_cd;
 	struct mainbus_attach_args *ma = aux;
 
-	if (strcmp(ma->ma_name, com_cd.cd_name) == 0)
+	if (strcmp(ma->ma_name, match->cf_name) == 0)
 		return (1);
 
 	return (0);
 }
 
 void
-com_mainbus_attach(struct device *parent, struct device *self, void *aux)
+com_mainbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
-	struct com_mainbus_softc *sc = (void *)self;
+	struct com_mainbus_softc *sc = device_private(self);
 	struct com_softc *csc = &sc->sc_com;
+#if defined(SH7750R)
+	const bus_space_tag_t iot = SH3_BUS_SPACE_PCMCIA_IO8;
+#else
+	const bus_space_tag_t iot = 0;
+#endif
+	bus_space_handle_t ioh;
 
+	if (!com_is_console(iot, ma->ma_addr1, &ioh))
+		if (bus_space_map(iot, ma->ma_addr1, COM_NPORTS, 0, &ioh)) {
+			aprint_error(": can't map i/o space\n");
+			return;
+		}
+	csc->sc_dev = self;
 	csc->sc_frequency = COM_FREQ;
-	COM_INIT_REGS(csc->sc_regs, 0, ma->ma_addr1, 0);
+	COM_INIT_REGS(csc->sc_regs, iot, ioh, ma->ma_addr1);
 
 	/* sanity check */
-	if (!comprobe1(0, ma->ma_addr1)) {
-		printf(": device problem. don't attach.\n");
+	if (!comprobe1(iot, ioh)) {
+		aprint_error(": device problem. don't attach.\n");
 		return;
 	}
 
@@ -119,10 +123,14 @@ comcnprobe(struct consdev *cp)
 }
 
 void
-comcninit(cp)
-	struct consdev *cp;
+comcninit(struct consdev *cp)
 {
+#if defined(SH7750R)
+	const bus_space_tag_t iot = SH3_BUS_SPACE_PCMCIA_IO8;
+#else
+	const bus_space_tag_t iot = 0;
+#endif
 
-	comcnattach(0, CONADDR, COMCN_SPEED, COM_FREQ, COM_TYPE_NORMAL,
+	comcnattach(iot, CONADDR, COMCN_SPEED, COM_FREQ, COM_TYPE_NORMAL,
 	    CONMODE);
 }

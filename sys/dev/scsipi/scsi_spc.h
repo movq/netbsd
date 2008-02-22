@@ -1,4 +1,4 @@
-/*	$NetBSD: scsi_spc.h,v 1.3 2005/12/11 12:23:50 christos Exp $	*/
+/*	$NetBSD: scsi_spc.h,v 1.5 2010/02/06 23:13:59 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -438,11 +431,11 @@ struct scsi_sense_data {
 #define	SSD_EOM			0x40
 #define	SSD_FILEMARK		0x80
 /* 7*/	uint8_t info[4];
-/* 8*/	uint8_t extra_len;
-/*12*/	uint8_t csi[4];
-/*13*/	uint8_t asc;
-/*14*/	uint8_t ascq;
-/*15*/	uint8_t fru;
+/* 8*/	uint8_t extra_len;		/* Additional sense length */
+/*12*/	uint8_t csi[4];			/* Command-specific information */
+/*13*/	uint8_t asc;			/* Additional sense code */
+/*14*/	uint8_t ascq;			/* Additional sense code qualifier */
+/*15*/	uint8_t fru;			/* Field replaceable unit code */
 	union {
 		uint8_t sks_bytes[3];
 
@@ -475,7 +468,7 @@ struct scsi_sense_data {
 #define	SSD_SKS_SP_SD		0x20	/* 0=param list, 1=segment desc */
 			uint8_t val[2];
 		} segment_pointer;
-/*18*/	} sks;
+/*18*/	} sks;				/* Sense-key specific */
 #define	SSD_SKSV		0x80	/* byte0 of sks field */
 /*32*/	uint8_t extra_bytes[14];	/* really variable length */
 };

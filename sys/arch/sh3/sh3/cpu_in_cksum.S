@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_in_cksum.S,v 1.2 2008/02/02 02:15:40 uwe Exp $	*/
+/*	$NetBSD: cpu_in_cksum.S,v 1.5 2015/01/06 17:43:16 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 SHIMIZU Ryo <ryo@misakimix.org>
@@ -27,11 +27,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _LOCORE
+#define _LOCORE
+#endif
 #include <machine/endian.h>
 #include <machine/asm.h>
 #include "assym.h"
 
-__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum.S,v 1.2 2008/02/02 02:15:40 uwe Exp $")
+__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum.S,v 1.5 2015/01/06 17:43:16 christos Exp $")
 
 
 #define	reg_tmp0		r0
@@ -244,7 +247,7 @@ out_of_mbufs:
 .L_message_out_of_data:
 	.asciz "cksum: out of data (%d byte short)\n"
 
-	SET_ENTRY_SIZE(in_cksum)
+	SET_ENTRY_SIZE(cpu_in_cksum)
 
 
 	.align	2

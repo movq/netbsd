@@ -1,10 +1,7 @@
-/*	$NetBSD: cpu_counter.h,v 1.1 2007/10/26 17:59:38 pooka Exp $	*/
+/*	$NetBSD: cpu_counter.h,v 1.3 2014/03/11 20:25:05 pooka Exp $	*/
 
-/*
- * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
- *
- * Development of this software was supported by the
- * Finnish Cultural Foundation.
+/*-
+ * Copyright (c) 2014 Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -28,21 +25,19 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _SYS_RUMP_CPUCOUNTER_H_
-#define _SYS_RUMP_CPUCOUNTER_H_
+#ifndef _SYS_RUMP_CPU_COUNTER_H_
+#define _SYS_RUMP_CPU_COUNTER_H_
 
-static __inline int
-cpu_hascounter(void)
-{
+#include <sys/types.h>
 
-	return 0;
-}
+#ifdef __HAVE_CPU_COUNTER
+/*
+ * A very simple MI cpu "counter".  Could start filling in MD ones ...
+ */
+#define cpu_hascounter() 0
+#define cpu_counter() 0
+#define cpu_counter32() 0
+#define cpu_frequency(a) 0
+#endif /* __HAVE_CPU_COUNTER */
 
-static __inline int
-cpu_counter(void)
-{
-
-	return 0;
-}
-
-#endif /* _SYS_RUMP_CPUCOUNTER_H_ */
+#endif /* _SYS_RUMP_CPU_COUNTER_H_ */

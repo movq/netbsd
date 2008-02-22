@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.3 2005/12/11 12:17:11 christos Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.13 2014/03/08 18:08:16 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1996-1998 The NetBSD Foundation, Inc.
@@ -19,13 +19,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.3 2005/12/11 12:17:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.13 2014/03/08 18:08:16 skrll Exp $");
 
 #include "opt_irqstats.h"
 
@@ -87,7 +80,7 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.3 2005/12/11 12:17:11 christos Exp
 #include <sys/malloc.h>
 #include <sys/proc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <machine/intr.h>
 #include <machine/pio.h>
@@ -110,11 +103,7 @@ static unsigned int isairq[3] = { 5, 6, 7 };
 static unsigned int isairq_nhandlers[3] = { 0, 0, 0 };
 
 int
-isa_intr_alloc(ic, mask, type, irq)
-	isa_chipset_tag_t ic;
-	int mask;
-	int type;
-	int *irq;
+isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 {
 	int i, bestirq, count;
 
@@ -127,7 +116,7 @@ isa_intr_alloc(ic, mask, type, irq)
 	/* some interrupts should never be dynamically allocated */
 	mask &= 0x00e0;
 
-	for (i = 0; i < sizeof(isairq); i++) {
+	for (i = 0; i < __arraycount(isairq); i++) {
 		if ((mask & (1<<isairq[i])) == 0)
 			continue;
 		if (isairq_nhandlers[i] < count || count == -1) {
@@ -154,17 +143,11 @@ isa_intr_evcnt(isa_chipset_tag_t ic, int irq)
  * Set up an interrupt handler to start being called.
  */
 void *
-isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
-	isa_chipset_tag_t ic;
-	int irq;
-	int type;
-	int level;
-	int (*ih_fun) __P((void *));
-	void *ih_arg;
+isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level, int (*ih_fun)(void *), void *ih_arg)
 {
 	int epirq = -1, i;
 	/* Find real EP93XX irq number */
-	for(i = 0; i < sizeof(isairq); i++) {
+	for(i = 0; i < __arraycount(isairq); i++) {
 		if (irq == isairq[i]) epirq = ep93xxirq[i];
 	}
 	
@@ -178,16 +161,13 @@ isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
  * Deregister an interrupt handler.
  */
 void
-isa_intr_disestablish(ic, arg)
-	isa_chipset_tag_t ic;
-	void *arg;
+isa_intr_disestablish(isa_chipset_tag_t ic, void *arg)
 {
 	ep93xx_intr_disestablish(arg);
 }
 
 void
-isa_tsarm_init(iobase16, membase16)
-        u_int iobase16, membase16;
+isa_tsarm_init(u_int iobase16, u_int membase16)
 {
         isa_io_init(iobase16, membase16);
 }
@@ -204,9 +184,7 @@ isa_intr_init(void)
 }
 
 void
-isa_attach_hook(parent, self, iba)
-	struct device *parent, *self;
-	struct isabus_attach_args *iba;
+isa_attach_hook(device_t parent, device_t self, struct isabus_attach_args *iba)
 {
 	/*
 	 * Since we can only have one ISA bus, we just use a single
@@ -215,4 +193,9 @@ isa_attach_hook(parent, self, iba)
 	 */
 	iba->iba_ic = &isa_chipset_tag;
 	printf(": PC/104 expansion bus");
+}
+
+void
+isa_detach_hook(isa_chipset_tag_t ic, device_t self)
+{
 }

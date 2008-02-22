@@ -1,32 +1,34 @@
-/*	$NetBSD: auth_unix.c,v 1.20 2005/02/11 06:21:21 simonb Exp $	*/
+/*	$NetBSD: auth_unix.c,v 1.26 2014/10/18 08:33:23 snj Exp $	*/
 
 /*
- * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
- * unrestricted use provided that this legend is included on all tape
- * media and as a part of the software program in whole or part.  Users
- * may copy or modify Sun RPC without charge, but are not authorized
- * to license or distribute it to anyone else except as part of a product or
- * program developed by the user.
- * 
- * SUN RPC IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING THE
- * WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
- * 
- * Sun RPC is provided with no support and without any obligation on the
- * part of Sun Microsystems, Inc. to assist in its use, correction,
- * modification or enhancement.
+ * Copyright (c) 2010, Oracle America, Inc.
  *
- * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
- * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY SUN RPC
- * OR ANY PART THEREOF.
- * 
- * In no event will Sun Microsystems, Inc. be liable for any lost revenue
- * or profits or other special, indirect and consequential damages, even if
- * Sun has been advised of the possibility of such damages.
- * 
- * Sun Microsystems, Inc.
- * 2550 Garcia Avenue
- * Mountain View, California  94043
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the "Oracle America, Inc." nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *   FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ *   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *   GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
@@ -35,7 +37,7 @@
 static char *sccsid = "@(#)auth_unix.c 1.19 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)auth_unix.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: auth_unix.c,v 1.20 2005/02/11 06:21:21 simonb Exp $");
+__RCSID("$NetBSD: auth_unix.c,v 1.26 2014/10/18 08:33:23 snj Exp $");
 #endif
 #endif
 
@@ -44,7 +46,7 @@ __RCSID("$NetBSD: auth_unix.c,v 1.20 2005/02/11 06:21:21 simonb Exp $");
  *  
  * Copyright (C) 1984, Sun Microsystems, Inc.
  *
- * The system is very weak.  The client uses no encryption for it's
+ * The system is very weak.  The client uses no encryption for its
  * credentials and only sends null verifiers.  The server sends backs
  * null verifiers or optionally a verifier that suggests a new short hand
  * for the credentials.
@@ -74,13 +76,13 @@ __weak_alias(authunix_create_default,_authunix_create_default)
 
 
 /* auth_unix.c */
-static void authunix_nextverf __P((AUTH *));
-static bool_t authunix_marshal __P((AUTH *, XDR *));
-static bool_t authunix_validate __P((AUTH *, struct opaque_auth *));
-static bool_t authunix_refresh __P((AUTH *));
-static void authunix_destroy __P((AUTH *));
-static void marshal_new_auth __P((AUTH *));
-static const struct auth_ops *authunix_ops __P((void));
+static void authunix_nextverf(AUTH *);
+static bool_t authunix_marshal(AUTH *, XDR *);
+static bool_t authunix_validate(AUTH *, struct opaque_auth *);
+static bool_t authunix_refresh(AUTH *);
+static void authunix_destroy(AUTH *);
+static void marshal_new_auth(AUTH *);
+static const struct auth_ops *authunix_ops(void);
 
 /*
  * This struct is pointed to by the ah_private field of an auth_handle.
@@ -99,12 +101,7 @@ struct audata {
  * Returns an auth handle with the given stuff in it.
  */
 AUTH *
-authunix_create(machname, uid, gid, len, aup_gids)
-	char *machname;
-	int uid;
-	int gid;
-	int len;
-	int *aup_gids;
+authunix_create(char *machname, int uid, int gid, int len, int *aup_gids)
 {
 	struct authunix_parms aup;
 	char mymem[MAX_AUTH_BYTES];
@@ -120,14 +117,14 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	auth = mem_alloc(sizeof(*auth));
 #ifndef KERNEL
 	if (auth == NULL) {
-		warnx("authunix_create: out of memory");
+		warn("%s: out of memory", __func__);
 		goto cleanup_authunix_create;
 	}
 #endif
 	au = mem_alloc(sizeof(*au));
 #ifndef KERNEL
 	if (au == NULL) {
-		warnx("authunix_create: out of memory");
+		warn("%s: out of memory", __func__);
 		goto cleanup_authunix_create;
 	}
 #endif
@@ -141,7 +138,7 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	 * fill in param struct from the given params
 	 */
 	(void)gettimeofday(&now, NULL);
-	aup.aup_time = now.tv_sec;
+	aup.aup_time = (u_long)now.tv_sec;	/* XXX: truncate on 32 bit */
 	aup.aup_machname = machname;
 	aup.aup_uid = uid;
 	aup.aup_gid = gid;
@@ -157,10 +154,10 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
 	au->au_origcred.oa_flavor = AUTH_UNIX;
 #ifdef KERNEL
-	au->au_origcred.oa_base = mem_alloc((u_int) len);
+	au->au_origcred.oa_base = mem_alloc((size_t)len);
 #else
-	if ((au->au_origcred.oa_base = mem_alloc((u_int) len)) == NULL) {
-		warnx("authunix_create: out of memory");
+	if ((au->au_origcred.oa_base = mem_alloc((size_t)len)) == NULL) {
+		warn("%s: out of memory", __func__);
 		goto cleanup_authunix_create;
 	}
 #endif
@@ -190,7 +187,7 @@ authunix_create(machname, uid, gid, len, aup_gids)
  * syscalls.
  */
 AUTH *
-authunix_create_default()
+authunix_create_default(void)
 {
 	int len;
 	char machname[MAXHOSTNAMELEN + 1];
@@ -216,16 +213,13 @@ authunix_create_default()
 
 /* ARGSUSED */
 static void
-authunix_nextverf(auth)
-	AUTH *auth;
+authunix_nextverf(AUTH *auth)
 {
 	/* no action necessary */
 }
 
 static bool_t
-authunix_marshal(auth, xdrs)
-	AUTH *auth;
-	XDR *xdrs;
+authunix_marshal(AUTH *auth, XDR *xdrs)
 {
 	struct audata *au;
 
@@ -237,9 +231,7 @@ authunix_marshal(auth, xdrs)
 }
 
 static bool_t
-authunix_validate(auth, verf)
-	AUTH *auth;
-	struct opaque_auth *verf;
+authunix_validate(AUTH *auth, struct opaque_auth *verf)
 {
 	struct audata *au;
 	XDR xdrs;
@@ -271,8 +263,7 @@ authunix_validate(auth, verf)
 }
 
 static bool_t
-authunix_refresh(auth)
-	AUTH *auth;
+authunix_refresh(AUTH *auth)
 {
 	struct audata *au = AUTH_PRIVATE(auth);
 	struct authunix_parms aup;
@@ -299,7 +290,7 @@ authunix_refresh(auth)
 
 	/* update the time and serialize in place */
 	(void)gettimeofday(&now, NULL);
-	aup.aup_time = now.tv_sec;
+	aup.aup_time = (u_long)now.tv_sec;	/* XXX: truncate on 32 bit */
 	xdrs.x_op = XDR_ENCODE;
 	XDR_SETPOS(&xdrs, 0);
 	stat = xdr_authunix_parms(&xdrs, &aup);
@@ -316,8 +307,7 @@ done:
 }
 
 static void
-authunix_destroy(auth)
-	AUTH *auth;
+authunix_destroy(AUTH *auth)
 {
 	struct audata *au;
 
@@ -342,8 +332,7 @@ authunix_destroy(auth)
  * sets private data, au_marshed and au_mpos
  */
 static void
-marshal_new_auth(auth)
-	AUTH *auth;
+marshal_new_auth(AUTH *auth)
 {
 	XDR	xdr_stream;
 	XDR	*xdrs = &xdr_stream;
@@ -355,14 +344,14 @@ marshal_new_auth(auth)
 	xdrmem_create(xdrs, au->au_marshed, MAX_AUTH_BYTES, XDR_ENCODE);
 	if ((! xdr_opaque_auth(xdrs, &(auth->ah_cred))) ||
 	    (! xdr_opaque_auth(xdrs, &(auth->ah_verf))))
-		warnx("auth_none.c - Fatal marshalling problem");
+		warnx("%s: Fatal marshalling problem", __func__);
 	else
 		au->au_mpos = XDR_GETPOS(xdrs);
 	XDR_DESTROY(xdrs);
 }
 
 static const struct auth_ops *
-authunix_ops()
+authunix_ops(void)
 {
 	static struct auth_ops ops;
 #ifdef _REENTRANT

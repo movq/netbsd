@@ -1,4 +1,4 @@
-/*	$NetBSD: sscom.c,v 1.27 2007/11/27 22:00:59 ad Exp $ */
+/*	$NetBSD: sscom.c,v 1.47 2015/04/13 21:18:41 riastradh Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -47,13 +47,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -105,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.27 2007/11/27 22:00:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.47 2015/04/13 21:18:41 riastradh Exp $");
 
 #include "opt_sscom.h"
 #include "opt_ddb.h"
@@ -113,9 +106,8 @@ __KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.27 2007/11/27 22:00:59 ad Exp $");
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
 
-#include "rnd.h"
-#if NRND > 0 && defined(RND_COM)
-#include <sys/rnd.h>
+#ifdef RND_COM
+#include <sys/rndsource.h>
 #endif
 
 /*
@@ -136,7 +128,6 @@ __KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.27 2007/11/27 22:00:59 ad Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -150,14 +141,9 @@ __KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.27 2007/11/27 22:00:59 ad Exp $");
 #include <sys/kauth.h>
 #include <sys/intr.h>
 #include <sys/bus.h>
+#include <sys/mutex.h>
 
 #include <arm/s3c2xx0/s3c2xx0reg.h>
-#include <arm/s3c2xx0/s3c2xx0var.h>
-#if defined(SSCOM_S3C2410) || defined(SSCOM_S3C2400)
-#include <arm/s3c2xx0/s3c24x0reg.h>
-#elif defined(SSCOM_S3C2800)
-#include <arm/s3c2xx0/s3c2800reg.h>
-#endif
 #include <arm/s3c2xx0/sscom_var.h>
 #include <dev/cons.h>
 
@@ -193,14 +179,26 @@ static int	sscom_to_tiocm(struct sscom_softc *);
 static void	sscom_iflush(struct sscom_softc *);
 
 static int	sscomhwiflow(struct tty *tp, int block);
+#if defined(KGDB) || defined(SSCOM0CONSOLE) || defined(SSCOM1CONSOLE)
 static int	sscom_init(bus_space_tag_t, const struct sscom_uart_info *,
 		    int, int, tcflag_t, bus_space_handle_t *);
+#endif
 
 extern struct cfdriver sscom_cd;
 
 const struct cdevsw sscom_cdevsw = {
-	sscomopen, sscomclose, sscomread, sscomwrite, sscomioctl,
-	sscomstop, sscomtty, sscompoll, nommap, ttykqfilter, D_TTY
+	.d_open = sscomopen,
+	.d_close = sscomclose,
+	.d_read = sscomread,
+	.d_write = sscomwrite,
+	.d_ioctl = sscomioctl,
+	.d_stop = sscomstop,
+	.d_tty = sscomtty,
+	.d_poll = sscompoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 /*
@@ -243,7 +241,7 @@ void	sscom_kgdb_putc (void *, int);
 #define	SSCOM_ISALIVE(sc)	((sc)->enabled != 0 && \
 				 device_is_active(&(sc)->sc_dev))
 #else
-#define	SSCOM_ISALIVE(sc)	device_is_active(&(sc)->sc_dev)
+#define	SSCOM_ISALIVE(sc)	device_is_active((sc)->sc_dev)
 #endif
 
 #define	BR	BUS_SPACE_BARRIER_READ
@@ -252,8 +250,8 @@ void	sscom_kgdb_putc (void *, int);
 
 #if (defined(MULTIPROCESSOR) || defined(LOCKDEBUG)) && defined(SSCOM_MPLOCK)
 
-#define SSCOM_LOCK(sc) simple_lock(&(sc)->sc_lock)
-#define SSCOM_UNLOCK(sc) simple_unlock(&(sc)->sc_lock)
+#define SSCOM_LOCK(sc) mutex_enter((sc)->sc_lock)
+#define SSCOM_UNLOCK(sc) mutex_exit((sc)->sc_lock)
 
 #else
 
@@ -343,7 +341,7 @@ sscomstatus(struct sscom_softc *sc, const char *str)
 	int umcon = bus_space_read_1(sc->sc_iot, sc->sc_iot, SSCOM_UMCON);
 
 	printf("%s: %s %sclocal  %sdcd %sts_carr_on %sdtr %stx_stopped\n",
-	    sc->sc_dev.dv_xname, str,
+	    device_xname(sc->sc_dev), str,
 	    ISSET(tp->t_cflag, CLOCAL) ? "+" : "-",
 	    "+",			/* DCD */
 	    ISSET(tp->t_state, TS_CARR_ON) ? "+" : "-",
@@ -351,7 +349,7 @@ sscomstatus(struct sscom_softc *sc, const char *str)
 	    sc->sc_tx_stopped ? "+" : "-");
 
 	printf("%s: %s %scrtscts %scts %sts_ttstop  %srts %xrx_flags\n",
-	    sc->sc_dev.dv_xname, str,
+	    device_xname(sc->sc_dev), str,
 	    ISSET(tp->t_cflag, CRTSCTS) ? "+" : "-",
 	    ISSET(umstat, UMSTAT_CTS) ? "+" : "-",
 	    ISSET(tp->t_state, TS_TTSTOP) ? "+" : "-",
@@ -373,7 +371,7 @@ sscom_enable_debugport(struct sscom_softc *sc)
 	sc->sc_ucon = UCON_DEBUGPORT;
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, SSCOM_UCON, sc->sc_ucon);
 	sc->sc_umcon = UMCON_RTS|UMCON_DTR;
-	sc->set_modem_control(sc);
+	sc->sc_set_modem_control(sc);
 	sscom_enable_rxint(sc);
 	sscom_disable_txint(sc);
 	SSCOM_UNLOCK(sc);
@@ -410,7 +408,7 @@ sscom_attach_subr(struct sscom_softc *sc)
 
 	callout_init(&sc->sc_diag_callout, 0);
 #if (defined(MULTIPROCESSOR) || defined(LOCKDEBUG)) && defined(SSCOM_MPLOCK)
-	simple_lock_init(&sc->sc_lock);
+	sc->sc_lock = mutex_obj_alloc(MUTEX_DEFAULT, IPL_SERIAL);
 #endif
 
 	sc->sc_ucon = UCON_RXINT_ENABLE|UCON_TXINT_ENABLE;
@@ -418,12 +416,13 @@ sscom_attach_subr(struct sscom_softc *sc)
 	/*
 	 * set default for modem control hook
 	 */
-	if (sc->set_modem_control == NULL)
-		sc->set_modem_control = sscom_set_modem_control;
-	if (sc->read_modem_status == NULL)
-		sc->read_modem_status = sscom_read_modem_status;
+	if (sc->sc_set_modem_control == NULL)
+		sc->sc_set_modem_control = sscom_set_modem_control;
+	if (sc->sc_read_modem_status == NULL)
+		sc->sc_read_modem_status = sscom_read_modem_status;
 
 	/* Disable interrupts before configuring the device. */
+	KASSERT(sc->sc_change_txrx_interrupts != NULL);
 	sscom_disable_txrxint(sc);
 
 #ifdef KGDB
@@ -438,13 +437,19 @@ sscom_attach_subr(struct sscom_softc *sc)
 #endif
 
 	if (unit == sscomconsunit) {
-		sscomconsattached = 1;
+		int timo, stat;
 
+		sscomconsattached = 1;
 		sscomconstag = iot;
 		sscomconsioh = ioh;
 
+		/* wait for this transmission to complete */
+		timo = 1500000;
+		do {
+			stat = bus_space_read_1(iot, ioh, SSCOM_UTRSTAT);
+		} while ((stat & UTRSTAT_TXEMPTY) == 0 && --timo > 0);
+
 		/* Make sure the console is always "hardwired". */
-		delay(1000);			/* XXX: wait for output to finish */
 		SET(sc->sc_hwflags, SSCOM_HW_CONSOLE);
 		SET(sc->sc_swflags, TIOCFLAG_SOFTCAR);
 
@@ -452,7 +457,11 @@ sscom_attach_subr(struct sscom_softc *sc)
 	}
 
 	bus_space_write_1(iot, ioh, SSCOM_UFCON,
+#ifdef SSCOM_S3C2440
+	    UFCON_TXTRIGGER_16|UFCON_RXTRIGGER_16|UFCON_FIFO_ENABLE|
+#else
 	    UFCON_TXTRIGGER_8|UFCON_RXTRIGGER_8|UFCON_FIFO_ENABLE|
+#endif
 	    UFCON_TXFIFO_RESET|UFCON_RXFIFO_RESET);
 
 	bus_space_write_1(iot, ioh, SSCOM_UCON, sc->sc_ucon);
@@ -460,15 +469,13 @@ sscom_attach_subr(struct sscom_softc *sc)
 #ifdef KGDB
 	if (ISSET(sc->sc_hwflags, SSCOM_HW_KGDB)) {
 		sscom_kgdb_attached = 1;
-		printf("%s: kgdb\n", sc->sc_dev.dv_xname);
+		printf("%s: kgdb\n", device_xname(sc->sc_dev));
 		sscom_enable_debugport(sc);
 		return;
 	}
 #endif
 
-
-
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = sscomstart;
 	tp->t_param = sscomparam;
 	tp->t_hwiflow = sscomhwiflow;
@@ -479,7 +486,7 @@ sscom_attach_subr(struct sscom_softc *sc)
 	sc->sc_rbavail = sscom_rbuf_size;
 	if (sc->sc_rbuf == NULL) {
 		printf("%s: unable to allocate ring buffer\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		return;
 	}
 	sc->sc_ebuf = sc->sc_rbuf + (sscom_rbuf_size << 1);
@@ -492,17 +499,18 @@ sscom_attach_subr(struct sscom_softc *sc)
 		/* locate the major number */
 		maj = cdevsw_lookup_major(&sscom_cdevsw);
 
-		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
+		cn_tab->cn_dev = makedev(maj, device_unit(sc->sc_dev));
 
-		printf("%s: console (major=%d)\n", sc->sc_dev.dv_xname, maj);
+		printf("%s: console (major=%d)\n", device_xname(sc->sc_dev), maj);
 	}
 
 
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, sscomsoft, sc);
 
-#if NRND > 0 && defined(RND_COM)
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
-			  RND_TYPE_TTY, 0);
+#ifdef RND_COM
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+			  RND_TYPE_TTY, RND_FLAG_COLLECT_TIME|
+					RND_FLAG_ESTIMATE_TIME);
 #endif
 
 	/* if there are no enable/disable functions, assume the device
@@ -517,41 +525,32 @@ sscom_attach_subr(struct sscom_softc *sc)
 }
 
 int
-sscom_detach(struct device *self, int flags)
+sscom_detach(device_t self, int flags)
 {
+	struct sscom_softc *sc = device_private(self);
+
+	if (sc->sc_hwflags & (SSCOM_HW_CONSOLE|SSCOM_HW_KGDB))
+		return EBUSY;
+
 	return 0;
 }
 
 int
-sscom_activate(struct device *self, enum devact act)
+sscom_activate(device_t self, enum devact act)
 {
 #ifdef notyet
-	struct sscom_softc *sc = (struct sscom_softc *)self;
-	int s, rv = 0;
-
-	s = splserial();
-	SSCOM_LOCK(sc);
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_hwflags & (SSCOM_HW_CONSOLE|SSCOM_HW_KGDB)) {
-			rv = EBUSY;
-			break;
-		}
-
-		sc->enabled = 0;
-		break;
-	}
-
-	SSCOM_UNLOCK(sc);	
-	splx(s);
-	return rv;
-#else
-	return 0;
+	struct sscom_softc *sc = device_private(self);
 #endif
+
+	switch (act) {
+	case DVACT_DEACTIVATE:
+#ifdef notyet
+		sc->enabled = 0;
+#endif
+		return 0;
+	default:
+		return EOPNOTSUPP;
+	}
 }
 
 void
@@ -611,12 +610,12 @@ sscomopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int s, s2;
 	int error;
 
-	sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	if (sc == NULL || !ISSET(sc->sc_hwflags, SSCOM_HW_DEV_OK) ||
 		sc->sc_rbuf == NULL)
 		return ENXIO;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return ENXIO;
 
 #ifdef KGDB
@@ -649,7 +648,7 @@ sscomopen(dev_t dev, int flag, int mode, struct lwp *l)
 		sscom_enable_txrxint(sc);
 
 		/* Fetch the current modem control status, needed later. */
-		sc->sc_msts = sc->read_modem_status(sc);
+		sc->sc_msts = sc->sc_read_modem_status(sc);
 
 #if 0
 		/* Clear PPS capture state on first open. */
@@ -740,7 +739,7 @@ bad:
 int
 sscomclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	/* XXX This is for cons.c. */
@@ -768,7 +767,7 @@ sscomclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 sscomread(dev_t dev, struct uio *uio, int flag)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -780,7 +779,7 @@ sscomread(dev_t dev, struct uio *uio, int flag)
 int
 sscomwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -792,7 +791,7 @@ sscomwrite(dev_t dev, struct uio *uio, int flag)
 int
 sscompoll(dev_t dev, int events, struct lwp *l)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -804,7 +803,7 @@ sscompoll(dev_t dev, int events, struct lwp *l)
 struct tty *
 sscomtty(dev_t dev)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return tp;
@@ -813,7 +812,7 @@ sscomtty(dev_t dev)
 int
 sscomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int error;
 	int s;
@@ -1031,7 +1030,7 @@ cflag2lcr(tcflag_t cflag)
 int
 sscomparam(struct tty *tp, struct termios *t)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(tp->t_dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(tp->t_dev));
 	int ospeed;
 	u_char lcr;
 	int s;
@@ -1191,7 +1190,7 @@ sscom_iflush(struct sscom_softc *sc)
 		(void)sscom_getc(iot,ioh);
 #ifdef DIAGNOSTIC
 	if (!timo)
-		printf("%s: sscom_iflush timeout\n", sc->sc_dev.dv_xname);
+		printf("%s: sscom_iflush timeout\n", device_xname(sc->sc_dev));
 #endif
 }
 
@@ -1215,14 +1214,14 @@ sscom_loadchannelregs(struct sscom_softc *sc)
 
 	bus_space_write_2(iot, ioh, SSCOM_UBRDIV, sc->sc_ubrdiv);
 	bus_space_write_1(iot, ioh, SSCOM_ULCON, sc->sc_ulcon);
-	sc->set_modem_control(sc);
+	sc->sc_set_modem_control(sc);
 	bus_space_write_2(iot, ioh, SSCOM_UCON, sc->sc_ucon);
 }
 
 static int
 sscomhwiflow(struct tty *tp, int block)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(tp->t_dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(tp->t_dev));
 	int s;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -1271,14 +1270,14 @@ sscom_hwiflow(struct sscom_softc *sc)
 		SET(sc->sc_umcon, sc->sc_mcr_rts);
 		SET(sc->sc_mcr_active, sc->sc_mcr_rts);
 	}
-	sc->set_modem_control(sc);
+	sc->sc_set_modem_control(sc);
 }
 
 
 void
 sscomstart(struct tty *tp)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(tp->t_dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(tp->t_dev));
 	int s;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -1329,7 +1328,7 @@ out:
 void
 sscomstop(struct tty *tp, int flag)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(tp->t_dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(tp->t_dev));
 	int s;
 
 	s = splserial();
@@ -1363,7 +1362,7 @@ sscomdiag(void *arg)
 	splx(s);
 
 	log(LOG_WARNING, "%s: %d silo overflow%s, %d ibuf flood%s\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(sc->sc_dev),
 	    overflows, overflows == 1 ? "" : "s",
 	    floods, floods == 1 ? "" : "s");
 }
@@ -1643,7 +1642,7 @@ sscomrxintr(void *arg)
 		}
 
 
-		msts = sc->read_modem_status(sc);
+		msts = sc->sc_read_modem_status(sc);
 		delta = msts ^ sc->sc_msts;
 		sc->sc_msts = msts;
 
@@ -1742,7 +1741,7 @@ sscomrxintr(void *arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | rsr);
 #endif
 
@@ -1807,7 +1806,7 @@ sscomtxintr(void *arg)
 	/* Wake up the poller. */
 	softint_schedule(sc->sc_si);
 
-#if NRND > 0 && defined(RND_COM)
+#ifdef RND_COM
 	rnd_add_uint32(&sc->rnd_source, iir | rsr);
 #endif
 
@@ -1831,7 +1830,11 @@ sscom_init(bus_space_tag_t iot, const struct sscom_uart_info *config,
 
 	bus_space_write_2(iot, ioh, SSCOM_UCON, 0);
 	bus_space_write_1(iot, ioh, SSCOM_UFCON, 
+#ifdef SSCOM_S3C2440
+	    UFCON_TXTRIGGER_16 | UFCON_RXTRIGGER_16 |
+#else
 	    UFCON_TXTRIGGER_8 | UFCON_RXTRIGGER_8 |
+#endif
 	    UFCON_TXFIFO_RESET | UFCON_RXFIFO_RESET |
 	    UFCON_FIFO_ENABLE );
 	/* tx/rx fifo reset are auto-cleared */
@@ -1906,7 +1909,8 @@ int
 sscomcngetc(dev_t dev)
 {
 	int s = splserial();
-	u_char stat, c;
+	u_char __attribute__((__unused__)) stat;
+	u_char c;
 
 	/* got a character from reading things earlier */
 	if (sscom_readaheadcount > 0) {
@@ -1928,7 +1932,7 @@ sscomcngetc(dev_t dev)
 	c = sscom_getc(sscomconstag, sscomconsioh);
 	stat = sscom_geterr(sscomconstag, sscomconsioh);
 	{
-		int cn_trapped = 0; /* unused */
+		int __attribute__((__unused__))cn_trapped = 0;
 #ifdef DDB
 		extern int db_active;
 		if (!db_active)
@@ -1948,11 +1952,12 @@ sscomcnputc(dev_t dev, int c)
 	int s = splserial();
 	int timo;
 
-	int cin, stat;
+	int cin;
+	int __attribute__((__unused__)) stat;
 	if (sscom_readaheadcount < MAX_READAHEAD && 
 	    sscom_rxrdy(sscomconstag, sscomconsioh)) {
 	    
-		int cn_trapped = 0;
+		int __attribute__((__unused__))cn_trapped = 0;
 		cin = sscom_getc(sscomconstag, sscomconsioh);
 		stat = sscom_geterr(sscomconstag, sscomconsioh);
 		cn_check_magic(dev, cin, sscom_cnm_state);
@@ -1982,6 +1987,7 @@ void
 sscomcnpollc(dev_t dev, int on)
 {
 
+	sscom_readaheadcount = 0;
 }
 
 #endif /* SSCOM0CONSOLE||SSCOM1CONSOLE */

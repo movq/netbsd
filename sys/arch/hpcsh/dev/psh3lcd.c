@@ -1,4 +1,4 @@
-/*	$NetBSD: psh3lcd.c,v 1.3 2007/01/21 11:01:09 kiyohara Exp $	*/
+/*	$NetBSD: psh3lcd.c,v 1.7 2013/11/09 02:54:11 christos Exp $	*/
 /*
  * Copyright (c) 2005 KIYOHARA Takashi
  * All rights reserved.
@@ -107,16 +107,16 @@ static const struct psh3lcd_xx0_bcd {	/* 200JC */
 
 
 struct psh3lcd_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	int sc_brightness;
 	int sc_brightness_max;
 	void (*sc_set_brightness)(int);
 };
 
-static int psh3lcd_match(struct device *, struct cfdata *, void *);
-static void psh3lcd_attach(struct device *, struct device *, void *);
+static int psh3lcd_match(device_t, struct cfdata *, void *);
+static void psh3lcd_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(psh3lcd, sizeof(struct psh3lcd_softc),
+CFATTACH_DECL_NEW(psh3lcd, sizeof(struct psh3lcd_softc),
     psh3lcd_match, psh3lcd_attach, NULL, NULL);
 
 
@@ -130,7 +130,7 @@ static int psh3lcd_power(void *, int, long, void *);
 
 
 static inline int
-psh3lcd_x0_bcd_get()
+psh3lcd_x0_bcd_get(void)
 {
 	int i;
 	uint8_t bcr0, bcr1, bcr2;
@@ -150,7 +150,7 @@ psh3lcd_x0_bcd_get()
 }
 
 static inline int
-psh3lcd_xx0_bcd_get()
+psh3lcd_xx0_bcd_get(void)
 {
 	int i;
 	uint8_t bcr1, bcr2;
@@ -222,8 +222,7 @@ psh3lcd_set_contrast(int value)
 
 /* ARGSUSED */
 static int
-psh3lcd_match(struct device *parent __unused, struct cfdata *cfp,
-	      void *aux __unused)
+psh3lcd_match(device_t parent __unused, struct cfdata *cfp, void *aux __unused)
 {
 	uint8_t bcr0;
 
@@ -247,15 +246,16 @@ psh3lcd_match(struct device *parent __unused, struct cfdata *cfp,
 
 /* ARGSUSED */
 static void
-psh3lcd_attach(struct device *parent __unused, struct device *self,
-	       void *aux __unused)
+psh3lcd_attach(device_t parent __unused, device_t self, void *aux __unused)
 {
 	struct psh3lcd_softc *sc = device_private(self);
-	uint8_t bcr0, bcr1, bcr2;
+	uint8_t bcr0;
+
+	sc->sc_dev = self;
 
 	bcr0 = _reg_read_1(PSH3LCD_BRIGHTNESS_REG0);
-	bcr1 = _reg_read_1(PSH3LCD_BRIGHTNESS_REG1);
-	bcr2 = _reg_read_1(PSH3LCD_BRIGHTNESS_REG2);
+	(void)_reg_read_1(PSH3LCD_BRIGHTNESS_REG1);
+	(void)_reg_read_1(PSH3LCD_BRIGHTNESS_REG2);
 	if (bcr0 == 0) {
 		sc->sc_set_brightness = psh3lcd_xx0_set_brightness;
 		sc->sc_brightness = psh3lcd_xx0_bcd_get();
@@ -287,6 +287,10 @@ psh3lcd_attach(struct device *parent __unused, struct device *self,
 	/* LCD on/off hook */
 	config_hook(CONFIG_HOOK_POWERCONTROL,
 	    CONFIG_HOOK_POWERCONTROL_LCD, CONFIG_HOOK_SHARE, psh3lcd_power, sc);
+
+ 	/* XXX: TODO: don't rely on CONFIG_HOOK_POWERCONTROL_LCD */
+ 	if (!pmf_device_register(self, NULL, NULL))
+ 		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 

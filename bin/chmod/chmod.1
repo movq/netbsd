@@ -1,4 +1,4 @@
-.\"	$NetBSD: chmod.1,v 1.21 2005/12/09 20:27:02 wiz Exp $
+.\"	$NetBSD: chmod.1,v 1.28 2017/07/04 06:47:27 wiz Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)chmod.1	8.4 (Berkeley) 3/31/94
 .\"
-.Dd December 9, 2005
+.Dd August 11, 2016
 .Dt CHMOD 1
 .Os
 .Sh NAME
@@ -44,8 +44,16 @@
 .Fl R
 .Op Fl H | Fl L | Fl P
 .Oc
-.Op Fl h
+.Op Fl fh
 .Ar mode
+.Ar
+.Nm
+.Oo
+.Fl R
+.Op Fl H | Fl L | Fl P
+.Oc
+.Op Fl fh
+.Fl Fl reference=rfile
 .Ar
 .Sh DESCRIPTION
 The
@@ -53,7 +61,12 @@ The
 utility modifies the file mode bits of the listed files
 as specified by the
 .Ar mode
-operand.
+operand, or
+copied from a reference
+.Ar rfile ,
+as specified with the
+.Fl Fl reference
+argument.
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
@@ -73,6 +86,10 @@ option is specified, no symbolic links are followed.
 .It Fl R
 Change the modes of the file hierarchies rooted in the files
 instead of just the files themselves.
+.It Fl f
+Do not display a diagnostic message or modify the exit status if
+.Nm
+fails to change the mode of a file.
 .It Fl h
 If
 .Ar file
@@ -89,13 +106,14 @@ options are ignored unless the
 option is specified.
 In addition, these options override each other and the
 command's actions are determined by the last one specified.
+The default is as if the
+.Fl P
+option had been specified.
 .Pp
 Only the owner of a file or the super-user is permitted to change
 the mode of a file.
 .Sh EXIT STATUS
-The
-.Nm
-utility exits 0 on success, and \*[Gt]0 if an error occurs.
+.Ex -std chmod
 .Sh MODES
 Modes may be absolute or symbolic.
 An absolute mode is an octal number constructed by
@@ -144,7 +162,6 @@ The
 .Ar who
 symbol ``a'' is equivalent to ``ugo''.
 .Pp
-.ne 1i
 The
 .Ar perm
 symbols represent the portions of the mode bits as follows:
@@ -285,6 +302,11 @@ compatible with the exception of the
 symbol
 .Dq t
 which is not included in that standard.
+.Sh HISTORY
+A
+.Nm
+utility appeared in
+.At v1 .
 .Sh BUGS
 There's no
 .Ar perm

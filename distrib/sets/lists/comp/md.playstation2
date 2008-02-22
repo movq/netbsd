@@ -1,4 +1,4 @@
-# $NetBSD: md.playstation2,v 1.9 2006/09/12 02:36:37 simonb Exp $
+# $NetBSD: md.playstation2,v 1.14 2015/12/21 16:49:37 christos Exp $
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/include/playstation2			comp-c-include
 ./usr/include/playstation2/_G_config.h		comp-obsolete		obsolete
@@ -14,6 +14,7 @@
 ./usr/include/playstation2/elf_machdep.h	comp-c-include
 ./usr/include/playstation2/endian.h		comp-c-include
 ./usr/include/playstation2/endian_machdep.h	comp-c-include
+./usr/include/playstation2/fenv.h		comp-c-include
 ./usr/include/playstation2/float.h		comp-c-include
 ./usr/include/playstation2/ieee.h		comp-c-include
 ./usr/include/playstation2/ieeefp.h		comp-c-include
@@ -31,6 +32,7 @@
 ./usr/include/playstation2/math.h		comp-c-include
 ./usr/include/playstation2/mcontext.h		comp-c-include
 ./usr/include/playstation2/mips_opcode.h	comp-c-include
+./usr/include/playstation2/mutex.h			comp-c-include
 ./usr/include/playstation2/param.h		comp-c-include
 ./usr/include/playstation2/pcb.h		comp-c-include
 ./usr/include/playstation2/pmap.h		comp-c-include
@@ -44,6 +46,7 @@
 ./usr/include/playstation2/regdef.h		comp-c-include
 ./usr/include/playstation2/regnum.h		comp-c-include
 ./usr/include/playstation2/reloc.h		comp-c-include
+./usr/include/playstation2/rwlock.h		comp-c-include
 ./usr/include/playstation2/setjmp.h		comp-c-include
 ./usr/include/playstation2/signal.h		comp-c-include
 ./usr/include/playstation2/stdarg.h		comp-c-include

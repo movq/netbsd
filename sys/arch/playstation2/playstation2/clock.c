@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.5 2006/09/14 16:07:00 gdamore Exp $	*/
+/*	$NetBSD: clock.c,v 1.11 2014/11/20 16:34:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,15 +27,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.5 2006/09/14 16:07:00 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.11 2014/11/20 16:34:25 christos Exp $");
 
 #include "debug_playstation2.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>		/* time */
+#include <sys/proc.h>
 
 #include <mips/locore.h>
+#include <mips/mips3_clock.h>
 
 #include <dev/clock_subr.h>
 #include <machine/bootinfo.h>
@@ -52,10 +47,10 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.5 2006/09/14 16:07:00 gdamore Exp $");
 static int get_bootinfo_tod(todr_chip_handle_t, struct clock_ymdhms *);
 
 void
-cpu_initclocks()
+cpu_initclocks(void)
 {
 	struct todr_chip_handle	todr = {
-		.todr_gettime_ymdhms = get_bootinfo_tod;
+		.todr_gettime_ymdhms = get_bootinfo_tod,
 	};
 
 	/*
@@ -87,12 +82,12 @@ get_bootinfo_tod(todr_chip_handle_t tch, struct clock_ymdhms *dt)
 	    (void *)MIPS_PHYS_TO_KSEG1(BOOTINFO_BLOCK_BASE + BOOTINFO_RTC);
 
 	/* PS2 RTC is JST */
-	dt->dt_year = FROMBCD(rtc->year) + 2000;
-	dt->dt_mon = FROMBCD(rtc->mon);
-	dt->dt_day = FROMBCD(rtc->day);
-	dt->dt_hour = FROMBCD(rtc->hour);
-	dt->dt_min = FROMBCD(rtc->min);
-	dt->dt_sec = FROMBCD(rtc->sec);
+	dt->dt_year = bcdtobin(rtc->year) + 2000;
+	dt->dt_mon = bcdtobin(rtc->mon);
+	dt->dt_day = bcdtobin(rtc->day);
+	dt->dt_hour = bcdtobin(rtc->hour);
+	dt->dt_min = bcdtobin(rtc->min);
+	dt->dt_sec = bcdtobin(rtc->sec);
 
 	/* convert to UTC */
 	utc = clock_ymdhms_to_secs(dt) - 9*60*60;

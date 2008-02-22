@@ -1,4 +1,4 @@
-/* $NetBSD: lk201_ws.c,v 1.7 2005/12/11 12:21:20 christos Exp $ */
+/* $NetBSD: lk201_ws.c,v 1.10 2016/07/11 10:55:35 skrll Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,10 +27,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lk201_ws.c,v 1.7 2005/12/11 12:21:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lk201_ws.c,v 1.10 2016/07/11 10:55:35 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/callout.h>
 
 #include <dev/wscons/wsconsio.h>
 
@@ -40,11 +41,20 @@ __KERNEL_RCSID(0, "$NetBSD: lk201_ws.c,v 1.7 2005/12/11 12:21:20 christos Exp $"
 
 #define send(lks, c) ((*((lks)->attmt.sendchar))((lks)->attmt.cookie, c))
 
+void lk201_identify(void *);
+
+static const char *lkkbd_descr[] = {
+	"no keyboard",
+	"LK-201 keyboard",
+	"LK-401 keyboard",
+};
+
 int
-lk201_init(lks)
-	struct lk201_state *lks;
+lk201_init(struct lk201_state *lks)
 {
 	int i;
+
+	lks->waitack = 0;
 
 	send(lks, LK_LED_ENABLE);
 	send(lks, LK_LED_ALL);
@@ -70,24 +80,66 @@ lk201_init(lks)
 	send(lks, LK_LED_ALL);
 	lks->leds_state = 0;
 
-	return (0);
+	/*
+	 * Swallow all the keyboard acknowledges from lk201_init().
+	 * There should be 14 of them - one per LK_CMD_MODE command.
+	 */
+	for(;;) {
+		lks->waitack = 1;
+		for (i = 100; i != 0; i--) {
+			DELAY(1000);
+			if (lks->waitack == 0)
+				break;
+		}
+		if (i == 0)
+			break;
+	}
+
+	/*
+	 * Try to set the keyboard in LK-401 mode.
+	 * If we receive an error, this is an LK-201 keyboard.
+	 */
+	lks->waitack = 1;
+	send(lks, LK_ENABLE_401);
+	for (i = 100; i != 0; i--) {
+		DELAY(1000);
+		if (lks->waitack == 0)
+			break;
+	}
+	if (lks->waitack != 0)
+		lks->kbdtype = KBD_NONE;
+	else {
+		if (lks->ackdata == LK_INPUT_ERROR)
+			lks->kbdtype = KBD_LK201;
+		else
+			lks->kbdtype = KBD_LK401;
+	}
+	lks->waitack = 0;
+
+	printf("lkkbd0: %s\n", lkkbd_descr[lks->kbdtype]);
+
+	return 0;
 }
 
 int
-lk201_decode(lks, datain, type, dataout)
-	struct lk201_state *lks;
-	int datain;
-	u_int *type;
-	int *dataout;
+lk201_decode(struct lk201_state *lks, int wantmulti, int datain, u_int *type, int *dataout)
 {
 	int i, freeslot;
 
+	if (lks->waitack != 0) {
+		lks->ackdata = datain;
+		lks->waitack = 0;
+		return LKD_NODATA;
+	}
+
 	switch (datain) {
+#if 0
 	    case LK_KEY_UP:
 		for (i = 0; i < LK_KLL; i++)
 			lks->down_keys_list[i] = -1;
 		*type = WSCONS_EVENT_ALL_KEYS_UP;
 		return (1);
+#endif
 	    case LK_POWER_UP:
 		printf("lk201_decode: powerup detected\n");
 		lk201_init(lks);
@@ -103,7 +155,25 @@ lk201_decode(lks, datain, type, dataout)
 		return (0);
 	}
 
-	if (datain < MIN_LK201_KEY || datain > MAX_LK201_KEY) {
+
+	if (datain == LK_KEY_UP) {
+		if (wantmulti) {
+			for (i = 0; i < LK_KLL; i++)
+				if (lks->down_keys_list[i] != -1) {
+					*type = WSCONS_EVENT_KEY_UP;
+					*dataout = lks->down_keys_list[i] -
+					    MIN_LK201_KEY;
+					lks->down_keys_list[i] = -1;
+					return (LKD_MORE);
+				}
+			return (LKD_NODATA);
+		} else {
+			for (i = 0; i < LK_KLL; i++)
+				lks->down_keys_list[i] = -1;
+			*type = WSCONS_EVENT_ALL_KEYS_UP;
+			return (LKD_COMPLETE);
+		}
+	} else if (datain < MIN_LK201_KEY || datain > MAX_LK201_KEY) {
 		printf("lk201_decode: %x\n", datain);
 		return (0);
 	}
@@ -132,9 +202,7 @@ lk201_decode(lks, datain, type, dataout)
 }
 
 void
-lk201_bell(lks, bell)
-	struct lk201_state *lks;
-	struct wskbd_bell_data *bell;
+lk201_bell(struct lk201_state *lks, struct wskbd_bell_data *bell)
 {
 	unsigned int vol;
 
@@ -154,9 +222,7 @@ lk201_bell(lks, bell)
 }
 
 void
-lk201_set_leds(lks, leds)
-	struct lk201_state *lks;
-	int leds;
+lk201_set_leds(struct lk201_state *lks, int leds)
 {
 	int newleds;
 
@@ -176,9 +242,7 @@ lk201_set_leds(lks, leds)
 }
 
 void
-lk201_set_keyclick(lks, vol)
-	struct lk201_state *lks;
-	int vol;
+lk201_set_keyclick(struct lk201_state *lks, int vol)
 {
 	unsigned int newvol;
 

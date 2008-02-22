@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6protosw.h,v 1.19 2007/07/19 20:48:57 dyoung Exp $	*/
+/*	$NetBSD: ip6protosw.h,v 1.26 2017/09/27 10:05:05 ozaki-r Exp $	*/
 /*	$KAME: ip6protosw.h,v 1.22 2001/02/08 18:02:08 itojun Exp $	*/
 
 /*
@@ -120,18 +120,13 @@ struct ip6protosw {
 /* protocol-protocol hooks */
 	int	(*pr_input)		/* input to protocol (from below) */
 			(struct mbuf **, int *, int);
-	int	(*pr_output)		/* output to protocol (from above) */
-			(struct mbuf *, struct socket *, struct sockaddr_in6 *,
-			 struct mbuf *);
-	void	(*pr_ctlinput)		/* control input (from below) */
+	void	*(*pr_ctlinput)		/* control input (from below) */
 			(int, const struct sockaddr *, void *);
 	int	(*pr_ctloutput)		/* control output (from above) */
-			(int, struct socket *, int, int, struct mbuf **);
+			(int, struct socket *, struct sockopt *);
 
 /* user-protocol hook */
-	int	(*pr_usrreq)		/* user request: see list below */
-			(struct socket *, int, struct mbuf *,
-			     struct mbuf *, struct mbuf *, struct lwp *);
+	const struct pr_usrreqs *pr_usrreqs;
 
 /* utility hooks */
 	void	(*pr_init)		/* initialization hook */
@@ -144,6 +139,19 @@ struct ip6protosw {
 	void	(*pr_drain)		/* flush any excess space possible */
 			(void);
 };
+
+#ifdef _KERNEL
+#define	PR_WRAP_INPUT6(name)				\
+static int						\
+name##_wrapper(struct mbuf **mp, int *offp, int proto)	\
+{							\
+	int rv;						\
+	mutex_enter(softnet_lock);			\
+	rv = name(mp, offp, proto);			\
+	mutex_exit(softnet_lock);			\
+	return rv;					\
+}
+#endif
 
 extern const struct ip6protosw inet6sw[];
 

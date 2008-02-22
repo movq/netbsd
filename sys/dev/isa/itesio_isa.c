@@ -1,8 +1,8 @@
-/*	$NetBSD: itesio_isa.c,v 1.12 2007/12/31 01:53:58 wiz Exp $ */
+/*	$NetBSD: itesio_isa.c,v 1.27 2017/09/12 09:54:45 msaitoh Exp $ */
 /*	Derived from $OpenBSD: it.c,v 1.19 2006/04/10 00:57:54 deraadt Exp $	*/
 
 /*
- * Copyright (c) 2006-2007 Juan Romero Pardines <juan@xtrarom.org>
+ * Copyright (c) 2006-2007 Juan Romero Pardines <xtraeme@netbsd.org>
  * Copyright (c) 2003 Julien Bordet <zejames@greyhats.org>
  * All rights reserved.
  *
@@ -34,12 +34,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: itesio_isa.c,v 1.12 2007/12/31 01:53:58 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: itesio_isa.c,v 1.27 2017/09/12 09:54:45 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
+#include <sys/module.h>
 #include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
@@ -69,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: itesio_isa.c,v 1.12 2007/12/31 01:53:58 wiz Exp $");
 #define RFACT(x, y)	(RFACT_NONE * ((x) + (y)) / (y))
 
 /* autoconf(9) functions */
-static int	itesio_isa_match(device_t, struct cfdata *, void *);
+static int	itesio_isa_match(device_t, cfdata_t, void *);
 static void	itesio_isa_attach(device_t, device_t, void *);
 static int	itesio_isa_detach(device_t, int);
 
@@ -92,6 +92,7 @@ static void	itesio_refresh_fans(struct itesio_softc *, envsys_data_t *);
 static void	itesio_refresh(struct sysmon_envsys *, envsys_data_t *);
 
 /* sysmon_wdog glue */
+static bool	itesio_wdt_suspend(device_t, const pmf_qual_t *);
 static int	itesio_wdt_setmode(struct sysmon_wdog *);
 static int 	itesio_wdt_tickle(struct sysmon_wdog *);
 
@@ -102,14 +103,14 @@ static const int itesio_vrfact[] = {
 	RFACT_NONE,	/* +3.3V	*/
 	RFACT(68, 100),	/* +5V 		*/
 	RFACT(30, 10),	/* +12V 	*/
-	RFACT(21, 10),	/* -12V 	*/
-	RFACT(83, 20),	/* -5V 		*/
+	RFACT(21, 10),	/* -5V 		*/
+	RFACT(83, 20),	/* -12V 	*/
 	RFACT(68, 100),	/* STANDBY	*/
 	RFACT_NONE	/* VBAT		*/
 };
 
 static int
-itesio_isa_match(device_t parent, struct cfdata *match, void *aux)
+itesio_isa_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_handle_t ioh;
@@ -135,10 +136,17 @@ itesio_isa_match(device_t parent, struct cfdata *match, void *aux)
 	bus_space_unmap(ia->ia_iot, ioh, 2);
 
 	switch (cr) {
+	case ITESIO_ID8628:
 	case ITESIO_ID8705:
 	case ITESIO_ID8712:
 	case ITESIO_ID8716:
 	case ITESIO_ID8718:
+	case ITESIO_ID8720:
+	case ITESIO_ID8721:
+	case ITESIO_ID8726:
+	case ITESIO_ID8728:
+	case ITESIO_ID8771:
+	case ITESIO_ID8772:
 		ia->ia_nio = 1;
 		ia->ia_io[0].ir_size = 2;
 		ia->ia_niomem = 0;
@@ -161,8 +169,8 @@ itesio_isa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_iot = ia->ia_iot;
 
 	if (bus_space_map(sc->sc_iot, ia->ia_io[0].ir_addr, 2, 0,
-			  &sc->sc_ioh)) {
-		aprint_error(": can't map i/o space\n");
+			  &sc->sc_pnp_ioh)) {
+		aprint_error(": can't map pnp i/o space\n");
 		return;
 	}
 
@@ -171,39 +179,40 @@ itesio_isa_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * Enter to the Super I/O MB PNP mode.
 	 */
-	itesio_enter(sc->sc_iot, sc->sc_ioh);
+	itesio_enter(sc->sc_iot, sc->sc_pnp_ioh);
 	/*
 	 * Get info from the Super I/O Global Configuration Registers:
 	 * Chip IDs and Device Revision.
 	 */
-	sc->sc_chipid = (itesio_readreg(sc->sc_iot, sc->sc_ioh,
+	sc->sc_chipid = (itesio_readreg(sc->sc_iot, sc->sc_pnp_ioh,
 	    ITESIO_CHIPID1) << 8);
-	sc->sc_chipid |= itesio_readreg(sc->sc_iot, sc->sc_ioh,
+	sc->sc_chipid |= itesio_readreg(sc->sc_iot, sc->sc_pnp_ioh,
 	    ITESIO_CHIPID2);
-	sc->sc_devrev = (itesio_readreg(sc->sc_iot, sc->sc_ioh,
+	sc->sc_devrev = (itesio_readreg(sc->sc_iot, sc->sc_pnp_ioh,
 	    ITESIO_DEVREV) & 0x0f);
 	/*
 	 * Select the EC LDN to get the Base Address.
 	 */
-	itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_LDNSEL, ITESIO_EC_LDN);
+	itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_LDNSEL,
+	    ITESIO_EC_LDN);
 	sc->sc_hwmon_baseaddr =
-	    (itesio_readreg(sc->sc_iot, sc->sc_ioh, ITESIO_EC_MSB) << 8);
-	sc->sc_hwmon_baseaddr |= itesio_readreg(sc->sc_iot, sc->sc_ioh,
+	    (itesio_readreg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_EC_MSB) << 8);
+	sc->sc_hwmon_baseaddr |= itesio_readreg(sc->sc_iot, sc->sc_pnp_ioh,
 	    ITESIO_EC_LSB);
 	/*
 	 * We are done, exit MB PNP mode.
 	 */
-	itesio_exit(sc->sc_iot, sc->sc_ioh);
+	itesio_exit(sc->sc_iot, sc->sc_pnp_ioh);
 
 	aprint_normal(": iTE IT%4xF Super I/O (rev %d)\n",
 	    sc->sc_chipid, sc->sc_devrev);
 	aprint_normal_dev(self, "Hardware Monitor registers at 0x%x\n",
 	    sc->sc_hwmon_baseaddr);
 
-	if (bus_space_map(sc->sc_ec_iot, sc->sc_hwmon_baseaddr, 8, 0,
+	if (bus_space_map(sc->sc_iot, sc->sc_hwmon_baseaddr, 8, 0,
 	    &sc->sc_ec_ioh)) {
 		aprint_error_dev(self, "cannot map hwmon i/o space\n");
-		return;
+		goto out2;
 	}
 
 	sc->sc_hwmon_mapped = true;
@@ -230,7 +239,7 @@ itesio_isa_attach(device_t parent, device_t self, void *aux)
 		if (sysmon_envsys_sensor_attach(sc->sc_sme,
 						&sc->sc_sensor[i])) {
 			sysmon_envsys_destroy(sc->sc_sme);
-			return;
+			goto out;
 		}
 	}
 	/*
@@ -244,19 +253,16 @@ itesio_isa_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self,
 		    "unable to register with sysmon (%d)\n", i);
 		sysmon_envsys_destroy(sc->sc_sme);
-		bus_space_unmap(sc->sc_ec_iot, sc->sc_ec_ioh, 8);
-		return;
+		goto out;
 	}
 	sc->sc_hwmon_enabled = true;
 
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
-	/* The IT8705 doesn't support a WDT */
-	if (sc->sc_chipid == ITESIO_ID8705) {
-		bus_space_unmap(sc->sc_iot, sc->sc_ioh, 2);
-		return;
-	}
+	/* The IT8705 doesn't support the WDT */
+	if (sc->sc_chipid == ITESIO_ID8705)
+		goto out2;
 
 	/*
 	 * Initialize the watchdog timer.
@@ -269,11 +275,21 @@ itesio_isa_attach(device_t parent, device_t self, void *aux)
 
 	if (sysmon_wdog_register(&sc->sc_smw)) {
 		aprint_error_dev(self, "unable to register watchdog timer\n");
-		bus_space_unmap(sc->sc_iot, sc->sc_ioh, 2);
-		return;
+		goto out2;
 	}
 	sc->sc_wdt_enabled = true;
 	aprint_normal_dev(self, "Watchdog Timer present\n");
+
+	pmf_device_deregister(self);
+	if (!pmf_device_register(self, itesio_wdt_suspend, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
+	return;
+
+out:
+	bus_space_unmap(sc->sc_iot, sc->sc_ec_ioh, 8);
+out2:
+	bus_space_unmap(sc->sc_iot, sc->sc_pnp_ioh, 2);
 }
 
 static int
@@ -284,13 +300,24 @@ itesio_isa_detach(device_t self, int flags)
 	if (sc->sc_hwmon_enabled)
 		sysmon_envsys_unregister(sc->sc_sme);
 	if (sc->sc_hwmon_mapped)
-		bus_space_unmap(sc->sc_ec_iot, sc->sc_ec_ioh, 8);
+		bus_space_unmap(sc->sc_iot, sc->sc_ec_ioh, 8);
 	if (sc->sc_wdt_enabled) {
 		sysmon_wdog_unregister(&sc->sc_smw);
-		bus_space_unmap(sc->sc_iot, sc->sc_ioh, 2);
+		bus_space_unmap(sc->sc_iot, sc->sc_pnp_ioh, 2);
 	}
 
 	return 0;
+}
+
+static bool
+itesio_wdt_suspend(device_t dev, const pmf_qual_t *qual)
+{
+	struct itesio_softc *sc = device_private(dev);
+
+	/* Don't allow suspend if watchdog is armed */
+	if ((sc->sc_smw.smw_mode & WDOG_MODE_MASK) != WDOG_MODE_DISARMED)
+		return false;
+	return true;
 }
 
 /*
@@ -299,15 +326,15 @@ itesio_isa_detach(device_t self, int flags)
 static uint8_t
 itesio_ecreadreg(struct itesio_softc *sc, int reg)
 {
-	bus_space_write_1(sc->sc_ec_iot, sc->sc_ec_ioh, ITESIO_EC_ADDR, reg);
-	return bus_space_read_1(sc->sc_ec_iot, sc->sc_ec_ioh, ITESIO_EC_DATA);
+	bus_space_write_1(sc->sc_iot, sc->sc_ec_ioh, ITESIO_EC_ADDR, reg);
+	return bus_space_read_1(sc->sc_iot, sc->sc_ec_ioh, ITESIO_EC_DATA);
 }
 
 static void
 itesio_ecwritereg(struct itesio_softc *sc, int reg, int val)
 {
-	bus_space_write_1(sc->sc_ec_iot, sc->sc_ec_ioh, ITESIO_EC_ADDR, reg);
-	bus_space_write_1(sc->sc_ec_iot, sc->sc_ec_ioh, ITESIO_EC_DATA, val);
+	bus_space_write_1(sc->sc_iot, sc->sc_ec_ioh, ITESIO_EC_ADDR, reg);
+	bus_space_write_1(sc->sc_iot, sc->sc_ec_ioh, ITESIO_EC_DATA, val);
 }
 
 /*
@@ -375,8 +402,8 @@ itesio_setup_sensors(struct itesio_softc *sc)
 	COPYDESCR(sc->sc_sensor[5].desc, "+3.3V");
 	COPYDESCR(sc->sc_sensor[6].desc, "+5V");
 	COPYDESCR(sc->sc_sensor[7].desc, "+12V");
-	COPYDESCR(sc->sc_sensor[8].desc, "-12V");
-	COPYDESCR(sc->sc_sensor[9].desc, "-5V");
+	COPYDESCR(sc->sc_sensor[8].desc, "-5V");
+	COPYDESCR(sc->sc_sensor[9].desc, "-12V");
 	COPYDESCR(sc->sc_sensor[10].desc, "STANDBY");
 	COPYDESCR(sc->sc_sensor[11].desc, "VBAT");
 
@@ -387,6 +414,10 @@ itesio_setup_sensors(struct itesio_softc *sc)
 	COPYDESCR(sc->sc_sensor[12].desc, "CPU Fan");
 	COPYDESCR(sc->sc_sensor[13].desc, "System Fan");
 	COPYDESCR(sc->sc_sensor[14].desc, "Aux Fan");
+
+	/* all */
+	for (i = 0; i < IT_NUM_SENSORS; i++)
+		sc->sc_sensor[i].state = ENVSYS_SINVALID;
 }
 #undef COPYDESCR
 
@@ -437,16 +468,19 @@ itesio_refresh_volts(struct itesio_softc *sc, envsys_data_t *edata)
 
 	/* voltage returned as (mV << 4) */
 	edata->value_cur = (sdata << 4);
+	/* negative values */
+	if (i == 5 || i == 6)
+		edata->value_cur -= ITESIO_EC_VREF;
 	/* rfact is (factor * 10^4) */
-	edata->value_cur *= itesio_vrfact[i];
-
 	if (edata->rfact)
-		edata->value_cur += edata->rfact;
+		edata->value_cur *= edata->rfact;
 	else
-		edata->rfact = itesio_vrfact[i];
-
+		edata->value_cur *= itesio_vrfact[i];
 	/* division by 10 gets us back to uVDC */
 	edata->value_cur /= 10;
+	if (i == 5 || i == 6)
+		edata->value_cur += ITESIO_EC_VREF * 1000;
+
 	edata->state = ENVSYS_SVALID;
 }
 
@@ -531,15 +565,16 @@ itesio_wdt_setmode(struct sysmon_wdog *smw)
 	int period = smw->smw_period;
 
 	/* Enter MB PNP mode and select the WDT LDN */
-	itesio_enter(sc->sc_iot, sc->sc_ioh);
-	itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_LDNSEL, ITESIO_WDT_LDN);
+	itesio_enter(sc->sc_iot, sc->sc_pnp_ioh);
+	itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_LDNSEL,
+	    ITESIO_WDT_LDN);
 
 	if ((smw->smw_mode & WDOG_MODE_MASK) == WDOG_MODE_DISARMED) {
 		/* Disable the watchdog */
-		itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_WDT_CTL, 0);
-		itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_WDT_CNF, 0);
-		itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_WDT_TMO_MSB, 0);
-		itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_WDT_TMO_LSB, 0);
+		itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_WDT_CTL, 0);
+		itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_WDT_CNF, 0);
+		itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_WDT_TMO_MSB, 0);
+		itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_WDT_TMO_LSB, 0);
 	} else {
 		/* Enable the watchdog */
 		if (period > ITESIO_WDT_MAXTIMO || period < 1)
@@ -548,16 +583,16 @@ itesio_wdt_setmode(struct sysmon_wdog *smw)
 		period *= 2;
 
 		/* set the timeout and start the watchdog */
-		itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_WDT_TMO_MSB,
+		itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_WDT_TMO_MSB,
 		    period >> 8);
-		itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_WDT_TMO_LSB,
+		itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_WDT_TMO_LSB,
 		    period & 0xff);
-		itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_WDT_CNF,
+		itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_WDT_CNF,
 		    ITESIO_WDT_CNF_SECS | ITESIO_WDT_CNF_KRST |
 		    ITESIO_WDT_CNF_PWROK);
 	}
 	/* we are done, exit MB PNP mode */
-	itesio_exit(sc->sc_iot, sc->sc_ioh);
+	itesio_exit(sc->sc_iot, sc->sc_pnp_ioh);
 
 	return 0;
 }
@@ -569,13 +604,43 @@ itesio_wdt_tickle(struct sysmon_wdog *smw)
 	int period = smw->smw_period * 2;
 
 	/* refresh timeout value and exit */
-	itesio_enter(sc->sc_iot, sc->sc_ioh);
-	itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_LDNSEL, ITESIO_WDT_LDN);
-	itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_WDT_TMO_MSB,
+	itesio_enter(sc->sc_iot, sc->sc_pnp_ioh);
+	itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_LDNSEL,
+	    ITESIO_WDT_LDN);
+	itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_WDT_TMO_MSB,
 	    period >> 8);
-	itesio_writereg(sc->sc_iot, sc->sc_ioh, ITESIO_WDT_TMO_LSB,
+	itesio_writereg(sc->sc_iot, sc->sc_pnp_ioh, ITESIO_WDT_TMO_LSB,
 	    period & 0xff);
-	itesio_exit(sc->sc_iot, sc->sc_ioh);
+	itesio_exit(sc->sc_iot, sc->sc_pnp_ioh);
 
 	return 0;
+}
+
+MODULE(MODULE_CLASS_DRIVER, itesio, "sysmon_envsys,sysmon_wdog");
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+itesio_modcmd(modcmd_t cmd, void *opaque)
+{
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+#ifdef _MODULE
+		return config_init_component(cfdriver_ioconf_itesio,
+		    cfattach_ioconf_itesio, cfdata_ioconf_itesio);
+#else
+		return 0;
+#endif
+	case MODULE_CMD_FINI:
+#ifdef _MODULE
+		return config_fini_component(cfdriver_ioconf_itesio,
+		    cfattach_ioconf_itesio, cfdata_ioconf_itesio);
+#else
+		return 0;
+#endif
+	default:
+		return ENOTTY;
+	}
 }

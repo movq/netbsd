@@ -1,4 +1,4 @@
-/*	$NetBSD: uirdavar.h,v 1.2 2007/12/05 07:15:54 ad Exp $	*/
+/*	$NetBSD: uirdavar.h,v 1.7 2016/12/04 10:12:35 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001,2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -124,48 +117,47 @@ typedef struct {
 
 
 struct uirda_softc {
- 	USBBASEDEVICE		sc_dev;
-	usbd_device_handle	sc_udev;
-	usbd_interface_handle	sc_iface;
+	device_t		sc_dev;
+	struct usbd_device 	*sc_udev;
+	struct usbd_interface	*sc_iface;
 
 	kmutex_t		sc_rd_buf_lk;
-	u_int8_t		*sc_rd_buf;
+	uint8_t			*sc_rd_buf;
 	int			sc_rd_addr;
-	usbd_pipe_handle	sc_rd_pipe;
-	usbd_xfer_handle	sc_rd_xfer;
+	struct usbd_pipe	*sc_rd_pipe;
+	struct usbd_xfer	*sc_rd_xfer;
 	struct selinfo		sc_rd_sel;
 	u_int			sc_rd_count;
 	u_char			sc_rd_err;
 
 	kmutex_t		sc_wr_buf_lk;
-	u_int8_t		*sc_wr_buf;
+	uint8_t			*sc_wr_buf;
 	int			sc_wr_addr;
-	usbd_xfer_handle	sc_wr_xfer;
-	usbd_pipe_handle	sc_wr_pipe;
+	struct usbd_xfer	*sc_wr_xfer;
+	struct usbd_pipe	*sc_wr_pipe;
 	int			sc_wr_hdr;
 	struct selinfo		sc_wr_sel;
 
-	struct device		*sc_child;
+	device_t		sc_child;
 	struct irda_params	sc_params;
 	usb_irda_descriptor_t	sc_irdadesc;
 
 	int			sc_refcnt;
 	char			sc_dying;
-	u_int8_t		sc_hdszi; /* set to value if != 1 needed */
+	uint8_t		sc_hdszi; /* set to value if != 1 needed */
 
 	int			(*sc_loadfw)(struct uirda_softc *);
 	struct irframe_methods	*sc_irm;
 };
 
-usbd_status usbd_get_class_desc(usbd_device_handle, int type, int index,
-	int len, void *desc);
+usbd_status usbd_get_class_desc(struct usbd_device *, int, int, int, void *);
 
-int uirda_open(void *h, int flag, int mode, struct lwp *l);
-int uirda_close(void *h, int flag, int mode, struct lwp *l);
-int uirda_read(void *h, struct uio *uio, int flag);
-int uirda_write(void *h, struct uio *uio, int flag);
-int uirda_set_params(void *h, struct irda_params *params);
-int uirda_get_speeds(void *h, int *speeds);
-int uirda_get_turnarounds(void *h, int *times);
-int uirda_poll(void *h, int events, struct lwp *l);
-int uirda_kqfilter(void *h, struct knote *kn);
+int uirda_open(void *, int, int, struct lwp *);
+int uirda_close(void *, int, int, struct lwp *);
+int uirda_read(void *, struct uio *, int);
+int uirda_write(void *, struct uio *, int);
+int uirda_set_params(void *, struct irda_params *);
+int uirda_get_speeds(void *, int *);
+int uirda_get_turnarounds(void *, int *);
+int uirda_poll(void *, int, struct lwp *);
+int uirda_kqfilter(void *, struct knote *);

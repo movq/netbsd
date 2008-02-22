@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.h,v 1.123 2008/01/20 10:15:50 dsl Exp $	*/
+/*	$NetBSD: exec.h,v 1.153 2018/04/27 18:33:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -97,6 +97,9 @@
 #ifndef _SYS_EXEC_H_
 #define _SYS_EXEC_H_
 
+struct pathbuf; /* from namei.h */
+
+
 /*
  * The following structure is found at the top of the user stack of each
  * user process. The ps program uses it to locate argv and environment
@@ -112,6 +115,16 @@ struct ps_strings {
 	int	ps_nenvstr;	/* the number of environment strings */
 };
 
+#ifdef _KERNEL
+struct ps_strings32 {
+	uint32_t	ps_argvstr;	/* first of 0 or more argument strings */
+	int32_t		ps_nargvstr;	/* the number of argument strings */
+	uint32_t	ps_envstr;	/* first of 0 or more environment strings */
+	int32_t		ps_nenvstr;	/* the number of environment strings */
+};
+#endif
+
+#ifdef _KERNEL
 /*
  * the following structures allow execve() to put together processes
  * in a more extensible and cleaner way.
@@ -131,6 +144,7 @@ struct lwp;
 struct proc;
 struct exec_package;
 struct vnode;
+struct coredump_iostate;
 
 typedef int (*exec_makecmds_fcn)(struct lwp *, struct exec_package *);
 
@@ -141,18 +155,17 @@ struct execsw {
 		int (*elf_probe_func)(struct lwp *,
 			struct exec_package *, void *, char *, vaddr_t *);
 		int (*ecoff_probe_func)(struct lwp *, struct exec_package *);
-		int (*mach_probe_func)(const char **);
 	} u;
-	const struct  emul *es_emul;	/* os emulation */
+	struct  emul *es_emul;		/* os emulation */
 	int	es_prio;		/* entry priority */
 	int	es_arglen;		/* Extra argument size in words */
 					/* Copy arguments on the new stack */
 	int	(*es_copyargs)(struct lwp *, struct exec_package *,
 			struct ps_strings *, char **, void *);
 					/* Set registers before execution */
-	void	(*es_setregs)(struct lwp *, struct exec_package *, u_long);
+	void	(*es_setregs)(struct lwp *, struct exec_package *, vaddr_t);
 					/* Dump core */
-	int	(*es_coredump)(struct lwp *, void *);
+	int	(*es_coredump)(struct lwp *, struct coredump_iostate *);
 	int	(*es_setup_stack)(struct lwp *, struct exec_package *);
 };
 
@@ -168,39 +181,44 @@ struct exec_vmcmd_set {
 };
 
 #define	EXEC_DEFAULT_VMCMD_SETSIZE	9	/* # of cmds in set to start */
+struct exec_fakearg {
+	char *fa_arg;
+	size_t fa_len;
+};
 
 struct exec_package {
-	const char *ep_name;		/* file's name */
+	const char *ep_kname;		/* kernel-side copy of file's name */
+	char *ep_resolvedname;		/* fully resolved path from namei */
 	void	*ep_hdr;		/* file's exec header */
 	u_int	ep_hdrlen;		/* length of ep_hdr */
 	u_int	ep_hdrvalid;		/* bytes of ep_hdr that are valid */
-	struct nameidata *ep_ndp;	/* namei data pointer for lookups */
 	struct	exec_vmcmd_set ep_vmcmds;  /* vmcmds used to build vmspace */
 	struct	vnode *ep_vp;		/* executable's vnode */
 	struct	vattr *ep_vap;		/* executable's attributes */
-	u_long	ep_taddr;		/* process's text address */
-	u_long	ep_tsize;		/* size of process's text */
-	u_long	ep_daddr;		/* process's data(+bss) address */
-	u_long	ep_dsize;		/* size of process's data(+bss) */
-	u_long	ep_maxsaddr;		/* proc's max stack addr ("top") */
-	u_long	ep_minsaddr;		/* proc's min stack addr ("bottom") */
-	u_long	ep_ssize;		/* size of process's stack */
-	u_long	ep_entry;		/* process's entry point */
+	vaddr_t	ep_taddr;		/* process's text address */
+	vsize_t	ep_tsize;		/* size of process's text */
+	vaddr_t	ep_daddr;		/* process's data(+bss) address */
+	vsize_t	ep_dsize;		/* size of process's data(+bss) */
+	vaddr_t	ep_maxsaddr;		/* proc's max stack addr ("top") */
+	vaddr_t	ep_minsaddr;		/* proc's min stack addr ("bottom") */
+	vsize_t	ep_ssize;		/* size of process's stack */
+	vaddr_t	ep_entry;		/* process's entry point */
+	vaddr_t	ep_entryoffset;		/* offset to entry point */
 	vaddr_t	ep_vm_minaddr;		/* bottom of process address space */
 	vaddr_t	ep_vm_maxaddr;		/* top of process address space */
 	u_int	ep_flags;		/* flags; see below. */
 	size_t	ep_fa_len;		/* byte size of ep_fa */
-	struct exec_fakearg {
-		char *fa_arg;
-		size_t fa_len;
-	} *ep_fa;			/* a fake args vector for scripts */
+	struct exec_fakearg *ep_fa;	/* a fake args vector for scripts */
 	int	ep_fd;			/* a file descriptor we're holding */
 	void	*ep_emul_arg;		/* emulation argument */
 	const struct	execsw *ep_esch;/* execsw entry */
 	struct vnode *ep_emul_root;     /* base of emulation filesystem */
 	struct vnode *ep_interp;        /* vnode of (elf) interpeter */
 	uint32_t ep_pax_flags;		/* pax flags */
-	char	*ep_path;		/* absolute path of executable */
+	void	(*ep_emul_arg_free)(void *);
+					/* free ep_emul_arg */
+	uint32_t ep_osversion;		/* OS version */
+	char	ep_machine_arch[12];	/* from MARCH note */
 };
 #define	EXEC_INDIR	0x0001		/* script handling already done */
 #define	EXEC_HASFD	0x0002		/* holding a shell script */
@@ -208,14 +226,17 @@ struct exec_package {
 #define	EXEC_SKIPARG	0x0008		/* don't copy user-supplied argv[0] */
 #define	EXEC_DESTR	0x0010		/* destructive ops performed */
 #define	EXEC_32		0x0020		/* 32-bit binary emulation */
+#define	EXEC_FORCEAUX	0x0040		/* always use ELF AUX vector */
+#define	EXEC_TOPDOWN_VM	0x0080		/* may use top-down VM layout */
+#define	EXEC_FROM32	0x0100		/* exec'ed from 32-bit binary */
 
 struct exec_vmcmd {
 	int	(*ev_proc)(struct lwp *, struct exec_vmcmd *);
 				/* procedure to run for region of vmspace */
-	u_long	ev_len;		/* length of the segment to map */
-	u_long	ev_addr;	/* address in the vmspace to place it at */
+	vsize_t	ev_len;		/* length of the segment to map */
+	vaddr_t	ev_addr;	/* address in the vmspace to place it at */
 	struct	vnode *ev_vp;	/* vnode pointer for the file w/the data */
-	u_long	ev_offset;	/* offset in the file for the data */
+	vsize_t	ev_offset;	/* offset in the file for the data */
 	u_int	ev_prot;	/* protections for segment */
 	int	ev_flags;
 #define	VMCMD_RELATIVE	0x0001	/* ev_addr is relative to base entry */
@@ -224,11 +245,11 @@ struct exec_vmcmd {
 #define	VMCMD_STACK	0x0008	/* entry is for a stack */
 };
 
-#ifdef _KERNEL
 /*
  * funtions used either by execve() or the various CPU-dependent execve()
  * hooks.
  */
+vaddr_t	exec_vm_minaddr		(vaddr_t);
 void	kill_vmcmd		(struct exec_vmcmd **);
 int	exec_makecmds		(struct lwp *, struct exec_package *);
 int	exec_runcmds		(struct lwp *, struct exec_package *);
@@ -240,37 +261,40 @@ int	vmcmd_readvn		(struct lwp *, struct exec_vmcmd *);
 int	vmcmd_map_zero		(struct lwp *, struct exec_vmcmd *);
 int	copyargs		(struct lwp *, struct exec_package *,
 				    struct ps_strings *, char **, void *);
-void	setregs			(struct lwp *, struct exec_package *, u_long);
+int	copyin_psstrings	(struct proc *, struct ps_strings *);
+int	copy_procargs		(struct proc *, int, size_t *,
+    int (*)(void *, const void *, size_t, size_t), void *);
+void	setregs			(struct lwp *, struct exec_package *, vaddr_t);
 int	check_veriexec		(struct lwp *, struct vnode *,
 				     struct exec_package *, int);
-int	check_exec		(struct lwp *, struct exec_package *);
+int	check_exec		(struct lwp *, struct exec_package *,
+				     struct pathbuf *);
 int	exec_init		(int);
 int	exec_read_from		(struct lwp *, struct vnode *, u_long off,
 				    void *, size_t);
 int	exec_setup_stack	(struct lwp *, struct exec_package *);
 
-int	coredump_write		(void *, enum uio_seg, const void *, size_t);
+int	coredump_write		(struct coredump_iostate *, enum uio_seg,
+				    const void *, size_t);
+off_t	coredump_offset		(struct coredump_iostate *);
+
+void	exec_free_emul_arg	(struct exec_package *);
+
+
 /*
  * Machine dependent functions
  */
 struct core;
 struct core32;
-int	cpu_coredump(struct lwp *, void *, struct core *);
-int	cpu_coredump32(struct lwp *, void *, struct core32 *);
+int	cpu_coredump(struct lwp *, struct coredump_iostate *, struct core *);
+int	cpu_coredump32(struct lwp *, struct coredump_iostate *, struct core32 *);
 
-
-#ifdef LKM
-int	emul_register		(const struct emul *, int);
-int	emul_unregister		(const char *);
-const struct emul *emul_search(const char *);
-
-int	exec_add		(struct execsw *, const char *);
-int	exec_remove		(const struct execsw *);
-#endif /* LKM */
+int	exec_add(struct execsw *, int);
+int	exec_remove(struct execsw *, int);
 
 void	new_vmcmd(struct exec_vmcmd_set *,
 		    int (*)(struct lwp *, struct exec_vmcmd *),
-		    u_long, u_long, struct vnode *, u_long, u_int, int);
+		    vsize_t, vaddr_t, struct vnode *, u_long, u_int, int);
 #define	NEW_VMCMD(evsp,lwp,len,addr,vp,offset,prot) \
 	new_vmcmd(evsp,lwp,len,addr,vp,offset,prot,0)
 #define	NEW_VMCMD2(evsp,lwp,len,addr,vp,offset,prot,flags) \
@@ -280,8 +304,18 @@ typedef	int (*execve_fetch_element_t)(char * const *, size_t, char **);
 int	execve1(struct lwp *, const char *, char * const *, char * const *,
     execve_fetch_element_t);
 
-#endif /* _KERNEL */
+struct posix_spawn_file_actions;
+struct posix_spawnattr;
+int	check_posix_spawn	(struct lwp *);
+void	posix_spawn_fa_free(struct posix_spawn_file_actions *, size_t);
+int	do_posix_spawn(struct lwp *, pid_t *, bool*, const char *,
+    struct posix_spawn_file_actions *, struct posix_spawnattr *,
+    char *const *, char *const *, execve_fetch_element_t);
+int      exec_makepathbuf(struct lwp *, const char *, enum uio_seg,
+    struct pathbuf **, size_t *);
 
-#include <sys/exec_aout.h>
+extern int	maxexec;
+
+#endif /* _KERNEL */
 
 #endif /* !_SYS_EXEC_H_ */

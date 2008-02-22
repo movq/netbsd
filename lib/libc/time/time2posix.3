@@ -1,10 +1,12 @@
-.\"	$NetBSD: time2posix.3,v 1.13 2003/04/16 13:34:58 wiz Exp $
-.Dd April 1, 2001
+.\"	$NetBSD: time2posix.3,v 1.22 2017/10/29 06:07:48 abhinav Exp $
+.Dd October 6, 2014
 .Dt TIME2POSIX 3
 .Os
 .Sh NAME
 .Nm time2posix ,
-.Nm posix2time
+.Nm time2posix_z ,
+.Nm posix2time ,
+.Nm posix2time_z
 .Nd convert seconds since the Epoch
 .Sh LIBRARY
 .Lb libc
@@ -13,23 +15,31 @@
 .Ft time_t
 .Fn time2posix "time_t t"
 .Ft time_t
+.Fn time2posix_z "const timezone_t tz" "time_t t"
+.Ft time_t
 .Fn posix2time "time_t t"
+.Ft time_t
+.Fn posix2time_z "const timezone_t tz" "time_t t"
 .Sh DESCRIPTION
 .St -p1003.1
-legislates that a
-.Va time_t
-value of 536457599 shall correspond to
+requires the
+.Ft time_t
+value of
+.Dv 536457599
+to stand for
 .Dl Wed Dec 31 23:59:59 UTC 1986 .
 This effectively implies that POSIX
-.Va time_t Ns 's
-cannot include leap seconds and, therefore,
+.Ft time_t
+values cannot include leap seconds and, therefore,
 that the system time must be adjusted as each leap occurs.
 .Pp
 If the time package is configured with leap-second support
 enabled, however, no such adjustment is needed and
 .Va time_t
 values continue to increase over leap events
-(as a true `seconds since...' value).
+(as a true
+.Dq "seconds since..."
+value).
 This means that these values will differ from those required by POSIX
 by the net number of leap seconds inserted since the Epoch.
 .Pp
@@ -42,7 +52,10 @@ values should only be obtained-from and
 passed-to functions such as
 .Xr time 3 ,
 .Xr localtime 3 ,
+.Xr localtime_r 3 ,
+.Xr localtime_rz 3 ,
 .Xr mktime 3 ,
+.Xr mktime_z 3 ,
 and
 .Xr difftime 3 .
 However, POSIX gives an arithmetic expression for directly computing a
@@ -55,9 +68,11 @@ using such a relationship will typically not handle intervals over
 leap seconds correctly.
 .Pp
 The
-.Fn time2posix
+.Fn time2posix ,
+.Fn time2posix_z ,
+.Fn posix2time ,
 and
-.Fn posix2time
+.Fn posix2time_z
 functions are provided to address this
 .Va time_t
 mismatch by converting between local
@@ -69,24 +84,37 @@ These converted values can then be used in lieu of correcting the
 older applications, or when communicating with POSIX-compliant systems.
 .Pp
 .Fn time2posix
-is single-valued.
+and
+.Fn time2posix_z
+are single-valued.
 That is, every local
 .Va time_t
 corresponds to a single POSIX
 .Va time_t .
 .Fn posix2time
-is less well-behaved: for a positive leap second hit the result is not
+and
+.Fn posix2time
+are less well-behaved: for a positive leap second hit the result is not
 unique, and for a negative leap second hit the corresponding POSIX
 .Va time_t
 doesn't exist so an adjacent value is returned.
 Both of these are good indicators of the inferiority of the POSIX
 representation.
 .Pp
+The
+.Dq z
+variants of the two functions behave exactly like their counterparts,
+but they operate in the given
+.Fa tz
+argument which was previously allocated using
+.Xr tzalloc 3
+and are re-entrant.
+.Pp
 The following table summarizes the relationship between a
 .Va time_t
 and its conversion to, and back from, the POSIX representation over
 the leap second inserted at the end of June, 1993.
-.Bl -column "93/06/30" "23:59:59" "A+0" "X=time2posix(T)" "posix2time(X) -offset indent
+.Bl -column "93/06/30" "23:59:59" "A+0" "X=time2posix(T)" "posix2time(X)" -offset indent
 .It Sy DATE	TIME	T	X=time2posix(T)	posix2time(X)
 .It 93/06/30	23:59:59	A+0	B+0	A+0
 .It 93/06/30	23:59:60	A+1	B+1	A+1 or A+2
@@ -95,13 +123,13 @@ the leap second inserted at the end of June, 1993.
 .El
 .Pp
 A leap second deletion would look like...
-.Bl -column "??/06/30" "23:59:58" "A+0" "X=time2posix(T)" "posix2time(X) -offset indent
+.Bl -column "??/06/30" "23:59:58" "A+0" "X=time2posix(T)" "posix2time(X)" -offset indent
 .It Sy DATE	TIME	T	X=time2posix(T)	posix2time(X)
 .It ??/06/30	23:59:58	A+0	B+0	A+0
 .It ??/07/01	00:00:00	A+1	B+2	A+1
 .It ??/07/01	00:00:01	A+2	B+3	A+2
 .El
-[Note: posix2time(B+1) =\*[Gt] A+0 or A+1]
+[Note: posix2time(B+1) => A+0 or A+1]
 .Pp
 If leap-second support is not enabled, local
 .Va time_t Ns 's
@@ -115,8 +143,12 @@ degenerate to the identity function.
 .Sh SEE ALSO
 .Xr difftime 3 ,
 .Xr localtime 3 ,
+.Xr localtime_r 3 ,
+.Xr localtime_rz 3 ,
 .Xr mktime 3 ,
-.Xr time 3
+.Xr mktime_z 3 ,
+.Xr time 3 ,
+.Xr tzalloc 3
 .\" @(#)time2posix.3	7.7
 .\" This file is in the public domain, so clarified as of
-.\" 1996-06-05 by Arthur David Olson (arthur_david_olson@nih.gov).
+.\" 1996-06-05 by Arthur David Olson.

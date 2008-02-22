@@ -1,4 +1,4 @@
-/*	$NetBSD: file_ufs.cpp,v 1.3 2006/03/05 04:05:39 uwe Exp $	*/
+/*	$NetBSD: file_ufs.cpp,v 1.5 2011/11/23 15:49:57 nonaka Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,15 +67,23 @@ BOOL
 UfsFile::setRoot(TCHAR *drive)
 {
 	char name[MAX_PATH];
-	int unit;
+	char devname[4] = "DSK";
+	int unit = 1;
 
 	_to_ascii(name, drive, MAX_PATH);
 	if ('1' <= name[0] && name[0] <= '9' && name[1] == ':')
 		unit = name[0] - '0';
-	else
-		unit = 1;
+	else if (isalpha((unsigned char)name[0]) &&
+	    isalpha((unsigned char)name[1]) &&
+	    isalpha((unsigned char)name[2]) &&
+	    '1' <= name[3] && name[3] <= '9' && name[4] == ':') {
+		devname[0] = name[0];
+		devname[1] = name[1];
+		devname[2] = name[2];
+		unit = name[3] - '0';
+	}
 
-	winblkopen(_f, "DSK", unit, 0);
+	winblkopen(_f, devname, unit, 0);
 
 	return TRUE;
 }

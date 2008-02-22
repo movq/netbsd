@@ -1,4 +1,4 @@
-/*	$NetBSD: rwlock.h,v 1.4 2007/11/29 15:17:45 ad Exp $	*/
+/*	$NetBSD: rwlock.h,v 1.9 2015/02/25 13:52:42 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,14 +40,21 @@ struct krwlock {
 
 #define	__HAVE_SIMPLE_RW_LOCKS		1
 
+#ifdef MULTIPROCESSOR
+#ifdef _ARM_ARCH_7
+#define	RW_RECEIVE(rw)			__asm __volatile("dmb" ::: "memory")
+#define	RW_GIVE(rw)			__asm __volatile("dsb" ::: "memory")
+#else
+#define	RW_RECEIVE(rw)			membar_consumer()
+#define	RW_GIVE(rw)			membar_producer()
+#endif
+#else
 #define	RW_RECEIVE(rw)			/* nothing */
 #define	RW_GIVE(rw)			/* nothing */
-
-unsigned long	_lock_cas(volatile unsigned long *,
-    unsigned long, unsigned long);
+#endif
 
 #define	RW_CAS(p, o, n)			\
-    (_lock_cas((volatile unsigned long *)(p), (o), (n)) == (o))
+    (atomic_cas_ulong((volatile unsigned long *)(p), (o), (n)) == (o))
 
 #endif	/* __RWLOCK_PRIVATE */
 

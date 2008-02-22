@@ -1,4 +1,4 @@
-/*	$NetBSD: ad1848var.h,v 1.42 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: ad1848var.h,v 1.44 2011/11/23 23:07:32 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -121,8 +114,8 @@ int	ad1848_isa_halt_input(void *);
 
 int	ad1848_isa_intr(void *);
 
-void   *ad1848_isa_malloc(void *, int, size_t, struct malloc_type *, int);
-void	ad1848_isa_free(void *, void *, struct malloc_type *);
+void   *ad1848_isa_malloc(void *, int, size_t);
+void	ad1848_isa_free(void *, void *, size_t);
 size_t	ad1848_isa_round_buffersize(void *, int, size_t);
 paddr_t	ad1848_isa_mappage(void *, void *, off_t, int);
 int	ad1848_isa_get_props(void *);

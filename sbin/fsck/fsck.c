@@ -1,4 +1,4 @@
-/*	$NetBSD: fsck.c,v 1.46 2007/07/17 20:12:40 christos Exp $	*/
+/*	$NetBSD: fsck.c,v 1.52 2014/10/25 22:00:19 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas. All rights reserved.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsck.c,v 1.46 2007/07/17 20:12:40 christos Exp $");
+__RCSID("$NetBSD: fsck.c,v 1.52 2014/10/25 22:00:19 mlelstv Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -63,10 +63,11 @@ __RCSID("$NetBSD: fsck.c,v 1.46 2007/07/17 20:12:40 christos Exp $");
 
 #include "pathnames.h"
 #include "fsutil.h"
+#include "exitvalues.h"
 
 static enum { IN_LIST, NOT_IN_LIST } which = NOT_IN_LIST;
 
-TAILQ_HEAD(fstypelist, entry) opthead, selhead;
+TAILQ_HEAD(fstypelist, entry) opthead, selhead, omhead;
 
 struct entry {
 	char *type;
@@ -80,6 +81,7 @@ static int flags = 0;
 
 static int checkfs(const char *, const char *, const char *, void *, pid_t *);
 static int selected(const char *);
+static int omitted(const char *);
 static void addoption(char *);
 static const char *getoptions(const char *);
 static void addentry(struct fstypelist *, const char *, const char *);
@@ -87,24 +89,27 @@ static void maketypelist(char *);
 static void catopt(char **, const char *);
 static void mangle(char *, int *, const char ** volatile *, int *);
 static const char *getfslab(const char *);
-static void usage(void);
+__dead static void usage(void);
 static void *isok(struct fstab *);
 
 int
 main(int argc, char *argv[])
 {
 	struct fstab *fs;
-	int i, rval = 0;
+	int i, rval;
 	const char *vfstype = NULL;
 	char globopt[3];
+	int ret = FSCK_EXIT_OK;
+	char buf[MAXPATHLEN];
 
 	globopt[0] = '-';
 	globopt[2] = '\0';
 
 	TAILQ_INIT(&selhead);
 	TAILQ_INIT(&opthead);
+	TAILQ_INIT(&omhead);
 
-	while ((i = getopt(argc, argv, "dfl:nPpqT:t:vy")) != -1) {
+	while ((i = getopt(argc, argv, "dfl:nPpqT:t:vx:y")) != -1) {
 		switch (i) {
 		case 'd':
 			flags |= CHECK_DEBUG;
@@ -150,6 +155,10 @@ main(int argc, char *argv[])
 			flags |= CHECK_VERBOSE;
 			continue;
 
+		case 'x':
+			addentry(&omhead, optarg, "");
+			continue;
+
 		case 'y':
 			break;
 
@@ -187,34 +196,50 @@ main(int argc, char *argv[])
 
 
 	for (; argc--; argv++) {
-		const char *spec, *type, *cp;
+		const char *spec, *spec2, *mntpt, *type, *cp;
 		char	device[MAXPATHLEN];
 
-		spec = *argv;
-		cp = strrchr(spec, '/');
+		spec = mntpt = *argv;
+		spec2 = getfsspecname(buf, sizeof(buf), spec);
+		if (spec2 == NULL)
+			spec2 = spec;
+
+		cp = strrchr(spec2, '/');
 		if (cp == 0) {
 			(void)snprintf(device, sizeof(device), "%s%s",
-				_PATH_DEV, spec);
-			spec = device;
+				_PATH_DEV, spec2);
+			spec2 = device;
 		}
-		if ((fs = getfsfile(spec)) == NULL &&
-		    (fs = getfsspec(spec)) == NULL) {
+
+		fs = getfsfile(spec);
+		if (fs == NULL)
+		    fs = getfsspec(spec);
+		if (fs == NULL && spec != spec2) {
+		    fs = getfsspec(spec2);
+		    spec = spec2;
+		}
+
+		if (fs) {
+			spec = getfsspecname(buf, sizeof(buf), fs->fs_spec);
+			if (spec == NULL)
+				err(FSCK_EXIT_CHECK_FAILED, "%s", buf);
+			type = fs->fs_vfstype;
+			if (BADTYPE(fs->fs_type))
+				errx(FSCK_EXIT_CHECK_FAILED,
+				    "%s has unknown file system type.",
+				    spec);
+		} else {
 			if (vfstype == NULL)
 				vfstype = getfslab(spec);
 			type = vfstype;
 		}
-		else {
-			spec = fs->fs_spec;
-			type = fs->fs_vfstype;
-			if (BADTYPE(fs->fs_type))
-				errx(1, "%s has unknown file system type.",
-				    spec);
-		}
 
-		rval |= checkfs(type, blockcheck(spec), *argv, NULL, NULL);
+		rval = checkfs(type, blockcheck(spec), *argv, NULL, NULL);
+		if (rval > ret) 
+			ret = rval;
 	}
 
-	return rval;
+	return ret;
 }
 
 
@@ -229,6 +254,9 @@ isok(struct fstab *fs)
 		return NULL;
 
 	if (!selected(fs->fs_vfstype))
+		return NULL;
+
+	if (omitted(fs->fs_file))
 		return NULL;
 
 	return fs;
@@ -292,7 +320,7 @@ checkfs(const char *vfst, const char *spec, const char *mntpt, void *auxarg,
 		if (optbuf)
 			free(optbuf);
 		free(argv);
-		return (1);
+		return FSCK_EXIT_CHECK_FAILED;
 
 	case 0:					/* Child. */
 		if ((flags & CHECK_FORCE) == 0) {
@@ -310,14 +338,14 @@ checkfs(const char *vfst, const char *spec, const char *mntpt, void *auxarg,
 		"%s: file system is mounted read-write on %s; not checking\n",
 				    spec, mntpt);
 				if ((flags & CHECK_PREEN) && auxarg != NULL)
-					_exit(0);	/* fsck -p */
+					_exit(FSCK_EXIT_OK);	/* fsck -p */
 				else
-					_exit(1);	/* fsck [[-p] ...] */
+					_exit(FSCK_EXIT_CHECK_FAILED);	/* fsck [[-p] ...] */
 			}
 		}
 
 		if (flags & CHECK_DEBUG)
-			_exit(0);
+			_exit(FSCK_EXIT_OK);
 
 		/* Go find an executable. */
 		edir = edirs;
@@ -339,7 +367,7 @@ checkfs(const char *vfst, const char *spec, const char *mntpt, void *auxarg,
 			else
 				warn("exec %s", execname);
 		}
-		_exit(1);
+		_exit(FSCK_EXIT_CHECK_FAILED);
 		/* NOTREACHED */
 
 	default:				/* Parent. */
@@ -349,26 +377,26 @@ checkfs(const char *vfst, const char *spec, const char *mntpt, void *auxarg,
 
 		if (pidp) {
 			*pidp = pid;
-			return 0;
+			return FSCK_EXIT_OK;
 		}
 
 		if (waitpid(pid, &status, 0) < 0) {
 			warn("waitpid");
-			return (1);
+			return FSCK_EXIT_CHECK_FAILED;
 		}
 
 		if (WIFEXITED(status)) {
 			if (WEXITSTATUS(status) != 0)
-				return (WEXITSTATUS(status));
+				return WEXITSTATUS(status);
 		}
 		else if (WIFSIGNALED(status)) {
 			warnx("%s: %s", spec, strsignal(WTERMSIG(status)));
-			return (1);
+			return FSCK_EXIT_CHECK_FAILED;
 		}
 		break;
 	}
 
-	return (0);
+	return FSCK_EXIT_OK;
 }
 
 
@@ -383,6 +411,20 @@ selected(const char *type)
 			return which == IN_LIST ? 1 : 0;
 
 	return which == IN_LIST ? 0 : 1;
+}
+
+
+static int
+omitted(const char *mountedon)
+{
+	struct entry *e;
+
+	/* If no type specified, it's always selected. */
+	TAILQ_FOREACH(e, &omhead, entries)
+		if (!strcmp(e->type, mountedon))
+			return 1;
+
+	return 0;
 }
 
 
@@ -553,9 +595,9 @@ static void
 usage(void)
 {
 	static const char common[] =
-	    "[-dfnPpqvy] [-l maxparallel] [-T fstype:fsoptions]\n\t\t[-t fstype]";
+	    "[-dfnPpqvy] [-x excludemount] [-l maxparallel] [-T fstype:fsoptions]\n\t\t[-t fstype]";
 
 	(void)fprintf(stderr, "usage: %s %s [special|node]...\n",
 	    getprogname(), common);
-	exit(1);
+	exit(FSCK_EXIT_USAGE);
 }

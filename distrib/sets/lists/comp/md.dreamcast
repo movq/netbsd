@@ -1,11 +1,11 @@
-# $NetBSD: md.dreamcast,v 1.13 2007/02/09 22:22:32 ad Exp $
+# $NetBSD: md.dreamcast,v 1.18 2016/08/25 12:17:26 christos Exp $
 ./usr/include/dreamcast				comp-c-include
 ./usr/include/dreamcast/_G_config.h		comp-obsolete		obsolete
 ./usr/include/dreamcast/ansi.h			comp-c-include
 ./usr/include/dreamcast/aout_machdep.h		comp-c-include
 ./usr/include/dreamcast/asm.h			comp-c-include
 ./usr/include/dreamcast/bswap.h			comp-c-include
-./usr/include/dreamcast/bus.h			comp-c-include
+./usr/include/dreamcast/bus.h			comp-obsolete		obsolete
 ./usr/include/dreamcast/cdefs.h			comp-c-include
 ./usr/include/dreamcast/coff_machdep.h		comp-c-include
 ./usr/include/dreamcast/conf.h			comp-obsolete		obsolete
@@ -16,6 +16,7 @@
 ./usr/include/dreamcast/elf_machdep.h		comp-c-include
 ./usr/include/dreamcast/endian.h		comp-c-include
 ./usr/include/dreamcast/endian_machdep.h	comp-c-include
+./usr/include/dreamcast/fenv.h			comp-c-include
 ./usr/include/dreamcast/float.h			comp-c-include
 ./usr/include/dreamcast/frame.h			comp-c-include
 ./usr/include/dreamcast/ieee.h			comp-c-include
@@ -44,10 +45,10 @@
 ./usr/include/dreamcast/rwlock.h		comp-c-include
 ./usr/include/dreamcast/setjmp.h		comp-c-include
 ./usr/include/dreamcast/signal.h		comp-c-include
-./usr/include/dreamcast/stdarg.h		comp-c-include
+./usr/include/dreamcast/stdarg.h		comp-obsolete		obsolete
 ./usr/include/dreamcast/trap.h			comp-obsolete		obsolete
 ./usr/include/dreamcast/types.h			comp-c-include
-./usr/include/dreamcast/varargs.h		comp-c-include
+./usr/include/dreamcast/varargs.h		comp-obsolete		obsolete
 ./usr/include/dreamcast/vmparam.h		comp-c-include
 ./usr/include/dreamcast/wchar_limits.h		comp-c-include
 ./usr/include/sh3/db_disasm.h			comp-obsolete		obsolete

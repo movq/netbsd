@@ -1,4 +1,4 @@
-/*	$NetBSD: i80312_pci.c,v 1.9 2005/12/11 12:16:51 christos Exp $	*/
+/*	$NetBSD: i80312_pci.c,v 1.16 2015/10/02 05:22:50 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -40,28 +40,30 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80312_pci.c,v 1.9 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80312_pci.c,v 1.16 2015/10/02 05:22:50 msaitoh Exp $");
+
+#include "opt_pci.h"
+#include "pci.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/extent.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <dev/pci/pcivar.h>
+#include <dev/pci/pciconf.h>
+#include <dev/pci/ppbreg.h>
+
+#include <arm/locore.h>
 
 #include <arm/xscale/i80312reg.h>
 #include <arm/xscale/i80312var.h>
 
-#include <dev/pci/ppbreg.h>
-#include <dev/pci/pciconf.h>
-
-#include "opt_pci.h"
-#include "pci.h"
-
-void		i80312_pci_attach_hook(struct device *, struct device *,
+void		i80312_pci_attach_hook(device_t, device_t,
 		    struct pcibus_attach_args *);
 int		i80312_pci_bus_maxdevs(void *, int);
 pcitag_t	i80312_pci_make_tag(void *, int, int, int);
@@ -69,6 +71,7 @@ void		i80312_pci_decompose_tag(void *, pcitag_t, int *, int *,
 		    int *);
 pcireg_t	i80312_pci_conf_read(void *, pcitag_t, int);
 void		i80312_pci_conf_write(void *, pcitag_t, int, pcireg_t);
+void		i80312_pci_conf_interrupt(void *, int, int, int, int, int *);
 
 #define	PCI_CONF_LOCK(s)	(s) = disable_interrupts(I32_bit)
 #define	PCI_CONF_UNLOCK(s)	restore_interrupts((s))
@@ -80,7 +83,7 @@ i80312_pci_init(pci_chipset_tag_t pc, void *cookie)
 	struct i80312_softc *sc = cookie;
 	struct extent *ioext, *memext;
 	pcireg_t binfo;
-	int pbus, sbus;
+	int sbus;
 #endif
 
 	pc->pc_conf_v = cookie;
@@ -90,6 +93,7 @@ i80312_pci_init(pci_chipset_tag_t pc, void *cookie)
 	pc->pc_decompose_tag = i80312_pci_decompose_tag;
 	pc->pc_conf_read = i80312_pci_conf_read;
 	pc->pc_conf_write = i80312_pci_conf_write;
+	pc->pc_conf_interrupt = i80312_pci_conf_interrupt;
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	/*
@@ -103,17 +107,17 @@ i80312_pci_init(pci_chipset_tag_t pc, void *cookie)
 	 */
 
 	binfo = bus_space_read_4(sc->sc_st, sc->sc_ppb_sh, PPB_REG_BUSINFO);
-	pbus = PPB_BUSINFO_PRIMARY(binfo);
+	/* pbus = PPB_BUSINFO_PRIMARY(binfo); */
 	sbus = PPB_BUSINFO_SECONDARY(binfo);
 
 	ioext  = extent_create("pciio", sc->sc_sioout_base,
 	    sc->sc_sioout_base + sc->sc_sioout_size - 1,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 	memext = extent_create("pcimem", sc->sc_smemout_base,
 	    sc->sc_smemout_base + sc->sc_smemout_size - 1,
-	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	    NULL, 0, EX_NOWAIT);
 
-	aprint_normal("%s: configuring Secondary PCI bus\n", sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "configuring Secondary PCI bus\n");
 	pci_configure_bus(pc, ioext, memext, NULL, sbus, arm_dcache_align);
 
 	extent_destroy(ioext);
@@ -122,12 +126,12 @@ i80312_pci_init(pci_chipset_tag_t pc, void *cookie)
 }
 
 void
-pci_conf_interrupt(pci_chipset_tag_t pc, int a, int b, int c, int d, int *p)
+i80312_pci_conf_interrupt(void *v, int a, int b, int c, int d, int *p)
 {
 }
 
 void
-i80312_pci_attach_hook(struct device *parent, struct device *self,
+i80312_pci_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 
@@ -175,6 +179,9 @@ i80312_pci_conf_setup(struct i80312_softc *sc, pcitag_t tag, int offset,
 {
 	pcireg_t binfo;
 	int pbus, sbus;
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return (1);
 
 	i80312_pci_decompose_tag(sc, tag, &ps->ps_b, &ps->ps_d, &ps->ps_f);
 

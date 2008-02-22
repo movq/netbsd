@@ -1,4 +1,4 @@
-.\" $NetBSD: autoconf.4,v 1.9 2005/06/20 13:25:24 peter Exp $
+.\" $NetBSD: autoconf.4,v 1.11 2017/02/17 22:24:46 christos Exp $
 .\"
 .\" Copyright (c) 1994 Christopher G. Demetriou
 .\" All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\" <<Id: LICENSE,v 1.2 2000/06/14 15:57:33 cgd Exp>>
 .\"
-.Dd February 20, 1994
+.Dd February 17, 2017
 .Dt AUTOCONF 4 i386
 .Os
 .Sh NAME
@@ -44,7 +44,8 @@ When
 bootstraps it probes the innards of the machine
 on which it is running
 and locates controllers, drives, and other devices, printing out
-what it finds on the console.  This procedure is driven by a system
+what it finds on the console.
+This procedure is driven by a system
 configuration table which is processed by
 .Xr config 1
 and compiled into each kernel.
@@ -64,5 +65,5 @@ doesn't) understand.
 .El
 .Sh SEE ALSO
 .Xr config 1 ,
-.Xr intro 4 ,
+.Xr i386/intro 4 ,
 .Xr boot 8

@@ -1,4 +1,4 @@
-/*	$NetBSD: deq.c,v 1.3 2007/01/17 23:05:49 macallan Exp $	*/
+/*	$NetBSD: deq.c,v 1.16 2018/06/26 06:03:57 thorpej Exp $	*/
 
 /*-
  * Copyright (C) 2005 Michael Lorenz
@@ -32,7 +32,7 @@
  */
  
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: deq.c,v 1.3 2007/01/17 23:05:49 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: deq.c,v 1.16 2018/06/26 06:03:57 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,52 +40,62 @@ __KERNEL_RCSID(0, "$NetBSD: deq.c,v 1.3 2007/01/17 23:05:49 macallan Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/ofw/openfirm.h>
 #include <dev/i2c/i2cvar.h>
 
 #include <machine/autoconf.h>
-#include <macppc/dev/ki2cvar.h>
 #include <macppc/dev/deqvar.h>
 
-static void deq_attach(struct device *, struct device *, void *);
-static int deq_match(struct device *, struct cfdata *, void *);
+static void deq_attach(device_t, device_t, void *);
+static int deq_match(device_t, struct cfdata *, void *);
 
-CFATTACH_DECL(deq, sizeof(struct deq_softc),
+CFATTACH_DECL_NEW(deq, sizeof(struct deq_softc),
     deq_match, deq_attach, NULL, NULL);
 
-int
-deq_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	struct ki2c_confargs *ka = aux;
-	char compat[32];
-	
-	if (strcmp(ka->ka_name, "deq") != 0)
-		return 0;
+static const struct device_compatible_entry compat_data[] = {
+	{ "deq",		0 },
+	{ "tas3004",		0 },
+	{ "pcm3052",		0 },
+	{ "cs8416",		0 },
+	{ "codec",		0 },
+	{ NULL,			0 }
+};
 
-	memset(compat, 0, sizeof(compat));
-	if(OF_getprop(ka->ka_node, "i2c-address", compat, sizeof(compat)))
-		return 1;
+int
+deq_match(device_t parent, struct cfdata *cf, void *aux)
+{
+	struct i2c_attach_args *ia = aux;
+	int match_result;
+
+	if (iic_use_direct_match(ia, cf, compat_data, &match_result))
+		return match_result;
+
+	/* This driver is direct-config only. */
+
 	return 0;
 }
 
 void
-deq_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+deq_attach(device_t parent, device_t self, void *aux)
 {
-	struct deq_softc *sc = (struct deq_softc *)self;
-	struct ki2c_confargs *ka = aux;
-	int node;
+	struct deq_softc *sc = device_private(self);
+	struct i2c_attach_args *ia = aux;
+	char name[256];
 
-	node = ka->ka_node;
-	sc->sc_node = node;
+	sc->sc_dev = self;
+	sc->sc_node = ia->ia_cookie;
 	sc->sc_parent = parent;
-	sc->sc_address = ka->ka_addr & 0xfe;
-	sc->sc_i2c = ka->ka_tag;
-	printf(" Apple Digital Equalizer, addr 0x%x\n", sc->sc_address);
+	sc->sc_address = ia->ia_addr;
+	sc->sc_i2c = ia->ia_tag;
+	if (OF_getprop(sc->sc_node, "compatible", name, 256) <= 0) {
+		/* deq has no 'compatible' on my iBook G4 */
+		switch (sc->sc_address) {
+			case 0x35:
+				strcpy(name, "tas3004");
+				break;
+			default:
+				strcpy(name, "unknown");
+		}
+	}
+	aprint_normal(" Audio Codec (%s)\n", name);
 }

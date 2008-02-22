@@ -1,7 +1,6 @@
-/*	$NetBSD: natm_proto.c,v 1.12 2007/12/07 19:46:19 elad Exp $	*/
+/*	$NetBSD: natm_proto.c,v 1.18 2017/09/21 07:15:35 ozaki-r Exp $	*/
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: natm_proto.c,v 1.12 2007/12/07 19:46:19 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: natm_proto.c,v 1.18 2017/09/21 07:15:35 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: natm_proto.c,v 1.12 2007/12/07 19:46:19 elad Exp $")
 #include <sys/mbuf.h>
 
 #include <net/if.h>
-#include <net/radix.h>
 #include <net/route.h>
 
 #include <netinet/in.h>
@@ -70,10 +62,9 @@ const struct protosw natmsw[] = {
   .pr_protocol = PROTO_NATMAAL5,
   .pr_flags = PR_CONNREQUIRED,
   .pr_input = 0,
-  .pr_output = 0,
   .pr_ctlinput = 0,
   .pr_ctloutput = 0,
-  .pr_usrreq = natm_usrreq,
+  .pr_usrreqs = &natm_usrreq,
   .pr_init = 0,
   .pr_fasttimo = 0,
   .pr_slowtimo = 0,
@@ -84,10 +75,9 @@ const struct protosw natmsw[] = {
   .pr_protocol = PROTO_NATMAAL5,
   .pr_flags = PR_CONNREQUIRED | PR_ATOMIC,
   .pr_input = 0,
-  .pr_output = 0,
   .pr_ctlinput = 0,
   .pr_ctloutput = 0,
-  .pr_usrreq = natm_usrreq,
+  .pr_usrreqs = &natm_usrreq,
   .pr_init = 0,
   .pr_fasttimo = 0,
   .pr_slowtimo = 0,
@@ -98,10 +88,9 @@ const struct protosw natmsw[] = {
   .pr_protocol = PROTO_NATMAAL0,
   .pr_flags = PR_CONNREQUIRED,
   .pr_input = 0,
-  .pr_output = 0,
   .pr_ctlinput = 0,
   .pr_ctloutput = 0,
-  .pr_usrreq = natm_usrreq,
+  .pr_usrreqs = &natm_usrreqs,
   .pr_init = 0,
   .pr_fasttimo = 0,
   .pr_slowtimo = 0,
@@ -116,7 +105,6 @@ struct domain natmdomain = {
 	.dom_protosw = natmsw,
 	.dom_protoswNPROTOSW = &natmsw[sizeof(natmsw)/sizeof(natmsw[0])],
 	.dom_ifqueues = { &natmintrq, NULL },
-	.dom_rtcache = LIST_HEAD_INITIALIZER(natmdomain.dom_rtcache)
 };
 #ifdef NATM_STAT
 u_int natm_sodropcnt = 0;		/* # mbufs dropped due to full sb */
@@ -128,4 +116,5 @@ u_int natm_sookbytes = 0;		/* # of bytes ok */
 void natm_init(void)
 {
 	natmintrq.ifq_maxlen = natmqmaxlen;
+	IFQ_LOCK_INIT(&natmintrq);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: poll.h,v 1.11 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: poll.h,v 1.15 2009/11/11 09:48:51 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -78,10 +71,11 @@ struct pollfd {
 #include <sys/signal.h>		/* for sigset_t */
 
 struct lwp;
-struct timeval;
+struct timespec;
 
-int	pollcommon(struct lwp *, register_t *, struct pollfd *, u_int,
-	    struct timeval *, sigset_t *);
+int	pollcommon(register_t *, struct pollfd *, u_int,
+    struct timespec *, sigset_t *);
+
 #else
 #include <sys/cdefs.h>
 
@@ -94,8 +88,11 @@ __END_DECLS
 struct timespec;
 
 __BEGIN_DECLS
+#ifndef __LIBC12_SOURCE__
 int	pollts(struct pollfd * __restrict, nfds_t,
-	    const struct timespec * __restrict, const sigset_t * __restrict);
+    const struct timespec * __restrict, const sigset_t * __restrict)
+    __RENAME(__pollts50);
+#endif /* __LIBC12_SOURCE__ */
 __END_DECLS
 #endif /* _NETBSD_SOURCE */
 

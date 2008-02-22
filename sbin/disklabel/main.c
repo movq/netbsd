@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.17 2007/06/05 21:48:46 dyoung Exp $	*/
+/*	$NetBSD: main.c,v 1.50 2018/06/27 01:14:48 kamil Exp $	*/
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,8 +67,8 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif	/* not lint */
 
 #ifndef lint
@@ -83,7 +76,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
 static char sccsid[] = "@(#)disklabel.c	8.4 (Berkeley) 5/4/95";
 /* from static char sccsid[] = "@(#)disklabel.c	1.2 (Symmetric) 11/28/85"; */
 #else
-__RCSID("$NetBSD: main.c,v 1.17 2007/06/05 21:48:46 dyoung Exp $");
+__RCSID("$NetBSD: main.c,v 1.50 2018/06/27 01:14:48 kamil Exp $");
 #endif
 #endif	/* not lint */
 
@@ -124,6 +117,7 @@ __RCSID("$NetBSD: main.c,v 1.17 2007/06/05 21:48:46 dyoung Exp $");
 #include "pathnames.h"
 #include "extern.h"
 #include "dkcksum.h"
+#include "bswap.h"
 
 /*
  * Disklabel: read and write disklabels.
@@ -169,6 +163,9 @@ static int readlabel_direct(int);
 static void writelabel_direct(int);
 static int update_label(int, u_int, u_int);
 static struct disklabel *find_label(int, u_int);
+#if !defined(NATIVELABEL_ONLY)
+static void getmachineparams(const char *);
+#endif
 
 static void		 makedisktab(FILE *, struct disklabel *);
 static void		 makelabel(const char *, const char *);
@@ -179,7 +176,7 @@ static int		 editit(const char *);
 static char		*skip(char *);
 static char		*word(char *);
 static int		 getasciilabel(FILE *, struct disklabel *);
-static void		 usage(void);
+__dead static void	 usage(void);
 static int		 qsort_strcmp(const void *, const void *);
 static int		 getulong(const char *, char, char **,
     unsigned long *, unsigned long);
@@ -189,16 +186,175 @@ static int		 getulong(const char *, char, char **,
 
 static int set_writable_fd = -1;
 
-#if HAVE_NBTOOL_CONFIG_H
-#define GETLABELOFFSET()	LABELOFFSET
-#define GETLABELSECTOR()	LABELSECTOR
-#else /* HAVE_NBTOOL_CONFIG_H */
-#define GETLABELOFFSET()	getlabeloffset()
-#define GETLABELSECTOR()	getlabelsector()
+#if !defined(NATIVELABEL_ONLY)
+static u_int labeloffset;
+static u_int labelsector;
+static int labelusesmbr;
+u_int maxpartitions;
+static int byteorder;
+
+static int biendian_p;
+#ifndef HAVE_NBTOOL_CONFIG_H
+static int native_p = 1;
 #endif
+int bswap_p;
+
+static const struct disklabel_params {
+	const char *machine;
+	u_char labelusesmbr : 1;
+	u_char labelsector : 7;
+	u_char maxpartitions;
+	u_char raw_part;
+	u_char oldmaxpartitions;
+	u_short labeloffset;
+	u_short byteorder;
+} disklabel_params[] = {
+	{ "mvme68k",	0, 0,  8, 2, 0,   0, BIG_ENDIAN },	/* m68k */
+	{ "next68k",	0, 0,  8, 2, 0,   0, BIG_ENDIAN },	/* m68k */
+
+	{ "algor",	0, 0,  8, 2, 0,  64, LITTLE_ENDIAN },	/* mips */
+	{ "alpha",	0, 0,  8, 2, 0,  64, LITTLE_ENDIAN },	/* alpha */
+	{ "luna68k",	0, 0,  8, 2, 0,  64, BIG_ENDIAN },	/* m68k */
+	{ "mac68k",	0, 0,  8, 2, 0,  64, BIG_ENDIAN },	/* m68k */
+	{ "news68k",	0, 0,  8, 2, 0,  64, BIG_ENDIAN },	/* m68k */
+	{ "newsmips",	0, 0,  8, 2, 0,  64, BIG_ENDIAN },	/* mips */
+	{ "pmax",	0, 0,  8, 2, 0,  64, LITTLE_ENDIAN },	/* mips */
+	{ "sun2",	0, 0,  8, 2, 0,  64, BIG_ENDIAN },	/* m68k */
+	{ "sun68k",	0, 0,  8, 2, 0,  64, BIG_ENDIAN },	/* m68010 */
+	{ "x68k",	0, 0,  8, 2, 0,  64, BIG_ENDIAN },	/* m68010 */
+
+	{ "vax",	0, 0, 12, 2, 8,  64, LITTLE_ENDIAN },	/* vax */
+
+	{ "amiga",	0, 0, 16, 2, 0,  64, BIG_ENDIAN },	/* m68k */
+	{ "amigappc",	0, 0, 16, 2, 0,  64, BIG_ENDIAN },	/* powerpc */
+	{ "evbmips",	0, 0, 16, 2, 0,  64, 0 },		/* mips */
+	{ "evbppc",	0, 0, 16, 2, 0,  64, BIG_ENDIAN },	/* powerpc */
+
+	{ "sparc",	0, 0,  8, 2, 0, 128, BIG_ENDIAN },	/* sun */
+	{ "sparc64",	0, 0,  8, 2, 0, 128, BIG_ENDIAN },	/* sun */
+	{ "sun3",	0, 0,  8, 2, 0, 128, BIG_ENDIAN },	/* sun */
+
+	{ "atari",	0, 0, 16, 2, 0, 516, BIG_ENDIAN },	/* m68k */
+
+	{ "mipsco",	0, 1,  8, 2, 0,   0, BIG_ENDIAN },	/* mips */
+	{ "mvmeppc",	0, 1,  8, 3, 0,   0, BIG_ENDIAN },	/* powerpc */
+
+	{ "bebox",	0, 1,  8, 3, 0,   0, BIG_ENDIAN },	/* powerpc */
+
+	{ "emips",	0, 1, 16, 2, 0,   0, BIG_ENDIAN },	/* mips */
+	{ "hppa",	0, 1, 16, 2, 0,   0, BIG_ENDIAN },	/* hppa */
+	{ "ibmnws",	0, 1, 16, 2, 0,   0, BIG_ENDIAN },	/* powerpc */
+	{ "ofppc",	0, 1, 16, 2, 0,   0, BIG_ENDIAN },	/* powerpc */
+	{ "rs6000",	0, 1, 16, 2, 0,   0, BIG_ENDIAN },	/* powerpc */
+	{ "sandpoint",	0, 1, 16, 2, 0,   0, BIG_ENDIAN },	/* powerpc */
+	{ "sgimips",	0, 1, 16, 2, 0,   0, BIG_ENDIAN },	/* mips */
+
+	{ "sbmips",	0, 1, 16, 3, 0,   0, 0 },		/* mips */
+
+	{ "cesfic",	0, 2,  8, 2, 0,   0, BIG_ENDIAN },	/* m68k */
+	{ "hp300",	0, 2,  8, 2, 0,   0, BIG_ENDIAN },	/* m68k */
+
+	{ "ews4800mips",0, 9, 16, 15, 0,  0, BIG_ENDIAN },	/* mips */
+
+	{ "macppc",	1, 0, 16, 2, 0,  64, BIG_ENDIAN },	/* powerpc */
+	{ "pmon",	1, 0, 16, 2, 0,  64, 0 },		/* evbmips */
+
+	{ "prep",	1, 1,  8, 2,  0,  0, BIG_ENDIAN },	/* powerpc */
+
+	{ "dreamcast",	1, 1, 16, 2,  0,  0, LITTLE_ENDIAN },	/* sh3 */
+	{ "evbcf",	1, 1, 16, 2,  0,  0, BIG_ENDIAN },	/* coldfire */
+	{ "evbppc-mbr",	1, 1, 16, 2,  0,  0, BIG_ENDIAN },	/* powerpc */
+	{ "evbsh3",	1, 1, 16, 2,  0,  0, 0 },		/* sh3 */
+	{ "hpcsh",	1, 1, 16, 2,  0,  0, LITTLE_ENDIAN },	/* sh3 */
+	{ "mmeye",	1, 1, 16, 2,  0,  0, 0 },		/* sh3 */
+	{ "or1k",	1, 1, 16, 2,  0,  0, BIG_ENDIAN },	/* or1k */
+	{ "riscv",	1, 1, 16, 2,  0,  0, LITTLE_ENDIAN },	/* riscv */
+
+	{ "acorn32",	1, 1, 16, 2,  8,  0, LITTLE_ENDIAN },	/* arm */
+	{ "cats",	1, 1, 16, 2,  8,  0, LITTLE_ENDIAN },	/* arm */
+	{ "evbarm",	1, 1, 16, 2,  8,  0, 0 },		/* arm */
+	{ "iyonix",	1, 1, 16, 2,  8,  0, LITTLE_ENDIAN },	/* arm */
+	{ "netwinder",	1, 1, 16, 2,  8,  0, LITTLE_ENDIAN },	/* arm */
+	{ "shark",	1, 1, 16, 2,  8,  0, LITTLE_ENDIAN },	/* arm */
+
+	{ "amd64",	1, 1, 16, 3,  0,  0, LITTLE_ENDIAN },	/* x86 */
+	{ "arc",	1, 1, 16, 3,  0,  0, LITTLE_ENDIAN },	/* mips */
+	{ "cobalt",	1, 1, 16, 3,  0,  0, LITTLE_ENDIAN },	/* mips */
+	{ "landisk",	1, 1, 16, 3,  0,  0, LITTLE_ENDIAN },	/* sh3 */
+
+	{ "epoc32",	1, 1, 16, 3,  8,  0, LITTLE_ENDIAN },	/* arm */
+	{ "hpcarm",	1, 1, 16, 3,  8,  0, LITTLE_ENDIAN },	/* arm */
+	{ "hpcmips",	1, 1, 16, 3,  8,  0, LITTLE_ENDIAN },	/* mips */
+	{ "i386",	1, 1, 16, 3,  8,  0, LITTLE_ENDIAN },	/* x86 */
+	{ "ia64",	1, 1, 16, 3,  8,  0, LITTLE_ENDIAN },	/* x86 */
+	{ "zaurus",	1, 1, 16, 3,  8,  0, LITTLE_ENDIAN },	/* arm */
+
+	{ NULL,		0, 0,  0,  0, 0,  0, 0 },	/* must be last */
+};
+
+#ifndef HAVE_NBTOOL_CONFIG_H
+static struct disklabel_params native_params;
+#endif
+
+static const struct arch_endian {
+	int byteorder;
+	const char *arch;
+} arch_endians[] = {
+	{ LITTLE_ENDIAN, "aarch64" },
+	{ LITTLE_ENDIAN, "alpha" },
+	{ LITTLE_ENDIAN, "arm" },
+	{ LITTLE_ENDIAN, "earm" },
+	{ LITTLE_ENDIAN, "earmhf" },
+	{ LITTLE_ENDIAN, "earmv4" },
+	{ LITTLE_ENDIAN, "earmv5" },
+	{ LITTLE_ENDIAN, "earmv6" },
+	{ LITTLE_ENDIAN, "earmv6hf" },
+	{ LITTLE_ENDIAN, "earmv7" },
+	{ LITTLE_ENDIAN, "earmv7hf" },
+	{ LITTLE_ENDIAN, "i386" },
+	{ LITTLE_ENDIAN, "ia64" },
+	{ LITTLE_ENDIAN, "mipsel" },
+	{ LITTLE_ENDIAN, "mips64el" },
+	{ LITTLE_ENDIAN, "riscv32" },
+	{ LITTLE_ENDIAN, "riscv64" },
+	{ LITTLE_ENDIAN, "sh3el" },
+	{ LITTLE_ENDIAN, "vax" },
+	{ LITTLE_ENDIAN, "x86_64" },
+
+	{ BIG_ENDIAN, "aarch64eb" },
+	{ BIG_ENDIAN, "armeb" },
+	{ BIG_ENDIAN, "coldfire" },
+	{ BIG_ENDIAN, "earmeb" },
+	{ BIG_ENDIAN, "earmhfeb" },
+	{ BIG_ENDIAN, "earmv4eb" },
+	{ BIG_ENDIAN, "earmv5eb" },
+	{ BIG_ENDIAN, "earmv6eb" },
+	{ BIG_ENDIAN, "earmv6hfeb" },
+	{ BIG_ENDIAN, "earmv7eb" },
+	{ BIG_ENDIAN, "earmv7hfeb" },
+	{ BIG_ENDIAN, "hppa" },
+	{ BIG_ENDIAN, "m68000" },
+	{ BIG_ENDIAN, "m68k" },
+	{ BIG_ENDIAN, "mipseb" },
+	{ BIG_ENDIAN, "mips64eb" },
+	{ BIG_ENDIAN, "or1k" },
+	{ BIG_ENDIAN, "powerpc" },
+	{ BIG_ENDIAN, "sh3eb" },
+	{ BIG_ENDIAN, "sparc" },
+	{ BIG_ENDIAN, "sparc64" },
+
+	{ 0, NULL },
+};
 
 /* Default location for label - only used if we don't find one to update */
 #define LABEL_OFFSET (dklabel_getlabelsector() * DEV_BSIZE + dklabel_getlabeloffset())
+#else
+#define labeloffset	LABELOFFSET
+#define labelsector	LABELSECTOR
+#define labelusesmbr	LABELUSESMBR
+#define maxpartitions	MAXPARTITIONS
+#define LABEL_OFFSET	LABELOFFSET
+#endif /* !NATIVELABEL_ONLY */
 
 /*
  * For portability it doesn't make sense to use any other value....
@@ -218,17 +374,57 @@ opendisk(const char *path, int flags, char *buf, int buflen, int cooked)
 	strlcpy(buf, path, buflen);
 	return f;
 }
-
-static int
-dk_ioctl(int f, void *arg)
-{
-	errno = ENOTTY;
-	return -1;
-}
-#define dk_ioctl(f, cmd, arg) dk_ioctl(f, arg)
-#else
-#define dk_ioctl(f, cmd, arg) ioctl(f, cmd, arg)
 #endif /* HAVE_NBTOOL_CONFIG_H */
+
+#if !defined(NATIVELABEL_ONLY)
+static void
+setbyteorder(int new_byteorder)
+{
+	static int set_p;
+
+	if ((!biendian_p || set_p)
+	    && byteorder != 0
+	    && byteorder != new_byteorder) {
+		warnx("changing %s byteorder to %s",
+		    byteorder == LITTLE_ENDIAN ? "le" : "be",
+		    new_byteorder == LITTLE_ENDIAN ? "le" : "be");
+	}
+	byteorder = new_byteorder;
+	biendian_p = 0;
+	set_p = 1;
+}
+
+static void
+getmachineparams(const char *mach)
+{
+	const struct disklabel_params *dp = disklabel_params;
+	for (; dp->machine != NULL; dp++) {
+		if (!strcmp(mach, dp->machine)) {
+			labelusesmbr = dp->labelusesmbr;
+			labelsector = dp->labelsector;
+			labeloffset = dp->labeloffset;
+			maxpartitions = dp->maxpartitions;
+			biendian_p = (dp->byteorder == 0);
+			if (!biendian_p)
+				setbyteorder(dp->byteorder);
+			return;
+		}
+	}
+	errx(1, "%s: unknown machine type", mach);
+}
+
+static void
+getarchbyteorder(const char *arch)
+{
+	const struct arch_endian *p = arch_endians;
+	for (; p->arch != NULL; p++) {
+		if (!strcmp(arch, p->arch)) {
+			setbyteorder(p->byteorder);
+			return;
+		}
+	}
+	errx(1, "%s: unknown arch", arch);
+}
 
 static daddr_t
 dklabel_getlabelsector(void)
@@ -238,7 +434,7 @@ dklabel_getlabelsector(void)
 	const char *val;
 
 	if ((val = getenv("DISKLABELSECTOR")) == NULL)
-		return GETLABELSECTOR();
+		return labelsector;
 	if ((nval = strtoul(val, &end, 10)) == ULONG_MAX && errno == ERANGE)
 		err(EXIT_FAILURE, "DISKLABELSECTOR in environment");
 	return nval;
@@ -252,11 +448,12 @@ dklabel_getlabeloffset(void)
 	const char *val;
 
 	if ((val = getenv("DISKLABELOFFSET")) == NULL)
-		return GETLABELOFFSET();
+		return labeloffset;
 	if ((nval = strtoul(val, &end, 10)) == ULONG_MAX && errno == ERANGE)
 		err(EXIT_FAILURE, "DISKLABELOFFSET in environment");
 	return nval;
 }
+#endif /* !NATIVELABEL_ONLY */
 
 static void
 clear_writable(void)
@@ -271,23 +468,56 @@ main(int argc, char *argv[])
 	FILE	*t;
 	int	 ch, f, error;
 	char	*dkname;
+#if !defined(NATIVELABEL_ONLY)
+	char	*cp;
+#endif
 	struct stat sb;
 	int	 writable;
 	enum {
 		UNSPEC, EDIT, READ, RESTORE, SETWRITABLE, SETREADONLY,
-		WRITE, INTERACT, DELETE
+		WRITE,
+#if !defined(NO_INTERACT)
+		INTERACT,
+#endif
+		DELETE
 	} op = UNSPEC, old_op;
 
-#ifdef USE_MBR
-	mflag = 1;
+#ifndef HAVE_NBTOOL_CONFIG_H
+#if !defined(NATIVELABEL_ONLY)
+	labeloffset = native_params.labeloffset = getlabeloffset();
+	labelsector = native_params.labelsector = getlabelsector();
+	labelusesmbr = native_params.labelusesmbr = getlabelusesmbr();
+	maxpartitions = native_params.maxpartitions = getmaxpartitions();
+	byteorder = native_params.byteorder = BYTE_ORDER;
 #endif
+#endif
+
+#if !defined(NATIVELABEL_ONLY)
+	if ((cp = getenv("MACHINE")) != NULL) {
+		getmachineparams(cp);
+	}
+
+	if ((cp = getenv("MACHINE_ARCH")) != NULL) {
+		getarchbyteorder(cp);
+	}
+#endif
+
+	mflag = labelusesmbr;
+	if (mflag < 0) {
+#if HAVE_NBTOOL_CONFIG_H
+		warn("getlabelusesmbr() failed");
+#else
+		warn("getlabelusesmbr() failed");
+		mflag = LABELUSESMBR;
+#endif
+	}
 #if HAVE_NBTOOL_CONFIG_H
 	/* We must avoid doing any ioctl requests */
 	Fflag = rflag = 1;
 #endif
 
 	error = 0;
-	while ((ch = getopt(argc, argv, "ACDFINRWb:ef:ilmrs:tvw")) != -1) {
+	while ((ch = getopt(argc, argv, "AB:CDFIM:NRWef:ilmrtvw")) != -1) {
 		old_op = op;
 		switch (ch) {
 		case 'A':	/* Action all labels */
@@ -312,6 +542,20 @@ main(int argc, char *argv[])
 		case 'R':	/* Restore label from text file */
 			op = RESTORE;
 			break;
+#if !defined(NATIVELABEL_ONLY)
+		case 'B':	/* byteorder */
+			if (!strcmp(optarg, "be")) {
+				setbyteorder(BIG_ENDIAN);
+			} else if (!strcmp(optarg, "le")) {
+				setbyteorder(LITTLE_ENDIAN);
+			} else {
+				errx(1, "%s: not be or le", optarg);
+			}
+			break;
+		case 'M':	/* machine type */
+			getmachineparams(optarg);
+			break;
+#endif
 		case 'N':	/* Disallow writes to label sector */
 			op = SETREADONLY;
 			break;
@@ -325,9 +569,11 @@ main(int argc, char *argv[])
 			if (setdisktab(optarg) == -1)
 				usage();
 			break;
+#if !defined(NO_INTERACT)
 		case 'i':	/* Edit using built-in editor */
 			op = INTERACT;
 			break;
+#endif /* !NO_INTERACT */
 		case 'l':	/* List all known file system types and exit */
 			lflag = 1;
 			break;
@@ -353,6 +599,36 @@ main(int argc, char *argv[])
 		if (old_op != UNSPEC && old_op != op)
 			usage();
 	}
+
+#if !defined(NATIVELABEL_ONLY)
+	if (maxpartitions == 0) {
+		errx(1, "unknown label: use -M/-B and $MACHINE/$MACHINE_ARCH");
+	}
+	if (byteorder != BIG_ENDIAN && byteorder != LITTLE_ENDIAN) {
+		errx(1, "unknown byteorder");
+	}
+	bswap_p = (byteorder != BYTE_ORDER);
+#ifdef DEBUG
+	printf("labelusesmbr=%d labelsector=%u labeloffset=%u maxpartitions=%u\n",
+	    labelusesmbr, labelsector, labeloffset, maxpartitions);
+	printf("byteorder=%d bswap_p=%d\n", byteorder, bswap_p);
+#endif
+#ifndef HAVE_NBTOOL_CONFIG_H
+	/*
+	 * If the disklabel has the same location as the native disklabel and
+	 * fewer or equal paritions, we can use the native ioctls.  Otherwise
+	 * force file/raw access.
+	 */
+	native_p = native_params.labelusesmbr == labelusesmbr
+	    && native_params.labelsector == labelsector
+	    && native_params.labeloffset == labeloffset
+	    && maxpartitions <= native_params.maxpartitions
+	    && !bswap_p;
+	if (!native_p)
+		Fflag = rflag = 1;
+#endif
+#endif /* !NATIVELABEL_ONLY */
+
 	argc -= optind;
 	argv += optind;
 
@@ -365,7 +641,11 @@ main(int argc, char *argv[])
 	if (argc < 1)
 		usage();
 
-	if (Iflag && op != EDIT && op != INTERACT)
+	if (Iflag && op != EDIT
+#if !defined(NO_INTERACT)
+	    && op != INTERACT
+#endif
+	    )
 		usage();
 
 	dkname = argv[0];
@@ -393,6 +673,7 @@ main(int argc, char *argv[])
 		error = edit(f);
 		break;
 
+#if !defined(NO_INTERACT)
 	case INTERACT:
 		if (argc != 1)
 			usage();
@@ -406,6 +687,7 @@ main(int argc, char *argv[])
 			lab.d_sbsize = SBLOCKSIZE;
 		interact(&lab, f);
 		break;
+#endif /* !NO_INTERACT */
 
 	case READ:
 		if (argc != 1)
@@ -542,8 +824,8 @@ write_label(int f)
 		}
 	}
 
-#ifdef __vax__
-	if (lab.d_type == DTYPE_SMD && lab.d_flags & D_BADSECT &&
+#ifdef VAX_ALTLABELS
+	if (lab.d_type == DKTYPE_SMD && lab.d_flags & D_BADSECT &&
 	    lab.d_secsize == 512) {
 		/* Write the label to the odd sectors of the last track! */
 		daddr_t	alt;
@@ -556,12 +838,12 @@ write_label(int f)
 		}
 
 		alt = lab.d_ncylinders * lab.d_secpercyl - lab.d_nsectors;
-		for (i = 1; i < 11 && i < lab.d_nsectors; i += 2) {
+		for (i = 1; i < 11 && (uint32_t)i < lab.d_nsectors; i += 2) {
 			if (pwrite(f, sec0, 512, (off_t)(alt + i) * 512) < 512)
 				warn("alternate label %d write", i/2);
 		}
 	}
-#endif	/* __vax__ */
+#endif	/* VAX_ALTLABELS */
 
 	return 0;
 }
@@ -630,7 +912,7 @@ process_mbr(int f, int (*action)(int, u_int))
 		if (pread(f, &mbr, sizeof mbr, this_ext * (off_t)DEV_BSIZE)
 		    != sizeof(mbr)) {
 			if (verbose)
-				warn("Can't read master boot record %d",
+				warn("Can't read master boot record %u",
 				    this_ext);
 			break;
 		}
@@ -638,7 +920,7 @@ process_mbr(int f, int (*action)(int, u_int))
 		/* Check if table is valid. */
 		if (mbr.mbr_magic != htole16(MBR_MAGIC)) {
 			if (verbose)
-				warnx("Invalid signature in mbr record %d",
+				warnx("Invalid signature in mbr record %u",
 				    this_ext);
 			break;
 		}
@@ -695,12 +977,12 @@ process_mbr(int f, int (*action)(int, u_int))
 static int
 readlabel_mbr(int f, u_int sector)
 {
-	struct disklabel *lp;
+	struct disklabel *disk_lp;
 
-	lp = find_label(f, sector);
-	if (lp == NULL)
+	disk_lp = find_label(f, sector);
+	if (disk_lp == NULL)
 		return 1;
-	lab = *lp;
+	targettohlabel(&lab, disk_lp);
 	return 0;
 }
 
@@ -907,8 +1189,9 @@ readlabel(int f)
 static struct disklabel *
 find_label(int f, u_int sector)
 {
-	struct disklabel *lp;
-	int i, offset;
+	struct disklabel *disk_lp, hlp, tlp;
+	int i;
+	off_t offset;
 	const char *is_deleted;
 
 	bootarea_len = pread(f, bootarea, sizeof bootarea,
@@ -920,57 +1203,62 @@ find_label(int f, u_int sector)
 	}
 
 	if (verbose > 2)
-		warnx("read sector %u len %u looking for label",
+		warnx("read sector %u len %d looking for label",
 		    sector, bootarea_len);
 
 	/* Check expected offset first */
 	for (offset = LABEL_OFFSET, i = -4;; offset = i += 4) {
 		is_deleted = "";
-		lp = (void *)(bootarea + offset);
 		if (i == LABEL_OFFSET)
 			continue;
-		if ((char *)(lp + 1) > bootarea + bootarea_len)
+		disk_lp = (void *)(bootarea + offset);
+		memcpy(&tlp, disk_lp, sizeof(tlp));
+		if ((char *)(disk_lp + 1) > bootarea + bootarea_len)
 			break;
-		if (lp->d_magic2 != lp->d_magic)
+		if (tlp.d_magic2 != tlp.d_magic)
 			continue;
-		if (read_all && (lp->d_magic == DISKMAGIC_DELETED ||
-		    lp->d_magic == DISKMAGIC_DELETED_REV)) {
-			lp->d_magic ^= ~0u;
-			lp->d_magic2 ^= ~0u;
+		if (read_all && (tlp.d_magic == DISKMAGIC_DELETED ||
+		    tlp.d_magic == DISKMAGIC_DELETED_REV)) {
+			tlp.d_magic ^= ~0u;
+			tlp.d_magic2 ^= ~0u;
 			is_deleted = "deleted ";
 		}
-		if (lp->d_magic != DISKMAGIC) {
+		if (target32toh(tlp.d_magic) != DISKMAGIC) {
 			/* XXX: Do something about byte-swapped labels ? */
-			if (lp->d_magic == DISKMAGIC_REV &&
-			    lp->d_magic2 == DISKMAGIC_REV)
+			if (target32toh(tlp.d_magic) == DISKMAGIC_REV &&
+			    target32toh(tlp.d_magic2) == DISKMAGIC_REV)
 				warnx("ignoring %sbyteswapped label"
-				    " at offset %u from sector %u",
-				    is_deleted, offset, sector);
+				    " at offset %jd from sector %u",
+				    is_deleted, (intmax_t)offset, sector);
 			continue;
 		}
-		if (lp->d_npartitions > MAXPARTITIONS || dkcksum(lp) != 0) {
+		if (target16toh(tlp.d_npartitions) > maxpartitions ||
+		    dkcksum_target(&tlp) != 0) {
 			if (verbose > 0)
-				warnx("corrupt label found at offset %u in "
-				    "sector %u", offset, sector);
+				warnx("corrupt label found at offset %jd in "
+				    "sector %u", (intmax_t)offset, sector);
 			continue;
 		}
 		if (verbose > 1)
-			warnx("%slabel found at offset %u from sector %u",
-			    is_deleted, offset, sector);
+			warnx("%slabel found at offset %jd from sector %u",
+			    is_deleted, (intmax_t)offset, sector);
 		if (!read_all)
-			return lp;
+			return disk_lp;
 
 		/* To print all the labels we have to do it here */
 		/* XXX: maybe we should compare them? */
-		printf("# %ssector %u offset %u bytes\n",
-		    is_deleted, sector, offset);
+		targettohlabel(&hlp, &tlp);
+		printf("# %ssector %u offset %jd bytes\n",
+		    is_deleted, sector, (intmax_t)offset);
 		if (tflag)
-			makedisktab(stdout, lp);
+			makedisktab(stdout, &hlp);
 		else {
-			showinfo(stdout, lp, specname);
-			showpartitions(stdout, lp, Cflag);
+			showinfo(stdout, &hlp, specname);
+			showpartitions(stdout, &hlp, Cflag);
 		}
-		checklabel(lp);
+		checklabel(&hlp);
+		htotargetlabel(&tlp, &hlp);
+		memcpy(disk_lp, &tlp, sizeof(tlp));
 		/* Remember we've found a label */
 		read_all = 2;
 	}
@@ -985,10 +1273,10 @@ write_bootarea(int f, u_int sector)
 	if (bootarea_len <= 0)
 		errx(1, "attempting to write after failed read");
 
-#ifdef __alpha__
+#ifdef ALPHA_BOOTBLOCK_CKSUM
 	/*
 	 * The Alpha requires that the boot block be checksummed.
-	 * The NetBSD/alpha disklabel.h provides a macro to do it.
+	 * <sys/bootblock.h> provides a macro to do it.
 	 */
 	if (sector == 0) {
 		struct alpha_boot_block *bb;
@@ -997,15 +1285,15 @@ write_bootarea(int f, u_int sector)
 		bb->bb_cksum = 0;
 		ALPHA_BOOT_BLOCK_CKSUM(bb, &bb->bb_cksum);
 	}
-#endif	/* __alpha__ */
+#endif	/* ALPHA_BOOTBLOCK_CKSUM */
 
 	wlen = pwrite(f, bootarea, bootarea_len, sector * (off_t)DEV_BSIZE);
 	if (wlen == bootarea_len)
 		return;
 	if (wlen == -1)
-		err(1, "disklabel write (sector %u) size %u failed",
+		err(1, "disklabel write (sector %u) size %d failed",
 		    sector, bootarea_len);
-	errx(1, "disklabel write (sector %u) size %u truncated to %d",
+	errx(1, "disklabel write (sector %u) size %d truncated to %d",
 		    sector, bootarea_len, wlen);
 }
 
@@ -1040,7 +1328,7 @@ update_label(int f, u_int label_sector, u_int label_offset)
 			    "to create label", label_sector);
 	}
 
-	*disk_lp = lab;
+	htotargetlabel(disk_lp, &lab);
 	write_bootarea(f, label_sector);
 	return 1;
 }
@@ -1076,7 +1364,7 @@ readlabel_direct(int f)
 	if (filecore_partition_offset != 0) {
 		disk_lp = find_label(f, filecore_partition_offset);
 		if (disk_lp != NULL) {
-			lab = *disk_lp;
+			targettohlabel(&lab, disk_lp);
 			return 0;
 		}
 	}
@@ -1086,7 +1374,7 @@ readlabel_direct(int f)
 
 	disk_lp = find_label(f, 0);
 	if (disk_lp != NULL) {
-		lab = *disk_lp;
+		targettohlabel(&lab, disk_lp);
 		return 0;
 	}
 
@@ -1109,40 +1397,40 @@ makedisktab(FILE *f, struct disklabel *lp)
 	if ((unsigned) lp->d_type < DKMAXTYPES)
 		(void) fprintf(f, "%s:", dktypenames[lp->d_type]);
 	else
-		(void) fprintf(f, "unknown%d:", lp->d_type);
+		(void) fprintf(f, "unknown%" PRIu16 ":", lp->d_type);
 
-	(void) fprintf(f, "se#%d:", lp->d_secsize);
-	(void) fprintf(f, "ns#%d:", lp->d_nsectors);
-	(void) fprintf(f, "nt#%d:", lp->d_ntracks);
-	(void) fprintf(f, "sc#%d:", lp->d_secpercyl);
-	(void) fprintf(f, "nc#%d:", lp->d_ncylinders);
+	(void) fprintf(f, "se#%" PRIu32 ":", lp->d_secsize);
+	(void) fprintf(f, "ns#%" PRIu32 ":", lp->d_nsectors);
+	(void) fprintf(f, "nt#%" PRIu32 ":", lp->d_ntracks);
+	(void) fprintf(f, "sc#%" PRIu32 ":", lp->d_secpercyl);
+	(void) fprintf(f, "nc#%" PRIu32 ":", lp->d_ncylinders);
 
 	if ((lp->d_secpercyl * lp->d_ncylinders) != lp->d_secperunit) {
-		(void) fprintf(f, "%ssu#%d:", did, lp->d_secperunit);
+		(void) fprintf(f, "%ssu#%" PRIu32 ":", did, lp->d_secperunit);
 		did = "";
 	}
 	if (lp->d_rpm != 3600) {
-		(void) fprintf(f, "%srm#%d:", did, lp->d_rpm);
+		(void) fprintf(f, "%srm#%" PRIu16 ":", did, lp->d_rpm);
 		did = "";
 	}
 	if (lp->d_interleave != 1) {
-		(void) fprintf(f, "%sil#%d:", did, lp->d_interleave);
+		(void) fprintf(f, "%sil#%" PRIu16 ":", did, lp->d_interleave);
 		did = "";
 	}
 	if (lp->d_trackskew != 0) {
-		(void) fprintf(f, "%ssk#%d:", did, lp->d_trackskew);
+		(void) fprintf(f, "%ssk#%" PRIu16 ":", did, lp->d_trackskew);
 		did = "";
 	}
 	if (lp->d_cylskew != 0) {
-		(void) fprintf(f, "%scs#%d:", did, lp->d_cylskew);
+		(void) fprintf(f, "%scs#%" PRIu16 ":", did, lp->d_cylskew);
 		did = "";
 	}
 	if (lp->d_headswitch != 0) {
-		(void) fprintf(f, "%shs#%d:", did, lp->d_headswitch);
+		(void) fprintf(f, "%shs#%" PRIu32 ":", did, lp->d_headswitch);
 		did = "";
 	}
 	if (lp->d_trkseek != 0) {
-		(void) fprintf(f, "%sts#%d:", did, lp->d_trkseek);
+		(void) fprintf(f, "%sts#%" PRIu32 ":", did, lp->d_trkseek);
 		did = "";
 	}
 #ifdef notyet
@@ -1153,21 +1441,22 @@ makedisktab(FILE *f, struct disklabel *lp)
 	if (i < 0)
 		i = 0;
 	for (j = 0; j <= i; j++)
-		(void) fprintf(f, "%d ", lp->d_drivedata[j]);
+		(void) fprintf(f, "%" PRIu32 " ", lp->d_drivedata[j]);
 #endif	/* notyet */
 	pp = lp->d_partitions;
 	for (i = 0; i < lp->d_npartitions; i++, pp++) {
 		if (pp->p_size) {
 			char c = 'a' + i;
 			(void) fprintf(f, "\\\n\t:");
-			(void) fprintf(f, "p%c#%d:", c, pp->p_size);
-			(void) fprintf(f, "o%c#%d:", c, pp->p_offset);
+			(void) fprintf(f, "p%c#%" PRIu32 ":", c, pp->p_size);
+			(void) fprintf(f, "o%c#%" PRIu32 ":", c, pp->p_offset);
 			if (pp->p_fstype != FS_UNUSED) {
 				if ((unsigned) pp->p_fstype < FSMAXTYPES)
 					(void) fprintf(f, "t%c=%s:", c,
 					    fstypenames[pp->p_fstype]);
 				else
-					(void) fprintf(f, "t%c=unknown%d:",
+					(void) fprintf(f,
+					    "t%c=unknown%" PRIu8 ":",
 					    c, pp->p_fstype);
 			}
 			switch (pp->p_fstype) {
@@ -1180,9 +1469,10 @@ makedisktab(FILE *f, struct disklabel *lp)
 			case FS_EX2FS:
 			case FS_ADOS:
 			case FS_APPLEUFS:
-				(void) fprintf(f, "b%c#%d:", c,
-				    pp->p_fsize * pp->p_frag);
-				(void) fprintf(f, "f%c#%d:", c, pp->p_fsize);
+				(void) fprintf(f, "b%c#%" PRIu64 ":", c,
+				    (uint64_t)pp->p_fsize * pp->p_frag);
+				(void) fprintf(f, "f%c#%" PRIu32 ":", c,
+				    pp->p_fsize);
 				break;
 			default:
 				break;
@@ -1471,9 +1761,9 @@ getasciilabel(FILE *f, struct disklabel *lp)
 			continue;
 		}
 		if (sscanf(cp, "%lu partitions", &v) == 1) {
-			if (v == 0 || v > MAXPARTITIONS) {
+			if (v == 0 || v > maxpartitions) {
 				warnx("line %d: bad # of partitions", lineno);
-				lp->d_npartitions = MAXPARTITIONS;
+				lp->d_npartitions = maxpartitions;
 				errors++;
 			} else
 				lp->d_npartitions = v;
@@ -1597,8 +1887,14 @@ getasciilabel(FILE *f, struct disklabel *lp)
 		/* We have a partition entry */
 		part = *cp - 'a';
 
-		if (part >= MAXPARTITIONS) {
+		if (part >= maxpartitions) {
 			warnx("line %d: bad partition name: %s", lineno, cp);
+			errors++;
+			continue;
+		}
+		if (part >= __arraycount(lp->d_partitions)) {
+			warnx("line %d: partition id %s, >= %zu", lineno,
+			    cp, __arraycount(lp->d_partitions));
 			errors++;
 			continue;
 		}
@@ -1712,47 +2008,49 @@ checklabel(struct disklabel *lp)
 
 	errors = 0;
 	if (lp->d_secsize == 0) {
-		warnx("sector size %d", lp->d_secsize);
+		warnx("sector size %" PRIu32, lp->d_secsize);
 		return (1);
 	}
 	if (lp->d_nsectors == 0) {
-		warnx("sectors/track %d", lp->d_nsectors);
+		warnx("sectors/track %" PRIu32, lp->d_nsectors);
 		return (1);
 	}
 	if (lp->d_ntracks == 0) {
-		warnx("tracks/cylinder %d", lp->d_ntracks);
+		warnx("tracks/cylinder %" PRIu32, lp->d_ntracks);
 		return (1);
 	}
 	if  (lp->d_ncylinders == 0) {
-		warnx("cylinders/unit %d", lp->d_ncylinders);
+		warnx("cylinders/unit %" PRIu32, lp->d_ncylinders);
 		errors++;
 	}
 	if (lp->d_rpm == 0)
-		warnx("warning, revolutions/minute %d", lp->d_rpm);
+		warnx("warning, revolutions/minute %" PRIu16, lp->d_rpm);
 	if (lp->d_secpercyl == 0)
 		lp->d_secpercyl = lp->d_nsectors * lp->d_ntracks;
 	if (lp->d_secperunit == 0)
 		lp->d_secperunit = lp->d_secpercyl * lp->d_ncylinders;
 	if (lp->d_bbsize == 0) {
-		warnx("boot block size %d", lp->d_bbsize);
+		warnx("boot block size %" PRIu32, lp->d_bbsize);
 		errors++;
 	} else if (lp->d_bbsize % lp->d_secsize)
 		warnx("warning, boot block size %% sector-size != 0");
 	if (lp->d_sbsize == 0) {
-		warnx("super block size %d", lp->d_sbsize);
+		warnx("super block size %" PRIu32, lp->d_sbsize);
 		errors++;
 	} else if (lp->d_sbsize % lp->d_secsize)
 		warnx("warning, super block size %% sector-size != 0");
-	if (lp->d_npartitions > MAXPARTITIONS)
-		warnx("warning, number of partitions (%d) > MAXPARTITIONS (%d)",
-		    lp->d_npartitions, MAXPARTITIONS);
+	if (lp->d_npartitions > maxpartitions)
+		warnx("warning, number of partitions (%" PRIu16 ") > "
+		    "MAXPARTITIONS (%d)",
+		    lp->d_npartitions, maxpartitions);
 	else
-		for (i = MAXPARTITIONS - 1; i >= lp->d_npartitions; i--) {
+		for (i = maxpartitions - 1; i >= lp->d_npartitions; i--) {
 			part = 'a' + i;
 			pp = &lp->d_partitions[i];
 			if (pp->p_size || pp->p_offset) {
 				warnx("warning, partition %c increased "
-				    "number of partitions from %d to %d",
+				    "number of partitions from %" PRIu16
+				    " to %d",
 				    part, lp->d_npartitions, i + 1);
 				lp->d_npartitions = i + 1;
 				break;
@@ -1762,7 +2060,8 @@ checklabel(struct disklabel *lp)
 		part = 'a' + i;
 		pp = &lp->d_partitions[i];
 		if (pp->p_size == 0 && pp->p_offset != 0)
-			warnx("warning, partition %c: size 0, but offset %d",
+			warnx("warning, partition %c: size 0, but "
+			    "offset %" PRIu32,
 			    part, pp->p_offset);
 #ifdef STRICT_CYLINDER_ALIGNMENT
 		if (pp->p_offset % lp->d_secpercyl) {
@@ -1803,12 +2102,14 @@ usage(void)
 		const char *name;
 		const char *expn;
 	} usages[] = {
-	{ "[-ACFrtv] disk", "(to read label)" },
-	{ "-w [-DFrv] [-f disktab] disk disktype [packid]", "(to write label)" },
-	{ "-e [-CDFIrv] disk", "(to edit label)" },
-	{ "-i [-DFIrv] disk", "(to create a label interactively)" },
+	{ "[-ABCFMrtv] disk", "(to read label)" },
+	{ "-w [-BDFMrv] [-f disktab] disk disktype [packid]", "(to write label)" },
+	{ "-e [-BCDFMIrv] disk", "(to edit label)" },
+#if !defined(NO_INTERACT)
+	{ "-i [-BDFMIrv] disk", "(to create a label interactively)" },
+#endif
 	{ "-D [-v] disk", "(to delete existing label(s))" },
-	{ "-R [-DFrv] disk protofile", "(to restore label)" },
+	{ "-R [-BDFMrv] disk protofile", "(to restore label)" },
 	{ "[-NW] disk", "(to write disable/enable label)" },
 	{ "-l", "(to show all known file system types)" },
 	{ NULL, NULL }
@@ -1902,3 +2203,17 @@ list_fs_types(void)
 
 	return ret;
 }
+
+#ifndef HAVE_NBTOOL_CONFIG_H
+int
+dk_ioctl(int f, u_long cmd, void *arg)
+{
+#if !defined(NATIVELABEL_ONLY)
+	if (!native_p) {
+		errno = ENOTTY;
+		return -1;
+	}
+#endif
+	return ioctl(f, cmd, arg);
+}
+#endif

@@ -1,4 +1,4 @@
-/* $NetBSD: echo.c,v 1.15 2003/11/25 03:40:18 simonb Exp $	*/
+/* $NetBSD: echo.c,v 1.19 2016/09/05 01:00:07 sevan Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,29 +32,31 @@
 #include <sys/cdefs.h>
 #ifndef lint
 __COPYRIGHT(
-"@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+"@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)echo.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: echo.c,v 1.15 2003/11/25 03:40:18 simonb Exp $");
+__RCSID("$NetBSD: echo.c,v 1.19 2016/09/05 01:00:07 sevan Exp $");
 #endif
 #endif /* not lint */
 
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-int main(int, char *[]);
 
 /* ARGSUSED */
 int
 main(int argc, char *argv[])
 {
 	int nflag;
+
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
 
 	/* This utility may NOT do getopt(3) option parsing. */
 	if (*++argv && !strcmp(*argv, "-n")) {
@@ -71,6 +73,9 @@ main(int argc, char *argv[])
 	}
 	if (nflag == 0)
 		(void)putchar('\n');
+	fflush(stdout);
+	if (ferror(stdout))
+		exit(1);
 	exit(0);
 	/* NOTREACHED */
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.h,v 1.45 2008/02/16 17:58:01 matt Exp $	*/
+/*	$NetBSD: dump.h,v 1.54 2015/11/16 17:06:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -32,10 +32,20 @@
  */
 
 #include <machine/bswap.h>
+#ifdef DUMP_LFS
+#include <ufs/lfs/lfs.h>
+#include <ufs/lfs/lfs_accessors.h>
+#endif
+#include <ufs/ufs/dinode.h>
+#include <protocols/dumprestore.h>
 
 union dinode {
 	struct ufs1_dinode dp1;
 	struct ufs2_dinode dp2;
+#ifdef DUMP_LFS
+	struct lfs32_dinode dlp32;
+	struct lfs64_dinode dlp64;
+#endif
 };
 #define DIP(dp, field) \
 	(is_ufs2 ? (dp)->dp2.di_##field : (dp)->dp1.di_##field)
@@ -72,7 +82,7 @@ struct ufsi {
 #define ufs_blkoff(u,loc)   /* calculates (loc % u->ufs_bsize) */ \
 	((loc) & (u)->ufs_qbmask)
 #define ufs_dblksize(u,d,b) \
-	((((b) >= NDADDR || DIP((d), size) >= ((b)+1) << (u)->ufs_bshift \
+	((((b) >= UFS_NDADDR || DIP((d), size) >= ((b)+1) << (u)->ufs_bshift \
 		? (u)->ufs_bsize \
 		: (ufs_fragroundup((u), ufs_blkoff(u, DIP((d), size)))))))
 struct ufsi *ufsib;
@@ -110,6 +120,7 @@ int	lflag;		/* autoload flag */
 int	diskfd;		/* disk file descriptor */
 int	tapefd;		/* tape file descriptor */
 int	pipeout;	/* true => output to standard output */
+int	trueinc;	/* true => "true incremental", i.e use last 9 as ref */
 ino_t	curino;		/* current inumber; used globally */
 int	newtape;	/* new tape flag */
 u_int64_t	tapesize;	/* estimated tape size, blocks */
@@ -174,14 +185,14 @@ void	fs_mapinodes(ino_t, u_int64_t *, int *);
 /* operator interface functions */
 void	broadcast(const char *);
 void	lastdump(char);
-void	msg(const char *fmt, ...) __attribute__((__format__(__printf__,1,2)));
-void	msgtail(const char *fmt, ...) __attribute__((__format__(__printf__,1,2)));
+void	msg(const char *fmt, ...) __printflike(1, 2);
+void	msgtail(const char *fmt, ...) __printflike(1, 2);
 int	query(const char *);
-void	quit(const char *fmt, ...) __attribute__((__format__(__printf__,1,2)));
+void	quit(const char *fmt, ...) __printflike(1, 2);
 time_t	do_stats(void);
 void	statussig(int);
 void	timeest(void);
-time_t	unctime(char *);
+time_t	unctime(const char *);
 
 /* mapping routines */
 union	dinode;
@@ -211,7 +222,7 @@ void	close_rewind(void);
 void	dumpblock(daddr_t, int);
 void	startnewtape(int);
 void	trewind(int);
-void	writerec(char *, int);
+void	writerec(const char *, int);
 
 void	Exit(int);
 void	dumpabort(int);
@@ -256,7 +267,7 @@ struct	fstab *fstabsearch(const char *);	/* search fs_file and fs_spec */
 struct	statvfs *mntinfosearch(const char *key);
 
 #ifndef NAME_MAX
-#define NAME_MAX 255
+#define NAME_MAX 511
 #endif
 
 /*
@@ -264,6 +275,7 @@ struct	statvfs *mntinfosearch(const char *key);
  *	a linked list, and then (eventually) arrayified.
  */
 struct dumpdates {
+	/* see DUMP{IN,OUT}FMT in <protocols/dumprestore.h> */
 	char	dd_name[NAME_MAX+3];
 	char	dd_level;
 	time_t	dd_ddate;
@@ -280,18 +292,6 @@ void	putdumptime(void);
 		for (ddp = ddatev[i = 0]; i < nddates; ddp = ddatev[++i])
 
 void	sig(int signo);
-
-/*
- * Compatibility with old systems.
- */
-#ifdef COMPAT
-#include <sys/file.h>
-#define	strchr(a,b)	index(a,b)
-#define	strrchr(a,b)	rindex(a,b)
-extern char *strdup(), *ctime();
-extern int read(), write();
-extern int errno;
-#endif
 
 #ifndef	_PATH_FSTAB
 #define	_PATH_FSTAB	"/etc/fstab"

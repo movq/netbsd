@@ -1,4 +1,4 @@
-/*	$NetBSD: sif.c,v 1.6 2007/12/15 00:39:22 perry Exp $	*/
+/*	$NetBSD: sif.c,v 1.11 2016/07/18 22:24:15 maya Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sif.c,v 1.6 2007/12/15 00:39:22 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sif.c,v 1.11 2016/07/18 22:24:15 maya Exp $");
 
 #include "debug_playstation2.h"
 
@@ -73,7 +66,7 @@ n		printf("%s: " fmt, __func__ , ##args)
 #define MINOR(x)	BCD_TO_DECIMAL((x) & 0xff)
 
 void
-sif_init()
+sif_init(void)
 {
 	u_int32_t vers;
 
@@ -94,7 +87,7 @@ sif_init()
 }
 
 void
-sif_exit()
+sif_exit(void)
 {
 
 	sifrpc_exit();
@@ -138,7 +131,7 @@ iopdma_allocate_buffer(struct iopdma_segment *seg, size_t size)
 void
 iopdma_free_buffer(struct iopdma_segment *seg)
 {
-	int ret;
+	int ret __unused;
 
 	ret = iopmem_free(seg->iop_paddr);
 #ifdef SIF_DEBUG

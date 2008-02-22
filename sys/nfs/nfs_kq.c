@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_kq.c,v 1.20 2008/02/12 08:55:27 yamt Exp $	*/
+/*	$NetBSD: nfs_kq.c,v 1.26 2017/10/25 08:12:40 maya Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_kq.c,v 1.20 2008/02/12 08:55:27 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_kq.c,v 1.26 2017/10/25 08:12:40 maya Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,17 +67,35 @@ struct kevq {
 };
 SLIST_HEAD(kevqlist, kevq);
 
-static kmutex_t nfskevq_lock;
+static kmutex_t nfskq_lock;
 static struct lwp *nfskq_thread;
 static kcondvar_t nfskq_cv;
 static struct kevqlist kevlist = SLIST_HEAD_INITIALIZER(kevlist);
+static bool nfskq_thread_exit;
 
 void
 nfs_kqinit(void)
 {
 
-	mutex_init(&nfskevq_lock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&nfskq_lock, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&nfskq_cv, "nfskqpw");
+}
+
+void
+nfs_kqfini(void)
+{
+
+	if (nfskq_thread != NULL) {
+		mutex_enter(&nfskq_lock);
+		nfskq_thread_exit = true;
+		cv_broadcast(&nfskq_cv);
+		do {
+			cv_wait(&nfskq_cv, &nfskq_lock);
+		} while (nfskq_thread != NULL);
+		mutex_exit(&nfskq_lock);
+	}
+	mutex_destroy(&nfskq_lock);
+	cv_destroy(&nfskq_cv);
 }
 
 /*
@@ -110,8 +121,8 @@ nfs_kqpoll(void *arg)
 	struct lwp *l = curlwp;
 	u_quad_t osize;
 
-	mutex_enter(&nfskevq_lock);
-	for (;;) {
+	mutex_enter(&nfskq_lock);
+	while (!nfskq_thread_exit) {
 		SLIST_FOREACH(ke, &kevlist, kev_link) {
 			/* skip if still in attrcache */
 			if (nfs_getattrcache(ke->vp, &attr) != ENOENT)
@@ -122,12 +133,15 @@ nfs_kqpoll(void *arg)
 			 * for changes.
 			 */
 			ke->flags |= KEVQ_BUSY;
-			mutex_exit(&nfskevq_lock);
+			mutex_exit(&nfskq_lock);
 
 			/* save v_size, nfs_getattr() updates it */
 			osize = ke->vp->v_size;
 
+			memset(&attr, 0, sizeof(attr));
+			vn_lock(ke->vp, LK_SHARED | LK_RETRY);
 			(void) VOP_GETATTR(ke->vp, &attr, l->l_cred);
+			VOP_UNLOCK(ke->vp);
 
 			/* following is a bit fragile, but about best
 			 * we can get */
@@ -153,7 +167,7 @@ nfs_kqpoll(void *arg)
 				ke->onlink = attr.va_nlink;
 			}
 
-			mutex_enter(&nfskevq_lock);
+			mutex_enter(&nfskq_lock);
 			ke->flags &= ~KEVQ_BUSY;
 			cv_signal(&ke->cv);
 		}
@@ -161,14 +175,17 @@ nfs_kqpoll(void *arg)
 		if (SLIST_EMPTY(&kevlist)) {
 			/* Nothing more to watch, exit */
 			nfskq_thread = NULL;
-			mutex_exit(&nfskevq_lock);
+			mutex_exit(&nfskq_lock);
 			kthread_exit(0);
 		}
 
 		/* wait a while before checking for changes again */
-		cv_timedwait(&nfskq_cv, &nfskevq_lock,
+		cv_timedwait(&nfskq_cv, &nfskq_lock,
 		    NFS_MINATTRTIMO * hz / 2);
 	}
+	nfskq_thread = NULL;
+	cv_broadcast(&nfskq_cv);
+	mutex_exit(&nfskq_lock);
 }
 
 static void
@@ -177,16 +194,16 @@ filt_nfsdetach(struct knote *kn)
 	struct vnode *vp = (struct vnode *)kn->kn_hook;
 	struct kevq *ke;
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	SLIST_REMOVE(&vp->v_klist, kn, knote, kn_selnext);
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 
 	/* Remove the vnode from watch list */
-	mutex_enter(&nfskevq_lock);
+	mutex_enter(&nfskq_lock);
 	SLIST_FOREACH(ke, &kevlist, kev_link) {
 		if (ke->vp == vp) {
 			while (ke->flags & KEVQ_BUSY) {
-				cv_wait(&ke->cv, &nfskevq_lock);
+				cv_wait(&ke->cv, &nfskq_lock);
 			}
 
 			if (ke->usecount > 1) {
@@ -201,7 +218,7 @@ filt_nfsdetach(struct knote *kn)
 			break;
 		}
 	}
-	mutex_exit(&nfskevq_lock);
+	mutex_exit(&nfskq_lock);
 }
 
 static int
@@ -216,18 +233,18 @@ filt_nfsread(struct knote *kn, long hint)
 	 */
 	switch (hint) {
 	case NOTE_REVOKE:
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 		kn->kn_flags |= (EV_EOF | EV_ONESHOT);
 		return (1);
 	case 0:
-		mutex_enter(&vp->v_interlock);
-		kn->kn_data = vp->v_size - kn->kn_fp->f_offset != 0;
+		mutex_enter(vp->v_interlock);
+		kn->kn_data = vp->v_size - ((file_t *)kn->kn_obj)->f_offset;
 		rv = (kn->kn_data != 0);
-		mutex_exit(&vp->v_interlock);
+		mutex_exit(vp->v_interlock);
 		return rv;
 	default:
-		KASSERT(mutex_owned(&vp->v_interlock));
-		kn->kn_data = vp->v_size - kn->kn_fp->f_offset != 0;
+		KASSERT(mutex_owned(vp->v_interlock));
+		kn->kn_data = vp->v_size - ((file_t *)kn->kn_obj)->f_offset;
 		return (kn->kn_data != 0);
 	}
 }
@@ -240,18 +257,18 @@ filt_nfsvnode(struct knote *kn, long hint)
 
 	switch (hint) {
 	case NOTE_REVOKE:
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 		kn->kn_flags |= EV_EOF;
 		if ((kn->kn_sfflags & hint) != 0)
 			kn->kn_fflags |= hint;
 		return (1);
 	case 0:
-		mutex_enter(&vp->v_interlock);
+		mutex_enter(vp->v_interlock);
 		fflags = kn->kn_fflags;
-		mutex_exit(&vp->v_interlock);
+		mutex_exit(vp->v_interlock);
 		break;
 	default:
-		KASSERT(mutex_owned(&vp->v_interlock));
+		KASSERT(mutex_owned(vp->v_interlock));
 		if ((kn->kn_sfflags & hint) != 0)
 			kn->kn_fflags |= hint;
 		fflags = kn->kn_fflags;
@@ -262,10 +279,19 @@ filt_nfsvnode(struct knote *kn, long hint)
 }
 
 
-static const struct filterops nfsread_filtops =
-	{ 1, NULL, filt_nfsdetach, filt_nfsread };
-static const struct filterops nfsvnode_filtops =
-	{ 1, NULL, filt_nfsdetach, filt_nfsvnode };
+static const struct filterops nfsread_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_nfsdetach,
+	.f_event = filt_nfsread,
+};
+
+static const struct filterops nfsvnode_filtops = {
+	.f_isfd = 1,
+	.f_attach = NULL,
+	.f_detach = filt_nfsdetach,
+	.f_event = filt_nfsvnode,
+};
 
 int
 nfs_kqfilter(void *v)
@@ -304,16 +330,18 @@ nfs_kqfilter(void *v)
 	 * held. This is likely cheap due to attrcache, so do it now.
 	 */
 	memset(&attr, 0, sizeof(attr));
+	vn_lock(vp, LK_SHARED | LK_RETRY);
 	(void) VOP_GETATTR(vp, &attr, l->l_cred);
+	VOP_UNLOCK(vp);
 
-	mutex_enter(&nfskevq_lock);
+	mutex_enter(&nfskq_lock);
 
 	/* ensure the poller is running */
 	if (!nfskq_thread) {
 		error = kthread_create(PRI_NONE, 0, NULL, nfs_kqpoll,
 		    NULL, &nfskq_thread, "nfskqpoll");
 		if (error) {
-			mutex_exit(&nfskevq_lock);
+			mutex_exit(&nfskq_lock);
 			return error;
 		}
 	}
@@ -339,15 +367,14 @@ nfs_kqfilter(void *v)
 		SLIST_INSERT_HEAD(&kevlist, ke, kev_link);
 	}
 
-	mutex_enter(&vp->v_interlock);
+	mutex_enter(vp->v_interlock);
 	SLIST_INSERT_HEAD(&vp->v_klist, kn, kn_selnext);
 	kn->kn_hook = vp;
-	mutex_exit(&vp->v_interlock);
+	mutex_exit(vp->v_interlock);
 
 	/* kick the poller */
 	cv_signal(&nfskq_cv);
-	mutex_exit(&nfskevq_lock);
-
+	mutex_exit(&nfskq_lock);
 
 	return (error);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.43 2005/12/11 12:16:59 christos Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.56 2018/02/09 15:24:35 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.  All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.43 2005/12/11 12:16:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.56 2018/02/09 15:24:35 tsutsui Exp $");
 
 #include "opt_mbtype.h"
 
@@ -45,10 +45,11 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.43 2005/12/11 12:16:59 christos Ex
 #include <sys/malloc.h>
 
 #define _ATARI_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
+#include <dev/pci/pcidevs.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -101,8 +102,8 @@ typedef LIST_HEAD(pci_memreg_head, pci_memreg) PCI_MEMREG;
 /*
  * Entry points for PCI DMA.  Use only the 'standard' functions.
  */
-int	_bus_dmamap_create __P((bus_dma_tag_t, bus_size_t, int, bus_size_t,
-	    bus_size_t, int, bus_dmamap_t *));
+int	_bus_dmamap_create(bus_dma_tag_t, bus_size_t, int, bus_size_t,
+	    bus_size_t, int, bus_dmamap_t *);
 struct atari_bus_dma_tag pci_bus_dma_tag = {
 	0,
 #if defined(_ATARIHW_)
@@ -120,16 +121,16 @@ struct atari_bus_dma_tag pci_bus_dma_tag = {
 	_bus_dmamap_sync,
 };
 
-int	ataripcibusprint __P((void *auxp, const char *));
-int	pcibusmatch __P((struct device *, struct cfdata *, void *));
-void	pcibusattach __P((struct device *, struct device *, void *));
+int	ataripcibusprint(void *, const char *);
+int	pcibusmatch(device_t, cfdata_t, void *);
+void	pcibusattach(device_t, device_t, void *);
 
-static void enable_pci_devices __P((void));
-static void insert_into_list __P((PCI_MEMREG *head, struct pci_memreg *elem));
-static int overlap_pci_areas __P((struct pci_memreg *p,
-	struct pci_memreg *self, u_int addr, u_int size, u_int what));
+static void enable_pci_devices(void);
+static void insert_into_list(PCI_MEMREG *head, struct pci_memreg *elem);
+static int overlap_pci_areas(struct pci_memreg *p,
+	struct pci_memreg *self, u_int addr, u_int size, u_int what);
 
-CFATTACH_DECL(pcib, sizeof(struct device),
+CFATTACH_DECL_NEW(pcib, 0,
     pcibusmatch, pcibusattach, NULL, NULL);
 
 /*
@@ -139,42 +140,37 @@ CFATTACH_DECL(pcib, sizeof(struct device),
 static struct atari_bus_space	bs_storage[2];	/* 1 iot, 1 memt */
 
 int
-pcibusmatch(pdp, cfp, auxp)
-struct device	*pdp;
-struct cfdata	*cfp;
-void		*auxp;
+pcibusmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	static int	nmatched = 0;
 
-	if (strcmp((char *)auxp, "pcib"))
-		return (0);	/* Wrong number... */
+	if (strcmp((char *)aux, "pcib"))
+		return 0;	/* Wrong number... */
 
-	if(atari_realconfig == 0)
-		return (1);
+	if (atari_realconfig == 0)
+		return 1;
 
 	if (machineid & (ATARI_HADES|ATARI_MILAN)) {
 		/*
 		 * Both Hades and Milan have only one pci bus
 		 */
 		if (nmatched)
-			return (0);
+			return 0;
 		nmatched++;
-		return (1);
+		return 1;
 	}
-	return (0);
+	return 0;
 }
 
 void
-pcibusattach(pdp, dp, auxp)
-struct device	*pdp, *dp;
-void		*auxp;
+pcibusattach(device_t parent, device_t self, void *aux)
 {
 	struct pcibus_attach_args	pba;
 
 	pba.pba_pc      = NULL;
 	pba.pba_bus     = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags	= PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags	= PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	pba.pba_dmat	= &pci_bus_dma_tag;
 	pba.pba_iot     = leb_alloc_bus_space_tag(&bs_storage[0]);
 	pba.pba_memt    = leb_alloc_bus_space_tag(&bs_storage[1]);
@@ -185,7 +181,7 @@ void		*auxp;
 	pba.pba_iot->base  = PCI_IO_PHYS;
 	pba.pba_memt->base = PCI_MEM_PHYS;
 
-	if (dp == NULL) {
+	if (self == NULL) {
 		/*
 		 * Scan the bus for a VGA-card that we support. If we
 		 * find one, try to initialize it to a 'standard' text
@@ -203,23 +199,20 @@ void		*auxp;
 
 	printf("\n");
 
-	config_found_ia(dp, "pcibus", &pba, ataripcibusprint);
+	config_found_ia(self, "pcibus", &pba, ataripcibusprint);
 }
 
 int
-ataripcibusprint(auxp, name)
-void		*auxp;
-const char	*name;
+ataripcibusprint(void *aux, const char *name)
 {
-	if(name == NULL)
-		return(UNCONF);
-	return(QUIET);
+
+	if (name == NULL)
+		return UNCONF;
+	return QUIET;
 }
 
 void
-pci_attach_hook(parent, self, pba)
-	struct device *parent, *self;
-	struct pcibus_attach_args *pba;
+pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 }
 
@@ -229,7 +222,7 @@ pci_attach_hook(parent, self, pba)
  * later at pcibusattach.
  */
 void
-init_pci_bus()
+init_pci_bus(void)
 {
 	pci_chipset_tag_t	pc = NULL; /* XXX */
 	pcitag_t		tag;
@@ -260,9 +253,7 @@ init_pci_bus()
  * pci_memreg) are sorted.
  */
 static void
-insert_into_list(head, elem)
-    PCI_MEMREG *head;
-    struct pci_memreg *elem;
+insert_into_list(PCI_MEMREG *head, struct pci_memreg *elem)
 {
     struct pci_memreg *p, *q;
 
@@ -283,9 +274,7 @@ insert_into_list(head, elem)
  * pci area.
  */
 static int
-overlap_pci_areas(p, self, addr, size, what)
-    struct pci_memreg *p, *self;
-    u_int addr, size, what;
+overlap_pci_areas(struct pci_memreg *p, struct pci_memreg *self, u_int addr, u_int size, u_int what)
 {
     struct pci_memreg *q;
 
@@ -325,7 +314,7 @@ overlap_pci_areas(p, self, addr, size, what)
  * in such a way that they are placed as closed as possible together.
  */
 static void
-enable_pci_devices()
+enable_pci_devices(void)
 {
     PCI_MEMREG memlist;
     PCI_MEMREG iolist;
@@ -461,6 +450,24 @@ enable_pci_devices()
 	/*
 	 * On the Milan, we accept the BIOS's choice.
 	 */
+	/* ..except the secondary IDE interrupt that the BIOS doesn't setup. */
+#define PIIX_PCIB_MBIRQ0	0x70
+	if ((PCI_VENDOR(id) == PCI_VENDOR_INTEL) &&
+	    (PCI_PRODUCT(id) == PCI_PRODUCT_INTEL_82371FB_ISA)) {
+		/*
+		 * Set Interrupt Routing for MBIRQ0 to IRQ15.
+		 * Note Milan's ROM bootloader v1.2 and v1.4 incorrectly
+		 * set MBIRQ0 to IRQ14 (not 15) and unused MBIRQ1 to IRQ 15,
+		 * so explicitly disable MBIRQ1.
+		 */
+		csr = pci_conf_read(pc, tag, PIIX_PCIB_MBIRQ0);
+		csr &= ~0x000ffff;
+		csr |=  0x000800f;	/* MBIRQ1: disable, MBIRQ0: IRQ15 */
+		pci_conf_write(pc, tag, PIIX_PCIB_MBIRQ0, csr);
+#ifdef DEBUG_PCI_MACHDEP
+		printf("\npcib0: enable and route MBIRQ0 to irq 15\n");
+#endif
+	}
 #endif
     }
 
@@ -609,18 +616,14 @@ enable_pci_devices()
 }
 
 pcitag_t
-pci_make_tag(pc, bus, device, function)
-	pci_chipset_tag_t pc;
-	int bus, device, function;
+pci_make_tag(pci_chipset_tag_t pc, int bus, int device, int function)
 {
-	return ((bus << 16) | (device << 11) | (function << 8));
+
+	return (bus << 16) | (device << 11) | (function << 8);
 }
 
 void
-pci_decompose_tag(pc, tag, bp, dp, fp)
-	pci_chipset_tag_t pc;
-	pcitag_t tag;
-	int *bp, *dp, *fp;
+pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag, int *bp, int *dp, int *fp)
 {
 
 	if (bp != NULL)
@@ -632,9 +635,7 @@ pci_decompose_tag(pc, tag, bp, dp, fp)
 }
 
 int
-pci_intr_map(pa, ihp)
-	struct pci_attach_args *pa;
-	pci_intr_handle_t *ihp;
+pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int line = pa->pa_intrline;
 
@@ -691,24 +692,18 @@ bad:
 }
 
 const char *
-pci_intr_string(pc, ih)
-	pci_chipset_tag_t pc;
-	pci_intr_handle_t ih;
+pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih, char *buf, size_t len)
 {
-	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
-
 	if (ih == -1)
 		panic("pci_intr_string: bogus handle 0x%x", ih);
 
-	sprintf(irqstr, "irq %d", ih);
-	return (irqstr);
+	snprintf(buf, len, "irq %d", ih);
+	return buf;
 	
 }
 
 const struct evcnt *
-pci_intr_evcnt(pc, ih)
-	pci_chipset_tag_t pc;
-	pci_intr_handle_t ih;
+pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 {
 
 	/* XXX for now, no evcnt parent reported */

@@ -1,4 +1,4 @@
-/*	$NetBSD: dz_vsbus.c,v 1.37 2006/03/12 17:14:42 matt Exp $ */
+/*	$NetBSD: dz_vsbus.c,v 1.44 2017/05/22 17:17:25 ragge Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed at Ludd, University of 
- *      Lule}, Sweden and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,25 +25,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dz_vsbus.c,v 1.37 2006/03/12 17:14:42 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dz_vsbus.c,v 1.44 2017/05/22 17:17:25 ragge Exp $");
 
 #include <sys/param.h>
-#include <sys/proc.h>
 #include <sys/systm.h>
-#include <sys/ioctl.h>
-#include <sys/tty.h>
-#include <sys/file.h>
 #include <sys/conf.h>
+#include <sys/cpu.h>
 #include <sys/device.h>
-#include <sys/reboot.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/proc.h>
+#include <sys/tty.h>
 
 #include <dev/cons.h>
 
-#include <machine/mtpr.h>
 #include <machine/sid.h>
-#include <machine/uvax.h>
 #include <machine/vsbus.h>
-#include <machine/cpu.h>
 #include <machine/scb.h>
 
 #include <arch/vax/vax/gencons.h>
@@ -71,12 +62,12 @@ static	struct dz_linestate dz_conslinestate = { NULL, -1, NULL, NULL, NULL };
 #endif
 #endif
 
-static  int     dz_vsbus_match(struct device *, struct cfdata *, void *);
-static  void    dz_vsbus_attach(struct device *, struct device *, void *);
+static  int     dz_vsbus_match(device_t, cfdata_t, void *);
+static  void    dz_vsbus_attach(device_t, device_t, void *);
 
 static	vaddr_t dz_regs; /* Used for console */
 
-CFATTACH_DECL(dz_vsbus, sizeof(struct dz_softc),
+CFATTACH_DECL_NEW(dz_vsbus, sizeof(struct dz_softc),
     dz_vsbus_match, dz_vsbus_attach, NULL, NULL);
 
 #define REG(name)     short name; short X##name##X;
@@ -118,15 +109,15 @@ dz_print(void *aux, const char *name)
 #endif
 
 static int
-dz_vsbus_match(struct device *parent, struct cfdata *cf, void *aux)
+dz_vsbus_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct vsbus_attach_args *va = aux;
+	struct vsbus_attach_args * const va = aux;
 	struct ss_dz *dzP;
 	short i;
 
 #if VAX53 || VAX49 || VAXANY
 	if (vax_boardtype == VAX_BTYP_53 || vax_boardtype == VAX_BTYP_49)
-		if (cf->cf_loc[VSBUSCF_CSR] != 0x25000000)
+		if (cf->cf_loc[VSBUSCF_CSR] != DZ_CSR_KA49)
 			return 0; /* Ugly */
 #endif
 
@@ -144,10 +135,10 @@ dz_vsbus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-dz_vsbus_attach(struct device *parent, struct device *self, void *aux)
+dz_vsbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct dz_softc *sc = (void *)self;
-	struct vsbus_attach_args *va = aux;
+	struct dz_softc * const sc = device_private(self);
+	struct vsbus_attach_args * const va = aux;
 #if NDZKBD > 0
 	extern const struct cdevsw dz_cdevsw;
 #endif
@@ -156,12 +147,13 @@ dz_vsbus_attach(struct device *parent, struct device *self, void *aux)
 #endif
 	int s, consline;
 
+	sc->sc_dev = self;
 	/* 
 	 * XXX - This is evil and ugly, but...
 	 * due to the nature of how bus_space_* works on VAX, this will
 	 * be perfectly good until everything is converted.
 	 */
-	if (dz_regs == 0) /* This isn't console */ {
+	if (cn_tab->cn_dev != makedev(cdevsw_lookup_major(&dz_cdevsw), 0)) {
 		dz_regs = vax_map_physmem(va->va_paddr, 1);
 		consline = -1;
 	} else
@@ -186,7 +178,8 @@ dz_vsbus_attach(struct device *parent, struct device *self, void *aux)
 	scb_vecalloc(va->va_cvec, dzxint, sc, SCB_ISTACK, &sc->sc_tintrcnt);
 	scb_vecalloc(va->va_cvec - 4, dzrint, sc, SCB_ISTACK, &sc->sc_rintrcnt);
 
-	printf("\n%s: 4 lines", self->dv_xname);
+	aprint_normal("\n");
+	aprint_normal_dev(self, "4 lines");
 
 	dzattach(sc, NULL, consline);
 	DELAY(10000);
@@ -263,9 +256,13 @@ dzcnprobe(struct consdev *cndev)
 		break;
 
 	case VAX_BTYP_49:
-	case VAX_BTYP_53:
-		ioaddr = 0x25000000;
+		ioaddr = DZ_CSR_KA49;
 		diagcons = (vax_confdata & 8 ? 3 : 0);
+		break;
+
+	case VAX_BTYP_53:
+		ioaddr = DZ_CSR_KA49;
+		diagcons = 3;
 		break;
 
 	default:
@@ -280,6 +277,9 @@ dzcnprobe(struct consdev *cndev)
 	dz_regs = iospace;
 	dz = (void *)dz_regs;
 	ioaccess(iospace, ioaddr, 1);
+	dz->csr = 0;    /* Disable scanning until initting is done */
+	dz->tcr = (1 << minor(cndev->cn_dev));    /* Turn on xmitter */
+	dz->csr = 0x20; /* Turn scanning back on */
 }
 
 void

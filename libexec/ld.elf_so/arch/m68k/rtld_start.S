@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld_start.S,v 1.8 2003/03/01 15:14:59 mycroft Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.11 2014/03/18 18:20:38 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,8 +38,9 @@
 .rtld_start:
 	subql	#8,%sp			| storage for obj and cleanup
 
-	lea	(%pc,_GLOBAL_OFFSET_TABLE_@GOTPC),%a0
-	lea	(%pc,_DYNAMIC),%a1
+	GOT_SETUP(%a0)
+	LEA_LCL(_DYNAMIC,%a1)
+
 	movel	%a1,%a5
 	subl	(%a0),%a5
 
@@ -70,7 +64,7 @@
 	.globl	_rtld_bind_start
 	.type	_rtld_bind_start,@function
 _rtld_bind_start:
-	moveml	%d0-%d1/%a0-%a1,-(%sp)	| preserve caller-saved registers
+	INTERRUPT_SAVEREG
 	movel	20(%sp),-(%sp)		| push reloff
 	movel	(16+4)(%sp),-(%sp)	| push obj
 	jbsr	_rtld_bind@PLTPC	| %a0 = _rtld_bind(obj, reloff)
@@ -80,7 +74,7 @@ _rtld_bind_start:
 #else
 	movel	%d0,(16+4)(%sp)		| write fake `return' address over obj
 #endif
-	moveml	(%sp)+,%d0-%d1/%a0-%a1	| restore caller-saved registers
+	INTERRUPT_RESTOREREG		| restore caller-saved registers
 	addql	#4,%sp			| skip reloff
 	rts				| `return' right into function
 	.size	_rtld_bind_start,.-_rtld_bind_start

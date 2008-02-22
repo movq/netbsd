@@ -1,4 +1,4 @@
-/* $NetBSD: toaster.c,v 1.5 2007/10/19 12:00:23 ad Exp $ */
+/* $NetBSD: toaster.c,v 1.13 2014/02/25 18:30:09 pooka Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: toaster.c,v 1.5 2007/10/19 12:00:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: toaster.c,v 1.13 2014/02/25 18:30:09 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: toaster.c,v 1.5 2007/10/19 12:00:23 ad Exp $");
 #include <dev/isa/tsdioreg.h>
 
 struct toaster_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_gpioh;
 	u_int32_t latch;
@@ -70,21 +63,18 @@ struct toaster_softc {
 	callout_t led_callout[4];
 };
 
-static int	toaster_match(struct device *, struct cfdata *, void *);
-static void	toaster_attach(struct device *, struct device *, void *);
+static int	toaster_match(device_t, cfdata_t, void *);
+static void	toaster_attach(device_t, device_t, void *);
 
 extern struct cfdriver toaster_cd;
 
-CFATTACH_DECL(toaster, sizeof(struct toaster_softc),
+CFATTACH_DECL_NEW(toaster, sizeof(struct toaster_softc),
     toaster_match, toaster_attach, NULL, NULL);
 
 static struct toaster_softc *toaster_sc = NULL;
 
 static int
-toaster_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+toaster_match(device_t parent, cfdata_t match, void *aux)
 {
 	/* No more than one toaster per system */
 	if (toaster_sc == NULL)
@@ -108,8 +98,7 @@ toaster_match(parent, match, aux)
 #define LEDCALLOUT_DECL(x)	static void led ## x ## _on(void *);	\
 static void led ## x ## _off(void *);					\
 static void  								\
-led ## x ## _on(arg)							\
-	void *arg;							\
+led ## x ## _on(void *arg)						\
 {									\
 	struct toaster_softc *sc = arg;					\
 									\
@@ -123,8 +112,7 @@ led ## x ## _on(arg)							\
 }									\
 									\
 static void								\
-led ## x ## _off(arg)							\
-	void *arg;							\
+led ## x ## _off(void *arg)						\
 {									\
 	struct toaster_softc *sc = arg;					\
 	int offtime = sc->led_width[(x)] - sc->led_duty[(x)];		\
@@ -229,16 +217,14 @@ burner_sysctl(SYSCTLFN_ARGS)
 
 
 static void
-toaster_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+toaster_attach(device_t parent, device_t self, void *aux)
 {
-	struct toaster_softc *sc = (void *)self;
+	struct toaster_softc *sc = device_private(self);
 	struct tsdio_attach_args *taa = aux;
         const struct sysctlnode *node, *datnode;
 	int i;
 
+	sc->sc_dev = self;
 	toaster_sc = sc;
 	sc->sc_iot = taa->ta_iot;
 	sc->sc_gpioh = taa->ta_ioh;
@@ -247,9 +233,9 @@ toaster_attach(parent, self, aux)
 	TSDIO_SETBITS(PBDR, 0xf0);	/* Turn off LED's */
 
 	aprint_normal(": internal toaster control outputs\n");
-	aprint_normal("%s: using port B, bits 4-7 for front panel LEDs\n", sc->sc_dev.dv_xname);
-	aprint_normal("%s: using port A, bit 0 for magnetic latch\n", sc->sc_dev.dv_xname);
-	aprint_normal("%s: using port A, bit 1 for burner element\n", sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev, "using port B, bits 4-7 for front panel LEDs\n");
+	aprint_normal_dev(sc->sc_dev, "using port A, bit 0 for magnetic latch\n");
+	aprint_normal_dev(sc->sc_dev, "using port A, bit 1 for burner element\n");
 	
 	callout_init(&sc->led_callout[0], 0);
 	callout_init(&sc->led_callout[1], 0);
@@ -263,21 +249,12 @@ toaster_attach(parent, self, aux)
 	sc->burner = 0;
 	sc->latch = 0;
 
-	if (sysctl_createv(NULL, 0, NULL, NULL,
-				CTLFLAG_PERMANENT, CTLTYPE_NODE, "hw",
-				NULL, NULL, 0, NULL, 0,
-				CTL_HW, CTL_EOL) != 0) {
-		printf("%s: could not create sysctl\n",
-			sc->sc_dev.dv_xname);
-		return;
-	}
 	if (sysctl_createv(NULL, 0, NULL, &node,
-        			0, CTLTYPE_NODE, sc->sc_dev.dv_xname,
+        			0, CTLTYPE_NODE, device_xname(sc->sc_dev),
         			NULL,
         			NULL, 0, NULL, 0,
 				CTL_HW, CTL_CREATE, CTL_EOL) != 0) {
-                printf("%s: could not create sysctl\n",
-			sc->sc_dev.dv_xname);
+                aprint_error_dev(sc->sc_dev, "could not create sysctl\n");
 		return;
 	}
 
@@ -292,8 +269,7 @@ toaster_attach(parent, self, aux)
 				CTL_HW, node->sysctl_num,		\
 				CTL_CREATE, CTL_EOL))			\
 				!= 0) {					\
-                printf("%s: could not create sysctl\n", 		\
-			sc->sc_dev.dv_xname);				\
+                aprint_error_dev(sc->sc_dev, "could not create sysctl\n"); 		\
 		return;							\
 	}								\
 	sc->led_duty_sysctl[(x)] = datnode->sysctl_num;			\
@@ -304,12 +280,11 @@ toaster_attach(parent, self, aux)
 				"led" #x "_width",			\
         			SYSCTL_DESCR(				\
 				"LED cycle width in HZ tick units"),	\
-        			led_sysctl, 0, &sc->led_width[(x)], 0,	\
+        			led_sysctl, 0, (void *)&sc->led_width[(x)], 0,	\
 				CTL_HW, node->sysctl_num,		\
 				CTL_CREATE, CTL_EOL))			\
 				!= 0) {					\
-                printf("%s: could not create sysctl\n", 		\
-			sc->sc_dev.dv_xname);				\
+                aprint_error_dev(sc->sc_dev, "could not create sysctl\n"); 		\
 		return;							\
 	}								\
 	sc->led_width_sysctl[(x)] = datnode->sysctl_num;
@@ -325,12 +300,11 @@ toaster_attach(parent, self, aux)
 				"magnetic_latch",
         			SYSCTL_DESCR(
 				"magnetic latch that holds the toast down"),
-        			latch_sysctl, 0, &sc->latch, 0,
+        			latch_sysctl, 0, (void *)&sc->latch, 0,
 				CTL_HW, node->sysctl_num,
 				CTL_CREATE, CTL_EOL))
 				!= 0) {
-                printf("%s: could not create sysctl\n",
-			sc->sc_dev.dv_xname);
+                aprint_error_dev(sc->sc_dev, "could not create sysctl\n");
 		return;
 	}
 
@@ -339,14 +313,11 @@ toaster_attach(parent, self, aux)
 				"burner_element",
         			SYSCTL_DESCR(
 				"800-watt burner element control for toasting"),
-        			burner_sysctl, 0, &sc->burner, 0,
+        			burner_sysctl, 0, (void *)&sc->burner, 0,
 				CTL_HW, node->sysctl_num,
 				CTL_CREATE, CTL_EOL))
 				!= 0) {
-                printf("%s: could not create sysctl\n",
-			sc->sc_dev.dv_xname);
+                aprint_error_dev(sc->sc_dev, "could not create sysctl\n");
 		return;
 	}
-
-
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: bha_pci.c,v 1.31 2007/10/19 12:00:40 ad Exp $	*/
+/*	$NetBSD: bha_pci.c,v 1.41 2016/10/13 17:11:09 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bha_pci.c,v 1.31 2007/10/19 12:00:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bha_pci.c,v 1.41 2016/10/13 17:11:09 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,12 +52,11 @@ __KERNEL_RCSID(0, "$NetBSD: bha_pci.c,v 1.31 2007/10/19 12:00:40 ad Exp $");
 
 /*
  * Check the slots looking for a board we recognise
- * If we find one, note it's address (slot) and call
+ * If we find one, note its address (slot) and call
  * the actual probe routine to check it out.
  */
 static int
-bha_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+bha_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	bus_space_tag_t iot;
@@ -94,16 +86,19 @@ bha_pci_match(struct device *parent, struct cfdata *match,
  * Attach all the sub-devices we can find
  */
 static void
-bha_pci_attach(struct device *parent, struct device *self, void *aux)
+bha_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct bha_softc *sc = (void *)self;
+	struct bha_softc *sc = device_private(self);
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
 	pcireg_t csr;
 	const char *model, *intrstr;
+	char intrbuf[PCI_INTRSTR_LEN];
+
+	sc->sc_dev = self;
 
 	aprint_naive(": SCSI controller\n");
 
@@ -117,8 +112,7 @@ bha_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_IO, 0, &iot, &ioh,
 	    NULL, NULL)) {
-		aprint_error("%s: unable to map device registers\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unable to map device registers\n");
 		return;
 	}
 
@@ -135,26 +129,25 @@ bha_pci_attach(struct device *parent, struct device *self, void *aux)
 	    csr | PCI_COMMAND_MASTER_ENABLE | PCI_COMMAND_IO_ENABLE);
 
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
-	sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, bha_intr, sc);
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
+	sc->sc_ih = pci_intr_establish_xname(pc, ih, IPL_BIO, bha_intr, sc,
+	    device_xname(sc->sc_dev));
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	bha_attach(sc);
 
 	bha_disable_isacompat(sc);
 }
 
-CFATTACH_DECL(bha_pci, sizeof(struct bha_softc),
+CFATTACH_DECL_NEW(bha_pci, sizeof(struct bha_softc),
     bha_pci_match, bha_pci_attach, NULL, NULL);

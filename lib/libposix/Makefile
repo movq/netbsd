@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2007/11/13 10:22:15 he Exp $
+#	$NetBSD: Makefile,v 1.17 2014/08/10 23:25:49 matt Exp $
 
 LIB=	posix
 
@@ -9,17 +9,16 @@ LLIBS=
 
 CPPFLAGS+=-D_REENTRANT -I${NETBSDSRCDIR}/lib/libc/include
 CPPFLAGS+=-I${NETBSDSRCDIR}/sys
-.if exists(${NETBSDSRCDIR}/lib/libc/arch/${MACHINE_ARCH})
-ARCHDIR=	${NETBSDSRCDIR}/lib/libc/arch/${MACHINE_ARCH}
-.elif exists(${NETBSDSRCDIR}/lib/libc/arch/${MACHINE_CPU})
-ARCHDIR=	${NETBSDSRCDIR}/lib/libc/arch/${MACHINE_CPU}
-.else
-.BEGIN:
-	@echo no ARCHDIR for ${MACHINE_ARCH} nor ${MACHINE_CPU}
-	@false
-.endif
+
+.include "${.CURDIR}/../libc/libcincludes.mk"
 
 AFLAGS+=-I${ARCHDIR}
+
+.if ${LIBC_MACHINE_ARCH} == "powerpc64"
+# XXX: How come it does not resolve from libc?
+.PATH.c: ${NETBSDSRCDIR}/lib/libc/gen
+SRCS+= _errno.c
+.endif
 
 .include "${.CURDIR}/sys/Makefile.inc"
 

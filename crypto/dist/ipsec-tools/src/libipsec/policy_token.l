@@ -1,4 +1,4 @@
-/*	$NetBSD: policy_token.l,v 1.7 2007/07/18 12:07:50 vanhu Exp $	*/
+/*	$NetBSD: policy_token.l,v 1.10 2018/05/28 20:45:38 maxv Exp $	*/
 
 /* Id: policy_token.l,v 1.12 2005/05/05 12:32:18 manubsd Exp */
 
@@ -59,11 +59,12 @@
 #endif
 #define yylval __libipseclval	/* XXX */
 
-int yylex __P((void));
+int yylex(void);
 %}
 
 %option noyywrap
 %option nounput
+%option noinput
 
 /* common section */
 nl		\n
@@ -166,14 +167,13 @@ unique		{ yylval.num = IPSEC_LEVEL_UNIQUE; return(LEVEL); }
 
 %%
 
-void __policy__strbuffer__init__ __P((char *));
-void __policy__strbuffer__free__ __P((void));
+void __policy__strbuffer__init__(char *);
+void __policy__strbuffer__free__(void);
 
 static YY_BUFFER_STATE strbuffer;
 
 void
-__policy__strbuffer__init__(msg)
-	char *msg;
+__policy__strbuffer__init__(char *msg)
 {
 	if (YY_CURRENT_BUFFER)
 		yy_delete_buffer(YY_CURRENT_BUFFER);
@@ -184,7 +184,7 @@ __policy__strbuffer__init__(msg)
 }
 
 void
-__policy__strbuffer__free__()
+__policy__strbuffer__free__(void)
 {
 	yy_delete_buffer(strbuffer);
 

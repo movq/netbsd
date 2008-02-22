@@ -1,4 +1,4 @@
-/*	$NetBSD: pdcide.c,v 1.25 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: pdcide.c,v 1.35 2013/10/07 19:51:55 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdcide.c,v 1.25 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdcide.c,v 1.35 2013/10/07 19:51:55 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,7 +36,8 @@ __KERNEL_RCSID(0, "$NetBSD: pdcide.c,v 1.25 2007/02/09 21:55:27 ad Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_pdc202xx_reg.h>
 
-static void pdc202xx_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void pdc202xx_chip_map(struct pciide_softc *,
+    const struct pci_attach_args *);
 static void pdc202xx_setup_channel(struct ata_channel *);
 static void pdc20268_setup_channel(struct ata_channel *);
 static int  pdc202xx_pci_intr(void *);
@@ -49,11 +45,11 @@ static int  pdc20265_pci_intr(void *);
 static void pdc20262_dma_start(void *, int, int);
 static int  pdc20262_dma_finish(void *, int, int, int);
 
-static int  pdcide_match(struct device *, struct cfdata *, void *);
-static void pdcide_attach(struct device *, struct device *, void *);
+static int  pdcide_match(device_t, cfdata_t, void *);
+static void pdcide_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pdcide, sizeof(struct pciide_softc),
-    pdcide_match, pdcide_attach, NULL, NULL);
+CFATTACH_DECL_NEW(pdcide, sizeof(struct pciide_softc),
+    pdcide_match, pdcide_attach, pciide_detach, NULL);
 
 static const struct pciide_product_desc pciide_promise_products[] =  {
 	{ PCI_PRODUCT_PROMISE_PDC20246,
@@ -119,8 +115,7 @@ static const struct pciide_product_desc pciide_promise_products[] =  {
 };
 
 static int
-pdcide_match(struct device *parent, struct cfdata *match,
-    void *aux)
+pdcide_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -132,10 +127,12 @@ pdcide_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-pdcide_attach(struct device *parent, struct device *self, void *aux)
+pdcide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_promise_products));
@@ -180,12 +177,11 @@ pdcide_attach(struct device *parent, struct device *self, void *aux)
 	(sc)->sc_pp->ide_product == PCI_PRODUCT_PROMISE_PDC20277)
 
 static void
-pdc202xx_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+pdc202xx_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	pcireg_t interface, st, mode;
-	bus_size_t cmdsize, ctlsize;
 
 	if (!PDC_IS_268(sc)) {
 		st = pci_conf_read(sc->sc_pc, sc->sc_tag, PDC2xx_STATE);
@@ -211,8 +207,8 @@ pdc202xx_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	if (st & PDC2xx_STATE_NATIVE)
 		interface |= PCIIDE_INTERFACE_PCI(0) | PCIIDE_INTERFACE_PCI(1);
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 	sc->sc_wdcdev.sc_atac.atac_cap = ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
@@ -237,6 +233,7 @@ pdc202xx_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			pdc20268_setup_channel : pdc202xx_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
+	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -312,12 +309,12 @@ pdc202xx_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			continue;
 		if ((st & (PDC_IS_262(sc) ?
 		    PDC262_STATE_EN(channel):PDC246_STATE_EN(channel))) == 0) {
-			aprint_normal("%s: %s channel ignored (disabled)\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+			aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			    "%s channel ignored (disabled)\n", cp->name);
 			cp->ata_channel.ch_flags |= ATACH_DISABLED;
 			continue;
 		}
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
+		pciide_mapchan(pa, cp, interface,
 		    PDC_IS_265(sc) ? pdc20265_pci_intr : pdc202xx_pci_intr);
 		/* clear interrupt, in case there is one pending */
 		bus_space_write_1(sc->sc_dma_iot, cp->dma_iohs[IDEDMA_CTL], 0,
@@ -342,7 +339,7 @@ pdc202xx_setup_channel(struct ata_channel *chp)
 
 	idedma_ctl = 0;
 	ATADEBUG_PRINT(("pdc202xx_setup_channel %s: scr 0x%x\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+	    device_xname(sc->sc_wdcdev.sc_atac.atac_dev),
 	    bus_space_read_1(sc->sc_dma_iot, sc->sc_dma_ioh, PDC262_U66)),
 	    DEBUG_PROBE);
 
@@ -353,9 +350,9 @@ pdc202xx_setup_channel(struct ata_channel *chp)
 		st = pci_conf_read(sc->sc_pc, sc->sc_tag, PDC2xx_STATE);
 		/* Trim UDMA mode */
 		if ((st & PDC262_STATE_80P(channel)) != 0 ||
-		    (chp->ch_drive[0].drive_flags & DRIVE_UDMA &&
+		    (chp->ch_drive[0].drive_flags & ATA_DRIVE_UDMA &&
 		    chp->ch_drive[0].UDMA_mode <= 2) ||
-		    (chp->ch_drive[1].drive_flags & DRIVE_UDMA &&
+		    (chp->ch_drive[1].drive_flags & ATA_DRIVE_UDMA &&
 		    chp->ch_drive[1].UDMA_mode <= 2)) {
 			if (chp->ch_drive[0].UDMA_mode > 2)
 				chp->ch_drive[0].UDMA_mode = 2;
@@ -363,9 +360,9 @@ pdc202xx_setup_channel(struct ata_channel *chp)
 				chp->ch_drive[1].UDMA_mode = 2;
 		}
 		/* Set U66 if needed */
-		if ((chp->ch_drive[0].drive_flags & DRIVE_UDMA &&
+		if ((chp->ch_drive[0].drive_flags & ATA_DRIVE_UDMA &&
 		    chp->ch_drive[0].UDMA_mode > 2) ||
-		    (chp->ch_drive[1].drive_flags & DRIVE_UDMA &&
+		    (chp->ch_drive[1].drive_flags & ATA_DRIVE_UDMA &&
 		    chp->ch_drive[1].UDMA_mode > 2))
 			scr |= PDC262_U66_EN(channel);
 		else
@@ -373,17 +370,17 @@ pdc202xx_setup_channel(struct ata_channel *chp)
 		bus_space_write_1(sc->sc_dma_iot, sc->sc_dma_ioh,
 		    PDC262_U66, scr);
 		ATADEBUG_PRINT(("pdc202xx_setup_channel %s:%d: ATAPI 0x%x\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, channel,
+		    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), channel,
 		    bus_space_read_4(sc->sc_dma_iot, sc->sc_dma_ioh,
 		    PDC262_ATAPI(channel))), DEBUG_PROBE);
-		if (chp->ch_drive[0].drive_flags & DRIVE_ATAPI ||
-			chp->ch_drive[1].drive_flags & DRIVE_ATAPI) {
-			if (((chp->ch_drive[0].drive_flags & DRIVE_UDMA) &&
-			    !(chp->ch_drive[1].drive_flags & DRIVE_UDMA) &&
-			    (chp->ch_drive[1].drive_flags & DRIVE_DMA)) ||
-			    ((chp->ch_drive[1].drive_flags & DRIVE_UDMA) &&
-			    !(chp->ch_drive[0].drive_flags & DRIVE_UDMA) &&
-			    (chp->ch_drive[0].drive_flags & DRIVE_DMA)))
+		if (chp->ch_drive[0].drive_type == ATA_DRIVET_ATAPI ||
+			chp->ch_drive[1].drive_type == ATA_DRIVET_ATAPI) {
+			if (((chp->ch_drive[0].drive_flags & ATA_DRIVE_UDMA) &&
+			    !(chp->ch_drive[1].drive_flags & ATA_DRIVE_UDMA) &&
+			    (chp->ch_drive[1].drive_flags & ATA_DRIVE_DMA)) ||
+			    ((chp->ch_drive[1].drive_flags & ATA_DRIVE_UDMA) &&
+			    !(chp->ch_drive[0].drive_flags & ATA_DRIVE_UDMA) &&
+			    (chp->ch_drive[0].drive_flags & ATA_DRIVE_DMA)))
 				atapi = 0;
 			else
 				atapi = PDC262_ATAPI_UDMA;
@@ -394,20 +391,20 @@ pdc202xx_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if ((drvp->drive_flags & DRIVE) == 0)
+		if (drvp->drive_type == ATA_DRIVET_NONE)
 			continue;
 		mode = 0;
-		if (drvp->drive_flags & DRIVE_UDMA) {
+		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
 			/* use Ultra/DMA */
 			s = splbio();
-			drvp->drive_flags &= ~DRIVE_DMA;
+			drvp->drive_flags &= ~ATA_DRIVE_DMA;
 			splx(s);
 			mode = PDC2xx_TIM_SET_MB(mode,
 			    pdc2xx_udma_mb[drvp->UDMA_mode]);
 			mode = PDC2xx_TIM_SET_MC(mode,
 			    pdc2xx_udma_mc[drvp->UDMA_mode]);
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
-		} else if (drvp->drive_flags & DRIVE_DMA) {
+		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
 			mode = PDC2xx_TIM_SET_MB(mode,
 			    pdc2xx_dma_mb[drvp->DMA_mode]);
 			mode = PDC2xx_TIM_SET_MC(mode,
@@ -421,7 +418,7 @@ pdc202xx_setup_channel(struct ata_channel *chp)
 		}
 		mode = PDC2xx_TIM_SET_PA(mode, pdc2xx_pa[drvp->PIO_mode]);
 		mode = PDC2xx_TIM_SET_PB(mode, pdc2xx_pb[drvp->PIO_mode]);
-		if (drvp->drive_flags & DRIVE_ATA)
+		if (drvp->drive_type == ATA_DRIVET_ATA)
 			mode |= PDC2xx_TIM_PRE;
 		mode |= PDC2xx_TIM_SYNC | PDC2xx_TIM_ERRDY;
 		if (drvp->PIO_mode >= 3) {
@@ -431,7 +428,7 @@ pdc202xx_setup_channel(struct ata_channel *chp)
 		}
 		ATADEBUG_PRINT(("pdc202xx_setup_channel: %s:%d:%d "
 		    "timings 0x%x\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+		    device_xname(sc->sc_wdcdev.sc_atac.atac_dev),
 		    chp->ch_channel, drive, mode), DEBUG_PROBE);
 		pci_conf_write(sc->sc_pc, sc->sc_tag,
 		    PDC2xx_TIM(chp->ch_channel, drive), mode);
@@ -472,17 +469,17 @@ pdc20268_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if ((drvp->drive_flags & DRIVE) == 0)
+		if (drvp->drive_type == ATA_DRIVET_NONE)
 			continue;
-		if (drvp->drive_flags & DRIVE_UDMA) {
+		if (drvp->drive_flags & ATA_DRIVE_UDMA) {
 			/* use Ultra/DMA */
 			s = splbio();
-			drvp->drive_flags &= ~DRIVE_DMA;
+			drvp->drive_flags &= ~ATA_DRIVE_DMA;
 			splx(s);
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 			if (drvp->UDMA_mode > 2 && u100 == 0)
 				drvp->UDMA_mode = 2;
-		} else if (drvp->drive_flags & DRIVE_DMA) {
+		} else if (drvp->drive_flags & ATA_DRIVE_DMA) {
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 		}
 	}
@@ -514,9 +511,9 @@ pdc202xx_pci_intr(void *arg)
 		if (scr & PDC2xx_SCR_INT(i)) {
 			crv = wdcintr(wdc_cp);
 			if (crv == 0)
-				printf("%s:%d: bogus intr (reg 0x%x)\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-				    i, scr);
+				aprint_error("%s:%d: bogus intr (reg 0x%x)\n",
+				    device_xname(
+				      sc->sc_wdcdev.sc_atac.atac_dev), i, scr);
 			else
 				rv = 1;
 		}
@@ -557,8 +554,8 @@ pdc20265_pci_intr(void *arg)
 			continue;
 		crv = wdcintr(wdc_cp);
 		if (crv == 0)
-			printf("%s:%d: bogus intr\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, i);
+			aprint_error("%s:%d: bogus intr\n",
+			    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), i);
 		else
 			rv = 1;
 	}
@@ -598,14 +595,14 @@ pdc20262_dma_finish(void *v, int channel, int drive, int force)
 	if (dma_maps->dma_flags & WDC_DMA_LBA48) {
 		chp = sc->wdc_chanarray[channel];
 		atapi = 0;
-		if (chp->ch_drive[0].drive_flags & DRIVE_ATAPI ||
-		    chp->ch_drive[1].drive_flags & DRIVE_ATAPI) {
-			if ((!(chp->ch_drive[0].drive_flags & DRIVE_UDMA) ||
-			    (chp->ch_drive[1].drive_flags & DRIVE_UDMA) ||
-			    !(chp->ch_drive[1].drive_flags & DRIVE_DMA)) &&
-			    (!(chp->ch_drive[1].drive_flags & DRIVE_UDMA) ||
-			    (chp->ch_drive[0].drive_flags & DRIVE_UDMA) ||
-			    !(chp->ch_drive[0].drive_flags & DRIVE_DMA)))
+		if (chp->ch_drive[0].drive_type == ATA_DRIVET_ATAPI ||
+		    chp->ch_drive[1].drive_type == ATA_DRIVET_ATAPI) {
+			if ((!(chp->ch_drive[0].drive_flags & ATA_DRIVE_UDMA) ||
+			    (chp->ch_drive[1].drive_flags & ATA_DRIVE_UDMA) ||
+			    !(chp->ch_drive[1].drive_flags & ATA_DRIVE_DMA)) &&
+			    (!(chp->ch_drive[1].drive_flags & ATA_DRIVE_UDMA) ||
+			    (chp->ch_drive[0].drive_flags & ATA_DRIVE_UDMA) ||
+			    !(chp->ch_drive[0].drive_flags & ATA_DRIVE_DMA)))
 				atapi = PDC262_ATAPI_UDMA;
 		}
 		bus_space_write_4(sc->sc_dma_iot, sc->sc_dma_ioh,

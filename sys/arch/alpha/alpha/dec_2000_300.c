@@ -1,4 +1,4 @@
-/* $NetBSD: dec_2000_300.c,v 1.15 2007/10/17 19:52:55 garbled Exp $ */
+/* $NetBSD: dec_2000_300.c,v 1.19 2012/10/13 17:58:54 jdc Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,17 +34,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -67,7 +60,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_2000_300.c,v 1.15 2007/10/17 19:52:55 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_2000_300.c,v 1.19 2012/10/13 17:58:54 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,7 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: dec_2000_300.c,v 1.15 2007/10/17 19:52:55 garbled Ex
 
 void dec_2000_300_init(void);
 static void dec_2000_300_cons_init(void);
-static void dec_2000_300_device_register(struct device *, void *);
+static void dec_2000_300_device_register(device_t, void *);
 
 #ifdef KGDB
 #include <machine/db_machdep.h>
@@ -175,7 +168,7 @@ dec_2000_300_cons_init(void)
 		/* display console... */
 		/* XXX */
 		(void) pckbc_cnattach(&jcp->jc_internal_iot, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT);
+		    PCKBC_KBD_SLOT, 0);
 
 		isa_display_console(&jcp->jc_eisa_iot, &jcp->jc_eisa_memt);
 #else
@@ -203,12 +196,12 @@ dec_2000_300_cons_init(void)
 }
 
 static void
-dec_2000_300_device_register(struct device *dev, void *aux)
+dec_2000_300_device_register(device_t dev, void *aux)
 {
 	static int found, initted, scsiboot, netboot;
-	static struct device *eisadev, *isadev, *scsidev;
+	static device_t eisadev, isadev, scsidev;
 	struct bootdev_data *b = bootdev_data;
-	struct device *parent = device_parent(dev);
+	device_t parent = device_parent(dev);
 
 	if (found)
 		return;
@@ -239,7 +232,7 @@ dec_2000_300_device_register(struct device *dev, void *aux)
 
 			scsidev = dev;
 #if 0
-			printf("\nscsidev = %s\n", scsidev->dv_xname);
+			printf("\nscsidev = %s\n", device_xname(scsidev));
 #endif
 			return;
 		}
@@ -276,7 +269,7 @@ dec_2000_300_device_register(struct device *dev, void *aux)
 		/* we've found it! */
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", booted_device->dv_xname);
+		printf("\nbooted_device = %s\n", device_xname(booted_device));
 #endif
 		found = 1;
 		return;
@@ -296,7 +289,7 @@ dec_2000_300_device_register(struct device *dev, void *aux)
 
 			booted_device = dev;
 #if 0
-			printf("\nbooted_device = %s\n", booted_device->dv_xname);
+			printf("\nbooted_device = %s\n", device_xname(booted_device));
 #endif
 			found = 1;
 			return;

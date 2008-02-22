@@ -1,4 +1,4 @@
-/*	$NetBSD: alpha.c,v 1.17 2006/03/18 11:08:19 dsl Exp $	*/
+/*	$NetBSD: alpha.c,v 1.21 2011/08/14 17:50:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -102,7 +95,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: alpha.c,v 1.17 2006/03/18 11:08:19 dsl Exp $");
+__RCSID("$NetBSD: alpha.c,v 1.21 2011/08/14 17:50:17 christos Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -161,8 +154,8 @@ alpha_clearboot(ib_params *params)
 	if (cksum != bb.bb_cksum) {		// XXX check bb_cksum endian?
 		warnx(
 	    "Old boot block checksum invalid (was %#llx, calculated %#llx)",
-		    (unsigned long long)bb.bb_cksum,
-		    (unsigned long long)cksum);
+		    (unsigned long long)le64toh(bb.bb_cksum),
+		    (unsigned long long)le64toh(cksum));
 		warnx("Boot block invalid");
 		return (0);
 	}
@@ -173,7 +166,7 @@ alpha_clearboot(ib_params *params)
 		printf("Old bootstrap size:         %llu\n",
 		    (unsigned long long)le64toh(bb.bb_secsize));
 		printf("Old bootstrap checksum:     %#llx\n",
-		    (unsigned long long)bb.bb_cksum);
+		    (unsigned long long)le64toh(bb.bb_cksum));
 	}
 
 	bb.bb_secstart = bb.bb_secsize = bb.bb_flags = 0;
@@ -187,7 +180,7 @@ alpha_clearboot(ib_params *params)
 	printf("New bootstrap size:         %llu\n",
 	    (unsigned long long)le64toh(bb.bb_secsize));
 	printf("New bootstrap checksum:     %#llx\n",
-	    (unsigned long long)bb.bb_cksum);
+	    (unsigned long long)le64toh(bb.bb_cksum));
 
 	if (params->flags & IB_VERBOSE)
 		printf("%slearing boot block\n",
@@ -303,7 +296,7 @@ alpha_setboot(ib_params *params)
 		printf("Bootstrap sector count:  %llu\n",
 		    (unsigned long long)le64toh(bb.bb_secsize));
 		printf("New boot block checksum: %#llx\n",
-		    (unsigned long long)bb.bb_cksum);
+		    (unsigned long long)le64toh(bb.bb_cksum));
 		printf("%sriting bootstrap\n",
 		    (params->flags & IB_NOWRITE) ? "Not w" : "W");
 	}
@@ -316,7 +309,7 @@ alpha_setboot(ib_params *params)
 	if (rv == -1) {
 		warn("Writing `%s'", params->filesystem);
 		goto done;
-	} else if (rv != bootstrapsize) {
+	} else if ((size_t)rv != bootstrapsize) {
 		warnx("Writing `%s': short write", params->filesystem);
 		goto done;
 	}
@@ -375,7 +368,8 @@ resum(ib_params *params, struct alpha_boot_block * const bb, uint16_t *bb16)
 	if (bb16 != NULL)
 		memcpy(bb16, bb, sizeof(*bb));
 	if ((params->flags & IB_VERBOSE) && lastsum != bb->bb_cksum)
-		printf("alpha checksum now %016llx\n", (long long)bb->bb_cksum);
+		printf("alpha checksum now %016llx\n",
+		    (unsigned long long)le64toh(bb->bb_cksum));
 	lastsum = bb->bb_cksum;
 }
 
@@ -438,7 +432,7 @@ sun_bootstrap(ib_params *params, struct alpha_boot_block * const bb)
 	resum(params, bb, bb16);
 	if (params->flags & IB_VERBOSE)
 		printf("final harmonized checksum: %016llx\n",
-		    (long long)bb->bb_cksum);
+		    (unsigned long long)le64toh(bb->bb_cksum));
 	check_sparc(bb, "Final");
 }
 
@@ -446,8 +440,7 @@ static void
 check_sparc(const struct alpha_boot_block * const bb, const char *when)
 {
 	uint16_t bb16[256];
-	const char * const wmsg =
-	    "%s sparc %s 0x%04x invalid, expected 0x%04x";
+#define wmsg "%s sparc %s 0x%04x invalid, expected 0x%04x"
 
 	memcpy(bb16, bb, sizeof(bb16));
 	if (compute_sunsum(bb16) != bb16[255])

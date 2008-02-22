@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sigsuspend.S,v 1.1 2006/03/11 18:59:21 christos Exp $	*/
+/*	$NetBSD: compat_sigsuspend.S,v 1.3 2014/05/22 15:21:13 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,7 +36,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: compat_sigsuspend.S,v 1.1 2006/03/11 18:59:21 christos Exp $")
+	RCSID("$NetBSD: compat_sigsuspend.S,v 1.3 2014/05/22 15:21:13 uebayasi Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"
@@ -51,9 +51,10 @@ ENTRY(sigsuspend)
 	xorl	%eax,%eax		# shouldn t happen
 	ret
 err:
-#ifdef PIC
+#ifdef __PIC__
 	movq	PIC_GOT(CERROR), %rcx
 	jmp	*%rcx
 #else
 	jmp	CERROR
 #endif
+END(sigsuspend)

@@ -1,4 +1,4 @@
-/*	$NetBSD: debug_subr.c,v 1.8 2006/03/05 02:14:41 uwe Exp $	*/
+/*	$NetBSD: debug_subr.c,v 1.10 2009/03/18 10:22:28 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: debug_subr.c,v 1.8 2006/03/05 02:14:41 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: debug_subr.c,v 1.10 2009/03/18 10:22:28 cegger Exp $");
 
 #include "debug_hpc.h"
 
@@ -113,7 +106,7 @@ dbg_banner_title(const char *name, size_t len)
 }
 
 void
-dbg_banner_line()
+dbg_banner_line(void)
 {
 
 	dbg_draw_line(BANNER_LENGTH);
@@ -315,7 +308,7 @@ static void __dbg_lcd_test8(vaddr_t, int, int);
 static void __dbg_lcd_test16(vaddr_t, int, int);
 
 void
-dbg_lcd_test()
+dbg_lcd_test(void)
 {
 	vaddr_t fbaddr;
 	int w, h;
@@ -483,7 +476,7 @@ __dbg_lcd_test16(vaddr_t fbaddr, int w, int h)
 }
 
 int
-bootinfo_fb_depth()
+bootinfo_fb_depth(void)
 {
 
 	switch (bootinfo->fb_type) {

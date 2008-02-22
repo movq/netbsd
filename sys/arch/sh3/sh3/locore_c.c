@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_c.c,v 1.27 2008/02/15 02:55:57 uwe Exp $	*/
+/*	$NetBSD: locore_c.c,v 1.31 2009/11/27 03:23:13 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2002, 2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -111,12 +104,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore_c.c,v 1.27 2008/02/15 02:55:57 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore_c.c,v 1.31 2009/11/27 03:23:13 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/cpu.h>
-#include <sys/user.h>
 #include <sys/sched.h>
 #include <sys/proc.h>
 #include <sys/ras.h>
@@ -141,9 +133,6 @@ void
 cpu_switch_prepare(struct lwp *olwp, struct lwp *nlwp)
 {
 	struct proc *p = nlwp->l_proc;
-
-	curlwp = nlwp;
-	curpcb = nlwp->l_md.md_pcb;
 
 	/* Check for Restartable Atomic Sequences. */
 	if (p->p_raslist != NULL) {
@@ -195,7 +184,7 @@ sh4_switch_setup(struct lwp *l)
 	int i, e;
 
 	md_upte = l->l_md.md_upte;
-	vpn = sh3_trunc_page(l->l_addr);
+	vpn = sh3_trunc_page(uvm_lwp_getuarea(l));
 	e = SH4_UTLB_ENTRY - UPAGES;
 
 	for (i = 0; i < UPAGES; ++i) {

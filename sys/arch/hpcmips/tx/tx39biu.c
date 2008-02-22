@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39biu.c,v 1.12 2007/01/24 13:08:13 hubertf Exp $ */
+/*	$NetBSD: tx39biu.c,v 1.15 2012/10/27 17:17:54 chs Exp $ */
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tx39biu.c,v 1.12 2007/01/24 13:08:13 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tx39biu.c,v 1.15 2012/10/27 17:17:54 chs Exp $");
 
 #include "opt_tx39_watchdogtimer.h"
 #include "opt_tx39biu_debug.h"
@@ -61,9 +54,9 @@ __KERNEL_RCSID(0, "$NetBSD: tx39biu.c,v 1.12 2007/01/24 13:08:13 hubertf Exp $")
 #define ISSETPRINT(r, s, m) dbg_bitmask_print((u_int32_t)(r),		\
 	TX39_MEMCONFIG ## s ## _ ##m, #m)
 
-int	tx39biu_match(struct device *, struct cfdata *, void *);
-void	tx39biu_attach(struct device *, struct device *, void *);
-void	tx39biu_callback(struct device *);
+int	tx39biu_match(device_t, cfdata_t, void *);
+void	tx39biu_attach(device_t, device_t, void *);
+void	tx39biu_callback(device_t);
 int	tx39biu_print(void *, const char *);
 int	tx39biu_intr(void *);
 
@@ -73,30 +66,23 @@ void	tx39biu_dump(tx_chipset_tag_t);
 #endif
 
 struct tx39biu_softc {
-	struct	device sc_dev;
 	tx_chipset_tag_t sc_tc;
 };
 
-CFATTACH_DECL(tx39biu, sizeof(struct tx39biu_softc),
+CFATTACH_DECL_NEW(tx39biu, sizeof(struct tx39biu_softc),
     tx39biu_match, tx39biu_attach, NULL, NULL);
 
 int
-tx39biu_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+tx39biu_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (ATTACH_NORMAL);
 }
 
 void
-tx39biu_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+tx39biu_attach(device_t parent, device_t self, void *aux)
 {
 	struct txsim_attach_args *ta = aux;
-	struct tx39biu_softc *sc = (void*)self;
+	struct tx39biu_softc *sc = device_private(self);
 	tx_chipset_tag_t tc;
 #ifdef TX39_WATCHDOGTIMER
 	txreg_t reg;
@@ -137,10 +123,9 @@ tx39biu_attach(parent, self, aux)
 }
 
 void
-tx39biu_callback(self)
-	struct device *self;
+tx39biu_callback(device_t self)
 {
-	struct tx39biu_softc *sc = (void*)self;
+	struct tx39biu_softc *sc = device_private(self);
 	struct csbus_attach_args cba;
 
 	cba.cba_busname = "txcsbus";
@@ -149,16 +134,13 @@ tx39biu_callback(self)
 }
 
 int
-tx39biu_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+tx39biu_print(void *aux, const char *pnp)
 {
 	return (pnp ? QUIET : UNCONF);
 }
 
 int
-tx39biu_intr(arg)
-	void *arg;
+tx39biu_intr(void *arg)
 {
 	struct tx39biu_softc *sc = __sc;
 	tx_chipset_tag_t tc;

@@ -1,7 +1,7 @@
-/*	$NetBSD: interwavevar.h,v 1.15 2005/12/11 12:21:27 christos Exp $	*/
+/*	$NetBSD: interwavevar.h,v 1.18 2012/10/27 17:18:21 chs Exp $	*/
 
 /*
- * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 1999, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Author: Kari Mettinen
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -82,9 +75,11 @@ typedef struct iw_port_info {
 } iw_port_info_t;
 
 struct iw_softc {
-	struct	device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;		/* bus cookie	  */
 	isa_chipset_tag_t sc_ic;
+	kmutex_t sc_lock;
+	kmutex_t sc_intr_lock;
 
 	int	vers;
 	int	revision;
@@ -238,10 +233,11 @@ int	iw_get_port(void *, mixer_ctrl_t *);
 int	iw_query_devinfo(void *, mixer_devinfo_t *);
 
 struct malloc_type;
-void *	iw_malloc(void *, int, size_t, struct malloc_type *, int);
-void	iw_free(void *,void *,struct malloc_type *);
+void *	iw_malloc(void *, int, size_t);
+void	iw_free(void *, void *, size_t);
 size_t	iw_round_buffersize(void *, int, size_t);
 paddr_t	iw_mappage(void *, void *, off_t, int);
 int	iw_get_props(void *);
+void	iw_get_locks(void *, kmutex_t **, kmutex_t **);
 
 #endif /* INTERWAVEVAR_H */

@@ -1,4 +1,4 @@
-/* $NetBSD: ipifuncs.c,v 1.38 2008/02/04 12:46:30 ad Exp $ */
+/* $NetBSD: ipifuncs.c,v 1.48 2014/05/19 22:47:53 rmind Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.38 2008/02/04 12:46:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.48 2014/05/19 22:47:53 rmind Exp $");
 
 /*
  * Interprocessor interrupt handlers.
@@ -50,54 +43,55 @@ __KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.38 2008/02/04 12:46:30 ad Exp $");
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/reboot.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
+#include <sys/ipi.h>
+#include <sys/intr.h>
+#include <sys/xcall.h>
+#include <sys/bitops.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/atomic.h>
 #include <machine/alpha_cpu.h>
 #include <machine/alpha.h>
-#include <machine/cpu.h>
 #include <machine/cpuvar.h>
-#include <machine/intr.h>
 #include <machine/rpb.h>
 #include <machine/prom.h>
 
 typedef void (*ipifunc_t)(struct cpu_info *, struct trapframe *);
 
-void	alpha_ipi_halt(struct cpu_info *, struct trapframe *);
-void	alpha_ipi_microset(struct cpu_info *, struct trapframe *);
-void	alpha_ipi_imb(struct cpu_info *, struct trapframe *);
-void	alpha_ipi_ast(struct cpu_info *, struct trapframe *);
-void	alpha_ipi_synch_fpu(struct cpu_info *, struct trapframe *);
-void	alpha_ipi_discard_fpu(struct cpu_info *, struct trapframe *);
-void	alpha_ipi_pause(struct cpu_info *, struct trapframe *);
+static void	alpha_ipi_halt(struct cpu_info *, struct trapframe *);
+static void	alpha_ipi_microset(struct cpu_info *, struct trapframe *);
+static void	alpha_ipi_imb(struct cpu_info *, struct trapframe *);
+static void	alpha_ipi_ast(struct cpu_info *, struct trapframe *);
+static void	alpha_ipi_pause(struct cpu_info *, struct trapframe *);
+static void	alpha_ipi_xcall(struct cpu_info *, struct trapframe *);
+static void	alpha_ipi_generic(struct cpu_info *, struct trapframe *);
 
 /*
  * NOTE: This table must be kept in order with the bit definitions
  * in <machine/intr.h>.
  */
-ipifunc_t ipifuncs[ALPHA_NIPIS] = {
-	alpha_ipi_halt,
-	alpha_ipi_microset,
-	pmap_do_tlb_shootdown,
-	alpha_ipi_imb,
-	alpha_ipi_ast,
-	alpha_ipi_synch_fpu,
-	alpha_ipi_discard_fpu,
-	alpha_ipi_pause,
-	pmap_do_reactivate,
+const ipifunc_t ipifuncs[ALPHA_NIPIS] = {
+	[ilog2(ALPHA_IPI_HALT)] =	alpha_ipi_halt,
+	[ilog2(ALPHA_IPI_MICROSET)] =	alpha_ipi_microset,
+	[ilog2(ALPHA_IPI_SHOOTDOWN)] =	pmap_do_tlb_shootdown,
+	[ilog2(ALPHA_IPI_IMB)] =	alpha_ipi_imb,
+	[ilog2(ALPHA_IPI_AST)] =	alpha_ipi_ast,
+	[ilog2(ALPHA_IPI_PAUSE)] =	alpha_ipi_pause,
+	[ilog2(ALPHA_IPI_XCALL)] =	alpha_ipi_xcall,
+	[ilog2(ALPHA_IPI_GENERIC)] =	alpha_ipi_generic
 };
 
-const char *ipinames[ALPHA_NIPIS] = {
-	"halt ipi",
-	"microset ipi",
-	"shootdown ipi",
-	"imb ipi",
-	"ast ipi",
-	"synch fpu ipi",
-	"discard fpu ipi",
-	"pause ipi",
-	"pmap reactivate ipi",
+const char * const ipinames[ALPHA_NIPIS] = {
+	[ilog2(ALPHA_IPI_HALT)] =	"halt ipi",
+	[ilog2(ALPHA_IPI_MICROSET)] =	"microset ipi",
+	[ilog2(ALPHA_IPI_SHOOTDOWN)] =	"shootdown ipi",
+	[ilog2(ALPHA_IPI_IMB)] =	"imb ipi",
+	[ilog2(ALPHA_IPI_AST)] =	"ast ipi",
+	[ilog2(ALPHA_IPI_PAUSE)] =	"pause ipi",
+	[ilog2(ALPHA_IPI_XCALL)] =	"xcall ipi",
+	[ilog2(ALPHA_IPI_GENERIC)] =	"generic ipi",
 };
 
 /*
@@ -108,16 +102,16 @@ const char *ipinames[ALPHA_NIPIS] = {
 void
 alpha_ipi_init(struct cpu_info *ci)
 {
-	struct cpu_softc *sc = ci->ci_softc;
+	struct cpu_softc * const sc = ci->ci_softc;
+	const char * const xname = device_xname(sc->sc_dev);
 	int i;
 
 	evcnt_attach_dynamic(&sc->sc_evcnt_ipi, EVCNT_TYPE_INTR,
-	    NULL, sc->sc_dev.dv_xname, "ipi");
+	    NULL, xname, "ipi");
 
 	for (i = 0; i < ALPHA_NIPIS; i++) {
 		evcnt_attach_dynamic(&sc->sc_evcnt_which_ipi[i],
-		    EVCNT_TYPE_INTR, NULL, sc->sc_dev.dv_xname,
-		    ipinames[i]);
+		    EVCNT_TYPE_INTR, NULL, xname, ipinames[i]);
 	}
 }
 
@@ -127,7 +121,7 @@ alpha_ipi_init(struct cpu_info *ci)
 void
 alpha_ipi_process(struct cpu_info *ci, struct trapframe *framep)
 {
-	struct cpu_softc *sc = ci->ci_softc;
+	struct cpu_softc * const sc = ci->ci_softc;
 	u_long pending_ipis, bit;
 
 #ifdef DIAGNOSTIC
@@ -138,7 +132,7 @@ alpha_ipi_process(struct cpu_info *ci, struct trapframe *framep)
 	}
 #endif
 
-	pending_ipis = atomic_loadlatch_ulong(&ci->ci_ipis, 0);
+	pending_ipis = atomic_swap_ulong(&ci->ci_ipis, 0);
 
 	/*
 	 * For various reasons, it is possible to have spurious calls
@@ -173,7 +167,7 @@ alpha_send_ipi(u_long cpu_id, u_long ipimask)
 		panic("alpha_send_ipi: CPU %ld not running", cpu_id);
 #endif
 
-	atomic_setbits_ulong(&cpu_info[cpu_id]->ci_ipis, ipimask);
+	atomic_or_ulong(&cpu_info[cpu_id]->ci_ipis, ipimask);
 	alpha_pal_wripir(cpu_id);
 }
 
@@ -218,7 +212,7 @@ alpha_multicast_ipi(u_long cpumask, u_long ipimask)
 	}
 }
 
-void
+static void
 alpha_ipi_halt(struct cpu_info *ci, struct trapframe *framep)
 {
 	u_long cpu_id = ci->ci_cpuid;
@@ -251,21 +245,21 @@ alpha_ipi_halt(struct cpu_info *ci, struct trapframe *framep)
 	/* NOTREACHED */
 }
 
-void
+static void
 alpha_ipi_microset(struct cpu_info *ci, struct trapframe *framep)
 {
 
 	cc_calibrate_cpu(ci);
 }
 
-void
+static void
 alpha_ipi_imb(struct cpu_info *ci, struct trapframe *framep)
 {
 
 	alpha_pal_imb();
 }
 
-void
+static void
 alpha_ipi_ast(struct cpu_info *ci, struct trapframe *framep)
 {
 
@@ -273,25 +267,7 @@ alpha_ipi_ast(struct cpu_info *ci, struct trapframe *framep)
 		aston(ci->ci_curlwp);
 }
 
-void
-alpha_ipi_synch_fpu(struct cpu_info *ci, struct trapframe *framep)
-{
-
-	if (ci->ci_flags & CPUF_FPUSAVE)
-		return;
-	fpusave_cpu(ci, 1);
-}
-
-void
-alpha_ipi_discard_fpu(struct cpu_info *ci, struct trapframe *framep)
-{
-
-	if (ci->ci_flags & CPUF_FPUSAVE)
-		return;
-	fpusave_cpu(ci, 0);
-}
-
-void
+static void
 alpha_ipi_pause(struct cpu_info *ci, struct trapframe *framep)
 {
 	u_long cpumask = (1UL << ci->ci_cpuid);
@@ -302,14 +278,14 @@ alpha_ipi_pause(struct cpu_info *ci, struct trapframe *framep)
 	/* Point debuggers at our trapframe for register state. */
 	ci->ci_db_regs = framep;
 
-	atomic_setbits_ulong(&ci->ci_flags, CPUF_PAUSED);
+	atomic_or_ulong(&ci->ci_flags, CPUF_PAUSED);
 
 	/* Spin with interrupts disabled until we're resumed. */
 	do {
 		alpha_mb();
 	} while (cpus_paused & cpumask);
 
-	atomic_clearbits_ulong(&ci->ci_flags, CPUF_PAUSED);
+	atomic_and_ulong(&ci->ci_flags, ~CPUF_PAUSED);
 
 	ci->ci_db_regs = NULL;
 
@@ -317,4 +293,50 @@ alpha_ipi_pause(struct cpu_info *ci, struct trapframe *framep)
 
 	/* Do an IMB on the way out, in case the kernel text was changed. */
 	alpha_pal_imb();
+}
+
+/*
+ * MD support for xcall(9) interface.
+ */
+
+static void
+alpha_ipi_xcall(struct cpu_info *ci, struct trapframe *framep)
+{
+	xc_ipi_handler();
+}
+
+void
+xc_send_ipi(struct cpu_info *ci)
+{
+	KASSERT(kpreempt_disabled());
+	KASSERT(curcpu() != ci);
+
+	if (ci) {
+		/* Unicast: remote CPU. */
+		alpha_send_ipi(ci->ci_cpuid, ALPHA_IPI_XCALL);
+	} else {
+		/* Broadcast: all, but local CPU (caller will handle it). */
+		alpha_broadcast_ipi(ALPHA_IPI_XCALL);
+	}
+}
+
+static void
+alpha_ipi_generic(struct cpu_info *ci, struct trapframe *framep)
+{
+	ipi_cpu_handler();
+}
+
+void
+cpu_ipi(struct cpu_info *ci)
+{
+	KASSERT(kpreempt_disabled());
+	KASSERT(curcpu() != ci);
+
+	if (ci) {
+		/* Unicast: remote CPU. */
+		alpha_send_ipi(ci->ci_cpuid, ALPHA_IPI_GENERIC);
+	} else {
+		/* Broadcast: all, but local CPU (caller will handle it). */
+		alpha_broadcast_ipi(ALPHA_IPI_GENERIC);
+	}
 }

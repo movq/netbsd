@@ -1,21 +1,21 @@
-/* $NetBSD: shared_intr.c,v 1.18 2005/12/11 12:16:16 christos Exp $ */
+/* $NetBSD: shared_intr.c,v 1.21 2012/02/06 02:14:12 matt Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Authors: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: shared_intr.c,v 1.18 2005/12/11 12:16:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shared_intr.c,v 1.21 2012/02/06 02:14:12 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -41,10 +41,10 @@ __KERNEL_RCSID(0, "$NetBSD: shared_intr.c,v 1.18 2005/12/11 12:16:16 christos Ex
 #include <sys/malloc.h>
 #include <sys/syslog.h>
 #include <sys/queue.h>
+#include <sys/atomic.h>
+#include <sys/intr.h>
 
-#include <machine/intr.h>
-
-static const char *intr_typename __P((int));
+static const char *intr_typename(int);
 
 static const char *
 intr_typename(int type)
@@ -102,7 +102,7 @@ alpha_shared_intr_dispatch(struct alpha_shared_intr *intr, unsigned int num)
 	struct alpha_shared_intrhand *ih;
 	int rv, handled;
 
-	atomic_add_ulong(&intr[num].intr_evcnt.ev_count, 1);
+	atomic_add_long(&intr[num].intr_evcnt.ev_count, 1);
 
 	ih = intr[num].intr_q.tqh_first;
 	handled = 0;

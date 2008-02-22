@@ -1,4 +1,4 @@
-/*	$NetBSD: res_update.h,v 1.5 2007/03/30 19:57:17 ghen Exp $	*/
+/*	$NetBSD: res_update.h,v 1.8 2012/11/15 18:49:37 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -18,7 +18,7 @@
  */
 
 /*
- *	Id: res_update.h,v 1.2.18.1 2005/04/27 05:00:49 sra Exp
+ *	Id: res_update.h,v 1.3 2005/04/27 04:56:15 sra Exp
  */
 
 #ifndef __RES_UPDATE_H
@@ -26,19 +26,19 @@
 
 #include <sys/types.h>
 #include <arpa/nameser.h>
-#include <isc/list.h>
+#include <sys/queue.h>
 #include <resolv.h>
 
 /*%
  * This RR-like structure is particular to UPDATE.
  */
 struct ns_updrec {
-	LINK(struct ns_updrec) r_link, r_glink;
+	TAILQ_ENTRY(ns_updrec) r_link, r_glink;
 	ns_sect		r_section;	/*%< ZONE/PREREQUISITE/UPDATE */
 	char *		r_dname;	/*%< owner of the RR */
 	ns_class	r_class;	/*%< class number */
 	ns_type		r_type;		/*%< type number */
-	u_int32_t	r_ttl;		/*%< time to live */
+	uint32_t	r_ttl;		/*%< time to live */
 	u_char *	r_data;		/*%< rdata fields as text string */
 	u_int		r_size;		/*%< size of r_data field */
 	int		r_opcode;	/*%< type of operation */
@@ -48,7 +48,7 @@ struct ns_updrec {
 	u_int		r_zone;		/*%< zone number on server */
 };
 typedef struct ns_updrec ns_updrec;
-typedef	LIST(ns_updrec)	ns_updque;
+typedef	TAILQ_HEAD(ns_updqueu, ns_updrec) ns_updque;
 
 #define res_mkupdate		__res_mkupdate
 #define res_update		__res_update

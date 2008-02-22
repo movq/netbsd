@@ -1,4 +1,4 @@
-/*	$NetBSD: ashrdi3.S,v 1.3 1999/10/25 23:48:14 thorpej Exp $	*/
+/*	$NetBSD: ashrdi3.S,v 1.8 2014/03/18 18:20:37 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,11 +37,11 @@
 | d3 offset (32 - shift)
 
 ENTRY(__ashrdi3)
-	link	%a6,#0
-	moveml	%d2-%d4,%sp@-
-	movel	%a6@(8),%d0
-	movel	%a6@(12),%d1
-	movel	%a6@(16),%d2
+	link	%fp,#-12
+	moveml	%d2-%d4,(%sp)
+	movel	8(%fp),%d0
+	movel	12(%fp),%d1
+	movel	16(%fp),%d2
 	moveq	#32,%d3
 	subl	%d2,%d3
 	jgt	L2
@@ -63,6 +56,7 @@ L2:	lsrl	%d2,%d1
 	asll	%d3,%d4
 	orl	%d4,%d1
 	asrl	%d2,%d0
-L3:	moveml	%a6@(-12),%d2-%d4
-	unlk	%a6
+L3:	moveml	-12(%fp),%d2-%d4
+	unlk	%fp
 	rts
+END(__ashrdi3)

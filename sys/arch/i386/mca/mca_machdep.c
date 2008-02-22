@@ -1,4 +1,4 @@
-/*	$NetBSD: mca_machdep.c,v 1.34 2007/12/01 16:49:56 ad Exp $	*/
+/*	$NetBSD: mca_machdep.c,v 1.44 2017/03/31 08:38:13 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mca_machdep.c,v 1.34 2007/12/01 16:49:56 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mca_machdep.c,v 1.44 2017/03/31 08:38:13 msaitoh Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -56,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: mca_machdep.c,v 1.34 2007/12/01 16:49:56 ad Exp $");
 
 #include <machine/bioscall.h>
 #include <machine/psl.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/bus_private.h>
 #include <machine/pio.h>
 
@@ -85,7 +78,7 @@ struct bios_config {
 #define FEATURE_DMA3	0x80	/* DMA channel 3 used by hard disk BIOS	*/
 	uint8_t		feature2;
 	uint8_t		pad[9];
-} __attribute__ ((packed));
+} __packed;
 
 /*
  * Used to encode DMA channel into ISA DMA cookie. We use upper 4 bits of
@@ -108,26 +101,11 @@ static void	_mca_bus_dmamap_sync(bus_dma_tag_t, bus_dmamap_t,
 #define	MCA_DMA_BOUNCE_THRESHOLD	(16 * 1024 * 1024)
 
 struct x86_bus_dma_tag mca_bus_dma_tag = {
-	0,
-	MCA_DMA_BOUNCE_THRESHOLD,		/* _bounce_thresh */
-	0,					/* _bounce_alloc_lo */
-	MCA_DMA_BOUNCE_THRESHOLD,		/* _bounce_alloc_hi */
-	NULL,					/* _may_bounce */
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	_bus_dmamap_sync,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
+	._tag_needs_free	= 0,
+	._bounce_thresh		= MCA_DMA_BOUNCE_THRESHOLD,
+	._bounce_alloc_lo	= 0,
+	._bounce_alloc_hi	= MCA_DMA_BOUNCE_THRESHOLD,
+	._may_bounce		= NULL,
 };
 
 /* Updated in mca_busprobe() if appropriate. */
@@ -136,7 +114,8 @@ int MCA_system = 0;
 /* Used to kick MCA DMA controller */
 #define DMA_CMD		0x18		/* command the controller */
 #define DMA_EXEC	0x1A		/* tell controller how to do things */
-static bus_space_handle_t dmaiot, dmacmdh, dmaexech;
+static bus_space_handle_t dmacmdh, dmaexech;
+static bus_space_tag_t dmaiot;
 
 /*
  * MCA DMA controller commands. The exact sense of individual bits
@@ -164,7 +143,7 @@ static bus_space_handle_t dmaiot, dmacmdh, dmaexech;
  * Map the MCA DMA controller registers.
  */
 void
-mca_attach_hook(struct device *parent, struct device *self,
+mca_attach_hook(device_t parent, device_t self,
     struct mcabus_attach_args *mba)
 {
 	dmaiot = mba->mba_iot;
@@ -242,7 +221,7 @@ mca_intr_disestablish(mca_chipset_tag_t mc, void *cookie)
  * Handle a NMI.
  * return true to panic system, false to ignore.
  */
-int
+void
 mca_nmi(void)
 {
 	/*
@@ -278,9 +257,8 @@ mca_nmi(void)
    out:
 	if (!mcanmi) {
 		/* no CHCK bits asserted, assume ISA NMI */
-		return (x86_nmi());
-	} else
-		return(0);
+		x86_nmi();
+	}
 }
 
 /*
@@ -314,7 +292,7 @@ mca_busprobe(void)
 	paddr = (regs.ES << 4) + regs.BX;
 	scp = (struct bios_config *)ISA_HOLE_VADDR(paddr);
 
-	bitmask_snprintf((scp->feature2 << 8) | scp->feature1,
+	snprintb(buf, sizeof(buf),
 		"\20"
 		"\01MCA+ISA"
 		"\02MCA"
@@ -331,10 +309,9 @@ mca_busprobe(void)
 		"\015MMF"
 		"\016GPDF"
 		"\017KBDF"
-		"\020DMA32\n",
-		buf, sizeof(buf));
+		"\020DMA32\n", (scp->feature2 << 8) | scp->feature1);
 
-	aprint_verbose("BIOS CFG: Model-SubM-Rev: %02x-%02x-%02x, 0x%s\n",
+	aprint_verbose("BIOS CFG: Model-SubM-Rev: %02x-%02x-%02x, %s\n",
 		scp->model, scp->submodel, scp->bios_rev, buf);
 
 	MCA_system = (scp->feature1 & FEATURE_MCABUS) ? 1 : 0;
@@ -482,7 +459,7 @@ mca_dmamap_create(bus_dma_tag_t t, bus_size_t size, int flags,
 	 * MCA DMA transfer can be maximum 65536 bytes long and must
 	 * be in one chunk. No specific boundary constraints are present.
 	 */
-	if ((error = _bus_dmamap_create(t, size, 1, 65536, 0, flags, dmamp)))
+	if ((error = bus_dmamap_create(t, size, 1, 65536, 0, flags, dmamp)))
 		return (error);
 
 	cookie = (struct x86_isa_dma_cookie *) (*dmamp)->_dm_cookie;

@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.3 2007/03/04 06:00:02 christos Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.6 2014/01/04 00:10:02 dsl Exp $	*/
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.3 2007/03/04 06:00:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.6 2014/01/04 00:10:02 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/ptrace.h>
@@ -46,6 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.3 2007/03/04 06:00:02 christos
 int
 process_read_regs(struct lwp *l, struct reg *regs)
 {
+printf("%s: not yet\n", __func__);
 	return 0;
 }
 
@@ -53,20 +47,23 @@ process_read_regs(struct lwp *l, struct reg *regs)
 int
 process_write_regs(struct lwp *l, const struct reg *regs)
 {
+printf("%s: not yet\n", __func__);
 	return 0;
 }
 
 
 int
-process_read_fpregs(struct lwp *l, struct fpreg *fpregs)
+process_read_fpregs(struct lwp *l, struct fpreg *fpregs, size_t *sz)
 {
+printf("%s: not yet\n", __func__);
 	return 0;
 }
 
 
 int
-process_write_fpregs(struct lwp *l, const struct fpreg *fpregs)
+process_write_fpregs(struct lwp *l, const struct fpreg *fpregs, size_t sz)
 {
+printf("%s: not yet\n", __func__);
 	return 0;
 }
 
@@ -76,6 +73,7 @@ process_write_fpregs(struct lwp *l, const struct fpreg *fpregs)
 int
 process_set_pc(struct lwp *l, void *addr)
 {
+printf("%s: not yet\n", __func__);
 	return 0;
 }
 
@@ -83,6 +81,7 @@ process_set_pc(struct lwp *l, void *addr)
 int
 process_sstep(struct lwp *l, int sstep)
 {
+printf("%s: not yet\n", __func__);
 	return 0;
 }
 

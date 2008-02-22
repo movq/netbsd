@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.13 2007/10/17 19:58:03 garbled Exp $	*/
+/*	$NetBSD: boot.c,v 1.30 2016/08/04 12:15:07 isaki Exp $	*/
 
 /*
  * Copyright (c) 2001 Minoura Makoto
@@ -32,10 +32,12 @@
 #include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
 #include <lib/libsa/ufs.h>
+#include <lib/libsa/dev_net.h>
 #include <lib/libkern/libkern.h>
 
 #include "libx68k.h"
 #include "iocs.h"
+#include "switch.h"
 
 #include "exec_image.h"
 
@@ -45,31 +47,52 @@
 #define EXSCSI_BDID	((void*) 0x00ea0001)
 #define SRAM_MEMSIZE	(*((long*) 0x00ed0008))
 
-char default_kernel[20] = "sd0a:netbsd";
-int mpu, hostadaptor;
+char default_kernel[20] =
+#if defined(NETBOOT)
+    "nfs:netbsd";
+#else
+    "sd0a:netbsd";
+#endif
+int mpu;
+int hostadaptor;
 int console_device = -1;
+
+#ifdef DEBUG
+int debug = 1;
+#endif
 
 static void help(void);
 static int get_scsi_host_adapter(void);
 static void doboot(const char *, int);
 static void boot(char *);
-static void ls(char *);
+static void cmd_ls(char *);
 int bootmenu(void);
 void bootmain(int);
 extern int detectmpu(void);
 extern int badbaddr(void *);
 
+extern struct fs_ops file_system_ustarfs[];
+extern struct fs_ops file_system_nfs[];
+
 /* from boot_ufs/bootmain.c */
 static int
 get_scsi_host_adapter(void)
 {
+	uint32_t bootinf;
 	char *bootrom;
 	int ha;
 
-	bootrom = (char *) (IOCS_BOOTINF() & 0x00ffffe0);
+	bootinf = IOCS_BOOTINF();
+	if (bootinf < 0xa0) {
+		/* boot from FD */
+		return 0;
+	}
+
+	/* Or, bootinf indicates the boot address */
+	bootrom = (char *)(bootinf & 0x00ffffe0);
 	/*
-	 * bootrom+0x24	"SCSIIN" ... Internal SCSI (spc@0)
-	 *		"SCSIEX" ... External SCSI (spc@1 or mha@0)
+	 * bootrom+0x24	"SCSIIN" ... Internal SCSI (spc0@)
+	 *		"SCSIEX" ... External SCSI (spc1@ or mha0@)
 	 */
 	if (*(u_short *)(bootrom + 0x24 + 4) == 0x494e) {	/* "IN" */
 		ha = (X68K_BOOT_SCSIIF_SPC << 4) | 0;
@@ -82,18 +105,20 @@ get_scsi_host_adapter(void)
 	return ha;
 }
 
-
 static void
 help(void)
 {
 	printf("Usage:\n");
-	printf("boot [dev:][file] -[flags]\n");
+	printf("boot [ha@][dev:][file] -[flags]\n");
+	printf(" ha:    spc0, spc1, mha0\n");
 	printf(" dev:   sd<ID><PART>, ID=0-7, PART=a-p\n");
 	printf("        cd<ID>a, ID=0-7\n");
 	printf("        fd<UNIT>a, UNIT=0-3, format is detected.\n");
+	printf("        nfs, first probed NE2000 is used.\n");
 	printf(" file:  netbsd, netbsd.gz, etc.\n");
 	printf(" flags: abdqsv\n");
 	printf("ls [dev:][directory]\n");
+	printf("switch [show | key=val]\n");
 	printf("halt\nreboot\n");
 }
 
@@ -102,43 +127,103 @@ doboot(const char *file, int flags)
 {
 	u_long		marks[MARK_MAX];
 	int fd;
-	int dev, unit, part;
+	int ha;		/* host adaptor */
+	int dev;	/* device number in devspec[] */
+	int unit;
+	int part;
+	int bootdev;
+	int maj;
 	char *name;
 	short *p;
+	int loadflag;
+	struct fs_ops *fs;
 
 	printf("Starting %s, flags 0x%x\n", file, flags);
+
+	if (devparse(file, &ha, &dev, &unit, &part, &name) != 0) {
+		printf("XXX: unknown corruption in /boot.\n");
+	}
+
+#ifdef DEBUG
+	if (file[0] == 'n') {
+		printf("dev = %x, unit = %d, name = %s\n",
+		       dev, unit, name);
+	} else {
+		printf("ha = 0x%x, dev = %x, unit = %d, part = %c, name = %s\n",
+		       ha, dev, unit, part + 'a', name);
+	}
+#endif
+
+	if (dev == 3) {		/* netboot */
+		bootdev = X68K_MAKEBOOTDEV(X68K_MAJOR_NE, unit, 0);
+	} else if (dev == 2) {		/* FD */
+		bootdev = X68K_MAKEBOOTDEV(X68K_MAJOR_FD, unit & 3, 0);
+	} else {		/* SCSI */
+		if (ha != 0) {
+			hostadaptor = ha;
+		}
+		if (hostadaptor == 0) {
+			printf("host adaptor must be specified.\n");
+			return;
+		}
+
+		maj = (dev == 0) ? X68K_MAJOR_SD : X68K_MAJOR_CD;
+		bootdev = X68K_MAKESCSIBOOTDEV(maj,
+		    hostadaptor >> 4,
+		    hostadaptor & 15,
+		    unit & 7, 0, 0);
+	}
+#ifdef DEBUG
+	printf("boot device = %x\n", bootdev);
+	if (file[0] == 'n') {
+		printf("type = %x, if = %d, unit = %d\n",
+		       B_TYPE(bootdev),
+		       B_X68K_SCSI_IF(bootdev),
+		       B_X68K_SCSI_IF_UN(bootdev));
+	} else {
+		printf("type = %x, if = %d, unit = %d, id = %d, lun = %d, part = %c\n",
+		       B_TYPE(bootdev),
+		       B_X68K_SCSI_IF(bootdev),
+		       B_X68K_SCSI_IF_UN(bootdev),
+		       B_X68K_SCSI_ID(bootdev),
+		       B_X68K_SCSI_LUN(bootdev),
+		       B_X68K_SCSI_PART(bootdev) + 'a');
+	}
+#endif
+
+	/*
+	 * Choose the last entry of file_system[] at runtime.
+	 *
+	 * file_system[] is checked in turn from the beginning at all cases.
+	 * Trying FS_OPS(ustarfs) for non-ustarfs displays "@" (as the
+	 * mark which read a cylinder?).  OTOH, trying FS_OPS(nfs) for
+	 * non-nfs displays "must mount first" error message.
+	 * It is better that neither is displayed and in other words you
+	 * should not put these two into file_system[] at the same time.
+	 * Therefore I choose one of these here.
+	 */
+	if (file[0] == 'n') {
+		fs = &file_system_nfs[0];
+	} else {
+		fs = &file_system_ustarfs[0];
+	}
+	memcpy(&file_system[nfsys - 1], fs, sizeof(*fs));
+
+	loadflag = LOAD_KERNEL;
+	if (file[0] == 'f')
+		loadflag &= ~LOAD_BACKWARDS;
+
 	marks[MARK_START] = 0x100000;
-	if ((fd = loadfile(file, marks, LOAD_KERNEL)) == -1) {
+	if ((fd = loadfile(file, marks, loadflag)) == -1) {
 		printf("loadfile failed\n");
 		return;
 	}
 	close(fd);
 
-	if (devparse(file, &dev, &unit, &part, &name) != 0) {
-		printf("XXX: unknown corruption in /boot.\n");
-	}
-
-	printf("dev = %x, unit = %d, part = %c, name = %s\n",
-	       dev, unit, part + 'a', name);
-
-	if (dev == 0) {		/* SCSI */
-		dev = X68K_MAKESCSIBOOTDEV(X68K_MAJOR_SD,
-					   hostadaptor >> 4,
-					   hostadaptor & 15,
-					   unit & 7, 0, 0);
-	} else {
-		dev = X68K_MAKEBOOTDEV(X68K_MAJOR_FD, unit & 3, 0);
-	}
-	printf("boot device = %x\n", dev);
-	printf("if = %d, unit = %d, id = %d, lun = %d, part = %c\n",
-	       B_X68K_SCSI_IF(dev),
-	       B_X68K_SCSI_IF_UN(dev),
-	       B_X68K_SCSI_ID(dev),
-	       B_X68K_SCSI_LUN(dev),
-	       B_X68K_SCSI_PART(dev) + 'a');
-
 	p = ((short*) marks[MARK_ENTRY]) - 1;
+#ifdef DEBUG
 	printf("Kernel Version: 0x%x\n", *p);
+#endif
 	if (*p != 0x4e73 && *p != 0) {
 		/*
 		 * XXX temporary solution; compatibility loader
@@ -150,7 +235,7 @@ doboot(const char *file, int flags)
 	}
 
 	exec_image(marks[MARK_START], 0, marks[MARK_ENTRY]-marks[MARK_START],
-		   marks[MARK_END]-marks[MARK_START], dev, flags);
+		   marks[MARK_END]-marks[MARK_START], bootdev, flags);
 
 	return;
 }
@@ -195,7 +280,7 @@ boot(char *arg)
 }
 
 static void
-ls(char *arg)
+cmd_ls(char *arg)
 {
 	char filename[80];
 
@@ -211,7 +296,7 @@ ls(char *arg)
 		if (*(strchr(arg, ':')+1) == 0)
 			strcat(filename, "/");
 	}
-	ufs_ls(filename);
+	ls(filename);
 	devopen_open_dir = 0;
 }
 
@@ -248,29 +333,48 @@ bootmenu(void)
 		char *p, *options;
 
 		printf("> ");
-		gets(input);
+		kgets(input, sizeof(input));
 
-		for (p = &input[0]; p - &input[0] < 80 && *p == ' '; p++);
+		for (p = &input[0]; p - &input[0] < 80 && *p == ' '; p++)
+			;
 		options = gettrailer(p);
 		if (strcmp("boot", p) == 0)
 			boot(options);
 		else if (strcmp("help", p) == 0 ||
 			 strcmp("?", p) == 0)
 			help();
-		else if ((strcmp("halt", p) == 0) ||(strcmp("reboot", p) == 0))
+		else if (strcmp("halt", p) == 0 ||
+			 strcmp("reboot", p) == 0)
 			exit(0);
+		else if (strcmp("switch", p) == 0)
+			cmd_switch(options);
 		else if (strcmp("ls", p) == 0)
-			ls(options);
+			cmd_ls(options);
 		else
 			printf("Unknown command %s\n", p);
 	}
 }
 
+static u_int
+checkmemsize(void)
+{
+	u_int m;
+
+#define MIN_MB 4
+#define MAX_MB 12
+
+	for (m = MIN_MB; m <= MAX_MB; m++) {
+		if (badbaddr((void *)(m * 1024 * 1024 - 1))) {
+			/* no memory */
+			break;
+		}
+	}
+
+	return (m - 1) * 1024 * 1024;
+}
 
 extern const char bootprog_rev[];
 extern const char bootprog_name[];
-extern const char bootprog_date[];
-extern const char bootprog_maker[];
 
 /*
  * Arguments from the boot block:
@@ -280,14 +384,20 @@ extern const char bootprog_maker[];
 void
 bootmain(int bootdev)
 {
+	u_int sram_memsize;
+	u_int probed_memsize;
+
 	hostadaptor = get_scsi_host_adapter();
+	rtc_offset = RTC_OFFSET;
+	try_bootp = 1;
 	mpu = detectmpu();
 
 	if (mpu < 3) {		/* not tested on 68020 */
 		printf("This MPU cannot run NetBSD.\n");
 		exit(1);
 	}
-	if (SRAM_MEMSIZE < 4*1024*1024) {
+	sram_memsize = SRAM_MEMSIZE;
+	if (sram_memsize < 4*1024*1024) {
 		printf("Main memory too small.\n");
 		exit(1);
 	}
@@ -295,6 +405,7 @@ bootmain(int bootdev)
 	console_device = consio_init(console_device);
 	setheap(HEAP_START, HEAP_END);
 
+#if !defined(NETBOOT)
 	switch (B_TYPE(bootdev)) {
 	case X68K_MAJOR_FD:
 		default_kernel[0] = 'f';
@@ -315,8 +426,18 @@ bootmain(int bootdev)
 	default:
 		printf("Warning: unknown boot device: %x\n", bootdev);
 	}
-	print_title("%s, Revision %s\n\t(%s, %s)",
-		    bootprog_name, bootprog_rev,
-		    bootprog_maker, bootprog_date);
+#endif
+	print_title("%s, Revision %s\n", bootprog_name, bootprog_rev);
+
+	/* check actual memory size for machines with a dead SRAM battery */
+	probed_memsize = checkmemsize();
+	if (sram_memsize != probed_memsize) {
+		printf("\x1b[1mWarning: SRAM Memory Size (%d MB) "
+		    "is different from probed Memory Size (%d MB)\n"
+		    "         Check and reset SRAM values.\x1b[m\n\n",
+		    sram_memsize / (1024 * 1024),
+		    probed_memsize / (1024 * 1024));
+	}
+
 	bootmenu();
 }

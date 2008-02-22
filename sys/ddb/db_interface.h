@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.h,v 1.21 2007/09/07 18:56:07 rmind Exp $	*/
+/*	$NetBSD: db_interface.h,v 1.36 2018/03/04 07:14:50 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1995 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,13 +38,16 @@ db_addr_t	db_disasm(db_addr_t, bool);
 /* arch/<arch>/<arch>/db_trace.c */
 /* arch/vax/vax/db_machdep.c */
 void		db_stack_trace_print(db_expr_t, bool, db_expr_t, const char *,
-		    void (*)(const char *, ...));
+    void (*)(const char *, ...) __printflike(1, 2));
 
 /* ddb/db_xxx.c */
 void		db_kgdb_cmd(db_expr_t, bool, db_expr_t, const char *);
+void		db_show_files_cmd(db_expr_t, bool, db_expr_t, const char *);
+void		db_show_panic(db_expr_t, bool, db_expr_t, const char *);
 
 /* kern/kern_proc.c */
 void		db_kill_proc(db_expr_t, bool, db_expr_t, const char *);
+void		db_show_proc(db_expr_t, bool, db_expr_t, const char *);
 void		db_show_all_procs(db_expr_t, bool, db_expr_t, const char *);
 void		db_show_all_pools(db_expr_t, bool, db_expr_t, const char *);
 void		db_show_sched_qs(db_expr_t, bool, db_expr_t, const char *);
@@ -62,8 +58,8 @@ void		db_show_callout(db_expr_t, bool, db_expr_t, const char *);
 /* kern/subr_log.c */
 void		db_dmesg(db_expr_t, bool, db_expr_t, const char *);
 
-/* netinet/if_arp.c */
-void		db_show_arptab(db_expr_t, bool, db_expr_t, const char *);
+/* net/route.c */
+void		db_show_routes(db_expr_t, bool, db_expr_t, const char *);
 
 /* kern/vfs_aio.c */
 void		db_show_aio_jobs(db_expr_t, bool, db_expr_t, const char *);
@@ -71,10 +67,21 @@ void		db_show_aio_jobs(db_expr_t, bool, db_expr_t, const char *);
 /* kern/sys_mqueue.c */
 void		db_show_mqueue_cmd(db_expr_t, bool, db_expr_t, const char *);
 
-/*
- * This is used in several places to determine which printf format
- * string is appropriate for displaying a variable of type db_expr_t.
- */
-#define	DB_EXPR_T_IS_QUAD (/* CONSTCOND */ sizeof(db_expr_t) > sizeof(long))
+/* kern/kern_module.c */
+void		db_show_module_cmd(db_expr_t, bool, db_expr_t, const char *);
+
+/* kern/subr_vmem.c */
+void		db_show_all_vmems(db_expr_t, bool, db_expr_t, const char *);
+
+/* kern/subr_autoconf.c */
+void		db_show_all_devices(db_expr_t, bool, db_expr_t, const char *);
+void		db_show_all_device(db_expr_t, bool, db_expr_t, const char *);
+
+/* kern/subr_disk.c, dev/dksubr.c */
+void		db_show_disk(db_expr_t, bool, db_expr_t, const char *);
+
+#define	db_stacktrace() \
+    db_stack_trace_print((db_expr_t)(intptr_t)__builtin_frame_address(0), \
+	true, 65535, "", printf)
 
 #endif /* _DDB_DB_INTERFACE_H_ */

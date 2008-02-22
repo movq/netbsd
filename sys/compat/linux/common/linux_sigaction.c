@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sigaction.c,v 1.32 2007/12/20 23:02:56 dsl Exp $	*/
+/*	$NetBSD: linux_sigaction.c,v 1.35 2018/01/07 21:14:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.32 2007/12/20 23:02:56 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.35 2018/01/07 21:14:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,7 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.32 2007/12/20 23:02:56 dsl Exp
 /* Used on: alpha (aka osf_sigaction), arm, i386, m68k, mips, ppc */
 /* Not used on: sparc, sparc64, amd64 */
 
-#ifndef __amd64__
 /*
  * The Linux sigaction() system call. Do the usual conversions,
  * and just call sigaction().
@@ -92,6 +84,15 @@ linux_sys_sigaction(struct lwp *l, const struct linux_sys_sigaction_args *uap, r
 		linux_old_to_native_sigaction(&nbsa, &nlsa);
 	}
 	sig = SCARG(uap, signum);
+	/*
+	 * XXX: Linux has 33 realtime signals, the go binary wants to
+	 * reset all of them; nothing else uses the last RT signal, so for
+	 * now ignore it.
+	 */
+	if (sig == LINUX__NSIG) {
+		uprintf("%s: setting signal %d ignored\n", __func__, sig);
+		sig--;	/* back to 63 which is ignored */
+	}
 	if (sig < 0 || sig >= LINUX__NSIG)
 		return (EINVAL);
 	if (sig > 0 && !linux_to_native_signo[sig]) {
@@ -114,4 +115,3 @@ linux_sys_sigaction(struct lwp *l, const struct linux_sys_sigaction_args *uap, r
 	}
 	return (0);
 }
-#endif /* !amd64 */

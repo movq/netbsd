@@ -1,4 +1,4 @@
-/*	$NetBSD: timed.c,v 1.23 2007/02/04 21:17:01 cbiere Exp $	*/
+/*	$NetBSD: timed.c,v 1.26 2018/02/04 09:01:13 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1993 The Regents of the University of California.
@@ -31,16 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1985, 1993 The Regents of the University of California.\n\
- All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1985, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)timed.c	8.2 (Berkeley) 3/26/95";
 #else
-__RCSID("$NetBSD: timed.c,v 1.23 2007/02/04 21:17:01 cbiere Exp $");
+__RCSID("$NetBSD: timed.c,v 1.26 2018/02/04 09:01:13 mrg Exp $");
 #endif
 #endif /* not lint */
 
@@ -187,7 +186,7 @@ main(int argc, char *argv[])
 			break;
 		case 'G':
 			if (goodgroup != 0)
-				errx(EXIT_FAILURE, "timed: only one net group\n");
+				errx(EXIT_FAILURE, "timed: only one net group");
 			goodgroup = optarg;
 			break;
 		default:
@@ -220,7 +219,7 @@ main(int argc, char *argv[])
 
 	srvp = getservbyname("timed", "udp");
 	if (srvp == NULL)
-		errx(EXIT_FAILURE, "unknown service 'timed/udp'\n");
+		errx(EXIT_FAILURE, "unknown service 'timed/udp'");
 
 	port = srvp->s_port;
 	(void)memset(&server, 0, sizeof(server));
@@ -235,7 +234,7 @@ main(int argc, char *argv[])
 
 	if (bind(sock, (struct sockaddr*)(void *)&server, sizeof(server))) {
 		if (errno == EADDRINUSE)
-			errx(EXIT_FAILURE, "time daemon already running\n");
+			errx(EXIT_FAILURE, "time daemon already running");
 		else
 			err(EXIT_FAILURE, "bind");
 	}
@@ -261,11 +260,11 @@ main(int argc, char *argv[])
 		if (nentp != 0)
 			nt->net = nentp->n_net;
 		else if (nt->net == INADDR_NONE)
-			errx(EXIT_FAILURE, "unknown net %s\n", nt->name);
+			errx(EXIT_FAILURE, "unknown net %s", nt->name);
 		else if (nt->net == INADDR_ANY)
-			errx(EXIT_FAILURE, "bad net %s\n", nt->name);
+			errx(EXIT_FAILURE, "bad net %s", nt->name);
 		else
-			warnx("warning: %s unknown in /etc/networks\n",
+			warnx("warning: %s unknown in /etc/networks",
 				nt->name);
 
 		if (0 == (nt->net & 0xff000000))
@@ -331,7 +330,7 @@ main(int argc, char *argv[])
 	if (ntp)
 		(void) free(ntp);
 	if (nettab == NULL)
-		errx(EXIT_FAILURE, "no network usable\n");
+		errx(EXIT_FAILURE, "no network usable");
 
 
 	/* microseconds to delay before responding to a broadcast */
@@ -406,9 +405,10 @@ main(int argc, char *argv[])
 			justquit = 1;
 		}
 		for (ntp = nettab; ntp != NULL; ntp = ntp->next) {
-			if (ntp->status == MASTER)
+			if (ntp->status == MASTER) {
 				rmnetmachs(ntp);
 				ntp->status = NOMASTER;
+			}
 		}
 		checkignorednets();
 		pickslavenet(0);
@@ -686,7 +686,7 @@ addnetname(char *name)
 		netlist = &((*netlist)->next);
 	*netlist = calloc(1, sizeof **netlist);
 	if (*netlist == NULL)
-		err(EXIT_FAILURE, "malloc failed\n");
+		err(EXIT_FAILURE, "malloc failed");
 	(*netlist)->name = name;
 }
 
@@ -711,7 +711,7 @@ add_good_host(const char* name,
 
 	hentp = gethostbyname(name);
 	if (NULL == hentp && perm)
-		(void)warnx("unknown host %s\n", name);
+		warnx("unknown host %s", name);
 }
 
 

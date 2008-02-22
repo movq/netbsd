@@ -1,4 +1,4 @@
-.\" $NetBSD: ugen.4,v 1.25 2008/01/19 09:58:38 skrll Exp $
+.\" $NetBSD: ugen.4,v 1.36 2018/03/05 10:23:44 wiz Exp $
 .\"
 .\" Copyright (c) 1999 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 19, 2008
+.Dd March 5, 2018
 .Dt UGEN 4
 .Os
 .Sh NAME
@@ -42,7 +35,7 @@
 .Nd USB generic device support
 .Sh SYNOPSIS
 .Cd "ugen* at uhub? flags N"
-.Cd options UGEN_BULK_RA_WB
+.Cd "ugenif* at uhub? vendor V product P configuration C interface I"
 .Sh DESCRIPTION
 The
 .Nm
@@ -67,6 +60,43 @@ locators this can be used to force the
 .Nm
 driver to be used for a certain
 device.
+.Pp
+The second form of attachment can be used to
+.Dq steal
+only one interface from some device for use by the
+.Nm
+driver.
+Most likely you want to explicitily specify at least vendor,
+product and interface with this form,
+as otherwise the
+.Nm
+driver would capture all of your
+.Nm usb
+devices.
+.Em NOTE :
+You have to be extremely careful,
+when using this form,
+as the attached
+.Nm
+driver has access to all of the device
+and can easily interfere with the driver(s) used for
+the other interface(s).
+.Pp
+As an example of this second form of attachment there are
+various debugging boards available based on some FTDI chip,
+where one interface is used for JTAG debugging
+and the other is used as a serial interface.
+In this case you want to attach the
+.Nm
+driver to interface 0 of this particular board identified by
+.Cd vendor
+and
+.Cd product
+while letting
+.Xr uftdi 4
+together with
+.Xr ucom 4
+to attach at interface 1.
 .Pp
 There can be up to 127 USB devices connected to a USB bus.
 Each USB device can have up to 16 endpoints.
@@ -116,27 +146,22 @@ and
 .Xr write 2
 should be used.
 All IO operations on a bulk endpoint are normally unbuffered.
-On kernels built with the
-.Dv UGEN_BULK_RA_WB
-option, the
+The
 .Dv USB_SET_BULK_RA
 and
 .Dv USB_SET_BULK_WB
 .Xr ioctl 2
-calls are available, and enable read-ahead and write-behind buffering
-respectively.
+calls enable read-ahead and write-behind buffering, respectively.
+This buffering supports fixed-sized USB transfers and is intended for
+devices with regular and continuing data transfers.
 When read-ahead or write-behind are enabled, the file descriptor
 may be set to use non-blocking IO.
 .Pp
-When in a
-.Dv UGEN_BULK_RA_WB
-mode,
+When in a read-ahead/writeback mode,
 .Xr select 2
 for read and write operates normally, returning true if there is data
 in the read buffer and space in the write buffer, respectively.
-When not in a
-.Dv UGEN_BULK_RA_WB
-mode,
+When not,
 .Xr select 2
 always returns true, because there is no way to predict how the device
 will respond to a read or write request.
@@ -156,11 +181,11 @@ All endpoints handle the following
 calls:
 .Pp
 .Bl -tag -width indent -compact
-.It Dv USB_SET_SHORT_XFER (int)
+.It Dv USB_SET_SHORT_XFER ( int )
 Allow short read transfer.
 Normally a transfer from the device which is shorter than the
 request specified is reported as an error.
-.It Dv USB_SET_TIMEOUT (int)
+.It Dv USB_SET_TIMEOUT ( int )
 Set the timeout on the device operations, the time is specified
 in milliseconds.
 The value 0 is used to indicate that there is no timeout.
@@ -171,14 +196,14 @@ The control endpoint (endpoint 0) handles the following
 calls:
 .Pp
 .Bl -tag -width indent -compact
-.It Dv USB_GET_CONFIG (int)
+.It Dv USB_GET_CONFIG ( int )
 Get the device configuration number.
-.It Dv USB_SET_CONFIG (int)
+.It Dv USB_SET_CONFIG ( int )
 Set the device into the given configuration number.
-.br
+.Pp
 This operation can only be performed when the control endpoint
 is the sole open endpoint.
-.It Dv USB_GET_ALTINTERFACE (struct usb_alt_interface)
+.It Dv USB_GET_ALTINTERFACE ( struct usb_alt_interface )
 Get the alternative setting number for the interface with the given
 index.
 The
@@ -191,22 +216,22 @@ struct usb_alt_interface {
 	int	uai_alt_no;
 };
 .Ed
-.It Dv USB_SET_ALTINTERFACE (struct usb_alt_interface)
+.It Dv USB_SET_ALTINTERFACE ( struct usb_alt_interface )
 Set the alternative setting to the given number in the interface with the
 given index.
 The
 .Dv uai_config_index
 is ignored in this call.
-.br
+.Pp
 This operation can only be performed when no endpoints for the interface
 are open.
-.It Dv USB_GET_NO_ALT (struct usb_alt_interface)
+.It Dv USB_GET_NO_ALT ( struct usb_alt_interface )
 Return the number of different alternate settings in the
-.Dv aui_alt_no
+.Dv uai_alt_no
 field.
-.It Dv USB_GET_DEVICE_DESC (usb_device_descriptor_t)
+.It Dv USB_GET_DEVICE_DESC ( usb_device_descriptor_t )
 Return the device descriptor.
-.It Dv USB_GET_CONFIG_DESC (struct usb_config_desc)
+.It Dv USB_GET_CONFIG_DESC ( struct usb_config_desc )
 Return the descriptor for the configuration with the given index.
 For convenience the current configuration can be specified by
 .Dv USB_CURRENT_CONFIG_INDEX .
@@ -216,7 +241,7 @@ struct usb_config_desc {
 	usb_config_descriptor_t ucd_desc;
 };
 .Ed
-.It Dv USB_GET_INTERFACE_DESC (struct usb_interface_desc)
+.It Dv USB_GET_INTERFACE_DESC ( struct usb_interface_desc )
 Return the interface descriptor for an interface specified by its
 configuration index, interface index, and alternative index.
 For convenience the current alternative can be specified by
@@ -229,7 +254,7 @@ struct usb_interface_desc {
 	usb_interface_descriptor_t uid_desc;
 };
 .Ed
-.It Dv USB_GET_ENDPOINT_DESC (struct usb_endpoint_desc)
+.It Dv USB_GET_ENDPOINT_DESC ( struct usb_endpoint_desc )
 Return the endpoint descriptor for the endpoint specified by its
 configuration index, interface index, alternative index, and
 endpoint index.
@@ -242,7 +267,7 @@ struct usb_endpoint_desc {
 	usb_endpoint_descriptor_t ued_desc;
 };
 .Ed
-.It Dv USB_GET_FULL_DESC (struct usb_full_desc)
+.It Dv USB_GET_FULL_DESC ( struct usb_full_desc )
 Return all the descriptors for the given configuration.
 .Bd -literal
 struct usb_full_desc {
@@ -261,7 +286,7 @@ The proper size can be determined by first issuing a
 and inspecting the
 .Dv wTotalLength
 field.
-.It Dv USB_GET_STRING_DESC (struct usb_string_desc)
+.It Dv USB_GET_STRING_DESC ( struct usb_string_desc )
 Get a string descriptor for the given language id and
 string index.
 .Bd -literal
@@ -300,7 +325,7 @@ This is a dangerous operation in that it can perform arbitrary operations
 on the device.
 Some of the most dangerous (e.g., changing the device
 address) are not allowed.
-.It Dv USB_GET_DEVICEINFO (struct usb_device_info)
+.It Dv USB_GET_DEVICEINFO ( struct usb_device_info )
 Get an information summary for the device.
 This call will not issue any USB transactions.
 .El
@@ -310,7 +335,7 @@ Bulk endpoints handle the following
 calls:
 .Pp
 .Bl -tag -width indent -compact
-.It Dv USB_SET_BULK_RA (int)
+.It Dv USB_SET_BULK_RA ( int )
 Enable or disable bulk read-ahead.
 When enabled, the driver will begin to read data from the device into
 a buffer, and will perform reads from the device whenever there is
@@ -323,7 +348,7 @@ The buffer size and the read request length can be set by the
 .Dv USB_SET_BULK_RA_OPT
 .Xr ioctl 2
 call.
-.It Dv USB_SET_BULK_WB (int)
+.It Dv USB_SET_BULK_WB ( int )
 Enable or disable bulk write-behind.
 When enabled, the driver will buffer data from the
 .Xr write 2
@@ -337,7 +362,7 @@ The buffer size and the write request length can be set by the
 .Dv USB_SET_BULK_WB_OPT
 .Xr ioctl 2
 call.
-.It Dv USB_SET_BULK_RA_OPT (struct usb_bulk_ra_wb_opt)
+.It Dv USB_SET_BULK_RA_OPT ( struct usb_bulk_ra_wb_opt )
 Set the size of the buffer and the length of the read requests used by
 the driver when bulk read-ahead is enabled.
 The changes do not take
@@ -359,7 +384,7 @@ struct usb_bulk_ra_wb_opt {
 	u_int	ra_wb_request_size;
 };
 .Ed
-.It Dv USB_SET_BULK_WB_OPT (struct usb_bulk_ra_wb_opt)
+.It Dv USB_SET_BULK_WB_OPT ( struct usb_bulk_ra_wb_opt )
 Set the size of the buffer and the length of the write requests used
 by the driver when bulk write-behind is enabled.
 The changes do not
@@ -380,11 +405,11 @@ All endpoints (except the control endpoint) for the current configuration
 can be found by iterating the
 .Dv interface_index
 from 0 to
-.Dv config_desc-\*[Gt]bNumInterface-1
+.Dv config_desc->bNumInterface-1
 and for each of these iterating the
 .Dv endpoint_index
 from 0 to
-.Dv interface_desc-\*[Gt]bNumEndpoints .
+.Dv interface_desc->bNumEndpoints .
 The
 .Dv config_index
 should set to

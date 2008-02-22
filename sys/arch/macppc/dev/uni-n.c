@@ -1,4 +1,4 @@
-/*	$NetBSD: uni-n.c,v 1.2 2005/12/11 12:18:03 christos Exp $	*/
+/*	$NetBSD: uni-n.c,v 1.9 2018/03/16 22:08:53 macallan Exp $	*/
 
 /*-
  * Copyright (C) 2005 Michael Lorenz.
@@ -31,7 +31,7 @@
  */
  
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uni-n.c,v 1.2 2005/12/11 12:18:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uni-n.c,v 1.9 2018/03/16 22:08:53 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,37 +39,46 @@ __KERNEL_RCSID(0, "$NetBSD: uni-n.c,v 1.2 2005/12/11 12:18:03 christos Exp $");
 #include <sys/device.h>
 
 #include <dev/ofw/openfirm.h>
+#include <dev/ofw/ofw_pci.h>
 
 #include <machine/autoconf.h>
 
-static void uni_n_attach(struct device *, struct device *, void *);
-static int uni_n_match(struct device *, struct cfdata *, void *);
+#include "fcu.h"
+
+static void uni_n_attach(device_t, device_t, void *);
+static int uni_n_match(device_t, cfdata_t, void *);
 static int uni_n_print(void *, const char *);
 
 struct uni_n_softc {
-	struct device sc_dev;
+	device_t sc_dev;
+	struct powerpc_bus_space sc_memt;
 	int sc_node;
 };
 
-CFATTACH_DECL(uni_n, sizeof(struct uni_n_softc),
+CFATTACH_DECL_NEW(uni_n, sizeof(struct uni_n_softc),
     uni_n_match, uni_n_attach, NULL, NULL);
 
+#if NFCU > 0
+/* storage for CPUID SEEPROM contents found on some G5 */
+static uint8_t eeprom[2][160];
+#endif
+
 int
-uni_n_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+uni_n_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 	char compat[32];
-	if (strcmp(ca->ca_name, "uni-n") != 0)
+	if ((strcmp(ca->ca_name, "uni-n") != 0) &&
+	    (strcmp(ca->ca_name, "u4") != 0) &&
+	    (strcmp(ca->ca_name, "u3") != 0))
 		return 0;
 
 	memset(compat, 0, sizeof(compat));
+#if 0
 	OF_getprop(ca->ca_node, "compatible", compat, sizeof(compat));
 	if (strcmp(compat, "uni-north") != 0)
 		return 0;
-
+#endif
 	return 1;
 }
 
@@ -77,22 +86,49 @@ uni_n_match(parent, cf, aux)
  * Attach all the sub-devices we can find
  */
 void
-uni_n_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+uni_n_attach(device_t parent, device_t self, void *aux)
 {
-	struct uni_n_softc *sc = (struct uni_n_softc *)self;
+	struct uni_n_softc *sc = device_private(self);
 	struct confargs *our_ca = aux;
 	struct confargs ca;
 	int node, child, namelen;
+#if NFCU > 0
+	int cpuid;
+#endif
 	u_int reg[20];
 	int intr[6];
 	char name[32];
 
-	node = OF_finddevice("/uni-n");
+	sc->sc_dev = self;
+	node = our_ca->ca_node;
 	sc->sc_node = node;
-	printf(" address 0x%08x\n",our_ca->ca_reg[0]);
-	
+	printf(" address 0x%08x\n",
+	    our_ca->ca_reg[our_ca->ca_nreg > 8 ? 1 : 0]);
+
+#if NFCU > 0
+	/*
+	 * zero out eeprom blocks, then see if we have valid data
+	 * doing this here because the EEPROMs are dangling from out i2c bus
+	 * but we can get all the data just from looking at the properties
+	 */
+	memset(eeprom, 0, sizeof(eeprom));
+	cpuid = OF_finddevice("/u3/i2c/cpuid@a0");
+	OF_getprop(cpuid, "cpuid", eeprom[0], sizeof(eeprom[0]));
+	if (eeprom[0][1] != 0)
+		aprint_normal_dev(self, "found EEPROM data for CPU 0\n");
+	cpuid = OF_finddevice("/u3/i2c/cpuid@a2");
+	OF_getprop(cpuid, "cpuid", eeprom[1], sizeof(eeprom[1]));
+	if (eeprom[1][1] != 0)
+		aprint_normal_dev(self, "found EEPROM data for CPU 1\n");
+#endif
+
+	memset(&sc->sc_memt, 0, sizeof(struct powerpc_bus_space));
+	sc->sc_memt.pbs_flags = _BUS_SPACE_LITTLE_ENDIAN|_BUS_SPACE_MEM_TYPE;
+	if (ofwoea_map_space(RANGE_TYPE_MACIO, RANGE_MEM, node, &sc->sc_memt,
+	    "uni-n mem-space") != 0) {
+		panic("Can't init uni-n mem tag");
+	}
+
 	for (child = OF_child(node); child; child = OF_peer(child)) {
 		namelen = OF_getprop(child, "name", name, sizeof(name));
 		if (namelen < 0)
@@ -103,7 +139,7 @@ uni_n_attach(parent, self, aux)
 		name[namelen] = 0;
 		ca.ca_name = name;
 		ca.ca_node = child;
-
+		ca.ca_tag = &sc->sc_memt;
 		ca.ca_nreg  = OF_getprop(child, "reg", reg, sizeof(reg));
 		ca.ca_nintr = OF_getprop(child, "AAPL,interrupts", intr,
 				sizeof(intr));
@@ -113,15 +149,12 @@ uni_n_attach(parent, self, aux)
 
 		ca.ca_reg = reg;
 		ca.ca_intr = intr;
-
 		config_found(self, &ca, uni_n_print);
 	}
 }
 
 int
-uni_n_print(aux, uni_n)
-	void *aux;
-	const char *uni_n;
+uni_n_print(void *aux, const char *uni_n)
 {
 	struct confargs *ca = aux;
 	if (uni_n)
@@ -132,3 +165,14 @@ uni_n_print(aux, uni_n)
 
 	return UNCONF;
 }
+
+#if NFCU > 0
+int
+get_cpuid(int cpu, uint8_t *buf)
+{
+	if ((cpu < 0) || (cpu > 1)) return -1;
+	if (eeprom[cpu][1] == 0) return 0;
+	memcpy(buf, eeprom[cpu], sizeof(eeprom[cpu]));
+	return sizeof(eeprom[cpu]);
+}
+#endif

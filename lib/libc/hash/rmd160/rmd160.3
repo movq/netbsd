@@ -1,4 +1,4 @@
-.\"	$NetBSD: rmd160.3,v 1.2 2005/12/26 19:40:14 perry Exp $
+.\"	$NetBSD: rmd160.3,v 1.4 2017/07/03 21:32:49 wiz Exp $
 .\"	$OpenBSD: rmd160.3,v 1.12 2000/04/18 03:01:29 aaron Exp $
 .\"
 .\" Copyright (c) 1997 Todd C. Miller <Todd.Miller@courtesan.com>
@@ -165,15 +165,15 @@ int n;
 
 buf = "abc";
 n = strlen(buf);
-RMD160Init(\*[Am]rmd);
-RMD160Update(\*[Am]rmd, (u_char *)buf, n);
-RMD160Final(results, \*[Am]rmd);
+RMD160Init(&rmd);
+RMD160Update(&rmd, (u_char *)buf, n);
+RMD160Final(results, &rmd);
 
 /* Print the digest as one long hex value */
 printf("0x");
-for (n = 0; n \*[Lt] 20; n++)
+for (n = 0; n < 20; n++)
 	printf("%02x", results[n]);
-putchar('\\n');
+putchar('\en');
 .Ed
 .Pp
 Alternately, the helper functions could be used in the following way:

@@ -1,4 +1,4 @@
-/*	$NetBSD: ypserv_db.c,v 1.18 2006/10/15 01:10:00 christos Exp $	*/
+/*	$NetBSD: ypserv_db.c,v 1.22 2011/02/01 21:00:25 chuck Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson
- *	and Charles D. Cranor.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -35,12 +29,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypserv_db.c,v 1.18 2006/10/15 01:10:00 christos Exp $");
+__RCSID("$NetBSD: ypserv_db.c,v 1.22 2011/02/01 21:00:25 chuck Exp $");
 #endif
 
 /*
  * major revision/cleanup of Mats' version done by
- * Chuck Cranor <chuck@ccrc.wustl.edu> Jan 1996.
+ * Chuck Cranor <chuck@netbsd> Jan 1996.
  */
 
 #include <sys/types.h>
@@ -54,14 +48,12 @@ __RCSID("$NetBSD: ypserv_db.c,v 1.18 2006/10/15 01:10:00 christos Exp $");
 #include <arpa/nameser.h>
 
 #include <errno.h>
-#include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <netdb.h>
 #include <resolv.h>
 #include <syslog.h>
-#include <unistd.h>
 
 #include <rpc/rpc.h>
 #include <rpcsvc/yp_prot.h>
@@ -243,8 +235,8 @@ DBM *
 ypdb_open_db(const char *domain, const char *map, u_int *status,
 	     struct opt_map **map_info)
 {
-	static char *domain_key = YP_INTERDOMAIN_KEY;
-	static char *secure_key = YP_SECURE_KEY;
+	static const char *domain_key = YP_INTERDOMAIN_KEY;
+	static const char *secure_key = YP_SECURE_KEY;
 	char map_path[MAXPATHLEN];
 	struct stat finfo;
 	struct opt_domain *d = NULL;
@@ -363,7 +355,7 @@ ypdb_open_db(const char *domain, const char *map, u_int *status,
 #ifdef OPTIMIZE_DB
 retryopen:
 #endif /* OPTIMIZE_DB */
-	db = ypdb_open(map_path, O_RDONLY, 0444);
+	db = ypdb_open(map_path);
 #ifdef OPTIMIZE_DB
 	if (db == NULL) {
 #ifdef DEBUG
@@ -697,7 +689,7 @@ struct ypresp_order
 ypdb_get_order(const char *domain, const char *map)
 {
 	static struct ypresp_order res;
-	static char *order_key = YP_LAST_KEY;
+	static const char *order_key = YP_LAST_KEY;
 	char order[MAX_LAST_LEN + 1];
 	DBM *db;
 	datum k, v;
@@ -729,7 +721,7 @@ struct ypresp_master
 ypdb_get_master(const char *domain, const char *map)
 {
 	static struct ypresp_master res;
-	static char *master_key = YP_MASTER_KEY;
+	static const char *master_key = YP_MASTER_KEY;
 	static char master[MAX_MASTER_LEN + 1];
 	DBM *db;
 	datum k, v;

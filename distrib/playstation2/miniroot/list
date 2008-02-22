@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.5 2002/05/29 04:11:02 lukem Exp $
+#	$NetBSD: list,v 1.10 2014/03/31 11:25:48 martin Exp $
 
 # extras in bin
 #PROG	bin/csh
@@ -21,16 +21,13 @@ PROG	usr/bin/rsh
 #PROG	usr/bin/vi
 
 # crunchgen source directory specials: progs built in nonstandard places
-#SPECIAL	vi	srcdir usr.bin/vi/build
+#SPECIAL	vi	srcdir usr.bin/nvi/build
 
 # Minimize use of MFS
 SYMLINK	/tmp	var/tmp
 
 # termcap file
-COPY	${ARCHDIR}/termcap.vt100	usr/share/misc/termcap
-
-# sysinst needs disktab template
-COPY	${DESTDIR}/etc/disktab		etc/disktab.preinstall
+COPY	${DISTRIBDIR}/common/termcap	usr/share/misc/termcap
 
 # and the installation tools
 COPY	${ARCHDIR}/dot.profile		.profile

@@ -1,4 +1,4 @@
-/*	$NetBSD: timex.h,v 1.13 2008/01/20 18:09:13 joerg Exp $	*/
+/*	$NetBSD: timex.h,v 1.18 2009/04/05 19:59:26 christos Exp $	*/
 
 /*-
  ***********************************************************************
@@ -95,13 +95,12 @@
  *	STA_NANO bit in the status word. See the description below for
  *	further information.
  */
+
 #ifndef _SYS_TIMEX_H_
 #define _SYS_TIMEX_H_ 1
 #define NTP_API		4	/* NTP API version */
 
-#ifndef MSDOS			/* Microsoft specific */
 #include <sys/syscall.h>
-#endif /* MSDOS */
 
 /*
  * The following defines establish the performance envelope of the
@@ -158,6 +157,24 @@
 #define STA_NANO	0x2000	/* resolution (0 = us, 1 = ns) (ro) */
 #define STA_MODE	0x4000	/* mode (0 = PLL, 1 = FLL) (ro) */
 #define STA_CLK		0x8000	/* clock source (0 = A, 1 = B) (ro) */
+
+#define STA_FMT	"\177\020\
+b\0PLL\0\
+b\1PPSFREQ\0\
+b\2PPSTIME\0\
+b\3FLL\0\
+b\4INS\0\
+b\5DEL\0\
+b\6UNSYNC\0\
+b\7FREQHOLD\0\
+b\10PPSSIGNAL\0\
+b\11PPSJITTER\0\
+b\12PPSWANDER\0\
+b\13PPSERROR\0\
+b\14CLOCKERR\0\
+b\15NANO\0\
+f\16\1MODE\0=\0PLL\0=\1FLL\0\
+f\17\1CLK\0=\0A\0=\1B\0"
 
 #define STA_RONLY (STA_PPSSIGNAL | STA_PPSJITTER | STA_PPSWANDER | \
     STA_PPSERROR | STA_CLOCKERR | STA_NANO | STA_MODE | STA_CLK)
@@ -220,30 +237,23 @@ struct timex {
 	long	stbcnt;		/* stability limit exceeded (ro) */
 };
 
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-
 #ifdef _KERNEL
+#include <sys/mutex.h>
+
 void	ntp_update_second(int64_t *adjustment, time_t *newsec);
-#ifdef __NetBSD__
 void	ntp_adjtime1(struct timex *);
 void	ntp_gettime(struct ntptimeval *);
 int ntp_timestatus(void);
-#endif /* __NetBSD__ */
+
+extern kmutex_t timecounter_lock;
 #else /* !_KERNEL */
-#include <sys/cdefs.h>
 
 __BEGIN_DECLS
-#ifdef __NetBSD__
 #ifndef __LIBC12_SOURCE__
-int ntp_gettime(struct ntptimeval *) __RENAME(__ntp_gettime30);
-#endif
-#else
-int ntp_gettime(struct ntptimeval *);
+int ntp_gettime(struct ntptimeval *) __RENAME(__ntp_gettime50);
 #endif
 int ntp_adjtime(struct timex *);
 __END_DECLS
 #endif /* _KERNEL */
-
-#endif /* __FreeBSD__ || __NetBSD__ */
 
 #endif /* _SYS_TIMEX_H_ */

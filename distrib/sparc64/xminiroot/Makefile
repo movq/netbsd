@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.26 2006/05/09 19:10:43 he Exp $
+#	$NetBSD: Makefile,v 1.34 2017/07/17 14:36:13 hannken Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -6,10 +6,19 @@
 .include <bsd.kernobj.mk>
 
 .include "${.CURDIR}/../instfs/Makefile.instfs"
-IMAGE=			miniroot.fs
-IMAGESIZE=		8m
-IMAGEPOSTBUILD=		${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} \
-			    ${DESTDIR}/usr/mdec/bootblk
+IMAGE=		miniroot.fs
+NUMCYLS=	14 	# size of image in MB, tune this if we need more space
+SECSPERCYL=	2048
+CYLSIZE=	$$(( ${SECSPERCYL} * 512 ))
+IMAGESIZE=	$$(( ${NUMCYLS} * ${CYLSIZE} ))
+IMAGEPOSTBUILD=	\
+	${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} \
+		${DESTDIR}/usr/mdec/bootblk && \
+	echo "Creating disklabel" && \
+	printf 'V nsect %d\nV nhead 1\nV rpm 7200\nV pcyl %d\nV ncyl %d\na 0 %d/0/0\nc 0 %d/0/0\nd 0 %d/0/0\nW\nL\nP\n' \
+		${SECSPERCYL} ${NUMCYLS} ${NUMCYLS} ${NUMCYLS} ${NUMCYLS} ${NUMCYLS} | \
+	${TOOL_SUNLABEL} -nq ${IMAGE}
+
 IMAGE_RELEASEDIR=	installation/miniroot
 
 CRUNCHBINDIR!=		cd ${INSTFSDIR} && ${PRINTOBJDIR}
@@ -23,7 +32,7 @@ ${CRUNCHBIN}: ${CRUNCHBINDIR}/${CRUNCHBIN}
 
 netbsd.gz: ${KERNOBJDIR}/GENERIC/netbsd
 	-rm -f ${.TARGET}
-	gzip -9c ${.ALLSRC} > ${.TARGET}
+	${TOOL_GZIP_N} -9c ${.ALLSRC} > ${.TARGET}
 
 clean:	localclean
 

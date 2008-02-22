@@ -1,32 +1,34 @@
-/*	$NetBSD: rpc_soc.c,v 1.12 2005/11/29 03:12:00 christos Exp $	*/
+/*	$NetBSD: rpc_soc.c,v 1.23 2015/11/13 15:23:17 christos Exp $	*/
 
 /*
- * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
- * unrestricted use provided that this legend is included on all tape
- * media and as a part of the software program in whole or part.  Users
- * may copy or modify Sun RPC without charge, but are not authorized
- * to license or distribute it to anyone else except as part of a product or
- * program developed by the user.
- * 
- * SUN RPC IS PROVIDED AS IS WITH NO WARRANTIES OF ANY KIND INCLUDING THE
- * WARRANTIES OF DESIGN, MERCHANTIBILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE, OR ARISING FROM A COURSE OF DEALING, USAGE OR TRADE PRACTICE.
- * 
- * Sun RPC is provided with no support and without any obligation on the
- * part of Sun Microsystems, Inc. to assist in its use, correction,
- * modification or enhancement.
- * 
- * SUN MICROSYSTEMS, INC. SHALL HAVE NO LIABILITY WITH RESPECT TO THE
- * INFRINGEMENT OF COPYRIGHTS, TRADE SECRETS OR ANY PATENTS BY SUN RPC
- * OR ANY PART THEREOF.
- * 
- * In no event will Sun Microsystems, Inc. be liable for any lost revenue
- * or profits or other special, indirect and consequential damages, even if
- * Sun has been advised of the possibility of such damages.
- * 
- * Sun Microsystems, Inc.
- * 2550 Garcia Avenue
- * Mountain View, California  94043
+ * Copyright (c) 2010, Oracle America, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above
+ *       copyright notice, this list of conditions and the following
+ *       disclaimer in the documentation and/or other materials
+ *       provided with the distribution.
+ *     * Neither the name of the "Oracle America, Inc." nor the names of its
+ *       contributors may be used to endorse or promote products derived
+ *       from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ *   FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+ *   COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+ *   INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *   DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ *   GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ *   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ *   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /* #ident	"@(#)rpc_soc.c	1.17	94/04/24 SMI" */
@@ -43,7 +45,7 @@
 #if 0
 static char sccsid[] = "@(#)rpc_soc.c 1.41 89/05/02 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: rpc_soc.c,v 1.12 2005/11/29 03:12:00 christos Exp $");
+__RCSID("$NetBSD: rpc_soc.c,v 1.23 2015/11/13 15:23:17 christos Exp $");
 #endif
 #endif
 
@@ -75,6 +77,7 @@ __RCSID("$NetBSD: rpc_soc.c,v 1.12 2005/11/29 03:12:00 christos Exp $");
 #include <syslog.h>
 #include <unistd.h>
 
+#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -97,23 +100,17 @@ __weak_alias(clnt_broadcast,_clnt_broadcast)
 extern mutex_t	rpcsoc_lock;
 #endif
 
-static CLIENT *clnt_com_create __P((struct sockaddr_in *, rpcprog_t, rpcvers_t,
-				    int *, u_int, u_int, const char *));
-static SVCXPRT *svc_com_create __P((int, u_int, u_int, const char *));
-static bool_t rpc_wrap_bcast __P((char *, struct netbuf *, struct netconfig *));
+static CLIENT *clnt_com_create(struct sockaddr_in *, rpcprog_t, rpcvers_t,
+				    int *, u_int, u_int, const char *);
+static SVCXPRT *svc_com_create(int, u_int, u_int, const char *);
+static bool_t rpc_wrap_bcast(char *, struct netbuf *, struct netconfig *);
 
 /*
  * A common clnt create routine
  */
 static CLIENT *
-clnt_com_create(raddr, prog, vers, sockp, sendsz, recvsz, tp)
-	struct sockaddr_in *raddr;
-	rpcprog_t prog;
-	rpcvers_t vers;
-	int *sockp;
-	u_int sendsz;
-	u_int recvsz;
-	const char *tp;
+clnt_com_create(struct sockaddr_in *raddr, rpcprog_t prog, rpcvers_t vers,
+	int *sockp, u_int sendsz, u_int recvsz, const char *tp)
 {
 	CLIENT *cl;
 	int madefd = FALSE;
@@ -159,7 +156,7 @@ clnt_com_create(raddr, prog, vers, sockp, sendsz, recvsz, tp)
 	bindaddr.maxlen = bindaddr.len =  sizeof (struct sockaddr_in);
 	bindaddr.buf = raddr;
 
-	bindresvport(fd, NULL);
+	(void)bindresvport(fd, NULL);
 	cl = clnt_tli_create(fd, nconf, &bindaddr, prog, vers,
 				sendsz, recvsz);
 	if (cl) {
@@ -188,14 +185,7 @@ err:	if (madefd == TRUE)
 }
 
 CLIENT *
-clntudp_bufcreate(raddr, prog, vers, wait, sockp, sendsz, recvsz)
-	struct sockaddr_in *raddr;
-	u_long prog;
-	u_long vers;
-	struct timeval wait;
-	int *sockp;
-	u_int sendsz;
-	u_int recvsz;
+clntudp_bufcreate(struct sockaddr_in *raddr, u_long prog, u_long vers, struct timeval wait, int *sockp, u_int sendsz, u_int recvsz)
 {
 	CLIENT *cl;
 
@@ -212,34 +202,23 @@ clntudp_bufcreate(raddr, prog, vers, wait, sockp, sendsz, recvsz)
 }
 
 CLIENT *
-clntudp_create(raddr, program, version, wait, sockp)
-	struct sockaddr_in *raddr;
-	u_long program;
-	u_long version;
-	struct timeval wait;
-	int *sockp;
+clntudp_create(struct sockaddr_in *raddr, u_long program, u_long version,
+    struct timeval wait, int *sockp)
 {
 	return clntudp_bufcreate(raddr, program, version, wait, sockp,
 					UDPMSGSIZE, UDPMSGSIZE);
 }
 
 CLIENT *
-clnttcp_create(raddr, prog, vers, sockp, sendsz, recvsz)
-	struct sockaddr_in *raddr;
-	u_long prog;
-	u_long vers;
-	int *sockp;
-	u_int sendsz;
-	u_int recvsz;
+clnttcp_create(struct sockaddr_in *raddr, u_long prog, u_long vers, int *sockp,
+    u_int sendsz, u_int recvsz)
 {
 	return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
 	    sendsz, recvsz, "tcp");
 }
 
 CLIENT *
-clntraw_create(prog, vers)
-	u_long prog;
-	u_long vers;
+clntraw_create(u_long prog, u_long vers)
 {
 	return clnt_raw_create((rpcprog_t)prog, (rpcvers_t)vers);
 }
@@ -248,11 +227,7 @@ clntraw_create(prog, vers)
  * A common server create routine
  */
 static SVCXPRT *
-svc_com_create(fd, sendsize, recvsize, netid)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
-	const char *netid;
+svc_com_create(int fd, u_int sendsize, u_int recvsize, const char *netid)
 {
 	struct netconfig *nconf;
 	SVCXPRT *svc;
@@ -279,63 +254,69 @@ svc_com_create(fd, sendsize, recvsize, netid)
 
 	memset(&sccsin, 0, sizeof sccsin);
 	sccsin.sin_family = AF_INET;
-	bindresvport(fd, &sccsin);
-	listen(fd, SOMAXCONN);
+	(void)bindresvport(fd, &sccsin);
+
+	switch (nconf->nc_semantics) {
+	case NC_TPI_COTS:
+	case NC_TPI_COTS_ORD:
+		if (listen(fd, SOMAXCONN) == -1) {
+			(void) syslog(LOG_ERR,
+			    "svc%s_create: listen(2) failed: %s",
+			    netid, strerror(errno));
+			(void) freenetconfigent(nconf);
+			goto out;
+		}
+		break;
+	default:
+		break;
+	}
+
 	svc = svc_tli_create(fd, nconf, NULL, sendsize, recvsize);
 	(void) freenetconfigent(nconf);
-	if (svc == NULL) {
-		if (madefd)
-			(void) close(fd);
-		return (NULL);
-	}
+	if (svc == NULL)
+		goto out;
 	port = (((struct sockaddr_in *)svc->xp_ltaddr.buf)->sin_port);
 	svc->xp_port = ntohs(port);
-	return (svc);
+	return svc;
+out:
+	if (madefd)
+		(void) close(fd);
+	return NULL;
 }
 
 SVCXPRT *
-svctcp_create(fd, sendsize, recvsize)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
+svctcp_create(int fd, u_int sendsize, u_int recvsize)
 {
 	return svc_com_create(fd, sendsize, recvsize, "tcp");
 }
 
 SVCXPRT *
-svcudp_bufcreate(fd, sendsz, recvsz)
-	int fd;
-	u_int sendsz, recvsz;
+svcudp_bufcreate(int fd, u_int sendsz, u_int recvsz)
 {
 	return svc_com_create(fd, sendsz, recvsz, "udp");
 }
 
 SVCXPRT *
-svcfd_create(fd, sendsize, recvsize)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
+svcfd_create(int fd, u_int sendsize, u_int recvsize)
 {
 	return svc_fd_create(fd, sendsize, recvsize);
 }
 
 
 SVCXPRT *
-svcudp_create(fd)
-	int fd;
+svcudp_create(int fd)
 {
 	return svc_com_create(fd, UDPMSGSIZE, UDPMSGSIZE, "udp");
 }
 
 SVCXPRT *
-svcraw_create()
+svcraw_create(void)
 {
 	return svc_raw_create();
 }
 
 int
-get_myaddress(addr)
-	struct sockaddr_in *addr;
+get_myaddress(struct sockaddr_in *addr)
 {
 
 	_DIAGASSERT(addr != NULL);
@@ -351,11 +332,8 @@ get_myaddress(addr)
  * For connectionless "udp" transport. Obsoleted by rpc_call().
  */
 int
-callrpc(host, prognum, versnum, procnum, inproc, in, outproc, out)
-	char *host;
-	int prognum, versnum, procnum;
-	xdrproc_t inproc, outproc;
-	char *in, *out;
+callrpc(char *host, int prognum, int versnum, int procnum,
+	xdrproc_t inproc, char *in, xdrproc_t outproc, char *out)
 {
 	return (int)rpc_call(host, (rpcprog_t)prognum, (rpcvers_t)versnum,
 	    (rpcproc_t)procnum, inproc, in, outproc, out, "udp");
@@ -365,10 +343,9 @@ callrpc(host, prognum, versnum, procnum, inproc, in, outproc, out)
  * For connectionless kind of transport. Obsoleted by rpc_reg()
  */
 int
-registerrpc(prognum, versnum, procnum, progname, inproc, outproc)
-	int prognum, versnum, procnum;
-	char *(*progname) __P((char [UDPMSGSIZE]));
-	xdrproc_t inproc, outproc;
+registerrpc(int prognum, int versnum, int procnum,
+	char *(*progname)(char [UDPMSGSIZE]),
+	xdrproc_t inproc, xdrproc_t outproc)
 {
 	return rpc_reg((rpcprog_t)prognum, (rpcvers_t)versnum,
 	    (rpcproc_t)procnum, progname, inproc, outproc, __UNCONST("udp"));
@@ -389,15 +366,12 @@ static resultproc_t	clnt_broadcast_result_main;
  */
 /* ARGSUSED */
 static bool_t
-rpc_wrap_bcast(resultp, addr, nconf)
-	char *resultp;		/* results of the call */
-	struct netbuf *addr;	/* address of the guy who responded */
-	struct netconfig *nconf; /* Netconf of the transport */
+rpc_wrap_bcast(
+	char *resultp,		/* results of the call */
+	struct netbuf *addr,	/* address of the guy who responded */
+	struct netconfig *nconf) /* Netconf of the transport */
 {
 	resultproc_t clnt_broadcast_result;
-#ifdef _REENTRANT
-	extern int __isthreaded;
-#endif
 
 	_DIAGASSERT(resultp != NULL);
 	_DIAGASSERT(addr != NULL);
@@ -432,19 +406,17 @@ clnt_broadcast_setup(void)
  * Broadcasts on UDP transport. Obsoleted by rpc_broadcast().
  */
 enum clnt_stat
-clnt_broadcast(prog, vers, proc, xargs, argsp, xresults, resultsp, eachresult)
-	u_long		prog;		/* program number */
-	u_long		vers;		/* version number */
-	u_long		proc;		/* procedure number */
-	xdrproc_t	xargs;		/* xdr routine for args */
-	caddr_t		argsp;		/* pointer to args */
-	xdrproc_t	xresults;	/* xdr routine for results */
-	caddr_t		resultsp;	/* pointer to results */
-	resultproc_t	eachresult;	/* call with each result obtained */
+clnt_broadcast(
+	u_long		prog,		/* program number */
+	u_long		vers,		/* version number */
+	u_long		proc,		/* procedure number */
+	xdrproc_t	xargs,		/* xdr routine for args */
+	caddr_t		argsp,		/* pointer to args */
+	xdrproc_t	xresults,	/* xdr routine for results */
+	caddr_t		resultsp,	/* pointer to results */
+	resultproc_t	eachresult)	/* call with each result obtained */
 {
 #ifdef _REENTRANT
-	extern int __isthreaded;
-
 	if (__isthreaded == 0)
 		clnt_broadcast_result_main = eachresult;
 	else {

@@ -1,4 +1,4 @@
-/* $NetBSD: ug_acpi.c,v 1.3 2007/10/19 11:59:36 ad Exp $ */
+/* $NetBSD: ug_acpi.c,v 1.6 2010/03/05 14:00:17 jruoho Exp $ */
 
 /*
  * Copyright (c) 2007 Mihai Chelaru <kefren@netbsd.ro>
@@ -26,33 +26,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ug_acpi.c,v 1.3 2007/10/19 11:59:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ug_acpi.c,v 1.6 2010/03/05 14:00:17 jruoho Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
-#include <sys/ioctl.h>
-#include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/proc.h>
-#include <sys/envsys.h>
+#include <sys/systm.h>
 
-#include <sys/bus.h>
-
-#include <dev/acpi/acpica.h>
-#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
-
-#include <dev/sysmon/sysmonvar.h>
 
 #include <dev/ic/ugreg.h>
 #include <dev/ic/ugvar.h>
 
 /* autoconf(9) functions */
-static int	ug_acpi_match(struct device *, struct cfdata *, void *);
-static void	ug_acpi_attach(struct device *, struct device *, void *);
+static int	ug_acpi_match(device_t, cfdata_t, void *);
+static void	ug_acpi_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(ug_acpi, sizeof(struct ug_softc), ug_acpi_match,
+CFATTACH_DECL_NEW(ug_acpi, sizeof(struct ug_softc), ug_acpi_match,
     ug_acpi_attach, NULL, NULL);
 
 /*
@@ -66,8 +55,7 @@ static const char* const ug_acpi_ids[] = {
 };
 
 static int
-ug_acpi_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ug_acpi_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -78,20 +66,17 @@ ug_acpi_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-ug_acpi_attach(struct device *parent, struct device *self, void *aux)
+ug_acpi_attach(device_t parent, device_t self, void *aux)
 {
-	struct ug_softc *sc = (struct ug_softc*)self;
+	struct ug_softc *sc = device_private(self);
 	struct acpi_attach_args *aa = aux;
 	struct acpi_resources res;
 	struct acpi_io *io;
 	bus_space_handle_t ioh;
 	ACPI_STATUS rv;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
-
 	/* parse resources */
-	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
+	rv = acpi_resource_parse(self, aa->aa_node->ad_handle, "_CRS",
 	    &res, &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
@@ -99,26 +84,25 @@ ug_acpi_attach(struct device *parent, struct device *self, void *aux)
 	/* find our i/o registers */
 	io = acpi_res_io(&res, 0);
 	if (io == NULL) {
-		aprint_error("%s: unable to find i/o register resource\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self,
+		    "unable to find i/o register resource\n");
 		acpi_resource_cleanup(&res);
 		return;
 	}
 
 	if (bus_space_map(aa->aa_iot, io->ar_base, io->ar_length,
 	    0, &ioh)) {
-		aprint_error("%s: can't map i/o space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		acpi_resource_cleanup(&res);
 		return;
 	}
 
-	aprint_normal("%s", sc->sc_dev.dv_xname);
+	aprint_normal("%s", device_xname(self));
 
 	sc->version = 2;	/* uGuru 2005 */
 	sc->sc_ioh = ioh;
 	sc->sc_iot = aa->aa_iot;
-	ug2_attach(sc);
+	ug2_attach(self);
 
 	acpi_resource_cleanup(&res);
 }

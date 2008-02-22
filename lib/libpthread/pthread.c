@@ -1,7 +1,7 @@
-/*	$NetBSD: pthread.c,v 1.96 2008/01/08 20:56:08 christos Exp $	*/
+/*	$NetBSD: pthread.c,v 1.151 2017/12/08 09:24:31 kre Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2002, 2003, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,43 +30,56 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread.c,v 1.96 2008/01/08 20:56:08 christos Exp $");
+__RCSID("$NetBSD: pthread.c,v 1.151 2017/12/08 09:24:31 kre Exp $");
 
 #define	__EXPOSE_STACK	1
 
 #include <sys/param.h>
+#include <sys/exec_elf.h>
 #include <sys/mman.h>
-#include <sys/sysctl.h>
+#include <sys/lwp.h>
 #include <sys/lwpctl.h>
+#include <sys/resource.h>
+#include <sys/sysctl.h>
+#include <sys/tls.h>
+#include <uvm/uvm_param.h>
 
+#include <assert.h>
+#include <dlfcn.h>
 #include <err.h>
 #include <errno.h>
 #include <lwp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <syslog.h>
 #include <ucontext.h>
 #include <unistd.h>
 #include <sched.h>
 
+#include "atexit.h"
 #include "pthread.h"
 #include "pthread_int.h"
+#include "pthread_makelwp.h"
+#include "reentrant.h"
 
 pthread_rwlock_t pthread__alltree_lock = PTHREAD_RWLOCK_INITIALIZER;
-RB_HEAD(__pthread__alltree, __pthread_st) pthread__alltree;
+static rb_tree_t	pthread__alltree;
 
-#ifndef lint
-static int	pthread__cmp(struct __pthread_st *, struct __pthread_st *);
-RB_PROTOTYPE_STATIC(__pthread__alltree, __pthread_st, pt_alltree, pthread__cmp)
-#endif
+static signed int	pthread__cmp(void *, const void *, const void *);
 
-static void	pthread__create_tramp(pthread_t, void *(*)(void *), void *);
+static const rb_tree_ops_t pthread__alltree_ops = {
+	.rbto_compare_nodes = pthread__cmp,
+	.rbto_compare_key = pthread__cmp,
+	.rbto_node_offset = offsetof(struct __pthread_st, pt_alltree),
+	.rbto_context = NULL
+};
+
+static void	pthread__create_tramp(void *);
 static void	pthread__initthread(pthread_t);
 static void	pthread__scrubthread(pthread_t, char *, int);
-static int	pthread__stackid_setup(void *, size_t, pthread_t *);
-static int	pthread__stackalloc(pthread_t *);
 static void	pthread__initmain(pthread_t *);
 static void	pthread__fork_callback(void);
 static void	pthread__reap(pthread_t);
@@ -83,13 +89,13 @@ static void	pthread__start(void);
 void	pthread__init(void);
 
 int pthread__started;
+int __uselibcstub = 1;
 pthread_mutex_t pthread__deadqueue_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_queue_t pthread__deadqueue;
 pthread_queue_t pthread__allqueue;
 
 static pthread_attr_t pthread_default_attr;
 static lwpctl_t pthread__dummy_lwpctl = { .lc_curcpu = LWPCTL_CPU_NONE };
-static pthread_t pthread__first;
 
 enum {
 	DIAGASSERT_ABORT =	1<<0,
@@ -97,12 +103,12 @@ enum {
 	DIAGASSERT_SYSLOG =	1<<2
 };
 
-static int pthread__diagassert = DIAGASSERT_ABORT | DIAGASSERT_STDERR;
+static int pthread__diagassert;
 
 int pthread__concurrency;
 int pthread__nspins;
 int pthread__unpark_max = PTHREAD__UNPARK_MAX;
-int pthread__osrev;
+int pthread__dbg;	/* set by libpthread_dbg if active */
 
 /* 
  * We have to initialize the pthread_stack* variables here because
@@ -111,12 +117,11 @@ int pthread__osrev;
  * pointer to the thread data, it is safe to change the mapping from
  * stack pointer to thread data afterwards.
  */
-#define	_STACKSIZE_LG 18
-int	pthread__stacksize_lg = _STACKSIZE_LG;
-size_t	pthread__stacksize = 1 << _STACKSIZE_LG;
-vaddr_t	pthread__stackmask = (1 << _STACKSIZE_LG) - 1;
-vaddr_t pthread__threadmask = (vaddr_t)~((1 << _STACKSIZE_LG) - 1);
-#undef	_STACKSIZE_LG
+size_t	pthread__stacksize;
+size_t	pthread__guardsize;
+size_t	pthread__pagesize;
+static struct __pthread_st *pthread__main;
+static size_t __pthread_st_size;
 
 int _sys___sigprocmask14(int, const sigset_t *, sigset_t *);
 
@@ -144,6 +149,13 @@ void *pthread__static_lib_binder[] = {
 	pthread_setspecific,
 };
 
+#define	NHASHLOCK	64
+
+static union hashlock {
+	pthread_mutex_t	mutex;
+	char		pad[64];
+} hashlocks[NHASHLOCK] __aligned(64);
+
 /*
  * This needs to be started by the library loading code, before main()
  * gets to run, for various things that use the state of the initial thread
@@ -155,31 +167,46 @@ pthread__init(void)
 {
 	pthread_t first;
 	char *p;
-	int i, mib[2];
+	int i;
+	int mib[2];
+	unsigned int value;
 	size_t len;
 	extern int __isthreaded;
 
-	mib[0] = CTL_HW;
-	mib[1] = HW_NCPU; 
+	/*
+	 * Allocate pthread_keys descriptors before
+	 * reseting __uselibcstub because otherwise 
+	 * malloc() will call pthread_keys_create()
+	 * while pthread_keys descriptors are not 
+	 * yet allocated.
+	 */
+	pthread__main = pthread_tsd_init(&__pthread_st_size);
+	if (pthread__main == NULL)
+		err(EXIT_FAILURE, "Cannot allocate pthread storage");
 
-	len = sizeof(pthread__concurrency);
-	if (sysctl(mib, 2, &pthread__concurrency, &len, NULL, 0) == -1)
-		err(1, "sysctl(hw.ncpu");
+	__uselibcstub = 0;
 
-	mib[0] = CTL_KERN;
-	mib[1] = KERN_OSREV; 
+	pthread__pagesize = (size_t)sysconf(_SC_PAGESIZE);
+	pthread__concurrency = (int)sysconf(_SC_NPROCESSORS_CONF);
 
-	len = sizeof(pthread__osrev);
-	if (sysctl(mib, 2, &pthread__osrev, &len, NULL, 0) == -1)
-		err(1, "sysctl(hw.osrevision");
+	mib[0] = CTL_VM;
+	mib[1] = VM_THREAD_GUARD_SIZE;
+	len = sizeof(value);
+	if (sysctl(mib, __arraycount(mib), &value, &len, NULL, 0) == 0)
+		pthread__guardsize = value;
+	else
+		pthread__guardsize = pthread__pagesize;
 
 	/* Initialize locks first; they're needed elsewhere. */
 	pthread__lockprim_init();
+	for (i = 0; i < NHASHLOCK; i++) {
+		pthread_mutex_init(&hashlocks[i].mutex, NULL);
+	}
 
 	/* Fetch parameters. */
 	i = (int)_lwp_unpark_all(NULL, 0, NULL);
 	if (i == -1)
-		err(1, "_lwp_unpark_all");
+		err(EXIT_FAILURE, "_lwp_unpark_all");
 	if (i < pthread__unpark_max)
 		pthread__unpark_max = i;
 
@@ -187,7 +214,8 @@ pthread__init(void)
 	pthread_attr_init(&pthread_default_attr);
 	PTQ_INIT(&pthread__allqueue);
 	PTQ_INIT(&pthread__deadqueue);
-	RB_INIT(&pthread__alltree);
+
+	rb_tree_init(&pthread__alltree, &pthread__alltree_ops);
 
 	/* Create the thread structure corresponding to main() */
 	pthread__initmain(&first);
@@ -196,9 +224,11 @@ pthread__init(void)
 
 	first->pt_lid = _lwp_self();
 	PTQ_INSERT_HEAD(&pthread__allqueue, first, pt_allq);
-	RB_INSERT(__pthread__alltree, &pthread__alltree, first);
+	(void)rb_tree_insert_node(&pthread__alltree, first);
 
-	(void)_lwp_ctl(LWPCTL_FEATURE_CURCPU, &first->pt_lwpctl);
+	if (_lwp_ctl(LWPCTL_FEATURE_CURCPU, &first->pt_lwpctl) != 0) {
+		err(EXIT_FAILURE, "_lwp_ctl");
+	}
 
 	/* Start subsystems */
 	PTHREAD_MD_INIT
@@ -227,7 +257,6 @@ pthread__init(void)
 	}
 
 	/* Tell libc that we're here and it should role-play accordingly. */
-	pthread__first = first;
 	pthread_atfork(NULL, NULL, pthread__fork_callback);
 	__isthreaded = 1;
 }
@@ -235,9 +264,13 @@ pthread__init(void)
 static void
 pthread__fork_callback(void)
 {
+	struct __pthread_st *self = pthread__self();
 
 	/* lwpctl state is not copied across fork. */
-	(void)_lwp_ctl(LWPCTL_FEATURE_CURCPU, &pthread__first->pt_lwpctl);
+	if (_lwp_ctl(LWPCTL_FEATURE_CURCPU, &self->pt_lwpctl)) {
+		err(EXIT_FAILURE, "_lwp_ctl");
+	}
+	self->pt_lid = _lwp_self();
 }
 
 static void
@@ -280,7 +313,6 @@ pthread__initthread(pthread_t t)
 	t->pt_magic = PT_MAGIC;
 	t->pt_willpark = 0;
 	t->pt_unpark = 0;
-	t->pt_sleeponq = 0;
 	t->pt_nwaiters = 0;
 	t->pt_sleepobj = NULL;
 	t->pt_signalled = 0;
@@ -294,7 +326,6 @@ pthread__initthread(pthread_t t)
 	pthread_mutex_init(&t->pt_lock, NULL);
 	PTQ_INIT(&t->pt_cleanup_stack);
 	pthread_cond_init(&t->pt_joiners, NULL);
-	memset(&t->pt_specific, 0, sizeof(t->pt_specific));
 }
 
 static void
@@ -310,6 +341,72 @@ pthread__scrubthread(pthread_t t, char *name, int flags)
 	t->pt_lid = 0;
 }
 
+static int
+pthread__getstack(pthread_t newthread, const pthread_attr_t *attr)
+{
+	void *stackbase, *stackbase2, *redzone;
+	size_t stacksize, guardsize;
+	bool allocated;
+
+	if (attr != NULL) {
+		pthread_attr_getstack(attr, &stackbase, &stacksize);
+		pthread_attr_getguardsize(attr, &guardsize);
+	} else {
+		stackbase = NULL;
+		stacksize = 0;
+		guardsize = pthread__guardsize;
+	}
+	if (stacksize == 0)
+		stacksize = pthread__stacksize;
+
+	if (newthread->pt_stack_allocated) {
+		if (stackbase == NULL &&
+		    newthread->pt_stack.ss_size == stacksize &&
+		    newthread->pt_guardsize == guardsize)
+			return 0;
+		stackbase2 = newthread->pt_stack.ss_sp;
+#ifndef __MACHINE_STACK_GROWS_UP
+		stackbase2 = (char *)stackbase2 - newthread->pt_guardsize;
+#endif
+		munmap(stackbase2,
+		    newthread->pt_stack.ss_size + newthread->pt_guardsize);
+		newthread->pt_stack.ss_sp = NULL;
+		newthread->pt_stack.ss_size = 0;
+		newthread->pt_guardsize = 0;
+		newthread->pt_stack_allocated = false;
+	}
+
+	newthread->pt_stack_allocated = false;
+
+	if (stackbase == NULL) {
+		stacksize = ((stacksize - 1) | (pthread__pagesize - 1)) + 1;
+		guardsize = ((guardsize - 1) | (pthread__pagesize - 1)) + 1;
+		stackbase = mmap(NULL, stacksize + guardsize,
+		    PROT_READ|PROT_WRITE, MAP_ANON|MAP_PRIVATE, -1, (off_t)0);
+		if (stackbase == MAP_FAILED)
+			return ENOMEM;
+		allocated = true;
+	} else {
+		allocated = false;
+	}
+#ifdef __MACHINE_STACK_GROWS_UP
+	redzone = (char *)stackbase + stacksize;
+	stackbase2 = (char *)stackbase;
+#else
+	redzone = (char *)stackbase;
+	stackbase2 = (char *)stackbase + guardsize;
+#endif
+	if (allocated && guardsize &&
+	    mprotect(redzone, guardsize, PROT_NONE) == -1) {
+		munmap(stackbase, stacksize + guardsize);
+		return EPERM;
+	}
+	newthread->pt_stack.ss_size = stacksize;
+	newthread->pt_stack.ss_sp = stackbase2;
+	newthread->pt_guardsize = guardsize;
+	newthread->pt_stack_allocated = allocated;
+	return 0;
+}
 
 int
 pthread_create(pthread_t *thread, const pthread_attr_t *attr,
@@ -320,7 +417,14 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 	struct pthread_attr_private *p;
 	char * volatile name;
 	unsigned long flag;
+	void *private_area;
 	int ret;
+
+	if (__predict_false(__uselibcstub)) {
+    		pthread__errorfunc(__FILE__, __LINE__, __func__,
+		    "pthread_create() requires linking with -lpthread");
+		return __libc_thr_create_stub(thread, attr, startfunc, arg);
+	}
 
 	/*
 	 * It's okay to check this without a lock because there can
@@ -352,23 +456,23 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 	 */
 	if (!PTQ_EMPTY(&pthread__deadqueue)) {
 		pthread_mutex_lock(&pthread__deadqueue_lock);
-		newthread = PTQ_FIRST(&pthread__deadqueue);
-		if (newthread != NULL) {
-			PTQ_REMOVE(&pthread__deadqueue, newthread, pt_deadq);
-			pthread_mutex_unlock(&pthread__deadqueue_lock);
+		PTQ_FOREACH(newthread, &pthread__deadqueue, pt_deadq) {
 			/* Still running? */
-			if (newthread->pt_lwpctl->lc_curcpu !=
-			    LWPCTL_CPU_EXITED &&
-			    (_lwp_kill(newthread->pt_lid, 0) == 0 ||
-			    errno != ESRCH)) {
-				pthread_mutex_lock(&pthread__deadqueue_lock);
-				PTQ_INSERT_TAIL(&pthread__deadqueue,
-				    newthread, pt_deadq);
-				pthread_mutex_unlock(&pthread__deadqueue_lock);
-				newthread = NULL;
-			}
-		} else
-			pthread_mutex_unlock(&pthread__deadqueue_lock);
+			if (newthread->pt_lwpctl->lc_curcpu ==
+			    LWPCTL_CPU_EXITED ||
+			    (_lwp_kill(newthread->pt_lid, 0) == -1 &&
+			    errno == ESRCH))
+				break;
+		}
+		if (newthread)
+			PTQ_REMOVE(&pthread__deadqueue, newthread, pt_deadq);
+		pthread_mutex_unlock(&pthread__deadqueue_lock);
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+		if (newthread && newthread->pt_tls) {
+			_rtld_tls_free(newthread->pt_tls);
+			newthread->pt_tls = NULL;
+		}
+#endif
 	}
 
 	/*
@@ -376,49 +480,77 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 	 * and initialize it.
 	 */
 	if (newthread == NULL) {
-		ret = pthread__stackalloc(&newthread);
-		if (ret != 0) {
-			if (name)
-				free(name);
-			return ret;
+		newthread = calloc(1, __pthread_st_size);
+		if (newthread == NULL) {
+			free(name);
+			return ENOMEM;
+		}
+		newthread->pt_stack_allocated = false;
+
+		if (pthread__getstack(newthread, attr)) {
+			free(newthread);
+			free(name);
+			return ENOMEM;
 		}
 
-		/* This is used only when creating the thread. */
-		_INITCONTEXT_U(&newthread->pt_uc);
-#ifdef PTHREAD_MACHINE_HAS_ID_REGISTER
-		pthread__uc_id(&newthread->pt_uc) = newthread;
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+		newthread->pt_tls = NULL;
 #endif
-		newthread->pt_uc.uc_stack = newthread->pt_stack;
-		newthread->pt_uc.uc_link = NULL;
 
 		/* Add to list of all threads. */
 		pthread_rwlock_wrlock(&pthread__alltree_lock);
 		PTQ_INSERT_TAIL(&pthread__allqueue, newthread, pt_allq);
-		RB_INSERT(__pthread__alltree, &pthread__alltree, newthread);
+		(void)rb_tree_insert_node(&pthread__alltree, newthread);
 		pthread_rwlock_unlock(&pthread__alltree_lock);
 
 		/* Will be reset by the thread upon exit. */
 		pthread__initthread(newthread);
+	} else {
+		if (pthread__getstack(newthread, attr)) {
+			pthread_mutex_lock(&pthread__deadqueue_lock);
+			PTQ_INSERT_TAIL(&pthread__deadqueue, newthread, pt_deadq);
+			pthread_mutex_unlock(&pthread__deadqueue_lock);
+			return ENOMEM;
+		}
 	}
 
 	/*
 	 * Create the new LWP.
 	 */
 	pthread__scrubthread(newthread, name, nattr.pta_flags);
-	makecontext(&newthread->pt_uc, pthread__create_tramp, 3,
-	    newthread, startfunc, arg);
+	newthread->pt_func = startfunc;
+	newthread->pt_arg = arg;
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	private_area = newthread->pt_tls = _rtld_tls_allocate();
+	newthread->pt_tls->tcb_pthread = newthread;
+#else
+	private_area = newthread;
+#endif
 
 	flag = LWP_DETACHED;
-	if ((newthread->pt_flags & PT_FLAG_SUSPENDED) != 0)
+	if ((newthread->pt_flags & PT_FLAG_SUSPENDED) != 0 ||
+	    (nattr.pta_flags & PT_FLAG_EXPLICIT_SCHED) != 0)
 		flag |= LWP_SUSPENDED;
-	ret = _lwp_create(&newthread->pt_uc, flag, &newthread->pt_lid);
+
+	ret = pthread__makelwp(pthread__create_tramp, newthread, private_area,
+	    newthread->pt_stack.ss_sp, newthread->pt_stack.ss_size,
+	    flag, &newthread->pt_lid);
 	if (ret != 0) {
-		free(name);
-		newthread->pt_state = PT_STATE_DEAD;
-		pthread_mutex_lock(&pthread__deadqueue_lock);
-		PTQ_INSERT_HEAD(&pthread__deadqueue, newthread, pt_deadq);
-		pthread_mutex_unlock(&pthread__deadqueue_lock);
+		ret = errno;
+		pthread_mutex_lock(&newthread->pt_lock);
+		/* Will unlock and free name. */
+		pthread__reap(newthread);
 		return ret;
+	}
+
+	if ((nattr.pta_flags & PT_FLAG_EXPLICIT_SCHED) != 0) {
+		if (p != NULL) {
+			(void)pthread_setschedparam(newthread, p->ptap_policy,
+			    &p->ptap_sp);
+		}
+		if ((newthread->pt_flags & PT_FLAG_SUSPENDED) == 0) {
+			(void)_lwp_continue(newthread->pt_lid);
+		}
 	}
 
 	*thread = newthread;
@@ -427,22 +559,22 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 }
 
 
-static void
-pthread__create_tramp(pthread_t self, void *(*start)(void *), void *arg)
+__dead static void
+pthread__create_tramp(void *cookie)
 {
+	pthread_t self;
 	void *retval;
 
-#ifdef PTHREAD__HAVE_THREADREG
-	/* Set up identity register. */
-	pthread__threadreg_set(self);
-#endif
+	self = cookie;
 
 	/*
 	 * Throw away some stack in a feeble attempt to reduce cache
 	 * thrash.  May help for SMT processors.  XXX We should not
 	 * be allocating stacks on fixed 2MB boundaries.  Needs a
-	 * thread register or decent thread local storage.  Note
-	 * that pt_lid may not be set by this point, but we don't
+	 * thread register or decent thread local storage.
+	 *
+	 * Note that we may race with the kernel in _lwp_create(),
+	 * and so pt_lid can be unset at this point, but we don't
 	 * care.
 	 */
 	(void)alloca(((unsigned)self->pt_lid & 7) << 8);
@@ -454,9 +586,11 @@ pthread__create_tramp(pthread_t self, void *(*start)(void *), void *arg)
 		pthread_mutex_unlock(&self->pt_lock);
 	}
 
-	(void)_lwp_ctl(LWPCTL_FEATURE_CURCPU, &self->pt_lwpctl);
+	if (_lwp_ctl(LWPCTL_FEATURE_CURCPU, &self->pt_lwpctl)) {
+		err(EXIT_FAILURE, "_lwp_ctl");
+	}
 
-	retval = (*start)(arg);
+	retval = (*self->pt_func)(self->pt_arg);
 
 	pthread_exit(retval);
 
@@ -498,6 +632,11 @@ pthread_exit(void *retval)
 	struct pt_clean_t *cleanup;
 	char *name;
 
+	if (__predict_false(__uselibcstub)) {
+		__libc_thr_exit_stub(retval);
+		goto out;
+	}
+
 	self = pthread__self();
 
 	/* Disable cancellability. */
@@ -515,6 +654,10 @@ pthread_exit(void *retval)
 		}
 		pthread_mutex_lock(&self->pt_lock);
 	}
+
+	pthread_mutex_unlock(&self->pt_lock);
+	__cxa_thread_run_atexit();
+	pthread_mutex_lock(&self->pt_lock);
 
 	/* Perform cleanup of thread-specific data */
 	pthread__destroy_tsd(self);
@@ -540,6 +683,7 @@ pthread_exit(void *retval)
 		_lwp_exit();
 	}
 
+out:
 	/*NOTREACHED*/
 	pthread__abort();
 	exit(1);
@@ -586,6 +730,7 @@ pthread_join(pthread_t thread, void **valptr)
 		}
 
 	}
+	pthread__testcancel(self);
 	if (valptr != NULL)
 		*valptr = thread->pt_exitval;
 	/* pthread__reap() will drop the lock. */
@@ -616,6 +761,8 @@ pthread__reap(pthread_t thread)
 int
 pthread_equal(pthread_t t1, pthread_t t2)
 {
+	if (__predict_false(__uselibcstub))
+		return __libc_thr_equal_stub(t1, t2);
 
 	/* Nothing special here. */
 	return (t1 == t2);
@@ -715,6 +862,8 @@ pthread_setname_np(pthread_t thread, const char *name, void *arg)
 pthread_t
 pthread_self(void)
 {
+	if (__predict_false(__uselibcstub))
+		return (pthread_t)__libc_thr_self_stub();
 
 	return pthread__self();
 }
@@ -744,6 +893,9 @@ pthread_setcancelstate(int state, int *oldstate)
 {
 	pthread_t self;
 	int retval;
+
+	if (__predict_false(__uselibcstub))
+		return __libc_thr_setcancelstate_stub(state, oldstate);
 
 	self = pthread__self();
 	retval = 0;
@@ -836,24 +988,20 @@ pthread_testcancel(void)
 /*
  * POSIX requires that certain functions return an error rather than
  * invoking undefined behavior even when handed completely bogus
- * pthread_t values, e.g. stack garbage or (pthread_t)666. This
- * utility routine searches the list of threads for the pthread_t
- * value without dereferencing it.
+ * pthread_t values, e.g. stack garbage.
  */
 int
 pthread__find(pthread_t id)
 {
 	pthread_t target;
+	int error;
 
 	pthread_rwlock_rdlock(&pthread__alltree_lock);
-	/* LINTED */
-	target = RB_FIND(__pthread__alltree, &pthread__alltree, id);
+	target = rb_tree_find_node(&pthread__alltree, id);
+	error = (target && target->pt_state != PT_STATE_DEAD) ? 0 : ESRCH;
 	pthread_rwlock_unlock(&pthread__alltree_lock);
 
-	if (target == NULL || target->pt_state == PT_STATE_DEAD)
-		return ESRCH;
-
-	return 0;
+	return error;
 }
 
 
@@ -916,6 +1064,12 @@ int *
 pthread__errno(void)
 {
 	pthread_t self;
+
+	if (__predict_false(__uselibcstub)) {
+    		pthread__errorfunc(__FILE__, __LINE__, __func__,
+		    "pthread__errno() requires linking with -lpthread");
+		return __libc_thr_errno_stub();
+	}
 
 	self = pthread__self();
 
@@ -996,22 +1150,21 @@ pthread__errorfunc(const char *file, int line, const char *function,
     pthread__errorfunc(__FILE__, __LINE__, __func__, msg)
 
 int
-pthread__park(pthread_t self, pthread_spin_t *lock,
+pthread__park(pthread_t self, pthread_mutex_t *lock,
 	      pthread_queue_t *queue, const struct timespec *abstime,
 	      int cancelpt, const void *hint)
 {
 	int rv, error;
 	void *obj;
 
-	/* Clear the willpark flag, since we're about to block. */
-	self->pt_willpark = 0;
-
 	/*
 	 * For non-interlocked release of mutexes we need a store
 	 * barrier before incrementing pt_blocking away from zero. 
-	 * This is provided by the caller (it will release an
-	 * interlock, or do an explicit barrier).
+	 * This is provided by pthread_mutex_unlock().
 	 */
+	self->pt_willpark = 1;
+	pthread_mutex_unlock(lock);
+	self->pt_willpark = 0;
 	self->pt_blocking++;
 
 	/*
@@ -1019,8 +1172,8 @@ pthread__park(pthread_t self, pthread_spin_t *lock,
 	 * a signal, an unpark posted after we have gone asleep,
 	 * or an expired timeout.
 	 *
-	 * It is fine to test the value of both pt_sleepobj and
-	 * pt_sleeponq without holding any locks, because:
+	 * It is fine to test the value of pt_sleepobj without
+	 * holding any locks, because:
 	 *
 	 * o Only the blocking thread (this thread) ever sets them
 	 *   to a non-NULL value.
@@ -1044,13 +1197,13 @@ pthread__park(pthread_t self, pthread_spin_t *lock,
 	 * to eat the previous wakeup.
 	 */
 	rv = 0;
-	while ((self->pt_sleepobj != NULL || self->pt_unpark != 0) && rv == 0) {
+	do {
 		/*
 		 * If we deferred unparking a thread, arrange to
 		 * have _lwp_park() restart it before blocking.
 		 */
-		error = _lwp_park(abstime, self->pt_unpark, hint,
-		    self->pt_unparkhint);
+		error = _lwp_park(CLOCK_REALTIME, TIMER_ABSTIME,
+		    __UNCONST(abstime), self->pt_unpark, hint, hint);
 		self->pt_unpark = 0;
 		if (error != 0) {
 			switch (rv = errno) {
@@ -1068,198 +1221,117 @@ pthread__park(pthread_t self, pthread_spin_t *lock,
 		/* Check for cancellation. */
 		if (cancelpt && self->pt_cancel)
 			rv = EINTR;
-	}
+	} while (self->pt_sleepobj != NULL && rv == 0);
 
 	/*
 	 * If we have been awoken early but are still on the queue,
 	 * then remove ourself.  Again, it's safe to do the test
 	 * without holding any locks.
 	 */
-	if (__predict_false(self->pt_sleeponq)) {
-		pthread__spinlock(self, lock);
-		if (self->pt_sleeponq) {
+	if (__predict_false(self->pt_sleepobj != NULL)) {
+		pthread_mutex_lock(lock);
+		if ((obj = self->pt_sleepobj) != NULL) {
 			PTQ_REMOVE(queue, self, pt_sleep);
-			obj = self->pt_sleepobj;
 			self->pt_sleepobj = NULL;
-			self->pt_sleeponq = 0;
 			if (obj != NULL && self->pt_early != NULL)
 				(*self->pt_early)(obj);
 		}
-		pthread__spinunlock(self, lock);
+		pthread_mutex_unlock(lock);
 	}
 	self->pt_early = NULL;
 	self->pt_blocking--;
+	membar_sync();
 
 	return rv;
 }
 
 void
-pthread__unpark(pthread_t self, pthread_spin_t *lock,
-		pthread_queue_t *queue, pthread_t target)
+pthread__unpark(pthread_queue_t *queue, pthread_t self,
+		pthread_mutex_t *interlock)
 {
-	int rv;
+	pthread_t target;
+	u_int max;
+	size_t nwaiters;
 
-	if (target == NULL) {
-		pthread__spinunlock(self, lock);
-		return;
+	max = pthread__unpark_max;
+	nwaiters = self->pt_nwaiters;
+	target = PTQ_FIRST(queue);
+	if (nwaiters == max) {
+		/* Overflow. */
+		(void)_lwp_unpark_all(self->pt_waiters, nwaiters,
+		    __UNVOLATILE(&interlock->ptm_waiters));
+		nwaiters = 0;
 	}
-
-	/*
-	 * Easy: the thread has already been removed from
-	 * the queue, so just awaken it.
-	 */
 	target->pt_sleepobj = NULL;
-	target->pt_sleeponq = 0;
-
-	/*
-	 * Releasing the spinlock serves as a store barrier,
-	 * which ensures that all our modifications are visible
-	 * to the thread in pthread__park() before the unpark
-	 * operation is set in motion.
-	 */
-	pthread__spinunlock(self, lock);
-
-	/*
-	 * If the calling thread is about to block, defer
-	 * unparking the target until _lwp_park() is called.
-	 */
-	if (self->pt_willpark && self->pt_unpark == 0) {
-		self->pt_unpark = target->pt_lid;
-		self->pt_unparkhint = queue;
-	} else {
-		rv = _lwp_unpark(target->pt_lid, queue);
-		if (rv != 0 && errno != EALREADY && errno != EINTR) {
-			OOPS("_lwp_unpark failed");
-		}
-	}
+	self->pt_waiters[nwaiters++] = target->pt_lid;
+	PTQ_REMOVE(queue, target, pt_sleep);
+	self->pt_nwaiters = nwaiters;
+	pthread__mutex_deferwake(self, interlock);
 }
 
 void
-pthread__unpark_all(pthread_t self, pthread_spin_t *lock,
-		    pthread_queue_t *queue)
+pthread__unpark_all(pthread_queue_t *queue, pthread_t self,
+		    pthread_mutex_t *interlock)
 {
-	ssize_t n, rv;
-	pthread_t thread, next;
-	void *wakeobj;
+	pthread_t target;
+	u_int max;
+	size_t nwaiters;
 
-	if (PTQ_EMPTY(queue) && self->pt_nwaiters == 0) {
-		pthread__spinunlock(self, lock);
-		return;
-	}
-
-	wakeobj = queue;
-
-	for (;;) {
-		/*
-		 * Pull waiters from the queue and add to this
-		 * thread's waiters list.
-		 */
-		thread = PTQ_FIRST(queue);
-		for (n = self->pt_nwaiters, self->pt_nwaiters = 0;
-		    n < pthread__unpark_max && thread != NULL;
-		    thread = next) {
-			/*
-			 * If the sleepobj pointer is non-NULL, it
-			 * means one of two things:
-			 *
-			 * o The thread has awoken early, spun
-			 *   through application code and is
-			 *   once more asleep on this object.
-			 *
-			 * o This is a new thread that has blocked
-			 *   on the object after we have released
-			 *   the interlock in this loop.
-			 *
-			 * In both cases we shouldn't remove the
-			 * thread from the queue.
-			 */
-			next = PTQ_NEXT(thread, pt_sleep);
-			if (thread->pt_sleepobj != wakeobj)
-				continue;
-			thread->pt_sleepobj = NULL;
-			thread->pt_sleeponq = 0;
-			self->pt_waiters[n++] = thread->pt_lid;
-			PTQ_REMOVE(queue, thread, pt_sleep);
+	max = pthread__unpark_max;
+	nwaiters = self->pt_nwaiters;
+	PTQ_FOREACH(target, queue, pt_sleep) {
+		if (nwaiters == max) {
+			/* Overflow. */
+			(void)_lwp_unpark_all(self->pt_waiters, nwaiters,
+			    __UNVOLATILE(&interlock->ptm_waiters));
+			nwaiters = 0;
 		}
-
-		/*
-		 * Releasing the spinlock serves as a store barrier,
-		 * which ensures that all our modifications are visible
-		 * to the thread in pthread__park() before the unpark
-		 * operation is set in motion.
-		 */
-		switch (n) {
-		case 0:
-			pthread__spinunlock(self, lock);
-			return;
-		case 1:
-			/*
-			 * If the calling thread is about to block,
-			 * defer unparking the target until _lwp_park()
-			 * is called.
-			 */
-			pthread__spinunlock(self, lock);
-			if (self->pt_willpark && self->pt_unpark == 0) {
-				self->pt_unpark = self->pt_waiters[0];
-				self->pt_unparkhint = queue;
-				return;
-			}
-			rv = (ssize_t)_lwp_unpark(self->pt_waiters[0], queue);
-			if (rv != 0 && errno != EALREADY && errno != EINTR) {
-				OOPS("_lwp_unpark failed");
-			}
-			return;
-		default:
-			/*
-			 * Clear all sleepobj pointers, since we
-			 * release the spin lock before awkening
-			 * everybody, and must synchronise with
-			 * pthread__park().
-			 */
-			while (thread != NULL) {
-				thread->pt_sleepobj = NULL;
-				thread = PTQ_NEXT(thread, pt_sleep);
-			}
-			/* 
-			 * Now only interested in waking threads
-			 * marked to be woken (sleepobj == NULL).
-			 */
-			wakeobj = NULL;
-			pthread__spinunlock(self, lock);
-			rv = _lwp_unpark_all(self->pt_waiters, (size_t)n,
-			    queue);
-			if (rv != 0 && errno != EINTR) {
-				OOPS("_lwp_unpark_all failed");
-			}
-			break;
-		}
-		pthread__spinlock(self, lock);
+		target->pt_sleepobj = NULL;
+		self->pt_waiters[nwaiters++] = target->pt_lid;
 	}
+	self->pt_nwaiters = nwaiters;
+	PTQ_INIT(queue);
+	pthread__mutex_deferwake(self, interlock);
 }
 
 #undef	OOPS
 
-/*
- * Allocate a stack for a thread, and set it up. It needs to be aligned, so 
- * that a thread can find itself by its stack pointer. 
- */
-static int
-pthread__stackalloc(pthread_t *newt)
+static void
+pthread__initmainstack(void)
 {
-	void *addr;
+	struct rlimit slimit;
+	const AuxInfo *aux;
+	size_t size, len;
+	int mib[2];
+	unsigned int value;
 
-	addr = mmap(NULL, pthread__stacksize, PROT_READ|PROT_WRITE,
-	    MAP_ANON|MAP_PRIVATE | MAP_ALIGNED(pthread__stacksize_lg),
-	    -1, (off_t)0);
+	_DIAGASSERT(_dlauxinfo() != NULL);
 
-	if (addr == MAP_FAILED)
-		return ENOMEM;
+	if (getrlimit(RLIMIT_STACK, &slimit) == -1)
+		err(EXIT_FAILURE,
+		    "Couldn't get stack resource consumption limits");
+	size = slimit.rlim_cur;
+	pthread__main->pt_stack.ss_size = size;
+	pthread__main->pt_guardsize = pthread__pagesize;
 
-	pthread__assert(((intptr_t)addr & pthread__stackmask) == 0);
+	mib[0] = CTL_VM;
+	mib[1] = VM_GUARD_SIZE;
+	len = sizeof(value);
+	if (sysctl(mib, __arraycount(mib), &value, &len, NULL, 0) == 0)
+		pthread__main->pt_guardsize = value;
 
-	return pthread__stackid_setup(addr, pthread__stacksize, newt); 
+	for (aux = _dlauxinfo(); aux->a_type != AT_NULL; ++aux) {
+		if (aux->a_type == AT_STACKBASE) {
+			pthread__main->pt_stack.ss_sp = (void *)aux->a_v;
+#ifdef __MACHINE_STACK_GROWS_UP
+			pthread__main->pt_stack.ss_sp = (void *)aux->a_v;
+#else
+			pthread__main->pt_stack.ss_sp = (char *)aux->a_v - size;
+#endif
+			break;
+		}
+	}
 }
-
 
 /*
  * Set up the slightly special stack for the "initial" thread, which
@@ -1269,109 +1341,89 @@ pthread__stackalloc(pthread_t *newt)
 static void
 pthread__initmain(pthread_t *newt)
 {
-	struct rlimit slimit;
-	size_t pagesize;
-	pthread_t t;
-	void *base;
-	size_t size;
-	int error, ret;
 	char *value;
 
-	pagesize = (size_t)sysconf(_SC_PAGESIZE);
-	pthread__stacksize = 0;
-	ret = getrlimit(RLIMIT_STACK, &slimit);
-	if (ret == -1)
-		err(1, "Couldn't get stack resource consumption limits");
+	pthread__initmainstack();
 
 	value = pthread__getenv("PTHREAD_STACKSIZE");
 	if (value != NULL) {
 		pthread__stacksize = atoi(value) * 1024;
-		if (pthread__stacksize > slimit.rlim_cur)
-			pthread__stacksize = (size_t)slimit.rlim_cur;
+		if (pthread__stacksize > pthread__main->pt_stack.ss_size)
+			pthread__stacksize = pthread__main->pt_stack.ss_size;
 	}
 	if (pthread__stacksize == 0)
-		pthread__stacksize = (size_t)slimit.rlim_cur;
-	if (pthread__stacksize < 4 * pagesize)
+		pthread__stacksize = pthread__main->pt_stack.ss_size;
+	pthread__stacksize += pthread__pagesize - 1;
+	pthread__stacksize &= ~(pthread__pagesize - 1);
+	if (pthread__stacksize < 4 * pthread__pagesize)
 		errx(1, "Stacksize limit is too low, minimum %zd kbyte.",
-		    4 * pagesize / 1024);
+		    4 * pthread__pagesize / 1024);
 
-	pthread__stacksize_lg = -1;
-	while (pthread__stacksize) {
-		pthread__stacksize >>= 1;
-		pthread__stacksize_lg++;
-	}
-
-	pthread__stacksize = (1 << pthread__stacksize_lg);
-	pthread__stackmask = pthread__stacksize - 1;
-	pthread__threadmask = ~pthread__stackmask;
-
-	base = (void *)(pthread__sp() & pthread__threadmask);
-	size = pthread__stacksize;
-
-	error = pthread__stackid_setup(base, size, &t);
-	if (error) {
-		/* XXX */
-		errx(2, "failed to setup main thread: error=%d", error);
-	}
-
-	*newt = t;
-
-#ifdef PTHREAD__HAVE_THREADREG
-	/* Set up identity register. */
-	pthread__threadreg_set(t);
+	*newt = pthread__main;
+#if defined(_PTHREAD_GETTCB_EXT)
+	pthread__main->pt_tls = _PTHREAD_GETTCB_EXT();
+#elif defined(__HAVE___LWP_GETTCB_FAST)
+	pthread__main->pt_tls = __lwp_gettcb_fast();
+#else
+	pthread__main->pt_tls = _lwp_getprivate();
 #endif
+	pthread__main->pt_tls->tcb_pthread = pthread__main;
 }
 
-static int
+static signed int
 /*ARGSUSED*/
-pthread__stackid_setup(void *base, size_t size, pthread_t *tp)
+pthread__cmp(void *ctx, const void *n1, const void *n2)
 {
-	pthread_t t;
-	void *redaddr;
-	size_t pagesize;
-	int ret;
+	const uintptr_t p1 = (const uintptr_t)n1;
+	const uintptr_t p2 = (const uintptr_t)n2;
 
-	t = base;
-	pagesize = (size_t)sysconf(_SC_PAGESIZE);
-
-	/*
-	 * Put a pointer to the pthread in the bottom (but
-         * redzone-protected section) of the stack. 
-	 */
-	redaddr = STACK_SHRINK(STACK_MAX(base, size), pagesize);
-	t->pt_stack.ss_size = size - 2 * pagesize;
-#ifdef __MACHINE_STACK_GROWS_UP
-	t->pt_stack.ss_sp = (char *)(void *)base + pagesize;
-#else
-	t->pt_stack.ss_sp = (char *)(void *)base + 2 * pagesize;
-#endif
-
-	/* Protect the next-to-bottom stack page as a red zone. */
-	ret = mprotect(redaddr, pagesize, PROT_NONE);
-	if (ret == -1) {
-		return errno;
-	}
-	*tp = t;
+	if (p1 < p2)
+		return -1;
+	if (p1 > p2)
+		return 1;
 	return 0;
 }
-
-#ifndef lint
-static int
-pthread__cmp(struct __pthread_st *a, struct __pthread_st *b)
-{
-	return b - a;
-}
-RB_GENERATE_STATIC(__pthread__alltree, __pthread_st, pt_alltree, pthread__cmp)
-#endif
 
 /* Because getenv() wants to use locks. */
 char *
 pthread__getenv(const char *name)
 {
-	extern char *__findenv(const char *, int *);
-	int off;
+	extern char **environ;
+	size_t l_name, offset;
 
-	return __findenv(name, &off);
+	if (issetugid())
+		return (NULL);
+
+	l_name = strlen(name);
+	for (offset = 0; environ[offset] != NULL; offset++) {
+		if (strncmp(name, environ[offset], l_name) == 0 &&
+		    environ[offset][l_name] == '=') {
+			return environ[offset] + l_name + 1;
+		}
+	}
+
+	return NULL;
 }
 
+pthread_mutex_t *
+pthread__hashlock(volatile const void *p)
+{
+	uintptr_t v;
 
+	v = (uintptr_t)p;
+	return &hashlocks[((v >> 9) ^ (v >> 3)) & (NHASHLOCK - 1)].mutex;
+}
+
+int
+pthread__checkpri(int pri)
+{
+	static int havepri;
+	static long min, max;
+
+	if (!havepri) {
+		min = sysconf(_SC_SCHED_PRI_MIN);
+		max = sysconf(_SC_SCHED_PRI_MAX);
+		havepri = 1;
+	}
+	return (pri < min || pri > max) ? EINVAL : 0;
+}

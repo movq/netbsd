@@ -1,4 +1,4 @@
-/*	$NetBSD: pass2.c,v 1.44 2006/11/14 21:01:46 apb Exp $	*/
+/*	$NetBSD: pass2.c,v 1.51 2017/02/08 16:11:40 rin Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass2.c	8.9 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass2.c,v 1.44 2006/11/14 21:01:46 apb Exp $");
+__RCSID("$NetBSD: pass2.c,v 1.51 2017/02/08 16:11:40 rin Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,6 +53,7 @@ __RCSID("$NetBSD: pass2.c,v 1.44 2006/11/14 21:01:46 apb Exp $");
 #include "fsck.h"
 #include "fsutil.h"
 #include "extern.h"
+#include "exitvalues.h"
 
 #define MINDIRSIZE	(sizeof (struct dirtemplate))
 
@@ -69,34 +70,37 @@ pass2(void)
 	struct inodesc curino;
 	union dinode dino;
 	int i, maxblk;
+#ifndef NO_FFS_EI
+	unsigned ii;
+#endif
 	char pathbuf[MAXPATHLEN + 1];
 
-	rinfo = inoinfo(ROOTINO);
+	rinfo = inoinfo(UFS_ROOTINO);
 	switch (rinfo->ino_state) {
 
 	case USTATE:
 		pfatal("ROOT INODE UNALLOCATED");
 		if (reply("ALLOCATE") == 0) {
 			markclean = 0;
-			ckfini();
-			exit(EEXIT);
+			ckfini(1);
+			exit(FSCK_EXIT_CHECK_FAILED);
 		}
-		if (allocdir(ROOTINO, ROOTINO, 0755) != ROOTINO)
-			errx(EEXIT, "CANNOT ALLOCATE ROOT INODE");
+		if (allocdir(UFS_ROOTINO, UFS_ROOTINO, 0755) != UFS_ROOTINO)
+			errexit("CANNOT ALLOCATE ROOT INODE");
 		break;
 
 	case DCLEAR:
 		pfatal("DUPS/BAD IN ROOT INODE");
 		if (reply("REALLOCATE")) {
-			freeino(ROOTINO);
-			if (allocdir(ROOTINO, ROOTINO, 0755) != ROOTINO)
-				errx(EEXIT, "CANNOT ALLOCATE ROOT INODE");
+			freeino(UFS_ROOTINO);
+			if (allocdir(UFS_ROOTINO, UFS_ROOTINO, 0755) != UFS_ROOTINO)
+				errexit("CANNOT ALLOCATE ROOT INODE");
 			break;
 		}
 		markclean = 0;
 		if (reply("CONTINUE") == 0) {
-			ckfini();
-			exit(EEXIT);
+			ckfini(1);
+			exit(FSCK_EXIT_CHECK_FAILED);
 		}
 		break;
 
@@ -104,17 +108,17 @@ pass2(void)
 	case FCLEAR:
 		pfatal("ROOT INODE NOT DIRECTORY");
 		if (reply("REALLOCATE")) {
-			freeino(ROOTINO);
-			if (allocdir(ROOTINO, ROOTINO, 0755) != ROOTINO)
-				errx(EEXIT, "CANNOT ALLOCATE ROOT INODE");
+			freeino(UFS_ROOTINO);
+			if (allocdir(UFS_ROOTINO, UFS_ROOTINO, 0755) != UFS_ROOTINO)
+				errexit("CANNOT ALLOCATE ROOT INODE");
 			break;
 		}
 		if (reply("FIX") == 0) {
 			markclean = 0;
-			ckfini();
-			exit(EEXIT);
+			ckfini(1);
+			exit(FSCK_EXIT_CHECK_FAILED);
 		}
-		dp = ginode(ROOTINO);
+		dp = ginode(UFS_ROOTINO);
 		DIP_SET(dp, mode,
 		    iswap16((iswap16(DIP(dp, mode)) & ~IFMT) | IFDIR));
 		inodirty();
@@ -124,10 +128,10 @@ pass2(void)
 		break;
 
 	default:
-		errx(EEXIT, "BAD STATE %d FOR ROOT INODE", rinfo->ino_state);
+		errexit("BAD STATE %d FOR ROOT INODE", rinfo->ino_state);
 	}
 	if (newinofmt) {
-		info = inoinfo(WINO);
+		info = inoinfo(UFS_WINO);
 		info->ino_state = FSTATE;
 		info->ino_type = DT_WHT;
 	}
@@ -192,33 +196,36 @@ pass2(void)
 		if (!is_ufs2) {
 			dp->dp1.di_mode = iswap16(IFDIR);
 			dp->dp1.di_size = iswap64(inp->i_isize);
-			maxblk = inp->i_numblks < NDADDR ? inp->i_numblks :
-			    NDADDR;
+			maxblk = inp->i_numblks < UFS_NDADDR ? inp->i_numblks :
+			    UFS_NDADDR;
 			for (i = 0; i < maxblk; i++)
 				dp->dp1.di_db[i] = inp->i_blks[i];
-			if (inp->i_numblks > NDADDR) {
-				for (i = 0; i < NIADDR; i++)
+			if (inp->i_numblks > UFS_NDADDR) {
+				for (i = 0; i < UFS_NIADDR; i++)
 					dp->dp1.di_ib[i] =
-					    inp->i_blks[NDADDR + i];
+					    inp->i_blks[UFS_NDADDR + i];
 			}
 		} else {
 			dp->dp2.di_mode = iswap16(IFDIR);
 			dp->dp2.di_size = iswap64(inp->i_isize);
-			maxblk = inp->i_numblks < NDADDR ? inp->i_numblks :
-			    NDADDR;
+			maxblk = inp->i_numblks < UFS_NDADDR ? inp->i_numblks :
+			    UFS_NDADDR;
 			for (i = 0; i < maxblk; i++)
 				dp->dp2.di_db[i] = inp->i_blks[i];
-			if (inp->i_numblks > NDADDR) {
-				for (i = 0; i < NIADDR; i++)
+			if (inp->i_numblks > UFS_NDADDR) {
+				for (i = 0; i < UFS_NIADDR; i++)
 					dp->dp2.di_ib[i] =
-					    inp->i_blks[NDADDR + i];
+					    inp->i_blks[UFS_NDADDR + i];
 			}
 		}
 		curino.id_number = inp->i_number;
 		curino.id_parent = inp->i_parent;
+		curino.id_uid = iswap32(DIP(dp, uid));
+		curino.id_gid = iswap32(DIP(dp, gid));
 		(void)ckinode(&dino, &curino);
 	}
 
+#ifndef NO_FFS_EI
 	/*
 	 * Byte swapping in directory entries, if needed, has been done.
 	 * Now rescan dirs for pass2check()
@@ -233,19 +240,22 @@ pass2(void)
 			if (!is_ufs2) {
 				dino.dp1.di_mode = iswap16(IFDIR);
 				dino.dp1.di_size = iswap64(inp->i_isize);
-				for (i = 0; i < inp->i_numblks; i++)
-					dino.dp1.di_db[i] = inp->i_blks[i];
+				for (ii = 0; ii < inp->i_numblks; ii++)
+					dino.dp1.di_db[ii] = inp->i_blks[ii];
 			} else {
 				dino.dp2.di_mode = iswap16(IFDIR);
 				dino.dp2.di_size = iswap64(inp->i_isize);
-				for (i = 0; i < inp->i_numblks; i++)
-					dino.dp2.di_db[i] = inp->i_blks[i];
+				for (ii = 0; ii < inp->i_numblks; ii++)
+					dino.dp2.di_db[ii] = inp->i_blks[ii];
 			}
 			curino.id_number = inp->i_number;
 			curino.id_parent = inp->i_parent;
+			curino.id_uid = iswap32(DIP(&dino, uid));
+			curino.id_gid = iswap32(DIP(&dino, gid));
 			(void)ckinode(&dino, &curino);
 		}
 	}
+#endif /* !NO_FFS_EI */
 
 	/*
 	 * Now that the parents of all directories have been found,
@@ -295,7 +305,7 @@ pass2(void)
 	for (inpp = inpsort; inpp < inpend; inpp++) {
 		inp = *inpp;
 		if (inp->i_parent == 0 ||
-		    inp->i_number == ROOTINO)
+		    inp->i_number == UFS_ROOTINO)
 			continue;
 		pinp = getinoinfo(inp->i_parent);
 		inp->i_sibling = pinp->i_child;
@@ -304,7 +314,7 @@ pass2(void)
 	/*
 	 * Mark all the directories that can be found from the root.
 	 */
-	propagate(ROOTINO);
+	propagate(UFS_ROOTINO);
 
 #ifdef PROGRESS
 	if (!preen)
@@ -376,7 +386,7 @@ pass2check(struct inodesc *idesc)
 			proto.d_type = proto.d_namlen;
 			proto.d_namlen = tmp;
 		}
-	entrysize = DIRSIZ(0, &proto, 0);
+	entrysize = UFS_DIRSIZ(0, &proto, 0);
 	if (dirp->d_ino != 0 && strcmp(dirp->d_name, "..") != 0) {
 		pfatal("CANNOT FIX, FIRST ENTRY IN DIRECTORY CONTAINS %s\n",
 			dirp->d_name);
@@ -427,9 +437,9 @@ chk1:
 		proto.d_type = proto.d_namlen;
 		proto.d_namlen = tmp;
 	}
-	entrysize = DIRSIZ(0, &proto, 0);
+	entrysize = UFS_DIRSIZ(0, &proto, 0);
 	if (idesc->id_entryno == 0) {
-		n = DIRSIZ(0, dirp, 0);
+		n = UFS_DIRSIZ(0, dirp, 0);
 		if (iswap16(dirp->d_reclen) < n + entrysize)
 			goto chk2;
 		proto.d_reclen = iswap16(iswap16(dirp->d_reclen) - n);
@@ -513,10 +523,10 @@ chk2:
 		if (n == 0)
 			markclean = 0;
 	} else if (newinofmt &&
-		   ((iswap32(dirp->d_ino) == WINO && dirp->d_type != DT_WHT) ||
-		    (iswap32(dirp->d_ino) != WINO && dirp->d_type == DT_WHT))) {
+		   ((iswap32(dirp->d_ino) == UFS_WINO && dirp->d_type != DT_WHT) ||
+		    (iswap32(dirp->d_ino) != UFS_WINO && dirp->d_type == DT_WHT))) {
 		fileerror(idesc->id_number, iswap32(dirp->d_ino), "BAD WHITEOUT ENTRY");
-		dirp->d_ino = iswap32(WINO);
+		dirp->d_ino = iswap32(UFS_WINO);
 		dirp->d_type = DT_WHT;
 		if (reply("FIX") == 1)
 			ret |= ALTERED;
@@ -590,7 +600,7 @@ again:
 			break;
 
 		default:
-			errx(EEXIT, "BAD STATE %d FOR INODE I=%d",
+			errexit("BAD STATE %d FOR INODE I=%d",
 			    info->ino_state, iswap32(dirp->d_ino));
 		}
 	}

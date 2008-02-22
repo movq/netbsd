@@ -1,4 +1,4 @@
-/*	$NetBSD: save.c,v 1.12 2006/03/18 23:25:30 christos Exp $	*/
+/*	$NetBSD: save.c,v 1.16 2012/10/13 19:19:39 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)save.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: save.c,v 1.12 2006/03/18 23:25:30 christos Exp $");
+__RCSID("$NetBSD: save.c,v 1.16 2012/10/13 19:19:39 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,8 +53,10 @@ static const char type[] = "'.\nType \"backgammon ";
 static const char rec[] = "\" to recover your game.\n\n";
 static const char cantrec[] = "Can't recover file:  ";
 
+static void norec(const char *) __dead;
+
 void
-save(int n)
+save(struct move *mm, int n)
 {
 	int     fdesc;
 	char   *fs;
@@ -121,7 +123,7 @@ save(int n)
 	write(fdesc, board, sizeof board);
 	write(fdesc, off, sizeof off);
 	write(fdesc, in, sizeof in);
-	write(fdesc, dice, sizeof dice);
+	write(fdesc, mm->dice, sizeof mm->dice);
 	write(fdesc, &cturn, sizeof cturn);
 	write(fdesc, &dlast, sizeof dlast);
 	write(fdesc, &pnum, sizeof pnum);
@@ -143,7 +145,7 @@ save(int n)
 }
 
 void
-recover(const char *s)
+recover(struct move *mm, const char *s)
 {
 	int     fdesc;
 
@@ -152,7 +154,7 @@ recover(const char *s)
 	read(fdesc, board, sizeof board);
 	read(fdesc, off, sizeof off);
 	read(fdesc, in, sizeof in);
-	read(fdesc, dice, sizeof dice);
+	read(fdesc, mm->dice, sizeof mm->dice);
 	read(fdesc, &cturn, sizeof cturn);
 	read(fdesc, &dlast, sizeof dlast);
 	read(fdesc, &pnum, sizeof pnum);
@@ -164,7 +166,7 @@ recover(const char *s)
 	rflag = 1;
 }
 
-void
+static void
 norec(const char *s)
 {
 	const char   *c;

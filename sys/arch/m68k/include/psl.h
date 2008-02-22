@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.13 2006/02/16 20:17:13 perry Exp $	*/
+/*	$NetBSD: psl.h,v 1.15 2012/07/27 05:36:11 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -69,6 +69,8 @@
 
 #if defined(_KERNEL) && !defined(_LOCORE)
 
+#define	IPL_SAFEPRI	PSL_LOWIPL	/* for kern_sleepq.c */
+
 /*
  * spl functions; platform-specific code must define spl0 and splx().
  */
@@ -79,7 +81,7 @@ _spl(int s)
 	int sr;
 
 	__asm volatile ("movew %%sr,%0; movew %1,%%sr" :
-	    "=&d" (sr) : "di" (s));
+	    "=&d" (sr) : "di" (s) : "memory");
 
 	return sr;
 }
@@ -92,7 +94,7 @@ _splraise(int level)
 	__asm volatile("movw %%sr,%0" : "=d" (sr));
 
 	if ((u_int16_t)level >= PSL_HIGHIPL || (u_int16_t)level > (u_int16_t)sr)
-		__asm volatile("movw %0,%%sr" :: "di" (level));
+		__asm volatile("movw %0,%%sr" :: "di" (level) : "memory");
 
 	return sr;
 }

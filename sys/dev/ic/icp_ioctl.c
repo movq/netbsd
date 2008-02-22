@@ -1,4 +1,4 @@
-/*	$NetBSD: icp_ioctl.c,v 1.17 2007/10/19 11:59:53 ad Exp $	*/
+/*	$NetBSD: icp_ioctl.c,v 1.22 2017/10/28 04:53:55 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icp_ioctl.c,v 1.17 2007/10/19 11:59:53 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icp_ioctl.c,v 1.22 2017/10/28 04:53:55 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,6 +85,8 @@ __KERNEL_RCSID(0, "$NetBSD: icp_ioctl.c,v 1.17 2007/10/19 11:59:53 ad Exp $");
 #include <dev/ic/icpreg.h>
 #include <dev/ic/icpvar.h>
 
+#include "ioconf.h"
+
 /* These are simply the same as ICP's "iir" driver for FreeBSD. */
 #define	ICP_DRIVER_VERSION		1
 #define	ICP_DRIVER_SUBVERSION		3
@@ -100,11 +95,19 @@ static dev_type_open(icpopen);
 static dev_type_ioctl(icpioctl);
 
 const struct cdevsw icp_cdevsw = {
-	icpopen, nullclose, noread, nowrite, icpioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
+	.d_open = icpopen,
+	.d_close = nullclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = icpioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_OTHER
 };
-
-extern struct cfdriver icp_cd;
 
 kmutex_t icp_ioctl_mutex;
 
@@ -137,7 +140,7 @@ icpioctl(dev_t dev, u_long cmd, void *data, int flag,
 		if (error)
 			break;
 
-		icp = device_lookup(&icp_cd, ucmd->io_node);
+		icp = device_lookup_private(&icp_cd, ucmd->io_node);
 		if (icp == NULL) {
 			error = ENXIO;
 			break;
@@ -157,7 +160,7 @@ icpioctl(dev_t dev, u_long cmd, void *data, int flag,
 		struct icp_softc *icp;
 		gdt_ctrt_t *ctrt = (void *) data;
 
-		icp = device_lookup(&icp_cd, ctrt->io_node);
+		icp = device_lookup_private(&icp_cd, ctrt->io_node);
 		if (icp == NULL) {
 			error = ENXIO;
 			break;
@@ -214,7 +217,7 @@ icpioctl(dev_t dev, u_long cmd, void *data, int flag,
 		gdt_evt_str *e = &evt->dvr;
 		int s;
 
-		icp = device_lookup(&icp_cd, minor(dev));
+		icp = device_lookup_private(&icp_cd, minor(dev));
 
 		switch (evt->erase) {
 		case 0xff:
@@ -272,7 +275,7 @@ icpioctl(dev_t dev, u_long cmd, void *data, int flag,
 		struct icp_softc *icp;
 		gdt_rescan_t *rsc = (void *) data;
 
-		icp = device_lookup(&icp_cd, rsc->io_node);
+		icp = device_lookup_private(&icp_cd, rsc->io_node);
 		if (icp == NULL) {
 			error = ENXIO;
 			break;

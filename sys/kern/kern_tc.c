@@ -1,4 +1,33 @@
-/* $NetBSD: kern_tc.c,v 1.32 2008/02/10 13:56:17 ad Exp $ */
+/* $NetBSD: kern_tc.c,v 1.49 2018/02/13 09:26:17 maxv Exp $ */
+
+/*-
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Andrew Doran.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*-
  * ----------------------------------------------------------------------------
@@ -11,9 +40,11 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.166 2005/09/19 22:16:31 andre Exp $"); */
-__KERNEL_RCSID(0, "$NetBSD: kern_tc.c,v 1.32 2008/02/10 13:56:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_tc.c,v 1.49 2018/02/13 09:26:17 maxv Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_ntp.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -28,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_tc.c,v 1.32 2008/02/10 13:56:17 ad Exp $");
 #include <sys/kauth.h>
 #include <sys/mutex.h>
 #include <sys/atomic.h>
+#include <sys/xcall.h>
 
 /*
  * A large step happens on boot.  This constant detects such steps.
@@ -52,21 +84,29 @@ dummy_get_timecount(struct timecounter *tc)
 }
 
 static struct timecounter dummy_timecounter = {
-	dummy_get_timecount, 0, ~0u, 1000000, "dummy", -1000000, NULL, NULL,
+	.tc_get_timecount	= dummy_get_timecount,
+	.tc_counter_mask	= ~0u,
+	.tc_frequency		= 1000000,
+	.tc_name		= "dummy",
+	.tc_quality		= -1000000,
+	.tc_priv		= NULL,
 };
 
 struct timehands {
 	/* These fields must be initialized by the driver. */
-	struct timecounter	*th_counter;
-	int64_t			th_adjustment;
-	u_int64_t		th_scale;
-	u_int	 		th_offset_count;
-	struct bintime		th_offset;
-	struct timeval		th_microtime;
-	struct timespec		th_nanotime;
+	struct timecounter	*th_counter;     /* active timecounter */
+	int64_t			th_adjustment;   /* frequency adjustment */
+						 /* (NTP/adjtime) */
+	u_int64_t		th_scale;        /* scale factor (counter */
+						 /* tick->time) */
+	u_int64_t 		th_offset_count; /* offset at last time */
+						 /* update (tc_windup()) */
+	struct bintime		th_offset;       /* bin (up)time at windup */
+	struct timeval		th_microtime;    /* cached microtime */
+	struct timespec		th_nanotime;     /* cached nanotime */
 	/* Fields not to be copied in tc_windup start with th_generation. */
-	volatile u_int		th_generation;
-	struct timehands	*th_next;
+	volatile u_int		th_generation;   /* current genration */
+	struct timehands	*th_next;        /* next timehand */
 };
 
 static struct timehands th0;
@@ -91,15 +131,17 @@ static struct timehands *volatile timehands = &th0;
 struct timecounter *timecounter = &dummy_timecounter;
 static struct timecounter *timecounters = &dummy_timecounter;
 
-time_t time_second = 1;
-time_t time_uptime = 1;
+volatile time_t time_second __cacheline_aligned = 1;
+volatile time_t time_uptime __cacheline_aligned = 1;
 
 static struct bintime timebasebin;
 
 static int timestepwarnings;
 
-extern kmutex_t time_lock;
-static kmutex_t tc_windup_lock;
+kmutex_t timecounter_lock;
+static u_int timecounter_mods;
+static volatile int timecounter_removals = 1;
+static u_int timecounter_bad;
 
 #ifdef __FreeBSD__
 SYSCTL_INT(_kern_timecounter, OID_AUTO, stepwarnings, CTLFLAG_RW,
@@ -138,7 +180,7 @@ sysctl_kern_timecounter_hardware(SYSCTLFN_ARGS)
 		return (error);
 
 	if (!cold)
-		mutex_enter(&time_lock);
+		mutex_spin_enter(&timecounter_lock);
 	error = EINVAL;
 	for (newtc = timecounters; newtc != NULL; newtc = newtc->tc_next) {
 		if (strcmp(newname, newtc->tc_name) != 0)
@@ -151,7 +193,7 @@ sysctl_kern_timecounter_hardware(SYSCTLFN_ARGS)
 		break;
 	}
 	if (!cold)
-		mutex_exit(&time_lock);
+		mutex_spin_exit(&timecounter_lock);
 	return error;
 }
 
@@ -159,23 +201,24 @@ static int
 sysctl_kern_timecounter_choice(SYSCTLFN_ARGS)
 {
 	char buf[MAX_TCNAMELEN+48];
-	char *where = oldp;
+	char *where;
 	const char *spc;
 	struct timecounter *tc;
 	size_t needed, left, slen;
-	int error;
+	int error, mods;
 
 	if (newp != NULL)
 		return (EPERM);
 	if (namelen != 0)
 		return (EINVAL);
 
+	mutex_spin_enter(&timecounter_lock);
+ retry:
 	spc = "";
 	error = 0;
 	needed = 0;
 	left = *oldlenp;
-
-	mutex_enter(&time_lock);
+	where = oldp;
 	for (tc = timecounters; error == 0 && tc != NULL; tc = tc->tc_next) {
 		if (where == NULL) {
 			needed += sizeof(buf);  /* be conservative */
@@ -185,16 +228,20 @@ sysctl_kern_timecounter_choice(SYSCTLFN_ARGS)
 					tc->tc_frequency);
 			if (left < slen + 1)
 				break;
-			/* XXX use sysctl_copyout? (from sysctl_hw_disknames) */
-			/* XXX copyout with held lock. */
+		 	mods = timecounter_mods;
+			mutex_spin_exit(&timecounter_lock);
 			error = copyout(buf, where, slen + 1);
+			mutex_spin_enter(&timecounter_lock);
+			if (mods != timecounter_mods) {
+				goto retry;
+			}
 			spc = " ";
 			where += slen;
 			needed += slen;
 			left -= slen;
 		}
 	}
-	mutex_exit(&time_lock);
+	mutex_spin_exit(&timecounter_lock);
 
 	*oldlenp = needed;
 	return (error);
@@ -257,7 +304,7 @@ static void tc_windup(void);
  * Return the difference between the timehands' counter value now and what
  * was when we copied it to the timehands' offset_count.
  */
-static __inline u_int
+static inline u_int
 tc_delta(struct timehands *th)
 {
 	struct timecounter *tc;
@@ -277,15 +324,49 @@ void
 binuptime(struct bintime *bt)
 {
 	struct timehands *th;
-	u_int gen;
+	lwp_t *l;
+	u_int lgen, gen;
 
 	TC_COUNT(nbinuptime);
+
+	/*
+	 * Provide exclusion against tc_detach().
+	 *
+	 * We record the number of timecounter removals before accessing
+	 * timecounter state.  Note that the LWP can be using multiple
+	 * "generations" at once, due to interrupts (interrupted while in
+	 * this function).  Hardware interrupts will borrow the interrupted
+	 * LWP's l_tcgen value for this purpose, and can themselves be
+	 * interrupted by higher priority interrupts.  In this case we need
+	 * to ensure that the oldest generation in use is recorded.
+	 *
+	 * splsched() is too expensive to use, so we take care to structure
+	 * this code in such a way that it is not required.  Likewise, we
+	 * do not disable preemption.
+	 *
+	 * Memory barriers are also too expensive to use for such a
+	 * performance critical function.  The good news is that we do not
+	 * need memory barriers for this type of exclusion, as the thread
+	 * updating timecounter_removals will issue a broadcast cross call
+	 * before inspecting our l_tcgen value (this elides memory ordering
+	 * issues).
+	 */
+	l = curlwp;
+	lgen = l->l_tcgen;
+	if (__predict_true(lgen == 0)) {
+		l->l_tcgen = timecounter_removals;
+	}
+	__insn_barrier();
+
 	do {
 		th = timehands;
 		gen = th->th_generation;
 		*bt = th->th_offset;
 		bintime_addx(bt, th->th_scale * tc_delta(th));
 	} while (gen == 0 || gen != th->th_generation);
+
+	__insn_barrier();
+	l->l_tcgen = lgen;
 }
 
 void
@@ -394,8 +475,8 @@ getbintime(struct bintime *bt)
 	bintime_add(bt, &timebasebin);
 }
 
-void
-getnanotime(struct timespec *tsp)
+static inline void
+dogetnanotime(struct timespec *tsp)
 {
 	struct timehands *th;
 	u_int gen;
@@ -406,6 +487,22 @@ getnanotime(struct timespec *tsp)
 		gen = th->th_generation;
 		*tsp = th->th_nanotime;
 	} while (gen == 0 || gen != th->th_generation);
+}
+
+void
+getnanotime(struct timespec *tsp)
+{
+
+	dogetnanotime(tsp);
+}
+
+void dtrace_getnanotime(struct timespec *tsp);
+
+void
+dtrace_getnanotime(struct timespec *tsp)
+{
+
+	dogetnanotime(tsp);
 }
 
 void
@@ -447,10 +544,10 @@ tc_init(struct timecounter *tc)
 		    tc->tc_quality);
 	}
 
-	mutex_enter(&time_lock);
-	mutex_spin_enter(&tc_windup_lock);
+	mutex_spin_enter(&timecounter_lock);
 	tc->tc_next = timecounters;
 	timecounters = tc;
+	timecounter_mods++;
 	/*
 	 * Never automatically use a timecounter with negative quality.
 	 * Even though we run on the dummy counter, switching here may be
@@ -464,35 +561,18 @@ tc_init(struct timecounter *tc)
 		timecounter = tc;
 		tc_windup();
 	}
-	mutex_spin_exit(&tc_windup_lock);
-	mutex_exit(&time_lock);
+	mutex_spin_exit(&timecounter_lock);
 }
 
 /*
- * Stop using a timecounter and remove it from the timecounters list.
+ * Pick a new timecounter due to the existing counter going bad.
  */
-int
-tc_detach(struct timecounter *target)
+static void
+tc_pick(void)
 {
 	struct timecounter *best, *tc;
-	struct timecounter **tcp = NULL;
-	int rc = 0;
 
-	mutex_enter(&time_lock);
-	for (tcp = &timecounters, tc = timecounters;
-	     tc != NULL;
-	     tcp = &tc->tc_next, tc = tc->tc_next) {
-		if (tc == target)
-			break;
-	}
-	if (tc == NULL) {
-		rc = ESRCH;
-		goto out;
-	}
-	*tcp = tc->tc_next;
-
-	if (timecounter != target)
-		goto out;
+	KASSERT(mutex_owned(&timecounter_lock));
 
 	for (best = tc = timecounters; tc != NULL; tc = tc->tc_next) {
 		if (tc->tc_quality > best->tc_quality)
@@ -502,15 +582,101 @@ tc_detach(struct timecounter *target)
 		else if (tc->tc_frequency > best->tc_frequency)
 			best = tc;
 	}
-	mutex_spin_enter(&tc_windup_lock);
 	(void)best->tc_get_timecount(best);
 	(void)best->tc_get_timecount(best);
 	timecounter = best;
-	tc_windup();
-	mutex_spin_exit(&tc_windup_lock);
-out:
-	mutex_exit(&time_lock);
-	return rc;
+}
+
+/*
+ * A timecounter has gone bad, arrange to pick a new one at the next
+ * clock tick.
+ */
+void
+tc_gonebad(struct timecounter *tc)
+{
+
+	tc->tc_quality = -100;
+	membar_producer();
+	atomic_inc_uint(&timecounter_bad);
+}
+
+/*
+ * Stop using a timecounter and remove it from the timecounters list.
+ */
+int
+tc_detach(struct timecounter *target)
+{
+	struct timecounter *tc;
+	struct timecounter **tcp = NULL;
+	int removals;
+	uint64_t where;
+	lwp_t *l;
+
+	/* First, find the timecounter. */
+	mutex_spin_enter(&timecounter_lock);
+	for (tcp = &timecounters, tc = timecounters;
+	     tc != NULL;
+	     tcp = &tc->tc_next, tc = tc->tc_next) {
+		if (tc == target)
+			break;
+	}
+	if (tc == NULL) {
+		mutex_spin_exit(&timecounter_lock);
+		return ESRCH;
+	}
+
+	/* And now, remove it. */
+	*tcp = tc->tc_next;
+	if (timecounter == target) {
+		tc_pick();
+		tc_windup();
+	}
+	timecounter_mods++;
+	removals = timecounter_removals++;
+	mutex_spin_exit(&timecounter_lock);
+
+	/*
+	 * We now have to determine if any threads in the system are still
+	 * making use of this timecounter.
+	 *
+	 * We issue a broadcast cross call to elide memory ordering issues,
+	 * then scan all LWPs in the system looking at each's timecounter
+	 * generation number.  We need to see a value of zero (not actively
+	 * using a timecounter) or a value greater than our removal value.
+	 *
+	 * We may race with threads that read `timecounter_removals' and
+	 * and then get preempted before updating `l_tcgen'.  This is not
+	 * a problem, since it means that these threads have not yet started
+	 * accessing timecounter state.  All we do need is one clean
+	 * snapshot of the system where every thread appears not to be using
+	 * old timecounter state.
+	 */
+	for (;;) {
+		where = xc_broadcast(0, (xcfunc_t)nullop, NULL, NULL);
+		xc_wait(where);
+
+		mutex_enter(proc_lock);
+		LIST_FOREACH(l, &alllwp, l_list) {
+			if (l->l_tcgen == 0 || l->l_tcgen > removals) {
+				/*
+				 * Not using timecounter or old timecounter
+				 * state at time of our xcall or later.
+				 */
+				continue;
+			}
+			break;
+		}
+		mutex_exit(proc_lock);
+
+		/*
+		 * If the timecounter is still in use, wait at least 10ms
+		 * before retrying.
+		 */
+		if (l == NULL) {
+			return 0;
+		}
+		(void)kpause("tcdetach", false, mstohz(10), NULL);
+	}
 }
 
 /* Report the frequency of the current timecounter. */
@@ -526,12 +692,12 @@ tc_getfrequency(void)
  * when we booted.
  */
 void
-tc_setclock(struct timespec *ts)
+tc_setclock(const struct timespec *ts)
 {
 	struct timespec ts2;
 	struct bintime bt, bt2;
 
-	mutex_spin_enter(&tc_windup_lock);
+	mutex_spin_enter(&timecounter_lock);
 	TC_COUNT(nsetclock);
 	binuptime(&bt2);
 	timespec2bintime(ts, &bt);
@@ -539,13 +705,14 @@ tc_setclock(struct timespec *ts)
 	bintime_add(&bt2, &timebasebin);
 	timebasebin = bt;
 	tc_windup();
-	mutex_spin_exit(&tc_windup_lock);
+	mutex_spin_exit(&timecounter_lock);
 
 	if (timestepwarnings) {
 		bintime2timespec(&bt2, &ts2);
-		log(LOG_INFO, "Time stepped from %jd.%09ld to %jd.%09ld\n",
-		    (intmax_t)ts2.tv_sec, ts2.tv_nsec,
-		    (intmax_t)ts->tv_sec, ts->tv_nsec);
+		log(LOG_INFO,
+		    "Time stepped from %lld.%09ld to %lld.%09ld\n",
+		    (long long)ts2.tv_sec, ts2.tv_nsec,
+		    (long long)ts->tv_sec, ts->tv_nsec);
 	}
 }
 
@@ -564,7 +731,7 @@ tc_windup(void)
 	int i, s_update;
 	time_t t;
 
-	KASSERT(mutex_owned(&tc_windup_lock));
+	KASSERT(mutex_owned(&timecounter_lock));
 
 	s_update = 0;
 
@@ -592,7 +759,6 @@ tc_windup(void)
 	else
 		ncount = 0;
 	th->th_offset_count += delta;
-	th->th_offset_count &= th->th_counter->tc_counter_mask;
 	bintime_addx(&th->th_offset, th->th_scale * delta);
 
 	/*
@@ -634,7 +800,6 @@ tc_windup(void)
 	/* XXX shouldn't do this here.  Should force non-`get' versions. */
 	bintime2timeval(&bt, &th->th_microtime);
 	bintime2timespec(&bt, &th->th_nanotime);
-
 	/* Now is a good time to change timecounters. */
 	if (th->th_counter != timecounter) {
 		th->th_counter = timecounter;
@@ -714,7 +879,10 @@ pps_ioctl(u_long cmd, void *data, struct pps_state *pps)
 	int *epi;
 #endif
 
-	KASSERT(pps != NULL); /* XXX ("NULL pps pointer in pps_ioctl") */
+	KASSERT(mutex_owned(&timecounter_lock));
+
+	KASSERT(pps != NULL);
+
 	switch (cmd) {
 	case PPS_IOC_CREATE:
 		return (0);
@@ -758,6 +926,9 @@ pps_ioctl(u_long cmd, void *data, struct pps_state *pps)
 void
 pps_init(struct pps_state *pps)
 {
+
+	KASSERT(mutex_owned(&timecounter_lock));
+
 	pps->ppscap |= PPS_TSFMT_TSPEC;
 	if (pps->ppscap & PPS_CAPTUREASSERT)
 		pps->ppscap |= PPS_OFFSETASSERT;
@@ -765,49 +936,181 @@ pps_init(struct pps_state *pps)
 		pps->ppscap |= PPS_OFFSETCLEAR;
 }
 
+/*
+ * capture a timetamp in the pps structure
+ */
 void
 pps_capture(struct pps_state *pps)
 {
 	struct timehands *th;
 
-	KASSERT(pps != NULL); /* XXX ("NULL pps pointer in pps_capture") */
+	KASSERT(mutex_owned(&timecounter_lock));
+	KASSERT(pps != NULL);
+
 	th = timehands;
 	pps->capgen = th->th_generation;
 	pps->capth = th;
-	pps->capcount = th->th_counter->tc_get_timecount(th->th_counter);
+	pps->capcount = (u_int64_t)tc_delta(th) + th->th_offset_count;
 	if (pps->capgen != th->th_generation)
 		pps->capgen = 0;
 }
 
+#ifdef PPS_DEBUG
+int ppsdebug = 0;
+#endif
+
+/*
+ * process a pps_capture()ed event
+ */
 void
 pps_event(struct pps_state *pps, int event)
 {
-	struct bintime bt;
+	pps_ref_event(pps, event, NULL, PPS_REFEVNT_PPS|PPS_REFEVNT_CAPTURE);
+}
+
+/*
+ * extended pps api /  kernel pll/fll entry point
+ *
+ * feed reference time stamps to PPS engine
+ *
+ * will simulate a PPS event and feed
+ * the NTP PLL/FLL if requested.
+ *
+ * the ref time stamps should be roughly once
+ * a second but do not need to be exactly in phase
+ * with the UTC second but should be close to it.
+ * this relaxation of requirements allows callout
+ * driven timestamping mechanisms to feed to pps 
+ * capture/kernel pll logic.
+ *
+ * calling pattern is:
+ *  pps_capture() (for PPS_REFEVNT_{CAPTURE|CAPCUR})
+ *  read timestamp from reference source
+ *  pps_ref_event()
+ *
+ * supported refmodes:
+ *  PPS_REFEVNT_CAPTURE
+ *    use system timestamp of pps_capture()
+ *  PPS_REFEVNT_CURRENT
+ *    use system timestamp of this call
+ *  PPS_REFEVNT_CAPCUR
+ *    use average of read capture and current system time stamp
+ *  PPS_REFEVNT_PPS
+ *    assume timestamp on second mark - ref_ts is ignored
+ *
+ */
+
+void
+pps_ref_event(struct pps_state *pps,
+	      int event,
+	      struct bintime *ref_ts,
+	      int refmode
+	)
+{
+	struct bintime bt;	/* current time */
+	struct bintime btd;	/* time difference */
+	struct bintime bt_ref;	/* reference time */
 	struct timespec ts, *tsp, *osp;
-	u_int tcount, *pcount;
-	int foff, fhard;
+	struct timehands *th;
+	u_int64_t tcount, acount, dcount, *pcount;
+	int foff, gen;
+#ifdef PPS_SYNC
+	int fhard;
+#endif
 	pps_seq_t *pseq;
 
-	KASSERT(pps != NULL); /* XXX ("NULL pps pointer in pps_event") */
-	/* If the timecounter was wound up underneath us, bail out. */
-	if (pps->capgen == 0 || pps->capgen != pps->capth->th_generation)
-		return;
+	KASSERT(mutex_owned(&timecounter_lock));
 
-	/* Things would be easier with arrays. */
+	KASSERT(pps != NULL);
+
+        /* pick up current time stamp if needed */
+	if (refmode & (PPS_REFEVNT_CURRENT|PPS_REFEVNT_CAPCUR)) {
+		/* pick up current time stamp */
+		th = timehands;
+		gen = th->th_generation;
+		tcount = (u_int64_t)tc_delta(th) + th->th_offset_count;
+		if (gen != th->th_generation)
+			gen = 0;
+
+		/* If the timecounter was wound up underneath us, bail out. */
+		if (pps->capgen == 0 ||
+		    pps->capgen != pps->capth->th_generation ||
+		    gen == 0 ||
+		    gen != pps->capgen) {
+#ifdef PPS_DEBUG
+			if (ppsdebug & 0x1) {
+				log(LOG_DEBUG,
+				    "pps_ref_event(pps=%p, event=%d, ...): DROP (wind-up)\n",
+				    pps, event);
+			}
+#endif
+			return;
+		}
+	} else {
+		tcount = 0;	/* keep GCC happy */
+	}
+
+#ifdef PPS_DEBUG
+	if (ppsdebug & 0x1) {
+		struct timespec tmsp;
+	
+		if (ref_ts == NULL) {
+			tmsp.tv_sec = 0;
+			tmsp.tv_nsec = 0;
+		} else {
+			bintime2timespec(ref_ts, &tmsp);
+		}
+
+		log(LOG_DEBUG,
+		    "pps_ref_event(pps=%p, event=%d, ref_ts=%"PRIi64
+		    ".%09"PRIi32", refmode=0x%1x)\n",
+		    pps, event, tmsp.tv_sec, (int32_t)tmsp.tv_nsec, refmode);
+	}
+#endif
+
+	/* setup correct event references */
 	if (event == PPS_CAPTUREASSERT) {
 		tsp = &pps->ppsinfo.assert_timestamp;
 		osp = &pps->ppsparam.assert_offset;
 		foff = pps->ppsparam.mode & PPS_OFFSETASSERT;
+#ifdef PPS_SYNC
 		fhard = pps->kcmode & PPS_CAPTUREASSERT;
+#endif
 		pcount = &pps->ppscount[0];
 		pseq = &pps->ppsinfo.assert_sequence;
 	} else {
 		tsp = &pps->ppsinfo.clear_timestamp;
 		osp = &pps->ppsparam.clear_offset;
 		foff = pps->ppsparam.mode & PPS_OFFSETCLEAR;
+#ifdef PPS_SYNC
 		fhard = pps->kcmode & PPS_CAPTURECLEAR;
+#endif
 		pcount = &pps->ppscount[1];
 		pseq = &pps->ppsinfo.clear_sequence;
+	}
+
+	/* determine system time stamp according to refmode */
+	dcount = 0;		/* keep GCC happy */
+	switch (refmode & PPS_REFEVNT_RMASK) {
+	case PPS_REFEVNT_CAPTURE:
+		acount = pps->capcount;	/* use capture timestamp */
+		break;
+
+	case PPS_REFEVNT_CURRENT:
+		acount = tcount; /* use current timestamp */
+		break;
+
+	case PPS_REFEVNT_CAPCUR:
+		/*
+		 * calculate counter value between pps_capture() and
+		 * pps_ref_event()
+		 */
+		dcount = tcount - pps->capcount;
+		acount = (dcount / 2) + pps->capcount;
+		break;
+
+	default:		/* ignore call error silently */
+		return;
 	}
 
 	/*
@@ -816,27 +1119,66 @@ pps_event(struct pps_state *pps, int event)
 	 */
 	if (pps->ppstc != pps->capth->th_counter) {
 		pps->ppstc = pps->capth->th_counter;
-		*pcount = pps->capcount;
-		pps->ppscount[2] = pps->capcount;
+		pps->capcount = acount;
+		*pcount = acount;
+		pps->ppscount[2] = acount;
+#ifdef PPS_DEBUG
+		if (ppsdebug & 0x1) {
+			log(LOG_DEBUG,
+			    "pps_ref_event(pps=%p, event=%d, ...): DROP (time-counter change)\n",
+			    pps, event);
+		}
+#endif
 		return;
 	}
 
-	/* Convert the count to a timespec. */
-	tcount = pps->capcount - pps->capth->th_offset_count;
-	tcount &= pps->capth->th_counter->tc_counter_mask;
+	pps->capcount = acount;
+
+	/* Convert the count to a bintime. */
 	bt = pps->capth->th_offset;
-	bintime_addx(&bt, pps->capth->th_scale * tcount);
+	bintime_addx(&bt, pps->capth->th_scale * (acount - pps->capth->th_offset_count));
 	bintime_add(&bt, &timebasebin);
+
+	if ((refmode & PPS_REFEVNT_PPS) == 0) {
+		/* determine difference to reference time stamp */
+		bt_ref = *ref_ts;
+
+		btd = bt;
+		bintime_sub(&btd, &bt_ref);
+
+		/* 
+		 * simulate a PPS timestamp by dropping the fraction
+		 * and applying the offset
+		 */
+		if (bt.frac >= (uint64_t)1<<63)	/* skip to nearest second */
+			bt.sec++;
+		bt.frac = 0;
+		bintime_add(&bt, &btd);
+	} else {
+		/*
+		 * create ref_ts from current time - 
+		 * we are supposed to be called on
+		 * the second mark
+		 */
+		bt_ref = bt;
+		if (bt_ref.frac >= (uint64_t)1<<63)	/* skip to nearest second */
+			bt_ref.sec++;
+		bt_ref.frac = 0;
+	}
+
+	/* convert bintime to timestamp */
 	bintime2timespec(&bt, &ts);
 
 	/* If the timecounter was wound up underneath us, bail out. */
 	if (pps->capgen != pps->capth->th_generation)
 		return;
 
+	/* store time stamp */
 	*pcount = pps->capcount;
 	(*pseq)++;
 	*tsp = ts;
 
+	/* add offset correction */
 	if (foff) {
 		timespecadd(tsp, osp, tsp);
 		if (tsp->tv_nsec < 0) {
@@ -844,26 +1186,107 @@ pps_event(struct pps_state *pps, int event)
 			tsp->tv_sec -= 1;
 		}
 	}
+
+#ifdef PPS_DEBUG
+	if (ppsdebug & 0x2) {
+		struct timespec ts2;
+		struct timespec ts3;
+
+		bintime2timespec(&bt_ref, &ts2);
+
+		bt.sec = 0;
+		bt.frac = 0;
+
+		if (refmode & PPS_REFEVNT_CAPCUR) {
+			    bintime_addx(&bt, pps->capth->th_scale * dcount);
+		}
+		bintime2timespec(&bt, &ts3);
+
+		log(LOG_DEBUG, "ref_ts=%"PRIi64".%09"PRIi32
+		    ", ts=%"PRIi64".%09"PRIi32", read latency=%"PRIi64" ns\n",
+		    ts2.tv_sec, (int32_t)ts2.tv_nsec,
+		    tsp->tv_sec, (int32_t)tsp->tv_nsec,
+		    timespec2ns(&ts3));
+	}
+#endif
+
 #ifdef PPS_SYNC
 	if (fhard) {
-		u_int64_t scale;
+		uint64_t scale;
+		uint64_t div;
 
 		/*
 		 * Feed the NTP PLL/FLL.
 		 * The FLL wants to know how many (hardware) nanoseconds
-		 * elapsed since the previous event.
+		 * elapsed since the previous event (mod 1 second) thus
+		 * we are actually looking at the frequency difference scaled
+		 * in nsec.
+		 * As the counter time stamps are not truly at 1Hz
+		 * we need to scale the count by the elapsed
+		 * reference time.
+		 * valid sampling interval: [0.5..2[ sec
 		 */
+
+		/* calculate elapsed raw count */
 		tcount = pps->capcount - pps->ppscount[2];
 		pps->ppscount[2] = pps->capcount;
 		tcount &= pps->capth->th_counter->tc_counter_mask;
-		scale = (u_int64_t)1 << 63;
-		scale /= pps->capth->th_counter->tc_frequency;
+		
+		/* calculate elapsed ref time */
+		btd = bt_ref;
+		bintime_sub(&btd, &pps->ref_time);
+		pps->ref_time = bt_ref;
+
+		/* check that we stay below 2 sec */
+		if (btd.sec < 0 || btd.sec > 1)
+			return;
+
+		/* we want at least 0.5 sec between samples */
+		if (btd.sec == 0 && btd.frac < (uint64_t)1<<63)
+			return;
+
+		/*
+		 * calculate cycles per period by multiplying
+		 * the frequency with the elapsed period
+		 * we pick a fraction of 30 bits
+		 * ~1ns resolution for elapsed time
+		 */ 
+		div   = (uint64_t)btd.sec << 30;
+		div  |= (btd.frac >> 34) & (((uint64_t)1 << 30) - 1);
+		div  *= pps->capth->th_counter->tc_frequency;
+		div >>= 30;
+
+		if (div == 0)	/* safeguard */
+			return;
+
+		scale = (uint64_t)1 << 63;
+		scale /= div;
 		scale *= 2;
+
 		bt.sec = 0;
 		bt.frac = 0;
 		bintime_addx(&bt, scale * tcount);
 		bintime2timespec(&bt, &ts);
-		hardpps(tsp, ts.tv_nsec + 1000000000 * ts.tv_sec);
+
+#ifdef PPS_DEBUG
+		if (ppsdebug & 0x4) {
+			struct timespec ts2;
+			int64_t df;
+
+			bintime2timespec(&bt_ref, &ts2);
+			df = timespec2ns(&ts);
+			if (df > 500000000)
+				df -= 1000000000;
+			log(LOG_DEBUG, "hardpps: ref_ts=%"PRIi64
+			    ".%09"PRIi32", ts=%"PRIi64".%09"PRIi32
+			    ", freqdiff=%"PRIi64" ns/s\n",
+			    ts2.tv_sec, (int32_t)ts2.tv_nsec,
+			    tsp->tv_sec, (int32_t)tsp->tv_nsec,
+			    df);
+		}
+#endif
+
+		hardpps(tsp, timespec2ns(&ts));
 	}
 #endif
 }
@@ -885,9 +1308,16 @@ tc_ticktock(void)
 	if (++count < tc_tick)
 		return;
 	count = 0;
-	mutex_spin_enter(&tc_windup_lock);
+	mutex_spin_enter(&timecounter_lock);
+	if (timecounter_bad != 0) {
+		/* An existing timecounter has gone bad, pick a new one. */
+		(void)atomic_swap_uint(&timecounter_bad, 0);
+		if (timecounter->tc_quality < 0) {
+			tc_pick();
+		}
+	}
 	tc_windup();
-	mutex_spin_exit(&tc_windup_lock);
+	mutex_spin_exit(&timecounter_lock);
 }
 
 void
@@ -895,7 +1325,7 @@ inittimecounter(void)
 {
 	u_int p;
 
-	mutex_init(&tc_windup_lock, MUTEX_DEFAULT, IPL_SCHED);
+	mutex_init(&timecounter_lock, MUTEX_DEFAULT, IPL_HIGH);
 
 	/*
 	 * Set the initial timeout to

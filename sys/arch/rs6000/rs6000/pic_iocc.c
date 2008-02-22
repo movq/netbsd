@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_iocc.c,v 1.1 2007/12/17 19:09:44 garbled Exp $	*/
+/*	$NetBSD: pic_iocc.c,v 1.4 2011/07/18 17:26:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,18 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_iocc.c,v 1.1 2007/12/17 19:09:44 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_iocc.c,v 1.4 2011/07/18 17:26:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
+#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/pio.h>
 #include <machine/intr.h>
 #include <machine/iocc.h>
-#include <machine/bus.h>
 
 #include <arch/powerpc/pic/picvar.h>
 
@@ -100,7 +93,7 @@ iocc_get_irq(struct pic_ops *pic, int mode)
         if (rv == 0)
                 return 255;
 
-        irq = 31 - cntlzw(rv);
+        irq = 31 - __builtin_clz(rv);
         if (irq >= 0 && irq < 16)
                 return irq;
         return 255;

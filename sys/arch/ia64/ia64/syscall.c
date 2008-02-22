@@ -1,11 +1,11 @@
-/* $NetBSD: syscall.c,v 1.2 2006/04/08 14:52:09 cherry Exp $ */
+/* $NetBSD: syscall.c,v 1.6 2012/11/05 15:14:34 chs Exp $ */
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  *
- * Author: 
+ * Author:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,13 +32,14 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.2 2006/04/08 14:52:09 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.6 2012/11/05 15:14:34 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 
 #include <machine/frame.h>
+#include <machine/userret.h>
 
 void	syscall_intern(struct proc *);
 void	syscall_plain(struct lwp *, u_int64_t, struct trapframe *);
@@ -54,7 +48,11 @@ void	syscall_fancy(struct lwp *, u_int64_t, struct trapframe *);
 void
 syscall_intern(struct proc *p)
 {
-	return;
+
+	if (trace_is_enabled(p))
+		p->p_md.md_syscall = syscall_fancy;
+	else
+		p->p_md.md_syscall = syscall_plain;
 }
 
 /*
@@ -63,12 +61,14 @@ syscall_intern(struct proc *p)
 void
 syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 {
+printf("%s: not yet\n", __func__);
 	return;
 }
 
 void
 syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 {
+printf("%s: not yet\n", __func__);
 	return;
 }
 
@@ -78,5 +78,16 @@ syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 void
 child_return(void *arg)
 {
+printf("%s: not yet\n", __func__);
 	return;
+}
+
+/*
+ * Process the tail end of a posix_spawn() for the child.
+ */
+void
+cpu_spawn_return(struct lwp *l)
+{
+
+	userret(l);
 }

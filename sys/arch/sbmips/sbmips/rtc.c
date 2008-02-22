@@ -1,4 +1,4 @@
-/* $NetBSD: rtc.c,v 1.16 2007/10/17 19:57:02 garbled Exp $ */
+/* $NetBSD: rtc.c,v 1.21 2016/07/21 17:02:15 christos Exp $ */
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.16 2007/10/17 19:57:02 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.21 2016/07/21 17:02:15 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -46,8 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.16 2007/10/17 19:57:02 garbled Exp $");
 
 #include <dev/clock_subr.h>
 
-#include <machine/swarm.h>
-#include <machine/systemsw.h>
+#include <sbmips/swarm.h>
+#include <sbmips/systemsw.h>
 
 #include <mips/locore.h>
 #include <mips/sibyte/dev/sbsmbusvar.h>
@@ -56,7 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtc.c,v 1.16 2007/10/17 19:57:02 garbled Exp $");
 #include <dev/smbus/x1241reg.h>
 
 struct rtc_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	int			sc_smbus_chan;
 	int			sc_smbus_addr;
 	int			sc_type;
@@ -67,13 +67,13 @@ struct rtc_softc {
 #define	SMB_1BYTE_ADDR	1
 #define	SMB_2BYTE_ADDR	2
 
-static int xirtc_match(struct device *, struct cfdata *, void *);
-static void xirtc_attach(struct device *, struct device *, void *);
+static int xirtc_match(device_t, cfdata_t , void *);
+static void xirtc_attach(device_t, device_t, void *);
 static int xirtc_gettime(todr_chip_handle_t, struct clock_ymdhms *);
 static int xirtc_settime(todr_chip_handle_t, struct clock_ymdhms *);
 
-static int strtc_match(struct device *, struct cfdata *, void *);
-static void strtc_attach(struct device *, struct device *, void *);
+static int strtc_match(device_t, cfdata_t , void *);
+static void strtc_attach(device_t, device_t, void *);
 static int strtc_gettime(todr_chip_handle_t, struct clock_ymdhms *);
 static int strtc_settime(todr_chip_handle_t, struct clock_ymdhms *);
 
@@ -90,10 +90,10 @@ static int time_writertc(int, int, int, int, int);
 	time_readrtc((sc)->sc_smbus_chan, (sc)->sc_smbus_addr, (dev), (sc)->sc_type)
 
 
-CFATTACH_DECL(xirtc, sizeof(struct rtc_softc),
+CFATTACH_DECL_NEW(xirtc, sizeof(struct rtc_softc),
     xirtc_match, xirtc_attach, NULL, NULL);
 
-CFATTACH_DECL(m41t81rtc, sizeof(struct rtc_softc),
+CFATTACH_DECL_NEW(m41t81rtc, sizeof(struct rtc_softc),
     strtc_match, strtc_attach, NULL, NULL);
 
 static int rtcfound = 0;
@@ -103,7 +103,7 @@ struct rtc_softc *the_rtc;
  * Xicor X1241 RTC support.
  */
 static int
-xirtc_match(struct device *parent, struct cfdata *cf, void *aux)
+xirtc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct smbus_attach_args *sa = aux;
 	int ret;
@@ -122,14 +122,15 @@ xirtc_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-xirtc_attach(struct device *parent, struct device *self, void *aux)
+xirtc_attach(device_t parent, device_t self, void *aux)
 {
 	struct smbus_attach_args *sa = aux;
-	struct rtc_softc *sc = (void *)self;
+	struct rtc_softc *sc = device_private(self);
 
 	rtcfound = 1;
 	the_rtc = sc;
 
+	sc->sc_dev = self;
 	sc->sc_smbus_chan = sa->sa_interface;
 	sc->sc_smbus_addr = sa->sa_device;
 	sc->sc_type = SMB_2BYTE_ADDR;	/* Two-byte register addresses on the Xicor */
@@ -142,7 +143,7 @@ xirtc_attach(struct device *parent, struct device *self, void *aux)
 
 	todr_attach(&sc->sc_ct);
 
-	printf("\n");
+	aprint_normal("\n");
 	rtc_cal_timer();	/* XXX */
 }
 
@@ -159,18 +160,18 @@ xirtc_settime(todr_chip_handle_t handle, struct clock_ymdhms *ymdhms)
 	WRITERTC(sc, X1241REG_SR, X1241REG_SR_WEL | X1241REG_SR_RWEL);
 
 	/* set the time */
-	WRITERTC(sc, X1241REG_HR, TOBCD(ymdhms->dt_hour) | X1241REG_HR_MIL);
-	WRITERTC(sc, X1241REG_MN, TOBCD(ymdhms->dt_min));
-	WRITERTC(sc, X1241REG_SC, TOBCD(ymdhms->dt_sec));
+	WRITERTC(sc, X1241REG_HR, bintobcd(ymdhms->dt_hour) | X1241REG_HR_MIL);
+	WRITERTC(sc, X1241REG_MN, bintobcd(ymdhms->dt_min));
+	WRITERTC(sc, X1241REG_SC, bintobcd(ymdhms->dt_sec));
 
 	/* set the date */
 	y2k = (ymdhms->dt_year >= 2000) ? 0x20 : 0x19;
 	year = ymdhms->dt_year % 100;
 
-	WRITERTC(sc, X1241REG_MO, TOBCD(ymdhms->dt_mon));
-	WRITERTC(sc, X1241REG_DT, TOBCD(ymdhms->dt_day));
-	WRITERTC(sc, X1241REG_YR, TOBCD(year));
-	WRITERTC(sc, X1241REG_Y2K, TOBCD(y2k));
+	WRITERTC(sc, X1241REG_MO, bintobcd(ymdhms->dt_mon));
+	WRITERTC(sc, X1241REG_DT, bintobcd(ymdhms->dt_day));
+	WRITERTC(sc, X1241REG_YR, bintobcd(year));
+	WRITERTC(sc, X1241REG_Y2K, bintobcd(y2k));
 
 	/* lock writes again */
 	WRITERTC(sc, X1241REG_SR, 0);
@@ -186,23 +187,23 @@ xirtc_gettime(todr_chip_handle_t handle, struct clock_ymdhms *ymdhms)
 	uint8_t status;
 
 	time_smbus_init(sc->sc_smbus_chan);
-	ymdhms->dt_day = FROMBCD(READRTC(sc, X1241REG_DT));
-	ymdhms->dt_mon =  FROMBCD(READRTC(sc, X1241REG_MO));
+	ymdhms->dt_day = bcdtobin(READRTC(sc, X1241REG_DT));
+	ymdhms->dt_mon =  bcdtobin(READRTC(sc, X1241REG_MO));
 	year =  READRTC(sc, X1241REG_YR);
 	y2k = READRTC(sc, X1241REG_Y2K);
-	ymdhms->dt_year = FROMBCD(y2k) * 100 + FROMBCD(year);
+	ymdhms->dt_year = bcdtobin(y2k) * 100 + bcdtobin(year);
 
 
-	ymdhms->dt_sec = FROMBCD(READRTC(sc, X1241REG_SC));
-	ymdhms->dt_min = FROMBCD(READRTC(sc, X1241REG_MN));
+	ymdhms->dt_sec = bcdtobin(READRTC(sc, X1241REG_SC));
+	ymdhms->dt_min = bcdtobin(READRTC(sc, X1241REG_MN));
 	hour = READRTC(sc, X1241REG_HR);
-	ymdhms->dt_hour = FROMBCD(hour & ~X1241REG_HR_MIL);
+	ymdhms->dt_hour = bcdtobin(hour & ~X1241REG_HR_MIL);
 
 	status = READRTC(sc, X1241REG_SR);
 
 	if (status & X1241REG_SR_RTCF) {
 		printf("%s: battery has failed, clock setting is not accurate\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		return (EIO);
 	}
 
@@ -213,7 +214,7 @@ xirtc_gettime(todr_chip_handle_t handle, struct clock_ymdhms *ymdhms)
  * ST M41T81 RTC support.
  */
 static int
-strtc_match(struct device *parent, struct cfdata *cf, void *aux)
+strtc_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct smbus_attach_args *sa = aux;
 	int ret;
@@ -232,14 +233,15 @@ strtc_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-strtc_attach(struct device *parent, struct device *self, void *aux)
+strtc_attach(device_t parent, device_t self, void *aux)
 {
 	struct smbus_attach_args *sa = aux;
-	struct rtc_softc *sc = (void *)self;
+	struct rtc_softc *sc = device_private(self);
 
 	rtcfound = 1;
 	the_rtc = sc;
 
+	sc->sc_dev = self;
 	sc->sc_smbus_chan = sa->sa_interface;
 	sc->sc_smbus_addr = sa->sa_device;
 	sc->sc_type = SMB_1BYTE_ADDR;	/* One-byte register addresses on the ST */
@@ -251,7 +253,7 @@ strtc_attach(struct device *parent, struct device *self, void *aux)
 
 	todr_attach(&sc->sc_ct);
 
-	printf("\n");
+	aprint_normal("\n");
 	rtc_cal_timer();	/* XXX */
 }
 
@@ -263,19 +265,19 @@ strtc_settime(todr_chip_handle_t handle, struct clock_ymdhms *ymdhms)
 
 	time_smbus_init(sc->sc_smbus_chan);
 
-	hour = TOBCD(ymdhms->dt_hour);
+	hour = bintobcd(ymdhms->dt_hour);
 	if (ymdhms->dt_year >= 2000)	/* Should be always true! */
 		hour |= M41T81_HOUR_CB | M41T81_HOUR_CEB;
 
 	/* set the time */
-	WRITERTC(sc, M41T81_SEC, TOBCD(ymdhms->dt_sec));
-	WRITERTC(sc, M41T81_MIN, TOBCD(ymdhms->dt_min));
+	WRITERTC(sc, M41T81_SEC, bintobcd(ymdhms->dt_sec));
+	WRITERTC(sc, M41T81_MIN, bintobcd(ymdhms->dt_min));
 	WRITERTC(sc, M41T81_HOUR, hour);
 
 	/* set the date */
-	WRITERTC(sc, M41T81_DATE, TOBCD(ymdhms->dt_day));
-	WRITERTC(sc, M41T81_MON, TOBCD(ymdhms->dt_mon));
-	WRITERTC(sc, M41T81_YEAR, TOBCD(ymdhms->dt_year % 100));
+	WRITERTC(sc, M41T81_DATE, bintobcd(ymdhms->dt_day));
+	WRITERTC(sc, M41T81_MON, bintobcd(ymdhms->dt_mon));
+	WRITERTC(sc, M41T81_YEAR, bintobcd(ymdhms->dt_year % 100));
 
 	return (0);
 }
@@ -288,14 +290,14 @@ strtc_gettime(todr_chip_handle_t handle, struct clock_ymdhms *ymdhms)
 
 	time_smbus_init(sc->sc_smbus_chan);
 
-	ymdhms->dt_sec = FROMBCD(READRTC(sc, M41T81_SEC));
-	ymdhms->dt_min = FROMBCD(READRTC(sc, M41T81_MIN));
+	ymdhms->dt_sec = bcdtobin(READRTC(sc, M41T81_SEC));
+	ymdhms->dt_min = bcdtobin(READRTC(sc, M41T81_MIN));
 	hour = READRTC(sc, M41T81_HOUR & M41T81_HOUR_MASK);
-	ymdhms->dt_hour = FROMBCD(hour & M41T81_HOUR_MASK);
+	ymdhms->dt_hour = bcdtobin(hour & M41T81_HOUR_MASK);
 
-	ymdhms->dt_day = FROMBCD(READRTC(sc, M41T81_DATE));
-	ymdhms->dt_mon =  FROMBCD(READRTC(sc, M41T81_MON));
-	ymdhms->dt_year =  1900 + FROMBCD(READRTC(sc, M41T81_YEAR));
+	ymdhms->dt_day = bcdtobin(READRTC(sc, M41T81_DATE));
+	ymdhms->dt_mon =  bcdtobin(READRTC(sc, M41T81_MON));
+	ymdhms->dt_year =  1900 + bcdtobin(READRTC(sc, M41T81_YEAR));
 	if (hour & M41T81_HOUR_CB)
 		ymdhms->dt_year += 100;
 
@@ -303,7 +305,7 @@ strtc_gettime(todr_chip_handle_t handle, struct clock_ymdhms *ymdhms)
 }
 
 #define	NITERS			3
-#define	RTC_SECONDS(rtc)	FROMBCD(READRTC((rtc), X1241REG_SC))
+#define	RTC_SECONDS(rtc)	bcdtobin(READRTC((rtc), X1241REG_SC))
 
 /*
  * Since it takes so long to read the complete time/date values from
@@ -324,7 +326,7 @@ rtc_cal_timer(void)
 	}
 return;	/* XXX XXX */
 
-	printf("%s: calibrating CPU clock", the_rtc->sc_dev.dv_xname);
+	printf("%s: calibrating CPU clock", device_xname(the_rtc->sc_dev));
 
 	/*
 	 * Run the loop an extra time to wait for the second to tick over
@@ -373,7 +375,7 @@ return;	/* XXX XXX */
 	curcpu()->ci_cycles_per_hz = curcpu()->ci_cpu_freq / hz;
 
 	printf("%s: timer calibration: %lu cycles/sec [(%u, %u)]\n",
-	    the_rtc->sc_dev.dv_xname, curcpu()->ci_cpu_freq,
+	    device_xname(the_rtc->sc_dev), curcpu()->ci_cpu_freq,
 	    ctrdiff[1], ctrdiff[2]);
 }
 #undef RTC_SECONDS
@@ -415,8 +417,8 @@ return;	/* XXX XXX */
 #include <mips/sibyte/include/sb1250_regs.h>
 #include <mips/sibyte/include/sb1250_smbus.h>
 
-#define	READ_REG(rp)		(mips3_ld((uint64_t *)(MIPS_PHYS_TO_KSEG1(rp))))
-#define	WRITE_REG(rp, val)	(mips3_sd((uint64_t *)(MIPS_PHYS_TO_KSEG1(rp)), (val)))
+#define	READ_REG(rp)		mips3_ld((register_t)(MIPS_PHYS_TO_KSEG1(rp)))
+#define	WRITE_REG(rp, val)	mips3_sd((register_t)(MIPS_PHYS_TO_KSEG1(rp)), (val))
 
 static void
 time_smbus_init(int chan)

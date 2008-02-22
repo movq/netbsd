@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupt.c,v 1.7 2007/12/15 00:39:22 perry Exp $	*/
+/*	$NetBSD: interrupt.c,v 1.16 2018/02/08 09:05:18 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.7 2007/12/15 00:39:22 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.16 2018/02/08 09:05:18 dholland Exp $");
 
 #include "debug_playstation2.h"
 #if defined INTR_DEBUG && !defined GSFB_DEBUG_MONITOR
@@ -78,8 +71,6 @@ STATIC struct {
 } _sif_call_env;
 
 struct clockframe playstation2_clockframe;
-struct playstation2_soft_intr playstation2_soft_intrs[_IPL_NSOFT];
-struct playstation2_soft_intrhand *softnet_intrhand;
 
 u_int32_t __icu_mask[_IPL_N];	/* interrupt mask of DMAC/INTC */
 volatile u_int32_t md_imask;
@@ -90,7 +81,7 @@ void _debug_print_intr(const char *);
 #endif /* INTR_DEBUG */
 
 void
-interrupt_init_bootstrap()
+interrupt_init_bootstrap(void)
 {
 	int i;
 
@@ -98,7 +89,7 @@ interrupt_init_bootstrap()
 	for (i = 0; i < _IPL_N; i++)
 		__icu_mask[i] = 0xffffffff;
 
-	/* intialize EE embeded device */
+	/* initialize EE embeded device */
 	timer_init();
 
 	/* clear all pending interrupt and disable all */
@@ -109,9 +100,6 @@ interrupt_init_bootstrap()
 void
 interrupt_init(void)
 {
-	struct playstation2_soft_intr *asi;
-	int i;
-
 	evcnt_attach_static(&_playstation2_evcnt.clock);
 	evcnt_attach_static(&_playstation2_evcnt.sbus);
 	evcnt_attach_static(&_playstation2_evcnt.dmac);
@@ -132,31 +120,35 @@ interrupt_init(void)
  *  Hardware interrupt support
  */
 void
-cpu_intr(u_int32_t status, u_int32_t cause, u_int32_t pc, u_int32_t ipending)
+cpu_intr(int ppl, vaddr_t pc, uint32_t status)
 {
 	struct cpu_info *ci;
-
+	uint32_t ipending;
+	int ipl;
 #if 0
 	_debug_print_intr(__func__);
 #endif
 
 	ci = curcpu();
 	ci->ci_idepth++;
-	uvmexp.intrs++;
+	ci->ci_data.cpu_nintr++;
 
-	playstation2_clockframe.ppl = md_imask;
+	playstation2_clockframe.intr = (curcpu()->ci_idepth > 1);
 	playstation2_clockframe.sr = status;
 	playstation2_clockframe.pc = pc;
 
-	if (ipending & MIPS_INT_MASK_0) {
-		intc_intr(md_imask);
+	while (ppl < (ipl = splintr(&ipending))) {
+		splx(ipl);
+		if (ipending & MIPS_INT_MASK_0) {
+			intc_intr(md_imask);
+		}
+
+		if (ipending & MIPS_INT_MASK_1) {
+			_playstation2_evcnt.dmac.ev_count++;
+			dmac_intr(md_imask);
+		}
+		(void)splhigh();
 	}
-	
-	if (ipending & MIPS_INT_MASK_1) {
-		_playstation2_evcnt.dmac.ev_count++;
-		dmac_intr(md_imask);
-	}
-	ci->ci_idepth--;
 }
 void
 setsoft(int ipl)
@@ -219,7 +211,7 @@ splset(int npl)
 }
 
 void
-spl0()
+spl0(void)
 {
 
 	splset(0);
@@ -230,7 +222,7 @@ spl0()
  * SIF BIOS call of interrupt utility.
  */
 void
-_sif_call_start()
+_sif_call_start(void)
 {
 	int s;
 
@@ -249,7 +241,7 @@ _sif_call_start()
 }
 
 void
-_sif_call_end()
+_sif_call_end(void)
 {
 	int s;
 
@@ -264,7 +256,7 @@ _sif_call_end()
 
 #ifdef INTR_DEBUG
 void
-_debug_print_ipl()
+_debug_print_ipl(void)
 {
 	int i;
 

@@ -1,4 +1,4 @@
-.\" $NetBSD: strip.4,v 1.13 2004/12/05 13:24:10 peter Exp $
+.\" $NetBSD: strip.4,v 1.16 2017/07/03 21:30:58 wiz Exp $
 .\"
 .\" Copyright 1996 The Board of Trustees of The Leland Stanford
 .\" Junior University. All Rights Reserved.
@@ -156,11 +156,9 @@ address 10.11.12.13, reachable via the
 .Em strip0
 interface:
 .Pp
-.br
-.in 10
-route add -host 10.11.12.13 -link strip0:1:2:3:4:5:6:7:8
-.br
-.in 5
+.Bd -literal -offset indent
+.Ic route add -host 10.11.12.13 -link strip0:1:2:3:4:5:6:7:8
+.Ed
 .Pp
 Generalising from this example to other
 .Tn IP
@@ -177,7 +175,7 @@ Use a terminal emulator and the Hayes command
 .Ic ATS304=115200
 to set the serial baudrate to the specified number (or 0 for autobaud).
 The command
-.Ic AT\*[Am]W
+.Ic AT&W
 will then save the current packet radio state in non-volatile memory.
 .Pp
 .Tn Metricom
@@ -207,9 +205,7 @@ if the baud rate was set correctly by
 was originally developed for the
 .Tn Linux
 kernel by Stuart Cheshire of Stanford's Operating Systems and
-Networking group, as part of Mary Baker's MosquitoNet
-.Sy http://mosquitonet.stanford.edu/mosquitonet.html
-project.
+Networking group, as part of Mary Baker's MosquitoNet project.
 .Pp
 This
 .Nm

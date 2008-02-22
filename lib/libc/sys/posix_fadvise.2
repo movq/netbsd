@@ -1,6 +1,6 @@
-.\"	$NetBSD: posix_fadvise.2,v 1.2 2006/02/24 21:50:04 wiz Exp $
+.\"	$NetBSD: posix_fadvise.2,v 1.6 2016/12/19 06:45:29 abhinav Exp $
 .\"
-.\" Copyright (c)2006 YAMAMOTO Takashi,
+.\" Copyright (c)2006,2009 YAMAMOTO Takashi,
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\" ------------------------------------------------------------
-.Dd February 20, 2006
+.Dd February 4, 2013
 .Dt POSIX_FADVISE 2
 .Os
 .Sh NAME
@@ -36,7 +36,7 @@
 .Lb libc
 .\" ------------------------------------------------------------
 .Sh SYNOPSIS
-.In sys/fcntl.h
+.In fcntl.h
 .Ft int
 .Fn posix_fadvise "int fd" "off_t offset" "off_t size" "int hint"
 .\" ------------------------------------------------------------
@@ -55,7 +55,7 @@ If
 is zero, it means to the end of file.
 .Pp
 .Fa hint
-should be one of the followings.
+should be one of the following:
 .Pp
 .Bl -tag -offset indent -width POSIX_FADV_SEQUENTIAL -compact
 .It POSIX_FADV_NORMAL
@@ -90,12 +90,6 @@ Otherwise, it returns an error number.
 .Xr madvise 2
 .\" ------------------------------------------------------------
 .Sh BUGS
-.Dv POSIX_FADV_WILLNEED ,
-.Dv POSIX_FADV_DONTNEED ,
-and
-.Dv POSIX_FADV_NOREUSE
-are not implemented.
-.Pp
 For
 .Dv POSIX_FADV_NORMAL ,
 .Dv POSIX_FADV_RANDOM ,

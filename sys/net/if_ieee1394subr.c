@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ieee1394subr.c,v 1.39 2008/02/20 17:05:53 matt Exp $	*/
+/*	$NetBSD: if_ieee1394subr.c,v 1.63 2018/06/26 06:48:02 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,18 +30,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.39 2008/02/20 17:05:53 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.63 2018/06/26 06:48:02 msaitoh Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#include "bpfilter.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/socket.h>
-#include <sys/sockio.h>
+#include <sys/bus.h>
+#include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/mbuf.h>
-#include <sys/device.h>
+#include <sys/socket.h>
+#include <sys/sockio.h>
+#include <sys/select.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -59,9 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.39 2008/02/20 17:05:53 matt Ex
 #include <net/netisr.h>
 #include <net/route.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -74,7 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.39 2008/02/20 17:05:53 matt Ex
 #include <netinet6/nd6.h>
 #endif /* INET6 */
 
-#include <dev/ieee1394/fw_port.h>
 #include <dev/ieee1394/firewire.h>
 
 #include <dev/ieee1394/firewirereg.h>
@@ -86,21 +79,19 @@ __KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.39 2008/02/20 17:05:53 matt Ex
 #define	senderr(e)	do { error = (e); goto bad; } while(0/*CONSTCOND*/)
 
 static int  ieee1394_output(struct ifnet *, struct mbuf *,
-		const struct sockaddr *, struct rtentry *);
+		const struct sockaddr *, const struct rtentry *);
 static struct mbuf *ieee1394_reass(struct ifnet *, struct mbuf *, uint16_t);
 
 static int
 ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
-    struct rtentry *rt0)
+    const struct rtentry *rt)
 {
 	uint16_t etype = 0;
 	struct mbuf *m;
-	int s, hdrlen, error = 0;
-	struct rtentry *rt;
+	int hdrlen, error = 0;
 	struct mbuf *mcopy = NULL;
 	struct ieee1394_hwaddr *hwdst, baddr;
 	const struct ieee1394_hwaddr *myaddr;
-	ALTQ_DECL(struct altq_pktattr pktattr;)
 #ifdef INET
 	struct arphdr *ah;
 #endif /* INET */
@@ -109,46 +100,12 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
 		senderr(ENETDOWN);
-	if ((rt = rt0) != NULL) {
-		if ((rt->rt_flags & RTF_UP) == 0) {
-			if ((rt0 = rt = rtalloc1(dst, 1)) != NULL) {
-				rt->rt_refcnt--;
-				if (rt->rt_ifp != ifp)
-					return (*rt->rt_ifp->if_output)
-							(ifp, m0, dst, rt);
-			} else
-				senderr(EHOSTUNREACH);
-		}
-		if (rt->rt_flags & RTF_GATEWAY) {
-			if (rt->rt_gwroute == NULL)
-				goto lookup;
-			if (((rt = rt->rt_gwroute)->rt_flags & RTF_UP) == 0) {
-				rtfree(rt);
-				rt = rt0;
-  lookup:
-				rt->rt_gwroute = rtalloc1(rt->rt_gateway, 1);
-				if ((rt = rt->rt_gwroute) == NULL)
-					senderr(EHOSTUNREACH);
-				/* the "G" test below also prevents rt == rt0 */
-				if ((rt->rt_flags & RTF_GATEWAY) ||
-				    (rt->rt_ifp != ifp)) {
-					rt->rt_refcnt--;
-					rt0->rt_gwroute = NULL;
-					senderr(EHOSTUNREACH);
-				}
-			}
-		}
-		if (rt->rt_flags & RTF_REJECT)
-			if (rt->rt_rmx.rmx_expire == 0 ||
-			    time_second < rt->rt_rmx.rmx_expire)
-				senderr(rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
-	}
 
 	/*
 	 * If the queueing discipline needs packet classification,
 	 * do it before prepending link headers.
 	 */
-	IFQ_CLASSIFY(&ifp->if_snd, m0, dst->sa_family, &pktattr);
+	IFQ_CLASSIFY(&ifp->if_snd, m0, dst->sa_family);
 
 	/*
 	 * For unicast, we make a tag to store the lladdr of the
@@ -162,9 +119,9 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	unicast = !(m0->m_flags & (M_BCAST | M_MCAST));
 	if (unicast) {
 		mtag =
-		    m_tag_locate(m0, MTAG_FIREWIRE, MTAG_FIREWIRE_HWADDR, NULL);
+		    m_tag_find(m0, MTAG_FIREWIRE_HWADDR, NULL);
 		if (!mtag) {
-			mtag = m_tag_alloc(MTAG_FIREWIRE, MTAG_FIREWIRE_HWADDR,
+			mtag = m_tag_get(MTAG_FIREWIRE_HWADDR,
 			    sizeof (struct ieee1394_hwaddr), M_NOWAIT);
 			if (!mtag) {
 				error = ENOMEM;
@@ -180,11 +137,13 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	switch (dst->sa_family) {
 #ifdef INET
 	case AF_INET:
-		if (unicast && (!arpresolve(ifp, rt, m0, dst, (u_char *)hwdst)))
-			return 0;	/* if not yet resolved */
+		if (unicast &&
+		    (error = arpresolve(ifp, rt, m0, dst, hwdst,
+			sizeof(*hwdst))) != 0)
+			return error == EWOULDBLOCK ? 0 : error;
 		/* if broadcasting on a simplex interface, loopback a copy */
 		if ((m0->m_flags & M_BCAST) && (ifp->if_flags & IFF_SIMPLEX))
-			mcopy = m_copy(m0, 0, M_COPYALL);
+			mcopy = m_copypacket(m0, M_DONTWAIT);
 		etype = htons(ETHERTYPE_IP);
 		break;
 	case AF_ARP:
@@ -195,10 +154,21 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 #endif /* INET */
 #ifdef INET6
 	case AF_INET6:
-		if (unicast && (!nd6_storelladdr(ifp, rt, m0, dst,
-		    hwdst->iha_uid, IEEE1394_ADDR_LEN))) {
-			/* something bad happened */
-			return 0;
+#if 0
+		/*
+		 * XXX This code was in nd6_storelladdr, which was replaced with
+		 * nd6_resolve, but it never be used because nd6_storelladdr was
+		 * called only if unicast. Should it be enabled?
+		 */
+		if (m0->m_flags & M_BCAST)
+			memcpy(hwdst->iha_uid, ifp->if_broadcastaddr,
+			    MIN(IEEE1394_ADDR_LEN, ifp->if_addrlen));
+#endif
+		if (unicast) {
+			error = nd6_resolve(ifp, rt, m0, dst, hwdst->iha_uid,
+			    IEEE1394_ADDR_LEN);
+			if (error != 0)
+				return error == EWOULDBLOCK ? 0 : error;
 		}
 		etype = htons(ETHERTYPE_IPV6);
 		break;
@@ -217,7 +187,6 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	if (mcopy)
 		looutput(ifp, mcopy, dst, rt);
 	myaddr = (const struct ieee1394_hwaddr *)CLLADDR(ifp->if_sadl);
-#if NBPFILTER > 0
 	if (ifp->if_bpf) {
 		struct ieee1394_bpfhdr h;
 		if (unicast)
@@ -228,9 +197,8 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 			    ifp->if_broadcastaddr)->iha_uid, 8);
 		memcpy(h.ibh_shost, myaddr->iha_uid, 8);
 		h.ibh_type = etype;
-		bpf_mtap2(ifp->if_bpf, &h, sizeof(h), m0);
+		bpf_mtap2(ifp->if_bpf, &h, sizeof(h), m0, BPF_D_OUT);
 	}
-#endif
 	if ((ifp->if_flags & IFF_SIMPLEX) &&
 	    unicast &&
 	    memcmp(hwdst, myaddr, IEEE1394_ADDR_LEN) == 0)
@@ -261,26 +229,15 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	if (m0 == NULL)
 		senderr(ENOBUFS);
 
-	s = splnet();
-	ifp->if_obytes += m0->m_pkthdr.len;
-	if (m0->m_flags & M_MCAST)
-		ifp->if_omcasts++;
 	while ((m = m0) != NULL) {
 		m0 = m->m_nextpkt;
-		if (m == NULL) {
-			splx(s);
-			senderr(ENOBUFS);
-		}
-		IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+
+		error = if_transmit_lock(ifp, m);
 		if (error) {
 			/* mbuf is already freed */
-			splx(s);
 			goto bad;
 		}
 	}
-	if ((ifp->if_flags & IFF_OACTIVE) == 0)
-		(*ifp->if_start)(ifp);
-	splx(s);
 	return 0;
 
   bad:
@@ -341,9 +298,11 @@ ieee1394_fragment(struct ifnet *ifp, struct mbuf *m0, int maxsize,
 		ifh->ifh_etype_off = htons(off);
 		ifh->ifh_dgl = htons(ic->ic_dgl);
 		ifh->ifh_reserved = 0;
-		m->m_next = m_copy(m0, sizeof(*ifh) + off, fraglen);
-		if (m->m_next == NULL)
+		m->m_next = m_copym(m0, sizeof(*ifh) + off, fraglen, M_DONTWAIT);
+		if (m->m_next == NULL) {
+			m_freem(m);
 			goto bad;
+		}
 		m->m_pkthdr.len = sizeof(*ifh) + fraglen;
 		off += fraglen;
 		*mp = m;
@@ -367,10 +326,11 @@ ieee1394_fragment(struct ifnet *ifp, struct mbuf *m0, int maxsize,
 void
 ieee1394_input(struct ifnet *ifp, struct mbuf *m, uint16_t src)
 {
+	pktqueue_t *pktq = NULL;
 	struct ifqueue *inq;
 	uint16_t etype;
-	int s;
 	struct ieee1394_unfraghdr *iuh;
+	int isr = 0;
 
 	if ((ifp->if_flags & IFF_UP) == 0) {
 		m_freem(m);
@@ -392,14 +352,12 @@ ieee1394_input(struct ifnet *ifp, struct mbuf *m, uint16_t src)
 
 	/* strip off the ieee1394 header */
 	m_adj(m, sizeof(*iuh));
-#if NBPFILTER > 0
 	if (ifp->if_bpf) {
 		struct ieee1394_bpfhdr h;
 		struct m_tag *mtag;
 		const struct ieee1394_hwaddr *myaddr;
 
-		mtag = m_tag_locate(m,
-		    MTAG_FIREWIRE, MTAG_FIREWIRE_SENDER_EUID, 0);
+		mtag = m_tag_find(m, MTAG_FIREWIRE_SENDER_EUID, 0);
 		if (mtag)
 			memcpy(h.ibh_shost, mtag + 1, 8);
 		else
@@ -414,27 +372,24 @@ ieee1394_input(struct ifnet *ifp, struct mbuf *m, uint16_t src)
 			memcpy(h.ibh_dhost, myaddr->iha_uid, 8);
 		}
 		h.ibh_type = htons(etype);
-		bpf_mtap2(ifp->if_bpf, &h, sizeof(h), m);
+		bpf_mtap2(ifp->if_bpf, &h, sizeof(h), m, BPF_D_IN);
 	}
-#endif
 
 	switch (etype) {
 #ifdef INET
 	case ETHERTYPE_IP:
-		schednetisr(NETISR_IP);
-		inq = &ipintrq;
+		pktq = ip_pktq;
 		break;
 
 	case ETHERTYPE_ARP:
-		schednetisr(NETISR_ARP);
+		isr = NETISR_ARP;
 		inq = &arpintrq;
 		break;
 #endif /* INET */
 
 #ifdef INET6
 	case ETHERTYPE_IPV6:
-		schednetisr(NETISR_IPV6);
-		inq = &ip6intrq;
+		pktq = ip6_pktq;
 		break;
 #endif /* INET6 */
 
@@ -443,13 +398,23 @@ ieee1394_input(struct ifnet *ifp, struct mbuf *m, uint16_t src)
 		return;
 	}
 
-	s = splnet();
+	if (__predict_true(pktq)) {
+		if (__predict_false(!pktq_enqueue(pktq, m, 0))) {
+			m_freem(m);
+		}
+		return;
+	}
+
+	IFQ_LOCK(inq);
 	if (IF_QFULL(inq)) {
 		IF_DROP(inq);
+		IFQ_UNLOCK(inq);
 		m_freem(m);
-	} else
+	} else {
 		IF_ENQUEUE(inq, m);
-	splx(s);
+		IFQ_UNLOCK(inq);
+		schednetisr(isr);
+	}
 }
 
 static struct mbuf *
@@ -477,8 +442,7 @@ ieee1394_reass(struct ifnet *ifp, struct mbuf *m0, uint16_t src)
 	len = m0->m_pkthdr.len;
 	id = dgl | (src << 16);
 	if (ftype & IEEE1394_FT_SUBSEQ) {
-		m_tag_delete_chain(m0, NULL);
-		m0->m_flags &= ~M_PKTHDR;
+		m_remove_pkthdr(m0);
 		etype = 0;
 		off = ntohs(ifh->ifh_etype_off);
 	} else {
@@ -692,7 +656,7 @@ ieee1394_ifattach(struct ifnet *ifp, const struct ieee1394_hwaddr *hwaddr)
 	if (ifp->if_baudrate == 0)
 		ifp->if_baudrate = IF_Mbps(100);
 
-	if_set_sadl(ifp, hwaddr, sizeof(struct ieee1394_hwaddr));
+	if_set_sadl(ifp, hwaddr, sizeof(struct ieee1394_hwaddr), true);
 
 	baddr = malloc(ifp->if_addrlen, M_DEVBUF, M_WAITOK);
 	memset(baddr->iha_uid, 0xff, IEEE1394_ADDR_LEN);
@@ -701,24 +665,17 @@ ieee1394_ifattach(struct ifnet *ifp, const struct ieee1394_hwaddr *hwaddr)
 	memset(baddr->iha_offset, 0, sizeof(baddr->iha_offset));
 	ifp->if_broadcastaddr = (uint8_t *)baddr;
 	LIST_INIT(&ic->ic_reassq);
-#if NBPFILTER > 0
-	bpfattach(ifp,
-	    DLT_APPLE_IP_OVER_IEEE1394, sizeof(struct ieee1394_hwaddr));
-#endif
+	bpf_attach(ifp, DLT_APPLE_IP_OVER_IEEE1394,
+	    sizeof(struct ieee1394_hwaddr));
 }
 
 void
 ieee1394_ifdetach(struct ifnet *ifp)
 {
 	ieee1394_drain(ifp);
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	free(__UNCONST(ifp->if_broadcastaddr), M_DEVBUF);
 	ifp->if_broadcastaddr = NULL;
-#if 0	/* done in if_detach() */
-	if_free_sadl(ifp);
-#endif
 }
 
 int
@@ -727,40 +684,23 @@ ieee1394_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa = (struct ifaddr *)data;
 	int error = 0;
-#if __NetBSD_Version__ < 105080000
-	int fw_init(struct ifnet *);
-	void fw_stop(struct ifnet *, int);
-#endif
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-#if __NetBSD_Version__ >= 105080000
 			if ((error = (*ifp->if_init)(ifp)) != 0)
-#else
-			if ((error = fw_init(ifp)) != 0)
-#endif
 				break;
 			arp_ifinit(ifp, ifa);
 			break;
 #endif /* INET */
 		default:
-#if __NetBSD_Version__ >= 105080000
 			error = (*ifp->if_init)(ifp);
-#else
-			error = fw_init(ifp);
-#endif
 			break;
 		}
 		break;
-
-	case SIOCGIFADDR:
-		memcpy(((struct sockaddr *)&ifr->ifr_data)->sa_data,
-		    CLLADDR(ifp->if_sadl), IEEE1394_ADDR_LEN);
-		    break;
 
 	case SIOCSIFMTU:
 		if (ifr->ifr_mtu > IEEE1394MTU)
@@ -769,10 +709,8 @@ ieee1394_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			error = 0;
 		break;
 
-	case SIOCSIFCAP:
-		return ifioctl_common(ifp, cmd, data);
 	default:
-		error = ENOTTY;
+		error = ifioctl_common(ifp, cmd, data);
 		break;
 	}
 

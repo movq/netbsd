@@ -1,4 +1,4 @@
-/*	$NetBSD: stalloc.h,v 1.3 1996/04/12 09:05:17 leo Exp $	*/
+/*	$NetBSD: stalloc.h,v 1.6 2014/01/03 07:14:20 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps (allocator stuff)
@@ -39,17 +39,20 @@
  * St-mem allocator stuff.
  */
 struct mem_node {
-	CIRCLEQ_ENTRY(mem_node) link; 	
-	CIRCLEQ_ENTRY(mem_node) free_link;
+	TAILQ_ENTRY(mem_node) link; 	
+	TAILQ_ENTRY(mem_node) free_link;
 	u_long size;		/* size of memory following node. */
+	u_char type;		/* free, used */
 };
+#define MNODE_FREE 0
+#define MNODE_USED 1
 
 #define ST_BLOCKSIZE	(sizeof(long))
 #define ST_BLOCKMASK	(~(ST_BLOCKSIZE - 1))
 #define MNODES_MEM(mn)	((u_char *)(&mn[1]))
 
-void init_stmem __P((void));
-void *alloc_stmem __P((u_long, void **));
-void free_stmem __P((void *));
+void init_stmem(void);
+void *alloc_stmem(u_long, void **);
+void free_stmem(void *);
 
 #endif /* _ATARI_STALLOC_H */

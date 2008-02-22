@@ -1,4 +1,4 @@
-.\"	$NetBSD: ccd.4,v 1.28 2005/06/20 13:25:24 peter Exp $
+.\"	$NetBSD: ccd.4,v 1.32 2014/10/27 16:20:48 wiz Exp $
 .\"
 .\" Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,14 +51,14 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd March 5, 2004
+.Dd November 30, 2013
 .Dt CCD 4
 .Os
 .Sh NAME
 .Nm ccd
 .Nd Concatenated disk driver
 .Sh SYNOPSIS
-.Cd "pseudo-device ccd" Op Ar count
+.Cd pseudo-device ccd
 .Sh DESCRIPTION
 The
 .Nm
@@ -100,15 +93,12 @@ In order to compile in support for the
 you must add a line similar
 to the following to your kernel configuration file:
 .Bd -unfilled -offset indent
-pseudo-device	ccd	4	# concatenated disk devices
+pseudo-device	ccd	# concatenated disk devices
 .Ed
 .Pp
-The count argument is how many
+The
 .Nm Ns s
-memory is allocated for at boot time.
-In this example, no more than 4
-.Nm Ns s
-may be configured.
+are allocated dynamically as needed.
 .Pp
 A
 .Nm
@@ -162,9 +152,9 @@ device special files.
 .El
 .Sh SEE ALSO
 .Xr config 1 ,
-.Xr MAKEDEV 8 ,
 .Xr ccdconfig 8 ,
 .Xr fsck 8 ,
+.Xr MAKEDEV 8 ,
 .Xr mount 8 ,
 .Xr newfs 8
 .Sh HISTORY

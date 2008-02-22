@@ -1,11 +1,11 @@
-/*	$NetBSD: opl_isa.c,v 1.17 2007/10/19 12:00:21 ad Exp $	*/
+/*	$NetBSD: opl_isa.c,v 1.21 2012/04/09 10:18:17 plunky Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson.
+ * by Lennart Augustsson, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.17 2007/10/19 12:00:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.21 2012/04/09 10:18:17 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,15 +56,19 @@ __KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.17 2007/10/19 12:00:21 ad Exp $");
 
 #define OPL_SIZE 4
 
-int	opl_isa_match(struct device *, struct cfdata *, void *);
-void	opl_isa_attach(struct device *, struct device *, void *);
+int	opl_isa_match(device_t, cfdata_t, void *);
+void	opl_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(opl_isa, sizeof(struct opl_softc),
+struct opl_isa_softc {
+	struct opl_softc	sc_opl;
+	kmutex_t		sc_lock;
+};
+
+CFATTACH_DECL_NEW(opl_isa, sizeof(struct opl_isa_softc),
     opl_isa_match, opl_isa_attach, NULL, NULL);
 
 int
-opl_isa_match(struct device *parent, struct cfdata *match,
-    void *aux)
+opl_isa_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_handle_t ioh;
@@ -102,19 +99,23 @@ opl_isa_match(struct device *parent, struct cfdata *match,
 }
 
 void
-opl_isa_attach(struct device *parent, struct device *self, void *aux)
+opl_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct opl_softc *sc = (struct opl_softc *)self;
+	struct opl_softc *sc = device_private(self);
+	struct opl_isa_softc *isa = device_private(self);
 	struct isa_attach_args *ia = aux;
 
+	sc->dev = self;
 	sc->iot = ia->ia_iot;
 
 	if (bus_space_map(sc->iot, ia->ia_io[0].ir_addr, OPL_SIZE,
 	    0, &sc->ioh)) {
-		printf("opl_isa_attach: bus_space_map failed\n");
+		aprint_error("opl_isa_attach: bus_space_map failed\n");
 		return;
 	}
 	sc->offs = 0;
+	sc->lock = &isa->sc_lock;
+	mutex_init(&isa->sc_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	opl_attach(sc);
 }

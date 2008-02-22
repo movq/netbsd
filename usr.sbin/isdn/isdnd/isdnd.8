@@ -1,4 +1,4 @@
-.\" $NetBSD: isdnd.8,v 1.11 2005/12/26 19:11:17 elad Exp $
+.\" $NetBSD: isdnd.8,v 1.16 2017/07/12 01:57:43 christos Exp $
 .\"
 .\" Copyright (c) 1997, 2000 Hellmuth Michaelis. All rights reserved.
 .\"
@@ -23,13 +23,13 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.\"	$Id: isdnd.8,v 1.11 2005/12/26 19:11:17 elad Exp $
+.\"	$Id: isdnd.8,v 1.16 2017/07/12 01:57:43 christos Exp $
 .\"
 .\" $FreeBSD$
 .\"
 .\"	last edit-date: [Tue May  2 13:45:12 2000]
 .\"
-.Dd December 26, 2005
+.Dd July 11, 2017
 .Dt ISDND 8
 .Os
 .Sh NAME
@@ -51,7 +51,7 @@
 .Op Fl m
 .Sh DESCRIPTION
 .Nm
-is the isdn4bsd package demon which manages all ISDN related connection
+is the isdn4bsd package daemon which manages all ISDN related connection
 and disconnection of ISDN devices supported by the package.
 .Pp
 The options are as follows:
@@ -178,7 +178,7 @@ and
 .Fl r
 options,
 .Ar terminaltype
-specifies a terminal type or termcap entry name (such as vt220) for the device
+specifies a terminal type or terminfo entry name (such as vt220) for the device
 used for
 .Nm
 full-screen output. This is useful if an unused (no getty running) tty line is
@@ -264,7 +264,7 @@ Charging information from the kernel.
 .Ss OUTGOING CALLS
 Currently the only possibility to trigger an outgoing call is that an
 isdn4bsd network driver
-.Em ( isdn\*[Lt]n\*[Gt] )
+.Em ( isdn<n> )
 sends a
 .Em MSG_DIALOUT_IND
 to the
@@ -388,7 +388,7 @@ isdnd -d0xf9 -f -r /dev/ttyv3 -t vt100
 will start
 .Nm
 with reasonable debugging messages enabled, full-screen mode of operation,
-full-screen display redirected to /dev/ttyv03 and using a termcap entry
+full-screen display redirected to /dev/ttyv03 and using a terminfo entry
 for vt100 on this display.
 .Sh DIAGNOSTICS
 Exit status is 0 on success, 1 on error.
@@ -405,4 +405,4 @@ Exit status is 0 on success, 1 on error.
 The
 .Nm
 daemon and this manual page were written by
-.An Hellmuth Michaelis Aq hm@kts.org .
+.An Hellmuth Michaelis Aq Mt hm@kts.org .

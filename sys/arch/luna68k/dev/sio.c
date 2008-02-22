@@ -1,4 +1,4 @@
-/* $NetBSD: sio.c,v 1.4 2007/03/04 06:00:03 christos Exp $ */
+/* $NetBSD: sio.c,v 1.13 2014/02/02 15:35:06 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.4 2007/03/04 06:00:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.13 2014/02/02 15:35:06 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,22 +43,20 @@ __KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.4 2007/03/04 06:00:03 christos Exp $");
 #include <luna68k/luna68k/isr.h>
 #include <luna68k/dev/siovar.h>
 
-static int  sio_match __P((struct device *, struct cfdata *, void *));
-static void sio_attach __P((struct device *, struct device *, void *));
-static int  sio_print __P((void *, const char *));
+#include "ioconf.h"
 
-CFATTACH_DECL(sio, sizeof(struct sio_softc),
+static int  sio_match(device_t, cfdata_t, void *);
+static void sio_attach(device_t, device_t, void *);
+static int  sio_print(void *, const char *);
+
+CFATTACH_DECL_NEW(sio, sizeof(struct sio_softc),
     sio_match, sio_attach, NULL, NULL);
-extern struct cfdriver sio_cd;
 
-static void nullintr __P((int));
-static int xsiointr __P((void *));
+static void nullintr(void *);
+static int xsiointr(void *);
 
 static int
-sio_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+sio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -77,21 +68,20 @@ sio_match(parent, cf, aux)
 }
 
 static void
-sio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+sio_attach(device_t parent, device_t self, void *aux)
 {
-	struct sio_softc *sc = (void *)self;
+	struct sio_softc *sc = device_private(self);
 	struct mainbus_attach_args *ma = aux;
 	struct sio_attach_args sio_args;
 	int channel;
 	extern int sysconsole; /* console: 0 for ttya, 1 for desktop */
 
-	printf(": 7201a\n");
+	aprint_normal(": uPD7201A\n");
 
-	sc->scp_ctl = (void *)ma->ma_addr;
-	sc->scp_intr[0] = sc->scp_intr[1] = nullintr;
+	sc->sc_dev = self;
+	sc->sc_ctl = (void *)ma->ma_addr;
 	for (channel = 0; channel < 2; channel++) {
+		sc->sc_intrhand[channel].ih_func = nullintr;
 		sio_args.channel = channel;
 		sio_args.hwflags = (channel == sysconsole);
 		config_found(self, (void *)&sio_args, sio_print);
@@ -101,9 +91,7 @@ sio_attach(parent, self, aux)
 }
 
 static int
-sio_print(aux, name)
-	void *aux;
-	const char *name;
+sio_print(void *aux, const char *name)
 {
 	struct sio_attach_args *args = aux;
 
@@ -117,14 +105,20 @@ sio_print(aux, name)
 }
 
 static int
-xsiointr(arg)
-	void *arg;
+xsiointr(void *arg)
 {
 	struct sio_softc *sc = arg;
 
-	(*sc->scp_intr[0])(0); 	/* 0: ttya system serial port */
-	(*sc->scp_intr[1])(1);	/* 1: keyboard and mouse */
+	/* channel 0: ttya system serial port */
+	(*sc->sc_intrhand[0].ih_func)(sc->sc_intrhand[0].ih_arg);
+
+	/* channel 1: keyboard and mouse */
+	(*sc->sc_intrhand[1].ih_func)(sc->sc_intrhand[1].ih_arg);
+
 	return 1;
 }
 
-static void nullintr(v) int v; { }
+static void
+nullintr(void *arg)
+{
+}

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuconf.h,v 1.13 2007/01/06 00:50:54 christos Exp $	*/
+/*	$NetBSD: cpuconf.h,v 1.26 2018/04/01 04:35:04 ryo Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -40,6 +40,7 @@
 
 #if defined(_KERNEL_OPT)
 #include "opt_cputypes.h"
+#include "opt_cpuoptions.h"
 #endif /* _KERNEL_OPT */
 
 #if defined(CPU_XSCALE_PXA250) || defined(CPU_XSCALE_PXA270)
@@ -56,6 +57,7 @@
  * YOU ARE ADDING SUPPORT FOR.
  */
 
+#if 0
 /*
  * Step 1: Count the number of CPU types configured into the kernel.
  */
@@ -68,16 +70,22 @@
 			 defined(CPU_ARM9E) +				\
 			 defined(CPU_ARM10) +				\
 			 defined(CPU_ARM11) +				\
+			 defined(CPU_ARM1136) +				\
+			 defined(CPU_ARM1176) +				\
+			 defined(CPU_ARM11MPCORE) +			\
+			 defined(CPU_CORTEX) +				\
+			 defined(CPU_CORTEXA8) +			\
+			 defined(CPU_CORTEXA9) +			\
 			 defined(CPU_SA110) + defined(CPU_SA1100) +	\
 			 defined(CPU_SA1110) +				\
+			 defined(CPU_FA526) +				\
 			 defined(CPU_IXP12X0) +				\
-			 defined(CPU_XSCALE_80200) +			\
-			 defined(CPU_XSCALE_80321) +			\
-			 defined(__CPU_XSCALE_PXA2XX) +			\
-			 defined(CPU_XSCALE_IXP425))
+			 defined(CPU_XSCALE) +				\
+			 defined(CPU_SHEEVA))
 #else
 #define	CPU_NTYPES	2
 #endif /* _KERNEL_OPT */
+#endif
 
 /*
  * Step 2: Determine which ARM architecture versions are configured.
@@ -98,8 +106,8 @@
 
 #if !defined(_KERNEL_OPT) ||						\
     (defined(CPU_ARM7TDMI) || defined(CPU_ARM8) || defined(CPU_ARM9) ||	\
-     defined(CPU_SA110) || defined(CPU_SA1100) || \
-     defined(CPU_SA1110) || defined(CPU_IXP12X0) || defined(CPU_XSCALE_IXP425))
+     defined(CPU_SA110) || defined(CPU_SA1100) || defined(CPU_FA526) || \
+     defined(CPU_SA1110) || defined(CPU_IXP12X0))
 #define	ARM_ARCH_4	1
 #else
 #define	ARM_ARCH_4	0
@@ -107,26 +115,31 @@
 
 #if !defined(_KERNEL_OPT) ||						\
     (defined(CPU_ARM9E) || defined(CPU_ARM10) ||			\
-     defined(CPU_XSCALE_80200) || defined(CPU_XSCALE_80321) ||		\
-     defined(__CPU_XSCALE_PXA2XX))
+     defined(CPU_XSCALE) || defined(CPU_SHEEVA))
 #define	ARM_ARCH_5	1
 #else
 #define	ARM_ARCH_5	0
 #endif
 
-#if defined(CPU_ARM11)
+#if defined(CPU_ARM11) || defined(CPU_ARM11MPCORE)
 #define ARM_ARCH_6	1
 #else
 #define ARM_ARCH_6	0
 #endif
 
+#if defined(CPU_CORTEX) || defined(CPU_PJ4B)
+#define ARM_ARCH_7	1
+#else
+#define ARM_ARCH_7	0
+#endif
+
 #define	ARM_NARCH	(ARM_ARCH_2 + ARM_ARCH_3 + ARM_ARCH_4 + \
-			 ARM_ARCH_5 + ARM_ARCH_6)
+			 ARM_ARCH_5 + ARM_ARCH_6 + ARM_ARCH_7)
 #if ARM_NARCH == 0
 #error ARM_NARCH is 0
 #endif
 
-#if ARM_ARCH_5 || ARM_ARCH_6
+#if ARM_ARCH_5 || ARM_ARCH_6 || ARM_ARCH_7
 /*
  * We could support Thumb code on v4T, but the lack of clean interworking
  * makes that hard.
@@ -148,6 +161,19 @@
  *	ARM_MMU_XSCALE		XScale MMU.  Compatible with generic ARM
  *				MMU, but also has several extensions which
  *				require different PTE layout to use.
+ *
+ *	ARM_MMU_V6C		ARM v6 MMU in backward compatible mode.
+ *                              Compatible with generic ARM MMU, but
+ *                              also has several extensions which
+ *				require different PTE layouts to use.
+ *                              XP bit in CP15 control reg is cleared.
+ *
+ *	ARM_MMU_V6N		ARM v6 MMU with XP bit of CP15 control reg
+ *                              set.  New features such as shared-bit
+ *                              and excute-never bit are available.
+ *                              Multiprocessor support needs this mode.
+ *
+ *	ARM_MMU_V7		ARM v7 MMU.
  */
 #if !defined(_KERNEL_OPT) ||						\
     (defined(CPU_ARM2) || defined(CPU_ARM250) || defined(CPU_ARM3))
@@ -159,7 +185,7 @@
 #if !defined(_KERNEL_OPT) ||						\
     (defined(CPU_ARM6) || defined(CPU_ARM7) || defined(CPU_ARM7TDMI) ||	\
      defined(CPU_ARM8) || defined(CPU_ARM9) || defined(CPU_ARM9E) ||	\
-     defined(CPU_ARM10) || defined(CPU_ARM11))
+     defined(CPU_ARM10) || defined(CPU_FA526)) || defined(CPU_SHEEVA)
 #define	ARM_MMU_GENERIC		1
 #else
 #define	ARM_MMU_GENERIC		0
@@ -174,15 +200,58 @@
 #endif
 
 #if !defined(_KERNEL_OPT) ||						\
-    (defined(CPU_XSCALE_80200) || defined(CPU_XSCALE_80321) ||		\
-     defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425))
+    defined(CPU_XSCALE)
 #define	ARM_MMU_XSCALE		1
 #else
 #define	ARM_MMU_XSCALE		0
 #endif
 
-#define	ARM_NMMUS		(ARM_MMU_MEMC + ARM_MMU_GENERIC +	\
-				 ARM_MMU_SA1 + ARM_MMU_XSCALE)
+#if !defined(_KERNEL_OPT) ||						\
+	(defined(CPU_ARM11) && defined(ARM11_COMPAT_MMU))
+#define	ARM_MMU_V6C		1
+#else
+#define	ARM_MMU_V6C		0
+#endif
+
+#if !defined(_KERNEL_OPT) ||						\
+	(defined(CPU_ARM11) && !defined(ARM11_COMPAT_MMU))
+#define	ARM_MMU_V6N		1
+#else
+#define	ARM_MMU_V6N		0
+#endif
+
+#define	ARM_MMU_V6	(ARM_MMU_V6C + ARM_MMU_V6N)
+
+#if !defined(_KERNEL_OPT) ||						\
+	 defined(CPU_ARMV7)
+#define	ARM_MMU_V7		1
+#else
+#define	ARM_MMU_V7		0
+#endif
+
+#if !defined(_KERNEL_OPT) ||						\
+	 defined(CPU_ARMV8)
+#define	ARM_MMU_V8		1
+#else
+#define	ARM_MMU_V8		0
+#endif
+
+/*
+ * Can we use the ASID support in armv6+ MMUs?
+ */
+#if !defined(_LOCORE)
+#define	ARM_MMU_EXTENDED						\
+    ((ARM_MMU_MEMC + ARM_MMU_GENERIC + ARM_MMU_SA1 + ARM_MMU_XSCALE +	\
+     ARM_MMU_V6C) == 0 &&						\
+    (ARM_MMU_V6N + ARM_MMU_V7 + ARM_MMU_V8) > 0)
+#if ARM_MMU_EXTENDED == 0
+#undef ARM_MMU_EXTENDED
+#endif
+#endif
+
+#define	ARM_NMMUS							\
+    (ARM_MMU_MEMC + ARM_MMU_GENERIC + ARM_MMU_SA1 + ARM_MMU_XSCALE +	\
+     ARM_MMU_V6N + ARM_MMU_V6C + ARM_MMU_V7 + ARM_MMU_V8)
 #if ARM_NMMUS == 0
 #error ARM_NMMUS is 0
 #endif

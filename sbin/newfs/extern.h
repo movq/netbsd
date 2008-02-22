@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.13 2006/08/26 22:03:47 christos Exp $	*/
+/*	$NetBSD: extern.h,v 1.18 2017/02/08 18:05:25 rin Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Christos Zoulas.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -57,6 +52,23 @@ extern int	avgfilesize;	/* expected average file size */
 extern int	avgfpdir;	/* expected number of files per directory */
 extern u_long	memleft;	/* virtual memory available */
 extern caddr_t	membase;	/* start address of memory based filesystem */
+extern int	quotas;		/* filesystem quota to enable */
+
+#ifndef NO_FFS_EI
 extern int	needswap;	/* Filesystem not in native byte order */
+#else
+/* Disable Endian-Independent FFS support for install media */
+#define		needswap		(0)
+#define		ffs_cg_swap(a, b, c)	__nothing
+#define		ffs_csum_swap(a, b, c)	__nothing
+#define		ffs_dinode1_swap(a, b)	__nothing
+#define		ffs_sb_swap(a, b)	__nothing
+#endif
+
+#ifndef NO_APPLE_UFS
 extern int	isappleufs; /* Filesystem is Apple UFS */
 extern char	*appleufs_volname;	/* Apple UFS volume name */
+#else
+/* Disable Apple UFS support for install media */
+#define		isappleufs		(0)
+#endif

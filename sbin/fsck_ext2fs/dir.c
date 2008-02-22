@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.20 2006/10/16 03:02:01 christos Exp $	*/
+/*	$NetBSD: dir.c,v 1.28 2013/06/23 07:28:36 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,11 +40,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +58,7 @@
 #if 0
 static char sccsid[] = "@(#)dir.c	8.5 (Berkeley) 12/8/94";
 #else
-__RCSID("$NetBSD: dir.c,v 1.20 2006/10/16 03:02:01 christos Exp $");
+__RCSID("$NetBSD: dir.c,v 1.28 2013/06/23 07:28:36 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,10 +81,10 @@ __RCSID("$NetBSD: dir.c,v 1.20 2006/10/16 03:02:01 christos Exp $");
 #include "extern.h"
 
 const char	*lfname = "lost+found";
-int	lfmode = 01777;
+int	lfmode = 01700;
 struct	ext2fs_dirtemplate emptydir = {
 	.dot_ino = 0,
-	.dot_reclen = DIRBLKSIZ,
+	.dot_reclen = UFS_DIRBLKSIZ,
 }; 
 struct	ext2fs_dirtemplate dirhead = {
 	.dot_ino = 0,
@@ -98,12 +93,12 @@ struct	ext2fs_dirtemplate dirhead = {
 	.dot_type = EXT2_FT_DIR,
 	.dot_name = ".",
 	.dotdot_ino = 0,
-	.dotdot_reclen = DIRBLKSIZ - 12,
+	.dotdot_reclen = UFS_DIRBLKSIZ - 12,
 	.dotdot_namlen = 2,
 	.dotdot_type = EXT2_FT_DIR,
 	.dotdot_name = "..",
 };
-#undef DIRBLKSIZ
+#undef UFS_DIRBLKSIZ
 
 static int expanddir(struct ext2fs_dinode *, char *);
 static void freedir(ino_t, ino_t);
@@ -165,7 +160,7 @@ dirscan(struct inodesc *idesc)
 		err(8, "Can't allocate directory block");
 
 	if (idesc->id_type != DATA)
-		errexit("wrong type to dirscan %d\n", idesc->id_type);
+		errexit("wrong type to dirscan %d", idesc->id_type);
 	if (idesc->id_entryno == 0 &&
 	    (idesc->id_filesize & (sblock.e2fs_bsize - 1)) != 0)
 		idesc->id_filesize = roundup(idesc->id_filesize, sblock.e2fs_bsize);
@@ -563,8 +558,8 @@ expanddir(struct ext2fs_dinode *dp, char *name)
 	struct bufarea *bp;
 	char *firstblk;
 
-	lastbn = lblkno(&sblock, inosize(dp));
-	if (lastbn >= NDADDR - 1 || fs2h32(dp->e2di_blocks[lastbn]) == 0 ||
+	lastbn = ext2_lblkno(&sblock, inosize(dp));
+	if (lastbn >= EXT2FS_NDADDR - 1 || fs2h32(dp->e2di_blocks[lastbn]) == 0 ||
 		inosize(dp) == 0) {
 		return (0);
 	}
@@ -574,7 +569,7 @@ expanddir(struct ext2fs_dinode *dp, char *name)
 	dp->e2di_blocks[lastbn + 1] = dp->e2di_blocks[lastbn];
 	dp->e2di_blocks[lastbn] = h2fs32(newblk);
 	inossize(dp, inosize(dp) + sblock.e2fs_bsize);
-	dp->e2di_nblock = h2fs32(fs2h32(dp->e2di_nblock) + 1);
+	inosnblock(dp, inonblock(dp) + btodb(sblock.e2fs_bsize));
 	bp = getdirblk(fs2h32(dp->e2di_blocks[lastbn + 1]),
 		sblock.e2fs_bsize);
 	if (bp->b_errs)
@@ -608,7 +603,7 @@ bad:
 	dp->e2di_blocks[lastbn] = dp->e2di_blocks[lastbn + 1];
 	dp->e2di_blocks[lastbn + 1] = 0;
 	inossize(dp, inosize(dp) - sblock.e2fs_bsize);
-	dp->e2di_nblock = h2fs32(fs2h32(dp->e2di_nblock) - 1);
+	inosnblock(dp, inonblock(dp) - btodb(sblock.e2fs_bsize));
 	freeblk(newblk);
 	return (0);
 }

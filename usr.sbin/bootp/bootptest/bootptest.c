@@ -1,4 +1,4 @@
-/*	$NetBSD: bootptest.c,v 1.16 2007/05/27 16:31:42 tls Exp $	*/
+/*	$NetBSD: bootptest.c,v 1.21 2017/05/04 16:26:09 sevan Exp $	*/
 
 /*
  * bootptest.c - Test out a bootp server.
@@ -36,11 +36,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: bootptest.c,v 1.16 2007/05/27 16:31:42 tls Exp $");
+__RCSID("$NetBSD: bootptest.c,v 1.21 2017/05/04 16:26:09 sevan Exp $");
 #endif
 
-char *usage = "usage: %s [-f bootfile] [-h] [-m magic_number] server-name\n"
-	      "                 [vendor-data-template-file]\n";
+static const char usage[] =
+    "Usage: %s [-f bootfile] [-h] [-m magic_number] server-name\n"
+    "\t[vendor-data-template-file]\n";
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -120,7 +121,6 @@ short secs;						/* How long client has waited */
 
 
 extern int getether(char *, char *);
-int main(int, char **);
 void send_request(int);
 
 /*
@@ -407,7 +407,7 @@ main(int argc, char **argv)
 		if (n <= 0) {
 			continue;
 		}
-		if (n < sizeof(struct bootp)) {
+		if (n < (int)sizeof(struct bootp)) {
 			printf("received short packet\n");
 			continue;
 		}

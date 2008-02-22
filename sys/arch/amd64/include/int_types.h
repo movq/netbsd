@@ -1,4 +1,4 @@
-/*	$NetBSD: int_types.h,v 1.5 2005/12/24 20:06:47 perry Exp $	*/
+/*	$NetBSD: int_types.h,v 1.7 2014/07/25 21:43:13 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -34,6 +34,12 @@
 #ifndef	_AMD64_INT_TYPES_H_
 #define	_AMD64_INT_TYPES_H_
 
+#ifdef __UINTPTR_TYPE__
+#include <sys/common_int_types.h>
+#else
+
+#ifdef __x86_64__
+
 #include <sys/cdefs.h>
 
 /*
@@ -57,5 +63,13 @@ typedef	unsigned long int	__uint64_t;
 
 typedef	long		       __intptr_t;
 typedef	unsigned long	      __uintptr_t;
+
+#else	/*	__x86_64__	*/
+
+#include <i386/int_types.h>
+
+#endif	/*	__x86_64__	*/
+
+#endif
 
 #endif	/* !_AMD64_INT_TYPES_H_ */

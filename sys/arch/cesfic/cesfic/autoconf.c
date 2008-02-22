@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.18 2007/12/03 15:33:24 ad Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.26 2012/07/29 18:05:40 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.18 2007/12/03 15:33:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.26 2012/07/29 18:05:40 mlelstv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,34 +57,28 @@ u_int	bootdev;
 
 struct evcnt evcnt_fpsp_unimp, evcnt_fpsp_unsupp;
 
-int	mainbusmatch __P((struct device *, struct cfdata *, void *));
-void	mainbusattach __P((struct device *, struct device *, void *));
-int	mainbussearch __P((struct device *, struct cfdata *,
-			   const int *, void *));
+int	mainbusmatch(device_t, cfdata_t, void *);
+void	mainbusattach(device_t, device_t, void *);
+int	mainbussearch(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbusmatch, mainbusattach, NULL, NULL);
 
 int
-mainbusmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+mainbusmatch(device_t parent, cfdata_t match, void *aux)
 {
-	static int mainbus_matched = 0;
+	static bool mainbus_matched;
 
 	/* Allow only one instance. */
 	if (mainbus_matched)
 		return (0);
 
-	mainbus_matched = 1;
+	mainbus_matched = true;
 	return (1);
 }
 
 void
-mainbusattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mainbusattach(device_t parent, device_t self, void *aux)
 {
 
 	printf("\n");
@@ -99,11 +93,7 @@ mainbusattach(parent, self, aux)
 }
 
 int
-mainbussearch(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+mainbussearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 
 	if (config_match(parent, cf, NULL) > 0)
@@ -112,11 +102,7 @@ mainbussearch(parent, cf, ldesc, aux)
 }
 
 int
-mainbus_map(physaddr, size, cacheable, virtaddr)
-	u_long physaddr;
-	int size;
-	int cacheable;
-	void ** virtaddr;
+mainbus_map(u_long physaddr, int size, int cacheable, void ** virtaddr)
 {
 
 	u_long pa, endpa;
@@ -136,7 +122,7 @@ mainbus_map(physaddr, size, cacheable, virtaddr)
 
 	*virtaddr = (void*)(va + (physaddr & PGOFSET));
 	for (; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
 		if (!cacheable) {
 			pt_entry_t *pte = kvtopte(va);
 			*pte |= PG_CI;
@@ -149,7 +135,7 @@ mainbus_map(physaddr, size, cacheable, virtaddr)
 }
 
 void
-cpu_configure()
+cpu_configure(void)
 {
 
 	isrinit();
@@ -160,12 +146,10 @@ cpu_configure()
 
 	(void)spl0();
 	cold = 0;
-
-	isrprintlevels();
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
-	setroot(0, 0);
+	rootconf();
 }

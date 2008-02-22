@@ -1,4 +1,4 @@
-/*	$NetBSD: nsdispatch.c,v 1.31 2006/10/15 16:14:46 christos Exp $	*/
+/*	$NetBSD: nsdispatch.c,v 1.38 2014/09/18 13:58:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nsdispatch.c,v 1.31 2006/10/15 16:14:46 christos Exp $");
+__RCSID("$NetBSD: nsdispatch.c,v 1.38 2014/09/18 13:58:20 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -179,12 +172,12 @@ static mutex_t _ns_drec_lock = MUTEX_INITIALIZER;
 /*
  * Runtime determination of whether we are dynamically linked or not.
  */
-#ifdef __ELF__
-extern	int			_DYNAMIC __attribute__((__weak__));
-#define	is_dynamic()		(&_DYNAMIC != NULL)
-#else
+#ifndef __ELF__
 #define	is_dynamic()		(0)	/* don't bother - switch to ELF! */
-#endif /* __ELF__ */
+#else
+__weakref_visible int rtld_DYNAMIC __weak_reference(_DYNAMIC);
+#define	is_dynamic()		(&rtld_DYNAMIC != NULL)
+#endif
 
 
 /*
@@ -397,8 +390,7 @@ _nsdbtaddsrc(ns_dbt *dbt, const ns_src *src)
 	/* dbt->srclistsize already incremented */
 
 	modkey.name = src->name;
-	mod = bsearch(&modkey, _nsmod, _nsmodsize, sizeof(*_nsmod),
-	    _nsmodcmp);
+	mod = bsearch(&modkey, _nsmod, _nsmodsize, sizeof(*_nsmod), _nsmodcmp);
 	if (mod == NULL)
 		return (_nsloadmod(src->name, NULL));
 
@@ -408,7 +400,7 @@ _nsdbtaddsrc(ns_dbt *dbt, const ns_src *src)
 void
 _nsdbtdump(const ns_dbt *dbt)
 {
-	int	i;
+	unsigned int	i;
 
 	_DIAGASSERT(dbt != NULL);
 
@@ -527,7 +519,7 @@ _nsconfigure(void)
 	 */
 	rwlock_wrlock(&_nslock);
 
-	_nsyyin = fopen(_PATH_NS_CONF, "r");
+	_nsyyin = fopen(_PATH_NS_CONF, "re");
 	if (_nsyyin == NULL) {
 		/*
 		 * Unable to open nsswitch.conf; behave as though the

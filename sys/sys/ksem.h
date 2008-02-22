@@ -1,4 +1,4 @@
-/*	$NetBSD: ksem.h,v 1.6 2006/03/05 00:49:19 cube Exp $	*/
+/*	$NetBSD: ksem.h,v 1.14 2012/11/25 01:05:04 christos Exp $	*/
 
 /*
  * Copyright (c) 2002 Alfred Perlstein <alfred@FreeBSD.org>
@@ -31,25 +31,46 @@
 
 #include <sys/cdefs.h>
 
-#ifdef _KERNEL
-void ksem_init(void);
+struct timespec;
 
-int do_ksem_init(struct lwp *, unsigned int, semid_t *, copyout_t);
+#ifdef _KERNEL
+#define	KSEM_MAX	128
+
+typedef struct ksem {
+	LIST_ENTRY(ksem)	ks_entry;	/* global list entry */
+	kmutex_t		ks_lock;	/* lock on this ksem */
+	kcondvar_t		ks_cv;		/* condition variable */
+	u_int			ks_ref;		/* number of references */
+	u_int			ks_value;	/* current value */
+	u_int			ks_waiters;	/* number of waiters */
+	char *			ks_name;	/* name, if named */
+	size_t			ks_namelen;	/* length of name */
+	int			ks_flags;	/* for KS_UNLINKED */
+	mode_t			ks_mode;	/* protection bits */
+	uid_t			ks_uid;		/* creator uid */
+	gid_t			ks_gid;		/* creator gid */
+} ksem_t;
+
+int do_ksem_init(struct lwp *, unsigned int, intptr_t *, copyout_t);
 int do_ksem_open(struct lwp *, const char *, int, mode_t, unsigned int,
-    semid_t *, copyout_t);
+    intptr_t *, copyout_t);
+int do_ksem_wait(struct lwp *, intptr_t, bool, struct timespec *);
+
+extern int	ksem_max;
 #endif
 
 #ifdef _LIBC
 __BEGIN_DECLS
-int _ksem_close(semid_t);
-int _ksem_destroy(semid_t);
-int _ksem_getvalue(semid_t, int *);
-int _ksem_init(unsigned int, semid_t *);
-int _ksem_open(const char *, int, mode_t, unsigned int, semid_t *);
-int _ksem_post(semid_t);
-int _ksem_trywait(semid_t);
+int _ksem_close(intptr_t);
+int _ksem_destroy(intptr_t);
+int _ksem_getvalue(intptr_t, int *);
+int _ksem_init(unsigned int, intptr_t *);
+int _ksem_open(const char *, int, mode_t, unsigned int, intptr_t *);
+int _ksem_post(intptr_t);
+int _ksem_timedwait(intptr_t, const struct timespec * __restrict);
+int _ksem_trywait(intptr_t);
 int _ksem_unlink(const char *);
-int _ksem_wait(semid_t);
+int _ksem_wait(intptr_t);
 __END_DECLS
 #endif /* _LIBC */
 

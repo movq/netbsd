@@ -1,4 +1,4 @@
-.\"	$NetBSD: jot.1,v 1.8 2004/11/22 17:34:24 peter Exp $
+.\"	$NetBSD: jot.1,v 1.16 2018/06/25 14:29:17 christos Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)jot.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd November 1, 1997
+.Dd June 25, 2018
 .Dt JOT 1
 .Os
 .Sh NAME
@@ -38,18 +38,10 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl cnr
-.Bk -words
 .Op Fl b Ar word
-.Ek
-.Bk -words
 .Op Fl p Ar precision
-.Ek
-.Bk -words
 .Op Fl s Ar string
-.Ek
-.Bk -words
 .Op Fl w Ar word
-.Ek
 .Oo Ar reps
 .Oo Ar begin
 .Oo Ar end
@@ -70,7 +62,8 @@ Just print
 .Ar word
 repetitively.
 .It Fl c
-This is an abbreviation for \fB\-w %c\fP.
+This is an abbreviation for
+.Fl w Ar %c .
 .It Fl n
 Do not print the final newline normally appended to the output.
 .It Fl p Ar precision
@@ -111,8 +104,7 @@ in which case the data are inserted rather than appended.
 The last four arguments indicate, respectively,
 the number of data, the lower bound, the upper bound,
 and the step size or, for random data, the seed.
-While at least one of them must appear,
-any of the other three may be omitted, and
+Any argument may be omitted, and
 will be considered as such if given as
 .Dq - .
 Any three of these arguments determines the fourth.
@@ -151,6 +143,10 @@ derives in part from
 a function in APL.
 .Sh EXAMPLES
 The command:
+.Dl "jot - 42 87 1"
+prints the integers from 42 to 87, inclusive.
+.Pp
+The command:
 .Dl "jot 21 \-1 1.00"
 prints 21 evenly spaced numbers increasing from \-1 to 1.
 .Pp
@@ -182,10 +178,10 @@ substitution commands applying to lines 2, 7, 12, etc.
 .Pp
 The command:
 .Dl "jot 0 9 \- \-.5"
-prints the stuttering sequence 9, 9, 8, 8, 7, etc.
+prints the stuttering sequence 9, 8, 8, 7, etc.
 .Pp
 The command:
-.Dl "jot \-b x 512 \*[Gt] block"
+.Dl "jot \-b x 512 > block"
 creates a file containing exactly 1024 bytes.
 .Pp
 The command:
@@ -200,6 +196,14 @@ prints all lines 80 characters or longer.
 .Xr ed 1 ,
 .Xr expand 1 ,
 .Xr rs 1 ,
+.Xr seq 1 ,
 .Xr yes 1 ,
 .Xr printf 3 ,
 .Xr random 3
+.Sh HISTORY
+The
+.Nm
+utility first appeared in
+.Bx 4.2 .
+.Sh AUTHORS
+.An John A. Kunze

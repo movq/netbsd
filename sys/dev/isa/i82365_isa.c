@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365_isa.c,v 1.28 2007/10/19 12:00:16 ad Exp $	*/
+/*	$NetBSD: i82365_isa.c,v 1.35 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365_isa.c,v 1.28 2007/10/19 12:00:16 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365_isa.c,v 1.35 2016/07/14 10:19:06 msaitoh Exp $");
 
 #define	PCICISADEBUG
 
@@ -61,13 +61,13 @@ int	pcicisa_debug = 0;
 #define	DPRINTF(arg)
 #endif
 
-int	pcic_isa_probe(struct device *, struct cfdata *, void *);
-void	pcic_isa_attach(struct device *, struct device *, void *);
+int	pcic_isa_probe(device_t, cfdata_t, void *);
+void	pcic_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pcic_isa, sizeof(struct pcic_isa_softc),
+CFATTACH_DECL_NEW(pcic_isa, sizeof(struct pcic_isa_softc),
     pcic_isa_probe, pcic_isa_attach, NULL, NULL);
 
-static struct pcmcia_chip_functions pcic_isa_functions = {
+static const struct pcmcia_chip_functions pcic_isa_functions = {
 	pcic_chip_mem_alloc,
 	pcic_chip_mem_free,
 	pcic_chip_mem_map,
@@ -88,8 +88,7 @@ static struct pcmcia_chip_functions pcic_isa_functions = {
 };
 
 int
-pcic_isa_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+pcic_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -97,21 +96,21 @@ pcic_isa_probe(struct device *parent, struct cfdata *match,
 	int val, found, msize;
 
 	if (ia->ia_nio < 1)
-		return (0);
+		return 0;
 	if (ia->ia_niomem < 1)
-		return (0);
+		return 0;
 
 	if (ISA_DIRECT_CONFIG(ia))
-		return (0);
+		return 0;
 
 	/* Disallow wildcarded i/o address. */
 	if (ia->ia_io[0].ir_addr == ISA_UNKNOWN_PORT)
-		return (0);
+		return 0;
 	if (ia->ia_iomem[0].ir_addr == ISA_UNKNOWN_IOMEM)
-		return (0);
+		return 0;
 
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, PCIC_IOSIZE, 0, &ioh))
-		return (0);
+		return 0;
 
 	if (ia->ia_iomem[0].ir_size == ISA_UNKNOWN_IOSIZ)
 		msize = PCIC_MEMSIZE;
@@ -121,7 +120,7 @@ pcic_isa_probe(struct device *parent, struct cfdata *match,
 	if (bus_space_map(ia->ia_memt, ia->ia_iomem[0].ir_addr,
 	    msize, 0, &memh)) {
 		bus_space_unmap(iot, ioh, PCIC_IOSIZE);
-		return (0);
+		return 0;
 	}
 
 	found = 0;
@@ -167,7 +166,7 @@ pcic_isa_probe(struct device *parent, struct cfdata *match,
 	bus_space_unmap(ia->ia_memt, memh, msize);
 
 	if (!found)
-		return (0);
+		return 0;
 
 	ia->ia_nio = 1;
 	ia->ia_io[0].ir_size = PCIC_IOSIZE;
@@ -179,15 +178,14 @@ pcic_isa_probe(struct device *parent, struct cfdata *match,
 
 	ia->ia_ndrq = 0;
 
-	return (1);
+	return 1;
 }
 
 void
-pcic_isa_attach( struct device *parent, struct device *self,
-    void *aux)
+pcic_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct pcic_softc *sc = (void *) self;
-	struct pcic_isa_softc *isc = (void *) self;
+	struct pcic_isa_softc *isc = device_private(self);
+	struct pcic_softc *sc = &isc->sc_pcic;
 	struct isa_attach_args *ia = aux;
 	isa_chipset_tag_t ic = ia->ia_ic;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -195,16 +193,19 @@ pcic_isa_attach( struct device *parent, struct device *self,
 	bus_space_handle_t ioh;
 	bus_space_handle_t memh;
 
+	aprint_naive("\n");
+	sc->dev = self;
+
 	/* Map i/o space. */
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, PCIC_IOSIZE, 0, &ioh)) {
-		printf(": can't map i/o space\n");
+		aprint_error(": can't map i/o space\n");
 		return;
 	}
 
 	/* Map mem space. */
 	if (bus_space_map(memt, ia->ia_iomem[0].ir_addr,
 	    ia->ia_iomem[0].ir_size, 0, &memh)) {
-		printf(": can't map mem space\n");
+		aprint_error(": can't map mem space\n");
 		return;
 	}
 
@@ -213,7 +214,7 @@ pcic_isa_attach( struct device *parent, struct device *self,
 	    (1 << (ia->ia_iomem[0].ir_size / PCIC_MEM_PAGESIZE)) - 1;
 
 	isc->sc_ic = ic;
-	sc->pct = (pcmcia_chipset_tag_t) & pcic_isa_functions;
+	sc->pct = &pcic_isa_functions;
 
 	sc->iot = iot;
 	sc->ioh = ioh;
@@ -224,7 +225,7 @@ pcic_isa_attach( struct device *parent, struct device *self,
 	else
 		sc->irq = ISA_UNKNOWN_IRQ;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	pcic_attach(sc);
 	pcic_isa_bus_width_probe(sc, iot, ioh, ia->ia_io[0].ir_addr,

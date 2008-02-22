@@ -41,7 +41,7 @@
 .\" this program; if not, write to the Free Software Foundation, Inc., 59
 .\" Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 .\"
-.\" $NetBSD: lmcconfig.8,v 1.4 2006/04/20 16:53:19 christos Exp $
+.\" $NetBSD: lmcconfig.8,v 1.7 2013/12/09 09:35:17 wiz Exp $
 .\"
 .Dd April 11, 2006
 .Dt LMCCONFIG 8
@@ -136,7 +136,7 @@ All parameters after this apply to the T3 card.
 .\"
 .Ss Parameters for all cards
 .\"
-The following parameters apply to more then one card type.
+The following parameters apply to more than one card type.
 .Bl -tag -width "-W addr data"
 .It Fl a Ar number
 Set Transmitter clock source to
@@ -788,8 +788,6 @@ the user is not privileged and tried to alter an interface's configuration.
 .if \n[fbsd] .Xr netgraph 4 ,
 .Xr ifconfig 8 ,
 .Xr ifnet 9
-.Pp
-.Pa http://www.sbei.com/
 .\"
 .Sh HISTORY
 .\"
@@ -803,4 +801,4 @@ and
 .\"
 .Sh AUTHORS
 .\"
-.An David Boggs Aq boggs@boggs.palo-alto.ca.us
+.An David Boggs Aq Mt boggs@boggs.palo-alto.ca.us

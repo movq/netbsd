@@ -1,4 +1,4 @@
-/*	$NetBSD: userret.h,v 1.9 2007/11/05 20:37:48 ad Exp $	*/
+/*	$NetBSD: userret.h,v 1.15 2017/05/22 17:12:11 ragge Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *     This product includes software developed at Ludd, University of Lule}.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,25 +26,26 @@
  */
 
 #include <sys/userret.h>
+#include <sys/ras.h>
 
 /*
- *	Common code used by various execption handlers to
+ *	Common code used by various exception handlers to
  *	return to usermode.
  */
 static __inline void
-userret(struct lwp *l, struct trapframe *frame, u_quad_t oticks)
+userret(struct lwp *l, struct trapframe *tf, u_quad_t oticks)
 {
-	struct proc *p = l->l_proc;
+	struct proc * const p = l->l_proc;
 
-	LOCKDEBUG_BARRIER(NULL, 0);
+	mi_userret(l);
 
-	/* Take pending signals. */
-	for (;;) {
-		if ((l->l_flag & LW_USERRET) != 0)
-			lwp_userret(l);
-		if (!curcpu()->ci_want_resched)
-			break;
-		preempt();
+	/*
+	 * Check to see if a RAS was interrupted and restart it if it was.
+	 */
+	if (__predict_false(p->p_raslist != NULL)) {
+		void * const ras_pc = ras_lookup(p, (void *) tf->tf_pc);
+		if (ras_pc != (void *) -1)
+			tf->tf_pc = (vaddr_t) ras_pc;
 	}
 
 	/*
@@ -58,7 +54,7 @@ userret(struct lwp *l, struct trapframe *frame, u_quad_t oticks)
 	if ((p->p_stflag & PST_PROFIL) != 0) {
 		extern int psratio;
 
-		addupc_task(l, frame->pc,
+		addupc_task(l, tf->tf_pc,
 		    (int)(p->p_sticks - oticks) * psratio);
 	}
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: ttwoga_pci.c,v 1.3 2008/01/05 00:31:51 ad Exp $ */
+/* $NetBSD: ttwoga_pci.c,v 1.8 2015/10/02 05:22:49 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,21 +31,20 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: ttwoga_pci.c,v 1.3 2008/01/05 00:31:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ttwoga_pci.c,v 1.8 2015/10/02 05:22:49 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/device.h> 
-#include <sys/simplelock.h>
+#include <sys/device.h>
 
-#include <dev/pci/pcireg.h> 
+#include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
 #include <alpha/pci/ttwogareg.h>
 #include <alpha/pci/ttwogavar.h>
 
-void		ttwoga_attach_hook(struct device *, struct device *,
+void		ttwoga_attach_hook(device_t, device_t,
 		    struct pcibus_attach_args *);
 int		ttwoga_bus_maxdevs(void *, int);
 pcitag_t	ttwoga_make_tag(void *, int, int, int);
@@ -73,28 +65,26 @@ paddr_t		ttwoga_make_type0addr(int, int);
  * the PCI configuration access routine.
  */
 
-struct simplelock ttwoga_conf_slock;
+static kmutex_t ttwoga_conf_lock;
 cpuid_t ttwoga_conf_cpu;		/* XXX core logic bug */
 
-#define	TTWOGA_CONF_LOCK(s)						\
+#define	TTWOGA_CONF_LOCK()						\
 do {									\
-	(s) = splhigh();						\
-	simple_lock(&ttwoga_conf_slock);				\
+	mutex_enter(&ttwoga_conf_lock);				\
 	ttwoga_conf_cpu = cpu_number();					\
 } while (0)
 
-#define	TTWOGA_CONF_UNLOCK(s)						\
+#define	TTWOGA_CONF_UNLOCK()						\
 do {									\
 	ttwoga_conf_cpu = (cpuid_t)-1;					\
-	simple_unlock(&ttwoga_conf_slock);				\
-	splx((s));							\
+	mutex_exit(&ttwoga_conf_lock);					\
 } while (0)
 
 void
 ttwoga_pci_init(pci_chipset_tag_t pc, void *v)
 {
 
-	simple_lock_init(&ttwoga_conf_slock);
+	mutex_init(&ttwoga_conf_lock, MUTEX_DEFAULT, IPL_HIGH);
 
 	pc->pc_conf_v = v;
 	pc->pc_attach_hook = ttwoga_attach_hook;
@@ -106,7 +96,7 @@ ttwoga_pci_init(pci_chipset_tag_t pc, void *v)
 }
 
 void
-ttwoga_attach_hook(struct device *parent, struct device *self,
+ttwoga_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 }
@@ -152,9 +142,12 @@ ttwoga_conf_read(void *cpv, pcitag_t tag, int offset)
 {
 	struct ttwoga_config *tcp = cpv;
 	pcireg_t *datap, data;
-	int s, b, d, f, ba;
+	int b, d, f, ba;
 	paddr_t addr;
-	u_int64_t old_hae3;
+	uint64_t old_hae3;
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return (pcireg_t) -1;
 
 	pci_decompose_tag(&tcp->tc_pc, tag, &b, &d, &f);
 
@@ -162,7 +155,7 @@ ttwoga_conf_read(void *cpv, pcitag_t tag, int offset)
 	if (addr == (paddr_t)-1)
 		return ((pcireg_t) -1);
 
-	TTWOGA_CONF_LOCK(s);
+	TTWOGA_CONF_LOCK();
 
 	alpha_mb();
 	old_hae3 = T2GA(tcp, T2_HAE0_3) & ~HAE0_3_PCA;
@@ -189,7 +182,7 @@ ttwoga_conf_read(void *cpv, pcitag_t tag, int offset)
 	alpha_mb();
 	alpha_mb();
 
-	TTWOGA_CONF_UNLOCK(s);
+	TTWOGA_CONF_UNLOCK();
 
 #if 0
 	printf("ttwoga_conf_read: tag 0x%lx, reg 0x%x -> 0x%x @ %p%s\n",
@@ -204,9 +197,12 @@ ttwoga_conf_write(void *cpv, pcitag_t tag, int offset, pcireg_t data)
 {
 	struct ttwoga_config *tcp = cpv;
 	pcireg_t *datap;
-	int s, b, d, f;
+	int b, d, f;
 	paddr_t addr;
-	u_int64_t old_hae3;
+	uint64_t old_hae3;
+
+	if ((unsigned int)offset >= PCI_CONF_SIZE)
+		return;
 
 	pci_decompose_tag(&tcp->tc_pc, tag, &b, &d, &f);
 
@@ -214,7 +210,7 @@ ttwoga_conf_write(void *cpv, pcitag_t tag, int offset, pcireg_t data)
 	if (addr == (paddr_t)-1)
 		return;
 
-	TTWOGA_CONF_LOCK(s);
+	TTWOGA_CONF_LOCK();
 
 	alpha_mb();
 	old_hae3 = T2GA(tcp, T2_HAE0_3) & ~HAE0_3_PCA;
@@ -239,7 +235,7 @@ ttwoga_conf_write(void *cpv, pcitag_t tag, int offset, pcireg_t data)
 	alpha_mb();
 	alpha_mb();
 
-	TTWOGA_CONF_UNLOCK(s);
+	TTWOGA_CONF_UNLOCK();
 
 #if 0
 	printf("ttwoga_conf_write: tag 0x%lx, reg 0x%x -> 0x%x @ %p\n",

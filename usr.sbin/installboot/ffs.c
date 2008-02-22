@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.c,v 1.24 2006/10/30 07:03:34 he Exp $	*/
+/*	$NetBSD: ffs.c,v 1.32 2013/06/23 02:06:06 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,8 +34,8 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: ffs.c,v 1.24 2006/10/30 07:03:34 he Exp $");
+#if !defined(__lint)
+__RCSID("$NetBSD: ffs.c,v 1.32 2013/06/23 02:06:06 dholland Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -104,7 +97,7 @@ ffs_read_disk_block(ib_params *params, uint64_t blkno, int size, char blk[])
 	assert(size > 0);
 	assert(blk != NULL);
 
-	rv = pread(params->fsfd, blk, size, blkno * DEV_BSIZE);
+	rv = pread(params->fsfd, blk, size, blkno * params->sectorsize);
 	if (rv == -1) {
 		warn("Reading block %llu in `%s'", 
 		    (unsigned long long)blkno, params->filesystem);
@@ -165,7 +158,7 @@ ffs_find_disk_blocks_ufs1(ib_params *params, ino_t ino,
 
 	/* Read the inode. */
 	if (! ffs_read_disk_block(params,
-		fsbtodb(fs, ino_to_fsba(fs, ino)) + params->fstype->offset,
+		FFS_FSBTODB(fs, ino_to_fsba(fs, ino)) + params->fstype->offset,
 		fs->fs_bsize, inodebuf))
 		return (0);
 	inode = (struct ufs1_dinode *)inodebuf;
@@ -180,7 +173,7 @@ ffs_find_disk_blocks_ufs1(ib_params *params, ino_t ino,
 	lblk = 0;
 	level_i = 0;
 	level[0].blknums = &inode->di_db[0];
-	level[0].blkcount = NDADDR;
+	level[0].blkcount = UFS_NDADDR;
 	level[1].blknums = &inode->di_ib[0];
 	level[1].blkcount = 1;
 	level[2].blknums = &inode->di_ib[1];
@@ -222,24 +215,24 @@ ffs_find_disk_blocks_ufs1(ib_params *params, ino_t ino,
 			if (blk == 0)
 				memset(level[level_i].diskbuf, 0, MAXBSIZE);
 			else if (! ffs_read_disk_block(params, 
-				fsbtodb(fs, blk) + params->fstype->offset,
+				FFS_FSBTODB(fs, blk) + params->fstype->offset,
 				fs->fs_bsize, level[level_i].diskbuf))
 				return (0);
 			/* XXX ondisk32 */
 			level[level_i].blknums = 
 				(int32_t *)level[level_i].diskbuf;
-			level[level_i].blkcount = NINDIR(fs);
+			level[level_i].blkcount = FFS_NINDIR(fs);
 			continue;
 		}
 
 		/* blk is the next direct level block. */
 #if 0
 		fprintf(stderr, "ino %lu db %lu blksize %lu\n", ino, 
-		    fsbtodb(fs, blk), sblksize(fs, inode->di_size, lblk));
+		    FFS_FSBTODB(fs, blk), ffs_sblksize(fs, inode->di_size, lblk));
 #endif
 		rv = (*callback)(params, state, 
-		    fsbtodb(fs, blk) + params->fstype->offset,
-		    sblksize(fs, inode->di_size, lblk));
+		    FFS_FSBTODB(fs, blk) + params->fstype->offset,
+		    ffs_sblksize(fs, (int64_t)inode->di_size, lblk));
 		lblk++;
 		nblk--;
 		if (rv != 1)
@@ -270,7 +263,7 @@ ffs_find_disk_blocks_ufs2(ib_params *params, ino_t ino,
 	char		inodebuf[MAXBSIZE];
 	struct ufs2_dinode	*inode;
 	int		level_i;
-	int64_t	blk, lblk, nblk;
+	int64_t		blk, lblk, nblk;
 	int		rv;
 #define LEVELS 4
 	struct {
@@ -302,7 +295,7 @@ ffs_find_disk_blocks_ufs2(ib_params *params, ino_t ino,
 
 	/* Read the inode. */
 	if (! ffs_read_disk_block(params,
-		fsbtodb(fs, ino_to_fsba(fs, ino)) + params->fstype->offset,
+		FFS_FSBTODB(fs, ino_to_fsba(fs, ino)) + params->fstype->offset,
 		fs->fs_bsize, inodebuf))
 		return (0);
 	inode = (struct ufs2_dinode *)inodebuf;
@@ -317,7 +310,7 @@ ffs_find_disk_blocks_ufs2(ib_params *params, ino_t ino,
 	lblk = 0;
 	level_i = 0;
 	level[0].blknums = &inode->di_db[0];
-	level[0].blkcount = NDADDR;
+	level[0].blkcount = UFS_NDADDR;
 	level[1].blknums = &inode->di_ib[0];
 	level[1].blkcount = 1;
 	level[2].blknums = &inode->di_ib[1];
@@ -359,23 +352,23 @@ ffs_find_disk_blocks_ufs2(ib_params *params, ino_t ino,
 			if (blk == 0)
 				memset(level[level_i].diskbuf, 0, MAXBSIZE);
 			else if (! ffs_read_disk_block(params, 
-				fsbtodb(fs, blk) + params->fstype->offset,
+				FFS_FSBTODB(fs, blk) + params->fstype->offset,
 				fs->fs_bsize, level[level_i].diskbuf))
 				return (0);
 			level[level_i].blknums = 
 				(int64_t *)level[level_i].diskbuf;
-			level[level_i].blkcount = NINDIR(fs);
+			level[level_i].blkcount = FFS_NINDIR(fs);
 			continue;
 		}
 
 		/* blk is the next direct level block. */
 #if 0
 		fprintf(stderr, "ino %lu db %llu blksize %lu\n", ino, 
-		    fsbtodb(fs, blk), sblksize(fs, inode->di_size, lblk));
+		    FFS_FSBTODB(fs, blk), ffs_sblksize(fs, inode->di_size, lblk));
 #endif
 		rv = (*callback)(params, state, 
-		    fsbtodb(fs, blk) + params->fstype->offset,
-		    sblksize(fs, inode->di_size, lblk));
+		    FFS_FSBTODB(fs, blk) + params->fstype->offset,
+		    ffs_sblksize(fs, (int64_t)inode->di_size, lblk));
 		lblk++;
 		nblk--;
 		if (rv != 1)
@@ -482,10 +475,10 @@ int
 raid_match(ib_params *params)
 {
 	/* XXX Assumes 512 bytes / sector */
-	if (DEV_BSIZE != 512) {
+	if (params->sectorsize != 512) {
 		warnx("Media is %d bytes/sector."
 			"  RAID is only supported on 512 bytes/sector media.",
-			DEV_BSIZE);
+			params->sectorsize);
 		return 0;
 	}
 	return ffs_match_common(params, (off_t) RF_PROTECTED_SECTORS);
@@ -504,7 +497,7 @@ ffs_match_common(ib_params *params, off_t offset)
 
 	fs = (struct fs *)sbbuf;
 	for (i = 0; sblock_try[i] != -1; i++) {
-		loc = sblock_try[i] / DEV_BSIZE + offset;
+		loc = sblock_try[i] / params->sectorsize + offset;
 		if (!ffs_read_disk_block(params, loc, SBLOCKSIZE, sbbuf))
 			continue;
 		switch (fs->fs_magic) {
@@ -560,19 +553,23 @@ ffs_findstage2(ib_params *params, uint32_t *maxblk, ib_block *blocks)
 	if (strchr(params->stage2, '/') != NULL) {
 		warnx("The secondary bootstrap `%s' must be in /",
 		    params->stage2);
+		warnx("(Path must be relative to the file system in `%s')",
+		    params->filesystem);
 		return (0);
 	}
 
 	/* Get the inode number of the secondary bootstrap. */
 	if (is_ufs2)
-		rv = ffs_find_disk_blocks_ufs2(params, ROOTINO,
+		rv = ffs_find_disk_blocks_ufs2(params, UFS_ROOTINO,
 		    ffs_findstage2_ino, &ino);
 	else
-		rv = ffs_find_disk_blocks_ufs1(params, ROOTINO,
+		rv = ffs_find_disk_blocks_ufs1(params, UFS_ROOTINO,
 		    ffs_findstage2_ino, &ino);
 	if (rv != 2) {
 		warnx("Could not find secondary bootstrap `%s' in `%s'",
 		    params->stage2, params->filesystem);
+		warnx("(Path must be relative to the file system in `%s')",
+		    params->filesystem);
 		return (0);
 	}
 

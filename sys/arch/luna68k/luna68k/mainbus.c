@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.c,v 1.4 2003/01/01 01:42:14 thorpej Exp $ */
+/* $NetBSD: mainbus.c,v 1.15 2017/03/09 14:05:59 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.4 2003/01/01 01:42:14 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.15 2017/03/09 14:05:59 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,61 +40,74 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.4 2003/01/01 01:42:14 thorpej Exp $");
 #include <machine/cpu.h>
 #include <machine/autoconf.h>
 
-static struct mainbus_attach_args devs[] = {
-	{ "clock",  0x45000000, -1 },	/* Mostek/Dallas TimeKeeper */
+static const struct mainbus_attach_args luna_devs[] = {
+	{ "clock",  0x45000000, -1 },	/* Mostek TimeKeeper */
+	{ "lcd",    0x4d000000, -1 },	/* Sharp LM16X212 LCD module */
 	{ "le",	    0xf1000000, 3 },	/* Am7990 */
 	{ "sio",    0x51000000, 6 },	/* uPD7201A */
+	{ "xp",     0x71000000, 1 },	/* HD647180XP */
 	{ "fb",	    0xc1100000, -1 },	/* BrookTree RAMDAC */
 	{ "spc",    0xe1000000, 2 },	/* MB89352 */
-#if 0
-	{ "spc",    0xe1000040, 2 },	/* ditto */
-#endif
 };
 
-static void mainbus_attach __P((struct device *, struct device *, void *));
-static int  mainbus_match __P((struct device *, struct cfdata *, void *));
-static int  mainbus_print __P((void *, const char *));
+static const struct mainbus_attach_args luna2_devs[] = {
+	{ "clock",  0x45000000, -1 },	/* Dallas TimeKeeper */
+	{ "lcd",    0x4d000000, -1 },	/* Sharp LM16X212 LCD module */
+	{ "le",	    0xf1000000, 3 },	/* Am7990 */
+	{ "sio",    0x51000000, 6 },	/* uPD7201A */
+	{ "xp",     0x71000000, 1 },	/* HD647180XP */
+	{ "fb",	    0xc1100000, -1 },	/* BrookTree RAMDAC */
+	{ "spc",    0xe1000000, 2 },	/* internal MB89352 */
+	{ "spc",    0xe1000040, 2 },	/* external MB89352 */
+};
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+static void mainbus_attach(device_t, device_t, void *);
+static int  mainbus_match(device_t, cfdata_t, void *);
+static int  mainbus_print(void *, const char *);
+
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
 static int
-mainbus_match(parent, cf, args)
-	struct device *parent;
-	struct cfdata *cf;
-	void *args;
+mainbus_match(device_t parent, cfdata_t cf, void *args)
 {
-	static int mainbus_matched;
+	static bool mainbus_matched;
 
 	if (mainbus_matched)
-		return (0);
+		return 0;
 
-	return ((mainbus_matched = 1));
+	mainbus_matched = true;
+	return 1;
 }
 
 static void
-mainbus_attach(parent, self, args)
-	struct device *parent, *self;
-	void *args;
+mainbus_attach(device_t parent, device_t self, void *args)
 {
-	int i;
-	
-	if (machtype == LUNA_II)
-		devs[1].ma_addr = 0xf0000000;
-	printf("\n");
-	for (i = 0; i < sizeof(devs)/sizeof(devs[0]); i++)
-		config_found(self, (void *)&devs[i], mainbus_print);
+	int i, ndevs;
+	const struct mainbus_attach_args *devs;
+	struct mainbus_attach_args ma;
+
+	if (machtype == LUNA_II) {
+		devs = luna2_devs;
+		ndevs = __arraycount(luna2_devs);
+	} else {
+		devs = luna_devs;
+		ndevs = __arraycount(luna_devs);
+	}
+	aprint_normal("\n");
+	for (i = 0; i < ndevs; i++) {
+		ma = devs[i];
+		config_found(self, &ma, mainbus_print);
+	}
 }
 
 static int
-mainbus_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+mainbus_print(void *aux, const char *pnp)
 {
 	struct mainbus_attach_args *ma = aux;
 
 	if (pnp)
 		aprint_normal("%s at %s", ma->ma_name, pnp);
 
-	return (UNCONF);
+	return UNCONF;
 }

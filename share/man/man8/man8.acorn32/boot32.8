@@ -1,4 +1,4 @@
-.\" $NetBSD: boot32.8,v 1.2 2004/02/23 19:39:48 wiz Exp $
+.\" $NetBSD: boot32.8,v 1.4 2016/04/30 14:32:22 jakllsch Exp $
 .\"
 .\" Copyright (c) 2000, 2001 Ben Harris
 .\" Copyright (c) 2004 Reinoud Zandijk
@@ -26,7 +26,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd February 23, 2004
+.Dd September 4, 2009
 .Dt BOOT32 8 acorn32
 .Os
 .Sh NAME
@@ -55,7 +55,9 @@ It takes the following standard
 .Nx
 options, which set flags in the
 .Va boothowto
-variable in the booted kernel (not all flags may be effective):
+variable in the booted kernel (see
+.Xr boothowto 9 ) .
+Not all flags may be effective.
 .Bl -tag -width Fl
 .It Fl a
 .Pq Dv RB_ASKNAME
@@ -77,10 +79,10 @@ Cause the kernel to enter the kernel debugger as soon as possible.
 Enter the in-kernel device configuration manager before attaching any
 devices.
 .It Fl q
-.Pq Dv RB_QUIET
+.Pq Dv AB_QUIET
 Cause the kernel to emit fewer messages than normal while starting up.
 .It Fl v
-.Pq Dv RB_VERBOSE
+.Pq Dv AB_VERBOSE
 Cause the kernel to emit more messages than normal while starting up.
 .El
 .Pp
@@ -138,7 +140,8 @@ filesystem.
 .Xr reboot 2 ,
 .Xr ddb 4 ,
 .Xr userconf 4 ,
-.Xr init 8
+.Xr init 8 ,
+.Xr boothowto 9
 .Sh HISTORY
 .Nm
 was introduced in

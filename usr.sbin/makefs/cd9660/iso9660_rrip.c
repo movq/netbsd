@@ -1,4 +1,4 @@
-/*	$NetBSD: iso9660_rrip.c,v 1.4 2006/12/18 21:03:29 christos Exp $	*/
+/*	$NetBSD: iso9660_rrip.c,v 1.14 2014/05/30 13:14:47 martin Exp $	*/
 
 /*
  * Copyright (c) 2005 Daniel Watt, Walter Deignan, Ryan Gabrys, Alan
@@ -40,19 +40,21 @@
 #include "iso9660_rrip.h"
 #include <sys/queue.h>
 #include <stdio.h>
+#include <util.h>
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: iso9660_rrip.c,v 1.4 2006/12/18 21:03:29 christos Exp $");
+__RCSID("$NetBSD: iso9660_rrip.c,v 1.14 2014/05/30 13:14:47 martin Exp $");
 #endif  /* !__lint */
 
 static void cd9660_rrip_initialize_inode(cd9660node *);
-static int cd9660_susp_handle_continuation(cd9660node *);
-static int cd9660_susp_handle_continuation_common(cd9660node *, int);
+static int cd9660_susp_handle_continuation(iso9660_disk *, cd9660node *);
+static int cd9660_susp_handle_continuation_common(iso9660_disk *, cd9660node *,
+    int);
 
 int
-cd9660_susp_initialize(cd9660node *node, cd9660node *parent,
-    cd9660node *grandparent)
+cd9660_susp_initialize(iso9660_disk *diskStructure, cd9660node *node,
+    cd9660node *parent, cd9660node *grandparent)
 {
 	cd9660node *cn;
 	int r;
@@ -69,11 +71,11 @@ cd9660_susp_initialize(cd9660node *node, cd9660node *parent,
 		TAILQ_INIT(&(node->dot_dot_record->head));
 
 	 /* SUSP specific entries here */
-	if ((r = cd9660_susp_initialize_node(node)) < 0)
+	if ((r = cd9660_susp_initialize_node(diskStructure, node)) < 0)
 		return r;
 
 	/* currently called cd9660node_rrip_init_links */
-	r = cd9660_rrip_initialize_node(node, parent, grandparent);
+	r = cd9660_rrip_initialize_node(diskStructure, node, parent, grandparent);
 	if (r < 0)
 		return r;
 
@@ -84,35 +86,35 @@ cd9660_susp_initialize(cd9660node *node, cd9660node *parent,
 	 * This should be called after all extensions. After
 	 * this is called, no new records should be added.
 	 */
-	if ((r = cd9660_susp_handle_continuation(node)) < 0)
+	if ((r = cd9660_susp_handle_continuation(diskStructure, node)) < 0)
 		return r;
 
 	/* Recurse on children. */
 	TAILQ_FOREACH(cn, &node->cn_children, cn_next_child) {
-		if ((r = cd9660_susp_initialize(cn, node, parent)) < 0)
+		if ((r = cd9660_susp_initialize(diskStructure, cn, node, parent)) < 0)
 			return 0;
 	}
 	return 1;
 }
 
 int
-cd9660_susp_finalize(cd9660node *node)
+cd9660_susp_finalize(iso9660_disk *diskStructure, cd9660node *node)
 {
 	cd9660node *temp;
 	int r;
 
 	assert(node != NULL);
 
-	if (node == diskStructure.rootNode)
-		diskStructure.susp_continuation_area_current_free = 0;
+	if (node == diskStructure->rootNode)
+		diskStructure->susp_continuation_area_current_free = 0;
 
-	if ((r = cd9660_susp_finalize_node(node)) < 0)
+	if ((r = cd9660_susp_finalize_node(diskStructure, node)) < 0)
 		return r;
-	if ((r = cd9660_rrip_finalize_node(node)) < 0)
+	if ((r = cd9660_rrip_finalize_node(diskStructure, node)) < 0)
 		return r;
 
 	TAILQ_FOREACH(temp, &node->cn_children, cn_next_child) {
-		if ((r = cd9660_susp_finalize(temp)) < 0)
+		if ((r = cd9660_susp_finalize(diskStructure, temp)) < 0)
 			return r;
 	}
 	return 1;
@@ -132,15 +134,15 @@ cd9660_susp_finalize(cd9660node *node)
  * CE (continuation area)
  */
 int
-cd9660_susp_finalize_node(cd9660node *node)
+cd9660_susp_finalize_node(iso9660_disk *diskStructure, cd9660node *node)
 {
 	struct ISO_SUSP_ATTRIBUTES *t;
 
 	/* Handle CE counters */
 	if (node->susp_entry_ce_length > 0) {
 		node->susp_entry_ce_start =
-		    diskStructure.susp_continuation_area_current_free;
-		diskStructure.susp_continuation_area_current_free +=
+		    diskStructure->susp_continuation_area_current_free;
+		diskStructure->susp_continuation_area_current_free +=
 		    node->susp_entry_ce_length;
 	}
 
@@ -149,12 +151,12 @@ cd9660_susp_finalize_node(cd9660node *node)
 		    t->entry_type != SUSP_ENTRY_SUSP_CE)
 			continue;
 		cd9660_bothendian_dword(
-			diskStructure.
+			diskStructure->
 			  susp_continuation_area_start_sector,
 			t->attr.su_entry.CE.ca_sector);
 
 		cd9660_bothendian_dword(
-			diskStructure.
+			diskStructure->
 			  susp_continuation_area_start_sector,
 			t->attr.su_entry.CE.ca_sector);
 		cd9660_bothendian_dword(node->susp_entry_ce_start,
@@ -166,7 +168,8 @@ cd9660_susp_finalize_node(cd9660node *node)
 }
 
 int
-cd9660_rrip_finalize_node(cd9660node *node)
+cd9660_rrip_finalize_node(iso9660_disk *diskStructure __unused,
+    cd9660node *node)
 {
 	struct ISO_SUSP_ATTRIBUTES *t;
 
@@ -185,10 +188,11 @@ cd9660_rrip_finalize_node(cd9660node *node)
 			break;
 		case SUSP_ENTRY_RRIP_PL:
 			/* Look at rr_real_parent */
-			if (node->rr_real_parent == NULL)
+			if (node->parent == NULL ||
+			    node->parent->rr_real_parent == NULL)
 				return -1;
 			cd9660_bothendian_dword(
-				node->rr_real_parent->fileDataSector,
+				node->parent->rr_real_parent->fileDataSector,
 				(unsigned char *)
 				    t->attr.rr_entry.PL.dir_loc);
 			break;
@@ -198,15 +202,20 @@ cd9660_rrip_finalize_node(cd9660node *node)
 }
 
 static int
-cd9660_susp_handle_continuation_common(cd9660node *node, int space)
+cd9660_susp_handle_continuation_common(iso9660_disk *diskStructure,
+    cd9660node *node, int space)
 {
-	int ca_used, susp_used, working;
-	struct ISO_SUSP_ATTRIBUTES *temp, *last = NULL, *CE;
+	int ca_used, susp_used, susp_used_pre_ce, working;
+	struct ISO_SUSP_ATTRIBUTES *temp, *pre_ce, *last, *CE, *ST;
 
+	pre_ce = last = NULL;
 	working = 254 - space;
+	if (node->su_tail_size > 0)
+		/* Allow 4 bytes for "ST" record. */
+		working -= node->su_tail_size + 4;
 	/* printf("There are %i bytes to work with\n",working); */
 
-	susp_used = 0;
+	susp_used_pre_ce = susp_used = 0;
 	ca_used = 0;
 	TAILQ_FOREACH(temp, &node->head, rr_ll) {
 		if (working < 0)
@@ -216,9 +225,17 @@ cd9660_susp_handle_continuation_common(cd9660node *node, int space)
 		 * CD9660_SUSP_ENTRY_SIZE(temp));
 		 */
 		working -= CD9660_SUSP_ENTRY_SIZE(temp);
-		if (working >= 28) {
+		if (working >= 0) {
 			last = temp;
 			susp_used += CD9660_SUSP_ENTRY_SIZE(temp);
+		}
+		if (working >= 28) {
+			/*
+			 * Remember the last entry after which we
+			 * could insert a "CE" entry.
+			 */
+			pre_ce = last;
+			susp_used_pre_ce = susp_used;
 		}
 	}
 
@@ -228,31 +245,49 @@ cd9660_susp_handle_continuation_common(cd9660node *node, int space)
 			SUSP_ENTRY_SUSP_CE, "CE", SUSP_LOC_ENTRY);
 		cd9660_susp_ce(CE, node);
 		/* This will automatically insert at the appropriate location */
-		TAILQ_INSERT_TAIL(&node->head, CE, rr_ll);
-		susp_used += 28;
-
+		if (pre_ce != NULL)
+			TAILQ_INSERT_AFTER(&node->head, pre_ce, CE, rr_ll);
+		else
+			TAILQ_INSERT_HEAD(&node->head, CE, rr_ll);
+		last = CE;
+		susp_used = susp_used_pre_ce + 28;
 		/* Count how much CA data is necessary */
-		for (temp = TAILQ_NEXT(CE, rr_ll); temp != NULL;
+		for (temp = TAILQ_NEXT(last, rr_ll); temp != NULL;
 		     temp = TAILQ_NEXT(temp, rr_ll)) {
 			ca_used += CD9660_SUSP_ENTRY_SIZE(temp);
 		}
 	}
 
+	/* An ST entry is needed */
+	if (node->su_tail_size > 0) {
+		ST = cd9660node_susp_create_node(SUSP_TYPE_SUSP,
+		    SUSP_ENTRY_SUSP_ST, "ST", SUSP_LOC_ENTRY);
+		cd9660_susp_st(ST, node);
+		if (last != NULL)
+			TAILQ_INSERT_AFTER(&node->head, last, ST, rr_ll);
+		else
+			TAILQ_INSERT_HEAD(&node->head, ST, rr_ll);
+		last = ST;
+		susp_used += 4;
+	}
+	if (last != NULL)
+		last->last_in_suf = 1;
+
 	node->susp_entry_size = susp_used;
 	node->susp_entry_ce_length = ca_used;
 
-	diskStructure.susp_continuation_area_size += ca_used;
+	diskStructure->susp_continuation_area_size += ca_used;
 	return 1;
 }
 
 /* See if a continuation entry is needed for each of the different types */
 static int
-cd9660_susp_handle_continuation(cd9660node *node)
+cd9660_susp_handle_continuation(iso9660_disk *diskStructure, cd9660node *node)
 {
 	assert (node != NULL);
 
 	/* Entry */
-	if (cd9660_susp_handle_continuation_common(
+	if (cd9660_susp_handle_continuation_common(diskStructure,
 		node,(int)(node->isoDirRecord->length[0])) < 0)
 		return 0;
 
@@ -260,7 +295,7 @@ cd9660_susp_handle_continuation(cd9660node *node)
 }
 
 int
-cd9660_susp_initialize_node(cd9660node *node)
+cd9660_susp_initialize_node(iso9660_disk *diskStructure, cd9660node *node)
 {
 	struct ISO_SUSP_ATTRIBUTES *temp;
 
@@ -276,7 +311,7 @@ cd9660_susp_initialize_node(cd9660node *node)
 
 	/* Check for root directory, add SP and ER if needed. */
 	if (node->type & CD9660_TYPE_DOT) {
-		if (node->parent == diskStructure.rootNode) {
+		if (node->parent == diskStructure->rootNode) {
 			temp = cd9660node_susp_create_node(SUSP_TYPE_SUSP,
 				SUSP_ENTRY_SUSP_SP, "SP", SUSP_LOC_DOT);
 			cd9660_susp_sp(temp, node);
@@ -335,8 +370,8 @@ cd9660_rrip_initialize_inode(cd9660node *node)
 }
 
 int
-cd9660_rrip_initialize_node(cd9660node *node, cd9660node *parent,
-    cd9660node *grandparent)
+cd9660_rrip_initialize_node(iso9660_disk *diskStructure, cd9660node *node,
+    cd9660node *parent, cd9660node *grandparent)
 {
 	struct ISO_SUSP_ATTRIBUTES *current = NULL;
 
@@ -347,7 +382,7 @@ cd9660_rrip_initialize_node(cd9660node *node, cd9660node *parent,
 		 * Handle ER - should be the only entry to appear on
 		 * a "." record
 		 */
-		if (node->parent == diskStructure.rootNode) {
+		if (node->parent == diskStructure->rootNode) {
 			cd9660_susp_ER(node, 1, SUSP_RRIP_ER_EXT_ID,
 				SUSP_RRIP_ER_EXT_DES, SUSP_RRIP_ER_EXT_SRC);
 		}
@@ -368,6 +403,13 @@ cd9660_rrip_initialize_node(cd9660node *node, cd9660node *parent,
 			cd9660node_rrip_px(current, grandparent->node);
 			TAILQ_INSERT_TAIL(&node->head, current, rr_ll);
 		}
+		/* Handle PL */
+		if (parent != NULL && parent->rr_real_parent != NULL) {
+			current = cd9660node_susp_create_node(SUSP_TYPE_RRIP,
+			    SUSP_ENTRY_RRIP_PL, "PL", SUSP_LOC_DOTDOT);
+			cd9660_rrip_PL(current,node);
+			TAILQ_INSERT_TAIL(&node->head, current, rr_ll);
+		}
 	} else {
 		cd9660_rrip_initialize_inode(node);
 
@@ -378,14 +420,14 @@ cd9660_rrip_initialize_node(cd9660node *node, cd9660node *parent,
 		 *
 		 * The rr_moved_dir needs to be assigned a NM record as well.
 		 */
-		if (node == diskStructure.rr_moved_dir) {
+		if (node == diskStructure->rr_moved_dir) {
 			cd9660_rrip_add_NM(node, RRIP_DEFAULT_MOVE_DIR_NAME);
 		}
 		else if ((node->node != NULL) &&
 			((strlen(node->node->name) !=
-			    (int)node->isoDirRecord->name_len[0]) ||
+			    (uint8_t)node->isoDirRecord->name_len[0]) ||
 			(memcmp(node->node->name,node->isoDirRecord->name,
-				(int) node->isoDirRecord->name_len[0]) != 0))) {
+				(uint8_t)node->isoDirRecord->name_len[0]) != 0))) {
 			cd9660_rrip_NM(node);
 		}
 
@@ -407,14 +449,6 @@ cd9660_rrip_initialize_node(cd9660node *node, cd9660node *parent,
 				SUSP_ENTRY_RRIP_RE, "RE", SUSP_LOC_ENTRY);
 			cd9660_rrip_RE(current,node);
 			TAILQ_INSERT_TAIL(&node->head, current, rr_ll);
-
-			/* Handle PL */
-			current = cd9660node_susp_create_node(SUSP_TYPE_RRIP,
-				SUSP_ENTRY_RRIP_PL, "PL", SUSP_LOC_DOTDOT);
-			cd9660_rrip_PL(current,node->dot_dot_record);
-			TAILQ_INSERT_TAIL(&node->dot_dot_record->head, current,
-			    rr_ll);
-			TAILQ_INSERT_TAIL(&node->head, current, rr_ll);
 		}
 	}
 	return 1;
@@ -426,13 +460,10 @@ cd9660node_susp_create_node(int susp_type, int entry_type, const char *type_id,
 {
 	struct ISO_SUSP_ATTRIBUTES* temp;
 
-	if ((temp = malloc(sizeof(struct ISO_SUSP_ATTRIBUTES))) == NULL) {
-		CD9660_MEM_ALLOC_ERROR("cd9660node_susp_create_node");
-		exit(1);
-	}
-
+	temp = emalloc(sizeof(*temp));
 	temp->susp_type = susp_type;
 	temp->entry_type = entry_type;
+	temp->last_in_suf = 0;
 	/* Phase this out */
 	temp->type_of[0] = type_id[0];
 	temp->type_of[1] = type_id[1];
@@ -467,7 +498,7 @@ cd9660_rrip_CL(struct ISO_SUSP_ATTRIBUTES *p, cd9660node *node __unused)
 int
 cd9660_rrip_RE(struct ISO_SUSP_ATTRIBUTES *p, cd9660node *node __unused)
 {
-	p->attr.rr_entry.RE.h.length[0] = 0;
+	p->attr.rr_entry.RE.h.length[0] = 4;
 	p->attr.rr_entry.RE.h.version[0] = 1;
 	return 1;
 }
@@ -626,13 +657,14 @@ cd9660node_rrip_pn(struct ISO_SUSP_ATTRIBUTES *pn_field, fsnode *fnode)
 	pn_field->attr.rr_entry.PN.h.length[0] = 20;
 	pn_field->attr.rr_entry.PN.h.version[0] = 1;
 
-	if (sizeof (fnode->inode->st.st_dev) > 32)
-		cd9660_bothendian_dword((uint64_t)fnode->inode->st.st_dev >> 32,
+	if (sizeof (fnode->inode->st.st_rdev) > 4)
+		cd9660_bothendian_dword(
+		    (uint64_t)fnode->inode->st.st_rdev >> 32,
 		    pn_field->attr.rr_entry.PN.high);
 	else
 		cd9660_bothendian_dword(0, pn_field->attr.rr_entry.PN.high);
 
-	cd9660_bothendian_dword(fnode->inode->st.st_dev & 0xffffffff,
+	cd9660_bothendian_dword(fnode->inode->st.st_rdev & 0xffffffff,
 		pn_field->attr.rr_entry.PN.low);
 	return 1;
 }
@@ -656,7 +688,7 @@ int
 cd9660node_rrip_tf(struct ISO_SUSP_ATTRIBUTES *p, fsnode *_node)
 {
 	p->attr.rr_entry.TF.flags[0] = TF_MODIFY | TF_ACCESS | TF_ATTRIBUTES;
-	p->attr.rr_entry.TF.h.length[0] = 4;
+	p->attr.rr_entry.TF.h.length[0] = 5;
 	p->attr.rr_entry.TF.h.version[0] = 1;
 
 	/*

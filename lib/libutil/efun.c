@@ -1,4 +1,4 @@
-/*	$NetBSD: efun.c,v 1.5 2007/07/01 21:41:16 pooka Exp $	*/
+/*	$NetBSD: efun.c,v 1.10 2015/07/26 02:20:30 kamil Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,11 +35,12 @@
 
 #include <sys/cdefs.h>
 #ifdef __RCSID
-__RCSID("$NetBSD: efun.c,v 1.5 2007/07/01 21:41:16 pooka Exp $");
+__RCSID("$NetBSD: efun.c,v 1.10 2015/07/26 02:20:30 kamil Exp $");
 #endif
 
 #include <err.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -111,7 +105,7 @@ void *
 emalloc(size_t n)
 {
 	void *p = malloc(n);
-	if (p == NULL)
+	if (p == NULL && n != 0)
 		(*efunc)(1, "Cannot allocate %zu bytes", n);
 	return p;
 }
@@ -120,8 +114,8 @@ void *
 ecalloc(size_t n, size_t s)
 {
 	void *p = calloc(n, s);
-	if (p == NULL)
-		(*efunc)(1, "Cannot allocate %zu bytes", n);
+	if (p == NULL && n != 0 && s != 0)
+		(*efunc)(1, "Cannot allocate %zu blocks of size %zu", n, s);
 	return p;
 }
 
@@ -129,9 +123,19 @@ void *
 erealloc(void *p, size_t n)
 {
 	void *q = realloc(p, n);
-	if (q == NULL)
+	if (q == NULL && n != 0)
 		(*efunc)(1, "Cannot re-allocate %zu bytes", n);
 	return q;
+}
+
+void
+ereallocarr(void *p, size_t n, size_t s)
+{
+	int rv = reallocarr(p, n, s);
+	if (rv != 0) {
+		errno = rv;
+		(*efunc)(1, "Cannot re-allocate %zu * %zu bytes", n, s);
+	}
 }
 
 FILE *
@@ -161,5 +165,33 @@ evasprintf(char ** __restrict ret, const char * __restrict format, va_list ap)
 	int rv;
 	if ((rv = vasprintf(ret, format, ap)) == -1)
 		(*efunc)(1, "Cannot format string");
+	return rv;
+}
+
+intmax_t
+estrtoi(const char * nptr, int base, intmax_t lo, intmax_t hi)
+{
+	int e;
+	intmax_t rv = strtoi(nptr, NULL, base, lo, hi, &e);
+	if (e != 0) {
+		errno = e;
+		(*efunc)(1,
+		    "Cannot convert string value '%s' with base %d to a number in range [%jd .. %jd]",
+		    nptr, base, lo, hi);
+	}
+	return rv;
+}
+
+uintmax_t
+estrtou(const char * nptr, int base, uintmax_t lo, uintmax_t hi)
+{
+	int e;
+	uintmax_t rv = strtou(nptr, NULL, base, lo, hi, &e);
+	if (e != 0) {
+		errno = e;
+		(*efunc)(1,
+		    "Cannot convert string value '%s' with base %d to a number in range [%ju .. %ju]",
+		    nptr, base, lo, hi);
+	}
 	return rv;
 }

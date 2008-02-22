@@ -1,4 +1,4 @@
-/*	$NetBSD: sscanf.c,v 1.16 2005/11/29 03:12:00 christos Exp $	*/
+/*	$NetBSD: sscanf.c,v 1.22 2018/02/04 01:13:45 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,9 +37,11 @@
 #if 0
 static char sccsid[] = "@(#)sscanf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: sscanf.c,v 1.16 2005/11/29 03:12:00 christos Exp $");
+__RCSID("$NetBSD: sscanf.c,v 1.22 2018/02/04 01:13:45 mrg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
+
+#include "namespace.h"
 
 #include <assert.h>
 #include <errno.h>
@@ -50,39 +52,28 @@ __RCSID("$NetBSD: sscanf.c,v 1.16 2005/11/29 03:12:00 christos Exp $");
 #include "reentrant.h"
 #include "local.h"
 
-static int eofread __P((void *, char *, int));
-
-/* ARGSUSED */
-static int
-eofread(cookie, buf, len)
-	void *cookie;
-	char *buf;
-	int len;
-{
-
-	return (0);
-}
+__weak_alias(sscanf_l, _sscanf_l)
 
 int
 sscanf(const char *str, char const *fmt, ...)
 {
 	int ret;
 	va_list ap;
-	FILE f;
-	struct __sfileext fext;
 
-	_DIAGASSERT(str != NULL);
-	_DIAGASSERT(fmt != NULL);
-
-	_FILEEXT_SETUP(&f, &fext);
-	f._flags = __SRD;
-	f._bf._base = f._p = __UNCONST(str);
-	f._bf._size = f._r = strlen(str);
-	f._read = eofread;
-	_UB(&f)._base = NULL;
-	f._lb._base = NULL;
 	va_start(ap, fmt);
-	ret = __svfscanf_unlocked(&f, fmt, ap);
+	ret = vsscanf(str, fmt, ap);
 	va_end(ap);
-	return (ret);
+	return ret;
+}
+
+int
+sscanf_l(const char *str, locale_t loc, char const *fmt, ...)
+{
+	int ret;
+	va_list ap;
+
+	va_start(ap, fmt);
+	ret = vsscanf_l(str, loc, fmt, ap);
+	va_end(ap);
+	return ret;
 }

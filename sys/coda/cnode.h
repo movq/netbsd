@@ -1,4 +1,4 @@
-/*	$NetBSD: cnode.h,v 1.16 2007/03/04 06:01:11 christos Exp $	*/
+/*	$NetBSD: cnode.h,v 1.20 2014/12/13 15:59:30 hannken Exp $	*/
 
 /*
  *
@@ -55,11 +55,6 @@ MALLOC_DECLARE(M_CODA);
 #endif
 
 /*
- * tmp below since we need struct queue
- */
-#include <coda/coda_kernel.h>
-
-/*
  * Cnode lookup stuff.
  * NOTE: CODA_CACHESIZE must be a power of 2 for cfshash to work!
  */
@@ -111,7 +106,7 @@ struct cnode {
     u_short		 c_symlen;	/* length of symbolic link */
     dev_t		 c_device;	/* associated vnode device */
     ino_t		 c_inode;	/* associated vnode inode */
-    struct cnode	*c_next;	/* links if on NetBSD machine */
+    kmutex_t		 c_lock;
 };
 #define	VTOC(vp)	((struct cnode *)(vp)->v_data)
 #define	SET_VTOC(vp)	((vp)->v_data)
@@ -120,8 +115,6 @@ struct cnode {
 /* flags */
 #define C_VATTR		0x01	/* Validity of vattr in the cnode */
 #define C_SYMLINK	0x02	/* Validity of symlink pointer in the Code */
-#define C_WANTED	0x08	/* Set if lock wanted */
-#define C_LOCKED	0x10	/* Set if lock held */
 #define C_UNMOUNTING	0X20	/* Set if unmounting */
 #define C_PURGING	0x40	/* Set if purging a fid */
 
@@ -129,16 +122,19 @@ struct cnode {
 #define VALID_SYMLINK(cp)	((cp->c_flags) & C_SYMLINK)
 #define IS_UNMOUNTING(cp)	((cp)->c_flags & C_UNMOUNTING)
 
+struct vmsg;
+
 struct vcomm {
-	u_long		vc_seq;
-	struct selinfo	vc_selproc;
-	struct queue	vc_requests;
-	struct queue	vc_replys;
+	u_long			vc_seq;
+	int			vc_open;
+	struct selinfo		vc_selproc;
+	TAILQ_HEAD(,vmsg)	vc_requests;
+	TAILQ_HEAD(,vmsg)	vc_replies;
 };
 
-#define	VC_OPEN(vcp)	    ((vcp)->vc_requests.forw != NULL)
-#define MARK_VC_CLOSED(vcp) (vcp)->vc_requests.forw = NULL;
-#define MARK_VC_OPEN(vcp)    /* MT */
+#define VC_OPEN(vcp)		((vcp)->vc_open == 1)
+#define MARK_VC_CLOSED(vcp)	((vcp)->vc_open = 0)
+#define MARK_VC_OPEN(vcp)	((vcp)->vc_open = 1)
 
 struct coda_clstat {
 	int	ncalls;			/* client requests */
@@ -189,20 +185,20 @@ enum dc_status {
 };
 
 /* cfs_psdev.h */
-extern int coda_call(struct coda_mntinfo *mntinfo, int inSize, int *outSize, void *buffer);
+extern int coda_call(struct coda_mntinfo *, int, int *, void *);
 extern int coda_kernel_version;
 
 /* cfs_subr.h */
-extern int  handleDownCall(int opcode, union outputArgs *out);
-extern void coda_unmounting(struct mount *whoIam);
-extern int  coda_vmflush(struct cnode *cp);
+extern int  handleDownCall(int, union outputArgs *);
+extern void coda_unmounting(struct mount *);
+extern int  coda_vmflush(struct cnode *);
 
 /* cfs_vnodeops.h */
-extern struct cnode *make_coda_node(CodaFid *fid, struct mount *vfsp, short type);
+extern struct cnode *make_coda_node(CodaFid *, struct mount *, short);
 extern int coda_vnodeopstats_init(void);
 
 /* coda_vfsops.h */
-extern struct mount *devtomp(dev_t dev);
+extern struct mount *devtomp(dev_t);
 
 /* sigh */
 #define CODA_RDWR ((u_long) 31)

@@ -1,8 +1,9 @@
-/*	$NetBSD: syntax.c,v 1.2 2007/12/12 22:55:43 lukem Exp $	*/
+/*	$NetBSD: syntax.c,v 1.5 2017/08/21 13:20:49 kre Exp $	*/
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: syntax.c,v 1.2 2007/12/12 22:55:43 lukem Exp $");
+__RCSID("$NetBSD: syntax.c,v 1.5 2017/08/21 13:20:49 kre Exp $");
 
+#include <limits.h>
 #include "shell.h"
 #include "syntax.h"
 #include "parser.h"
@@ -62,6 +63,7 @@ const char sqsyntax[257] = { CEOF,
     set_range(CTL_FIRST, CTL_LAST, CCTL)
     set('\n', CNL)
     set('\'', CSQUOTE)
+    set('\\', CSBACK)
     /* ':/' for tilde expansion, '-' for [a\-x] pattern ranges */
     set('!', CCTL)
     set('*', CCTL)
@@ -101,4 +103,7 @@ const char is_type[257] = { 0,
     set('-', ISSPECL)
     set('*', ISSPECL)
     set('@', ISSPECL)
+    set(' ', ISSPACE)
+    set('\t', ISSPACE)
+    set('\n', ISSPACE)
 };

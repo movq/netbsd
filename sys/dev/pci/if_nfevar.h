@@ -1,5 +1,5 @@
-/*	$NetBSD: if_nfevar.h,v 1.6 2008/01/26 14:13:07 tsutsui Exp $	*/
-/*	$OpenBSD: if_nfevar.h,v 1.11 2006/02/19 13:57:02 damien Exp $	*/
+/*	$NetBSD: if_nfevar.h,v 1.10 2010/11/03 14:03:40 jakllsch Exp $	*/
+/*	$OpenBSD: if_nfevar.h,v 1.13 2007/12/05 08:30:33 jsg Exp $	*/
 
 /*-
  * Copyright (c) 2005 Jonathan Gray <jsg@openbsd.org>
@@ -38,7 +38,7 @@ struct nfe_tx_ring {
 };
 
 struct nfe_jbuf {
-	void *			buf;
+	void			*buf;
 	bus_addr_t		physaddr;
 	SLIST_ENTRY(nfe_jbuf)	jnext;
 };
@@ -56,7 +56,7 @@ struct nfe_rx_ring {
 	bus_addr_t		physaddr;
 	struct nfe_desc32	*desc32;
 	struct nfe_desc64	*desc64;
-	void *			jpool;
+	void			*jpool;
 	struct nfe_rx_data	data[NFE_RX_RING_COUNT];
 	struct nfe_jbuf		jbuf[NFE_JPOOL_COUNT];
 	int			jbufmap[NFE_RX_RING_COUNT];
@@ -64,14 +64,17 @@ struct nfe_rx_ring {
 	int			bufsz;
 	int			cur;
 	int			next;
+	kmutex_t		mtx;
 };
 
 struct nfe_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	struct ethercom		sc_ethercom;
 	uint8_t			sc_enaddr[ETHER_ADDR_LEN];
+	pci_chipset_tag_t	sc_pc;
 	bus_space_handle_t	sc_memh;
 	bus_space_tag_t		sc_memt;
+	bus_size_t		sc_mems;
 	void			*sc_ih;
 	bus_dma_tag_t		sc_dmat;
 	struct mii_data		sc_mii;

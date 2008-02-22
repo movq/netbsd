@@ -1,4 +1,4 @@
-# 	$NetBSD: Makefile.sparc64,v 1.66 2008/02/18 15:02:20 joerg Exp $
+# 	$NetBSD: Makefile.sparc64,v 1.84 2017/12/10 14:29:47 christos Exp $
 
 #=========================================================================
 #
@@ -43,6 +43,8 @@ USETOOLS?=	no
 NEED_OWN_INSTALL_TARGET?=no
 .include <bsd.own.mk>
 
+USE_SSP?=	yes
+
 ##
 ## (1) port identification
 ##
@@ -56,51 +58,65 @@ CPPFLAGS+=	-Dsparc64 -D__sparc64__
 .if ${LP64} == "yes"
 # 64-bit kernels
 CPPFLAGS+=	-D_LP64 -Wa,-Av9a
+CPPFLAGS+=	${${ACTIVE_CC} == "clang":? -Qunused-arguments :}
 AFLAGS+=	-Wa,-Av9a
-CC_NOOPT=	${NORMAL_C}
 .if defined(PROF)
 # Profiling is only supported in the medium low memory model.
-CFLAGS+=	-mcmodel=medlow
+CFLAGS+=	${${ACTIVE_CC} == "gcc":? -mcmodel=medlow :}
+CFLAGS+=	${${ACTIVE_CC} == "clang":? -mcmodel=small :}
 .else
 # Since the kernel resides in the lower 32 bits, use medium low for now anyway.
-CFLAGS+=	-mcmodel=medlow
+CFLAGS+=	${${ACTIVE_CC} == "gcc":? -mcmodel=medlow :}
+CFLAGS+=	${${ACTIVE_CC} == "clang":? -mcmodel=small :}
 .endif
 .else
 # 32-bit kernels
 CPPFLAGS+=	-m32 -Wa,-Av8plusa -mcpu=ultrasparc
+CPPFLAGS+=	${${ACTIVE_CC} == "clang":? -Qunused-arguments :}
 AFLAGS+=	-Wa,-Av8plusa
-# XXX
-# The sparc gcc version 3.3.3 (NetBSD nb1 20040301) does not compile this
-# file properly with higher optimizations
-CC_NOOPT=	${NORMAL_C:C/-O./-O0/}
+AFLAGS+=	${${ACTIVE_CC} == "clang":? -Qunused-arguments :}
 .endif
-CFLAGS+=	-mno-fpu
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+CFLAGS+=	${${ACTIVE_CC} == "gcc":? -mno-fpu :}
+AFLAGS+=	-x assembler-with-cpp
 
 ##
 ## (3) libkern and compat
 ##
-# KERN_AS=	obj	# memcpy, memset, etc. are in locore.s
+OPT_MODULAR=	%MODULAR%
+.if !empty(OPT_MODULAR)
+KERN_AS=	obj
+.else
+KERN_AS=	library
+.endif
 
 ##
 ## (4) local objects, compile rules, and dependencies
 ##
-MD_OBJS=	locore.o
+MD_OBJS=	locore.o copy.o mp_subr.o
 MD_CFILES=
-MD_SFILES=	${SPARC64}/sparc64/locore.s
+MD_SFILES=	${SPARC64}/sparc64/locore.s ${SPARC64}/sparc64/copy.S \
+	 ${SPARC64}/sparc64/mp_subr.S
 
 locore.o: ${SPARC64}/sparc64/locore.s assym.h
 	${NORMAL_S}
+
+copy.o:	${SPARC64}/sparc64/copy.S assym.h
+	${NORMAL_S}
+
+mp_subr.o:	${SPARC64}/sparc64/mp_subr.S assym.h
+	${NORMAL_S}
+
+# Our libkern needs stuff from assym.h for memcpy and memset.
+dependkernlib:	assym.h
 
 ##
 ## (5) link settings
 ##
 TEXTADDR?=	01000000
-LINKFORMAT=	-n -T ${SPARC64}/conf/${KERN_LDSCRIPT}
 .if ${LP64} == "yes"
-KERN_LDSCRIPT?= kern.ldscript
+KERNLDSCRIPT?= ${SPARC64}/conf/kern.ldscript
 .else
-KERN_LDSCRIPT?= kern32.ldscript
+KERNLDSCRIPT?= ${SPARC64}/conf/kern32.ldscript
 .endif
 
 ##
@@ -122,9 +138,9 @@ cpu_in_cksum.o lock_stubs.o: assym.h
 # would be defined
 .MAIN: all
 
-.if make(depend) || make(all) || make(dependall)
-.BEGIN:
-	@rm -f sparc && \
+.if !make(obj) && !make(clean) && !make(cleandir)
+.BEGIN::
+	-@rm -f sparc && \
 		ln -s $S/arch/sparc/include sparc
 .endif
 
@@ -143,12 +159,10 @@ cpu_in_cksum.o lock_stubs.o: assym.h
 
 %RULES
 
-## Include rules for Atheros WLAN
-.include "$S/contrib/dev/ath/netbsd/Makefile.ath.inc"
-
 ##
 ## (9) port independent kernel machinery
 ##
+_SKIP_DTS=yes
 .include "$S/conf/Makefile.kern.inc"
 
 ##

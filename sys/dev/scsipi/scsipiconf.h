@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipiconf.h,v 1.110 2007/07/09 21:01:22 ad Exp $	*/
+/*	$NetBSD: scsipiconf.h,v 1.126 2016/11/29 03:23:00 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,6 +54,7 @@ typedef	int	boolean;
 
 #include <sys/callout.h>
 #include <sys/queue.h>
+#include <sys/condvar.h>
 #include <dev/scsipi/scsi_spc.h>
 #include <dev/scsipi/scsipi_debug.h>
 
@@ -86,7 +80,7 @@ struct scsipi_generic {
  * scsipi_async_event_t:
  *
  *	Asynchronous events from the adapter to the mid-layer and
- *	peripherial.
+ *	peripheral.
  *
  *	Arguments:
  *
@@ -150,7 +144,7 @@ typedef enum {
 	ADAPTER_REQ_SET_XFER_MODE	/* set xfer mode */
 } scsipi_adapter_req_t;
 
-
+#ifdef _KERNEL
 /*
  * scsipi_periphsw:
  *
@@ -193,9 +187,9 @@ struct scsipi_inquiry_pattern;
  *	structure contains the channel number.
  */
 struct scsipi_adapter {
-	struct device *adapt_dev;	/* pointer to adapter's device */
+	device_t adapt_dev;	/* pointer to adapter's device */
 	int	adapt_nchannels;	/* number of adapter channels */
-	int	adapt_refcnt;		/* adapter's reference count */
+	volatile int	adapt_refcnt;		/* adapter's reference count */
 	int	adapt_openings;		/* total # of command openings */
 	int	adapt_max_periph;	/* max openings per periph */
 	int	adapt_flags;
@@ -205,27 +199,27 @@ struct scsipi_adapter {
 	void	(*adapt_minphys)(struct buf *);
 	int	(*adapt_ioctl)(struct scsipi_channel *, u_long,
 		    void *, int, struct proc *);
-	int	(*adapt_enable)(struct device *, int);
+	int	(*adapt_enable)(device_t, int);
 	int	(*adapt_getgeom)(struct scsipi_periph *,
 			struct disk_parms *, u_long);
 	int	(*adapt_accesschk)(struct scsipi_periph *,
 			struct scsipi_inquiry_pattern *);
+
+	kmutex_t adapt_mtx;
+	volatile int	adapt_running;	/* how many users of mutex */
 };
 
 /* adapt_flags */
 #define SCSIPI_ADAPT_POLL_ONLY	0x01 /* Adaptor can't do interrupts. */
+#define SCSIPI_ADAPT_MPSAFE     0x02 /* Adaptor doesn't need kernel lock */
 
-#define	scsipi_adapter_minphys(chan, bp)				\
-	(*(chan)->chan_adapter->adapt_minphys)((bp))
-
-#define	scsipi_adapter_request(chan, req, arg)				\
-	(*(chan)->chan_adapter->adapt_request)((chan), (req), (arg))
-
-#define	scsipi_adapter_ioctl(chan, cmd, data, flag, p)			\
-	(*(chan)->chan_adapter->adapt_ioctl)((chan), (cmd), (data), (flag), (p))
-
-#define	scsipi_adapter_enable(chan, enable)				\
-	(*(chan)->chan_adapt->adapt_enable)((chan), (enable))
+void scsipi_adapter_minphys(struct scsipi_channel *, struct buf *);
+void scsipi_adapter_request(struct scsipi_channel *,
+	scsipi_adapter_req_t, void *);
+int scsipi_adapter_ioctl(struct scsipi_channel *, u_long,
+	void *, int, struct proc *);
+int scsipi_adapter_enable(struct scsipi_adapter *, int);
+#endif
 
 
 /*
@@ -242,13 +236,24 @@ struct scsipi_bustype {
 	int	(*bustype_interpret_sense)(struct scsipi_xfer *);
 	void	(*bustype_printaddr)(struct scsipi_periph *);
 	void	(*bustype_kill_pending)(struct scsipi_periph *);
+	void	(*bustype_async_event_xfer_mode)(struct scsipi_channel *,
+		    void *);
 };
 
 /* bustype_type */
-#define	SCSIPI_BUSTYPE_SCSI	0
+/* type is stored in the first byte */
+#define SCSIPI_BUSTYPE_TYPE_SHIFT 0
+#define SCSIPI_BUSTYPE_TYPE(x) (((x) >> SCSIPI_BUSTYPE_TYPE_SHIFT) & 0xff)
+#define	SCSIPI_BUSTYPE_SCSI	0 /* parallel SCSI */
 #define	SCSIPI_BUSTYPE_ATAPI	1
 /* #define SCSIPI_BUSTYPE_ATA	2 */
+/* subtype is stored in the second byte */
+#define SCSIPI_BUSTYPE_SUBTYPE_SHIFT 8
+#define SCSIPI_BUSTYPE_SUBTYPE(x) (((x) >> SCSIPI_BUSTYPE_SUBTYPE_SHIFT) & 0xff)
 
+#define SCSIPI_BUSTYPE_BUSTYPE(t, s) \
+    ((t) << SCSIPI_BUSTYPE_TYPE_SHIFT | (s) << SCSIPI_BUSTYPE_SUBTYPE_SHIFT)
+/* subtypes are defined in each bus type headers */
 
 /*
  * scsipi_channel:
@@ -263,6 +268,7 @@ struct scsipi_bustype {
 #define	SCSIPI_CHAN_PERIPH_BUCKETS	16
 #define	SCSIPI_CHAN_PERIPH_HASHMASK	(SCSIPI_CHAN_PERIPH_BUCKETS - 1)
 
+#ifdef _KERNEL
 struct scsipi_channel {
 	const struct scsipi_bustype *chan_bustype; /* channel's bus type */
 	const char *chan_name;	/* this channel's name */
@@ -301,7 +307,18 @@ struct scsipi_channel {
 	/* callback we may have to call after forking the kthread */
 	void (*chan_init_cb)(struct scsipi_channel *, void *);
 	void *chan_init_cb_arg;
+
+	kcondvar_t chan_cv_comp;
+	kcondvar_t chan_cv_thr;
+	kcondvar_t chan_cv_xs;
+
+#define chan_cv_complete(ch) (&(ch)->chan_cv_comp)
+#define chan_cv_thread(ch) (&(ch)->chan_cv_thr)
 };
+
+#define chan_running(ch) ((ch)->chan_adapter->adapt_running)
+#define chan_mtx(ch) (&(ch)->chan_adapter->adapt_mtx)
+#endif
 
 /* chan_flags */
 #define	SCSIPI_CHAN_OPENINGS	0x01	/* use chan_openings */
@@ -335,10 +352,11 @@ struct scsipi_channel {
 #define	PERIPH_NTAGWORDS	((256 / 8) / sizeof(u_int32_t))
 
 
+#ifdef _KERNEL
 /*
  * scsipi_periph:
  *
- *	This structure describes the path between a peripherial device
+ *	This structure describes the path between a peripheral device
  *	and an adapter.  It contains a pointer to the adapter channel
  *	which in turn contains a pointer to the adapter.
  *
@@ -349,13 +367,13 @@ struct scsipi_channel {
  *	still be an improvement.
  */
 struct scsipi_periph {
-	struct device *periph_dev;	/* pointer to peripherial's device */
+	device_t periph_dev;	/* pointer to peripheral's device */
 	struct scsipi_channel *periph_channel; /* channel we're connected to */
 
 					/* link in channel's table of periphs */
 	LIST_ENTRY(scsipi_periph) periph_hash;
 
-	const struct scsipi_periphsw *periph_switch; /* peripherial's entry
+	const struct scsipi_periphsw *periph_switch; /* peripheral's entry
 							points */
 	int	periph_openings;	/* max # of outstanding commands */
 	int	periph_active;		/* current # of outstanding commands */
@@ -385,7 +403,7 @@ struct scsipi_periph {
 	/* Bitmap of free command tags. */
 	u_int32_t periph_freetags[PERIPH_NTAGWORDS];
 
-	/* Pending scsipi_xfers on this peripherial. */
+	/* Pending scsipi_xfers on this peripheral. */
 	struct scsipi_xfer_queue periph_xferq;
 
 	callout_t periph_callout;
@@ -393,7 +411,11 @@ struct scsipi_periph {
 	/* xfer which has a pending CHECK_CONDITION */
 	struct scsipi_xfer *periph_xscheck;
 
+	kcondvar_t periph_cv;
+#define periph_cv_periph(p) (&(p)->periph_cv)
+#define periph_cv_active(p) (&(p)->periph_cv)
 };
+#endif
 
 /*
  * Macro to return the current xfer mode of a periph.
@@ -447,12 +469,14 @@ struct scsipi_periph {
 #define	PQUIRK_LITTLETOC	0x00000400	/* audio TOC is little-endian */
 #define	PQUIRK_NOCAPACITY	0x00000800	/* no READ CD CAPACITY */
 #define	PQUIRK_NOTUR		0x00001000	/* no TEST UNIT READY */
+#define	PQUIRK_NODOORLOCK	0x00002000	/* can't lock door */
 #define	PQUIRK_NOSENSE		0x00004000	/* can't REQUEST SENSE */
 #define PQUIRK_ONLYBIG		0x00008000	/* only use SCSI_{R,W}_BIG */
 #define PQUIRK_NOBIGMODESENSE	0x00040000	/* has no big mode-sense op */
 #define PQUIRK_CAP_SYNC		0x00080000	/* SCSI device with ST sync op*/
 #define PQUIRK_CAP_WIDE16	0x00100000	/* SCSI device with ST wide op*/
 #define PQUIRK_CAP_NODT		0x00200000	/* signals DT, but can't. */
+#define PQUIRK_START		0x00400000	/* needs start before tur */
 
 
 /*
@@ -471,6 +495,7 @@ typedef enum {
 	XS_REQUEUE		/* requeue this command */
 } scsipi_xfer_result_t;
 
+#ifdef _KERNEL
 /*
  * Each scsipi transaction is fully described by one of these structures
  * It includes information about the source of the command and also the
@@ -501,7 +526,7 @@ struct scsipi_xfer {
 	callout_t xs_callout;		/* callout for adapter use */
 	int	xs_control;		/* control flags */
 	volatile int xs_status;		/* status flags */
-	struct scsipi_periph *xs_periph;/* peripherial doing the xfer */
+	struct scsipi_periph *xs_periph;/* peripheral doing the xfer */
 	int	xs_retries;		/* the number of times to retry */
 	int	xs_requeuecnt;		/* number of requeues */
 	int	timeout;		/* in milliseconds */
@@ -532,8 +557,11 @@ struct scsipi_xfer {
 	u_int8_t xs_tag_id;		/* tag ID */
 
 	struct	scsipi_generic cmdstore
-	    __attribute__ ((aligned (4)));/* stash the command in here */
+	    __aligned(4);		/* stash the command in here */
+
+#define xs_cv(xs) (&(xs)->xs_periph->periph_channel->chan_cv_xs)
 };
+#endif
 
 /*
  * scsipi_xfer control flags
@@ -571,7 +599,6 @@ struct scsipi_xfer {
 #define	XS_CTL_HEAD_TAG		0x00080000	/* use a Head of Queue Tag */
 #define	XS_CTL_THAW_PERIPH	0x00100000	/* thaw periph once enqueued */
 #define	XS_CTL_FREEZE_PERIPH	0x00200000	/* freeze periph when done */
-#define XS_CTL_DATA_ONSTACK	0x00400000	/* data is alloc'ed on stack */
 #define XS_CTL_REQSENSE		0x00800000	/* xfer is a request sense */
 
 #define	XS_CTL_TAGMASK	(XS_CTL_SIMPLE_TAG|XS_CTL_ORDERED_TAG|XS_CTL_HEAD_TAG)
@@ -625,13 +652,14 @@ struct scsi_quirk_inquiry_pattern {
 
 #ifdef _KERNEL
 void	scsipi_init(void);
+void	scsipi_ioctl_init(void);
+void	scsipi_load_verbose(void);
 int	scsipi_command(struct scsipi_periph *, struct scsipi_generic *, int,
 	    u_char *, int, int, int, struct buf *, int);
 void	scsipi_create_completion_thread(void *);
 const void *scsipi_inqmatch(struct scsipi_inquiry_pattern *, const void *,
 	    size_t, size_t, int *);
 const char *scsipi_dtype(int);
-void	scsipi_strvis(u_char *, int, const u_char *, int);
 int	scsipi_execute_xs(struct scsipi_xfer *);
 int	scsipi_test_unit_ready(struct scsipi_periph *, int);
 int	scsipi_prevent(struct scsipi_periph *, int, int);
@@ -652,11 +680,17 @@ int	scsipi_interpret_sense(struct scsipi_xfer *);
 void	scsipi_wait_drain(struct scsipi_periph *);
 void	scsipi_kill_pending(struct scsipi_periph *);
 struct scsipi_periph *scsipi_alloc_periph(int);
-#ifdef SCSIVERBOSE
-void	scsipi_print_sense(struct scsipi_xfer *, int);
-void	scsipi_print_sense_data(struct scsi_sense_data *, int);
-char   *scsipi_decode_sense(void *, int);
-#endif
+void	scsipi_free_periph(struct scsipi_periph *);
+
+/* Function pointers for scsiverbose module */
+extern int	(*scsipi_print_sense)(struct scsipi_xfer *, int);
+extern void	(*scsipi_print_sense_data)(struct scsi_sense_data *, int);
+
+int     scsipi_print_sense_stub(struct scsipi_xfer *, int);
+void    scsipi_print_sense_data_stub(struct scsi_sense_data *, int);
+
+extern int	scsi_verbose_loaded;
+
 void	scsipi_print_cdb(struct scsipi_generic *cmd);
 int	scsipi_thread_call_callback(struct scsipi_channel *,
 	    void (*callback)(struct scsipi_channel *, void *),
@@ -666,7 +700,6 @@ void	scsipi_async_event(struct scsipi_channel *,
 int	scsipi_do_ioctl(struct scsipi_periph *, dev_t, u_long, void *,
 	    int, struct lwp *);
 
-void	scsipi_print_xfer_mode(struct scsipi_periph *);
 void	scsipi_set_xfer_mode(struct scsipi_channel *, int, int);
 
 int	scsipi_channel_init(struct scsipi_channel *);
@@ -677,6 +710,8 @@ void	scsipi_insert_periph(struct scsipi_channel *,
 void	scsipi_remove_periph(struct scsipi_channel *,
 	    struct scsipi_periph *);
 struct scsipi_periph *scsipi_lookup_periph(struct scsipi_channel *,
+	    int, int);
+struct scsipi_periph *scsipi_lookup_periph_locked(struct scsipi_channel *,
 	    int, int);
 int	scsipi_target_detach(struct scsipi_channel *, int, int, int);
 
@@ -690,6 +725,9 @@ void	scsipi_channel_timed_thaw(void *);
 void	scsipi_periph_freeze(struct scsipi_periph *, int);
 void	scsipi_periph_thaw(struct scsipi_periph *, int);
 void	scsipi_periph_timed_thaw(void *);
+
+void	scsipi_periph_freeze_locked(struct scsipi_periph *, int);
+void	scsipi_periph_thaw_locked(struct scsipi_periph *, int);
 
 int	scsipi_sync_period_to_factor(int);
 int	scsipi_sync_factor_to_period(int);

@@ -1,4 +1,4 @@
-/*	$NetBSD: cmdtab.c,v 1.23 2007/02/18 17:00:08 dsl Exp $	*/
+/*	$NetBSD: cmdtab.c,v 1.25 2016/08/02 15:56:09 scole Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cmdtab.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: cmdtab.c,v 1.23 2007/02/18 17:00:08 dsl Exp $");
+__RCSID("$NetBSD: cmdtab.c,v 1.25 2016/08/02 15:56:09 scole Exp $");
 #endif /* not lint */
 
 #include "systat.h"
@@ -69,6 +69,13 @@ struct command	icmp_commands[] = {
 	{ .c_name = NULL }
 };
 
+struct command ifstat_commands[] = {
+	{ "scale",	ifstat_scale,	"modify scale of display"},
+	{ "pps",	ifstat_pps, 	"toggle packets per second display"},
+	{ "match",	ifstat_match,   "display matching interfaces"},
+	{ .c_name = NULL }
+};
+
 struct command	iostat_commands[] = {
 	{ "bars",	iostat_bars,	"show io stats as a bar graph"},
 	{ "numbers",	iostat_numbers,	"show io stats numerically"},
@@ -96,16 +103,6 @@ struct command	ip6_commands[] = {
 	{ "run",	ip6_run,	"show running total stats"},
 	{ "time",	ip6_time,	"show stats for each sample time"},
 	{ "zero",	ip6_zero,	"re-zero running totals"},
-	{ .c_name = NULL }
-};
-#endif
-
-#ifdef IPSEC
-struct command	ipsec_commands[] = {
-	{ "boot",	ipsec_boot,	"show total stats since boot"},
-	{ "run",	ipsec_run,	"show running total stats"},
-	{ "time",	ipsec_time,	"show stats for each sample time"},
-	{ "zero",	ipsec_zero,	"re-zero running totals"},
 	{ .c_name = NULL }
 };
 #endif
@@ -169,6 +166,9 @@ struct mode modes[] = {
 	{ "df",         showdf,  	fetchdf,	labeldf,
 	  initdf,	opendf,		closedf,	df_commands,
 	  CF_LOADAV },
+	{ "ifstat",	showifstat,	fetchifstat,	labelifstat,
+	  initifstat,	openifstat,	closeifstat,	ifstat_commands,
+	  CF_LOADAV },
 	{ "inet.icmp",	showicmp,	fetchicmp,	labelicmp,
 	  initicmp,	openicmp,	closeicmp,	icmp_commands,
 	  CF_LOADAV },
@@ -184,11 +184,6 @@ struct mode modes[] = {
 #ifdef INET6
 	{ "inet6.ip6",	showip6,	fetchip6,	labelip6,
 	  initip6,	openip6,	closeip6,	ip6_commands,
-	  CF_LOADAV },
-#endif
-#ifdef IPSEC
-	{ "ipsec",	showipsec,	fetchipsec,	labelipsec,
-	  initipsec,	openipsec,	closeipsec,	ipsec_commands,
 	  CF_LOADAV },
 #endif
 	{ "iostat",	showiostat,	fetchiostat,	labeliostat,

@@ -1,4 +1,4 @@
-/*	$NetBSD: siopvar.h,v 1.25 2007/12/25 18:33:39 perry Exp $	*/
+/*	$NetBSD: siopvar.h,v 1.29 2012/08/24 09:01:23 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -41,13 +36,13 @@
  */
 struct siop_xfer {
 	struct siop_common_xfer siop_tables;
-	/* u_int32_t resel[sizeof(load_dsa) / sizeof(load_dsa[0])]; */
-	u_int32_t resel[25];
+	/* uint32_t resel[sizeof(load_dsa) / sizeof(load_dsa[0])]; */
+	uint32_t resel[25];
 } __packed;
 
 /*
  * This describes a command handled by the SCSI controller
- * These are chained in either a free list or a active list
+ * These are chained in either a free list or an active list
  * We have one queue per target
  */
 
@@ -56,7 +51,7 @@ struct siop_cmd {
 	struct siop_common_cmd cmd_c;
 	struct siop_cbd *siop_cbdp; /* pointer to our siop_cbd */
 	int reselslot;
-	u_int32_t saved_offset; /* offset in table after disc without sdp */
+	uint32_t saved_offset; /* offset in table after disc without sdp */
 };
 #define cmd_tables cmd_c.siop_tables
 
@@ -94,15 +89,13 @@ struct siop_target {
 
 struct siop_lunsw {
 	TAILQ_ENTRY (siop_lunsw) next;
-	u_int32_t lunsw_off; /* offset of this lun sw, from sc_scriptaddr*/
-	u_int32_t lunsw_size; /* size of this lun sw */
+	uint32_t lunsw_off; /* offset of this lun sw, from sc_scriptaddr*/
+	uint32_t lunsw_size; /* size of this lun sw */
 };
 
 static __inline void siop_table_sync(struct siop_cmd *, int);
 static __inline void
-siop_table_sync(siop_cmd, ops)
-	struct siop_cmd *siop_cmd;
-	int ops;
+siop_table_sync(struct siop_cmd *siop_cmd, int ops)
 {
 	struct siop_common_softc *sc  = siop_cmd->cmd_c.siop_sc;
 	bus_addr_t offset;
@@ -126,10 +119,10 @@ struct siop_softc {
 	struct cbd_list cmds;		/* list of command block descriptors */
 	struct cmd_list free_list;	/* cmd descr free list */
 	struct lunsw_list lunsw_list;	/* lunsw free list */
-	u_int32_t script_free_lo;	/* free ram offset from sc_scriptaddr */
-	u_int32_t script_free_hi;	/* free ram offset from sc_scriptaddr */
+	uint32_t script_free_lo;	/* free ram offset from sc_scriptaddr */
+	uint32_t script_free_hi;	/* free ram offset from sc_scriptaddr */
 	int sc_ntargets;		/* number of known targets */
-	u_int32_t sc_flags;
+	uint32_t sc_flags;
 };
 
 /* defs for sc_flags */

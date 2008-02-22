@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_disks.c,v 1.69 2008/01/26 20:44:47 oster Exp $	*/
+/*	$NetBSD: rf_disks.c,v 1.89 2017/01/13 13:01:13 christos Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  ***************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.69 2008/01/26 20:44:47 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.89 2017/01/13 13:01:13 christos Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -85,7 +78,9 @@ __KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.69 2008/01/26 20:44:47 oster Exp $");
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
 #include <sys/vnode.h>
+#include <sys/namei.h> /* for pathbuf */
 #include <sys/kauth.h>
+#include <miscfs/specfs/specdev.h> /* for v_rdev */
 
 static int rf_AllocDiskStructures(RF_Raid_t *, RF_Config_t *);
 static void rf_print_label_status( RF_Raid_t *, int, char *,
@@ -139,10 +134,14 @@ rf_ConfigureDisks(RF_ShutdownList_t **listp, RF_Raid_t *raidPtr,
 			goto fail;
 
 		if (disks[c].status == rf_ds_optimal) {
-			raidread_component_label(
-						 raidPtr->raid_cinfo[c].ci_dev,
-						 raidPtr->raid_cinfo[c].ci_vp,
-						 &raidPtr->raid_cinfo[c].ci_label);
+			ret = raidfetch_component_label(raidPtr, c);
+			if (ret)
+				goto fail;
+
+			/* mark it as failed if the label looks bogus... */
+			if (!rf_reasonable_label(&raidPtr->raid_cinfo[c].ci_label,0) && !force) {
+				disks[c].status = rf_ds_failed;
+			}
 		}
 
 		if (disks[c].status != rf_ds_optimal) {
@@ -150,9 +149,9 @@ rf_ConfigureDisks(RF_ShutdownList_t **listp, RF_Raid_t *raidPtr,
 		} else {
 			if (disks[c].numBlocks < min_numblks)
 				min_numblks = disks[c].numBlocks;
-			DPRINTF6("Disk at col %d: dev %s numBlocks %ld blockSize %d (%ld MB)\n",
+			DPRINTF6("Disk at col %d: dev %s numBlocks %" PRIu64 " blockSize %d (%ld MB)\n",
 				 c, disks[c].devname,
-				 (long int) disks[c].numBlocks,
+				 disks[c].numBlocks,
 				 disks[c].blockSize,
 				 (long int) disks[c].numBlocks *
 				 disks[c].blockSize / 1024 / 1024);
@@ -260,9 +259,9 @@ rf_ConfigureSpareDisks(RF_ShutdownList_t **listp, RF_Raid_t *raidPtr,
 		} else {
 			disks[i].status = rf_ds_spare;	/* change status to
 							 * spare */
-			DPRINTF6("Spare Disk %d: dev %s numBlocks %ld blockSize %d (%ld MB)\n", i,
+			DPRINTF6("Spare Disk %d: dev %s numBlocks %" PRIu64 " blockSize %d (%ld MB)\n", i,
 			    disks[i].devname,
-			    (long int) disks[i].numBlocks, disks[i].blockSize,
+			    disks[i].numBlocks, disks[i].blockSize,
 			    (long int) disks[i].numBlocks *
 				 disks[i].blockSize / 1024 / 1024);
 		}
@@ -278,17 +277,17 @@ rf_ConfigureSpareDisks(RF_ShutdownList_t **listp, RF_Raid_t *raidPtr,
 			goto fail;
 		}
 		if (disks[i].numBlocks < raidPtr->sectorsPerDisk) {
-			RF_ERRORMSG3("Spare disk %s (%d blocks) is too small to serve as a spare (need %ld blocks)\n",
+			RF_ERRORMSG3("Spare disk %s (%d blocks) is too small to serve as a spare (need %" PRIu64 " blocks)\n",
 				     disks[i].devname, disks[i].blockSize,
-				     (long int) raidPtr->sectorsPerDisk);
+				     raidPtr->sectorsPerDisk);
 			ret = EINVAL;
 			goto fail;
 		} else
 			if (disks[i].numBlocks > raidPtr->sectorsPerDisk) {
-				RF_ERRORMSG3("Warning: truncating spare disk %s to %ld blocks (from %ld)\n",
+				RF_ERRORMSG3("Warning: truncating spare disk %s to %" PRIu64 " blocks (from %" PRIu64 ")\n",
 				    disks[i].devname,
-				    (long int) raidPtr->sectorsPerDisk,
-				    (long int) disks[i].numBlocks);
+				    raidPtr->sectorsPerDisk,
+				    disks[i].numBlocks);
 
 				disks[i].numBlocks = raidPtr->sectorsPerDisk;
 			}
@@ -462,13 +461,14 @@ rf_AutoConfigureDisks(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr,
 		if (ac!=NULL) {
 			/* Found it.  Configure it.. */
 			diskPtr->blockSize = ac->clabel->blockSize;
-			diskPtr->numBlocks = ac->clabel->numBlocks;
+			diskPtr->numBlocks =
+			    rf_component_label_numblocks(ac->clabel);
 			/* Note: rf_protectedSectors is already
 			   factored into numBlocks here */
 			raidPtr->raid_cinfo[c].ci_vp = ac->vp;
 			raidPtr->raid_cinfo[c].ci_dev = ac->dev;
 
-			memcpy(&raidPtr->raid_cinfo[c].ci_label,
+			memcpy(raidget_component_label(raidPtr, c),
 			    ac->clabel, sizeof(*ac->clabel));
 			snprintf(diskPtr->devname, sizeof(diskPtr->devname),
 			    "/dev/%s", ac->devname);
@@ -506,7 +506,7 @@ rf_AutoConfigureDisks(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr,
 			if (ac->clabel->mod_counter != mod_counter) {
 				/* Even though we've filled in all of
 				   the above, we don't trust this
-				   component since it's modification
+				   component since its modification
 				   counter is not in sync with the
 				   rest, and we really consider it to
 				   be failed.  */
@@ -575,8 +575,8 @@ rf_ConfigureDisk(RF_Raid_t *raidPtr, char *bf, RF_RaidDisk_t *diskPtr,
 		 RF_RowCol_t col)
 {
 	char   *p;
+	struct pathbuf *pb;
 	struct vnode *vp;
-	struct vattr va;
 	int     error;
 
 	p = rf_find_non_white(bf);
@@ -594,34 +594,49 @@ rf_ConfigureDisk(RF_Raid_t *raidPtr, char *bf, RF_RaidDisk_t *diskPtr,
 
 	if (!strcmp("absent", diskPtr->devname)) {
 		printf("Ignoring missing component at column %d\n", col);
-		sprintf(diskPtr->devname, "component%d", col);
+		snprintf(diskPtr->devname, sizeof(diskPtr->devname),
+		    "component%d", col);
 		diskPtr->status = rf_ds_failed;
 		return (0);
 	}
 
-	error = dk_lookup(diskPtr->devname, curlwp, &vp, UIO_SYSSPACE);
+	pb = pathbuf_create(diskPtr->devname);
+	if (pb == NULL) {
+		printf("pathbuf_create for device: %s failed!\n",
+		       diskPtr->devname);
+		return ENOMEM;
+	}
+	error = dk_lookup(pb, curlwp, &vp);
+	pathbuf_destroy(pb);
 	if (error) {
 		printf("dk_lookup on device: %s failed!\n", diskPtr->devname);
 		if (error == ENXIO) {
 			/* the component isn't there... must be dead :-( */
 			diskPtr->status = rf_ds_failed;
+			return 0;
 		} else {
 			return (error);
 		}
 	}
+
+	if ((error = rf_getdisksize(vp, diskPtr)) != 0)
+		return (error);
+
+	/*
+	 * If this raidPtr's bytesPerSector is zero, fill it in with this
+	 * components blockSize.  This will give us something to work with
+	 * initially, and if it is wrong, we'll get errors later.
+	 */
+	if (raidPtr->bytesPerSector == 0)
+		raidPtr->bytesPerSector = diskPtr->blockSize;
+
 	if (diskPtr->status == rf_ds_optimal) {
-
-		if ((error = VOP_GETATTR(vp, &va, curlwp->l_cred)) != 0) 
-			return (error);
-		if ((error = rf_getdisksize(vp, curlwp, diskPtr)) != 0)
-			return (error);
-
 		raidPtr->raid_cinfo[col].ci_vp = vp;
-		raidPtr->raid_cinfo[col].ci_dev = va.va_rdev;
+		raidPtr->raid_cinfo[col].ci_dev = vp->v_rdev;
 
 		/* This component was not automatically configured */
 		diskPtr->auto_configured = 0;
-		diskPtr->dev = va.va_rdev;
+		diskPtr->dev = vp->v_rdev;
 
 		/* we allow the user to specify that only a fraction of the
 		 * disks should be used this is just for debug:  it speeds up
@@ -685,6 +700,25 @@ static int rf_check_label_vitals(RF_Raid_t *raidPtr, int row, int column,
 }
 
 
+static void
+rf_handle_hosed(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, int hosed_column,
+    int again)
+{
+	printf("Hosed component: %s\n", &cfgPtr->devnames[0][hosed_column][0]);
+	if (!cfgPtr->force)
+		return;
+
+	/* we'll fail this component, as if there are
+	   other major errors, we aren't forcing things
+	   and we'll abort the config anyways */
+	if (again && raidPtr->Disks[hosed_column].status == rf_ds_failed)
+		return;
+
+	raidPtr->Disks[hosed_column].status = rf_ds_failed;
+	raidPtr->numFailures++;
+	raidPtr->status = rf_rs_degraded;
+}
+
 /*
 
    rf_CheckLabels() - check all the component labels for consistency.
@@ -712,11 +746,9 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 	int hosed_column;
 	int too_fatal;
 	int parity_good;
-	int force;
 
 	hosed_column = -1;
 	too_fatal = 0;
-	force = cfgPtr->force;
 
 	/*
 	   We're going to try to be a little intelligent here.  If one
@@ -737,8 +769,15 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 	num_ser = 0;
 	num_mod = 0;
 
+	ser_values[0] = ser_values[1] = ser_values[2] = ser_values[3] = 0;
+	ser_count[0] = ser_count[1] = ser_count[2] = ser_count[3] = 0;
+	mod_values[0] = mod_values[1] = mod_values[2] = mod_values[3] = 0;
+	mod_count[0] = mod_count[1] = mod_count[2] = mod_count[3] = 0;
+
 	for (c = 0; c < raidPtr->numCol; c++) {
-		ci_label = &raidPtr->raid_cinfo[c].ci_label;
+		if (raidPtr->Disks[c].status != rf_ds_optimal)
+			continue;
+		ci_label = raidget_component_label(raidPtr, c);
 		found=0;
 		for(i=0;i<num_ser;i++) {
 			if (ser_values[i] == ci_label->serial_number) {
@@ -793,23 +832,17 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 			}
 
 			for (c = 0; c < raidPtr->numCol; c++) {
-				ci_label = &raidPtr->raid_cinfo[c].ci_label;
+				if (raidPtr->Disks[c].status != rf_ds_optimal)
+					continue;
+				ci_label = raidget_component_label(raidPtr, c);
 				if (serial_number != ci_label->serial_number) {
 					hosed_column = c;
 					break;
 				}
 			}
-			printf("Hosed component: %s\n",
-			       &cfgPtr->devnames[0][hosed_column][0]);
-			if (!force) {
-				/* we'll fail this component, as if there are
-				   other major errors, we arn't forcing things
-				   and we'll abort the config anyways */
-				raidPtr->Disks[hosed_column].status
-					= rf_ds_failed;
-				raidPtr->numFailures++;
-				raidPtr->status = rf_rs_degraded;
-			}
+			if (hosed_column != -1)
+				rf_handle_hosed(raidPtr, cfgPtr, hosed_column,
+				    0);
 		} else {
 			too_fatal = 1;
 		}
@@ -848,7 +881,10 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 			}
 
 			for (c = 0; c < raidPtr->numCol; c++) {
-				ci_label = &raidPtr->raid_cinfo[c].ci_label;
+				if (raidPtr->Disks[c].status != rf_ds_optimal)
+					continue;
+
+				ci_label = raidget_component_label(raidPtr, c);
 				if (mod_number != ci_label->mod_counter) {
 					if (hosed_column == c) {
 						/* same one.  Can
@@ -862,19 +898,9 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 					}
 				}
 			}
-			printf("Hosed component: %s\n",
-			       &cfgPtr->devnames[0][hosed_column][0]);
-			if (!force) {
-				/* we'll fail this component, as if there are
-				   other major errors, we arn't forcing things
-				   and we'll abort the config anyways */
-				if (raidPtr->Disks[hosed_column].status != rf_ds_failed) {
-					raidPtr->Disks[hosed_column].status
-						= rf_ds_failed;
-					raidPtr->numFailures++;
-					raidPtr->status = rf_rs_degraded;
-				}
-			}
+			if (hosed_column != -1)
+				rf_handle_hosed(raidPtr, cfgPtr, hosed_column,
+				    1);
 		} else {
 			too_fatal = 1;
 		}
@@ -908,6 +934,13 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 		fatal_error = 1;
 	}
 
+        for (c = 0; c < raidPtr->numCol; c++) {
+		if (raidPtr->Disks[c].status != rf_ds_optimal) {
+			hosed_column = c;
+			break;
+		}
+	}
+
 	/* we start by assuming the parity will be good, and flee from
 	   that notion at the slightest sign of trouble */
 
@@ -915,7 +948,7 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 
 	for (c = 0; c < raidPtr->numCol; c++) {
 		dev_name = &cfgPtr->devnames[0][c][0];
-		ci_label = &raidPtr->raid_cinfo[c].ci_label;
+		ci_label = raidget_component_label(raidPtr, c);
 
 		if (c == hosed_column) {
 			printf("raid%d: Ignoring %s\n",
@@ -960,13 +993,12 @@ rf_add_hot_spare(RF_Raid_t *raidPtr, RF_SingleComponent_t *sparePtr)
 		return(EINVAL);
 	}
 
-	RF_LOCK_MUTEX(raidPtr->mutex);
-	while (raidPtr->adding_hot_spare==1) {
-		ltsleep(&(raidPtr->adding_hot_spare), PRIBIO, "raidhs", 0,
-			&(raidPtr->mutex));
+	rf_lock_mutex2(raidPtr->mutex);
+	while (raidPtr->adding_hot_spare == 1) {
+		rf_wait_cond2(raidPtr->adding_hot_spare_cv, raidPtr->mutex);
 	}
-	raidPtr->adding_hot_spare=1;
-	RF_UNLOCK_MUTEX(raidPtr->mutex);
+	raidPtr->adding_hot_spare = 1;
+	rf_unlock_mutex2(raidPtr->mutex);
 
 	/* the beginning of the spares... */
 	disks = &raidPtr->Disks[raidPtr->numCol];
@@ -987,9 +1019,10 @@ rf_add_hot_spare(RF_Raid_t *raidPtr, RF_SingleComponent_t *sparePtr)
 		goto fail;
 	} else {
 		disks[spare_number].status = rf_ds_spare;
-		DPRINTF6("Spare Disk %d: dev %s numBlocks %ld blockSize %d (%ld MB)\n", spare_number,
+		DPRINTF6("Spare Disk %d: dev %s numBlocks %" PRIu64 " blockSize %d (%ld MB)\n",
+			 spare_number,
 			 disks[spare_number].devname,
-			 (long int) disks[spare_number].numBlocks,
+			 disks[spare_number].numBlocks,
 			 disks[spare_number].blockSize,
 			 (long int) disks[spare_number].numBlocks *
 			 disks[spare_number].blockSize / 1024 / 1024);
@@ -1005,20 +1038,20 @@ rf_add_hot_spare(RF_Raid_t *raidPtr, RF_SingleComponent_t *sparePtr)
 		goto fail;
 	}
 	if (disks[spare_number].numBlocks < raidPtr->sectorsPerDisk) {
-		RF_ERRORMSG3("Spare disk %s (%d blocks) is too small to serve as a spare (need %ld blocks)\n",
+		RF_ERRORMSG3("Spare disk %s (%d blocks) is too small to serve as a spare (need %" PRIu64 " blocks)\n",
 			     disks[spare_number].devname,
 			     disks[spare_number].blockSize,
-			     (long int) raidPtr->sectorsPerDisk);
+			     raidPtr->sectorsPerDisk);
 		rf_close_component(raidPtr, raidPtr->raid_cinfo[raidPtr->numCol+spare_number].ci_vp, 0);
 		ret = EINVAL;
 		goto fail;
 	} else {
 		if (disks[spare_number].numBlocks >
 		    raidPtr->sectorsPerDisk) {
-			RF_ERRORMSG3("Warning: truncating spare disk %s to %ld blocks (from %ld)\n",
+			RF_ERRORMSG3("Warning: truncating spare disk %s to %" PRIu64 " blocks (from %" PRIu64 ")\n",
 			    disks[spare_number].devname,
-			    (long int) raidPtr->sectorsPerDisk,
-			    (long int) disks[spare_number].numBlocks);
+			    raidPtr->sectorsPerDisk,
+			    disks[spare_number].numBlocks);
 
 			disks[spare_number].numBlocks = raidPtr->sectorsPerDisk;
 		}
@@ -1035,15 +1068,15 @@ rf_add_hot_spare(RF_Raid_t *raidPtr, RF_SingleComponent_t *sparePtr)
 				 &raidPtr->shutdownList,
 				 raidPtr->cleanupList);
 
-	RF_LOCK_MUTEX(raidPtr->mutex);
+	rf_lock_mutex2(raidPtr->mutex);
 	raidPtr->numSpare++;
-	RF_UNLOCK_MUTEX(raidPtr->mutex);
+	rf_unlock_mutex2(raidPtr->mutex);
 
 fail:
-	RF_LOCK_MUTEX(raidPtr->mutex);
-	raidPtr->adding_hot_spare=0;
-	wakeup(&(raidPtr->adding_hot_spare));
-	RF_UNLOCK_MUTEX(raidPtr->mutex);
+	rf_lock_mutex2(raidPtr->mutex);
+	raidPtr->adding_hot_spare = 0;
+	rf_signal_cond2(raidPtr->adding_hot_spare_cv);
+	rf_unlock_mutex2(raidPtr->mutex);
 
 	return(ret);
 }
@@ -1051,18 +1084,19 @@ fail:
 int
 rf_remove_hot_spare(RF_Raid_t *raidPtr, RF_SingleComponent_t *sparePtr)
 {
+#if 0
 	int spare_number;
-
+#endif
 
 	if (raidPtr->numSpare==0) {
 		printf("No spares to remove!\n");
 		return(EINVAL);
 	}
 
-	spare_number = sparePtr->column;
-
 	return(EINVAL); /* XXX not implemented yet */
 #if 0
+	spare_number = sparePtr->column;
+
 	if (spare_number < 0 || spare_number > raidPtr->numSpare) {
 		return(EINVAL);
 	}
@@ -1084,14 +1118,18 @@ rf_remove_hot_spare(RF_Raid_t *raidPtr, RF_SingleComponent_t *sparePtr)
 int
 rf_delete_component(RF_Raid_t *raidPtr, RF_SingleComponent_t *component)
 {
+#if 0
 	RF_RaidDisk_t *disks;
+#endif
 
 	if ((component->column < 0) ||
 	    (component->column >= raidPtr->numCol)) {
 		return(EINVAL);
 	}
 
+#if 0
 	disks = &raidPtr->Disks[component->column];
+#endif
 
 	/* 1. This component must be marked as 'failed' */
 

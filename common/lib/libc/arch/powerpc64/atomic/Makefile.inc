@@ -1,14 +1,5 @@
-#	$NetBSD: Makefile.inc,v 1.4 2008/02/11 14:21:12 ad Exp $
+#	$NetBSD: Makefile.inc,v 1.7 2014/03/07 07:20:24 matt Exp $
 
-.if defined(LIB) && (${LIB} == "kern" || ${LIB} == "c")
+.PATH:	${NETBSDSRCDIR}/common/lib/libc/arch/powerpc/atomic
 
-SRCS+=	atomic_add.S atomic_and.S atomic_cas.S atomic_dec.S \
-	atomic_inc.S atomic_or.S atomic_swap.S membar_ops.S
-
-.endif
-
-.if defined(LIB) && (${LIB} == "c")
-
-SRCS+=	atomic_init_cas.c
-
-.endif
+.include "${NETBSDSRCDIR}/common/lib/libc/arch/powerpc/atomic/Makefile.inc"

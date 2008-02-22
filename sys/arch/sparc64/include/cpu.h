@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.72 2008/02/22 10:55:00 martin Exp $ */
+/*	$NetBSD: cpu.h,v 1.124 2018/01/16 08:23:17 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -50,17 +50,22 @@
 #define	CPU_BOOTED_DEVICE	2	/* string: device booted from */
 #define	CPU_BOOT_ARGS		3	/* string: args booted with */
 #define	CPU_ARCH		4	/* integer: cpu architecture version */
-#define	CPU_MAXID		5	/* number of valid machdep ids */
+#define CPU_VIS			5	/* 0 - no VIS, 1 - VIS 1.0, etc. */
+#define	CPU_MAXID		6	/* number of valid machdep ids */
 
-#define	CTL_MACHDEP_NAMES {			\
-	{ 0, 0 },				\
-	{ "booted_kernel", CTLTYPE_STRING },	\
-	{ "booted_device", CTLTYPE_STRING },	\
-	{ "boot_args", CTLTYPE_STRING },	\
-	{ "cpu_arch", CTLTYPE_INT },		\
-}
+/*
+ * This is exported via sysctl for cpuctl(8).
+ */
+struct cacheinfo {
+	int 	c_itotalsize;
+	int 	c_ilinesize;
+	int 	c_dtotalsize;
+	int 	c_dlinesize;
+	int 	c_etotalsize;
+	int 	c_elinesize;
+};
 
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(_KMEMUSER)
 /*
  * Exported definitions unique to SPARC cpu support.
  */
@@ -72,11 +77,20 @@
 
 #include <machine/psl.h>
 #include <machine/reg.h>
+#include <machine/pte.h>
 #include <machine/intr.h>
+#if defined(_KERNEL)
+#include <machine/bus_defs.h>
 #include <machine/cpuset.h>
 #include <sparc64/sparc64/intreg.h>
+#endif
+#ifdef SUN4V
+#include <machine/hypervisor.h>
+#endif
 
 #include <sys/cpu_data.h>
+#include <sys/evcnt.h>
+
 /*
  * The cpu_info structure is part of a 64KB structure mapped both the kernel
  * pmap and a single locked TTE a CPUINFO_VA for that particular processor.
@@ -94,6 +108,8 @@
  */
 
 struct cpu_info {
+	struct cpu_data		ci_data;	/* MI per-cpu data */
+
 
 	/*
 	 * SPARC cpu_info structures live at two VAs: one global
@@ -124,22 +140,89 @@ struct cpu_info {
 
 	int			ci_cpuid;
 
+	uint64_t		ci_ver;
+
 	/* CPU PROM information. */
 	u_int			ci_node;
+	const char		*ci_name;
+
+	/* This is for sysctl. */
+	struct cacheinfo	ci_cacheinfo;
 
 	/* %tick and cpu frequency information */
 	u_long			ci_tick_increment;
-	uint64_t		ci_cpu_clockrate[2];
+	uint64_t		ci_cpu_clockrate[2];	/* %tick */
+	uint64_t		ci_system_clockrate[2];	/* %stick */
+
+	/* Interrupts */
+	struct intrhand		*ci_intrpending[16];
+	struct intrhand		*ci_tick_ih;
+
+	/* Event counters */
+	struct evcnt		ci_tick_evcnt;
+
+	/* This could be under MULTIPROCESSOR, but there's no good reason */
+	struct evcnt		ci_ipi_evcnt[IPI_EVCNT_NUM];
 
 	int			ci_flags;
 	int			ci_want_ast;
 	int			ci_want_resched;
 	int			ci_idepth;
 
-	struct cpu_data		ci_data;	/* MI per-cpu data */
+/*
+ * A context is simply a small number that differentiates multiple mappings
+ * of the same address.  Contexts on the spitfire are 13 bits, but could
+ * be as large as 17 bits.
+ *
+ * Each context is either free or attached to a pmap.
+ *
+ * The context table is an array of pointers to psegs.  Just dereference
+ * the right pointer and you get to the pmap segment tables.  These are
+ * physical addresses, of course.
+ *
+ * ci_ctx_lock protects this CPUs context allocation/free.
+ * These are all allocated almost with in the same cacheline.
+ */
+	kmutex_t		ci_ctx_lock;
+	int			ci_pmap_next_ctx;
+	int			ci_numctx;
+	paddr_t 		*ci_ctxbusy;
+	LIST_HEAD(, pmap) 	ci_pmap_ctxlist;
+
+	/*
+	 * The TSBs are per cpu too (since MMU context differs between
+	 * cpus). These are just caches for the TLBs.
+	 */
+	pte_t			*ci_tsb_dmmu;
+	pte_t			*ci_tsb_immu;
+
+	/* TSB description (sun4v). */
+	struct tsb_desc         *ci_tsb_desc;
+	
+	/* MMU Fault Status Area (sun4v).
+	 * Will be initialized to the physical address of the bottom of
+	 * the interrupt stack.
+	 */
+	paddr_t			ci_mmufsa;
+
+	/*
+	 * sun4v mondo control fields
+	 */
+	paddr_t			ci_cpumq;  /* cpu mondo queue address */
+	paddr_t			ci_devmq;  /* device mondo queue address */
+	paddr_t			ci_cpuset; /* mondo recipient address */ 
+	paddr_t			ci_mondo;  /* mondo message address */
+	
+	/* probe fault in PCI config space reads */
+	bool			ci_pci_probe;
+	bool			ci_pci_fault;
 
 	volatile void		*ci_ddb_regs;	/* DDB regs */
 };
+
+#endif /* _KERNEL || _KMEMUSER */
+
+#ifdef _KERNEL
 
 #define CPUF_PRIMARY	1
 
@@ -159,20 +242,26 @@ struct cpu_bootargs {
 	vaddr_t cb_ekdata;
 
 	paddr_t	cb_cpuinfo;
+	int cb_cputyp;
 };
 
 extern struct cpu_bootargs *cpu_args;
 
+#if defined(MULTIPROCESSOR)
 extern int sparc_ncpus;
+#else
+#define sparc_ncpus 1
+#endif
+
 extern struct cpu_info *cpus;
+extern struct pool_cache *fpstate_cache;
 
 #define	curcpu()	(((struct cpu_info *)CPUINFO_VA)->ci_self)
 #define	cpu_number()	(curcpu()->ci_index)
 #define	CPU_IS_PRIMARY(ci)	((ci)->ci_flags & CPUF_PRIMARY)
 
-#define CPU_INFO_ITERATOR		int
-#define CPU_INFO_FOREACH(cii, ci)	cii = 0, ci = cpus; ci != NULL; \
-					ci = ci->ci_next
+#define CPU_INFO_ITERATOR		int __unused
+#define CPU_INFO_FOREACH(cii, ci)	ci = cpus; ci != NULL; ci = ci->ci_next
 
 #define curlwp		curcpu()->ci_curlwp
 #define fplwp		curcpu()->ci_fplwp
@@ -185,17 +274,24 @@ extern struct cpu_info *cpus;
  * definitions of cpu-dependent requirements
  * referenced in generic code
  */
-#define	cpu_swapin(p)	/* nothing */
-#define	cpu_swapout(p)	/* nothing */
 #define	cpu_wait(p)	/* nothing */
 void cpu_proc_fork(struct proc *, struct proc *);
+
+/* run on the cpu itself */
+void	cpu_pmap_init(struct cpu_info *);
+/* run upfront to prepare the cpu_info */
+void	cpu_pmap_prepare(struct cpu_info *, bool);
+
+/* Helper functions to retrieve cache info */
+int	cpu_ecache_associativity(int node);
+int	cpu_ecache_size(int node);
 
 #if defined(MULTIPROCESSOR)
 extern vaddr_t cpu_spinup_trampoline;
 
 extern  char   *mp_tramp_code;
 extern  u_long  mp_tramp_code_len;
-extern  u_long  mp_tramp_tlb_slots;
+extern  u_long  mp_tramp_dtlb_slots, mp_tramp_itlb_slots;
 extern  u_long  mp_tramp_func;
 extern  u_long  mp_tramp_ci;
 
@@ -207,13 +303,25 @@ void	cpu_boot_secondary_processors(void);
  *	multicast - send to everyone in the sparc64_cpuset_t
  *	broadcast - send to to all cpus but ourselves
  *	send - send to just this cpu
+ * The called function do not follow the C ABI, so need to be coded in
+ * assembler.
  */
-typedef void (* ipifunc_t)(void *);
+typedef void (* ipifunc_t)(void *, void *);
 
-void	sparc64_multicast_ipi (sparc64_cpuset_t, ipifunc_t, uint64_t);
-void	sparc64_broadcast_ipi (ipifunc_t, uint64_t);
-void	sparc64_send_ipi (int, ipifunc_t, uint64_t);
+void	sparc64_multicast_ipi(sparc64_cpuset_t, ipifunc_t, uint64_t, uint64_t);
+void	sparc64_broadcast_ipi(ipifunc_t, uint64_t, uint64_t);
+extern void (*sparc64_send_ipi)(int, ipifunc_t, uint64_t, uint64_t);
+
+/*
+ * Call an arbitrary C function on another cpu (or all others but ourself)
+ */
+typedef void (*ipi_c_call_func_t)(void*);
+void	sparc64_generic_xcall(struct cpu_info*, ipi_c_call_func_t, void*);
+
 #endif
+
+/* Provide %pc of a lwp */
+#define	LWP_PC(l)	((l)->l_md.md_tf->tf_pc)
 
 /*
  * Arguments to hardclock, softclock and gatherstats encapsulate the
@@ -240,12 +348,6 @@ struct clockframe {
 			((vaddr_t)(framep)->t.tf_out[6] >		\
 				(vaddr_t)INTSTACK))))
 
-
-extern struct intrhand soft01intr, soft01net, soft01clock;
-
-void setsoftint(void);
-void setsoftnet(void);
-
 /*
  * Give a profiling tick to the current process when the user profiling
  * buffer pages are invalid.  On the sparc, request an ast to send us
@@ -254,10 +356,10 @@ void setsoftnet(void);
 #define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, want_ast = 1)
 
 /*
- * Notify the current process (l) that it has a signal pending,
- * process as soon as possible.
+ * Notify an LWP that it has a signal pending, process as soon as possible.
  */
-#define	cpu_signotify(l)	(want_ast = 1)
+void cpu_signotify(struct lwp *);
+
 
 /*
  * Interrupt handler chains.  Interrupt handlers should return 0 for
@@ -279,11 +381,23 @@ struct intrhand {
 	struct intrhand		*ih_pending;	/* interrupt queued */
 	volatile uint64_t	*ih_map;	/* Interrupt map reg */
 	volatile uint64_t	*ih_clr;	/* clear interrupt reg */
+	void			(*ih_ack)(struct intrhand *); /* ack interrupt function */
+	bus_space_tag_t		ih_bus;		/* parent bus */
+	struct evcnt		ih_cnt;		/* counter for vmstat */
+	uint32_t		ih_ivec;
+	char			ih_name[32];	/* name for the above */
 };
 extern struct intrhand *intrhand[];
 extern struct intrhand *intrlev[MAXINTNUM];
 
-void	intr_establish(int level, struct intrhand *);
+void	intr_establish(int level, bool mpsafe, struct intrhand *);
+void	*sparc_softintr_establish(int, int (*)(void *), void *);
+void	sparc_softintr_schedule(void *);
+void	sparc_softintr_disestablish(void *);
+struct intrhand *intrhand_alloc(void);
+
+/* cpu.c */
+int	cpu_myid(void);
 
 /* disksubr.c */
 struct dkbad;
@@ -292,9 +406,16 @@ int isbad(struct dkbad *bt, int, int, int);
 void *	reserve_dumppages(void *);
 /* clock.c */
 struct timeval;
-int	tickintr(void *);	/* level 10 (tick) interrupt code */
+int	tickintr(void *);	/* level 10/14 (tick) interrupt code */
+int	stickintr(void *);	/* system tick interrupt code */
+int	stick2eintr(void *);	/* system tick interrupt code */
 int	clockintr(void *);	/* level 10 (clock) interrupt code */
 int	statintr(void *);	/* level 14 (statclock) interrupt code */
+int	schedintr(void *);	/* level 10 (schedclock) interrupt code */
+void	tickintr_establish(int, int (*)(void *));
+void	stickintr_establish(int, int (*)(void *));
+void	stick2eintr_establish(int, int (*)(void *));
+
 /* locore.s */
 struct fpstate64;
 void	savefpstate(struct fpstate64 *);
@@ -302,17 +423,20 @@ void	loadfpstate(struct fpstate64 *);
 void	clearfpstate(void);
 uint64_t	probeget(paddr_t, int, int);
 int	probeset(paddr_t, int, int, uint64_t);
+void	setcputyp(int);
 
 #define	 write_all_windows() __asm volatile("flushw" : : )
 #define	 write_user_windows() __asm volatile("flushw" : : )
 
-void 	lwp_trampoline(void);
 struct pcb;
 void	snapshot(struct pcb *);
 struct frame *getfp(void);
-void	switchtoctx(int);
+void	switchtoctx_us(int);
+void	switchtoctx_usiii(int);
+void	next_tick(long);
+void	next_stick(long);
 /* trap.c */
-void	kill_user_windows(struct lwp *);
+void	cpu_vmspace_exec(struct lwp *, vaddr_t, vaddr_t);
 int	rwindow_save(struct lwp *);
 /* cons.c */
 int	cnrom(void);
@@ -329,6 +453,16 @@ void kgdb_panic(void);
 /* emul.c */
 int	fixalign(struct lwp *, struct trapframe64 *);
 int	emulinstr(vaddr_t, struct trapframe64 *);
+
+#else /* _KERNEL */
+
+/*
+ * XXX: provide some definitions for crash(8), probably can share
+ */
+#if defined(_KMEMUSER)
+#define	curcpu()	(((struct cpu_info *)CPUINFO_VA)->ci_self)
+#define curlwp		curcpu()->ci_curlwp
+#endif
 
 #endif /* _KERNEL */
 #endif /* _CPU_H_ */

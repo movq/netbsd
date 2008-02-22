@@ -1,7 +1,7 @@
-/*	$NetBSD: ad1848var.h,v 1.15 2007/12/11 00:21:51 martin Exp $	*/
+/*	$NetBSD: ad1848var.h,v 1.18 2011/11/23 23:07:32 jmcneill Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -102,7 +95,9 @@ struct ad1848_volume {
 };
 
 struct ad1848_softc {
-	struct	device sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
+	kmutex_t sc_lock;
+	kmutex_t sc_intr_lock;
 	bus_space_tag_t sc_iot;		/* tag */
 	bus_space_handle_t sc_ioh;	/* handle */
 
@@ -197,10 +192,13 @@ int	ad1848_get_mic_gain(struct ad1848_softc *, struct ad1848_volume *);
 void	ad1848_mute_channel(struct ad1848_softc *, int, int);
 int	ad1848_to_vol(mixer_ctrl_t *, struct ad1848_volume *);
 int	ad1848_from_vol(mixer_ctrl_t *, struct ad1848_volume *);
+void	ad1848_init_locks(struct ad1848_softc *, int);
+void	ad1848_destroy_locks(struct ad1848_softc *);
 
 int	ad1848_halt_output(void *);
 int	ad1848_halt_input(void *);
 paddr_t	ad1848_mappage(void *, void *, off_t, int);
+void	ad1848_get_locks(void *, kmutex_t **, kmutex_t **);
 
 #ifdef AUDIO_DEBUG
 void	ad1848_dump_regs(struct ad1848_softc *);

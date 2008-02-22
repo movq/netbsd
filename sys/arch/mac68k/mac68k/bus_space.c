@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.30 2007/10/17 19:55:14 garbled Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.32 2013/10/19 19:08:39 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.30 2007/10/17 19:55:14 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.32 2013/10/19 19:08:39 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -146,7 +139,9 @@ int
 bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
 	      bus_space_handle_t *hp)
 {
+#ifdef DIAGNOSTIC
 	paddr_t pa, endpa;
+#endif
 	int error;
 
 	/*
@@ -158,10 +153,10 @@ bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
 	if (error)
 		return (error);
 
+#ifdef DIAGNOSTIC
 	pa = m68k_trunc_page(bpa + t);
 	endpa = m68k_round_page((bpa + t + size) - 1);
 
-#ifdef DIAGNOSTIC
 	if (endpa <= pa)
 		panic("bus_space_map: overflow");
 #endif
@@ -276,7 +271,6 @@ int
 mac68k_bus_space_probe(bus_space_tag_t t, bus_space_handle_t h,
 		       bus_size_t offset, int size)
 {
-	int i;
 	label_t faultbuf;
 
 	nofault = &faultbuf;
@@ -287,13 +281,13 @@ mac68k_bus_space_probe(bus_space_tag_t t, bus_space_handle_t h,
 
 	switch (size) {
 	case 1:
-		i = bus_space_read_1(t, h, offset);
+		bus_space_read_1(t, h, offset);
 		break;
 	case 2:
-		i = bus_space_read_2(t, h, offset);
+		bus_space_read_2(t, h, offset);
 		break;
 	case 4:
-		i = bus_space_read_4(t, h, offset);
+		bus_space_read_4(t, h, offset);
 		break;
 	case 8:
 	default:

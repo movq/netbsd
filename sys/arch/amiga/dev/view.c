@@ -1,4 +1,4 @@
-/*	$NetBSD: view.c,v 1.26 2007/03/04 05:59:29 christos Exp $ */
+/*	$NetBSD: view.c,v 1.33 2015/11/12 12:19:49 phx Exp $ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -38,7 +38,7 @@
  * a interface to graphics. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: view.c,v 1.26 2007/03/04 05:59:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: view.c,v 1.33 2015/11/12 12:19:49 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: view.c,v 1.26 2007/03/04 05:59:29 christos Exp $");
 #include <amiga/dev/viewvar.h>
 
 #include "view.h"
+#include "ioconf.h"
 
 static void view_display(struct view_softc *);
 static void view_remove(struct view_softc *);
@@ -62,8 +63,6 @@ static int view_setsize(struct view_softc *, struct view_size *);
 
 int view_get_colormap(struct view_softc *, colormap_t *);
 int view_set_colormap(struct view_softc *, colormap_t *);
-
-void viewattach(int);
 
 struct view_softc views[NVIEW];
 int view_inited;			/* also checked in ite_cc.c */
@@ -80,8 +79,18 @@ dev_type_ioctl(viewioctl);
 dev_type_mmap(viewmmap);
 
 const struct cdevsw view_cdevsw = {
-	viewopen, viewclose, nullread, nullwrite, viewioctl,
-	nostop, notty, nopoll, viewmmap, nokqfilter,
+	.d_open = viewopen,
+	.d_close = viewclose,
+	.d_read = nullread,
+	.d_write = nullwrite,
+	.d_ioctl = viewioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = viewmmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 /*
@@ -306,14 +315,14 @@ viewioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		view_remove(vu);
 		break;
 	case VIOCGSIZE:
-		bcopy(&vu->size, data, sizeof (struct view_size));
+		memcpy(data, &vu->size, sizeof (struct view_size));
 		break;
 	case VIOCSSIZE:
 		error = view_setsize(vu, (struct view_size *)data);
 		break;
 	case VIOCGBMAP:
 		bm = (bmap_t *)data;
-		bcopy(vu->view->bitmap, bm, sizeof(bmap_t));
+		memcpy(bm, vu->view->bitmap, sizeof(bmap_t));
 		if (flag != -1) {
 			bm->plane = 0;
 			bm->blit_temp = 0;
@@ -343,7 +352,7 @@ view_get_colormap(struct view_softc *vu, colormap_t *ucm)
 	/* add one incase of zero, ick. */
 	if (ucm->size + 1 > SIZE_T_MAX / sizeof(u_long))
 		return EINVAL;
-	cme = malloc(sizeof (u_long)*(ucm->size + 1), M_IOCTLOPS, M_WAITOK);
+	cme = malloc(sizeof (u_long)*(ucm->size + 1), M_TEMP, M_WAITOK);
 	if (cme == NULL)
 		return(ENOMEM);
 
@@ -355,7 +364,7 @@ view_get_colormap(struct view_softc *vu, colormap_t *ucm)
 	else
 		error = copyout(cme, uep, sizeof(u_long) * ucm->size);
 	ucm->entry = uep;	  /* set entry back to users. */
-	free(cme, M_IOCTLOPS);
+	free(cme, M_TEMP);
 	return(error);
 }
 
@@ -366,7 +375,7 @@ view_set_colormap(struct view_softc *vu, colormap_t *ucm)
 	int error;
 
 	error = 0;
-	cm = malloc(sizeof(u_long) * ucm->size + sizeof (*cm), M_IOCTLOPS,
+	cm = malloc(sizeof(u_long) * ucm->size + sizeof (*cm), M_TEMP,
 	    M_WAITOK);
 	if (cm == NULL)
 		return(ENOMEM);
@@ -377,7 +386,7 @@ view_set_colormap(struct view_softc *vu, colormap_t *ucm)
 	    copyin(ucm->entry, cm->entry, sizeof (u_long) * ucm->size)) == 0)
 	    && (vu->view == NULL || grf_use_colormap(vu->view, cm)))
 		error = EINVAL;
-	free(cm, M_IOCTLOPS);
+	free(cm, M_TEMP);
 	return(error);
 }
 
@@ -396,7 +405,7 @@ viewmmap(dev_t dev, off_t off, int prot)
 	bmd_size = bm->bytes_per_row*bm->rows*bm->depth;
 
 	if (off >= 0 && off < bmd_size)
-		return(((paddr_t)bmd_start + off) >> PGSHIFT);
+		return MD_BTOP((paddr_t)bmd_start + off);
 
 	return(-1);
 }

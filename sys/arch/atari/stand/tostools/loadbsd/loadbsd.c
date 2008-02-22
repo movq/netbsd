@@ -1,4 +1,4 @@
-/*	$NetBSD: loadbsd.c,v 1.18 2001/10/11 07:07:43 leo Exp $	*/
+/*	$NetBSD: loadbsd.c,v 1.22 2014/10/18 08:33:25 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 L. Weppelman
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -53,7 +48,7 @@ int	s_flag  = 0;		/* St-ram only			*/
 int	t_flag  = 0;		/* Just test, do not execute	*/
 int	v_flag  = 0;		/* show version			*/
 
-const char version[] = "$Revision: 1.18 $";
+const char version[] = "$Revision: 1.22 $";
 
 /*
  * Default name of kernel to boot, large enough to patch
@@ -68,9 +63,7 @@ void get_sys_info PROTO((osdsc_t *));
 void start_kernel PROTO((osdsc_t *));
 
 int
-main(argc, argv)
-int	argc;
-char	**argv;
+main(int argc, char **argv)
 {
 	/*
 	 * Option parsing
@@ -157,7 +150,7 @@ char	**argv;
 	}
 
 	/*
-	 * Find the kernel to boot and read it's exec-header
+	 * Find the kernel to boot and read its exec-header
 	 */
 	if ((fd = open(kname, O_RDONLY)) < 0)
 		fatal(-1, "Cannot open kernel '%s'", kname);
@@ -196,8 +189,7 @@ char	**argv;
 }
 
 void
-get_sys_info(od)
-osdsc_t	*od;
+get_sys_info(osdsc_t *od)
 {
 	long	stck;
 
@@ -214,7 +206,7 @@ osdsc_t	*od;
 }
 
 void
-help()
+help(void)
 {
 	eprintf("\r
 NetBSD loader for the Atari-TT\r
@@ -242,7 +234,7 @@ Description of options:\r
 }
 
 void
-usage()
+usage(void)
 {
 	eprintf("Usage: %s [-abdhstVD] [-S <stram-size>] "
 		"[-T <ttram-size>] [kernel]\r\n", Progname);
@@ -250,8 +242,7 @@ usage()
 }
 
 void
-start_kernel(od)
-osdsc_t	*od;
+start_kernel(osdsc_t *od)
 {
 	long	stck;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: wchar_limits.h,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
+/*	$NetBSD: wchar_limits.h,v 1.3 2012/12/27 07:14:24 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,5 +31,17 @@
 
 #ifndef _IA64_WCHAR_LIMITS_H_
 #define _IA64_WCHAR_LIMITS_H_
+
+/*
+ * 7.18.3 Limits of other integer types
+ */
+
+/* limits of wchar_t */
+#define	WCHAR_MIN	(-0x7fffffff-1)			/* wchar_t	  */
+#define	WCHAR_MAX	0x7fffffff			/* wchar_t	  */
+
+/* limits of wint_t */
+#define	WINT_MIN	(-0x7fffffff-1)			/* wint_t	  */
+#define	WINT_MAX	0x7fffffff			/* wint_t	  */
 
 #endif /* !_IA64_WCHAR_LIMITS_H_ */

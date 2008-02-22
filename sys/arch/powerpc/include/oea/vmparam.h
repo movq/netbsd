@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,34 +51,43 @@
 #endif
 
 #ifndef	USRSTACK32
-#define	USRSTACK32		((uint32_t)VM_MAXUSER_ADDRESS)
+#define	USRSTACK32		VM_MAXUSER_ADDRESS32
 #endif
 
 #ifndef	MAXTSIZ
-#define	MAXTSIZ			(64*1024*1024)		/* maximum text size */
+#define	MAXTSIZ			(128*1024*1024)		/* maximum text size */
 #endif
 
 #ifndef	MAXDSIZ
 #define	MAXDSIZ			(1024*1024*1024)	/* maximum data size */
 #endif
 
+#ifndef	MAXDSIZ32
+#define	MAXDSIZ32		(1024*1024*1024)	/* maximum data size */
+#endif
+
 #ifndef	MAXSSIZ
 #define	MAXSSIZ			(32*1024*1024)		/* maximum stack size */
+#endif
+
+#ifndef	MAXSSIZ32
+#define	MAXSSIZ32		(32*1024*1024)		/* maximum stack size */
 #endif
 
 #ifndef	DFLDSIZ
 #define	DFLDSIZ			(256*1024*1024)		/* default data size */
 #endif
 
+#ifndef	DFLDSIZ32
+#define	DFLSSIZ32		(256*1024*1024)
+#endif
+
 #ifndef	DFLSSIZ
 #define	DFLSSIZ			(2*1024*1024)		/* default stack size */
 #endif
 
-/*
- * Default maximum amount of shared memory pages
- */
-#ifndef SHMMAXPGS
-#define	SHMMAXPGS		1024
+#ifndef	DFLSSIZ32
+#define	DFLSSIZ32		(2*1024*1024)		/* default stack size */
 #endif
 
 /*
@@ -142,6 +144,7 @@
 	(((vsid) & SR_VSID) >> (SR_VSID_SHFT + VSID__HASHSHFT))
 #endif /*0*/
 
+#ifndef _LP64
 /*
  * Fixed segments
  */
@@ -155,6 +158,7 @@
 #define	KERNEL2_SR		14
 #endif
 #define	KERNEL2_SEGMENT		VSID_MAKE(KERNEL2_SR, KERNEL_VSIDBITS)
+#endif
 #define	KERNEL_VSIDBITS		0xfffff
 #define	PHYSMAP_VSIDBITS	0xffffe
 #define	PHYSMAPN_SEGMENT(s)	VSID_MAKE(s, PHYSMAP_VSIDBITS)
@@ -172,59 +176,25 @@
 #endif
 
 #define	VM_MIN_ADDRESS		((vaddr_t) 0)
-#define	VM_MAXUSER_ADDRESS	((vaddr_t) ~0xfffL)
+#define	VM_MAXUSER_ADDRESS32	((vaddr_t) (uint32_t) ~0xfffL)
+#ifdef _LP64
+#define	VM_MAXUSER_ADDRESS	((vaddr_t) 1UL << 48) /* 256TB */
+#else
+#define	VM_MAXUSER_ADDRESS	VM_MAXUSER_ADDRESS32
+#endif
 #define	VM_MAX_ADDRESS		VM_MAXUSER_ADDRESS
+#ifdef _LP64
+#define	VM_MIN_KERNEL_ADDRESS	((vaddr_t) 0xffffffUL << 40) /* top 1TB */
+#define	VM_MAX_KERNEL_ADDRESS	((vaddr_t) -32768)
+#else
 #define	VM_MIN_KERNEL_ADDRESS	((vaddr_t) (KERNEL_SR << ADDR_SR_SHFT))
 #define	VM_MAX_KERNEL_ADDRESS	(VM_MIN_KERNEL_ADDRESS + 2*SEGMENT_LENGTH)
-
-/*
- * The address to which unspecified mapping requests default
- * Put the stack in it's own segment and start mmaping at the
- * top of the next lower segment.
- */
-#ifdef _KERNEL_OPT
-#include "opt_uvm.h"
 #endif
-#define	__USE_TOPDOWN_VM
-#define	VM_DEFAULT_ADDRESS(da, sz) \
-	(((VM_MAXUSER_ADDRESS - MAXSSIZ) & SEGMENT_MASK) - round_page(sz))
 
-#ifndef VM_PHYSSEG_MAX
-#define	VM_PHYSSEG_MAX		16
-#endif
 #define	VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
-#define	VM_PHYSSEG_NOADD
 
 #ifndef VM_PHYS_SIZE
 #define	VM_PHYS_SIZE		(USRIOSIZE * PAGE_SIZE)
 #endif
-
-#ifndef VM_MAX_KERNEL_BUF
-#define	VM_MAX_KERNEL_BUF	(SEGMENT_LENGTH * 3 / 4)
-#endif
-
-#define	VM_NFREELIST		16	/* 16 distinct memory segments */
-#define	VM_FREELIST_DEFAULT	0
-#define	VM_FREELIST_FIRST256	1
-#define	VM_FREELIST_FIRST16	2
-#define	VM_FREELIST_MAX		3
-
-#ifndef _LOCORE
-
-LIST_HEAD(pvo_head, pvo_entry);
-
-#define	__HAVE_VM_PAGE_MD
-
-struct vm_page_md {
-	struct pvo_head mdpg_pvoh;
-	unsigned int mdpg_attrs; 
-};
-
-#define	VM_MDPAGE_INIT(pg) do {			\
-	LIST_INIT(&(pg)->mdpage.mdpg_pvoh);	\
-	(pg)->mdpage.mdpg_attrs = 0;		\
-} while (/*CONSTCOND*/0)
-
-#endif	/* _LOCORE */
 
 #endif /* _POWERPC_OEA_VMPARAM_H_ */

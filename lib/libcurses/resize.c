@@ -1,4 +1,4 @@
-/*	$NetBSD: resize.c,v 1.17 2007/11/08 06:34:34 jdc Exp $	*/
+/*	$NetBSD: resize.c,v 1.26 2017/01/24 17:27:30 roy Exp $	*/
 
 /*
  * Copyright (c) 2001
@@ -40,7 +40,7 @@
 #if 0
 static char sccsid[] = "@(#)resize.c   blymn 2001/08/26";
 #else
-__RCSID("$NetBSD: resize.c,v 1.17 2007/11/08 06:34:34 jdc Exp $");
+__RCSID("$NetBSD: resize.c,v 1.26 2017/01/24 17:27:30 roy Exp $");
 #endif
 #endif				/* not lint */
 
@@ -69,8 +69,6 @@ wresize(WINDOW *win, int req_nlines, int req_ncols)
 	__CTRACE(__CTRACE_WINDOW, "wresize: (%p, %d, %d)\n",
 	    win, nlines, ncols);
 #endif
-	nlines = req_nlines;
-	ncols = req_ncols;
 	if (win->orig == NULL) {
 		/* bound "our" windows by the screen size */
 		if (win == curscr || win == __virtscr || win == stdscr) {
@@ -138,34 +136,90 @@ wresize(WINDOW *win, int req_nlines, int req_ncols)
 }
 
 /*
+ * is_term_resized --
+ *	Return true if the given dimensions do not match the
+ *	internal structures.
+ */
+bool
+is_term_resized(int nlines, int ncols)
+{
+
+	return (nlines > 0 && ncols > 0 &&
+	    (nlines != _cursesi_screen->LINES ||
+	    ncols != _cursesi_screen->COLS));
+}
+
+/*
  * resizeterm --
  *	Resize the terminal window, resizing the dependent windows.
+ *	Handles internal book-keeping.
  */
 int
 resizeterm(int nlines, int ncols)
 {
-	WINDOW *win;
-	struct __winlist *list;
-
-	  /* don't worry if things have not changed... we would like to
-	     do this but some bastard programs update LINES and COLS before
-	     calling resizeterm thus negating it's effect.
-	if ((nlines == LINES) && (ncols == COLS))
-	return OK;*/
+	int result;
 
 #ifdef	DEBUG
 	__CTRACE(__CTRACE_WINDOW, "resizeterm: (%d, %d)\n", nlines, ncols);
 #endif
 
+
+	if (!is_term_resized(nlines, ncols))
+		return OK;
+
+	result = resize_term(nlines, ncols);
+
+	/* Screen contents are unknown, libcurses is not libpanel, we don't
+	 * know the correct draw order. */
+	clearok(curscr, TRUE);
+
+	if (result == OK) {
+		/* We know how to repaint the ripoffs */
+		__ripoffresize(_cursesi_screen);
+
+		/* We do need to reposition our slks. */
+		__slk_resize(_cursesi_screen, ncols);
+		__slk_noutrefresh(_cursesi_screen);
+	}
+
+	return result;
+}
+
+/*
+ * resize_term --
+ *	Resize the terminal window, resizing the dependent windows.
+ */
+int
+resize_term(int nlines, int ncols)
+{
+	WINDOW *win;
+	struct __winlist *list;
+	int rlines;
+
+#ifdef	DEBUG
+	__CTRACE(__CTRACE_WINDOW, "resize_term: (%d, %d)\n", nlines, ncols);
+#endif
+
+	if (!is_term_resized(nlines, ncols))
+		return OK;
+
 	if (__resizeterm(curscr, nlines, ncols) == ERR)
 		return ERR;
 	if (__resizeterm(__virtscr, nlines, ncols) == ERR)
 		return ERR;
-	if (__resizeterm(stdscr, nlines, ncols) == ERR)
+	rlines = nlines - __rippedlines(_cursesi_screen);
+	if (__resizeterm(stdscr, rlines, ncols) == ERR)
 		return ERR;
 
-	LINES = nlines;
+	_cursesi_screen->LINES = nlines;
+	_cursesi_screen->COLS = ncols;
+	LINES = rlines;
 	COLS = ncols;
+
+	if (_cursesi_screen->slk_window != NULL &&
+	    __resizewin(_cursesi_screen->slk_window,
+		        _cursesi_screen->slk_window->reqy, ncols) == ERR)
+		return ERR;
 
 	  /* tweak the flags now that we have updated the LINES and COLS */
 	for (list = _cursesi_screen->winlistp; list != NULL; list = list->nextp) {
@@ -175,7 +229,6 @@ resizeterm(int nlines, int ncols)
 			__swflags(win);
 	}
 
-	wrefresh(curscr);
 	return OK;
 }
 
@@ -241,10 +294,10 @@ __resizewin(WINDOW *win, int nlines, int ncols)
 		nlines = ncols = 0;
 	else {
 		/* Reallocate line pointer array and line space. */
-		newlines = realloc(win->lines, nlines * sizeof(__LINE *));
+		newlines = realloc(win->alines, nlines * sizeof(__LINE *));
 		if (newlines == NULL)
 			return ERR;
-		win->lines = newlines;
+		win->alines = newlines;
 
 		newlspace = realloc(win->lspace, nlines * sizeof(__LINE));
 		if (newlspace == NULL)
@@ -270,7 +323,7 @@ __resizewin(WINDOW *win, int nlines, int ncols)
 		 * window space.
 		 */
 		for (lp = win->lspace, i = 0; i < nlines; i++, lp++) {
-			win->lines[i] = lp;
+			win->alines[i] = lp;
 			lp->line = &win->wspace[i * ncols];
 #ifdef DEBUG
 			lp->sentinel = SENTINEL_VALUE;
@@ -286,8 +339,8 @@ __resizewin(WINDOW *win, int nlines, int ncols)
 		win->ch_off = win->begx - win->orig->begx;
 		  /* Point line pointers to line space. */
 		for (lp = win->lspace, i = 0; i < nlines; i++, lp++) {
-			win->lines[i] = lp;
-			olp = win->orig->lines[i + win->begy - win->orig->begy];
+			win->alines[i] = lp;
+			olp = win->orig->alines[i + win->begy - win->orig->begy];
 			lp->line = &olp->line[win->ch_off];
 #ifdef DEBUG
 			lp->sentinel = SENTINEL_VALUE;
@@ -297,7 +350,6 @@ __resizewin(WINDOW *win, int nlines, int ncols)
 			lp->flags = __ISDIRTY;
 		}
 	}
-
 
 	win->cury = win->curx = 0;
 	win->maxy = nlines;
@@ -312,21 +364,21 @@ __resizewin(WINDOW *win, int nlines, int ncols)
 	   * so this is no big deal.
 	   */
 	for (i = 0; i < win->maxy; i++) {
-		lp = win->lines[i];
+		lp = win->alines[i];
 		for (sp = lp->line, j = 0; j < win->maxx; j++, sp++) {
 			sp->attr = 0;
 #ifndef HAVE_WCHAR
 			sp->ch = win->bch;
 #else
-			sp->ch = ( wchar_t )btowc(( int ) win->bch );
+			sp->ch = (wchar_t)btowc((int)win->bch);
 			sp->nsp = NULL;
 			if (_cursesi_copy_nsp(win->bnsp, sp) == ERR)
 				return ERR;
-			SET_WCOL( *sp, 1 );
+			SET_WCOL(*sp, 1);
 #endif /* HAVE_WCHAR */
 		}
 		lp->hash = __hash((char *)(void *)lp->line,
-				  (size_t) (ncols * __LDATASIZE));
+				  (size_t)(ncols * __LDATASIZE));
 	}
 
 #ifdef DEBUG

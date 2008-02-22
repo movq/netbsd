@@ -1,4 +1,4 @@
-/*	$NetBSD: sha1.c,v 1.3 2008/02/16 17:37:13 apb Exp $	*/
+/*	$NetBSD: sha1.c,v 1.6 2009/11/06 20:31:18 joerg Exp $	*/
 /*	$OpenBSD: sha1.c,v 1.9 1997/07/23 21:12:32 kstailey Exp $	*/
 
 /*
@@ -20,14 +20,14 @@
 #include <sys/cdefs.h>
 
 #if defined(_KERNEL) || defined(_STANDALONE)
-__KERNEL_RCSID(0, "$NetBSD: sha1.c,v 1.3 2008/02/16 17:37:13 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sha1.c,v 1.6 2009/11/06 20:31:18 joerg Exp $");
 
 #include <lib/libkern/libkern.h>
 
 #else
 
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: sha1.c,v 1.3 2008/02/16 17:37:13 apb Exp $");
+__RCSID("$NetBSD: sha1.c,v 1.6 2009/11/06 20:31:18 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -71,16 +71,18 @@ __RCSID("$NetBSD: sha1.c,v 1.3 2008/02/16 17:37:13 apb Exp $");
 #define R4(v,w,x,y,z,i) z+=(w^x^y)+blk(i)+0xCA62C1D6+rol(v,5);w=rol(w,30);
 
 
-#if !defined(_KERNEL) && defined(__weak_alias)
+#if !defined(_KERNEL) && !defined(_STANDALONE)
+#if defined(__weak_alias)
 __weak_alias(SHA1Transform,_SHA1Transform)
 __weak_alias(SHA1Init,_SHA1Init)
 __weak_alias(SHA1Update,_SHA1Update)
 __weak_alias(SHA1Final,_SHA1Final)
 #endif
+#endif
 
 typedef union {
-    u_char c[64];
-    u_int l[16];
+    uint8_t c[64];
+    uint32_t l[16];
 } CHAR64LONG16;
 
 /* old sparc64 gcc could not compile this */
@@ -145,9 +147,7 @@ do_R4(uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d, uint32_t *e, CHAR64LON
 /*
  * Hash a single 512-bit block. This is the core of the algorithm.
  */
-void SHA1Transform(state, buffer)
-    uint32_t state[5];
-    const u_char buffer[64];
+void SHA1Transform(uint32_t state[5], const uint8_t buffer[64])
 {
     uint32_t a, b, c, d, e;
     CHAR64LONG16 *block;
@@ -217,8 +217,7 @@ void SHA1Transform(state, buffer)
 /*
  * SHA1Init - Initialize new context
  */
-void SHA1Init(context)
-    SHA1_CTX *context;
+void SHA1Init(SHA1_CTX *context)
 {
 
     _DIAGASSERT(context != 0);
@@ -236,12 +235,9 @@ void SHA1Init(context)
 /*
  * Run your data through this.
  */
-void SHA1Update(context, data, len)
-    SHA1_CTX *context;
-    const u_char *data;
-    u_int len;
+void SHA1Update(SHA1_CTX *context, const uint8_t *data, unsigned int len)
 {
-    u_int i, j;
+    unsigned int i, j;
 
     _DIAGASSERT(context != 0);
     _DIAGASSERT(data != 0);
@@ -266,28 +262,26 @@ void SHA1Update(context, data, len)
 /*
  * Add padding and return the message digest.
  */
-void SHA1Final(digest, context)
-    u_char digest[20];
-    SHA1_CTX* context;
+void SHA1Final(uint8_t digest[20], SHA1_CTX *context)
 {
-    u_int i;
-    u_char finalcount[8];
+    unsigned int i;
+    uint8_t finalcount[8];
 
     _DIAGASSERT(digest != 0);
     _DIAGASSERT(context != 0);
 
     for (i = 0; i < 8; i++) {
-	finalcount[i] = (u_char)((context->count[(i >= 4 ? 0 : 1)]
+	finalcount[i] = (uint8_t)((context->count[(i >= 4 ? 0 : 1)]
 	 >> ((3-(i & 3)) * 8) ) & 255);	 /* Endian independent */
     }
-    SHA1Update(context, (const u_char *)"\200", 1);
+    SHA1Update(context, (const uint8_t *)"\200", 1);
     while ((context->count[0] & 504) != 448)
-	SHA1Update(context, (const u_char *)"\0", 1);
+	SHA1Update(context, (const uint8_t *)"\0", 1);
     SHA1Update(context, finalcount, 8);  /* Should cause a SHA1Transform() */
 
     if (digest) {
 	for (i = 0; i < 20; i++)
-	    digest[i] = (u_char)
+	    digest[i] = (uint8_t)
 		((context->state[i>>2] >> ((3-(i & 3)) * 8) ) & 255);
     }
 }

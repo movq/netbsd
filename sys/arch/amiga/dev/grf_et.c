@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_et.c,v 1.26 2007/10/17 19:53:16 garbled Exp $ */
+/*	$NetBSD: grf_et.c,v 1.36 2018/03/05 04:23:00 rin Exp $ */
 
 /*
  * Copyright (c) 1997 Klaus Burkert
@@ -37,9 +37,11 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_et.c,v 1.26 2007/10/17 19:53:16 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_et.c,v 1.36 2018/03/05 04:23:00 rin Exp $");
 
 #include "grfet.h"
+#include "ite.h"
+#include "wsdisplay.h"
 #if NGRFET > 0
 
 /*
@@ -71,6 +73,12 @@ __KERNEL_RCSID(0, "$NetBSD: grf_et.c,v 1.26 2007/10/17 19:53:16 garbled Exp $");
 
 #include <machine/cpu.h>
 #include <dev/cons.h>
+#if NWSDISPLAY > 0
+#include <dev/wscons/wsconsio.h>
+#include <dev/wscons/wsdisplayvar.h>
+#include <dev/rasops/rasops.h>
+#include <dev/wscons/wsdisplay_vconsvar.h>
+#endif
 #ifdef TSENGCONSOLE
 #include <amiga/dev/itevar.h>
 #endif
@@ -80,34 +88,50 @@ __KERNEL_RCSID(0, "$NetBSD: grf_et.c,v 1.26 2007/10/17 19:53:16 garbled Exp $");
 #include <amiga/dev/grf_etreg.h>
 #include <amiga/dev/zbusvar.h>
 
-int	et_mondefok(struct grfvideo_mode *gv);
-void	et_boardinit(struct grf_softc *gp);
-static void et_CompFQ(u_int fq, u_char *num, u_char *denom);
-int	et_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm);
-int	et_setvmode(struct grf_softc *gp, unsigned int mode);
-int	et_toggle(struct grf_softc *gp, unsigned short);
-int	et_getcmap(struct grf_softc *gfp, struct grf_colormap *cmap);
-int	et_putcmap(struct grf_softc *gfp, struct grf_colormap *cmap);
+int	et_mondefok(struct grfvideo_mode *);
+void	et_boardinit(struct grf_softc *);
+static void et_CompFQ(u_int fq, u_char *, u_char *);
+int	et_getvmode(struct grf_softc *, struct grfvideo_mode *);
+int	et_setvmode(struct grf_softc *, unsigned int);
+int	et_toggle(struct grf_softc *, unsigned short);
+int	et_getcmap(struct grf_softc *, struct grf_colormap *);
+int	et_putcmap(struct grf_softc *, struct grf_colormap *);
 #ifndef TSENGCONSOLE
-void	et_off(struct grf_softc *gp);
+void	et_off(struct grf_softc *);
 #endif
-void	et_inittextmode(struct grf_softc *gp);
-int	et_ioctl(register struct grf_softc *gp, u_long cmd, void *data);
-int	et_getmousepos(struct grf_softc *gp, struct grf_position *data);
-void	et_writesprpos(volatile char *ba, short x, short y);
-int	et_setmousepos(struct grf_softc *gp, struct grf_position *data);
-static int et_setspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *data);
-int	et_getspriteinfo(struct grf_softc *gp, struct grf_spriteinfo *data);
-static int et_getspritemax(struct grf_softc *gp, struct grf_position *data);
-int	et_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv);
-int	et_blank(struct grf_softc *gp, int *on);
-static int et_getControllerType(struct grf_softc *gp);
-static int et_getDACType(struct grf_softc *gp);
+void	et_inittextmode(struct grf_softc *);
+int	et_ioctl(register struct grf_softc *, u_long cmd, void *);
+int	et_getmousepos(struct grf_softc *, struct grf_position *);
+void	et_writesprpos(volatile char *ba, short, short);
+int	et_setmousepos(struct grf_softc *, struct grf_position *);
+static int et_setspriteinfo(struct grf_softc *, struct grf_spriteinfo *);
+int	et_getspriteinfo(struct grf_softc *, struct grf_spriteinfo *);
+static int et_getspritemax(struct grf_softc *, struct grf_position *);
+int	et_setmonitor(struct grf_softc *, struct grfvideo_mode *);
+int	et_blank(struct grf_softc *, int);
+int	et_isblank(struct grf_softc *);
+static int et_getControllerType(struct grf_softc *);
+static int et_getDACType(struct grf_softc *);
 
-int	grfetmatch(struct device *, struct cfdata *, void *);
-void	grfetattach(struct device *, struct device *, void *);
+int	grfetmatch(device_t, cfdata_t, void *);
+void	grfetattach(device_t, device_t, void *);
 int	grfetprint(void *, const char *);
-void	et_memset(volatile unsigned char *d, unsigned char c, int l);
+void	et_memset(volatile unsigned char *, unsigned char, int);
+
+#if NWSDISPLAY > 0
+/* wsdisplay acessops, emulops */
+static int	et_wsioctl(void *, void *, u_long, void *, int, struct lwp *);
+static int	et_get_fbinfo(struct grf_softc *, struct wsdisplayio_fbinfo *);
+
+static void	et_wscursor(void *, int, int, int);
+static void	et_wsputchar(void *, int, int, u_int, long);
+static void	et_wscopycols(void *, int, int, int, int);
+static void	et_wserasecols(void *, int, int, int, long);
+static void	et_wscopyrows(void *, int, int, int);
+static void	et_wseraserows(void *, int, int, long);
+static int	et_wsallocattr(void *, int, int, int, long *);
+static int	et_wsmapchar(void *, int, unsigned int *);
+#endif  /* NWSDISPLAY > 0 */
 
 /*
  * Graphics display definitions.
@@ -178,19 +202,54 @@ struct grf_spriteinfo et_cursprite;
 static unsigned char et_imageptr[8 * 64], et_maskptr[8 * 64];
 static unsigned char et_sprred[2], et_sprgreen[2], et_sprblue[2];
 
+#if NWSDISPLAY > 0
+static struct wsdisplay_accessops et_accessops = {
+	.ioctl		= et_wsioctl,
+	.mmap		= grf_wsmmap
+};
+
+static struct wsdisplay_emulops et_textops = {
+	.cursor		= et_wscursor,
+	.mapchar	= et_wsmapchar,
+	.putchar	= et_wsputchar,
+	.copycols	= et_wscopycols,
+	.erasecols	= et_wserasecols,
+	.copyrows	= et_wscopyrows,
+	.eraserows	= et_wseraserows,
+	.allocattr	= et_wsallocattr
+};
+
+static struct wsscreen_descr et_defaultscreen = {
+	.name		= "default",
+	.textops	= &et_textops,
+	.fontwidth	= 8,
+	.fontheight	= TSENGFONTY,
+	.capabilities	= WSSCREEN_HILIT | WSSCREEN_BLINK |
+			  WSSCREEN_REVERSE | WSSCREEN_UNDERLINE
+};
+
+static const struct wsscreen_descr *et_screens[] = {
+	&et_defaultscreen,
+};
+
+static struct wsscreen_list et_screenlist = {
+	sizeof(et_screens) / sizeof(struct wsscreen_descr *), et_screens
+};
+#endif  /* NWSDISPLAY > 0 */
+
 /* standard driver stuff */
-CFATTACH_DECL(grfet, sizeof(struct grf_softc),
+CFATTACH_DECL_NEW(grfet, sizeof(struct grf_softc),
     grfetmatch, grfetattach, NULL, NULL);
 
 static struct cfdata *cfdata;
 
 int
-grfetmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+grfetmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zbus_args *zap;
 	static int regprod, regprod2 = 0, fbprod;
 
-	zap = auxp;
+	zap = aux;
 
 #ifndef TSENGCONSOLE
 	if (amiga_realconfig == 0)
@@ -258,7 +317,7 @@ grfetmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 
 #ifdef TSENGCONSOLE
 	if (amiga_realconfig == 0) {
-		cfdata = cfp;
+		cfdata = cf;
 	}
 #endif
 
@@ -267,14 +326,12 @@ grfetmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 
 
 void
-grfetattach(struct device *pdp, struct device *dp, void *auxp)
+grfetattach(device_t parent, device_t self, void *aux)
 {
 	static struct grf_softc congrf;
-	struct zbus_args *zap;
-	struct grf_softc *gp;
 	static char attachflag = 0;
-
-	zap = auxp;
+	struct device temp;
+	struct grf_softc *gp;
 
 	printf("\n");
 
@@ -283,16 +340,20 @@ grfetattach(struct device *pdp, struct device *dp, void *auxp)
 		return;
 
 	/* do all that messy console/grf stuff */
-	if (dp == NULL)
+	if (self == NULL) {
 		gp = &congrf;
-	else
-		gp = (struct grf_softc *) dp;
+		gp->g_device = &temp;
+		temp.dv_private = gp;
+	} else {
+		gp = device_private(self);
+		gp->g_device = self;
+	}
 
-	if (dp != NULL && congrf.g_regkva != 0) {
+	if (self != NULL && congrf.g_regkva != 0) {
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
-		bcopy(&congrf.g_display, &gp->g_display,
+		memcpy(&gp->g_display, &congrf.g_display,
 		    (char *) &gp[1] - (char *) &gp->g_display);
 	} else {
 		gp->g_regkva = (volatile void *) et_regaddr;
@@ -300,14 +361,25 @@ grfetattach(struct device *pdp, struct device *dp, void *auxp)
 
 		gp->g_unit = GRF_ET4000_UNIT;
 		gp->g_mode = et_mode;
+#if NITE > 0
 		gp->g_conpri = grfet_cnprobe();
+#endif
 		gp->g_flags = GF_ALIVE;
 
 		/* wakeup the board */
 		et_boardinit(gp);
 
 #ifdef TSENGCONSOLE
+#if NWSDISPLAY > 0
+		gp->g_accessops = &et_accessops;
+		gp->g_emulops = &et_textops;
+		gp->g_defaultscr = &et_defaultscreen;
+		gp->g_scrlist = &et_screenlist;
+#else
+#if NITE > 0
 		grfet_iteinit(gp);
+#endif
+#endif  /* NWSDISPLAY > 0 */
 		(void) et_load_mon(gp, &etconsole_mode);
 #endif
 	}
@@ -315,7 +387,7 @@ grfetattach(struct device *pdp, struct device *dp, void *auxp)
 	/*
 	 * attach grf (once)
 	 */
-	if (amiga_config_found(cfdata, &gp->g_device, gp, grfetprint)) {
+	if (amiga_config_found(cfdata, gp->g_device, gp, grfetprint)) {
 		attachflag = 1;
 		printf("grfet: %dMB ", et_fbsize / 0x100000);
 		switch (ettype) {
@@ -365,7 +437,7 @@ grfetattach(struct device *pdp, struct device *dp, void *auxp)
 
 
 int
-grfetprint(void *auxp, const char *pnp)
+grfetprint(void *aux, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("ite at %s: ", pnp);
@@ -560,7 +632,7 @@ et_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 #ifdef TSENGCONSOLE
 	/* Handle grabbing console mode */
 	if (vm->mode_num == 255) {
-		bcopy(&etconsole_mode, vm, sizeof(struct grfvideo_mode));
+		memcpy(vm, &etconsole_mode, sizeof(struct grfvideo_mode));
 	/* XXX so grfconfig can tell us the correct text dimensions. */
 		vm->depth = etconsole_mode.fy;
 	} else
@@ -574,7 +646,7 @@ et_getvmode(struct grf_softc *gp, struct grfvideo_mode *vm)
 		if (gv->mode_num == 0)
 			return (EINVAL);
 
-		bcopy(gv, vm, sizeof(struct grfvideo_mode));
+		memcpy(vm, gv, sizeof(struct grfvideo_mode));
 	}
 
 	/* adjust internal values to pixel values */
@@ -614,10 +686,21 @@ et_off(struct grf_softc *gp)
 
 
 int
-et_blank(struct grf_softc *gp, int *on)
+et_blank(struct grf_softc *gp, int on)
 {
-	WSeq(gp->g_regkva, SEQ_ID_CLOCKING_MODE, *on > 0 ? 0x01 : 0x21);
-	return(0);
+
+	WSeq(gp->g_regkva, SEQ_ID_CLOCKING_MODE, on > 0 ? 0x01 : 0x21);
+	return 0;
+}
+
+
+int
+et_isblank(struct grf_softc *gp)
+{
+	int r;
+
+	r = RSeq(gp->g_regkva, SEQ_ID_CLOCKING_MODE);
+	return (r & 0x20) != 0;
 }
 
 
@@ -708,7 +791,7 @@ et_ioctl(register struct grf_softc *gp, u_long cmd, void *data)
 		return (et_setmonitor(gp, (struct grfvideo_mode *) data));
 
 	    case GRFIOCBLANK:
-		return (et_blank(gp, (int *)data));
+		return (et_blank(gp, *(int *)data));
 	}
 	return (EPASSTHROUGH);
 }
@@ -734,7 +817,7 @@ int
 et_setmousepos(struct grf_softc *gp, struct grf_position *data)
 {
 	volatile char *ba = gp->g_regkva;
-	short rx, ry, prx, pry;
+	short rx, ry;
 
 	/* no movement */
 	if (et_cursprite.pos.x == data->x && et_cursprite.pos.y == data->y)
@@ -743,8 +826,6 @@ et_setmousepos(struct grf_softc *gp, struct grf_position *data)
 	/* current and previous real coordinates */
 	rx = data->x - et_cursprite.hot.x;
 	ry = data->y - et_cursprite.hot.y;
-	prx = et_cursprite.pos.x - et_cursprite.hot.x;
-	pry = et_cursprite.pos.y - et_cursprite.hot.y;
 
 	/* if we are/were on an edge, create (un)shifted bitmap --
 	 * ripped out optimization (not extremely worthwhile,
@@ -795,7 +876,7 @@ et_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 #ifdef TSENGCONSOLE
 	/* handle interactive setting of console mode */
 	if (gv->mode_num == 255) {
-		bcopy(gv, &etconsole_mode.gv, sizeof(struct grfvideo_mode));
+		memcpy(&etconsole_mode.gv, gv, sizeof(struct grfvideo_mode));
 		etconsole_mode.gv.hblank_start /= 8;
 		etconsole_mode.gv.hsync_start /= 8;
 		etconsole_mode.gv.hsync_stop /= 8;
@@ -804,13 +885,15 @@ et_setmonitor(struct grf_softc *gp, struct grfvideo_mode *gv)
 		etconsole_mode.cols = gv->disp_width / etconsole_mode.fx;
 		if (!(gp->g_flags & GF_GRFON))
 			et_load_mon(gp, &etconsole_mode);
+#if NITE > 0
 		ite_reinit(gp->g_itedev);
+#endif
 		return (0);
 	}
 #endif
 
 	md = monitor_def + (gv->mode_num - 1);
-	bcopy(gv, md, sizeof(struct grfvideo_mode));
+	memcpy(md, gv, sizeof(struct grfvideo_mode));
 
 	/* adjust pixel oriented values to internal rep. */
 
@@ -1503,6 +1586,11 @@ et_getControllerType(struct grf_softc *gp)
 	return ((*mem == 0xff) ? ETW32 : ET4000);
 }
 
+/* We MUST do 4 HW reads to switch into command mode */
+static inline int vgar4HDR(volatile unsigned char *ba)
+{
+	return vgar(ba, HDR) + vgar(ba, HDR) + vgar(ba, HDR) + vgar(ba, HDR);
+}
 
 static int
 et_getDACType(struct grf_softc *gp)
@@ -1515,9 +1603,8 @@ et_getDACType(struct grf_softc *gp)
 
 	/* check for Sierra SC 15025 */
 
-	/* We MUST do 4 HW reads to switch into command mode */
-	if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR));
-		vgaw(ba, VDAC_COMMAND, 0x10); /* set ERPF */
+	vgar4HDR(ba);
+	vgaw(ba, VDAC_COMMAND, 0x10); /* set ERPF */
 
 	vgaw(ba, VDAC_XINDEX, 9);
 	check.cc[0] = vgar(ba, VDAC_XDATA);
@@ -1528,12 +1615,12 @@ et_getDACType(struct grf_softc *gp)
 	vgaw(ba, VDAC_XINDEX, 12);
 	check.cc[3] = vgar(ba, VDAC_XDATA);
 
-	if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR));
-		vgaw(ba, VDAC_COMMAND, 0x00); /* clear ERPF */
+	vgar4HDR(ba);
+	vgaw(ba, VDAC_COMMAND, 0x00); /* clear ERPF */
 
 	if (check.tt == 0x533ab141) {
-		if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR));
-			vgaw(ba, VDAC_COMMAND, 0x10); /* set ERPF */
+		vgar4HDR(ba);
+		vgaw(ba, VDAC_COMMAND, 0x10); /* set ERPF */
 
 		/* switch to 8 bits per color */
 		vgaw(ba, VDAC_XINDEX, 8);
@@ -1541,8 +1628,8 @@ et_getDACType(struct grf_softc *gp)
 		/* do not shift color values */
 		etcmap_shift = 0;
 
-		if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR));
-			vgaw(ba, VDAC_COMMAND, 0x00); /* clear ERPF */
+		vgar4HDR(ba);
+		vgaw(ba, VDAC_COMMAND, 0x00); /* clear ERPF */
 
 		vgaw(ba, VDAC_MASK, 0xff);
 		return (SIERRA15025);
@@ -1550,8 +1637,8 @@ et_getDACType(struct grf_softc *gp)
 
 	/* check for MUSIC DAC */
 
-	if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR));
-		vgaw(ba, VDAC_COMMAND, 0x02);	/* set some strange MUSIC mode (???) */
+	vgar4HDR(ba);
+	vgaw(ba, VDAC_COMMAND, 0x02);	/* set some strange MUSIC mode (???) */
 
 	vgaw(ba, VDAC_XINDEX, 0x01);
 	if (vgar(ba, VDAC_XDATA) == 0x01) {
@@ -1563,10 +1650,10 @@ et_getDACType(struct grf_softc *gp)
 	}
 
 	/* check for AT&T ATT20c491 DAC (crest) */
-	if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR));
+	vgar4HDR(ba);
 	vgaw(ba, HDR, 0xff);
 	vgaw(ba, VDAC_MASK, 0x01);
-	if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR));
+	vgar4HDR(ba);
 	if (vgar(ba, HDR) == 0xff) {
 		/* do not shift color values */
 		etcmap_shift = 0;
@@ -1576,7 +1663,7 @@ et_getDACType(struct grf_softc *gp)
 	}
 
 	/* restore PowerUp settings (crest) */
-	if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR)); if (vgar(ba, HDR));
+	vgar4HDR(ba);
 	vgaw(ba, HDR, 0x00);
 
 	/*
@@ -1590,5 +1677,344 @@ et_getDACType(struct grf_softc *gp)
 	vgaw(ba, VDAC_MASK, 0xff);
 	return (SIERRA11483);
 }
+
+
+#if NWSDISPLAY > 0
+static void
+et_wscursor(void *c, int on, int row, int col) 
+{
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	volatile void *ba;
+	int offs;
+
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+
+	if ((ri->ri_flg & RI_CURSOR) && !on) {
+		/* cursor was visible, but we want to remove it */
+		/*WCrt(ba, CRT_ID_CURSOR_START, | 0x20);*/
+		ri->ri_flg &= ~RI_CURSOR;
+	}
+
+	ri->ri_crow = row;
+	ri->ri_ccol = col;
+
+	if (on) {
+		/* move cursor to new location */
+		if (!(ri->ri_flg & RI_CURSOR)) {
+			/*WCrt(ba, CRT_ID_CURSOR_START, | 0x20);*/
+			ri->ri_flg |= RI_CURSOR;
+		}
+		offs = gp->g_rowoffset[row] + col;
+		WCrt(ba, CRT_ID_CURSOR_LOC_LOW, offs & 0xff);
+		WCrt(ba, CRT_ID_CURSOR_LOC_HIGH, (offs >> 8) & 0xff);
+		WCrt(ba, CRT_ID_EXT_START, (offs >> (16-2)) & 0x0c);
+	}
+}
+
+static void
+et_wsputchar(void *c, int row, int col, u_int ch, long attr)
+{
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	volatile unsigned char *ba, *cp;
+
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	cp = gp->g_fbkva;
+
+	cp += gp->g_rowoffset[row] + col;
+	SetTextPlane(ba, 0x00);
+	*cp = ch;
+	SetTextPlane(ba, 0x01);
+	*cp = attr;
+}
+
+static void     
+et_wscopycols(void *c, int row, int srccol, int dstcol, int ncols) 
+{
+	volatile unsigned char *ba, *dst, *src;
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	int i;
+
+	KASSERT(ncols > 0);
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	src = gp->g_fbkva;
+
+	src += gp->g_rowoffset[row];
+	dst = src;
+	src += srccol;
+	dst += dstcol;
+	if (srccol < dstcol) {
+		/* need to copy backwards */
+		src += ncols;
+		dst += ncols;
+		SetTextPlane(ba, 0x00);
+		for (i = 0; i < ncols; i++)
+			*(--dst) = *(--src);
+		src += ncols;
+		dst += ncols;
+		SetTextPlane(ba, 0x01);
+		for (i = 0; i < ncols; i++)
+			*(--dst) = *(--src);
+	} else {
+		SetTextPlane(ba, 0x00);
+		for (i = 0; i < ncols; i++)
+			*dst++ = *src++;
+		src -= ncols;
+		dst -= ncols;
+		SetTextPlane(ba, 0x01);
+		for (i = 0; i < ncols; i++)
+			*dst++ = *src++;
+	}
+}
+
+static void     
+et_wserasecols(void *c, int row, int startcol, int ncols, long fillattr)
+{
+	volatile unsigned char *ba, *cp;
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	int i;
+
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	cp = gp->g_fbkva;
+
+	cp += gp->g_rowoffset[row] + startcol;
+	SetTextPlane(ba, 0x00);
+	for (i = 0; i < ncols; i++)
+		*cp++ = 0x20;
+	cp -= ncols;
+	SetTextPlane(ba, 0x01);
+	for (i = 0; i < ncols; i++)
+		*cp++ = 0x07;
+}
+
+static void     
+et_wscopyrows(void *c, int srcrow, int dstrow, int nrows) 
+{
+	volatile unsigned char *ba, *dst, *src;
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	int i, n;
+
+	KASSERT(nrows > 0);
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	src = dst = gp->g_fbkva;
+	n = ri->ri_cols * nrows;
+
+	if (srcrow < dstrow) {
+		/* need to copy backwards */
+		src += gp->g_rowoffset[srcrow + nrows];
+		dst += gp->g_rowoffset[dstrow + nrows];
+		SetTextPlane(ba, 0x00);
+		for (i = 0; i < n; i++)
+			*(--dst) = *(--src);
+		src += n;
+		dst += n;
+		SetTextPlane(ba, 0x01);
+		for (i = 0; i < n; i++)
+			*(--dst) = *(--src);
+	} else {
+		src += gp->g_rowoffset[srcrow];
+		dst += gp->g_rowoffset[dstrow];
+		SetTextPlane(ba, 0x00);
+		for (i = 0; i < n; i++)
+			*dst++ = *src++;
+		src -= n;
+		dst -= n;
+		SetTextPlane(ba, 0x01);
+		for (i = 0; i < n; i++)
+			*dst++ = *src++;
+	}
+}
+
+static void     
+et_wseraserows(void *c, int row, int nrows, long fillattr) 
+{
+	volatile unsigned char *ba, *cp;
+	struct rasops_info *ri;
+	struct vcons_screen *scr;
+	struct grf_softc *gp;
+	int i, n;
+
+	ri = c;
+	scr = ri->ri_hw;
+	gp = scr->scr_cookie;
+	ba = gp->g_regkva;
+	cp = gp->g_fbkva;
+
+	cp += gp->g_rowoffset[row];
+	n = ri->ri_cols * nrows;
+	SetTextPlane(ba, 0x00);
+	for (i = 0; i < n; i++)
+		*cp++ = 0x20;
+	cp -= n;
+	SetTextPlane(ba, 0x01);
+	for (i = 0; i < n; i++)
+		*cp++ = 0x07;
+}
+
+static int
+et_wsallocattr(void *c, int fg, int bg, int flg, long *attr)
+{
+
+	/* XXX color support? */
+	*attr = (flg & WSATTR_REVERSE) ? 0x70 : 0x07;
+	if (flg & WSATTR_UNDERLINE)	*attr = 0x01;
+	if (flg & WSATTR_HILIT)		*attr |= 0x08;
+	if (flg & WSATTR_BLINK)		*attr |= 0x80;
+	return 0;
+}
+
+/* our font does not support unicode extensions */
+static int      
+et_wsmapchar(void *c, int ch, unsigned int *cp)
+{
+
+	if (ch > 0 && ch < 256) {
+		*cp = ch;
+		return 5;
+	}
+	*cp = ' ';
+	return 0;
+}
+
+static int
+et_wsioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
+{
+	struct vcons_data *vd;
+	struct grf_softc *gp;
+
+	vd = v;
+	gp = vd->cookie;
+
+	switch (cmd) {
+	case WSDISPLAYIO_GETCMAP:
+		/* Note: wsdisplay_cmap and grf_colormap have same format */
+		if (gp->g_display.gd_planes == 8)
+			return et_getcmap(gp, (struct grf_colormap *)data);
+		return EINVAL;
+
+	case WSDISPLAYIO_PUTCMAP:
+		/* Note: wsdisplay_cmap and grf_colormap have same format */
+		if (gp->g_display.gd_planes == 8)
+			return et_putcmap(gp, (struct grf_colormap *)data);
+		return EINVAL;
+
+	case WSDISPLAYIO_GVIDEO:
+		if (et_isblank(gp))
+			*(u_int *)data = WSDISPLAYIO_VIDEO_OFF;
+		else
+			*(u_int *)data = WSDISPLAYIO_VIDEO_ON;
+		return 0;
+
+	case WSDISPLAYIO_SVIDEO:
+		return et_blank(gp, *(u_int *)data == WSDISPLAYIO_VIDEO_ON);
+
+	case WSDISPLAYIO_SMODE:
+		if ((*(int *)data) != gp->g_wsmode) {
+			if (*(int *)data == WSDISPLAYIO_MODE_EMUL) {
+				/* load console text mode, redraw screen */
+				(void)et_load_mon(gp, &etconsole_mode);
+				if (vd->active != NULL)
+					vcons_redraw_screen(vd->active);
+			} else {
+				/* switch to current graphics mode */
+				if (!et_load_mon(gp,
+				    (struct grfettext_mode *)monitor_current))
+					return EINVAL;
+			}
+			gp->g_wsmode = *(int *)data;
+		} 
+		return 0;
+
+	case WSDISPLAYIO_GET_FBINFO:
+		return et_get_fbinfo(gp, data);
+	}
+
+	/* handle this command hw-independant in grf(4) */
+	return grf_wsioctl(v, vs, cmd, data, flag, l);
+}
+
+/*
+ * Fill the wsdisplayio_fbinfo structure with information from the current
+ * graphics mode. Even when text mode is active.
+ */
+static int
+et_get_fbinfo(struct grf_softc *gp, struct wsdisplayio_fbinfo *fbi)
+{
+	struct grfvideo_mode *md;
+	uint32_t rbits, gbits, bbits;
+
+	md = monitor_current;
+
+	switch (md->depth) {
+	case 8:
+		fbi->fbi_bitsperpixel = 8;
+		rbits = gbits = bbits = 6;  /* keep gcc happy */
+		break;
+	case 15:
+		fbi->fbi_bitsperpixel = 16;
+		rbits = gbits = bbits = 5;
+		break;
+	case 16:
+		fbi->fbi_bitsperpixel = 16;
+		rbits = bbits = 5;
+		gbits = 6;
+		break;
+	case 24:
+		fbi->fbi_bitsperpixel = 24;
+		rbits = gbits = bbits = 8;
+		break;
+	default:
+		return EINVAL;
+	}
+
+	fbi->fbi_stride = (fbi->fbi_bitsperpixel / 8) * md->disp_width;
+	fbi->fbi_width = md->disp_width;
+	fbi->fbi_height = md->disp_height;
+
+	if (md->depth > 8) {
+		fbi->fbi_pixeltype = WSFB_RGB;
+		fbi->fbi_subtype.fbi_rgbmasks.red_offset = bbits + gbits;
+		fbi->fbi_subtype.fbi_rgbmasks.red_size = rbits;
+		fbi->fbi_subtype.fbi_rgbmasks.green_offset = bbits;
+		fbi->fbi_subtype.fbi_rgbmasks.green_size = gbits;
+		fbi->fbi_subtype.fbi_rgbmasks.blue_offset = 0;
+		fbi->fbi_subtype.fbi_rgbmasks.blue_size = bbits;
+		fbi->fbi_subtype.fbi_rgbmasks.alpha_offset = 0;
+		fbi->fbi_subtype.fbi_rgbmasks.alpha_size = 0;
+	} else {
+		fbi->fbi_pixeltype = WSFB_CI;
+		fbi->fbi_subtype.fbi_cmapinfo.cmap_entries = 1 << md->depth;
+	}
+
+	fbi->fbi_flags = 0;
+	fbi->fbi_fbsize = fbi->fbi_stride * fbi->fbi_height;
+	fbi->fbi_fboffset = 0;
+	return 0;
+}
+#endif	/* NWSDISPLAY > 0 */
 
 #endif /* NGRFET */

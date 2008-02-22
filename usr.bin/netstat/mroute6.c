@@ -1,4 +1,4 @@
-/*	$NetBSD: mroute6.c,v 1.12 2005/08/04 19:41:28 rpaulo Exp $	*/
+/*	$NetBSD: mroute6.c,v 1.15 2014/11/06 21:30:09 christos Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.
@@ -117,6 +117,7 @@
 #include <stdio.h>
 #include <kvm.h>
 #include "netstat.h"
+#include "rtutil.h"
 
 #ifdef INET6
 
@@ -124,8 +125,7 @@
 #define	WID_GRP	(lflag ? 18 : (numeric_addr ? 16 : 18)) /* width of group column */
 
 void
-mroute6pr(mrpaddr, mfcaddr, mifaddr)
-	u_long mrpaddr, mfcaddr, mifaddr;
+mroute6pr(u_long mrpaddr, u_long mfcaddr, u_long mifaddr)
 {
 	u_int mrtproto;
 	struct mf6c *mf6ctable[MF6CTBLSIZ], *mfcp;
@@ -137,7 +137,6 @@ mroute6pr(mrpaddr, mfcaddr, mifaddr)
 	register int i;
 	register int banner_printed;
 	register int saved_numeric_addr;
-	mifi_t maxmif = 0;
 	int waitings;
 
 	if (mrpaddr == 0) {
@@ -182,7 +181,6 @@ mroute6pr(mrpaddr, mfcaddr, mifaddr)
 			continue;
 
 		kread((u_long)mifp->m6_ifp, (char *)&ifnet, sizeof(ifnet));
-		maxmif = mifi;
 		if (!banner_printed) {
 			printf("\nIPv6 Multicast Interface Table\n"
 			    " Mif   Rate   PhyIF   Pkts-In   Pkts-Out\n");
@@ -215,9 +213,9 @@ mroute6pr(mrpaddr, mfcaddr, mifaddr)
 			}
 			
 			printf(" %-*.*s", WID_ORG, WID_ORG,
-			    routename6(&mfc.mf6c_origin));
+			    routename6(&mfc.mf6c_origin, nflag));
 			printf(" %-*.*s", WID_GRP, WID_GRP,
-			    routename6(&mfc.mf6c_mcastgrp));
+			    routename6(&mfc.mf6c_mcastgrp, nflag));
 			printf(" %9llu", (unsigned long long)mfc.mf6c_pkt_cnt);
 
 			for (waitings = 0, rtep = mfc.mf6c_stall; rtep; ) {
@@ -248,8 +246,7 @@ mroute6pr(mrpaddr, mfcaddr, mifaddr)
 }
 
 void
-mrt6_stats(mrpaddr, mstaddr)
-	u_long mrpaddr, mstaddr;
+mrt6_stats(u_long mrpaddr, u_long mstaddr)
 {
 #define	p(f, m) printf(m, (unsigned long long)mrtstat.f, plural(mrtstat.f))
 #define	pes(f, m) printf(m, (unsigned long long)mrtstat.f, plurales(mrtstat.f))

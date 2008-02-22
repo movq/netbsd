@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: s_scalbn.c,v 1.12 2002/05/26 22:01:58 wiz Exp $");
+__RCSID("$NetBSD: s_scalbn.c,v 1.19 2018/03/27 11:59:49 martin Exp $");
 #endif
 
 /*
@@ -22,26 +22,53 @@ __RCSID("$NetBSD: s_scalbn.c,v 1.12 2002/05/26 22:01:58 wiz Exp $");
  * exponentiation or a multiplication.
  */
 
+#include "namespace.h"
 #include "math.h"
 #include "math_private.h"
 
+#ifndef _LP64
+__strong_alias(_scalbn, _scalbln)
+#endif
+
+#ifndef __HAVE_LONG_DOUBLE
+__strong_alias(_scalbnl, _scalbn)
+__strong_alias(_scalblnl, _scalbln)
+__weak_alias(scalbnl, _scalbnl)
+__weak_alias(scalblnl, _scalblnl)
+__weak_alias(ldexpl, _scalblnl)
+#endif
+
+#ifdef __weak_alias
+__weak_alias(scalbn, _scalbn)
+__weak_alias(scalbln, _scalbln)
+__weak_alias(ldexp, _scalbn)
+#endif
+
 static const double
-two54   =  1.80143985094819840000e+16, /* 0x43500000, 0x00000000 */
-twom54  =  5.55111512312578270212e-17, /* 0x3C900000, 0x00000000 */
+two54   =  0x1.0p54,	/* 0x43500000, 0x00000000 */
+twom54  =  0x1.0p-54,	/* 0x3C900000, 0x00000000 */
 huge   = 1.0e+300,
 tiny   = 1.0e-300;
 
+#ifdef _LP64
 double
 scalbn(double x, int n)
 {
+	return scalbln(x, n);
+}
+#endif
+
+double
+scalbln(double x, long n)
+{
 	int32_t k,hx,lx;
 	EXTRACT_WORDS(hx,lx,x);
-        k = (hx&0x7ff00000)>>20;		/* extract exponent */
+        k = ((uint32_t)hx&0x7ff00000)>>20;		/* extract exponent */
         if (k==0) {				/* 0 or subnormal x */
             if ((lx|(hx&0x7fffffff))==0) return x; /* +-0 */
 	    x *= two54;
 	    GET_HIGH_WORD(hx,x);
-	    k = ((hx&0x7ff00000)>>20) - 54;
+	    k = (((uint32_t)hx&0x7ff00000)>>20) - 54;
             if (n< -50000) return tiny*x; 	/*underflow*/
 	    }
         if (k==0x7ff) return x+x;		/* NaN or Inf */

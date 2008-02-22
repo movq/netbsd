@@ -1,4 +1,4 @@
-/* $NetBSD: exec_coff.c,v 1.5 2001/10/01 23:32:34 cgd Exp $ */
+/* $NetBSD: exec_coff.c,v 1.7 2016/09/21 16:27:55 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: exec_coff.c,v 1.5 2001/10/01 23:32:34 cgd Exp $");
+__RCSID("$NetBSD: exec_coff.c,v 1.7 2016/09/21 16:27:55 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -49,18 +49,16 @@ __RCSID("$NetBSD: exec_coff.c,v 1.5 2001/10/01 23:32:34 cgd Exp $");
 #define	BAD			do { rv = -1; goto out; } while (0)
 
 int
-check_coff(mappedfile, mappedsize)
-	const char *mappedfile;
-	size_t mappedsize;
+check_coff(const char *mappedfile, size_t mappedsize)
 {
-	struct coff_exechdr *exechdrp;
+	const struct coff_exechdr *exechdrp;
 	int rv;
 
 	rv = 0;
 
 	if (check(0, sizeof *exechdrp))
 		BAD;
-	exechdrp = (struct coff_exechdr *)&mappedfile[0];
+	exechdrp = (const struct coff_exechdr *)&mappedfile[0];
 
 	if (COFF_BADMAG(&(exechdrp->f)))
 		BAD;
@@ -70,16 +68,14 @@ out:
 }
 
 int
-findoff_coff(mappedfile, mappedsize, vmaddr, fileoffp)
-	const char *mappedfile;
-	size_t mappedsize, *fileoffp;
-	u_long vmaddr;
+findoff_coff(const char *mappedfile, size_t mappedsize, u_long vmaddr,
+    size_t *fileoffp, u_long text_addr)
 {
-	struct coff_exechdr *exechdrp;
+	const struct coff_exechdr *exechdrp;
 	int rv;
 
 	rv = 0;
-	exechdrp = (struct coff_exechdr *)&mappedfile[0];
+	exechdrp = (const struct coff_exechdr *)&mappedfile[0];
 
 #define COFF_TXTOFF_XXX(fp, ap) \
          (COFF_ROUND(COFF_HDR_SIZE + (fp)->f_nscns * \
@@ -89,12 +85,12 @@ findoff_coff(mappedfile, mappedsize, vmaddr, fileoffp)
 #define COFF_DATOFF_XXX(fp, ap) \
         (COFF_TXTOFF_XXX(fp, ap) + (ap)->a_tsize)
 
-	if (exechdrp->a.a_tstart <= vmaddr &&
-	    vmaddr < (exechdrp->a.a_tstart + exechdrp->a.a_tsize))
+	if ((u_long)exechdrp->a.a_tstart <= vmaddr &&
+	    vmaddr < (u_long)(exechdrp->a.a_tstart + exechdrp->a.a_tsize))
 		*fileoffp = vmaddr - exechdrp->a.a_tstart +
 		    COFF_TXTOFF(&exechdrp->f, &(exechdrp->a));
-	else if (exechdrp->a.a_dstart <= vmaddr && 
-            vmaddr < (exechdrp->a.a_dstart + exechdrp->a.a_dsize))
+	else if ((u_long)exechdrp->a.a_dstart <= vmaddr && 
+            vmaddr < (u_long)(exechdrp->a.a_dstart + exechdrp->a.a_dsize))
 		*fileoffp = vmaddr - exechdrp->a.a_dstart +
 		    COFF_DATOFF_XXX(&exechdrp->f, &(exechdrp->a));
 	else

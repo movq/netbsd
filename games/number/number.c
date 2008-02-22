@@ -1,4 +1,4 @@
-/*	$NetBSD: number.c,v 1.11 2007/12/15 19:44:42 perry Exp $	*/
+/*	$NetBSD: number.c,v 1.16 2014/03/23 00:03:04 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)number.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: number.c,v 1.11 2007/12/15 19:44:42 perry Exp $");
+__RCSID("$NetBSD: number.c,v 1.16 2014/03/23 00:03:04 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -76,19 +76,17 @@ static const char	*const name1[] = {
 	"novemdecillion",		"vigintillion",
 };
 
-void	convert(char *);
 int	main(int, char *[]);
-int	number(const char *, int);
-void	pfract(int);
-int	unit(int, const char *);
-void	usage(void) __dead;
+static void convert(char *);
+static int number(const char *, size_t);
+static void pfract(size_t);
+static int unit(size_t, const char *);
+static void usage(void) __dead;
 
-int lflag;
+static int lflag;
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int ch, first;
 	char line[256];
@@ -125,16 +123,16 @@ main(argc, argv)
 }
 
 void
-convert(line)
-	char *line;
+convert(char *line)
 {
-	int flen, len, rval;
+	size_t flen, len;
+	int rval;
 	char *p, *fraction;
 
 	flen = 0;
 	fraction = NULL;
 	for (p = line; *p != '\0' && *p != '\n'; ++p) {
-		if (isblank(*p)) {
+		if (isblank((unsigned char)*p)) {
 			if (p == line) {
 				++line;
 				continue;
@@ -194,11 +192,10 @@ badnum:			errx(1, "illegal number: %s", line);
 }
 
 int
-unit(len, p)
-	int len;
-	const char *p;
+unit(size_t len, const char *p)
 {
-	int off, rval;
+	size_t off;
+	int rval;
 
 	rval = 0;
 	if (len > 3) {
@@ -230,9 +227,7 @@ unit(len, p)
 }
 
 int
-number(p, len)
-	const char *p;
-	int len;
+number(const char *p, size_t len)
 {
 	int val, rval;
 
@@ -270,8 +265,7 @@ number(p, len)
 }
 
 void
-pfract(len)
-	int len;
+pfract(size_t len)
 {
 	static const char *const pref[] = { "", "ten-", "hundred-" };
 
@@ -289,7 +283,7 @@ pfract(len)
 }
 
 void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr, "usage: number [# ...]\n");
 	exit(1);

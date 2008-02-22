@@ -1,4 +1,4 @@
-/* $NetBSD: getpeereid.c,v 1.1 2007/08/09 15:23:02 he Exp $ */
+/* $NetBSD: getpeereid.c,v 1.3 2018/02/16 19:21:49 christos Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,27 +31,38 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getpeereid.c,v 1.1 2007/08/09 15:23:02 he Exp $");
+__RCSID("$NetBSD: getpeereid.c,v 1.3 2018/02/16 19:21:49 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
-#include <unistd.h>
 #include <sys/un.h>
 #include <sys/socket.h>
+#include <unistd.h>
+#include <errno.h>
 
 
 int
 getpeereid(int s, uid_t *euid, gid_t *egid)
 {
 	struct unpcbid cred;
-	socklen_t len = sizeof(cred);
-	if (getsockopt(s, 0, LOCAL_PEEREID, &cred, &len) < 0) {
+	struct sockaddr_storage ss;
+	socklen_t len;
+
+	len = sizeof(ss);
+	if (getsockname(s, (void *)&ss, &len) == -1)
 		return -1;
-	} else {
-		if (euid != NULL)
-			*euid = cred.unp_euid;
-		if (egid != NULL)
-			*egid = cred.unp_egid;
-		return 0;
+	if (ss.ss_family != AF_LOCAL) {
+		errno = EOPNOTSUPP;
+		return -1;
 	}
+
+	len = sizeof(cred);
+	if (getsockopt(s, 0, LOCAL_PEEREID, &cred, &len) == -1)
+		return -1;
+
+	if (euid != NULL)
+		*euid = cred.unp_euid;
+	if (egid != NULL)
+		*egid = cred.unp_egid;
+	return 0;
 }

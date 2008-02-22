@@ -1,4 +1,4 @@
-/*	$NetBSD: osk5912_machdep.c,v 1.2 2008/01/19 13:11:16 chris Exp $ */
+/*	$NetBSD: osk5912_machdep.c,v 1.17 2018/03/13 06:18:47 ryo Exp $ */
 
 /*
  * Machine dependent functions for kernel setup for TI OSK5912 board.
@@ -99,14 +99,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osk5912_machdep.c,v 1.2 2008/01/19 13:11:16 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osk5912_machdep.c,v 1.17 2018/03/13 06:18:47 ryo Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_md.h"
 #include "opt_com.h"
-#include "md.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -118,10 +117,12 @@ __KERNEL_RCSID(0, "$NetBSD: osk5912_machdep.c,v 1.2 2008/01/19 13:11:16 chris Ex
 #include <sys/reboot.h>
 #include <sys/termios.h>
 #include <sys/ksyms.h>
+#include <sys/bus.h>
+#include <sys/conf.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <sys/conf.h>
 #include <dev/cons.h>
 #include <dev/md.h>
 
@@ -133,9 +134,7 @@ __KERNEL_RCSID(0, "$NetBSD: osk5912_machdep.c,v 1.2 2008/01/19 13:11:16 chris Ex
 #endif
 
 #include <machine/bootconfig.h>
-#include <machine/bus.h>
-#include <machine/cpu.h>
-#include <machine/frame.h>
+#include <arm/locore.h>
 #include <arm/undefined.h>
 
 #include <arm/arm32/machdep.h>
@@ -150,20 +149,6 @@ __KERNEL_RCSID(0, "$NetBSD: osk5912_machdep.c,v 1.2 2008/01/19 13:11:16 chris Ex
 #define	KERNEL_VM_BASE		(KERNEL_BASE + 0x01000000)
 #define KERNEL_VM_SIZE		0x0C000000
 
-
-/*
- * Address to call from cpu_reset() to reset the machine.
- * This is machine architecture dependant as it varies depending
- * on where the ROM appears when you turn the MMU off.
- */
-
-u_int cpu_reset_address = 0;
-
-/* Define various stack sizes in pages */
-#define IRQ_STACK_SIZE	1
-#define ABT_STACK_SIZE	1
-#define UND_STACK_SIZE	1
-
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
@@ -173,26 +158,14 @@ paddr_t physical_start;
 /* Physical address of the first byte after the end of SDRAM. */
 paddr_t physical_end;
 /* Number of pages of memory. */
-int physmem = 0;
 
 /* Same things, but for the free (unused by the kernel) memory. */
 static paddr_t physical_freestart, physical_freeend;
 static u_int free_pages;
 
-/* Physical and virtual addresses for some global pages */
-pv_addr_t systempage;		/* exception vectors */
-pv_addr_t irqstack;
-pv_addr_t undstack;
-pv_addr_t abtstack;
-pv_addr_t kernelstack;	/* stack for SVC mode */
-static pv_addr_t kernel_l1pt;	/* First level page table. */
-
 /* Physical address of the message buffer. */
 paddr_t msgbufphys;
 
-extern u_int data_abort_handler_address;
-extern u_int prefetch_abort_handler_address;
-extern u_int undefined_handler_address;
 extern char KERNEL_BASE_phys[];
 extern char etext[], __data_start[], _edata[], __bss_start[], __bss_end__[];
 extern char _end[];
@@ -206,8 +179,6 @@ extern char _end[];
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
-
-extern struct user *proc0paddr;
 
 /*
  * Macros to translate between physical and virtual for a subset of the
@@ -258,6 +229,7 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -288,6 +260,8 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -423,8 +397,7 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init.
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -474,7 +447,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("page ");
 #endif
-	uvm_setpagesize();        /* initialize PAGE_SIZE-dependent variables */
+	uvm_md_init();
 	uvm_page_physload(atop(physical_freestart), atop(physical_freeend),
 	    atop(physical_freestart), atop(physical_freeend),
 	    VM_FREELIST_DEFAULT);
@@ -483,8 +456,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("pmap ");
 #endif
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("done.\n");
@@ -824,7 +796,7 @@ setup_real_page_tables(void)
 
 	printf(mem_fmt, "SDRAM", physical_start, physical_end-1,
 	    KERN_PHYSTOV(physical_start), KERN_PHYSTOV(physical_end-1),
-	    physmem);
+	    (int)physmem);
 	printf(mem_fmt, "text section",
 	       KERN_VTOPHYS(KERNEL_BASE), KERN_VTOPHYS(etext-1),
 	       (vaddr_t)KERNEL_BASE, (vaddr_t)etext-1,
@@ -882,7 +854,7 @@ setup_real_page_tables(void)
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(l1_pa);
+	cpu_setttb(l1_pa, true);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 

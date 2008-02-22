@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64461pcmcia.c,v 1.41 2008/02/17 06:03:13 uwe Exp $	*/
+/*	$NetBSD: hd64461pcmcia.c,v 1.51 2013/11/09 02:54:11 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.41 2008/02/17 06:03:13 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.51 2013/11/09 02:54:11 christos Exp $");
 
 #include "opt_hd64461pcmcia.h"
 
@@ -47,8 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.41 2008/02/17 06:03:13 uwe Exp $
 #include <sys/malloc.h>
 #include <sys/kthread.h>
 #include <sys/boot_flag.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
@@ -63,6 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: hd64461pcmcia.c,v 1.41 2008/02/17 06:03:13 uwe Exp $
 #include <hpcsh/dev/hd64461/hd64461gpioreg.h>
 #include <hpcsh/dev/hd64461/hd64461pcmciavar.h>
 #include <hpcsh/dev/hd64461/hd64461pcmciareg.h>
+
+#include <hpcsh/bus_util.h>	/* for _BUS_SPACE_WRITE(), et cetera */
 
 #include "locators.h"
 
@@ -116,7 +111,7 @@ struct hd64461pcmcia_window_cookie {
 
 struct hd64461pcmcia_channel {
 	struct hd64461pcmcia_softc *ch_parent;
-	struct device *ch_pcmcia;
+	device_t ch_pcmcia;
 	enum controller_channel ch_channel;
 
 	/* memory space */
@@ -146,7 +141,8 @@ struct hd64461pcmcia_event {
 };
 
 struct hd64461pcmcia_softc {
-	struct device sc_dev;
+	device_t sc_dev;
+
 	enum hd64461_module_id sc_module_id;
 	int sc_shutdown;
 
@@ -196,13 +192,12 @@ STATIC struct pcmcia_chip_functions hd64461pcmcia_functions = {
 	hd64461pcmcia_chip_socket_settype,
 };
 
-STATIC int hd64461pcmcia_match(struct device *, struct cfdata *, void *);
-STATIC void hd64461pcmcia_attach(struct device *, struct device *, void *);
+STATIC int hd64461pcmcia_match(device_t, cfdata_t, void *);
+STATIC void hd64461pcmcia_attach(device_t, device_t, void *);
 STATIC int hd64461pcmcia_print(void *, const char *);
-STATIC int hd64461pcmcia_submatch(struct device *, struct cfdata *,
-				  const int *, void *);
+STATIC int hd64461pcmcia_submatch(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(hd64461pcmcia, sizeof(struct hd64461pcmcia_softc),
+CFATTACH_DECL_NEW(hd64461pcmcia, sizeof(struct hd64461pcmcia_softc),
     hd64461pcmcia_match, hd64461pcmcia_attach, NULL, NULL);
 
 STATIC void hd64461pcmcia_attach_channel(struct hd64461pcmcia_softc *,
@@ -244,7 +239,7 @@ _BUS_SPACE_SET_MULTI(_sh3_pcmcia_bug, 1, 8)
 #define	DELAY_MS(x)	delay((x) * 1000)
 
 STATIC int
-hd64461pcmcia_match(struct device *parent, struct cfdata *cf, void *aux)
+hd64461pcmcia_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct hd64461_attach_args *ha = aux;
 
@@ -252,11 +247,14 @@ hd64461pcmcia_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 STATIC void
-hd64461pcmcia_attach(struct device *parent, struct device *self, void *aux)
+hd64461pcmcia_attach(device_t parent, device_t self, void *aux)
 {
 	struct hd64461_attach_args *ha = aux;
-	struct hd64461pcmcia_softc *sc = (struct hd64461pcmcia_softc *)self;
-	int error;
+	struct hd64461pcmcia_softc *sc;
+	int error __diagused;
+
+	sc = device_private(self);
+	sc->sc_dev = self;
 
 	sc->sc_module_id = ha->ha_module_id;
 
@@ -268,19 +266,18 @@ hd64461pcmcia_attach(struct device *parent, struct device *self, void *aux)
 #endif
 	/* Channel 0/1 common CSC event queue */
 	SIMPLEQ_INIT (&sc->sc_event_head);
+
 	error = kthread_create(PRI_NONE, 0, NULL,
 			       hd64461pcmcia_event_thread, sc,
 			       &sc->sc_event_thread,
 			       "%s", device_xname(self));
 	KASSERT(error == 0);
 
-#if !defined(HD64461PCMCIA_REORDER_ATTACH)
-	hd64461pcmcia_attach_channel(sc, CHANNEL_0);
-	hd64461pcmcia_attach_channel(sc, CHANNEL_1);
-#else
-	hd64461pcmcia_attach_channel(sc, CHANNEL_1);
-	hd64461pcmcia_attach_channel(sc, CHANNEL_0);
-#endif
+	config_pending_incr(self);
+
+	/* XXX: TODO */
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 STATIC void
@@ -289,6 +286,15 @@ hd64461pcmcia_event_thread(void *arg)
 	struct hd64461pcmcia_softc *sc = arg;
 	struct hd64461pcmcia_event *pe;
 	int s;
+
+#if !defined(HD64461PCMCIA_REORDER_ATTACH)
+	hd64461pcmcia_attach_channel(sc, CHANNEL_0);
+	hd64461pcmcia_attach_channel(sc, CHANNEL_1);
+#else
+	hd64461pcmcia_attach_channel(sc, CHANNEL_1);
+	hd64461pcmcia_attach_channel(sc, CHANNEL_0);
+#endif
+	config_pending_decr(sc->sc_dev);
 
 	while (!sc->sc_shutdown) {
 		tsleep(sc, PWAIT, "CSC wait", 0);
@@ -315,6 +321,9 @@ hd64461pcmcia_event_thread(void *arg)
 		}
 		splx(s);
 	}
+
+	sc->sc_event_thread = NULL;
+	kthread_exit(0);
 	/* NOTREACHED */
 }
 
@@ -329,7 +338,7 @@ hd64461pcmcia_print(void *arg, const char *pnp)
 }
 
 STATIC int
-hd64461pcmcia_submatch(struct device *parent, struct cfdata *cf,
+hd64461pcmcia_submatch(device_t parent, cfdata_t cf,
 		       const int *ldesc, void *aux)
 {
 	struct pcmciabus_attach_args *paa = aux;
@@ -356,7 +365,7 @@ STATIC void
 hd64461pcmcia_attach_channel(struct hd64461pcmcia_softc *sc,
     enum controller_channel channel)
 {
-	struct device *parent = (struct device *)sc;
+	device_t parent = sc->sc_dev;
 	struct hd64461pcmcia_channel *ch = &sc->sc_ch[channel];
 	struct pcmciabus_attach_args paa;
 	bus_addr_t membase;
@@ -409,8 +418,6 @@ hd64461pcmcia_attach_channel(struct hd64461pcmcia_softc *sc,
 
 	paa.paa_busname = "pcmcia";
 	paa.pch = (pcmcia_chipset_handle_t)ch;
-	paa.iobase = ch->ch_iobase;
-	paa.iosize = ch->ch_iosize;
 
 	ch->ch_pcmcia = config_found_sm_loc(parent, "pcmciabus", NULL, &paa,
 	    hd64461pcmcia_print, hd64461pcmcia_submatch);
@@ -886,11 +893,11 @@ hd64461pcmcia_power_on(enum controller_channel channel)
 {
 	uint8_t r;
 	uint16_t r16;
-	bus_addr_t scr, gcr, isr;
+	bus_addr_t gcr, isr;
 
 	isr = HD64461_PCCISR(channel);
 	gcr = HD64461_PCCGCR(channel);
-	scr = HD64461_PCCSCR(channel);
+	(void)HD64461_PCCSCR(channel);
 
 	/*
 	 * XXX to access attribute memory, this is required.

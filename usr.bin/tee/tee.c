@@ -1,4 +1,4 @@
-/*	$NetBSD: tee.c,v 1.7 2003/08/07 11:16:07 agc Exp $	*/
+/*	$NetBSD: tee.c,v 1.12 2016/09/05 00:40:30 sevan Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)tee.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: tee.c,v 1.7 2003/08/07 11:16:07 agc Exp $");
+__RCSID("$NetBSD: tee.c,v 1.12 2016/09/05 00:40:30 sevan Exp $");
 #endif
 
 #include <sys/types.h>
@@ -57,21 +57,18 @@ __RCSID("$NetBSD: tee.c,v 1.7 2003/08/07 11:16:07 agc Exp $");
 typedef struct _list {
 	struct _list *next;
 	int fd;
-	char *name;
+	const char *name;
 } LIST;
 LIST *head;
 
-void	add __P((int, char *));
-int	main __P((int, char **));
+void	add(int, const char *);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	LIST *p;
-	int n, fd, rval, wval;
-	char *bp;
+	ssize_t rval;
+	int fd;
 	int append, ch, exitval;
 	char *buf;
 #define	BSIZE (8 * 1024)
@@ -95,7 +92,7 @@ main(argc, argv)
 	argv += optind;
 	argc -= optind;
 
-	if ((buf = malloc((size_t)BSIZE)) == NULL)
+	if ((buf = malloc(BSIZE)) == NULL)
 		err(1, "malloc");
 
 	add(STDOUT_FILENO, "stdout");
@@ -110,8 +107,10 @@ main(argc, argv)
 
 	while ((rval = read(STDIN_FILENO, buf, BSIZE)) > 0)
 		for (p = head; p; p = p->next) {
-			n = rval;
-			bp = buf;
+			const char *bp = buf;
+			size_t n = rval;
+			ssize_t wval;
+
 			do {
 				if ((wval = write(p->fd, bp, n)) == -1) {
 					warn("%s", p->name);
@@ -137,13 +136,11 @@ main(argc, argv)
 }
 
 void
-add(fd, name)
-	int fd;
-	char *name;
+add(int fd, const char *name)
 {
 	LIST *p;
 
-	if ((p = malloc((size_t)sizeof(LIST))) == NULL)
+	if ((p = malloc(sizeof(LIST))) == NULL)
 		err(1, "malloc");
 	p->fd = fd;
 	p->name = name;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_ihash.c,v 1.6 2007/06/30 09:37:56 pooka Exp $	*/
+/*	$NetBSD: ntfs_ihash.c,v 1.11 2015/02/20 17:08:13 maxv Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993, 1995
@@ -33,22 +33,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_ihash.c,v 1.6 2007/06/30 09:37:56 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_ihash.c,v 1.11 2015/02/20 17:08:13 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/lock.h>
 #include <sys/vnode.h>
-#include <sys/malloc.h>
-#include <sys/proc.h>
 #include <sys/mount.h>
+#include <sys/mallocvar.h>
 
 #include <fs/ntfs/ntfs.h>
 #include <fs/ntfs/ntfs_inode.h>
 #include <fs/ntfs/ntfs_ihash.h>
-
-MALLOC_JUSTDEFINE(M_NTFSNTHASH, "NTFS nthash", "NTFS ntnode hash tables");
 
 /*
  * Structures associated with inode cacheing.
@@ -63,12 +60,11 @@ kmutex_t ntfs_hashlock;
  * Initialize inode hash table.
  */
 void
-ntfs_nthashinit()
+ntfs_nthashinit(void)
 {
 	mutex_init(&ntfs_hashlock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&ntfs_nthash_lock, MUTEX_DEFAULT, IPL_NONE);
-	ntfs_nthashtbl = HASHINIT(desiredvnodes, M_NTFSNTHASH, M_WAITOK,
-	    &ntfs_nthash);
+	ntfs_nthashtbl = hashinit(desiredvnodes, HASH_LIST, true, &ntfs_nthash);
 }
 
 /*
@@ -76,14 +72,14 @@ ntfs_nthashinit()
  */
 
 void
-ntfs_nthashreinit()
+ntfs_nthashreinit(void)
 {
 	struct ntnode *ip;
 	struct nthashhead *oldhash, *hash;
 	u_long oldmask, mask, val;
 	int i;
 
-	hash = HASHINIT(desiredvnodes, M_NTFSNTHASH, M_WAITOK, &mask);
+	hash = hashinit(desiredvnodes, HASH_LIST, true, &mask);
 
 	mutex_enter(&ntfs_nthash_lock);
 	oldhash = ntfs_nthashtbl;
@@ -98,7 +94,7 @@ ntfs_nthashreinit()
 		}
 	}
 	mutex_exit(&ntfs_nthash_lock);
-	hashdone(oldhash, M_NTFSNTHASH);
+	hashdone(oldhash, HASH_LIST, oldmask);
 }
 
 /*
@@ -106,9 +102,9 @@ ntfs_nthashreinit()
  * on NetBSD.
  */
 void
-ntfs_nthashdone()
+ntfs_nthashdone(void)
 {
-	hashdone(ntfs_nthashtbl, M_NTFSNTHASH);
+	hashdone(ntfs_nthashtbl, HASH_LIST, ntfs_nthash);
 	mutex_destroy(&ntfs_hashlock);
 	mutex_destroy(&ntfs_nthash_lock);
 }
@@ -118,9 +114,7 @@ ntfs_nthashdone()
  * to it. If it is in core, return it, even if it is locked.
  */
 struct ntnode *
-ntfs_nthashlookup(dev, inum)
-	dev_t dev;
-	ino_t inum;
+ntfs_nthashlookup(dev_t dev, ino_t inum)
 {
 	struct ntnode *ip;
 	struct nthashhead *ipp;
@@ -140,8 +134,7 @@ ntfs_nthashlookup(dev, inum)
  * Insert the ntnode into the hash table.
  */
 void
-ntfs_nthashins(ip)
-	struct ntnode *ip;
+ntfs_nthashins(struct ntnode *ip)
 {
 	struct nthashhead *ipp;
 
@@ -156,8 +149,7 @@ ntfs_nthashins(ip)
  * Remove the inode from the hash table.
  */
 void
-ntfs_nthashrem(ip)
-	struct ntnode *ip;
+ntfs_nthashrem(struct ntnode *ip)
 {
 	mutex_enter(&ntfs_nthash_lock);
 	if (ip->i_flag & IN_HASHED) {

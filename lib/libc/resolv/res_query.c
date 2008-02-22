@@ -1,9 +1,26 @@
-/*	$NetBSD: res_query.c,v 1.9 2007/03/30 20:23:05 ghen Exp $	*/
+/*	$NetBSD: res_query.c,v 1.16 2015/02/24 17:56:20 christos Exp $	*/
+
+/*
+ * Portions Copyright (C) 2004, 2005, 2008  Internet Systems Consortium, Inc. ("ISC")
+ * Portions Copyright (C) 1996-2001, 2003  Internet Software Consortium.
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND ISC DISCLAIMS ALL WARRANTIES WITH
+ * REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS.  IN NO EVENT SHALL ISC BE LIABLE FOR ANY SPECIAL, DIRECT,
+ * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+ * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
+ * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ * PERFORMANCE OF THIS SOFTWARE.
+ */
 
 /*
  * Copyright (c) 1988, 1993
  *    The Regents of the University of California.  All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
@@ -12,14 +29,10 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- * 	This product includes software developed by the University of
- * 	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -35,14 +48,14 @@
 
 /*
  * Portions Copyright (c) 1993 by Digital Equipment Corporation.
- * 
+ *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies, and that
  * the name of Digital Equipment Corporation not be used in advertising or
  * publicity pertaining to distribution of the document or software without
  * specific, written prior permission.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND DIGITAL EQUIPMENT CORP. DISCLAIMS ALL
  * WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS.   IN NO EVENT SHALL DIGITAL EQUIPMENT
@@ -74,9 +87,9 @@
 #if defined(LIBC_SCCS) && !defined(lint)
 #ifdef notdef
 static const char sccsid[] = "@(#)res_query.c	8.1 (Berkeley) 6/4/93";
-static const char rcsid[] = "Id: res_query.c,v 1.7.18.1 2005/04/27 05:01:11 sra Exp";
+static const char rcsid[] = "Id: res_query.c,v 1.11 2008/11/14 02:36:51 marka Exp";
 #else
-__RCSID("$NetBSD: res_query.c,v 1.9 2007/03/30 20:23:05 ghen Exp $");
+__RCSID("$NetBSD: res_query.c,v 1.16 2015/02/24 17:56:20 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -137,8 +150,9 @@ res_nquery(res_state statp,
 {
 	u_char buf[MAXPACKET];
 	HEADER *hp = (HEADER *)(void *)answer;
-	int n;
 	u_int oflags;
+	u_char *rdata;
+	int n;
 
 	oflags = statp->_flags;
 
@@ -150,11 +164,17 @@ again:
 #endif
 
 	n = res_nmkquery(statp, QUERY, name, class, type, NULL, 0, NULL,
-			 buf, sizeof(buf));
+			 buf, (int)sizeof(buf));
 #ifdef RES_USE_EDNS0
 	if (n > 0 && (statp->_flags & RES_F_EDNS0ERR) == 0 &&
-	    (statp->options & (RES_USE_EDNS0|RES_USE_DNSSEC)) != 0U)
-		n = res_nopt(statp, n, buf, sizeof(buf), anslen);
+	    (statp->options & (RES_USE_EDNS0|RES_USE_DNSSEC|RES_NSID)) != 0U) {
+		n = res_nopt(statp, n, buf, (int)sizeof(buf), anslen);
+		rdata = &buf[n];
+		if (n > 0 && (statp->options & RES_NSID) != 0U) {
+			n = res_nopt_rdata(statp, n, buf, (int)sizeof(buf),
+			    rdata, NS_OPT_NSID, 0, NULL);
+		}
+	}
 #endif
 	if (n <= 0) {
 #ifdef DEBUG
@@ -164,6 +184,7 @@ again:
 		RES_SET_H_ERRNO(statp, NO_RECOVERY);
 		return (n);
 	}
+
 	n = res_nsend(statp, buf, n, answer, anslen);
 	if (n < 0) {
 #ifdef RES_USE_EDNS0
@@ -377,7 +398,7 @@ res_nquerydomain(res_state statp,
 {
 	char nbuf[MAXDNAME];
 	const char *longname = nbuf;
-	int n, d;
+	size_t n, d;
 
 #ifdef DEBUG
 	if (statp->options & RES_DEBUG)
@@ -394,9 +415,8 @@ res_nquerydomain(res_state statp,
 			RES_SET_H_ERRNO(statp, NO_RECOVERY);
 			return (-1);
 		}
-		n--;
-		if (n >= 0 && name[n] == '.') {
-			strncpy(nbuf, name, (size_t)n);
+		if (n && name[--n] == '.') {
+			strncpy(nbuf, name, n);
 			nbuf[n] = '\0';
 		} else
 			longname = name;
@@ -427,11 +447,10 @@ res_hostalias(const res_state statp, const char *name, char *dst, size_t siz) {
 	if (issetugid())
 		return (NULL);
 	file = getenv("HOSTALIASES");
-	if (file == NULL || (fp = fopen(file, "r")) == NULL)
+	if (file == NULL || (fp = fopen(file, "re")) == NULL)
 		return (NULL);
-	setbuf(fp, NULL);
 	buf[sizeof(buf) - 1] = '\0';
-	while (fgets(buf, sizeof(buf), fp)) {
+	while (fgets(buf, (int)sizeof(buf), fp)) {
 		for (cp1 = buf; *cp1 && !isspace((unsigned char)*cp1); ++cp1)
 			;
 		if (!*cp1)

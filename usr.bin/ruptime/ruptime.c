@@ -1,4 +1,4 @@
-/*	$NetBSD: ruptime.c,v 1.12 2005/09/12 16:16:23 christos Exp $	*/
+/*	$NetBSD: ruptime.c,v 1.15 2011/09/06 18:29:19 joerg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993, 1994
@@ -31,13 +31,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 /*static char sccsid[] = "from: @(#)ruptime.c	8.2 (Berkeley) 4/5/94";*/
-__RCSID("$NetBSD: ruptime.c,v 1.12 2005/09/12 16:16:23 christos Exp $");
+__RCSID("$NetBSD: ruptime.c,v 1.15 2011/09/06 18:29:19 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -55,7 +55,7 @@ __RCSID("$NetBSD: ruptime.c,v 1.12 2005/09/12 16:16:23 christos Exp $");
 #include <tzfile.h>
 #include <unistd.h>
 
-struct hs {
+static struct hs {
 	struct	whod *hs_wd;
 	int	hs_nusers;
 } *hs;
@@ -64,18 +64,16 @@ struct hs {
 #define	WHDRSIZE	(sizeof(struct whod) - \
     sizeof (((struct whod *)0)->wd_we))
 
-size_t nhosts;
-time_t now;
-int rflg = 1;
+static size_t nhosts;
+static time_t now;
+static int rflg = 1;
 
-int	 hscmp(const void *, const void *);
-char	*interval(time_t, char *);
-int	 lcmp(const void *, const void *);
-int	 main(int, char **);
-void	 morehosts(void);
-int	 tcmp(const void *, const void *);
-int	 ucmp(const void *, const void *);
-void	 usage(void);
+static int	 hscmp(const void *, const void *);
+static char	*interval(time_t, const char *);
+static int	 lcmp(const void *, const void *);
+static int	 tcmp(const void *, const void *);
+static int	 ucmp(const void *, const void *);
+__dead static void	 usage(void);
 
 int
 main(int argc, char **argv)
@@ -85,8 +83,8 @@ main(int argc, char **argv)
 	struct whod *wd;
 	struct whoent *we;
 	DIR *dirp;
-	size_t hspace;
-	int aflg, cc, ch, fd, i, maxloadav;
+	size_t hspace, i;
+	int aflg, cc, ch, fd, maxloadav;
 	char buf[sizeof(struct whod)];
 	int (*cmp)(const void *, const void *);
 
@@ -133,7 +131,7 @@ main(int argc, char **argv)
 		cc = read(fd, buf, sizeof(struct whod));
 		(void)close(fd);
 
-		if (cc < WHDRSIZE)
+		if (cc < (int)WHDRSIZE)
 			continue;
 		if (nhosts == hspace) {
 			if ((hs =
@@ -186,8 +184,8 @@ main(int argc, char **argv)
 	exit(0);
 }
 
-char *
-interval(time_t tval, char *updown)
+static char *
+interval(time_t tval, const char *updown)
 {
 	static char resbuf[32];
 	int days, hours, minutes;
@@ -211,19 +209,18 @@ interval(time_t tval, char *updown)
 	return (resbuf);
 }
 
-#define	HS(a)	((struct hs *)(a))
+#define	HS(a)	((const struct hs *)(a))
 
 /* Alphabetical comparison. */
-int
-hscmp(a1, a2)
-	const void *a1, *a2;
+static int
+hscmp(const void *a1, const void *a2)
 {
 	return (rflg *
 	    strcmp(HS(a1)->hs_wd->wd_hostname, HS(a2)->hs_wd->wd_hostname));
 }
 
 /* Load average comparison. */
-int
+static int
 lcmp(const void *a1, const void *a2)
 {
 	if (ISDOWN(HS(a1))) {
@@ -239,7 +236,7 @@ lcmp(const void *a1, const void *a2)
 }
 
 /* Number of users comparison. */
-int
+static int
 ucmp(const void *a1, const void *a2)
 {
 	if (ISDOWN(HS(a1))) {
@@ -254,7 +251,7 @@ ucmp(const void *a1, const void *a2)
 }
 
 /* Uptime comparison. */
-int
+static int
 tcmp(const void *a1, const void *a2)
 {
 	return (rflg * (
@@ -266,7 +263,7 @@ tcmp(const void *a1, const void *a2)
 	));
 }
 
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: ruptime [-alrtu]\n");

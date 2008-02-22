@@ -1,4 +1,4 @@
-/*	$NetBSD: cut.c,v 1.24 2007/12/15 19:44:49 perry Exp $	*/
+/*	$NetBSD: cut.c,v 1.29 2014/02/03 20:22:19 wiz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)cut.c	8.3 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: cut.c,v 1.24 2007/12/15 19:44:49 perry Exp $");
+__RCSID("$NetBSD: cut.c,v 1.29 2014/02/03 20:22:19 wiz Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -76,14 +76,14 @@ main(int argc, char *argv[])
 {
 	FILE *fp;
 	void (*fcn)(FILE *, const char *);
-	int ch;
+	int ch, rval;
 
 	fcn = NULL;
 	(void)setlocale(LC_ALL, "");
 
 	dchar = '\t';			/* default delimiter is \t */
 
-	/* Since we don't support multi-byte characters, the -c and -b 
+	/* Since we don't support multi-byte characters, the -c and -b
 	   options are equivalent, and the -n option is meaningless. */
 	while ((ch = getopt(argc, argv, "b:c:d:f:sn")) != -1)
 		switch(ch) {
@@ -126,20 +126,24 @@ main(int argc, char *argv[])
 	else if (bflag && cflag)
 		usage();
 
+	rval = 0;
 	if (*argv)
 		for (; *argv; ++argv) {
 			if (strcmp(*argv, "-") == 0)
 				fcn(stdin, "stdin");
 			else {
-				if ((fp = fopen(*argv, "r")) == NULL)
-					err(1, "%s", *argv);
-				fcn(fp, *argv);
-				(void)fclose(fp);
+				if ((fp = fopen(*argv, "r"))) {
+					fcn(fp, *argv);
+					(void)fclose(fp);
+				} else {
+					rval = 1;
+					warn("%s", *argv);
+				}
 			}
 		}
 	else
 		fcn(stdin, "stdin");
-	return 0;
+	return(rval);
 }
 
 static size_t autostart, autostop, maxval;
@@ -166,7 +170,7 @@ get_list(char *list)
 	 * This parser is less restrictive than the Draft 9 POSIX spec.
 	 * POSIX doesn't allow lists that aren't in increasing order or
 	 * overlapping lists.  We also handle "-3-5" although there's no
-	 * real reason too.
+	 * real reason to.
 	 */
 	for (; (p = strtok(list, ", \t")) != NULL; list = NULL) {
 		setautostart = start = stop = 0;
@@ -189,9 +193,9 @@ get_list(char *list)
 			}
 		}
 		if (*p)
-			errx(1, "[-cf] list: illegal list value");
+			errx(1, "[-bcf] list: illegal list value");
 		if (!stop || !start)
-			errx(1, "[-cf] list: values may not include zero");
+			errx(1, "[-bcf] list: values may not include zero");
 		if (stop + 1 > numpositions) {
 			size_t newsize;
 			newsize = roundup(stop + 1, ALLOC_CHUNK);
@@ -285,14 +289,14 @@ f_cut(FILE *fp, const char *fname __unused)
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "Usage:\tcut -b list [-n] [file ...]\n"
-	    "\tcut -c list [file1 ...]\n"
-	    "\tcut -f list [-d delim] [-s] [file ...]\n");
+	(void)fprintf(stderr, "usage:\tcut -b list [-n] [file ...]\n"
+	    "\tcut -c list [file ...]\n"
+	    "\tcut -f list [-d string] [-s] [file ...]\n");
 	exit(1);
 }
 
 /* make b_put(): */
-#define CUT_BYTE 1 
+#define CUT_BYTE 1
 #include "x_cut.c"
 #undef CUT_BYTE
 

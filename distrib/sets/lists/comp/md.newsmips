@@ -1,13 +1,13 @@
-# $NetBSD: md.newsmips,v 1.26 2007/02/09 22:49:47 ad Exp $
+# $NetBSD: md.newsmips,v 1.33 2015/12/21 16:49:37 christos Exp $
 ./usr/include/ieeefp.h				comp-c-include
 ./usr/include/newsmips				comp-c-include
 ./usr/include/newsmips/_G_config.h		comp-obsolete		obsolete
 ./usr/include/newsmips/adrsmap.h		comp-c-include
 ./usr/include/newsmips/ansi.h			comp-c-include
-./usr/include/newsmips/aout_machdep.h		comp-c-include
+./usr/include/newsmips/aout_machdep.h		comp-obsolete		obsolete
 ./usr/include/newsmips/asm.h			comp-c-include
 ./usr/include/newsmips/autoconf.h		comp-c-include
-./usr/include/newsmips/bsd-aout.h		comp-c-include
+./usr/include/newsmips/bsd-aout.h		comp-obsolete		obsolete
 ./usr/include/newsmips/bswap.h			comp-c-include
 ./usr/include/newsmips/cdefs.h			comp-c-include
 ./usr/include/newsmips/conf.h			comp-obsolete		obsolete
@@ -19,6 +19,7 @@
 ./usr/include/newsmips/elf_machdep.h		comp-c-include
 ./usr/include/newsmips/endian.h			comp-c-include
 ./usr/include/newsmips/endian_machdep.h		comp-c-include
+./usr/include/newsmips/fenv.h			comp-c-include
 ./usr/include/newsmips/float.h			comp-c-include
 ./usr/include/newsmips/framebuf.h		comp-obsolete		obsolete
 ./usr/include/newsmips/ieee.h			comp-c-include
@@ -57,10 +58,12 @@
 ./usr/include/newsmips/rwlock.h			comp-c-include
 ./usr/include/newsmips/setjmp.h			comp-c-include
 ./usr/include/newsmips/signal.h			comp-c-include
-./usr/include/newsmips/stdarg.h			comp-c-include
+./usr/include/newsmips/sljit_machdep.h		comp-c-include
+./usr/include/newsmips/sljitarch.h		comp-obsolete		obsolete
+./usr/include/newsmips/stdarg.h			comp-obsolete		obsolete
 ./usr/include/newsmips/trap.h			comp-c-include
 ./usr/include/newsmips/types.h			comp-c-include
-./usr/include/newsmips/varargs.h		comp-c-include
+./usr/include/newsmips/varargs.h		comp-obsolete		obsolete
 ./usr/include/newsmips/vmparam.h		comp-c-include
 ./usr/include/newsmips/wchar_limits.h		comp-c-include
 ./usr/include/newsmips/wsconsio.h		comp-c-include

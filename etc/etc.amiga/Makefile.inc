@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.25 2007/07/24 10:49:24 pavel Exp $
+#	$NetBSD: Makefile.inc,v 1.27 2012/07/09 18:12:11 rkujawa Exp $
 #
 #	etc.amiga/Makefile.inc -- amiga-specific etc Makefile targets
 #
@@ -8,11 +8,11 @@
 
 KERNEL_SETS=		GENERIC
 
-EXTRA_KERNELS=		INSTALL ISDN
+EXTRA_KERNELS=		INSTALL ISDN WSCONS
 
 INSTALLATION_DIRS+=	installation/miniroot	\
 			installation/misc
 
 snap_md_post:
-	${MAKESUMS} -t ${RELEASEDIR}/${MACHINE}/installation/misc '*'
-#	${MAKESUMS} -t ${RELEASEDIR}/${MACHINE}/installation/miniroot '*.gz'
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/misc '*'
+#	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/miniroot '*.gz'

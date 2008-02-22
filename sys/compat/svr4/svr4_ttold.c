@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_ttold.c,v 1.31 2007/12/08 18:36:26 dsl Exp $	 */
+/*	$NetBSD: svr4_ttold.c,v 1.34 2014/11/09 18:16:55 maxv Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_ttold.c,v 1.31 2007/12/08 18:36:26 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_ttold.c,v 1.34 2014/11/09 18:16:55 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -50,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_ttold.c,v 1.31 2007/12/08 18:36:26 dsl Exp $");
 #include <sys/socket.h>
 #include <sys/mount.h>
 #include <net/if.h>
-#include <sys/malloc.h>
 #include <sys/ioctl_compat.h>
 
 #include <sys/syscallargs.h>
@@ -181,12 +173,11 @@ bsd_ltchars_to_svr4_ltchars(const struct ltchars *bl, struct svr4_ltchars *sl)
 
 
 int
-svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
+svr4_ttold_ioctl(file_t *fp, struct lwp *l, register_t *retval,
     int fd, u_long cmd, void *data)
 {
 	int			error;
-	int (*ctl)(struct file *, u_long,  void *, struct lwp *) =
-			fp->f_ops->fo_ioctl;
+	int (*ctl)(file_t *, u_long,  void *) = fp->f_ops->fo_ioctl;
 
 	*retval = 0;
 
@@ -195,8 +186,7 @@ svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 		{
 			pid_t pid;
 
-			if ((error = (*ctl)(fp, TIOCGPGRP,
-					    (void *) &pid, l)) != 0)
+			if ((error = (*ctl)(fp, TIOCGPGRP, &pid)) != 0)
 			    return error;
 
 			DPRINTF(("TIOCGPGRP %d\n", pid));
@@ -215,15 +205,14 @@ svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 
 			DPRINTF(("TIOCSPGRP %d\n", pid));
 
-			return (*ctl)(fp, TIOCSPGRP, (void *) &pid, l);
+			return (*ctl)(fp, TIOCSPGRP, &pid);
 		}
 
 	case SVR4_TIOCGSID:
 		{
 			pid_t pid;
 
-			if ((error = (*ctl)(fp, TIOCGSID,
-					    (void *) &pid, l)) != 0)
+			if ((error = (*ctl)(fp, TIOCGSID, &pid)) != 0)
 				return error;
 
 			DPRINTF(("TIOCGSID %d\n", pid));
@@ -236,7 +225,7 @@ svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 			struct sgttyb bs;
 			struct svr4_sgttyb ss;
 
-			error = (*ctl)(fp, TIOCGETP, (void *) &bs, l);
+			error = (*ctl)(fp, TIOCGETP, &bs);
 			if (error)
 				return error;
 
@@ -261,7 +250,7 @@ svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 			print_svr4_sgttyb("SVR4_TIOCSET{P,N}", &ss);
 #endif /* DEBUG_SVR4 */
 			cmd = (cmd == SVR4_TIOCSETP) ? TIOCSETP : TIOCSETN;
-			return (*ctl)(fp, cmd, (void *) &bs, l);
+			return (*ctl)(fp, cmd, &bs);
 		}
 
 	case SVR4_TIOCGETC:
@@ -269,7 +258,7 @@ svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 			struct tchars bt;
 			struct svr4_tchars st;
 
-			error = (*ctl)(fp, TIOCGETC, (void *) &bt, l);
+			error = (*ctl)(fp, TIOCGETC, &bt);
 			if (error)
 				return error;
 
@@ -292,7 +281,7 @@ svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 #ifdef DEBUG_SVR4
 			print_svr4_tchars("SVR4_TIOCSETC", &st);
 #endif /* DEBUG_SVR4 */
-			return (*ctl)(fp, TIOCSETC, (void *) &bt, l);
+			return (*ctl)(fp, TIOCSETC, &bt);
 		}
 
 	case SVR4_TIOCGLTC:
@@ -300,7 +289,7 @@ svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 			struct ltchars bl;
 			struct svr4_ltchars sl;
 
-			error = (*ctl)(fp, TIOCGLTC, (void *) &bl, l);
+			error = (*ctl)(fp, TIOCGLTC, &bl);
 			if (error)
 				return error;
 
@@ -323,14 +312,13 @@ svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 #ifdef DEBUG_SVR4
 			print_svr4_ltchars("SVR4_TIOCSLTC", &sl);
 #endif /* DEBUG_SVR4 */
-			return (*ctl)(fp, TIOCSLTC, (void *) &bl, l);
+			return (*ctl)(fp, TIOCSLTC, &bl);
 		}
 
 	case SVR4_TIOCLGET:
 		{
 			int flags;
-			if ((error = (*ctl)(fp, TIOCLGET,
-			    (void *) &flags, l)) != 0)
+			if ((error = (*ctl)(fp, TIOCLGET, &flags)) != 0)
 				return error;
 			DPRINTF(("SVR4_TIOCLGET %o\n", flags));
 			return copyout(&flags, data, sizeof(flags));
@@ -358,7 +346,7 @@ svr4_ttold_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 			}
 
 			DPRINTF(("SVR4_TIOCL{SET,BIS,BIC} %o\n", flags));
-			return (*ctl)(fp, cmd, (void *) &flags, l);
+			return (*ctl)(fp, cmd, &flags);
 		}
 
 	default:

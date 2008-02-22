@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_pci_space.c,v 1.6 2006/04/10 03:36:03 simonb Exp $ */
+/*	$NetBSD: ixp425_pci_space.c,v 1.14 2018/03/16 17:56:32 ryo Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_pci_space.c,v 1.6 2006/04/10 03:36:03 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_pci_space.c,v 1.14 2018/03/16 17:56:32 ryo Exp $");
 
 /*
  * bus_space PCI functions for ixp425
@@ -46,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_pci_space.c,v 1.6 2006/04/10 03:36:03 simonb 
 
 #include <uvm/uvm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -67,90 +61,90 @@ bs_protos(bs_notimpl);
 
 /* special I/O functions */
 #if 1	/* XXX */
-inline u_int8_t  _pci_io_bs_r_1(void *, bus_space_handle_t, bus_size_t);
-inline u_int16_t _pci_io_bs_r_2(void *, bus_space_handle_t, bus_size_t);
-inline u_int32_t _pci_io_bs_r_4(void *, bus_space_handle_t, bus_size_t);
+uint8_t  _pci_io_bs_r_1(void *, bus_space_handle_t, bus_size_t);
+uint16_t _pci_io_bs_r_2(void *, bus_space_handle_t, bus_size_t);
+uint32_t _pci_io_bs_r_4(void *, bus_space_handle_t, bus_size_t);
 
-inline void _pci_io_bs_w_1(void *, bus_space_handle_t, bus_size_t, u_int8_t);
-inline void _pci_io_bs_w_2(void *, bus_space_handle_t, bus_size_t, u_int16_t);
-inline void _pci_io_bs_w_4(void *, bus_space_handle_t, bus_size_t, u_int32_t);
+void _pci_io_bs_w_1(void *, bus_space_handle_t, bus_size_t, uint8_t);
+void _pci_io_bs_w_2(void *, bus_space_handle_t, bus_size_t, uint16_t);
+void _pci_io_bs_w_4(void *, bus_space_handle_t, bus_size_t, uint32_t);
 #endif
 
 struct bus_space ixp425_pci_bs_tag_template = {
 	/* cookie */
-	(void *) 0,
+	.bs_cookie = (void *) 0,
 
 	/* mapping/unmapping */
-	NULL,
-	NULL,
-	ixp425_pci_bs_subregion,
+	.bs_map = NULL,
+	.bs_unmap = NULL,
+	.bs_subregion = ixp425_pci_bs_subregion,
 
 	/* allocation/deallocation */
-	NULL,
-	NULL,
+	.bs_alloc = NULL,
+	.bs_free = NULL,
 
 	/* get kernel virtual address */
-	NULL,
+	.bs_vaddr = NULL,
 
 	/* mmap bus space for userland */
-	ixp425_pci_bs_mmap,
+	.bs_mmap = ixp425_pci_bs_mmap,
 
 	/* barrier */
-	ixp425_pci_bs_barrier,
+	.bs_barrier = ixp425_pci_bs_barrier,
 
 	/* read (single) */
-	bs_notimpl_bs_r_1,
-	bs_notimpl_bs_r_2,
-	bs_notimpl_bs_r_4,
-	bs_notimpl_bs_r_8,
+	.bs_r_1 = bs_notimpl_bs_r_1,
+	.bs_r_2 = bs_notimpl_bs_r_2,
+	.bs_r_4 = bs_notimpl_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
 
 	/* read multiple */
-	bs_notimpl_bs_rm_1,
-	bs_notimpl_bs_rm_2,
-	bs_notimpl_bs_rm_4,
-	bs_notimpl_bs_rm_8,
+	.bs_rm_1 = bs_notimpl_bs_rm_1,
+	.bs_rm_2 = bs_notimpl_bs_rm_2,
+	.bs_rm_4 = bs_notimpl_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
 
 	/* read region */
-	bs_notimpl_bs_rr_1,
-	bs_notimpl_bs_rr_2,
-	bs_notimpl_bs_rr_4,
-	bs_notimpl_bs_rr_8,
+	.bs_rr_1 = bs_notimpl_bs_rr_1,
+	.bs_rr_2 = bs_notimpl_bs_rr_2,
+	.bs_rr_4 = bs_notimpl_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
 
 	/* write (single) */
-	bs_notimpl_bs_w_1,
-	bs_notimpl_bs_w_2,
-	bs_notimpl_bs_w_4,
-	bs_notimpl_bs_w_8,
+	.bs_w_1 = bs_notimpl_bs_w_1,
+	.bs_w_2 = bs_notimpl_bs_w_2,
+	.bs_w_4 = bs_notimpl_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
 
 	/* write multiple */
-	bs_notimpl_bs_wm_1,
-	bs_notimpl_bs_wm_2,
-	bs_notimpl_bs_wm_4,
-	bs_notimpl_bs_wm_8,
+	.bs_wm_1 = bs_notimpl_bs_wm_1,
+	.bs_wm_2 = bs_notimpl_bs_wm_2,
+	.bs_wm_4 = bs_notimpl_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
 
 	/* write region */
-	bs_notimpl_bs_wr_1,
-	bs_notimpl_bs_wr_2,
-	bs_notimpl_bs_wr_4,
-	bs_notimpl_bs_wr_8,
+	.bs_wr_1 = bs_notimpl_bs_wr_1,
+	.bs_wr_2 = bs_notimpl_bs_wr_2,
+	.bs_wr_4 = bs_notimpl_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
 
 	/* set multiple */
-	bs_notimpl_bs_sm_1,
-	bs_notimpl_bs_sm_2,
-	bs_notimpl_bs_sm_4,
-	bs_notimpl_bs_sm_8,
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
 
 	/* set region */
-	bs_notimpl_bs_sr_1,
-	bs_notimpl_bs_sr_2,
-	bs_notimpl_bs_sr_4,
-	bs_notimpl_bs_sr_8,
+	.bs_sr_1 = bs_notimpl_bs_sr_1,
+	.bs_sr_2 = bs_notimpl_bs_sr_2,
+	.bs_sr_4 = bs_notimpl_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
 
 	/* copy */
-	bs_notimpl_bs_c_1,
-	bs_notimpl_bs_c_2,
-	bs_notimpl_bs_c_4,
-	bs_notimpl_bs_c_8,
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = bs_notimpl_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
 };
 
 void
@@ -263,10 +257,10 @@ ixp425_pci_io_bs_vaddr(void *t, bus_space_handle_t bsh)
 
 /* special I/O functions */
 #if 1	/* _pci_io_bs_{rw}_{124} */
-inline u_int8_t
+uint8_t
 _pci_io_bs_r_1(void *v, bus_space_handle_t ioh, bus_size_t off)
 {
-	u_int32_t data, n, be;
+	uint32_t data, n, be;
 	int s;
 
 	n = (ioh + off) % 4;
@@ -283,10 +277,10 @@ _pci_io_bs_r_1(void *v, bus_space_handle_t ioh, bus_size_t off)
 	return data >> (8 * n);
 }
 
-inline u_int16_t
+uint16_t
 _pci_io_bs_r_2(void *v, bus_space_handle_t ioh, bus_size_t off)
 {
-	u_int32_t data, n, be;
+	uint32_t data, n, be;
 	int s;
 
 	n = (ioh + off) % 4;
@@ -303,10 +297,10 @@ _pci_io_bs_r_2(void *v, bus_space_handle_t ioh, bus_size_t off)
 	return data >> (8 * n);
 }
 
-inline u_int32_t
+uint32_t
 _pci_io_bs_r_4(void *v, bus_space_handle_t ioh, bus_size_t off)
 {
-	u_int32_t data;
+	uint32_t data;
 	int s;
 
 	PCI_CONF_LOCK(s);
@@ -320,11 +314,11 @@ _pci_io_bs_r_4(void *v, bus_space_handle_t ioh, bus_size_t off)
 	return data;
 }
 
-inline void
+void
 _pci_io_bs_w_1(void *v, bus_space_handle_t ioh, bus_size_t off,
-	u_int8_t val)
+	uint8_t val)
 {
-	u_int32_t data, n, be;
+	uint32_t data, n, be;
 	int s;
 
 	n = (ioh + off) % 4;
@@ -340,11 +334,11 @@ _pci_io_bs_w_1(void *v, bus_space_handle_t ioh, bus_size_t off,
 	PCI_CONF_UNLOCK(s);
 }
 
-inline void
+void
 _pci_io_bs_w_2(void *v, bus_space_handle_t ioh, bus_size_t off,
-	u_int16_t val)
+	uint16_t val)
 {
-	u_int32_t data, n, be;
+	uint32_t data, n, be;
 	int s;
 
 	n = (ioh + off) % 4;
@@ -360,9 +354,9 @@ _pci_io_bs_w_2(void *v, bus_space_handle_t ioh, bus_size_t off,
 	PCI_CONF_UNLOCK(s);
 }
 
-inline void
+void
 _pci_io_bs_w_4(void *v, bus_space_handle_t ioh, bus_size_t off,
-	u_int32_t val)
+	uint32_t val)
 {
 	int s;
 
@@ -379,7 +373,7 @@ _pci_io_bs_w_4(void *v, bus_space_handle_t ioh, bus_size_t off,
 /* mem bs */
 int
 ixp425_pci_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
-	      int cacheable, bus_space_handle_t *bshp)
+	      int flags, bus_space_handle_t *bshp)
 {
 	const struct pmap_devmap	*pd;
 
@@ -388,7 +382,6 @@ ixp425_pci_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 	paddr_t		pa;
 	paddr_t		offset;
 	vaddr_t		va;
-	pt_entry_t	*pte;
 
 	if ((pd = pmap_devmap_find_pa(bpa, size)) != NULL) {
 		/* Device was statically mapped. */
@@ -409,12 +402,14 @@ ixp425_pci_mem_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 	/* Store the bus space handle */
 	*bshp = va + offset;
 
+	const int pmapflags =
+	    (flags & (BUS_SPACE_MAP_CACHEABLE|BUS_SPACE_MAP_PREFETCHABLE))
+		? 0
+		: PMAP_NOCACHE;
+
 	/* Now map the pages */
 	for (pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
-		pte = vtopte(va);
-		*pte &= ~L2_S_CACHE_MASK;
-		PTE_SYNC(pte);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, pmapflags);
 	}
 	pmap_update(pmap_kernel());
 

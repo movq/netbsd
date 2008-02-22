@@ -1,4 +1,4 @@
-/*	$NetBSD: mem1.c,v 1.11 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: mem1.c,v 1.18 2016/12/24 17:43:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: mem1.c,v 1.11 2004/06/20 22:20:17 jmc Exp $");
+__RCSID("$NetBSD: mem1.c,v 1.18 2016/12/24 17:43:45 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -87,6 +87,47 @@ fnalloc(const char *s)
 	return (s != NULL ? fnnalloc(s, strlen(s)) : NULL);
 }
 
+struct repl {
+	char *orig;
+	char *repl;
+	size_t len;
+	struct repl *next;
+};
+
+struct repl *replist;
+
+void
+fnaddreplsrcdir(char *arg)
+{
+	struct repl *r = xmalloc(sizeof(*r));
+	
+	r->orig = arg;
+	if ((r->repl = strchr(arg, '=')) == NULL) 
+		err(1, "Bad replacement directory spec `%s'", arg);
+	r->len = r->repl - r->orig;
+	*(r->repl)++ = '\0';
+	if (replist == NULL) {
+		r->next = NULL;
+	} else
+		r->next = replist;
+	replist = r;
+}
+
+const char *
+fnxform(const char *name, size_t len)
+{
+	static char buf[MAXPATHLEN];
+	struct repl *r;
+
+	for (r = replist; r; r = r->next)
+		if (r->len < len && memcmp(name, r->orig, r->len) == 0)
+			break;
+	if (r == NULL)
+		return name;
+	snprintf(buf, sizeof(buf), "%s%s", r->repl, name + r->len);
+	return buf;
+}
+
 const char *
 fnnalloc(const char *s, size_t len)
 {
@@ -111,7 +152,7 @@ fnnalloc(const char *s, size_t len)
 		outclr();
 		outint(fn->fn_id);
 		outchar('s');
-		outstrg(fn->fn_name);
+		outstrg(fnxform(fn->fn_name, fn->fn_len));
 	}
 	return (fn->fn_name);
 }
@@ -132,8 +173,8 @@ getfnid(const char *s)
 /*
  * Memory for declarations and other things which must be available
  * until the end of a block (or the end of the translation unit)
- * are assoziated with the level (mblklev) of the block (or wiht 0).
- * Because these memory is allocated in large blocks associated with
+ * are associated with the level (mblklev) of the block (or with 0).
+ * Because this memory is allocated in large blocks associated with
  * a given level it can be freed easily at the end of a block.
  */
 #define	ML_INC	((size_t)32)		/* Increment for length of *mblks */
@@ -192,17 +233,19 @@ xgetblk(mbl_t **mbp, size_t s)
 	void	*p;
 	size_t	t = 0;
 
-	s = ALIGN(s);
+	s = WORST_ALIGN(s);
 	if ((mb = *mbp) == NULL || mb->nfree < s) {
-		if ((mb = frmblks) == NULL) {
+		if ((mb = frmblks) == NULL || mb->size < s) {
 			if (s > mblklen) {
 				t = mblklen;
 				mblklen = s;
 			}
 			mb = xnewblk();
+#ifndef BLKDEBUG
+			(void)memset(mb->blk, 0, mb->size);
+#endif
 			if (t)
 				mblklen = t;
-			(void)memset(mb->blk, 0, mb->size);
 		} else {
 			frmblks = mb->nxt;
 		}
@@ -214,6 +257,9 @@ xgetblk(mbl_t **mbp, size_t s)
 	p = mb->ffree;
 	mb->ffree = (char *)mb->ffree + s;
 	mb->nfree -= s;
+#ifdef BLKDEBUG
+	(void)memset(p, 0, s);
+#endif
 	return (p);
 }
 
@@ -230,7 +276,7 @@ xfreeblk(mbl_t **fmbp)
 		*fmbp = mb->nxt;
 		mb->nxt = frmblks;
 		frmblks = mb;
-		(void)memset(mb->blk, 0, mb->size - mb->nfree);
+		(void)memset(mb->blk, ZERO, mb->size - mb->nfree);
 	}
 }
 
@@ -250,7 +296,7 @@ initmem(void)
  * Allocate memory associated with level l.
  */
 void *
-getlblk(int l, size_t s)
+getlblk(size_t l, size_t s)
 {
 
 	while (l >= nmblks) {

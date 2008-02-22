@@ -20,7 +20,7 @@
 #ifdef notdef
 static const char rcsid[] = "Id: inet_net_ntop.c,v 1.1.2.1 2002/08/02 02:17:21 marka Exp ";
 #else
-__RCSID("$NetBSD: inet_net_ntop.c,v 1.1 2004/05/20 23:13:02 christos Exp $");
+__RCSID("$NetBSD: inet_net_ntop.c,v 1.4 2017/05/09 02:56:44 maya Exp $");
 #endif
 #endif
 
@@ -49,10 +49,10 @@ __weak_alias(inet_net_ntop,_inet_net_ntop)
 # define SPRINTF(x) sprintf x
 #endif
 
-static char *	inet_net_ntop_ipv4 __P((const u_char *src, int bits,
-					char *dst, size_t size));
-static char *	inet_net_ntop_ipv6 __P((const u_char *src, int bits,
-					char *dst, size_t size));
+static char *	inet_net_ntop_ipv4(const u_char *src, int bits,
+					char *dst, size_t size);
+static char *	inet_net_ntop_ipv6(const u_char *src, int bits,
+					char *dst, size_t size);
 
 /*
  * char *
@@ -65,12 +65,7 @@ static char *	inet_net_ntop_ipv6 __P((const u_char *src, int bits,
  *	Paul Vixie (ISC), July 1996
  */
 char *
-inet_net_ntop(af, src, bits, dst, size)
-	int af;
-	const void *src;
-	int bits;
-	char *dst;
-	size_t size;
+inet_net_ntop(int af, const void *src, int bits, char *dst, size_t size)
 {
 	switch (af) {
 	case AF_INET:
@@ -97,11 +92,7 @@ inet_net_ntop(af, src, bits, dst, size)
  *	Paul Vixie (ISC), July 1996
  */
 static char *
-inet_net_ntop_ipv4(src, bits, dst, size)
-	const u_char *src;
-	int bits;
-	char *dst;
-	size_t size;
+inet_net_ntop_ipv4(const u_char *src, int bits, char *dst, size_t size)
 {
 	char *odst = dst;
 	char *t;
@@ -176,17 +167,18 @@ inet_net_ntop_ipv4(src, bits, dst, size)
  */
 
 static char *
-inet_net_ntop_ipv6(const u_char *src, int bits, char *dst, size_t size) {
+inet_net_ntop_ipv6(const u_char *src, int bits, char *dst, size_t size)
+{
 	u_int	m;
 	int	b;
 	size_t	p;
-	int	zero_s, zero_l, tmp_zero_s, tmp_zero_l;
-	int	i;
+	size_t	zero_s, zero_l, tmp_zero_s, tmp_zero_l;
+	size_t	i;
 	int	is_ipv4 = 0;
 	unsigned char inbuf[16];
 	char outbuf[sizeof("xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:255.255.255.255/128")];
 	char	*cp;
-	int	words;
+	size_t	words;
 	u_char	*s;
 
 	if (bits < 0 || bits > 128) {
@@ -207,7 +199,7 @@ inet_net_ntop_ipv6(const u_char *src, int bits, char *dst, size_t size) {
 		memset(inbuf + p, 0, 16 - p);
 		b = bits % 8;
 		if (b != 0) {
-			m = ~0 << (8 - b);
+			m = ~0u << (8 - b);
 			inbuf[p-1] &= m;
 		}
 

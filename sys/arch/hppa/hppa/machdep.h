@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.h,v 1.9 2005/12/11 12:17:37 christos Exp $	*/
+/*	$NetBSD: machdep.h,v 1.17 2014/03/06 19:02:58 skrll Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,13 +38,20 @@
 
 /*
  * XXX there is a lot of stuff in various headers under 
- * hp700/include and hppa/include, and a lot of one-off 
- * `extern's in C files that could probably be moved here.
+ * hppa/include, and a lot of one-off `extern's in C files
+ * that could probably be moved here.
  */
 
 #ifdef _KERNEL
 
-/*      
+#ifdef _KERNEL_OPT
+#include "opt_useleds.h"
+#endif
+
+/* The primary (aka monarch) CPU HPA */
+extern hppa_hpa_t hppa_mcpuhpa;
+
+/*
  * cache configuration, for most machines is the same
  * numbers, so it makes sense to do defines w/ numbers depending
  * on configured CPU types in the kernel.
@@ -66,6 +66,7 @@ extern vaddr_t virtual_start, virtual_end;
 
 /* Total physical pages, and low reserved physical pages. */
 extern int totalphysmem;
+extern int availphysmem;
 extern int resvmem;
 
 /* BTLB minimum and maximum sizes, in pages. */
@@ -76,17 +77,17 @@ extern u_int hppa_btlb_size_max;
 extern int fpu_present;
 extern u_int fpu_version;
 extern u_int fpu_csw;
-extern paddr_t fpu_cur_uspace;
 void hppa_fpu_bootstrap(u_int);
 void hppa_fpu_flush(struct lwp *);
 void hppa_fpu_emulate(struct trapframe *, struct lwp *, u_int);
 
+/* Set up of space registers and protection IDs */
+void hppa_setvmspace(struct lwp *);
+
 /* Interrupt dispatching. */
-extern u_int hppa_intr_depth;
 void hppa_intr(struct trapframe *);
 
 /* Special pmap functions. */
-void pmap_bootstrap(vaddr_t *, vaddr_t *);
 void pmap_redzone(vaddr_t, vaddr_t, int);
 
 /* Functions to write low memory and the kernel text. */
@@ -105,5 +106,42 @@ void hppa_machine_check(int);
 int hppa_btlb_insert(pa_space_t, vaddr_t, paddr_t, vsize_t *, u_int); 
 int hppa_btlb_reload(void);
 int hppa_btlb_purge(pa_space_t, vaddr_t, vsize_t *);
+
+/* The LEDs. */
+#define	HPPA_LED_NETSND		(0)
+#define	HPPA_LED_NETRCV		(1)
+#define	HPPA_LED_DISK		(2)
+#define	HPPA_LED_HEARTBEAT	(3)
+#define	_HPPA_LEDS_BLINKABLE	(4)
+#define	_HPPA_LEDS_COUNT	(8)
+
+/* This forcefully reboots the machine. */
+void cpu_die(void);
+
+/* These map and unmap page zero. */
+int hppa_pagezero_map(void);
+void hppa_pagezero_unmap(int);
+
+/* Blinking the LEDs. */
+#ifdef USELEDS
+#define	_HPPA_LED_FREQ		(16)
+extern volatile uint8_t *machine_ledaddr;
+extern int machine_ledword, machine_leds;
+extern int _hppa_led_on_cycles[];
+#define hppa_led_blink(i)			\
+do {						\
+	if (_hppa_led_on_cycles[i] == -1)	\
+		_hppa_led_on_cycles[i] = 1;	\
+} while (/* CONSTCOND */ 0)
+#define hppa_led_on(i, ms)			\
+do {						\
+	_hppa_led_on_cycles[i] = (((ms) * _HPPA_LED_FREQ) / 1000); \
+} while (/* CONSTCOND */ 0)
+void hppa_led_ctl(int, int, int);
+#else  /* !USELEDS */
+#define hppa_led_blink(i)
+#define hppa_led_on(i, ms)
+#define hppa_led_ctl(off, on, toggle)
+#endif /* !USELEDS */
 
 #endif /* _KERNEL */

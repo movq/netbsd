@@ -1,4 +1,4 @@
-/*	$NetBSD: promdev.c,v 1.20 2006/07/13 20:03:34 uwe Exp $ */
+/*	$NetBSD: promdev.c,v 1.28 2017/03/25 09:21:21 martin Exp $ */
 
 /*
  * Copyright (c) 1993 Paul Kranenburg
@@ -45,8 +45,10 @@
 #include <machine/pte.h>
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/net.h>
 #include <lib/libkern/libkern.h>
 #include <sparc/stand/common/promdev.h>
+#include <sparc/stand/common/isfloppy.h>
 
 #ifndef BOOTXX
 #include <sys/disklabel.h>
@@ -103,7 +105,6 @@ static int	saveecho;
 #ifndef BOOTXX
 static daddr_t doffset = 0;
 #endif
-
 
 void
 putchar(int c)
@@ -198,18 +199,28 @@ devopen(struct open_file *f, const char *fname, char **file)
 		*file = (char *)fname;
 
 	if (pd->devtype == DT_NET) {
-		bcopy(file_system_nfs, file_system, sizeof(struct fs_ops));
+		nfsys = 1;
+		memcpy(file_system, file_system_nfs,
+		    sizeof(struct fs_ops) * nfsys);
 		if ((error = net_open(pd)) != 0) {
 			printf("Can't open NFS network connection on `%s'\n",
 				prom_bootdevice);
 			return (error);
 		}
 	} else {
-		bcopy(file_system_ufs, file_system, sizeof(struct fs_ops));
+		memcpy(file_system, file_system_ufs,
+		    sizeof(struct fs_ops) * nfsys);
 
 #ifdef NOTDEF_DEBUG
 	printf("devopen: Checking disklabel for RAID partition\n");
 #endif
+
+		/*
+		 * Don't check disklabel on floppy boot since
+		 * reopening it could cause Data Access Exception later.
+		 */
+		if (bootdev_isfloppy(prom_bootdevice))
+			return 0;
 
 		/*
 		 * We need to read from the raw partition (i.e. the
@@ -293,7 +304,7 @@ obp_v0_strategy(void *devdata, int flag, daddr_t dblk, size_t size,
 	dblk += doffset;
 #endif
 #ifdef DEBUG_PROM
-	printf("promstrategy: size=%d dblk=%d\n", size, dblk);
+	printf("promstrategy: size=%zd dblk=%d\n", size, (int)dblk);
 #endif
 
 #define prom_bread(fd, nblk, dblk, buf) \
@@ -315,7 +326,7 @@ obp_v0_strategy(void *devdata, int flag, daddr_t dblk, size_t size,
 	*rsize = dbtob(n);
 
 #ifdef DEBUG_PROM
-	printf("rsize = %x\n", *rsize);
+	printf("rsize = %zx\n", *rsize);
 #endif
 	return (error);
 }
@@ -332,7 +343,7 @@ obp_v2_strategy(void *devdata, int flag, daddr_t dblk, size_t size,
 	dblk += doffset;
 #endif
 #ifdef DEBUG_PROM
-	printf("promstrategy: size=%d dblk=%d\n", size, dblk);
+	printf("promstrategy: size=%zd dblk=%d\n", size, (int)dblk);
 #endif
 
 #ifndef BOOTXX	/* We know it's a block device, so save some space */
@@ -345,7 +356,7 @@ obp_v2_strategy(void *devdata, int flag, daddr_t dblk, size_t size,
 		: prom_write(fd, buf, size);
 
 #ifdef DEBUG_PROM
-	printf("rsize = %x\n", *rsize);
+	printf("rsize = %zx\n", *rsize);
 #endif
 	return (error);
 }
@@ -371,7 +382,7 @@ oldmon_strategy(void *devdata, int flag, daddr_t dblk, size_t size,
 	dblk += doffset;
 #endif
 #ifdef DEBUG_PROM
-	printf("prom_strategy: size=%d dblk=%d\n", size, dblk);
+	printf("prom_strategy: size=%zd dblk=%d\n", size, (int)dblk);
 #endif
 
 	dmabuf = dvma_mapin(buf, size);
@@ -385,7 +396,7 @@ oldmon_strategy(void *devdata, int flag, daddr_t dblk, size_t size,
 	dvma_mapout(dmabuf, size);
 
 #ifdef DEBUG_PROM
-	printf("disk_strategy: xcnt = %x\n", xcnt);
+	printf("disk_strategy: xcnt = %zx\n", xcnt);
 #endif
 
 	if (xcnt <= 0)
@@ -502,7 +513,7 @@ getchar(void)
 	return (prom_getchar());
 }
 
-time_t
+satime_t
 getsecs(void)
 {
 
@@ -551,6 +562,8 @@ getdevtype(int fd, char *name)
 		cp = mygetpropstring(node, "device_type");
 		if (strcmp(cp, "block") == 0)
 			return (DT_BLOCK);
+		if (strcmp(cp, "scsi") == 0)
+			return (DT_BLOCK);
 		else if (strcmp(cp, "network") == 0)
 			return (DT_NET);
 		else if (strcmp(cp, "byte") == 0)
@@ -572,6 +585,8 @@ mygetpropstring(int node, char *name)
 static	char buf[64];
 
 	len = prom_proplen(node, name);
+	if (len > sizeof(buf))
+		len = sizeof(buf)-1;
 	if (len > 0)
 		_prom_getprop(node, name, buf, len);
 	else
@@ -611,7 +626,7 @@ oldmon_iopen(struct promdata *pd)
 	printf("d_dmabytes=%d\n", dip->d_dmabytes);
 	printf("d_localbytes=%d\n", dip->d_localbytes);
 	printf("d_stdcount=%d\n", dip->d_stdcount);
-	printf("d_stdaddrs[%d]=%x\n", bp->ctlrNum, dip->d_stdaddrs[bp->ctlrNum]);
+	printf("d_stdaddrs[%d]=%lx\n", bp->ctlrNum, dip->d_stdaddrs[bp->ctlrNum]);
 	printf("d_devtype=%d\n", dip->d_devtype);
 	printf("d_maxiobytes=%d\n", dip->d_maxiobytes);
 #endif
@@ -632,7 +647,7 @@ oldmon_iopen(struct promdata *pd)
 		si->si_devaddr = oldmon_mapin(dip->d_stdaddrs[si->si_ctlr],
 			dip->d_devbytes, dip->d_devtype);
 #ifdef	DEBUG_PROM
-		printf("prom_iopen: devaddr=0x%x pte=0x%x\n",
+		printf("prom_iopen: devaddr=%p pte=0x%x\n",
 			si->si_devaddr,
 			getpte4((u_long)si->si_devaddr & ~PGOFSET));
 #endif
@@ -641,14 +656,14 @@ oldmon_iopen(struct promdata *pd)
 	if (dip->d_dmabytes) {
 		si->si_dmaaddr = dvma_alloc(dip->d_dmabytes);
 #ifdef	DEBUG_PROM
-		printf("prom_iopen: dmaaddr=0x%x\n", si->si_dmaaddr);
+		printf("prom_iopen: dmaaddr=%p\n", si->si_dmaaddr);
 #endif
 	}
 
 	if (dip->d_localbytes) {
 		si->si_devdata = alloc(dip->d_localbytes);
 #ifdef	DEBUG_PROM
-		printf("prom_iopen: devdata=0x%x\n", si->si_devdata);
+		printf("prom_iopen: devdata=%p\n", si->si_devdata);
 #endif
 	}
 

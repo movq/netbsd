@@ -1,7 +1,7 @@
-/*	$NetBSD: ftpcmd.y,v 1.86 2007/07/22 05:06:45 lukem Exp $	*/
+/*	$NetBSD: ftpcmd.y,v 1.94 2015/08/10 07:45:50 shm Exp $	*/
 
 /*-
- * Copyright (c) 1997-2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997-2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -79,7 +72,7 @@
 #if 0
 static char sccsid[] = "@(#)ftpcmd.y	8.3 (Berkeley) 4/6/94";
 #else
-__RCSID("$NetBSD: ftpcmd.y,v 1.86 2007/07/22 05:06:45 lukem Exp $");
+__RCSID("$NetBSD: ftpcmd.y,v 1.94 2015/08/10 07:45:50 shm Exp $");
 #endif
 #endif /* not lint */
 
@@ -133,7 +126,8 @@ static	void	port_check(const char *, int);
 		LLT	ll;
 		int	i;
 	} u;
-	char   *s;
+	char *s;
+	const char *cs;
 }
 
 %token
@@ -199,7 +193,7 @@ cmd
 	| PASS SP password CRLF
 		{
 			pass($3);
-			memset($3, 0, strlen($3));
+			explicit_memset($3, 0, strlen($3));
 			free($3);
 		}
 
@@ -509,7 +503,7 @@ cmd
 
 	| LIST check_login CRLF
 		{
-			char *argv[] = { INTERNAL_LS, "-lgA", NULL };
+			const char *argv[] = { INTERNAL_LS, "-lgA", NULL };
 			
 			if (CURCLASS_FLAGS_ISSET(hidesymlinks))
 				argv[1] = "-LlgA";
@@ -519,7 +513,7 @@ cmd
 
 	| LIST check_login SP pathname CRLF
 		{
-			char *argv[] = { INTERNAL_LS, "-lgA", NULL, NULL };
+			const char *argv[] = { INTERNAL_LS, "-lgA", NULL, NULL };
 
 			if (CURCLASS_FLAGS_ISSET(hidesymlinks))
 				argv[1] = "-LlgA";
@@ -973,18 +967,24 @@ host_long_port6
 		NUMBER
 		{
 #ifdef INET6
-			char *a, *p;
+			unsigned char buf[16];
 
-			memset(&data_dest, 0, sizeof(data_dest));
+			(void)memset(&data_dest, 0, sizeof(data_dest));
 			data_dest.su_len = sizeof(struct sockaddr_in6);
 			data_dest.su_family = AF_INET6;
-			p = (char *)&data_dest.su_port;
-			p[0] = $39.i; p[1] = $41.i;
-			a = (char *)&data_dest.si_su.su_sin6.sin6_addr;
-			a[0] = $5.i; a[1] = $7.i; a[2] = $9.i; a[3] = $11.i;
-			a[4] = $13.i; a[5] = $15.i; a[6] = $17.i; a[7] = $19.i;
-			a[8] = $21.i; a[9] = $23.i; a[10] = $25.i; a[11] = $27.i;
-			a[12] = $29.i; a[13] = $31.i; a[14] = $33.i; a[15] = $35.i;
+			buf[0] = $39.i; buf[1] = $41.i;
+			(void)memcpy(&data_dest.su_port, buf,
+			    sizeof(data_dest.su_port));
+			buf[0] = $5.i; buf[1] = $7.i;
+			buf[2] = $9.i; buf[3] = $11.i;
+			buf[4] = $13.i; buf[5] = $15.i;
+			buf[6] = $17.i; buf[7] = $19.i;
+			buf[8] = $21.i; buf[9] = $23.i;
+			buf[10] = $25.i; buf[11] = $27.i;
+			buf[12] = $29.i; buf[13] = $31.i;
+			buf[14] = $33.i; buf[15] = $35.i;
+			(void)memcpy(&data_dest.si_su.su_sin6.sin6_addr,
+			    buf, sizeof(data_dest.si_su.su_sin6.sin6_addr));
 			if (his_addr.su_family == AF_INET6) {
 				/* XXX: more sanity checks! */
 				data_dest.su_scope_id = his_addr.su_scope_id;
@@ -1220,89 +1220,89 @@ check_login
 
 struct tab cmdtab[] = {
 				/* From RFC 959, in order defined (5.3.1) */
-	{ "USER", USER, STR1,	1,	"<sp> username" },
-	{ "PASS", PASS, ZSTR1,	1,	"<sp> password" },
-	{ "ACCT", ACCT, STR1,	0,	"(specify account)" },
-	{ "CWD",  CWD,  OSTR,	1,	"[ <sp> directory-name ]" },
-	{ "CDUP", CDUP, NOARGS,	1,	"(change to parent directory)" },
-	{ "SMNT", SMNT, ARGS,	0,	"(structure mount)" },
-	{ "QUIT", QUIT, NOARGS,	1,	"(terminate service)" },
-	{ "REIN", REIN, NOARGS,	0,	"(reinitialize server state)" },
-	{ "PORT", PORT, ARGS,	1,	"<sp> b0, b1, b2, b3, b4, b5" },
-	{ "LPRT", LPRT, ARGS,	1,	"<sp> af, hal, h1, h2, h3,..., pal, p1, p2..." },
-	{ "EPRT", EPRT, STR1,	1,	"<sp> |af|addr|port|" },
-	{ "PASV", PASV, NOARGS,	1,	"(set server in passive mode)" },
-	{ "LPSV", LPSV, ARGS,	1,	"(set server in passive mode)" },
-	{ "EPSV", EPSV, ARGS,	1,	"[<sp> af|ALL]" },
-	{ "TYPE", TYPE, ARGS,	1,	"<sp> [ A | E | I | L ]" },
-	{ "STRU", STRU, ARGS,	1,	"(specify file structure)" },
-	{ "MODE", MODE, ARGS,	1,	"(specify transfer mode)" },
-	{ "RETR", RETR, STR1,	1,	"<sp> file-name" },
-	{ "STOR", STOR, STR1,	1,	"<sp> file-name" },
-	{ "STOU", STOU, STR1,	1,	"<sp> file-name" },
-	{ "APPE", APPE, STR1,	1,	"<sp> file-name" },
-	{ "ALLO", ALLO, ARGS,	1,	"allocate storage (vacuously)" },
-	{ "REST", REST, ARGS,	1,	"<sp> offset (restart command)" },
-	{ "RNFR", RNFR, STR1,	1,	"<sp> file-name" },
-	{ "RNTO", RNTO, STR1,	1,	"<sp> file-name" },
-	{ "ABOR", ABOR, NOARGS,	4,	"(abort operation)" },
-	{ "DELE", DELE, STR1,	1,	"<sp> file-name" },
-	{ "RMD",  RMD,  STR1,	1,	"<sp> path-name" },
-	{ "MKD",  MKD,  STR1,	1,	"<sp> path-name" },
-	{ "PWD",  PWD,  NOARGS,	1,	"(return current directory)" },
-	{ "LIST", LIST, OSTR,	1,	"[ <sp> path-name ]" },
-	{ "NLST", NLST, OSTR,	1,	"[ <sp> path-name ]" },
-	{ "SITE", SITE, SITECMD, 1,	"site-cmd [ <sp> arguments ]" },
-	{ "SYST", SYST, NOARGS,	1,	"(get type of operating system)" },
-	{ "STAT", STAT, OSTR,	4,	"[ <sp> path-name ]" },
-	{ "HELP", HELP, OSTR,	1,	"[ <sp> <string> ]" },
-	{ "NOOP", NOOP, NOARGS,	2,	"" },
+	{ "USER", USER, STR1,	1,	"<sp> username", 0, },
+	{ "PASS", PASS, ZSTR1,	1,	"<sp> password", 0, },
+	{ "ACCT", ACCT, STR1,	0,	"(specify account)", 0, },
+	{ "CWD",  CWD,  OSTR,	1,	"[ <sp> directory-name ]", 0, },
+	{ "CDUP", CDUP, NOARGS,	1,	"(change to parent directory)", 0, },
+	{ "SMNT", SMNT, ARGS,	0,	"(structure mount)", 0, },
+	{ "QUIT", QUIT, NOARGS,	1,	"(terminate service)", 0, },
+	{ "REIN", REIN, NOARGS,	0,	"(reinitialize server state)", 0, },
+	{ "PORT", PORT, ARGS,	1,	"<sp> b0, b1, b2, b3, b4, b5", 0, },
+	{ "LPRT", LPRT, ARGS,	1,	"<sp> af, hal, h1, h2, h3,..., pal, p1, p2...", 0, },
+	{ "EPRT", EPRT, STR1,	1,	"<sp> |af|addr|port|", 0, },
+	{ "PASV", PASV, NOARGS,	1,	"(set server in passive mode)", 0, },
+	{ "LPSV", LPSV, ARGS,	1,	"(set server in passive mode)", 0, },
+	{ "EPSV", EPSV, ARGS,	1,	"[<sp> af|ALL]", 0, },
+	{ "TYPE", TYPE, ARGS,	1,	"<sp> [ A | E | I | L ]", 0, },
+	{ "STRU", STRU, ARGS,	1,	"(specify file structure)", 0, },
+	{ "MODE", MODE, ARGS,	1,	"(specify transfer mode)", 0, },
+	{ "RETR", RETR, STR1,	1,	"<sp> file-name", 0, },
+	{ "STOR", STOR, STR1,	1,	"<sp> file-name", 0, },
+	{ "STOU", STOU, STR1,	1,	"<sp> file-name", 0, },
+	{ "APPE", APPE, STR1,	1,	"<sp> file-name", 0, },
+	{ "ALLO", ALLO, ARGS,	1,	"allocate storage (vacuously)", 0, },
+	{ "REST", REST, ARGS,	1,	"<sp> offset (restart command)", 0, },
+	{ "RNFR", RNFR, STR1,	1,	"<sp> file-name", 0, },
+	{ "RNTO", RNTO, STR1,	1,	"<sp> file-name", 0, },
+	{ "ABOR", ABOR, NOARGS,	4,	"(abort operation)", 0, },
+	{ "DELE", DELE, STR1,	1,	"<sp> file-name", 0, },
+	{ "RMD",  RMD,  STR1,	1,	"<sp> path-name", 0, },
+	{ "MKD",  MKD,  STR1,	1,	"<sp> path-name", 0, },
+	{ "PWD",  PWD,  NOARGS,	1,	"(return current directory)", 0, },
+	{ "LIST", LIST, OSTR,	1,	"[ <sp> path-name ]", 0, },
+	{ "NLST", NLST, OSTR,	1,	"[ <sp> path-name ]", 0, },
+	{ "SITE", SITE, SITECMD, 1,	"site-cmd [ <sp> arguments ]", 0, },
+	{ "SYST", SYST, NOARGS,	1,	"(get type of operating system)", 0, },
+	{ "STAT", STAT, OSTR,	4,	"[ <sp> path-name ]", 0, },
+	{ "HELP", HELP, OSTR,	1,	"[ <sp> <string> ]", 0, },
+	{ "NOOP", NOOP, NOARGS,	2,	"", 0, },
 
 				/* From RFC 2228, in order defined */
-	{ "AUTH", AUTH, STR1,	1,	"<sp> mechanism-name" },
-	{ "ADAT", ADAT, STR1,	1,	"<sp> base-64-data" },
-	{ "PROT", PROT, STR1,	1,	"<sp> prot-code" },
-	{ "PBSZ", PBSZ, ARGS,	1,	"<sp> decimal-integer" },
-	{ "CCC",  CCC,  NOARGS,	1,	"(Disable data protection)" },
-	{ "MIC",  MIC,  STR1,	4,	"<sp> base64data" },
-	{ "CONF", CONF, STR1,	4,	"<sp> base64data" },
-	{ "ENC",  ENC,  STR1,	4,	"<sp> base64data" },
+	{ "AUTH", AUTH, STR1,	1,	"<sp> mechanism-name", 0, },
+	{ "ADAT", ADAT, STR1,	1,	"<sp> base-64-data", 0, },
+	{ "PROT", PROT, STR1,	1,	"<sp> prot-code", 0, },
+	{ "PBSZ", PBSZ, ARGS,	1,	"<sp> decimal-integer", 0, },
+	{ "CCC",  CCC,  NOARGS,	1,	"(Disable data protection)", 0, },
+	{ "MIC",  MIC,  STR1,	4,	"<sp> base64data", 0, },
+	{ "CONF", CONF, STR1,	4,	"<sp> base64data", 0, },
+	{ "ENC",  ENC,  STR1,	4,	"<sp> base64data", 0, },
 
 				/* From RFC 2389, in order defined */
-	{ "FEAT", FEAT, NOARGS,	1,	"(display extended features)" },
-	{ "OPTS", OPTS, STR1,	1,	"<sp> command [ <sp> options ]" },
+	{ "FEAT", FEAT, NOARGS,	1,	"(display extended features)", 0, },
+	{ "OPTS", OPTS, STR1,	1,	"<sp> command [ <sp> options ]", 0, },
 
 				/* From RFC 3659, in order defined */
-	{ "MDTM", MDTM, OSTR,	1,	"<sp> path-name" },
-	{ "SIZE", SIZE, OSTR,	1,	"<sp> path-name" },
-	{ "MLST", MLST, OSTR,	2,	"[ <sp> path-name ]" },
-	{ "MLSD", MLSD, OSTR,	1,	"[ <sp> directory-name ]" },
+	{ "MDTM", MDTM, OSTR,	1,	"<sp> path-name", 0, },
+	{ "SIZE", SIZE, OSTR,	1,	"<sp> path-name", 0, },
+	{ "MLST", MLST, OSTR,	2,	"[ <sp> path-name ]", 0, },
+	{ "MLSD", MLSD, OSTR,	1,	"[ <sp> directory-name ]", 0, },
 
 				/* obsolete commands */
-	{ "MAIL", MAIL, OSTR,	0,	"(mail to user)" },
-	{ "MLFL", MLFL, OSTR,	0,	"(mail file)" },
-	{ "MRCP", MRCP, STR1,	0,	"(mail recipient)" },
-	{ "MRSQ", MRSQ, OSTR,	0,	"(mail recipient scheme question)" },
-	{ "MSAM", MSAM, OSTR,	0,	"(mail send to terminal and mailbox)" },
-	{ "MSND", MSND, OSTR,	0,	"(mail send to terminal)" },
-	{ "MSOM", MSOM, OSTR,	0,	"(mail send to terminal or mailbox)" },
-	{ "XCUP", CDUP, NOARGS,	1,	"(change to parent directory)" },
-	{ "XCWD", CWD,  OSTR,	1,	"[ <sp> directory-name ]" },
-	{ "XMKD", MKD,  STR1,	1,	"<sp> path-name" },
-	{ "XPWD", PWD,  NOARGS,	1,	"(return current directory)" },
-	{ "XRMD", RMD,  STR1,	1,	"<sp> path-name" },
+	{ "MAIL", MAIL, OSTR,	0,	"(mail to user)", 0, },
+	{ "MLFL", MLFL, OSTR,	0,	"(mail file)", 0, },
+	{ "MRCP", MRCP, STR1,	0,	"(mail recipient)", 0, },
+	{ "MRSQ", MRSQ, OSTR,	0,	"(mail recipient scheme question)", 0, },
+	{ "MSAM", MSAM, OSTR,	0,	"(mail send to terminal and mailbox)", 0, },
+	{ "MSND", MSND, OSTR,	0,	"(mail send to terminal)", 0, },
+	{ "MSOM", MSOM, OSTR,	0,	"(mail send to terminal or mailbox)", 0, },
+	{ "XCUP", CDUP, NOARGS,	1,	"(change to parent directory)", 0, },
+	{ "XCWD", CWD,  OSTR,	1,	"[ <sp> directory-name ]", 0, },
+	{ "XMKD", MKD,  STR1,	1,	"<sp> path-name", 0, },
+	{ "XPWD", PWD,  NOARGS,	1,	"(return current directory)", 0, },
+	{ "XRMD", RMD,  STR1,	1,	"<sp> path-name", 0, },
 
-	{  NULL,  0,	0,	0,	0 }
+	{  NULL,  0,	0,	0,	0, 0, }
 };
 
 struct tab sitetab[] = {
-	{ "CHMOD",	CHMOD,	NSTR,	1,	"<sp> mode <sp> file-name" },
-	{ "HELP",	HELP,	OSTR,	1,	"[ <sp> <string> ]" },
-	{ "IDLE",	IDLE,	ARGS,	1,	"[ <sp> maximum-idle-time ]" },
-	{ "RATEGET",	RATEGET,OSTR,	1,	"[ <sp> get-throttle-rate ]" },
-	{ "RATEPUT",	RATEPUT,OSTR,	1,	"[ <sp> put-throttle-rate ]" },
-	{ "UMASK",	UMASK,	ARGS,	1,	"[ <sp> umask ]" },
-	{ NULL,		0,	0,	0,	NULL }
+	{ "CHMOD",	CHMOD,	NSTR,	1,	"<sp> mode <sp> file-name", 0, },
+	{ "HELP",	HELP,	OSTR,	1,	"[ <sp> <string> ]", 0, },
+	{ "IDLE",	IDLE,	ARGS,	1,	"[ <sp> maximum-idle-time ]", 0, },
+	{ "RATEGET",	RATEGET,OSTR,	1,	"[ <sp> get-throttle-rate ]", 0, },
+	{ "RATEPUT",	RATEPUT,OSTR,	1,	"[ <sp> put-throttle-rate ]", 0, },
+	{ "UMASK",	UMASK,	ARGS,	1,	"[ <sp> umask ]", 0, },
+	{ NULL,		0,	0,	0,	0, 0, }
 };
 
 /*
@@ -1362,10 +1362,14 @@ lookup(struct tab *p, const char *cmd)
 #include <arpa/telnet.h>
 
 /*
- * getline - a hacked up version of fgets to ignore TELNET escape codes.
+ * get_line - a hacked up version of fgets to ignore TELNET escape codes.
+ *	`s' is the buffer to read into.
+ *	`n' is the 1 less than the size of the buffer, to allow trailing NUL
+ *	`iop' is the FILE to read from.
+ *	Returns 0 on success, -1 on EOF, -2 if the command was too long.
  */
-char *
-getline(char *s, int n, FILE *iop)
+int
+get_line(char *s, int n, FILE *iop)
 {
 	int c;
 	char *cs;
@@ -1379,7 +1383,7 @@ getline(char *s, int n, FILE *iop)
 			if (ftpd_debug)
 				syslog(LOG_DEBUG, "command: %s", s);
 			tmpline[0] = '\0';
-			return(s);
+			return(0);
 		}
 		if (c == 0)
 			tmpline[0] = '\0';
@@ -1418,11 +1422,25 @@ getline(char *s, int n, FILE *iop)
 		    }
 		}
 		*cs++ = c;
-		if (--n <= 0 || c == '\n')
+		if (--n <= 0) {
+			/*
+			 * If command doesn't fit into buffer, discard the
+			 * rest of the command and indicate truncation.
+			 * This prevents the command to be split up into
+			 * multiple commands.
+			 */
+			if (ftpd_debug)
+				syslog(LOG_DEBUG,
+				    "command too long, last char: %d", c);
+			while (c != '\n' && (c = getc(iop)) != EOF)
+				continue;
+			return (-2);
+		}
+		if (c == '\n')
 			break;
 	}
 	if (c == EOF && cs == s)
-		return (NULL);
+		return (-1);
 	*cs++ = '\0';
 	if (ftpd_debug) {
 		if ((curclass.type != CLASS_GUEST &&
@@ -1444,7 +1462,7 @@ getline(char *s, int n, FILE *iop)
 			syslog(LOG_DEBUG, "command: %.*s", len, s);
 		}
 	}
-	return (s);
+	return (0);
 }
 
 void
@@ -1458,15 +1476,20 @@ ftp_handle_line(char *cp)
 void
 ftp_loop(void)
 {
+	int ret;
 
 	while (1) {
 		(void) alarm(curclass.timeout);
-		if (getline(cbuf, sizeof(cbuf)-1, stdin) == NULL) {
+		ret = get_line(cbuf, sizeof(cbuf)-1, stdin);
+		(void) alarm(0);
+		if (ret == -1) {
 			reply(221, "You could at least say goodbye.");
 			dologout(0);
+		} else if (ret == -2) {
+			reply(500, "Command too long.");
+		} else {
+			ftp_handle_line(cbuf);
 		}
-		(void) alarm(0);
-		ftp_handle_line(cbuf);
 	}
 	/*NOTREACHED*/
 }
@@ -1513,7 +1536,7 @@ yylex(void)
 				break;
 			}
 			state = p->state;
-			yylval.s = p->name;
+			yylval.cs = p->name;
 			return (p->token);
 		}
 		break;
@@ -1538,7 +1561,7 @@ yylex(void)
 				break;
 			}
 			state = p->state;
-			yylval.s = p->name;
+			yylval.cs = p->name;
 			return (p->token);
 		}
 		break;
@@ -1610,7 +1633,7 @@ yylex(void)
 			c = cmdp[cpos];
 			cmdp[cpos] = '\0';
 			yylval.u.i = atoi(cp);
-			yylval.u.ll = STRTOLL(cp, (char **)NULL, 10);
+			yylval.u.ll = STRTOLL(cp, NULL, 10);
 			cmdp[cpos] = c;
 			return (NUMBER);
 		}
@@ -1708,7 +1731,7 @@ yylex(void)
 
 /* ARGSUSED */
 void
-yyerror(char *s)
+yyerror(const char *s)
 {
 	char *cp;
 
@@ -1725,7 +1748,7 @@ help(struct tab *ctab, const char *s)
 {
 	struct tab *c;
 	int width, NCMDS;
-	char *htype;
+	const char *htype;
 
 	if (ctab == sitetab)
 		htype = "SITE ";

@@ -1,4 +1,4 @@
-/* $NetBSD: main.c,v 1.36 2007/07/16 17:06:52 pooka Exp $	 */
+/* $NetBSD: main.c,v 1.52 2015/07/28 05:09:34 dholland Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -32,11 +32,12 @@
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/mount.h>
-#include <ufs/ufs/dinode.h>
-#include <ufs/ufs/ufsmount.h>
+
 #include <ufs/lfs/lfs.h>
+#include <ufs/lfs/lfs_accessors.h>
 
 #include <fstab.h>
+#include <stdbool.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,8 +51,9 @@
 #include "fsck.h"
 #include "extern.h"
 #include "fsutil.h"
+#include "exitvalues.h"
 
-int returntosingle;
+volatile sig_atomic_t returntosingle = 0;
 
 static int argtoi(int, const char *, const char *, int);
 static int checkfilesys(const char *, char *, long, int);
@@ -72,9 +74,12 @@ int
 main(int argc, char **argv)
 {
 	int ch;
-	int ret = 0;
-	const char *optstring = "b:dfi:m:npPqy";
+	int ret = FSCK_EXIT_OK;
+	const char *optstring = "b:dfi:m:npPqUy";
+	bool reallypreen;
 
+	reallypreen = false;
+	ckfinish = ckfini;
 	skipclean = 1;
 	exitonfail = 0;
 	idaddr = 0x0;
@@ -95,6 +100,7 @@ main(int argc, char **argv)
 			break;
 		case 'f':
 			skipclean = 0;
+			reallypreen = true;
 			break;
 		case 'i':
 			idaddr = strtol(optarg, NULL, 0);
@@ -102,7 +108,7 @@ main(int argc, char **argv)
 		case 'm':
 			lfmode = argtoi('m', "mode", optarg, 8);
 			if (lfmode & ~07777)
-				err(1, "bad mode to -m: %o\n", lfmode);
+				err(1, "bad mode to -m: %o", lfmode);
 			printf("** lost+found creation mode %o\n", lfmode);
 			break;
 
@@ -121,7 +127,11 @@ main(int argc, char **argv)
 		case 'q':
 			quiet++;
 			break;
-
+#ifndef SMALL
+		case 'U':
+			Uflag++;
+			break;
+#endif
 		case 'y':
 			yflag++;
 			nflag = 0;
@@ -138,18 +148,41 @@ main(int argc, char **argv)
 	if (!argc)
 		usage();
 
+	/*
+	 * Don't do anything in preen mode. This is a replacement for
+	 * version 1.111 of src/distrib/utils/sysinst/disks.c, which
+	 * disabled fsck on installer-generated lfs partitions. That
+	 * isn't the right way to do it; better to run fsck but have
+	 * it not do anything, so that when the issues in fsck get
+	 * resolved it can be turned back on.
+	 *
+	 * If you really want to run fsck in preen mode you can do:
+	 *    fsck_lfs -p -f image
+	 *
+	 * This was prompted by
+	 * http://mail-index.netbsd.org/tech-kern/2010/02/09/msg007306.html.
+	 *
+	 * It would be nice if someone prepared a more detailed report
+	 * of the problems.
+	 *
+	 * XXX.
+	 */
+	if (preen && !reallypreen) {
+		return ret;
+	}
+
 	if (signal(SIGINT, SIG_IGN) != SIG_IGN)
 		(void) signal(SIGINT, catch);
 	if (preen)
 		(void) signal(SIGQUIT, catchquit);
 
-	while (argc-- > 0)
-		(void) checkfilesys(blockcheck(*argv++), 0, 0L, 0);
+	while (argc-- > 0) {
+		int nret = checkfilesys(blockcheck(*argv++), 0, 0L, 0);
+		if (ret < nret)
+			ret = nret;
+	}
 
-	if (returntosingle)
-		ret = 2;
-
-	exit(ret);
+	return returntosingle ? FSCK_EXIT_UNRESOLVED : ret;
 }
 
 static int
@@ -160,7 +193,7 @@ argtoi(int flag, const char *req, const char *str, int base)
 
 	ret = (int) strtol(str, &cp, base);
 	if (cp == str || *cp)
-		err(1, "-%c flag requires a %s\n", flag, req);
+		err(FSCK_EXIT_USAGE, "-%c flag requires a %s", flag, req);
 	return (ret);
 }
 
@@ -185,7 +218,7 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 		if (preen)
 			pfatal("CAN'T CHECK FILE SYSTEM.");
 	case -1:
-		return (0);
+		return FSCK_EXIT_OK;
 	}
 
 	/*
@@ -193,7 +226,7 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 	 * else.
 	 */
 	if (preen == 0) {
-		printf("** Last Mounted on %s\n", fs->lfs_fsmnt);
+		printf("** Last Mounted on %s\n", lfs_sb_getfsmnt(fs));
 		if (hotroot())
 			printf("** Root file system\n");
 		/*
@@ -277,9 +310,9 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 	/*
 	 * print out summary statistics
 	 */
-	pwarn("%llu files, %lld used, %lld free\n",
-	    (unsigned long long)n_files, (long long) n_blks,
-	    (long long) fs->lfs_bfree);
+	pwarn("%ju files, %jd used, %jd free\n",
+	    (uintmax_t) n_files, (intmax_t) n_blks,
+	    (intmax_t) lfs_sb_getbfree(fs));
 
 	ckfini(1);
 
@@ -287,7 +320,7 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 	free(statemap);
 	free((char *)lncntp);
 	if (!fsmodified) {
-		return (0);
+		return FSCK_EXIT_OK;
 	}
 	if (!preen)
 		printf("\n***** FILE SYSTEM WAS MODIFIED *****\n");
@@ -301,24 +334,22 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 		 */
 		if (statvfs("/", &stfs_buf) == 0) {
 			long flags = stfs_buf.f_flag;
-			struct ufs_args args;
-			int ret;
+			struct ulfs_args args;
 
 			if (flags & MNT_RDONLY) {
 				args.fspec = 0;
 				flags |= MNT_UPDATE | MNT_RELOAD;
-				ret = mount(MOUNT_LFS, "/", flags,
-				    &args, sizeof args);
-				if (ret == 0)
-					return (0);
+				if (mount(MOUNT_LFS, "/", flags,
+				    &args, sizeof args) == 0)
+					return FSCK_EXIT_OK;
 			}
 		}
 		if (!preen)
 			printf("\n***** REBOOT NOW *****\n");
 		sync();
-		return (4);
+		return FSCK_EXIT_ROOT_CHANGED;
 	}
-	return (0);
+	return FSCK_EXIT_OK;
 }
 
 static void
@@ -326,7 +357,7 @@ usage(void)
 {
 
 	(void) fprintf(stderr,
-	    "usage: %s [-dfpq] [-b block] [-m mode] [-y | -n] filesystem ...\n",
+	    "Usage: %s [-dfpqU] [-b block] [-m mode] [-y | -n] filesystem ...\n",
 	    getprogname());
-	exit(1);
+	exit(FSCK_EXIT_USAGE);
 }

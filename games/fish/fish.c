@@ -1,4 +1,4 @@
-/*	$NetBSD: fish.c,v 1.18 2007/12/15 19:44:40 perry Exp $	*/
+/*	$NetBSD: fish.c,v 1.23 2018/03/05 04:59:54 eadler Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)fish.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: fish.c,v 1.18 2007/12/15 19:44:40 perry Exp $");
+__RCSID("$NetBSD: fish.c,v 1.23 2018/03/05 04:59:54 eadler Exp $");
 #endif
 #endif /* not lint */
 
@@ -67,32 +67,32 @@ __RCSID("$NetBSD: fish.c,v 1.18 2007/12/15 19:44:40 perry Exp $");
 #define	COMPUTER	0
 #define	OTHER(a)	(1 - (a))
 
-const char *const cards[] = {
+static const char *const cards[] = {
 	"A", "2", "3", "4", "5", "6", "7",
 	"8", "9", "10", "J", "Q", "K", NULL,
 };
 #define	PRC(card)	(void)printf(" %s", cards[card])
 
-int promode;
-int asked[RANKS], comphand[RANKS], deck[TOTCARDS];
-int userasked[RANKS], userhand[RANKS];
-int curcard = TOTCARDS;
+static int promode;
+static int asked[RANKS], comphand[RANKS], deck[TOTCARDS];
+static int userasked[RANKS], userhand[RANKS];
+static int curcard = TOTCARDS;
 
-void	chkwinner(int, const int *);
-int	compmove(void);
-int	countbooks(const int *);
-int	countcards(const int *);
-int	drawcard(int, int *);
-int	gofish(int, int, int *);
-void	goodmove(int, int, int *, int *);
-void	init(void);
-void	instructions(void);
-int	nrandom(int);
-void	printhand(const int *);
-void	printplayer(int);
-int	promove(void);
-void	usage(void) __dead;
-int	usermove(void);
+static void chkwinner(int, const int *);
+static int compmove(void);
+static int countbooks(const int *);
+static int countcards(const int *);
+static int drawcard(int, int *);
+static int gofish(int, int, int *);
+static void goodmove(int, int, int *, int *);
+static void init(void);
+static void instructions(void);
+static int nrandom(int);
+static void printhand(const int *);
+static void printplayer(int);
+static int promove(void);
+static void usage(void) __dead;
+static int usermove(void);
 
 int
 main(int argc, char **argv)
@@ -112,7 +112,7 @@ main(int argc, char **argv)
 			usage();
 		}
 
-	srandom(time((time_t *)NULL));
+	srandom(time(NULL));
 	instructions();
 	init();
 
@@ -146,7 +146,7 @@ istart:		for (;;) {
 	/* NOTREACHED */
 }
 
-int
+static int
 usermove(void)
 {
 	int n;
@@ -171,9 +171,14 @@ usermove(void)
 			continue;
 		}
 		buf[strlen(buf) - 1] = '\0';
-		if (!strcasecmp(buf, "p") && !promode) {
-			promode = 1;
-			(void)printf("Entering pro mode.\n");
+		if (!strcasecmp(buf, "p")) {
+			if (!promode) {
+				promode = 1;
+				printf("Entering pro mode.\n");
+			}
+			else {
+				printf("Already in pro mode.\n");
+			}
 			continue;
 		}
 		if (!strcasecmp(buf, "quit"))
@@ -186,10 +191,15 @@ usermove(void)
 			continue;
 		}
 		n = p - cards;
-		if (userhand[n]) {
+		if (userhand[n] <= 3) {
 			userasked[n] = 1;
 			return(n);
 		}
+		if (userhand[n] == 4) {
+			printf("You already have all of those.\n");
+			continue;
+		}
+
 		if (nrandom(3) == 1)
 			(void)printf("You don't have any of those!\n");
 		else
@@ -201,7 +211,7 @@ usermove(void)
 	/* NOTREACHED */
 }
 
-int
+static int
 compmove(void)
 {
 	static int lmove;
@@ -219,7 +229,7 @@ compmove(void)
 	return(lmove);
 }
 
-int
+static int
 promove(void)
 {
 	int i, max;
@@ -258,7 +268,7 @@ promove(void)
 	/* NOTREACHED */
 }
 
-int
+static int
 drawcard(int player, int *hand)
 {
 	int card;
@@ -277,7 +287,7 @@ drawcard(int player, int *hand)
 	return(card);
 }
 
-int
+static int
 gofish(int askedfor, int player, int *hand)
 {
 	printplayer(OTHER(player));
@@ -292,7 +302,7 @@ gofish(int askedfor, int player, int *hand)
 	return(0);
 }
 
-void
+static void
 goodmove(int player, int move, int *hand, int *opphand)
 {
 	printplayer(OTHER(player));
@@ -314,7 +324,7 @@ goodmove(int player, int move, int *hand, int *opphand)
 	(void)printf("get another guess!\n");
 }
 
-void
+static void
 chkwinner(int player, const int *hand)
 {
 	int cb, i, ub;
@@ -342,7 +352,7 @@ chkwinner(int player, const int *hand)
 	exit(0);
 }
 
-void
+static void
 printplayer(int player)
 {
 	switch (player) {
@@ -355,7 +365,7 @@ printplayer(int player)
 	}
 }
 
-void
+static void
 printhand(const int *hand)
 {
 	int book, i, j;
@@ -375,7 +385,7 @@ printhand(const int *hand)
 	(void)putchar('\n');
 }
 
-int
+static int
 countcards(const int *hand)
 {
 	int i, count;
@@ -385,7 +395,7 @@ countcards(const int *hand)
 	return(count);
 }
 
-int
+static int
 countbooks(const int *hand)
 {
 	int i, count;
@@ -401,7 +411,7 @@ countbooks(const int *hand)
 	return(count);
 }
 
-void
+static void
 init(void)
 {
 	int i, j, temp;
@@ -422,14 +432,14 @@ init(void)
 	}
 }
 
-int
+static int
 nrandom(int n)
 {
 
 	return((int)random() % n);
 }
 
-void
+static void
 instructions(void)
 {
 	int input;
@@ -470,7 +480,7 @@ instructions(void)
 	while ((input = getchar()) != EOF && input != '\n');
 }
 
-void
+static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: fish [-p]\n");

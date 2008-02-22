@@ -1,4 +1,4 @@
-/*	$NetBSD: scan.c,v 1.26 2007/12/20 20:15:59 christos Exp $	*/
+/*	$NetBSD: scan.c,v 1.32 2016/03/12 02:26:40 dholland Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -166,11 +166,6 @@ extern time_t scantime;		/* time of this scan */
 extern int trace;		/* trace directories */
 extern int newonly;		/* new files only */
 
-#ifdef RCSSTAT
-extern char *rcs_branch;
-extern int candorcs;
-#endif
-
 /*************************************************
  ***   STATIC   R O U T I N E S    ***
  *************************************************/
@@ -218,7 +213,7 @@ parserelease(TREELIST ** tlp, char *relname, char *args)
 	int opno;
 	char *nextrel;
 
-	tl = (TREELIST *) malloc(sizeof(TREELIST));
+	tl = malloc(sizeof(TREELIST));
 	if ((*tlp = tl) == NULL)
 		goaway("Couldn't allocate TREELIST");
 	tl->TLnext = NULL;
@@ -297,10 +292,10 @@ getrelease(char *release)
 				rewound = TRUE;
 				continue;
 			}
-			q = index(p, '\n');
+			q = strchr(p, '\n');
 			if (q)
 				*q = 0;
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			q = nxtarg(&p, " \t");
 			if (strcmp(q, release) != 0)
@@ -315,7 +310,9 @@ getrelease(char *release)
 					free(frelease);
 				return (FALSE);
 			} else
-				(void) chdir(basedir);
+				if (chdir(basedir) < 0)
+					goaway("Can't chdir to %s (%s)",
+					    basedir, strerror(errno));
 			tl->TLnext = listTL;
 			listTL = tl;
 			if (release == NULL)
@@ -357,10 +354,10 @@ makescanlists(void)
 	f = fopen(buf, "r");
 	if (f != NULL) {
 		while ((p = fgets(buf, sizeof(buf), f)) != NULL) {
-			q = index(p, '\n');
+			q = strchr(p, '\n');
 			if (q)
 				*q = 0;
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			q = nxtarg(&p, " \t");
 			(void) parserelease(&tl, q, p);
@@ -368,8 +365,11 @@ makescanlists(void)
 				prefix = saveprefix;
 			if (prefix != NULL) {
 				if (chdir(prefix) < 0)
-					goaway("Can't chdir to %s", prefix);
-				(void) chdir(basedir);
+					goaway("Can't chdir to %s (%s)",
+					    prefix, strerror(errno));
+				if (chdir(basedir) < 0)
+					goaway("Can't chdir to %s (%s)",
+					    basedir, strerror(errno));
 			}
 			makescan(tl->TLlist, tl->TLscan);
 			free(tl);
@@ -378,7 +378,7 @@ makescanlists(void)
 		(void) fclose(f);
 	}
 	if (count == 0)
-		makescan((char *) NULL, (char *) NULL);
+		makescan(NULL, NULL);
 }
 
 static int
@@ -432,7 +432,7 @@ getscan(char *listfile, char *scanfile)
 {
 	listT = NULL;
 	if (!getscanfile(scanfile)) {	/* check for pre-scanned file list */
-		scantime = time((time_t *) NULL);
+		scantime = time(NULL);
 		doscan(listfile);	/* read list file and scan disk */
 	}
 }
@@ -455,7 +455,7 @@ doscan(char *listfile)
 	readlistfile(buf);	/* get contents of list file */
 	(void) Tprocess(upgT, listone, NULL);	/* build list of files
 						 * specified */
-	cdprefix((char *) NULL);
+	cdprefix(NULL);
 	Tfree(&upgT);
 	Tfree(&flagsT);
 	Tfree(&omitT);
@@ -481,9 +481,9 @@ readlistfile(char *fname)
 		goaway("Can't read list file %s", fname);
 	cdprefix(prefix);
 	while ((p = fgets(buf, sizeof(buf), f)) != NULL) {
-		if ((q = index(p, '\n')) != NULL)
+		if ((q = strchr(p, '\n')) != NULL)
 			*q = '\0';
-		if (index("#;:", *p))
+		if (strchr("#;:", *p))
 			continue;
 		q = nxtarg(&p, " \t");
 		if (*q == '\0')
@@ -523,11 +523,11 @@ readlistfile(char *fname)
 			break;
 		case LINCLUDE:
 			while (*(q = nxtarg(&p, " \t"))) {
-				cdprefix((char *) NULL);
+				cdprefix(NULL);
 				n = expand(q, speclist, SPECNUMBER);
 				for (i = 0; i < n && i < SPECNUMBER; i++) {
 					readlistfile(speclist[i]);
-					cdprefix((char *) NULL);
+					cdprefix(NULL);
 					free(speclist[i]);
 				}
 				cdprefix(prefix);
@@ -558,7 +558,7 @@ readlistfile(char *fname)
 			if (lt == LOMITANY)
 				(void) Tinsert(t, q, FALSE);
 			else
-				expTinsert(q, t, flags, (char *) NULL);
+				expTinsert(q, t, flags, NULL);
 		}
 	}
 	(void) fclose(f);
@@ -587,7 +587,7 @@ expTinsert(char *p, TREE ** t, int flags, char *exec)
 static int
 listone(TREE * t, void *v __unused)
 {				/* expand and add one name from upgrade list */
-	listentry(t->Tname, t->Tname, (char *) NULL, (t->Tflags & FALWAYS) != 0);
+	listentry(t->Tname, t->Tname, NULL, (t->Tflags & FALWAYS) != 0);
 	return (SCMOK);
 }
 
@@ -633,38 +633,25 @@ listentry(char *name, char *fullname, char *updir, int always)
 		}
 		listdir(fullname, always);
 		if (updir == 0 || linkcount) {
-			(void) chdir(basedir);
+			if (chdir(basedir) < 0)
+				goaway("Can't chdir to %s (%s)",
+				    basedir, strerror(errno));
 			if (prefix)
-				(void) chdir(prefix);
+				if (chdir(prefix) < 0)
+					goaway("Can't chdir to %s (%s)",
+					    prefix, strerror(errno));
 			if (updir && *updir)
-				(void) chdir(updir);
+				if (chdir(updir) < 0)
+					goaway("Can't chdir to %s (%s)",
+					    updir, strerror(errno));
 		} else
-			(void) chdir("..");
+			if (chdir("..") < 0)
+				goaway("Can't chdir to %s (%s)",
+				    "..", strerror(errno));
 		return;
 	}
 	if (access(name, R_OK) < 0)
 		return;
-#ifdef RCSSTAT
-	if (candorcs) {
-		char rcs_release[STRINGLENGTH];
-		int status;
-		if (rcs_branch != NULL)
-#ifdef CVS
-			sprintf(rcs_release, "-r %s", rcs_branch);
-#else
-			sprintf(rcs_release, "-r%s", rcs_branch);
-#endif
-		else
-			rcs_release[0] = '\0';
-#ifdef CVS
-		sprintf(sys_com, "cvs -d %s -r -l -Q co -p %s %s > %s\n", cvs_root, rcs_release, name, rcs_file);
-#else
-		status = runp("rcsstat", "rcsstat", "-q", rcs_release, name, 0);
-#endif
-		if (status != 0)
-			return;
-	}
-#endif
 	listname(fullname, &statbuf);
 }
 
@@ -851,7 +838,7 @@ getscanfile(char *scanfile)
 		(void) fclose(f);
 		return (FALSE);
 	}
-	if ((q = index(p, '\n')) != NULL)
+	if ((q = strchr(p, '\n')) != NULL)
 		*q = '\0';
 	if (*p++ != 'V') {
 		(void) fclose(f);
@@ -869,7 +856,7 @@ getscanfile(char *scanfile)
 	}
 	notwanted = FALSE;
 	while ((p = fgets(buf, sizeof(buf), f)) != NULL) {
-		q = index(p, '\n');
+		q = strchr(p, '\n');
 		if (q)
 			*q = 0;
 		ts.Tflags = 0;
@@ -890,17 +877,17 @@ getscanfile(char *scanfile)
 			p++;
 			ts.Tflags |= FNOACCT;
 		}
-		if ((q = index(p, ' ')) == NULL)
+		if ((q = strchr(p, ' ')) == NULL)
 			goaway("scanfile format inconsistent");
 		*q++ = '\0';
 		ts.Tmode = atoo(p);
 		p = q;
-		if ((q = index(p, ' ')) == NULL)
+		if ((q = strchr(p, ' ')) == NULL)
 			goaway("scanfile format inconsistent");
 		*q++ = '\0';
 		ts.Tctime = atoi(p);
 		p = q;
-		if ((q = index(p, ' ')) == NULL)
+		if ((q = strchr(p, ' ')) == NULL)
 			goaway("scanfile format inconsistent");
 		*q++ = 0;
 		ts.Tmtime = atoi(p);
@@ -968,21 +955,23 @@ makescanfile(char *scanfile)
 	if (scanF == NULL)
 		goto out;
 	if (fprintf(scanF, "V%d\n", SCANVERSION) < 0)
-		goto out;
+		goto closeout;
 	if (Tprocess(listT, recordone, scanF) != SCMOK)
-		goto out;
+		goto closeout;
 	if (fclose(scanF) != 0)
 		goto out;
 	if (rename(tname, fname) < 0) {
 		(void)unlink(tname);
 		goaway("Can't change %s to %s", tname, fname);
 	}
-	tbuf[0].tv_sec = time((time_t *) NULL);
+	tbuf[0].tv_sec = time(NULL);
 	tbuf[0].tv_usec = 0;
 	tbuf[1].tv_sec = scantime;
 	tbuf[1].tv_usec = 0;
 	(void) utimes(fname, tbuf);
 	return;
+closeout:
+	(void) fclose(scanF);
 out:
 	goaway("Can't write scan file temp %s for %s", tname, collname);
 }
@@ -1033,12 +1022,16 @@ cdprefix(char *prefix)
 	if (curprefix == NULL) {
 		if (prefix == NULL)
 			return;
-		(void) chdir(prefix);
+		if (chdir(prefix) < 0)
+			goaway("Can't chdir to %s (%s)",
+			    prefix, strerror(errno));
 		curprefix = prefix;
 		return;
 	}
 	if (prefix == NULL) {
-		(void) chdir(basedir);
+		if (chdir(basedir) < 0)
+			goaway("Can't chdir to %s (%s)",
+			    basedir, strerror(errno));
 		curprefix = NULL;
 		return;
 	}
@@ -1048,7 +1041,11 @@ cdprefix(char *prefix)
 		curprefix = prefix;
 		return;
 	}
-	(void) chdir(basedir);
-	(void) chdir(prefix);
+	if (chdir(basedir) < 0)
+		goaway("Can't chdir to %s (%s)",
+		    basedir, strerror(errno));
+	if (chdir(prefix) < 0)
+		goaway("Can't chdir to %s (%s)",
+		    prefix, strerror(errno));
 	curprefix = prefix;
 }

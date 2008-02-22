@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_machdep.h,v 1.4 2007/12/15 11:26:40 joerg Exp $	*/
+/*	$NetBSD: acpi_machdep.h,v 1.12 2018/03/20 12:14:52 bouyer Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -35,17 +35,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * Machine-dependent code for ACPI.  This is provided to the Osd
- * portion of the ACPICA.
- */
+#ifndef _X86_ACPI_MACHDEP_H_
+#define _X86_ACPI_MACHDEP_H_
 
+/*
+ * Machine-dependent code for ACPI.
+ */
 #include <machine/pio.h>
 #include <machine/i82489var.h>
 #include <machine/i82489reg.h>
 
-ACPI_STATUS	acpi_md_OsInitialize(void);
-ACPI_STATUS	acpi_md_OsTerminate(void);
+ACPI_STATUS		acpi_md_OsInitialize(void);
 ACPI_PHYSICAL_ADDRESS	acpi_md_OsGetRootPointer(void);
 
 #define	acpi_md_OsIn8(x)	inb((x))
@@ -57,7 +57,7 @@ ACPI_PHYSICAL_ADDRESS	acpi_md_OsGetRootPointer(void);
 #define	acpi_md_OsOut32(x, v)	outl((x), (v))
 
 ACPI_STATUS	acpi_md_OsInstallInterruptHandler(UINT32,
-		    ACPI_OSD_HANDLER, void *, void **);
+		    ACPI_OSD_HANDLER, void *, void **, const char *);
 void		acpi_md_OsRemoveInterruptHandler(void *);
 
 ACPI_STATUS	acpi_md_OsMapMemory(ACPI_PHYSICAL_ADDRESS, UINT32, void **);
@@ -68,7 +68,14 @@ ACPI_STATUS	acpi_md_OsGetPhysicalAddress(void *LogicalAddress,
 BOOLEAN		acpi_md_OsReadable(void *, UINT32);
 BOOLEAN		acpi_md_OsWritable(void *, UINT32);
 void		acpi_md_OsDisableInterrupt(void);
+void		acpi_md_OsEnableInterrupt(void);
 
 int		acpi_md_sleep(int);
 void		acpi_md_sleep_init(void);
-void		acpi_md_callback(void);
+
+uint32_t	acpi_md_pdc(void);
+uint32_t	acpi_md_ncpus(void);
+struct acpi_softc;
+void		acpi_md_callback(struct acpi_softc *);
+
+#endif /* !_X86_ACPI_MACHDEP_H_ */

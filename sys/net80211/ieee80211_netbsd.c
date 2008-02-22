@@ -1,5 +1,6 @@
-/* $NetBSD: ieee80211_netbsd.c,v 1.16 2008/01/31 22:07:22 christos Exp $ */
-/*-
+/* $NetBSD: ieee80211_netbsd.c,v 1.31 2018/04/27 06:56:21 maxv Exp $ */
+
+/*
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
  *
@@ -30,7 +31,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_freebsd.c,v 1.8 2005/08/08 18:46:35 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.16 2008/01/31 22:07:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.31 2018/04/27 06:56:21 maxv Exp $");
 #endif
 
 /*
@@ -38,15 +39,15 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.16 2008/01/31 22:07:22 christ
  */
 #include <sys/param.h>
 #include <sys/kernel.h>
-#include <sys/systm.h> 
-#include <sys/mbuf.h>   
+#include <sys/systm.h>
+#include <sys/mbuf.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
 #include <sys/once.h>
 
-#include <machine/stdarg.h>
-
 #include <sys/socket.h>
+
+#include <sys/cprng.h>
 
 #include <net/if.h>
 #include <net/if_media.h>
@@ -68,6 +69,8 @@ static struct ieee80211_node *ieee80211_node_walkfirst(
     struct ieee80211_node_walk *, u_short);
 static int ieee80211_sysctl_node(SYSCTLFN_ARGS);
 
+static void ieee80211_sysctl_setup(void);
+
 #ifdef IEEE80211_DEBUG
 int	ieee80211_debug = 0;
 #endif
@@ -81,7 +84,13 @@ ieee80211_init0(void)
 {
 	ieee80211_setup_func * const *ieee80211_setup, f;
 
-        __link_set_foreach(ieee80211_setup, ieee80211_funcs) {
+	ieee80211_sysctl_setup();
+
+	if (max_linkhdr < ALIGN(sizeof(struct ieee80211_qosframe_addr4))) {
+		max_linkhdr = ALIGN(sizeof(struct ieee80211_qosframe_addr4));
+	}
+
+	__link_set_foreach(ieee80211_setup, ieee80211_funcs) {
 		f = (void*)*ieee80211_setup;
 		(*f)();
 	}
@@ -104,22 +113,25 @@ ieee80211_sysctl_inact(SYSCTLFN_ARGS)
 	struct sysctlnode node;
 
 	node = *rnode;
-	/* sysctl_lookup copies the product from t.  Then, it
+
+	/*
+	 * sysctl_lookup copies the product from t.  Then, it
 	 * copies the new value onto t.
 	 */
 	t = *(int*)rnode->sysctl_data * IEEE80211_INACT_WAIT;
 	node.sysctl_data = &t;
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
 	if (error || newp == NULL)
-		return (error);
+		return error;
 
-	/* The new value was in seconds.  Convert to inactivity-wait
+	/*
+	 * The new value was in seconds.  Convert to inactivity-wait
 	 * intervals.  There are IEEE80211_INACT_WAIT seconds per
 	 * interval.
 	 */
 	*(int*)rnode->sysctl_data = t / IEEE80211_INACT_WAIT;
 
-	return (0);
+	return 0;
 }
 
 static int
@@ -131,7 +143,7 @@ ieee80211_sysctl_parent(SYSCTLFN_ARGS)
 
 	node = *rnode;
 	ic = node.sysctl_data;
-	strncpy(pname, ic->ic_ifp->if_xname, IFNAMSIZ);
+	strlcpy(pname, ic->ic_ifp->if_xname, IFNAMSIZ);
 	node.sysctl_data = pname;
 	return sysctl_lookup(SYSCTLFN_CALL(&node));
 }
@@ -146,14 +158,9 @@ ieee80211_sysctl_treetop(struct sysctllog **log)
 	const struct sysctlnode *rnode;
 
 	if ((rc = sysctl_createv(log, 0, NULL, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "net", NULL,
-	    NULL, 0, NULL, 0, CTL_NET, CTL_EOL)) != 0)
-		goto err;
-
-	if ((rc = sysctl_createv(log, 0, &rnode, &rnode,
 	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "link",
 	    "link-layer statistics and controls",
-	    NULL, 0, NULL, 0, PF_LINK, CTL_EOL)) != 0)
+	    NULL, 0, NULL, 0, CTL_NET, PF_LINK, CTL_EOL)) != 0)
 		goto err;
 
 	if ((rc = sysctl_createv(log, 0, &rnode, &rnode,
@@ -189,7 +196,7 @@ ieee80211_sysctl_attach(struct ieee80211com *ic)
 	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
 	    CTLFLAG_PERMANENT|CTLFLAG_READONLY, CTLTYPE_STRING,
 	    "parent", SYSCTL_DESCR("parent device"),
-	    ieee80211_sysctl_parent, 0, ic, IFNAMSIZ, CTL_CREATE,
+	    ieee80211_sysctl_parent, 0, (void *)ic, IFNAMSIZ, CTL_CREATE,
 	    CTL_EOL)) != 0)
 		goto err;
 
@@ -260,11 +267,11 @@ ieee80211_sysctl_detach(struct ieee80211com *ic)
  *
  *	If there is any single 802.11 interface, ieee80211_node_walkfirst
  *	must not return NULL.
- */	
+ */
 static struct ieee80211_node *
 ieee80211_node_walkfirst(struct ieee80211_node_walk *nw, u_short if_index)
 {
-	(void)memset(nw, 0, sizeof(*nw));
+	memset(nw, 0, sizeof(*nw));
 
 	nw->nw_ifindex = if_index;
 
@@ -329,11 +336,13 @@ ieee80211_sysctl_fill_node(struct ieee80211_node *ni,
     struct ieee80211_node_sysctl *ns, int ifindex,
     const struct ieee80211_channel *chan0, uint32_t flags)
 {
+	memset(ns, 0, sizeof(*ns));
+
 	ns->ns_ifindex = ifindex;
 	ns->ns_capinfo = ni->ni_capinfo;
 	ns->ns_flags = flags;
-	(void)memcpy(ns->ns_macaddr, ni->ni_macaddr, sizeof(ns->ns_macaddr));
-	(void)memcpy(ns->ns_bssid, ni->ni_bssid, sizeof(ns->ns_bssid));
+	memcpy(ns->ns_macaddr, ni->ni_macaddr, sizeof(ns->ns_macaddr));
+	memcpy(ns->ns_bssid, ni->ni_bssid, sizeof(ns->ns_bssid));
 	if (ni->ni_chan != IEEE80211_CHAN_ANYC) {
 		ns->ns_freq = ni->ni_chan->ic_freq;
 		ns->ns_chanflags = ni->ni_chan->ic_flags;
@@ -344,7 +353,7 @@ ieee80211_sysctl_fill_node(struct ieee80211_node *ni,
 	}
 	ns->ns_rssi = ni->ni_rssi;
 	ns->ns_esslen = ni->ni_esslen;
-	(void)memcpy(ns->ns_essid, ni->ni_essid, sizeof(ns->ns_essid));
+	memcpy(ns->ns_essid, ni->ni_essid, sizeof(ns->ns_essid));
 	ns->ns_erp = ni->ni_erp;
 	ns->ns_associd = ni->ni_associd;
 	ns->ns_inact = ni->ni_inact * IEEE80211_INACT_WAIT;
@@ -352,7 +361,7 @@ ieee80211_sysctl_fill_node(struct ieee80211_node *ni,
 	ns->ns_rates = ni->ni_rates;
 	ns->ns_txrate = ni->ni_txrate;
 	ns->ns_intval = ni->ni_intval;
-	(void)memcpy(ns->ns_tstamp, &ni->ni_tstamp, sizeof(ns->ns_tstamp));
+	memcpy(ns->ns_tstamp, &ni->ni_tstamp, sizeof(ns->ns_tstamp));
 	ns->ns_txseq = ni->ni_txseqs[0];
 	ns->ns_rxseq = ni->ni_rxseqs[0];
 	ns->ns_fhdwell = ni->ni_fhdwell;
@@ -458,29 +467,33 @@ cleanup:
 /*
  * Setup sysctl(3) MIB, net.ieee80211.*
  *
- * TBD condition CTLFLAG_PERMANENT on being an LKM or not
+ * TBD condition CTLFLAG_PERMANENT on being a module or not
  */
-SYSCTL_SETUP(sysctl_ieee80211, "sysctl ieee80211 subtree setup")
+static struct sysctllog *ieee80211_sysctllog;
+static void
+ieee80211_sysctl_setup(void)
 {
 	int rc;
-	const struct sysctlnode *cnode, *rnode;
+	const struct sysctlnode *rnode;
 
-	if ((rnode = ieee80211_sysctl_treetop(clog)) == NULL)
+	if ((rnode = ieee80211_sysctl_treetop(&ieee80211_sysctllog)) == NULL)
 		return;
 
-	if ((rc = sysctl_createv(clog, 0, &rnode, NULL,
+	if ((rc = sysctl_createv(&ieee80211_sysctllog, 0, &rnode, NULL,
 	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "nodes", "client/peer stations",
 	    ieee80211_sysctl_node, 0, NULL, 0, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
 #ifdef IEEE80211_DEBUG
 	/* control debugging printfs */
-	if ((rc = sysctl_createv(clog, 0, &rnode, &cnode,
+	if ((rc = sysctl_createv(&ieee80211_sysctllog, 0, &rnode, NULL,
 	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
 	    "debug", SYSCTL_DESCR("control debugging printfs"),
 	    NULL, 0, &ieee80211_debug, 0, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
-#endif /* IEEE80211_DEBUG */
+#endif
+
+	ieee80211_rssadapt_sysctl_setup(&ieee80211_sysctllog);
 
 	return;
 err:
@@ -490,15 +503,11 @@ err:
 int
 ieee80211_node_dectestref(struct ieee80211_node *ni)
 {
-	int rc, s;
-	s = splnet();
-	if (--ni->ni_refcnt == 0) {
-		rc = 1;
-		ni->ni_refcnt = 1;
+	if (atomic_dec_uint_nv(&ni->ni_refcnt) == 0) {
+		atomic_inc_uint(&ni->ni_refcnt);
+		return 1;
 	} else
-		rc = 0;
-	splx(s);
-	return rc;
+		return 0;
 }
 
 void
@@ -512,15 +521,14 @@ ieee80211_drain_ifq(struct ifqueue *ifq)
 		if (m == NULL)
 			break;
 
-		ni = (struct ieee80211_node *)m->m_pkthdr.rcvif;
+		ni = M_GETCTX(m, struct ieee80211_node *);
 		KASSERT(ni != NULL);
 		ieee80211_free_node(ni);
-		m->m_pkthdr.rcvif = NULL;
+		M_SETCTX(m, NULL);
 
 		m_freem(m);
 	}
 }
-
 
 void
 if_printf(struct ifnet *ifp, const char *fmt, ...)
@@ -533,72 +541,6 @@ if_printf(struct ifnet *ifp, const char *fmt, ...)
 
 	va_end(ap);
 	return;
-}
-
-/*
- * Set the m_data pointer of a newly-allocated mbuf
- * to place an object of the specified size at the
- * end of the mbuf, longword aligned.
- */
-void
-m_align(struct mbuf *m, int len)
-{
-       int adjust;
-
-       if (m->m_flags & M_EXT)
-	       adjust = m->m_ext.ext_size - len;
-       else if (m->m_flags & M_PKTHDR)
-	       adjust = MHLEN - len;
-       else
-	       adjust = MLEN - len;
-       m->m_data += adjust &~ (sizeof(long)-1);
-}
-
-/*
- * Append the specified data to the indicated mbuf chain,
- * Extend the mbuf chain if the new data does not fit in
- * existing space.
- *
- * Return 1 if able to complete the job; otherwise 0.
- */
-int
-m_append(struct mbuf *m0, int len, const void *cpv)
-{
-	struct mbuf *m, *n;
-	int remainder, space;
-	const char *cp = cpv;
-
-	for (m = m0; m->m_next != NULL; m = m->m_next)
-		continue;
-	remainder = len;
-	space = M_TRAILINGSPACE(m);
-	if (space > 0) {
-		/*
-		 * Copy into available space.
-		 */
-		if (space > remainder)
-			space = remainder;
-		memmove(mtod(m, char *) + m->m_len, cp, space);
-		m->m_len += space;
-		cp = cp + space, remainder -= space;
-	}
-	while (remainder > 0) {
-		/*
-		 * Allocate a new mbuf; could check space
-		 * and allocate a cluster instead.
-		 */
-		n = m_get(M_DONTWAIT, m->m_type);
-		if (n == NULL)
-			break;
-		n->m_len = min(MLEN, remainder);
-		memmove(mtod(n, void *), cp, n->m_len);
-		cp += n->m_len, remainder -= n->m_len;
-		m->m_next = n;
-		m = n;
-	}
-	if (m0->m_flags & M_PKTHDR)
-		m0->m_pkthdr.len += len - remainder;
-	return (remainder == 0);
 }
 
 /*
@@ -623,6 +565,7 @@ ieee80211_getmgtframe(u_int8_t **frm, u_int pktlen)
 	/* XXX 4-address frame? */
 	len = roundup(sizeof(struct ieee80211_frame) + pktlen, 4);
 	IASSERT(len <= MCLBYTES, ("802.11 mgt frame too large: %u", len));
+
 	if (len <= MHLEN) {
 		m = m_gethdr(M_NOWAIT, MT_HEADER);
 		/*
@@ -633,45 +576,42 @@ ieee80211_getmgtframe(u_int8_t **frm, u_int pktlen)
 		 */
 		if (m != NULL)
 			MH_ALIGN(m, len);
-	} else
+	} else {
 		m = m_getcl(M_NOWAIT, MT_HEADER, M_PKTHDR);
+	}
+
 	if (m != NULL) {
 		m->m_data += sizeof(struct ieee80211_frame);
 		*frm = m->m_data;
 		IASSERT((uintptr_t)*frm % 4 == 0, ("bad beacon boundary"));
 	}
+
 	return m;
 }
 
 void
 get_random_bytes(void *p, size_t n)
 {
-	u_int8_t *dp = p;
-
-	while (n > 0) {
-		u_int32_t v = arc4random();
-		size_t nb = n > sizeof(u_int32_t) ? sizeof(u_int32_t) : n;
-		(void)memcpy(dp, &v, nb);
-		dp += sizeof(u_int32_t), n -= nb;
-	}
+	cprng_fast(p, n);
 }
 
 void
-ieee80211_notify_node_join(struct ieee80211com *ic, struct ieee80211_node *ni, int newassoc)
+ieee80211_notify_node_join(struct ieee80211com *ic, struct ieee80211_node *ni,
+    int newassoc)
 {
 	struct ifnet *ifp = ic->ic_ifp;
 	struct ieee80211_join_event iev;
 
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%s: %snode %s join\n",
-	    ifp->if_xname, (ni == ic->ic_bss) ? "bss " : "",
+	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%snode %s join\n",
+	    (ni == ic->ic_bss) ? "bss " : "",
 	    ether_sprintf(ni->ni_macaddr));
 
 	memset(&iev, 0, sizeof(iev));
 	if (ni == ic->ic_bss) {
 		IEEE80211_ADDR_COPY(iev.iev_addr, ni->ni_bssid);
 		rt_ieee80211msg(ifp, newassoc ?
-			RTM_IEEE80211_ASSOC : RTM_IEEE80211_REASSOC,
-			&iev, sizeof(iev));
+		    RTM_IEEE80211_ASSOC : RTM_IEEE80211_REASSOC,
+		    &iev, sizeof(iev));
 		if_link_state_change(ifp, LINK_STATE_UP);
 	} else {
 		IEEE80211_ADDR_COPY(iev.iev_addr, ni->ni_macaddr);
@@ -687,8 +627,8 @@ ieee80211_notify_node_leave(struct ieee80211com *ic, struct ieee80211_node *ni)
 	struct ifnet *ifp = ic->ic_ifp;
 	struct ieee80211_leave_event iev;
 
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%s: %snode %s leave\n",
-	    ifp->if_xname, (ni == ic->ic_bss) ? "bss " : "",
+	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%snode %s leave\n",
+	    (ni == ic->ic_bss) ? "bss " : "",
 	    ether_sprintf(ni->ni_macaddr));
 
 	if (ni == ic->ic_bss) {
@@ -708,7 +648,7 @@ ieee80211_notify_scan_done(struct ieee80211com *ic)
 	struct ifnet *ifp = ic->ic_ifp;
 
 	IEEE80211_DPRINTF(ic, IEEE80211_MSG_SCAN,
-		"%s: notify scan done\n", ic->ic_ifp->if_xname);
+		"%s", "notify scan done\n");
 
 	/* dispatch wireless event indicating scan completed */
 	rt_ieee80211msg(ifp, RTM_IEEE80211_SCAN, NULL, 0);
@@ -750,8 +690,8 @@ ieee80211_notify_michael_failure(struct ieee80211com *ic,
 	struct ifnet *ifp = ic->ic_ifp;
 
 	IEEE80211_DPRINTF(ic, IEEE80211_MSG_CRYPTO,
-		"[%s] michael MIC verification failed <keyix %u>\n",
-	       ether_sprintf(wh->i_addr2), keyix);
+	    "[%s] michael MIC verification failed <keyix %u>\n",
+	    ether_sprintf(wh->i_addr2), keyix);
 	ic->ic_stats.is_rx_tkipmic++;
 
 	if (ifp != NULL) {		/* NB: for cipher test modules */
@@ -779,4 +719,75 @@ ieee80211_load_module(const char *modname)
 #else
 	printf("%s: load the %s module by hand for now.\n", __func__, modname);
 #endif
+}
+
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Set the m_data pointer of a newly-allocated mbuf
+ * to place an object of the specified size at the
+ * end of the mbuf, longword aligned.
+ */
+void
+m_align(struct mbuf *m, int len)
+{
+	int adjust;
+
+	KASSERT(len != M_COPYALL);
+
+	if (m->m_flags & M_EXT)
+		adjust = m->m_ext.ext_size - len;
+	else if (m->m_flags & M_PKTHDR)
+		adjust = MHLEN - len;
+	else
+		adjust = MLEN - len;
+	m->m_data += adjust &~ (sizeof(long)-1);
+}
+
+/*
+ * Append the specified data to the indicated mbuf chain,
+ * Extend the mbuf chain if the new data does not fit in
+ * existing space.
+ *
+ * Return 1 if able to complete the job; otherwise 0.
+ */
+int
+m_append(struct mbuf *m0, int len, const void *cpv)
+{
+	struct mbuf *m, *n;
+	int remainder, space;
+	const char *cp = cpv;
+
+	KASSERT(len != M_COPYALL);
+	for (m = m0; m->m_next != NULL; m = m->m_next)
+		continue;
+	remainder = len;
+	space = M_TRAILINGSPACE(m);
+	if (space > 0) {
+		/*
+		 * Copy into available space.
+		 */
+		if (space > remainder)
+			space = remainder;
+		memmove(mtod(m, char *) + m->m_len, cp, space);
+		m->m_len += space;
+		cp = cp + space, remainder -= space;
+	}
+	while (remainder > 0) {
+		/*
+		 * Allocate a new mbuf; could check space
+		 * and allocate a cluster instead.
+		 */
+		n = m_get(M_DONTWAIT, m->m_type);
+		if (n == NULL)
+			break;
+		n->m_len = min(MLEN, remainder);
+		memmove(mtod(n, void *), cp, n->m_len);
+		cp += n->m_len, remainder -= n->m_len;
+		m->m_next = n;
+		m = n;
+	}
+	if (m0->m_flags & M_PKTHDR)
+		m0->m_pkthdr.len += len - remainder;
+	return (remainder == 0);
 }

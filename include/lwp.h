@@ -1,4 +1,4 @@
-/*	$NetBSD: lwp.h,v 1.9 2007/11/13 17:38:55 ad Exp $	*/
+/*	$NetBSD: lwp.h,v 1.13 2017/12/08 01:19:29 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,7 +53,10 @@ void	*_lwp_getprivate(void);
 void	_lwp_setprivate(void *);
 int	_lwp_kill(lwpid_t, int);
 int	_lwp_detach(lwpid_t);
-int	_lwp_park(const struct timespec *, lwpid_t, const void *, const void *);
+#ifndef __LIBC12_SOURCE__
+int	_lwp_park(clockid_t, int, struct timespec *, lwpid_t,
+    const void *, const void *) __RENAME(___lwp_park60);
+#endif
 int	_lwp_unpark(lwpid_t, const void *);
 ssize_t	_lwp_unpark_all(const lwpid_t *, size_t, const void *);
 int	_lwp_setname(lwpid_t, const char *);

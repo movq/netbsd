@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_hb.c,v 1.13 2008/01/28 17:07:19 tsutsui Exp $	*/
+/*	$NetBSD: timer_hb.c,v 1.19 2011/11/22 14:31:02 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_hb.c,v 1.13 2008/01/28 17:07:19 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_hb.c,v 1.19 2011/11/22 14:31:02 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -66,8 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD: timer_hb.c,v 1.13 2008/01/28 17:07:19 tsutsui Exp $"
 #define TIMER_LEVEL 6
 #define TIMER_SIZE 8	/* XXX */
 
-static int timer_hb_match(struct device *, struct cfdata  *, void *);
-static void timer_hb_attach(struct device *, struct device *, void *);
+static int timer_hb_match(device_t, cfdata_t, void *);
+static void timer_hb_attach(device_t, device_t, void *);
 static void timer_hb_initclocks(int, int);
 void clock_intr(struct clockframe *);
 
@@ -75,7 +68,7 @@ static inline void leds_intr(void);
 
 extern void _isr_clock(void);	/* locore.s */
 
-CFATTACH_DECL(timer_hb, sizeof(struct device),
+CFATTACH_DECL_NEW(timer_hb, 0,
     timer_hb_match, timer_hb_attach, NULL, NULL);
 
 static volatile uint8_t *ctrl_timer; /* XXX */
@@ -83,7 +76,7 @@ static volatile uint8_t *ctrl_timer; /* XXX */
 extern volatile u_char *ctrl_led; /* XXX */
 
 static int
-timer_hb_match(struct device *parent, struct cfdata *cf, void *aux)
+timer_hb_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct hb_attach_args *ha = aux;
 	static int timer_hb_matched;
@@ -106,14 +99,14 @@ timer_hb_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-timer_hb_attach(struct device *parent, struct device *self, void *aux)
+timer_hb_attach(device_t parent, device_t self, void *aux)
 {
 	struct hb_attach_args *ha = aux;
 
 	if (ha->ha_ipl != TIMER_LEVEL)
 		panic("clock_hb_attach: wrong interrupt level");
 
-	ctrl_timer = (uint8_t *)IIOV(ha->ha_address); /* XXX needs bus_space */
+	ctrl_timer = (uint8_t *)(ha->ha_address); /* XXX needs bus_space */
 
 	printf("\n");
 
@@ -146,7 +139,7 @@ timer_hb_initclocks(int prof, int stat)
 
 /*
  * Clock interrupt handler.
- * This is is called by the "custom" interrupt handler.
+ * This is called by the "custom" interrupt handler.
  *
  * from sun3/sun3x/clock.c -tsutsui
  */
@@ -156,8 +149,6 @@ clock_intr(struct clockframe *cf)
 #ifdef	LED_IDLE_CHECK
 	extern char _Idle[];	/* locore.s */
 #endif
-
-	idepth++;
 
 	/* Pulse the clock intr. enable low. */
 	*ctrl_timer = 0;
@@ -172,9 +163,7 @@ clock_intr(struct clockframe *cf)
 
 	/* Call common clock interrupt handler. */
 	hardclock(cf);
-	uvmexp.intrs++;
-
-	idepth--;
+	curcpu()->ci_data.cpu_nintr++;
 }
 
 /* heartbeat LED */

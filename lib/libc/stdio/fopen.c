@@ -1,4 +1,4 @@
-/*	$NetBSD: fopen.c,v 1.12 2003/08/07 16:43:24 agc Exp $	*/
+/*	$NetBSD: fopen.c,v 1.19 2018/01/17 01:24:30 kamil Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fopen.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fopen.c,v 1.12 2003/08/07 16:43:24 agc Exp $");
+__RCSID("$NetBSD: fopen.c,v 1.19 2018/01/17 01:24:30 kamil Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -48,13 +48,12 @@ __RCSID("$NetBSD: fopen.c,v 1.12 2003/08/07 16:43:24 agc Exp $");
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
+#include <limits.h>
 #include "reentrant.h"
 #include "local.h"
 
 FILE *
-fopen(file, mode)
-	const char *file;
-	const char *mode;
+fopen(const char *file, const char *mode)
 {
 	FILE *fp;
 	int f;
@@ -62,25 +61,24 @@ fopen(file, mode)
 
 	_DIAGASSERT(file != NULL);
 	if ((flags = __sflags(mode, &oflags)) == 0)
-		return (NULL);
+		return NULL;
 	if ((fp = __sfp()) == NULL)
-		return (NULL);
+		return NULL;
 	if ((f = open(file, oflags, DEFFILEMODE)) < 0)
 		goto release;
-	if (oflags & O_NONBLOCK) {
-		struct stat st;
-		if (fstat(f, &st) == -1) {
-			int sverrno = errno;
-			(void)close(f);
-			errno = sverrno;
-			goto release;
-		}
-		if (!S_ISREG(st.st_mode)) {
-			(void)close(f);
-			errno = EFTYPE;
-			goto release;
-		}
+	/*
+	 * File descriptors are a full int, but _file is only a short.
+	 * If we get a valid file descriptor that is greater or equal to
+	 * USHRT_MAX, then the fd will get sign-extended into an
+	 * invalid file descriptor.  Handle this case by failing the
+	 * open. (We treat the short as unsigned, and special-case -1).
+	 */
+	if (f >= USHRT_MAX) {
+		(void)close(f);
+		errno = EMFILE;
+		goto release;
 	}
+
 	fp->_file = f;
 	fp->_flags = flags;
 	fp->_cookie = fp;
@@ -98,9 +96,9 @@ fopen(file, mode)
 	 * fseek and ftell.)
 	 */
 	if (oflags & O_APPEND)
-		(void) __sseek((void *)fp, (fpos_t)0, SEEK_END);
-	return (fp);
+		(void) __sseek((void *)fp, (off_t)0, SEEK_END);
+	return fp;
 release:
 	fp->_flags = 0;			/* release */
-	return (NULL);
+	return NULL;
 }

@@ -1,4 +1,4 @@
-.\"	$NetBSD: kvm_open.3,v 1.14 2003/08/07 16:44:37 agc Exp $
+.\"	$NetBSD: kvm_open.3,v 1.18 2011/09/12 21:11:32 christos Exp $
 .\"
 .\" Copyright (c) 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\"     @(#)kvm_open.3	8.3 (Berkeley) 4/19/94
 .\"
-.Dd April 19, 1994
+.Dd September 14, 2011
 .Dt KVM_OPEN 3
 .Os
 .Sh NAME
@@ -46,7 +46,6 @@
 .Sh SYNOPSIS
 .In fcntl.h
 .In kvm.h
-.br
 .Ft kvm_t *
 .Fn kvm_open "const char *execfile" "const char *corefile" "char *swapfile" "int flags" "const char *errstr"
 .Ft kvm_t *
@@ -70,11 +69,22 @@ is the executable image of the kernel being examined.
 This file must contain a symbol table.
 If this argument is
 .Dv NULL ,
-the currently running system is assumed,
-which is indicated by
+the currently running system is assumed; in this case, the functions will
+attempt to use the
+.Xr ksyms 4
+device indicated by
+.Dv _PATH_KSYMS
+in
+.In paths.h ;
+if that fails, then they will use the file indicated by the
+.Xr sysctl 3
+variable
+.Va machdep.booted_kernel ,
+or (if the sysctl information is not available)
+the default kernel path indicated by
 .Dv _PATH_UNIX
 in
-.Aq Pa paths.h .
+.In paths.h .
 .Pp
 .Fa corefile
 is the kernel memory device file.
@@ -89,7 +99,7 @@ is
 the default indicated by
 .Dv _PATH_MEM
 from
-.Aq Pa paths.h
+.In paths.h
 is used.
 .Pp
 .Fa swapfile
@@ -98,7 +108,7 @@ If
 .Dv NULL ,
 .Dv _PATH_DRUM
 from
-.Aq Pa paths.h
+.In paths.h
 is used.
 .Pp
 The
@@ -189,7 +199,7 @@ will place any error message in the
 .Fa errbuf
 argument.
 This buffer should be _POSIX2_LINE_MAX characters large (from
-.Aq Pa limits.h ) .
+.In limits.h ) .
 .Sh RETURN VALUES
 The
 .Fn kvm_open
@@ -214,6 +224,7 @@ function returns 0 on success and -1 on failure.
 .Xr kvm_getargv 3 ,
 .Xr kvm_getenvv 3 ,
 .Xr kvm_geterr 3 ,
+.Xr kvm_getkernelname 3 ,
 .Xr kvm_getprocs 3 ,
 .Xr kvm_nlist 3 ,
 .Xr kvm_read 3 ,

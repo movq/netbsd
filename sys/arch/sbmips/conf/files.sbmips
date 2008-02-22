@@ -1,4 +1,4 @@
-# $NetBSD: files.sbmips,v 1.14 2008/02/20 21:43:35 drochner Exp $
+# $NetBSD: files.sbmips,v 1.16 2014/07/20 10:22:55 alnsn Exp $
 
 maxpartitions 8
 
@@ -14,12 +14,15 @@ file dev/cons.c
 file arch/sbmips/sbmips/sb1250_icu.c
 
 file arch/mips/cfe/cfe_api.c
-file arch/mips/mips/softintr.c
 file arch/mips/mips/mips3_clock.c
+file arch/mips/mips/bus_dma.c
 
 ###
 ### MI device inclusion
 ###
+
+# Stack-less Just-In-Time compiler
+include	"external/bsd/sljit/conf/files.sljit"
 
 # Machine-independent I2O drivers.
 include "dev/i2o/files.i2o"

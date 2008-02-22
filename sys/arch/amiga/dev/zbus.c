@@ -1,4 +1,4 @@
-/*	$NetBSD: zbus.c,v 1.61 2007/10/17 19:53:17 garbled Exp $ */
+/*	$NetBSD: zbus.c,v 1.75 2017/10/04 09:44:09 rkujawa Exp $ */
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -31,19 +31,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zbus.c,v 1.61 2007/10/17 19:53:17 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zbus.c,v 1.75 2017/10/04 09:44:09 rkujawa Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/bus.h>
 
 #include <machine/cpu.h>
 #include <machine/pte.h>
 #include <amiga/amiga/cfdev.h>
 #include <amiga/amiga/device.h>
 #include <amiga/dev/zbusvar.h>
+#include <amiga/dev/z3rambdvar.h>
+
+#include "z3rambd.h"
 
 struct aconfdata {
 	const char *name;
@@ -57,6 +59,12 @@ struct preconfdata {
 	void *vaddr;
 };
 
+struct quirksdata {
+	int manid;
+	int prodid;
+	uint8_t quirks;
+};
+
 vaddr_t		ZTWOROMADDR;
 vaddr_t		ZTWOMEMADDR;
 u_int		NZTWOMEMPG;
@@ -66,7 +74,7 @@ u_int		ZBUSAVAIL;	/* bytes of Zorro bus I/O space left */
 /*
  * explain the names.. 0123456789 => zothfisven
  */
-static struct aconfdata aconftab[] = {
+static const struct aconfdata aconftab[] = {
 	/* Commodore Amiga */
 	{ "atzee",	513,	1 },
 	{ "atzsc",	514,	2 },
@@ -150,6 +158,8 @@ static struct aconfdata aconftab[] = {
 	{ "grfcv",	8512,	34},	/* CyberVison 64 */
 	{ "grfcv3d",	8512,	67},	/* CyberVison 64/3D */
 	{ "cbiiisc", 	8512,	100},	/* Cyberstorm Mk III SCSI */
+	{ "p5pb", 	8512,	101},	/* CyberVisionPPC / BlizzardVisionPPC */
+	{ "bppcsc", 	8512,	110},	/* Blizzard 603e+ SCSI */
 	/* Hacker Inc. */
 	{ "mlhsc",	2011,	1 },
 	/* Resource Management Force */
@@ -182,7 +192,9 @@ static struct aconfdata aconftab[] = {
 	{ "hyper4+",	5001,	6},	/* Hypercom4+ */
 	{ "hyper3+",	5001,	7},	/* Hypercom3+ */
 	/* Matay Grzegorz Kraszewski */
-	{ "Prometheus",	44359,	1}	/* Prometheus PCI bridge */
+	{ "mppb",	44359,	1},	/* Prometheus PCI bridge */
+	/* MNT */
+	{ "mntva",	28014,	1}	/* MNT VA2000 */
 };
 static int naconfent = sizeof(aconftab) / sizeof(struct aconfdata);
 
@@ -216,15 +228,40 @@ static struct preconfdata preconftab[] = {
 	{2167,	3, 0},	/* Domino regs (proto 16M) */
 	{2181,	0, 0},	/* oMniBus mem or regs */
 	{8512,	67, 0}	/* Cybervison 64/3D */		/* grf7 */
+/*	{28014,	1, 0}	// MNTMN VA2000 */
 };
 static int npreconfent = sizeof(preconftab) / sizeof(struct preconfdata);
 
+/*
+ * Quirks table.
+ */
+#define ZORRO_QUIRK_NO_ZBUSMAP 1	/* Don't map VA=PA in zbusattach. */
+static struct quirksdata quirkstab[] = {
+	{8512, 101, ZORRO_QUIRK_NO_ZBUSMAP}
+};
+static int nquirksent = sizeof(quirkstab) / sizeof(struct quirksdata);
 
-void zbusattach(struct device *, struct device *, void *);
+void zbusattach(device_t, device_t, void *);
 int zbusprint(void *, const char *);
-int zbusmatch(struct device *, struct cfdata *, void *);
-void *zbusmap(void *, u_int);
+int zbusmatch(device_t, cfdata_t, void *);
 static const char *aconflookup(int, int);
+
+/*
+ * given a manufacturer id and product id, find quirks
+ * for this board.
+ */
+
+static uint8_t
+quirkslookup(int mid, int pid)
+{
+	const struct quirksdata *qdp, *eqdp;
+
+	eqdp = &quirkstab[nquirksent];
+	for (qdp = quirkstab; qdp < eqdp; qdp++)
+		if (qdp->manid == mid && qdp->prodid == pid) 
+			return(qdp->quirks);
+	return(0);
+}
 
 /*
  * given a manufacturer id and product id, find the name
@@ -233,7 +270,7 @@ static const char *aconflookup(int, int);
 static const char *
 aconflookup(int mid, int pid)
 {
-	struct aconfdata *adp, *eadp;
+	const struct aconfdata *adp, *eadp;
 
 	eadp = &aconftab[naconfent];
 	for (adp = aconftab; adp < eadp; adp++)
@@ -246,20 +283,20 @@ aconflookup(int mid, int pid)
  * mainbus driver
  */
 
-CFATTACH_DECL(zbus, sizeof(struct device),
+CFATTACH_DECL_NEW(zbus, 0,
     zbusmatch, zbusattach, NULL, NULL);
 
-static struct cfdata *early_cfdata;
+static cfdata_t early_cfdata;
 
 /*ARGSUSED*/
 int
-zbusmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
+zbusmatch(device_t parent, cfdata_t cf, void *aux)
 {
 
-	if (matchname(auxp, "zbus") == 0)
+	if (matchname(aux, "zbus") == 0)
 		return(0);
 	if (amiga_realconfig == 0)
-		early_cfdata = cfp;
+		early_cfdata = cf;
 	return(1);
 }
 
@@ -269,7 +306,7 @@ zbusmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
  * with that driver if matched else print a diag.
  */
 void
-zbusattach(struct device *pdp, struct device *dp, void *auxp)
+zbusattach(device_t parent, device_t self, void *aux)
 {
 	struct zbus_args za;
 	struct preconfdata *pcp, *epcp;
@@ -295,34 +332,45 @@ zbusattach(struct device *pdp, struct device *dp, void *auxp)
 		if (amiga_realconfig == 0 && pcp >= epcp)
 			continue;
 
+#if NZ3RAMBD > 0
+		if (z3rambd_match_id(cdp->rom.manid, cdp->rom.prodid) > 0)
+		{ }
+		else 
+#endif /* NZ3RAMBD */
 		/*
 		 * check if it's a Zorro II or III board and not linked into
 		 * MemList (i.e. not a memory board)
 		 */
-		if ((cdp->rom.type & 0xe0) != 0xc0 &&
-		    (cdp->rom.type & 0xe0) != 0x80)
-			continue;	/* er_Type != Zorro I/O */
+		switch (cdp->rom.type & (ERT_TYPEMASK | ERTF_MEMLIST)) {
+		case ERT_ZORROII:
+		case ERT_ZORROIII:
+			break;
+		default:
+			continue;
+		}
 
 		za.pa = cdp->addr;
 		za.size = cdp->size;
+		za.manid = cdp->rom.manid;
+		za.prodid = cdp->rom.prodid;
+		za.serno = cdp->rom.serno;
+		za.slot = (((u_long)za.pa >> 16) & 0xF) - 0x9;
+
 		if (amiga_realconfig && pcp < epcp && pcp->vaddr)
 			za.va = pcp->vaddr;
 		else {
-			za.va = (void *) (isztwopa(za.pa) ? 
-			    __UNVOLATILE(ztwomap(za.pa)) :
-			    zbusmap(za.pa, za.size));
-/*                     		??????? */
+			if(quirkslookup(za.manid, za.prodid) != 
+		 	    ZORRO_QUIRK_NO_ZBUSMAP) 
+				za.va = (void *) (isztwopa(za.pa) ? 
+				    __UNVOLATILE(ztwomap(za.pa)) :
+				    zbusmap(za.pa, za.size));
 			/*
 			 * save value if early console init
 			 */
 			if (amiga_realconfig == 0)
 				pcp->vaddr = za.va;
 		}
-		za.manid = cdp->rom.manid;
-		za.prodid = cdp->rom.prodid;
-		za.serno = cdp->rom.serno;
-		za.slot = (((u_long)za.pa >> 16) & 0xF) - 0x9;
-		amiga_config_found(early_cfdata, dp, &za, zbusprint);
+		amiga_config_found(early_cfdata, self, &za, zbusprint);
 	}
 }
 
@@ -330,13 +378,13 @@ zbusattach(struct device *pdp, struct device *dp, void *auxp)
  * print configuration info.
  */
 int
-zbusprint(void *auxp, const char *pnp)
+zbusprint(void *aux, const char *pnp)
 {
 	struct zbus_args *zap;
 	int rv;
 
 	rv = UNCONF;
-	zap = auxp;
+	zap = aux;
 
 	if (pnp) {
 		aprint_normal("%s at %s:",

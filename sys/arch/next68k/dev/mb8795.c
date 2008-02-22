@@ -1,4 +1,4 @@
-/*	$NetBSD: mb8795.c,v 1.42 2007/10/17 19:56:03 garbled Exp $	*/
+/*	$NetBSD: mb8795.c,v 1.60 2018/06/26 06:47:59 msaitoh Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Darrin B. Jewell
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,11 +25,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.42 2007/10/17 19:56:03 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.60 2018/06/26 06:47:59 msaitoh Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,15 +38,13 @@ __KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.42 2007/10/17 19:56:03 garbled Exp $");
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+#include <sys/rndsource.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
-
 #include <net/if_media.h>
+#include <net/bpf.h>
 
 #ifdef INET
 #include <netinet/in.h>
@@ -61,13 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.42 2007/10/17 19:56:03 garbled Exp $");
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
-#endif
-
-
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
 #endif
 
 #include <machine/cpu.h>
@@ -116,10 +100,10 @@ mb8795_config(struct mb8795_softc *sc, int *media, int nmedia, int defmedia)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
-	DPRINTF(("%s: mb8795_config()\n",sc->sc_dev.dv_xname));
+	DPRINTF(("%s: mb8795_config()\n",device_xname(sc->sc_dev)));
 
 	/* Initialize ifnet structure. */
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = mb8795_start;
 	ifp->if_ioctl = mb8795_ioctl;
@@ -148,12 +132,10 @@ mb8795_config(struct mb8795_softc *sc, int *media, int nmedia, int defmedia)
   if (sc->sc_sh == NULL)
     panic("mb8795_config: can't establish shutdownhook");
 
-#if NRND > 0
-  rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
-                    RND_TYPE_NET, 0);
-#endif
+  rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
+                    RND_TYPE_NET, RND_FLAG_DEFAULT);
 
-	DPRINTF(("%s: leaving mb8795_config()\n",sc->sc_dev.dv_xname));
+	DPRINTF(("%s: leaving mb8795_config()\n",device_xname(sc->sc_dev)));
 }
 
 /*
@@ -267,36 +249,37 @@ mb8795_rint(struct mb8795_softc *sc)
 
 	rxstat = MB_READ_REG(sc, MB8795_RXSTAT);
 	rxmask = MB_READ_REG(sc, MB8795_RXMASK);
+	__USE(rxmask);
 
 	MB_WRITE_REG(sc, MB8795_RXSTAT, MB8795_RXSTAT_CLEAR);
 
 	if (rxstat & MB8795_RXSTAT_RESET) {
 		DPRINTF(("%s: rx reset packet\n",
-				sc->sc_dev.dv_xname));
+				device_xname(sc->sc_dev)));
 		error++;
 	}
 	if (rxstat & MB8795_RXSTAT_SHORT) {
 		DPRINTF(("%s: rx short packet\n",
-				sc->sc_dev.dv_xname));
+				device_xname(sc->sc_dev)));
 		error++;
 	}
 	if (rxstat & MB8795_RXSTAT_ALIGNERR) {
 		DPRINTF(("%s: rx alignment error\n",
-				sc->sc_dev.dv_xname));
+				device_xname(sc->sc_dev)));
 #if 0
 		error++;
 #endif
 	}
 	if (rxstat & MB8795_RXSTAT_CRCERR) {
 		DPRINTF(("%s: rx CRC error\n",
-				sc->sc_dev.dv_xname));
+				device_xname(sc->sc_dev)));
 #if 0
 		error++;
 #endif
 	}
 	if (rxstat & MB8795_RXSTAT_OVERFLOW) {
 		DPRINTF(("%s: rx overflow error\n",
-				sc->sc_dev.dv_xname));
+				device_xname(sc->sc_dev)));
 #if 0
 		error++;
 #endif
@@ -315,7 +298,7 @@ mb8795_rint(struct mb8795_softc *sc)
 		while ((m = MBDMA_RX_MBUF (sc))) {
 			/* CRC is included with the packet; trim it. */
 			m->m_pkthdr.len = m->m_len = m->m_len - ETHER_CRC_LEN;
-			m->m_pkthdr.rcvif = ifp;
+			m_set_rcvif(m, ifp);
 			
 			/* Find receive length, keep crc */
 			/* enable DMA interrupts while we process the packet */
@@ -324,7 +307,7 @@ mb8795_rint(struct mb8795_softc *sc)
 #if defined(MB8795_DEBUG)
 			/* Peek at the packet */
 			DPRINTF(("%s: received packet, at VA %p-%p,len %d\n",
-					sc->sc_dev.dv_xname,mtod(m,u_char *),mtod(m,u_char *)+m->m_len,m->m_len));
+					device_xname(sc->sc_dev),mtod(m,u_char *),mtod(m,u_char *)+m->m_len,m->m_len));
 			if (mb8795_debug > 3) {
 				mb8795_hex_dump(mtod(m,u_char *), m->m_pkthdr.len);
 			} else if (mb8795_debug > 2) {
@@ -332,20 +315,8 @@ mb8795_rint(struct mb8795_softc *sc)
 			}
 #endif
 
-#if NBPFILTER > 0
-			/*
-			 * Pass packet to bpf if there is a listener.
-			 */
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m);
-#endif
-
-			{
-				ifp->if_ipackets++;
-
-				/* Pass the packet up. */
-				(*ifp->if_input)(ifp, m);
-			}
+			/* Pass the packet up. */
+			if_percpuq_enqueue(ifp->if_percpuq, m);
 
 			s = spldma();
 
@@ -359,21 +330,22 @@ mb8795_rint(struct mb8795_softc *sc)
 	if (mb8795_debug) {
 		char sbuf[256];
 
-		bitmask_snprintf(rxstat, MB8795_RXSTAT_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), MB8795_RXSTAT_BITS, rxstat);
 		printf("%s: rx interrupt, rxstat = %s\n",
-		       sc->sc_dev.dv_xname, sbuf);
+		       device_xname(sc->sc_dev), sbuf);
 
-		bitmask_snprintf(MB_READ_REG(sc, MB8795_RXSTAT),
-				 MB8795_RXSTAT_BITS, sbuf, sizeof(sbuf));
-		printf("rxstat = 0x%s\n", sbuf);
+		snprintb(sbuf, sizeof(sbuf), MB8795_RXSTAT_BITS,
+		    MB_READ_REG(sc, MB8795_RXSTAT));
+				
+		printf("rxstat = %s\n", sbuf);
 
-		bitmask_snprintf(MB_READ_REG(sc, MB8795_RXMASK),
-				 MB8795_RXMASK_BITS, sbuf, sizeof(sbuf));
-		printf("rxmask = 0x%s\n", sbuf);
+		snprintb(sbuf, sizeof(sbuf), MB8795_RXMASK_BITS,
+		    MB_READ_REG(sc, MB8795_RXMASK));
+		printf("rxmask = %s\n", sbuf);
 
-		bitmask_snprintf(MB_READ_REG(sc, MB8795_RXMODE),
-				 MB8795_RXMODE_BITS, sbuf, sizeof(sbuf));
-		printf("rxmode = 0x%s\n", sbuf);
+		snprintb(sbuf, sizeof(sbuf), MB8795_RXMODE_BITS,
+		    MB_READ_REG(sc, MB8795_RXMODE));
+		printf("rxmode = %s\n", sbuf);
 	}
 #endif
 
@@ -393,6 +365,7 @@ mb8795_tint(struct mb8795_softc *sc)
 	panic ("tint");
 	txstat = MB_READ_REG(sc, MB8795_TXSTAT);
 	txmask = MB_READ_REG(sc, MB8795_TXMASK);
+	__USE(txmask);
 
 	if ((txstat & MB8795_TXSTAT_READY) ||
 	    (txstat & MB8795_TXSTAT_TXRECV)) {
@@ -410,19 +383,19 @@ mb8795_tint(struct mb8795_softc *sc)
 	}
 
 	if (txstat & MB8795_TXSTAT_SHORTED) {
-		printf("%s: tx cable shorted\n", sc->sc_dev.dv_xname);
+		printf("%s: tx cable shorted\n", device_xname(sc->sc_dev));
 		ifp->if_oerrors++;
 	}
 	if (txstat & MB8795_TXSTAT_UNDERFLOW) {
-		printf("%s: tx underflow\n", sc->sc_dev.dv_xname);
+		printf("%s: tx underflow\n", device_xname(sc->sc_dev));
 		ifp->if_oerrors++;
 	}
 	if (txstat & MB8795_TXSTAT_COLLERR) {
-		DPRINTF(("%s: tx collision\n", sc->sc_dev.dv_xname));
+		DPRINTF(("%s: tx collision\n", device_xname(sc->sc_dev)));
 		ifp->if_collisions++;
 	}
 	if (txstat & MB8795_TXSTAT_COLLERR16) {
-		printf("%s: tx 16th collision\n", sc->sc_dev.dv_xname);
+		printf("%s: tx 16th collision\n", device_xname(sc->sc_dev));
 		ifp->if_oerrors++;
 		ifp->if_collisions += 16;
 	}
@@ -431,9 +404,9 @@ mb8795_tint(struct mb8795_softc *sc)
 	if (txstat & MB8795_TXSTAT_READY) {
 		char sbuf[256];
 
-		bitmask_snprintf(txstat, MB8795_TXSTAT_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), MB8795_TXSTAT_BITS, txstat);
 		panic("%s: unexpected tx interrupt %s",
-				sc->sc_dev.dv_xname, sbuf);
+				device_xname(sc->sc_dev), sbuf);
 
 		/* turn interrupt off */
 		MB_WRITE_REG(sc, MB8795_TXMASK, txmask & ~MB8795_TXMASK_READYIE);
@@ -453,7 +426,7 @@ mb8795_reset(struct mb8795_softc *sc)
 
 	s = splnet();
 
-	DPRINTF (("%s: mb8795_reset()\n",sc->sc_dev.dv_xname));
+	DPRINTF (("%s: mb8795_reset()\n",device_xname(sc->sc_dev)));
 
 	sc->sc_ethercom.ec_if.if_flags &= ~(IFF_RUNNING|IFF_OACTIVE);
 	sc->sc_ethercom.ec_if.if_timer = 0;
@@ -491,7 +464,7 @@ mb8795_reset(struct mb8795_softc *sc)
 	}
 	
 	DPRINTF(("%s: initializing ethernet %02x:%02x:%02x:%02x:%02x:%02x, size=%d\n",
-		 sc->sc_dev.dv_xname,
+		 device_xname(sc->sc_dev),
 		 sc->sc_enaddr[0],sc->sc_enaddr[1],sc->sc_enaddr[2],
 		 sc->sc_enaddr[3],sc->sc_enaddr[4],sc->sc_enaddr[5],
 		 sizeof(sc->sc_enaddr)));
@@ -506,11 +479,11 @@ mb8795_watchdog(struct ifnet *ifp)
 {
 	struct mb8795_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
 	++ifp->if_oerrors;
 
 	DPRINTF(("%s: %lld input errors, %lld input packets\n",
-			sc->sc_dev.dv_xname, ifp->if_ierrors, ifp->if_ipackets));
+			device_xname(sc->sc_dev), ifp->if_ierrors, ifp->if_ipackets));
 
 	ifp->if_flags &= ~IFF_RUNNING;
 	mb8795_init(sc);
@@ -526,7 +499,7 @@ mb8795_init(struct mb8795_softc *sc)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int s;
 
-	DPRINTF (("%s: mb8795_init()\n",sc->sc_dev.dv_xname));
+	DPRINTF (("%s: mb8795_init()\n",device_xname(sc->sc_dev)));
 
 	if (ifp->if_flags & IFF_UP) {
 		int rxmode;
@@ -576,7 +549,7 @@ mb8795_shutdown(void *arg)
 {
 	struct mb8795_softc *sc = (struct mb8795_softc *)arg;
 
-	DPRINTF(("%s: mb8795_shutdown()\n",sc->sc_dev.dv_xname));
+	DPRINTF(("%s: mb8795_shutdown()\n",device_xname(sc->sc_dev)));
 
 	mb8795_reset(sc);
 }
@@ -592,51 +565,54 @@ mb8795_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	s = splnet();
 
-	DPRINTF(("%s: mb8795_ioctl()\n",sc->sc_dev.dv_xname));
+	DPRINTF(("%s: mb8795_ioctl()\n",device_xname(sc->sc_dev)));
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
-		DPRINTF(("%s: mb8795_ioctl() SIOCSIFADDR\n",sc->sc_dev.dv_xname));
+	case SIOCINITIFADDR:
+		DPRINTF(("%s: mb8795_ioctl() SIOCINITIFADDR\n",device_xname(sc->sc_dev)));
 		ifp->if_flags |= IFF_UP;
 
+		mb8795_init(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-			mb8795_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
-			mb8795_init(sc);
 			break;
 		}
 		break;
 
 
 	case SIOCSIFFLAGS:
-		DPRINTF(("%s: mb8795_ioctl() SIOCSIFFLAGS\n",sc->sc_dev.dv_xname));
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
+		DPRINTF(("%s: mb8795_ioctl() SIOCSIFFLAGS\n",device_xname(sc->sc_dev)));
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 /* 			ifp->if_flags &= ~IFF_RUNNING; */
 			mb8795_reset(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
+			break;
+		case IFF_UP:
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			mb8795_init(sc);
-		} else {
+			break;
+		default:
 			/*
 			 * Reset the interface to pick up changes in any other
 			 * flags that affect hardware registers.
 			 */
 			mb8795_init(sc);
+			break;
 		}
 #ifdef MB8795_DEBUG
 		if (ifp->if_flags & IFF_DEBUG)
@@ -649,7 +625,7 @@ mb8795_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
 		DPRINTF(("%s: mb8795_ioctl() SIOCADDMULTI\n",
-		    sc->sc_dev.dv_xname));
+		    device_xname(sc->sc_dev)));
 		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware filter
@@ -663,12 +639,12 @@ mb8795_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	case SIOCGIFMEDIA:
 	case SIOCSIFMEDIA:
-		DPRINTF(("%s: mb8795_ioctl() SIOCSIFMEDIA\n",sc->sc_dev.dv_xname));
+		DPRINTF(("%s: mb8795_ioctl() SIOCSIFMEDIA\n",device_xname(sc->sc_dev)));
 		error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, cmd);
 		break;
 
 	default:
-		error = EINVAL;
+		error = ether_ioctl(ifp, cmd, data);
 		break;
 	}
 
@@ -695,13 +671,13 @@ mb8795_start(struct ifnet *ifp)
 	struct mbuf *m;
 	int s;
 
-	DPRINTF(("%s: mb8795_start()\n",sc->sc_dev.dv_xname));
+	DPRINTF(("%s: mb8795_start()\n",device_xname(sc->sc_dev)));
 
 #ifdef DIAGNOSTIC
 	IFQ_POLL(&ifp->if_snd, m);
 	if (m == 0) {
 		panic("%s: No packet to start",
-		      sc->sc_dev.dv_xname);
+		      device_xname(sc->sc_dev));
 	}
 #endif
 
@@ -721,13 +697,10 @@ mb8795_start(struct ifnet *ifp)
 			return;
 		}
 
-#if NBPFILTER > 0
 		/*
 		 * Pass packet to bpf if there is a listener.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m, BPF_D_OUT);
 
 		s = spldma();
 		IF_ENQUEUE(&sc->sc_tx_snd, m);
@@ -747,7 +720,7 @@ mb8795_start_dma(struct mb8795_softc *sc)
 	struct mbuf *m;
 	u_char txmask;
 
-	DPRINTF(("%s: mb8795_start_dma()\n",sc->sc_dev.dv_xname));
+	DPRINTF(("%s: mb8795_start_dma()\n",device_xname(sc->sc_dev)));
 
 #if (defined(DIAGNOSTIC))
 	{
@@ -758,7 +731,7 @@ mb8795_start_dma(struct mb8795_softc *sc)
 			 * Let's see if I can just reset instead. [ dbj 980706.1900 ]
 			 */
 			printf("%s: transmitter not ready\n",
-				sc->sc_dev.dv_xname);
+				device_xname(sc->sc_dev));
 			ifp->if_flags &= ~IFF_RUNNING;
 			mb8795_init(sc);
 			return;
@@ -774,13 +747,14 @@ mb8795_start_dma(struct mb8795_softc *sc)
 	if (m == 0) {
 #ifdef DIAGNOSTIC
 		panic("%s: No packet to start_dma",
-		      sc->sc_dev.dv_xname);
+		      device_xname(sc->sc_dev));
 #endif
 		return;
 	}
 
 	MB_WRITE_REG(sc, MB8795_TXSTAT, MB8795_TXSTAT_CLEAR);
 	txmask = MB_READ_REG(sc, MB8795_TXMASK);
+	__USE(txmask);
 	/* MB_WRITE_REG(sc, MB8795_TXMASK, txmask | MB8795_TXMASK_READYIE); */
 	/* MB_WRITE_REG(sc, MB8795_TXMASK, txmask | MB8795_TXMASK_TXRXIE); */
 

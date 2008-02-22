@@ -1,4 +1,4 @@
-/*	$NetBSD: if_qn.c,v 1.31 2007/10/17 19:53:16 garbled Exp $ */
+/*	$NetBSD: if_qn.c,v 1.46 2018/06/26 06:47:57 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1995 Mika Kortelainen
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.31 2007/10/17 19:53:16 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.46 2018/06/26 06:47:57 msaitoh Exp $");
 
 #include "qn.h"
 #if NQN > 0
@@ -75,7 +75,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.31 2007/10/17 19:53:16 garbled Exp $");
 #define QN_DEBUG1_no /* hides some old tests */
 #define QN_CHECKS_no /* adds some checks (not needed in normal situations) */
 
-#include "bpfilter.h"
 
 /*
  * Fujitsu MB86950 Ethernet Controller (as used in the QuickNet QN2000
@@ -99,6 +98,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.31 2007/10/17 19:53:16 garbled Exp $");
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
+#include <net/bpf.h>
 
 #ifdef INET
 #include <netinet/in.h>
@@ -108,13 +108,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.31 2007/10/17 19:53:16 garbled Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
-
 #include <machine/cpu.h>
-#include <machine/mtpr.h>
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/isr.h>
 #include <amiga/dev/zbusvar.h>
@@ -133,7 +127,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.31 2007/10/17 19:53:16 garbled Exp $");
  * This structure contains the output queue for the interface, its address, ...
  */
 struct	qn_softc {
-	struct	device sc_dev;
+	device_t sc_dev;
 	struct	isr sc_isr;
 	struct	ethercom sc_ethercom;	/* Common ethernet structures */
 	u_char	volatile *sc_base;
@@ -148,19 +142,11 @@ struct	qn_softc {
 	u_short	volatile *nic_reset;
 	u_short	volatile *nic_len;
 	u_char	transmit_pending;
-#if NBPFILTER > 0
-	void *	sc_bpf;
-#endif
 } qn_softc[NQN];
 
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#include <net/bpfdesc.h>
-#endif
 
-
-int	qnmatch(struct device *, struct cfdata *, void *);
-void	qnattach(struct device *, struct device *, void *);
+int	qnmatch(device_t, cfdata_t, void *);
+void	qnattach(device_t, device_t, void *);
 int	qnintr(void *);
 int	qnioctl(struct ifnet *, u_long, void *);
 void	qnstart(struct ifnet *);
@@ -179,11 +165,11 @@ static	void qn_get_packet(struct qn_softc *, u_short);
 static	void qn_dump(struct qn_softc *);
 #endif
 
-CFATTACH_DECL(qn, sizeof(struct qn_softc),
+CFATTACH_DECL_NEW(qn, sizeof(struct qn_softc),
     qnmatch, qnattach, NULL, NULL);
 
 int
-qnmatch(struct device *parent, struct cfdata *cfp, void *aux)
+qnmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zbus_args *zap;
 
@@ -202,10 +188,10 @@ qnmatch(struct device *parent, struct cfdata *cfp, void *aux)
  * to accept packets.
  */
 void
-qnattach(struct device *parent, struct device *self, void *aux)
+qnattach(device_t parent, device_t self, void *aux)
 {
 	struct zbus_args *zap;
-	struct qn_softc *sc = (struct qn_softc *)self;
+	struct qn_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	u_int8_t myaddr[ETHER_ADDR_LEN];
 
@@ -238,7 +224,7 @@ qnattach(struct device *parent, struct device *self, void *aux)
 	/* set interface to stopped condition (reset) */
 	qnstop(sc);
 
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_ioctl = qnioctl;
 	ifp->if_watchdog = qnwatchdog;
@@ -249,6 +235,7 @@ qnattach(struct device *parent, struct device *self, void *aux)
 
 	/* Attach the interface. */
 	if_attach(ifp);
+	if_deferred_start_init(ifp, NULL);
 	ether_ifattach(ifp, myaddr);
 
 #ifdef QN_DEBUG
@@ -304,7 +291,7 @@ qninit(struct qn_softc *sc)
 	*sc->nic_reset = ENABLE_DLC;
 
 	/* Attempt to start output, if any. */
-	qnstart(ifp);
+	if_schedule_deferred_start(ifp);
 }
 
 /*
@@ -406,18 +393,14 @@ qnstart(struct ifnet *ifp)
 	if (m == 0)
 		return;
 
-#if NBPFILTER > 0
 	/*
 	 * If bpf is listening on this interface, let it
 	 * see the packet before we commit it to the wire
 	 *
 	 * (can't give the copy in QuickNet card RAM to bpf, because
 	 * that RAM is not visible to the host but is read from FIFO)
-	 *
 	 */
-	if (sc->sc_bpf)
-		bpf_mtap(sc->sc_bpf, m);
-#endif
+	bpf_mtap(ifp, m, BPF_D_OUT);
 	len = qn_put(sc->nic_fifo, m);
 	m_freem(m);
 
@@ -556,7 +539,7 @@ qn_get_packet(struct qn_softc *sc, u_short len)
 	if (len & 1)
 		len++;
 
-	m->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
+	m_set_rcvif(m, &sc->sc_ethercom.ec_if);
 	m->m_pkthdr.len = len;
 	m->m_len = 0;
 	head = m;
@@ -598,12 +581,7 @@ qn_get_packet(struct qn_softc *sc, u_short len)
 		len -= len1;
 	}
 
-#if NBPFILTER > 0
-	if (sc->sc_bpf)
-		bpf_mtap(sc->sc_bpf, head);
-#endif
-
-	(*ifp->if_input)(ifp, head);
+	if_percpuq_enqueue(ifp->if_percpuq, head);
 	return;
 
 bad:
@@ -696,7 +674,7 @@ qn_rint(struct qn_softc *sc, u_short rstat)
 		    len < ETHER_HDR_LEN) {
 			log(LOG_WARNING,
 			    "%s: received a %s packet? (%u bytes)\n",
-			    sc->sc_dev.dv_xname,
+			    device_xname(sc->sc_dev),
 			    len < ETHER_HDR_LEN ? "partial" : "big", len);
 			++sc->sc_ethercom.ec_if.if_ierrors;
 			continue;
@@ -706,13 +684,11 @@ qn_rint(struct qn_softc *sc, u_short rstat)
 		if (len < (ETHER_MIN_LEN - ETHER_CRC_LEN))
 			log(LOG_WARNING,
 			    "%s: received a short packet? (%u bytes)\n",
-			    sc->sc_dev.dv_xname, len);
+			    device_xname(sc->sc_dev), len);
 #endif
 
 		/* Read the packet. */
 		qn_get_packet(sc, len);
-
-		++sc->sc_ethercom.ec_if.if_ipackets;
 	}
 
 #ifdef QN_DEBUG
@@ -802,7 +778,7 @@ qnintr(void *arg)
 		qn_rint(sc, rint);
 
 	if ((sc->sc_ethercom.ec_if.if_flags & IFF_OACTIVE) == 0)
-		qnstart(&sc->sc_ethercom.ec_if);
+		if_schedule_deferred_start(&sc->sc_ethercom.ec_if);
 	else if (return_tintmask == 1)
 		*sc->nic_t_mask = tintmask;
 
@@ -830,7 +806,7 @@ qnioctl(register struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
 
 		switch (ifa->ifa_addr->sa_family) {
@@ -841,22 +817,6 @@ qnioctl(register struct ifnet *ifp, u_long cmd, void *data)
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
-#ifdef NS
-		case AF_NS:
-		    {
-			register struct ns_addr *ina = &(IA_SNS(ifa)->sns_addr);
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-				    *(union ns_host *)LLADDR(ifp->if_sadl);
-			else
-				bcopy(ina->x_host.c_host,
-				    LLADDR(ifp->if_sadl), ETHER_ADDR_LEN);
-			qnstop(sc);
-			qninit(sc);
-			break;
-		    }
-#endif
 		default:
 			log(LOG_INFO, "qn:sa_family:default (not tested)\n");
 			qnstop(sc);
@@ -866,6 +826,9 @@ qnioctl(register struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		/* XXX see the comment in ed_ioctl() about code re-use */
 		if ((ifp->if_flags & IFF_UP) == 0 &&
 		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
@@ -913,8 +876,7 @@ qnioctl(register struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		log(LOG_INFO, "qnioctl: default\n");
-		error = EINVAL;
+		error = ether_ioctl(ifp, cmd, data);
 	}
 
 	splx(s);

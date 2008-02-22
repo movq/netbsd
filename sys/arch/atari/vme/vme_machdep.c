@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_machdep.c,v 1.14 2005/12/11 12:17:02 christos Exp $	*/
+/*	$NetBSD: vme_machdep.c,v 1.21 2011/07/01 20:34:06 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.14 2005/12/11 12:17:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.21 2011/07/01 20:34:06 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,7 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.14 2005/12/11 12:17:02 christos Ex
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/cpu.h>
 #include <machine/iomap.h>
 #include <machine/mfp.h>
@@ -53,32 +46,28 @@ __KERNEL_RCSID(0, "$NetBSD: vme_machdep.c,v 1.14 2005/12/11 12:17:02 christos Ex
 #include <atari/atari/device.h>
 #include <atari/vme/vmevar.h>
 
-static int	vmebusprint __P((void *auxp, const char *));
-static int	vmebusmatch __P((struct device *, struct cfdata *, void *));
-static void	vmebusattach __P((struct device *, struct device *, void *));
+static int	vmebusprint(void *, const char *);
+static int	vmebusmatch(device_t, cfdata_t, void *);
+static void	vmebusattach(device_t, device_t, void *);
 
-CFATTACH_DECL(avmebus, sizeof(struct device),
+CFATTACH_DECL_NEW(avmebus, 0,
     vmebusmatch, vmebusattach, NULL, NULL);
 
 int vmebus_attached;
 
 int
-vmebusmatch(pdp, cfp, auxp)
-struct device	*pdp;
-struct cfdata	*cfp;
-void		*auxp;
+vmebusmatch(device_t parent, cfdata_t cf, void *aux)
 {
-	if(atari_realconfig == 0)
-		return (0);
-	if (strcmp((char *)auxp, "avmebus") || vmebus_attached)
-		return(0);
-	return(machineid & ATARI_FALCON ? 0 : 1);
+
+	if (atari_realconfig == 0)
+		return 0;
+	if (strcmp((char *)aux, "avmebus") || vmebus_attached)
+		return 0;
+	return (machineid & ATARI_FALCON) ? 0 : 1;
 }
 
 void
-vmebusattach(pdp, dp, auxp)
-struct device	*pdp, *dp;
-void		*auxp;
+vmebusattach(device_t parent, device_t self, void *aux)
 {
 	struct vmebus_attach_args	vba;
 
@@ -99,15 +88,14 @@ void		*auxp;
 	vba.vba_memt->base = 0;
 
 	printf("\n");
-	config_found(dp, &vba, vmebusprint);
+	config_found(self, &vba, vmebusprint);
 }
 
 int
-vmebusprint(auxp, name)
-void		*auxp;
-const char	*name;
+vmebusprint(void *aux, const char *name)
 {
-	if(name == NULL)
-		return(UNCONF);
-	return(QUIET);
+
+	if (name == NULL)
+		return UNCONF;
+	return QUIET;
 }

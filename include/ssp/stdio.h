@@ -1,4 +1,4 @@
-/*	$NetBSD: stdio.h,v 1.2 2007/05/30 21:14:37 tls Exp $	*/
+/*	$NetBSD: stdio.h,v 1.5 2011/07/17 20:54:34 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,14 +35,16 @@
 
 __BEGIN_DECLS
 int __sprintf_chk(char *__restrict, int, size_t, const char *__restrict, ...)
-    __attribute__((__format__(__printf__, 4, 5)));
+    __printflike(4, 5);
 int __vsprintf_chk(char *__restrict, int, size_t, const char *__restrict,
-    _BSD_VA_LIST_) __attribute__((__format__(__printf__, 4, 0)));
+    __va_list)
+    __printflike(4, 0);
 int __snprintf_chk(char *__restrict, size_t, int, size_t,
-    const char *__restrict, ...) __attribute__((__format__(__printf__, 5, 6)));
+    const char *__restrict, ...)
+    __printflike(5, 6);
 int __vsnprintf_chk(char *__restrict, size_t, int, size_t,
-     const char *__restrict, _BSD_VA_LIST_)
-     __attribute__((__format__(__printf__, 5, 0)));
+     const char *__restrict, __va_list)
+    __printflike(5, 0);
 char *__gets_chk(char *, size_t);
 char *__fgets_chk(char *, int, size_t, FILE *);
 __END_DECLS

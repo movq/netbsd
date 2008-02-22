@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.36 2007/12/25 17:55:10 macallan Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.41 2016/10/19 00:08:41 nonaka Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.36 2007/12/25 17:55:10 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.41 2016/10/19 00:08:41 nonaka Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,10 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.36 2007/12/25 17:55:10 macallan Ex
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #define _POWERPC_BUS_DMA_PRIVATE
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <machine/autoconf.h>
 #include <machine/intr.h>
@@ -83,9 +81,7 @@ pcitag_t genppc_pci_indirect_make_tag(void *, int, int, int);
 void genppc_pci_indirect_decompose_tag(void *, pcitag_t, int *, int *, int *);
 
 void
-macppc_pci_attach_hook(parent, self, pba)
-	struct device *parent, *self;
-	struct pcibus_attach_args *pba;
+macppc_pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 	pci_chipset_tag_t pc = pba->pba_pc;
 	int bus = pba->pba_bus;
@@ -127,6 +123,17 @@ macppc_pci_get_chipset_tag(pci_chipset_tag_t pc)
 	pc->pc_intr_evcnt = genppc_pci_intr_evcnt;
 	pc->pc_intr_establish = genppc_pci_intr_establish;
 	pc->pc_intr_disestablish = genppc_pci_intr_disestablish;
+	pc->pc_intr_setattr = genppc_pci_intr_setattr;
+	pc->pc_intr_type = genppc_pci_intr_type;
+	pc->pc_intr_alloc = genppc_pci_intr_alloc;
+	pc->pc_intr_release = genppc_pci_intr_release;
+	pc->pc_intx_alloc = genppc_pci_intx_alloc;
+
+	pc->pc_msi_v = (void *)pc;
+	genppc_pci_chipset_msi_init(pc);
+
+	pc->pc_msix_v = (void *)pc;
+	genppc_pci_chipset_msix_init(pc);
 
 	pc->pc_conf_interrupt = genppc_pci_conf_interrupt;
 	pc->pc_conf_hook = genppc_pci_conf_hook;

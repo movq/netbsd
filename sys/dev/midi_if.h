@@ -1,4 +1,4 @@
-/*	$NetBSD: midi_if.h,v 1.19 2007/03/04 06:01:42 christos Exp $	*/
+/*	$NetBSD: midi_if.h,v 1.27 2015/03/01 00:34:14 mrg Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,8 @@
 #ifndef _SYS_DEV_MIDI_IF_H_
 #define _SYS_DEV_MIDI_IF_H_
 
+#include <sys/mutex.h>
+
 struct midi_info {
 	const char *name;		/* Name of MIDI hardware */
 	int	props;
@@ -46,6 +41,22 @@ struct midi_info {
 #define MIDI_PROP_OUT_INTR  1
 #define MIDI_PROP_CAN_INPUT 2
 #define MIDI_PROP_NO_OUTPUT 4
+
+/*
+ * XXX expand
+ *
+ * List of hardware interface methods, and when locks are held by each
+ * called by this module:
+ *
+ *	METHOD			INTR	NOTES
+ *	----------------------- ------- -------------------------
+ *	open 			-	
+ *	close 			-	
+ *	output 			-	
+ *	getinfo 		-	Called at attach time
+ *	ioctl 			-	
+ *	get_locks 		-	Called at attach time
+ */
 
 struct midi_softc;
 
@@ -58,6 +69,7 @@ struct midi_hw_if {
 	int	(*output)(void *, int);	/* output a byte */
 	void	(*getinfo)(void *, struct midi_info *);
 	int	(*ioctl)(void *, u_long, void *, int, struct lwp *);
+	void	(*get_locks)(void *, kmutex_t **, kmutex_t **);
 };
 
 /*
@@ -90,9 +102,9 @@ struct midi_hw_if_ext {
 };
 void midi_register_hw_if_ext(struct midi_hw_if_ext *);
 
-void	midi_attach(struct midi_softc *, struct device *);
-struct device *midi_attach_mi(const struct midi_hw_if *, void *,
-				   struct device *);
+void	midi_attach(struct midi_softc *);
+int	mididetach(device_t, int);
+device_t midi_attach_mi(const struct midi_hw_if *, void *, device_t);
 
 int	midi_unit_count(void);
 void	midi_getinfo(dev_t, struct midi_info *);

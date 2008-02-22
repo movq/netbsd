@@ -1,4 +1,4 @@
-/* $NetBSD: sbjcnvar.h,v 1.2 2003/02/07 17:38:49 cgd Exp $ */
+/* $NetBSD: sbjcnvar.h,v 1.6 2015/04/13 21:18:42 riastradh Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -64,16 +64,15 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rnd.h"
-#if NRND > 0 && defined(RND_SBJCN)
-#include <sys/rnd.h>
+#ifdef RND_SBJCN
+#include <sys/rndsource.h>
 #endif
 
 #include <sys/callout.h>
 
-#define	SBJCN_CHAN(x)		((minor(x) & 0x00001) >> 0)
-#define	SBJCN_UNIT(x)		((minor(x) & 0x7fffe) >> 1)
-#define	SBJCN_DIALOUT(x)	((minor(x) & 0x80000) != 0)
+#define	SBJCN_CHAN(x)		(TTUNIT(x) & 1)
+#define	SBJCN_UNIT(x)		(TTUNIT(x) >> 1)
+#define	SBJCN_DIALOUT(x)	TTDIALOUT(x)
 
 #define	SBJCN_TOLERANCE	30	/* baud rate tolerance, in 0.1% units */
 
@@ -163,7 +162,7 @@ struct sbjcn_channel {
 };
 
 struct sbjcn_softc {
-	struct device	sc_dev;		/* base device */
+	device_t	sc_dev;		/* base device */
 
 	/* shared data structures */
 	u_long		sc_addr;	/* phys addr of JTAG console bus_space */

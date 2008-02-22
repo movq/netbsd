@@ -1,3 +1,3 @@
-/*	$NetBSD: rwlock.h,v 1.2 2007/02/09 21:55:09 ad Exp $	*/
+/*	$NetBSD: rwlock.h,v 1.4 2014/03/31 11:25:49 martin Exp $	*/
 
 #include <mips/rwlock.h>

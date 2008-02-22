@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.43 2005/12/11 12:19:34 christos Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.51 2018/03/31 06:34:51 ragge Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -62,13 +62,13 @@
  */
 
 #ifndef MAXTSIZ
-#define MAXTSIZ		(8*1024*1024)		/* max text size */
+#define MAXTSIZ		(32*1024*1024)		/* max text size */
 #endif
 #ifndef DFLDSIZ
 #define DFLDSIZ		(128*1024*1024)		/* initial data size limit */
 #endif
 #ifndef MAXDSIZ
-#define MAXDSIZ		(1024*1024*1024)	/* max data size */
+#define MAXDSIZ		(512*1024*1024)		/* max data size */
 #endif
 #ifndef DFLSSIZ
 #define DFLSSIZ		(512*1024)		/* initial stack size limit */
@@ -77,16 +77,7 @@
 #define MAXSSIZ		(8*1024*1024)		/* max stack size */
 #endif
 
-/* 
- * Size of shared memory map
- */
-
-#ifndef SHMMAXPGS
-#define SHMMAXPGS	1024
-#endif
-
 #define VM_PHYSSEG_MAX		1
-#define VM_PHYSSEG_NOADD
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH /* XXX */
 
 #define	VM_NFREELIST		1
@@ -107,12 +98,7 @@
 #define VM_MIN_KERNEL_ADDRESS	((vaddr_t)KERNBASE)
 #define VM_MAX_KERNEL_ADDRESS	((vaddr_t)(0xC0000000))
 
-/*
- * The address to which unspecified mapping requests default
- */
 #define __USE_TOPDOWN_VM
-#define VM_DEFAULT_ADDRESS(da, sz) \
-	trunc_page(VM_MAXUSER_ADDRESS - MAXSSIZ - (sz))
 
 #define	USRIOSIZE		(8 * VAX_NPTEPG)	/* 512MB */
 #define	VM_PHYS_SIZE		(USRIOSIZE*VAX_NBPG)

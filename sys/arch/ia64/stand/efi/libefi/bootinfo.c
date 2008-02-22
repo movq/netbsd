@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.c,v 1.3 2006/07/02 17:28:11 cherry Exp $	*/
+/*	$NetBSD: bootinfo.c,v 1.5 2016/08/04 18:07:43 scole Exp $	*/
 
 /*-
  * Copyright (c) 1998 Michael Smith <msmith@freebsd.org>
@@ -31,6 +31,7 @@
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
+#include <lib/libkern/libkern.h>
 
 #include <sys/param.h>
 #include <sys/reboot.h>
@@ -45,6 +46,9 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <efiboot.h>
+
+#include <machine/efilib.h>
 
 #include "bootstrap.h" 
 

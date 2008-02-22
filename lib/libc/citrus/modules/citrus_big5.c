@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_big5.c,v 1.11 2006/11/22 23:38:27 tnozaki Exp $	*/
+/*	$NetBSD: citrus_big5.c,v 1.15 2014/06/24 22:24:18 spz Exp $	*/
 
 /*-
  * Copyright (c)2002, 2006 Citrus Project,
@@ -60,7 +60,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_big5.c,v 1.11 2006/11/22 23:38:27 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_big5.c,v 1.15 2014/06/24 22:24:18 spz Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/queue.h>
@@ -72,7 +72,6 @@ __RCSID("$NetBSD: citrus_big5.c,v 1.11 2006/11/22 23:38:27 tnozaki Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <wchar.h>
 #include <limits.h>
 
@@ -116,8 +115,10 @@ typedef struct {
 		_BIG5State	s_mbrtowc;
 		_BIG5State	s_mbtowc;
 		_BIG5State	s_mbsrtowcs;
+		_BIG5State	s_mbsnrtowcs;
 		_BIG5State	s_wcrtomb;
 		_BIG5State	s_wcsrtombs;
+		_BIG5State	s_wcsnrtombs;
 		_BIG5State	s_wctomb;
 	} states;
 } _BIG5CTypeInfo;
@@ -191,18 +192,18 @@ _citrus_BIG5_check_excludes(_BIG5EncodingInfo *ei, wint_t c)
 }
 
 static int
-_citrus_BIG5_fill_rowcol(void ** __restrict ctx, const char * __restrict s,
+_citrus_BIG5_fill_rowcol(void * __restrict ctx, const char * __restrict s,
 	uint64_t start, uint64_t end)
 {
 	_BIG5EncodingInfo *ei;
 	int i;
 	uint64_t n;
 
-	_DIAGASSERT(ctx != NULL && *ctx != NULL);
+	_DIAGASSERT(ctx != NULL);
 
 	if (start > 0xFF || end > 0xFF)
 		return EINVAL;
-	ei = (_BIG5EncodingInfo *)*ctx;
+	ei = (_BIG5EncodingInfo *)ctx;
 	i = strcmp("row", s) ? 1 : 0;
 	i = 1 << i;
 	for (n = start; n <= end; ++n)
@@ -212,17 +213,17 @@ _citrus_BIG5_fill_rowcol(void ** __restrict ctx, const char * __restrict s,
 
 static int
 /*ARGSUSED*/
-_citrus_BIG5_fill_excludes(void ** __restrict ctx, const char * __restrict s,
+_citrus_BIG5_fill_excludes(void * __restrict ctx, const char * __restrict s,
 	uint64_t start, uint64_t end)
 {
 	_BIG5EncodingInfo *ei;
 	_BIG5Exclude *exclude;
 
-	_DIAGASSERT(ctx != NULL && *ctx != NULL);
+	_DIAGASSERT(ctx != NULL);
 
 	if (start > 0xFFFF || end > 0xFFFF)
 		return EINVAL;
-	ei = (_BIG5EncodingInfo *)*ctx;
+	ei = (_BIG5EncodingInfo *)ctx;
 	exclude = TAILQ_LAST(&ei->excludes, _BIG5ExcludeList);
 	if (exclude != NULL && (wint_t)start <= exclude->end)
 		return EINVAL;
@@ -285,9 +286,9 @@ _citrus_BIG5_encoding_module_init(_BIG5EncodingInfo * __restrict ei,
 	}
 
 	/* fallback Big5-1984, for backward compatibility. */
-	_citrus_BIG5_fill_rowcol((void **)&ei, "row", 0xA1, 0xFE);
-	_citrus_BIG5_fill_rowcol((void **)&ei, "col", 0x40, 0x7E);
-	_citrus_BIG5_fill_rowcol((void **)&ei, "col", 0xA1, 0xFE);
+	_citrus_BIG5_fill_rowcol(ei, "row", 0xA1, 0xFE);
+	_citrus_BIG5_fill_rowcol(ei, "col", 0x40, 0x7E);
+	_citrus_BIG5_fill_rowcol(ei, "col", 0xA1, 0xFE);
 
 	return 0;
 }
@@ -394,7 +395,7 @@ _citrus_BIG5_wcrtomb_priv(_BIG5EncodingInfo * __restrict ei,
 			  size_t n, wchar_t wc, _BIG5State * __restrict psenc,
 			  size_t * __restrict nresult)
 {
-	int l, ret;
+	size_t l, ret;
 
 	_DIAGASSERT(ei != NULL);
 	_DIAGASSERT(nresult != 0);

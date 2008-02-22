@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.7 2008/02/05 22:31:49 garbled Exp $	*/
+/*	$NetBSD: locore.S,v 1.16 2014/08/07 09:08:41 joerg Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -33,9 +33,9 @@
  */
 
 #include "opt_ddb.h"
-#include "fs_kernfs.h"
 #include "opt_ipkdb.h"
 #include "opt_lockdebug.h"
+#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcparam.h"
 #include "assym.h"
@@ -43,14 +43,12 @@
 #include <sys/syscall.h>
 
 #include <machine/param.h>
-#include <machine/vmparam.h>
-#include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
-#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 
 #include "ksyms.h"
 
@@ -66,8 +64,6 @@ GLOBAL(startsym)
 	.long	0			/* start symbol table */
 GLOBAL(endsym)
 	.long	0			/* end symbol table */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
 GLOBAL(oeacpufeat)
 	.long	0			/* cpu features */
 
@@ -114,7 +110,7 @@ __start:
 	isync
 
 /* compute end of kernel memory */
-#if NKSYMS || defined(DDB) || defined(LKM) || defined(KERNFS)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	lis	%r7,_C_LABEL(startsym)@ha
 	addi	%r7,%r7,_C_LABEL(startsym)@l
 	stw	%r3,0(%r7)
@@ -136,7 +132,7 @@ __start:
 /* enable internal i/d-cache */
 	mfpvr	%r9
 	rlwinm	%r9,%r9,16,16,31
-	cmpi	%cr0,%r9,1
+	cmpwi	%cr0,%r9,1
 	beq	3f			/* not needed for 601 */
 	mfspr	%r11,SPR_HID0
 	andi.	%r0,%r11,HID0_DCE
@@ -151,9 +147,9 @@ __start:
 	mtspr	SPR_HID0,%r11		/* enable caches */
 	sync
 	isync
-	cmpi	%cr0,%r9,4		/* check for 604 */
-	cmpi	%cr1,%r9,9		/* or 604e */
-	cmpi	%cr2,%r9,10		/* or mach5 */
+	cmpwi	%cr0,%r9,4		/* check for 604 */
+	cmpwi	%cr1,%r9,9		/* or 604e */
+	cmpwi	%cr2,%r9,10		/* or mach5 */
 	cror	2,2,6
 	cror	2,2,10
 	bne	3f

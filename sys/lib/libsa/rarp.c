@@ -1,4 +1,4 @@
-/*	$NetBSD: rarp.c,v 1.26 2007/11/24 13:20:56 isaki Exp $	*/
+/*	$NetBSD: rarp.c,v 1.32 2014/03/29 14:30:16 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1992 Regents of the University of California.
@@ -76,8 +76,8 @@ struct ether_arp {
 #define	arp_pln	ea_hdr.ar_pln
 #define	arp_op	ea_hdr.ar_op
 
-static ssize_t rarpsend __P((struct iodesc *, void *, size_t));
-static ssize_t rarprecv __P((struct iodesc *, void *, size_t, time_t));
+static ssize_t rarpsend(struct iodesc *, void *, size_t);
+static ssize_t rarprecv(struct iodesc *, void *, size_t, saseconds_t);
 
 /*
  * Ethernet (Reverse) Address Resolution Protocol (see RFC 903, and 826).
@@ -88,14 +88,14 @@ rarp_getipaddress(int sock)
 	struct iodesc *d;
 	struct ether_arp *ap;
 	struct {
-		u_char header[ETHER_SIZE];
+		u_char header[ETHERNET_HEADER_SIZE];
 		struct {
 			struct ether_arp arp;
 			u_char pad[18]; 	/* 60 - sizeof(arp) */
 		} data;
 	} wbuf;
 	struct {
-		u_char header[ETHER_SIZE];
+		u_char header[ETHERNET_HEADER_SIZE];
 		struct {
 			struct ether_arp arp;
 			u_char pad[24]; 	/* extra space */
@@ -115,15 +115,15 @@ rarp_getipaddress(int sock)
 		printf("rarp: d=%lx\n", (u_long)d);
 #endif
 
-	bzero((char *)&wbuf.data, sizeof(wbuf.data));
+	(void)memset(&wbuf.data, 0, sizeof(wbuf.data));
 	ap = &wbuf.data.arp;
 	ap->arp_hrd = htons(ARPHRD_ETHER);
 	ap->arp_pro = htons(ETHERTYPE_IP);
 	ap->arp_hln = sizeof(ap->arp_sha); /* hardware address length */
 	ap->arp_pln = sizeof(ap->arp_spa); /* protocol address length */
 	ap->arp_op = htons(ARPOP_REVREQUEST);
-	bcopy(d->myea, ap->arp_sha, 6);
-	bcopy(d->myea, ap->arp_tha, 6);
+	(void)memcpy(ap->arp_sha, d->myea, ETHER_ADDR_LEN);
+	(void)memcpy(ap->arp_tha, d->myea, ETHER_ADDR_LEN);
 
 	if (sendrecv(d,
 	    rarpsend, &wbuf.data, sizeof(wbuf.data),
@@ -134,10 +134,10 @@ rarp_getipaddress(int sock)
 	}
 
 	ap = &rbuf.data.arp;
-	bcopy(ap->arp_tpa, (char *)&myip, sizeof(myip));
+	(void)memcpy(&myip, ap->arp_tpa, sizeof(myip));
 #if 0
 	/* XXX - Can NOT assume this is our root server! */
-	bcopy(ap->arp_spa, (char *)&rootip, sizeof(rootip));
+	(void)memcpy(&rootip, ap->arp_spa, sizeof(rootip));
 #endif
 
 	/* Compute our "natural" netmask. */
@@ -172,7 +172,7 @@ rarpsend(struct iodesc *d, void *pkt, size_t len)
  * else -1 (and errno == 0)
  */
 static ssize_t
-rarprecv(struct iodesc *d, void *pkt, size_t len, time_t tleft)
+rarprecv(struct iodesc *d, void *pkt, size_t len, saseconds_t tleft)
 {
 	ssize_t n;
 	struct ether_arp *ap;
@@ -188,7 +188,7 @@ rarprecv(struct iodesc *d, void *pkt, size_t len, time_t tleft)
 	if (n == -1 || (size_t)n < sizeof(struct ether_arp)) {
 #ifdef RARP_DEBUG
 		if (debug)
-			printf("bad len=%d\n", n);
+			printf("bad len=%d\n", (int)n);
 #endif
 		return -1;
 	}
@@ -223,7 +223,7 @@ rarprecv(struct iodesc *d, void *pkt, size_t len, time_t tleft)
 	}
 
 	/* Is the reply for our Ethernet address? */
-	if (memcmp(ap->arp_tha, d->myea, 6)) {
+	if (memcmp(ap->arp_tha, d->myea, ETHER_ADDR_LEN)) {
 #ifdef RARP_DEBUG
 		if (debug)
 			printf("unwanted address\n");

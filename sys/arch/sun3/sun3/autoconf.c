@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.74 2008/02/12 17:30:58 joerg Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.79 2013/09/07 15:56:11 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.74 2008/02/12 17:30:58 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.79 2013/09/07 15:56:11 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.74 2008/02/12 17:30:58 joerg Exp $");
  * then choose root device (etc.)
  * Called by sys/kern/subr_autoconf.c: configure()
  */
-void 
+void
 cpu_configure(void)
 {
 
@@ -104,8 +97,8 @@ cpu_configure(void)
  * used config_found, then we would not have an opportunity to
  * setup the confargs for each child match and attach call.
  */
-int 
-bus_scan(struct device *parent, struct cfdata *cf, const int *ldesc, void *aux)
+int
+bus_scan(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -140,7 +133,7 @@ bus_scan(struct device *parent, struct cfdata *cf, const int *ldesc, void *aux)
  * The parent name is non-NULL when there was no match
  * found by config_found().
  */
-int 
+int
 bus_print(void *args, const char *name)
 {
 	struct confargs *ca = args;
@@ -161,13 +154,13 @@ bus_print(void *args, const char *name)
 /****************************************************************/
 
 /* This takes the args: name, ctlr, unit */
-typedef struct device * (*findfunc_t)(char *, int, int);
+typedef device_t (*findfunc_t)(char *, int, int);
 
-static struct device * net_find (char *, int, int);
+static device_t net_find(char *, int, int);
 #if NSCSIBUS > 0
-static struct device * scsi_find(char *, int, int);
+static device_t scsi_find(char *, int, int);
 #endif
-static struct device * xx_find  (char *, int, int);
+static device_t xx_find(char *, int, int);
 
 struct prom_n2f {
 	const char name[4];
@@ -187,13 +180,11 @@ static struct prom_n2f prom_dev_table[] = {
 /*
  * Choose root and swap devices.
  */
-void 
+void
 cpu_rootconf(void)
 {
 	struct bootparam *bp;
 	struct prom_n2f *nf;
-	struct device *boot_device;
-	int boot_partition;
 	const char *devname;
 	findfunc_t find;
 	char promname[4];
@@ -212,8 +203,8 @@ cpu_rootconf(void)
 	promname[2] = '\0';
 
 	/* Default to "unknown" */
-	boot_device = NULL;
-	boot_partition = 0;
+	booted_device = NULL;
+	booted_partition = 0;
 	devname = "<unknown>";
 	partname[0] = '\0';
 	find = NULL;
@@ -225,18 +216,18 @@ cpu_rootconf(void)
 			break;
 		}
 	if (find)
-		boot_device = (*find)(promname, bp->ctlrNum, bp->unitNum);
-	if (boot_device) {
-		devname = boot_device->dv_xname;
-		if (device_class(boot_device) == DV_DISK) {
-			boot_partition = bp->partNum & 7;
-			partname[0] = 'a' + boot_partition;
+		booted_device = (*find)(promname, bp->ctlrNum, bp->unitNum);
+	if (booted_device) {
+		devname = device_xname(booted_device);
+		if (device_class(booted_device) == DV_DISK) {
+			booted_partition = bp->partNum & 7;
+			partname[0] = 'a' + booted_partition;
 			partname[1] = '\0';
 		}
 	}
 
 	printf("boot device: %s%s\n", devname, partname);
-	setroot(boot_device, boot_partition);
+	rootconf();
 }
 
 /*
@@ -246,7 +237,7 @@ cpu_rootconf(void)
 /*
  * Network device:  Just use controller number.
  */
-static struct device *
+static device_t
 net_find(char *name, int ctlr, int unit)
 {
 	return device_find_by_driver_unit(name, ctlr);
@@ -257,10 +248,10 @@ net_find(char *name, int ctlr, int unit)
  * SCSI device:  The controller number corresponds to the
  * scsibus number, and the unit number is (targ*8 + LUN).
  */
-static struct device *
+static device_t
 scsi_find(char *name, int ctlr, int unit)
 {
-	struct device *scsibus;
+	device_t scsibus;
 	struct scsibus_softc *sbsc;
 	struct scsipi_periph *periph;
 	int target, lun;
@@ -287,7 +278,7 @@ scsi_find(char *name, int ctlr, int unit)
  * Xylogics SMD disk: (xy, xd)
  * Assume wired-in unit numbers for now...
  */
-static struct device *
+static device_t
 xx_find(char *name, int ctlr, int unit)
 {
 	return device_find_by_driver_unit(name, ctlr * 2 + unit);
@@ -305,7 +296,7 @@ xx_find(char *name, int ctlr, int unit)
  *	Try the access using peek_*
  *	Clean up temp. mapping
  */
-int 
+int
 bus_peek(int bustype, int pa, int sz)
 {
 	void *va;
@@ -332,7 +323,7 @@ bus_peek(int bustype, int pa, int sz)
 }
 
 /* from hp300: badbaddr() */
-int 
+int
 peek_byte(void *addr)
 {
 	label_t faultbuf;
@@ -348,7 +339,7 @@ peek_byte(void *addr)
 	return x;
 }
 
-int 
+int
 peek_word(void *addr)
 {
 	label_t faultbuf;
@@ -364,7 +355,7 @@ peek_word(void *addr)
 	return x;
 }
 
-int 
+int
 peek_long(void *addr)
 {
 	label_t faultbuf;

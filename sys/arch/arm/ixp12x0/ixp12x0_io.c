@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp12x0_io.c,v 1.11 2005/11/24 13:08:32 yamt Exp $ */
+/*	$NetBSD: ixp12x0_io.c,v 1.18 2018/03/16 17:56:32 ryo Exp $ */
 
 /*
  * Copyright (c) 2002, 2003
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_io.c,v 1.11 2005/11/24 13:08:32 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_io.c,v 1.18 2018/03/16 17:56:32 ryo Exp $");
 
 /*
  * bus_space I/O functions for ixp12x0
@@ -46,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0_io.c,v 1.11 2005/11/24 13:08:32 yamt Exp $")
 
 #include <uvm/uvm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <arm/ixp12x0/ixp12x0reg.h>
 #include <arm/ixp12x0/ixp12x0var.h>
@@ -59,79 +53,79 @@ bs_protos(bs_notimpl);
 
 struct bus_space ixp12x0_bs_tag = {
 	/* cookie */
-	(void *) 0,
+	.bs_cookie = (void *) 0,
 
 	/* mapping/unmapping */
-	ixp12x0_bs_map,
-	ixp12x0_bs_unmap,
-	ixp12x0_bs_subregion,
+	.bs_map = ixp12x0_bs_map,
+	.bs_unmap = ixp12x0_bs_unmap,
+	.bs_subregion = ixp12x0_bs_subregion,
 
 	/* allocation/deallocation */
-	ixp12x0_bs_alloc,
-	ixp12x0_bs_free,
+	.bs_alloc = ixp12x0_bs_alloc,
+	.bs_free = ixp12x0_bs_free,
 
 	/* get kernel virtual address */
-	ixp12x0_bs_vaddr,
+	.bs_vaddr = ixp12x0_bs_vaddr,
 
 	/* mmap bus space for userland */
-	bs_notimpl_bs_mmap,
+	.bs_mmap = bs_notimpl_bs_mmap,
 
 	/* barrier */
-	ixp12x0_bs_barrier,
+	.bs_barrier = ixp12x0_bs_barrier,
 
 	/* read (single) */
-	generic_bs_r_1,
-	generic_armv4_bs_r_2,
-	generic_bs_r_4,
-	bs_notimpl_bs_r_8,
+	.bs_r_1 = generic_bs_r_1,
+	.bs_r_2 = generic_armv4_bs_r_2,
+	.bs_r_4 = generic_bs_r_4,
+	.bs_r_8 = bs_notimpl_bs_r_8,
 
 	/* read multiple */
-	generic_bs_rm_1,
-	generic_armv4_bs_rm_2,
-	generic_bs_rm_4,
-	bs_notimpl_bs_rm_8,
+	.bs_rm_1 = generic_bs_rm_1,
+	.bs_rm_2 = generic_armv4_bs_rm_2,
+	.bs_rm_4 = generic_bs_rm_4,
+	.bs_rm_8 = bs_notimpl_bs_rm_8,
 
 	/* read region */
-	generic_bs_rr_1,
-	generic_armv4_bs_rr_2,
-	generic_bs_rr_4,
-	bs_notimpl_bs_rr_8,
+	.bs_rr_1 = generic_bs_rr_1,
+	.bs_rr_2 = generic_armv4_bs_rr_2,
+	.bs_rr_4 = generic_bs_rr_4,
+	.bs_rr_8 = bs_notimpl_bs_rr_8,
 
 	/* write (single) */
-	generic_bs_w_1,
-	generic_armv4_bs_w_2,
-	generic_bs_w_4,
-	bs_notimpl_bs_w_8,
+	.bs_w_1 = generic_bs_w_1,
+	.bs_w_2 = generic_armv4_bs_w_2,
+	.bs_w_4 = generic_bs_w_4,
+	.bs_w_8 = bs_notimpl_bs_w_8,
 
 	/* write multiple */
-	generic_bs_wm_1,
-	generic_armv4_bs_wm_2,
-	generic_bs_wm_4,
-	bs_notimpl_bs_wm_8,
+	.bs_wm_1 = generic_bs_wm_1,
+	.bs_wm_2 = generic_armv4_bs_wm_2,
+	.bs_wm_4 = generic_bs_wm_4,
+	.bs_wm_8 = bs_notimpl_bs_wm_8,
 
 	/* write region */
-	generic_bs_wr_1,
-	generic_armv4_bs_wr_2,
-	generic_bs_wr_4,
-	bs_notimpl_bs_wr_8,
+	.bs_wr_1 = generic_bs_wr_1,
+	.bs_wr_2 = generic_armv4_bs_wr_2,
+	.bs_wr_4 = generic_bs_wr_4,
+	.bs_wr_8 = bs_notimpl_bs_wr_8,
 
 	/* set multiple */
-	bs_notimpl_bs_sm_1,
-	bs_notimpl_bs_sm_2,
-	bs_notimpl_bs_sm_4,
-	bs_notimpl_bs_sm_8,
+	.bs_sm_1 = bs_notimpl_bs_sm_1,
+	.bs_sm_2 = bs_notimpl_bs_sm_2,
+	.bs_sm_4 = bs_notimpl_bs_sm_4,
+	.bs_sm_8 = bs_notimpl_bs_sm_8,
 
 	/* set region */
-	bs_notimpl_bs_sr_1,
-	generic_armv4_bs_sr_2,
-	generic_bs_sr_4,
-	bs_notimpl_bs_sr_8,
+	.bs_sr_1 = bs_notimpl_bs_sr_1,
+	.bs_sr_2 = generic_armv4_bs_sr_2,
+	.bs_sr_4 = generic_bs_sr_4,
+	.bs_sr_8 = bs_notimpl_bs_sr_8,
 
 	/* copy */
-	bs_notimpl_bs_c_1,
-	generic_armv4_bs_c_2,
-	bs_notimpl_bs_c_4,
-	bs_notimpl_bs_c_8,
+	.bs_c_1 = bs_notimpl_bs_c_1,
+	.bs_c_2 = generic_armv4_bs_c_2,
+	.bs_c_4 = bs_notimpl_bs_c_4,
+	.bs_c_8 = bs_notimpl_bs_c_8,
 };
 
 /* Common routines */
@@ -147,7 +141,6 @@ ixp12x0_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 	paddr_t		pa;
 	paddr_t		offset;
 	vaddr_t		va;
-	pt_entry_t	*pte;
 
 	if ((pd = pmap_devmap_find_pa(bpa, size)) != NULL) {
 		/* Device was statically mapped. */
@@ -166,11 +159,12 @@ ixp12x0_bs_map(void *t, bus_addr_t bpa, bus_size_t size,
 
 	*bshp = va + offset;
 
+	const int pmapflags =
+	    (flags & (BUS_SPACE_MAP_CACHEABLE|BUS_SPACE_MAP_PREFETCHABLE))
+		? 0
+		: PMAP_NOCACHE;
 	for (pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
-		pte = vtopte(va);
-		*pte &= ~L2_S_CACHE_MASK;
-		PTE_SYNC(pte);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, pmapflags);
 	}
 	pmap_update(pmap_kernel());
 
@@ -196,11 +190,7 @@ ixp12x0_bs_unmap(void *t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 int
-ixp12x0_bs_subregion(t, bsh, offset, size, nbshp)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, size;
-	bus_space_handle_t *nbshp;
+ixp12x0_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
 {
 
 	*nbshp = bsh + offset;
@@ -208,9 +198,7 @@ ixp12x0_bs_subregion(t, bsh, offset, size, nbshp)
 }
 
 void *
-ixp12x0_bs_vaddr(t, bsh)
-	void *t;
-	bus_space_handle_t bsh;
+ixp12x0_bs_vaddr(void *t, bus_space_handle_t bsh)
 {
 	return ((void *)bsh);
 }
@@ -232,11 +220,7 @@ ixp12x0_bs_free(void *t, bus_space_handle_t bsh, bus_size_t size)
 }
 
 void
-ixp12x0_bs_barrier(t, bsh, offset, len, flags)
-	void *t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, len;
-	int flags;
+ixp12x0_bs_barrier(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t len, int flags)
 {
 /* NULL */
 }	

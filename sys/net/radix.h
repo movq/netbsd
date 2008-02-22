@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.h,v 1.19 2007/06/09 03:07:21 dyoung Exp $	*/
+/*	$NetBSD: radix.h,v 1.23 2016/11/15 01:50:06 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1993
@@ -124,23 +124,25 @@ struct radix_node_head {
 	struct	radix_node rnh_nodes[3];	/* empty tree for common case */
 };
 
-
 #ifdef _KERNEL
 extern struct radix_mask *rn_mkfreelist;
 
-#define Bcmp(a, b, n) ((n) == 0 ? 0 : memcmp((a), (b), (n)))
-#define Bcopy(a, b, n) memmove((b), (a), (n))
-#define Bzero(p, n) memset((p), 0, (n));
 #define R_Malloc(p, t, n) (p = (t) malloc((size_t)(n), M_RTABLE, M_NOWAIT))
 #define Free(p) free(p, M_RTABLE);
 #endif /*_KERNEL*/
 
-void	 rn_init(void);
-int	 rn_inithead(void **, int);
-int	 rn_inithead0(struct radix_node_head *, int);
-int	 rn_refines(const void *, const void *);
-int	 rn_walktree(struct radix_node_head *,
-			  int (*)(struct radix_node *, void *), void *);
+void	rn_init(void);
+int	rn_inithead(void **, int);
+void	rn_delayedinit(void **, int);
+int	rn_inithead0(struct radix_node_head *, int);
+int	rn_refines(const void *, const void *);
+int	rn_walktree(struct radix_node_head *,
+	            int (*)(struct radix_node *, void *),
+		    void *);
+struct radix_node *
+	rn_search_matched(struct radix_node_head *,
+	                  int (*)(struct radix_node *, void *),
+		          void *);
 struct radix_node
 	 *rn_addmask(const void *, int, int),
 	 *rn_addroute(const void *, const void *, struct radix_node_head *,

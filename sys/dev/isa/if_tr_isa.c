@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_isa.c,v 1.17 2007/10/19 12:00:18 ad Exp $	*/
+/*	$NetBSD: if_tr_isa.c,v 1.26 2016/07/14 10:19:06 msaitoh Exp $	*/
 
 /* XXXJRT changes isa_attach_args too early!! */
 
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by The NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_isa.c,v 1.17 2007/10/19 12:00:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_isa.c,v 1.26 2016/07/14 10:19:06 msaitoh Exp $");
 
 #undef TRISADEBUG
 
@@ -62,10 +55,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_tr_isa.c,v 1.17 2007/10/19 12:00:18 ad Exp $");
 #include <dev/ic/tropicvar.h>
 
 
-int	tr_isa_probe(struct device *, struct cfdata *, void *);
-int	trtcm_isa_probe(struct device *, struct cfdata *, void *);
-int	tribm_isa_probe(struct device *, struct cfdata *, void *);
-void	tr_isa_attach(struct device *, struct device *, void *);
+int	tr_isa_probe(device_t, cfdata_t, void *);
+int	trtcm_isa_probe(device_t, cfdata_t, void *);
+int	tribm_isa_probe(device_t, cfdata_t, void *);
+void	tr_isa_attach(device_t, device_t, void *);
 int	tr_isa_map_io(struct isa_attach_args *, bus_space_handle_t *,
 	    bus_space_handle_t *);
 void	tr_isa_unmap_io(struct isa_attach_args *, bus_space_handle_t,
@@ -79,19 +72,18 @@ void	tr_isa_dumpaip(bus_space_tag_t, bus_space_handle_t);
 /*
  * List of manufacturer specific probe routines.  Order is important.
  */
-int	(*tr_isa_probe_list[])(struct device *, struct cfdata *, void *) = {
+int	(*tr_isa_probe_list[])(device_t, cfdata_t, void *) = {
 		trtcm_isa_probe,
 		tribm_isa_probe,
 		0
 	};
 
-CFATTACH_DECL(tr_isa, sizeof(struct tr_softc),
+CFATTACH_DECL_NEW(tr_isa, sizeof(struct tr_softc),
     tr_isa_probe, tr_isa_attach, NULL, NULL);
 
 int
-tr_isa_map_io(ia, pioh, mmioh)
-struct isa_attach_args *ia;
-bus_space_handle_t *pioh, *mmioh;
+tr_isa_map_io(struct isa_attach_args *ia, bus_space_handle_t *pioh,
+    bus_space_handle_t *mmioh)
 {
 	bus_size_t mmio;
 	u_int8_t s;
@@ -114,7 +106,7 @@ bus_space_handle_t *pioh, *mmioh;
 	mmio = ((s & 0xfc) << 11) + TR_MMIO_OFFSET;
 	if (bus_space_map(ia->ia_memt, mmio, TR_MMIO_SIZE, 0, mmioh)) {
 		printf("tr_isa_map_io: can't map MMIO region 0x%05lx/%d\n",
-			mmio, TR_MMIO_SIZE);
+			(u_long)mmio, TR_MMIO_SIZE);
 		bus_space_unmap(ia->ia_iot, *pioh, ia->ia_io[0].ir_size);
 		return 1;
 	}
@@ -122,9 +114,8 @@ bus_space_handle_t *pioh, *mmioh;
 }
 
 void
-tr_isa_unmap_io(ia, pioh, mmioh)
-struct isa_attach_args *ia;
-bus_space_handle_t pioh, mmioh;
+tr_isa_unmap_io(struct isa_attach_args *ia, bus_space_handle_t pioh,
+    bus_space_handle_t mmioh)
 {
 	bus_space_unmap(ia->ia_memt, mmioh, TR_MMIO_SIZE);
 	bus_space_unmap(ia->ia_iot, pioh, ia->ia_io[0].ir_size);
@@ -139,10 +130,7 @@ static u_char tr_isa_id[] = {
  */
 
 int
-tr_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+tr_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	int	i;
@@ -206,22 +194,23 @@ tr_isa_probe(parent, match, aux)
 int trtcm_setspeed(struct tr_softc *, int);
 
 void
-tr_isa_attach(struct device *parent, struct device *self, void	*aux)
+tr_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct tr_softc *sc = (void *) self;
+	struct tr_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 
 	printf("\n");
 
+	sc->sc_dev = self;
 	sc->sc_piot = ia->ia_iot;
 	sc->sc_memt = ia->ia_memt;
 	if (tr_isa_map_io(ia, &sc->sc_pioh, &sc->sc_mmioh)) {
-		printf("tr_isa_attach: IO space vanished\n");
+		aprint_error("tr_isa_attach: IO space vanished\n");
 		return;
 	}
 	if (bus_space_map(sc->sc_memt, ia->ia_iomem[0].ir_addr,
 	    ia->ia_iomem[0].ir_size, 0, &sc->sc_sramh)) {
-		printf("tr_isa_attach: shared ram space vanished\n");
+		aprint_error("tr_isa_attach: shared ram space vanished\n");
 		return;
 	}
 	/* set ACA offset */
@@ -262,9 +251,7 @@ tr_isa_attach(struct device *parent, struct device *self, void	*aux)
  * Dump the adapters AIP
  */
 void
-tr_isa_dumpaip(memt, mmioh)
-	bus_space_tag_t memt;
-	bus_space_handle_t mmioh;
+tr_isa_dumpaip(bus_space_tag_t memt, bus_space_handle_t mmioh)
 {
 	unsigned int off, val;
 	printf("AIP contents:");

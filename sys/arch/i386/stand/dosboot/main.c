@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.22 2005/12/11 12:17:48 christos Exp $	 */
+/*	$NetBSD: main.c,v 1.32 2014/03/26 17:58:57 christos Exp $	 */
 
 /*
  * Copyright (c) 1996, 1997
@@ -50,8 +50,7 @@ extern int exec_lynx(const char*, int);
 
 int errno;
 
-extern	char bootprog_name[], bootprog_rev[], bootprog_date[],
-	bootprog_maker[];
+extern	char bootprog_name[], bootprog_rev[], bootprog_kernrev[];
 
 #define MAXDEVNAME 16
 
@@ -84,12 +83,11 @@ const struct bootblk_command commands[] = {
 };
 
 int
-parsebootfile(fname, fsmode, devname, unit, partition, file)
-	const char     *fname;
-	char          **fsmode; /* out */
-	char          **devname; /* out */
-	int            *unit, *partition; /* out */
-	const char    **file; /* out */
+parsebootfile(const char *fname, char **fsmode, char **devname, int *unit, int *partition, const char **file)
+	/* fsmode:  out */
+	/* devname:  out */
+	/* unit, *partition:  out */
+	/* file:  out */
 {
 	const char     *col, *help;
 
@@ -155,8 +153,7 @@ parsebootfile(fname, fsmode, devname, unit, partition, file)
 }
 
 char *
-sprint_bootsel(filename)
-	const char *filename;
+sprint_bootsel(const char *filename)
 {
 	char *fsname, *devname;
 	int unit, partition;
@@ -166,9 +163,9 @@ sprint_bootsel(filename)
 	if (parsebootfile(filename, &fsname, &devname, &unit,
 			  &partition, &file) == 0) {
 		if (!strcmp(fsname, "dos"))
-			sprintf(buf, "dos:%s", file);
+			snprintf(buf, sizeof(buf), "dos:%s", file);
 		else if (!strcmp(fsname, "ufs"))
-			sprintf(buf, "%s%d%c:%s", devname, unit,
+			snprintf(buf, sizeof(buf), "%s%d%c:%s", devname, unit,
 				'a' + partition, file);
 		else goto bad;
 		return (buf);
@@ -178,10 +175,9 @@ bad:
 }
 
 static void
-bootit(filename, howto, tell)
-	const char     *filename;
-	int             howto, tell;
+bootit(const char *filename, int howto, int tell)
 {
+	int floppy = strncmp(default_devname, "fd", 2) == 0;
 	if (tell) {
 		printf("booting %s", sprint_bootsel(filename));
 		if (howto)
@@ -189,7 +185,7 @@ bootit(filename, howto, tell)
 		printf("\n");
 	}
 #ifdef SUPPORT_LYNX
-	if(exec_netbsd(filename, 0, howto) < 0)
+	if(exec_netbsd(filename, 0, howto, floppy, NULL) < 0)
 		printf("boot netbsd: %s: %s\n", sprint_bootsel(filename),
 		       strerror(errno));
 	else {
@@ -202,7 +198,7 @@ bootit(filename, howto, tell)
 	else
 		printf("boot lynx returned\n");
 #else
-	if (exec_netbsd(filename, 0, howto) < 0)
+	if (exec_netbsd(filename, 0, howto, floppy, NULL) < 0)
 		printf("boot: %s: %s\n", sprint_bootsel(filename),
 		       strerror(errno));
 	else
@@ -215,6 +211,8 @@ print_banner(void)
 {
 	int extmem = getextmem();
 	char *s = "";
+
+	clear_pc_screen();
 
 #ifdef XMS
 	u_long xmsmem;
@@ -232,22 +230,21 @@ print_banner(void)
 	}
 #endif
 
-	printf("\n");
-	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
-	printf(">> Memory: %d/%d %sk\n", getbasemem(), extmem, s);
+	printf("\n"
+	       ">> %s, Revision %s (from NetBSD %s)\n"
+	       ">> Memory: %d/%d %sk\n",
+	       bootprog_name, bootprog_rev, bootprog_kernrev,
+	       getbasemem(), extmem, s);
 }
 
 void 
-usage()
+usage(void)
 {
 	printf("dosboot [-u] [-c <commands>] [-i] [filename [-bootopts]]\n");
 }
 
 int 
-main(argc, argv)
-	int             argc;
-	char          **argv;
+main(int argc, char **argv)
 {
 	int             ch;
 	int             interactive = 0;
@@ -310,8 +307,7 @@ main(argc, argv)
 
 /* ARGSUSED */
 void
-command_help(arg)
-	char *arg;
+command_help(char *arg)
 {
 	printf("commands are:\n"
 	       "boot [xdNx:][filename] [-acdqsv]\n"
@@ -324,31 +320,24 @@ command_help(arg)
 }
 
 void
-command_ls(arg)
-	char *arg;
+command_ls(char *arg)
 {
 	char *help = default_filename;
-	if (strcmp(current_fsmode, "ufs")) {
-		printf("UFS only\n");
-		return;
-	}
 	default_filename = "/";
-	ufs_ls(arg);
+	ls(arg);
 	default_filename = help;
 }
 
 /* ARGSUSED */
 void
-command_quit(arg)
-	char *arg;
+command_quit(char *arg)
 {
 	printf("Exiting... goodbye...\n");
-	exit(0);
+	_rtt();
 }
 
 void
-command_boot(arg)
-	char *arg;
+command_boot(char *arg)
 {
 	char *filename;
 	int howto;
@@ -358,8 +347,7 @@ command_boot(arg)
 }
 
 void
-command_mode(arg)
-	char *arg;
+command_mode(char *arg)
 {
 	if (!strcmp("dos", arg))
 		current_fsmode = "dos";
@@ -370,8 +358,7 @@ command_mode(arg)
 }
 
 void
-command_dev(arg)
-	char *arg;
+command_dev(char *arg)
 {
 	static char savedevname[MAXDEVNAME + 1];
 	char *fsname, *devname;

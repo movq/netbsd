@@ -1,4 +1,4 @@
-/*	$NetBSD: ctl.c,v 1.7 2004/03/20 17:07:33 christos Exp $	*/
+/*	$NetBSD: ctl.c,v 1.10 2012/03/20 20:34:59 matt Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)ctl.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: ctl.c,v 1.7 2004/03/20 17:07:33 christos Exp $");
+__RCSID("$NetBSD: ctl.c,v 1.10 2012/03/20 20:34:59 matt Exp $");
 #endif /* not lint */
 
 /*
@@ -47,9 +47,9 @@ __RCSID("$NetBSD: ctl.c,v 1.7 2004/03/20 17:07:33 christos Exp $");
 #include <arpa/inet.h>
 #include "talk_ctl.h"
 
-struct	sockaddr_in daemon_addr = { sizeof(daemon_addr), AF_INET };
-struct	sockaddr_in ctl_addr = { sizeof(ctl_addr), AF_INET };
-struct	sockaddr_in my_addr = { sizeof(my_addr), AF_INET };
+struct	sockaddr_in daemon_addr = { sizeof(daemon_addr), AF_INET, 0, {0}, {0} };
+struct	sockaddr_in ctl_addr = { sizeof(ctl_addr), AF_INET, 0, {0}, {0} };
+struct	sockaddr_in my_addr = { sizeof(my_addr), AF_INET, 0, {0}, {0} };
 
 	/* inet addresses of the two machines */
 struct	in_addr my_machine_addr;
@@ -64,7 +64,7 @@ int	invitation_waiting = 0;
 CTL_MSG msg;
 
 void
-open_sockt()
+open_sockt(void)
 {
 	socklen_t length;
 
@@ -88,7 +88,7 @@ open_sockt()
 
 /* open the ctl socket */
 void
-open_ctl() 
+open_ctl(void) 
 {
 	socklen_t length;
 
@@ -113,8 +113,7 @@ open_ctl()
 
 /* print_addr is a debug print routine */
 void
-print_addr(addr)
-	struct sockaddr_in addr;
+print_addr(struct sockaddr_in addr)
 {
 	int i;
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.28 2007/12/20 20:25:08 christos Exp $
+#	$NetBSD: Makefile,v 1.32 2009/01/15 15:57:18 christos Exp $
 # Copyright (c) 1992,1991 Carnegie Mellon University
 # All Rights Reserved.
 # 
@@ -47,16 +47,20 @@
 #SITE			= SUNOS
 #SITE			= SOLARIS
 #SITE			= NETBSD
+#SITE			= FREEBSD
 #SITE			= CMUCS
-SITE1			!= uname -s | tr '[a-z]' '[A-Z]' | sed -e s/_.*//g
+SITE1			!= uname -s | tr '[a-z]' '[A-Z]' \
+			    | sed -e s/_.*//g
 SITE2			= $(shell uname -s | tr '[a-z]' '[A-Z]' \
 			    | sed -e s/_.*//g)
 SITE			= ${SITE1}${SITE2}
-TARDIR			= sup-0.2
+TARDIR			= sup-0.3
 
 LINUX_DEFINES		= -UMACH -DVAR_TMP -DHAS_DAEMON -DHAS_POSIX_DIR \
 			  -DNEED_SETPROCTITLE
 NETBSD_DEFINES		= -UMACH -DVAR_TMP -DHAS_DAEMON -DHAS_POSIX_DIR \
+			    -DHAS_FPARSELN -DHAS_FGETLN -DHAS_VIS
+FREEBSD_DEFINES		= -UMACH -DVAR_TMP -DHAS_DAEMON -DHAS_POSIX_DIR \
 			    -DHAS_FPARSELN -DHAS_FGETLN -DHAS_VIS
 SOLARIS_DEFINES		= -UMACH -DVAR_TMP -DHAS_POSIX_DIR -DNEED_VSNPRINTF
 AFS_DEFINES		= -DAFS -I/usr/afsws/include
@@ -70,17 +74,17 @@ NON_MACH_DEFINES	= -UMACH
 
 
 #INSTALLATION PARAMETERS
-PREFIX		       ?= /usr/local/
+PREFIX		       ?= /usr/pkg/
 NETBSD_BINDIR		= ${PREFIX}/sbin
 NETBSD_MAN1		= ${PREFIX}/man/man1
 NETBSD_MAN8		= ${PREFIX}/man/man8
 
-CFLAGS			= ${DEFS} -O -I.
+CFLAGS			= ${DEFS} -O -I. -g
 
 SUPCL			= supcmain.o supcvers.o supcparse.o supcname.o \
 			  supcmisc.o supcmeat.o
 SUPS			= scm.o scmio.o stree.o log.o supmsg.o netcrypt.o
-EXTRA			= atoo.o errmsg.o expand.o ffilecopy.o filecopy.o \
+EXTRA			= atoo.o expand.o ffilecopy.o filecopy.o \
 			  nxtarg.o path.o quit.o read_line.o run.o estrdup.o \
 			  skipto.o vprintf.o setproctitle.o
 
@@ -93,6 +97,7 @@ AFS_LIBPATH		= /usr/afs/lib
 AFS_LIBS		= -L${AFS_LIBPATH}/afs -lkauth -lprot -L${AFS_LIBPATH} -lubik -lauth -lrxkad -lsys -ldes -lrx -llwp -lcmd -lcom_err -lc ${AFS_LIBPATH}/afs/util.a
 
 NETBSD_LIBS		= -lcrypt
+FREEBSD_LIBS		= -lcrypt
 DRAGONFLY_LIBS		= -lcrypt
 LINUX_LIBS		= -lcrypt
 CYGWIN_LIBS		= -lcrypt

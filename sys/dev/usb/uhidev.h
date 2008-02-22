@@ -1,4 +1,4 @@
-/*	$NetBSD: uhidev.h,v 1.7 2007/03/13 13:51:55 drochner Exp $	*/
+/*	$NetBSD: uhidev.h,v 1.19 2016/04/23 10:15:32 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,50 +30,51 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rnd.h"
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
+
+#include <sys/rndsource.h>
 
 struct uhidev_softc {
-	USBBASEDEVICE sc_dev;		/* base device */
-	usbd_device_handle sc_udev;
-	usbd_interface_handle sc_iface;	/* interface */
-	usbd_pipe_handle sc_ipipe;	/* input interrupt pipe */
+	device_t sc_dev;		/* base device */
+	struct usbd_device *sc_udev;
+	struct usbd_interface *sc_iface;	/* interface */
+	struct usbd_pipe *sc_ipipe;	/* input interrupt pipe */
 	int sc_iep_addr;
 
 	u_char *sc_ibuf;
 	u_int sc_isize;
 
-	usbd_pipe_handle sc_opipe;	/* output interrupt pipe */
-	usbd_xfer_handle sc_oxfer;	/* write request */
+	struct usbd_pipe *sc_opipe;	/* output interrupt pipe */
+	struct usbd_xfer *sc_oxfer;	/* write request */
 	int sc_oep_addr;
 
 	void *sc_repdesc;
 	int sc_repdesc_size;
 
 	u_int sc_nrepid;
-	struct uhidev **sc_subdevs;
+	device_t *sc_subdevs;
 
 	int sc_refcnt;
 	u_char sc_dying;
+
+	kmutex_t sc_lock;		/* protects writes to sc_state */
+
+	u_int sc_flags;
+#define UHIDEV_F_XB1	0x0001	/* Xbox 1 controller */
 };
 
 struct uhidev {
-	USBBASEDEVICE sc_dev;		/* base device */
+	device_t sc_dev;		/* base device */
 	struct uhidev_softc *sc_parent;
 	uByte sc_report_id;
-	u_int8_t sc_state;
+	uint8_t sc_state;
 	int sc_in_rep_size;
 #define	UHIDEV_OPEN	0x01	/* device is open */
 	void (*sc_intr)(struct uhidev *, void *, u_int);
-#if NRND > 0
-        rndsource_element_t     rnd_source;
-#endif
+	krndsource_t     rnd_source;
 };
 
 struct uhidev_attach_arg {
-	struct usbif_attach_arg *uaa;
+	struct usbif_attach_arg *uiaa;
 	struct uhidev_softc *parent;
 	int reportid;
 	int reportsize;
@@ -88,8 +82,10 @@ struct uhidev_attach_arg {
 
 void uhidev_get_report_desc(struct uhidev_softc *, void **, int *);
 int uhidev_open(struct uhidev *);
+void uhidev_stop(struct uhidev *);
 void uhidev_close(struct uhidev *);
-usbd_status uhidev_set_report(struct uhidev *scd, int type, void *data,int len);
-void uhidev_set_report_async(struct uhidev *scd, int type, void *data, int len);
-usbd_status uhidev_get_report(struct uhidev *scd, int type, void *data,int len);
+usbd_status uhidev_set_report(struct uhidev *, int, void *, int);
+usbd_status uhidev_get_report(struct uhidev *, int, void *, int);
 usbd_status uhidev_write(struct uhidev_softc *, void *, int);
+
+#define	UHIDEV_OSIZE	64

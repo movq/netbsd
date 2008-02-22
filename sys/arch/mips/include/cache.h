@@ -1,4 +1,4 @@
-/*	$NetBSD: cache.h,v 1.9 2005/12/11 12:18:09 christos Exp $	*/
+/*	$NetBSD: cache.h,v 1.14 2016/08/18 22:23:20 skrll Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -34,6 +34,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _MIPS_CACHE_H_
+#define _MIPS_CACHE_H_
 
 /*
  * Cache operations.
@@ -125,86 +128,131 @@
 
 struct mips_cache_ops {
 	void	(*mco_icache_sync_all)(void);
-	void	(*mco_icache_sync_range)(vaddr_t, vsize_t);
+	void	(*mco_icache_sync_range)(register_t, vsize_t);
 	void	(*mco_icache_sync_range_index)(vaddr_t, vsize_t);
 
 	void	(*mco_pdcache_wbinv_all)(void);
-	void	(*mco_pdcache_wbinv_range)(vaddr_t, vsize_t);
+	void	(*mco_pdcache_wbinv_range)(register_t, vsize_t);
 	void	(*mco_pdcache_wbinv_range_index)(vaddr_t, vsize_t);
-	void	(*mco_pdcache_inv_range)(vaddr_t, vsize_t);
-	void	(*mco_pdcache_wb_range)(vaddr_t, vsize_t);
+	void	(*mco_pdcache_inv_range)(register_t, vsize_t);
+	void	(*mco_pdcache_wb_range)(register_t, vsize_t);
 
 	/* These are called only by the (mipsNN) icache functions. */
-	void	(*mco_intern_pdcache_wbinv_all)(void);
+	void	(*mco_intern_icache_sync_range_index)(vaddr_t, vsize_t);
+	void	(*mco_intern_icache_sync_range)(register_t, vsize_t);
+	void	(*mco_intern_pdcache_sync_all)(void);
+	void	(*mco_intern_pdcache_sync_range_index)(vaddr_t, vsize_t);
+	void	(*mco_intern_pdcache_sync_range)(register_t, vsize_t);
+	/* This is used internally by the (mipsNN) pdcache functions. */
 	void	(*mco_intern_pdcache_wbinv_range_index)(vaddr_t, vsize_t);
-	void	(*mco_intern_pdcache_wb_range)(vaddr_t, vsize_t);
 
 	void	(*mco_sdcache_wbinv_all)(void);
-	void	(*mco_sdcache_wbinv_range)(vaddr_t, vsize_t);
+	void	(*mco_sdcache_wbinv_range)(register_t, vsize_t);
 	void	(*mco_sdcache_wbinv_range_index)(vaddr_t, vsize_t);
-	void	(*mco_sdcache_inv_range)(vaddr_t, vsize_t);
-	void	(*mco_sdcache_wb_range)(vaddr_t, vsize_t);
+	void	(*mco_sdcache_inv_range)(register_t, vsize_t);
+	void	(*mco_sdcache_wb_range)(register_t, vsize_t);
 
 	/* These are called only by the (mipsNN) icache functions. */
-	void	(*mco_intern_sdcache_wbinv_all)(void);
+	void	(*mco_intern_sdcache_sync_all)(void);
+	void	(*mco_intern_sdcache_sync_range_index)(vaddr_t, vsize_t);
+	void	(*mco_intern_sdcache_sync_range)(register_t, vsize_t);
+
+	/* This is used internally by the (mipsNN) sdcache functions. */
 	void	(*mco_intern_sdcache_wbinv_range_index)(vaddr_t, vsize_t);
-	void	(*mco_intern_sdcache_wb_range)(vaddr_t, vsize_t);
 };
 
 extern struct mips_cache_ops mips_cache_ops;
 
 /* PRIMARY CACHE VARIABLES */
-extern u_int mips_picache_size;
-extern u_int mips_picache_line_size;
-extern u_int mips_picache_ways;
-extern u_int mips_picache_way_size;
-extern u_int mips_picache_way_mask;
+struct mips_cache_info {
+	u_int mci_picache_size;
+	u_int mci_picache_line_size;
+	u_int mci_picache_ways;
+	u_int mci_picache_way_size;
+	u_int mci_picache_way_mask;
+	bool mci_picache_vivt;		/* virtually indexed and tagged */
 
-extern u_int mips_pdcache_size;		/* and unified */
-extern u_int mips_pdcache_line_size;
-extern u_int mips_pdcache_ways;
-extern u_int mips_pdcache_way_size;
-extern u_int mips_pdcache_way_mask;
-extern int mips_pdcache_write_through;
+	u_int mci_pdcache_size;		/* and unified */
+	u_int mci_pdcache_line_size;
+	u_int mci_pdcache_ways;
+	u_int mci_pdcache_way_size;
+	u_int mci_pdcache_way_mask;
+	bool mci_pdcache_write_through;
 
-extern int mips_pcache_unified;
+	bool mci_pcache_unified;
 
-/* SECONDARY CACHE VARIABLES */
-extern u_int mips_sicache_size;
-extern u_int mips_sicache_line_size;
-extern u_int mips_sicache_ways;
-extern u_int mips_sicache_way_size;
-extern u_int mips_sicache_way_mask;
+	/* SECONDARY CACHE VARIABLES */
+	u_int mci_sicache_size;
+	u_int mci_sicache_line_size;
+	u_int mci_sicache_ways;
+	u_int mci_sicache_way_size;
+	u_int mci_sicache_way_mask;
 
-extern u_int mips_sdcache_size;		/* and unified */
-extern u_int mips_sdcache_line_size;
-extern u_int mips_sdcache_ways;
-extern u_int mips_sdcache_way_size;
-extern u_int mips_sdcache_way_mask;
-extern int mips_sdcache_write_through;
+	u_int mci_sdcache_size;		/* and unified */
+	u_int mci_sdcache_line_size;
+	u_int mci_sdcache_ways;
+	u_int mci_sdcache_way_size;
+	u_int mci_sdcache_way_mask;
+	bool mci_sdcache_write_through;
 
-extern int mips_scache_unified;
+	bool mci_scache_unified;
 
-/* TERTIARY CACHE VARIABLES */
-extern u_int mips_tcache_size;		/* always unified */
-extern u_int mips_tcache_line_size;
-extern u_int mips_tcache_ways;
-extern u_int mips_tcache_way_size;
-extern u_int mips_tcache_way_mask;
-extern int mips_tcache_write_through;
+	/* TERTIARY CACHE VARIABLES */
+	u_int mci_tcache_size;		/* always unified */
+	u_int mci_tcache_line_size;
+	u_int mci_tcache_ways;
+	u_int mci_tcache_way_size;
+	u_int mci_tcache_way_mask;
+	bool mci_tcache_write_through;
 
-extern u_int mips_dcache_align;
-extern u_int mips_dcache_align_mask;
+	/*
+	 * These two variables inform the rest of the kernel about the
+	 * size of the largest D-cache line present in the system.  The
+	 * mask can be used to determine if a region of memory is cache
+	 * line size aligned.
+	 *
+	 * Whenever any code updates a data cache line size, it should
+	 * call mips_dcache_compute_align() to recompute these values.
+	 */
+	u_int mci_dcache_align;
+	u_int mci_dcache_align_mask;
 
-extern u_int mips_cache_alias_mask;
-extern u_int mips_cache_prefer_mask;
+	u_int mci_cache_prefer_mask;
+	u_int mci_cache_alias_mask;
+	u_int mci_icache_alias_mask;
 
-extern int mips_cache_virtual_alias;
+	bool mci_cache_virtual_alias;
+	bool mci_icache_virtual_alias;
+};
+
+
+#if (MIPS1 + MIPS64_RMIXL + MIPS64R2_RMIXL + MIPS64_OCTEON) > 0 && \
+    (MIPS3 + MIPS4) == 0 \
+     && !defined(MODULE)
+#define	MIPS_CACHE_ALIAS_MASK		0
+#define	MIPS_CACHE_VIRTUAL_ALIAS	false
+#else
+#define	MIPS_CACHE_ALIAS_MASK		mips_cache_info.mci_cache_alias_mask
+#define	MIPS_CACHE_VIRTUAL_ALIAS	mips_cache_info.mci_cache_virtual_alias
+#endif
+#if (MIPS1 + MIPS64_RMIXL + MIPS64_OCTEON) > 0 && \
+    (MIPS3 + MIPS4) == 0 \
+    && !defined(_MODULE)
+#define	MIPS_ICACHE_ALIAS_MASK		0
+#define	MIPS_ICACHE_VIRTUAL_ALIAS	false
+#else
+#define	MIPS_ICACHE_ALIAS_MASK		mips_cache_info.mci_icache_alias_mask
+#define	MIPS_ICACHE_VIRTUAL_ALIAS	mips_cache_info.mci_icache_virtual_alias
+#endif
+
+extern struct mips_cache_info mips_cache_info;
+
 
 /*
  * XXX XXX XXX THIS SHOULD NOT EXIST XXX XXX XXX
  */
-#define	mips_cache_indexof(x)	(((vaddr_t)(x)) & mips_cache_alias_mask)
+#define	mips_cache_indexof(x)	(((vaddr_t)(x)) & MIPS_CACHE_ALIAS_MASK)
+#define	mips_cache_badalias(x,y) (((vaddr_t)(x)^(vaddr_t)(y)) & MIPS_CACHE_ALIAS_MASK)
 
 #define	__mco_noargs(prefix, x)						\
 do {									\
@@ -249,16 +297,30 @@ do {									\
  * Private D-cache functions only called from (currently only the
  * mipsNN) I-cache functions.
  */
-#define	mips_intern_dcache_wbinv_all()					\
-	__mco_noargs(intern_, dcache_wbinv_all)
+#define	mips_intern_dcache_sync_all()					\
+	__mco_noargs(intern_, dcache_sync_all)
 
-#define	mips_intern_dcache_wbinv_range_index(v, s)			\
-	__mco_2args(intern_, dcache_wbinv_range_index, (v), (s))
+#define	mips_intern_dcache_sync_range_index(v, s)			\
+	__mco_2args(intern_, dcache_sync_range_index, (v), (s))
 
-#define	mips_intern_dcache_wb_range(v, s)				\
-	__mco_2args(intern_, dcache_wb_range, (v), (s))
+#define	mips_intern_dcache_sync_range(v, s)				\
+	__mco_2args(intern_, dcache_sync_range, (v), (s))
+
+#define	mips_intern_pdcache_wbinv_range_index(v, s)			\
+	(*mips_cache_ops.mco_intern_pdcache_wbinv_range_index)((v), (s))
+
+#define	mips_intern_sdcache_wbinv_range_index(v, s)			\
+	(*mips_cache_ops.mco_intern_sdcache_wbinv_range_index)((v), (s))
+
+#define	mips_intern_icache_sync_range(v, s)				\
+	(*mips_cache_ops.mco_intern_icache_sync_range)((v), (s))
+
+#define	mips_intern_icache_sync_range_index(v, s)			\
+	(*mips_cache_ops.mco_intern_icache_sync_range_index)((v), (s))
 
 void	mips_config_cache(void);
 void	mips_dcache_compute_align(void);
 
 #include <mips/cache_mipsNN.h>
+
+#endif /* _MIPS_CACHE_H_ */

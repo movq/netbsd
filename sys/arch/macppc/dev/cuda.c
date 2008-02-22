@@ -1,4 +1,4 @@
-/*	$NetBSD: cuda.c,v 1.6 2007/12/06 17:00:33 ad Exp $ */
+/*	$NetBSD: cuda.c,v 1.22 2017/09/22 04:00:58 macallan Exp $ */
 
 /*-
  * Copyright (c) 2006 Michael Lorenz
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,15 +27,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cuda.c,v 1.6 2007/12/06 17:00:33 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cuda.c,v 1.22 2017/09/22 04:00:58 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/proc.h>
+#include <sys/mutex.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/pio.h>
 #include <dev/clock_subr.h>
@@ -63,8 +61,8 @@ __KERNEL_RCSID(0, "$NetBSD: cuda.c,v 1.6 2007/12/06 17:00:33 ad Exp $");
 #define CUDA_IN		0x4	/* receiving data */
 #define CUDA_POLLING	0x5	/* polling - II only */
 
-static void cuda_attach(struct device *, struct device *, void *);
-static int cuda_match(struct device *, struct cfdata *, void *);
+static void cuda_attach(device_t, device_t, void *);
+static int cuda_match(device_t, struct cfdata *, void *);
 static void cuda_autopoll(void *, int);
 
 static int cuda_intr(void *);
@@ -75,12 +73,13 @@ typedef struct _cuda_handler {
 } CudaHandler;
 
 struct cuda_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	void *sc_ih;
 	CudaHandler sc_handlers[16];
 	struct todr_chip_handle sc_todr;
 	struct adb_bus_accessops sc_adbops;
 	struct i2c_controller sc_i2c;
+	kmutex_t sc_buslock;
 	bus_space_tag_t sc_memt;
 	bus_space_handle_t sc_memh;
 	int sc_node;
@@ -105,7 +104,7 @@ struct cuda_softc {
 	uint8_t sc_out[256];
 };
 
-CFATTACH_DECL(cuda, sizeof(struct cuda_softc),
+CFATTACH_DECL_NEW(cuda, sizeof(struct cuda_softc),
     cuda_match, cuda_attach, NULL, NULL);
 
 static inline void cuda_write_reg(struct cuda_softc *, int, uint8_t);
@@ -133,11 +132,11 @@ static int cuda_set_handler(void *, int, int (*)(void *, int, uint8_t *), void *
 static int cuda_error_handler(void *, int, uint8_t *);
 
 static int cuda_todr_handler(void *, int, uint8_t *);
-static int cuda_todr_set(todr_chip_handle_t, volatile struct timeval *);
-static int cuda_todr_get(todr_chip_handle_t, volatile struct timeval *);
+static int cuda_todr_set(todr_chip_handle_t, struct timeval *);
+static int cuda_todr_get(todr_chip_handle_t, struct timeval *);
 
 static int cuda_adb_handler(void *, int, uint8_t *);
-static void cuda_final(struct device *);
+static void cuda_final(device_t);
 
 static struct cuda_attach_args *cuda0 = NULL;
 
@@ -152,7 +151,7 @@ static int cuda_i2c_exec(void *, i2c_op_t, i2c_addr_t, const void *, size_t,
 		    void *, size_t, int);
 
 static int
-cuda_match(struct device *parent, struct cfdata *cf, void *aux)
+cuda_match(device_t parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -170,21 +169,25 @@ cuda_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-cuda_attach(struct device *parent, struct device *dev, void *aux)
+cuda_attach(device_t parent, device_t self, void *aux)
 {
 	struct confargs *ca = aux;
-	struct cuda_softc *sc = (struct cuda_softc *)dev;
+	struct cuda_softc *sc = device_private(self);
 	struct i2cbus_attach_args iba;
 	static struct cuda_attach_args caa;
+	prop_dictionary_t dict = device_properties(self);
+	prop_dictionary_t dev;
+	prop_array_t cfg;
 	int irq = ca->ca_intr[0];
 	int node, i, child;
 	char name[32];
 
+	sc->sc_dev = self;
 	node = of_getnode_byname(OF_parent(ca->ca_node), "extint-gpio1");
 	if (node)
 		OF_getprop(node, "interrupts", &irq, 4);
 
-	printf(" irq %d: ", irq);
+	aprint_normal(" irq %d", irq);
 
 	sc->sc_node = ca->ca_node;
 	sc->sc_memt = ca->ca_tag;
@@ -200,7 +203,7 @@ cuda_attach(struct device *parent, struct device *dev, void *aux)
 	if (bus_space_map(sc->sc_memt, ca->ca_reg[0] + ca->ca_baseaddr,
 	    ca->ca_reg[1], 0, &sc->sc_memh) != 0) {
 
-		printf("%s: unable to map registers\n", dev->dv_xname);
+		aprint_normal(": unable to map registers\n");
 		return;
 	}
 	sc->sc_ih = intr_establish(irq, IST_EDGE, IPL_TTY, cuda_intr, sc);
@@ -214,7 +217,7 @@ cuda_attach(struct device *parent, struct device *dev, void *aux)
 	cuda_init(sc);
 
 	/* now attach children */
-	config_interrupts(dev, cuda_final);
+	config_interrupts(self, cuda_final);
 	cuda_set_handler(sc, CUDA_ERROR, cuda_error_handler, sc);
 	cuda_set_handler(sc, CUDA_PSEUDO, cuda_todr_handler, sc);
 
@@ -231,7 +234,7 @@ cuda_attach(struct device *parent, struct device *dev, void *aux)
 			sc->sc_adbops.poll = cuda_adb_poll;
 			sc->sc_adbops.autopoll = cuda_autopoll;
 			sc->sc_adbops.set_handler = cuda_adb_set_handler;
-			config_found_ia(dev, "adb_bus", &sc->sc_adbops,
+			config_found_ia(self, "adb_bus", &sc->sc_adbops,
 			    nadb_print);
 		} else if (strncmp(name, "rtc", 4) == 0) {
 
@@ -248,9 +251,34 @@ cuda_attach(struct device *parent, struct device *dev, void *aux)
 	caa.send = cuda_send;
 	caa.poll = cuda_poll;
 #if notyet
-	config_found(dev, &caa, cuda_print);
+	config_found(self, &caa, cuda_print);
 #endif
+	cfg = prop_array_create();
+	prop_dictionary_set(dict, "i2c-child-devices", cfg);
+	prop_object_release(cfg);
 
+	/* we don't have OF nodes for i2c devices so we have to make our own */
+
+	node = OF_finddevice("/valkyrie");
+	if (node != -1) {
+		dev = prop_dictionary_create();
+		prop_dictionary_set_cstring(dev, "name", "videopll");
+		prop_dictionary_set_uint32(dev, "addr", 0x50);
+		prop_array_add(cfg, dev);
+		prop_object_release(dev);
+	}
+
+	node = OF_finddevice("/perch");
+	if (node != -1) {
+		dev = prop_dictionary_create();
+		prop_dictionary_set_cstring(dev, "name", "sgsmix");
+		prop_dictionary_set_uint32(dev, "addr", 0x8a);
+		prop_array_add(cfg, dev);
+		prop_object_release(dev);
+	}
+
+	mutex_init(&sc->sc_buslock, MUTEX_DEFAULT, IPL_NONE);
+	memset(&iba, 0, sizeof(iba));
 	iba.iba_tag = &sc->sc_i2c;
 	sc->sc_i2c.ic_cookie = sc;
 	sc->sc_i2c.ic_acquire_bus = cuda_i2c_acquire_bus;
@@ -261,7 +289,7 @@ cuda_attach(struct device *parent, struct device *dev, void *aux)
 	sc->sc_i2c.ic_read_byte = NULL;
 	sc->sc_i2c.ic_write_byte = NULL;
 	sc->sc_i2c.ic_exec = cuda_i2c_exec;
-	config_found_ia(&sc->sc_dev, "i2cbus", &iba, iicbus_print);
+	config_found_ia(self, "i2cbus", &iba, iicbus_print);
 
 	if (cuda0 == NULL)
 		cuda0 = &caa;
@@ -270,7 +298,6 @@ cuda_attach(struct device *parent, struct device *dev, void *aux)
 static void
 cuda_init(struct cuda_softc *sc)
 {
-	volatile int i;
 	uint8_t reg;
 
 	reg = cuda_read_reg(sc, vDirB);
@@ -293,7 +320,7 @@ cuda_init(struct cuda_softc *sc)
 	cuda_idle(sc);	/* set ADB bus state to idle */
 
 	/* sort of a device reset */
-	i = cuda_read_reg(sc, vSR);	/* clear interrupt */
+	(void)cuda_read_reg(sc, vSR);	/* clear interrupt */
 	cuda_write_reg(sc, vIER, 0x04); /* no interrupts while clearing */
 	cuda_idle(sc);	/* reset state to idle */
 	delay(150);
@@ -304,32 +331,16 @@ cuda_init(struct cuda_softc *sc)
 	cuda_clear_tip(sc);
 	delay(150);
 	cuda_idle(sc);	/* back to idle state */
-	i = cuda_read_reg(sc, vSR);	/* clear interrupt */
+	(void)cuda_read_reg(sc, vSR);	/* clear interrupt */
 	cuda_write_reg(sc, vIER, 0x84);	/* ints ok now */
 }
 
 static void
-cuda_final(struct device *dev)
+cuda_final(device_t dev)
 {
-	struct cuda_softc *sc = (struct cuda_softc *)dev;
+	struct cuda_softc *sc = device_private(dev);
 
 	sc->sc_polling = 0;
-#if 0
-	{
-		int err;
-		uint8_t buffer[2], buf2[2];
-
-		/* trying to read */
-		printf("reading\n");
-		buffer[0] = 0;
-		buffer[1] = 1;
-		buf2[0] = 0;
-		err = cuda_i2c_exec(sc, I2C_OP_WRITE, 0x8a, buffer, 2, buf2, 0, 0);
-		buf2[0] = 0;
-		err = cuda_i2c_exec(sc, I2C_OP_WRITE | I2C_OP_READ, 0x8a, buffer, 1, buf2, 2, 0);
-		printf("buf2: %02x\n", buf2[0]);
-	}
-#endif
 }
 
 static inline void
@@ -374,8 +385,8 @@ cuda_send(void *cookie, int poll, int length, uint8_t *msg)
 
 	s = splhigh();
 
-	if ((sc->sc_state == CUDA_IDLE) /*&& 
-	    ((cuda_read_reg(sc, vBufB) & vPB3) == vPB3)*/) {
+	if (sc->sc_state == CUDA_IDLE /*&& 
+	    (cuda_read_reg(sc, vBufB) & vPB3) == vPB3*/) {
 		/* fine */
 		DPRINTF("chip is idle\n");
 	} else {
@@ -522,7 +533,7 @@ static int
 cuda_intr(void *arg)
 {
 	struct cuda_softc *sc = arg;
-	int i, ending, type;
+	int ending, type;
 	uint8_t reg;
 
 	reg = cuda_read_reg(sc, vIFR);		/* Read the interrupts */
@@ -576,8 +587,8 @@ switch_start:
 		if (sc->sc_received > 255) {
 			/* bitch only once */
 			if (sc->sc_received == 256) {
-				printf("%s: input overflow\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(sc->sc_dev,
+				    "input overflow\n");
 				ending = 1;
 			}
 		} else
@@ -613,7 +624,8 @@ switch_start:
 					me->handler(me->cookie,
 					    sc->sc_received - 1, &sc->sc_in[1]);
 				} else {
-					printf("no handler for type %02x\n", type);
+					aprint_error_dev(sc->sc_dev,
+					  "no handler for type %02x\n", type);
 					panic("barf");
 				}
 			}
@@ -667,7 +679,7 @@ switch_start:
 		break;
 
 	case CUDA_OUT:
-		i = cuda_read_reg(sc, vSR);	/* reset SR-intr in IFR */
+		(void)cuda_read_reg(sc, vSR);	/* reset SR-intr in IFR */
 
 		sc->sc_sent++;
 		if (cuda_intr_state(sc)) {	/* ADB intr low during write */
@@ -695,6 +707,7 @@ switch_start:
 		} else {
 			/* send next byte */
 			cuda_write_reg(sc, vSR, sc->sc_out[sc->sc_sent]);
+			DPRINTF("%02x", sc->sc_out[sc->sc_sent]);
 			cuda_toggle_ack(sc);	/* signal byte ready to
 							 * shift */
 		}
@@ -765,31 +778,43 @@ cuda_todr_handler(void *cookie, int len, uint8_t *data)
 #define DIFF19041970 2082844800
 
 static int
-cuda_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
+cuda_todr_get(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	struct cuda_softc *sc = tch->cookie;
 	int cnt = 0;
 	uint8_t cmd[] = { CUDA_PSEUDO, CMD_READ_RTC};
 
 	sc->sc_tod = 0;
-	cuda_send(sc, 0, 2, cmd);
+	while (sc->sc_tod == 0) {
+		cuda_send(sc, 0, 2, cmd);
 
-	while ((sc->sc_tod == 0) && (cnt < 10)) {
-		tsleep(&sc->sc_todev, 0, "todr", 10);
-		cnt++;
+		while ((sc->sc_tod == 0) && (cnt < 10)) {
+			tsleep(&sc->sc_todev, 0, "todr", 10);
+			cnt++;
+		}
+
+		if (sc->sc_tod == 0) {
+			aprint_error_dev(sc->sc_dev,
+			    "unable to read a sane RTC value\n");
+			return EIO;
+		}
+		if ((sc->sc_tod > 0xf0000000UL) ||
+		    (sc->sc_tod < DIFF19041970)) {
+			/* huh? try again */
+			sc->sc_tod = 0;
+			aprint_verbose_dev(sc->sc_dev,
+			    "got garbage reading RTC, trying again\n");
+		}
 	}
 
-	if (sc->sc_tod == 0)
-		return EIO;
-
 	tvp->tv_sec = sc->sc_tod - DIFF19041970;
-	DPRINTF("tod: %ld\n", tvp->tv_sec);
+	DPRINTF("tod: %" PRIo64 "\n", tvp->tv_sec);
 	tvp->tv_usec = 0;
 	return 0;
 }
 
 static int
-cuda_todr_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
+cuda_todr_set(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	struct cuda_softc *sc = tch->cookie;
 	uint32_t sec;
@@ -804,6 +829,7 @@ cuda_todr_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
 		}
 		return 0;
 	}
+	aprint_error_dev(sc->sc_dev, "%s failed\n", __func__);
 	return -1;
 		
 }
@@ -811,7 +837,7 @@ cuda_todr_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
 /* poweroff and reboot */
 
 void
-cuda_poweroff()
+cuda_poweroff(void)
 {
 	struct cuda_softc *sc;
 	uint8_t cmd[] = {CUDA_PSEUDO, CMD_POWEROFF};
@@ -826,7 +852,7 @@ cuda_poweroff()
 }
 
 void
-cuda_restart()
+cuda_restart(void)
 {
 	struct cuda_softc *sc;
 	uint8_t cmd[] = {CUDA_PSEUDO, CMD_RESET};
@@ -915,14 +941,18 @@ cuda_adb_set_handler(void *cookie, void (*handler)(void *, int, uint8_t *),
 static int
 cuda_i2c_acquire_bus(void *cookie, int flags)
 {
-	/* nothing yet */
+	struct cuda_softc *sc = cookie;
+
+	mutex_enter(&sc->sc_buslock);
 	return 0;
 }
 
 static void
 cuda_i2c_release_bus(void *cookie, int flags)
 {
-	/* nothing here either */
+	struct cuda_softc *sc = cookie;
+
+	mutex_exit(&sc->sc_buslock);
 }
 
 static int
@@ -937,7 +967,19 @@ cuda_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *_send,
 	DPRINTF("cuda_i2c_exec(%02x)\n", addr);
 	command[2] = addr;
 
-	memcpy(&command[3], send, min((int)send_len, 12));
+	/* Copy command and output data bytes, if any, to buffer */
+	if (send_len > 0)
+		memcpy(&command[3], send, min((int)send_len, 12));
+	else if (I2C_OP_READ_P(op) && (recv_len == 0)) {
+		/*
+		 * If no data bytes in either direction, it's a "quick"
+		 * i2c operation.  We don't know how to do a quick_read
+		 * since that requires us to set the low bit of the
+		 * address byte after it has been left-shifted.
+		 */
+		sc->sc_error = 0;
+		return -1;
+	}
 
 	sc->sc_iic_done = 0;
 	cuda_send(sc, sc->sc_polling, send_len + 3, command);
@@ -951,6 +993,7 @@ cuda_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *_send,
 
 	if (sc->sc_error) {
 		sc->sc_error = 0;
+		aprint_error_dev(sc->sc_dev, "error doing I2C\n");
 		return -1;
 	}
 
@@ -975,7 +1018,8 @@ cuda_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *_send,
 		}
 
 		if (sc->sc_error) {
-			printf("error trying to read\n");
+			aprint_error_dev(sc->sc_dev, 
+			    "error trying to read from I2C\n");
 			sc->sc_error = 0;
 			return -1;
 		}

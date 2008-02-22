@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.32 2006/12/14 17:09:43 christos Exp $	*/
+/*	$NetBSD: cmds.c,v 1.37 2014/07/12 05:28:07 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cmds.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: cmds.c,v 1.32 2006/12/14 17:09:43 christos Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.37 2014/07/12 05:28:07 mlelstv Exp $");
 #endif /* not lint */
 
 #include "tip.h"
@@ -55,7 +55,7 @@ static	char *argv[10];		/* argument vector for take and put */
 int	args(char *, char **);
 int	anyof(char *, const char *);
 void	execute(char *);
-void	intcopy(int);
+__dead static void	intcopy(int);
 void	prtime(const char *, time_t);
 void	stopsnd(int);
 void	transfer(char *, int, const char *);
@@ -792,11 +792,11 @@ tandem(const char *option)
 
 	(void)tcgetattr(FD, &rmtty);
 	if (strcmp(option, "on") == 0) {
-		rmtty.c_iflag |= IXOFF;
-		term.c_iflag |= IXOFF;
+		rmtty.c_iflag |= IXON|IXOFF;
+		term.c_iflag |= IXON|IXOFF;
 	} else {
-		rmtty.c_iflag &= ~IXOFF;
-		term.c_iflag &= ~IXOFF;
+		rmtty.c_iflag &= ~(IXON|IXOFF);
+		term.c_iflag &= ~(IXON|IXOFF);
 	}
 	(void)tcsetattr(FD, TCSADRAIN, &rmtty);
 	(void)tcsetattr(0, TCSADRAIN, &term);
@@ -887,8 +887,8 @@ expand(char aname[])
 	(void)close(pivec[1]);
 	l = read(pivec[0], xname, BUFSIZ);
 	(void)close(pivec[0]);
-	while (wait(&s) != mypid);
-		;
+	while (wait(&s) != mypid)
+		continue;
 	s &= 0377;
 	if (s != 0 && s != SIGPIPE) {
 		(void)fprintf(stderr, "\"Echo\" failed\n");

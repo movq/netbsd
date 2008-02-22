@@ -1,4 +1,4 @@
-/*	$NetBSD: uyap.c,v 1.12 2007/03/13 13:51:57 drochner Exp $	*/
+/*	$NetBSD: uyap.c,v 1.21 2016/07/14 04:19:27 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uyap.c,v 1.12 2007/03/13 13:51:57 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uyap.c,v 1.21 2016/07/14 04:19:27 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/conf.h>
-#include <sys/tty.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
@@ -58,58 +50,74 @@ const struct ezdata uyap_firmware[] = {
 const struct ezdata *uyap_firmwares[] = { uyap_firmware, NULL };
 
 struct uyap_softc {
-	USBBASEDEVICE		sc_dev;		/* base device */
+	device_t		sc_dev;		/* base device */
 };
 
-USB_DECLARE_DRIVER(uyap);
+int	uyap_match(device_t, cfdata_t, void *);
+void	uyap_attach(device_t, device_t, void *);
+int	uyap_detach(device_t, int);
+int	uyap_activate(device_t, enum devact);
+extern struct cfdriver uyap_cd;
+CFATTACH_DECL_NEW(uyap, sizeof(struct uyap_softc), uyap_match, uyap_attach,
+    uyap_detach, uyap_activate);
 
-USB_MATCH(uyap)
+int
+uyap_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_MATCH_START(uyap, uaa);
+	struct usb_attach_arg *uaa = aux;
 
 	/* Match the boot device. */
-	if (uaa->vendor == USB_VENDOR_SILICONPORTALS &&
-	    uaa->product == USB_PRODUCT_SILICONPORTALS_YAPPH_NF)
+	if (uaa->uaa_vendor == USB_VENDOR_SILICONPORTALS &&
+	    uaa->uaa_product == USB_PRODUCT_SILICONPORTALS_YAPPH_NF)
 		return (UMATCH_VENDOR_PRODUCT);
 
 	return (UMATCH_NONE);
 }
 
-USB_ATTACH(uyap)
+void
+uyap_attach(device_t parent, device_t self, void *aux)
 {
-	USB_ATTACH_START(uyap, sc, uaa);
-	usbd_device_handle dev = uaa->device;
+	struct uyap_softc *sc = device_private(self);
+	struct usb_attach_arg *uaa = aux;
+	struct usbd_device *dev = uaa->uaa_device;
 	usbd_status err;
 	char *devinfop;
 
+	sc->sc_dev = self;
+
+	aprint_naive("\n");
+	aprint_normal("\n");
+
 	devinfop = usbd_devinfo_alloc(dev, 0);
-	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
-	printf("%s: downloading firmware\n", USBDEVNAME(sc->sc_dev));
+	aprint_verbose_dev(self, "downloading firmware\n");
 
 	err = ezload_downloads_and_reset(dev, uyap_firmwares);
 	if (err) {
-		printf("%s: download ezdata error: %s\n",
-		       USBDEVNAME(sc->sc_dev), usbd_errstr(err));
-		USB_ATTACH_ERROR_RETURN;
+		aprint_error_dev(self, "download ezdata error: %s\n",
+		    usbd_errstr(err));
+		return;
 	}
 
-	printf("%s: firmware download complete, disconnecting.\n",
-	       USBDEVNAME(sc->sc_dev));
-	USB_ATTACH_SUCCESS_RETURN;
+	aprint_verbose_dev(self,
+	    "firmware download complete, disconnecting.\n");
+	return;
 }
 
-USB_DETACH(uyap)
+int
+uyap_detach(device_t self, int flags)
 {
-	/*USB_DETACH_START(uyap, sc);*/
+#if 0
+	struct uyap_softc *sc = device_private(self);
+#endif
 
 	return (0);
 }
 
 int
-uyap_activate(device_ptr_t self, enum devact act)
+uyap_activate(device_t self, enum devact act)
 {
 	return 0;
 }

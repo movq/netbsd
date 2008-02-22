@@ -1,5 +1,5 @@
 /*	$wasabi: ld_twa.c,v 1.9 2006/02/14 18:44:37 jordanr Exp $	*/
-/*	$NetBSD: ld_twa.c,v 1.9 2007/10/19 12:00:51 ad Exp $ */
+/*	$NetBSD: ld_twa.c,v 1.20 2017/02/27 21:32:33 jdolecek Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,9 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.9 2007/10/19 12:00:51 ad Exp $");
-
-#include "rnd.h"
+__KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.20 2017/02/27 21:32:33 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,13 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.9 2007/10/19 12:00:51 ad Exp $");
 #include <sys/dkio.h>
 #include <sys/disk.h>
 #include <sys/proc.h>
-#if NRND > 0
-#include <sys/rnd.h>
-#endif
-
+#include <sys/module.h>
 #include <sys/bus.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/ldvar.h>
 
@@ -78,27 +64,30 @@ __KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.9 2007/10/19 12:00:51 ad Exp $");
 #include <dev/pci/twareg.h>
 #include <dev/pci/twavar.h>
 
+#include "ioconf.h"
+
 struct ld_twa_softc {
 	struct	ld_softc sc_ld;
 	int	sc_hwunit;
 };
 
-static void	ld_twa_attach(struct device *, struct device *, void *);
-static int	ld_twa_detach(struct device *, int);
+static void	ld_twa_attach(device_t, device_t, void *);
+static int	ld_twa_detach(device_t, int);
 static int	ld_twa_dobio(struct ld_twa_softc *, void *, size_t, daddr_t,
 			     struct buf *);
 static int	ld_twa_dump(struct ld_softc *, void *, int, int);
-static int	ld_twa_flush(struct ld_softc *);
+static int	ld_twa_flush(struct ld_softc *, bool);
+static int	ld_twa_ioctl(struct ld_softc *, u_long, void *, int32_t, bool);
 static void	ld_twa_handler(struct twa_request *);
-static int	ld_twa_match(struct device *, struct cfdata *, void *);
+static int	ld_twa_match(device_t, cfdata_t, void *);
 static int	ld_twa_start(struct ld_softc *, struct buf *);
 
-static void	ld_twa_adjqparam(struct device *, int);
+static void	ld_twa_adjqparam(device_t, int);
 
 static int ld_twa_scsicmd(struct ld_twa_softc *,
 	struct twa_request *, struct buf *);
 
-CFATTACH_DECL(ld_twa, sizeof(struct ld_twa_softc),
+CFATTACH_DECL_NEW(ld_twa, sizeof(struct ld_twa_softc),
     ld_twa_match, ld_twa_attach, ld_twa_detach, NULL);
 
 static const struct twa_callbacks ld_twa_callbacks = {
@@ -106,24 +95,21 @@ static const struct twa_callbacks ld_twa_callbacks = {
 };
 
 static int
-ld_twa_match(struct device *parent, struct cfdata *match, void *aux)
+ld_twa_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return (1);
 }
 
 static void
-ld_twa_attach(struct device *parent, struct device *self, void *aux)
+ld_twa_attach(device_t parent, device_t self, void *aux)
 {
-	struct twa_attach_args *twa_args;
-	struct ld_twa_softc *sc;
-	struct ld_softc *ld;
-	struct twa_softc *twa;
+	struct twa_attach_args *twa_args = aux;
+	struct ld_twa_softc *sc = device_private(self);
+	struct ld_softc *ld = &sc->sc_ld;
+	struct twa_softc *twa = device_private(parent);
 
-	sc = (struct ld_twa_softc *)self;
-	ld = &sc->sc_ld;
-	twa = (struct twa_softc *)parent;
-	twa_args = aux;
+	ld->sc_dv = self;
 
 	twa_register_callbacks(twa, twa_args->twaa_unit, &ld_twa_callbacks);
 
@@ -132,21 +118,23 @@ ld_twa_attach(struct device *parent, struct device *self, void *aux)
 	ld->sc_secperunit = twa->sc_units[sc->sc_hwunit].td_size;
 	ld->sc_flags = LDF_ENABLED;
 	ld->sc_secsize = TWA_SECTOR_SIZE;
-	ld->sc_maxqueuecnt = twa->sc_openings;
+	ld->sc_maxqueuecnt = twa->sc_units[sc->sc_hwunit].td_openings;
 	ld->sc_start = ld_twa_start;
 	ld->sc_dump = ld_twa_dump;
-	ld->sc_flush = ld_twa_flush;
-	ldattach(ld);
+	ld->sc_ioctl = ld_twa_ioctl;
+	ldattach(ld, BUFQ_DISK_DEFAULT_STRAT);
 }
 
 static int
-ld_twa_detach(struct device *self, int flags)
+ld_twa_detach(device_t self, int flags)
 {
+	struct ld_twa_softc *sc = device_private(self);
+	struct ld_softc *ld = &sc->sc_ld;
 	int error;
 
-	if ((error = ldbegindetach((struct ld_softc *)self, flags)) != 0)
+	if ((error = ldbegindetach(ld, flags)) != 0)
 		return (error);
-	ldenddetach((struct ld_softc *)self);
+	ldenddetach(ld);
 
 	return (0);
 }
@@ -159,7 +147,7 @@ ld_twa_dobio(struct ld_twa_softc *sc, void *data, size_t datasize,
 	struct twa_request	*tr;
 	struct twa_softc *twa;
 
-	twa = (struct twa_softc *)sc->sc_ld.sc_dv.dv_parent;
+	twa = device_private(device_parent(sc->sc_ld.sc_dv));
 
 	if ((tr = twa_get_request(twa, 0)) == NULL) {
 		return (EAGAIN);
@@ -214,11 +202,9 @@ ld_twa_handler(struct twa_request *tr)
 	uint8_t	status;
 	struct buf *bp;
 	struct ld_twa_softc *sc;
-	struct twa_softc *twa;
 
 	bp = tr->bp;
 	sc = (struct ld_twa_softc *)tr->tr_ld_sc;
-	twa = (struct twa_softc *)sc->sc_ld.sc_dv.dv_parent;
 
 	status = tr->tr_command->command.cmd_pkt_9k.status;
 
@@ -250,11 +236,11 @@ ld_twa_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 
 
 static int
-ld_twa_flush(struct ld_softc *ld)
+ld_twa_flush(struct ld_softc *ld, bool poll)
 {
 	int s, rv = 0;
 	struct twa_request *tr;
-	struct twa_softc *twa = (void *)ld->sc_dv.dv_parent;
+	struct twa_softc *twa = device_private(device_parent(ld->sc_dv));
 	struct ld_twa_softc *sc = (void *)ld;
 	struct twa_command_generic *generic_cmd;
 
@@ -291,11 +277,31 @@ ld_twa_flush(struct ld_softc *ld)
 	return (rv);
 }
 
-static void
-ld_twa_adjqparam(struct device *self, int openings)
+static int
+ld_twa_ioctl(struct ld_softc *ld, u_long cmd, void *addr, int32_t flag, bool poll)
 {
+        int error;
 
-	ldadjqparam((struct ld_softc *)self, openings);
+        switch (cmd) {
+        case DIOCCACHESYNC:
+		error = ld_twa_flush(ld, poll);
+		break;
+
+	default:
+		error = EPASSTHROUGH;
+		break;
+	}
+
+	return error;
+}
+
+static void
+ld_twa_adjqparam(device_t self, int openings)
+{
+	struct ld_twa_softc *sc = device_private(self);
+	struct ld_softc *ld = &sc->sc_ld;
+
+	ldadjqparam(ld, openings);
 }
 
 
@@ -320,4 +326,47 @@ ld_twa_scsicmd(struct ld_twa_softc *sc,
 	tr->tr_command->command.cmd_pkt_9k.cdb[15] = 0;
 
 	return (0);
+}
+
+MODULE(MODULE_CLASS_DRIVER, ld_twa, "ld,twa");
+
+#ifdef _MODULE
+/*
+ * XXX Don't allow ioconf.c to redefine the "struct cfdriver ld_cd"
+ * XXX it will be defined in the common-code module
+ */
+#undef  CFDRIVER_DECL 
+#define CFDRIVER_DECL(name, class, attr)
+#include "ioconf.c"
+#endif
+
+static int
+ld_twa_modcmd(modcmd_t cmd, void *opaque)
+{
+#ifdef _MODULE
+	/*
+	 * We ignore the cfdriver_vec[] that ioconf provides, since
+	 * the cfdrivers are attached already.
+	 */
+	static struct cfdriver * const no_cfdriver_vec[] = { NULL };
+#endif
+	int error = 0;
+
+#ifdef _MODULE
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = config_init_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_twa, cfdata_ioconf_ld_twa);
+		break;
+	case MODULE_CMD_FINI:
+		error = config_fini_component(no_cfdriver_vec,
+		    cfattach_ioconf_ld_twa, cfdata_ioconf_ld_twa);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+#endif
+
+	return error;
 }

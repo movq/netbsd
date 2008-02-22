@@ -1,4 +1,4 @@
-/*	$NetBSD: openfirm.c,v 1.19 2007/11/07 19:31:10 garbled Exp $	*/
+/*	$NetBSD: openfirm.c,v 1.25 2014/08/07 09:08:09 joerg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,8 +31,10 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "opt_multiprocessor.h"
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.19 2007/11/07 19:31:10 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.25 2014/08/07 09:08:09 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.19 2007/11/07 19:31:10 garbled Exp $"
 #include <uvm/uvm_extern.h>
 
 #include <machine/psl.h>
-#include <machine/stdarg.h>
 
 #include <dev/ofw/openfirm.h>
 
@@ -48,6 +49,9 @@ char *OF_buf;
 
 void ofw_stack(void);
 void ofbcopy(const void *, void *, size_t);
+#ifdef MULTIPROCESSOR
+void OF_start_cpu(int, u_int, int);
+#endif
 
 int
 OF_peer(int phandle)
@@ -566,6 +570,31 @@ OF_seek(int handle, u_quad_t pos)
 	return args.status;
 }
 
+#ifdef MULTIPROCESSOR
+void
+OF_start_cpu(int phandle, u_int pc, int arg)
+{
+	static struct {
+		const char *name;
+		int nargs;
+		int nreturns;
+		int phandle;
+		u_int pc;
+		int arg;
+	} args = {
+		"start-cpu",
+		3,
+		0,
+	};
+	ofw_stack();
+	args.phandle = phandle;
+	args.pc = pc;
+	args.arg = arg;
+	if (openfirmware(&args) == -1)
+		panic("WTF?");
+}
+#endif
+
 void
 OF_boot(const char *bootspec)
 {
@@ -587,7 +616,7 @@ OF_boot(const char *bootspec)
 	ofbcopy(bootspec, OF_buf, l + 1);
 	args.bootspec = OF_buf;
 	openfirmware(&args);
-	while (1);			/* just in case */
+	panic("OF_boot didn't");
 }
 
 void
@@ -670,13 +699,13 @@ OF_interpret(const char *cmd, int nargs, int nreturns, ...)
 		return -1;
 	ofbcopy(cmd, OF_buf, len + 1);
 	i = 0;
-	args.slots[i] = (uint32_t)OF_buf;
+	args.slots[i] = (uintptr_t)OF_buf;
 	args.nargs = nargs + 1;
 	args.nreturns = nreturns + 1;
 	va_start(ap, nreturns);
 	i++;
 	while (i < args.nargs) {
-		args.slots[i] = (uint32_t)va_arg(ap, uint32_t *);
+		args.slots[i] = (uintptr_t)va_arg(ap, uint32_t *);
 		i++;
 	}
 
@@ -691,6 +720,23 @@ OF_interpret(const char *cmd, int nargs, int nreturns, ...)
 	}
 	va_end(ap);
 	return status;
+}
+
+void
+OF_quiesce(void)
+{
+	static struct {
+		const char *name;
+		int nargs;
+		int nreturns;
+	} args = {
+		"quiesce",
+		0,
+		0,
+	};
+
+	ofw_stack();
+	openfirmware(&args);
 }
 
 /*

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.80 2008/02/02 06:09:11 uwe Exp $
+# $NetBSD: GENERIC,v 1.110 2018/01/23 15:08:11 sevan Exp $
 #
 # GENERIC machine description file
 #
@@ -31,6 +31,7 @@ options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
 maxusers	32			# estimated number of users
 
+options 	HZ=64			# default clock rate
 
 # System options specific to hpcsh
 
@@ -67,28 +68,27 @@ options 	KLOADER
 
 options 	KTRACE		# system call tracing via ktrace(1)
 
-#options 	SYSVMSG		# System V-like message queues
-#options 	SYSVSEM		# System V-like semaphores
-#options 	SYSVSHM		# System V-like memory sharing
-#options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
+options 	SYSVMSG		# System V-like message queues
+options 	SYSVSEM		# System V-like semaphores
+options 	SYSVSHM		# System V-like memory sharing
 
-#options 	LKM		# loadable kernel modules
+#options 	MODULAR		# new style module(7) framework
+#options 	MODULAR_DEFAULT_AUTOLOAD
 
 options 	USERCONF		# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
-# Enable experimental buffer queue strategy for better responsiveness under
-# high disk I/O load. Likely stable but not yet the default.
+# Alternate buffer queue strategies for better responsiveness under high
+# disk I/O load.
 #options 	BUFQ_READPRIO
 #options 	BUFQ_PRIOCSCAN
 
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC	# expensive kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
-#options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 #options 	DDB		# in-kernel debugger
-#options 	DDB_ONPANIC=1	# see also sysctl(8): `ddb.onpanic'
+#options 	DDB_ONPANIC=1	# see also sysctl(7): `ddb.onpanic'
 #options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	KGDB		# remote debugger
 #options 	KGDB_DEVRATE=19200
@@ -98,20 +98,15 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 #makeoptions	DEBUG="-g"	# compile full symbol table
 
 # Compatibility options
-options 	COMPAT_15	# NetBSD 1.5
-options 	COMPAT_16	# NetBSD 1.6
-options 	COMPAT_20	# NetBSD 2.0
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options 	COMPAT_40	# NetBSD 4.0 compatibility.
+include 	"conf/compat_netbsd15.config"
 #options 	BSDDISKLABEL_EI	# endian independent disklabel support
-options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Executable format options
 options 	EXEC_COFF	# 32-bit COFF executables
 
 # File systems
 file-system 	FFS		# UFS
-#file-system 	MFS		# memory file system (requires FFS)
+file-system 	MFS		# memory file system (requires FFS)
 #file-system 	EXT2FS		# second extended file system (linux)
 file-system 	MSDOSFS		# MS-DOS file system
 file-system	NFS		# Sun NFS-compatible filesystem client
@@ -119,7 +114,6 @@ file-system	NFS		# Sun NFS-compatible filesystem client
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 #file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	PROCFS		# /proc
@@ -132,6 +126,8 @@ file-system	PTYFS		# /dev/pts/N support
 # File system options
 #options 	FFS_EI		# FFS Endian Independent support
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+#options 	UFS_EXTATTR	# Extended attribute support for UFS1
+options 	WAPBL		# File system journaling support
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
 				# immutable) behave as system flags.
 
@@ -143,7 +139,6 @@ options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
 options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 
-#options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
@@ -190,7 +185,7 @@ options 	WS_KERNEL_BG=WSCOL_BLUE
 # compatibility to other console drivers
 options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
 options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
-options 	WSDISPLAY_COMPAT_USL		# VT handling
+options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 
 options 	FONT_VT220L8x10			# the console font
@@ -331,6 +326,10 @@ bthub*	at btuart?
 #btkbd*	at bthidev? reportid ?
 #wskbd*	at btkbd? console ? mux 1
 
+# Bluetooth Apple Magic Mouse
+#btmagic* at bthub?
+#wsmouse* at btmagic? mux 0
+
 # Bluetooth Audio support
 #btsco*	at bthub?
 
@@ -340,7 +339,7 @@ bthub*	at btuart?
 # disk/mass storage pseudo-devices
 #pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 
 # network pseudo-devices
 pseudo-device	loop			# network loopback
@@ -351,9 +350,13 @@ pseudo-device	bpfilter		# Berkeley packet filter
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
 
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 #pseudo-device	irframetty		# IrDA frame line discipline
 pseudo-device	ksyms			# kernel symbol table interface
@@ -361,7 +364,7 @@ pseudo-device	bcsp			# BlueCore Serial Protocol
 pseudo-device	btuart			# Bluetooth HCI UART (H4)
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-#pseudo-device	vcoda		4	# coda minicache <-> venus comm.
+#pseudo-device	vcoda			# coda minicache <-> venus comm.
 
 # a pseudo device needed for SMBFS
 #pseudo-device	nsmb			# experimental - SMB requester
@@ -375,15 +378,12 @@ pseudo-device	wsmux			# mouse & keyboard multiplexor
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec		1
+#pseudo-device	veriexec
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel
 # code size.
 #
-#options VERIFIED_EXEC_FP_RMD160
 #options VERIFIED_EXEC_FP_SHA256
 #options VERIFIED_EXEC_FP_SHA384
 #options VERIFIED_EXEC_FP_SHA512
-#options VERIFIED_EXEC_FP_SHA1
-#options VERIFIED_EXEC_FP_MD5

@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310_intr.c,v 1.25 2008/01/06 01:37:58 matt Exp $	*/
+/*	$NetBSD: iq80310_intr.c,v 1.34 2014/03/26 17:40:03 christos Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80310_intr.c,v 1.25 2008/01/06 01:37:58 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80310_intr.c,v 1.34 2014/03/26 17:40:03 christos Exp $");
 
 #ifndef EVBARM_SPL_NOINLINE
 #define	EVBARM_SPL_NOINLINE
@@ -50,9 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: iq80310_intr.c,v 1.25 2008/01/06 01:37:58 matt Exp $
 #include <sys/systm.h>
 #include <sys/malloc.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/intr.h>
 
 #include <arm/cpufunc.h>
@@ -70,16 +68,13 @@ struct intrq intrq[NIRQ];
 /* Interrupts to mask at each level. */
 int iq80310_imask[NIPL];
 
-/* Current interrupt priority level. */
-volatile int current_spl_level;  
-
 /* Interrupts pending. */
 volatile int iq80310_ipending;
 
 /* Software copy of the IRQs we have enabled. */
 uint32_t intr_enabled;
 
-#ifdef __HAVE_FAST_SOFTINTRS
+#ifdef __HAVE_FAST_SOFTINTS
 /*
  * Map a software interrupt queue index (at the top of the word, and
  * highest priority softintr is encountered first in an ffs()).
@@ -97,7 +92,7 @@ static const int si_to_ipl[SI_NQUEUES] = {
 };
 #endif
 
-void	iq80310_intr_dispatch(struct irqframe *frame);
+void	iq80310_intr_dispatch(struct trapframe *frame);
 
 static inline uint32_t
 iq80310_intstat_read(void)
@@ -252,28 +247,29 @@ iq80310_intr_calculate_masks(void)
 	}
 }
 
-#ifdef __HAVE_FAST_SOFTINTRS
+#ifdef __HAVE_FAST_SOFTINTS
 void
 iq80310_do_soft(void)
 {
 	static __cpu_simple_lock_t processing = __SIMPLELOCK_UNLOCKED;
+	struct cpu_info * const ci = curcpu();
 	int new, oldirqstate;
 
 	if (__cpu_simple_lock_try(&processing) == 0)
 		return;
 
-	new = current_spl_level;
+	new = ci->ci_cpl;
 
 	oldirqstate = disable_interrupts(I32_bit);
 
 #define	DO_SOFTINT(si)							\
 	if ((iq80310_ipending & ~new) & SI_TO_IRQBIT(si)) {		\
 		iq80310_ipending &= ~SI_TO_IRQBIT(si);			\
-		current_spl_level |= iq80310_imask[si_to_ipl[(si)]];	\
+		ci->ci_cpl |= iq80310_imask[si_to_ipl[(si)]];	\
 		restore_interrupts(oldirqstate);			\
 		softintr_dispatch(si);					\
 		oldirqstate = disable_interrupts(I32_bit);		\
-		current_spl_level = new;				\
+		ci->ci_cpl = new;				\
 	}
 
 	DO_SOFTINT(SI_SOFTSERIAL);
@@ -285,7 +281,7 @@ iq80310_do_soft(void)
 
 	restore_interrupts(oldirqstate);
 }
-#endif	/* __HAVE_SOFT_FASTINTRS */
+#endif	/* __HAVE_SOFT_FASTINTS */
 
 int
 _splraise(int ipl)
@@ -308,7 +304,7 @@ _spllower(int ipl)
 	return (iq80310_spllower(ipl));
 }
 
-#ifdef __HAVE_FAST_SOFTINTRS
+#ifdef __HAVE_FAST_SOFTINTS
 void
 _setsoftintr(int si)
 {
@@ -319,7 +315,7 @@ _setsoftintr(int si)
 	restore_interrupts(oldirqstate);
 
 	/* Process unmasked pending soft interrupts. */
-	if ((iq80310_ipending & ~IRQ_BITS) & ~current_spl_level)
+	if ((iq80310_ipending & ~IRQ_BITS) & ~curcpl())
 		iq80310_do_soft();
 }
 #endif
@@ -341,9 +337,7 @@ iq80310_intr_init(void)
 		iq = &intrq[i];
 		TAILQ_INIT(&iq->iq_list);
 
-		sprintf(iq->iq_name, "irq %d", i);
-		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
-		    NULL, "iq80310", iq->iq_name);
+		snprintf(iq->iq_name, sizeof(iq->iq_name), "irq %d", i);
 	}
 
 	iq80310_intr_calculate_masks();
@@ -354,6 +348,19 @@ iq80310_intr_init(void)
 
 	/* Enable IRQs (don't yet use FIQs). */
 	enable_interrupts(I32_bit);
+}
+
+void
+iq80310_intr_evcnt_attach(void)
+{
+	struct intrq *iq;
+	int i;
+
+	for (i = 0; i < NIRQ; i++) {
+		iq = &intrq[i];
+		evcnt_attach_dynamic(&iq->iq_ev, EVCNT_TYPE_INTR,
+		    NULL, "iq80310", iq->iq_name);
+	}
 }
 
 void *
@@ -408,24 +415,30 @@ iq80310_intr_disestablish(void *cookie)
 }
 
 void
-iq80310_intr_dispatch(struct irqframe *frame)
+iq80310_intr_dispatch(struct trapframe *frame)
 {
 	struct intrq *iq;
 	struct intrhand *ih;
-	int oldirqstate, pcpl, irq, ibit, hwpend, rv, stray;
+	int oldirqstate, pcpl, irq, ibit, hwpend, rv;
+	struct cpu_info * const ci = curcpu();
+#if 0
+	int stray;
 
 	stray = 1;
+#endif
 
 	/* First, disable external IRQs. */
 	i80200_intr_disable(INTCTL_IM | INTCTL_PM);
 
-	pcpl = current_spl_level;
+	pcpl = ci->ci_cpl;
 
 	for (hwpend = iq80310_intstat_read(); hwpend != 0;) {
 		irq = ffs(hwpend) - 1;
 		ibit = (1U << irq);
 
+#if 0
 		stray = 0;
+#endif
 
 		hwpend &= ~ibit;
 
@@ -444,8 +457,8 @@ iq80310_intr_dispatch(struct irqframe *frame)
 
 		iq = &intrq[irq];
 		iq->iq_ev.ev_count++;
-		uvmexp.intrs++;
-		current_spl_level |= iq->iq_mask;
+		ci->ci_data.cpu_nintr++;
+		ci->ci_cpl |= iq->iq_mask;
 		oldirqstate = enable_interrupts(I32_bit);
 		for (ih = TAILQ_FIRST(&iq->iq_list); ih != NULL;
 		     ih = TAILQ_NEXT(ih, ih_list)) {
@@ -453,7 +466,7 @@ iq80310_intr_dispatch(struct irqframe *frame)
 		}
 		restore_interrupts(oldirqstate);
 
-		current_spl_level = pcpl;
+		ci->ci_cpl = pcpl;
 
 #if 0 /* XXX */
 		if (rv == 0)
@@ -466,9 +479,9 @@ iq80310_intr_dispatch(struct irqframe *frame)
 		printf("Stray external interrupt\n");
 #endif
 
-#if 0
+#ifdef __HAVE_FAST_SOFTINTS
 	/* Check for pendings soft intrs. */
-	if ((iq80310_ipending & ~IRQ_BITS) & ~current_spl_level) {
+	if ((iq80310_ipending & ~IRQ_BITS) & ~ci->ci_cpl) {
 		oldirqstate = enable_interrupts(I32_bit);
 		iq80310_do_soft();
 		restore_interrupts(oldirqstate);

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.39 2007/03/04 06:00:50 christos Exp $ */
+/*	$NetBSD: db_trace.c,v 1.50 2013/03/04 20:17:46 christos Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -28,19 +28,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.39 2007/03/04 06:00:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.50 2013/03/04 20:17:46 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
+#include <sys/cpu.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <machine/db_machdep.h>
 #include <machine/ctlreg.h>
 
 #include <ddb/db_access.h>
+#include <ddb/db_proc.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_interface.h>
 #include <ddb/db_output.h>
+
+#ifndef _KERNEL
+#include <stdbool.h>
+#endif
 
 void db_print_window(uint64_t);
 
@@ -50,62 +55,82 @@ void db_print_window(uint64_t);
 #define INKERNEL(va)	1	/* Everything's in the kernel now. 8^) */
 #endif
 
+#ifdef _KERNEL
 #define	KLOAD(x)	probeget((paddr_t)(u_long)&(x), ASI_PRIMARY, sizeof(x))	
-#define ULOAD(x)	probeget((paddr_t)(u_long)&(x), ASI_AIUS, sizeof(x))	
+#else
+static long
+kload(db_addr_t addr)
+{
+	long val;
+
+	db_read_bytes(addr, sizeof val, (char *)&val);
+
+	return val;
+}
+#define	KLOAD(x)	kload((db_addr_t)(u_long)&(x))
+#endif
 
 void
-db_stack_trace_print(addr, have_addr, count, modif, pr)
-	db_expr_t       addr;
-	bool            have_addr;
-	db_expr_t       count;
-	const char      *modif;
- 	void		(*pr) (const char *, ...);
+db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
+	const char *modif, void (*pr) (const char *, ...))
 {
 	vaddr_t		frame;
-	bool		kernel_only = TRUE;
-	bool		trace_thread = FALSE;
-	bool		lwpaddr = FALSE;
+	bool		kernel_only = true;
+	bool		trace_thread = false;
+	bool		lwpaddr = false;
 	char		c;
 	const char	*cp = modif;
 
 	while ((c = *cp++) != 0) {
 		if (c == 'a') {
-			lwpaddr = TRUE;
-			trace_thread = TRUE;
+			lwpaddr = true;
+			trace_thread = true;
 		}
 		if (c == 't')
-			trace_thread = TRUE;
+			trace_thread = true;
 		if (c == 'u')
-			kernel_only = FALSE;
+			kernel_only = false;
 	}
 
-	if (!have_addr)
+	if (!have_addr) {
+#ifndef _KERNEL
+		extern struct pcb pcb;
+		frame = (vaddr_t)pcb.pcb_sp;
+#else
 		frame = (vaddr_t)DDB_TF->tf_out[6];
-	else {
+#endif
+	} else {
 		if (trace_thread) {
-			struct proc *p;
-			struct lwp *l;
-			struct user *u;
+			proc_t p;
+			lwp_t l;
+			struct pcb *pcb;
 			if (lwpaddr) {
-				l = (struct lwp *)addr;
-				p = l->l_proc;
-				(*pr)("trace: pid %d ", p->p_pid);
+				db_read_bytes(addr, sizeof(l), (char *)&l);
+				db_read_bytes((db_addr_t)l.l_proc,
+				    sizeof(p), (char *)&p);
+
+				(*pr)("trace: pid %d ", p.p_pid);
 			} else {
+				proc_t *pp;
 				(*pr)("trace: pid %d ", (int)addr);
-				p = p_find(addr, PFIND_LOCKED);
-				if (p == NULL) {
+				pp = db_proc_find((pid_t)addr);
+				if (pp == NULL) {
 					(*pr)("not found\n");
 					return;
 				}
-				l = proc_representative_lwp(p, NULL, 0);
+				db_read_bytes((db_addr_t)pp, sizeof(p),
+				    (char *)&p);
+				addr = (db_addr_t)p.p_lwps.lh_first;
+				db_read_bytes(addr, sizeof(l), (char *)&l);
 			}
-			(*pr)("lid %d ", l->l_lid);
-                        if ((l->l_flag & LW_INMEM) == 0) {
-                                (*pr)("swapped out\n");
-                                return;
-                        }
-                        u = l->l_addr;
-			frame = (vaddr_t)u->u_pcb.pcb_sp;
+			(*pr)("lid %d ", l.l_lid);
+			pcb = lwp_getpcb(&l);
+#ifndef _KERNEL
+			db_read_bytes((db_addr_t)&pcb->pcb_sp,
+			    sizeof(frame), (char *)&frame);
+#else
+			frame = (vaddr_t)pcb->pcb_sp;
+#endif
 			(*pr)("at %p\n", frame);
 		} else {
 			frame = (vaddr_t)addr;
@@ -193,7 +218,7 @@ db_dump_window(db_expr_t addr, bool have_addr, db_expr_t count, const char *modi
 		else frame = (uint64_t)((struct frame32 *)(u_long)frame)->fr_fp;
 	}
 
-	db_printf("Window %lx ", addr);
+	db_printf("Window %lx ", (long)addr);
 	db_print_window(frame);
 }
 
@@ -286,13 +311,13 @@ db_dump_stack(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif
 {
 	int		i;
 	uint64_t	frame, oldframe;
-	bool		kernel_only = TRUE;
+	bool		kernel_only = true;
 	char		c;
 	const char	*cp = modif;
 
 	while ((c = *cp++) != 0)
 		if (c == 'u')
-			kernel_only = FALSE;
+			kernel_only = false;
 
 	if (count == -1)
 		count = 65535;
@@ -355,7 +380,7 @@ db_dump_trap(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	}
 	/* Or an arbitrary trapframe */
 	if (have_addr)
-		tf = (struct trapframe64 *)addr;
+		tf = (struct trapframe64 *)(uintptr_t)addr;
 
 	db_printf("Trapframe %p:\ttstate: %llx\tpc: %llx\tnpc: %llx\n",
 		  tf, (unsigned long long)tf->tf_tstate,
@@ -428,7 +453,7 @@ db_dump_fpstate(db_expr_t addr, bool have_addr, db_expr_t count, const char *mod
 	fpstate = DDB_FP;
 	/* Or an arbitrary trapframe */
 	if (have_addr)
-		fpstate = (struct fpstate64 *)addr;
+		fpstate = (struct fpstate64 *)(uintptr_t)addr;
 
 	db_printf("fpstate %p: fsr = %llx gsr = %lx\nfpregs:\n",
 		fpstate, (unsigned long long)fpstate->fs_fsr,
@@ -517,9 +542,9 @@ db_dump_ts(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	ts = &DDB_REGS->db_ts[0];
 	tl = DDB_REGS->db_tl;
 	for (i=0; i<tl; i++) {
-		printf("%d tt=%lx tstate=%lx tpc=%p tnpc=%p\n",
-		       i+1, (long)ts[i].tt, (u_long)ts[i].tstate,
-		       (void*)(u_long)ts[i].tpc, (void*)(u_long)ts[i].tnpc);
+		db_printf("%d tt=%lx tstate=%lx tpc=%p tnpc=%p\n",
+		          i+1, (long)ts[i].tt, (u_long)ts[i].tstate,
+		          (void*)(u_long)ts[i].tpc, (void*)(u_long)ts[i].tnpc);
 	}
 
 }

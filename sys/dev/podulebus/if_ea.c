@@ -1,4 +1,4 @@
-/* $NetBSD: if_ea.c,v 1.13 2007/10/19 12:01:07 ad Exp $ */
+/* $NetBSD: if_ea.c,v 1.17 2012/10/10 22:17:44 skrll Exp $ */
 
 /*
  * Copyright (c) 2000, 2001 Ben Harris
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ea.c,v 1.13 2007/10/19 12:01:07 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ea.c,v 1.17 2012/10/10 22:17:44 skrll Exp $");
 
 #include <sys/param.h>
 
@@ -71,12 +71,12 @@ struct ea_softc {
  * prototypes
  */
 
-int eaprobe(struct device *, struct cfdata *, void *);
-void eaattach(struct device *, struct device *, void *);
+int eaprobe(device_t, cfdata_t, void *);
+void eaattach(device_t, device_t, void *);
 
 /* driver structure for autoconf */
 
-CFATTACH_DECL(ea, sizeof(struct ea_softc),
+CFATTACH_DECL_NEW(ea, sizeof(struct ea_softc),
     eaprobe, eaattach, NULL, NULL);
 
 /*
@@ -88,7 +88,7 @@ CFATTACH_DECL(ea, sizeof(struct ea_softc),
  */
 
 int
-eaprobe(struct device *parent, struct cfdata *cf, void *aux)
+eaprobe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct podulebus_attach_args *pa = aux;
 
@@ -101,7 +101,7 @@ eaprobe(struct device *parent, struct cfdata *cf, void *aux)
  */
 
 void
-eaattach(struct device *parent, struct device *self, void *aux)
+eaattach(device_t parent, device_t self, void *aux)
 {
 	struct ea_softc *sc = device_private(self);
 	struct podulebus_attach_args *pa = aux;
@@ -109,7 +109,9 @@ eaattach(struct device *parent, struct device *self, void *aux)
 	char *ptr;
 	int i;
 
-/*	dprintf(("Attaching %s...\n", sc->sc_dev.dv_xname));*/
+	sc->sc_8005.sc_dev = self;
+
+/*	dprintf(("Attaching %s...\n", device_xname(self)));*/
 
 	/* Set the address of the controller for easy access */
 	podulebus_shift_tag(pa->pa_mod_t, EA_8005_SHIFT, &sc->sc_8005.sc_iot);
@@ -142,7 +144,7 @@ eaattach(struct device *parent, struct device *self, void *aux)
 	/* Claim a podule interrupt */
 
 	evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-	    self->dv_xname, "intr");
+	    device_xname(self), "intr");
 	sc->sc_ih = podulebus_irq_establish(pa->pa_ih, IPL_NET, seeq8005intr,
 	    sc, &sc->sc_intrcnt);
 }

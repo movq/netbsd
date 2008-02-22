@@ -1,4 +1,4 @@
-/*	$NetBSD: sliplogin.c,v 1.21 2004/10/30 15:44:04 dsl Exp $	*/
+/*	$NetBSD: sliplogin.c,v 1.24 2013/10/19 17:16:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)sliplogin.c	8.2 (Berkeley) 2/1/94";
 #else
-__RCSID("$NetBSD: sliplogin.c,v 1.21 2004/10/30 15:44:04 dsl Exp $");
+__RCSID("$NetBSD: sliplogin.c,v 1.24 2013/10/19 17:16:38 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -100,21 +100,19 @@ __RCSID("$NetBSD: sliplogin.c,v 1.21 2004/10/30 15:44:04 dsl Exp $");
 
 #include "pathnames.h"
 
-int	unit;
-int	speed;
-int	uid;
-char	loginargs[BUFSIZ];
-char	loginfile[MAXPATHLEN];
-char	loginname[BUFSIZ];
+static int	unit;
+static int	speed;
+static int	uid;
+static char	loginargs[BUFSIZ];
+static char	loginfile[MAXPATHLEN];
+static char	loginname[BUFSIZ];
 
-void	 findid __P((char *));
-void	hup_handler __P((int));
-int	main __P((int, char **));
-const char *sigstr __P((int));
+static void	 findid(const char *);
+__dead static void	hup_handler(int);
+static const char *sigstr(int);
 
-void
-findid(name)
-	char *name;
+static void
+findid(const char *name)
 {
 	FILE *fp;
 	static char slopt[5][16];
@@ -122,7 +120,6 @@ findid(name)
 	static char raddr[16];
 	static char mask[16];
 	char user[16];
-	int n;
 
 	(void)strlcpy(loginname, name, sizeof(loginname));
 	if ((fp = fopen(_PATH_ACCESS, "r")) == NULL) {
@@ -132,9 +129,11 @@ findid(name)
 	while (fgets(loginargs, sizeof(loginargs) - 1, fp)) {
 		if (ferror(fp))
 			break;
-		n = sscanf(loginargs, "%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s\n",
-                        user, laddr, raddr, mask, slopt[0], slopt[1], 
-			slopt[2], slopt[3], slopt[4]);
+		(void)sscanf(loginargs, "%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]"
+		    "%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s%*[ \t]%15s"
+		    "%*[ \t]%15s\n",
+		    user, laddr, raddr, mask, slopt[0], slopt[1], 
+		    slopt[2], slopt[3], slopt[4]);
 		if (user[0] == '#' || isspace((unsigned char)user[0]))
 			continue;
 		if (strcmp(user, name) != 0)
@@ -168,9 +167,8 @@ findid(name)
 	/* NOTREACHED */
 }
 
-const char *
-sigstr(s)
-	int s;
+static const char *
+sigstr(int s)
 {
 
 	if (s > 0 && s < NSIG)
@@ -183,9 +181,8 @@ sigstr(s)
 	}
 }
 
-void
-hup_handler(s)
-	int s;
+static void
+hup_handler(int s)
 {
 	char logoutfile[MAXPATHLEN];
 
@@ -208,9 +205,7 @@ hup_handler(s)
 }
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int fd, s, ldisc, odisc;
 	char *name;

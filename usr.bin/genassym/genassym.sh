@@ -1,5 +1,5 @@
 #!/bin/sh -
-#	$NetBSD: genassym.sh,v 1.2 2006/10/21 04:48:29 itohy Exp $
+#	$NetBSD: genassym.sh,v 1.8 2014/01/06 22:43:15 christos Exp $
 #
 # Copyright (c) 1997 Matthias Pfaller.
 # All rights reserved.
@@ -12,11 +12,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by Matthias Pfaller.
-# 4. The name of the author may not be used to endorse or promote products
-#    derived from this software without specific prior written permission
 #
 # THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 # IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,8 +25,8 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-progname=${0}
-awk=${AWK:-awk}
+progname="$(basename "${0}")"
+: ${AWK:=awk}
 
 ccode=0		# generate temporary C file, compile it, execute result
 fcode=0		# generate Forth code
@@ -42,29 +37,28 @@ usage()
 	echo "usage: ${progname} [-c | -f] -- compiler command" >&2
 }
 
-args=`getopt cf $*`
-if [ $? != 0 ]; then
-	usage;
-	exit 1;
-fi
-set -- $args
+set -e
 
-for i; do
+while getopts cf i
+do
 	case "$i" in
-	-c)
+	c)
 		ccode=1
-		shift;;
-	-f)
+		;;
+	f)
 		fcode=1
-		shift;;
-	--)
-		shift; break;;
+		;;
 	esac
 done
+shift "$(($OPTIND - 1))"
+if [ $# -eq 0 ]; then
+	usage
+	exit 1
+fi
 
 # Deal with any leading environment settings..
 
-while [ "$1" ]
+while [ -n "$1" ]
 do
 	case "$1" in
 	*=*)
@@ -77,17 +71,22 @@ do
 	esac
 done
 
-genassym_temp=/tmp/genassym.$$
+genassym_temp="$(mktemp -d "${TMPDIR-/tmp}/genassym.XXXXXX")"
 
-if ! mkdir $genassym_temp; then
+
+if [ ! -d $genassym_temp ]; then
 	echo "${progname}: unable to create temporary directory" >&2
 	exit 1
 fi
 trap "rm -rf $genassym_temp" 0 1 2 3 15
 
-$awk '
+$AWK '
 BEGIN {
+	printf("#if __GNUC__ >= 4\n");
+	printf("#define	offsetof(type, member) __builtin_offsetof(type, member)\n");
+	printf("#else\n");
 	printf("#define	offsetof(type, member) ((size_t)(&((type *)0)->member))\n");
+	printf("#endif\n");
 	defining = 0;
 	type = "long";
 	asmtype = "n";
@@ -153,7 +152,7 @@ $0 ~ /^endif/ {
 	if (defining == 0) {
 		defining = 1;
 		printf("void f" FNR "(void);\n");
-		printf("void f" FNR "() {\n");
+		printf("void f" FNR "(void) {\n");
 		if (ccode)
 			call[FNR] = "f" FNR;
 		defining = 1;
@@ -195,21 +194,21 @@ END {
 		printf("return(0); }\n");
 	}
 }
-' ccode=$ccode fcode=$fcode > ${genassym_temp}/assym.c || exit 1
+' ccode="$ccode" fcode="$fcode" > "${genassym_temp}/assym.c" || exit 1
 
-if [ $ccode = 1 ] ; then
-	"$@" ${genassym_temp}/assym.c -o ${genassym_temp}/genassym && \
-	    ${genassym_temp}/genassym
-elif [ $fcode = 1 ]; then
+if [ "$ccode" = 1 ]; then
+	"$@" "${genassym_temp}/assym.c" -o "${genassym_temp}/genassym" && \
+	    "${genassym_temp}/genassym"
+elif [ "$fcode" = 1 ]; then
 	# Kill all of the "#" and "$" modifiers; locore.s already
 	# prepends the correct "constant" modifier.
-	"$@" -S ${genassym_temp}/assym.c -o - | sed -e 's/\$//g' | \
+	"$@" -S "${genassym_temp}/assym.c" -o - | sed -e 's/\$//g' | \
 	    sed -n 's/.*XYZZY//gp'
 else
 	# Kill all of the "#" and "$" modifiers; locore.s already
 	# prepends the correct "constant" modifier.
-	"$@" -S ${genassym_temp}/assym.c -o - > \
-	    ${genassym_temp}/genassym.out && \
-	    sed -e 's/#//g' -e 's/\$//g' < ${genassym_temp}/genassym.out | \
+	"$@" -S "${genassym_temp}/assym.c" -o - > \
+	    "${genassym_temp}/genassym.out" && \
+	    sed -e 's/#//g' -e 's/\$//g' < "${genassym_temp}/genassym.out" | \
 	    sed -n 's/.*XYZZY/#define/gp'
 fi

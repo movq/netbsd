@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread.h,v 1.28 2008/01/26 17:55:30 rmind Exp $	*/
+/*	$NetBSD: pthread.h,v 1.41 2018/02/20 05:10:51 kamil Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,7 +41,10 @@
 #include <pthread_types.h>
 
 __BEGIN_DECLS
+#ifndef __PTHREAD_ATFORK_DECLARED
+#define __PTHREAD_ATFORK_DECLARED
 int	pthread_atfork(void (*)(void), void (*)(void), void (*)(void));
+#endif
 int	pthread_create(pthread_t * __restrict,
 	    const pthread_attr_t * __restrict, void *(*)(void *),
 	    void * __restrict);
@@ -101,24 +97,53 @@ int	pthread_mutex_destroy(pthread_mutex_t *);
 int	pthread_mutex_lock(pthread_mutex_t *);
 int	pthread_mutex_trylock(pthread_mutex_t *);
 int	pthread_mutex_unlock(pthread_mutex_t *);
+#ifndef __LIBC12_SOURCE__
+int	pthread_mutex_timedlock(pthread_mutex_t * __restrict,
+	    const struct timespec * __restrict);
+#endif
+int	pthread_mutex_getprioceiling(const pthread_mutex_t * __restrict,
+	    int * __restrict);
+int	pthread_mutex_setprioceiling(pthread_mutex_t * __restrict, int,
+	    int * __restrict);
 int	pthread_mutexattr_init(pthread_mutexattr_t *);
 int	pthread_mutexattr_destroy(pthread_mutexattr_t *);
+#ifdef _PTHREAD_PSHARED
+int	pthread_mutexattr_getpshared(const pthread_mutexattr_t * __restrict,
+	    int * __restrict);
+int	pthread_mutexattr_setpshared(pthread_mutexattr_t *, int);
+#endif
 int	pthread_mutexattr_gettype(const pthread_mutexattr_t * __restrict,
 	    int * __restrict);
 int	pthread_mutexattr_settype(pthread_mutexattr_t *attr, int);
-
+int	pthread_mutexattr_getprotocol(const pthread_mutexattr_t * __restrict,
+	    int * __restrict);
+int	pthread_mutexattr_setprotocol(pthread_mutexattr_t*,
+	    int);
+int	pthread_mutexattr_getprioceiling(const pthread_mutexattr_t * __restrict,
+	    int * __restrict);
+int	pthread_mutexattr_setprioceiling(pthread_mutexattr_t *,
+	    int);
 int	pthread_cond_init(pthread_cond_t * __restrict,
 	    const pthread_condattr_t * __restrict);
 int	pthread_cond_destroy(pthread_cond_t *);
 int	pthread_cond_wait(pthread_cond_t * __restrict,
 	    pthread_mutex_t * __restrict);
+#ifndef __LIBC12_SOURCE__
 int	pthread_cond_timedwait(pthread_cond_t * __restrict,
 	    pthread_mutex_t * __restrict, const struct timespec * __restrict);
+#endif
 int	pthread_cond_signal(pthread_cond_t *);
 int	pthread_cond_broadcast(pthread_cond_t *);
 int	pthread_condattr_init(pthread_condattr_t *);
+int     pthread_condattr_setclock(pthread_condattr_t *, clockid_t);
+int	pthread_condattr_getclock(const pthread_condattr_t * __restrict,
+	    clockid_t * __restrict);
 int	pthread_condattr_destroy(pthread_condattr_t *);
-
+#ifdef _PTHREAD_PSHARED
+int	pthread_condattr_getpshared(const pthread_condattr_t * __restrict,
+	    int * __restrict);
+int	pthread_condattr_setpshared(pthread_condattr_t *, int);
+#endif
 int	pthread_once(pthread_once_t *, void (*)(void));
 
 int	pthread_key_create(pthread_key_t *, void (*)(void *));
@@ -139,6 +164,8 @@ int	pthread_suspend_np(pthread_t);
 int	pthread_resume_np(pthread_t);
 
 unsigned int	pthread_curcpu_np(void);
+
+int	pthread_getcpuclockid(pthread_t, clockid_t *);
 
 struct pthread_cleanup_store {
 	void	*pad[4];
@@ -169,21 +196,31 @@ int	pthread_rwlock_rdlock(pthread_rwlock_t *);
 int	pthread_rwlock_tryrdlock(pthread_rwlock_t *);
 int	pthread_rwlock_wrlock(pthread_rwlock_t *);
 int	pthread_rwlock_trywrlock(pthread_rwlock_t *);
+#ifndef __LIBC12_SOURCE__
 int	pthread_rwlock_timedrdlock(pthread_rwlock_t * __restrict,
 	    const struct timespec * __restrict);
 int	pthread_rwlock_timedwrlock(pthread_rwlock_t * __restrict,
 	    const struct timespec * __restrict);
+#endif
 int	pthread_rwlock_unlock(pthread_rwlock_t *);
 int	pthread_rwlockattr_init(pthread_rwlockattr_t *);
 int	pthread_rwlockattr_destroy(pthread_rwlockattr_t *);
-
+#ifdef _PTHREAD_PSHARED
+int	pthread_rwlockattr_getpshared(const pthread_rwlockattr_t * __restrict,
+	    int * __restrict);
+int	pthread_rwlockattr_setpshared(pthread_rwlockattr_t *, int);
+#endif
 int	pthread_barrier_init(pthread_barrier_t * __restrict,
 	    const pthread_barrierattr_t * __restrict, unsigned int);
 int	pthread_barrier_wait(pthread_barrier_t *);
 int	pthread_barrier_destroy(pthread_barrier_t *);
 int	pthread_barrierattr_init(pthread_barrierattr_t *);
 int	pthread_barrierattr_destroy(pthread_barrierattr_t *);
-
+#ifdef _PTHREAD_PSHARED
+int	pthread_barrierattr_getpshared(const pthread_barrierattr_t * __restrict,
+    int * __restrict);
+int	pthread_barrierattr_setpshared(pthread_barrierattr_t *, int);
+#endif
 int	pthread_getschedparam(pthread_t, int * __restrict,
 	    struct sched_param * __restrict);
 int	pthread_setschedparam(pthread_t, int, const struct sched_param *);
@@ -194,6 +231,7 @@ int 	*pthread__errno(void);
 #if defined(_NETBSD_SOURCE)
 int	pthread_getaffinity_np(pthread_t, size_t, cpuset_t *);
 int	pthread_setaffinity_np(pthread_t, size_t, cpuset_t *);
+int	pthread_getattr_np(pthread_t, pthread_attr_t *);
 
 int	pthread_mutex_held_np(pthread_mutex_t *);
 pthread_t pthread_mutex_owner_np(pthread_mutex_t *);
@@ -201,6 +239,8 @@ pthread_t pthread_mutex_owner_np(pthread_mutex_t *);
 int	pthread_rwlock_held_np(pthread_rwlock_t *);
 int	pthread_rwlock_wrheld_np(pthread_rwlock_t *);
 int	pthread_rwlock_rdheld_np(pthread_rwlock_t *);
+
+int	pthread_cond_has_waiters_np(pthread_cond_t *);
 #endif	/* _NETBSD_SOURCE */
 
 __END_DECLS
@@ -245,6 +285,10 @@ __END_DECLS
 #define	PTHREAD_MUTEX_ERRORCHECK	1
 #define	PTHREAD_MUTEX_RECURSIVE		2
 #define	PTHREAD_MUTEX_DEFAULT		PTHREAD_MUTEX_NORMAL
+
+#define	PTHREAD_PRIO_NONE		0
+#define	PTHREAD_PRIO_INHERIT		1
+#define	PTHREAD_PRIO_PROTECT		2
 
 #define PTHREAD_COND_INITIALIZER	_PTHREAD_COND_INITIALIZER
 #define PTHREAD_MUTEX_INITIALIZER	_PTHREAD_MUTEX_INITIALIZER
@@ -315,8 +359,10 @@ int	__libc_cond_signal(pthread_cond_t *);
 int	__libc_cond_broadcast(pthread_cond_t *);
 int	__libc_cond_wait(pthread_cond_t * __restrict,
 	    pthread_mutex_t * __restrict);
+#ifndef __LIBC12_SOURCE__
 int	__libc_cond_timedwait(pthread_cond_t * __restrict,
 	    pthread_mutex_t * __restrict, const struct timespec * __restrict);
+#endif
 int	__libc_cond_destroy(pthread_cond_t *);
 __END_DECLS
 

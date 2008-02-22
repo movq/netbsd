@@ -1,4 +1,4 @@
-/*	$NetBSD: dumprestore.h,v 1.14 2005/12/26 19:01:47 perry Exp $	*/
+/*	$NetBSD: dumprestore.h,v 1.18 2016/01/22 23:11:50 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -38,6 +38,9 @@
 
 #ifndef _PROTOCOLS_DUMPRESTORE_H_
 #define _PROTOCOLS_DUMPRESTORE_H_
+
+#include <stdint.h>
+#include <ufs/ufs/dinode.h>
 
 /*
  * TP_BSIZE is the size of file blocks on the dump tapes.
@@ -150,9 +153,11 @@ union u_spcl {
  */
 #define DR_NEWHEADER	0x0001	/* new format tape header */
 #define DR_NEWINODEFMT	0x0002	/* new format inodes on tape */
+#define DR_EXTATTRIBUTES 0x8000	/* linux: extended attributes */
 
-#define	DUMPOUTFMT	"%-16s %c %s"		/* for printf */
+/* 511 == NAME_MAX */
+#define	DUMPOUTFMT	"%-511s %c %s"		/* for printf */
 						/* name, level, ctime(date) */
-#define	DUMPINFMT	"%16s %c %[^\n]\n"	/* inverse for scanf */
+#define	DUMPINFMT	"%511s %c %[^\n]\n"	/* inverse for scanf */
 
 #endif /* !_PROTOCOLS_DUMPRESTORE_H_ */

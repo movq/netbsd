@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.44 2007/02/19 02:57:40 mrg Exp $ */
+/*	$NetBSD: psl.h,v 1.49 2016/05/18 08:16:04 nakayama Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -142,25 +142,26 @@
 #define PSTATE_USER	(PSTATE_MM_TSO|PSTATE_AM|PSTATE_IE)
 #endif
 
+
 /*
  * SPARC V9 TSTATE register
  *
- *   39 32 31 24 23 18  17   8	7 5 4   0
+ *   39 32 31 24 23 20  19   8	7 5 4   0
  *  +-----+-----+-----+--------+---+-----+
  *  | CCR | ASI |  -  | PSTATE | - | CWP |
  *  +-----+-----+-----+--------+---+-----+
- * */
+ */
 
 #define TSTATE_CWP		0x01f
-#define TSTATE_PSTATE		0x6ff00
+#define TSTATE_PSTATE		0xfff00
 #define TSTATE_PSTATE_SHIFT	8
 #define TSTATE_ASI		0xff000000LL
 #define TSTATE_ASI_SHIFT	24
 #define TSTATE_CCR		0xff00000000LL
 #define TSTATE_CCR_SHIFT	32
 
-#define PSRCC_TO_TSTATE(x)	(((int64_t)(x)&PSR_ICC)<<(TSTATE_CCR_SHIFT-19))
-#define TSTATECCR_TO_PSR(x)	(((x)&TSTATE_CCR)>>(TSTATE_CCR_SHIFT-19))
+#define PSRCC_TO_TSTATE(x)	(((int64_t)(x)&PSR_ICC)<<(TSTATE_CCR_SHIFT-20))
+#define TSTATECCR_TO_PSR(x)	(((x)&TSTATE_CCR)>>(TSTATE_CCR_SHIFT-20))
 
 /*
  * These are here to simplify life.
@@ -182,8 +183,8 @@
 
 #define TSTATE_BITS "\20\14IG\13MG\12CLE\11TLE\10\7MM\6RED\5PEF\4AM\3PRIV\2IE\1AG"
 
-#define TSTATE_KERN	((TSTATE_KERN)<<TSTATE_PSTATE_SHIFT)
-#define TSTATE_USER	((TSTATE_USER)<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_KERN	((PSTATE_KERN)<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_USER	((PSTATE_USER)<<TSTATE_PSTATE_SHIFT)
 /*
  * SPARC V9 VER version register.
  *
@@ -223,15 +224,15 @@
 #define CWP		0x01f
 
 /* 64-byte alignment -- this seems the best place to put this. */
-#define BLOCK_SIZE	64
-#define BLOCK_ALIGN	0x3f
+#define SPARC64_BLOCK_SIZE	64
+#define SPARC64_BLOCK_ALIGN	0x3f
 
 #if defined(_KERNEL) && !defined(_LOCORE)
 
 /*
  * GCC pseudo-functions for manipulating PSR (primarily PIL field).
  */
-static __inline int
+static __inline __attribute__((__always_inline__)) int
 getpsr(void)
 {
 	int psr;
@@ -240,7 +241,7 @@ getpsr(void)
 	return (psr);
 }
 
-static __inline int
+static __inline __attribute__((__always_inline__)) int
 getmid(void)
 {
 	int mid;
@@ -249,14 +250,14 @@ getmid(void)
 	return ((mid >> 20) & 0x3);
 }
 
-static __inline void
+static __inline __attribute__((__always_inline__)) void
 setpsr(int newpsr)
 {
-	__asm volatile("wr %0,0,%%psr" : : "r" (newpsr));
+	__asm volatile("wr %0,0,%%psr" : : "r" (newpsr) : "memory");
 	__asm volatile("nop; nop; nop");
 }
 
-static __inline void
+static __inline __attribute__((__always_inline__)) void
 spl0(void)
 {
 	int psr, oldipl;
@@ -266,7 +267,7 @@ spl0(void)
 	 * which gives us the same value as the old psr but with all
 	 * the old PIL bits turned off.
 	 */
-	__asm volatile("rd %%psr,%0" : "=r" (psr));
+	__asm volatile("rd %%psr,%0" : "=r" (psr) : : "memory");
 	oldipl = psr & PSR_PIL;
 	__asm volatile("wr %0,%1,%%psr" : : "r" (psr), "r" (oldipl));
 
@@ -283,14 +284,14 @@ spl0(void)
  * into the ipl field.)
  */
 #define	_SPLSET(name, newipl) \
-static __inline void name(void) \
+static __inline __attribute__((__always_inline__)) void name(void) \
 { \
 	int psr; \
 	__asm volatile("rd %%psr,%0" : "=r" (psr)); \
 	psr &= ~PSR_PIL; \
 	__asm volatile("wr %0,%1,%%psr" : : \
 	    "r" (psr), "n" ((newipl) << 8)); \
-	__asm volatile("nop; nop; nop"); \
+	__asm volatile("nop; nop; nop" : : : "memory"); \
 }
 
 _SPLSET(spllowerschedclock, IPL_SCHED)
@@ -324,7 +325,7 @@ splraiseipl(ipl_cookie_t icookie)
 	psr = (psr & ~oldipl) | newipl;
 
 	__asm volatile("wr %0,0,%%psr" : : "r" (psr));
-	__asm volatile("nop; nop; nop");
+	__asm volatile("nop; nop; nop" : : : "memory");
 
 	return (oldipl);
 }
@@ -340,12 +341,12 @@ splraiseipl(ipl_cookie_t icookie)
 #define	splzs()		splraiseipl(makeiplcookie(IPL_ZS))
 
 /* splx does not have a return value */
-static __inline void
+static __inline __attribute__((__always_inline__)) void
 splx(int newipl)
 {
 	int psr;
 
-	__asm volatile("rd %%psr,%0" : "=r" (psr));
+	__asm volatile("rd %%psr,%0" : "=r" (psr) : : "memory");
 	__asm volatile("wr %0,%1,%%psr" : : \
 	    "r" (psr & ~PSR_PIL), "rn" (newipl));
 	__asm volatile("nop; nop; nop");

@@ -1,4 +1,4 @@
-/*	$NetBSD: ldexp.S,v 1.8 2003/08/07 16:42:15 agc Exp $	*/
+/*	$NetBSD: ldexp.S,v 1.10 2014/09/17 11:01:05 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -35,13 +35,12 @@
 #include <mips/asm.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	ASMSTR("from: @(#)ldexp.s	8.1 (Berkeley) 6/4/93")
-	ASMSTR("$NetBSD: ldexp.S,v 1.8 2003/08/07 16:42:15 agc Exp $")
-#endif /* LIBC_SCCS and not lint */
-
-#ifdef __ABICALLS__
-	.abicalls
+#if 0
+	RCSID("from: @(#)ldexp.s	8.1 (Berkeley) 6/4/93")
+#else
+	RCSID("$NetBSD: ldexp.S,v 1.10 2014/09/17 11:01:05 joerg Exp $")
 #endif
+#endif /* LIBC_SCCS and not lint */
 
 #define DEXP_INF	0x7ff
 #define DEXP_BIAS	1023
@@ -210,7 +209,7 @@ LEAF(ldexp)
 	bge	v1, zero, 1f		# should result be negative infinity?
 	neg.d	$f0, $f0		# result is negative infinity
 1:
-	add.d	$f0, $f0		# cause overflow faults if enabled
+	add.d	$f0, $f0, $f0		# cause overflow faults if enabled
 	j	ra
 9:
 	mov.d	$f0, $f12		# yes, result is just x

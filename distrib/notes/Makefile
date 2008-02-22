@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.39 2008/01/09 11:25:58 simonb Exp $
+#	$NetBSD: Makefile,v 1.45 2018/01/24 09:04:40 skrll Exp $
 #
 
 .include <bsd.own.mk>
@@ -10,18 +10,19 @@ TARGETS+=	release
 SUBDIR=	${RELEASEMACHINE}
 .endif
 .else
-SUBDIR+= acorn26
 SUBDIR+= acorn32
 SUBDIR+= alpha
 SUBDIR+= amd64
 SUBDIR+= amiga
-# SUBDIR+= arc		# not complete
+SUBDIR+= arc
 SUBDIR+= atari
+SUBDIR+= bebox
 SUBDIR+= cats
+SUBDIR+= emips
 SUBDIR+= evbarm
 SUBDIR+= evbppc
 SUBDIR+= hp300
-SUBDIR+= hp700
+SUBDIR+= hppa
 SUBDIR+= hpcmips
 SUBDIR+= hpcsh
 SUBDIR+= i386
@@ -34,6 +35,7 @@ SUBDIR+= mvme68k
 SUBDIR+= news68k
 SUBDIR+= newsmips
 SUBDIR+= next68k
+SUBDIR+= ofppc
 SUBDIR+= pmax
 SUBDIR+= prep
 SUBDIR+= sandpoint

@@ -1,8 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.92 2008/01/09 20:38:35 wiz Exp $	*/
+/*	$NetBSD: machdep.c,v 1.121 2018/01/20 13:56:08 skrll Exp $	*/
 
-/*
- * Copyright (c) 2006 Izumi Tsutsui.
- * All rights reserved.
+/*-
+ * Copyright (c) 2006 Izumi Tsutsui.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -53,43 +50,36 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.92 2008/01/09 20:38:35 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.121 2018/01/20 13:56:08 skrll Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "opt_modular.h"
 #include "opt_execfmt.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/boot_flag.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 #include <sys/kernel.h>
+#include <sys/kcore.h>
+#include <sys/ksyms.h>
+#include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
-#include <sys/user.h>
-#include <sys/mount.h>
-#include <sys/kcore.h>
-#include <sys/boot_flag.h>
-#include <sys/ksyms.h>
-#include <sys/cpu.h>
-#include <sys/intr.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <mips/mips3_clock.h>
 #include <machine/bootinfo.h>
-#include <machine/bus.h>
-#include <machine/leds.h>
-#include <machine/psl.h>
 
 #include <mips/locore.h>
+#include <mips/psl.h>
 
 #include <dev/cons.h>
 
-#include <dev/ic/i8259reg.h>
-#include <dev/isa/isareg.h>
-
 #include <cobalt/dev/gtreg.h>
-#define GT_BASE		0x14000000	/* XXX */
-#define PCIB_BASE	0x10000000	/* XXX */
 
 #ifdef KGDB
 #include <sys/kgdb.h>
@@ -97,23 +87,16 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.92 2008/01/09 20:38:35 wiz Exp $");
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(LKM)
-#include <machine/db_machdep.h>
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+#include <mips/db_machdep.h>
 #include <ddb/db_extern.h>
-#define ELFSIZE		DB_ELFSIZE
 #include <sys/exec_elf.h>
 #endif
 
-/* Our exported CPU info; we can have only one. */
-struct cpu_info cpu_info_store;
-
 /* Maps for VM objects. */
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-int	physmem;		/* Total physical memory */
-char	*bootinfo = NULL;	/* pointer to bootinfo structure */
+void	*bootinfo = NULL;	/* pointer to bootinfo structure */
 
 char	bootstring[512];	/* Boot command */
 int	netboot;		/* Are we netbooting? */
@@ -123,52 +106,55 @@ char	*root_bstr = NULL;
 int	bootunit = -1;
 int	bootpart = -1;
 
+#if 0
+struct extent *cobalt_io_ex = NULL;
+struct extent *cobalt_mem_ex = NULL;
+struct mips_bus_space bonito_iot;
+struct mips_bus_space bonito_memt;
+struct mips_bus_dma_tag bonito_dmat;
+struct mips_pci_chipset bonito_pc;
+#endif
+
+
 int cpuspeed;
 
 u_int cobalt_id;
 static const char * const cobalt_model[] =
 {
-	NULL,
-	NULL,
-	NULL,
-	"Cobalt Qube 2700",
-	"Cobalt RaQ",
-	"Cobalt Qube 2",
-	"Cobalt RaQ 2"
+	[COBALT_ID_QUBE2700] = "Cobalt Qube 2700",
+	[COBALT_ID_RAQ]      = "Cobalt RaQ",
+	[COBALT_ID_QUBE2]    = "Cobalt Qube 2",
+	[COBALT_ID_RAQ2]     = "Cobalt RaQ 2"
 };
 #define COBALT_MODELS	__arraycount(cobalt_model)
 
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int mem_cluster_cnt;
 
-void	mach_init(unsigned int, u_int, char*);
+void	mach_init(int32_t, u_int, int32_t);
 void	decode_bootstring(void);
 static char *strtok_light(char *, const char);
 static u_int read_board_id(void);
 
-/*
- * safepri is a safe priority for sleep to set for a spin-wait during
- * autoconfiguration or after a panic.  Used as an argument to splx().
- */
-int	safepri = MIPS1_PSL_LOWIPL;
-
 extern char *esym;
-extern struct user *proc0paddr;
 
+struct mips_bus_space cobalt_bs;
+void mainbus_bus_mem_init(bus_space_tag_t, void *);
 
 
 /*
  * Do all the stuff that locore normally does before calling main().
  */
 void
-mach_init(unsigned int memsize, u_int bim, char *bip)
+mach_init(int32_t memsize32, u_int bim, int32_t bip32)
 {
-	char *kernend, *v;
+	intptr_t memsize = (int32_t)memsize32;
+	char *kernend;
+	char *bip = (char *)(intptr_t)(int32_t)bip32;
 	u_long first, last;
 	extern char edata[], end[];
 	const char *bi_msg;
-#if NKSYMS || defined(DDB) || defined(LKM)
-	int nsym = 0;
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	char *ssym = 0;
 	struct btinfo_symtab *bi_syms;
 #endif
@@ -180,7 +166,7 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 	if (memcmp(((Elf_Ehdr *)end)->e_ident, ELFMAG, SELFMAG) == 0 &&
 	    ((Elf_Ehdr *)end)->e_ident[EI_CLASS] == ELFCLASS) {
 		esym = end;
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 		esym += ((Elf_Ehdr *)end)->e_entry;
 #endif
 		kernend = (char *)mips_round_page(esym);
@@ -201,15 +187,16 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 		 */
 		memset(edata, 0, kernend - edata);
 
-		/*
-		 * XXX
-		 * lwp0 and cpu_info_store are allocated in BSS
-		 * and initialized before mach_init() is called,
-		 * so restore them again.
-		 */
-		lwp0.l_cpu = &cpu_info_store;
-		cpu_info_store.ci_curlwp = &lwp0;
 	}
+
+	/*
+	 * Copy exception-dispatch code down to exception vector.
+	 * Initialize locore-function vector.
+	 * Clear out the I and D caches.
+	 */
+	mips_vector_init(NULL, false);
+
+	mainbus_bus_mem_init(&cobalt_bs, NULL);
 
 	/* Check for valid bootinfo passed from bootstrap */
 	if (bim == BOOTINFO_MAGIC) {
@@ -217,21 +204,25 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 
 		bootinfo = bip;
 		bi_magic = lookup_bootinfo(BTINFO_MAGIC);
-		if (bi_magic == NULL || bi_magic->magic != BOOTINFO_MAGIC)
-			bi_msg = "invalid bootinfo structure.\n";
-		else
+		if (bi_magic == NULL) {
+			bi_msg = "missing bootinfo structure";
+			bim = (uintptr_t)bip;
+		} else if (bi_magic->magic != BOOTINFO_MAGIC) {
+			bi_msg = "invalid bootinfo structure";
+			bim = bi_magic->magic;
+		} else
 			bi_msg = NULL;
-	} else
-		bi_msg = "invalid bootinfo (standalone boot?)\n";
+	} else {
+		bi_msg = "invalid bootinfo (standalone boot?)";
+	}
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
 
 	/* Load symbol table if present */
 	if (bi_syms != NULL) {
-		nsym = bi_syms->nsym;
-		ssym = (void *)bi_syms->ssym;
-		esym = (void *)bi_syms->esym;
+		ssym = (void *)(intptr_t)bi_syms->ssym;
+		esym = (void *)(intptr_t)bi_syms->esym;
 		kernend = (void *)mips_round_page(esym);
 	}
 #endif
@@ -242,10 +233,10 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 
 	cobalt_id = read_board_id();
 	if (cobalt_id >= COBALT_MODELS || cobalt_model[cobalt_id] == NULL)
-		sprintf(cpu_model, "Cobalt unknown model (board ID %u)",
+		cpu_setmodel("Cobalt unknown model (board ID %u)",
 		    cobalt_id);
 	else
-		strcpy(cpu_model, cobalt_model[cobalt_id]);
+		cpu_setmodel("%s", cobalt_model[cobalt_id]);
 
 	switch (cobalt_id) {
 	case COBALT_ID_QUBE2700:
@@ -268,23 +259,16 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 	/* all models have Rm5200, which is CPU_MIPS_DOUBLE_COUNT */
 	curcpu()->ci_cycles_per_hz /= 2;
 	curcpu()->ci_divisor_delay /= 2;
-	MIPS_SET_CI_RECIPROCAL(curcpu());
 
 	physmem = btoc(memsize - MIPS_KSEG0_START);
 
 	consinit();
 
+	KASSERT(&lwp0 == curlwp);
 	if (bi_msg != NULL)
-		printf(bi_msg);
+		printf("%s: magic=%#x bip=%p\n", bi_msg, bim, bip);
 
-	uvm_setpagesize();
-
-	/*
-	 * Copy exception-dispatch code down to exception vector.
-	 * Initialize locore-function vector.
-	 * Clear out the I and D caches.
-	 */
-	mips_vector_init();
+	uvm_md_init();
 
 	/*
 	 * The boot command is passed in the top 512 bytes,
@@ -300,22 +284,12 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 
 	decode_bootstring();
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	/* init symbols if present */
 	if ((bi_syms != NULL) && (esym != NULL))
-		ksyms_init(esym - ssym, ssym, esym);
-	else
-		ksyms_init(0, NULL, NULL);
+		ksyms_addsyms_elf(esym - ssym, ssym, esym);
 #endif
-#ifdef DDB
-	if (boothowto & RB_KDB)
-		Debugger();
-#endif
-#ifdef KGDB
-	if (boothowto & RB_KDB)
-		kgdb_connect(0);
-#endif
-
+	KASSERT(&lwp0 == curlwp);
 	/*
 	 * Load the rest of the available pages into the VM system.
 	 */
@@ -334,11 +308,17 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 	/*
 	 * Allocate space for proc0's USPACE.
 	 */
-	v = (char *)uvm_pageboot_alloc(USPACE);
-	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	mips_init_lwp0_uarea();
+
+#ifdef DDB
+	if (boothowto & RB_KDB)
+		Debugger();
+#endif
+#ifdef KGDB
+	if (boothowto & RB_KDB)
+		kgdb_connect(0);
+#endif
+
 }
 
 /*
@@ -347,38 +327,7 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 void
 cpu_startup(void)
 {
-	vaddr_t minaddr, maxaddr;
-	char pbuf[9];
-
-	/*
-	 * Good {morning,afternoon,evening,night}.
-	 */
-	printf("%s%s", copyright, version);
-	printf("%s\n", cpu_model);
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
-
-	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
-	/*
-	 * Allocate a submap for physio.
-	 */
-	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * (No need to allocate an mbuf cluster submap.  Mbuf clusters
-	 * are allocated via the pool allocator, and we use KSEG to
-	 * map those pages.)
-	 */
-
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
+	cpu_startup_common();
 }
 
 static int waittime = -1;
@@ -388,8 +337,7 @@ cpu_reboot(int howto, char *bootstr)
 {
 
 	/* Take a snapshot before clobbering any registers. */
-	if (curlwp)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 	if (cold) {
 		howto |= RB_HALT;
@@ -420,6 +368,8 @@ cpu_reboot(int howto, char *bootstr)
  haltsys:
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if (howto & RB_HALT) {
 		printf("\n");
 		printf("The operating system has halted.\n");
@@ -439,337 +389,6 @@ cpu_reboot(int howto, char *bootstr)
 		;
 }
 
-
-#define NCPU_INT	6
-#define NICU_INT	16
-#define IRQ_SLAVE	2
-
-#define IO_ELCR		0x4d0
-#define IO_ELCRSIZE	2
-#define ELCR0		0
-#define ELCR1		1
-
-#define ICU1_READ(reg)		\
-    bus_space_read_1(icu_bst, icu1_bsh, (reg))
-#define ICU1_WRITE(reg, val)	\
-    bus_space_write_1(icu_bst, icu1_bsh, (reg), (val))
-#define ICU2_READ(reg)		\
-    bus_space_read_1(icu_bst, icu2_bsh, (reg))
-#define ICU2_WRITE(reg, val)	\
-    bus_space_write_1(icu_bst, icu2_bsh, (reg), (val))
-#define ELCR_READ(reg)		\
-    bus_space_read_1(icu_bst, elcr_bsh, (reg))
-#define ELCR_WRITE(reg, val)	\
-    bus_space_write_1(icu_bst, elcr_bsh, (reg), (val))
-
-u_int icu_imen;
-
-static bus_space_tag_t icu_bst;
-static bus_space_handle_t icu1_bsh, icu2_bsh, elcr_bsh;
-static struct cobalt_intrhand cpu_intrtab[NCPU_INT];
-static struct cobalt_intrhand icu_intrtab[NICU_INT];
-
-static int	icu_intr(void *);
-static void	icu_reinit_irqs(void);
-static u_int	icu_setmask(u_int);
-
-
-void
-icu_init(void)
-{
-
-	icu_bst = 0;	/* XXX unused on cobalt */
-	bus_space_map(icu_bst, PCIB_BASE + IO_ICU1, IO_ICUSIZE, 0, &icu1_bsh);
-	bus_space_map(icu_bst, PCIB_BASE + IO_ICU2, IO_ICUSIZE, 0, &icu2_bsh);
-	bus_space_map(icu_bst, PCIB_BASE + IO_ELCR, IO_ELCRSIZE, 0, &elcr_bsh);
-
-	/* Initialize master PIC */
-
-	/* reset; program device, four bytes */
-	ICU1_WRITE(PIC_ICW1, ICW1_SELECT | ICW1_IC4);
-	/* starting at this vector index */
-	ICU1_WRITE(PIC_ICW2, 0);			/* XXX */
-	/* slave on line 2 */
-	ICU1_WRITE(PIC_ICW3, ICW3_CASCADE(IRQ_SLAVE));
-	/* special fully nested mode, 8086 mode */
-	ICU1_WRITE(PIC_ICW4, ICW4_SFNM | ICW4_8086);
-	/* special mask mode */
-	ICU1_WRITE(PIC_OCW3, OCW3_SELECT | OCW3_SSMM | OCW3_SMM);
-	/* read IRR by default */
-	ICU1_WRITE(PIC_OCW3, OCW3_SELECT | OCW3_RR);
-
-	/* Initialize slave PIC */
-
-	/* reset; program device, four bytes */
-	ICU2_WRITE(PIC_ICW1, ICW1_SELECT | ICW1_IC4);
-	/* starting at this vector index */
-	ICU2_WRITE(PIC_ICW2, 8);			/* XXX */
-	/* slave connected to line 2 of master */
-	ICU2_WRITE(PIC_ICW3, ICW3_SIC(IRQ_SLAVE));
-	/* special fully nested mode, 8086 mode */
-	ICU2_WRITE(PIC_ICW4, ICW4_SFNM | ICW4_8086);
-	/* special mask mode */
-	ICU2_WRITE(PIC_OCW3, OCW3_SELECT | OCW3_SSMM | OCW3_SMM);
-	/* read IRR by default */
-	ICU2_WRITE(PIC_OCW3, OCW3_SELECT | OCW3_RR);
-
-	icu_setmask(0xffff);	/* mask all interrupts */
-
-	/* default to edge-triggered */
-	ELCR_WRITE(ELCR0, 0);
-	ELCR_WRITE(ELCR1, 0);
-
-	wbflush();
-
-	cpu_intr_establish(4, IPL_NONE, icu_intr, NULL);
-}
-
-void *
-icu_intr_establish(int irq, int type, int ipl, int (*func)(void *),
-    void *arg)
-{
-	struct cobalt_intrhand *ih;
-
-	ih = &icu_intrtab[irq];
-	if (ih->ih_func != NULL) {
-		printf("%s: irq %d is already in use\n", __func__, irq);
-		return NULL;
-	}
-
-	ih->ih_cookie_type = COBALT_COOKIE_TYPE_ICU;
-	ih->ih_func = func;
-	ih->ih_arg = arg;
-	ih->ih_type = type;
-	snprintf(ih->ih_evname, sizeof(ih->ih_evname), "irq %d", irq);
-	evcnt_attach_dynamic(&ih->ih_evcnt, EVCNT_TYPE_INTR, NULL, "icu",
-	    ih->ih_evname);
-
-	icu_reinit_irqs();
-
-	return ih;
-}
-
-void
-icu_intr_disestablish(void *cookie)
-{
-	struct cobalt_intrhand *ih = cookie;
-
-	if (ih->ih_cookie_type == COBALT_COOKIE_TYPE_ICU) {
-		ih->ih_func = NULL;
-		ih->ih_arg = NULL;
-		ih->ih_cookie_type = 0;
-		ih->ih_type = IST_NONE;
-		evcnt_detach(&ih->ih_evcnt);
-
-		icu_reinit_irqs();
-	}
-}
-
-void
-icu_reinit_irqs(void)
-{
-	u_int i, irqs, elcr;
-
-	/* unmask interrupts */
-	irqs = 0;
-	elcr = 0;
-	for (i = 0; i < NICU_INT; i++) {
-		if (icu_intrtab[i].ih_func) {
-			irqs |= 1 << i;
-			if (icu_intrtab[i].ih_type == IST_LEVEL)
-				elcr |= 1 << i;
-		}
-	}
-	if (irqs & 0xff00) /* any slave IRQs in use */
-		irqs |= 1 << IRQ_SLAVE;
-	icu_imen = ~irqs;
-
-	ICU1_WRITE(PIC_OCW1, icu_imen);
-	ICU2_WRITE(PIC_OCW1, icu_imen >> 8);
-
-	ELCR_WRITE(ELCR0, elcr);
-	ELCR_WRITE(ELCR1, elcr >> 8);
-}
-
-u_int
-icu_setmask(u_int mask)
-{
-	u_int old;
-
-	old = icu_imen;
-	icu_imen = mask;
-	ICU1_WRITE(PIC_OCW1, icu_imen);
-	ICU2_WRITE(PIC_OCW1, icu_imen >> 8);
-
-	return old;
-}
-
-int
-icu_intr(void *arg)
-{
-	struct cobalt_intrhand *ih;
-	int irq, handled;
-
-	handled = 0;
-
-	/* check requested irq */
-	ICU1_WRITE(PIC_OCW3, OCW3_SELECT | OCW3_POLL);
-	irq = ICU1_READ(PIC_OCW3);
-	if ((irq & OCW3_POLL_PENDING) == 0)
-		goto out;
-
-	irq = OCW3_POLL_IRQ(irq);
-	if (irq == IRQ_SLAVE) {
-		ICU2_WRITE(PIC_OCW3, OCW3_SELECT | OCW3_POLL);
-		irq = OCW3_POLL_IRQ(ICU2_READ(PIC_OCW3)) + 8;
-	}
-
-	ih = &icu_intrtab[irq];
-	if (__predict_false(ih->ih_func == NULL)) {
-		printf("icu_intr(): spurious interrupt (irq = %d)\n", irq);
-	} else if (__predict_true((*ih->ih_func)(ih->ih_arg))) {
-		ih->ih_evcnt.ev_count++;
-		handled = 1;
-	}
-
-	/* issue EOI to ack */
-	if (irq >= 8) {
-		ICU2_WRITE(PIC_OCW2,
-		    OCW2_SELECT | OCW2_SL | OCW2_EOI | OCW2_ILS(irq - 8));
-		irq = IRQ_SLAVE;
-	}
-	ICU1_WRITE(PIC_OCW2, OCW2_SELECT | OCW2_SL | OCW2_EOI | OCW2_ILS(irq));
-
- out:
-	return handled;
-}
-
-void *
-cpu_intr_establish(int level, int ipl, int (*func)(void *), void *arg)
-{
-	struct cobalt_intrhand *ih;
-
-	if (level < 0 || level >= NCPU_INT)
-		panic("invalid interrupt level");
-
-	ih = &cpu_intrtab[level];
-
-	if (ih->ih_func != NULL)
-		panic("cannot share CPU interrupts");
-
-	ih->ih_cookie_type = COBALT_COOKIE_TYPE_CPU;
-	ih->ih_func = func;
-	ih->ih_arg = arg;
-	snprintf(ih->ih_evname, sizeof(ih->ih_evname), "int %d", level);
-	evcnt_attach_dynamic(&ih->ih_evcnt, EVCNT_TYPE_INTR, NULL,
-	    "cpu", ih->ih_evname);
-
-	return ih;
-}
-
-void
-cpu_intr_disestablish(void *cookie)
-{
-	struct cobalt_intrhand *ih = cookie;
-
-	if (ih->ih_cookie_type == COBALT_COOKIE_TYPE_CPU) {
-		ih->ih_func = NULL;
-		ih->ih_arg = NULL;
-		ih->ih_cookie_type = 0;
-		evcnt_detach(&ih->ih_evcnt);
-	}
-}
-
-void
-cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
-{
-	struct clockframe cf;
-	struct cobalt_intrhand *ih;
-	struct cpu_info *ci;
-
-	ci = curcpu();
-	ci->ci_idepth++;
-	uvmexp.intrs++;
-
-	if (ipending & MIPS_INT_MASK_5) {
-		/* call the common MIPS3 clock interrupt handler */
-		cf.pc = pc;
-		cf.sr = status;
-		mips3_clockintr(&cf);
-
-		cause &= ~MIPS_INT_MASK_5;
-	}
-	_splset((status & MIPS_INT_MASK_5) | MIPS_SR_INT_IE);
-
-	if (__predict_false(ipending & MIPS_INT_MASK_0)) {
-		/* GT64x11 timer0 */
-		volatile uint32_t *irq_src =
-		    (uint32_t *)MIPS_PHYS_TO_KSEG1(GT_BASE + GT_INTR_CAUSE);
-
-		if (__predict_true((*irq_src & T0EXP) != 0)) {
-			/* GT64x11 timer is no longer used for hardclock(9) */
-			*irq_src = 0;
-		}
-		cause &= ~MIPS_INT_MASK_0;
-	}
-	_splset((status & ~cause & MIPS_HARD_INT_MASK) | MIPS_SR_INT_IE);
-
-	if (ipending & MIPS_INT_MASK_3) {
-		/* 16650 serial */
-		ih = &cpu_intrtab[3];
-		if (__predict_true(ih->ih_func != NULL)) {
-			if (__predict_true((*ih->ih_func)(ih->ih_arg))) {
-				cause &= ~MIPS_INT_MASK_3;
-				ih->ih_evcnt.ev_count++;
-			}
-		}
-	}
-	_splset((status & ~cause & MIPS_HARD_INT_MASK) | MIPS_SR_INT_IE);
-
-	if (ipending & MIPS_INT_MASK_1) {
-		/* tulip primary */
-		ih = &cpu_intrtab[1];
-		if (__predict_true(ih->ih_func != NULL)) {
-			if (__predict_true((*ih->ih_func)(ih->ih_arg))) {
-				cause &= ~MIPS_INT_MASK_1;
-				ih->ih_evcnt.ev_count++;
-			}
-		}
-	}
-	if (ipending & MIPS_INT_MASK_2) {
-		/* tulip secondary */
-		ih = &cpu_intrtab[2];
-		if (__predict_true(ih->ih_func != NULL)) {
-			if (__predict_true((*ih->ih_func)(ih->ih_arg))) {
-				cause &= ~MIPS_INT_MASK_2;
-				ih->ih_evcnt.ev_count++;
-			}
-		}
-	}
-	_splset((status & ~cause & MIPS_HARD_INT_MASK) | MIPS_SR_INT_IE);
-
-	if (ipending & MIPS_INT_MASK_4) {
-		/* ICU interrupts */
-		ih = &cpu_intrtab[4];
-		if (__predict_true(ih->ih_func != NULL)) {
-			if (__predict_true((*ih->ih_func)(ih->ih_arg))) {
-				cause &= ~MIPS_INT_MASK_4;
-				/* evcnt for ICU is done in icu_intr() */
-			}
-		}
-	}
-	_splset((status & ~cause & MIPS_HARD_INT_MASK) | MIPS_SR_INT_IE);
-	ci->ci_idepth--;
-
-#ifdef __HAVE_FAST_SOFTINTS
-	/* software interrupt */
-	ipending &= (MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0);
-	if (ipending == 0)
-		return;
-	_clrsoftintr(ipending);
-	softintr_dispatch(ipending);
-#endif
-}
 
 void
 decode_bootstring(void)
@@ -856,7 +475,7 @@ strtok_light(char *str, const char sep)
  * Look up information in bootinfo of boot loader.
  */
 void *
-lookup_bootinfo(int type)
+lookup_bootinfo(unsigned int type)
 {
 	struct btinfo_common *bt;
 	char *help = bootinfo;
@@ -869,12 +488,12 @@ lookup_bootinfo(int type)
 
 	do {
 		bt = (struct btinfo_common *)help;
-		printf("Type %d @0x%x\n", bt->type, (u_int)bt);
+		printf("Type %d @%p\n", bt->type, (void *)(intptr_t)bt);
 		if (bt->type == type)
 			return (void *)help;
 		help += bt->next;
 	} while (bt->next != 0 &&
-	    (size_t)help < (size_t)bootinfo + BOOTINFO_SIZE);
+	    (uintptr_t)help < (uintptr_t)bootinfo + BOOTINFO_SIZE);
 
 	return NULL;
 }
@@ -908,20 +527,4 @@ read_board_id(void)
 	*pcicfg_addr = 0;
 
 	return COBALT_BOARD_ID(reg);
-}
-
-static const int ipl2spl_table[] = {
-	[IPL_NONE] = 0,
-	[IPL_SOFTCLOCK] = MIPS_SOFT_INT_MASK_0,
-	[IPL_SOFTNET] = MIPS_SOFT_INT_MASK_0|MIPS_SOFT_INT_MASK_1,
-	[IPL_VM] = SPLVM,
-	[IPL_SCHED] = SPLSCHED,
-	[IPL_HIGH] = MIPS_INT_MASK,
-};
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._spl = ipl2spl_table[ipl]};
 }

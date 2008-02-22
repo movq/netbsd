@@ -1,4 +1,4 @@
-/*	$NetBSD: psignal.c,v 1.21 2005/11/29 03:11:59 christos Exp $	*/
+/*	$NetBSD: psignal.c,v 1.23 2012/03/13 21:13:36 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)psignal.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: psignal.c,v 1.21 2005/11/29 03:11:59 christos Exp $");
+__RCSID("$NetBSD: psignal.c,v 1.23 2012/03/13 21:13:36 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -55,13 +55,11 @@ __weak_alias(psignal,_psignal)
 #endif
 
 void
-psignal(sig, s)
-	unsigned int sig;
-	const char *s;
+psignal(int sig, const char *s)
 {
 	struct iovec *v;
 	struct iovec iov[4];
-	static char buf[NL_TEXTMAX];
+	char buf[NL_TEXTMAX];
 
 	v = iov;
 	if (s && *s) {
@@ -77,5 +75,11 @@ psignal(sig, s)
 	v++;
 	v->iov_base = __UNCONST("\n");
 	v->iov_len = 1;
-	(void)writev(STDERR_FILENO, iov, (v - iov) + 1);
+	(void)writev(STDERR_FILENO, iov, (int)((v - iov) + 1));
+}
+
+void
+psiginfo(const siginfo_t *si, const char *s)
+{
+	psignal(si->si_signo, s);
 }

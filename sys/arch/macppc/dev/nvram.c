@@ -1,4 +1,4 @@
-/*	$NetBSD: nvram.c,v 1.11 2007/01/24 13:08:12 hubertf Exp $	*/
+/*	$NetBSD: nvram.c,v 1.20 2014/07/25 08:10:34 dholland Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.11 2007/01/24 13:08:12 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.20 2014/07/25 08:10:34 dholland Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,17 +52,16 @@ __KERNEL_RCSID(0, "$NetBSD: nvram.c,v 1.11 2007/01/24 13:08:12 hubertf Exp $");
 
 #define NVRAM_SIZE 0x2000
 
-static void nvram_attach __P((struct device *, struct device *, void *));
-static int nvram_match __P((struct device *, struct cfdata *, void *));
+static void nvram_attach(device_t, device_t, void *);
+static int nvram_match(device_t, cfdata_t, void *);
 
 struct nvram_softc {
-	struct device sc_dev;
 	int nv_type;
 	char *nv_port;
 	char *nv_data;
 };
 
-CFATTACH_DECL(nvram, sizeof(struct nvram_softc),
+CFATTACH_DECL_NEW(nvram, sizeof(struct nvram_softc),
     nvram_match, nvram_attach, NULL, NULL);
 
 extern struct cfdriver nvram_cd;
@@ -72,15 +71,22 @@ dev_type_write(nvramwrite);
 dev_type_mmap(nvrammmap);
 
 const struct cdevsw nvram_cdevsw = {
-	nullopen, nullclose, nvramread, nvramwrite, noioctl,
-	nostop, notty, nopoll, nvrammmap, nokqfilter,
+	.d_open = nullopen,
+	.d_close = nullclose,
+	.d_read = nvramread,
+	.d_write = nvramwrite,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nvrammmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 int
-nvram_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+nvram_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -94,11 +100,9 @@ nvram_match(parent, cf, aux)
 }
 
 void
-nvram_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+nvram_attach(device_t parent, device_t self, void *aux)
 {
-	struct nvram_softc *sc = (struct nvram_softc *)self;
+	struct nvram_softc *sc = device_private(self);
 	struct confargs *ca = aux;
 	int *reg = ca->ca_reg;
 
@@ -108,13 +112,13 @@ nvram_attach(parent, self, aux)
 
 	case 8:						/* untested */
 		sc->nv_type = NVRAM_IOMEM;
-		sc->nv_data = mapiodev(ca->ca_baseaddr + reg[0], reg[1]);
+		sc->nv_data = mapiodev(ca->ca_baseaddr + reg[0], reg[1], false);
 		break;
 
 	case 16:
 		sc->nv_type = NVRAM_PORT;
-		sc->nv_port = mapiodev(ca->ca_baseaddr + reg[0], reg[1]);
-		sc->nv_data = mapiodev(ca->ca_baseaddr + reg[2], reg[3]);
+		sc->nv_port = mapiodev(ca->ca_baseaddr + reg[0], reg[1], false);
+		sc->nv_data = mapiodev(ca->ca_baseaddr + reg[2], reg[3], false);
 		break;
 
 	case 0:
@@ -125,10 +129,7 @@ nvram_attach(parent, self, aux)
 }
 
 int
-nvramread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+nvramread(dev_t dev, struct uio *uio, int flag)
 {
 	struct nvram_softc *sc;
 	u_int off, cnt;
@@ -136,7 +137,7 @@ nvramread(dev, uio, flag)
 	int error = 0;
 	char *buf;
 
-	sc = nvram_cd.cd_devs[0];
+	sc = device_lookup_private(&nvram_cd, 0);
 
 	off = uio->uio_offset;
 	cnt = uio->uio_resid;
@@ -186,19 +187,13 @@ out:
 }
 
 int
-nvramwrite(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+nvramwrite(dev_t dev, struct uio *uio, int flag)
 {
 	return ENXIO;
 }
 
 paddr_t
-nvrammmap(dev, off, prot)
-        dev_t dev;
-        off_t off;
-	int prot;
+nvrammmap(dev_t dev, off_t off, int prot)
 {
 	return -1;
 }

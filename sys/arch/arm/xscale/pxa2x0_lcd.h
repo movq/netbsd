@@ -1,4 +1,4 @@
-/* $NetBSD: pxa2x0_lcd.h,v 1.8 2007/03/04 05:59:39 christos Exp $ */
+/* $NetBSD: pxa2x0_lcd.h,v 1.10 2011/07/01 20:32:51 dyoung Exp $ */
 /*
  * Copyright (c) 2002  Genetec Corporation.  All rights reserved.
  * Written by Hiroyuki Bessho for Genetec Corporation.
@@ -37,7 +37,7 @@
 #define _ARM_XSCALE_PXA2X0_LCD_H
 
 #include <dev/rasops/rasops.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 /* LCD Contoroller */
 
@@ -73,11 +73,14 @@ struct pxa2x0_lcd_screen {
 };
 
 struct pxa2x0_lcd_softc {
-	struct device  dev;
+	device_t		dev;
 	/* control register */
 	bus_space_tag_t  	iot;
 	bus_space_handle_t	ioh;
 	bus_dma_tag_t    	dma_tag;
+
+	uint32_t		flags;
+#define FLAG_NOUSE_ACBIAS	(1U<<0)
 	
 	const struct lcd_panel_geometry *geometry;
 
@@ -115,6 +118,8 @@ struct lcd_panel_geometry {
 	short vsync_pulse_width;	/* vertical sync pulse width */
 	short beg_frame_wait;		/* beginning of frame wait (BFW) */
 	short end_frame_wait;		/* end of frame wait (EFW) */
+
+	short pcd_div;			/* PCD divisor selection */
 };
 
 /*

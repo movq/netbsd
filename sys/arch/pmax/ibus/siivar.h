@@ -1,4 +1,4 @@
-/*	$NetBSD: siivar.h,v 1.2 2006/07/29 19:10:57 ad Exp $	*/
+/*	$NetBSD: siivar.h,v 1.4 2011/06/04 01:31:23 tsutsui Exp $	*/
 
 #ifndef _SIIVAR_H
 #define _SIIVAR_H
@@ -47,7 +47,7 @@ typedef struct scsi_state {
 
 #define SII_NCMD	8
 struct siisoftc {
-	struct device sc_dev;		/* us as a device */
+	device_t sc_dev;		/* us as a device */
 	struct scsipi_channel sc_channel;
 	struct scsipi_adapter sc_adapter;	/* scsipi adapter glue */
 	ScsiCmd sc_cmd_fake[SII_NCMD];		/* XXX - hack!!! */
@@ -57,18 +57,18 @@ struct siisoftc {
 	int	sc_flags;
 	int	sc_target;		/* target SCSI ID if connected */
 	ScsiCmd	*sc_cmd[SII_NCMD];	/* active command indexed by ID */
- 	void  (*sii_copytobuf) __P((u_short *src, volatile u_short *dst, int ln));
-	void (*sii_copyfrombuf) __P((volatile u_short *src, char *dst, int len));
+ 	void  (*sii_copytobuf)(u_short *src, volatile u_short *dst, int ln);
+	void (*sii_copyfrombuf)(volatile u_short *src, char *dst, int len);
 
 	State	sc_st[SII_NCMD];	/* state info for each active command */
 };
 
-int	siiintr __P((void *sc));
+int	siiintr(void *sc);
 
 /* Machine-indepedent back-end attach entry point */
 
-void	sii_scsi_request __P((struct scsipi_channel *,
-				scsipi_adapter_req_t, void *));
-void	siiattach __P((struct siisoftc *));
+void	sii_scsi_request(struct scsipi_channel *,
+				scsipi_adapter_req_t, void *);
+void	siiattach(struct siisoftc *);
 
 #endif	/* _SIIVAR_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: at_control.c,v 1.24 2007/12/06 00:28:37 dyoung Exp $	 */
+/*	$NetBSD: at_control.c,v 1.40 2018/02/17 19:10:18 rjs Exp $	 */
 
 /*
  * Copyright (c) 1990,1994 Regents of The University of Michigan.
@@ -27,7 +27,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at_control.c,v 1.24 2007/12/06 00:28:37 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at_control.c,v 1.40 2018/02/17 19:10:18 rjs Exp $");
+
+#include "opt_atalk.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,11 +74,7 @@ static void aa_clean(void);
 			 (a)->sat_addr.s_node == (b)->sat_addr.s_node )
 
 int
-at_control(cmd, data, ifp, l)
-	u_long          cmd;
-	void *        data;
-	struct ifnet   *ifp;
-	struct lwp     *l;
+at_control(u_long cmd, void *data, struct ifnet *ifp)
 {
 	struct ifreq   *ifr = (struct ifreq *) data;
 	const struct sockaddr_at *csat;
@@ -129,7 +127,7 @@ at_control(cmd, data, ifp, l)
 		 * If we are not superuser, then we don't get to do these
 		 * ops.
 		 */
-		if (l && kauth_authorize_network(l->l_cred,
+		if (kauth_authorize_network(curlwp->l_cred,
 		    KAUTH_NETWORK_INTERFACE,
 		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, (void *)cmd,
 		    NULL) != 0)
@@ -197,7 +195,8 @@ at_control(cmd, data, ifp, l)
 			} else {
 				TAILQ_INSERT_TAIL(&at_ifaddr, aa, aa_list);
 			}
-			IFAREF(&aa->aa_ifa);
+			ifaref(&aa->aa_ifa);
+			ifa_psref_init(&aa->aa_ifa);
 
 			/*
 		         * Find the end of the interface's addresses
@@ -318,9 +317,7 @@ at_control(cmd, data, ifp, l)
 		break;
 
 	default:
-		if (ifp == 0 || ifp->if_ioctl == 0)
-			return (EOPNOTSUPP);
-		return ((*ifp->if_ioctl) (ifp, cmd, data));
+		return ENOTTY;
 	}
 	return (0);
 }
@@ -342,7 +339,7 @@ at_purgeaddr(struct ifaddr *ifa)
 	 */
 	ifa_remove(ifp, &aa->aa_ifa);
 	TAILQ_REMOVE(&at_ifaddr, aa, aa_list);
-	IFAFREE(&aa->aa_ifa);
+	ifafree(&aa->aa_ifa);
 }
 
 void
@@ -357,9 +354,7 @@ at_purgeif(struct ifnet *ifp)
  * aa->at_ifaddr.ifa_ifp should be the same.
  */
 static int
-at_scrub(ifp, aa)
-	struct ifnet   *ifp;
-	struct at_ifaddr *aa;
+at_scrub(struct ifnet *ifp, struct at_ifaddr *aa)
 {
 	int error = 0;
 
@@ -385,10 +380,7 @@ at_scrub(ifp, aa)
  * bang them all together at high speed and see what happens
  */
 static int
-at_ifinit(ifp, aa, sat)
-	struct ifnet   *ifp;
-	struct at_ifaddr *aa;
-	const struct sockaddr_at *sat;
+at_ifinit(struct ifnet *ifp, struct at_ifaddr *aa, const struct sockaddr_at *sat)
 {
 	struct netrange nr, onr;
 	struct sockaddr_at oldaddr;
@@ -408,9 +400,9 @@ at_ifinit(ifp, aa, sat)
          * at_ifnet (also given). Remember ing to update
          * those parts of the at_ifaddr that need special processing
          */
-	bzero(AA_SAT(aa), sizeof(struct sockaddr_at));
-	bcopy(sat->sat_zero, &nr, sizeof(struct netrange));
-	bcopy(sat->sat_zero, AA_SAT(aa)->sat_zero, sizeof(struct netrange));
+	memset(AA_SAT(aa), 0, sizeof(struct sockaddr_at));
+	memcpy(&nr, sat->sat_zero, sizeof(struct netrange));
+	memcpy(AA_SAT(aa)->sat_zero, sat->sat_zero, sizeof(struct netrange));
 	nnets = ntohs(nr.nr_lastnet) - ntohs(nr.nr_firstnet) + 1;
 	aa->aa_firstnet = nr.nr_firstnet;
 	aa->aa_lastnet = nr.nr_lastnet;
@@ -586,8 +578,7 @@ at_ifinit(ifp, aa, sat)
 	 * Now that we have selected an address, we need to tell the
 	 * interface about it, just in case it needs to adjust something.
 	 */
-	if (ifp->if_ioctl &&
-	    (error = (*ifp->if_ioctl) (ifp, SIOCSIFADDR, (void *) aa))) {
+	if ((error = if_addr_init(ifp, &aa->aa_ifa, true)) != 0) {
 		/*
 		 * of course this could mean that it objects violently
 		 * so if it does, we back out again..
@@ -603,7 +594,7 @@ at_ifinit(ifp, aa, sat)
 	 * pointer in the ifaddr to it. probably pointless, but what the
 	 * heck.. XXX
 	 */
-	bzero(&aa->aa_netmask, sizeof(aa->aa_netmask));
+	memset(&aa->aa_netmask, 0, sizeof(aa->aa_netmask));
 	aa->aa_netmask.sat_len = sizeof(struct sockaddr_at);
 	aa->aa_netmask.sat_family = AF_APPLETALK;
 	aa->aa_netmask.sat_addr.s_net = 0xffff;
@@ -615,14 +606,14 @@ at_ifinit(ifp, aa, sat)
 	/*
          * Initialize broadcast (or remote p2p) address
          */
-	bzero(&aa->aa_broadaddr, sizeof(aa->aa_broadaddr));
+	memset(&aa->aa_broadaddr, 0, sizeof(aa->aa_broadaddr));
 	aa->aa_broadaddr.sat_len = sizeof(struct sockaddr_at);
 	aa->aa_broadaddr.sat_family = AF_APPLETALK;
 
 	aa->aa_ifa.ifa_metric = ifp->if_metric;
 	if (ifp->if_flags & IFF_BROADCAST) {
-		aa->aa_broadaddr.sat_addr.s_net = htons(0);
-		aa->aa_broadaddr.sat_addr.s_node = 0xff;
+		aa->aa_broadaddr.sat_addr.s_net = htons(ATADDR_ANYNET);
+		aa->aa_broadaddr.sat_addr.s_node = ATADDR_BCAST;
 		aa->aa_ifa.ifa_broadaddr =
 		    (struct sockaddr *) &aa->aa_broadaddr;
 		/* add the range of routes needed */
@@ -631,16 +622,16 @@ at_ifinit(ifp, aa, sat)
 	} else if (ifp->if_flags & IFF_POINTOPOINT) {
 		struct at_addr  rtaddr, rtmask;
 
-		bzero(&rtaddr, sizeof(rtaddr));
-		bzero(&rtmask, sizeof(rtmask));
+		memset(&rtaddr, 0, sizeof(rtaddr));
+		memset(&rtmask, 0, sizeof(rtmask));
 		/* fill in the far end if we know it here XXX */
 		aa->aa_ifa.ifa_dstaddr = (struct sockaddr *) & aa->aa_dstaddr;
 		error = aa_addsingleroute(&aa->aa_ifa, &rtaddr, &rtmask);
 	} else if (ifp->if_flags & IFF_LOOPBACK) {
 		struct at_addr  rtaddr, rtmask;
 
-		bzero(&rtaddr, sizeof(rtaddr));
-		bzero(&rtmask, sizeof(rtmask));
+		memset(&rtaddr, 0, sizeof(rtaddr));
+		memset(&rtmask, 0, sizeof(rtmask));
 		rtaddr.s_net = AA_SAT(aa)->sat_addr.s_net;
 		rtaddr.s_node = AA_SAT(aa)->sat_addr.s_node;
 		rtmask.s_net = 0xffff;
@@ -709,7 +700,7 @@ at_broadcast(const struct sockaddr_at *sat)
  *
  * Split the range into two subranges such that the middle
  * of the two ranges is the point where the highest bit of difference
- * between the two addresses, makes it's transition
+ * between the two addresses, makes its transition
  * Each of the upper and lower ranges might not exist, or might be
  * representable by 1 or more netmasks. In addition, if both
  * ranges can be represented by the same netmask, then teh can be merged
@@ -717,11 +708,7 @@ at_broadcast(const struct sockaddr_at *sat)
  */
 
 static int
-aa_dorangeroute(ifa, bot, top, cmd)
-	struct ifaddr *ifa;
-	u_int bot;
-	u_int top;
-	int cmd;
+aa_dorangeroute(struct ifaddr *ifa, u_int bot, u_int top, int cmd)
 {
 	u_int           mask1;
 	struct at_addr  addr;
@@ -766,10 +753,7 @@ aa_dorangeroute(ifa, bot, top, cmd)
 }
 
 static int
-aa_addsingleroute(ifa, addr, mask)
-	struct ifaddr *ifa;
-	struct at_addr *addr;
-	struct at_addr *mask;
+aa_addsingleroute(struct ifaddr *ifa, struct at_addr *addr, struct at_addr *mask)
 {
 	int error;
 
@@ -788,10 +772,7 @@ aa_addsingleroute(ifa, addr, mask)
 }
 
 static int
-aa_delsingleroute(ifa, addr, mask)
-	struct ifaddr *ifa;
-	struct at_addr *addr;
-	struct at_addr *mask;
+aa_delsingleroute(struct ifaddr *ifa, struct at_addr *addr, struct at_addr *mask)
 {
 	int error;
 
@@ -810,17 +791,12 @@ aa_delsingleroute(ifa, addr, mask)
 }
 
 static int
-aa_dosingleroute(ifa, at_addr, at_mask, cmd, flags)
-	struct ifaddr *ifa;
-	struct at_addr *at_addr;
-	struct at_addr *at_mask;
-	int cmd;
-	int flags;
+aa_dosingleroute(struct ifaddr *ifa, struct at_addr *at_addr, struct at_addr *at_mask, int cmd, int flags)
 {
 	struct sockaddr_at addr, mask, *gate;
 
-	bzero(&addr, sizeof(addr));
-	bzero(&mask, sizeof(mask));
+	memset(&addr, 0, sizeof(addr));
+	memset(&mask, 0, sizeof(mask));
 	addr.sat_family = AF_APPLETALK;
 	addr.sat_len = sizeof(struct sockaddr_at);
 	addr.sat_addr.s_net = at_addr->s_net;
@@ -847,7 +823,7 @@ aa_dosingleroute(ifa, at_addr, at_mask, cmd, flags)
 
 #if 0
 static void
-aa_clean()
+aa_clean(void)
 {
 	struct at_ifaddr *aa;
 	struct ifaddr  *ifa;
@@ -857,7 +833,7 @@ aa_clean()
 		TAILQ_REMOVE(&at_ifaddr, aa, aa_list);
 		ifp = aa->aa_ifp;
 		at_scrub(ifp, aa);
-		IFADDR_FOREACH(ifa, ifp) {
+		IFADDR_READER_FOREACH(ifa, ifp) {
 			if (ifa == &aa->aa_ifa)
 				break;
 		}

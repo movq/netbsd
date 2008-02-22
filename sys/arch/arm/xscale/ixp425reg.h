@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425reg.h,v 1.20 2006/12/10 10:01:49 scw Exp $ */
+/*	$NetBSD: ixp425reg.h,v 1.22 2012/11/12 18:00:38 skrll Exp $ */
 /*
  * Copyright (c) 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -438,10 +432,10 @@
 #define	BE_32BIT(a)		0x00
 
 /* PCI byte selects */
-#define	READ_8BIT(v,a)		((u_int8_t)((v) >> (((a) & 3) * 8)))
-#define	READ_16BIT(v,a)		((u_int16_t)((v) >> (((a) & 2) * 8)))
-#define	WRITE_8BIT(v,a)		(((u_int32_t)(v)) << (((a) & 3) * 8))
-#define	WRITE_16BIT(v,a)	(((u_int32_t)(v)) << (((a) & 2) * 8))
+#define	READ_8BIT(v,a)		((uint8_t)((v) >> (((a) & 3) * 8)))
+#define	READ_16BIT(v,a)		((uint16_t)((v) >> (((a) & 2) * 8)))
+#define	WRITE_8BIT(v,a)		(((uint32_t)(v)) << (((a) & 3) * 8))
+#define	WRITE_16BIT(v,a)	(((uint32_t)(v)) << (((a) & 2) * 8))
 
 /* PCI Controller Configuration Commands for PCI_CRP_AD_CBE */
 #define COMMAND_CRP_READ	0x00

@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_fdesc.c,v 1.21 2007/07/16 17:06:53 pooka Exp $	*/
+/*	$NetBSD: mount_fdesc.c,v 1.26 2011/08/29 14:35:00 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -69,15 +69,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_fdesc.c	8.3 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_fdesc.c,v 1.21 2007/07/16 17:06:53 pooka Exp $");
+__RCSID("$NetBSD: mount_fdesc.c,v 1.26 2011/08/29 14:35:00 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -92,13 +92,15 @@ __RCSID("$NetBSD: mount_fdesc.c,v 1.21 2007/07/16 17:06:53 pooka Exp $");
 
 #include <mntopts.h>
 
+#include "mount_fdesc.h"
+
 static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_GETARGS,
 	MOPT_NULL,
 };
 
-static void	usage(void);
+__dead static void	usage(void);
 int	mount_fdesc(int argc, char **argv);
 
 #ifndef MOUNT_NOMAIN
@@ -109,18 +111,18 @@ main(int argc, char **argv)
 }
 #endif
 
-int
-mount_fdesc(int argc, char *argv[])
+void
+mount_fdesc_parseargs(int argc, char *argv[], void *dummy, int *mntflags,
+	char *canon_dev, char *canon_dir)
 {
-	int ch, mntflags;
-	char canon_dir[MAXPATHLEN];
+	int ch;
 	mntoptparse_t mp;
 
-	mntflags = 0;
+	*mntflags = 0;
 	while ((ch = getopt(argc, argv, "o:")) != -1)
 		switch (ch) {
 		case 'o':
-			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, mntflags, 0);
 			if (mp == NULL)
 				err(1, "getmntopts");
 			freemntopts(mp);
@@ -135,15 +137,29 @@ mount_fdesc(int argc, char *argv[])
 	if (argc != 2)
 		usage();
 
+	/* getargs is a NULL op and kernel would return EINVAL */
+	if (*mntflags & MNT_GETARGS)
+		exit(0);
+
+	strlcpy(canon_dev, argv[0], MAXPATHLEN);
 	if (realpath(argv[1], canon_dir) == NULL)    /* Check mounton path */
 		err(1, "realpath %s", argv[1]);
 	if (strncmp(argv[1], canon_dir, MAXPATHLEN)) {
 		warnx("\"%s\" is a relative path.", argv[1]);
 		warnx("using \"%s\" instead.", canon_dir);
 	}
+}
 
+int
+mount_fdesc(int argc, char *argv[])
+{
+	int mntflags;
+	char canon_dev[MAXPATHLEN], canon_dir[MAXPATHLEN];
+
+	mount_fdesc_parseargs(argc, argv, NULL, &mntflags,
+	    canon_dev, canon_dir);
 	if (mount(MOUNT_FDESC, canon_dir, mntflags, NULL, 0) == -1)
-		err(1, "fdesc on %s", argv[1]);
+		err(1, "fdesc on %s", canon_dir);
 	exit(0);
 }
 

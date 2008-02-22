@@ -1,4 +1,4 @@
-/*	$NetBSD: ofrom.c,v 1.15 2007/03/04 10:21:26 christos Exp $	*/
+/*	$NetBSD: ofrom.c,v 1.27 2017/09/08 08:16:09 skrll Exp $	*/
 
 /*
  * Copyright 1998
@@ -38,30 +38,29 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofrom.c,v 1.15 2007/03/04 10:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofrom.c,v 1.27 2017/09/08 08:16:09 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
 #include <sys/fcntl.h>
+#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
 #include <dev/ofw/openfirm.h>
 
 struct ofrom_softc {
-	struct device	sc_dev;
 	int		enabled;
 	paddr_t		base;
 	paddr_t		size;
 };
 
-int ofromprobe __P((struct device *, struct cfdata *, void *));
-void ofromattach __P((struct device *, struct device *, void *));
+int ofromprobe(device_t, cfdata_t, void *);
+void ofromattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ofrom, sizeof(struct ofrom_softc),
+CFATTACH_DECL_NEW(ofrom, sizeof(struct ofrom_softc),
     ofromprobe, ofromattach, NULL, NULL);
 
 extern struct cfdriver ofrom_cd;
@@ -71,15 +70,22 @@ dev_type_read(ofromrw);
 dev_type_mmap(ofrommmap);
 
 const struct cdevsw ofrom_cdevsw = {
-	ofromopen, nullclose, ofromrw, ofromrw, noioctl,
-	nostop, notty, nopoll, ofrommmap, nokqfilter,
+	.d_open = ofromopen,
+	.d_close = nullclose,
+	.d_read = ofromrw,
+	.d_write = ofromrw,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = ofrommmap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 int
-ofromprobe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ofromprobe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofbus_attach_args *oba = aux;
 	static const char *const compatible_strings[] = { "rom", NULL };
@@ -90,11 +96,9 @@ ofromprobe(parent, cf, aux)
 
 
 void
-ofromattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ofromattach(device_t parent, device_t self, void *aux)
 {
-	struct ofrom_softc *sc = (struct ofrom_softc *)self;
+	struct ofrom_softc *sc = device_private(self);
 	struct ofbus_attach_args *oba = aux;
 	char regbuf[8];
 
@@ -114,17 +118,11 @@ ofromattach(parent, self, aux)
 }
 
 int
-ofromopen(dev, oflags, devtype, l)
-	dev_t dev;
-	int oflags, devtype;
-	struct lwp *l;
+ofromopen(dev_t dev, int oflags, int devtype, struct lwp *l)
 {
 	struct ofrom_softc *sc;
-	int unit = minor(dev);
 
-	if (unit >= ofrom_cd.cd_ndevs)
-		return (ENXIO);
-	sc = ofrom_cd.cd_devs[unit];
+	sc = device_lookup_private(&ofrom_cd, minor(dev));
 	if (!sc || !sc->enabled)
 		return (ENXIO);
 
@@ -135,35 +133,22 @@ ofromopen(dev, oflags, devtype, l)
 }
 
 int
-ofromrw(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+ofromrw(dev_t dev, struct uio *uio, int flags)
 {
+	pmap_t kpm = pmap_kernel();
 	struct ofrom_softc *sc;
-	int c, error = 0, unit = minor(dev);
+	int c, error = 0;
 	struct iovec *iov;
 	paddr_t v;
 	psize_t o;
-	extern int physlock;
+	extern kmutex_t memlock;
 	extern char *memhook;
 
-	if (unit >= ofrom_cd.cd_ndevs)
-		return (ENXIO);			/* XXX PANIC */
-	sc = ofrom_cd.cd_devs[unit];
+	sc = device_lookup_private(&ofrom_cd, minor(dev));
 	if (!sc || !sc->enabled)
 		return (ENXIO);			/* XXX PANIC */
 
-	/* lock against other uses of shared vmmap */
-	while (physlock > 0) {
-		physlock++;
-		error = tsleep((void *)&physlock, PZERO | PCATCH, "ofromrw",
-		    0);
-		if (error)
-			return (error);
-	}
-	physlock = 1;
-
+	mutex_enter(&memlock);
 	while (uio->uio_resid > 0 && error == 0) {
 		iov = uio->uio_iov;
 		if (iov->iov_len == 0) {
@@ -183,37 +168,27 @@ ofromrw(dev, uio, flags)
 			break;
 
 		v = sc->base + uio->uio_offset;
-		pmap_enter(pmap_kernel(), (vaddr_t)memhook,
-		    trunc_page(v), uio->uio_rw == UIO_READ ?
-		    VM_PROT_READ : VM_PROT_WRITE, PMAP_WIRED);
-		pmap_update(pmap_kernel());
+		pmap_kenter_pa((vaddr_t)memhook, trunc_page(v),
+		    uio->uio_rw == UIO_READ ?  VM_PROT_READ : VM_PROT_WRITE,
+		    0);
+		pmap_update(kpm);
 		o = uio->uio_offset & PGOFSET;
 		c = min(uio->uio_resid, (int)(PAGE_SIZE - o));
 		error = uiomove((char *)memhook + o, c, uio);
-		pmap_remove(pmap_kernel(), (vaddr_t)memhook,
-		    (vaddr_t)memhook + PAGE_SIZE);
-		pmap_update(pmap_kernel());
+		pmap_kremove((vaddr_t)memhook, (vaddr_t)memhook + PAGE_SIZE);
+		pmap_update(kpm);
 	}
-
-	if (physlock > 1)
-		wakeup((void *)&physlock);
-	physlock = 0;
+	mutex_exit(&memlock);
 
 	return (error);
 }
 
 paddr_t
-ofrommmap(dev, off, prot)
-	dev_t dev;
-	off_t off;
-	int prot;
+ofrommmap(dev_t dev, off_t off, int prot)
 {
 	struct ofrom_softc *sc;
-	int unit = minor(dev);
 
-	if (unit >= ofrom_cd.cd_ndevs)
-		return (-1);			/* XXX PANIC */
-	sc = ofrom_cd.cd_devs[unit];
+	sc = device_lookup_private(&ofrom_cd, minor(dev));
 	if (!sc || !sc->enabled)
 		return (-1);			/* XXX PANIC */
 

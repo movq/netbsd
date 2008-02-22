@@ -1,4 +1,4 @@
-/*	$NetBSD: cache.c,v 1.19 2005/12/24 20:07:41 perry Exp $	*/
+/*	$NetBSD: cache.c,v 1.22 2013/09/07 15:56:11 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,13 +35,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache.c,v 1.19 2005/12/24 20:07:41 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache.c,v 1.22 2013/09/07 15:56:11 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/malloc.h>
-#include <sys/user.h>
 #include <sys/queue.h>
 
 #include <uvm/uvm_extern.h>
@@ -69,7 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: cache.c,v 1.19 2005/12/24 20:07:41 perry Exp $");
 
 static void cache_clear_tags(void);
 
-void 
+void
 cache_flush_page(vaddr_t pgva)
 {
 	char *va, *endva;
@@ -98,7 +90,7 @@ cache_flush_page(vaddr_t pgva)
 	__asm volatile ("movc %0, %%dfc" : : "d" (old_dfc));
 }
 
-void 
+void
 cache_flush_segment(vaddr_t sgva)
 {
 	char *va, *endva;
@@ -127,7 +119,7 @@ cache_flush_segment(vaddr_t sgva)
 	__asm volatile ("movc %0, %%dfc" : : "d" (old_dfc));
 }
 
-void 
+void
 cache_flush_context(void)
 {
 	char *va, *endva;
@@ -153,7 +145,7 @@ cache_flush_context(void)
 	__asm volatile ("movc %0, %%dfc" : : "d" (old_dfc));
 }
 
-static void 
+static void
 cache_clear_tags(void)
 {
 	char *va, *endva;
@@ -179,7 +171,7 @@ cache_clear_tags(void)
 	__asm volatile ("movc %0, %%dfc" : : "d" (old_dfc));
 }
 
-void 
+void
 cache_enable(void)
 {
 	int enab_reg;

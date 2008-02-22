@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_tape.c,v 1.9 2008/01/12 09:54:30 tsutsui Exp $	*/
+/*	$NetBSD: dev_tape.c,v 1.13 2014/03/30 15:20:54 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,6 @@
 
 #include <sys/types.h>
 #include <machine/prom.h>
-#include <machine/stdarg.h>
 
 #include <lib/libkern/libkern.h>
 
@@ -122,9 +114,6 @@ tape_open(struct open_file *f, ...)
 int
 tape_close(struct open_file *f)
 {
-	struct mvmeprom_dskio *ti;
-
-	ti = f->f_devdata;
 	f->f_devdata = NULL;
 	return 0;
 }
@@ -176,7 +165,7 @@ hackprom_diskrd(struct mvmeprom_dskio *ti)
 	static int blkoffset = 0;
 
 #define	hackload_addr	((char *)0x080000)	/* Load tape segment here */
-#define hackload_blocks 0x2000			/* 2Mb worth */
+#define hackload_blocks 0x3000			/* 3Mb worth */
 
 	if ((ti->flag & IGNORE_FILENUM) == 0) {
 		/*

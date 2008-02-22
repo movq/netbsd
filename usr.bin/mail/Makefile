@@ -1,22 +1,33 @@
-#	$NetBSD: Makefile,v 1.30 2007/05/28 12:06:28 tls Exp $
+#	$NetBSD: Makefile,v 1.38 2018/06/10 17:55:11 christos Exp $
 #	@(#)Makefile	8.3 (Berkeley) 4/20/95
 
 .include <bsd.own.mk>
 
 USE_FORT?= yes	# data-driven bugs?
 
-USE_EDITLINE=yes
-MIME_SUPPORT=yes	# currently requires USE_EDITLINE
-CHARSET_SUPPORT=yes	# requires MIME_SUPPORT
-THREAD_SUPPORT=yes	# EXPERIMENTAL
+USE_EDITLINE?=yes
+MIME_SUPPORT?=yes	# currently requires USE_EDITLINE
+CHARSET_SUPPORT?=yes	# requires MIME_SUPPORT
+THREAD_SUPPORT?=yes	# EXPERIMENTAL
+
+# Work around some problems in -current.
+# See the source code for more info.
+#
+CPPFLAGS+=	-DBROKEN_EXEC_TTY_RESTORE	# broken since 4.99.10
+CPPFLAGS+=	-DBROKEN_CLONE_STAT		# see PRs 37878 and 37550
+CPPFLAGS+=	-DBROKEN_MAGIC			# bad MIME type on short files
+
+# Debugging options (most should go away - please leave for now).
+#
+#CPPFLAGS+=	-DDEBUG_FILE_LEAK
 
 PROG=	mail
 SRCS=	version.c support.c cmd1.c cmd2.c cmd3.c cmd4.c cmdtab.c collect.c \
 	dotlock.c edit.c fio.c format.c getname.c head.c v7.local.c lex.c \
-	list.c main.c names.c popen.c quit.c send.c strings.c temp.c tty.c \
-	vars.c
-LINKS=	${BINDIR}/mail ${BINDIR}/Mail ${BINDIR}/mail ${BINDIR}/mailx
-MLINKS=	mail.1 Mail.1 mail.1 mailx.1
+	list.c main.c names.c popen.c quit.c send.c sig.c strings.c temp.c \
+	tty.c vars.c
+LINKS=	${BINDIR}/mail ${BINDIR}/mailx
+MLINKS=	mail.1 mailx.1
 
 LDADD+=		-lutil
 DPADD+=		${LIBUTIL}
@@ -25,8 +36,8 @@ DPADD+=		${LIBUTIL}
 SRCS+=	complete.c
 
 CPPFLAGS+=	-DUSE_EDITLINE
-LDADD+=		-ledit -ltermcap
-DPADD+=		${LIBEDIT} ${LIBTERMCAP}
+LDADD+=		-ledit -lterminfo
+DPADD+=		${LIBEDIT} ${LIBTERMINFO}
 
 .if ${MIME_SUPPORT:Uno} == "yes"
 SRCS+=	mime_attach.c
@@ -51,7 +62,6 @@ SRCS+=	thread.c
 CPPFLAGS+=	-DTHREAD_SUPPORT
 .endif
 
-WARNS=	4
 CWARNFLAGS+=	-Wextra
 
 .PATH: ${.CURDIR}/misc
@@ -59,14 +69,14 @@ CWARNFLAGS+=	-Wextra
 .if ${MKSHARE} != "no"
 FILESDIR=		/usr/share/misc
 FILES=			mail.help mail.tildehelp
+.endif
 
-.if make(install)
-SUBDIR+= USD.doc
-.endif
-.endif
+SUBDIR.roff+= USD.doc
 
 CONFIGFILES=		mail.rc
 FILESDIR_mail.rc=	/etc
+
+COPTS.format.c += -Wno-format-nonliteral
 
 .include <bsd.prog.mk>
 .include <bsd.subdir.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: atwreg.h,v 1.19 2007/11/16 05:53:16 dyoung Exp $	*/
+/*	$NetBSD: atwreg.h,v 1.23 2009/02/06 02:02:26 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.  All rights reserved.
@@ -14,25 +14,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of the author nor the names of any co-contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY David Young AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL David Young
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
  * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 /* glossary */
@@ -337,6 +330,10 @@
 #define ATW_LPC_LPCO		__BIT(16)	/* lost packet counter overflow */
 #define ATW_LPC_LPC_MASK	__BITS(0, 15)	/* lost packet counter */
 
+#define	ATW_TEST1_RRA_MASK	__BITS(20,12)
+#define	ATW_TEST1_RWA_MASK	__BITS(10,2)
+#define	ATW_TEST1_RXPKT1IN	__BIT(1)
+
 #define	ATW_TEST1_CONTROL	__BIT(31)	/* "0: read from dxfer_control,
 						 * 1: read from dxfer_state"
 						 */
@@ -471,7 +468,16 @@
 #define ATW_BBPCTL_NEGEDGE_DO		__BIT(23)
 /* data-in on negative edge */
 #define ATW_BBPCTL_NEGEDGE_DI		__BIT(22)
-#define ATW_BBPCTL_CCA_ACTLO		__BIT(21)	/* CCA low when busy */
+#define ATW_BBPCTL_CCA_ACTLO		__BIT(21)	/* 1: CCA signal is low
+							 * when channel is busy,
+							 * CCA signal is high
+							 * when channel is
+							 * clear.
+							 * 0: vice-versa
+							 * 1 is suitable for
+							 * the embedded
+							 * RFMD RF3000.
+							 */
 #define ATW_BBPCTL_TYPE_MASK		__BITS(20, 18)	/* BBP type */
 /* start write; reset on completion */
 #define ATW_BBPCTL_WR			__BIT(17)
@@ -923,7 +929,7 @@ struct atw_txdesc {
 	volatile uint32_t	at_flags;
 	volatile uint32_t	at_buf1;
 	volatile uint32_t	at_buf2;
-} __attribute__((__packed__, __aligned__(4)));
+} __packed __aligned(4);
 
 #define ATW_TXCTL_OWN		__BIT(31)	/* 1: ready to transmit */
 #define ATW_TXCTL_DONE		__BIT(30)	/* 0: not processed */
@@ -962,7 +968,7 @@ struct atw_rxdesc {
 	volatile uint32_t	ar_ctlrssi;
 	volatile uint32_t	ar_buf1;
 	volatile uint32_t	ar_buf2;
-} __attribute__((__packed__, __aligned__(4)));
+} __packed __aligned(4);
 
 #define ATW_RXCTL_RER		__BIT(25)	/* end of ring */
 #define ATW_RXCTL_RCH		__BIT(24)	/* ar_buf2 is 2nd chain */

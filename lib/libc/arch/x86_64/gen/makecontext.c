@@ -1,4 +1,4 @@
-/*	$NetBSD: makecontext.c,v 1.2 2004/02/28 15:57:21 drochner Exp $	*/
+/*	$NetBSD: makecontext.c,v 1.4 2009/07/30 20:57:17 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: makecontext.c,v 1.2 2004/02/28 15:57:21 drochner Exp $");
+__RCSID("$NetBSD: makecontext.c,v 1.4 2009/07/30 20:57:17 dsl Exp $");
 #endif
 
 #include <inttypes.h>
@@ -74,7 +67,7 @@ makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 	if (stackargs > 0)
 		sp -= stackargs;
 	/* LINTED __greg_t is safe */
-	gr[_REG_URSP] = (__greg_t)sp;
+	gr[_REG_RSP] = (__greg_t)sp;
 	gr[_REG_RBP] = (__greg_t)0;	/* Wipe out frame pointer. */
 
 	/* Put return address on top of stack. */

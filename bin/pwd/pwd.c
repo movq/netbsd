@@ -1,4 +1,4 @@
-/* $NetBSD: pwd.c,v 1.19 2003/10/30 13:52:23 dsl Exp $ */
+/* $NetBSD: pwd.c,v 1.22 2011/08/29 14:51:19 joerg Exp $ */
 
 /*
  * Copyright (c) 1991, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)pwd.c	8.3 (Berkeley) 4/1/94";
 #else
-__RCSID("$NetBSD: pwd.c,v 1.19 2003/10/30 13:52:23 dsl Exp $");
+__RCSID("$NetBSD: pwd.c,v 1.22 2011/08/29 14:51:19 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,13 +49,14 @@ __RCSID("$NetBSD: pwd.c,v 1.19 2003/10/30 13:52:23 dsl Exp $");
 
 #include <err.h>
 #include <errno.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 static char *getcwd_logical(void);
-static void usage(void);
+__dead static void usage(void);
 
 /*
  * Note that EEE Std 1003.1, 2003 requires that the default be -L.
@@ -72,6 +73,8 @@ main(int argc, char *argv[])
 	const char *p;
 
 	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
+
 	lFlag = 0;
 	while ((ch = getopt(argc, argv, "LP")) != -1) {
 		switch (ch) {

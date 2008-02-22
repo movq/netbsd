@@ -1,4 +1,4 @@
-/*	$NetBSD: factor.c,v 1.17 2007/12/15 19:44:40 perry Exp $	*/
+/*	$NetBSD: factor.c,v 1.29 2018/02/06 16:53:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,35 +34,36 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)factor.c	8.4 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: factor.c,v 1.17 2007/12/15 19:44:40 perry Exp $");
+__RCSID("$NetBSD: factor.c,v 1.29 2018/02/06 16:53:27 christos Exp $");
 #endif
 #endif /* not lint */
 
 /*
  * factor - factor a number into primes
  *
- * By: Landon Curt Noll   chongo@toad.com,   ...!{sun,tolsoft}!hoptoad!chongo
- *
- *   chongo <for a good prime call: 391581 * 2^216193 - 1> /\oo/\
+ * By Landon Curt Noll, http://www.isthe.com/chongo/index.html /\oo/\
  *
  * usage:
- *	factor [number] ...
+ *	factor [-h] [number] ...
  *
- * The form of the output is:
+ * By Default, the form of the output is:
  *
  *	number: factor1 factor1 factor2 factor3 factor3 factor3 ...
  *
  * where factor1 <= factor2 <= factor3 <= ...
  *
- * If no args are given, the list of numbers are read from stdin.
+ * If the -h flag is specified, the output is in "human-readable" format.
+ * Duplicate factors are printed in the form of x^n.
+ *
+ * If no number args are given, the list of numbers are read from stdin.
  */
 
 #include <ctype.h>
@@ -72,16 +73,14 @@ __RCSID("$NetBSD: factor.c,v 1.17 2007/12/15 19:44:40 perry Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 #ifdef HAVE_OPENSSL
 #include <openssl/bn.h>
 #else
 typedef long	BIGNUM;
 typedef u_long	BN_ULONG;
-int	BN_dec2bn(BIGNUM **a, const char *str);
-#define BN_new()		((BIGNUM *)calloc(sizeof(BIGNUM), 1))
-#define BN_is_zero(v)		(*(v) == 0)
-#define BN_is_one(v)		(*(v) == 1)
+static int BN_dec2bn(BIGNUM **a, const char *str);
 #define BN_new()		((BIGNUM *)calloc(sizeof(BIGNUM), 1))
 #define BN_is_zero(v)		(*(v) == 0)
 #define BN_is_one(v)		(*(v) == 1)
@@ -96,29 +95,30 @@ int	BN_dec2bn(BIGNUM **a, const char *str);
  * We are able to sieve 2^32-1 because this byte table yields all primes
  * up to 65537 and 65537^2 > 2^32-1.
  */
-extern const ubig prime[];
-extern const ubig *pr_limit;		/* largest prime in the prime array */
+
+#if 0 /* debugging: limit table use to stress the "pollard" code */
+#define pr_limit &prime[0]
+#endif
 
 #define	PRIME_CHECKS	5
 
 #ifdef HAVE_OPENSSL 
-BN_CTX *ctx;				/* just use a global context */
+static BN_CTX *ctx;			/* just use a global context */
 #endif
 
-int	main(int, char *[]);
-void	pr_fact(BIGNUM *);		/* print factors of a value */
-void	BN_print_dec_fp(FILE *, const BIGNUM *);
-void	usage(void) __dead;
+static void pr_fact(BIGNUM *, int);	/* print factors of a value */
+static void BN_print_dec_fp(FILE *, const BIGNUM *);
+static void usage(void) __dead;
 #ifdef HAVE_OPENSSL
-void	pollard_pminus1(BIGNUM *);	/* print factors for big numbers */
+static void pollard_rho(BIGNUM *);	/* print factors for big numbers */
 #else
-char	*BN_bn2dec(const BIGNUM *);
-BN_ULONG BN_div_word(BIGNUM *, BN_ULONG);
+static char *BN_bn2dec(const BIGNUM *);
+static BN_ULONG BN_div_word(BIGNUM *, BN_ULONG);
 #endif
 
 
 #ifndef HAVE_OPENSSL
-int
+static int
 BN_dec2bn(BIGNUM **a, const char *str)
 {
 	char *p;
@@ -135,7 +135,7 @@ int
 main(int argc, char *argv[])
 {
 	BIGNUM *val;
-	int ch;
+	int ch, hflag;
 	char *p, buf[LINE_MAX];		/* > max number of digits. */
 
 #ifdef HAVE_OPENSSL 
@@ -145,8 +145,12 @@ main(int argc, char *argv[])
 	if (val == NULL)
 		errx(1, "can't initialise bignum");
 
-	while ((ch = getopt(argc, argv, "")) != -1)
+	hflag = 0;
+	while ((ch = getopt(argc, argv, "h")) != -1)
 		switch (ch) {
+		case 'h':
+			hflag = 1;
+			break;
 		case '?':
 		default:
 			usage();
@@ -162,23 +166,23 @@ main(int argc, char *argv[])
 					err(1, "stdin");
 				exit (0);
 			}
-			for (p = buf; isblank(*p); ++p);
+			for (p = buf; isblank((unsigned char)*p); ++p);
 			if (*p == '\n' || *p == '\0')
 				continue;
 			if (*p == '-')
 				errx(1, "negative numbers aren't permitted.");
 			if (BN_dec2bn(&val, buf) == 0)
 				errx(1, "%s: illegal numeric format.", argv[0]);
-			pr_fact(val);
+			pr_fact(val, hflag);
 		}
 	/* Factor the arguments. */
 	else
 		for (; *argv != NULL; ++argv) {
 			if (argv[0][0] == '-')
-				errx(1, "negative numbers aren't permitted.");
+				errx(1, "numbers <= 1 aren't permitted.");
 			if (BN_dec2bn(&val, argv[0]) == 0)
 				errx(1, "%s: illegal numeric format.", argv[0]);
-			pr_fact(val);
+			pr_fact(val, hflag);
 		}
 	exit(0);
 }
@@ -191,23 +195,23 @@ main(int argc, char *argv[])
  * processing.
  *
  * Print the factors of the number, from the lowest to the highest.
- * A factor will be printed numtiple times if it divides the value
- * multiple times.
+ * By default, a factor will be printed numtiple times if it divides
+ * the value multiple times.
+ *
+ * If hflag is specified, duplicate factors are printed in "human-
+ * readable" form of x^n.
  *
  * Factors are printed with leading tabs.
  */
-void
-pr_fact(BIGNUM *val)
+static void
+pr_fact(BIGNUM *val, int hflag)
 {
-	const ubig *fact;		/* The factor found. */
+	const uint64_t *fact;		/* The factor found. */
+	int i;
 
 	/* Firewall - catch 0 and 1. */
-	if (BN_is_zero(val))	/* Historical practice; 0 just exits. */
-		exit(0);
-	if (BN_is_one(val)) {
-		printf("1: 1\n");
-		return;
-	}
+	if (BN_is_zero(val) || BN_is_one(val))
+		errx(1, "numbers <= 1 aren't permitted.");
 
 	/* Factor value. */
 
@@ -215,10 +219,11 @@ pr_fact(BIGNUM *val)
 	putchar(':');
 	for (fact = &prime[0]; !BN_is_one(val); ++fact) {
 		/* Look for the smallest factor. */
-		do {
+		while (fact <= pr_limit) {
 			if (BN_mod_word(val, (BN_ULONG)*fact) == 0)
 				break;
-		} while (++fact <= pr_limit);
+			fact++;
+		}
 
 		/* Watch for primes larger than the table. */
 		if (fact > pr_limit) {
@@ -226,15 +231,15 @@ pr_fact(BIGNUM *val)
 			BIGNUM *bnfact;
 
 			bnfact = BN_new();
-			BN_set_word(bnfact, *(fact - 1));
+			BN_set_word(bnfact, (BN_ULONG)*(fact - 1));
 			BN_sqr(bnfact, bnfact, ctx);
 			if (BN_cmp(bnfact, val) > 0
-			    || BN_is_prime(val, PRIME_CHECKS, NULL, NULL,
-					   NULL) == 1) {
+			    || BN_is_prime_ex(val, PRIME_CHECKS, NULL, NULL)
+			    == 1) {
 				putchar(' ');
 				BN_print_dec_fp(stdout, val);
 			} else
-				pollard_pminus1(val);
+				pollard_rho(val);
 #else
 			printf(" %s", BN_bn2dec(val));
 #endif
@@ -242,10 +247,19 @@ pr_fact(BIGNUM *val)
 		}
 
 		/* Divide factor out until none are left. */
+		i = 0;
 		do {
-			printf(" %lu", *fact);
+			i++;
+			if (!hflag)
+				printf(" %" PRIu64, *fact);
 			BN_div_word(val, (BN_ULONG)*fact);
 		} while (BN_mod_word(val, (BN_ULONG)*fact) == 0);
+
+		if (hflag) {
+			printf(" %" PRIu64, *fact);
+			if (i > 1)
+				printf("^%d", i);
+		}
 
 		/* Let the user know we're doing something. */
 		fflush(stdout);
@@ -256,7 +270,7 @@ pr_fact(BIGNUM *val)
 /*
  * Sigh..  No _decimal_ output to file functions in BN.
  */
-void
+static void
 BN_print_dec_fp(FILE *fp, const BIGNUM *num)
 {
 	char *buf;
@@ -264,14 +278,14 @@ BN_print_dec_fp(FILE *fp, const BIGNUM *num)
 	buf = BN_bn2dec(num);
 	if (buf == NULL)
 		return;	/* XXX do anything here? */
-	fprintf(fp, buf);
+	fprintf(fp, "%s", buf);
 	free(buf);
 }
 
 void
 usage(void)
 {
-	fprintf(stderr, "usage: factor [value ...]\n");
+	fprintf(stderr, "usage: factor [-h] [value ...]\n");
 	exit (0);
 }
 
@@ -279,56 +293,82 @@ usage(void)
 
 
 #ifdef HAVE_OPENSSL
-/* pollard p-1, algorithm from Jim Gillogly, May 2000 */
-
-void
-pollard_pminus1(BIGNUM *val)
+static void
+pollard_rho(BIGNUM *val)
 {
-	BIGNUM *base, *rbase, *num, *i, *x;
+	BIGNUM *x, *y, *tmp, *num;
+	BN_ULONG a;
+	unsigned int steps_taken, steps_limit;
 
-	base = BN_new();
-	rbase = BN_new();
-	num = BN_new();
-	i = BN_new();
 	x = BN_new();
-
-	BN_set_word(rbase, 1);
- newbase:
-	BN_add_word(rbase, 1);
-	BN_set_word(i, 2);
-	BN_copy(base, rbase);
+	y = BN_new();
+	tmp = BN_new();
+	num = BN_new();
+	a = 1;
+restart:
+	steps_taken = 0;
+	steps_limit = 2;
+	BN_set_word(x, 1);
+	BN_copy(y, x);
 
 	for (;;) {
-		BN_mod_exp(base, base, i, val, ctx);
-		if (BN_is_one(base))
-			goto newbase;
+		BN_sqr(tmp, x, ctx);
+		BN_add_word(tmp, a);
+		BN_mod(x, tmp, val, ctx);
+		BN_sub(tmp, x, y);
+		if (BN_is_zero(tmp)) {
+#ifdef DEBUG
+			printf(" (loop)");
+#endif
+			a++;
+			goto restart;
+		}
+		BN_gcd(tmp, tmp, val, ctx);
 
-		BN_copy(x, base);
-		BN_sub_word(x, 1);
-		BN_gcd(x, x, val, ctx);
-
-		if (!BN_is_one(x)) {
-			if (BN_is_prime(x, PRIME_CHECKS, NULL, NULL,
-			    NULL) == 1) {
+		if (!BN_is_one(tmp)) {
+			if (BN_is_prime_ex(tmp, PRIME_CHECKS, NULL, NULL) == 1)
+			{
 				putchar(' ');
-				BN_print_dec_fp(stdout, x);
-			} else
-				pollard_pminus1(x);
+				BN_print_dec_fp(stdout, tmp);
+			} else {
+#ifdef DEBUG
+				printf(" (recurse for ");
+				BN_print_dec_fp(stdout, tmp);
+				putchar(')');
+#endif
+				pollard_rho(BN_dup(tmp));
+#ifdef DEBUG
+				printf(" (back)");
+#endif
+			}
 			fflush(stdout);
 
-			BN_div(num, NULL, val, x, ctx);
+			BN_div(num, NULL, val, tmp, ctx);
 			if (BN_is_one(num))
 				return;
-			if (BN_is_prime(num, PRIME_CHECKS, NULL, NULL,
-			    NULL) == 1) {
+			if (BN_is_prime_ex(num, PRIME_CHECKS, NULL, NULL) == 1)
+			{
 				putchar(' ');
 				BN_print_dec_fp(stdout, num);
 				fflush(stdout);
 				return;
 			}
 			BN_copy(val, num);
+			goto restart;
 		}
-		BN_add_word(i, 1);
+		steps_taken++;
+		if (steps_taken == steps_limit) {
+			BN_copy(y, x); /* teleport the turtle */
+			steps_taken = 0;
+			steps_limit *= 2;
+			if (steps_limit == 0) {
+#ifdef DEBUG
+				printf(" (overflow)");
+#endif
+				a++;
+				goto restart;
+			}
+		}
 	}
 }
 #else
@@ -344,7 +384,7 @@ BN_bn2dec(const BIGNUM *val)
 	return buf;
 }
 
-BN_ULONG
+static BN_ULONG
 BN_div_word(BIGNUM *a, BN_ULONG b)
 {
 	BN_ULONG mod;

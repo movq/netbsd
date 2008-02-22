@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_types.h,v 1.27 2008/01/15 22:38:35 njoly Exp $	*/
+/*	$NetBSD: linux_types.h,v 1.31 2013/11/18 01:32:52 chs Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,11 +48,13 @@
 #include <compat/linux/arch/amd64/linux_types.h>
 #else
 typedef unsigned long linux_clock_t;
-typedef unsigned long linux_time_t;
+typedef long linux_time_t;
+typedef long linux_suseconds_t;
 #endif
 
 typedef unsigned short linux_gid16_t;
 typedef unsigned short linux_uid16_t;
+typedef unsigned short linux_umode_t;
 
 /*
  * From Linux include/asm-.../posix_types.h
@@ -92,6 +87,11 @@ struct linux_tms {
 	linux_clock_t ltms_cstime;
 };
 
+struct linux_timeval {
+	linux_time_t tv_sec;
+	linux_suseconds_t tv_usec;
+};
+
 struct linux_utimbuf {
 	linux_time_t l_actime;
 	linux_time_t l_modtime;
@@ -104,7 +104,7 @@ struct linux___sysctl {
 	size_t       *oldlenp;
 	void         *newval;
 	size_t        newlen;
-	unsigned long0[4];
+	unsigned long __unused0[4];
 };
 
 #include <compat/linux/common/linux_siginfo.h>

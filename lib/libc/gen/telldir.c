@@ -1,4 +1,4 @@
-/*	$NetBSD: telldir.c,v 1.18 2006/05/17 20:36:50 christos Exp $	*/
+/*	$NetBSD: telldir.c,v 1.20 2013/03/06 11:27:28 yamt Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)telldir.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: telldir.c,v 1.18 2006/05/17 20:36:50 christos Exp $");
+__RCSID("$NetBSD: telldir.c,v 1.20 2013/03/06 11:27:28 yamt Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -61,11 +61,11 @@ telldir(DIR *dirp)
 #ifdef _REENTRANT
 	if (__isthreaded) {
 		mutex_lock((mutex_t *)dirp->dd_lock);
-		rv = (intptr_t)_telldir_unlocked(dirp);
+		rv = _telldir_unlocked(dirp);
 		mutex_unlock((mutex_t *)dirp->dd_lock);
 	} else
 #endif
-		rv = (intptr_t)_telldir_unlocked(dirp);
+		rv = _telldir_unlocked(dirp);
 	return rv;
 }
 
@@ -117,6 +117,6 @@ _seekdir_unlocked(DIR *dirp, long loc)
 	dirp->dd_seek = lseek(dirp->dd_fd, lp->dp_seek, SEEK_SET);
 	dirp->dd_loc = 0;
 	while (dirp->dd_loc < lp->dp_loc)
-		if (_readdir_unlocked(dirp) == NULL)
+		if (_readdir_unlocked(dirp, 0) == NULL)
 			break;
 }

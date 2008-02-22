@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.18 2007/10/17 19:58:15 garbled Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.39 2018/06/24 13:35:33 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,28 +65,31 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.18 2007/10/17 19:58:15 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.39 2018/06/24 13:35:33 jdolecek Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/mbuf.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
-#include <machine/bus.h>
 #include <machine/bus_private.h>
-
 #include <machine/pio.h>
 #include <machine/cpufunc.h>
+#include <machine/autoconf.h>
+#include <machine/bootinfo.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
 
 #include <uvm/uvm_extern.h>
 
+#include "acpica.h"
+#include "opt_acpi.h"
 #include "ioapic.h"
 
 #if NIOAPIC > 0
@@ -104,30 +100,15 @@ __KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.18 2007/10/17 19:58:15 garbled Exp
 static int _isa_dma_may_bounce(bus_dma_tag_t, bus_dmamap_t, int, int *);
 
 struct x86_bus_dma_tag isa_bus_dma_tag = {
-	0,				/* _tag_needs_free */
-	ISA_DMA_BOUNCE_THRESHOLD,	/* _bounce_thresh */
-	0,				/* _bounce_alloc_lo */
-	ISA_DMA_BOUNCE_THRESHOLD,	/* _bounce_alloc_hi */
-	_isa_dma_may_bounce,
-	_bus_dmamap_create,
-	_bus_dmamap_destroy,
-	_bus_dmamap_load,
-	_bus_dmamap_load_mbuf,
-	_bus_dmamap_load_uio,
-	_bus_dmamap_load_raw,
-	_bus_dmamap_unload,
-	_bus_dmamap_sync,
-	_bus_dmamem_alloc,
-	_bus_dmamem_free,
-	_bus_dmamem_map,
-	_bus_dmamem_unmap,
-	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
+	._tag_needs_free	= 0,
+	._bounce_thresh		= ISA_DMA_BOUNCE_THRESHOLD,
+	._bounce_alloc_lo	= 0,
+	._bounce_alloc_hi	= ISA_DMA_BOUNCE_THRESHOLD,
+	._may_bounce		= _isa_dma_may_bounce,
 };
 
 #define	IDTVEC(name)	__CONCAT(X,name)
-typedef void (vector) __P((void));
+typedef void (vector)(void);
 extern vector *IDTVEC(intr)[];
 
 #define	LEGAL_IRQ(x)	((x) >= 0 && (x) < NUM_LEGACY_IRQS && (x) != 2)
@@ -135,7 +116,6 @@ extern vector *IDTVEC(intr)[];
 int
 isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 {
-	extern kmutex_t x86_intr_lock;
 	int i, tmp, bestirq, count;
 	struct intrhand **p, *q;
 	struct intrsource *isp;
@@ -158,19 +138,17 @@ isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 	 */
 	mask &= 0xefbf;
 
-	mutex_enter(&x86_intr_lock);
+	mutex_enter(&cpu_lock);
 
 	for (i = 0; i < NUM_LEGACY_IRQS; i++) {
 		if (LEGAL_IRQ(i) == 0 || (mask & (1<<i)) == 0)
 			continue;
 		isp = ci->ci_isources[i];
 		if (isp == NULL) {
-			/*
-			 * if nothing's using the irq, just return it
-			 */
+			/* if nothing's using the irq, just return it */
 			*irq = i;
-			mutex_exit(&x86_intr_lock);
-			return (0);
+			mutex_exit(&cpu_lock);
+			return 0;
 		}
 
 		switch(isp->is_type) {
@@ -195,45 +173,46 @@ isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 				count = tmp;
 			}
 			break;
-
 		case IST_PULSE:
 			/* this just isn't shareable */
 			continue;
 		}
 	}
 
-	mutex_exit(&x86_intr_lock);
+	mutex_exit(&cpu_lock);
 
 	if (bestirq == -1)
-		return (1);
+		return 1;
 
 	*irq = bestirq;
 
-	return (0);
+	return 0;
 }
 
 const struct evcnt *
 isa_intr_evcnt(isa_chipset_tag_t ic, int irq)
 {
-
 	/* XXX for now, no evcnt parent reported */
 	return NULL;
 }
 
 void *
-isa_intr_establish(
-    isa_chipset_tag_t ic,
-    int irq,
-    int type,
-    int level,
-    int (*ih_fun)(void *),
-    void *ih_arg
-)
+isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level,
+    int (*ih_fun)(void *), void *ih_arg)
+{
+	return isa_intr_establish_xname(ic, irq, type, level,
+	    ih_fun, ih_arg, "unknown");
+}
+
+void *
+isa_intr_establish_xname(isa_chipset_tag_t ic, int irq, int type, int level,
+    int (*ih_fun)(void *), void *ih_arg, const char *xname)
 {
 	struct pic *pic;
 	int pin;
+	intr_handle_t mpih = 0;
 #if NIOAPIC > 0
-	int mpih;
+	struct ioapic_softc *ioapic = NULL;
 #endif
 
 	pin = irq;
@@ -245,39 +224,62 @@ isa_intr_establish(
 		    intr_find_mpmapping(mp_eisa_bus, irq, &mpih) == 0) {
 			if (!APIC_IRQ_ISLEGACY(mpih)) {
 				pin = APIC_IRQ_PIN(mpih);
-				pic = (struct pic *)
-				    ioapic_find(APIC_IRQ_APIC(mpih));
-				if (pic == NULL) {
+				ioapic = ioapic_find(APIC_IRQ_APIC(mpih));
+				if (ioapic == NULL) {
 					printf("isa_intr_establish: "
 					       "unknown apic %d\n",
 					    APIC_IRQ_APIC(mpih));
 					return NULL;
 				}
+				pic = &ioapic->sc_pic;
 			}
 		} else
 			printf("isa_intr_establish: no MP mapping found\n");
 	}
 #endif
-	return intr_establish(irq, pic, pin, type, level, ih_fun, ih_arg);
+#if defined(XEN)
+	KASSERT(APIC_IRQ_ISLEGACY(irq));
+
+	int evtch;
+	const char *intrstr;
+	char intrstr_buf[INTRIDBUF];
+
+	mpih |= APIC_IRQ_LEGACY_IRQ(irq);
+
+	evtch = xen_pirq_alloc(&mpih, type); /* XXX: legacy - xen just tosses irq back at us */
+	if (evtch == -1)
+		return NULL;
+
+	intrstr = intr_create_intrid(irq, pic, pin, intrstr_buf,
+	    sizeof(intrstr_buf));
+
+	aprint_debug("irq: %d requested on pic: %s.\n", irq, pic->pic_name);
+
+	return (void *)pirq_establish(irq, evtch, ih_fun, ih_arg, level,
+	    intrstr, xname);
+#else /* defined(XEN) */
+	return intr_establish_xname(irq, pic, pin, type, level, ih_fun, ih_arg,
+	    false, xname);
+#endif
+
 }
 
-/*
- * Deregister an interrupt handler.
- */
+/* Deregister an interrupt handler. */
 void
 isa_intr_disestablish(isa_chipset_tag_t ic, void *arg)
 {
+#if !defined(XEN)
 	struct intrhand *ih = arg;
 
 	if (!LEGAL_IRQ(ih->ih_pin))
 		panic("intr_disestablish: bogus irq");
 
 	intr_disestablish(ih);
+#endif	
 }
 
 void
-isa_attach_hook(struct device *parent, struct device *self,
-    struct isabus_attach_args *iba)
+isa_attach_hook(device_t parent, device_t self, struct isabus_attach_args *iba)
 {
 	extern struct x86_isa_chipset x86_isa_chipset;
 	extern int isa_has_been_seen;
@@ -298,30 +300,26 @@ isa_attach_hook(struct device *parent, struct device *self,
 	iba->iba_ic = &x86_isa_chipset;
 }
 
-int
-isa_mem_alloc(t, size, align, boundary, flags, addrp, bshp)
-	bus_space_tag_t t;
-	bus_size_t size, align;
-	bus_addr_t boundary;
-	int flags;
-	bus_addr_t *addrp;
-	bus_space_handle_t *bshp;
+void
+isa_detach_hook(isa_chipset_tag_t ic, device_t self)
 {
+	extern int isa_has_been_seen;
 
-	/*
-	 * Allocate physical address space in the ISA hole.
-	 */
-	return (bus_space_alloc(t, IOM_BEGIN, IOM_END - 1, size, align,
-	    boundary, flags, addrp, bshp));
+	isa_has_been_seen = 0;
+}
+
+int
+isa_mem_alloc(bus_space_tag_t t, bus_size_t size, bus_size_t align,
+    bus_addr_t boundary, int flags, bus_addr_t *addrp, bus_space_handle_t *bshp)
+{
+	/* Allocate physical address space in the ISA hole. */
+	return bus_space_alloc(t, IOM_BEGIN, IOM_END - 1, size, align,
+	    boundary, flags, addrp, bshp);
 }
 
 void
-isa_mem_free(t, bsh, size)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+isa_mem_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 {
-
 	bus_space_free(t, bsh, size);
 }
 
@@ -357,4 +355,48 @@ _isa_dma_may_bounce(bus_dma_tag_t t, bus_dmamap_t map, int flags,
 	if (((map->_dm_size / PAGE_SIZE) + 1) > map->_dm_segcnt)
 		*cookieflagsp |= X86_DMA_MIGHT_NEED_BOUNCE;
 	return 0;
+}
+
+device_t
+device_isa_register(device_t dev, void *aux)
+{
+	/*
+	 * Handle network interfaces here, the attachment information is
+	 * not available driver-independently later.
+	 *
+	 * For disks, there is nothing useful available at attach time.
+	 */
+	if (device_class(dev) == DV_IFNET) {
+		struct btinfo_netif *bin = lookup_bootinfo(BTINFO_NETIF);
+		if (bin == NULL)
+			return NULL;
+
+		/*
+		 * We don't check the driver name against the device name
+		 * passed by the boot ROM.  The ROM should stay usable if
+		 * the driver becomes obsolete.  The physical attachment
+		 * information (checked below) must be sufficient to
+		 * identify the device.
+		 */
+		if (bin->bus == BI_BUS_ISA &&
+		    device_is_a(device_parent(dev), "isa")) {
+			struct isa_attach_args *iaa = aux;
+
+			/* Compare IO base address */
+			/* XXXJRT What about multiple IO addrs? */
+			if (iaa->ia_nio > 0 &&
+			    bin->addr.iobase == iaa->ia_io[0].ir_addr)
+			    	return dev;
+		}
+	}
+#if NACPICA > 0
+#if notyet
+	if (device_is_a(dev, "isa") && acpi_active) {
+		if (!(AcpiGbl_FADT.BootFlags & ACPI_FADT_LEGACY_DEVICES))
+			prop_dictionary_set_bool(device_properties(dev),
+			    "no-legacy-devices", true);
+	}
+#endif
+#endif /* NACPICA > 0 */
+	return NULL;
 }

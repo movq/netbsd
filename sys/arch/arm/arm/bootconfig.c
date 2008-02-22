@@ -1,4 +1,4 @@
-/*	$NetBSD: bootconfig.c,v 1.5 2006/10/24 20:25:52 bjh21 Exp $	*/
+/*	$NetBSD: bootconfig.c,v 1.11 2017/06/01 02:45:05 chs Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -36,16 +36,26 @@
  * SUCH DAMAGE.
  */
 
+#include "ether.h"
+
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: bootconfig.c,v 1.5 2006/10/24 20:25:52 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bootconfig.c,v 1.11 2017/06/01 02:45:05 chs Exp $");
 
 #include <sys/systm.h>
+#include <sys/kmem.h>
 
 #include <machine/bootconfig.h>
 
+#if NETHER > 0
+#include <net/if_ether.h>
+#endif
+
 /* 
  * Function to identify and process different types of boot argument
+ * Note, results may contain trailing data, eg:
+ * get_bootconf_option("cow=moo milk=1", "moo", BOOTOPT_TYPE_STRING, &ptr)
+ * will return ptr of "moo milk=1", *not* "moo"
  */
 
 int
@@ -53,7 +63,7 @@ get_bootconf_option(char *opts, const char *opt, int type, void *result)
 {
 	char *ptr;
 	char *optstart;
-	int not;
+	bool neg;
 
 	ptr = opts;
 
@@ -65,12 +75,12 @@ get_bootconf_option(char *opts, const char *opt, int type, void *result)
 		if (*ptr == 0)
 			break;
 
-		not = 0;
+		neg = false;
 
 		/* Is it a negate option */
 		if ((type & BOOTOPT_TYPE_MASK) == BOOTOPT_TYPE_BOOLEAN &&
 		    *ptr == '!') {
-			not = 1;
+			neg = true;
 			++ptr;
 		}
 
@@ -80,8 +90,7 @@ get_bootconf_option(char *opts, const char *opt, int type, void *result)
 			++ptr;
 
 		if (*ptr == '=' ||
-		    (*ptr != '=' &&
-		     ((type & BOOTOPT_TYPE_MASK) == BOOTOPT_TYPE_BOOLEAN))) {
+		    (type & BOOTOPT_TYPE_MASK) == BOOTOPT_TYPE_BOOLEAN) {
 			/* compare the option */
 			if (strncmp(optstart, opt, (ptr - optstart)) == 0) {
 				/* found */
@@ -96,7 +105,7 @@ get_bootconf_option(char *opts, const char *opt, int type, void *result)
 						    ((u_int)strtoul(ptr, NULL,
 						    10) != 0);
 					else
-						*((int *)result) = !not;
+						*((int *)result) = !neg;
 					break;
 				case BOOTOPT_TYPE_STRING :
 					*((char **)result) = ptr;
@@ -113,6 +122,18 @@ get_bootconf_option(char *opts, const char *opt, int type, void *result)
 					*((int *)result) =
 					    (u_int)strtoul(ptr, NULL, 16);
 					break;
+#if NETHER > 0
+				case BOOTOPT_TYPE_MACADDR : {
+					char mac[18];
+					if (strlen(ptr) < ETHER_ADDR_LEN)
+						return 0;
+					strlcpy(mac, ptr, sizeof(mac));
+					if (ether_aton_r((u_char *)result,
+							 ETHER_ADDR_LEN, mac))
+						return 0;
+					break;
+				}
+#endif
 				default:
 					return 0;
 				}
@@ -124,4 +145,35 @@ get_bootconf_option(char *opts, const char *opt, int type, void *result)
 			++ptr;
 	}
 	return 0;
+}
+
+char *
+get_bootconf_string(char *opts, const char *key)
+{
+	char *s, *ret;
+	int i = 0;
+
+	if (!get_bootconf_option(opts, key, BOOTOPT_TYPE_STRING, &s))
+		return NULL;
+
+	for (;;) {
+		if (s[i] == ' ' || s[i] == '\t' || s[i] == '\0')
+			break;
+		++i;
+	}
+
+	ret = kmem_alloc(i + 1, KM_SLEEP);
+	strlcpy(ret, s, i + 1);
+	return ret;
+}
+
+bool
+match_bootconf_option(char *opts, const char *key, const char *val)
+{
+	char *s;
+
+	if (!get_bootconf_option(opts, key, BOOTOPT_TYPE_STRING, &s))
+		return false;
+
+	return strncmp(s, val, strlen(val)) == 0;
 }

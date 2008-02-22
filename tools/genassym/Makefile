@@ -1,12 +1,10 @@
-#	$NetBSD: Makefile,v 1.3 2005/06/05 18:19:53 thorpej Exp $
+#	$NetBSD: Makefile,v 1.8 2018/05/01 19:59:46 christos Exp $
 
-.include <bsd.own.mk>
+.include <bsd.hostinit.mk>
 
 .PATH.sh:	${.CURDIR}/../../usr.bin/genassym
 
-COMPATOBJ!=	cd ${.CURDIR}/../compat && ${PRINTOBJDIR}
-.-include	"${COMPATOBJ}/defs.mk"
-
+.-include	"${TOOLDIR}/share/compat/defs.mk"
 
 TIMESTAMP=	${TOOLDIR}/bin/${_TOOL_PREFIX}genassym
 
@@ -19,6 +17,8 @@ ${TIMESTAMP}: genassym
 	${HOST_INSTALL_FILE} -m ${BINMODE} ${.ALLSRC} ${.TARGET}
 
 genassym: genassym.sh
-	sed -e "s,/bin/sh,${HOST_BSHELL},g" < ${.ALLSRC} > ${.TARGET}
+	${TOOL_SED} -e "s,/bin/sh,${HOST_BSHELL},g" \
+	    -e "s,{AWK:=.*},{AWK:="${TOOL_AWK:Q}"}," \
+		< ${.ALLSRC} > ${.TARGET}
 
 realall: genassym

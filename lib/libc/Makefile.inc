@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2007/06/03 17:36:08 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.19 2018/06/09 22:41:55 christos Exp $
 #	@(#)Makefile	8.2 (Berkeley) 2/3/94
 #
 # All library objects contain sccsid strings by default; they may be
@@ -17,14 +17,23 @@
 # The Hesiod functions are always in libc. To choose that getpwent() and friends
 # actually call the Hesiod functions, put -DHESIOD on the CPPFLAGS line below.
 
+NOSANITIZER=	# defined
 USE_FORT?=	yes
 
 USE_SHLIBDIR=	yes
 
 .include <bsd.own.mk>
 
-WARNS=4
+# build libc suitable for rumprun software stack, i.e. are system calls
+# rump kernel function calls instead of kernel traps?
+RUMPRUN?=	no
+
+WARNS=5
 CPPFLAGS+=	-D_LIBC -DLIBC_SCCS -DSYSLIBC_SCCS -D_REENTRANT
+CPPFLAGS+=	-D_DIAGNOSTIC
+.if defined(MLIBDIR)
+CPPFLAGS+=	-DMLIBDIR=\"${MLIBDIR}\"
+.endif
 
 .if (${USE_HESIOD} != "no")
 CPPFLAGS+=	-DHESIOD
@@ -40,28 +49,15 @@ CPPFLAGS+=	-DNLS
 CPPFLAGS+=	-DYP
 .endif
 
-.if ${MACHINE_ARCH} == "i386"
 # Set lint to exit on warnings
-LINTFLAGS+=	-w
-.endif
+#LINTFLAGS+=	-w
 # ignore 'empty translation unit' warnings.
 LINTFLAGS+=	-X 272
 
-.if exists(${.CURDIR}/arch/${MACHINE_ARCH})
-ARCHSUBDIR=	${MACHINE_ARCH}
-.elif exists(${.CURDIR}/arch/${MACHINE_CPU}) 
-ARCHSUBDIR=	${MACHINE_CPU}
-.else
-.BEGIN:
-	@echo no ARCHSUBDIR for ${MACHINE_ARCH} nor ${MACHINE_CPU}
-	@false
-.endif
+.include "libcincludes.mk"
 
 ARCHDIR=	${.CURDIR}/arch/${ARCHSUBDIR}
 AFLAGS+=	-I${ARCHDIR}
-.if defined(DESTDIR)
-AFLAGS+=	-nostdinc -idirafter ${DESTDIR}/usr/include
-.endif
 CLEANFILES+=	tags
 
 # Don't try to lint the C library against itself when creating llib-lc.ln

@@ -1,4 +1,4 @@
-/*	$NetBSD: boot2.c,v 1.1 2006/09/01 21:26:18 uwe Exp $	*/
+/*	$NetBSD: boot2.c,v 1.6 2016/06/11 06:31:49 dholland Exp $	*/
 
 /*
  * Copyright (c) 2003
@@ -183,7 +183,8 @@ sprint_bootsel(const char *filename)
 	const char *file;
 
 	if (parsebootfile(filename, &devname, &unit, &partition, &file) == 0) {
-		sprintf(buf, "%s%d%c:%s", devname, unit, 'a' + partition, file);
+		snprintf(buf, sizeof(buf), "%s%d%c:%s", devname, unit,
+		    'a' + partition, file);
 		return (buf);
 	}
 	return ("(invalid)");
@@ -213,12 +214,9 @@ print_banner(void)
 {
 	extern const char bootprog_name[];
 	extern const char bootprog_rev[];
-	extern const char bootprog_date[];
-	extern const char bootprog_maker[];
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 }
 
 void
@@ -332,7 +330,7 @@ bootcmd_ls(char *arg)
 	const char *save = default_filename;
 
 	default_filename = "/";
-	ufs_ls(arg);
+	ls(arg);
 	default_filename = save;
 }
 
@@ -412,7 +410,7 @@ bootmenu(void)
 
 		input[0] = '\0';
 		printf("> ");
-		gets(input);
+		kgets(input, sizeof(input));
 
 		/*
 		 * Skip leading whitespace.
@@ -444,7 +442,7 @@ gettrailer(char *arg)
 		*options++ = '\0';
 
 	/* trim leading blanks */
-	while (*options && *options == ' ')
+	while (*options == ' ')
 		options++;
 
 	return (options);

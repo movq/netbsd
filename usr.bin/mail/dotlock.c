@@ -1,4 +1,4 @@
-/*	$NetBSD: dotlock.c,v 1.9 2007/10/29 23:20:38 christos Exp $	*/
+/*	$NetBSD: dotlock.c,v 1.13 2015/07/04 22:45:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Christos Zoulas.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,11 +26,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: dotlock.c,v 1.9 2007/10/29 23:20:38 christos Exp $");
+__RCSID("$NetBSD: dotlock.c,v 1.13 2015/07/04 22:45:08 christos Exp $");
 #endif
 
 #include "rcv.h"
 #include "extern.h"
+#include "sig.h"
 
 #ifndef O_SYNC
 #define O_SYNC	0
@@ -84,13 +80,13 @@ create_exclusive(const char *fname)
 	/*
 	 * We try to create the unique filename.
 	 */
-	for (ntries = 0; ntries < 5; ntries++) {
+	for (ntries = 0; ; ntries++) {
 		fd = open(path, O_WRONLY|O_CREAT|O_TRUNC|O_EXCL|O_SYNC, 0);
 		if (fd != -1) {
 			(void)close(fd);
 			break;
 		}
-		else if (errno == EEXIST)
+		else if (errno == EEXIST && ntries < 5)
 			continue;
 		else
 			return -1;
@@ -139,6 +135,7 @@ dot_lock(const char *fname, int pollinterval, FILE *fp, const char *msg)
 {
 	char path[MAXPATHLEN];
 	sigset_t nset, oset;
+	int retval;
 
 	(void)sigemptyset(&nset);
 	(void)sigaddset(&nset, SIGHUP);
@@ -152,17 +149,20 @@ dot_lock(const char *fname, int pollinterval, FILE *fp, const char *msg)
 
 	(void)snprintf(path, sizeof(path), "%s.lock", fname);
 
+	retval = -1;
 	for (;;) {
+		sig_check();
 		(void)sigprocmask(SIG_BLOCK, &nset, &oset);
 		if (create_exclusive(path) != -1) {
 			(void)sigprocmask(SIG_SETMASK, &oset, NULL);
-			return 0;
+			retval = 0;
+			break;
 		}
 		else
 			(void)sigprocmask(SIG_SETMASK, &oset, NULL);
 
 		if (errno != EEXIST)
-			return -1;
+			break;
 
 		if (fp && msg)
 		    (void)fputs(msg, fp);
@@ -170,11 +170,13 @@ dot_lock(const char *fname, int pollinterval, FILE *fp, const char *msg)
 		if (pollinterval) {
 			if (pollinterval == -1) {
 				errno = EEXIST;
-				return -1;
+				break;
 			}
 			(void)sleep((unsigned int)pollinterval);
 		}
 	}
+	sig_check();
+	return retval;
 }
 
 PUBLIC void

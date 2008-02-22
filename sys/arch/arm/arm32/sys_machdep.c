@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.9 2007/12/20 23:02:39 dsl Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.23 2017/03/16 16:13:20 chs Exp $	*/
 
 /*
  * Copyright (c) 1995-1997 Mark Brinicombe.
@@ -35,31 +35,37 @@
  *
  * sys_machdep.c
  *
- * Machine dependant syscalls
+ * Machine dependent syscalls
  *
  * Created      : 10/01/96
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.9 2007/12/20 23:02:39 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.23 2017/03/16 16:13:20 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
+#include <sys/cpu.h>
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
 #include <sys/syscallargs.h>
 
 #include <machine/sysarch.h>
+#include <machine/pcb.h>
+#include <arm/vfpreg.h>
+#include <arm/locore.h>
 
 /* Prototypes */
-static int arm32_sync_icache __P((struct proc *, char *, register_t *));
-static int arm32_drain_writebuf __P((struct proc *, char *, register_t *));
+static int arm32_sync_icache(struct lwp *, const void *, register_t *);
+static int arm32_drain_writebuf(struct lwp *, const void *, register_t *);
+static int arm32_vfp_fpscr(struct lwp *, const void *, register_t *);
+static int arm32_fpu_used(struct lwp *, const void *, register_t *);
 
 static int
-arm32_sync_icache(struct proc *p, char *args, register_t *retval)
+arm32_sync_icache(struct lwp *l, const void *args, register_t *retval)
 {
 	struct arm_sync_icache_args ua;
 	int error;
@@ -67,14 +73,15 @@ arm32_sync_icache(struct proc *p, char *args, register_t *retval)
 	if ((error = copyin(args, &ua, sizeof(ua))) != 0)
 		return (error);
 
-	cpu_icache_sync_range(ua.addr, ua.len);
+	pmap_icache_sync_range(vm_map_pmap(&l->l_proc->p_vmspace->vm_map),
+	    ua.addr, ua.addr + ua.len);
 
 	*retval = 0;
 	return(0);
 }
 
 static int
-arm32_drain_writebuf(struct proc *p, char *args, register_t *retval)
+arm32_drain_writebuf(struct lwp *l, const void *args, register_t *retval)
 {
 	/* No args. */
 
@@ -84,6 +91,47 @@ arm32_drain_writebuf(struct proc *p, char *args, register_t *retval)
 	return(0);
 }
 
+static int
+arm32_vfp_fpscr(struct lwp *l, const void *uap, register_t *retval)
+{
+	struct pcb * const pcb = lwp_getpcb(l);
+
+#ifdef FPU_VFP
+	/*
+	 * Save the current VFP state (to make sure the FPSCR copy is
+	 * up to date).
+	 */
+	vfp_savecontext(l);
+#endif
+
+	retval[0] = pcb->pcb_vfp.vfp_fpscr;
+	if (uap) {
+		extern uint32_t vfp_fpscr_changable;
+		struct arm_vfp_fpscr_args ua;
+		int error;
+		if ((error = copyin(uap, &ua, sizeof(ua))) != 0)
+			return (error);
+		if ((ua.fpscr_clear|ua.fpscr_set) & ~vfp_fpscr_changable)
+			return EINVAL;
+		pcb->pcb_vfp.vfp_fpscr &= ~ua.fpscr_clear;
+		pcb->pcb_vfp.vfp_fpscr |= ua.fpscr_set;
+	}
+
+	return 0;
+}
+
+static int
+arm32_fpu_used(struct lwp *l, const void *uap, register_t *retval)
+{
+	/* No args */
+#ifdef FPU_VFP
+	retval[0] = vfp_used_p(l);
+#else
+	retval[0] = false;
+#endif
+	return 0;
+}
+
 int
 sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retval)
 {
@@ -91,16 +139,23 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 		syscallarg(int) op;
 		syscallarg(void *) parms;
 	} */
-	struct proc *p = l->l_proc;
 	int error = 0;
 
 	switch(SCARG(uap, op)) {
 	case ARM_SYNC_ICACHE : 
-		error = arm32_sync_icache(p, SCARG(uap, parms), retval);
+		error = arm32_sync_icache(l, SCARG(uap, parms), retval);
 		break;
 
 	case ARM_DRAIN_WRITEBUF : 
-		error = arm32_drain_writebuf(p, SCARG(uap, parms), retval);
+		error = arm32_drain_writebuf(l, SCARG(uap, parms), retval);
+		break;
+
+	case ARM_VFP_FPSCR :
+		error = arm32_vfp_fpscr(l, SCARG(uap, parms), retval);
+		break;
+
+	case ARM_FPU_USED :
+		error = arm32_fpu_used(l, SCARG(uap, parms), retval);
 		break;
 
 	default:
@@ -110,4 +165,18 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 	return (error);
 }
   
-/* End of sys_machdep.c */
+int
+cpu_lwp_setprivate(lwp_t *l, void *addr)
+{
+#ifdef _ARM_ARCH_6
+	if (l == curlwp) {
+		u_int val = (u_int)addr;
+		kpreempt_disable();
+		armreg_tpidruro_write(val);
+		kpreempt_enable();
+	}
+	return 0;
+#else
+	return 0;
+#endif
+}

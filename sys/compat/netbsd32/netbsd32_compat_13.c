@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_13.c,v 1.24 2007/12/20 23:03:01 dsl Exp $	*/
+/*	$NetBSD: netbsd32_compat_13.c,v 1.26 2014/01/24 22:44:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_13.c,v 1.24 2007/12/20 23:03:01 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_13.c,v 1.26 2014/01/24 22:44:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,11 +62,14 @@ compat_13_netbsd32_sigprocmask(struct lwp *l, const struct compat_13_netbsd32_si
 	} */
 	sigset13_t ness, oess;
 	sigset_t nbss, obss;
+	struct proc *p = l->l_proc;
 	int error;
 
 	ness = SCARG(uap, mask);
 	native_sigset13_to_sigset(&ness, &nbss);
+	mutex_enter(p->p_lock);
 	error = sigprocmask1(l, SCARG(uap, how), &nbss, &obss);
+	mutex_exit(p->p_lock);
 	if (error)
 		return (error);
 	native_sigset_to_sigset13(&obss, &oess);

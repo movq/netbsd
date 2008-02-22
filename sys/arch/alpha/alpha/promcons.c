@@ -1,21 +1,21 @@
-/* $NetBSD: promcons.c,v 1.34 2007/11/19 18:51:36 ad Exp $ */
+/* $NetBSD: promcons.c,v 1.39 2014/07/25 08:10:31 dholland Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- * 
+ *
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
+ *
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: promcons.c,v 1.34 2007/11/19 18:51:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: promcons.c,v 1.39 2014/07/25 08:10:31 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,7 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: promcons.c,v 1.34 2007/11/19 18:51:36 ad Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/file.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
@@ -64,8 +63,18 @@ dev_type_tty(promtty);
 dev_type_poll(prompoll);
 
 const struct cdevsw prom_cdevsw = {
-	promopen, promclose, promread, promwrite, promioctl,
-	promstop, promtty, prompoll, nommap, ttykqfilter, D_TTY
+	.d_open = promopen,
+	.d_close = promclose,
+	.d_read = promread,
+	.d_write = promwrite,
+	.d_ioctl = promioctl,
+	.d_stop = promstop,
+	.d_tty = promtty,
+	.d_poll = prompoll,
+	.d_mmap = nommap,
+	.d_kqfilter = ttykqfilter,
+	.d_discard = nodiscard,
+	.d_flag = D_TTY
 };
 
 #define	PROM_POLL_HZ	50
@@ -92,14 +101,14 @@ promopen(dev_t dev, int flag, int mode, struct lwp *l)
 		callout_init(&prom_ch, 0);
 		callo = true;
 	}
- 
+
 	if (!pmap_uses_prom_console() || unit >= 1)
 		return ENXIO;
 
 	s = spltty();
 
 	if (!prom_tty[unit]) {
-		tp = prom_tty[unit] = ttymalloc();
+		tp = prom_tty[unit] = tty_alloc();
 		tty_attach(tp);
 	} else
 		tp = prom_tty[unit];
@@ -137,7 +146,7 @@ promopen(dev_t dev, int flag, int mode, struct lwp *l)
 	}
 	return error;
 }
- 
+
 int
 promclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
@@ -149,7 +158,7 @@ promclose(dev_t dev, int flag, int mode, struct lwp *l)
 	ttyclose(tp);
 	return 0;
 }
- 
+
 int
 promread(dev_t dev, struct uio *uio, int flag)
 {
@@ -157,20 +166,20 @@ promread(dev_t dev, struct uio *uio, int flag)
 
 	return ((*tp->t_linesw->l_read)(tp, uio, flag));
 }
- 
+
 int
 promwrite(dev_t dev, struct uio *uio, int flag)
 {
 	struct tty *tp = prom_tty[minor(dev)];
- 
+
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
 }
- 
+
 int
 prompoll(dev_t dev, int events, struct lwp *l)
 {
 	struct tty *tp = prom_tty[minor(dev)];
- 
+
 	return ((*tp->t_linesw->l_poll)(tp, events, l));
 }
 
@@ -257,8 +266,18 @@ promtty(dev_t dev)
  * NEVER REMOVE!
  */
 const struct cdevsw prom_cdevsw = {
-	noopen, noclose, noread, nowrite, noioctl,
-	nostop, notty, nopoll, nommap,
+	.d_open = noopen,
+	.d_close = noclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = noioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 #endif /* _PMAP_MAY_USE_PROM_CONSOLE */

@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.5 2007/10/17 19:55:49 garbled Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.8 2016/10/18 22:04:34 jdolecek Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,9 +44,13 @@ extern int isa_pcmciamask;
 /* function mappings */
 #define isa_attach_hook(p, s, iaa)					\
 	genppc_isa_attach_hook(p, s, iaa)
+#define isa_detach_hook(c, s)						\
+	genppc_isa_detach_hook(c, s)
 #define isa_intr_evcnt(ic, irq)						\
 	genppc_isa_intr_evcnt(ic, irq)
 #define isa_intr_establish(ic, irq, type, level, fun, arg)		\
+	genppc_isa_intr_establish(ic, irq, type, level, fun, arg)
+#define isa_intr_establish_xname(ic, irq, type, level, fun, arg, xname)	\
 	genppc_isa_intr_establish(ic, irq, type, level, fun, arg)
 #define isa_intr_disestablish(ic, arg)					\
 	genppc_isa_intr_disestablish(ic, arg)

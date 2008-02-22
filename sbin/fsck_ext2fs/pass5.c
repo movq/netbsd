@@ -1,4 +1,4 @@
-/*	$NetBSD: pass5.c,v 1.14 2007/11/13 13:57:52 tsutsui Exp $	*/
+/*	$NetBSD: pass5.c,v 1.20 2012/08/26 09:33:18 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,11 +40,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +58,7 @@
 #if 0
 static char sccsid[] = "@(#)pass5.c	8.6 (Berkeley) 11/30/94";
 #else
-__RCSID("$NetBSD: pass5.c,v 1.14 2007/11/13 13:57:52 tsutsui Exp $");
+__RCSID("$NetBSD: pass5.c,v 1.20 2012/08/26 09:33:18 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -72,8 +67,9 @@ __RCSID("$NetBSD: pass5.c,v 1.14 2007/11/13 13:57:52 tsutsui Exp $");
 #include <ufs/ufs/dinode.h>
 #include <ufs/ext2fs/ext2fs_dinode.h>
 #include <ufs/ext2fs/ext2fs.h>
+#include <inttypes.h>
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <stdio.h>
 
 #include "fsutil.h"
@@ -81,7 +77,7 @@ __RCSID("$NetBSD: pass5.c,v 1.14 2007/11/13 13:57:52 tsutsui Exp $");
 #include "extern.h"
 
 
-void print_bmap(u_char *,u_int32_t);
+static void print_bmap(char *, uint32_t);
 
 void
 pass5(void)
@@ -90,7 +86,7 @@ pass5(void)
 	struct m_ext2fs *fs = &sblock;
 	daddr_t dbase, dmax;
 	daddr_t d;
-	long i, j;
+	uint32_t i, j;
 	struct inodesc idesc[3];
 	struct bufarea *ino_bitmap = NULL, *blk_bitmap = NULL;
 	char *ibmap, *bbmap;
@@ -104,7 +100,7 @@ pass5(void)
 	ibmap = malloc(fs->e2fs_bsize);
 	bbmap = malloc(fs->e2fs_bsize);
 	if (ibmap == NULL || bbmap == NULL) {
-		errexit("out of memory\n");
+		errexit("out of memory");
 	}
 
 	for (c = 0; c < fs->e2fs_ncg; c++) {
@@ -167,13 +163,13 @@ pass5(void)
 				break;
 
 			default:
-				errexit("BAD STATE %d FOR INODE I=%ld\n",
+				errexit("BAD STATE %d FOR INODE I=%"PRIu32,
 				    statemap[j], j);
 			}
 		}
 
 		/* fill in unused par of the inode map */
-		for (i = fs->e2fs.e2fs_ipg / NBBY; i < fs->e2fs_bsize; i++)
+		for (i = fs->e2fs.e2fs_ipg / NBBY; i < (uint32_t)fs->e2fs_bsize; i++)
 			ibmap[i] = 0xff; 
 
 		dbase = c * sblock.e2fs.e2fs_bpg +
@@ -266,16 +262,16 @@ pass5(void)
 	free(bbmap);
 }
 
-void 
-print_bmap(u_char *map, u_int32_t size)
+static void 
+print_bmap(char *map, uint32_t size)
 {
-	int i, j;
+	uint32_t i, j;
 
 	i = 0;
 	while (i < size) {
 		printf("%04x: ",i);
 		for (j = 0; j < 16; j++, i++)
-			printf("%02x ", (u_int)map[i] & 0xff);
+			printf("%02x ", (unsigned char)map[i] & 0xff);
 		printf("\n");
 	}
 }

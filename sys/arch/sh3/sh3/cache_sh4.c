@@ -1,4 +1,4 @@
-/*	$NetBSD: cache_sh4.c,v 1.17 2007/03/29 01:51:49 uwe Exp $	*/
+/*	$NetBSD: cache_sh4.c,v 1.24 2013/05/14 14:11:43 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache_sh4.c,v 1.17 2007/03/29 01:51:49 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache_sh4.c,v 1.24 2013/05/14 14:11:43 tsutsui Exp $");
+
+#include "opt_cache.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,8 +118,11 @@ sh4_cache_config(void)
 	r |= SH4_CCR_CB;
 #endif
 
-	sh4_icache_sync_all();
 	RUN_P2;
+	if (r & SH4_CCR_EMODE)
+		SH4_EMODE_CACHE_FLUSH();
+	else
+		SH4_CACHE_FLUSH();
 	_reg_write_4(SH4_CCR, SH4_CCR_ICI|SH4_CCR_OCI);
 	_reg_write_4(SH4_CCR, r);
 	RUN_P1;
@@ -162,6 +160,16 @@ sh4_cache_config(void)
 	sh_cache_ops._dcache_wb_range		= sh4_dcache_wb_range;
 
 	switch (cpu_product) {
+	case CPU_PRODUCT_7750:	/* FALLTHROUGH */
+	case CPU_PRODUCT_7750S:
+		/* memory mapped d$ can only be accessed from p2 */
+		sh_cache_ops._dcache_wbinv_all
+			= (void *)SH3_P1SEG_TO_P2SEG(sh4_dcache_wbinv_all);
+		sh_cache_ops._dcache_wbinv_range_index
+			= (void *)SH3_P1SEG_TO_P2SEG(sh4_dcache_wbinv_range_index);
+		break;
+
+#if !defined(SH4_CACHE_DISABLE_EMODE)
 	case CPU_PRODUCT_7750R:
 	case CPU_PRODUCT_7751R:
 		if (!(r & SH4_CCR_EMODE)) {
@@ -172,6 +180,7 @@ sh4_cache_config(void)
 		sh_cache_ops._dcache_wbinv_all = sh4_emode_dcache_wbinv_all;
 		sh_cache_ops._dcache_wbinv_range_index = sh4_emode_dcache_wbinv_range_index;
 		break;
+#endif
 	}
 }
 
@@ -216,14 +225,16 @@ sh4_icache_sync_all(void)
 	vaddr_t va = 0;
 	vaddr_t eva = SH4_ICACHE_SIZE;
 
-	sh4_dcache_wbinv_all();
+	/* d$ index ops must be called via P2 on 7750 and 7750S */
+	(*sh_cache_ops._dcache_wbinv_all)();
 
 	RUN_P2;
 	while (va < eva) {
 		cache_sh4_op_8lines_32(va, SH4_CCIA, CCIA_ENTRY_MASK, CCIA_V);
 		va += 32 * 8;
 	}
-	RUN_P1;
+	/* assume we are returning into a P1 caller */
+	PAD_P1_SWITCH;
 }
 
 void
@@ -242,7 +253,8 @@ sh4_icache_sync_range(vaddr_t va, vsize_t sz)
 		_reg_write_4(ccia, va & CCIA_TAGADDR_MASK); /* V = 0 */
 		va += 32;
 	}
-	RUN_P1;
+	/* assume we are returning into a P1 caller */
+	PAD_P1_SWITCH;
 }
 
 void
@@ -251,7 +263,8 @@ sh4_icache_sync_range_index(vaddr_t va, vsize_t sz)
 	vaddr_t eva = round_line(va + sz);
 	va = trunc_line(va);
 
-	sh4_dcache_wbinv_range_index(va, eva - va);
+	/* d$ index ops must be called via P2 on 7750 and 7750S */
+	(*sh_cache_ops._dcache_wbinv_range_index)(va, eva - va);
 
 	RUN_P2;
 	while ((eva - va) >= (8 * 32)) {
@@ -263,7 +276,8 @@ sh4_icache_sync_range_index(vaddr_t va, vsize_t sz)
 		cache_sh4_op_line_32(va, SH4_CCIA, CCIA_ENTRY_MASK, CCIA_V);
 		va += 32;
 	}
-	RUN_P1;
+	/* assume we are returning into a P1 caller */
+	PAD_P1_SWITCH;
 }
 
 void
@@ -272,13 +286,14 @@ sh4_dcache_wbinv_all(void)
 	vaddr_t va = 0;
 	vaddr_t eva = SH4_DCACHE_SIZE;
 
-	RUN_P2;
+	/* RUN_P2; */ /* called via P2 address if necessary */
 	while (va < eva) {
 		cache_sh4_op_8lines_32(va, SH4_CCDA, CCDA_ENTRY_MASK,
 		    (CCDA_U | CCDA_V));
 		va += 32 * 8;
 	}
-	RUN_P1;
+	/* assume we are returning into a P1 caller */
+	PAD_P1_SWITCH;
 }
 
 void
@@ -299,7 +314,7 @@ sh4_dcache_wbinv_range_index(vaddr_t va, vsize_t sz)
 	vaddr_t eva = round_line(va + sz);
 	va = trunc_line(va);
 
-	RUN_P2;
+	/* RUN_P2; */ /* called via P2 address if necessary */
 	while ((eva - va) >= (8 * 32)) {
 		cache_sh4_op_8lines_32(va, SH4_CCDA, CCDA_ENTRY_MASK,
 		    (CCDA_U | CCDA_V));
@@ -311,7 +326,8 @@ sh4_dcache_wbinv_range_index(vaddr_t va, vsize_t sz)
 		    (CCDA_U | CCDA_V));
 		va += 32;
 	}
-	RUN_P1;
+	/* assume we are returning into a P1 caller */
+	PAD_P1_SWITCH;
 }
 
 void
@@ -413,7 +429,8 @@ sh4_emode_icache_sync_all(void)
 		    CCIA_V, 13);
 		va += 32 * 8;
 	}
-	RUN_P1;
+	/* assume we are returning into a P1 caller */
+	PAD_P1_SWITCH;
 }
 
 void
@@ -436,7 +453,8 @@ sh4_emode_icache_sync_range_index(vaddr_t va, vsize_t sz)
 		    CCIA_V, 13);
 		va += 32;
 	}
-	RUN_P1;
+	/* assume we are returning into a P1 caller */
+	PAD_P1_SWITCH;
 }
 
 void
@@ -445,13 +463,11 @@ sh4_emode_dcache_wbinv_all(void)
 	vaddr_t va = 0;
 	vaddr_t eva = SH4_EMODE_DCACHE_SIZE;
 
-	RUN_P2;
 	while (va < eva) {
 		cache_sh4_emode_op_8lines_32(va, SH4_CCDA, CCDA_ENTRY_MASK,
 		    (CCDA_U | CCDA_V), 14);
 		va += 32 * 8;
 	}
-	RUN_P1;
 }
 
 void
@@ -460,7 +476,6 @@ sh4_emode_dcache_wbinv_range_index(vaddr_t va, vsize_t sz)
 	vaddr_t eva = round_line(va + sz);
 	va = trunc_line(va);
 
-	RUN_P2;
 	while ((eva - va) >= (8 * 32)) {
 		cache_sh4_emode_op_8lines_32(va, SH4_CCDA, CCDA_ENTRY_MASK,
 		    (CCDA_U | CCDA_V), 14);
@@ -472,5 +487,4 @@ sh4_emode_dcache_wbinv_range_index(vaddr_t va, vsize_t sz)
 		    (CCDA_U | CCDA_V), 14);
 		va += 32;
 	}
-	RUN_P1;
 }

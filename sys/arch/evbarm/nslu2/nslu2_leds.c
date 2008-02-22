@@ -1,4 +1,4 @@
-/*	$NetBSD: nslu2_leds.c,v 1.7 2007/10/17 19:54:13 garbled Exp $	*/
+/*	$NetBSD: nslu2_leds.c,v 1.10 2013/08/19 22:26:09 matt Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nslu2_leds.c,v 1.7 2007/10/17 19:54:13 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nslu2_leds.c,v 1.10 2013/08/19 22:26:09 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,8 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD: nslu2_leds.c,v 1.7 2007/10/17 19:54:13 garbled Exp $
 #include <sys/device.h>
 #include <sys/callout.h>
 #include <sys/proc.h>
-
-#include <machine/intr.h>
+#include <sys/intr.h>
+#include <sys/cpu.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbcdc.h>
@@ -69,7 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: nslu2_leds.c,v 1.7 2007/10/17 19:54:13 garbled Exp $
 #define	LEDBITS_STATUS		(1u << GPIO_LED_STATUS)
 
 struct slugled_softc {
-	struct device sc_dev;
 	void *sc_tmr_ih;
 	struct callout sc_usb0;
 	void *sc_usb0_ih;
@@ -152,11 +144,11 @@ slugled_intr2(void *arg)
 static int
 slugled_tmr(void *arg)
 {
-	struct clockframe *frame = arg;
+	struct clockframe *cf = arg;
 	uint32_t reg, bit;
 	int is;
 
-	if (CLKF_INTR(frame) || sched_curcpu_runnable_p() ||
+	if (CLKF_INTR(cf) || sched_curcpu_runnable_p() ||
 	    (curlwp != NULL && curlwp != curcpu()->ci_data.cpu_idlelwp))
 		bit = LEDBITS_STATUS;
 	else
@@ -197,9 +189,9 @@ slugled_shutdown(void *arg)
 }
 
 static void
-slugled_defer(struct device *self)
+slugled_defer(device_t self)
 {
-	struct slugled_softc *sc = (struct slugled_softc *) self;
+	struct slugled_softc *sc = device_private(self);
 	struct ixp425_softc *ixsc = ixp425_softc;
 	uint32_t reg;
 	int s;
@@ -221,8 +213,7 @@ slugled_defer(struct device *self)
 	splx(s);
 
 	if (shutdownhook_establish(slugled_shutdown, sc) == NULL)
-		aprint_error("%s: WARNING - Failed to register shutdown hook\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "WARNING - Failed to register shutdown hook\n");
 
 	callout_init(&sc->sc_usb0, 0);
 	callout_setfunc(&sc->sc_usb0, slugled_callout,
@@ -252,14 +243,14 @@ slugled_defer(struct device *self)
 }
 
 static int
-slugled_match(struct device *parent, struct cfdata *match, void *aux)
+slugled_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (slugled_attached == 0);
 }
 
 static void
-slugled_attach(struct device *parent, struct device *self, void *aux)
+slugled_attach(device_t parent, device_t self, void *aux)
 {
 
 	aprint_normal(": LED support\n");
@@ -269,5 +260,5 @@ slugled_attach(struct device *parent, struct device *self, void *aux)
 	config_interrupts(self, slugled_defer);
 }
 
-CFATTACH_DECL(slugled, sizeof(struct slugled_softc),
+CFATTACH_DECL_NEW(slugled, sizeof(struct slugled_softc),
     slugled_match, slugled_attach, NULL, NULL);

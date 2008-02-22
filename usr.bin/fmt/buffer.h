@@ -1,4 +1,4 @@
-/*	$NetBSD: buffer.h,v 1.3 2006/01/04 22:05:26 christos Exp $	*/
+/*	$NetBSD: buffer.h,v 1.5 2017/10/13 00:11:56 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,19 +32,20 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <wchar.h>
 #include <err.h>
 
 #define BUF_SIZE	BUFSIZ
 struct buffer {
-	char *ptr;
-	char *bptr;
-	char *eptr;
+	wchar_t *ptr;
+	wchar_t *bptr;
+	wchar_t *eptr;
 };
 
 static void
 buf_init(struct buffer *buf)
 {
-	buf->ptr = buf->bptr = malloc(BUF_SIZE);
+	buf->ptr = buf->bptr = calloc(BUF_SIZE, sizeof(*buf->ptr));
 	if (buf->ptr == NULL)
 		err(1, "Cannot allocate buffer");
 	buf->eptr = buf->ptr + BUF_SIZE;
@@ -69,7 +63,7 @@ buf_grow(struct buffer *buf, size_t minsize)
 	ptrdiff_t diff;
 	size_t len = (buf->eptr - buf->bptr) + 
 	    (minsize > BUF_SIZE ? minsize : BUF_SIZE);
-	char *nptr = realloc(buf->bptr, len);
+	wchar_t *nptr = realloc(buf->bptr, len * sizeof(*buf->ptr));
 
 	if (nptr == NULL)
 		err(1, "Cannot grow buffer");
@@ -86,7 +80,7 @@ buf_grow(struct buffer *buf, size_t minsize)
 }
 
 static inline void
-buf_putc(struct buffer *buf, char c)
+buf_putc(struct buffer *buf, wchar_t c)
 {
 	if (buf->ptr >= buf->eptr)
 		buf_grow(buf, 1);
@@ -99,7 +93,7 @@ buf_reset(struct buffer *buf)
 	buf->ptr = buf->bptr;
 }
 
-static inline char 
+static inline wchar_t 
 buf_unputc(struct buffer *buf)
 {
 	return buf->ptr > buf->bptr ? *--buf->ptr : '\0';

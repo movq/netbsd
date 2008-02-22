@@ -1,4 +1,4 @@
-/*	$NetBSD: opmbell.c,v 1.21 2007/10/17 19:58:02 garbled Exp $	*/
+/*	$NetBSD: opmbell.c,v 1.27 2015/08/22 14:11:19 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 MINOURA Makoto, Takuya Harakawa.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opmbell.c,v 1.21 2007/10/17 19:58:02 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opmbell.c,v 1.27 2015/08/22 14:11:19 christos Exp $");
 
 #include "bell.h"
 #if NBELL > 0
@@ -63,8 +63,9 @@ __KERNEL_RCSID(0, "$NetBSD: opmbell.c,v 1.21 2007/10/17 19:58:02 garbled Exp $")
 
 #include <machine/opmbellio.h>
 
-#include <x68k/x68k/iodevice.h>
 #include <x68k/dev/opmvar.h>
+
+#include "ioconf.h"
 
 /* In opm.c. */
 void opm_set_volume(int, int);
@@ -111,21 +112,28 @@ void opm_bell_off(void);
 int opm_bell_setup(struct bell_info *);
 int bellmstohz(int);
 
-void bellattach(int);
-
 dev_type_open(bellopen);
 dev_type_close(bellclose);
 dev_type_ioctl(bellioctl);
 
 const struct cdevsw bell_cdevsw = {
-	bellopen, bellclose, noread, nowrite, bellioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	.d_open = bellopen,
+	.d_close = bellclose,
+	.d_read = noread,
+	.d_write = nowrite,
+	.d_ioctl = bellioctl,
+	.d_stop = nostop,
+	.d_tty = notty,
+	.d_poll = nopoll,
+	.d_mmap = nommap,
+	.d_kqfilter = nokqfilter,
+	.d_discard = nodiscard,
+	.d_flag = 0
 };
 
 void
 bellattach(int num)
 {
-	char *mem;
 	u_long size;
 	struct bell_softc *sc;
 	int unit;
@@ -134,13 +142,11 @@ bellattach(int num)
 		return;
 	callout_init(&bell_ch, 0);
 	size = num * sizeof(struct bell_softc);
-	mem = malloc(size, M_DEVBUF, M_NOWAIT);
-	if (mem == NULL) {
+	bell_softc = malloc(size, M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (bell_softc == NULL) {
 		printf("WARNING: no memory for opm bell\n");
 		return;
 	}
-	memset(mem, 0, size);
-	bell_softc = (struct bell_softc *)mem;
 
 	for (unit = 0; unit < num; unit++) {
 		sc = &bell_softc[unit];

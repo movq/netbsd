@@ -1,4 +1,4 @@
-/*	$NetBSD: fileread_bfs.c,v 1.1 2005/12/29 15:20:09 tsutsui Exp $	*/
+/*	$NetBSD: fileread_bfs.c,v 1.3 2014/01/22 16:27:01 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,11 +49,10 @@ fileread(const char *fname, size_t *size)
 	struct ux_partition *partition = vtoc->partition;
 	struct bfs_inode *inode = (void *)SDBOOT_INODEADDR;
 	struct bfs_dirent *dirent = (void *)SDBOOT_DIRENTADDR;
-	int i, n, err, block_size, bfs_sector;
+	int i, n, err, bfs_sector;
 
 	if (pdinfo->magic != PDINFO_MAGIC)
 		return BERR_PDINFO;
-	block_size = pdinfo->geometory.bytes_per_sector;
 
 #if 0
 {

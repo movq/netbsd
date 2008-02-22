@@ -10,9 +10,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -28,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmuvar.h,v 1.6 2007/10/17 19:55:19 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmuvar.h,v 1.9 2016/06/01 05:27:40 macallan Exp $");
 
 #ifndef PMUVAR_H
 #define PMUVAR_H
@@ -75,6 +72,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmuvar.h,v 1.6 2007/10/17 19:55:19 garbled Exp $");
 #define PMU_I2C_CMD		0x9a	/* i2c commands */
 #define PMU_GET_LID_STATE	0xdc	/* Report lid state */
 #define PMU_GET_VERSION		0xea	/* Identify thyself */
+#define PMU_SET_LED		0xee	/* control system LED */
 
 /* Bits in PMU interrupt and interrupt mask bytes */
 #define PMU_INT_ADB_AUTO	0x04	/* ADB autopoll, when PMU_INT_ADB */
@@ -89,6 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmuvar.h,v 1.6 2007/10/17 19:55:19 garbled Exp $");
 #define PMU_POW0_ON		0x80	/* OR this to power ON the device */
 #define PMU_POW0_OFF		0x00	/* leave bit 7 to 0 to power it OFF */
 #define PMU_POW0_HARD_DRIVE	0x04	/* wallstreet/lombard? */
+#define PMU_POW0_MODEM		0x08	/* pismo, maybe others */
 
 /* Bits to use with the PMU_POWER_CTRL command */
 #define PMU_POW_ON		0x80	/* OR this to power ON the device */
@@ -100,6 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmuvar.h,v 1.6 2007/10/17 19:55:19 garbled Exp $");
 
 /* Bits from PMU_GET_LID_STATE or PMU_INT_ENVIRONMENT on core99 */
 #define PMU_ENV_LID_CLOSED	0x01	/* The lid is closed */
+#define PMU_ENV_POWER_BUTTON	0x08	/* power button on ADB-less Macs */
 
 /* PMU PMU_POWER_EVENTS commands */
 enum {
@@ -151,5 +151,6 @@ struct pmu_ops {
 
 void pmu_poweroff(void);
 void pmu_restart(void);
+void pmu_modem(int);
 
 #endif /* PMUVAR_H */

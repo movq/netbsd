@@ -1,4 +1,4 @@
-/*	$NetBSD: makecontext.c,v 1.2 2005/12/24 21:41:01 perry Exp $	*/
+/*	$NetBSD: makecontext.c,v 1.6 2012/03/22 12:31:32 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: makecontext.c,v 1.2 2005/12/24 21:41:01 perry Exp $");
+__RCSID("$NetBSD: makecontext.c,v 1.6 2012/03/22 12:31:32 skrll Exp $");
 #endif
 
 #include <inttypes.h>
@@ -51,6 +44,8 @@ __RCSID("$NetBSD: makecontext.c,v 1.2 2005/12/24 21:41:01 perry Exp $");
 #include <sys/types.h>
 #include <machine/frame.h>
 
+void __resumecontext(void) __dead;
+
 void
 makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 {
@@ -60,8 +55,6 @@ makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 	uintptr_t *sp;
 	int i;
 	va_list ap;
-
-	void __resumecontext(void);
 
 	/* LINTED uintptr_t is safe */
 	sp  = (uintptr_t *)ucp->uc_stack.ss_sp;
@@ -88,6 +81,7 @@ makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 	}
 	gr[_REG_PCOQH] = fp | HPPA_PC_PRIV_USER;
 	gr[_REG_PCOQT] = (fp + 4) | HPPA_PC_PRIV_USER;
+	/* LINTED dp is reg27, ref. above, so initialized */
 	gr[_REG_DP] = dp;
 
 	/* Construct argument list. */

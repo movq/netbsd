@@ -1,11 +1,11 @@
-/*	$NetBSD: mpu_sb.c,v 1.12 2007/10/19 12:00:21 ad Exp $	*/
+/*	$NetBSD: mpu_sb.c,v 1.16 2011/11/23 23:07:32 jmcneill Exp $	*/
 
 /*
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Lennart Augustsson (augustss@NetBSD.org).
+ * by Lennart Augustsson (augustss@NetBSD.org) and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpu_sb.c,v 1.12 2007/10/19 12:00:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpu_sb.c,v 1.16 2011/11/23 23:07:32 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,39 +50,40 @@ __KERNEL_RCSID(0, "$NetBSD: mpu_sb.c,v 1.12 2007/10/19 12:00:21 ad Exp $");
 #include <dev/isa/isavar.h>
 #include <dev/isa/sbdspvar.h>
 
-int	mpu_sb_match(struct device *, struct cfdata *, void *);
-void	mpu_sb_attach(struct device *, struct device *, void *);
+static int	mpu_sb_match(device_t, cfdata_t, void *);
+static void	mpu_sb_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mpu_sb, sizeof(struct mpu_softc),
+CFATTACH_DECL_NEW(mpu_sb, sizeof(struct mpu_softc),
     mpu_sb_match, mpu_sb_attach, NULL, NULL);
 
-int
-mpu_sb_match(struct device *parent, struct cfdata *match,
-    void *aux)
+static int
+mpu_sb_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct audio_attach_args *aa = (struct audio_attach_args *)aux;
-	struct sbdsp_softc *ssc = (struct sbdsp_softc *)parent;
+	struct audio_attach_args *aa = aux;
+	struct sbdsp_softc *ssc = device_private(parent);
 	struct mpu_softc sc;
 
 	if (aa->type != AUDIODEV_TYPE_MPU)
-		return (0);
+		return 0;
 	memset(&sc, 0, sizeof sc);
 	sc.ioh = ssc->sc_mpu_ioh;
 	sc.iot = ssc->sc_mpu_iot;
-	return (mpu_find(&sc));
+	return mpu_find(&sc);
 }
 
-void
-mpu_sb_attach(struct device *parent, struct device *self, void *aux)
+static void
+mpu_sb_attach(device_t parent, device_t self, void *aux)
 {
-	struct sbdsp_softc *ssc = (struct sbdsp_softc *)parent;
-	struct mpu_softc *sc = (struct mpu_softc *)self;
+	struct sbdsp_softc *ssc = device_private(parent);
+	struct mpu_softc *sc = device_private(self);
 
-	printf("\n");
+	aprint_normal("\n");
 
 	sc->ioh = ssc->sc_mpu_ioh;
 	sc->iot = ssc->sc_mpu_iot;
 	sc->model = "SB MPU-401 MIDI UART";
+	sc->sc_dev = self;
+	sc->lock = &ssc->sc_intr_lock;
 
 	mpu_attach(sc);
 }

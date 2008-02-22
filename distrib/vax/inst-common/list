@@ -1,8 +1,9 @@
-#	$NetBSD: list,v 1.8 2007/03/03 06:40:10 apb Exp $
+#	$NetBSD: list,v 1.15 2011/01/14 10:26:37 tsutsui Exp $
 
 # copy the crunched binary, link to it, and kill it
 COPY	${OBJDIR}/instbin	instbin
 LINK	instbin			bin/cat
+LINK	instbin			bin/chgrp
 LINK	instbin			bin/chmod
 LINK	instbin			bin/cp
 LINK	instbin			bin/dd
@@ -21,6 +22,7 @@ LINK	instbin			bin/stty
 LINK	instbin			bin/sync
 LINK	instbin			bin/test
 LINK	instbin			bin/[
+LINK	instbin			sbin/chown
 LINK	instbin			sbin/disklabel
 LINK	instbin			sbin/fsck
 LINK	instbin			sbin/fsck_ffs
@@ -36,7 +38,6 @@ LINK	instbin			sbin/route
 LINK	instbin			sbin/slattach
 LINK	instbin			sbin/umount
 LINK	instbin			usr/bin/awk
-LINK	instbin			usr/bin/chgrp
 LINK	instbin			usr/bin/ftp
 LINK	instbin			usr/bin/gunzip
 LINK	instbin			usr/bin/gzcat
@@ -44,7 +45,6 @@ LINK	instbin			usr/bin/gzip
 LINK	instbin			usr/bin/sed
 LINK	instbin			usr/bin/tar
 # LINK	instbin			usr/sbin/bad144
-LINK	instbin			usr/sbin/chown
 LINK	instbin			usr/sbin/installboot
 SPECIAL	/bin/rm instbin
 
@@ -53,17 +53,14 @@ COPY	${DESTDIR}/dev/MAKEDEV	dev/MAKEDEV
 SPECIAL	cd dev; sh MAKEDEV all
 
 # various files that we need in /etc for the install
-COPY	${DESTDIR}/etc/group		etc
-COPY	${DESTDIR}/etc/master.passwd	etc
-COPY	${DESTDIR}/etc/passwd		etc
-COPY	${DESTDIR}/etc/protocols	etc
-COPY	${DESTDIR}/etc/netconfig	etc
-COPY	${DESTDIR}/etc/pwd.db		etc
-COPY	${DESTDIR}/etc/services		etc
-COPY	${DESTDIR}/etc/spwd.db		etc
-
-# and the common installation tools
-COPY	${TOPDIR}/inst-common/termcap.vt	usr/share/misc/termcap
+COPY	${DESTDIR}/etc/group			etc
+COPY	${DESTDIR}/etc/master.passwd		etc
+COPY	${DESTDIR}/etc/netconfig		etc
+COPY	${DESTDIR}/etc/passwd			etc
+COPY	${DISTRIBDIR}/common/protocols		etc
+COPY	${DESTDIR}/etc/pwd.db			etc
+COPY	${DISTRIBDIR}/common/services		etc
+COPY	${DESTDIR}/etc/spwd.db			etc
 
 SPECIAL	strip /sys/arch/vax/compile/MINIROOT/netbsd
 COPY	/sys/arch/vax/compile/MINIROOT/netbsd	.

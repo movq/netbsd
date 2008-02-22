@@ -1,4 +1,4 @@
-/*	$NetBSD: get_names.c,v 1.13 2007/01/08 17:10:59 christos Exp $	*/
+/*	$NetBSD: get_names.c,v 1.16 2012/12/29 23:44:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)get_names.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: get_names.c,v 1.13 2007/01/08 17:10:59 christos Exp $");
+__RCSID("$NetBSD: get_names.c,v 1.16 2012/12/29 23:44:23 christos Exp $");
 #endif /* not lint */
 
 #include "talk.h"
@@ -51,32 +51,27 @@ extern	CTL_MSG msg;
  * Determine the local and remote user, tty, and machines
  */
 void
-get_names(argc, argv)
-	int argc;
-	char *argv[];
+get_names(int argc, char *argv[])
 {
 	char hostname[MAXHOSTNAMELEN + 1];
 	const char *his_name, *my_name;
 	const char *my_machine_name, *his_machine_name;
-	char *his_tty;
+	const char *his_tty;
 	char *cp;
 	char *names;
 
 	if (argc < 2 ) {
-		printf("usage: talk user [ttyname]\n");
+		fprintf(stderr, "Usage: %s user [ttyname]\n", getprogname());
 		exit(1);
 	}
-	if (!isatty(0)) {
-		printf("Standard input must be a tty, not a pipe or a file\n");
-		exit(1);
-	}
+	if (!isatty(0))
+		errx(EXIT_FAILURE, "Standard input must be a tty, "
+		    "not a pipe or a file");
 	if ((my_name = getlogin()) == NULL) {
 		struct passwd *pw;
 
-		if ((pw = getpwuid(getuid())) == NULL) {
-			printf("You don't exist. Go away.\n");
-			exit(1);
-		}
+		if ((pw = getpwuid(getuid())) == NULL)
+			errx(EXIT_FAILURE, "You don't exist. Go away.");
 		my_name = pw->pw_name;
 	}
 	if ((cp = getenv("TALKHOST")) != NULL)

@@ -1,16 +1,13 @@
 /*
  *	type and other definitions
  *
- *	written by Yasha (ITOH Yasufumi)
+ *	written by ITOH Yasufumi
  *	public domain
  *
- *	$NetBSD: type_local.h,v 1.1 1998/09/01 19:51:09 itohy Exp $
+ *	$NetBSD: type_local.h,v 1.3 2011/02/21 02:31:58 itohy Exp $
  */
 
-#ifdef __STDC__
-# define PROTO(x)	x
-#else
-# define PROTO(x)	()
+#ifndef __STDC__
 # ifndef const
 #  define const
 # endif

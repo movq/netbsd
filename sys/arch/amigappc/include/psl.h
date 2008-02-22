@@ -1,5 +1,3 @@
-/*	$NetBSD: psl.h,v 1.1 2000/05/25 22:12:01 is Exp $ */
-
-#define	spl3()	spl0()		/* XXXX ???? */
+/*	$NetBSD: psl.h,v 1.4 2011/06/19 08:00:56 matt Exp $ */
 
 #include <powerpc/psl.h>

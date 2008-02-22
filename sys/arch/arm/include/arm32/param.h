@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.13 2008/01/19 15:04:10 chris Exp $	*/
+/*	$NetBSD: param.h,v 1.25 2017/06/09 01:16:54 chs Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe.
@@ -35,8 +35,8 @@
 #ifndef	_ARM_ARM32_PARAM_H_
 #define	_ARM_ARM32_PARAM_H_
 
-#ifdef _KERNEL
-#  include <machine/cpu.h>
+#ifdef _KERNEL_OPT
+# include "opt_arm32_pmap.h"
 #endif
 
 /*
@@ -45,56 +45,46 @@
 /* These are defined in the Port File before it includes
  * this file. */
 
+#ifndef PGSHIFT
+#if defined(_ARM_ARCH_6)
+#define	PGSHIFT		13		/* LOG2(NBPG) */
+#else
 #define	PGSHIFT		12		/* LOG2(NBPG) */
+#endif
+#endif
 #define	NBPG		(1 << PGSHIFT)	/* bytes/page */
 #define	PGOFSET		(NBPG-1)	/* byte offset into page */
 #define	NPTEPG		(NBPG/(sizeof (pt_entry_t)))
 
 
-#define SSIZE           1               /* initial stack size/NBPG */
-#define SINCR           1               /* increment of stack/NBPG */
-#define UPAGES          2               /* pages of u-area */
-#define USPACE          (UPAGES * NBPG) /* total size of u-area */
+#define SSIZE		1		/* initial stack size/NBPG */
+#define SINCR		1		/* increment of stack/NBPG */
+#define USPACE		8192		/* total size of u-area */
+#define UPAGES		(USPACE / NBPG)	/* pages of u-area */
 
 #ifndef MSGBUFSIZE
-#define MSGBUFSIZE	NBPG		/* default message buffer size */
-#endif
-
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
+#define MSGBUFSIZE	16384	 	/* default message buffer size */
 #endif
 
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
  */
-#define	NKMEMPAGES_MIN_DEFAULT	((6 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((7 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MIN_DEFAULT	((8 * 1024 * 1024) >> PAGE_SHIFT)
+#define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
 
 /* Constants used to divide the USPACE area */
 
 /*
  * The USPACE area contains :
- * 1. the user structure for the process
- * 2. the fp context for FP emulation
- * 3. the kernel (svc) stack
+ * 1. the pcb structure for the process
+ * 2. the kernel (svc) stack
  *
  * The layout of the area looks like this
  *
- * | user area | FP context | kernel stack |
+ * | uarea | kernel stack |
  *
- * The size of the user area is known.
- * The size of the FP context is variable depending of the FP emulator
- * in use and whether there is hardware FP support. However we can put
- * an upper limit on it.
+ * The size of the uarea is known.
  * The kernel stack should be at least 4K is size.
  *
  * The stack top addresses are used to set the stack pointers. The stack bottom
@@ -102,18 +92,19 @@
  *
  */
 
-#define FPCONTEXTSIZE			(0x100)
 #define USPACE_SVC_STACK_TOP		(USPACE)
-#define USPACE_SVC_STACK_BOTTOM		(sizeof(struct user) + FPCONTEXTSIZE + 10)
+#define USPACE_SVC_STACK_BOTTOM		(sizeof(struct pcb))
 
-#define arm_btop(x)			((x) >> PGSHIFT)
-#define arm_ptob(x)			((x) << PGSHIFT)
+#define arm_btop(x)			((unsigned)(x) >> PGSHIFT)
+#define arm_ptob(x)			((unsigned)(x) << PGSHIFT)
 #define arm_trunc_page(x)		((unsigned)(x) & ~PGOFSET)
     
 #ifdef _KERNEL
 #ifndef _LOCORE
-void	delay __P((unsigned));
+#ifndef __HIDE_DELAY
+void	delay(unsigned);
 #define DELAY(x)	delay(x)
+#endif
 #endif
 #endif
 

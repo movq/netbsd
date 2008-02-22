@@ -1,4 +1,4 @@
-/*	$NetBSD: grfabs_et.c,v 1.27 2007/03/06 14:40:25 tsutsui Exp $	*/
+/*	$NetBSD: grfabs_et.c,v 1.34 2010/04/13 11:31:11 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -46,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grfabs_et.c,v 1.27 2007/03/06 14:40:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grfabs_et.c,v 1.34 2010/04/13 11:31:11 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -92,15 +87,15 @@ __KERNEL_RCSID(0, "$NetBSD: grfabs_et.c,v 1.27 2007/03/06 14:40:25 tsutsui Exp $
 /*
  * Function decls
  */
-static void       init_view __P((view_t *, bmap_t *, dmode_t *, box_t *));
-static colormap_t *alloc_colormap __P((dmode_t *));
-static void	  et_display_view __P((view_t *));
-static view_t	  *et_alloc_view __P((dmode_t *, dimen_t *, u_char));
-static void	  et_free_view __P((view_t *));
-static void	  et_loadmode __P((struct grfvideo_mode *, et_sv_reg_t *));
-static void	  et_remove_view __P((view_t *));
-static void	  et_save_view __P((view_t *));
-static int	  et_use_colormap __P((view_t *, colormap_t *));
+static void       init_view(view_t *, bmap_t *, dmode_t *, box_t *);
+static colormap_t *alloc_colormap(dmode_t *);
+static void	  et_display_view(view_t *);
+static view_t	  *et_alloc_view(dmode_t *, dimen_t *, u_char);
+static void	  et_free_view(view_t *);
+static void	  et_loadmode(struct grfvideo_mode *, et_sv_reg_t *);
+static void	  et_remove_view(view_t *);
+static void	  et_save_view(view_t *);
+static int	  et_use_colormap(view_t *, colormap_t *);
 
 /*
  * Our function switch table
@@ -173,8 +168,7 @@ struct grfabs_et_priv {
  * Initialize list of posible video modes.
  */
 void
-et_probe_video(modelp)
-MODES	*modelp;
+et_probe_video(MODES *modelp)
 {
 	dmode_t	*dm;
 	int	i;
@@ -185,8 +179,7 @@ MODES	*modelp;
 }
 
 static void
-et_display_view(v)
-view_t *v;
+et_display_view(view_t *v)
 {
 	dmode_t		*dm = v->mode;
 	bmap_t		*bm = v->bitmap;
@@ -226,8 +219,7 @@ view_t *v;
 }
 
 void
-et_remove_view(v)
-view_t *v;
+et_remove_view(view_t *v)
 {
 	dmode_t *mode = v->mode;
 
@@ -242,8 +234,7 @@ view_t *v;
 }
 
 void
-et_save_view(v)
-view_t *v;
+et_save_view(view_t *v)
 {
 	bmap_t		*bm = v->bitmap;
 	u_char		font_height;
@@ -288,10 +279,10 @@ view_t *v;
 }
 
 void
-et_free_view(v)
-view_t *v;
+et_free_view(view_t *v)
 {
-	if(v) {
+
+	if (v) {
 		et_remove_view(v);
 		if (v->colormap != &gra_con_cmap)
 			free(v->colormap, M_DEVBUF);
@@ -305,18 +296,13 @@ view_t *v;
 }
 
 static int
-et_use_colormap(v, cm)
-view_t		*v;
-colormap_t	*cm;
+et_use_colormap(view_t *v, colormap_t *cm)
 {
 	return (0); /* XXX: Nothing here for now... */
 }
 
 static view_t *
-et_alloc_view(mode, dim, depth)
-dmode_t	*mode;
-dimen_t	*dim;
-u_char   depth;
+et_alloc_view(dmode_t *mode, dimen_t *dim, u_char depth)
 {
 	view_t		*v;
 	bmap_t		*bm;
@@ -326,8 +312,7 @@ u_char   depth;
 	if (!atari_realconfig) {
 		v  = &gra_con_view;
 		bm = &con_bm;
-	}
-	else {
+	} else {
 		v  = malloc(sizeof(*v), M_DEVBUF, M_WAITOK);
 		bm = malloc(sizeof(*bm), M_DEVBUF, M_WAITOK);
 	}
@@ -363,8 +348,8 @@ u_char   depth;
 		sa->fb_size  = 0;
 		bm->plane    = (u_char *)sa->sv_fb;
 		et_loadmode(mode->data, &sa->sv_regs);
-	}
-	else v->save_area = NULL;
+	} else
+		v->save_area = NULL;
 	
 	v->colormap = alloc_colormap(mode);
 	if (v->colormap) {
@@ -380,22 +365,17 @@ u_char   depth;
 }
 
 static void
-init_view(v, bm, mode, dbox)
-view_t	*v;
-bmap_t	*bm;
-dmode_t	*mode;
-box_t	*dbox;
+init_view(view_t *v, bmap_t *bm, dmode_t *mode, box_t *dbox)
 {
 	v->bitmap    = bm;
 	v->mode      = mode;
 	v->flags     = 0;
-	bcopy(dbox, &v->display, sizeof(box_t));
+	memcpy(&v->display, dbox, sizeof(box_t));
 }
 
 /* XXX: No more than a stub... */
 static colormap_t *
-alloc_colormap(dm)
-dmode_t		*dm;
+alloc_colormap(dmode_t *dm)
 {
 	colormap_t	*cm;
 	int		i;
@@ -417,7 +397,7 @@ dmode_t		*dm;
  * bus0 for et4000/et6000 cards. The first card found is used.
  */
 int
-et_probe_card()
+et_probe_card(void)
 {
 	pci_chipset_tag_t	pc = NULL; /* XXX */
 	pcitag_t		tag;
@@ -490,9 +470,7 @@ et_probe_card()
 }
 
 static void
-et_loadmode(mode, regs)
-struct grfvideo_mode	*mode;
-et_sv_reg_t		*regs;
+et_loadmode(struct grfvideo_mode *mode, et_sv_reg_t *regs)
 {
 	unsigned short	HDE, VDE;
 	int	    	lace, dblscan;
@@ -535,7 +513,7 @@ et_sv_reg_t		*regs;
 	/*
 	 * Set the clock...
 	 */
-	for(clock = ET_NUMCLOCKS-1; clock > 0; clock--) {
+	for (clock = ET_NUMCLOCKS-1; clock > 0; clock--) {
 		if (et_clockfreqs[clock] <= mode->pixel_clock)
 			break;
 	}
@@ -653,13 +631,12 @@ et_sv_reg_t		*regs;
 	/* I'm unable to try the rest.... */
 	regs->misc_output = tmp;
 
-	if(regs == &loc_regs)
+	if (regs == &loc_regs)
 		et_hwrest(regs);
 }
 
 void
-et_hwsave(et_regs)
-et_sv_reg_t	*et_regs;
+et_hwsave(et_sv_reg_t *et_regs)
 {
 	volatile u_char *ba;
 	int		i, s;
@@ -672,13 +649,13 @@ et_sv_reg_t	*et_regs;
 	 * General VGA registers
 	 */
 	et_regs->misc_output = vgar(ba, GREG_MISC_OUTPUT_R);
-	for(i = 0; i < 25; i++)
+	for (i = 0; i < 25; i++)
 		et_regs->crt[i]  = RCrt(ba, i);
-	for(i = 0; i < 21; i++)
+	for (i = 0; i < 21; i++)
 		et_regs->attr[i] = RAttr(ba, i | 0x20);
-	for(i = 0; i < 9; i++)
+	for (i = 0; i < 9; i++)
 		et_regs->grf[i]  = RGfx(ba, i);
-	for(i = 0; i < 5; i++)
+	for (i = 0; i < 5; i++)
 		et_regs->seq[i]  = RSeq(ba, i);
 
 	/*
@@ -696,8 +673,7 @@ et_sv_reg_t	*et_regs;
 }
 
 void
-et_hwrest(et_regs)
-et_sv_reg_t	*et_regs;
+et_hwrest(et_sv_reg_t *et_regs)
 {
 	volatile u_char *ba;
 	int		i, s;
@@ -713,7 +689,7 @@ et_sv_reg_t	*et_regs;
 	 * General VGA registers
 	 */
 	WSeq(ba, SEQ_ID_RESET, 0x01);
-	for(i = 1; i < 5; i++)
+	for (i = 1; i < 5; i++)
 		WSeq(ba, i, et_regs->seq[i]);
 	WSeq(ba, SEQ_ID_RESET, 0x03);
 
@@ -722,11 +698,11 @@ et_sv_reg_t	*et_regs;
 	 */
 	WCrt(ba, CRT_ID_END_VER_RETR,
 		et_regs->crt[CRT_ID_END_VER_RETR] & 0x7f);
-	for(i = 0; i < 25; i++)
+	for (i = 0; i < 25; i++)
 		WCrt(ba, i, et_regs->crt[i]);
-	for(i = 0; i < 9; i++)
+	for (i = 0; i < 9; i++)
 		WGfx(ba, i, et_regs->grf[i]);
-	for(i = 0; i < 21; i++)
+	for (i = 0; i < 21; i++)
 		WAttr(ba, i | 0x20, et_regs->attr[i]);
 
 	/*

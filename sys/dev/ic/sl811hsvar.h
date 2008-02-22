@@ -1,11 +1,11 @@
-/*	$NetBSD: sl811hsvar.h,v 1.3 2008/01/04 21:17:58 ad Exp $	*/
+/*	$NetBSD: sl811hsvar.h,v 1.12 2016/04/23 10:15:31 skrll Exp $	*/
 
 /*
  * Not (c) 2007 Matthew Orgass
- * This file is public domain, meaning anyone can make any use of part or all 
- * of this file including copying into other works without credit.  Any use, 
- * modified or not, is solely the responsibility of the user.  If this file is 
- * part of a collection then use in the collection is governed by the terms of 
+ * This file is public domain, meaning anyone can make any use of part or all
+ * of this file including copying into other works without credit.  Any use,
+ * modified or not, is solely the responsibility of the user.  If this file is
+ * part of a collection then use in the collection is governed by the terms of
  * the collection.
  */
 
@@ -14,11 +14,9 @@
  */
 
 #include <sys/gcq.h>
-#include <sys/simplelock.h>
-#include "opt_slhci.h"
 
-#define SC_DEV(sc)	(&((sc)->sc_bus.bdev))
-#define SC_NAME(sc)	(SC_DEV(sc)->dv_xname)
+#define SC_DEV(sc)	((sc)->sc_dev)
+#define SC_NAME(sc)	(device_xname(SC_DEV(sc)))
 
 typedef unsigned int Frame;
 struct slhci_pipe;
@@ -38,8 +36,6 @@ struct slhci_transfers {
 	int16_t len[2];		     	/* length of transfer or -1 if none */
 	uint8_t current_tregs[2][4]; 	/* ab, ADR, LEN, PID, DEV */
 	uint8_t copyin[2]; 		/* copyin ADR, LEN */
-	uint8_t rootaddr;		/* device address of root hub */
-	uint8_t rootconf;		/* root configuration */
 	uint8_t max_current;		/* max current / 2 */
 	uint8_t sltype;			/* revision */
 };
@@ -53,10 +49,11 @@ typedef void (*PowerFunc)(void *, enum power_change);
 
 /* Attachment code must call slhci_preinit before registering the ISR */
 struct slhci_softc {
+	device_t		sc_dev;
 	struct usbd_bus		sc_bus;
 
-	struct simplelock	sc_lock;
-	struct simplelock	sc_wait_lock;
+	kmutex_t		sc_lock;
+	kmutex_t		sc_intr_lock;
 
 	struct slhci_transfers	sc_transfers;	/* Info useful in transfers. */
 
@@ -69,7 +66,7 @@ struct slhci_softc {
 
 	PowerFunc		sc_enable_power;
 
-	struct device		*sc_child;
+	device_t		sc_child;
 
 	struct timeval		sc_reserved_warn_rate;
 	struct timeval		sc_overflow_warn_rate;
@@ -81,16 +78,16 @@ struct slhci_softc {
 	int			sc_mem_use; /* XXX SLHCI_MEM_ACCOUNTING */
 
 	uint8_t			sc_ier; 	/* enabled interrupts */
-	uint8_t			sc_stride;	/* port stride */
+	uint32_t		sc_stride;	/* port stride */
 };
 
 /* last preinit arguments are: max current (in mA, not mA/2), port stride */
 /* register access uses byte access, but stride offsets the data port */
 int  slhci_supported_rev(uint8_t);
-void slhci_preinit(struct slhci_softc *, PowerFunc, bus_space_tag_t, 
-    bus_space_handle_t, uint16_t, uint8_t);
+void slhci_preinit(struct slhci_softc *, PowerFunc, bus_space_tag_t,
+    bus_space_handle_t, uint16_t, uint32_t);
 int  slhci_attach(struct slhci_softc *);
 int  slhci_detach(struct slhci_softc *, int);
-int  slhci_activate(struct device *, enum devact);
+int  slhci_activate(device_t, enum devact);
 int  slhci_intr(void *);
 

@@ -1,4 +1,4 @@
-/*      $NetBSD: catman.c,v 1.26 2006/04/10 14:39:06 chuck Exp $       */
+/*      $NetBSD: catman.c,v 1.37 2016/05/29 22:33:39 dholland Exp $       */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,9 +28,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+#ifndef lint
+__RCSID("$NetBSD: catman.c,v 1.37 2016/05/29 22:33:39 dholland Exp $");
+#endif /* not lint */
+
 #include <sys/types.h>
 #include <sys/queue.h>
-#include <sys/cdefs.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -67,7 +64,6 @@ int dowhatis = 0;
 
 TAG *defp;	/* pointer to _default list */
 
-int		main(int, char * const *);
 static void	setdefentries(char *, char *, const char *);
 static void	uniquepath(void);
 static void	catman(void);
@@ -77,7 +73,7 @@ static void	setcatsuffix(char *, const char *, const char *);
 static void	makecat(const char *, const char *, const char *, const char *);
 static void	makewhatis(void);
 static void	dosystem(const char *);
-static void	usage(void);
+__dead static void	usage(void);
 
 
 int
@@ -141,8 +137,8 @@ setdefentries(char *m_path, char *m_add, const char *sections)
 {
 	TAG *defnewp, *sectnewp, *subp;
 	ENTRY *e_defp, *e_subp;
-	const char *p;
-	char *slashp, *machine;
+	const char *p, *slashp;
+	char *machine;
 	char buf[MAXPATHLEN * 2];
 	int i;
 
@@ -171,7 +167,7 @@ setdefentries(char *m_path, char *m_add, const char *sections)
 			err(1, "malloc");
 		for (p = sections; *p;) {
 			i = snprintf(buf, sizeof(buf), "man%c", *p++);
-			for (; *p && !isdigit((unsigned char)*p) && i < sizeof(buf) - 1; i++)
+			for (; *p && !isdigit((unsigned char)*p) && i < (int)sizeof(buf) - 1; i++)
 				buf[i] = *p++;
 			buf[i] = '\0';
 			if (addentry(sectnewp, buf, 0) < 0)
@@ -429,13 +425,19 @@ scanmandir(const char *catdir, const char *mandir)
 					continue;
 				}
 				buffer[len] = '\0';
-				bp = basename(buffer);
-				strlcpy(tmp, manpage, sizeof(tmp));
-				snprintf(manpage, sizeof(manpage), "%s/%s",
-				    dirname(tmp), bp);
-				strlcpy(tmp, catpage, sizeof(tmp));
-				snprintf(catpage, sizeof(catpage), "%s/%s",
-				    dirname(tmp), buffer);
+
+				if (strcmp(buffer, basename(buffer)) == 0) {
+					bp = basename(buffer);
+					strlcpy(tmp, manpage, sizeof(tmp));
+					snprintf(manpage, sizeof(manpage),
+					    "%s/%s", dirname(tmp), bp);
+					strlcpy(tmp, catpage, sizeof(tmp));
+					snprintf(catpage, sizeof(catpage),
+					    "%s/%s", dirname(tmp), buffer);
+				} else {
+					*linkname = '\0';
+				}
+
 			}
 			else
 				*linkname = '\0';
@@ -532,7 +534,7 @@ splitentry(char *s, char *first, size_t firstlen, char *second,
 		;
 	if (*c == '\0')
 		return(0);
-	if (c - s + 1 > firstlen)
+	if ((size_t)(c - s + 1) > firstlen)
 		return(0);
 	strncpy(first, s, c-s);
 	first[c-s] = '\0';
@@ -565,18 +567,22 @@ setcatsuffix(char *catpage, const char *suffix, const char *crunchsuff)
 
 static void
 makecat(const char *manpage, const char *catpage, const char *buildcmd, 
-	const char *crunchcmd)
+    const char *crunchcmd)
 {
 	char crunchbuf[1024];
 	char sysbuf[2048];
+	size_t len;
 
-	snprintf(sysbuf, sizeof(sysbuf), buildcmd, manpage);
+	len = snprintf(sysbuf, sizeof(sysbuf), buildcmd, manpage);
+	if (len > sizeof(sysbuf))
+		errx(1, "snprintf");
 
 	if (*crunchcmd != '\0') {
 		snprintf(crunchbuf, sizeof(crunchbuf), crunchcmd, catpage);
-		snprintf(sysbuf, sizeof(sysbuf), "%s | %s", sysbuf, crunchbuf);
+		snprintf(sysbuf + len, sizeof(sysbuf) - len, " | %s", 
+		    crunchbuf);
 	} else {
-		snprintf(sysbuf, sizeof(sysbuf), "%s > %s", sysbuf, catpage);
+		snprintf(sysbuf + len, sizeof(sysbuf) - len, " > %s", catpage);
 	}
 
 	if (f_noprint == 0)
@@ -596,7 +602,7 @@ makewhatis(void)
 		err(1, "malloc");
 	TAILQ_FOREACH(e_whatdb, &whatdbp->entrylist, q) {
 		snprintf(sysbuf, sizeof(sysbuf), "%s %s",
-		    _PATH_WHATIS, dirname(e_whatdb->s));
+		    _PATH_MAKEWHATIS, dirname(e_whatdb->s));
 		if (f_noprint == 0)
 			printf("%s\n", sysbuf);
 		if (f_noaction == 0)

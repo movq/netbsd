@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.4 2005/12/11 12:18:39 christos Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.8 2011/07/09 17:32:30 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,21 +35,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.4 2005/12/11 12:18:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.8 2011/07/09 17:32:30 matt Exp $");
 
 #include <sys/param.h>
+#include <sys/bus.h>
 #include <sys/systm.h>
-
-#include <machine/bus.h>
 
 /* ARGSUSED */
 int
-bus_space_map(t, bpa, size, flags, bshp)
-	bus_space_tag_t t;
-	bus_addr_t bpa;
-	bus_size_t size;
-	int flags;
-	bus_space_handle_t *bshp;
+bus_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags,
+    bus_space_handle_t *bshp)
 {
 	int cacheable = flags & BUS_SPACE_MAP_CACHEABLE;
 
@@ -65,33 +53,25 @@ bus_space_map(t, bpa, size, flags, bshp)
 		*bshp = MIPS_PHYS_TO_KSEG0(bpa);
 	else
 		*bshp = MIPS_PHYS_TO_KSEG1(bpa);
-	return (0);
+	return 0;
 }
 
 /* ARGSUSED */
 int
-bus_space_alloc(t, rstart, rend, size, alignment, boundary, flags,
-    bpap, bshp)
-	bus_space_tag_t t;
-	bus_addr_t rstart, rend;
-	bus_size_t size, alignment, boundary;
-	int flags;
-	bus_addr_t *bpap;
-	bus_space_handle_t *bshp;
+bus_space_alloc(bus_space_tag_t t, bus_addr_t rstart, bus_addr_t rend,
+    bus_size_t size, bus_size_t alignment, bus_size_t boundary,
+    int flags, bus_addr_t *bpap, bus_space_handle_t *bshp)
 {
 
 	/*
 	 * Not meaningful on any currently-supported DECstation bus.
 	 */
-	return (EINVAL);
+	return EINVAL;
 }
 
 /* ARGSUSED */
 void
-bus_space_free(t, bsh, size)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+bus_space_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 {
 
 	/*
@@ -101,10 +81,7 @@ bus_space_free(t, bsh, size)
 }
 
 void
-bus_space_unmap(t, bsh, size)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+bus_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 {
 
 	/* Nothing to do. */
@@ -112,13 +89,10 @@ bus_space_unmap(t, bsh, size)
 
 /* ARGSUSED */
 int
-bus_space_subregion(t, bsh, offset, size, nbshp)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t offset, size;
-	bus_space_handle_t *nbshp;
+bus_space_subregion(bus_space_tag_t t, bus_space_handle_t bsh,
+    bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
 {
 
 	*nbshp = bsh + offset;
-	return (0);
+	return 0;
 }

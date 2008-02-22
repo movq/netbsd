@@ -1,4 +1,4 @@
-/*	$NetBSD: addchnstr.c,v 1.3 2007/01/21 13:25:36 jdc Exp $	*/
+/*	$NetBSD: addchnstr.c,v 1.6 2013/11/09 11:16:59 blymn Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: addchnstr.c,v 1.3 2007/01/21 13:25:36 jdc Exp $");
+__RCSID("$NetBSD: addchnstr.c,v 1.6 2013/11/09 11:16:59 blymn Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -129,8 +122,11 @@ mvwaddchnstr(WINDOW *win, int y, int x, const chtype *chstr, int n)
 /*
  * waddchnstr --
  *	Add a string (at most n characters) to the given window
- *	starting at (_cury, _curx).  If n is negative, add the
- *	entire string.
+ *	starting at (_cury, _curx) until the end of line is reached or
+ *      n characters have been added.  If n is negative, add as much
+ *	of the string that will fit on the current line.  SUSv2 says
+ *      that the addchnstr family does not wrap and strings are truncated
+ *      to the RHS of the window.
  */
 int
 waddchnstr(WINDOW *win, const chtype *chstr, int n)
@@ -139,7 +135,7 @@ waddchnstr(WINDOW *win, const chtype *chstr, int n)
 	const chtype *chp;
 	attr_t	attr;
 	char	*ocp, *cp, *start;
-	int i, ret;
+	int i, ret, ox, oy;
 
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INPUT, "waddchnstr: win = %p, chstr = %p, n = %d\n",
@@ -151,6 +147,10 @@ waddchnstr(WINDOW *win, const chtype *chstr, int n)
 	else
 		for (chp = chstr, len = 0; *chp++; ++len);
 
+	/* check if string is too long for current location */
+	if (len > (win->maxx - win->curx))
+		len = win->maxx - win->curx;
+
 	if ((ocp = malloc(len + 1)) == NULL)
 		return ERR;
 	chp = chstr;
@@ -158,6 +158,8 @@ waddchnstr(WINDOW *win, const chtype *chstr, int n)
 	start = ocp;
 	i = 0;
 	attr = (*chp) & __ATTRIBUTES;
+	ox = win->curx;
+	oy = win->cury;
 	while (len) {
 		*cp = (*chp) & __CHARTEXT;
 		cp++;
@@ -166,7 +168,7 @@ waddchnstr(WINDOW *win, const chtype *chstr, int n)
 		len--;
 		if (((*chp) & __ATTRIBUTES) != attr) {
 			*cp = '\0';
-			if (__waddbytes(win, start, i, attr) == ERR) {
+			if (_cursesi_waddbytes(win, start, i, attr, 0) == ERR) {
 				free(ocp);
 				return ERR;
 			}
@@ -176,7 +178,8 @@ waddchnstr(WINDOW *win, const chtype *chstr, int n)
 		}
 	}
 	*cp = '\0';
-	ret = __waddbytes(win, start, i, attr);
+	ret = _cursesi_waddbytes(win, start, i, attr, 0);
 	free(ocp);
+	wmove(win, oy, ox);
 	return ret;
 }

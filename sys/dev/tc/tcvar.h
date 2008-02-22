@@ -1,4 +1,4 @@
-/* $NetBSD: tcvar.h,v 1.23 2007/10/19 12:01:20 ad Exp $ */
+/* $NetBSD: tcvar.h,v 1.27 2017/06/09 17:55:18 flxd Exp $ */
 
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
@@ -35,6 +35,7 @@
  */
 
 #include <sys/bus.h>
+#include <sys/device.h>
 #include <dev/tc/tcreg.h>
 
 /*
@@ -63,16 +64,16 @@
 #endif /* 1 */
 
 struct tc_softc {
-	struct	device sc_dv;
+	device_t sc_dev;
 
 	int	sc_speed;
 	int	sc_nslots;
 	struct tc_slotdesc *sc_slots;
 
-	const struct evcnt *(*sc_intr_evcnt)(struct device *, void *);
-	void	(*sc_intr_establish)(struct device *, void *,
+	const struct evcnt *(*sc_intr_evcnt)(device_t, void *);
+	void	(*sc_intr_establish)(device_t, void *,
 			int, int (*)(void *), void *);
-	void	(*sc_intr_disestablish)(struct device *, void *);
+	void	(*sc_intr_disestablish)(device_t, void *);
 	bus_dma_tag_t (*sc_get_dma_tag)(int);
 };
 
@@ -92,10 +93,10 @@ struct tcbus_attach_args {
 
 
 	/* TC bus resource management; XXX will move elsewhere eventually. */
-	const struct evcnt *(*tba_intr_evcnt)(struct device *, void *);
-	void	(*tba_intr_establish)(struct device *, void *,
+	const struct evcnt *(*tba_intr_evcnt)(device_t, void *);
+	void	(*tba_intr_establish)(device_t, void *,
 			int, int (*)(void *), void *);
-	void	(*tba_intr_disestablish)(struct device *, void *);
+	void	(*tba_intr_disestablish)(device_t, void *);
 	bus_dma_tag_t (*tba_get_dma_tag)(int);
 };
 
@@ -138,12 +139,12 @@ struct tc_builtin {
 /*
  * Interrupt establishment functions.
  */
-int	tc_checkslot(tc_addr_t, char *);
-void	tcattach(struct device *, struct device *, void *);
-const struct evcnt *tc_intr_evcnt(struct device *, void *);
-void	tc_intr_establish(struct device *, void *, int, int (*)(void *),
+int	tc_checkslot(tc_addr_t, char *, struct tc_rommap **);
+void	tcattach(device_t, device_t, void *);
+const struct evcnt *tc_intr_evcnt(device_t, void *);
+void	tc_intr_establish(device_t, void *, int, int (*)(void *),
 	    void *);
-void	tc_intr_disestablish(struct device *, void *);
+void	tc_intr_disestablish(device_t, void *);
 
 /*
  * Miscellaneous definitions.

@@ -1,4 +1,4 @@
-/*	$NetBSD: sigcode.S,v 1.6 2005/12/11 12:18:46 christos Exp $	*/
+/*	$NetBSD: sigcode.S,v 1.8 2014/02/28 05:41:59 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -31,12 +31,11 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define _NOREGNAMES
 #include <machine/asm.h>
 #include <machine/signal.h>
-#include <sys/syscall.h>
 
 #ifndef SIGCODE_NAME
+#include <sys/syscall.h>
 #define	SIGCODE_NAME	sigcode
 #define	ESIGCODE_NAME	esigcode
 #define	SIGRETURN_NAME	SYS_compat_16___sigreturn14
@@ -46,11 +45,7 @@
 #define SIGNAL_FRAMESIZE	0
 #endif
 #ifndef SIGCALLFRAMESIZE
-#ifdef _LP64
-#define	SIGCALLFRAMESIZE	32
-#else
 #define	SIGCALLFRAMESIZE	16
-#endif
 #endif
 
 /*

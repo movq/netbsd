@@ -1,4 +1,4 @@
-/*	$NetBSD: asc_vsbus.c,v 1.36 2008/02/03 08:41:22 matt Exp $	*/
+/*	$NetBSD: asc_vsbus.c,v 1.44 2016/07/07 06:55:39 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	  This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,36 +31,30 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: asc_vsbus.c,v 1.36 2008/02/03 08:41:22 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asc_vsbus.c,v 1.44 2016/07/07 06:55:39 msaitoh Exp $");
 
 #include "locators.h"
 #include "opt_cputype.h"
 
-#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/errno.h>
 #include <sys/ioctl.h>
-#include <sys/device.h>
 #include <sys/buf.h>
-#include <sys/proc.h>
-#include <sys/user.h>
-#include <sys/reboot.h>
-#include <sys/queue.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsi_message.h>
 
-#include <machine/bus.h>
-#include <machine/vmparam.h>
-
 #include <dev/ic/ncr53c9xreg.h>
 #include <dev/ic/ncr53c9xvar.h>
 
-#include <machine/cpu.h>
+#include <machine/vmparam.h>
 #include <machine/sid.h>
 #include <machine/scb.h>
 #include <machine/vsbus.h>
@@ -83,7 +70,7 @@ struct asc_vsbus_softc {
 	bus_space_handle_t sc_ncrh;		/* ncr bus space handle */
 	bus_dma_tag_t sc_dmat;			/* bus DMA tag */
 	bus_dmamap_t sc_dmamap;
-	void **sc_dmaaddr;
+	uint8_t **sc_dmaaddr;
 	size_t *sc_dmalen;
 	size_t sc_dmasize;
 	unsigned int sc_flags;
@@ -103,46 +90,45 @@ struct asc_vsbus_softc {
 #define	ASC_MAXXFERSIZE		65536
 #define	ASC_FREQUENCY		25000000
 
-static int asc_vsbus_match(struct device *, struct cfdata *, void *);
-static void asc_vsbus_attach(struct device *, struct device *, void *);
+static int asc_vsbus_match(device_t, cfdata_t, void *);
+static void asc_vsbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(asc_vsbus, sizeof(struct asc_vsbus_softc),
+CFATTACH_DECL_NEW(asc_vsbus, sizeof(struct asc_vsbus_softc),
     asc_vsbus_match, asc_vsbus_attach, NULL, NULL);
 
 /*
  * Functions and the switch for the MI code
  */
-static u_char	asc_vsbus_read_reg(struct ncr53c9x_softc *, int);
-static void	asc_vsbus_write_reg(struct ncr53c9x_softc *, int, u_char);
+static uint8_t	asc_vsbus_read_reg(struct ncr53c9x_softc *, int);
+static void	asc_vsbus_write_reg(struct ncr53c9x_softc *, int, uint8_t);
 static int	asc_vsbus_dma_isintr(struct ncr53c9x_softc *);
 static void	asc_vsbus_dma_reset(struct ncr53c9x_softc *);
 static int	asc_vsbus_dma_intr(struct ncr53c9x_softc *);
-static int	asc_vsbus_dma_setup(struct ncr53c9x_softc *, void **,
+static int	asc_vsbus_dma_setup(struct ncr53c9x_softc *, uint8_t **,
 		    size_t *, int, size_t *);
 static void	asc_vsbus_dma_go(struct ncr53c9x_softc *);
 static void	asc_vsbus_dma_stop(struct ncr53c9x_softc *);
 static int	asc_vsbus_dma_isactive(struct ncr53c9x_softc *);
 
-static struct ncr53c9x_glue asc_vsbus_glue = {
-	asc_vsbus_read_reg,
-	asc_vsbus_write_reg,
-	asc_vsbus_dma_isintr,
-	asc_vsbus_dma_reset,
-	asc_vsbus_dma_intr,
-	asc_vsbus_dma_setup,
-	asc_vsbus_dma_go,
-	asc_vsbus_dma_stop,
-	asc_vsbus_dma_isactive,
-	NULL,
+static const struct ncr53c9x_glue asc_vsbus_glue = {
+	.gl_read_reg	= asc_vsbus_read_reg,
+	.gl_write_reg	= asc_vsbus_write_reg,
+	.gl_dma_isintr	= asc_vsbus_dma_isintr,
+	.gl_dma_reset	= asc_vsbus_dma_reset,
+	.gl_dma_intr	= asc_vsbus_dma_intr,
+	.gl_dma_setup	= asc_vsbus_dma_setup,
+	.gl_dma_go	= asc_vsbus_dma_go,
+	.gl_dma_stop	= asc_vsbus_dma_stop,
+	.gl_dma_isactive = asc_vsbus_dma_isactive,
 };
 
-static u_int8_t asc_attached;		/* can't have more than one asc */
+static uint8_t asc_attached;		/* can't have more than one asc */
 
 static int
-asc_vsbus_match( struct device *parent, struct cfdata *cf, void *aux)
+asc_vsbus_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct vsbus_attach_args *va = aux;
-	volatile u_int8_t *ncr_regs;
+	struct vsbus_attach_args * const va = aux;
+	volatile uint8_t *ncr_regs;
 	int dummy;
 
 	if (asc_attached)
@@ -159,7 +145,7 @@ asc_vsbus_match( struct device *parent, struct cfdata *cf, void *aux)
 		return 0;
 	}
 
-	ncr_regs = (volatile u_int8_t *) va->va_addr;
+	ncr_regs = (volatile uint8_t *) va->va_addr;
 
 	/*  *** need to generate an interrupt here
 	 * From trial and error, I've determined that an INT is generated
@@ -185,17 +171,18 @@ asc_vsbus_match( struct device *parent, struct cfdata *cf, void *aux)
  * Attach this instance, and then all the sub-devices
  */
 static void
-asc_vsbus_attach(struct device *parent, struct device *self, void *aux)
+asc_vsbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct vsbus_attach_args *va = aux;
-	struct asc_vsbus_softc *asc = (void *)self;
-	struct ncr53c9x_softc *sc = &asc->sc_ncr53c9x;
+	struct vsbus_attach_args * const va = aux;
+	struct asc_vsbus_softc * const asc = device_private(self);
+	struct ncr53c9x_softc * const sc = &asc->sc_ncr53c9x;
 	int error;
 
 	asc_attached = 1;
 	/*
 	 * Set up glue for MI code early; we use some of it here.
 	 */
+	sc->sc_dev = self;
 	sc->sc_glue = &asc_vsbus_glue;
 
 	asc->sc_bst = va->va_memt;
@@ -204,27 +191,28 @@ asc_vsbus_attach(struct device *parent, struct device *self, void *aux)
 	error = bus_space_map(asc->sc_bst, va->va_paddr - ASC_REG_NCR,
 	    ASC_REG_END, 0, &asc->sc_bsh);
 	if (error) {
-		printf(": failed to map registers: error=%d\n", error);
+		aprint_error(": failed to map registers: error=%d\n", error);
 		return;
 	}
 	error = bus_space_subregion(asc->sc_bst, asc->sc_bsh, ASC_REG_NCR,
 	    ASC_REG_END - ASC_REG_NCR, &asc->sc_ncrh);
 	if (error) {
-		printf(": failed to map ncr registers: error=%d\n", error);
+		aprint_error(": failed to map ncr registers: error=%d\n",
+		    error);
 		return;
 	}
 	if (vax_boardtype == VAX_BTYP_46 || vax_boardtype == VAX_BTYP_48) {
 		error = bus_space_subregion(asc->sc_bst, asc->sc_bsh,
-		    ASC_REG_KA46_ADR, sizeof(u_int32_t), &asc->sc_adrh);
+		    ASC_REG_KA46_ADR, sizeof(uint32_t), &asc->sc_adrh);
 		if (error) {
-			printf(": failed to map adr register: error=%d\n",
+			aprint_error(": failed to map adr register: error=%d\n",
 			     error);
 			return;
 		}
 		error = bus_space_subregion(asc->sc_bst, asc->sc_bsh,
-		    ASC_REG_KA46_DIR, sizeof(u_int32_t), &asc->sc_dirh);
+		    ASC_REG_KA46_DIR, sizeof(uint32_t), &asc->sc_dirh);
 		if (error) {
-			printf(": failed to map dir register: error=%d\n",
+			aprint_error(": failed to map dir register: error=%d\n",
 			     error);
 			return;
 		}
@@ -237,29 +225,37 @@ asc_vsbus_attach(struct device *parent, struct device *self, void *aux)
 		 * them from there and knowing the internals of the 
 		 * bus_space implementation, we cast to bus_space_handles.
 		 */
-		struct vsbus_softc *vsc = (struct vsbus_softc *) parent;
-		asc->sc_adrh = (bus_space_handle_t) (vsc->sc_vsregs + ASC_REG_KA49_ADR);
-		asc->sc_dirh = (bus_space_handle_t) (vsc->sc_vsregs + ASC_REG_KA49_DIR);
+		struct vsbus_softc *vsc = device_private(parent);
+		asc->sc_adrh =
+		    (bus_space_handle_t)(vsc->sc_vsregs + ASC_REG_KA49_ADR);
+		asc->sc_dirh =
+		    (bus_space_handle_t)(vsc->sc_vsregs + ASC_REG_KA49_DIR);
 #if 0
-		printf("\n%s: adrh=0x%08lx dirh=0x%08lx", self->dv_xname,
-		       asc->sc_adrh, asc->sc_dirh);
-		ncr53c9x_debug = NCR_SHOWDMA|NCR_SHOWINTS|NCR_SHOWCMDS|NCR_SHOWPHASE|NCR_SHOWSTART|NCR_SHOWMSGS;
+		printf("\n%s: adrh=0x%08lx dirh=0x%08lx", device_xname(self),
+		    asc->sc_adrh, asc->sc_dirh);
+		ncr53c9x_debug = NCR_SHOWDMA | NCR_SHOWINTS | NCR_SHOWCMDS |
+		    NCR_SHOWPHASE | NCR_SHOWSTART | NCR_SHOWMSGS;
 #endif
 	}
 	error = bus_dmamap_create(asc->sc_dmat, ASC_MAXXFERSIZE, 1, 
 	    ASC_MAXXFERSIZE, 0, BUS_DMA_NOWAIT, &asc->sc_dmamap);
 
-	/* SCSI ID is store in the clock NVRAM at magic address 0xbc */
-	sc->sc_id = (clk_page[0xbc/2] >> clk_tweak) & 7;
+#if defined(VAX46) || defined(VAX48) || defined(VAX49) || defined(VAXANY)
+	if(vax_boardtype != VAX_BTYP_53)
+		/* SCSI ID is store in the clock NVRAM at magic address 0xbc */
+		sc->sc_id = (clk_page[0xbc / 2] >> clk_tweak) & 7;
+	else
+#endif
+		sc->sc_id = 6; /* XXX need to get this from VMB */
 	sc->sc_freq = ASC_FREQUENCY;
 
 	/* gimme MHz */
 	sc->sc_freq /= 1000000;
 
-	scb_vecalloc(va->va_cvec, (void (*)(void *)) ncr53c9x_intr,
+	scb_vecalloc(va->va_cvec, (void (*)(void *))ncr53c9x_intr,
 	    &asc->sc_ncr53c9x, SCB_ISTACK, &asc->sc_intrcnt);
 	evcnt_attach_dynamic(&asc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-	    self->dv_xname, "intr");
+	    device_xname(self), "intr");
 
 	/*
 	 * XXX More of this should be in ncr53c9x_attach(), but
@@ -293,7 +289,7 @@ asc_vsbus_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_minsync = (1000 / sc->sc_freq);
 	sc->sc_maxxfer = 64 * 1024;
 
-	printf("\n%s", self->dv_xname);	/* Pretty print */
+	aprint_normal("\n%s", device_xname(self)); /* Pretty print */
 
 	/* Do the common parts of attachment. */
 	sc->sc_adapter.adapt_minphys = minphys;
@@ -305,41 +301,37 @@ asc_vsbus_attach(struct device *parent, struct device *self, void *aux)
  * Glue functions.
  */
 
-static u_char
+static uint8_t
 asc_vsbus_read_reg(struct ncr53c9x_softc *sc, int reg)
 {
-	struct asc_vsbus_softc *asc = (struct asc_vsbus_softc *)sc;
+	struct asc_vsbus_softc * const asc = (struct asc_vsbus_softc *)sc;
 
 	return bus_space_read_1(asc->sc_bst, asc->sc_ncrh,
-	    reg * sizeof(u_int32_t));
+	    reg * sizeof(uint32_t));
 }
 
 static void
-asc_vsbus_write_reg(sc, reg, val)
-	struct ncr53c9x_softc *sc;
-	int reg;
-	u_char val;
+asc_vsbus_write_reg(struct ncr53c9x_softc *sc, int reg, uint8_t val)
 {
-	struct asc_vsbus_softc *asc = (struct asc_vsbus_softc *)sc;
+	struct asc_vsbus_softc * const asc = (struct asc_vsbus_softc *)sc;
 
 	bus_space_write_1(asc->sc_bst, asc->sc_ncrh,
-	    reg * sizeof(u_int32_t), val);
+	    reg * sizeof(uint32_t), val);
 }
 
 static int
-asc_vsbus_dma_isintr(sc)
-	struct ncr53c9x_softc *sc;
+asc_vsbus_dma_isintr(struct ncr53c9x_softc *sc)
 {
-	struct asc_vsbus_softc *asc = (struct asc_vsbus_softc *)sc;
+	struct asc_vsbus_softc * const asc = (struct asc_vsbus_softc *)sc;
+
 	return bus_space_read_1(asc->sc_bst, asc->sc_ncrh,
-	    NCR_STAT * sizeof(u_int32_t)) & NCRSTAT_INT;
+	    NCR_STAT * sizeof(uint32_t)) & NCRSTAT_INT;
 }
 
 static void
-asc_vsbus_dma_reset(sc)
-	struct ncr53c9x_softc *sc;
+asc_vsbus_dma_reset(struct ncr53c9x_softc *sc)
 {
-	struct asc_vsbus_softc *asc = (struct asc_vsbus_softc *)sc;
+	struct asc_vsbus_softc * const asc = (struct asc_vsbus_softc *)sc;
 
 	if (asc->sc_flags & ASC_MAPLOADED)
 		bus_dmamap_unload(asc->sc_dmat, asc->sc_dmamap);
@@ -347,21 +339,20 @@ asc_vsbus_dma_reset(sc)
 }
 
 static int
-asc_vsbus_dma_intr(sc)
-	struct ncr53c9x_softc *sc;
+asc_vsbus_dma_intr(struct ncr53c9x_softc *sc)
 {
-	struct asc_vsbus_softc *asc = (struct asc_vsbus_softc *)sc;
+	struct asc_vsbus_softc * const asc = (struct asc_vsbus_softc *)sc;
 	u_int tcl, tcm;
 	int trans, resid;
 	
 	if ((asc->sc_flags & ASC_DMAACTIVE) == 0)
-		panic("asc_vsbus_dma_intr: DMA wasn't active");
+		panic("%s: DMA wasn't active", __func__);
 
 	asc->sc_flags &= ~ASC_DMAACTIVE;
 
 	if (asc->sc_dmasize == 0) {
 		/* A "Transfer Pad" operation completed */
-		tcl = NCR_READ_REG(sc, NCR_TCL); 
+		tcl = NCR_READ_REG(sc, NCR_TCL);
 		tcm = NCR_READ_REG(sc, NCR_TCM);
 		NCR_DMA(("asc_vsbus_intr: discarded %d bytes (tcl=%d, tcm=%d)\n",
 		    tcl | (tcm << 8), tcl, tcm));
@@ -396,17 +387,17 @@ asc_vsbus_dma_intr(sc)
 	    tcl, tcm, trans, resid));
 
 	*asc->sc_dmalen -= trans;
-	*asc->sc_dmaaddr = (char *)*asc->sc_dmaaddr + trans;
+	*asc->sc_dmaaddr += trans;
 	
 	asc->sc_xfers++;
 	return 0;
 }
 
 static int
-asc_vsbus_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
+asc_vsbus_dma_setup(struct ncr53c9x_softc *sc, uint8_t **addr, size_t *len,
 		    int datain, size_t *dmasize)
 {
-	struct asc_vsbus_softc *asc = (struct asc_vsbus_softc *)sc;
+	struct asc_vsbus_softc * const asc = (struct asc_vsbus_softc *)sc;
 
 	asc->sc_dmaaddr = addr;
 	asc->sc_dmalen = len;
@@ -415,12 +406,13 @@ asc_vsbus_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
 	} else {
 		asc->sc_flags |= ASC_FROMMEMORY;
 	}
-	if ((vaddr_t) *asc->sc_dmaaddr < VM_MIN_KERNEL_ADDRESS)
-		panic("asc_vsbus_dma_setup: DMA address (%p) outside of kernel",
-		    *asc->sc_dmaaddr);
+	if ((vaddr_t)*asc->sc_dmaaddr < VM_MIN_KERNEL_ADDRESS)
+		panic("%s: DMA address (%p) outside of kernel",
+		    __func__, *asc->sc_dmaaddr);
 
-        NCR_DMA(("%s: start %d@%p,%d\n", sc->sc_dev.dv_xname,
-                (int)*asc->sc_dmalen, *asc->sc_dmaaddr, (asc->sc_flags & ASC_FROMMEMORY)));
+        NCR_DMA(("%s: start %d@%p,%d\n", device_xname(sc->sc_dev),
+            (int)*asc->sc_dmalen, *asc->sc_dmaaddr,
+	    (asc->sc_flags & ASC_FROMMEMORY)));
 	*dmasize = asc->sc_dmasize = min(*dmasize, ASC_MAXXFERSIZE);
 
 	if (asc->sc_dmasize) {
@@ -428,7 +420,8 @@ asc_vsbus_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
 				*asc->sc_dmaaddr, asc->sc_dmasize,
 				NULL /* kernel address */,   
 				BUS_DMA_NOWAIT|VAX_BUS_DMA_SPILLPAGE))
-			panic("%s: cannot load DMA map", sc->sc_dev.dv_xname);
+			panic("%s: cannot load DMA map",
+			    device_xname(sc->sc_dev));
 		bus_dmamap_sync(asc->sc_dmat, asc->sc_dmamap,
 				0, asc->sc_dmasize,
 				asc->sc_flags & ASC_FROMMEMORY
@@ -438,9 +431,10 @@ asc_vsbus_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
 				  asc->sc_dmamap->dm_segs[0].ds_addr);
 		bus_space_write_4(asc->sc_bst, asc->sc_dirh, 0,
 				  asc->sc_flags & ASC_FROMMEMORY);
-		NCR_DMA(("%s: dma-load %lu@0x%08lx\n", sc->sc_dev.dv_xname,
-			asc->sc_dmamap->dm_segs[0].ds_len,
-			asc->sc_dmamap->dm_segs[0].ds_addr));
+		NCR_DMA(("%s: dma-load %lu@0x%08lx\n",
+		    device_xname(sc->sc_dev),
+		    asc->sc_dmamap->dm_segs[0].ds_len,
+		    asc->sc_dmamap->dm_segs[0].ds_addr));
 		asc->sc_flags |= ASC_MAPLOADED;
 	}
 
@@ -450,7 +444,7 @@ asc_vsbus_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
 static void
 asc_vsbus_dma_go(struct ncr53c9x_softc *sc)
 {
-	struct asc_vsbus_softc *asc = (struct asc_vsbus_softc *)sc;
+	struct asc_vsbus_softc * const asc = (struct asc_vsbus_softc *)sc;
 
 	asc->sc_flags |= ASC_DMAACTIVE;
 }
@@ -458,7 +452,7 @@ asc_vsbus_dma_go(struct ncr53c9x_softc *sc)
 static void
 asc_vsbus_dma_stop(struct ncr53c9x_softc *sc)
 {
-	struct asc_vsbus_softc *asc = (struct asc_vsbus_softc *)sc;
+	struct asc_vsbus_softc * const asc = (struct asc_vsbus_softc *)sc;
 
 	if (asc->sc_flags & ASC_MAPLOADED) {
 		bus_dmamap_sync(asc->sc_dmat, asc->sc_dmamap,
@@ -475,7 +469,7 @@ asc_vsbus_dma_stop(struct ncr53c9x_softc *sc)
 static int
 asc_vsbus_dma_isactive(struct ncr53c9x_softc *sc)
 {
-	struct asc_vsbus_softc *asc = (struct asc_vsbus_softc *)sc;
+	struct asc_vsbus_softc * const asc = (struct asc_vsbus_softc *)sc;
 
 	return (asc->sc_flags & ASC_DMAACTIVE) != 0;
 }

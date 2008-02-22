@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_conn.c,v 1.23 2008/01/30 14:08:00 ad Exp $	*/
+/*	$NetBSD: smb_conn.c,v 1.29 2012/04/29 20:27:31 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_conn.c,v 1.23 2008/01/30 14:08:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_conn.c,v 1.29 2012/04/29 20:27:31 dsl Exp $");
 
 /*
  * Connection engine.
@@ -94,12 +87,10 @@ __KERNEL_RCSID(0, "$NetBSD: smb_conn.c,v 1.23 2008/01/30 14:08:00 ad Exp $");
 
 static struct smb_connobj smb_vclist;
 static int smb_vcnext = 1;	/* next unique id for VC */
-
-#ifndef __NetBSD__
-SYSCTL_NODE(_net, OID_AUTO, smb, CTLFLAG_RW, NULL, "SMB protocol");
-#endif
+static kauth_listener_t smb_listener;
 
 MALLOC_DEFINE(M_SMBCONN, "SMB conn", "SMB connection");
+MALLOC_DECLARE(M_SMBCONN);
 
 static void smb_co_init(struct smb_connobj *cp, int level, const char *objname);
 static void smb_co_done(struct smb_connobj *cp);
@@ -110,12 +101,106 @@ static void smb_vc_gone(struct smb_connobj *cp, struct smb_cred *scred);
 static smb_co_free_t smb_share_free;
 static smb_co_gone_t smb_share_gone;
 
-#ifndef __NetBSD__
-static int  smb_sysctl_treedump(SYSCTL_HANDLER_ARGS);
+static int
+smb_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
+    void *arg0, void *arg1, void *arg2, void *arg3)
+{
+	int result, ismember = 0;
+	enum kauth_network_req req;
 
-SYSCTL_PROC(_net_smb, OID_AUTO, treedump, CTLFLAG_RD | CTLTYPE_OPAQUE,
-	    NULL, 0, smb_sysctl_treedump, "S,treedump", "Requester tree");
-#endif
+	if (action != KAUTH_NETWORK_SMB)
+		return KAUTH_RESULT_DEFER;
+
+	result = KAUTH_RESULT_DEFER;
+	req = (enum kauth_network_req)arg0;
+
+	switch (req) {
+	case KAUTH_REQ_NETWORK_SMB_SHARE_ACCESS: {
+		struct smb_share *ssp = arg1;
+		mode_t mode = (mode_t)(uintptr_t)arg2;
+
+		/* Owner can access. */
+		if (kauth_cred_geteuid(cred) == ssp->ss_uid) {
+			result = KAUTH_RESULT_ALLOW;
+			break;
+		}
+
+		/* Try group permissions if member or other if not. */
+		mode >>= 3;
+		if (kauth_cred_ismember_gid(cred, ssp->ss_grp, &ismember) != 0 ||
+		    !ismember)
+			mode >>= 3;
+
+		if ((ssp->ss_mode & mode) == mode)
+			result = KAUTH_RESULT_ALLOW;
+
+		break;
+		}
+
+	case KAUTH_REQ_NETWORK_SMB_SHARE_CREATE: {
+		struct smb_sharespec *shspec = arg1;
+
+		/*
+		 * Only superuser can create shares with different uid and gid
+		 */
+		if (shspec->owner != SMBM_ANY_OWNER &&
+		    shspec->owner != kauth_cred_geteuid(cred))
+			break;
+		if (shspec->group != SMBM_ANY_GROUP &&
+		    (kauth_cred_ismember_gid(cred, shspec->group, &ismember) != 0 || !ismember))
+			break;
+
+		result = KAUTH_RESULT_ALLOW;
+
+		break;
+		}
+
+	case KAUTH_REQ_NETWORK_SMB_VC_ACCESS: {
+		struct smb_vc *vcp = arg1;
+		mode_t mode = (mode_t)(uintptr_t)arg2;
+
+		/* Owner can access. */
+		if (kauth_cred_geteuid(cred) == vcp->vc_uid) {
+			result = KAUTH_RESULT_ALLOW;
+			break;
+		}
+
+		/* Try group permissions if member or other if not. */
+		mode >>= 3;
+		if (kauth_cred_ismember_gid(cred, vcp->vc_grp, &ismember) != 0 ||
+		    !ismember)
+			mode >>= 3;
+
+		if ((vcp->vc_mode & mode) == mode)
+			result = KAUTH_RESULT_ALLOW;
+
+		break;
+		}
+
+	case KAUTH_REQ_NETWORK_SMB_VC_CREATE: {
+		struct smb_vcspec *vcspec = arg1;
+
+		/*
+		 * Only superuser can create VCs with different uid and gid
+		 */
+		if (vcspec->owner != SMBM_ANY_OWNER &&
+		    vcspec->owner != kauth_cred_geteuid(cred))
+			break;
+		if (vcspec->group != SMBM_ANY_GROUP &&
+		    (kauth_cred_ismember_gid(cred, vcspec->group, &ismember) != 0 || !ismember))
+			break;
+
+		result = KAUTH_RESULT_ALLOW;
+
+		break;
+		}
+
+	default:
+		break;
+	}
+
+	return result;
+}
 
 int
 smb_sm_init(void)
@@ -125,6 +210,8 @@ smb_sm_init(void)
 	mutex_enter(&smb_vclist.co_interlock);
 	smb_co_unlock(&smb_vclist);
 	mutex_exit(&smb_vclist.co_interlock);
+	smb_listener = kauth_listen_scope(KAUTH_SCOPE_NETWORK,
+	    smb_listener_cb, NULL);
 	return 0;
 }
 
@@ -138,11 +225,12 @@ smb_sm_done(void)
 		panic("%d connections still active", smb_vclist.co_usecount - 1);
 #endif
 	smb_co_done(&smb_vclist);
+	kauth_unlisten_scope(smb_listener);
 	return 0;
 }
 
 static int
-smb_sm_lockvclist(int flags)
+smb_sm_lockvclist(void)
 {
 	int error;
 
@@ -230,7 +318,7 @@ smb_sm_lookup(struct smb_vcspec *vcspec, struct smb_sharespec *shspec,
 
 	*vcpp = vcp = NULL;
 
-	error = smb_sm_lockvclist(LK_EXCLUSIVE);
+	error = smb_sm_lockvclist();
 	if (error)
 		return error;
 	fail = smb_sm_lookupint(vcspec, shspec, scred, vcpp);
@@ -434,20 +522,14 @@ smb_vc_create(struct smb_vcspec *vcspec,
 	gid_t gid = vcspec->group;
 	uid_t realuid;
 	char *domain = vcspec->domain;
-	int error, isroot, ismember = 0;
+	int error;
+
+	error = kauth_authorize_network(cred, KAUTH_NETWORK_SMB,
+	    KAUTH_REQ_NETWORK_SMB_VC_CREATE, vcspec, NULL, NULL);
+	if (error)
+		return EPERM;
 
 	realuid = kauth_cred_geteuid(cred);
-	isroot = (smb_suser(cred) == 0);
-	/*
-	 * Only superuser can create VCs with different uid and gid
-	 */
-	if (uid != SMBM_ANY_OWNER && uid != realuid && !isroot)
-		return EPERM;
-
-	if (gid != SMBM_ANY_GROUP &&
-	    (kauth_cred_ismember_gid(cred, gid, &ismember) != 0 || !ismember) &&
-	    !isroot)
-		return EPERM;
 
 	vcp = smb_zmalloc(sizeof(*vcp), M_SMBCONN, M_WAITOK);
 	smb_co_init(VCTOCP(vcp), SMBL_VC, "smb_vc");
@@ -615,15 +697,14 @@ int
 smb_vc_access(struct smb_vc *vcp, struct smb_cred *scred, mode_t mode)
 {
 	kauth_cred_t cred = scred->scr_cred;
-	int ismember = 0;
+	int error;
 
-	if (smb_suser(cred) == 0 || kauth_cred_geteuid(cred) == vcp->vc_uid)
-		return 0;
-	mode >>= 3;
-	if (kauth_cred_ismember_gid(cred, vcp->vc_grp, &ismember) != 0 ||
-	    !ismember)
-		mode >>= 3;
-	return (vcp->vc_mode & mode) == mode ? 0 : EACCES;
+	error = kauth_authorize_network(cred, KAUTH_NETWORK_SMB,
+	    KAUTH_REQ_NETWORK_SMB_VC_ACCESS, vcp, KAUTH_ARG(mode), NULL);
+	if (error)
+		return EACCES;
+
+	return 0;
 }
 
 static int
@@ -715,25 +796,6 @@ smb_vc_getpass(struct smb_vc *vcp)
 	return smb_emptypass;
 }
 
-#ifndef __NetBSD__
-static int
-smb_vc_getinfo(struct smb_vc *vcp, struct smb_vc_info *vip)
-{
-	bzero(vip, sizeof(struct smb_vc_info));
-	vip->itype = SMB_INFO_VC;
-	vip->usecount = vcp->obj.co_usecount;
-	vip->uid = vcp->vc_uid;
-	vip->gid = vcp->vc_grp;
-	vip->mode = vcp->vc_mode;
-	vip->flags = vcp->obj.co_flags;
-	vip->sopt = vcp->vc_sopt;
-	vip->iodstate = vcp->vc_iod->iod_state;
-	bzero(&vip->sopt.sv_skey, sizeof(vip->sopt.sv_skey));
-	snprintf(vip->srvname, sizeof(vip->srvname), "%s", vcp->vc_srvname);
-	snprintf(vip->vcname, sizeof(vip->vcname), "%s", vcp->vc_username);
-	return 0;
-}
-#endif
 
 u_short
 smb_vc_nextmid(struct smb_vc *vcp)
@@ -763,19 +825,15 @@ smb_share_create(struct smb_vc *vcp, struct smb_sharespec *shspec,
 	uid_t realuid;
 	uid_t uid = shspec->owner;
 	gid_t gid = shspec->group;
-	int error, isroot, ismember = 0;
+	int error;
+
+	error = kauth_authorize_network(cred, KAUTH_NETWORK_SMB,
+	    KAUTH_REQ_NETWORK_SMB_SHARE_CREATE, shspec, NULL, NULL);
+	if (error)
+		return EPERM;
 
 	realuid = kauth_cred_geteuid(cred);
-	isroot = smb_suser(cred) == 0;
-	/*
-	 * Only superuser can create shares with different uid and gid
-	 */
-	if (uid != SMBM_ANY_OWNER && uid != realuid && !isroot)
-		return EPERM;
-	if (gid != SMBM_ANY_GROUP &&
-	    (kauth_cred_ismember_gid(cred, gid, &ismember) != 0 || !ismember) &&
-	    !isroot)
-		return EPERM;
+
 	error = smb_vc_lookupshare(vcp, shspec, scred, &ssp);
 	if (!error) {
 		smb_share_put(ssp, scred);
@@ -881,15 +939,14 @@ int
 smb_share_access(struct smb_share *ssp, struct smb_cred *scred, mode_t mode)
 {
 	kauth_cred_t cred = scred->scr_cred;
-	int ismember = 0;
+	int error;
 
-	if (smb_suser(cred) == 0 || kauth_cred_geteuid(cred) == ssp->ss_uid)
-		return 0;
-	mode >>= 3;
-	if (kauth_cred_ismember_gid(cred, ssp->ss_grp, &ismember) != 0 ||
-	    !ismember)
-		mode >>= 3;
-	return (ssp->ss_mode & mode) == mode ? 0 : EACCES;
+	error = kauth_authorize_network(cred, KAUTH_NETWORK_SMB,
+	    KAUTH_REQ_NETWORK_SMB_SHARE_ACCESS, ssp, KAUTH_ARG(mode), NULL);
+	if (error)
+		return EACCES;
+
+	return 0;
 }
 
 int
@@ -912,73 +969,4 @@ smb_share_getpass(struct smb_share *ssp)
 	return smb_emptypass;
 }
 
-#ifndef __NetBSD__
-static int
-smb_share_getinfo(struct smb_share *ssp, struct smb_share_info *sip)
-{
-	bzero(sip, sizeof(struct smb_share_info));
-	sip->itype = SMB_INFO_SHARE;
-	sip->usecount = ssp->obj.co_usecount;
-	sip->tid  = ssp->ss_tid;
-	sip->type= ssp->ss_type;
-	sip->uid = ssp->ss_uid;
-	sip->gid = ssp->ss_grp;
-	sip->mode= ssp->ss_mode;
-	sip->flags = ssp->obj.co_flags;
-	snprintf(sip->sname, sizeof(sip->sname), "%s", ssp->ss_name);
-	return 0;
-}
-#endif
 
-#ifndef __NetBSD__
-/*
- * Dump an entire tree into sysctl call
- */
-static int
-smb_sysctl_treedump(SYSCTL_HANDLER_ARGS)
-{
-	struct smb_cred scred;
-	struct smb_vc *vcp;
-	struct smb_share *ssp;
-	struct smb_vc_info vci;
-	struct smb_share_info ssi;
-	int error, itype;
-
-	smb_makescred(&scred, td, td->td_proc->p_cred);
-	error = smb_sm_lockvclist(LK_SHARED);
-	if (error)
-		return error;
-	SMBCO_FOREACH((struct smb_connobj*)vcp, &smb_vclist) {
-		error = smb_vc_lock(vcp, LK_SHARED);
-		if (error)
-			continue;
-		smb_vc_getinfo(vcp, &vci);
-		error = SYSCTL_OUT(req, &vci, sizeof(struct smb_vc_info));
-		if (error) {
-			smb_vc_unlock(vcp, 0);
-			break;
-		}
-		SMBCO_FOREACH((struct smb_connobj*)ssp, VCTOCP(vcp)) {
-			error = smb_share_lock(ssp, LK_SHARED);
-			if (error) {
-				error = 0;
-				continue;
-			}
-			smb_share_getinfo(ssp, &ssi);
-			smb_share_unlock(ssp, 0);
-			error = SYSCTL_OUT(req, &ssi, sizeof(struct smb_share_info));
-			if (error)
-				break;
-		}
-		smb_vc_unlock(vcp, 0);
-		if (error)
-			break;
-	}
-	if (!error) {
-		itype = SMB_INFO_NONE;
-		error = SYSCTL_OUT(req, &itype, sizeof(itype));
-	}
-	smb_sm_unlockvclist();
-	return error;
-}
-#endif

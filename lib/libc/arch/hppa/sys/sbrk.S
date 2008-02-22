@@ -1,4 +1,4 @@
-/*	$NetBSD: sbrk.S,v 1.3 2003/10/06 05:30:21 matt Exp $	*/
+/*	$NetBSD: sbrk.S,v 1.6 2013/09/12 15:36:15 joerg Exp $	*/
 
 /*	$OpenBSD: sbrk.S,v 1.7 2001/06/04 23:14:04 mickey Exp $	*/
 
@@ -14,11 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Michael Shalayeff.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -36,10 +31,10 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: sbrk.S,v 1.3 2003/10/06 05:30:21 matt Exp $")
+	RCSID("$NetBSD: sbrk.S,v 1.6 2013/09/12 15:36:15 joerg Exp $")
 #endif /* LIBC_SCCS and not lint */
 
-	.import	end, data
+	.global	_end
 
 #ifdef WEAK_ALIAS
 	WEAK_ALIAS(sbrk, _sbrk)
@@ -48,29 +43,29 @@
 	.data
 	.export	curbrk, data
 curbrk:
-	.long	end
+	.long	_end
 
 ENTRY(_sbrk,0)
-#ifdef PIC
+#ifdef __PIC__
 	addil	LT%curbrk, %r19
 	ldw	RT%curbrk(%r1), %r1
 	ldw	0(%r1), %t2
-#else  /* !PIC */
+#else  /* !__PIC__ */
 	ldil	L%curbrk, %t1
 	ldw	R%curbrk(%t1), %t2
-#endif /* !PIC */
+#endif /* !__PIC__ */
 	add	%arg0, %t2, %arg0
 	stw	%arg0, HPPA_FRAME_ARG(0)(%sp)
 
 	SYSCALL(break)
 
-#ifdef PIC
+#ifdef __PIC__
 	addil	LT%curbrk, %r19
 	ldw	RT%curbrk(%r1), %r1
-#else  /* !PIC */
+#else  /* !__PIC__ */
 	ldil	L%curbrk, %t1
 	ldo	R%curbrk(%t1), %r1
-#endif /* !PIC */
+#endif /* !__PIC__ */
 	ldw	0(%r1), %ret0
 	ldw	HPPA_FRAME_ARG(0)(%sp), %arg0
 	bv	%r0(%rp)

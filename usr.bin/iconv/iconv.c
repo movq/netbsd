@@ -1,4 +1,4 @@
-/*	$NetBSD: iconv.c,v 1.11 2007/12/15 19:44:50 perry Exp $	*/
+/*	$NetBSD: iconv.c,v 1.19 2013/10/07 02:00:46 dholland Exp $ */
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,19 +28,21 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: iconv.c,v 1.11 2007/12/15 19:44:50 perry Exp $");
+__RCSID("$NetBSD: iconv.c,v 1.19 2013/10/07 02:00:46 dholland Exp $");
 #endif /* LIBC_SCCS and not lint */
 
+#include <err.h>
 #include <errno.h>
+#include <iconv.h>
+#include <langinfo.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <iconv.h>
 #include <unistd.h>
-#include <err.h>
 #include <util.h>
 
-static void usage(void) __unused;
+static void usage(void) __dead;
 static int scmp(const void *, const void *);
 static void show_codesets(void);
 static void do_conv(const char *, FILE *, const char *, const char *, int, int);
@@ -48,8 +50,11 @@ static void do_conv(const char *, FILE *, const char *, const char *, int, int);
 static void
 usage(void)
 {
-	(void)fprintf(stderr, "Usage: %s [-cs] -f <from> -t <to> [file ...]\n"
-	    "\t%s -l\n", getprogname(), getprogname());
+	(void)fprintf(stderr,
+	    "Usage:\t%1$s [-cs] -f <from_code> -t <to_code> [file ...]\n"
+	    "\t%1$s -f <from_code> [-cs] [-t <to_code>] [file ...]\n"
+	    "\t%1$s -t <to_code> [-cs] [-f <from_code>] [file ...]\n"
+	    "\t%1$s -l\n", getprogname());
 	exit(1);
 }
 
@@ -84,6 +89,7 @@ show_codesets(void)
 
 #define INBUFSIZE 1024
 #define OUTBUFSIZE (INBUFSIZE * 2)
+/*ARGSUSED*/
 static void
 do_conv(const char *fn, FILE *fp, const char *from, const char *to, int silent,
     int hide_invalid)
@@ -92,7 +98,8 @@ do_conv(const char *fn, FILE *fp, const char *from, const char *to, int silent,
 	const char *in;
 	size_t inbytes, outbytes, ret, invalids;
 	iconv_t cd;
-	u_int32_t flags = 0;
+	uint32_t flags = 0;
+	int serrno;
 
 	if (hide_invalid)
 		flags |= __ICONV_F_HIDE_INVALID;
@@ -110,7 +117,12 @@ do_conv(const char *fn, FILE *fp, const char *from, const char *to, int silent,
 			outbytes = OUTBUFSIZE;
 			ret = __iconv(cd, &in, &inbytes, &out, &outbytes,
 			    flags, &inval);
+			serrno = errno;
 			invalids += inval;
+			if (outbytes < OUTBUFSIZE)
+				(void)fwrite(outbuf, 1, OUTBUFSIZE - outbytes,
+				    stdout);
+			errno = serrno;
 			if (ret == (size_t)-1 && errno != E2BIG) {
 				/*
 				 * XXX: iconv(3) is bad interface.
@@ -125,6 +137,7 @@ do_conv(const char *fn, FILE *fp, const char *from, const char *to, int silent,
 				ret = fread(inbuf + inbytes, 1,
 				    INBUFSIZE - inbytes, fp);
 				if (ret == 0) {
+					fflush(stdout);
 					if (feof(fp))
 						errx(EXIT_FAILURE,
 						     "unexpected end of file; "
@@ -136,16 +149,13 @@ do_conv(const char *fn, FILE *fp, const char *from, const char *to, int silent,
 				in = inbuf;
 				inbytes += ret;
 			}
-			if (outbytes < OUTBUFSIZE)
-				(void)fwrite(outbuf, 1, OUTBUFSIZE - outbytes,
-				    stdout);
 		}
 	}
 	/* reset the shift state of the output buffer */
 	outbytes = OUTBUFSIZE;
 	out = outbuf;
 	ret = iconv(cd, NULL, NULL, &out, &outbytes);
-	if (ret == -1)
+	if (ret == (size_t)-1)
 		err(EXIT_FAILURE, "iconv()");
 	if (outbytes < OUTBUFSIZE)
 		(void)fwrite(outbuf, 1, OUTBUFSIZE - outbytes, stdout);
@@ -165,6 +175,7 @@ main(int argc, char **argv)
 	char *opt_f = NULL, *opt_t = NULL;
 	FILE *fp;
 
+	setlocale(LC_ALL, "");
 	setprogname(argv[0]);
 
 	while ((ch = getopt(argc, argv, "cslf:t:")) != EOF) {
@@ -200,8 +211,12 @@ main(int argc, char **argv)
 		}
 		show_codesets();
 	} else {
-		if (opt_f == NULL || opt_t == NULL)
-			usage();
+		if (opt_f == NULL) {
+			if (opt_t == NULL)
+				usage();
+			opt_f = nl_langinfo(CODESET);
+		} else if (opt_t == NULL)
+			opt_t = nl_langinfo(CODESET);
 
 		if (argc == 0)
 			do_conv("<stdin>", stdin, opt_f, opt_t, opt_s, opt_c);

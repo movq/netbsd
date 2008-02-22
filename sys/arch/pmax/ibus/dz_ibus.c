@@ -1,4 +1,4 @@
-/*	$NetBSD: dz_ibus.c,v 1.6 2007/10/17 19:56:15 garbled Exp $	*/
+/*	$NetBSD: dz_ibus.c,v 1.12 2017/05/18 16:37:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,22 +61,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dz_ibus.c,v 1.6 2007/10/17 19:56:15 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dz_ibus.c,v 1.12 2017/05/18 16:37:06 christos Exp $");
 
 #include "dzkbd.h"
 #include "dzms.h"
 
 #include <sys/param.h>
-#include <sys/proc.h>
-#include <sys/systm.h>
-#include <sys/ioctl.h>
-#include <sys/tty.h>
-#include <sys/file.h>
+#include <sys/bus.h>
 #include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/proc.h>
 #include <sys/reboot.h>
-
-#include <machine/bus.h>
+#include <sys/systm.h>
+#include <sys/tty.h>
 
 #include <dev/cons.h>
 
@@ -102,8 +94,8 @@ __KERNEL_RCSID(0, "$NetBSD: dz_ibus.c,v 1.6 2007/10/17 19:56:15 garbled Exp $");
 #define	DZ_LINE_CONSOLE	2
 #define	DZ_LINE_AUX	3
 
-int	dz_ibus_match(struct device *, struct cfdata *, void *);
-void	dz_ibus_attach(struct device *, struct device *, void *);
+int	dz_ibus_match(device_t, cfdata_t, void *);
+void	dz_ibus_attach(device_t, device_t, void *);
 int	dz_ibus_intr(void *);
 void	dz_ibus_cnsetup(paddr_t);
 int	dz_ibus_cngetc(dev_t);
@@ -115,7 +107,7 @@ int	dz_ibus_print(void *, const char *);
 int	dzgetc(struct dz_linestate *);
 void	dzputc(struct dz_linestate *, int);
 
-CFATTACH_DECL(dz_ibus, sizeof(struct dz_softc),
+CFATTACH_DECL_NEW(dz_ibus, sizeof(struct dz_softc),
     dz_ibus_match, dz_ibus_attach, NULL, NULL);
 
 struct consdev dz_ibus_consdev = {
@@ -141,11 +133,9 @@ int	dz_ibus_iscn;
 int	dz_ibus_consln = -1;
 
 int
-dz_ibus_match(struct device *parent, struct cfdata *cf, void *aux)
+dz_ibus_match(device_t parent, cfdata_t cf, void *aux)
 {
-	struct ibus_attach_args *iba;
-
-	iba = aux;
+	struct ibus_attach_args *iba = aux;
 
 	if (strcmp(iba->ia_name, "dc") != 0 &&
 	    strcmp(iba->ia_name, "mdc") != 0 &&
@@ -159,23 +149,26 @@ dz_ibus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-dz_ibus_attach(struct device *parent, struct device *self, void *aux)
+dz_ibus_attach(device_t parent, device_t self, void *aux)
 {
-	struct ibus_attach_args *iba;
-	struct dz_softc *sc;
+	struct ibus_attach_args *iba = aux;
+	struct dz_softc *sc = device_private(self);
 	volatile struct dzregs *dz;
+#if NDZMS > 0 || NDZKBD > 0
 	struct dzkm_attach_args daa;
+#endif
 	int i;
 
-	iba = aux;
-	sc = (struct dz_softc *)self;
 
 	DELAY(100000);
+
+	sc->sc_dev = self;
 
 	/* 
 	 * XXX - This is evil and ugly, but... due to the nature of how
 	 * bus_space_* works on pmax it will do for the time being.
 	 */
+	sc->sc_iot = normal_memt;
 	sc->sc_ioh = (bus_space_handle_t)MIPS_PHYS_TO_KSEG1(iba->ia_addr);
 
 	sc->sc_dr.dr_csr = 0;
@@ -206,7 +199,7 @@ dz_ibus_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_dsr = 0x0f; /* XXX check if VS has modem ctrl bits */
 
-	printf(": DC-7085, 4 lines");
+	aprint_normal(": DC-7085, 4 lines");
 	ibus_intr_establish(parent, (void *)iba->ia_cookie, IPL_TTY,
 	    dz_ibus_intr, sc);
 	dzattach(sc, NULL, dz_ibus_consln);
@@ -394,8 +387,8 @@ dz_ibus_print(void *aux, const char *pnp)
 
 	daa = aux;
 	if (pnp != NULL)
-		printf("lkkbd/vsms at %s", pnp);
-	printf(" line %d", daa->daa_line);
+		aprint_normal("lkkbd/vsms at %s", pnp);
+	aprint_normal(" line %d", daa->daa_line);
 	return (UNCONF);
 }
 

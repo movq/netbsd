@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_split.c,v 1.14 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_split.c,v 1.22 2016/09/24 21:31:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_split.c	8.9 (Berkeley) 7/26/94";
-#else
-__RCSID("$NetBSD: bt_split.c,v 1.14 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_split.c,v 1.22 2016/09/24 21:31:25 christos Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -62,7 +60,7 @@ static int	 bt_rroot(BTREE *, PAGE *, PAGE *, PAGE *);
 static recno_t	 rec_total(PAGE *);
 
 #ifdef STATISTICS
-u_long	bt_rootsplit, bt_split, bt_sortsplit, bt_pfxsaved;
+unsigned long	bt_rootsplit, bt_split, bt_sortsplit, bt_pfxsaved;
 #endif
 
 /*
@@ -82,7 +80,7 @@ u_long	bt_rootsplit, bt_split, bt_sortsplit, bt_pfxsaved;
  */
 int
 __bt_split(BTREE *t, PAGE *sp, const DBT *key, const DBT *data, int flags,
-    size_t ilen, u_int32_t argskip)
+    size_t ilen, uint32_t argskip)
 {
 	BINTERNAL *bi = NULL;	/* pacify gcc */
 	BLEAF *bl = NULL, *tbl;	/* pacify gcc */
@@ -90,8 +88,8 @@ __bt_split(BTREE *t, PAGE *sp, const DBT *key, const DBT *data, int flags,
 	EPGNO *parent;
 	PAGE *h, *l, *r, *lchild, *rchild;
 	indx_t nxtindex;
-	u_int16_t skip;
-	u_int32_t n, nbytes, nksize = 0; /* pacify gcc */
+	uint16_t skip;
+	uint32_t n, nbytes, nksize = 0; /* pacify gcc */
 	int parentsplit;
 	char *dest;
 
@@ -195,8 +193,8 @@ __bt_split(BTREE *t, PAGE *sp, const DBT *key, const DBT *data, int flags,
 				b.size = bl->ksize;
 				b.data = bl->bytes;
 				temp = t->bt_pfx(&a, &b);
-				_DBFIT(temp, u_int32_t);
-				nksize = (u_int32_t)temp;
+				_DBFIT(temp, uint32_t);
+				nksize = (uint32_t)temp;
 				n = NBINTERNAL(nksize);
 				if (n < nbytes) {
 #ifdef STATISTICS
@@ -217,7 +215,7 @@ __bt_split(BTREE *t, PAGE *sp, const DBT *key, const DBT *data, int flags,
 		}
 
 		/* Split the parent page if necessary or shift the indices. */
-		if (h->upper - h->lower < nbytes + sizeof(indx_t)) {
+		if ((uint32_t)h->upper - (uint32_t)h->lower < nbytes + sizeof(indx_t)) {
 			sp = h;
 			h = h->pgno == P_ROOT ?
 			    bt_root(t, h, &l, &r, &skip, nbytes) :
@@ -247,10 +245,12 @@ __bt_split(BTREE *t, PAGE *sp, const DBT *key, const DBT *data, int flags,
 			WR_BINTERNAL(dest, nksize ? nksize : bl->ksize,
 			    rchild->pgno, bl->flags & P_BIGKEY);
 			memmove(dest, bl->bytes, nksize ? nksize : bl->ksize);
-			if (bl->flags & P_BIGKEY &&
-			    bt_preserve(t, *(pgno_t *)(void *)bl->bytes) ==
-			    RET_ERROR)
-				goto err1;
+			if (bl->flags & P_BIGKEY) {
+				pgno_t pgno;
+				memcpy(&pgno, bl->bytes, sizeof(pgno));
+				if (bt_preserve(t, pgno) == RET_ERROR)
+					goto err1;
+			}
 			break;
 		case P_RINTERNAL:
 			/*
@@ -385,7 +385,7 @@ bt_page(BTREE *t, PAGE *h, PAGE **lp, PAGE **rp, indx_t *skip, size_t ilen)
 	}
 
 	/* Put the new left page for the split into place. */
-	if ((l = (PAGE *)malloc(t->bt_psize)) == NULL) {
+	if ((l = calloc(1, t->bt_psize)) == NULL) {
 		mpool_put(t->bt_mp, r, 0);
 		return (NULL);
 	}
@@ -491,12 +491,12 @@ static int
 bt_rroot(BTREE *t, PAGE *h, PAGE *l, PAGE *r)
 {
 	char *dest;
-	u_int32_t sz;
+	uint32_t sz;
 	size_t temp;
 
 	temp = t->bt_psize - NRINTERNAL;
-	_DBFIT(temp, u_int32_t);
-	sz = (u_int32_t)temp;
+	_DBFIT(temp, uint32_t);
+	sz = (uint32_t)temp;
 
 	/* Insert the left and right keys, set the header information. */
 	_DBFIT(sz, indx_t);
@@ -537,7 +537,7 @@ bt_broot(BTREE *t, PAGE *h, PAGE *l, PAGE *r)
 {
 	BINTERNAL *bi = NULL;	/* pacify gcc */
 	BLEAF *bl;
-	u_int32_t nbytes;
+	uint32_t nbytes;
 	char *dest;
 
 	/*
@@ -566,9 +566,12 @@ bt_broot(BTREE *t, PAGE *h, PAGE *l, PAGE *r)
 		 * If the key is on an overflow page, mark the overflow chain
 		 * so it isn't deleted when the leaf copy of the key is deleted.
 		 */
-		if (bl->flags & P_BIGKEY &&
-		    bt_preserve(t, *(pgno_t *)(void *)bl->bytes) == RET_ERROR)
-			return (RET_ERROR);
+		if (bl->flags & P_BIGKEY) {
+			pgno_t pgno;
+			memcpy(&pgno, bl->bytes, sizeof(pgno));
+			if (bt_preserve(t, pgno) == RET_ERROR)
+				return (RET_ERROR);
+		}
 		break;
 	case P_BINTERNAL:
 		bi = GETBINTERNAL(r, 0);
@@ -617,7 +620,7 @@ bt_psplit(BTREE *t, PAGE *h, PAGE *l, PAGE *r, indx_t *pskip, size_t ilen)
 	PAGE *rval;
 	void *src = NULL;	/* pacify gcc */
 	indx_t full, half, nxt, off, skip, top, used;
-	u_int32_t nbytes;
+	uint32_t nbytes;
 	size_t temp;
 	int bigkeycnt, isbigkey;
 
@@ -636,8 +639,8 @@ bt_psplit(BTREE *t, PAGE *h, PAGE *l, PAGE *r, indx_t *pskip, size_t ilen)
 	used = 0;
 	for (nxt = off = 0, top = NEXTINDEX(h); nxt < top; ++off) {
 		if (skip == off) {
-			_DBFIT(ilen, u_int32_t);
-			nbytes = (u_int32_t)ilen;
+			_DBFIT(ilen, uint32_t);
+			nbytes = (uint32_t)ilen;
 			isbigkey = 0;		/* XXX: not really known. */
 		} else
 			switch (h->flags & P_TYPE) {

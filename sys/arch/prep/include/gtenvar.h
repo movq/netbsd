@@ -1,4 +1,4 @@
-/*	$NetBSD: gtenvar.h,v 1.4 2002/02/24 13:19:07 kleink Exp $	*/
+/*	$NetBSD: gtenvar.h,v 1.6 2011/06/18 08:08:29 matt Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
 struct rasops_info;
 
 struct gten_softc {
-	struct device gt_dev;
+	device_t gt_dev;
 
 	struct rasops_info *gt_ri;
 	paddr_t gt_paddr;

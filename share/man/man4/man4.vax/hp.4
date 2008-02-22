@@ -1,4 +1,4 @@
-.\"	$NetBSD: hp.4,v 1.12 2003/08/07 10:31:11 agc Exp $
+.\"	$NetBSD: hp.4,v 1.18 2017/08/01 11:11:17 wiz Exp $
 .\"
 .\" Copyright (c) 1991, 1993, 19801988
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	from: @(#)hp.4	8.1 (Berkeley) 6/5/93
 .\"
-.Dd June 5, 1993
+.Dd February 17, 2017
 .Dt HP 4 vax
 .Os
 .Sh NAME
@@ -109,7 +109,8 @@ with the error bits decoded if any error bits other than
 .Tn MBEXC
 and
 .Tn DTABT
-are set.  In any case the contents of the two error registers are also printed
+are set.
+In any case the contents of the two error registers are also printed
 in octal and symbolically with bits decoded.
 (Note that er2 is what old
 .Tn RP06
@@ -122,7 +123,6 @@ disks).
 The error was either unrecoverable, or a large number of retry attempts
 (including offset positioning and drive recalibration) could not
 recover the error.
-.Pp
 .It "hp%d%c: soft ecc reading fsbn %d [of %d-%d] (hp%d bn %d cn %d tn %d sn %d)."
 A recoverable
 .Tn ECC
@@ -133,25 +133,25 @@ The parenthesized fields list the actual disk sector number
 relative to the beginning of the drive,
 as well as the cylinder, track and sector number of the block.
 This happens normally
-a few times a week.  If it happens more frequently than
+a few times a week.
+If it happens more frequently than
 this the sectors where the errors are occurring should be checked to see
 if certain cylinders on the pack, spots on the carriage of the drive
 or heads are indicated.
-.Pp
 .El
 .Sh SEE ALSO
 .Xr physio 4 ,
-.Xr up 4 ,
+.Xr vax/up 4 ,
 .Xr disklabel 5 ,
-.Xr MAKEDEV 8 ,
 .Xr disklabel 8 ,
+.Xr MAKEDEV 8 ,
 .Xr mknod 8
 .Sh HISTORY
 The
 .Nm
 driver appeared in
 .Bx 4.0 .
-.br
+.Pp
 A new
 .Nm
 driver showed up in

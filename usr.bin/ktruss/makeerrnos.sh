@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: makeerrnos.sh,v 1.4 2005/07/17 09:45:50 he Exp $
+#	$NetBSD: makeerrnos.sh,v 1.6 2012/03/12 22:02:07 dyoung Exp $
 
 if [ $# -ne 3 ]; then
 	echo "usage: makeerrnos.sh errno.h signal.h output"
@@ -12,6 +12,7 @@ SIGNALH=$2
 CFILE=$3.c
 HFILE=$3.h
 
+: ${AWK:=awk}
 : ${CPP:=cpp}
 : ${CPPFLAGS:=}
 
@@ -21,7 +22,7 @@ cat <<__EOF__ > $CFILE
 struct systab errnos[] = {
 __EOF__
 cat ${ERRNOH} | ${CPP} ${CPPFLAGS} -dM |
-awk '
+${AWK} '
 /^#[ 	]*define[ 	]*E[A-Z0-9]*[ 	]*[0-9-][0-9]*[ 	]*.*/ {
 	for (i = 1; i <= NF; i++)
 		if ($i ~ /define/) 
@@ -34,10 +35,10 @@ awk '
 END {
 	print "	{ \"0\", 0 },\n";
 }
-' | sort -n +2 >> $CFILE
+' | sort -n -k 3 >> $CFILE
 echo "	{ 0L, 0},
 };" >> $CFILE
-lines=`wc -l $CFILE|awk ' { print $1; } ' -`
+lines=`wc -l $CFILE | ${AWK} ' { print $1; } ' -`
 lines=`expr $lines - 4`
 
 cat <<__EOF__ >> $CFILE
@@ -45,7 +46,7 @@ cat <<__EOF__ >> $CFILE
 struct systab signals[] = {
 __EOF__
 cat ${SIGNALH} | ${CPP} ${CPPFLAGS} -dM |
-awk '
+${AWK} '
 /^#[ 	]*define[ 	]*S[A-Z0-9]*[ 	]*[0-9-][0-9]*[ 	]*.*/ {
 	for (i = 1; i <= NF; i++)
 		if ($i ~ /define/) 
@@ -58,7 +59,7 @@ awk '
 END {
 	print "	{ \"0\", 0 },\n";
 }
-' | sort -n +2 >> $CFILE
+' | sort -n -k 3 >> $CFILE
 echo "	{ 0L, 0},
 };" >> $CFILE
 elines=`grep '{ "SIG' $CFILE | wc -l`
