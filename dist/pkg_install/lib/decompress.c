@@ -37,7 +37,7 @@
 #include <sys/cdefs.h>
 #endif
 
-__RCSID("$NetBSD: decompress.c,v 1.1 2008/02/22 16:14:59 joerg Exp $");
+__RCSID("$NetBSD: decompress.c,v 1.1.1.1 2008/02/22 16:14:59 joerg Exp $");
 
 #ifdef BOOTSTRAP
 #include "lib.h"
