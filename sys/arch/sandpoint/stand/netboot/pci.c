@@ -1,4 +1,4 @@
-/* $NetBSD: pci.c,v 1.6 2008/04/19 04:57:55 nisimura Exp $ */
+/* $NetBSD: pci.c,v 1.5 2007/11/05 00:40:39 nisimura Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -59,15 +59,11 @@
 
 static unsigned cfgread(int, int, int, int);
 static void cfgwrite(int, int, int, int, unsigned);
-static void _buswalk(int,
-		int (*)(int, int, int, unsigned long), unsigned long);
-static int _pcilookup(int,
-		int (*)(int, int, int, unsigned long), unsigned long,
-		unsigned [][2], int, int);
-static int deviceinit(int, int, int, unsigned long);
-static void memassign(int, int, int);
-static int devmatch(int, int, int, unsigned long);
-static int clsmatch(int, int, int, unsigned long);
+static void busprobe(int);
+static void deviceinit(int, int, int);
+static void devicemap(int, int, int);
+static int _pcifinddev(unsigned, unsigned, int, unsigned *);
+static int _pcilookup(unsigned, unsigned [][2], int, int, int);
 
 unsigned memstart, memlimit;
 unsigned iostart, iolimit;
@@ -83,33 +79,7 @@ pcisetup()
 	iolimit =  PCI_IOLIMIT;
 	maxbus = 0;
 
-	(void)_buswalk(0, deviceinit, 0UL);
-}
-
-int
-pcifinddev(vend, prod, tag)
-	unsigned vend, prod;
-	unsigned *tag;
-{
-	unsigned pciid, target[1][2];
-
-	pciid = PCI_DEVICE(vend, prod);
-	if (_pcilookup(0, devmatch, pciid, target, 0, 1)) {
-		*tag = target[0][1];
-		return 0;
-	}
-	*tag = ~0;
-	return -1;
-} 
-
-int
-pcilookup(type, list, max)
-	unsigned type;
-	unsigned list[][2];
-	int max;
-{
-
-	return _pcilookup(0, clsmatch, type, list, 0, max);
+	busprobe(0);
 }
 
 unsigned
@@ -133,6 +103,25 @@ pcidecomposetag(tag, b, d, f)
 	if (f != NULL)
 		*f = (tag >> 8) & 0x7;
 	return;
+}
+
+int
+pcifinddev(vend, prod, tag)
+	unsigned vend, prod;
+	unsigned *tag;
+{
+
+	return _pcifinddev(vend, prod, 0, tag);
+} 
+
+int
+pcilookup(type, list, max)
+	unsigned type;
+	unsigned list[][2];
+	int max;
+{
+
+	return _pcilookup(type, list, 0, 0, max);
 }
 
 unsigned
@@ -186,10 +175,8 @@ cfgwrite(b, d, f, off, val)
 }
 
 static void
-_buswalk(bus, proc, data)
+busprobe(bus)
 	int bus;
-	int (*proc)(int, int, int, unsigned long);
-	unsigned long data;
 {
 	int device, function, nfunctions;
 	unsigned pciid, bhlcr;
@@ -209,17 +196,14 @@ _buswalk(bus, proc, data)
 			if (PCI_VENDOR(pciid) == 0)
 				continue;
 
-			if ((*proc)(bus, device, function, data) != 0)
-				goto out; /* early exit */
+			deviceinit(bus, device, function);
 		}
 	}
-  out:;
 }
 
-static int
-deviceinit(bus, dev, func, data)
+static void
+deviceinit(bus, dev, func)
 	int bus, dev, func;
-	unsigned long data;
 {
 	unsigned val;
 
@@ -244,13 +228,7 @@ deviceinit(bus, dev, func, data)
 	val = 0x80 << 8 | 0x08 /* 32B cache line */;
 	cfgwrite(bus, dev, func, 0x0c, val);
 
-#if 1
-/* skip IDE controller BAR assignment */
-val = cfgread(bus, dev, func, PCI_CLASS_REG);
-if ((val >> 16) == PCI_CLASS_IDE)
-	return 0;
-#endif
-	memassign(bus, dev, func);
+	devicemap(bus, dev, func);
 
 	/* descending toward PCI-PCI bridge */
 	if ((cfgread(bus, dev, func, 0x08) >> 16) == PCI_CLASS_PPB) {
@@ -280,18 +258,17 @@ if ((val >> 16) == PCI_CLASS_IDE)
 		val |= 0xffff0107;
 		cfgwrite(bus, dev, func, 0x04, val);
 
-		_buswalk(new, deviceinit, data);
+		busprobe(new);
 
 		/* adjust 0x18 */
 		val = cfgread(bus, dev, func, 0x18);
 		val = (maxbus << 16) | (val & 0xffff);
 		cfgwrite(bus, dev, func, 0x18, val);
 	}
-	return 0;
 }
 
 static void
-memassign(bus, dev, func)
+devicemap(bus, dev, func)
 	int bus, dev, func;
 {
 	unsigned val, maxbar, mapr, req, mapbase, size;
@@ -352,36 +329,53 @@ printf("%s base %x size %x\n", (val & 01) ? "i/o" : "mem", mapbase, size);
 }
 
 static int
-devmatch(bus, dev, func, data)
-	int bus, dev, func;
-	unsigned long data;
-{
-	unsigned pciid;
-
-	pciid = cfgread(bus, dev, func, PCI_ID_REG);
-	return (pciid == (unsigned)data);
-}
-
-static int
-clsmatch(bus, dev, func, data)
-	int bus, dev, func;
-	unsigned long data;
-{
-	unsigned class;
-
-	class = cfgread(bus, dev, func, PCI_CLASS_REG);
-	return ((class >> 16) == (unsigned)data);
-}
-
-static int
-_pcilookup(bus, match, data, list, index, limit)
+_pcifinddev(vend, prod, bus, tag)
+	unsigned vend, prod;
 	int bus;
-	int (*match)(int, int, int, unsigned long);
-	unsigned long data;
-	unsigned list[][2];
-	int index, limit;
+	unsigned *tag;
 {
-	int device, function, nfuncs;
+	unsigned device, function, nfunctions;
+	unsigned pciid, bhlcr, class;
+
+	for (device = 0; device < MAXNDEVS; device++) {
+		pciid = cfgread(bus, device, 0, PCI_ID_REG);
+		if (PCI_VENDOR(pciid) == PCI_VENDOR_INVALID)
+			continue;
+		if (PCI_VENDOR(pciid) == 0)
+			continue;
+		class = cfgread(bus, device, 0, PCI_CLASS_REG);
+		if ((class >> 16) == PCI_CLASS_PPB) {
+			/* exploring bus beyond PCI-PCI bridge */
+			if (_pcifinddev(vend, prod, bus + 1, tag) == 0)
+				return 0;
+			continue;
+		}
+		bhlcr = cfgread(bus, device, 0, PCI_BHLC_REG);
+		nfunctions = (PCI_HDRTYPE_MULTIFN(bhlcr)) ? 8 : 1;
+		for (function = 0; function < nfunctions; function++) {
+			pciid = cfgread(bus, device, function, PCI_ID_REG);
+			if (PCI_VENDOR(pciid) == PCI_VENDOR_INVALID)
+				continue;
+			if (PCI_VENDOR(pciid) == 0)
+				continue;
+			if (PCI_VENDOR(pciid) == vend
+			    && PCI_PRODUCT(pciid) == prod) {
+				*tag = pcimaketag(bus, device, function);
+				return 0;
+			}
+		}
+	}
+	*tag = ~0;
+	return -1;
+}
+
+static int
+_pcilookup(type, list, bus, index, limit)
+	unsigned type;
+	unsigned list[][2];
+	int bus, index, limit;
+{
+	int device, function, nfunctions;
 	unsigned pciid, bhlcr, class;
 	
 	for (device = 0; device < MAXNDEVS; device++) {
@@ -393,21 +387,21 @@ _pcilookup(bus, match, data, list, index, limit)
 		class = cfgread(bus, device, 0, PCI_CLASS_REG);
 		if ((class >> 16) == PCI_CLASS_PPB) {
 			/* exploring bus beyond PCI-PCI bridge */
-			index = _pcilookup(bus + 1,
-				    match, data, list, index, limit);
+			index = _pcilookup(type, list, bus + 1, index, limit);
 			if (index >= limit)
 				goto out;
 			continue;
 		}
 		bhlcr = cfgread(bus, device, 0, PCI_BHLC_REG);
-		nfuncs = (PCI_HDRTYPE_MULTIFN(bhlcr)) ? 8 : 1;
-		for (function = 0; function < nfuncs; function++) {
+		nfunctions = (PCI_HDRTYPE_MULTIFN(bhlcr)) ? 8 : 1;
+		for (function = 0; function < nfunctions; function++) {
 			pciid = cfgread(bus, device, function, PCI_ID_REG);
 			if (PCI_VENDOR(pciid) == PCI_VENDOR_INVALID)
 				continue;
 			if (PCI_VENDOR(pciid) == 0)
 				continue;
-			if ((*match)(bus, device, function, data)) {
+			class = cfgread(bus, device, function, PCI_CLASS_REG);
+			if ((class >> 16) == type) {
 				list[index][0] = pciid;
 				list[index][1] = 
 				     pcimaketag(bus, device, function);
