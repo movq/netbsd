@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_private.h,v 1.1 2008/04/23 06:09:05 thorpej Exp $	*/
+/*	$NetBSD: ipsec_private.h,v 1.2 2008/04/23 07:29:47 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -47,6 +47,7 @@ extern	percpu_t *ahstat_percpu;
 extern	percpu_t *espstat_percpu;
 extern	percpu_t *ipcompstat_percpu;
 extern	percpu_t *ipipstat_percpu;
+extern	percpu_t *pfkeystat_percpu;
 
 #define	IPSEC_STAT_GETREF()	_NET_STAT_GETREF(ipsecstat_percpu)
 #define	IPSEC_STAT_PUTREF()	_NET_STAT_PUTREF(ipsecstat_percpu)
@@ -68,6 +69,11 @@ extern	percpu_t *ipipstat_percpu;
 
 #define	IPIP_STATINC(x)		_NET_STATINC(ipipstat_percpu, x)
 #define	IPIP_STATADD(x, v)	_NET_STATADD(ipipstat_percpu, x, v)
+
+#define	PFKEY_STAT_GETREF()	_NET_STAT_GETREF(pfkeystat_percpu)
+#define	PFKEY_STAT_PUTREF()	_NET_STAT_PUTREF(pfkeystat_percpu)
+#define	PFKEY_STATINC(x)	_NET_STATINC(pfkeystat_percpu, x)
+#define	PFKEY_STATADD(x, v)	_NET_STATADD(pfkeystat_percpu, x, v)
 #endif /* _KERNEL */
 
 #endif /* !_NETIPSEC_IPSEC_PRIVATE_H_ */
