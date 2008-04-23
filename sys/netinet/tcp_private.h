@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_private.h,v 1.1 2008/04/12 05:58:22 thorpej Exp $	*/
+/*	$NetBSD: tcp_private.h,v 1.2 2008/04/23 06:09:05 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -40,26 +40,15 @@
 #define _NETINET_TCP_PRIVATE_H_
 
 #ifdef _KERNEL
-#include <sys/percpu.h>
+#include <net/net_stats.h>
 
 extern	percpu_t *tcpstat_percpu;
 
-#define	TCP_STAT_GETREF()	percpu_getref(tcpstat_percpu)
-#define	TCP_STAT_PUTREF()	percpu_putref(tcpstat_percpu)
+#define	TCP_STAT_GETREF()	_NET_STAT_GETREF(tcpstat_percpu)
+#define	TCP_STAT_PUTREF()	_NET_STAT_PUTREF(tcpstat_percpu)
 
-#define	TCP_STATINC(x)							\
-do {									\
-	uint64_t *_tcps_ = TCP_STAT_GETREF();				\
-	_tcps_[x]++;							\
-	TCP_STAT_PUTREF();						\
-} while (/*CONSTCOND*/0)
-
-#define	TCP_STATADD(x, v)						\
-do {									\
-	uint64_t *_tcps_ = TCP_STAT_GETREF();				\
-	_tcps_[x] += (v);						\
-	TCP_STAT_PUTREF();						\
-} while (/*CONSTCOND*/0)
+#define	TCP_STATINC(x)		_NET_STATINC(tcpstat_percpu, x)
+#define	TCP_STATADD(x, v)	_NET_STATADD(tcpstat_percpu, x, v)
 
 #ifdef __NO_STRICT_ALIGNMENT
 #define	TCP_HDR_ALIGNED_P(th)	1
