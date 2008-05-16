@@ -6,7 +6,7 @@
  *
  * See the LICENSE file for redistribution information.
  *
- *	$Id: log.h,v 1.1 2008/05/16 18:03:18 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:18 $
+ *	$Id: log.h,v 1.1.1.1 2008/05/16 18:03:18 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:18 $
  */
 
 #define	LOG_NOTYPE		0

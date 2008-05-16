@@ -1,4 +1,4 @@
-/* $Id: acconfig.h,v 1.1 2008/05/16 18:03:26 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:26 $ */
+/* $Id: acconfig.h,v 1.1.1.1 2008/05/16 18:03:26 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:26 $ */
 
 /* Define to `int' if <sys/types.h> doesn't define.  */
 #undef ssize_t

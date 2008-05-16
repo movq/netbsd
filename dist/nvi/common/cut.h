@@ -6,7 +6,7 @@
  *
  * See the LICENSE file for redistribution information.
  *
- *	$Id: cut.h,v 1.1 2008/05/16 18:03:13 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:13 $
+ *	$Id: cut.h,v 1.1.1.1 2008/05/16 18:03:13 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:13 $
  */
 
 typedef struct _texth TEXTH;		/* TEXT list head structure. */

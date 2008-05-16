@@ -1,4 +1,4 @@
-#	$Id: README,v 1.1 2008/05/16 18:03:01 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:01 $
+#	$Id: README,v 1.1.1.1 2008/05/16 18:03:01 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:01 $
 
 This is version 1.80 (%H%) of nex/nvi, a reimplementation of the ex/vi
 text editors originally distributed as part of the Fourth Berkeley

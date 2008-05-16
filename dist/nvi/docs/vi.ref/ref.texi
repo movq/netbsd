@@ -5,7 +5,7 @@
 @comment 
 @comment  See the LICENSE file for redistribution information.
 @comment 
-@comment      $Id: ref.texi,v 1.1 2008/05/16 18:03:39 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:39 $
+@comment      $Id: ref.texi,v 1.1.1.1 2008/05/16 18:03:39 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:39 $
 @comment 
 @comment 
 @comment  indented paragraph, with spaces between the items, bold font

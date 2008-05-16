@@ -6,7 +6,7 @@
  *
  * See the LICENSE file for redistribution information.
  *
- *	$Id: util.h,v 1.1 2008/05/16 18:03:24 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:24 $
+ *	$Id: util.h,v 1.1.1.1 2008/05/16 18:03:24 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:24 $
  */
 
 /* Macros to init/set/clear/test flags. */

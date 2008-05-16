@@ -6,7 +6,7 @@
  *
  * See the LICENSE file for redistribution information.
  *
- *	$Id: cl.h,v 1.1 2008/05/16 18:03:08 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:08 $
+ *	$Id: cl.h,v 1.1.1.1 2008/05/16 18:03:08 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:08 $
  */
 
 /* Avoid clash on OSF1 */

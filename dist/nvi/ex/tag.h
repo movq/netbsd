@@ -8,7 +8,7 @@
  *
  * See the LICENSE file for redistribution information.
  *
- *	$Id: tag.h,v 1.1 2008/05/16 18:04:02 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:04:02 $
+ *	$Id: tag.h,v 1.1.1.1 2008/05/16 18:04:02 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:04:02 $
  */
 
 /*

@@ -6,7 +6,7 @@
  *
  * See the LICENSE file for redistribution information.
  *
- *	$Id: script.h,v 1.1 2008/05/16 18:04:02 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:04:02 $
+ *	$Id: script.h,v 1.1.1.1 2008/05/16 18:04:02 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:04:02 $
  */
 
 struct _script {

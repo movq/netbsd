@@ -4,7 +4,7 @@
  *
  * See the LICENSE file for redistribution information.
  *
- *	$Id: ip.h,v 1.1 2008/05/16 18:04:05 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:04:05 $
+ *	$Id: ip.h,v 1.1.1.1 2008/05/16 18:04:05 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:04:05 $
  */
 
 #include <sys/socket.h>

@@ -6,7 +6,7 @@
  *
  * See the LICENSE file for redistribution information.
  *
- *	$Id: seq.h,v 1.1 2008/05/16 18:03:24 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:24 $
+ *	$Id: seq.h,v 1.1.1.1 2008/05/16 18:03:24 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:24 $
  */
 
 /*

@@ -6,7 +6,7 @@
  *
  * See the LICENSE file for redistribution information.
  *
- *	$Id: msg.h,v 1.1 2008/05/16 18:03:20 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:20 $
+ *	$Id: msg.h,v 1.1.1.1 2008/05/16 18:03:20 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:20 $
  */
 
 /*

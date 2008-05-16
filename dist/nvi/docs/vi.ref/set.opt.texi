@@ -5,7 +5,7 @@
 @comment 
 @comment  See the LICENSE file for redistribution information.
 @comment 
-@comment      $Id: set.opt.texi,v 1.1 2008/05/16 18:03:40 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:40 $
+@comment      $Id: set.opt.texi,v 1.1.1.1 2008/05/16 18:03:40 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:40 $
 @comment 
 @chapter Set Options
 

@@ -14,7 +14,7 @@
 @comment 
 @comment  See the LICENSE file for redistribution information.
 @comment 
-@comment      $Id: vi.texi,v 1.1 2008/05/16 18:03:45 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:45 $
+@comment      $Id: vi.texi,v 1.1.1.1 2008/05/16 18:03:45 aymeric Exp $ (Berkeley) $Date: 2008/05/16 18:03:45 $
 @comment 
 @comment 
 @include ref.texi
