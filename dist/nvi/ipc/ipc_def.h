@@ -1,4 +1,4 @@
-/*	$NetBSD: ipc_def.h,v 1.1 2008/05/18 14:31:25 aymeric Exp $ */
+/*	$NetBSD: ipc_def.h,v 1.1.1.1 2008/05/18 14:31:25 aymeric Exp $ */
 
 /* Do not edit: automatically built by build/distrib. */
 #define SI_ADDSTR 1

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.1 2008/05/18 14:31:24 aymeric Exp $ */
+/*	$NetBSD: extern.h,v 1.1.1.1 2008/05/18 14:31:24 aymeric Exp $ */
 
 /* Do not edit: automatically built by build/distrib. */
 int ip_waddstr __P((SCR *, const CHAR_T *, size_t));

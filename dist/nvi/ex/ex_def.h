@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_def.h,v 1.1 2008/05/18 14:31:21 aymeric Exp $ */
+/*	$NetBSD: ex_def.h,v 1.1.1.1 2008/05/18 14:31:21 aymeric Exp $ */
 
 /* Do not edit: automatically built by build/distrib. */
 #define C_SCROLL 0

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.1 2008/05/18 14:31:34 aymeric Exp $ */
+/*	$NetBSD: extern.h,v 1.1.1.1 2008/05/18 14:31:34 aymeric Exp $ */
 
 /* Do not edit: automatically built by build/distrib. */
 #ifdef USE_SFIO

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.1 2008/05/18 14:31:25 aymeric Exp $ */
+/*	$NetBSD: extern.h,v 1.1.1.1 2008/05/18 14:31:25 aymeric Exp $ */
 
 /* Do not edit: automatically built by build/distrib. */
 int vi_run __P((IPVI *, int, char *[]));

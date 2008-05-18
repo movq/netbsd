@@ -1,4 +1,4 @@
-/*	$NetBSD: options_def.h,v 1.1 2008/05/18 14:29:48 aymeric Exp $ */
+/*	$NetBSD: options_def.h,v 1.1.1.1 2008/05/18 14:29:48 aymeric Exp $ */
 
 /* Do not edit: automatically built by build/distrib. */
 #define O_ALTWERASE 0
