@@ -1,5 +1,5 @@
 .\"
-.\" $Id: ucpgba.man,v 1.1 2008/05/22 14:20:36 lukem Exp $
+.\" $Id: ucpgba.man,v 1.1.1.1 2008/05/22 14:20:36 lukem Exp $
 .\"
 .TH ucpgba 3 "19 November 1999"
 .SH NAME 

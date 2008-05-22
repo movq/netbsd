@@ -1,5 +1,5 @@
 /**
- * $Id: addpartial-overlay.c,v 1.1 2008/05/22 14:20:36 lukem Exp $
+ * $Id: addpartial-overlay.c,v 1.1.1.1 2008/05/22 14:20:36 lukem Exp $
  *
  * Copyright (C) 2004 Virginia Tech, David Hawes.
  * All rights reserved.
@@ -16,7 +16,7 @@
  *
  * Author:  David H. Hawes, Jr.
  * Email:   dhawes@vt.edu
- * Version: $Revision: 1.1 $
+ * Version: $Revision: 1.1.1.1 $
  * Updated: $Date: 2008/05/22 14:20:36 $
  * 
  * addpartial-overlay

@@ -1,5 +1,5 @@
 #! /bin/sh
-# $Header: /home/mike/src/cvs/netbsd/src/external/bsd/openldap/dist/tests/scripts/test038-retcode,v 1.1 2008/05/22 14:20:36 lukem Exp $
+# $Header: /home/mike/src/cvs/netbsd/src/external/bsd/openldap/dist/tests/scripts/test038-retcode,v 1.1.1.1 2008/05/22 14:20:36 lukem Exp $
 ## This work is part of OpenLDAP Software <http://www.openldap.org/>.
 ##
 ## Copyright 1998-2008 The OpenLDAP Foundation.
