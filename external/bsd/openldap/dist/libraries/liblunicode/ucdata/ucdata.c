@@ -32,7 +32,7 @@
  * OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
  * THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-/* $Id: ucdata.c,v 1.1 2008/05/22 14:20:36 lukem Exp $" */
+/* $Id: ucdata.c,v 1.1.1.1 2008/05/22 14:20:36 lukem Exp $" */
 
 #include "portable.h"
 #include "ldap_config.h"
