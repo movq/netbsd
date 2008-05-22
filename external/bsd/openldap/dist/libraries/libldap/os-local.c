@@ -228,7 +228,7 @@ sendcred:
 				msg.msg_accrights = (char *)fds;
 				msg.msg_accrightslen = sizeof(int);
 # endif /* HAVE_STRUCT_MSGHDR_MSG_CONTROL */
-				getpeername( s, (struct sockaddr *) sa, &salen );
+				getpeername( s, sa, &salen );
 				fchmod( fds[0], S_ISUID|S_IRWXU );
 				write( fds[1], sa, salen );
 				sendmsg( s, &msg, 0 );
