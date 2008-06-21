@@ -1,4 +1,4 @@
-/*	$NetBSD: httpd.h,v 1.1 2008/06/21 18:31:19 christos Exp $	*/
+/*	$NetBSD: httpd.h,v 1.1.1.1 2008/06/21 18:31:19 christos Exp $	*/
 
 /*
  * Copyright (C) 2006-2008  Internet Systems Consortium, Inc. ("ISC")

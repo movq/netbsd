@@ -1,4 +1,4 @@
-/*	$NetBSD: gsstest.c,v 1.1 2008/06/21 18:34:10 christos Exp $	*/
+/*	$NetBSD: gsstest.c,v 1.1.1.1 2008/06/21 18:34:10 christos Exp $	*/
 
 /*
  * Copyright (C) 2006, 2007  Internet Systems Consortium, Inc. ("ISC")
