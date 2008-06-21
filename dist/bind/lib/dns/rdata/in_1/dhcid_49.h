@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcid_49.h,v 1.1 2008/06/21 18:32:46 christos Exp $	*/
+/*	$NetBSD: dhcid_49.h,v 1.1.1.1 2008/06/21 18:32:46 christos Exp $	*/
 
 /*
  * Copyright (C) 2006, 2007  Internet Systems Consortium, Inc. ("ISC")

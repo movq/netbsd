@@ -1,4 +1,4 @@
-/*	$NetBSD: statschannel.h,v 1.1 2008/06/21 18:35:23 christos Exp $	*/
+/*	$NetBSD: statschannel.h,v 1.1.1.1 2008/06/21 18:35:23 christos Exp $	*/
 
 /*
  * Copyright (C) 2008  Internet Systems Consortium, Inc. ("ISC")

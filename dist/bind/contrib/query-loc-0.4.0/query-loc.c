@@ -1,4 +1,4 @@
-/*	$NetBSD: query-loc.c,v 1.1 2008/06/21 18:30:28 christos Exp $	*/
+/*	$NetBSD: query-loc.c,v 1.1.1.1 2008/06/21 18:30:28 christos Exp $	*/
 
 #include        "loc.h"
 

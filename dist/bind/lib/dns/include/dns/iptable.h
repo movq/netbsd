@@ -1,4 +1,4 @@
-/*	$NetBSD: iptable.h,v 1.1 2008/06/21 18:32:25 christos Exp $	*/
+/*	$NetBSD: iptable.h,v 1.1.1.1 2008/06/21 18:32:25 christos Exp $	*/
 
 /*
  * Copyright (C) 2007  Internet Systems Consortium, Inc. ("ISC")
