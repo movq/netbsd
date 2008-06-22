@@ -1,4 +1,4 @@
-/*	$NetBSD: fold_addr.c,v 1.1 2008/06/22 14:02:23 christos Exp $	*/
+/*	$NetBSD: fold_addr.c,v 1.1.1.1 2008/06/22 14:02:23 christos Exp $	*/
 
 /*++
 /* NAME

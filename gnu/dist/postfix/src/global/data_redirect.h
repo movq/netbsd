@@ -1,4 +1,4 @@
-/*	$NetBSD: data_redirect.h,v 1.1 2008/06/22 14:02:17 christos Exp $	*/
+/*	$NetBSD: data_redirect.h,v 1.1.1.1 2008/06/22 14:02:17 christos Exp $	*/
 
 #ifndef _DATA_REDIRECT_H_INCLUDED_
 #define _DATA_REDIRECT_H_INCLUDED_

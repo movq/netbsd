@@ -1,4 +1,4 @@
-/*	$NetBSD: header_body_checks.c,v 1.1 2008/06/22 14:02:16 christos Exp $	*/
+/*	$NetBSD: header_body_checks.c,v 1.1.1.1 2008/06/22 14:02:16 christos Exp $	*/
 
 /*++
 /* NAME
