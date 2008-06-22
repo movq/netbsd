@@ -1,4 +1,4 @@
-/*	$NetBSD: data_redirect.c,v 1.1 2008/06/22 14:02:17 christos Exp $	*/
+/*	$NetBSD: data_redirect.c,v 1.1.1.1 2008/06/22 14:02:17 christos Exp $	*/
 
 /*++
 /* NAME
