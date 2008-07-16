@@ -30,7 +30,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*	$NetBSD: m_netbsd.c,v 1.1 2008/07/16 00:20:34 christos Exp $	*/
+/*	$NetBSD: m_netbsd.c,v 1.1.1.1 2008/07/16 00:20:34 christos Exp $	*/
 
 /*
  * top - a top users display for Unix
@@ -75,7 +75,7 @@
  *		Tomas Svensson <ts@unix1.net>
  *
  *
- * $Id: m_netbsd.c,v 1.1 2008/07/16 00:20:34 christos Exp $
+ * $Id: m_netbsd.c,v 1.1.1.1 2008/07/16 00:20:34 christos Exp $
  */
 
 #include <sys/param.h>
