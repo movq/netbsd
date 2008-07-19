@@ -53,6 +53,8 @@ dm_target_error_init(struct dm_dev *dmv, void **target_config,
 	printf("Error target init function called!!\n");
 
 	*target_config = NULL;
+
+	dmv->dev_type = DM_ERROR_DEV;
 	
 	return 0;
 }
