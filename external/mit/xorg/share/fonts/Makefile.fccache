@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.fccache,v 1.1 2008/07/29 05:01:23 mrg Exp $
+#	$NetBSD: Makefile.fccache,v 1.1.1.1 2008/07/29 05:01:23 mrg Exp $
 
 .ifndef _MAKEFILE_FCCACHE_
 _MAKEFILE_FCCACHE_=1

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2008/07/29 05:01:21 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2008/07/29 05:01:21 mrg Exp $
 
 # install include/X11/drm files
 

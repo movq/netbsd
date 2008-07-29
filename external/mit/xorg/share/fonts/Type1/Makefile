@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2008/07/29 05:01:23 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2008/07/29 05:01:23 mrg Exp $
 
 SUBDIR=	font-adobe-utopia-type1 font-bh-type1 \
 	font-bitstream-type1 font-ibm-type1

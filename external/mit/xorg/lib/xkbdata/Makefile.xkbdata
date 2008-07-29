@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.xkbdata,v 1.1 2008/07/29 05:01:22 mrg Exp $
+#	$NetBSD: Makefile.xkbdata,v 1.1.1.1 2008/07/29 05:01:22 mrg Exp $
 
 XKBDISTDIR=	${X11SRCDIR.xkbdata}/${XKBNAME}
 

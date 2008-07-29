@@ -1,4 +1,4 @@
-#	$NetBSD: shlib_version,v 1.1 2008/07/29 05:01:22 mrg Exp $
+#	$NetBSD: shlib_version,v 1.1.1.1 2008/07/29 05:01:22 mrg Exp $
 #
 # XXX netbsd-4 had minor=3
 major=1

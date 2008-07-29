@@ -1,4 +1,4 @@
-/*	$NetBSD: xkbcomp-stubs.c,v 1.1 2008/07/29 05:01:23 mrg Exp $	*/
+/*	$NetBSD: xkbcomp-stubs.c,v 1.1.1.1 2008/07/29 05:01:23 mrg Exp $	*/
 
 /*-
  * Copyright (c) 2003-2004 The NetBSD Foundation, Inc.

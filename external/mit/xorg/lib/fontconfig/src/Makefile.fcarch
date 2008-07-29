@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.fcarch,v 1.1 2008/07/29 05:01:21 mrg Exp $
+#	$NetBSD: Makefile.fcarch,v 1.1.1.1 2008/07/29 05:01:21 mrg Exp $
 
 .ifndef _FONTCONFIG_FCARCH_MK_
 _FONTCONFIG_FCARCH_MK_=1

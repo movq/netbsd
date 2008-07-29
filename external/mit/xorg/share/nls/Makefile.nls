@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.nls,v 1.1 2008/07/29 05:01:23 mrg Exp $
+#	$NetBSD: Makefile.nls,v 1.1.1.1 2008/07/29 05:01:23 mrg Exp $
 
 # install Compose XI18N_OBJS XLC_LOCALE for this subdir
 

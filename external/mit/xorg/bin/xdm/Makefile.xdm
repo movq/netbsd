@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.xdm,v 1.1 2008/07/29 05:01:22 mrg Exp $
+#	$NetBSD: Makefile.xdm,v 1.1.1.1 2008/07/29 05:01:22 mrg Exp $
 
 XDMVARDIR=	/var/db/xdm
 XDMDIR=		${X11ETCDIR}/xdm

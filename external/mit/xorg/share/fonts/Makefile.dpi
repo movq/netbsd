@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.dpi,v 1.1 2008/07/29 05:01:23 mrg Exp $
+#	$NetBSD: Makefile.dpi,v 1.1.1.1 2008/07/29 05:01:23 mrg Exp $
 
 # Files installed by both 75dpi and 100dpi packages.
 
