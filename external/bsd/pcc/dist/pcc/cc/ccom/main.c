@@ -1,4 +1,4 @@
-/*	$Id: main.c,v 1.1 2008/08/24 05:33:02 gmcgarry Exp $	*/
+/*	$Id: main.c,v 1.1.1.1 2008/08/24 05:33:02 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2002 Anders Magnusson. All rights reserved.

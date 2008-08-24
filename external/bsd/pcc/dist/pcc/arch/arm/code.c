@@ -1,4 +1,4 @@
-/*      $Id: code.c,v 1.1 2008/08/24 05:32:52 gmcgarry Exp $    */
+/*      $Id: code.c,v 1.1.1.1 2008/08/24 05:32:52 gmcgarry Exp $    */
 /*
  * Copyright (c) 2007 Gregory McGarry (g.mcgarry@ieee.org).
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).

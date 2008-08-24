@@ -1,4 +1,4 @@
-/*	$Id: local2.c,v 1.1 2008/08/24 05:32:58 gmcgarry Exp $	*/
+/*	$Id: local2.c,v 1.1.1.1 2008/08/24 05:32:58 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

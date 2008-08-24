@@ -1,4 +1,4 @@
-/*	$Id: f77config.h,v 1.1 2008/08/24 05:33:10 gmcgarry Exp $	*/
+/*	$Id: f77config.h,v 1.1.1.1 2008/08/24 05:33:10 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).

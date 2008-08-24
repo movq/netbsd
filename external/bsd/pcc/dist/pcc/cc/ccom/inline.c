@@ -1,4 +1,4 @@
-/*	$Id: inline.c,v 1.1 2008/08/24 05:33:02 gmcgarry Exp $	*/
+/*	$Id: inline.c,v 1.1.1.1 2008/08/24 05:33:02 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$Id: table.c,v 1.1 2008/08/24 05:32:57 gmcgarry Exp $	*/
+/*	$Id: table.c,v 1.1.1.1 2008/08/24 05:32:57 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

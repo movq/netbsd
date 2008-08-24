@@ -1,4 +1,4 @@
-/*	$Id: ccconfig.h,v 1.1 2008/08/24 05:33:10 gmcgarry Exp $	*/
+/*	$Id: ccconfig.h,v 1.1.1.1 2008/08/24 05:33:10 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2008 Adam Hoka.

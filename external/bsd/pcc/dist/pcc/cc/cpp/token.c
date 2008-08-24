@@ -1,4 +1,4 @@
-/*	$Id: token.c,v 1.1 2008/08/24 05:33:05 gmcgarry Exp $	*/
+/*	$Id: token.c,v 1.1.1.1 2008/08/24 05:33:05 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2004 Anders Magnusson. All rights reserved.

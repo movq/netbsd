@@ -1,4 +1,4 @@
-/*	$Id: init.c,v 1.1 2008/08/24 05:33:02 gmcgarry Exp $	*/
+/*	$Id: init.c,v 1.1.1.1 2008/08/24 05:33:02 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2004, 2007 Anders Magnusson (ragge@ludd.ltu.se).

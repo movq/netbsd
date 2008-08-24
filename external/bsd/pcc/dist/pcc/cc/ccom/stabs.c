@@ -1,4 +1,4 @@
-/*	$Id: stabs.c,v 1.1 2008/08/24 05:33:03 gmcgarry Exp $	*/
+/*	$Id: stabs.c,v 1.1.1.1 2008/08/24 05:33:03 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).
