@@ -1,4 +1,4 @@
-/*	$Id: common.c,v 1.1 2008/08/24 05:34:46 gmcgarry Exp $	*/
+/*	$Id: common.c,v 1.1.1.1 2008/08/24 05:34:46 gmcgarry Exp $	*/
 /*-
  * Copyright (c) 2008 Gregory McGarry <g.mcgarry@ieee.org>
  *
@@ -117,4 +117,4 @@ _dyld_fini(void)
 
 #endif
 
-IDENT("$Id: common.c,v 1.1 2008/08/24 05:34:46 gmcgarry Exp $");
+IDENT("$Id: common.c,v 1.1.1.1 2008/08/24 05:34:46 gmcgarry Exp $");

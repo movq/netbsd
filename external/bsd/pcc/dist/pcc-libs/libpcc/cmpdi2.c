@@ -1,5 +1,5 @@
-/*	$Id: cmpdi2.c,v 1.1 2008/08/24 05:34:48 gmcgarry Exp $	*/
-/*	$NetBSD: cmpdi2.c,v 1.1 2008/08/24 05:34:48 gmcgarry Exp $	*/
+/*	$Id: cmpdi2.c,v 1.1.1.1 2008/08/24 05:34:48 gmcgarry Exp $	*/
+/*	$NetBSD: cmpdi2.c,v 1.1.1.1 2008/08/24 05:34:48 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

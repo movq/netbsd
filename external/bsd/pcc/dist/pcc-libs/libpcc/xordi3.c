@@ -1,5 +1,5 @@
-/*	$Id: xordi3.c,v 1.1 2008/08/24 05:34:48 gmcgarry Exp $	*/
-/*	$NetBSD: xordi3.c,v 1.1 2008/08/24 05:34:48 gmcgarry Exp $	*/
+/*	$Id: xordi3.c,v 1.1.1.1 2008/08/24 05:34:48 gmcgarry Exp $	*/
+/*	$NetBSD: xordi3.c,v 1.1.1.1 2008/08/24 05:34:48 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

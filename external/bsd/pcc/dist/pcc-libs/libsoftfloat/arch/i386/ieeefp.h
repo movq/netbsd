@@ -1,4 +1,4 @@
-/*	$NetBSD: ieeefp.h,v 1.1 2008/08/24 05:34:49 gmcgarry Exp $	*/
+/*	$NetBSD: ieeefp.h,v 1.1.1.1 2008/08/24 05:34:49 gmcgarry Exp $	*/
 
 /* 
  * Written by J.T. Conklin, Apr 6, 1995

@@ -1,4 +1,4 @@
-/* $NetBSD: ltsf2.c,v 1.1 2008/08/24 05:34:48 gmcgarry Exp $ */
+/* $NetBSD: ltsf2.c,v 1.1.1.1 2008/08/24 05:34:48 gmcgarry Exp $ */
 
 /*
  * Written by Ben Harris, 2000.  This file is in the Public Domain.
