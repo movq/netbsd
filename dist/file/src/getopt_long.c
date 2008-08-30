@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt_long.c,v 1.1 2008/08/30 11:00:56 christos Exp $	*/
+/*	$NetBSD: getopt_long.c,v 1.1.1.1 2008/08/30 11:00:56 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
