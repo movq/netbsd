@@ -1,4 +1,4 @@
-/*	$NetBSD: strcase.h,v 1.1 2008/09/02 07:49:31 christos Exp $	*/
+/*	$NetBSD: strcase.h,v 1.1.1.1 2008/09/02 07:49:31 christos Exp $	*/
 
 /* Case-insensitive string comparison functions.
    Copyright (C) 1995-1996, 2001, 2003 Free Software Foundation, Inc.
