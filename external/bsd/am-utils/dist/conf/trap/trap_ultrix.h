@@ -1,4 +1,4 @@
-/*	$NetBSD: trap_ultrix.h,v 1.1 2008/09/19 20:07:19 christos Exp $	*/
+/*	$NetBSD: trap_ultrix.h,v 1.1.1.1 2008/09/19 20:07:19 christos Exp $	*/
 
 /* $srcdir/conf/trap/trap_ultrix.h */
 /* arg 3 to mount(2) is rwflag */
