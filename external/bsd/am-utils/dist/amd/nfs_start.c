@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_start.c,v 1.1 2008/09/19 20:07:16 christos Exp $	*/
+/*	$NetBSD: nfs_start.c,v 1.1.1.1 2008/09/19 20:07:16 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2007 Erez Zadok

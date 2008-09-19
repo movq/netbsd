@@ -1,4 +1,4 @@
-/*	$NetBSD: mk-amd-map.c,v 1.1 2008/09/19 20:07:23 christos Exp $	*/
+/*	$NetBSD: mk-amd-map.c,v 1.1.1.1 2008/09/19 20:07:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2007 Erez Zadok

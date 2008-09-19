@@ -1,4 +1,4 @@
-/*	$NetBSD: sun_map_tok.l,v 1.1 2008/09/19 20:07:17 christos Exp $	*/
+/*	$NetBSD: sun_map_tok.l,v 1.1.1.1 2008/09/19 20:07:17 christos Exp $	*/
 
 %{
 /*

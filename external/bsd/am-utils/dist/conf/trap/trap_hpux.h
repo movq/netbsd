@@ -1,4 +1,4 @@
-/*	$NetBSD: trap_hpux.h,v 1.1 2008/09/19 20:07:19 christos Exp $	*/
+/*	$NetBSD: trap_hpux.h,v 1.1.1.1 2008/09/19 20:07:19 christos Exp $	*/
 
 /* $srcdir/conf/trap/trap_hpux.h */
 extern int mount_hpux(MTYPE_TYPE type, const char *dir, int flags, caddr_t data);

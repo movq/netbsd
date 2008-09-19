@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_prot_sunos5_6.h,v 1.1 2008/09/19 20:07:19 christos Exp $	*/
+/*	$NetBSD: nfs_prot_sunos5_6.h,v 1.1.1.1 2008/09/19 20:07:19 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2007 Erez Zadok

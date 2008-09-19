@@ -1,4 +1,4 @@
-/*	$NetBSD: trap_stellix.h,v 1.1 2008/09/19 20:07:19 christos Exp $	*/
+/*	$NetBSD: trap_stellix.h,v 1.1.1.1 2008/09/19 20:07:19 christos Exp $	*/
 
 /* $srcdir/conf/trap/trap_stellix.h */
 extern int mount_stellix(char *fsname, char *dir, int flags, int type, void *data);
