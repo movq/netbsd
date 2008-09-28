@@ -1,8 +1,7 @@
-/*	$NetBSD: agr.h,v 1.1.20.1 2008/06/02 13:21:22 mjf Exp $	*/
+/*	$NetBSD: mount_udf.h,v 1.1.4.2 2008/09/28 11:17:14 mjf Exp $	*/
 
-/*-
- * Copyright (c)2005 YAMAMOTO Takashi,
- * All rights reserved.
+/*
+ * Copyright (c) 2008 The NetBSD Foundation.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -13,21 +12,26 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
+ * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#include "parse.h"
 
-extern struct pkw agr;
+#ifndef _SBIN_MOUNT_UDF_MOUNT_UDF_H_
+#define _SBIN_MOUNT_UDF_MOUNT_UDF_H_
 
-int agrsetport(prop_dictionary_t, prop_dictionary_t);
-void agr_status(prop_dictionary_t, prop_dictionary_t);
+#include <fs/udf/udf_mount.h>
+
+int	mount_udf(int, char **);
+void	mount_udf_parseargs(int, char **, struct udf_args *, int *,
+			      char *, char *);
+
+#endif /* _SBIN_MOUNT_UDF_MOUNT_UDF_H_ */
