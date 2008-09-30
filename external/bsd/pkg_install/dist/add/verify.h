@@ -1,4 +1,4 @@
-/* $NetBSD: verify.h,v 1.1 2008/09/30 19:00:26 joerg Exp $ */
+/* $NetBSD: verify.h,v 1.1.1.1 2008/09/30 19:00:26 joerg Exp $ */
 
 /*
  * Copyright (c) 2001 Alistair G. Crooks.  All rights reserved.

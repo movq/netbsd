@@ -1,4 +1,4 @@
-/* $NetBSD: delete.h,v 1.1 2008/09/30 19:00:26 joerg Exp $ */
+/* $NetBSD: delete.h,v 1.1.1.1 2008/09/30 19:00:26 joerg Exp $ */
 
 /* from FreeBSD Id: delete.h,v 1.4 1997/02/22 16:09:35 peter Exp */
 

@@ -1,4 +1,4 @@
-/* $NetBSD: verify.c,v 1.1 2008/09/30 19:00:26 joerg Exp $ */
+/* $NetBSD: verify.c,v 1.1.1.1 2008/09/30 19:00:26 joerg Exp $ */
 
 /*
  * Copyright (c) 2001 Alistair G. Crooks.  All rights reserved.
@@ -41,7 +41,7 @@
 #ifndef lint
 __COPYRIGHT("@(#) Copyright (c) 1999 \
 	        The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: verify.c,v 1.1 2008/09/30 19:00:26 joerg Exp $");
+__RCSID("$NetBSD: verify.c,v 1.1.1.1 2008/09/30 19:00:26 joerg Exp $");
 #endif
 
 #if HAVE_SYS_TYPES_H

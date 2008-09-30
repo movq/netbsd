@@ -1,4 +1,4 @@
-/* $NetBSD: lib.h,v 1.1 2008/09/30 19:00:27 joerg Exp $ */
+/* $NetBSD: lib.h,v 1.1.1.1 2008/09/30 19:00:27 joerg Exp $ */
 
 /* from FreeBSD Id: lib.h,v 1.25 1997/10/08 07:48:03 charnier Exp */
 

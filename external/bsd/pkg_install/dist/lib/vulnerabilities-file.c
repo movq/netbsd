@@ -36,7 +36,7 @@
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
 #endif
-__RCSID("$NetBSD: vulnerabilities-file.c,v 1.1 2008/09/30 19:00:27 joerg Exp $");
+__RCSID("$NetBSD: vulnerabilities-file.c,v 1.1.1.1 2008/09/30 19:00:27 joerg Exp $");
 
 #if HAVE_SYS_STAT_H
 #include <sys/stat.h>

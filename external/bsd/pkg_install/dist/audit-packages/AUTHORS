@@ -1,4 +1,4 @@
-# $NetBSD: AUTHORS,v 1.1 2008/09/30 19:00:26 joerg Exp $
+# $NetBSD: AUTHORS,v 1.1.1.1 2008/09/30 19:00:26 joerg Exp $
 
 * The functions that deal with finding packages such as fixpkgname()
   foundpkg() and checkforpkg() were taken from the pkg_install

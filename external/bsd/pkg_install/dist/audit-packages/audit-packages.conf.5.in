@@ -1,4 +1,4 @@
-.\" $NetBSD: audit-packages.conf.5.in,v 1.1 2008/09/30 19:00:26 joerg Exp $
+.\" $NetBSD: audit-packages.conf.5.in,v 1.1.1.1 2008/09/30 19:00:26 joerg Exp $
 .\"
 .\" Copyright (c) 2007 Adrian Portelli.  All rights reserved.
 .\"

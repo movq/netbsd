@@ -1,4 +1,4 @@
-/*	$NetBSD: pkg_io.c,v 1.1 2008/09/30 19:00:27 joerg Exp $	*/
+/*	$NetBSD: pkg_io.c,v 1.1.1.1 2008/09/30 19:00:27 joerg Exp $	*/
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>.
  * All rights reserved.
@@ -36,7 +36,7 @@
 #include <sys/cdefs.h>
 #endif
 
-__RCSID("$NetBSD: pkg_io.c,v 1.1 2008/09/30 19:00:27 joerg Exp $");
+__RCSID("$NetBSD: pkg_io.c,v 1.1.1.1 2008/09/30 19:00:27 joerg Exp $");
 
 #include <archive.h>
 #include <archive_entry.h>

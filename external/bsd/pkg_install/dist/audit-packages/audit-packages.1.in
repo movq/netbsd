@@ -1,4 +1,4 @@
-.\" $NetBSD: audit-packages.1.in,v 1.1 2008/09/30 19:00:26 joerg Exp $
+.\" $NetBSD: audit-packages.1.in,v 1.1.1.1 2008/09/30 19:00:26 joerg Exp $
 .\"
 .\" Copyright (c) 2003 Jeremy C. Reed.  All rights reserved.
 .\"
