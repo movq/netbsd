@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_shm_50.c,v 1.1.2.1 2008/03/29 20:50:33 christos Exp $	*/
+/*	$NetBSD: sysv_shm_50.c,v 1.1.2.2 2008/11/09 23:28:36 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_shm_50.c,v 1.1.2.1 2008/03/29 20:50:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_shm_50.c,v 1.1.2.2 2008/11/09 23:28:36 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,43 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_shm_50.c,v 1.1.2.1 2008/03/29 20:50:33 christos
 #include <sys/syscallargs.h>
 
 #include <compat/sys/shm.h>
-
-static void shmid_ds13_to_native(struct shmid_ds13 *, struct shmid_ds *);
-static void native_to_shmid_ds13(struct shmid_ds *, struct shmid_ds13 *);
-
-static void
-shmid_ds13_to_native(struct shmid_ds13 *oshmbuf, struct shmid_ds *shmbuf)
-{
-
-	oshmbuf->shm_perm = shmbuf->shm_perm;
-
-#define	CVT(x)	shmbuf->x = oshmbuf->x
-	CVT(shm_segsz);
-	CVT(shm_lpid);
-	CVT(shm_cpid);
-	CVT(shm_nattch);
-	CVT(shm_atime);
-	CVT(shm_dtime);
-	CVT(shm_ctime);
-#undef CVT
-}
-
-static void
-native_to_shmid_ds13(struct shmid_ds *shmbuf, struct shmid_ds13 *oshmbuf)
-{
-
-	shmbuf->shm_perm = oshmbuf->shm_perm;
-
-#define	CVT(x)	oshmbuf->x = shmbuf->x
-	CVT(shm_segsz);
-	CVT(shm_lpid);
-	CVT(shm_cpid);
-	CVT(shm_nattch);
-	CVT(shm_atime);
-	CVT(shm_dtime);
-	CVT(shm_ctime);
-#undef CVT
-}
 
 int
 compat_50_sys___shmctl13(struct lwp *l, const struct compat_50_sys___shmctl13_args *uap, register_t *retval)
@@ -110,14 +73,14 @@ compat_50_sys___shmctl13(struct lwp *l, const struct compat_50_sys___shmctl13_ar
 		error = copyin(SCARG(uap, buf), &oshmbuf, sizeof(oshmbuf));
 		if (error)
 			return (error);
-		shmid_ds13_to_native(&oshmbuf, &shmbuf);
+		__shmid_ds13_to_native(&oshmbuf, &shmbuf);
 	}
 
 	error = shmctl1(l, SCARG(uap, shmid), cmd,
 	    (cmd == IPC_SET || cmd == IPC_STAT) ? &shmbuf : NULL);
 
 	if (error == 0 && cmd == IPC_STAT) {
-		native_to_shmid_ds13(&shmbuf, &oshmbuf);
+		__native_to_shmid_ds13(&shmbuf, &oshmbuf);
 		error = copyout(&oshmbuf, SCARG(uap, buf), sizeof(oshmbuf));
 	}
 
