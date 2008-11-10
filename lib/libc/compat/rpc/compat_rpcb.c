@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_rpcb.c,v 1.1.2.1 2008/11/08 21:49:35 christos Exp $	*/
+/*	$NetBSD: compat_rpcb.c,v 1.1.2.2 2008/11/10 00:13:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat_rpcb.c,v 1.1.2.1 2008/11/08 21:49:35 christos Exp $");
+__RCSID("$NetBSD: compat_rpcb.c,v 1.1.2.2 2008/11/10 00:13:02 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 
@@ -54,6 +54,11 @@ __warn_references(rpcb_rmtcall,
     "warning: reference to compatibility rpcb_rmtcall(); include <rpc/rpcb_clnt.h> to generate correct reference")
 __warn_references(rpcb_gettime,
     "warning: reference to compatibility rpcb_gettime(); include <rpc/rpcb_clnt.h> to generate correct reference")
+
+#ifdef __weak_alias
+__weak_alias(rpcb_rmtcall, _rpcb_rmtcall)
+__weak_alias(rpcb_gettime, _rpcb_gettime)
+#endif
 
 enum clnt_stat
 rpcb_rmtcall(const struct netconfig *nc,
