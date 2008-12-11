@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ah_eeprom_v3.c,v 1.1 2008/12/11 04:46:25 alc Exp $
+ * $Id: ah_eeprom_v3.c,v 1.1.1.1 2008/12/11 04:46:25 alc Exp $
  */
 #include "opt_ah.h"
 

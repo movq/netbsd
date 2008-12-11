@@ -15,7 +15,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ah_regdomain.c,v 1.1 2008/12/11 04:46:26 alc Exp $
+ * $Id: ah_regdomain.c,v 1.1.1.1 2008/12/11 04:46:26 alc Exp $
  */
 #include "opt_ah.h"
 
