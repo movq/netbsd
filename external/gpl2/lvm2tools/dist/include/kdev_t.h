@@ -1,4 +1,4 @@
-/*	$NetBSD: kdev_t.h,v 1.1 2008/12/12 11:42:07 haad Exp $	*/
+/*	$NetBSD: kdev_t.h,v 1.1.1.1 2008/12/12 11:42:07 haad Exp $	*/
 
 /*
  * Copyright (C) 2004-2008 Red Hat, Inc. All rights reserved.

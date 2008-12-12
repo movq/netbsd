@@ -1,4 +1,4 @@
-/*	$NetBSD: libdevmapper-event.c,v 1.1 2008/12/12 11:42:06 haad Exp $	*/
+/*	$NetBSD: libdevmapper-event.c,v 1.1.1.1 2008/12/12 11:42:06 haad Exp $	*/
 
 /*
  * Copyright (C) 2005-2007 Red Hat, Inc. All rights reserved.

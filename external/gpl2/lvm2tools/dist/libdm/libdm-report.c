@@ -1,4 +1,4 @@
-/*	$NetBSD: libdm-report.c,v 1.1 2008/12/12 11:42:50 haad Exp $	*/
+/*	$NetBSD: libdm-report.c,v 1.1.1.1 2008/12/12 11:42:50 haad Exp $	*/
 
 /*
  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.

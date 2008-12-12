@@ -1,4 +1,4 @@
-/*	$NetBSD: dm-ioctl.h,v 1.1 2008/12/12 11:42:09 haad Exp $	*/
+/*	$NetBSD: dm-ioctl.h,v 1.1.1.1 2008/12/12 11:42:09 haad Exp $	*/
 
 /*
  * Copyright (C) 2001 - 2003 Sistina Software (UK) Limited.
