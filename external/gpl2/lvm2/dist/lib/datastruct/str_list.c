@@ -1,4 +1,4 @@
-/*	$NetBSD: str_list.c,v 1.1 2008/12/22 00:17:54 haad Exp $	*/
+/*	$NetBSD: str_list.c,v 1.1.1.1 2008/12/22 00:17:54 haad Exp $	*/
 
 /*
  * Copyright (C) 2003-2004 Sistina Software, Inc. All rights reserved.

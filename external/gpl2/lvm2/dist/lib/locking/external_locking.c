@@ -1,4 +1,4 @@
-/*	$NetBSD: external_locking.c,v 1.1 2008/12/22 00:18:04 haad Exp $	*/
+/*	$NetBSD: external_locking.c,v 1.1.1.1 2008/12/22 00:18:04 haad Exp $	*/
 
 /*
  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.

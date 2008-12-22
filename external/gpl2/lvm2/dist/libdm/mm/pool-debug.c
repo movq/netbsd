@@ -1,4 +1,4 @@
-/*	$NetBSD: pool-debug.c,v 1.1 2008/12/22 00:18:34 haad Exp $	*/
+/*	$NetBSD: pool-debug.c,v 1.1.1.1 2008/12/22 00:18:34 haad Exp $	*/
 
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  

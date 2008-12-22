@@ -1,4 +1,4 @@
-/*	$NetBSD: lvm-wrappers.c,v 1.1 2008/12/22 00:18:13 haad Exp $	*/
+/*	$NetBSD: lvm-wrappers.c,v 1.1.1.1 2008/12/22 00:18:13 haad Exp $	*/
 
 /*
  * Copyright (C) 2006 Red Hat, Inc. All rights reserved.

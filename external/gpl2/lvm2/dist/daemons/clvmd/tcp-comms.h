@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp-comms.h,v 1.1 2008/12/22 00:18:49 haad Exp $	*/
+/*	$NetBSD: tcp-comms.h,v 1.1.1.1 2008/12/22 00:18:49 haad Exp $	*/
 
 #include <netinet/in.h>
 

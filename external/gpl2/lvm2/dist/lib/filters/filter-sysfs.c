@@ -1,4 +1,4 @@
-/*	$NetBSD: filter-sysfs.c,v 1.1 2008/12/22 00:17:58 haad Exp $	*/
+/*	$NetBSD: filter-sysfs.c,v 1.1.1.1 2008/12/22 00:17:58 haad Exp $	*/
 
 /*
  * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.

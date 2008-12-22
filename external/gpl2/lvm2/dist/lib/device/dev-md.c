@@ -1,4 +1,4 @@
-/*	$NetBSD: dev-md.c,v 1.1 2008/12/22 00:17:57 haad Exp $	*/
+/*	$NetBSD: dev-md.c,v 1.1.1.1 2008/12/22 00:17:57 haad Exp $	*/
 
 /*
  * Copyright (C) 2004 Luca Berra
