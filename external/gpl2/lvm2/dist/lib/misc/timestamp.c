@@ -1,4 +1,4 @@
-/*	$NetBSD: timestamp.c,v 1.1 2008/12/22 00:18:13 haad Exp $	*/
+/*	$NetBSD: timestamp.c,v 1.1.1.1 2008/12/22 00:18:13 haad Exp $	*/
 
 /*
  * Copyright (C) 2006 Rackable Systems All rights reserved.

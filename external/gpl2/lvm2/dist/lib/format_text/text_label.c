@@ -1,4 +1,4 @@
-/*	$NetBSD: text_label.c,v 1.1 2008/12/22 00:18:14 haad Exp $	*/
+/*	$NetBSD: text_label.c,v 1.1.1.1 2008/12/22 00:18:14 haad Exp $	*/
 
 /*
  * Copyright (C) 2002-2004 Sistina Software, Inc. All rights reserved.

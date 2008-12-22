@@ -1,4 +1,4 @@
-/*	$NetBSD: libdm-string.c,v 1.1 2008/12/22 00:18:34 haad Exp $	*/
+/*	$NetBSD: libdm-string.c,v 1.1.1.1 2008/12/22 00:18:34 haad Exp $	*/
 
 /*
  * Copyright (C) 2006-2007 Red Hat, Inc. All rights reserved.

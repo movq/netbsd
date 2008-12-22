@@ -1,4 +1,4 @@
-/*	$NetBSD: clvmd-gulm.h,v 1.1 2008/12/22 00:18:50 haad Exp $	*/
+/*	$NetBSD: clvmd-gulm.h,v 1.1.1.1 2008/12/22 00:18:50 haad Exp $	*/
 
 
 /* DLM constant that clvmd uses as a generic NONBLOCK lock flag */

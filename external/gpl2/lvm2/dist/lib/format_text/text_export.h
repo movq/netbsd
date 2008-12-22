@@ -1,4 +1,4 @@
-/*	$NetBSD: text_export.h,v 1.1 2008/12/22 00:18:17 haad Exp $	*/
+/*	$NetBSD: text_export.h,v 1.1.1.1 2008/12/22 00:18:17 haad Exp $	*/
 
 /*
  * Copyright (C) 2003-2004 Sistina Software, Inc. All rights reserved.  

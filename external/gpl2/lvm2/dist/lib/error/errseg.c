@@ -1,4 +1,4 @@
-/*	$NetBSD: errseg.c,v 1.1 2008/12/22 00:17:57 haad Exp $	*/
+/*	$NetBSD: errseg.c,v 1.1.1.1 2008/12/22 00:17:57 haad Exp $	*/
 
 /*
  * Copyright (C) 2004-2007 Red Hat, Inc. All rights reserved.

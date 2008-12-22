@@ -1,4 +1,4 @@
-/*	$NetBSD: lvm2cmd-static.c,v 1.1 2008/12/22 00:19:04 haad Exp $	*/
+/*	$NetBSD: lvm2cmd-static.c,v 1.1.1.1 2008/12/22 00:19:04 haad Exp $	*/
 
 /*
  * Copyright (C) 2006 Red Hat, Inc. All rights reserved.

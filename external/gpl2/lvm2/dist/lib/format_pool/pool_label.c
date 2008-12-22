@@ -1,4 +1,4 @@
-/*	$NetBSD: pool_label.c,v 1.1 2008/12/22 00:17:51 haad Exp $	*/
+/*	$NetBSD: pool_label.c,v 1.1.1.1 2008/12/22 00:17:51 haad Exp $	*/
 
 /*
  * Copyright (C) 1997-2004 Sistina Software, Inc. All rights reserved.

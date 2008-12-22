@@ -1,4 +1,4 @@
-/*	$NetBSD: dmeventd.c,v 1.1 2008/12/22 00:18:53 haad Exp $	*/
+/*	$NetBSD: dmeventd.c,v 1.1.1.1 2008/12/22 00:18:53 haad Exp $	*/
 
 /*
  * Copyright (C) 2005-2007 Red Hat, Inc. All rights reserved.

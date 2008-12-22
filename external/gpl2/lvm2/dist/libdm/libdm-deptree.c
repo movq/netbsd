@@ -1,4 +1,4 @@
-/*	$NetBSD: libdm-deptree.c,v 1.1 2008/12/22 00:18:33 haad Exp $	*/
+/*	$NetBSD: libdm-deptree.c,v 1.1.1.1 2008/12/22 00:18:33 haad Exp $	*/
 
 /*
  * Copyright (C) 2005-2007 Red Hat, Inc. All rights reserved.

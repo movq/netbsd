@@ -1,4 +1,4 @@
-/*	$NetBSD: format1.c,v 1.1 2008/12/22 00:17:59 haad Exp $	*/
+/*	$NetBSD: format1.c,v 1.1.1.1 2008/12/22 00:17:59 haad Exp $	*/
 
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.

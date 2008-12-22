@@ -1,5 +1,5 @@
 #!/bin/sh
-#$Header: /cvsroot/src/external/gpl2/lvm2/dist/scripts/last_cvs_update.sh,v 1.1 2008/12/22 00:18:57 haad Exp $
+#$Header: /cvsroot/src/external/gpl2/lvm2/dist/scripts/last_cvs_update.sh,v 1.1.1.1 2008/12/22 00:18:57 haad Exp $
 ################################################################################
 ##
 ##    Copyright 2001 Sistina Software, Inc.

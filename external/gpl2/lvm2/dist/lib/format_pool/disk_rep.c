@@ -1,4 +1,4 @@
-/*	$NetBSD: disk_rep.c,v 1.1 2008/12/22 00:17:50 haad Exp $	*/
+/*	$NetBSD: disk_rep.c,v 1.1.1.1 2008/12/22 00:17:50 haad Exp $	*/
 
 /*
  * Copyright (C) 1997-2004 Sistina Software, Inc. All rights reserved.
