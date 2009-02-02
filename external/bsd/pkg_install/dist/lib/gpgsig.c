@@ -1,4 +1,4 @@
-/*	$NetBSD: gpgsig.c,v 1.1 2009/02/02 20:44:06 joerg Exp $	*/
+/*	$NetBSD: gpgsig.c,v 1.1.1.1 2009/02/02 20:44:06 joerg Exp $	*/
 #if HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -7,7 +7,7 @@
 #include <sys/cdefs.h>
 #endif
 
-__RCSID("$NetBSD: gpgsig.c,v 1.1 2009/02/02 20:44:06 joerg Exp $");
+__RCSID("$NetBSD: gpgsig.c,v 1.1.1.1 2009/02/02 20:44:06 joerg Exp $");
 
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>.

@@ -1,4 +1,4 @@
-/*	$NetBSD: remove.c,v 1.1 2009/02/02 20:44:08 joerg Exp $	*/
+/*	$NetBSD: remove.c,v 1.1.1.1 2009/02/02 20:44:08 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>.
@@ -39,7 +39,7 @@
 #include <sys/cdefs.h>
 #endif
 
-__RCSID("$NetBSD: remove.c,v 1.1 2009/02/02 20:44:08 joerg Exp $");
+__RCSID("$NetBSD: remove.c,v 1.1.1.1 2009/02/02 20:44:08 joerg Exp $");
 
 #if HAVE_DIRENT_H
 #include <dirent.h>

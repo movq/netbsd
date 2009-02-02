@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs7.c,v 1.1 2009/02/02 20:44:07 joerg Exp $	*/
+/*	$NetBSD: pkcs7.c,v 1.1.1.1 2009/02/02 20:44:07 joerg Exp $	*/
 #if HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -7,7 +7,7 @@
 #include <sys/cdefs.h>
 #endif
 
-__RCSID("$NetBSD: pkcs7.c,v 1.1 2009/02/02 20:44:07 joerg Exp $");
+__RCSID("$NetBSD: pkcs7.c,v 1.1.1.1 2009/02/02 20:44:07 joerg Exp $");
 
 /*-
  * Copyright (c) 2004, 2008 The NetBSD Foundation, Inc.
