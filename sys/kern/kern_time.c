@@ -1,11 +1,11 @@
-/*	$NetBSD: kern_time.c,v 1.155 2008/10/16 18:21:45 wrstuden Exp $	*/
+/*	$NetBSD: kern_time.c,v 1.155.4.2 2009/02/08 20:38:49 snj Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2004, 2005, 2007, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2004, 2005, 2007, 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Christopher G. Demetriou.
+ * by Christopher G. Demetriou, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.155 2008/10/16 18:21:45 wrstuden Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_time.c,v 1.155.4.2 2009/02/08 20:38:49 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/resourcevar.h>
@@ -134,8 +134,6 @@ settime1(struct proc *p, struct timespec *ts, bool check_kauth)
 	struct timeval delta, tv;
 	struct timeval now;
 	struct timespec ts1;
-	struct bintime btdelta;
-	lwp_t *l;
 	int s;
 
 	TIMESPEC_TO_TIMEVAL(&tv, ts);
@@ -164,19 +162,6 @@ settime1(struct proc *p, struct timespec *ts, bool check_kauth)
 
 	timeradd(&boottime, &delta, &boottime);
 
-	/*
-	 * XXXSMP: There is a short race between setting the time above
-	 * and adjusting LWP's run times.  Fixing this properly means
-	 * pausing all CPUs while we adjust the clock.
-	 */
-	timeval2bintime(&delta, &btdelta);
-	mutex_enter(proc_lock);
-	LIST_FOREACH(l, &alllwp, l_list) {
-		lwp_lock(l);
-		bintime_add(&l->l_stime, &btdelta);
-		lwp_unlock(l);
-	}
-	mutex_exit(proc_lock);
 	resettodr();
 	splx(s);
 
@@ -1440,6 +1425,7 @@ timer_intr(void *cookie)
 	struct ptimer *pt;
 	proc_t *p;
 	
+	mutex_enter(proc_lock);
 	mutex_spin_enter(&timer_lock);
 	while ((pt = TAILQ_FIRST(&timer_queue)) != NULL) {
 		TAILQ_REMOVE(&timer_queue, pt, pt_chain);
@@ -1471,12 +1457,9 @@ timer_intr(void *cookie)
 		pt->pt_poverruns = pt->pt_overruns;
 		pt->pt_overruns = 0;
 		mutex_spin_exit(&timer_lock);
-
-		mutex_enter(proc_lock);
 		kpsignal(p, &ksi, NULL);
-		mutex_exit(proc_lock);
-
 		mutex_spin_enter(&timer_lock);
 	}
 	mutex_spin_exit(&timer_lock);
+	mutex_exit(proc_lock);
 }

@@ -1,11 +1,16 @@
-# $NetBSD: Makefile,v 1.2 2008/10/30 00:52:43 macallan Exp $
+# $NetBSD: Makefile,v 1.2.2.5 2009/02/25 20:42:46 snj Exp $
 
-.if ${MACHINE_ARCH} == "powerpc"
-SUBDIR= mach64 mga r128 r200 r300 radeon tdfx
+SUBDIR=	libmesa .WAIT
+
+.if ${MACHINE} == "macppc"
+SUBDIR+=	mach64 mga r128 r200 r300 radeon tdfx
 .elif ${MACHINE} == "sparc64" || ${MACHINE} == "sparc"
-SUBDIR= mach64 mga r128 r200 r300 radeon
+SUBDIR+=	mach64 mga r128 r200 r300 radeon
+.elif ${MACHINE} == "shark" || ${MACHINE} == "ibmnws" || \
+      ${MACHINE} == "sgimips" || ${MACHINE} == "netwinder"
+SUBDIR=
 .else
-SUBDIR=	i810 i915 i965 mach64 mga r128 r200 r300 radeon s3v \
+SUBDIR+=	i810 i915 i965 mach64 mga r128 r200 r300 radeon s3v \
 	savage sis tdfx trident unichrome
 .endif
 

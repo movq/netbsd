@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs_vnops.c,v 1.51 2008/06/19 19:03:44 christos Exp $	*/
+/*	$NetBSD: tmpfs_vnops.c,v 1.51.6.5 2009/04/19 15:27:32 snj Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tmpfs_vnops.c,v 1.51 2008/06/19 19:03:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tmpfs_vnops.c,v 1.51.6.5 2009/04/19 15:27:32 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/dirent.h>
@@ -219,6 +219,7 @@ tmpfs_lookup(void *v)
 				error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred);
 				if (error != 0)
 					goto out;
+				cnp->cn_flags |= SAVENAME;
 			} else
 				de = NULL;
 
@@ -270,8 +271,10 @@ tmpfs_mknod(void *v)
 	struct vattr *vap = ((struct vop_mknod_args *)v)->a_vap;
 
 	if (vap->va_type != VBLK && vap->va_type != VCHR &&
-	    vap->va_type != VFIFO)
+	    vap->va_type != VFIFO) {
+		vput(dvp);
 		return EINVAL;
+	}
 
 	return tmpfs_alloc_file(dvp, vpp, vap, cnp, NULL);
 }
@@ -688,6 +691,7 @@ out:
 		vrele(dvp);
 	else
 		vput(dvp);
+	PNBUF_PUT(cnp->cn_pnbuf);
 
 	return error;
 }
@@ -816,6 +820,11 @@ tmpfs_rename(void *v)
 	tdnode = VP_TO_TMPFS_DIR(tdvp);
 	tmp = VFS_TO_TMPFS(tdvp->v_mount);
 
+	if (fdvp == tvp) {
+		error = 0;
+		goto out_unlocked;
+	}
+
 	/* If we need to move the directory between entries, lock the
 	 * source so that we can safely operate on it. */
 
@@ -826,26 +835,20 @@ tmpfs_rename(void *v)
 			goto out_unlocked;
 	}
 
+	/*
+	 * If the node we were renaming has scarpered, just give up.
+	 */
 	de = tmpfs_dir_lookup(fdnode, fcnp);
-	if (de == NULL) {
+	if (de == NULL || de->td_node != fnode) {
 		error = ENOENT;
 		goto out;
 	}
-	KASSERT(de->td_node == fnode);
 
 	/* If source and target are the same file, there is nothing to do. */
 	if (fvp == tvp) {
 		error = 0;
 		goto out;
 	}
-
-	/* Avoid manipulating '.' and '..' entries. */
-	if (de == NULL) {
-		KASSERT(fvp->v_type == VDIR);
-		error = EINVAL;
-		goto out;
-	}
-	KASSERT(de->td_node == fnode);
 
 	/* If replacing an existing entry, ensure we can do the operation. */
 	if (tvp != NULL) {
@@ -1074,6 +1077,7 @@ tmpfs_rmdir(void *v)
 	/* Release the nodes. */
 	vput(dvp);
 	vput(vp);
+	PNBUF_PUT(cnp->cn_pnbuf);
 
 	return error;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: timex.h,v 1.14 2008/04/21 12:56:31 ad Exp $	*/
+/*	$NetBSD: timex.h,v 1.14.12.3 2009/04/07 23:25:09 snj Exp $	*/
 
 /*-
  ***********************************************************************
@@ -157,6 +157,24 @@
 #define STA_NANO	0x2000	/* resolution (0 = us, 1 = ns) (ro) */
 #define STA_MODE	0x4000	/* mode (0 = PLL, 1 = FLL) (ro) */
 #define STA_CLK		0x8000	/* clock source (0 = A, 1 = B) (ro) */
+
+#define STA_FMT	"\177\020\
+b\0PLL\0\
+b\1PPSFREQ\0\
+b\2PPSTIME\0\
+b\3FLL\0\
+b\4INS\0\
+b\5DEL\0\
+b\6UNSYNC\0\
+b\7FREQHOLD\0\
+b\10PPSSIGNAL\0\
+b\11PPSJITTER\0\
+b\12PPSWANDER\0\
+b\13PPSERROR\0\
+b\14CLOCKERR\0\
+b\15NANO\0\
+f\16\1MODE\0=\0PLL\0=\1FLL\0\
+f\17\1CLK\0=\0A\0=\1B\0"
 
 #define STA_RONLY (STA_PPSSIGNAL | STA_PPSJITTER | STA_PPSWANDER | \
     STA_PPSERROR | STA_CLOCKERR | STA_NANO | STA_MODE | STA_CLK)

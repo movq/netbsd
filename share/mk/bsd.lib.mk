@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.lib.mk,v 1.289 2008/10/19 22:05:21 apb Exp $
+#	$NetBSD: bsd.lib.mk,v 1.289.2.2 2009/01/09 03:35:51 snj Exp $
 #	@(#)bsd.lib.mk	8.3 (Berkeley) 4/22/94
 
 .include <bsd.init.mk>
@@ -9,6 +9,7 @@
 
 LIBISMODULE?=	no
 LIBISPRIVATE?=	no
+LIBISCXX?=	no
 
 _LIB_PREFIX=	lib
 
@@ -24,7 +25,12 @@ MKSTATICLIB:=	no
 .if ${LIBISPRIVATE} != "no"
 MKDEBUGLIB:=	no
 MKLINT:=	no
+MKPICINSTALL:=	no
+. if defined(NOSTATICLIB) && ${MKPICLIB} != "no"
+MKSTATICLIB:=	no
+. else
 MKPIC:=		no
+. endif
 MKPROFILE:=	no
 .endif
 
@@ -367,7 +373,7 @@ LOBJS+=${LSRCS:.c=.ln} ${SRCS:M*.c:.c=.ln}
 .if ${LIBISPRIVATE} != "no"
 # No installation is required
 libinstall::
-.else	# ${LIBISPRIVATE} == "no"					# {
+.endif	# ${LIBISPRIVATE} == "no"					# {
 
 .if ${MKDEBUGLIB} != "no"
 _LIBS+=lib${LIB}_g.a
@@ -405,8 +411,6 @@ _LIBS+=lib${LIB}.so.${SHLIB_FULLVERSION}
 .if ${MKLINT} != "no" && !empty(LOBJS)
 _LIBS+=llib-l${LIB}.ln
 .endif
-
-.endif	# ${LIBISPRIVATE} == "no"					# }
 
 ALLOBJS=
 .if (${MKPIC} == "no" || (defined(LDSTATIC) && ${LDSTATIC} != "") \
@@ -489,19 +493,25 @@ LDADD+= -lgcc_pic
 .endif
 .endif
 
+.if ${LIBISCXX} != "no"
+LIBCC:=	${CXX}
+.else
+LIBCC:=	${CC}
+.endif
+
 lib${LIB}.so.${SHLIB_FULLVERSION}: ${SOLIB} ${DPADD} ${DPLIBC} \
     ${SHLIB_LDSTARTFILE} ${SHLIB_LDENDFILE}
 	${_MKTARGET_BUILD}
 	rm -f lib${LIB}.so.${SHLIB_FULLVERSION}
 .if defined(DESTDIR)
-	${CC} ${LDLIBC} -Wl,-nostdlib -B${_GCC_CRTDIR}/ -B${DESTDIR}/usr/lib/ \
+	${LIBCC} ${LDLIBC} -Wl,-nostdlib -B${_GCC_CRTDIR}/ -B${DESTDIR}/usr/lib/ \
 	    ${_LIBLDOPTS} \
 	    -Wl,-x -shared ${SHLIB_SHFLAGS} ${LDFLAGS} -o ${.TARGET} \
 	    -Wl,--whole-archive ${SOLIB} \
 	    -Wl,--no-whole-archive ${LDADD} \
 	    -L${_GCC_LIBGCCDIR}
 .else
-	${CC} ${LDLIBC} -Wl,-x -shared ${SHLIB_SHFLAGS} ${LDFLAGS} \
+	${LIBCC} ${LDLIBC} -Wl,-x -shared ${SHLIB_SHFLAGS} ${LDFLAGS} \
 	    -o ${.TARGET} ${_LIBLDOPTS} \
 	    -Wl,--whole-archive ${SOLIB} -Wl,--no-whole-archive ${LDADD}
 .endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls.c,v 1.376 2008/10/22 11:16:29 ad Exp $	*/
+/*	$NetBSD: vfs_syscalls.c,v 1.376.4.2 2009/02/16 03:33:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.376 2008/10/22 11:16:29 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.376.4.2 2009/02/16 03:33:17 snj Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_43.h"
@@ -3426,10 +3426,10 @@ do_sys_rename(const char *from, const char *to, enum uio_seg seg, int retain)
 		char *f1, *f2;
 
 		f1 = malloc(fromnd.ni_cnd.cn_namelen + 1, M_TEMP, M_WAITOK);
-		strlcpy(f1, fromnd.ni_cnd.cn_nameptr, fromnd.ni_cnd.cn_namelen);
+		strlcpy(f1, fromnd.ni_cnd.cn_nameptr, fromnd.ni_cnd.cn_namelen + 1);
 
 		f2 = malloc(tond.ni_cnd.cn_namelen + 1, M_TEMP, M_WAITOK);
-		strlcpy(f2, tond.ni_cnd.cn_nameptr, tond.ni_cnd.cn_namelen);
+		strlcpy(f2, tond.ni_cnd.cn_nameptr, tond.ni_cnd.cn_namelen + 1);
 
 		error = veriexec_renamechk(l, fvp, f1, tvp, f2);
 
@@ -3624,7 +3624,7 @@ dorevoke(struct vnode *vp, kauth_cred_t cred)
 
 	if ((error = VOP_GETATTR(vp, &vattr, cred)) != 0)
 		return error;
-	if (kauth_cred_geteuid(cred) != vattr.va_uid &&
+	if (kauth_cred_geteuid(cred) == vattr.va_uid ||
 	    (error = kauth_authorize_generic(cred,
 	    KAUTH_GENERIC_ISSUSER, NULL)) == 0)
 		VOP_REVOKE(vp, REVOKEALL);

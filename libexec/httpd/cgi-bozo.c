@@ -1,4 +1,4 @@
-/*	$NetBSD: cgi-bozo.c,v 1.7 2008/03/03 22:15:09 mrg Exp $	*/
+/*	$NetBSD: cgi-bozo.c,v 1.7.8.3 2009/02/24 03:15:07 snj Exp $	*/
 
 /*	$eterna: cgi-bozo.c,v 1.18 2008/03/03 03:36:11 mrg Exp $	*/
 
@@ -60,6 +60,7 @@ static	int	Cflag;		/* added a cgi handler, always process_cgi() */
 static	const char *	content_cgihandler(http_req *, const char *);
 static	void		finish_cgi_output(http_req *request, int, int);
 static	int		parse_header(const char *, ssize_t, char **, char **);
+static	void		append_index_html(char **);
 
 void
 set_cgibin(char *path)
@@ -92,7 +93,7 @@ process_cgi(http_req *request)
 	char	buf[WRSZ];
 	struct	headers *headp;
 	const char *type, *clen, *info, *cgihandler;
-	char	*query, *s, *t, *path, *env, *command, *url;
+	char	*query, *s, *t, *path, *env, *command, *file, *url;
 	char	**envp, **curenvp, *argv[4];
 	size_t	len;
 	ssize_t rbytes;
@@ -103,48 +104,46 @@ process_cgi(http_req *request)
 	if (!cgibin && !Cflag)
 		return;
 
-	debug((DEBUG_NORMAL, "process_cgi: url `%s'", request->hr_url));
+	asprintf(&file, "/%s", request->hr_file);
+	if (request->hr_query && strlen(request->hr_query)) {
+	  query = bozostrdup(request->hr_query);
+	} else {
+	  query = NULL;
+	}
+	
+	asprintf(&url, "%s%c%s", file, query?'?':0, query);
+	debug((DEBUG_NORMAL, "process_cgi: url `%s'", url));
 
-	url = bozostrdup(request->hr_url);
-	if ((s = strchr(url, '?')) != NULL) {
-		*s++ = '\0';
-		query = s;
-	} else
-		query = NULL;
 	path = NULL;
 	envp = NULL;
 	cgihandler = NULL;
 	command = NULL;
 	info = NULL;
-
 	len = strlen(url);
-	if (len == 0 || url[len - 1] == '/') {	/* append index.html */
-		debug((DEBUG_FAT, "appending index.html"));
-		url = bozorealloc(url, len + strlen(index_html) + 1);
-		strcat(url, index_html);
-		debug((DEBUG_NORMAL, "process_cgi: url adjusted to `%s'", url));
-	}
 
 	auth_check(request, url + 1);
-
 	if (!cgibin || strncmp(url + 1, CGIBIN_PREFIX, CGIBIN_PREFIX_LEN) != 0) {
-		cgihandler = content_cgihandler(request, url + 1);
+		cgihandler = content_cgihandler(request, file + 1);
 		if (cgihandler == NULL) {
+		        debug((DEBUG_FAT, "process_cgi: no handler, returning"));
+			free(file);
 			free(url);
 			return;
 		}
+		if (len == 0 || file[len - 1] == '/')
+			append_index_html(&file);
 		debug((DEBUG_NORMAL, "process_cgi: cgihandler `%s'",
 		    cgihandler));
-	}
-
+	} else if (len - 1 == CGIBIN_PREFIX_LEN)	/* url is "/cgi-bin/" */
+		append_index_html(&file);
 	ix = 0;
 	if (cgihandler) {
-		command = url + 1;
+		command = file + 1;
 		path = bozostrdup(cgihandler);
 		argv[ix++] = path;
 			/* argv[] = [ path, command, query, NULL ] */
 	} else {
-		command = url + CGIBIN_PREFIX_LEN + 1;
+		command = file + CGIBIN_PREFIX_LEN + 1;
 		if ((s = strchr(command, '/')) != NULL) {
 			info = bozostrdup(s);
 			*s = '\0';
@@ -178,6 +177,9 @@ process_cgi(http_req *request)
 	    auth_cgi_count(request) +
 	    (request->hr_serverport && *request->hr_serverport ? 1 : 0);
 
+	debug((DEBUG_FAT,
+	       "process_cgi: envpsize `%d'", envpsize));
+
 	envp = bozomalloc(sizeof(*envp) * envpsize);
 	for (ix = 0; ix < envpsize; ix++)
 		envp[ix] = NULL;
@@ -204,7 +206,7 @@ process_cgi(http_req *request)
 		spsetenv(env, headp->h_value, curenvp++);
 		free(env);
 	}
-		
+
 #ifndef _PATH_DEFPATH
 #define _PATH_DEFPATH "/usr/bin:/bin"
 #endif
@@ -215,10 +217,10 @@ process_cgi(http_req *request)
 	spsetenv("GATEWAY_INTERFACE", "CGI/1.1", curenvp++);
 	spsetenv("SERVER_PROTOCOL", request->hr_proto, curenvp++);
 	spsetenv("REQUEST_METHOD", request->hr_methodstr, curenvp++);
-	spsetenv("SCRIPT_NAME", url, curenvp++);
-	spsetenv("SCRIPT_FILENAME", url + 1, curenvp++);
+	spsetenv("SCRIPT_NAME", file, curenvp++);
+	spsetenv("SCRIPT_FILENAME", file + 1, curenvp++);
 	spsetenv("SERVER_SOFTWARE", server_software, curenvp++);
-	spsetenv("REQUEST_URI", request->hr_url, curenvp++);
+	spsetenv("REQUEST_URI", url, curenvp++);
 	spsetenv("DATE_GMT", http_date(), curenvp++);
 	if (query && *query)
 		spsetenv("QUERY_STRING", query, curenvp++);
@@ -236,8 +238,8 @@ process_cgi(http_req *request)
 		spsetenv("REMOTE_ADDR", request->hr_remoteaddr, curenvp++);
 	auth_cgi_setenv(request, &curenvp);
 
-	debug((DEBUG_FAT, "process_cgi: going exec %s, %s %s %s",
-	    path, argv[0], strornull(argv[1]), strornull(argv[2])));
+	free(file);
+	free(url);
 
 	if (-1 == socketpair(AF_UNIX, SOCK_STREAM, PF_UNSPEC, sv))
 		error(1, "child socketpair failed: %s", strerror(errno));
@@ -255,6 +257,9 @@ process_cgi(http_req *request)
 		close(sv[0]);
 		dup2(sv[1], STDIN_FILENO);
 		dup2(sv[1], STDOUT_FILENO);
+
+		debug((DEBUG_FAT, "process_cgi: going exec %s, %s %s %s",
+		       path, argv[0], strornull(argv[1]), strornull(argv[2])));
 
 		if (-1 == execve(path, argv, envp))
 			error(1, "child exec failed: %s", path);
@@ -424,10 +429,20 @@ content_cgihandler(http_req *request, const char *file)
 {
 	struct	content_map	*map;
 
+	debug((DEBUG_FAT, "content_cgihandler: trying file %s", file));
+
 	map = match_content_map(file, 0);
 	if (map)
 		return (map->cgihandler);
 	return (NULL);
+}
+
+static void
+append_index_html(char **url)
+{
+	*url = bozorealloc(*url, strlen(*url) + strlen(index_html) + 1);
+	strcat(*url, index_html);
+	debug((DEBUG_NORMAL, "append_index_html: url adjusted to `%s'", *url));
 }
 
 #ifndef NO_DYNAMIC_CONTENT

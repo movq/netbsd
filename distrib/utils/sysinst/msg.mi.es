@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.es,v 1.21 2008/02/04 01:54:56 riz Exp $	*/
+/*	$NetBSD: msg.mi.es,v 1.21.14.2 2009/01/22 22:45:15 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -44,6 +44,9 @@ message usage
 
 message sysinst_message_language
 {Mensajes de instalación en castellano}
+
+message sysinst_message_locale
+{es_ES.ISO8859-15}
 
 message Yes {Sí}
 message No {No}
@@ -993,3 +996,9 @@ el sendmail eliminado.  ¿Desea actualizar el fichero /etc/mailer.conf
 automáticamente para que apunte a postfix?  Si escoge "No" tendrá que
 actualizar /etc/mailer.conf usted mismo para asegurarse de que los mensajes
 de correo electrónico se envíen correctamente.}
+
+message license
+{To use the network interface %s, you must agree to the license in
+file %s.
+To view this file now, you can type ^Z, look at the contents of
+the file and then type "fg" to resume.}

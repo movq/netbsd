@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_proc.c,v 1.78 2008/04/28 20:23:01 martin Exp $	*/
+/*	$NetBSD: kvm_proc.c,v 1.78.6.2 2009/04/01 00:25:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_proc.c	8.3 (Berkeley) 9/23/93";
 #else
-__RCSID("$NetBSD: kvm_proc.c,v 1.78 2008/04/28 20:23:01 martin Exp $");
+__RCSID("$NetBSD: kvm_proc.c,v 1.78.6.2 2009/04/01 00:25:21 snj Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -99,6 +99,7 @@ __RCSID("$NetBSD: kvm_proc.c,v 1.78 2008/04/28 20:23:01 martin Exp $");
 #include <kvm.h>
 
 #include <uvm/uvm_extern.h>
+#include <uvm/uvm_param.h>
 #include <uvm/uvm_amap.h>
 
 #include <sys/sysctl.h>
@@ -561,6 +562,16 @@ again:
 			    (u_long)PTRTOUINT64(kp->kp_eproc.e_paddr),
 			    sizeof(struct kinfo_lwp), &nlwps);
 
+			if (kl == NULL) {
+				_kvm_syserr(kd, NULL,
+					"kvm_getlwps() failed on process %u\n",
+					kp->kp_proc.p_pid);
+				if (nlwps == 0)
+					return NULL;
+				else
+					continue;
+			}
+
 			/* We use kl[0] as the "representative" LWP */
 			memset(kp2p, 0, sizeof(kp2));
 			kp2p->p_forw = kl[0].l_forw;
@@ -669,6 +680,12 @@ again:
 			kp2p->p_vm_tsize = kp->kp_eproc.e_vm.vm_tsize;
 			kp2p->p_vm_dsize = kp->kp_eproc.e_vm.vm_dsize;
 			kp2p->p_vm_ssize = kp->kp_eproc.e_vm.vm_ssize;
+			kp2p->p_vm_vsize = kp->kp_eproc.e_vm.vm_map.size;
+			/* Adjust mapped size */
+			kp2p->p_vm_msize =
+			    (kp->kp_eproc.e_vm.vm_map.size / kd->nbpg) -
+			    kp->kp_eproc.e_vm.vm_issize +
+			    kp->kp_eproc.e_vm.vm_ssize;
 
 			kp2p->p_eflag = (int32_t)kp->kp_eproc.e_flag;
 

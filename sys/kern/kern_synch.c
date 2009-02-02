@@ -1,7 +1,8 @@
-/*	$NetBSD: kern_synch.c,v 1.254 2008/10/29 21:35:27 smb Exp $	*/
+/*	$NetBSD: kern_synch.c,v 1.254.2.6 2009/04/23 17:47:13 snj Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2000, 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000, 2004, 2006, 2007, 2008, 2009
+ *    The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -68,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.254 2008/10/29 21:35:27 smb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.254.2.6 2009/04/23 17:47:13 snj Exp $");
 
 #include "opt_kstack.h"
 #include "opt_perfctrs.h"
@@ -129,7 +130,6 @@ kcondvar_t	lbolt;			/* once a second sleep address */
 /* Preemption event counters */
 static struct evcnt kpreempt_ev_crit;
 static struct evcnt kpreempt_ev_klock;
-static struct evcnt kpreempt_ev_ipl;
 static struct evcnt kpreempt_ev_immed;
 
 /*
@@ -154,8 +154,6 @@ sched_init(void)
 	   "kpreempt", "defer: critical section");
 	evcnt_attach_dynamic(&kpreempt_ev_klock, EVCNT_TYPE_MISC, NULL,
 	   "kpreempt", "defer: kernel_lock");
-	evcnt_attach_dynamic(&kpreempt_ev_ipl, EVCNT_TYPE_MISC, NULL,
-	   "kpreempt", "defer: IPL");
 	evcnt_attach_dynamic(&kpreempt_ev_immed, EVCNT_TYPE_MISC, NULL,
 	   "kpreempt", "immediate");
 
@@ -377,8 +375,8 @@ preempt(void)
  */
 static char	in_critical_section;
 static char	kernel_lock_held;
-static char	spl_raised;
 static char	is_softint;
+static char	cpu_kpreempt_enter_fail;
 
 bool
 kpreempt(uintptr_t where)
@@ -437,10 +435,7 @@ kpreempt(uintptr_t where)
 			 * interrupt to retry later.
 			 */
 			splx(s);
-			if ((dop & DOPREEMPT_COUNTED) == 0) {
-				kpreempt_ev_ipl.ev_count++;
-			}
-			failed = (uintptr_t)&spl_raised;
+			failed = (uintptr_t)&cpu_kpreempt_enter_fail;
 			break;
 		}
 		/* Do it! */
@@ -925,7 +920,6 @@ setrunnable(struct lwp *l)
 {
 	struct proc *p = l->l_proc;
 	struct cpu_info *ci;
-	sigset_t *ss;
 
 	KASSERT((l->l_flag & LW_IDLE) == 0);
 	KASSERT(mutex_owned(p->p_lock));
@@ -938,14 +932,8 @@ setrunnable(struct lwp *l)
 		 * If we're being traced (possibly because someone attached us
 		 * while we were stopped), check for a signal from the debugger.
 		 */
-		if ((p->p_slflag & PSL_TRACED) != 0 && p->p_xstat != 0) {
-			if ((sigprop[p->p_xstat] & SA_TOLWP) != 0)
-				ss = &l->l_sigpend.sp_set;
-			else
-				ss = &p->p_sigpend.sp_set;
-			sigaddset(ss, p->p_xstat);
+		if ((p->p_slflag & PSL_TRACED) != 0 && p->p_xstat != 0)
 			signotify(l);
-		}
 		p->p_nrlwps++;
 		break;
 	case LSSUSPENDED:
@@ -1163,6 +1151,7 @@ void
 sched_pstats(void *arg)
 {
 	const int clkhz = (stathz != 0 ? stathz : hz);
+	static bool backwards;
 	struct rlimit *rlim;
 	struct lwp *l;
 	struct proc *p;
@@ -1222,8 +1211,16 @@ sched_pstats(void *arg)
 			}
 		}
 		mutex_exit(p->p_lock);
-		if (__predict_false(sig))
+		if (__predict_false(runtm < 0)) {
+			if (!backwards) {
+				backwards = true;
+				printf("WARNING: negative runtime; "
+				    "monotonic clock has gone backwards\n");
+			}
+		} else if (__predict_false(sig)) {
+			KASSERT((p->p_flag & PK_SYSTEM) == 0);
 			psignal(p, sig);
+		}
 	}
 	mutex_exit(proc_lock);
 	uvm_meter();

@@ -1,12 +1,14 @@
-/*	$NetBSD: machdep.c,v 1.644 2008/10/21 15:46:32 cegger Exp $	*/
+/*	$NetBSD: machdep.c,v 1.644.4.10 2009/04/04 17:39:09 snj Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1998, 2000, 2004, 2006, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 2000, 2004, 2006, 2008, 2009
+ *     The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Charles M. Hannum, by Jason R. Thorpe of the Numerical Aerospace
- * Simulation Facility, NASA Ames Research Center and by Julio M. Merino Vidal.
+ * Simulation Facility NASA Ames Research Center, by Julio M. Merino Vidal,
+ * and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -65,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.644 2008/10/21 15:46:32 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.644.4.10 2009/04/04 17:39:09 snj Exp $");
 
 #include "opt_beep.h"
 #include "opt_compat_ibcs2.h"
@@ -77,6 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.644 2008/10/21 15:46:32 cegger Exp $")
 #include "opt_ipkdb.h"
 #include "opt_kgdb.h"
 #include "opt_mtrr.h"
+#include "opt_multiboot.h"
 #include "opt_multiprocessor.h"
 #include "opt_physmem.h"
 #include "opt_realmem.h"
@@ -537,8 +540,8 @@ i386_proc0_tss_ldt_init()
 	l = &lwp0;
 	pcb = &l->l_addr->u_pcb;
 
-	pcb->pcb_ldt_sel = pmap_kernel()->pm_ldt_sel = GSEL(GLDT_SEL, SEL_KPL);
-	pcb->pcb_cr0 = rcr0();
+	pmap_kernel()->pm_ldt_sel = GSEL(GLDT_SEL, SEL_KPL);
+	pcb->pcb_cr0 = rcr0() & ~CR0_TS;
 	pcb->pcb_esp0 = USER_TO_UAREA(l->l_addr) + KSTACK_SIZE - 16;
 	pcb->pcb_iopl = SEL_KPL;
 	l->l_md.md_regs = (struct trapframe *)pcb->pcb_esp0 - 1;
@@ -546,7 +549,7 @@ i386_proc0_tss_ldt_init()
 	memcpy(pcb->pcb_gsd, &gdt[GUDATA_SEL], sizeof(pcb->pcb_gsd));
 
 #ifndef XEN
-	lldt(pcb->pcb_ldt_sel);
+	lldt(pmap_kernel()->pm_ldt_sel);
 #else
 	HYPERVISOR_fpu_taskswitch();
 	XENPRINTF(("lwp tss sp %p ss %04x/%04x\n",
@@ -769,6 +772,9 @@ buildcontext(struct lwp *l, int sel, void *catcher, void *fp)
 	tf->tf_eflags &= ~PSL_CLEARSIG;
 	tf->tf_esp = (int)fp;
 	tf->tf_ss = GSEL(GUDATA_SEL, SEL_UPL);
+
+	/* Ensure FP state is reset, if FP is used. */
+	l->l_md.md_flags &= ~MDL_USEDFPU;
 }
 
 static void
@@ -924,10 +930,6 @@ cpu_reboot(int howto, char *bootstr)
 haltsys:
 	doshutdownhooks();
 
-#ifdef MULTIPROCESSOR
-	x86_broadcast_ipi(X86_IPI_HALT);
-#endif
-
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 #ifdef XEN
 		HYPERVISOR_shutdown();
@@ -962,7 +964,15 @@ haltsys:
 #endif
 	}
 
+#ifdef MULTIPROCESSOR
+	x86_broadcast_ipi(X86_IPI_HALT);
+#endif
+
 	if (howto & RB_HALT) {
+#if NACPI > 0
+		AcpiDisable();
+#endif
+
 		printf("\n");
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
@@ -1868,19 +1878,18 @@ init386(paddr_t first_avail)
 	/* exceptions */
 	for (x = 0; x < 32; x++) {
 		idt_vec_reserve(x);
-		setgate(&idt[x], IDTVEC(exceptions)[x], 0,
-		    (x == 7 || x == 16) ? SDT_SYS386IGT : SDT_SYS386TGT,
+		setgate(&idt[x], IDTVEC(exceptions)[x], 0, SDT_SYS386IGT,
 		    (x == 3 || x == 4) ? SEL_UPL : SEL_KPL,
 		    GSEL(GCODE_SEL, SEL_KPL));
 	}
 
 	/* new-style interrupt gate for syscalls */
 	idt_vec_reserve(128);
-	setgate(&idt[128], &IDTVEC(syscall), 0, SDT_SYS386TGT, SEL_UPL,
+	setgate(&idt[128], &IDTVEC(syscall), 0, SDT_SYS386IGT, SEL_UPL,
 	    GSEL(GCODE_SEL, SEL_KPL));
 #ifdef COMPAT_SVR4
 	idt_vec_reserve(0xd2);
-	setgate(&idt[0xd2], &IDTVEC(svr4_fasttrap), 0, SDT_SYS386TGT,
+	setgate(&idt[0xd2], &IDTVEC(svr4_fasttrap), 0, SDT_SYS386IGT,
 	    SEL_UPL, GSEL(GCODE_SEL, SEL_KPL));
 #endif /* COMPAT_SVR4 */
 
@@ -2118,15 +2127,7 @@ cpu_reset()
 		outl(0xcfc, 0xf);
 	}
 
-	/*
-	 * The keyboard controller has 4 random output pins, one of which is
-	 * connected to the RESET pin on the CPU in many PCs.  We tell the
-	 * keyboard controller to pulse this line a couple of times.
-	 */
-	outb(IO_KBD + KBCMDP, KBC_PULSE0);
-	delay(100000);
-	outb(IO_KBD + KBCMDP, KBC_PULSE0);
-	delay(100000);
+	x86_reset();
 
 	/*
 	 * Try to cause a triple fault and watchdog reset by making the IDT
@@ -2201,8 +2202,6 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 		/*
 		 * If this process is the current FP owner, dump its
 		 * context to the PCB first.
-		 * XXX npxsave() also clears the FPU state; depending on the
-		 * XXX application this might be a penalty.
 		 */
 		if (l->l_addr->u_pcb.pcb_fpcpu) {
 			npxsave_lwp(l, true);
@@ -2284,15 +2283,16 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_ss     = gr[_REG_SS];
 	}
 
+#if NNPX > 0
+	/*
+	 * If we were using the FPU, forget that we were.
+	 */
+	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
+		npxsave_lwp(l, false);
+#endif
+
 	/* Restore floating point register context, if any. */
 	if ((flags & _UC_FPU) != 0) {
-#if NNPX > 0
-		/*
-		 * If we were using the FPU, forget that we were.
-		 */
-		if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-			npxsave_lwp(l, false);
-#endif
 		if (flags & _UC_FXSAVE) {
 			if (i386_use_fxsave) {
 				memcpy(
@@ -2316,12 +2316,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 				    sizeof (l->l_addr->u_pcb.pcb_savefpu.sv_87));
 			}
 		}
-		/* If not set already. */
 		l->l_md.md_flags |= MDL_USEDFPU;
-#if 0
-		/* Apparently unused. */
-		l->l_addr->u_pcb.pcb_saveemc = mcp->mc_fp.fp_emcsts;
-#endif
 	}
 	mutex_enter(p->p_lock);
 	if (flags & _UC_SETSTACK)

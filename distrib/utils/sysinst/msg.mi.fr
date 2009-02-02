@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.fr,v 1.101 2008/02/04 01:54:56 riz Exp $	*/
+/*	$NetBSD: msg.mi.fr,v 1.101.14.2 2009/01/22 22:45:15 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -44,6 +44,9 @@ message usage
 
 message sysinst_message_language
 {Messages d'installation en français}
+
+message sysinst_message_locale
+{fr_FR.ISO8859-15}
 
 message Yes {Oui}
 message No {Non}
@@ -1051,3 +1054,8 @@ choisissez "Non", vous devez mettre à jour manuellement votre fichier
 /etc/mailer.conf pour que vos mails soient délivrés correctement.
 }
 
+message license
+{To use the network interface %s, you must agree to the license in
+file %s.
+To view this file now, you can type ^Z, look at the contents of
+the file and then type "fg" to resume.}

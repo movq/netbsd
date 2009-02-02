@@ -1,8 +1,11 @@
-/*	$NetBSD: uipc_syscalls.c,v 1.134 2008/08/06 15:01:23 plunky Exp $	*/
+/*	$NetBSD: uipc_syscalls.c,v 1.134.4.2 2009/04/04 23:36:28 snj Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -58,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls.c,v 1.134 2008/08/06 15:01:23 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls.c,v 1.134.4.2 2009/04/04 23:36:28 snj Exp $");
 
 #include "opt_pipe.h"
 
@@ -199,7 +202,7 @@ do_sys_accept(struct lwp *l, int sock, struct mbuf **name, register_t *new_sock)
 			so->so_error = ECONNABORTED;
 			break;
 		}
-		error = sowait(so, 0);
+		error = sowait(so, true, 0);
 		if (error) {
 			goto bad;
 		}
@@ -300,7 +303,7 @@ do_sys_connect(struct lwp *l, int fd, struct mbuf *nam)
 	}
 	solock(so);
 	MCLAIM(nam, so->so_mowner);
-	if (so->so_state & SS_ISCONNECTING) {
+	if ((so->so_state & SS_ISCONNECTING) != 0) {
 		error = EALREADY;
 		goto out;
 	}
@@ -308,12 +311,17 @@ do_sys_connect(struct lwp *l, int fd, struct mbuf *nam)
 	error = soconnect(so, nam, l);
 	if (error)
 		goto bad;
-	if (so->so_nbio && (so->so_state & SS_ISCONNECTING)) {
+	if (so->so_nbio && (so->so_state & SS_ISCONNECTING) != 0) {
 		error = EINPROGRESS;
 		goto out;
 	}
-	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
-		error = sowait(so, 0);
+	while ((so->so_state & SS_ISCONNECTING) != 0 && so->so_error == 0) {
+		error = sowait(so, true, 0);
+		if (__predict_false((so->so_state & SS_ISDRAINING) != 0)) {
+			error = EPIPE;
+			interrupted = 1;
+			break;
+		}
 		if (error) {
 			if (error == EINTR || error == ERESTART)
 				interrupted = 1;

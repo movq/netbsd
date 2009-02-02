@@ -1,11 +1,11 @@
-/*	$NetBSD: ffs_vnops.c,v 1.104 2008/10/10 09:21:58 hannken Exp $	*/
+/*	$NetBSD: ffs_vnops.c,v 1.104.4.7 2009/04/04 17:27:16 snj Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Wasabi Systems, Inc.
+ * by Wasabi Systems, Inc, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.104 2008/10/10 09:21:58 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.104.4.7 2009/04/04 17:27:16 snj Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -295,9 +295,6 @@ ffs_fsync(void *v)
 	if ((ap->a_offlo == 0 && ap->a_offhi == 0) || DOINGSOFTDEP(vp) ||
 	    (vp->v_type != VREG)) {
 		int flags = ap->a_flags;
-
-		if (vp->v_type == VBLK)
-			flags |= FSYNC_VFS;
 		error = ffs_full_fsync(vp, flags);
 		goto out;
 	}
@@ -322,7 +319,13 @@ ffs_fsync(void *v)
 #ifdef WAPBL
 	mp = wapbl_vptomp(vp);
 	if (mp->mnt_wapbl) {
-		if (ap->a_flags & FSYNC_DATAONLY) {
+		/*
+		 * Don't bother writing out metadata if the syncer is
+		 * making the request.  We will let the sync vnode
+		 * write it out in a single burst through a call to
+		 * VFS_SYNC().
+		 */
+		if ((ap->a_flags & (FSYNC_DATAONLY | FSYNC_LAZY)) != 0) {
 			fstrans_done(vp->v_mount);
 			return 0;
 		}
@@ -335,11 +338,11 @@ ffs_fsync(void *v)
 				fstrans_done(vp->v_mount);
 				return error;
 			}
-			error = ffs_update(vp, NULL, NULL,
-				(ap->a_flags & FSYNC_WAIT) ? UPDATE_WAIT : 0);
+			error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE |
+			    ((ap->a_flags & FSYNC_WAIT) ? UPDATE_WAIT : 0));
 			UFS_WAPBL_END(mp);
 		}
-		if (error || (ap->a_flags & FSYNC_NOLOG)) {
+		if (error || (ap->a_flags & FSYNC_NOLOG) != 0) {
 			fstrans_done(vp->v_mount);
 			return error;
 		}
@@ -380,9 +383,9 @@ ffs_fsync(void *v)
 		mutex_exit(&vp->v_interlock);
 	}
 
-	error = ffs_update(vp, NULL, NULL,
-	    ((ap->a_flags & (FSYNC_WAIT | FSYNC_DATAONLY)) == FSYNC_WAIT)
-	    ? UPDATE_WAIT : 0);
+	error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE |
+	    (((ap->a_flags & (FSYNC_WAIT | FSYNC_DATAONLY)) == FSYNC_WAIT)
+	    ? UPDATE_WAIT : 0));
 
 	if (error == 0 && ap->a_flags & FSYNC_CACHE) {
 		int l = 0;
@@ -396,22 +399,29 @@ out:
 }
 
 /*
- * Synch an open file.
+ * Synch an open file.  Called for VOP_FSYNC().
  */
 /* ARGSUSED */
 int
 ffs_full_fsync(struct vnode *vp, int flags)
 {
 	struct buf *bp, *nbp;
-	int error, passes, skipmeta, inodedeps_only, waitfor;
+	int error, passes, skipmeta, inodedeps_only, waitfor, i;
 	struct mount *mp;
+
+	KASSERT(VTOI(vp) != NULL);
+	KASSERT(vp->v_tag == VT_UFS);
 
 	error = 0;
 
-	if (vp->v_type == VBLK &&
-	    vp->v_specmountpoint != NULL &&
-	    (vp->v_specmountpoint->mnt_flag & MNT_SOFTDEP))
-		softdep_fsync_mountdev(vp);
+	mp = vp->v_mount;
+	if (vp->v_type == VBLK && vp->v_specmountpoint != NULL) {
+		mp = vp->v_specmountpoint;
+		if ((mp->mnt_flag & MNT_SOFTDEP) != 0)
+			softdep_fsync_mountdev(vp);
+	} else {
+		mp = vp->v_mount;
+	}
 
 	mutex_enter(&vp->v_interlock);
 
@@ -419,16 +429,10 @@ ffs_full_fsync(struct vnode *vp, int flags)
 	    && UVM_OBJ_IS_CLEAN(&vp->v_uobj) && LIST_EMPTY(&vp->v_dirtyblkhd);
 
 	/*
-	 * Flush all dirty data associated with a vnode.
+	 * Flush all dirty data associated with the vnode.
 	 */
-
 	if (vp->v_type == VREG || vp->v_type == VBLK) {
 		int pflags = PGO_ALLPAGES | PGO_CLEANIT;
-
-		if ((flags & FSYNC_VFS) != 0 && vp->v_specmountpoint != NULL)
-			mp = vp->v_specmountpoint;
-		else
-			mp = vp->v_mount;
 
 		if ((flags & FSYNC_WAIT))
 			pflags |= PGO_SYNCIO;
@@ -439,47 +443,45 @@ ffs_full_fsync(struct vnode *vp, int flags)
 		if (error)
 			return error;
 	} else {
-		mp = vp->v_mount;
 		mutex_exit(&vp->v_interlock);
 	}
 
 #ifdef WAPBL
 	if (mp && mp->mnt_wapbl) {
-		error = 0;
-		if (flags & FSYNC_DATAONLY)
-			return error;
+		/*
+		 * Don't bother writing out metadata if the syncer is
+		 * making the request.  We will let the sync vnode
+		 * write it out in a single burst through a call to
+		 * VFS_SYNC().
+		 */
+		if ((flags & (FSYNC_DATAONLY | FSYNC_LAZY)) != 0)
+			return 0;
 
-		if (VTOI(vp) && (VTOI(vp)->i_flag &
-		    (IN_ACCESS | IN_CHANGE | IN_UPDATE | IN_MODIFY |
-				 IN_MODIFIED | IN_ACCESSED))) {
+		if ((VTOI(vp)->i_flag & (IN_ACCESS | IN_CHANGE | IN_UPDATE
+		    | IN_MODIFY | IN_MODIFIED | IN_ACCESSED)) != 0) {
 			error = UFS_WAPBL_BEGIN(mp);
 			if (error)
 				return error;
-			error = ffs_update(vp, NULL, NULL,
-				(flags & FSYNC_WAIT) ? UPDATE_WAIT : 0);
+			error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE |
+			    ((flags & FSYNC_WAIT) ? UPDATE_WAIT : 0));
 			UFS_WAPBL_END(mp);
 		}
-		if (error || (flags & FSYNC_NOLOG))
+		if (error || (flags & FSYNC_NOLOG) != 0)
 			return error;
+
 		/*
 		 * Don't flush the log if the vnode being flushed
 		 * contains no dirty buffers that could be in the log.
 		 */
-		if (!((flags & FSYNC_RECLAIM) &&
-		    LIST_EMPTY(&vp->v_dirtyblkhd))) {
+		if (!LIST_EMPTY(&vp->v_dirtyblkhd)) {
 			error = wapbl_flush(mp->mnt_wapbl, 0);
 			if (error)
 				return error;
 		}
 
-		/*
-		 * XXX temporary workaround for "dirty bufs" panic in
-		 * vinvalbuf.  need a full fix for the v_numoutput
-		 * waiters issues.
-		 */
-		if (flags & FSYNC_WAIT) {
+		if ((flags & FSYNC_WAIT) != 0) {
 			mutex_enter(&vp->v_interlock);
-			while (vp->v_numoutput)
+			while (vp->v_numoutput != 0)
 				cv_wait(&vp->v_cv, &vp->v_interlock);
 			mutex_exit(&vp->v_interlock);
 		}
@@ -488,6 +490,10 @@ ffs_full_fsync(struct vnode *vp, int flags)
 	}
 #endif /* WAPBL */
 
+	/*
+	 * Write out metadata for non-logging file systems.  This block can
+	 * be simplified once softdep goes.
+	 */
 	passes = NIADDR + 1;
 	skipmeta = 0;
 	if (flags & FSYNC_WAIT)
@@ -530,7 +536,7 @@ loop:
 		goto loop;
 	}
 
-	if (flags & FSYNC_WAIT) {
+	if ((flags & FSYNC_WAIT) != 0) {
 		mutex_enter(&vp->v_interlock);
 		while (vp->v_numoutput) {
 			cv_wait(&vp->v_cv, &vp->v_interlock);
@@ -567,22 +573,12 @@ loop:
 	if (inodedeps_only)
 		waitfor = 0;
 	else
-		waitfor = (flags & FSYNC_WAIT) ? UPDATE_WAIT : 0;
+		waitfor = (flags & FSYNC_WAIT) != 0 ? UPDATE_WAIT : 0;
+	error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE | waitfor);
 
-	if (vp->v_tag == VT_UFS)
-		error = ffs_update(vp, NULL, NULL, waitfor);
-	else {
-		KASSERT(vp->v_type == VBLK);
-		KASSERT((flags & FSYNC_VFS) != 0);
-	}
-
-	if (error == 0 && flags & FSYNC_CACHE) {
-		int i = 0;
-		if ((flags & FSYNC_VFS) == 0) {
-			KASSERT(VTOI(vp) != NULL);
-			vp = VTOI(vp)->i_devvp;
-		}
-		VOP_IOCTL(vp, DIOCCACHESYNC, &i, FWRITE, curlwp->l_cred);
+	if (error == 0 && (flags & FSYNC_CACHE) != 0) {
+		(void)VOP_IOCTL(VTOI(vp)->i_devvp, DIOCCACHESYNC, &i, FWRITE,
+		    kauth_cred_get());
 	}
 
 	return error;

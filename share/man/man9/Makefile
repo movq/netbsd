@@ -1,4 +1,4 @@
-#       $NetBSD: Makefile,v 1.270 2008/09/16 16:40:23 pgoyette Exp $
+#       $NetBSD: Makefile,v 1.270.2.4 2008/12/01 01:28:11 snj Exp $
 
 #	Makefile for section 9 (kernel function and variable) manual pages.
 
@@ -50,7 +50,7 @@ MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	signal.9 sockopt.9 softintr.9 spl.9 splraiseipl.9 \
 	store.9 suspendsched.9 \
 	sysctl.9 sysmon_envsys.9 tc.9 tcp_congctl.9 timecounter.9 \
-	time_second.9 todr.9 uiomove.9 ucom.9 userret.9 \
+	time_second.9 todr.9 tvtohz.9 uiomove.9 ucom.9 userret.9 \
 	vattr.9 veriexec.9 vcons.9 vfs.9 vfs_hooks.9 vfsops.9 vfssubr.9 \
 	video.9 vme.9 \
 	vnfileops.9 vnode.9 vnodeops.9 vnsubr.9 \
@@ -373,6 +373,16 @@ MLINKS+=mca.9 mca_intr_establish.9 \
 	mca.9 mca_intr_evcnt.9 \
 	mca.9 mca_conf_read.9 \
 	mca.9 mca_conf_write.9
+MLINKS+=microtime.9 bintime.9 \
+	microtime.9 getbintime.9 \
+	microtime.9 getmicrotime.9 \
+	microtime.9 nanotime.9 \
+	microtime.9 getnanotime.9
+MLINKS+=microuptime.9 binuptime.9 \
+	microuptime.9 getbinuptime.9 \
+	microuptime.9 getmicrouptime.9 \
+	microuptime.9 nanouptime.9 \
+	microuptime.9 getnanouptime.9
 MLINKS+=mutex.9 mutex_init.9 mutex.9 mutex_destroy.9 mutex.9 mutex_enter.9 \
 	mutex.9 mutex_exit.9 mutex.9 mutex_tryenter.9 mutex.9 mutex_owned.9 \
 	mutex.9 mutex_spin_enter.9 mutex.9 mutex_spin_exit.9
@@ -596,6 +606,7 @@ MLINKS+=sysmon_envsys.9 sysmon_envsys_create.9 \
 	sysmon_envsys.9 sysmon_envsys_sensor_attach.9 \
 	sysmon_envsys.9 sysmon_envsys_sensor_detach.9
 MLINKS+=time_second.9 boottime.9 time_second.9 time_uptime.9
+MLINKS+=timecounter.9 tc_init.9
 MLINKS+=tc.9 tc_intr_establish.9 \
 	tc.9 tc_intr_disestablish.9 \
 	tc.9 tc_intr_evcnt.9 \

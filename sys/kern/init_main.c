@@ -1,7 +1,7 @@
-/*	$NetBSD: init_main.c,v 1.371 2008/10/28 15:33:10 tsutsui Exp $	*/
+/*	$NetBSD: init_main.c,v 1.371.2.3 2009/04/04 17:39:10 snj Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.371 2008/10/28 15:33:10 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.371.2.3 2009/04/04 17:39:10 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipsec.h"
@@ -112,6 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.371 2008/10/28 15:33:10 tsutsui Exp 
 #include "opt_wapbl.h"
 
 #include "rnd.h"
+#include "ksyms.h"
 #include "sysmon_envsys.h"
 #include "sysmon_power.h"
 #include "sysmon_taskq.h"
@@ -252,52 +253,6 @@ int	start_init_exec;		/* semaphore for start_init() */
 static void check_console(struct lwp *l);
 static void start_init(void *);
 void main(void);
-void ssp_init(void);
-
-#if defined(__SSP__) || defined(__SSP_ALL__)
-long __stack_chk_guard[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-void __stack_chk_fail(void);
-
-void
-__stack_chk_fail(void)
-{
-	panic("stack overflow detected; terminated");
-}
-
-void
-ssp_init(void)
-{
-	int s;
-
-#ifdef DIAGNOSTIC
-	printf("Initializing SSP:");
-#endif
-	/*
-	 * We initialize ssp here carefully:
-	 *	1. after we got some entropy
-	 *	2. without calling a function
-	 */
-	size_t i;
-	long guard[__arraycount(__stack_chk_guard)];
-
-	arc4randbytes(guard, sizeof(guard));
-	s = splhigh();
-	for (i = 0; i < __arraycount(guard); i++)
-		__stack_chk_guard[i] = guard[i];
-	splx(s);
-#ifdef DIAGNOSTIC
-	for (i = 0; i < __arraycount(guard); i++)
-		printf("%lx ", guard[i]);
-	printf("\n");
-#endif
-}
-#else
-void
-ssp_init(void)
-{
-
-}
-#endif
 
 void __secmodel_none(void);
 __weak_alias(secmodel_start,__secmodel_none);
@@ -339,6 +294,7 @@ main(void)
 
 	kernel_lock_init();
 	once_init();
+	mutex_init(&cpu_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	uvm_init();
 
@@ -346,6 +302,10 @@ main(void)
 
 	/* Initialize lock caches. */
 	mutex_obj_init();
+
+#if NKSYMS > 0
+	ksyms_init_finalize();
+#endif
 
 	/* Initialize the extent manager. */
 	extent_init();
@@ -404,7 +364,6 @@ main(void)
 	time_init();
 
 	/* Initialize the run queues, turnstiles and sleep queues. */
-	mutex_init(&cpu_lock, MUTEX_DEFAULT, IPL_NONE);
 	sched_rqinit();
 	turnstile_init();
 	sleeptab_init(&sleeptab);
@@ -506,6 +465,10 @@ main(void)
 
 	/* Configure the system hardware.  This will enable interrupts. */
 	configure();
+
+	ssp_init();
+
+	configure2();
 
 	ubc_init();		/* must be after autoconfig */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_socket.c,v 1.173 2008/10/07 01:20:37 pooka Exp $	*/
+/*	$NetBSD: nfs_socket.c,v 1.173.4.3 2009/02/06 01:48:58 snj Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1995
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_socket.c,v 1.173 2008/10/07 01:20:37 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_socket.c,v 1.173.4.3 2009/02/06 01:48:58 snj Exp $");
 
 #include "fs_nfs.h"
 #include "opt_nfs.h"
@@ -283,7 +283,7 @@ nfs_connect(nmp, rep, l)
 		 * that interruptible mounts don't hang here for a long time.
 		 */
 		while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
-			(void)sowait(so, 2 * hz);
+			(void)sowait(so, false, 2 * hz);
 			if ((so->so_state & SS_ISCONNECTING) &&
 			    so->so_error == 0 && rep &&
 			    (error = nfs_sigintr(nmp, rep, rep->r_lwp)) != 0){
@@ -1614,7 +1614,7 @@ nfs_timer(void *arg)
 	struct socket *so;
 	struct nfsmount *nmp;
 	int timeo;
-	int s, error;
+	int error;
 	bool more = false;
 #ifdef NFSSERVER
 	struct timeval tv;
@@ -1624,7 +1624,7 @@ nfs_timer(void *arg)
 
 	nfs_timer_ev.ev_count++;
 
-	s = splsoftnet();
+	mutex_enter(softnet_lock);	/* XXX PR 40491 */
 	TAILQ_FOREACH(rep, &nfs_reqq, r_chain) {
 		more = true;
 		nmp = rep->r_nmp;
@@ -1642,6 +1642,8 @@ nfs_timer(void *arg)
 				timeo = NFS_RTO(nmp, proct[rep->r_procnum]);
 			if (nmp->nm_timeouts > 0)
 				timeo *= nfs_backoff[nmp->nm_timeouts - 1];
+			if (timeo > NFS_MAXTIMEO)
+				timeo = NFS_MAXTIMEO;
 			if (rep->r_rtt <= timeo)
 				continue;
 			if (nmp->nm_timeouts <
@@ -1676,7 +1678,7 @@ nfs_timer(void *arg)
 		 *	Resend it
 		 * Set r_rtt to -1 in case we fail to send it now.
 		 */
-		solock(so);
+		/* solock(so);		XXX PR 40491 */
 		rep->r_rtt = -1;
 		if (sbspace(&so->so_snd) >= rep->r_mreq->m_pkthdr.len &&
 		   ((nmp->nm_flag & NFSMNT_DUMBTIMR) ||
@@ -1718,9 +1720,9 @@ nfs_timer(void *arg)
 				rep->r_rtt = 0;
 			}
 		}
-		sounlock(so);
+		/* sounlock(so);	XXX PR 40491 */
 	}
-	splx(s);
+	mutex_exit(softnet_lock);	/* XXX PR 40491 */
 
 #ifdef NFSSERVER
 	/*

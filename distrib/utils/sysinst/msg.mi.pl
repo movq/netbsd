@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.60 2008/02/04 01:54:56 riz Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.60.14.2 2009/01/22 22:45:15 snj Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -46,6 +46,9 @@ message usage
 
 message sysinst_message_language
 {Komunikaty instalacyjne w jezyku polskim}
+
+message sysinst_message_locale
+{pl_PL.ISO8859-2}
 
 message Yes {Tak}
 message No {Nie}
@@ -945,3 +948,9 @@ postfix. The file /etc/mailer.conf still chooses the removed
 sendmail. Do you want to upgrade /etc/mailer.conf automatically for
 postfix? If you choose "No" you will have to update /etc/mailer.conf
 yourself to ensure proper email delivery.}
+
+message license
+{To use the network interface %s, you must agree to the license in
+file %s.
+To view this file now, you can type ^Z, look at the contents of
+the file and then type "fg" to resume.}

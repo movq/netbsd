@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_subr.c,v 1.357 2008/09/24 09:33:40 ad Exp $	*/
+/*	$NetBSD: vfs_subr.c,v 1.357.4.4 2009/02/16 03:33:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2004, 2005, 2007, 2008 The NetBSD Foundation, Inc.
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.357 2008/09/24 09:33:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.357.4.4 2009/02/16 03:33:16 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -1302,7 +1302,7 @@ vput(vnode_t *vp)
 
 /*
  * Try to drop reference on a vnode.  Abort if we are releasing the
- * last reference.
+ * last reference.  Note: this _must_ succeed if not the last reference.
  */
 static inline bool
 vtryrele(vnode_t *vp)
@@ -1334,7 +1334,8 @@ vrelel(vnode_t *vp, int flags)
 	KASSERT((vp->v_iflag & VI_MARKER) == 0);
 	KASSERT(vp->v_freelisthd == NULL);
 
-	if (vp->v_op == dead_vnodeop_p && (vp->v_iflag & VI_CLEAN) == 0) {
+	if (__predict_false(vp->v_op == dead_vnodeop_p &&
+	    (vp->v_iflag & (VI_CLEAN|VI_XLOCK)) == 0)) {
 		vpanic(vp, "dead but not clean");
 	}
 
@@ -1348,8 +1349,10 @@ vrelel(vnode_t *vp, int flags)
 		return;
 	}
 	if (vp->v_usecount <= 0 || vp->v_writecount != 0) {
-		vpanic(vp, "vput: bad ref count");
+		vpanic(vp, "vrelel: bad ref count");
 	}
+
+	KASSERT((vp->v_iflag & VI_XLOCK) == 0);
 
 	/*
 	 * If not clean, deactivate the vnode, but preserve
@@ -1841,9 +1844,9 @@ vclean(vnode_t *vp, int flags)
 	cache_purge(vp);
 
 	/* Done with purge, notify sleepers of the grim news. */
+	mutex_enter(&vp->v_interlock);
 	vp->v_op = dead_vnodeop_p;
 	vp->v_tag = VT_NON;
-	mutex_enter(&vp->v_interlock);
 	vp->v_vnlock = &vp->v_lock;
 	KNOTE(&vp->v_klist, NOTE_REVOKE);
 	vp->v_iflag &= ~(VI_XLOCK | VI_FREEING);
@@ -1989,6 +1992,11 @@ vrevoke(vnode_t *vp)
 	mutex_enter(&vp->v_interlock);
 	if ((vp->v_iflag & VI_CLEAN) != 0) {
 		mutex_exit(&vp->v_interlock);
+		return;
+	} else if (vp->v_type != VBLK && vp->v_type != VCHR) {
+		atomic_inc_uint(&vp->v_usecount);
+		vclean(vp, DOCLOSE);
+		vrelel(vp, 0);
 		return;
 	} else {
 		dev = vp->v_rdev;
@@ -2184,7 +2192,7 @@ sysctl_kern_vnode(SYSCTLFN_ARGS)
 			}
 			memcpy(&vbuf, vp, VNODESZ);
 			mutex_exit(&mntvnode_lock);
-			if ((error = copyout(vp, bp, VPTRSZ)) ||
+			if ((error = copyout(&vp, bp, VPTRSZ)) ||
 			   (error = copyout(&vbuf, bp + VPTRSZ, VNODESZ))) {
 			   	mutex_enter(&mntvnode_lock);
 				(void)vunmark(mvp);

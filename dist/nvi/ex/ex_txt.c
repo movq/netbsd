@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_txt.c,v 1.1.1.2 2008/05/18 14:31:20 aymeric Exp $ */
+/*	$NetBSD: ex_txt.c,v 1.1.1.2.6.2 2009/01/20 02:56:07 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -392,8 +392,8 @@ txt_dent(SCR *sp, TEXT *tp)
 			++scno;
 
 	/* Get the previous shiftwidth column. */
-	cno = scno;
-	scno -= --scno % sw;
+	cno = scno--;
+	scno -= scno % sw;
 
 	/*
 	 * Since we don't know what comes before the character(s) being
@@ -405,8 +405,12 @@ txt_dent(SCR *sp, TEXT *tp)
 	 *
 	 * Count up spaces/tabs needed to get to the target.
 	 */
-	for (cno = 0, tabs = 0; cno + COL_OFF(cno, ts) <= scno; ++tabs)
-		cno += COL_OFF(cno, ts);
+	cno = 0;
+	tabs = 0;
+	if (!O_ISSET(sp, O_EXPANDTABS)) {
+		for (; cno + COL_OFF(cno, ts) <= scno; ++tabs)
+			cno += COL_OFF(cno, ts);
+	}
 	spaces = scno - cno;
 
 	/* Make sure there's enough room. */
