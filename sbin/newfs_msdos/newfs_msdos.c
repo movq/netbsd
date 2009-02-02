@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs_msdos.c,v 1.27 2008/08/11 10:56:54 christos Exp $	*/
+/*	$NetBSD: newfs_msdos.c,v 1.27.2.2 2009/02/02 20:52:42 snj Exp $	*/
 
 /*
  * Copyright (c) 1998 Robert Nordier
@@ -33,7 +33,7 @@
 static const char rcsid[] =
   "$FreeBSD: src/sbin/newfs_msdos/newfs_msdos.c,v 1.15 2000/10/10 01:49:37 wollman Exp $";
 #else
-__RCSID("$NetBSD: newfs_msdos.c,v 1.27 2008/08/11 10:56:54 christos Exp $");
+__RCSID("$NetBSD: newfs_msdos.c,v 1.27.2.2 2009/02/02 20:52:42 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -786,24 +786,21 @@ getbpbinfo(int fd, const char *fname, const char *dtype, int oflag,
 	if (!bpb->bps)
 	    bpb->bps = ckgeom(fname, geo.dg_secsize, "bytes/sector");
 
-	if (geo.dg_nsectors > 63 || geo.dg_ntracks > 255) {
+	if (geo.dg_nsectors > 63) {
 		/*
-		 * The kernel doesn't accept BPB with spt > 63 or hds > 255.
+		 * The kernel doesn't accept BPB with spt > 63.
 		 * (see sys/fs/msdosfs/msdosfs_vfsops.c:msdosfs_mountfs())
 		 * If values taken from disklabel don't match these
 		 * restrictions, use popular BIOS default values instead.
 		 */
 		geo.dg_nsectors = 63;
-		geo.dg_ntracks = 255;
 	}
 	if (!bpb->spt)
 	    bpb->spt = ckgeom(fname, geo.dg_nsectors, "sectors/track");
 	if (!bpb->hds)
 	    bpb->hds = ckgeom(fname, geo.dg_ntracks, "drive heads");
-	if (!bpb->sec)
-	    bpb->sec = geo.dg_secperunit;
 	if (!bpb->bsec)
-	    bpb->bsec = bpb->sec;
+	    bpb->bsec = geo.dg_secperunit;
     }
 }
 

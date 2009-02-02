@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwn.c,v 1.22 2008/10/20 09:33:48 rtr Exp $	*/
+/*	$NetBSD: if_iwn.c,v 1.22.4.3 2008/11/15 03:13:51 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iwn.c,v 1.22 2008/10/20 09:33:48 rtr Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iwn.c,v 1.22.4.3 2008/11/15 03:13:51 snj Exp $");
 
 
 /*
@@ -377,6 +377,9 @@ iwn_attach(device_t parent __unused, device_t self, void *aux)
 
 	/* IBSS channel undefined for now */
 	ic->ic_ibss_chan = &ic->ic_channels[0];
+
+	memset(ic->ic_des_essid, 0, IEEE80211_NWID_LEN);
+	ic->ic_des_esslen = 0;
 
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
@@ -1032,7 +1035,7 @@ iwn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 		/* FALLTHROUGH */
 	case IEEE80211_S_AUTH:
 		/* cancel any active scan - it apparently breaks auth */
-		(void)iwn_cmd(sc, IWN_CMD_SCAN_ABORT, NULL, 0, 1);
+		/*(void)iwn_cmd(sc, IWN_CMD_SCAN_ABORT, NULL, 0, 1);*/
 
 		if ((error = iwn_auth(sc)) != 0) {
 			aprint_error_dev(sc->sc_dev,
@@ -1230,7 +1233,7 @@ iwn_load_firmware(struct iwn_softc *sc)
 	int error;
 
 	/* load firmware image from disk */
-	if ((error = firmware_open("if_iwn","iwlwifi-4965.ucode", &fw)) != 0) {
+	if ((error = firmware_open("if_iwn","iwlwifi-4965-1.ucode", &fw)) != 0) {
 		aprint_error_dev(sc->sc_dev, "could not read firmware file\n");
 		goto fail1;
 	}

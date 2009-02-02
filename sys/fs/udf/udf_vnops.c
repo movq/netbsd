@@ -1,4 +1,4 @@
-/* $NetBSD: udf_vnops.c,v 1.30 2008/07/17 19:10:22 reinoud Exp $ */
+/* $NetBSD: udf_vnops.c,v 1.30.4.6 2009/03/24 20:29:53 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_vnops.c,v 1.30 2008/07/17 19:10:22 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_vnops.c,v 1.30.4.6 2009/03/24 20:29:53 snj Exp $");
 #endif /* not lint */
 
 
@@ -279,8 +279,9 @@ udf_write(void *v)
 	struct file_entry    *fe;
 	struct extfile_entry *efe;
 	void *win;
-	uint64_t file_size, old_size;
+	uint64_t file_size, old_size, old_offset;
 	vsize_t len;
+	int async = vp->v_mount->mnt_flag & MNT_ASYNC;
 	int error;
 	int flags, resid, extended;
 
@@ -342,6 +343,7 @@ udf_write(void *v)
 	error = 0;
 
 	uvm_vnp_setwritesize(vp, file_size);
+	old_offset = uio->uio_offset;
 	while (uio->uio_resid > 0) {
 		/* maximise length to file extremity */
 		len = MIN(file_size - uio->uio_offset, uio->uio_resid);
@@ -355,6 +357,23 @@ udf_write(void *v)
 		ubc_release(win, flags);
 		if (error)
 			break;
+
+		/*
+		 * flush what we just wrote if necessary.
+		 * XXXUBC simplistic async flushing.
+		 *
+		 * this one works on page sizes. Directories are excluded
+		 * since its file data that we want to purge.
+		 */
+		if (!async && (vp->v_type != VDIR) &&
+		  (uio->uio_offset - old_offset >= PAGE_SIZE)) {
+			mutex_enter(&vp->v_interlock);
+			error = VOP_PUTPAGES(vp,
+				ptoa(atop(old_offset)),
+				ptoa(atop(uio->uio_offset + PAGE_SIZE-1)),
+				PGO_CLEANIT);
+			old_offset = uio->uio_offset;
+		}
 	}
 	uvm_vnp_setsize(vp, file_size);
 
@@ -555,8 +574,7 @@ udf_readdir(void *v)
 
 	/* we are called just as long as we keep on pushing data in */
 	error = 0;
-	if ((uio->uio_offset < file_size) &&
-	    (uio->uio_resid >= sizeof(struct dirent))) {
+	if (uio->uio_offset < file_size) {
 		/* allocate temporary space for fid */
 		lb_size = udf_rw32(udf_node->ump->logical_vol->lb_size);
 		fid = malloc(lb_size, M_UDFTEMP, M_WAITOK);
@@ -606,7 +624,7 @@ udf_readdir(void *v)
 	}
 
 	if (ap->a_eofflag)
-		*ap->a_eofflag = (uio->uio_offset == file_size);
+		*ap->a_eofflag = (uio->uio_offset >= file_size);
 
 #ifdef DEBUG
 	if (udf_verbose & UDF_DEBUG_READDIR) {
@@ -860,10 +878,10 @@ udf_getattr(void *v)
 	}
 
 	/* do the uid/gid translation game */
-	if ((uid == (uid_t) -1) && (gid == (gid_t) -1)) {
+	if (uid == (uid_t) -1)
 		uid = ump->mount_args.anon_uid;
+	if (gid == (gid_t) -1)
 		gid = ump->mount_args.anon_gid;
-	}
 
 	/* fill in struct vattr with values from the node */
 	VATTR_NULL(vap);
@@ -1650,13 +1668,10 @@ udf_do_symlink(struct udf_node *udf_node, char *target)
 		pathbuf, pathlen, 0,
 		UIO_SYSSPACE, IO_NODELOCKED | IO_ALTSEMANTICS,
 		FSCRED, NULL, NULL);
-	if (error) {
-		/* failed to write out symlink contents */
-		free(pathbuf, M_UDFTEMP);
-		return error;
-	}
 
-	return 0;
+	/* return status of symlink contents writeout */
+	free(pathbuf, M_UDFTEMP);
+	return error;
 }
 
 
@@ -2083,7 +2098,8 @@ udf_fsync(void *v)
 	struct udf_node *udf_node = VTOI(vp);
 	int error, flags, wait;
 
-	DPRINTF(STRATEGY, ("udf_fsync called : %s, %s\n",
+	DPRINTF(SYNC, ("udf_fsync called on %p : %s, %s\n",
+		udf_node,
 		(ap->a_flags & FSYNC_WAIT)     ? "wait":"no wait",
 		(ap->a_flags & FSYNC_DATAONLY) ? "data_only":"complete"));
 
@@ -2119,31 +2135,33 @@ udf_fsync(void *v)
 	/* if we don't have to wait, check for IO pending */
 	if (!wait) {
 		if (vp->v_numoutput > 0) {
-			DPRINTF(NODE, ("udf_fsync: rejecting on v_numoutput\n"));
+			DPRINTF(SYNC, ("udf_fsync %p, rejecting on v_numoutput\n", udf_node));
 			return 0;
 		}
 		if (udf_node->outstanding_bufs > 0) {
-			DPRINTF(NODE, ("udf_fsync: rejecting on outstanding_bufs\n"));
+			DPRINTF(SYNC, ("udf_fsync %p, rejecting on outstanding_bufs\n", udf_node));
 			return 0;
 		}
 		if (udf_node->outstanding_nodedscr > 0) {
-			DPRINTF(NODE, ("udf_fsync: rejecting on outstanding_nodedscr\n"));
+			DPRINTF(SYNC, ("udf_fsync %p, rejecting on outstanding_nodedscr\n", udf_node));
 			return 0;
 		}
 	}
 
 	/* wait until vp->v_numoutput reaches zero i.e. is finished */
 	if (wait) {
-		DPRINTF(SYNC, ("udf_fsync, waiting\n"));
+		DPRINTF(SYNC, ("udf_fsync %p, waiting\n", udf_node));
 		mutex_enter(&vp->v_interlock);
 		while (vp->v_numoutput) {
+			DPRINTF(SYNC, ("udf_fsync %p, v_numoutput %d\n", udf_node, vp->v_numoutput));
 			cv_timedwait(&vp->v_cv, &vp->v_interlock, hz/8);
 		}
 		mutex_exit(&vp->v_interlock);
-		DPRINTF(SYNC, ("udf_fsync: fin wait\n"));
+		DPRINTF(SYNC, ("udf_fsync %p, fin wait\n", udf_node));
 	}
 
 	/* write out node and wait for it if requested */
+	DPRINTF(SYNC, ("udf_fsync %p, writeout node\n", udf_node));
 	error = udf_writeout_node(udf_node, wait);
 	if (error)
 		return error;

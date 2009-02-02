@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl8169.c,v 1.105 2008/08/23 14:27:45 tnn Exp $	*/
+/*	$NetBSD: rtl8169.c,v 1.105.4.2 2009/03/26 17:36:03 snj Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998-2003
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.105 2008/08/23 14:27:45 tnn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.105.4.2 2009/03/26 17:36:03 snj Exp $");
 /* $FreeBSD: /repoman/r/ncvs/src/sys/dev/re/if_re.c,v 1.20 2004/04/11 20:34:08 ru Exp $ */
 
 /*
@@ -389,10 +389,10 @@ re_reset(struct rtk_softc *sc)
 		    device_xname(sc->sc_dev));
 
 	/*
-	 * NB: Realtek-supplied Linux driver does this only for
-	 * MCFG_METHOD_2, which corresponds to sc->sc_rev == 3.
+	 * NB: Realtek-supplied FreeBSD driver does this only for MACFG_3,
+	 *     but also says "Rtl8169s sigle chip detected".
 	 */
-	if (1) /* XXX check softc flag for 8169s version */
+	if ((sc->sc_quirk & RTKQ_MACLDPS) != 0)
 		CSR_WRITE_1(sc, RTK_LDPS, 1);
 
 }
@@ -523,22 +523,17 @@ re_diag(struct rtk_softc *sc)
 	if (memcmp((char *)&eh->ether_dhost, (char *)&dst, ETHER_ADDR_LEN) ||
 	    memcmp((char *)&eh->ether_shost, (char *)&src, ETHER_ADDR_LEN) ||
 	    ntohs(eh->ether_type) != ETHERTYPE_IP) {
-		aprint_error_dev(sc->sc_dev, "WARNING, DMA FAILURE!\n");
-		aprint_error_dev(sc->sc_dev, "expected TX data: %s",
-		    ether_sprintf(dst));
-		aprint_error("/%s/0x%x\n", ether_sprintf(src), ETHERTYPE_IP);
-		aprint_error_dev(sc->sc_dev, "received RX data: %s",
-		    ether_sprintf(eh->ether_dhost));
-		aprint_error("/%s/0x%x\n", ether_sprintf(eh->ether_shost),
-		    ntohs(eh->ether_type));
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(sc->sc_dev, "WARNING, DMA FAILURE!\n"
+		    "expected TX data: %s/%s/0x%x\n"
+		    "received RX data: %s/%s/0x%x\n"
 		    "You may have a defective 32-bit NIC plugged "
-		    "into a 64-bit PCI slot.\n");
-		aprint_error_dev(sc->sc_dev,
+		    "into a 64-bit PCI slot.\n"
 		    "Please re-install the NIC in a 32-bit slot "
-		    "for proper operation.\n");
-		aprint_error_dev(sc->sc_dev,
-		    "Read the re(4) man page for more details.\n");
+		    "for proper operation.\n"
+		    "Read the re(4) man page for more details.\n" ,
+		    ether_sprintf(dst),  ether_sprintf(src), ETHERTYPE_IP,
+		    ether_sprintf(eh->ether_dhost),
+		    ether_sprintf(eh->ether_shost), ntohs(eh->ether_type));
 		error = EIO;
 	}
 
@@ -567,9 +562,6 @@ re_attach(struct rtk_softc *sc)
 	struct ifnet *ifp;
 	int error = 0, i, addr_len;
 
-	/* Reset the adapter. */
-	re_reset(sc);
-
 	if ((sc->sc_quirk & RTKQ_8139CPLUS) == 0) {
 		uint32_t hwrev;
 
@@ -585,12 +577,15 @@ re_attach(struct rtk_softc *sc)
 		case RTK_HWREV_8169S:
 		case RTK_HWREV_8110S:
 			sc->sc_rev = 3;
+			sc->sc_quirk |= RTKQ_MACLDPS;
 			break;
 		case RTK_HWREV_8169_8110SB:
 			sc->sc_rev = 4;
+			sc->sc_quirk |= RTKQ_MACLDPS;
 			break;
 		case RTK_HWREV_8169_8110SC:
 			sc->sc_rev = 5;
+			sc->sc_quirk |= RTKQ_MACLDPS;
 			break;
 		case RTK_HWREV_8101E:
 			sc->sc_rev = 11;
@@ -605,6 +600,7 @@ re_attach(struct rtk_softc *sc)
 			sc->sc_rev = 23;
 			break;
 		case RTK_HWREV_8168C:
+		case RTK_HWREV_8168C_SPIN2:
 			sc->sc_rev = 24;
 			break;
 		case RTK_HWREV_8102E:
@@ -630,6 +626,9 @@ re_attach(struct rtk_softc *sc)
 		sc->re_rxlenmask = RE_RDESC_STAT_FRAGLEN;
 		sc->re_ldata.re_tx_desc_cnt = RE_TX_DESC_CNT_8139;
 	}
+
+	/* Reset the adapter. */
+	re_reset(sc);
 
 	if (sc->sc_rev == 24 || sc->sc_rev == 25) {
 		/*
@@ -1861,9 +1860,14 @@ re_ioctl(struct ifnet *ifp, u_long command, void *data)
 	case SIOCSIFMTU:
 		/*
 		 * According to FreeBSD, 8102E/8102EL use a different DMA
-		 * descriptor format. Disable jumbo frames for those parts.
+		 * descriptor format. 8168C/8111C requires touching additional
+		 * magic registers. Depending on MAC revisions some controllers
+		 * need to disable checksum offload.
+		 *
+		 * Disable jumbo frames for those parts.
 		 */
-		if (sc->sc_rev == 25 && ifr->ifr_mtu > ETHERMTU) {
+		if ((sc->sc_rev == 24 || sc->sc_rev == 25) &&
+		    ifr->ifr_mtu > ETHERMTU) {
 			error = EINVAL;
 			break;
 		}

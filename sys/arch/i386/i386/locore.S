@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.78 2008/10/19 14:12:28 joerg Exp $	*/
+/*	$NetBSD: locore.S,v 1.78.4.3 2009/04/04 17:39:09 snj Exp $	*/
 
 /*
  * Copyright-o-rama!
@@ -134,7 +134,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.78 2008/10/19 14:12:28 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.78.4.3 2009/04/04 17:39:09 snj Exp $");
 
 #include "opt_compat_oldboot.h"
 #include "opt_ddb.h"
@@ -910,7 +910,7 @@ ENTRY(dumpsys)
 END(dumpsys)
 
 /*
- * struct lwp *cpu_switchto(struct lwp *oldlwp, struct newlwp,
+ * struct lwp *cpu_switchto(struct lwp *oldlwp, struct *newlwp,
  *			    bool returning)
  *
  *	1. if (oldlwp != NULL), save its context.
@@ -1008,15 +1008,14 @@ ENTRY(cpu_switchto)
 2:
 #ifndef XEN
 	movl	$IPL_IPI,CPUVAR(ILEVEL)
-	movl	PCB_CR0(%ebx),%ecx
+	movl	PCB_CR0(%ebx),%ecx		/* has CR0_TS clear */
 	movl	%cr0,%edx
 
 	/*
 	 * If our floating point registers are on a different CPU,
 	 * set CR0_TS so we'll trap rather than reuse bogus state.
 	 */
-	movl	PCB_FPCPU(%ebx),%eax
-	cmpl	CPUVAR(SELF),%eax
+	cmpl	CPUVAR(FPCURLWP),%edi
 	je	3f
 	orl	$CR0_TS,%ecx
 
@@ -1079,8 +1078,10 @@ END(savectx)
  * Old call gate entry for syscall
  */
 IDTVEC(osyscall)
+	cli			# must be first instruction
 	pushfl			# set eflags in trap frame
 	popl	8(%esp)
+	orl	$PSL_I,(%esp)	# re-enable ints on return to user
 	pushl	$7		# size of instruction for restart
 	jmp	syscall1
 IDTVEC_END(osyscall)
@@ -1095,6 +1096,7 @@ IDTVEC(syscall)
 syscall1:
 	pushl	$T_ASTFLT	# trap # for doing ASTs
 	INTRENTRY
+	STI(%eax)
 #ifdef DIAGNOSTIC
 	movl	CPUVAR(ILEVEL),%ebx
 	testl	%ebx,%ebx
@@ -1241,7 +1243,7 @@ ENTRY(sse2_idlezero_page)
 	xorl	%eax, %eax
 	.align	16
 1:
-	cmpl	$0, CPUVAR(RESCHED)
+	testl	$RESCHED_KPREEMPT, CPUVAR(RESCHED)
 	jnz	2f
 	movnti	%eax, 0(%edx)
 	movnti	%eax, 4(%edx)

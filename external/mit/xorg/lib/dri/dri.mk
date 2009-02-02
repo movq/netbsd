@@ -1,4 +1,4 @@
-# $NetBSD: dri.mk,v 1.3 2008/10/06 16:24:33 tron Exp $
+# $NetBSD: dri.mk,v 1.3.4.2 2009/02/25 03:02:19 snj Exp $
 
 # XXX DRI_LIB_DEPS
 
@@ -36,5 +36,12 @@ SRCS+=	dri_util.c drirenderbuffer.c driverfuncs.c texmem.c utils.c vblank.c \
 
 LIB=		${MODULE}_dri
 LIBDIR=		${X11USRLIBDIR}/modules/dri
+
+LIBDPLIBS+= 	drm		${.CURDIR}/../../libdrm
+LIBDPLIBS+=	expat		${.CURDIR}/../../expat
+LIBDPLIBS+=	m		${NETBSDSRCDIR}/lib/libm
+LIBDPLIBS+= 	mesa_dri	${.CURDIR}/../libmesa
+# to find mesa_dri.so
+LDFLAGS+=	-Wl,-rpath,${LIBDIR}
 
 .include <bsd.lib.mk>

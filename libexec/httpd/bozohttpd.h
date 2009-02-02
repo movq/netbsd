@@ -1,4 +1,4 @@
-/*	$NetBSD: bozohttpd.h,v 1.5 2008/03/03 22:15:08 mrg Exp $	*/
+/*	$NetBSD: bozohttpd.h,v 1.5.8.2 2009/02/18 00:05:41 snj Exp $	*/
 
 /*	$eterna: bozohttpd.h,v 1.18 2008/03/03 03:36:11 mrg Exp $	*/
 
@@ -55,7 +55,8 @@ typedef struct {
 #define HTTP_TRACE	0x07	/* not supported */
 #define HTTP_CONNECT	0x08	/* not supported */
 	const char *hr_methodstr;
-	char	*hr_url;
+	char	   *hr_file;
+        char       *hr_query;  
 	const char *hr_proto;
 	const char *hr_content_type;
 	const char *hr_content_length;
@@ -63,6 +64,7 @@ typedef struct {
 	const char *hr_host;		/* HTTP/1.1 Host: */
 	const char *hr_referrer;
 	const char *hr_range;
+	const char *hr_if_modified_since;
 	int         hr_have_range;
 	off_t       hr_first_byte_pos;
 	off_t       hr_last_byte_pos;

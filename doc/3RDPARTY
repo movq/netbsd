@@ -1,4 +1,4 @@
-#	$NetBSD: 3RDPARTY,v 1.647 2008/10/29 11:30:27 kleink Exp $
+#      $NetBSD: 3RDPARTY,v 1.647.2.6 2009/03/02 20:24:26 snj Exp $
 #
 # This file contains a list of the software that has been integrated into
 # NetBSD where we are not the primary maintainer.
@@ -134,7 +134,7 @@ Maintainer:	n/a
 Archive Site:	http://cvsweb.freebsd.org/src/share/misc/bsd-family-tree
 Home Page:	http://cvsweb.freebsd.org/src/share/misc/bsd-family-tree
 Mailing List:
-Responsible:	xtraeme
+Responsible:
 License:	See URL above.
 Notes:
 
@@ -232,14 +232,16 @@ No changes for NetBSD integration - just import the new distribution on
 top of the current tree.
 
 Package:	dhcpcd
-Version:	4.0.1
-Current Vers:	4.0.1
-Maintainer:	joerg
-Home Page:	http://roy.marples.name/dhcpcd/
+Version:	4.0.10
+Current Vers:	4.0.10
+Maintainer:	roy
+Archive Site:	ftp://roy.marples.name/pub/dhcpcd/
+Home Page:	http://roy.marples.name/projects/dhcpcd/
+Mailing List:	dhcpcd-discuss@marples.name
 License:	BSD (2-clause)
 Notes:
 Please submit all changes to the author.
-The distribution doesn't include the Linux specific bits.
+The distribution doesn't include the Linux specific bits or build system.
 
 Package:	diffutils
 Version:	2.8.1
@@ -584,8 +586,8 @@ and ndbootd-raw.c.  Restore saved config.h, and force it to define
 HAVE_STRICT_ALIGNMENT.  Fix RCS IDs, import.
 
 Package:	ntp
-Version:	4.2.4p5
-Current Vers:	4.2.4p5
+Version:	4.2.4p6
+Current Vers:	4.2.4p6
 Maintainer:	David L. Mills <mills@udel.edu>
 Archive Site:	ftp://ftp.udel.edu/pub/ntp/ntp4/
 Home Page:	http://www.ntp.org/, http://ntp.isc.org/

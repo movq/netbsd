@@ -1,5 +1,5 @@
 #! /usr/bin/env sh
-#	$NetBSD: build.sh,v 1.198 2008/10/26 23:40:06 apb Exp $
+#	$NetBSD: build.sh,v 1.198.2.3 2009/03/18 05:39:06 snj Exp $
 #
 # Copyright (c) 2001-2008 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -43,6 +43,7 @@
 progname=${0##*/}
 toppid=$$
 results=/dev/null
+tab='	'
 trap "exit 1" 1 2 3 15
 
 bomb()
@@ -113,7 +114,7 @@ set_HOST_SH()
 	# specifying HOST_SH in the environment.
 	#
 	[ -z "${HOST_SH}" ] && HOST_SH="$(
-		(ps -p $$ -o comm | sed -ne '2s/[ \t]*$//p') 2>/dev/null )"
+		(ps -p $$ -o comm | sed -ne "2s/[ ${tab}]*\$//p") 2>/dev/null )"
 
 	# If nothing above worked, use "sh".  We will later find the
 	# first directory in the PATH that has a "sh" program.
@@ -162,14 +163,23 @@ initdefaults()
 	[ -f share/mk/bsd.own.mk ] ||
 	    bomb "src/share/mk is missing; please re-fetch the source tree"
 
-	# Find information about the build platform.  Note that "uname -p"
-	# is not part of POSIX, but NetBSD's uname -p prints MACHINE_ARCH,
-	# while uname -m prints MACHINE.
+	# Find information about the build platform.  This should be
+	# kept in sync with _HOST_OSNAME, _HOST_OSREL, and _HOST_ARCH
+	# variables in share/mk/bsd.sys.mk.
+	#
+	# Note that "uname -p" is not part of POSIX, but we want uname_p
+	# to be set to the host MACHINE_ARCH, if possible.  On systems
+	# where "uname -p" fails, prints "unknown", or prints a string
+	# that does not look like an identifier, fall back to using the
+	# output from "uname -m" instead.
 	#
 	uname_s=$(uname -s 2>/dev/null)
 	uname_r=$(uname -r 2>/dev/null)
 	uname_m=$(uname -m 2>/dev/null)
-	uname_p=$(uname -p 2>/dev/null || uname -m 2>/dev/null)
+	uname_p=$(uname -p 2>/dev/null || echo "unknown")
+	case "${uname_p}" in
+	''|unknown|*[^-_A-Za-z0-9]*) uname_p="${uname_m}" ;;
+	esac
 
 	# If $PWD is a valid name of the current directory, POSIX mandates
 	# that pwd return it by default which causes problems in the
@@ -1199,7 +1209,7 @@ createmakewrapper()
 	eval cat <<EOF ${makewrapout}
 #! ${HOST_SH}
 # Set proper variables to allow easy "make" building of a NetBSD subtree.
-# Generated from:  \$NetBSD: build.sh,v 1.198 2008/10/26 23:40:06 apb Exp $
+# Generated from:  \$NetBSD: build.sh,v 1.198.2.3 2009/03/18 05:39:06 snj Exp $
 # with these arguments: ${_args}
 #
 

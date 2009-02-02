@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.117 2008/03/29 15:19:53 reed Exp $	*/
+/*	$NetBSD: net.c,v 1.117.8.2 2009/01/22 22:18:26 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -51,6 +51,7 @@
 #endif
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/statvfs.h>
 #include <netinet/in.h>
 #include <net/if.h>
 #include <net/if_media.h>
@@ -63,6 +64,7 @@
 
 #include <sys/wait.h>
 #include <sys/resource.h>
+#include <sys/sysctl.h>
 
 int network_up = 0;
 /* Access to network information */
@@ -477,6 +479,43 @@ get_v6wait(void)
 }
 #endif
 
+static int
+handle_license(const char *dev)
+{
+	static struct {
+		const char *dev;
+		const char *lic;
+	} licdev[] = {
+		{ "iwi", "/libdata/firmware/if_iwi/LICENSE.ipw2200-fw" },
+		{ "ipw", "/libdata/firmware/if_ipw/LICENSE" },
+	};
+
+	size_t i;
+
+	for (i = 0; i < __arraycount(licdev); i++)
+		if (strncmp(dev, licdev[i].dev, 3) == 0) {
+			char buf[64];
+			int val;
+			size_t len = sizeof(int);
+			(void)snprintf(buf, sizeof(buf), "hw.%s.accept_eula",
+			    licdev[i].dev);
+			if (sysctlbyname(buf, &val, &len, NULL, 0) != -1
+			    && val != 0)
+				return 1;
+			msg_display(MSG_license, dev, licdev[i].lic);
+			process_menu(MENU_yesno, NULL);
+			if (yesno) {
+				val = 1;
+				if (sysctlbyname(buf, NULL, NULL, &val,
+				    0) == -1)
+					return 0;
+				return 1;
+			} else
+				return 0;
+		}
+	return 1;
+}
+
 /*
  * Get the information to configure the network, configure it and
  * make sure both the gateway and the name server are up.
@@ -490,11 +529,12 @@ config_network(void)
 	char *textbuf;
 	int  octet0;
 	int  dhcp_config;
-
- 	int  slip;
+	int  nfs_root = 0;
+ 	int  slip = 0;
  	int  pid, status;
  	char **ap, *slcmd[10], *in_buf;
  	char buffer[STRSIZE];
+ 	struct statvfs sb;
 
 	int l;
 	char dhcp_host[STRSIZE];
@@ -545,13 +585,22 @@ again:
 		break;
 	}
 	free(defname);
+	if (!handle_license(net_dev))
+		goto done;
 
 	slip = net_dev[0] == 's' && net_dev[1] == 'l' &&
 	    isdigit((unsigned char)net_dev[2]);
 
-	if (slip)
+	/* If root is on NFS do not reconfigure the interface. */
+	if (statvfs("/", &sb) == 0 && strcmp(sb.f_fstypename, "nfs") == 0) {
+		nfs_root = 1;
 		dhcp_config = 0;
-	else {
+		get_ifinterface_info();
+		get_if6interface_info();
+		get_host_info();
+	} else if (slip) {
+		dhcp_config = 0;
+	} else {
 		/* Preload any defaults we can find */
 		get_ifinterface_info();
 		get_if6interface_info();
@@ -664,11 +713,13 @@ again:
 
 	if (!dhcp_config) {
 		/* Manually configure IPv4 */
-		msg_prompt_add(MSG_net_ip, net_ip, net_ip, sizeof net_ip);
+		if (!nfs_root)
+			msg_prompt_add(MSG_net_ip, net_ip, net_ip,
+			    sizeof net_ip);
 		if (slip)
 			msg_prompt_add(MSG_net_srv_ip, net_srv_ip, net_srv_ip,
 			    sizeof net_srv_ip);
-		else {
+		else if (!nfs_root) {
 			/* We don't want netmasks for SLIP */
 			octet0 = atoi(net_ip);
 			if (!net_mask[0]) {
@@ -733,6 +784,7 @@ again:
 			(v6config ? "yes" : "no"),
 		     *net_namesvr6 == '\0' ? "<none>" : net_namesvr6);
 #endif
+done:
 	process_menu(MENU_yesno, deconst(MSG_netok_ok));
 	if (!yesno)
 		msg_display(MSG_netagain);
@@ -779,7 +831,7 @@ again:
 	run_program(0, "/sbin/ifconfig lo0 127.0.0.1");
 
 #ifdef INET6
-	if (v6config) {
+	if (v6config && !nfs_root) {
 		init_v6kernel(1);
 		run_program(0, "/sbin/ifconfig %s up", net_dev);
 		sleep(get_v6wait() + 1);
@@ -812,7 +864,7 @@ again:
 				execvp(slcmd[0], slcmd);
 			} else
 				wait4(pid, &status, WNOHANG, 0);
-		} else {
+		} else if (!nfs_root) {
 			if (net_mask[0] != '\0') {
 				run_program(0, "/sbin/ifconfig %s inet %s netmask %s",
 				    net_dev, net_ip, net_mask);
@@ -828,7 +880,7 @@ again:
 	  	sethostname(net_host, strlen(net_host));
 
 	/* Set a default route if one was given */
-	if (net_defroute[0] != '\0') {
+	if (!nfs_root && net_defroute[0] != '\0') {
 		run_program(RUN_DISPLAY | RUN_PROGRESS,
 				"/sbin/route -n flush -inet");
 		run_program(RUN_DISPLAY | RUN_PROGRESS,
@@ -838,8 +890,10 @@ again:
 	/*
 	 * wait a couple of seconds for the interface to go live.
 	 */
-	msg_display_add(MSG_wait_network);
-	sleep(5);
+	if (!nfs_root) {
+		msg_display_add(MSG_wait_network);
+		sleep(5);
+	}
 
 	/*
 	 * ping should be verbose, so users can see the cause

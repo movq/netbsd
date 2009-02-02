@@ -1,4 +1,4 @@
-/*	$NetBSD: vs_line.c,v 1.1.1.2 2008/05/18 14:31:50 aymeric Exp $ */
+/*	$NetBSD: vs_line.c,v 1.1.1.2.6.3 2009/04/19 15:48:10 snj Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994
@@ -42,17 +42,17 @@ static const char sccsid[] = "Id: vs_line.c,v 10.38 2002/01/19 21:59:07 skimo Ex
 int
 vs_line(SCR *sp, SMAP *smp, size_t *yp, size_t *xp)
 {
-	char *kp;
+	unsigned char *kp;
 	GS *gp;
 	SMAP *tsmp;
-	size_t chlen, cno_cnt, cols_per_screen, len, nlen;
+	size_t chlen = 0, cno_cnt, cols_per_screen, len, nlen;
 	size_t offset_in_char, offset_in_line, oldx, oldy;
 	size_t scno, skip_cols, skip_screens;
 	int dne, is_cached, is_partial, is_tab, no_draw;
 	int list_tab, list_dollar;
 	CHAR_T *p;
 	CHAR_T *cbp, *ecbp, cbuf[128];
-	CHAR_T ch;
+	CHAR_T ch = '\0';
 
 #if defined(DEBUG) && 0
 	vtrace(sp, "vs_line: row %u: line: %u off: %u\n",
@@ -141,7 +141,8 @@ vs_line(SCR *sp, SMAP *smp, size_t *yp, size_t *xp)
 			cols_per_screen -= O_NUMBER_LENGTH;
 			if ((!dne || smp->lno == 1) && skip_cols == 0) {
 				nlen = snprintf((char*)cbuf,
-				    sizeof(cbuf), O_NUMBER_FMT, smp->lno);
+				    sizeof(cbuf), O_NUMBER_FMT,
+				    (unsigned long)smp->lno);
 				(void)gp->scr_addstr(sp, (char*)cbuf, nlen);
 			}
 		}
@@ -171,7 +172,7 @@ vs_line(SCR *sp, SMAP *smp, size_t *yp, size_t *xp)
 		 * Lots of special cases for empty lines, but they only apply
 		 * if we're displaying the first screen of the line.
 		 */
-		if (skip_cols == 0)
+		if (skip_cols == 0) {
 			if (dne) {
 				if (smp->lno == 1) {
 					if (list_dollar) {
@@ -186,8 +187,10 @@ vs_line(SCR *sp, SMAP *smp, size_t *yp, size_t *xp)
 				if (list_dollar) {
 					ch = L('$');
 empty:					(void)gp->scr_addstr(sp,
-					    KEY_NAME(sp, ch), KEY_LEN(sp, ch));
+					    (const char *)KEY_NAME(sp, ch),
+					    KEY_LEN(sp, ch));
 				}
+		}
 
 		(void)gp->scr_clrtoeol(sp);
 		(void)gp->scr_move(sp, oldy, oldx);
@@ -439,7 +442,7 @@ display:
 			/* XXXX this needs some rethinking */
 			if (INTISWIDE(ch)) {
 				/* Put a space before non-spacing char. */
-				if (!CHAR_WIDTH(sp, ch))
+				if (CHAR_WIDTH(sp, ch) <= 0)
 					*cbp++ = L(' ');
 				*cbp++ = ch;
 			} else
@@ -534,7 +537,8 @@ vs_number(SCR *sp)
 			break;
 
 		(void)gp->scr_move(sp, smp - HMAP, 0);
-		len = snprintf(nbuf, sizeof(nbuf), O_NUMBER_FMT, smp->lno);
+		len = snprintf(nbuf, sizeof(nbuf), O_NUMBER_FMT,
+		    (unsigned long)smp->lno);
 		(void)gp->scr_addstr(sp, nbuf, len);
 	}
 	(void)gp->scr_move(sp, oldy, oldx);

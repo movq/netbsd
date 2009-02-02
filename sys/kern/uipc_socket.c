@@ -1,11 +1,11 @@
-/*	$NetBSD: uipc_socket.c,v 1.177 2008/10/14 13:45:26 ad Exp $	*/
+/*	$NetBSD: uipc_socket.c,v 1.177.4.2 2009/04/04 23:36:27 snj Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2007, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2007, 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Jason R. Thorpe of Wasabi Systems, Inc.
+ * by Jason R. Thorpe of Wasabi Systems, Inc, and by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_socket.c,v 1.177 2008/10/14 13:45:26 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_socket.c,v 1.177.4.2 2009/04/04 23:36:27 snj Exp $");
 
 #include "opt_sock_counters.h"
 #include "opt_sosend_loan.h"
@@ -669,7 +669,7 @@ soclose(struct socket *so)
 			if ((so->so_state & SS_ISDISCONNECTING) && so->so_nbio)
 				goto drop;
 			while (so->so_state & SS_ISCONNECTED) {
-				error = sowait(so, so->so_linger * hz);
+				error = sowait(so, true, so->so_linger * hz);
 				if (error)
 					break;
 			}
@@ -1532,6 +1532,20 @@ soshutdown(struct socket *so, int how)
 	if (how == SHUT_WR || how == SHUT_RDWR)
 		error = (*pr->pr_usrreq)(so, PRU_SHUTDOWN, NULL,
 		    NULL, NULL, NULL);
+
+	return error;
+}
+
+int
+sodrain(struct socket *so)
+{
+	int error;
+
+	solock(so);
+	so->so_state |= SS_ISDRAINING;
+	cv_broadcast(&so->so_cv);
+	error = soshutdown(so, SHUT_RDWR);
+	sounlock(so);
 
 	return error;
 }

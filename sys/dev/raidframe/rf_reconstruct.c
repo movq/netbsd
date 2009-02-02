@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_reconstruct.c,v 1.105 2008/09/23 21:36:35 oster Exp $	*/
+/*	$NetBSD: rf_reconstruct.c,v 1.105.4.2 2009/02/19 20:27:08 snj Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  ************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_reconstruct.c,v 1.105 2008/09/23 21:36:35 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_reconstruct.c,v 1.105.4.2 2009/02/19 20:27:08 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
@@ -626,6 +626,12 @@ rf_ContinueReconstructFailedDisk(RF_RaidReconDesc_t *reconDesc)
 	done = 0;
 	while (!done) {
 		
+		if (raidPtr->waitShutdown) {
+			/* someone is unconfiguring this array... bail on the reconstruct.. */
+			recon_error = 1;
+			break;
+		}
+
 		num_writes = 0;
 		
 		/* issue a read for each surviving disk */
@@ -670,8 +676,10 @@ rf_ContinueReconstructFailedDisk(RF_RaidReconDesc_t *reconDesc)
 				   done dealing with the reads that are
 				   finished, we don't want to wait for any
 				   writes */
-				if (status == RF_RECON_WRITE_ERROR)
+				if (status == RF_RECON_WRITE_ERROR) {
 					write_error = 1;
+					num_writes++;
+				}
 				
 			} else if (status == RF_RECON_READ_STOPPED) {
 				/* count this component as being "done" */
@@ -712,12 +720,13 @@ rf_ContinueReconstructFailedDisk(RF_RaidReconDesc_t *reconDesc)
 			status = ProcessReconEvent(raidPtr, event);
 			
 			if (status == RF_RECON_WRITE_ERROR) {
+				num_writes++;
 				recon_error = 1;
 				raidPtr->reconControl->error = 1;
 				/* an error was encountered at the very end... bail */
 			} else if (status == RF_RECON_WRITE_DONE) {
 				num_writes++;
-			}
+			} /* else it's something else, and we don't care */
 		}
 		if (recon_error || 
 		    (raidPtr->reconControl->lastPSID == lastPSID)) {
@@ -1047,6 +1056,12 @@ ProcessReconEvent(RF_Raid_t *raidPtr, RF_ReconEvent_t *event)
 		/* A write I/O failed to complete */
 	case RF_REVENT_WRITE_FAILED:
 		retcode = RF_RECON_WRITE_ERROR;
+
+		/* This is an error, but it was a pending write.
+		   Account for it. */
+		RF_LOCK_MUTEX(raidPtr->reconControl->rb_mutex);
+		raidPtr->reconControl->pending_writes--;
+		RF_UNLOCK_MUTEX(raidPtr->reconControl->rb_mutex);
 
 		rbuf = (RF_ReconBuffer_t *) event->arg;
 

@@ -1,4 +1,4 @@
-/* $NetBSD: vfs_dirhash.c,v 1.4 2008/10/30 17:19:18 reinoud Exp $ */
+/* $NetBSD: vfs_dirhash.c,v 1.4.2.5 2009/01/06 23:01:49 snj Exp $ */
 
 /*
  * Copyright (c) 2008 Reinoud Zandijk
@@ -28,44 +28,45 @@
 
 
 #include <sys/cdefs.h>
-#ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: vfs_dirhash.c,v 1.4 2008/10/30 17:19:18 reinoud Exp $");
-#endif /* not lint */
+__KERNEL_RCSID(0, "$NetBSD: vfs_dirhash.c,v 1.4.2.5 2009/01/06 23:01:49 snj Exp $");
+
+/* CLEAN UP! */
+#include <sys/param.h>
+#include <sys/kernel.h>
+#include <sys/buf.h>
+#include <sys/dirent.h>
+#include <sys/hash.h>
+#include <sys/mutex.h>
+#include <sys/pool.h>
+#include <sys/queue.h>
+#include <sys/vnode.h>
+#include <sys/sysctl.h>
+
+#include <sys/dirhash.h>
 
 #if 1
 #	define DPRINTF(a) ;
 #else
-#	define DPRINTF(a) printf(a);
+#	define DPRINTF(a) printf a;
 #endif
 
-/* CLEAN UP! */
-#include <sys/sysctl.h>
-#include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/sysctl.h>
-#include <sys/namei.h>
-#include <sys/proc.h>
-#include <sys/kernel.h>
-#include <sys/vnode.h>
-#include <sys/mount.h>
-#include <sys/buf.h>
-#include <sys/file.h>
-#include <sys/device.h>
-#include <sys/disklabel.h>
-#include <sys/ioctl.h>
-#include <sys/malloc.h>
-#include <sys/dirent.h>
-#include <sys/stat.h>
-#include <sys/conf.h>
-#include <sys/kauth.h>
-#include <dev/clock_subr.h>
-
-#include <sys/dirhash.h>
-
+/*
+ * The locking protocol of the dirhash structures is fairly simple:
+ *
+ * The global dirhash_queue is protected by the dirhashmutex. This lock is
+ * internal only and is FS/mountpoint/vnode independent. On exit of the
+ * exported functions this mutex is not helt.
+ *
+ * The dirhash structure is considered part of the vnode/inode/udf_node
+ * structure and will thus use the lock that protects that vnode/inode.
+ *
+ * The dirhash entries are considered part of the dirhash structure and thus
+ * are on the same lock.
+ */
 
 static struct sysctllog *sysctl_log;
-struct pool dirhash_pool;
-struct pool dirhash_entry_pool;
+static struct pool dirhash_pool;
+static struct pool dirhash_entry_pool;
 
 static kmutex_t dirhashmutex;
 static uint32_t maxdirhashsize = DIRHASH_SIZE;
@@ -77,23 +78,23 @@ void
 dirhash_init(void)
 {
 	const struct sysctlnode *rnode, *cnode;
-	size_t size;
+	size_t sz;
 	uint32_t max_entries;
 
 	/* initialise dirhash queue */
 	TAILQ_INIT(&dirhash_queue);
 
 	/* init dirhash pools */
-	size = sizeof(struct dirhash);
-	pool_init(&dirhash_pool, size, 0, 0, 0,
-		"dirhash_pool", NULL, IPL_NONE);
+	sz = sizeof(struct dirhash);
+	pool_init(&dirhash_pool, sz, 0, 0, 0,
+		"dirhpl", NULL, IPL_NONE);
 
-	size = sizeof(struct dirhash_entry);
-	pool_init(&dirhash_entry_pool, size, 0, 0, 0,
-		"dirhash_entry_pool", NULL, IPL_NONE);
+	sz = sizeof(struct dirhash_entry);
+	pool_init(&dirhash_entry_pool, sz, 0, 0, 0,
+		"dirhepl", NULL, IPL_NONE);
 
 	mutex_init(&dirhashmutex, MUTEX_DEFAULT, IPL_NONE);
-	max_entries = maxdirhashsize / size;
+	max_entries = maxdirhashsize / sz;
 	pool_sethiwat(&dirhash_entry_pool, max_entries);
 	dirhashsize = 0;
 
@@ -136,20 +137,6 @@ dirhash_finish(void)
 /*
  * generic dirhash implementation
  */
-
-static uint32_t
-dirhash_hash(const char *str, int namelen)
-{
-	uint32_t hash = 5381;
-        int i, c;
-
-	for (i = 0; i < namelen; i++) {
-		c = *str++;
-		hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-	}
-        return hash;
-}
-
 
 void
 dirhash_purge_entries(struct dirhash *dirh)
@@ -195,15 +182,16 @@ dirhash_purge(struct dirhash **dirhp)
 	if (dirh == NULL)
 		return;
 
-	mutex_enter(&dirhashmutex);
-
+	/* purge its entries */
 	dirhash_purge_entries(dirh);
+
+	/* recycle */
+	mutex_enter(&dirhashmutex);
 	TAILQ_REMOVE(&dirhash_queue, dirh, next);
-	pool_put(&dirhash_pool, dirh);
-
-	*dirhp = NULL;
-
 	mutex_exit(&dirhashmutex);
+
+	pool_put(&dirhash_pool, dirh);
+	*dirhp = NULL;
 }
 
 
@@ -213,26 +201,27 @@ dirhash_get(struct dirhash **dirhp)
 	struct dirhash *dirh;
 	uint32_t hashline;
 
-	mutex_enter(&dirhashmutex);
-
+	/* if no dirhash was given, allocate one */
 	dirh = *dirhp;
-	if (*dirhp == NULL) {
+	if (dirh == NULL) {
 		dirh = pool_get(&dirhash_pool, PR_WAITOK);
-		*dirhp = dirh;
 		memset(dirh, 0, sizeof(struct dirhash));
-		for (hashline = 0; hashline < DIRHASH_HASHSIZE; hashline++)
+		for (hashline = 0; hashline < DIRHASH_HASHSIZE; hashline++) {
 			LIST_INIT(&dirh->entries[hashline]);
-		dirh->size   = 0;
-		dirh->refcnt = 0;
-		dirh->flags  = 0;
-	} else {
-		TAILQ_REMOVE(&dirhash_queue, dirh, next);
+		}
 	}
 
+	/* implement LRU on the dirhash queue */
+	mutex_enter(&dirhashmutex);
+	if (*dirhp) {
+		/* remove from queue to be requeued */
+		TAILQ_REMOVE(&dirhash_queue, dirh, next);
+	}
 	dirh->refcnt++;
 	TAILQ_INSERT_HEAD(&dirhash_queue, dirh, next);
-
 	mutex_exit(&dirhashmutex);
+
+	*dirhp = dirh;
 }
 
 
@@ -264,7 +253,7 @@ dirhash_enter(struct dirhash *dirh,
 		return;
 
 	/* calculate our hash */
-	hashvalue = dirhash_hash(dirent->d_name, dirent->d_namlen);
+	hashvalue = hash32_strn(dirent->d_name, dirent->d_namlen, HASH32_STR_INIT);
 	hashline  = hashvalue & DIRHASH_HASHMASK;
 
 	/* lookup and insert entry if not there yet */
@@ -289,6 +278,7 @@ dirhash_enter(struct dirhash *dirh,
 		if (dirh_e->offset == offset) {
 			DPRINTF(("\tremoving free entry\n"));
 			LIST_REMOVE(dirh_e, next);
+			pool_put(&dirhash_entry_pool, dirh_e);
 			break;
 		}
 	}
@@ -296,6 +286,8 @@ dirhash_enter(struct dirhash *dirh,
 	/* ensure we are not passing the dirhash limit */
 	entrysize = sizeof(struct dirhash_entry);
 	if (dirhashsize + entrysize > maxdirhashsize) {
+		/* we walk the dirhash_queue, so need to lock it */
+		mutex_enter(&dirhashmutex);
 		del_dirh = TAILQ_LAST(&dirhash_queue, _dirhash);
 		KASSERT(del_dirh);
 		while (dirhashsize + entrysize > maxdirhashsize) {
@@ -307,6 +299,7 @@ dirhash_enter(struct dirhash *dirh,
 				dirhash_purge_entries(del_dirh);
 			del_dirh = prev_dirh;
 		}
+		mutex_exit(&dirhashmutex);
 	}
 
 	/* add to the hashline */
@@ -334,11 +327,10 @@ dirhash_enter_freed(struct dirhash *dirh, uint64_t offset,
 	KASSERT(dirh);
 	KASSERT(dirh->refcnt > 0);
 
-#ifdef DEBUG
 	/* check for double entry of free space */
-	LIST_FOREACH(dirh_e, &dirh->free_entries, next)
+	LIST_FOREACH(dirh_e, &dirh->free_entries, next) {
 		KASSERT(dirh_e->offset != offset);
-#endif
+	}
 
 	DPRINTF(("dirhash enter FREED %"PRIu64", %d\n",
 		offset, entry_size));
@@ -373,7 +365,7 @@ dirhash_remove(struct dirhash *dirh, struct dirent *dirent,
 	KASSERT(dirh->refcnt > 0);
 
 	/* calculate our hash */
-	hashvalue = dirhash_hash(dirent->d_name, dirent->d_namlen);
+	hashvalue = hash32_strn(dirent->d_name, dirent->d_namlen, HASH32_STR_INIT);
 	hashline  = hashvalue & DIRHASH_HASHMASK;
 
 	/* lookup entry */
@@ -388,7 +380,7 @@ dirhash_remove(struct dirhash *dirh, struct dirent *dirent,
 		KASSERT(dirh_e->d_namlen == dirent->d_namlen);
 		KASSERT(dirh_e->entry_size == entry_size);
 		LIST_REMOVE(dirh_e, next);
-		dirh->size      -= sizeof(struct dirhash_entry);
+		dirh->size -= sizeof(struct dirhash_entry);
 		dirhashsize -= sizeof(struct dirhash_entry);
 
 		dirhash_enter_freed(dirh, offset, entry_size);
@@ -400,17 +392,16 @@ dirhash_remove(struct dirhash *dirh, struct dirent *dirent,
 }
 
 
-/* BUGALERT: don't use result longer than needed, never past the node lock */
-/* call with NULL *result initially and it will return nonzero if again */
+/*
+ * BUGALERT: don't use result longer than needed, never past the node lock.
+ * Call with NULL *result initially and it will return nonzero if again.
+ */
 int
 dirhash_lookup(struct dirhash *dirh, const char *d_name, int d_namlen,
 	struct dirhash_entry **result)
 {
 	struct dirhash_entry *dirh_e;
 	uint32_t hashvalue, hashline;
-
-	/* vnode should be locked */
-	//KASSERT(VOP_ISLOCKED(dirh->vnode));
 
 	/* make sure we have a dirhash to work on */
 	KASSERT(dirh);
@@ -425,7 +416,7 @@ dirhash_lookup(struct dirhash *dirh, const char *d_name, int d_namlen,
 		dirh_e = LIST_NEXT(*result, next);
 	} else {
 		/* calculate our hash and lookup all entries in hashline */
-		hashvalue = dirhash_hash(d_name, d_namlen);
+		hashvalue = hash32_strn(d_name, d_namlen, HASH32_STR_INIT);
 		hashline  = hashvalue & DIRHASH_HASHMASK;
 		dirh_e = LIST_FIRST(&dirh->entries[hashline]);
 	}
@@ -446,15 +437,16 @@ dirhash_lookup(struct dirhash *dirh, const char *d_name, int d_namlen,
 }
 
 
-/* BUGALERT: don't use result longer than needed, never past the node lock */
-/* call with NULL *result initially and it will return nonzero if again */
+/*
+ * BUGALERT: don't use result longer than needed, never past the node lock.
+ * Call with NULL *result initially and it will return nonzero if again.
+ */
+
 int
 dirhash_lookup_freed(struct dirhash *dirh, uint32_t min_entrysize,
 	struct dirhash_entry **result)
 {
 	struct dirhash_entry *dirh_e;
-
-	//KASSERT(VOP_ISLOCKED(dirh->vnode));
 
 	/* make sure we have a dirhash to work on */
 	KASSERT(dirh);
@@ -480,5 +472,3 @@ dirhash_lookup_freed(struct dirhash *dirh, uint32_t min_entrysize,
 	*result = NULL;
 	return 0;
 }
-
-

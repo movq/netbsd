@@ -1,7 +1,7 @@
-/*	$NetBSD: netbsd32_netbsd.c,v 1.145 2008/10/15 06:51:19 wrstuden Exp $	*/
+/*	$NetBSD: netbsd32_netbsd.c,v 1.145.4.2 2008/11/25 17:31:26 snj Exp $	*/
 
 /*
- * Copyright (c) 1998, 2001 Matthew R. Green
+ * Copyright (c) 1998, 2001, 2008 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.145 2008/10/15 06:51:19 wrstuden Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_netbsd.c,v 1.145.4.2 2008/11/25 17:31:26 snj Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
@@ -177,7 +177,11 @@ const struct emul emul_netbsd32 = {
 
 	netbsd32_vm_default_addr,
 	NULL,
+#ifdef COMPAT_40
 	&saemul_netbsd32,
+#else
+	NULL,
+#endif
 	sizeof(ucontext32_t),
 	startlwp32,
 };
@@ -380,6 +384,7 @@ netbsd32_break(struct lwp *l, const struct netbsd32_break_args *uap, register_t 
 int
 netbsd32_mount(struct lwp *l, const struct netbsd32_mount_args *uap, register_t *retval)
 {
+#ifdef COMPAT_40
 	/* {
 		syscallarg(const netbsd32_charp) type;
 		syscallarg(const netbsd32_charp) path;
@@ -393,6 +398,9 @@ netbsd32_mount(struct lwp *l, const struct netbsd32_mount_args *uap, register_t 
 	NETBSD32TO64_UAP(flags);
 	NETBSD32TOP_UAP(data, void);
 	return (compat_40_sys_mount(l, &ua, retval));
+#else
+	return ENOSYS;
+#endif
 }
 
 int
@@ -2530,6 +2538,86 @@ netbsd32___posix_fadvise50(struct lwp *l,
 
 	return do_posix_fadvise(SCARG(uap, fd), SCARG(uap, offset),
 	    SCARG(uap, len), SCARG(uap, advice));
+}
+
+int
+netbsd32__sched_setparam(struct lwp *l,
+			 const struct netbsd32__sched_setparam_args *uap,
+			 register_t *retval)
+{
+	/* {
+		syscallarg(pid_t) pid;
+		syscallarg(lwpid_t) lid;
+		syscallarg(int) policy;
+		syscallarg(const netbsd32_sched_paramp_t) params;
+	} */
+	struct sys__sched_setparam_args ua;
+
+	NETBSD32TO64_UAP(pid);
+	NETBSD32TO64_UAP(lid);
+	NETBSD32TO64_UAP(policy);
+	NETBSD32TOP_UAP(params, const struct sched_param *);
+	return sys__sched_setparam(l, &ua, retval);
+}
+
+int
+netbsd32__sched_getparam(struct lwp *l,
+			 const struct netbsd32__sched_getparam_args *uap,
+			 register_t *retval)
+{
+	/* {
+		syscallarg(pid_t) pid;
+		syscallarg(lwpid_t) lid;
+		syscallarg(netbsd32_intp) policy;
+		syscallarg(netbsd32_sched_paramp_t) params;
+	} */
+	struct sys__sched_getparam_args ua;
+
+	NETBSD32TO64_UAP(pid);
+	NETBSD32TO64_UAP(lid);
+	NETBSD32TOP_UAP(policy, int *);
+	NETBSD32TOP_UAP(params, struct sched_param *);
+	return sys__sched_getparam(l, &ua, retval);
+}
+
+int
+netbsd32__sched_setaffinity(struct lwp *l,
+			    const struct netbsd32__sched_setaffinity_args *uap,
+			    register_t *retval)
+{
+	/* {
+		syscallarg(pid_t) pid;
+		syscallarg(lwpid_t) lid;
+		syscallarg(netbsd_size_t) size;
+		syscallarg(const netbsd32_cpusetp_t) cpuset;
+	} */
+	struct sys__sched_setaffinity_args ua;
+
+	NETBSD32TO64_UAP(pid);
+	NETBSD32TO64_UAP(lid);
+	NETBSD32TOX_UAP(size, size_t);
+	NETBSD32TOP_UAP(cpuset, const cpuset_t *);
+	return sys__sched_setaffinity(l, &ua, retval);
+}
+
+int
+netbsd32__sched_getaffinity(struct lwp *l,
+			    const struct netbsd32__sched_getaffinity_args *uap,
+			    register_t *retval)
+{
+	/* {
+		syscallarg(pid_t) pid;
+		syscallarg(lwpid_t) lid;
+		syscallarg(netbsd_size_t) size;
+		syscallarg(netbsd32_cpusetp_t) cpuset;
+	} */
+	struct sys__sched_getaffinity_args ua;
+
+	NETBSD32TO64_UAP(pid);
+	NETBSD32TO64_UAP(lid);
+	NETBSD32TOX_UAP(size, size_t);
+	NETBSD32TOP_UAP(cpuset, cpuset_t *);
+	return sys__sched_getaffinity(l, &ua, retval);
 }
 
 /*

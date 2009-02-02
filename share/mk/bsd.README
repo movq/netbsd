@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.README,v 1.236 2008/10/26 23:13:24 apb Exp $
+#	$NetBSD: bsd.README,v 1.236.2.7 2009/01/26 00:30:32 snj Exp $
 #	@(#)bsd.README	8.2 (Berkeley) 4/2/94
 
 This is the README file for the make "include" files for the NetBSD
@@ -295,13 +295,6 @@ MKPOSTFIX	If "no", don't build or install postfix(1).
 MKPROFILE	If "no", don't build or install the profiling (*_p.a) libraries.
 		Default: yes
 
-MKPUFFS		If "no", don't build librefuse (lib/librefuse) or
-		puffs applications (usr.sbin/puffs).  NOTE: libpuffs
-		is always built due to historic reasons.  This flag will
-		disappear once puffs is no longer considered experimental,
-		i.e. it will effectively default to "yes".
-		Default: no
-
 MKSHARE		If "no", act as "MKCATPAGES=no MKDOC=no MKHTML=no MKINFO=no
 		MKMAN=no MKNLS=no".
 		I.e, don't build catman pages, documentation, Info
@@ -332,16 +325,10 @@ MKUPDATE 	If not "no", 'make install' only installs targets that are
 		installed counterparts.
 		Default: no
 
-MKX11		If not "no", 'make build' also descends into src/x11
-		to cross-build X11R6 and automatically enables creation
-		of X sets.
-		Mutually exclusive to MKXORG!=no
-		Default: no
-
-MKXORG		If not "no", 'make build' also descends into
-		src/external/mit/xorg to cross-build X11R7 (modular Xorg)
-		and automatically enables creation of X sets.
-		Mutually exclusive to MKX11!=no
+MKX11		If not "no", depending on the value of ${X11FLAVOUR},
+		'make build' also descends into either src/x11 (XFree86) or
+		src/external/mit/xorg (modular Xorg) to cross-build X11 and
+		automatically enables creation of X sets.
 		Default: no
 
 MKYP		If "no", disables building of YP (NIS)
@@ -387,9 +374,22 @@ USE_SSP		If "no", disables GCC stack protection code, which
 		imposes some performance penalty.
 		Default: no
 
+USE_FORT 	If "yes" turns on substitute wrappers for commonly used
+		functions that do not do bounds checking regularly, but
+		they could in some cases by using the gcc
+		__builtin_object_size() function to determine the buffer 
+		size where it is known and detect buffer overflows.
+		These substitute functions are in /usr/include/ssp.
+		Default: no
+
 USE_YP		If "no", disables building YP (NIS) support into
 		various system utilities/libraries that support it.
 		If ${MKYP} is "no", USE_YP will also be forced to "no".
+
+X11FLAVOUR	Set to "Xorg" or "XFree86", depending on whether to build
+		XFree86 or modular Xorg.  Only matters if MKX11!=no.
+		Default: "Xorg" on amd64, i386, macppc, shark and sparc64,
+		"XFree86" on everything else.
 
 COPTS.lib<lib>
 OBJCOPTS.lib<lib>
@@ -806,6 +806,10 @@ FILESDIR_<fn>	The location to install the specific file <fn>.
 
 FILESNAME_<fn>	Optional name to install <fn> as.
 
+FILESBUILD_<fn>	A value different from "no" will add the file to the list of
+		targets to be built by `realall'.  Users of that variable
+		should provide a target to build the file.
+
 
 BUILDSYMLINKS	List of two word items:
 			lnsrc lntgt
@@ -954,6 +958,11 @@ LIBISMODULE	If not "no", install as ${LIB}.so (without the "lib" prefix),
 LIBISPRIVATE	If not "no", act as "MKDEBUGLIB=no MKLINT=no MKPIC=no
 		MKPROFILE=no", and don't install the (.a) library.
 		This is useful for "build only" helper libraries.
+		Default: no
+
+LIBISCXX	If not "no", Use ${CXX} instead of ${CC} to link
+		shared libraries.
+		This is useful for C++ libraries.
 		Default: no
 
 LINTLIBDIR	Target directory for lint libraries.

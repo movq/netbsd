@@ -1,4 +1,4 @@
-.\" $NetBSD: iwn.4,v 1.2 2008/08/22 22:10:52 wiz Exp $
+.\" $NetBSD: iwn.4,v 1.2.6.3 2009/02/06 02:00:17 snj Exp $
 .\"
 .\" Copyright (c) 2007,2008
 .\"	Damien Bergamini <damien.bergamini@free.fr>. All rights reserved.
@@ -15,7 +15,7 @@
 .\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
-.Dd August 20, 2008
+.Dd November 7, 2008
 .Os
 .Dt IWN 4
 .Sh NAME
@@ -37,12 +37,6 @@ This mode requires the use of an access point.
 .Pp
 For more information on configuring this device, see
 .Xr ifconfig 8 .
-.Pp
-The
-.Nm
-driver requires the
-.Pa pkgsrc/sysutils/iwn-firmware
-package to be installed and loaded for proper functionality.
 .Sh CONFIGURATION
 The
 .Nm
@@ -142,19 +136,6 @@ or 104-bit (13 characters or 26 hexadecimal digits) keys.
 Disable WEP encryption.
 This is the default mode of operation.
 .El
-.Sh FILES
-The driver needs at least version 4.44.20 of the following firmware file,
-which is loaded when an interface is brought up:
-.Pp
-.Bl -tag -width Ds -offset indent -compact
-.It Pa /usr/pkg/libdata/if_iwn/iwlwifi-4965.ucode
-.El
-.Pp
-The firmware can be found at
-.Pa http://intellinuxwireless.org/
-(Microcode), or can be installed using the
-.Pa pkgsrc/sysutils/iwn-firmware
-package.
 .Sh EXAMPLES
 The following
 .\" .Xr hostname.if 5 ,
@@ -208,7 +189,6 @@ An attempt to load the firmware into the adapter failed.
 The driver will reset the hardware.
 .El
 .Sh SEE ALSO
-.Xr pkg_add 1 ,
 .Xr arp 4 ,
 .Xr ifmedia 4 ,
 .Xr intro 4 ,

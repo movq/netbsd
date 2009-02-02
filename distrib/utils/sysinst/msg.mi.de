@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.de,v 1.43 2008/03/25 12:54:32 martin Exp $	*/
+/*	$NetBSD: msg.mi.de,v 1.43.8.3 2009/01/22 22:45:15 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -44,6 +44,9 @@ message usage
 
 message sysinst_message_language
 {Installation auf Deutsch}
+
+message sysinst_message_locale
+{de_DE.ISO8859-15}
 
 message Yes {Ja}
 message No {Nein}
@@ -1014,3 +1017,10 @@ Möchten Sie /etc/mailer.conf automatisch auf eine Version für
 Postfix umstellen? Falls Sie "Nein" wählen, müssen Sie anschließend
 manuell /etc/mailer.conf korrigieren, um funktionierende Mailauslieferung
 zu gewährleisten.}
+
+message license
+{Um den Netzwerkadapter %s zu benutzen müssen Sie der Lizenz in
+der Datei %s zustimmen.
+Um den Lizenztext zu lesen, geben Sie ^Z ein, schauen den Inhalt
+der Datei an und kehren mit dem Befehl "fg" zu sysinst zurück.}
+

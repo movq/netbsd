@@ -1,4 +1,4 @@
-#	$NetBSD: sets.subr,v 1.71 2008/10/26 07:31:00 mrg Exp $
+#	$NetBSD: sets.subr,v 1.71.2.5 2009/04/08 00:09:27 snj Exp $
 #
 
 #
@@ -57,7 +57,6 @@ MKVARS="\
 	MKPIC		\
 	MKPOSTFIX	\
 	MKPROFILE	\
-	MKPUFFS		\
 	MKSENDMAIL	\
 	MKSHARE		\
 	MKSKEY		\
@@ -171,6 +170,14 @@ MKMANPAGES=no
 .else
 MKMANPAGES=yes
 .endif
+.if \${MKX11} != "no"
+. if \${X11FLAVOUR} == "Xorg"
+MKXORG:=yes
+MKX11:=no
+. else
+MKXORG:=no
+. endif
+.endif
 all:
 .for i in MACHINE MACHINE_ARCH MACHINE_CPU \
 		HAVE_GCC HAVE_GDB OBJECT_FMT TOOLCHAIN_MISSING \
@@ -221,7 +228,7 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 # In each file, a record consists of a path and a System Package name,
 # separated by whitespace. E.g.,
 #
-# 	# $NetBSD: sets.subr,v 1.71 2008/10/26 07:31:00 mrg Exp $
+# 	# $NetBSD: sets.subr,v 1.71.2.5 2009/04/08 00:09:27 snj Exp $
 # 	.			base-sys-root	[keyword[,...]]
 # 	./altroot		base-sys-root
 # 	./bin			base-sys-root
@@ -276,12 +283,11 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 #	pic			${MKPIC} != no
 #	postfix			${MKPOSTFIX} != no
 #	profile			${MKPROFILE} != no
-#	puffs			${MKPUFFS} != no
 #	sendmail		${MKSENDMAIL} != no
 #	share			${MKSHARE} != no
 #	skey			${MKSKEY} != no
-#	x11			${MKX11} != no
-#	xorg			${MKXORG} != no
+#	x11			${MKX11} != no && ${X11FLAVOUR} != "Xorg"
+#	xorg			${MKX11} != no && ${X11FLAVOUR} == "Xorg"
 #	yp			${MKYP} != no
 #
 #	gcc=<n>			<n> = value of ${HAVE_GCC}
@@ -299,7 +305,7 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 #
 list_set_files()
 {
-	if [ ${MAKEVERBOSE:-2} -lt 2 ]; then
+	if [ ${MAKEVERBOSE:-2} -lt 3 ]; then
 		verbose=false
 	else
 		verbose=true
@@ -309,7 +315,7 @@ list_set_files()
 		for l in $list; do
 			echo $l
 			if $verbose; then
-				echo $l >&2
+				echo >&2 "DEBUG: list_set_files: $l"
 			fi
 		done
 	done | xargs cat | ${SED} ${SUBST} | \

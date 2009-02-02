@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.10 2008/09/26 07:02:57 rtr Exp $
+# $NetBSD: mi,v 1.10.2.3 2009/03/15 20:31:59 snj Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
@@ -32,6 +32,7 @@
 ./etc/X11/xdm/Xaccess					-unknown-	xorg
 ./etc/X11/xdm/Xresources				-unknown-	x11
 ./etc/X11/xdm/Xresources				-unknown-	xorg
+./etc/X11/xdm/Xreset					-unknown-	xorg
 ./etc/X11/xdm/Xservers					-unknown-	x11
 ./etc/X11/xdm/Xservers					-unknown-	xorg
 ./etc/X11/xdm/Xservers.fs				-unknown-	x11
@@ -42,12 +43,13 @@
 ./etc/X11/xdm/Xsession					-unknown-	xorg
 ./etc/X11/xdm/Xsetup_0					-unknown-	x11
 ./etc/X11/xdm/Xsetup_0					-unknown-	xorg
+./etc/X11/xdm/Xstartup					-unknown-	xorg
 ./etc/X11/xdm/Xwilling					-unknown-	x11
 ./etc/X11/xdm/Xwilling					-unknown-	xorg
 ./etc/X11/xdm/xdm-config				-unknown-	x11
 ./etc/X11/xdm/xdm-config				-unknown-	xorg
-./etc/X11/xdm/xorg-bw.xpm				-unknown-	xorg
-./etc/X11/xdm/xorg.xpm					-unknown-	xorg
+./etc/X11/xdm/xorg-bw.xpm				xetc-obsolete	obsolete
+./etc/X11/xdm/xorg.xpm					xetc-obsolete	obsolete
 ./etc/X11/xinit/xinitrc					-unknown-	x11
 ./etc/X11/xinit/xinitrc					-unknown-	xorg
 ./etc/X11/xserver/SecurityPolicy			-unknown-	x11
@@ -85,3 +87,7 @@
 ./etc/fonts/fonts.dtd					-unknown-	xorg
 ./etc/mtree/set.xetc					xetc-sys-root	x11
 ./etc/mtree/set.xetc					xetc-sys-root	xorg
+./etc/rc.d/xdm						etc-x11-rc	x11
+./etc/rc.d/xdm						etc-x11-rc	xorg
+./etc/rc.d/xfs						etc-x11-rc	x11
+./etc/rc.d/xfs						etc-x11-rc	xorg
