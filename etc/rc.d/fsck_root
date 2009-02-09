@@ -1,0 +1,69 @@
+#!/bin/sh
+#
+# $NetBSD: fsck_root,v 1.2 2009/04/28 13:08:51 apb Exp $
+#
+
+# PROVIDE: fsck_root
+
+$_rc_subr_loaded . /etc/rc.subr
+
+name="fsck_root"
+start_cmd="fsck_root_start"
+stop_cmd=":"
+fstab_file=/etc/fstab
+
+fsck_root_start()
+{
+	if [ -e /fastboot ]; then
+		echo "Fast boot: skipping disk checks."
+		return
+	fi
+	trap : 2 		# Ignore SIGINT, SIGQUIT, so we
+	trap : 3		# enter single-user mode on failure.
+
+	# Do nothing if root file system has fs_passno=0 in /etc/fstab.
+	while read fs_spec fs_file fs_vfstype fs_mntops fs_freq fs_passno
+	do
+		case "${fs_spec}:${fs_file}:${fs_passno}" in
+		\#*|'':*)
+			continue # skip comment or blank line
+			;;
+		*:/:0)
+			echo "Not checking /: fs_passno = 0 in ${fstab_file}"
+			return
+			;;
+		*:/:*)	break
+			;;
+		esac
+	done <"${fstab_file}"
+
+	echo "Starting root file system check:"
+	fsck $fsck_flags /
+	local fsck_error="$?"
+	case $fsck_error in
+	0)	# OK
+		return
+		;;
+	2)	# Needs re-run, still fs errors
+		echo "file system still has errors; re-run fsck manually!"
+		;;
+	4)	# Root modified
+		echo "Root filesystem was modified, rebooting ..."
+		reboot
+		echo "Reboot failed; help!"
+		;;
+	8)	# Check failed
+		echo "Automatic file system check failed; help!"
+		;;
+	12)	# Got signal
+		echo "Boot interrupted."
+		;;
+	*)
+		echo "Unknown error $fsck_error; help!"
+		;;
+	esac
+	stop_boot
+}
+
+load_rc_config $name
+run_rc_command "$1"
