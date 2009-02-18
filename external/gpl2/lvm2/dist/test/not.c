@@ -1,4 +1,4 @@
-/*	$NetBSD: not.c,v 1.1 2009/02/18 11:17:34 haad Exp $	*/
+/*	$NetBSD: not.c,v 1.1.1.1 2009/02/18 11:17:34 haad Exp $	*/
 
 #include <unistd.h>
 #include <stdio.h>

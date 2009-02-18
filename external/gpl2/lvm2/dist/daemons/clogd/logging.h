@@ -1,4 +1,4 @@
-/*	$NetBSD: logging.h,v 1.1 2009/02/18 11:16:33 haad Exp $	*/
+/*	$NetBSD: logging.h,v 1.1.1.1 2009/02/18 11:16:33 haad Exp $	*/
 
 #ifndef __CLUSTER_LOG_LOGGING_DOT_H__
 #define __CLUSTER_LOG_LOGGING_DOT_H__

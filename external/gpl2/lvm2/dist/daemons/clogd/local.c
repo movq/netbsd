@@ -1,4 +1,4 @@
-/*	$NetBSD: local.c,v 1.1 2009/02/18 11:16:33 haad Exp $	*/
+/*	$NetBSD: local.c,v 1.1.1.1 2009/02/18 11:16:33 haad Exp $	*/
 
 #include <unistd.h>
 #include <errno.h>

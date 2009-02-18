@@ -1,4 +1,4 @@
-/*	$NetBSD: link_mon.c,v 1.1 2009/02/18 11:16:32 haad Exp $	*/
+/*	$NetBSD: link_mon.c,v 1.1.1.1 2009/02/18 11:16:32 haad Exp $	*/
 
 #include <stdlib.h>
 #include <errno.h>

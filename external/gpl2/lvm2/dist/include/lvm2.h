@@ -1,4 +1,4 @@
-/*	$NetBSD: lvm2.h,v 1.1 2009/02/18 11:16:49 haad Exp $	*/
+/*	$NetBSD: lvm2.h,v 1.1.1.1 2009/02/18 11:16:49 haad Exp $	*/
 
 /*
  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  

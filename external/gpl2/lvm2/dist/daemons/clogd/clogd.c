@@ -1,4 +1,4 @@
-/*	$NetBSD: clogd.c,v 1.1 2009/02/18 11:16:31 haad Exp $	*/
+/*	$NetBSD: clogd.c,v 1.1.1.1 2009/02/18 11:16:31 haad Exp $	*/
 
 #include <stdio.h>
 #include <stdlib.h>
