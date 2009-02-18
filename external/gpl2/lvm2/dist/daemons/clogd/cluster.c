@@ -1,4 +1,4 @@
-/*	$NetBSD: cluster.c,v 1.1 2009/02/18 11:16:31 haad Exp $	*/
+/*	$NetBSD: cluster.c,v 1.1.1.1 2009/02/18 11:16:31 haad Exp $	*/
 
 #include <errno.h>
 #include <string.h>

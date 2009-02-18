@@ -1,4 +1,4 @@
-/*	$NetBSD: functions.h,v 1.1 2009/02/18 11:16:32 haad Exp $	*/
+/*	$NetBSD: functions.h,v 1.1.1.1 2009/02/18 11:16:32 haad Exp $	*/
 
 #ifndef __CLOG_FUNCTIONS_DOT_H__
 #define __CLOG_FUNCTIONS_DOT_H__

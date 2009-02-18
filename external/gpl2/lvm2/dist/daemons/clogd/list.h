@@ -1,4 +1,4 @@
-/*	$NetBSD: list.h,v 1.1 2009/02/18 11:16:32 haad Exp $	*/
+/*	$NetBSD: list.h,v 1.1.1.1 2009/02/18 11:16:32 haad Exp $	*/
 
 #ifndef _LINUX_LIST_H
 #define _LINUX_LIST_H
