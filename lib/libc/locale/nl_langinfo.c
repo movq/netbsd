@@ -1,4 +1,4 @@
-/* $NetBSD: nl_langinfo.c,v 1.13 2009/01/11 02:46:29 christos Exp $ */
+/* $NetBSD: nl_langinfo.c,v 1.11.26.1 2009/01/15 03:24:08 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nl_langinfo.c,v 1.13 2009/01/11 02:46:29 christos Exp $");
+__RCSID("$NetBSD: nl_langinfo.c,v 1.11.26.1 2009/01/15 03:24:08 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>

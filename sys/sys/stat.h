@@ -1,4 +1,4 @@
-/*	$NetBSD: stat.h,v 1.58 2009/01/11 02:45:55 christos Exp $	*/
+/*	$NetBSD: stat.h,v 1.57.4.1 2009/12/18 06:12:51 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -46,6 +46,20 @@
 #include <sys/time.h>
 #endif
 
+/*
+ * On systems with 8 byte longs and 4 byte time_ts, padding the time_ts
+ * is required in order to have a consistent ABI.  This is because the
+ * stat structure used to contain timespecs, which had different
+ * alignment constraints than a time_t and a long alone.  The padding
+ * should be removed the next time the stat structure ABI is changed.
+ * (This will happen whever we change to 8 byte time_t.)
+ */
+#if defined(_LP64)	/* XXXX  && _BSD_TIME_T_ == int */
+#define	__STATPAD(x)	int x;
+#else
+#define	__STATPAD(x)	/* nothing */
+#endif
+
 struct stat {
 	dev_t	  st_dev;		/* inode's device */
 	mode_t	  st_mode;		/* inode protection mode */
@@ -61,12 +75,16 @@ struct stat {
 	struct 	  timespec st_birthtimespec; /* time of creation */
 #else
 	time_t	  st_atime;		/* time of last access */
+	__STATPAD(__pad0)
 	long	  st_atimensec;		/* nsec of last access */
 	time_t	  st_mtime;		/* time of last data modification */
+	__STATPAD(__pad1)
 	long	  st_mtimensec;		/* nsec of last data modification */
 	time_t	  st_ctime;		/* time of last file status change */
+	__STATPAD(__pad2)
 	long	  st_ctimensec;		/* nsec of last file status change */
 	time_t	  st_birthtime;		/* time of creation */
+	__STATPAD(__pad3)
 	long	  st_birthtimensec;	/* nsec of time of creation */
 #endif
 	off_t	  st_size;		/* file size, in bytes */
@@ -76,6 +94,8 @@ struct stat {
 	uint32_t  st_gen;		/* file generation number */
 	uint32_t  st_spare[2];
 };
+
+#undef __STATPAD
 
 #if defined(_NETBSD_SOURCE)
 #define	st_atime		st_atimespec.tv_sec
@@ -148,21 +168,21 @@ struct stat {
 #define	S_ARCH2	_S_ARCH2
 #endif
 
-#define	S_ISDIR(m)	((m & _S_IFMT) == _S_IFDIR)	/* directory */
-#define	S_ISCHR(m)	((m & _S_IFMT) == _S_IFCHR)	/* char special */
-#define	S_ISBLK(m)	((m & _S_IFMT) == _S_IFBLK)	/* block special */
-#define	S_ISREG(m)	((m & _S_IFMT) == _S_IFREG)	/* regular file */
-#define	S_ISFIFO(m)	((m & _S_IFMT) == _S_IFIFO)	/* fifo */
+#define	S_ISDIR(m)	(((m) & _S_IFMT) == _S_IFDIR)	/* directory */
+#define	S_ISCHR(m)	(((m) & _S_IFMT) == _S_IFCHR)	/* char special */
+#define	S_ISBLK(m)	(((m) & _S_IFMT) == _S_IFBLK)	/* block special */
+#define	S_ISREG(m)	(((m) & _S_IFMT) == _S_IFREG)	/* regular file */
+#define	S_ISFIFO(m)	(((m) & _S_IFMT) == _S_IFIFO)	/* fifo */
 #if ((_POSIX_C_SOURCE - 0) >= 200112L) || defined(_XOPEN_SOURCE) || \
     defined(_NETBSD_SOURCE)
-#define	S_ISLNK(m)	((m & _S_IFMT) == _S_IFLNK)	/* symbolic link */
+#define	S_ISLNK(m)	(((m) & _S_IFMT) == _S_IFLNK)	/* symbolic link */
 #endif
 #if ((_POSIX_C_SOURCE - 0) >= 200112L) || ((_XOPEN_SOURCE - 0) >= 600) || \
     defined(_NETBSD_SOURCE)
-#define	S_ISSOCK(m)	((m & _S_IFMT) == _S_IFSOCK)	/* socket */
+#define	S_ISSOCK(m)	(((m) & _S_IFMT) == _S_IFSOCK)	/* socket */
 #endif
 #if defined(_NETBSD_SOURCE)
-#define	S_ISWHT(m)	((m & _S_IFMT) == _S_IFWHT)	/* whiteout */
+#define	S_ISWHT(m)	(((m) & _S_IFMT) == _S_IFWHT)	/* whiteout */
 #endif
 
 #if defined(_NETBSD_SOURCE)
@@ -214,16 +234,16 @@ int	chmod(const char *, mode_t);
 int	mkdir(const char *, mode_t);
 int	mkfifo(const char *, mode_t);
 #ifndef __LIBC12_SOURCE__
-int	stat(const char *, struct stat *) __RENAME(__stat50);
-int	fstat(int, struct stat *) __RENAME(__fstat50);
+int	stat(const char *, struct stat *) __RENAME(__stat30);
+int	fstat(int, struct stat *) __RENAME(__fstat30);
 #endif
 mode_t	umask(mode_t);
 #if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 int	fchmod(int, mode_t);
 #ifndef __LIBC12_SOURCE__
-int	lstat(const char *, struct stat *) __RENAME(__lstat50);
-int	mknod(const char *, mode_t, dev_t) __RENAME(__mknod50);
+int	lstat(const char *, struct stat *) __RENAME(__lstat30);
 #endif
+int	mknod(const char *, mode_t, dev_t);
 #endif /* defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE) */
 
 #if defined(_NETBSD_SOURCE)

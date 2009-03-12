@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cnw.c,v 1.46 2009/02/13 23:31:23 bouyer Exp $	*/
+/*	$NetBSD: if_cnw.c,v 1.44.10.1 2009/07/26 18:33:36 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -105,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.46 2009/02/13 23:31:23 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.44.10.1 2009/07/26 18:33:36 snj Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -1015,7 +1015,10 @@ cnw_intr(arg)
  * Handle device ioctls.
  */
 int
-cnw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+cnw_ioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	u_long cmd;
+	void *data;
 {
 	struct cnw_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -1024,7 +1027,7 @@ cnw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	struct lwp *l = curlwp;	/*XXX*/
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 	case SIOCSIFFLAGS:
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
@@ -1047,46 +1050,40 @@ cnw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		if (!(ifp->if_flags & IFF_RUNNING) &&
 		    (error = cnw_enable(sc)) != 0)
 			break;
 		ifp->if_flags |= IFF_UP;
-		cnw_init(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
+			cnw_init(sc);
 			arp_ifinit(&sc->sc_ethercom.ec_if, ifa);
 			break;
 #endif
 		default:
+			cnw_init(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX re-use ether_ioctl() */
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) == IFF_RUNNING) {
 			/*
 			 * The interface is marked down and it is running, so
 			 * stop it.
 			 */
 			cnw_disable(sc);
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & (IFF_UP | IFF_RUNNING)) == IFF_UP){
 			/*
 			 * The interface is marked up and it is stopped, so
 			 * start it.
 			 */
 			error = cnw_enable(sc);
-			break;
-		default:
+		} else {
 			/* IFF_PROMISC may be changed */
 			cnw_init(sc);
-			break;
 		}
 		break;
 
@@ -1127,7 +1124,7 @@ cnw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 

@@ -344,13 +344,13 @@ param_text_print(char *text, uint32_t text_len)
 	char            key[256];
 	char           *ptr, *eq, *value;
 
-	for (ptr = text; (uint32_t)(ptr - text) < text_len; ptr += (strlen(ptr) + 1)) {
+	for (ptr = text; ptr - text < text_len; ptr += (strlen(ptr) + 1)) {
 
 		/* Skip over any NULLs */
 
-		while (!(*ptr) && ((uint32_t)(ptr - text) < text_len))
+		while (!(*ptr) && ((ptr - text) < text_len))
 			ptr++;
-		if ((uint32_t)(ptr - text) >= text_len)
+		if ((ptr - text) >= text_len)
 			break;
 
 		if ((eq = strchr(ptr, '=')) == NULL) {

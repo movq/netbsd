@@ -1,4 +1,4 @@
-/*	$NetBSD: i80321_aau.c,v 1.14 2009/01/05 04:39:32 briggs Exp $	*/
+/*	$NetBSD: i80321_aau.c,v 1.13.10.1 2009/01/09 02:41:27 snj Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80321_aau.c,v 1.14 2009/01/05 04:39:32 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80321_aau.c,v 1.13.10.1 2009/01/09 02:41:27 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/pool.h>

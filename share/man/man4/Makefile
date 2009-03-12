@@ -1,19 +1,20 @@
-#	$NetBSD: Makefile,v 1.487 2009/02/05 18:03:30 sborrill Exp $
+#	$NetBSD: Makefile,v 1.482.2.9 2010/11/21 03:05:10 riz Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/18/93
 
 MAN=	aac.4 ac97.4 acardide.4 aceride.4 acphy.4 acpidalb.4 \
 	adbbt.4 adbkbd.4 adbms.4 \
 	adc.4 admtemp.4 adv.4 adw.4 age.4 agp.4 agr.4 ahb.4 ahc.4 \
 	ahcisata.4 ahd.4 \
-	aiboost.4 alipm.4 amdpm.4 amdtemp.4 amhphy.4 amr.4 aps.4 \
+	aiboost.4 ale.4 alipm.4 amdpm.4 amdtemp.4 amhphy.4 \
+	amr.4 aps.4 \
 	an.4 arcmsr.4 aria.4 artsata.4 ata.4 atalk.4 ataraid.4 \
 	ath.4 atphy.4 atppc.4 attimer.4 atw.4 \
 	auacer.4 audio.4 audiocs.4 auich.4 \
 	auixp.4 autri.4 auvia.4 awi.4 azalia.4 \
 	battery_pmu.4 bba.4 bce.4 bcsp.4 be.4 bge.4 bnx.4 bha.4 \
 	bio.4 bktr.4 bluetooth.4 bmtphy.4 bpf.4 \
-	brgphy.4 bridge.4 bthidev.4 bthub.4 btkbd.4 btms.4 btsco.4 btuart.4 \
-	bwi.4 \
+	brgphy.4 bridge.4 bthidev.4 bthub.4 btkbd.4 \
+	btmagic.4 btms.4 btsco.4 btuart.4 \
 	cac.4 cardbus.4 carp.4 ccd.4 cd.4 \
 	cec.4 cgd.4 cfb.4 ch.4 chipsfb.4 ciphy.4 ciss.4 clcs.4 clct.4 clnp.4 \
 	clockctl.4 cltp.4 cmdide.4 cmpci.4 cms.4 cnw.4 \
@@ -25,14 +26,14 @@ MAN=	aac.4 ac97.4 acardide.4 aceride.4 acphy.4 acpidalb.4 \
 	fast_ipsec.4 fd.4 finsio.4 fpa.4 fms.4 fss.4 fxp.4 \
 	gcscaudio.4 gem.4 genfb.4 gentbi.4 geodeide.4 \
 	glxtphy.4 gpib.4 gpio.4 gre.4 gphyter.4 gsip.4 hifn.4 hme.4 \
-	hpqlb.4 hptide.4 \
+	hdaudio.4 hpqlb.4 hptide.4 \
 	ichlpcib.4 ichsmb.4 icmp.4 icp.4 icsphy.4 iee.4 ieee80211.4 \
 	ifmedia.4 igsfb.4 iha.4 inet.4 ikphy.4 inphy.4 intersil7170.4 \
 	ioasic.4 ioat.4 iop.4 iophy.4 iopsp.4 ip.4 ipkdb.4 ipmi.4 ipw.4 \
 	iso.4 isp.4 isv.4 itesio.4 iteide.4 iwi.4 iwn.4 ixpide.4 \
 	jme.4 jmide.4 joy.4 \
 	kloader.4 kse.4 ksyms.4 kttcp.4 \
-	lc.4 ld.4 lii.4 lo.4 lxtphy.4 \
+	lc.4 ld.4 lii.4 lkm.4 lo.4 lxtphy.4 \
 	mainbus.4 makphy.4 mbe.4 mca.4 mcclock.4 md.4 mfb.4 mfi.4 mhzc.4 \
 	midi.4 mii.4 mk48txx.4 mlx.4 mly.4 mpt.4 mpu.4 mtd.4 mtio.4 \
 	multicast.4 \
@@ -46,7 +47,8 @@ MAN=	aac.4 ac97.4 acardide.4 aceride.4 acphy.4 acpidalb.4 \
 	qe.4 qec.4 qsphy.4 \
 	raid.4 ral.4 ray.4 rcons.4 re.4 rgephy.4 rlphy.4 rnd.4 route.4 \
 	rs5c372rtc.4 rtk.4 rtw.4 rum.4 \
-	satalink.4 sbus.4 scc.4 scsi.4 sd.4 se.4 seeprom.4 sem.4 \
+	satalink.4 sbus.4 scc.4 scsi.4 sd.4 sdhc.4 sdmmc.4 se.4 seeprom.4 \
+	sem.4 \
 	ses.4 sf.4 sfb.4 sgsmix.4 shb.4 \
 	shpcic.4 siisata.4 siop.4 sip.4 siside.4 sk.4 sl.4 slide.4 \
 	sm.4 sn.4 sony.4 spc.4 speaker.4 spif.4 sqphy.4 ss.4 \
@@ -58,7 +60,7 @@ MAN=	aac.4 ac97.4 acardide.4 aceride.4 acphy.4 acpidalb.4 \
 	ubsec.4 udp.4 uep.4 ug.4 uha.4 uk.4 ukphy.4 unix.4 userconf.4 \
 	veriexec.4 vga.4 vge.4 viaide.4 video.4 vlan.4 vmmon.4 vmnet.4 \
 	vnd.4 vr.4 \
-	wapbl.4 wd.4 wdc.4 wi.4 wm.4 wpi.4 wscons.4 wsdisplay.4 wsfont.4 \
+	wapbl.4 wb.4 wd.4 wdc.4 wi.4 wm.4 wpi.4 wscons.4 wsdisplay.4 wsfont.4 \
 	wskbd.4 wsmouse.4 wsmux.4 \
 	xbox.4 xge.4 \
 	yds.4 ym.4 \
@@ -161,6 +163,8 @@ MLINKS+=dbcool.4 adt7475.4
 MLINKS+=dbcool.4 adt7476.4
 MLINKS+=fd.4 stderr.4 fd.4 stdin.4 fd.4 stdout.4
 MLINKS+=fpa.4 fea.4 fpa.4 fta.4
+MLINKS+=hdaudio.4 hdafg.4
+MLINKS+=hdaudio.4 hdaudiobus.4
 MLINKS+=icp.4 icpsp.4
 MLINKS+=irframe.4 irda.4
 MLINKS+=le.4 bicc.4 le.4 nele.4 le.4 depca.4

@@ -1,4 +1,4 @@
-/*	$NetBSD: lockd_lock.c,v 1.29 2008/12/29 03:38:26 christos Exp $	*/
+/*	$NetBSD: lockd_lock.c,v 1.28.12.1 2009/12/01 19:48:05 snj Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -62,11 +62,7 @@ typedef struct {
 static int
 fhcmp(const nfs_fhandle_t *fh1, const nfs_fhandle_t *fh2)
 {
-
-	if (fh1->fhsize != fh2->fhsize) {
-		return 1;
-	}
-	return memcmp(fh1->fhdata, fh2->fhdata, fh1->fhsize);
+	return memcmp(fh1->fhdata, fh2->fhdata, MIN(fh1->fhsize, fh2->fhsize));
 }
 
 static int
@@ -541,11 +537,10 @@ do_lock(struct file_lock *fl, int block)
 		    fl->client_name);
 	}
 	syslog(LOG_DEBUG, "lock from %s.%" PRIu32 " for file%s%s: "
-	    "dev %llu ino %llu (uid %d), flags %d",
+	    "dev %u ino %llu (uid %d), flags %d",
 	    fl->client_name, fl->client.svid,
 	    fl->client.exclusive ? " (exclusive)":"", block ? " (block)":"",
-	    (unsigned long long)st.st_dev,
-	    (unsigned long long)st.st_ino, st.st_uid, fl->flags);
+	    st.st_dev, (unsigned long long)st.st_ino, st.st_uid, fl->flags);
 	lflags = LOCK_NB;
 	if (fl->client.exclusive == 0)
 		lflags |= LOCK_SH;

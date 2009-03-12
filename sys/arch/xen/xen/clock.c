@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.49 2009/01/16 20:16:47 jym Exp $	*/
+/*	$NetBSD: clock.c,v 1.47.4.1 2009/06/19 21:22:11 snj Exp $	*/
 
 /*
  *
@@ -34,7 +34,7 @@
 #include "opt_xen.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.49 2009/01/16 20:16:47 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.47.4.1 2009/06/19 21:22:11 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.49 2009/01/16 20:16:47 jym Exp $");
 #include <machine/cpu_counter.h>
 
 #include <dev/clock_subr.h>
+#include <x86/rtc.h>
 
 static int xen_timer_handler(void *, struct intrframe *);
 
@@ -108,30 +109,30 @@ get_time_values_from_xen(void)
 
 	do {
 		shadow_time_version = t->version;
-		xen_rmb();
+		x86_lfence();
 		shadow_tsc_stamp = t->tsc_timestamp;
 		shadow_system_time = t->system_time;
 		shadow_freq_mul = t->tsc_to_system_mul;
 		shadow_freq_shift = t->tsc_shift;
-		xen_rmb();
+		x86_lfence();
 	} while ((t->version & 1) || (shadow_time_version != t->version));
 	do {
 		tversion = HYPERVISOR_shared_info->wc_version;
-		xen_rmb();
+		x86_lfence();
 		shadow_ts.tv_sec = HYPERVISOR_shared_info->wc_sec;
 		shadow_ts.tv_nsec = HYPERVISOR_shared_info->wc_nsec;
-		xen_rmb();
+		x86_lfence();
 	} while ((HYPERVISOR_shared_info->wc_version & 1) ||
 	    (tversion != HYPERVISOR_shared_info->wc_version));
 #else /* XEN3 */
 	do {
 		shadow_time_version = HYPERVISOR_shared_info->time_version2;
-		xen_rmb();
+		x86_lfence();
 		shadow_ts.tv_sec = HYPERVISOR_shared_info->wc_sec;
 		shadow_ts.tv_nsec = HYPERVISOR_shared_info->wc_usec;
 		shadow_tsc_stamp = HYPERVISOR_shared_info->tsc_timestamp;
 		shadow_system_time = HYPERVISOR_shared_info->system_time;
-		xen_rmb();
+		x86_lfence();
 	} while (shadow_time_version != HYPERVISOR_shared_info->time_version1);
 	shadow_ts.tv_nsec *= 1000;
 #endif
@@ -145,13 +146,13 @@ time_values_up_to_date(void)
 {
 	int rv;
 
-	xen_rmb();
+	x86_lfence();
 #ifndef XEN3
 	rv = shadow_time_version == HYPERVISOR_shared_info->time_version1;
 #else
 	rv = shadow_time_version == curcpu()->ci_vcpu->time.version;
 #endif
-	xen_rmb();
+	x86_lfence();
 
 	return rv;
 }
@@ -308,19 +309,18 @@ static int
 xen_rtc_set(todr_chip_handle_t todr, volatile struct timeval *tvp)
 {
 #ifdef DOM0OPS
-#if __XEN_INTERFACE_VERSION__ < 0x00030204
 	dom0_op_t op;
-#else
-	xen_platform_op_t op;
-#endif
 	int s;
 
 	if (xendomain_is_privileged()) {
-#if __XEN_INTERFACE_VERSION__ < 0x00030204
-		op.cmd = DOM0_SETTIME;
-#else
-		op.cmd = XENPF_settime;
+#ifdef XEN3
+		/* needs to set the RTC chip too */
+		struct clock_ymdhms dt;
+		clock_secs_to_ymdhms(tvp->tv_sec, &dt);
+		rtc_set_ymdhms(NULL, &dt);
 #endif
+
+		op.cmd = DOM0_SETTIME;
 		/* XXX is rtc_offset handled correctly everywhere? */
 		op.u.settime.secs	 = tvp->tv_sec;
 #ifdef XEN3
@@ -331,11 +331,7 @@ xen_rtc_set(todr_chip_handle_t todr, volatile struct timeval *tvp)
 		s = splhigh();
 		op.u.settime.system_time = get_system_time();
 		splx(s);
-#if __XEN_INTERFACE_VERSION__ < 0x00030204
-		HYPERVISOR_dom0_op(&op);
-#else
-		HYPERVISOR_platform_op(&op);
-#endif
+		return HYPERVISOR_dom0_op(&op);
 	}
 #endif
 

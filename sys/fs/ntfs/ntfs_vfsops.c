@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_vfsops.c,v 1.74 2008/12/19 18:49:38 cegger Exp $	*/
+/*	$NetBSD: ntfs_vfsops.c,v 1.72.6.1 2009/09/10 07:33:24 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 Semen Ustimenko
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_vfsops.c,v 1.74 2008/12/19 18:49:38 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_vfsops.c,v 1.72.6.1 2009/09/10 07:33:24 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -334,7 +334,8 @@ ntfs_mountfs(devvp, mp, argsp, l)
 	error = bread(devvp, BBLOCK, BBSIZE, NOCRED, 0, &bp);
 	if (error)
 		goto out;
-	ntmp = malloc( sizeof *ntmp, M_NTFSMNT, M_WAITOK|M_ZERO);
+	ntmp = malloc( sizeof *ntmp, M_NTFSMNT, M_WAITOK );
+	bzero( ntmp, sizeof *ntmp );
 	bcopy( bp->b_data, &ntmp->ntm_bootfile, sizeof(struct bootfile) );
 	brelse( bp , 0 );
 	bp = NULL;
@@ -558,7 +559,7 @@ ntfs_unmount(
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
 	free(ntmp->ntm_ad, M_NTFSMNT);
-	free(ntmp, M_NTFSMNT);
+	FREE(ntmp, M_NTFSMNT);
 	return (0);
 }
 
@@ -823,7 +824,7 @@ ntfs_vgetex(
 		}
 	}
 
-	uvm_vnp_setsize(vp, 0); /* XXX notused */
+	uvm_vnp_setsize(vp, fp->f_size); /* XXX: mess, cf. ntfs_lookupfile() */
 	VREF(ip->i_devvp);
 	*vpp = vp;
 	return (0);

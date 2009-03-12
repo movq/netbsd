@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.6 2008/11/03 15:13:16 rjs Exp $	*/
+/*	$NetBSD: cpu.c,v 1.5 2008/05/02 18:40:51 rjs Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -37,21 +37,16 @@
 #include <machine/bus.h>
 #include <machine/cpu.h>
 
-int cpumatch(device_t, cfdata_t, void *);
-void cpuattach(device_t, device_t, void *);
+int cpumatch(struct device *, struct cfdata *, void *);
+void cpuattach(struct device *, struct device *, void *);
 
-struct cpu_softc {
-	device_t sc_dev;		/* device tree glue */
-	struct cpu_info *sc_info;	/* pointer to CPU info */
-};
-
-CFATTACH_DECL_NEW(cpu, sizeof(struct cpu_softc),
+CFATTACH_DECL(cpu, sizeof(struct device),
     cpumatch, cpuattach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
 
 int
-cpumatch(device_t parent, cfdata_t cfdata, void *aux)
+cpumatch(struct device *parent, struct cfdata *cfdata, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -63,10 +58,9 @@ cpumatch(device_t parent, cfdata_t cfdata, void *aux)
 }
 
 void
-cpuattach(device_t parent, device_t self, void *aux)
+cpuattach(struct device *parent, struct device *self, void *aux)
 {
-	struct cpu_softc *sc = device_private(self);
+	struct cpu_info *ci;
 
-	sc->sc_dev = self;
-	sc->sc_info = cpu_attach_common(self, 0);
+	ci = cpu_attach_common(self, 0);
 }

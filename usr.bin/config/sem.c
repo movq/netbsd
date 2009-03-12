@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.c,v 1.32 2009/01/20 18:20:48 drochner Exp $	*/
+/*	$NetBSD: sem.c,v 1.30 2008/07/07 16:10:27 cube Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -83,9 +83,9 @@ static char *extend(char *, const char *);
 static int split(const char *, size_t, char *, size_t, int *);
 static void selectbase(struct devbase *, struct deva *);
 static const char **fixloc(const char *, struct attr *, struct nvlist *);
-static const char *makedevstr(devmajor_t, devminor_t);
-static const char *major2name(devmajor_t);
-static devmajor_t dev2major(struct devbase *);
+static const char *makedevstr(int, int);
+static const char *major2name(int);
+static int dev2major(struct devbase *);
 
 extern const char *yyfile;
 extern int vflag;
@@ -436,7 +436,7 @@ getdevbase(const char *name)
 		dev = ecalloc(1, sizeof *dev);
 		dev->d_name = name;
 		dev->d_isdef = 0;
-		dev->d_major = NODEVMAJOR;
+		dev->d_major = NODEV;
 		dev->d_attrs = NULL;
 		dev->d_ihead = NULL;
 		dev->d_ipp = &dev->d_ihead;
@@ -631,10 +631,10 @@ expandattr(struct attr *a, void (*callback)(struct attr *))
  * as a root/dumps "on" device in a configuration.
  */
 void
-setmajor(struct devbase *d, devmajor_t n)
+setmajor(struct devbase *d, int n)
 {
 
-	if (d != &errdev && d->d_major != NODEVMAJOR)
+	if (d != &errdev && d->d_major != NODEV)
 		cfgerror("device `%s' is already major %d",
 		    d->d_name, d->d_major);
 	else
@@ -642,7 +642,7 @@ setmajor(struct devbase *d, devmajor_t n)
 }
 
 const char *
-major2name(devmajor_t maj)
+major2name(int maj)
 {
 	struct devbase *dev;
 	struct devm *dm;
@@ -661,7 +661,7 @@ major2name(devmajor_t maj)
 	return (NULL);
 }
 
-devmajor_t
+int
 dev2major(struct devbase *dev)
 {
 	struct devm *dm;
@@ -673,14 +673,14 @@ dev2major(struct devbase *dev)
 		if (strcmp(dm->dm_name, dev->d_name) == 0)
 			return (dm->dm_bmajor);
 	}
-	return (NODEVMAJOR);
+	return (NODEV);
 }
 
 /*
  * Make a string description of the device at maj/min.
  */
 static const char *
-makedevstr(devmajor_t maj, devminor_t min)
+makedevstr(int maj, int min)
 {
 	const char *devicename;
 	char buf[32];
@@ -707,9 +707,7 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 	struct nvlist *nv;
 	struct devbase *dev;
 	const char *cp;
-	devmajor_t maj;
-	devminor_t min;
-	int i, l;
+	int maj, min, i, l;
 	int unit;
 	char buf[NAMESIZE];
 
@@ -721,9 +719,9 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 		 * Apply default.  Easiest to do this by number.
 		 * Make sure to retain NODEVness, if this is dflt's disposition.
 		 */
-		if (dflt->nv_num != NODEV) {
-			maj = major(dflt->nv_num);
-			min = ((minor(dflt->nv_num) / maxpartitions) *
+		if (dflt->nv_int != NODEV) {
+			maj = major(dflt->nv_int);
+			min = ((minor(dflt->nv_int) / maxpartitions) *
 			    maxpartitions) + part;
 			d = makedev(maj, min);
 			cp = makedevstr(maj, min);
@@ -731,13 +729,13 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 			cp = NULL;
 		*nvp = nv = newnv(NULL, cp, NULL, d, NULL);
 	}
-	if (nv->nv_num != NODEV) {
+	if (nv->nv_int != NODEV) {
 		/*
 		 * By the numbers.  Find the appropriate major number
 		 * to make a name.
 		 */
-		maj = major(nv->nv_num);
-		min = minor(nv->nv_num);
+		maj = major(nv->nv_int);
+		min = minor(nv->nv_int);
 		nv->nv_str = makedevstr(maj, min);
 		return (0);
 	}
@@ -776,7 +774,7 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 	 * don't bother making a device number.
 	 */
 	if (has_attr(dev->d_attrs, s_ifnet)) {
-		nv->nv_num = NODEV;
+		nv->nv_int = NODEV;
 		nv->nv_ifunit = unit;	/* XXX XXX XXX */
 	} else {
 		maj = dev2major(dev);
@@ -785,7 +783,7 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 			    name, what, nv->nv_str);
 			return (1);
 		}
-		nv->nv_num = makedev(maj, unit * maxpartitions + part);
+		nv->nv_int = makedev(maj, unit * maxpartitions + part);
 	}
 
 	nv->nv_name = dev->d_name;
@@ -1463,23 +1461,22 @@ delpseudo(const char *name)
 }
 
 void
-adddevm(const char *name, devmajor_t cmajor, devmajor_t bmajor,
-	struct nvlist *options)
+adddevm(const char *name, int cmajor, int bmajor, struct nvlist *options)
 {
 	struct devm *dm;
 
-	if (cmajor != NODEVMAJOR && (cmajor < 0 || cmajor >= 4096)) {
+	if (cmajor < -1 || cmajor >= 4096) {
 		cfgerror("character major %d is invalid", cmajor);
 		nvfreel(options);
 		return;
 	}
 
-	if (bmajor != NODEVMAJOR && (bmajor < 0 || bmajor >= 4096)) {
+	if (bmajor < -1 || bmajor >= 4096) {
 		cfgerror("block major %d is invalid", bmajor);
 		nvfreel(options);
 		return;
 	}
-	if (cmajor == NODEVMAJOR && bmajor == NODEVMAJOR) {
+	if (cmajor == -1 && bmajor == -1) {
 		cfgerror("both character/block majors are not specified");
 		nvfreel(options);
 		return;
@@ -1747,18 +1744,18 @@ fixloc(const char *name, struct attr *attr, struct nvlist *got)
 	else
 		lp = emalloc((attr->a_loclen + 1) * sizeof(const char *));
 	for (n = got; n != NULL; n = n->nv_next)
-		n->nv_num = -1;
+		n->nv_int = -1;
 	nmissing = 0;
 	mp = missing;
 	/* yes, this is O(mn), but m and n should be small */
 	for (ord = 0, m = attr->a_locs; m != NULL; m = m->nv_next, ord++) {
 		for (n = got; n != NULL; n = n->nv_next) {
 			if (n->nv_name == m->nv_name) {
-				n->nv_num = ord;
+				n->nv_int = ord;
 				break;
 			}
 		}
-		if (n == NULL && m->nv_num == 0) {
+		if (n == NULL && m->nv_int == 0) {
 			nmissing++;
 			mp = extend(mp, m->nv_name);
 		}
@@ -1772,10 +1769,10 @@ fixloc(const char *name, struct attr *attr, struct nvlist *got)
 	nnodefault = 0;
 	ndp = nodefault;
 	for (n = got; n != NULL; n = n->nv_next) {
-		if (n->nv_num >= 0) {
+		if (n->nv_int >= 0) {
 			if (n->nv_str != NULL)
-				lp[n->nv_num] = n->nv_str;
-			else if (lp[n->nv_num] == NULL) {
+				lp[n->nv_int] = n->nv_str;
+			else if (lp[n->nv_int] == NULL) {
 				nnodefault++;
 				ndp = extend(ndp, n->nv_name);
 			}

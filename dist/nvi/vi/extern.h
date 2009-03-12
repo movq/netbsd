@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.2 2008/12/05 22:51:43 christos Exp $ */
+/*	$NetBSD: extern.h,v 1.1.1.1.8.1 2009/01/20 02:41:13 snj Exp $ */
 
 /* Do not edit: automatically built by build/distrib. */
 int cs_init __P((SCR *, VCS *));

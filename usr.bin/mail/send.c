@@ -1,4 +1,4 @@
-/*	$NetBSD: send.c,v 1.33 2009/01/25 14:07:18 lukem Exp $	*/
+/*	$NetBSD: send.c,v 1.32 2007/10/30 02:28:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)send.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: send.c,v 1.33 2009/01/25 14:07:18 lukem Exp $");
+__RCSID("$NetBSD: send.c,v 1.32 2007/10/30 02:28:32 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -293,7 +293,7 @@ sendmessage(struct message *mp, FILE *obuf, struct ignoretab *doign,
 		}
 	else
 		while (len > 0) {
-			linelen = (size_t)len < sizeof(line) ? (size_t)len : sizeof(line);
+			linelen = len < sizeof(line) ? (size_t)len : sizeof(line);
 			if ((linelen = fread(line, sizeof(*line), linelen, ibuf)) == 0)
 				break;
 			len -= linelen;

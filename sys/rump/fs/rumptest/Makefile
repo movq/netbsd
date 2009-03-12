@@ -1,16 +1,11 @@
-#	$NetBSD: Makefile,v 1.5 2009/01/14 19:29:32 pooka Exp $
+#	$NetBSD: Makefile,v 1.2 2008/07/29 14:00:01 pooka Exp $
 #
 
 PROG=	rumptest
 NOMAN=	woman
 
-# std rump libs
-LDADD=	${RUMPFSLDADD} -lrumpvfs -lrump -lrumpuser
-
-# for NFS
-LDADD+=	-lrumpnet_sockin -lrumpnet
-
-LDADD+=	-lpthread
+LDADD=	${RUMPFSLDADD} -lrump -lrumpuser -lpthread
+LDFLAGS+=-Wl,--wrap=malloc
 
 .include "${.CURDIR}/../Makefile.rumpfs"
 .include <bsd.prog.mk>

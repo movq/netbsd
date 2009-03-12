@@ -1,4 +1,4 @@
-/*	$NetBSD: ipcrm.c,v 1.16 2009/01/18 01:06:42 lukem Exp $	*/
+/*	$NetBSD: ipcrm.c,v 1.15 2008/08/18 02:12:35 dholland Exp $	*/
 
 /*
  * Copyright (c) 1994 Adam Glass
@@ -109,8 +109,7 @@ msgrmall(void)
 {
 	int mib[4];
 	struct msg_sysctl_info *msgsi;
-	int32_t i;
-	size_t len;
+	size_t i, len;
 	int result = 0;
 
 	mib[0] = CTL_KERN;
@@ -176,8 +175,7 @@ semrmall(void)
 {
 	int mib[4];
 	struct sem_sysctl_info *semsi;
-	size_t len;
-	int32_t i;
+	size_t i, len;
 	int result = 0;
 
 	mib[0] = CTL_KERN;

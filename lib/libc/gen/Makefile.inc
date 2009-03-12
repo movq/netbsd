@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.167 2009/01/11 02:46:27 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.163.4.1 2009/01/15 03:24:06 snj Exp $
 #	from: @(#)Makefile.inc	8.6 (Berkeley) 5/4/95
 
 # gen sources
@@ -19,7 +19,7 @@ SRCS+= 	_errno.c alarm.c alphasort.c arc4random.c assert.c basename.c clock.c \
 	isascii.c isatty.c isctype.c lockf.c nftw.c \
 	nice.c nlist.c nlist_aout.c \
 	nlist_coff.c nlist_ecoff.c nlist_elf32.c nlist_elf64.c opendir.c \
-	pause.c popen.c psignal.c pthread_atfork.c ptree.c pwcache.c \
+	pause.c popen.c psignal.c pthread_atfork.c pwcache.c \
 	pw_scan.c raise.c randomid.c rb.c readdir.c rewinddir.c \
 	scandir.c seekdir.c setdomainname.c \
 	sethostname.c setjmperr.c setmode.c setproctitle.c setprogname.c \
@@ -81,8 +81,7 @@ MLINKS+=cpuset.3 cpuset_create.3 cpuset.3 cpuset_destroy.3 \
 	cpuset.3 cpuset_isset.3 cpuset.3 cpuset_size.3
 MLINKS+=directory.3 closedir.3 directory.3 dirfd.3 directory.3 opendir.3 \
 	directory.3 readdir.3 directory.3 readdir_r.3 directory.3 \
-	rewinddir.3 directory.3 seekdir.3 directory.3 telldir.3 \
-	directory.3 fdopendir.3	
+	rewinddir.3 directory.3 seekdir.3 directory.3 telldir.3
 MLINKS+=endutxent.3 getutxent.3 endutxent.3 getutxid.3 \
 	endutxent.3 getutxline.3 endutxent.3 pututxline.3 \
 	endutxent.3 setutxent.3

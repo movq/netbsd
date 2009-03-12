@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.227 2009/02/13 22:41:02 apb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.223.6.1 2009/07/26 18:45:44 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -77,11 +77,10 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.227 2009/02/13 22:41:02 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.223.6.1 2009/07/26 18:45:44 snj Exp $");
 
 #include "fs_mfs.h"
 #include "opt_ddb.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,7 +93,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.227 2009/02/13 22:41:02 apb Exp $");
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
 #include <sys/proc.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -114,7 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.227 2009/02/13 22:41:02 apb Exp $");
 #define _PMAX_BUS_DMA_PRIVATE
 #include <machine/bus.h>
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 #include <sys/exec_aout.h>		/* XXX backwards compatilbity for DDB */
 #include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
@@ -203,7 +201,7 @@ mach_init(argc, argv, code, cv, bim, bip)
 	u_long first, last;
 	int i;
 	char *kernend;
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	void *ssym = 0;
 	struct btinfo_symtab *bi_syms;
 	struct exec *aout;		/* XXX backwards compatilbity for DDB */
@@ -226,7 +224,7 @@ mach_init(argc, argv, code, cv, bim, bip)
 		bootinfo_msg = "invalid bootinfo pointer (old bootblocks?)\n";
 
 	/* clear the BSS segment */
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
 	aout = (struct exec *)edata;
 
@@ -236,13 +234,13 @@ mach_init(argc, argv, code, cv, bim, bip)
 		esym = (void *)bi_syms->esym;
 		kernend = (void *)mips_round_page(esym);
 		memset(edata, 0, end - edata);
-	}
+	} else
+#ifdef EXEC_AOUT
 	/* XXX: Backwards compatibility with old bootblocks - this should
 	 * go soon...
 	 */
-#ifdef EXEC_AOUT
 	/* Exec header and symbols? */
-	else if (aout->a_midmag == 0x07018b00 && (i = aout->a_syms) != 0) {
+	if (aout->a_midmag == 0x07018b00 && (i = aout->a_syms) != 0) {
 		ssym = end;
 		i += (*(long *)(end + i + 4) + 3) & ~3;		/* strings */
 		esym = end + i + 4;
@@ -331,10 +329,10 @@ mach_init(argc, argv, code, cv, bim, bip)
 		kernend += round_page(mfs_initminiroot(kernend));
 #endif
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	/* init symbols if present */
 	if (esym)
-		ksyms_addsyms_elf((char *)esym - (char *)ssym, ssym, esym);
+		ksyms_init((char *)esym - (char *)ssym, ssym, esym);
 #endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
@@ -550,8 +548,6 @@ haltsys:
 
 	/* run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Finally, halt/reboot the system. */
 	printf("%s\n\n", ((howto & RB_HALT) != 0) ? "halted." : "rebooting...");

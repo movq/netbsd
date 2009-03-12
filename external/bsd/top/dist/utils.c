@@ -254,7 +254,7 @@ char *homogenize(char *str)
     char *to;
     int ch;
 
-    to = fr = ans = estrdup(str);
+    to = fr = ans = strdup(str);
     while ((ch = *fr++) != '\0')
     {
 	if (isalnum(ch))
@@ -314,7 +314,7 @@ char *string_list(char **strings)
 
     if (cnt > 0)
     {
-	resp = result = emalloc(cnt);
+	resp = result = (char *)malloc(cnt);
 	pp = strings;
 	while ((p = *pp++) != NULL)
 	{
@@ -371,10 +371,10 @@ argparse(char *line, int *cntp)
     cnt += 3;
 
     /* allocate a char * array to hold the pointers */
-    argarray = emalloc(cnt * sizeof(char *));
+    argarray = (char **)malloc(cnt * sizeof(char *));
 
     /* allocate another array to hold the strings themselves */
-    args = emalloc(length+2);
+    args = (char *)malloc(length+2);
 
     /* initialization for main loop */
     from = line;

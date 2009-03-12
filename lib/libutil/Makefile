@@ -1,15 +1,13 @@
-#	$NetBSD: Makefile,v 1.60 2009/01/18 12:13:32 lukem Exp $
+#	$NetBSD: Makefile,v 1.56 2007/09/25 01:13:56 lukem Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/4/93
 
 USE_SHLIBDIR=	yes
 
 .include <bsd.own.mk>
 
-.include "${NETBSDSRCDIR}/common/lib/libutil/Makefile.inc"
-
-WARNS=	4
+WARNS=3
 LIB=	util
-CPPFLAGS+=-DLIBC_SCCS -I${.CURDIR}
+CPPFLAGS+=-DLIBC_SCCS
 SRCS=	efun.c getbootfile.c getlabelsector.c getmaxpartitions.c \
 	getmntopts.c getrawpartition.c \
 	disklabel_dkcksum.c disklabel_scan.c \
@@ -32,10 +30,7 @@ MAN=	efun.3 getbootfile.3 getlabelsector.3 getmaxpartitions.3 \
 	snprintb.3 sockaddr_snprintf.3 stat_flags.3 ttyaction.3 \
 	ttymsg.3 util.3
 
-YPREFIX=__pd
 .PATH:	${NETBSDSRCDIR}/lib/libc/gen
-
-.include "compat/Makefile.inc"
 
 MLINKS+=getlabelsector.3 getlabeloffset.3
 MLINKS+=login.3 logout.3
@@ -52,7 +47,6 @@ MLINKS+=login_cap.3 setusercontext.3
 MLINKS+=loginx.3 logoutx.3 loginx.3 logwtmpx.3
 MLINKS+=openpty.3 login_tty.3
 MLINKS+=openpty.3 forkpty.3
-MLINKS+=pw_getconf.3 pw_getpwconf.3
 MLINKS+=pw_init.3 pw_edit.3
 MLINKS+=pw_init.3 pw_prompt.3
 MLINKS+=pw_init.3 pw_copy.3

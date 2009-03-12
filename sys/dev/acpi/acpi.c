@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi.c,v 1.123 2009/01/30 12:51:03 jmcneill Exp $	*/
+/*	$NetBSD: acpi.c,v 1.120.4.2 2009/09/05 11:34:26 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2007 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.123 2009/01/30 12:51:03 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.120.4.2 2009/09/05 11:34:26 bouyer Exp $");
 
 #include "opt_acpi.h"
 #include "opt_pcifixup.h"
@@ -89,6 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.123 2009/01/30 12:51:03 jmcneill Exp $");
 #include <dev/acpi/acpivar.h>
 #include <dev/acpi/acpi_osd.h>
 #include <dev/acpi/acpi_timer.h>
+#include <dev/acpi/acpi_wakedev.h>
 #ifdef ACPIVERBOSE
 #include <dev/acpi/acpidevs_data.h>
 #endif
@@ -177,7 +178,7 @@ static const char * const acpi_ignored_ids[] = {
 
 static uint64_t acpi_root_pointer;	/* found as hw.acpi.root */
 static int acpi_sleepstate = ACPI_STATE_S0;
-static char acpi_supported_states[3 * 6 + 1] = "";
+static char acpi_supported_states[3 * 6 + 1] = "";;
 
 /*
  * Prototypes.
@@ -669,6 +670,8 @@ acpi_build_tree(struct acpi_softc *sc)
 			    "acpinodebus", &aa, acpi_print);
 		}
 	}
+	acpi_wakedev_scan(sc);
+
 	config_found_ia(sc->sc_dev, "acpiapmbus", NULL, NULL);
 }
 
@@ -826,29 +829,15 @@ acpi_print(void *aux, const char *pnp)
 		if (aa->aa_node->ad_devinfo->Valid & ACPI_VALID_HID) {
 			char *pnpstr =
 			    aa->aa_node->ad_devinfo->HardwareId.Value;
-			ACPI_BUFFER buf;
+			char *str;
 
 			aprint_normal("%s (%s) ", aa->aa_node->ad_name,
 			    pnpstr);
-
-			buf.Pointer = NULL;
-			buf.Length = ACPI_ALLOCATE_BUFFER;
-			rv = AcpiEvaluateObject(aa->aa_node->ad_handle,
-			    "_STR", NULL, &buf);
+			rv = acpi_eval_string(aa->aa_node->ad_handle,
+			    "_STR", &str);
 			if (ACPI_SUCCESS(rv)) {
-				ACPI_OBJECT *obj = buf.Pointer;
-				switch (obj->Type) {
-				case ACPI_TYPE_STRING:
-					aprint_normal("[%s] ", obj->String.Pointer);
-					break;
-				case ACPI_TYPE_BUFFER:
-					aprint_normal("buffer %p ", obj->Buffer.Pointer);
-					break;
-				default:
-					aprint_normal("type %d ",obj->Type);
-					break;
-				}
-				AcpiOsFree(buf.Pointer);
+				aprint_normal("[%s] ", str);
+				AcpiOsFree(str);
 			}
 #ifdef ACPIVERBOSE
 			else {
@@ -1278,6 +1267,8 @@ acpi_enter_sleep_state(struct acpi_softc *sc, int state)
 			    "ACPI S%d not available on this platform\n", state);
 			break;
 		}
+
+		acpi_wakedev_commit(sc);
 
 		if (state != ACPI_STATE_S1 && !pmf_system_suspend(PMF_F_NONE)) {
 			aprint_error_dev(sc->sc_dev, "aborting suspend\n");

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_misc.c,v 1.16 2009/01/20 12:00:59 njoly Exp $	*/
+/*	$NetBSD: linux32_misc.c,v 1.12 2008/06/18 22:58:21 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 1999 The NetBSD Foundation, Inc.
@@ -32,7 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_misc.c,v 1.16 2009/01/20 12:00:59 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_misc.c,v 1.12 2008/06/18 22:58:21 njoly Exp $");
+
+#if defined(_KERNEL_OPT)
+#include "opt_ptrace.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -42,7 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_misc.c,v 1.16 2009/01/20 12:00:59 njoly Exp 
 #include <sys/fstypes.h>
 #include <sys/vfs_syscalls.h>
 #include <sys/ptrace.h>
-#include <sys/syscall.h>
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_syscallargs.h>
@@ -56,8 +59,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_misc.c,v 1.16 2009/01/20 12:00:59 njoly Exp 
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_misc.h>
 #include <compat/linux/common/linux_statfs.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 extern const struct linux_mnttypes linux_fstypes[];
@@ -102,6 +103,7 @@ linux32_sys_ptrace(struct lwp *l, const struct linux32_sys_ptrace_args *uap, reg
 		syscallarg(T) addr;
 		syscallarg(T) data;
 	} */
+#if defined(PTRACE) || defined(_LKM)
 	const int *ptr;
 	int request;
 	int error;
@@ -126,7 +128,7 @@ linux32_sys_ptrace(struct lwp *l, const struct linux32_sys_ptrace_args *uap, reg
 			if (request == LINUX_PTRACE_CONT && SCARG(uap, addr)==0)
 				SCARG(&pta, addr) = (void *) 1;
 
-			error = sysent[SYS_ptrace].sy_call(l, &pta, retval);
+			error = sys_ptrace(l, &pta, retval);
 			if (error)
 				return error;
 			switch (request) {
@@ -146,24 +148,7 @@ linux32_sys_ptrace(struct lwp *l, const struct linux32_sys_ptrace_args *uap, reg
 			ptr++;
 
 	return EIO;
-}
-
-int
-linux32_sys_personality(struct lwp *l, const struct linux32_sys_personality_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int) per;
-	} */
-
-	switch (SCARG(uap, per)) {
-	case LINUX_PER_LINUX:
-	case LINUX_PER_LINUX32:
-	case LINUX_PER_QUERY:
-		break;
-	default:
-		return EINVAL;
-	}
-
-	retval[0] = LINUX_PER_LINUX;
-	return 0;
+#else
+	return ENOSYS;
+#endif /* PTRACE || _LKM */
 }

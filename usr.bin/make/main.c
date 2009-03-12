@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.167 2009/03/01 01:49:17 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.154 2008/10/22 15:04:49 apb Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -69,7 +69,7 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: main.c,v 1.167 2009/03/01 01:49:17 christos Exp $";
+static char rcsid[] = "$NetBSD: main.c,v 1.154 2008/10/22 15:04:49 apb Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
@@ -81,7 +81,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1989, 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.3 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.167 2009/03/01 01:49:17 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.154 2008/10/22 15:04:49 apb Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -177,7 +177,7 @@ static Boolean		jobsRunning;	/* TRUE if the jobs might be running */
 static const char *	tracefile;
 static char *		Check_Cwd_av(int, char **, int);
 static void		MainParseArgs(int, char **);
-static int		ReadMakefile(const void *, const void *);
+static int		ReadMakefile(ClientData, ClientData);
 static void		usage(void);
 
 static char curdir[MAXPATHLEN + 1];	/* startup directory */
@@ -203,9 +203,6 @@ parse_debug_options(const char *argvalue)
 			break;
 		case 'a':
 			debug |= DEBUG_ARCH;
-			break;
-		case 'C':
-			debug |= DEBUG_CWD;
 			break;
 		case 'c':
 			debug |= DEBUG_COND;
@@ -385,7 +382,7 @@ rearg:
 			Var_Append(MAKEFLAGS, "-B", VAR_GLOBAL);
 			break;
 		case 'D':
-			if (argvalue == NULL || argvalue[0] == 0) goto noarg;
+			if (argvalue == NULL) goto noarg;
 			Var_Set(argvalue, "1", VAR_GLOBAL, 0);
 			Var_Append(MAKEFLAGS, "-D", VAR_GLOBAL);
 			Var_Append(MAKEFLAGS, argvalue, VAR_GLOBAL);
@@ -581,7 +578,7 @@ noarg:
  *	Only those that come from the various arguments.
  */
 void
-Main_ParseArgLine(const char *line)
+Main_ParseArgLine(char *line)
 {
 	char **argv;			/* Manufactured argument vector */
 	int argc;			/* Number of arguments in argv */
@@ -603,11 +600,6 @@ Main_ParseArgLine(const char *line)
 		free(p1);
 
 	argv = brk_string(buf, &argc, TRUE, &args);
-	if (argv == NULL) {
-		Error("Unterminated quoted string [%s]", buf);
-		free(buf);
-		return;
-	}
 	free(buf);
 	MainParseArgs(argc, argv);
 
@@ -661,27 +653,10 @@ Main_SetObjdir(const char *path)
  *	TRUE if ok, FALSE on error
  */
 static int
-ReadAllMakefiles(const void *p, const void *q)
+ReadAllMakefiles(ClientData p, ClientData q)
 {
 	return (ReadMakefile(p, q) == 0);
 }
-
-#ifdef SIGINFO
-/*ARGSUSED*/
-static void
-siginfo(int signo)
-{
-	char dir[MAXPATHLEN];
-	char str[2 * MAXPATHLEN];
-	int len;
-	if (getcwd(dir, sizeof(dir)) == NULL)
-		return;
-	len = snprintf(str, sizeof(str), "%s: Working in: %s\n", getprogname(),
-	    dir);
-	if (len > 0)
-		(void)write(STDERR_FILENO, str, (size_t)len);
-}
-#endif
 
 /*-
  * main --
@@ -724,11 +699,8 @@ main(int argc, char **argv)
 	/* default to writing debug to stderr */
 	debug_file = stderr;
 
-#ifdef SIGINFO
-	(void)signal(SIGINFO, siginfo);
-#endif
 	/*
-	 * Set the seed to produce a different random sequence
+	 * Set the seed to produce a different random sequences
 	 * on each program execution.
 	 */
 	gettimeofday(&rightnow, NULL);
@@ -946,7 +918,7 @@ main(int argc, char **argv)
 	Suff_Init();
 	Trace_Init(tracefile);
 
-	DEFAULT = NULL;
+	DEFAULT = NILGNODE;
 	(void)time(&now);
 
 	Trace_Log(MAKESTART, NULL);
@@ -959,7 +931,7 @@ main(int argc, char **argv)
 	if (!Lst_IsEmpty(create)) {
 		LstNode ln;
 
-		for (ln = Lst_First(create); ln != NULL;
+		for (ln = Lst_First(create); ln != NILLNODE;
 		    ln = Lst_Succ(ln)) {
 			char *name = (char *)Lst_Datum(ln);
 
@@ -1014,7 +986,7 @@ main(int argc, char **argv)
 			Fatal("%s: no system rules (%s).", progname,
 			    _PATH_DEFSYSMK);
 		ln = Lst_Find(sysMkPath, NULL, ReadMakefile);
-		if (ln == NULL)
+		if (ln == NILLNODE)
 			Fatal("%s: cannot open %s.", progname,
 			    (char *)Lst_Datum(ln));
 	}
@@ -1023,16 +995,16 @@ main(int argc, char **argv)
 		LstNode ln;
 
 		ln = Lst_Find(makefiles, NULL, ReadAllMakefiles);
-		if (ln != NULL)
+		if (ln != NILLNODE)
 			Fatal("%s: cannot open %s.", progname, 
 			    (char *)Lst_Datum(ln));
-	} else if (ReadMakefile("makefile", NULL) != 0)
-		(void)ReadMakefile("Makefile", NULL);
+	} else if (ReadMakefile(UNCONST("makefile"), NULL) != 0)
+		(void)ReadMakefile(UNCONST("Makefile"), NULL);
 
 	/* In particular suppress .depend for '-r -V .OBJDIR -f /dev/null' */
 	if (!noBuiltins || !printVars) {
 		doing_depend = TRUE;
-		(void)ReadMakefile(".depend", NULL);
+		(void)ReadMakefile(UNCONST(".depend"), NULL);
 		doing_depend = FALSE;
 	}
 
@@ -1102,7 +1074,7 @@ main(int argc, char **argv)
 	if (printVars) {
 		LstNode ln;
 
-		for (ln = Lst_First(variables); ln != NULL;
+		for (ln = Lst_First(variables); ln != NILLNODE;
 		    ln = Lst_Succ(ln)) {
 			char *var = (char *)Lst_Datum(ln);
 			char *value;
@@ -1153,9 +1125,9 @@ main(int argc, char **argv)
 	}
 
 #ifdef CLEANUP
-	Lst_Destroy(targs, NULL);
-	Lst_Destroy(variables, NULL);
-	Lst_Destroy(makefiles, NULL);
+	Lst_Destroy(targs, NOFREE);
+	Lst_Destroy(variables, NOFREE);
+	Lst_Destroy(makefiles, NOFREE);
 	Lst_Destroy(create, (FreeProc *)free);
 #endif
 
@@ -1188,9 +1160,9 @@ main(int argc, char **argv)
  *	lots
  */
 static int
-ReadMakefile(const void *p, const void *q __unused)
+ReadMakefile(ClientData p, ClientData q __unused)
 {
-	const char *fname = p;		/* makefile to read */
+	char *fname = p;		/* makefile to read */
 	int fd;
 	size_t len = MAXPATHLEN;
 	char *name, *path = bmake_malloc(len);
@@ -1290,17 +1262,12 @@ Check_Cwd_av(int ac, char **av, int copy)
     int i;
     int n;
 
-    if (Check_Cwd_Off) {
-	if (DEBUG(CWD))
-	    fprintf(debug_file, "check_cwd: check is off.\n");
+    if (Check_Cwd_Off)
 	return NULL;
-    }
     
     if (make[0] == NULL) {
 	if (Var_Exists("NOCHECKMAKECHDIR", VAR_GLOBAL)) {
 	    Check_Cwd_Off = 1;
-	    if (DEBUG(CWD))
-		fprintf(debug_file, "check_cwd: turning check off.\n");
 	    return NULL;
 	}
 	    
@@ -1313,18 +1280,12 @@ Check_Cwd_av(int ac, char **av, int copy)
         make[2] = NULL;
         cur_dir = Var_Value(".CURDIR", VAR_GLOBAL, &cp);
     }
-    if (ac == 0 || av == NULL) {
-	if (DEBUG(CWD))
-	    fprintf(debug_file, "check_cwd: empty command.\n");
+    if (ac == 0 || av == NULL)
         return NULL;			/* initialization only */
-    }
 
     if (getenv("MAKEOBJDIR") == NULL &&
-        getenv("MAKEOBJDIRPREFIX") == NULL) {
-	if (DEBUG(CWD))
-	    fprintf(debug_file, "check_cwd: no obj dirs.\n");
+        getenv("MAKEOBJDIRPREFIX") == NULL)
         return NULL;
-    }
 
     
     next_cmd = 1;
@@ -1347,8 +1308,8 @@ Check_Cwd_av(int ac, char **av, int copy)
 		/*
 		 * XXX this should not happen.
 		 */
-		fprintf(stderr, "%s: WARNING: raw arg ends in shell meta '%s'\n",
-		    progname, av[i]);
+		fprintf(stderr, "WARNING: raw arg ends in shell meta '%s'\n",
+			av[i]);
 	    }
 	} else
 	    next_cmd = 0;
@@ -1357,9 +1318,10 @@ Check_Cwd_av(int ac, char **av, int copy)
 	if (*cp == ';' || *cp == '&' || *cp == '|')
 	    is_cmd = 1;
 	
-	if (DEBUG(CWD))
-	    fprintf(debug_file, "av[%d] == %s '%s'",
+#ifdef check_cwd_debug
+	fprintf(stderr, "av[%d] == %s '%s'",
 		i, (is_cmd) ? "cmd" : "arg", av[i]);
+#endif
 	if (is_cmd != 0) {
 	    if (*cp == '(' || *cp == '{' ||
 		*cp == ';' || *cp == '&' || *cp == '|') {
@@ -1373,22 +1335,25 @@ Check_Cwd_av(int ac, char **av, int copy)
 		}
 	    }
 	    if (strcmp(cp, "cd") == 0 || strcmp(cp, "chdir") == 0) {
-		if (DEBUG(CWD))
-		    fprintf(debug_file, " == cd, done.\n");
+#ifdef check_cwd_debug
+		fprintf(stderr, " == cd, done.\n");
+#endif
 		return NULL;
 	    }
 	    for (mp = make; *mp != NULL; ++mp) {
 		n = strlen(*mp);
 		if (strcmp(cp, *mp) == 0) {
-		    if (DEBUG(CWD))
-			fprintf(debug_file, " %s == '%s', chdir(%s)\n",
+#ifdef check_cwd_debug
+		    fprintf(stderr, " %s == '%s', chdir(%s)\n",
 			    cp, *mp, cur_dir);
+#endif
 		    return cur_dir;
 		}
 	    }
 	}
-	if (DEBUG(CWD))
-	    fprintf(debug_file, "\n");
+#ifdef check_cwd_debug
+	fprintf(stderr, "\n");
+#endif
     }
     return NULL;
 }
@@ -1405,9 +1370,10 @@ Check_Cwd_Cmd(const char *cmd)
     
     if (cmd) {
 	av = brk_string(cmd, &ac, TRUE, &bp);
-	if (DEBUG(CWD))
-	    fprintf(debug_file, "splitting: '%s' -> %d words\n",
+#ifdef check_cwd_debug
+	fprintf(stderr, "splitting: '%s' -> %d words\n",
 		cmd, ac);
+#endif
     } else {
 	ac = 0;
 	av = NULL;
@@ -1522,13 +1488,13 @@ Cmd_Exec(const char *cmd, const char **errnum)
 	 */
 	(void)close(fds[1]);
 
-	Buf_Init(&buf, 0);
+	buf = Buf_Init(0);
 
 	do {
 	    char   result[BUFSIZ];
 	    cc = read(fds[0], result, sizeof(result));
 	    if (cc > 0)
-		Buf_AddBytes(&buf, cc, result);
+		Buf_AddBytes(buf, cc, (Byte *)result);
 	}
 	while (cc > 0 || (cc == -1 && errno == EINTR));
 
@@ -1543,8 +1509,8 @@ Cmd_Exec(const char *cmd, const char **errnum)
 	while(((pid = waitpid(cpid, &status, 0)) != cpid) && (pid >= 0))
 	    continue;
 
-	cc = Buf_Size(&buf);
-	res = Buf_Destroy(&buf, FALSE);
+	res = (char *)Buf_GetAll(buf, &cc);
+	Buf_Destroy(buf, FALSE);
 
 	if (cc == 0)
 	    *errnum = "Couldn't read shell's output for \"%s\"";
@@ -1595,22 +1561,13 @@ void
 Error(const char *fmt, ...)
 {
 	va_list ap;
-	FILE *err_file;
 
-	err_file = debug_file;
-	if (err_file == stdout)
-		err_file = stderr;
-	for (;;) {
-		va_start(ap, fmt);
-		fprintf(err_file, "%s: ", progname);
-		(void)vfprintf(err_file, fmt, ap);
-		va_end(ap);
-		(void)fprintf(err_file, "\n");
-		(void)fflush(err_file);
-		if (err_file == stderr)
-			break;
-		err_file = stderr;
-	}
+	va_start(ap, fmt);
+	fprintf(stderr, "%s: ", progname);
+	(void)vfprintf(stderr, fmt, ap);
+	va_end(ap);
+	(void)fprintf(stderr, "\n");
+	(void)fflush(stderr);
 }
 
 /*-
@@ -1715,6 +1672,84 @@ Finish(int errors)
 	Fatal("%d error%s", errors, errors == 1 ? "" : "s");
 }
 
+#ifndef USE_EMALLOC
+/*
+ * enomem --
+ *	die when out of memory.
+ */
+static void
+enomem(void)
+{
+	(void)fprintf(stderr, "%s: %s.\n", progname, strerror(errno));
+	exit(2);
+}
+
+/*
+ * bmake_malloc --
+ *	malloc, but die on error.
+ */
+void *
+bmake_malloc(size_t len)
+{
+	void *p;
+
+	if ((p = malloc(len)) == NULL)
+		enomem();
+	return(p);
+}
+
+/*
+ * bmake_strdup --
+ *	strdup, but die on error.
+ */
+char *
+bmake_strdup(const char *str)
+{
+	size_t len;
+	char *p;
+
+	len = strlen(str) + 1;
+	if ((p = malloc(len)) == NULL)
+		enomem();
+	return memcpy(p, str, len);
+}
+
+/*
+ * bmake_strndup --
+ *	strndup, but die on error.
+ */
+char *
+bmake_strndup(const char *str, size_t max_len)
+{
+	size_t len;
+	char *p;
+
+	if (str == NULL)
+		return NULL;
+
+	len = strlen(str);
+	if (len > max_len)
+		len = max_len;
+	p = bmake_malloc(len + 1);
+	memcpy(p, str, len);
+	p[len] = '\0';
+
+	return(p);
+}
+
+/*
+ * bmake_realloc --
+ *	realloc, but die on error.
+ */
+void *
+bmake_realloc(void *ptr, size_t size)
+{
+	if ((ptr = realloc(ptr, size)) == NULL)
+		enomem();
+	return(ptr);
+}
+#endif
+
 /*
  * enunlink --
  *	Remove a file carefully, avoiding directories.
@@ -1782,7 +1817,7 @@ usage(void)
 
 
 int
-PrintAddr(void *a, void *b)
+PrintAddr(ClientData a, ClientData b)
 {
     printf("%lx ", (unsigned long) a);
     return b ? 0 : 0;

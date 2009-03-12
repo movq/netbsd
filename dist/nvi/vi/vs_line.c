@@ -1,4 +1,4 @@
-/*	$NetBSD: vs_line.c,v 1.4 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: vs_line.c,v 1.1.1.2.6.3 2009/04/19 15:48:10 snj Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994
@@ -65,7 +65,7 @@ vs_line(SCR *sp, SMAP *smp, size_t *yp, size_t *xp)
 	no_draw = 0;
 	if (!F_ISSET(sp, SC_TINPUT_INFO) && VIP(sp)->totalcount > 1)
 		no_draw = 1;
-	if (F_ISSET(sp, SC_SCR_EXWROTE) && (size_t)(smp - HMAP) != LASTLINE(sp))
+	if (F_ISSET(sp, SC_SCR_EXWROTE) && smp - HMAP != LASTLINE(sp))
 		no_draw = 1;
 
 	/*
@@ -442,7 +442,7 @@ display:
 			/* XXXX this needs some rethinking */
 			if (INTISWIDE(ch)) {
 				/* Put a space before non-spacing char. */
-				if (!CHAR_WIDTH(sp, ch))
+				if (CHAR_WIDTH(sp, ch) <= 0)
 					*cbp++ = L(' ');
 				*cbp++ = ch;
 			} else

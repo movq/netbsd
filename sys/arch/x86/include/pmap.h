@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.21 2008/12/09 20:45:46 pooka Exp $	*/
+/*	$NetBSD: pmap.h,v 1.20.4.1 2009/04/04 17:39:09 snj Exp $	*/
 
 /*
  *
@@ -119,6 +119,9 @@
  * pmap data structures: see pmap.c for details of locking.
  */
 
+struct pmap;
+typedef struct pmap *pmap_t;
+
 /*
  * we maintain a list of all non-kernel pmaps
  */
@@ -159,15 +162,12 @@ struct pmap {
 	int pm_flags;			/* see below */
 
 	union descriptor *pm_ldt;	/* user-set LDT */
-	int pm_ldt_len;			/* number of LDT entries */
+	size_t pm_ldt_len;		/* size of LDT in bytes */
 	int pm_ldt_sel;			/* LDT selector */
 	uint32_t pm_cpus;		/* mask of CPUs using pmap */
 	uint32_t pm_kernel_cpus;	/* mask of CPUs using kernel part
 					 of pmap */
 };
-
-/* pm_flags */
-#define	PMF_USER_LDT	0x01	/* pmap has user-set LDT */
 
 /* macro to access pm_pdirpa */
 #ifdef PAE
@@ -185,6 +185,7 @@ struct pmap {
 /* PDPpaddr: is the physical address of the kernel's PDP */
 extern u_long PDPpaddr;
 
+extern struct pmap kernel_pmap_store;	/* kernel pmap */
 extern int pmap_pg_g;			/* do we support PG_G? */
 extern long nkptp[PTP_LEVELS];
 
@@ -192,6 +193,7 @@ extern long nkptp[PTP_LEVELS];
  * macros
  */
 
+#define	pmap_kernel()			(&kernel_pmap_store)
 #define	pmap_resident_count(pmap)	((pmap)->pm_stats.resident_count)
 #define	pmap_wired_count(pmap)		((pmap)->pm_stats.wired_count)
 
@@ -220,6 +222,7 @@ void		pmap_write_protect(struct pmap *, vaddr_t, vaddr_t, vm_prot_t);
 void		pmap_load(void);
 paddr_t		pmap_init_tmp_pgtbl(paddr_t);
 void		pmap_remove_all(struct pmap *);
+void		pmap_ldt_sync(struct pmap *);
 
 vaddr_t reserve_dumppages(vaddr_t); /* XXX: not a pmap fn */
 

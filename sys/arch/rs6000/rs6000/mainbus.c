@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.3 2009/01/18 16:46:12 christos Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.2 2008/04/28 20:23:34 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.3 2009/01/18 16:46:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2 2008/04/28 20:23:34 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/extent.h>
@@ -86,9 +86,8 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	union mainbus_attach_args mba;
 	struct confargs ca;
-#if DEBUG
 	int slot;
-#endif
+
 	mainbus_found = 1;
 
 	aprint_normal("\n");

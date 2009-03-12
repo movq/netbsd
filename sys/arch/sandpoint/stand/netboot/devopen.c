@@ -1,4 +1,4 @@
-/* $NetBSD: devopen.c,v 1.8 2009/01/12 09:41:59 tsutsui Exp $ */
+/* $NetBSD: devopen.c,v 1.7 2008/04/28 20:23:34 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -34,9 +34,6 @@
 #include <sys/disklabel.h>
 #include <netinet/in.h>
 
-#include <dev/ic/wdcreg.h>
-#include <dev/ata/atareg.h>
-
 #include <lib/libsa/stand.h>
 #include <lib/libsa/nfs.h>
 #include <lib/libsa/ufs.h>
@@ -44,8 +41,14 @@
 #include <lib/libsa/dosfs.h>
 #include <lib/libkern/libkern.h>
 
-#include "globals.h"
+int net_open(struct open_file *, ...);
+int net_close(struct open_file *);
+int net_strategy(void *, int, daddr_t, size_t, void *, size_t *);
+int wdopen(struct open_file *, ...);
+int wdclose(struct open_file *);
+int wdstrategy(void *, int, daddr_t, size_t, void *, size_t *);
 
+int parsefstype(void *);
 static void parseunit(const char *, int *, int *, char **);
 
 struct devsw devsw[] = {

@@ -1,4 +1,4 @@
-/*	$NetBSD: kthread.h,v 1.8 2009/01/29 22:00:26 ad Exp $	*/
+/*	$NetBSD: kthread.h,v 1.7.10.1 2009/02/02 22:01:34 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2009 The NetBSD Foundation, Inc.

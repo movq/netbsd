@@ -1,4 +1,4 @@
-# $NetBSD: std.cp3100,v 1.3 2009/01/05 05:53:06 briggs Exp $
+# $NetBSD: std.cp3100,v 1.2.20.1 2009/01/09 02:43:13 snj Exp $
 #
 # Standard NetBSD/evbarm options for CP3100
 

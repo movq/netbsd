@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_malloc.c,v 1.126 2009/01/07 21:06:31 pooka Exp $	*/
+/*	$NetBSD: kern_malloc.c,v 1.121.4.1 2010/02/14 13:37:42 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1987, 1991, 1993
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_malloc.c,v 1.126 2009/01/07 21:06:31 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_malloc.c,v 1.121.4.1 2010/02/14 13:37:42 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -215,6 +215,7 @@ domlog(void *a, long size, struct malloc_type *type, int action,
 		malloclogptr = 0;
 }
 
+#ifdef DIAGNOSTIC
 static void
 hitmlog(void *a)
 {
@@ -271,6 +272,7 @@ hitmlog(void *a)
 
 #undef PRT
 }
+#endif /* DIAGNOSTIC */
 #endif /* MALLOCLOG */
 
 #ifdef DIAGNOSTIC
@@ -324,11 +326,11 @@ kmutex_t malloc_lock;
  */
 #ifdef MALLOCLOG
 void *
-_kern_malloc(unsigned long size, struct malloc_type *ksp, int flags,
+_malloc(unsigned long size, struct malloc_type *ksp, int flags,
     const char *file, long line)
 #else
 void *
-kern_malloc(unsigned long size, struct malloc_type *ksp, int flags)
+malloc(unsigned long size, struct malloc_type *ksp, int flags)
 #endif /* MALLOCLOG */
 {
 	struct kmembuckets *kbp;
@@ -348,9 +350,8 @@ kern_malloc(unsigned long size, struct malloc_type *ksp, int flags)
 #endif
 #ifdef MALLOC_DEBUG
 	if (debug_malloc(size, ksp, flags, (void *) &va)) {
-		if (va != 0) {
+		if (va != 0)
 			FREECHECK_OUT(&malloc_freecheck, (void *)va);
-		}
 		return ((void *) va);
 	}
 #endif
@@ -539,10 +540,10 @@ out:
  */
 #ifdef MALLOCLOG
 void
-_kern_free(void *addr, struct malloc_type *ksp, const char *file, long line)
+_free(void *addr, struct malloc_type *ksp, const char *file, long line)
 #else
 void
-kern_free(void *addr, struct malloc_type *ksp)
+free(void *addr, struct malloc_type *ksp)
 #endif /* MALLOCLOG */
 {
 	struct kmembuckets *kbp;
@@ -680,7 +681,7 @@ kern_free(void *addr, struct malloc_type *ksp)
  * Change the size of a block of memory.
  */
 void *
-kern_realloc(void *curaddr, unsigned long newsize, struct malloc_type *ksp,
+realloc(void *curaddr, unsigned long newsize, struct malloc_type *ksp,
     int flags)
 {
 	struct kmemusage *kup;

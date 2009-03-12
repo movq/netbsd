@@ -1,4 +1,4 @@
-/*	$NetBSD: session.h,v 1.8 2009/01/23 08:05:58 tteras Exp $	*/
+/*	$NetBSD: session.h,v 1.6.2.1 2009/02/08 18:42:19 snj Exp $	*/
 
 /* Id: session.h,v 1.3 2004/06/11 16:00:17 ludvigm Exp */
 
@@ -36,8 +36,5 @@
 
 extern int session __P((void));
 extern RETSIGTYPE signal_handler __P((int));
-
-extern void monitor_fd __P((int fd, int (*callback)(void *, int), void *ctx));
-extern void unmonitor_fd __P((int fd));
 
 #endif /* _SESSION_H */

@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.42 2009/02/13 22:41:03 apb Exp $ */
+/* $NetBSD: machdep.c,v 1.38 2008/07/02 17:28:56 ad Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -58,11 +58,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.42 2009/02/13 22:41:03 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.38 2008/07/02 17:28:56 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,7 +102,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.42 2009/02/13 22:41:03 apb Exp $");
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 #include <machine/db_machdep.h>
 #include <ddb/db_access.h>
 #include <ddb/db_sym.h>
@@ -117,7 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.42 2009/02/13 22:41:03 apb Exp $");
 
 #include <dev/cons.h>
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 /* start and end of kernel symbol table */
 void	*ksym_start, *ksym_end;
 #endif
@@ -193,7 +192,7 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 	}
 
 	kernend = (void *)mips_round_page(end);
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	if (magic == BOOTINFO_MAGIC) {
 		ksym_start = (void *)bootinfo.ssym;
 		ksym_end   = (void *)bootinfo.esym;
@@ -331,8 +330,8 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 	/*
 	 * Initialize debuggers, and break into them, if appropriate.
 	 */
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf(((uintptr_t)ksym_end - (uintptr_t)ksym_start),
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(((uintptr_t)ksym_end - (uintptr_t)ksym_start),
 	    ksym_start, ksym_end);
 #endif
 
@@ -415,8 +414,6 @@ cpu_reboot(int howto, char *bootstr)
 
 haltsys:
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
 		printf("\n");

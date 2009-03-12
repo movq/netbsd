@@ -1,4 +1,4 @@
-/* $NetBSD: bioctl.c,v 1.12 2009/01/18 00:27:59 lukem Exp $ */
+/* $NetBSD: bioctl.c,v 1.11 2008/03/03 16:10:48 xtraeme Exp $ */
 /* $OpenBSD: bioctl.c,v 1.52 2007/03/20 15:26:06 jmc Exp $ */
 
 /*
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: bioctl.c,v 1.12 2009/01/18 00:27:59 lukem Exp $");
+__RCSID("$NetBSD: bioctl.c,v 1.11 2008/03/03 16:10:48 xtraeme Exp $");
 #endif
 
 #include <sys/types.h>
@@ -733,8 +733,7 @@ bio_volops_create(int fd, int argc, char **argv)
 		errx(EXIT_FAILURE, "Invalid Volume ID value");
 
 	if (argc == 7)
-		if (dehumanize_number(argv[3], &volsize) == -1
-		    || volsize < 0)
+		if (dehumanize_number(argv[3], &volsize) == -1)
 			errx(EXIT_FAILURE, "Invalid SIZE value");
 
 	bc.bc_stripe = (unsigned int)strtoul(stripe, &endptr, 10);
@@ -799,7 +798,7 @@ bio_volops_create(int fd, int argc, char **argv)
 	switch (bc.bc_level) {
 	case 0:	/* RAID 0 requires at least one disk */
 		if (argc == 7) {
-			if ((uint64_t)volsize > (disksize * user_disks))
+			if (volsize > (disksize * user_disks))
 				errx(EXIT_FAILURE, "volume size specified "
 				   "is larger than available on free disks");
 			bc.bc_size = (uint64_t)volsize;
@@ -817,7 +816,7 @@ bio_volops_create(int fd, int argc, char **argv)
 			bc.bc_level = BIOC_SVOL_RAID10;
 
 		if (argc == 7) {
-			if ((uint64_t)volsize > ((disksize * user_disks) / 2))
+			if (volsize > ((disksize * user_disks) / 2))
 				errx(EXIT_FAILURE, "volume size specified "
 				   "is larger than available on free disks");
 			bc.bc_size = (uint64_t)volsize;
@@ -832,7 +831,7 @@ bio_volops_create(int fd, int argc, char **argv)
 			    "this RAID level");
 
 		if (argc == 7) {
-			if ((uint64_t)volsize > (disksize * (user_disks - 1)))
+			if (volsize > (disksize * (user_disks - 1)))
 				errx(EXIT_FAILURE, "volume size specified "
 				    "is larger than available on free disks");
 			bc.bc_size = (uint64_t)volsize;
@@ -846,7 +845,7 @@ bio_volops_create(int fd, int argc, char **argv)
 			    "this RAID level");
 
 		if (argc == 7) {
-			if ((uint64_t)volsize >
+			if (volsize >
 			    ((disksize * user_disks) - (disksize * 2)))
 				err(EXIT_FAILURE, "volume size specified "
 				    "is larger than available on free disks");

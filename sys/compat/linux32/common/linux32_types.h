@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_types.h,v 1.11 2009/01/16 13:10:47 njoly Exp $ */
+/*	$NetBSD: linux32_types.h,v 1.8 2008/09/04 17:45:00 njoly Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -56,8 +56,6 @@ typedef netbsd32_pointer_t linux32_tmsp_t;
 typedef netbsd32_pointer_t linux32_sched_paramp_t;
 typedef netbsd32_pointer_t linux32_utimbufp_t;
 typedef netbsd32_pointer_t linux32_oldold_utsnamep_t;
-typedef netbsd32_pointer_t linux32_uidp_t;
-typedef netbsd32_pointer_t linux32_gidp_t;
 typedef netbsd32_pointer_t linux32_uid16p_t;
 typedef netbsd32_pointer_t linux32_gid16p_t;
 typedef netbsd32_pointer_t linux32_oldselectp_t;
@@ -72,7 +70,7 @@ struct linux32_sysctl {
 	netbsd32_size_tp oldlenp;
 	netbsd32_voidp newval;
 	netbsd32_size_t newlen;
-	unsigned int __unused0[4];
+	unsigned int0[4];
 };
 
 struct linux32_tms {
@@ -87,7 +85,7 @@ struct linux32_oldselect {
         netbsd32_fd_setp_t readfds;
         netbsd32_fd_setp_t writefds;
         netbsd32_fd_setp_t exceptfds;
-        netbsd32_timeval50p_t timeout;
+        netbsd32_timevalp_t timeout;
 };
 
 struct linux32_sysinfo {

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.46 2009/02/13 22:41:03 apb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.42 2008/04/19 02:01:03 nisimura Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,12 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.46 2009/02/13 22:41:03 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.42 2008/04/19 02:01:03 nisimura Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -111,7 +110,7 @@ paddr_t avail_end;
 struct pic_ops *isa_pic = NULL;
 extern int primary_pic;
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 extern void *startsym, *endsym;
 #endif
 
@@ -180,7 +179,7 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 	cn_tab = &kcomcons;
 	(*cn_tab->cn_init)(&kcomcons);
 
-	ksyms_addsyms_elf((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+	ksyms_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
 	if (boothowto & RB_KDB)
 		Debugger();
 #endif
@@ -197,8 +196,8 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 	/* Initialize pmap module */
 	pmap_bootstrap(startkernel, endkernel);
 
-#if 0 /* NKSYMS || defined(DDB) || defined(MODULAR) */
-	ksyms_addsyms_elf((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+#if 0 /* NKSYMS || defined(DDB) || defined(LKM) */
+	ksyms_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
 #endif
 #ifdef IPKDB
 	/*
@@ -363,8 +362,6 @@ cpu_reboot(int howto, char *what)
 		oea_dumpsys();
 	
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 	 
 	if (howto & RB_HALT) {
 		printf("\n");

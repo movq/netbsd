@@ -1,4 +1,4 @@
-.\"	$NetBSD: sh.1,v 1.91 2009/03/10 15:14:28 joerg Exp $
+.\"	$NetBSD: sh.1,v 1.87.18.3 2010/01/30 19:26:39 snj Exp $
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
 .\"
@@ -31,9 +31,9 @@
 .\"
 .\"	@(#)sh.1	8.6 (Berkeley) 5/4/95
 .\"
-.Dd June 24, 2007
-.Dt SH 1
+.Dd January 1, 2010
 .Os
+.Dt SH 1
 .Sh NAME
 .Nm sh
 .Nd command interpreter (shell)
@@ -1197,7 +1197,13 @@ names and values of all defined aliases (see
 .It bg [ Ar job ] ...
 Continue the specified jobs (or the current job if no
 jobs are given) in the background.
-.It command Oo Fl p Oc Oo Fl v Oc Oo Fl V Oc Ar command Oo Ar arg ... Oc
+.It Xo command
+.Op Fl p
+.Op Fl v
+.Op Fl V
+.Ar command
+.Op Ar arg ...
+.Xc
 Execute the specified command but ignore shell functions when searching
 for it.
 (This is useful when you
@@ -1219,7 +1225,7 @@ Do not execute the command but
 search for the command and print the absolute pathname
 of utilities, the name for built-ins or the expansion of aliases.
 .El
-.It cd Op Ar directory Op Ar replace
+.It cd Oo Fl P Oc Op Ar directory Op Ar replace
 Switch to the specified directory (default
 .Ev $HOME ) .
 If
@@ -1244,6 +1250,21 @@ The format of
 .Ev CDPATH
 is the same as that of
 .Ev PATH .
+.Pp
+The
+.Fl P
+option instructs the shell to update
+.Ev PWD
+with the specified directory and change to that directory.
+This is the default.
+.Pp
+Some shells also support a
+.Fl L
+option, which instructs the shell to update
+.Ev PWD
+with incorrect information and to change the current directory
+accordingly.
+This is not supported.
 .Pp
 In an interactive shell, the
 .Ic cd
@@ -1285,9 +1306,16 @@ With no arguments the export command lists the names of all exported variables.
 With the
 .Fl p
 option specified the output will be formatted suitably for non-interactive use.
-.It fc Oo Fl e Ar editor Oc Oo Ar first Oo Ar last Oc Oc
-.It fc Fl l Oo Fl nr Oc Oo Ar first Oo Ar last Oc Oc
-.It fc Fl s Oo Ar old=new Oc Oo Ar first Oc
+.It Xo fc Op Fl e Ar editor
+.Op Ar first Op Ar last
+.Xc
+.It Xo fc Fl l
+.Op Fl nr
+.Op Ar first Op Ar last
+.Xc
+.It Xo fc Fl s Op Ar old=new
+.Op Ar first
+.Xc
 The
 .Ic fc
 built-in lists, or edits and re-executes, commands previously entered
@@ -1506,7 +1534,7 @@ argument is omitted, the current job is used.
 .It jobs
 This command lists out all the background processes
 which are children of the current shell process.
-.It pwd Op Fl \&LP
+.It pwd Op Fl LP
 Print the current directory.
 If
 .Fl L
@@ -1525,11 +1553,9 @@ The default is
 .Fl L ,
 but note that the built-in
 .Ic cd
-command doesn't currently support
+command doesn't currently support the
 .Fl L
-or
-.Fl P
-and will cache (almost) the absolute path.
+option and will cache (almost) the absolute path.
 If
 .Ic cd
 is changed,
@@ -1548,7 +1574,11 @@ The built-in command may differ from the program of the same name because
 the program will use
 .Ev PWD
 and the built-in uses a separately cached value.
-.It read Oo Fl p Ar prompt Oc Oo Fl r Oc Ar variable Oo Ar ... Oc
+.It Xo read Op Fl p Ar prompt
+.Op Fl r
+.Ar variable
+.Op Ar ...
+.Xc
 The prompt is printed if the
 .Fl p
 option is specified and the standard input is a terminal.
@@ -1590,7 +1620,11 @@ With the
 .Fl p
 option specified the output will be formatted suitably for non-interactive use.
 .Pp
-.It set Oo { Fl options | Cm +options | Cm \-- } Oc Ar arg ...
+.It Xo set
+.Oo {
+.Fl options | Cm +options | Cm -- }
+.Oc Ar arg ...
+.Xc
 The
 .Ic set
 command performs three different functions.
@@ -1638,16 +1672,20 @@ by one.
 If there are zero positional parameters,
 .Ic shift
 does nothing.
-.It trap Oo Fl l Oc
-.It trap Oo Ar action Oc Ar signal ...
+.It Xo trap
+.Op Fl l
+.Xc
+.It Xo trap
+.Op Ar action
+.Ar signal ...
+.Xc
 Cause the shell to parse and execute action when any of the specified
 signals are received.
 The signals are specified by signal number or as the name of the signal.
 If
 .Ar signal
 is
-.Li 0
-or its equivalent, EXIT,
+.Li 0 ,
 the action is executed when the shell exits.
 .Ar action
 may be null, which cause the specified signals to be ignored.
@@ -1699,7 +1737,10 @@ command, tracked alias and not found.
 For aliases the alias expansion is
 printed; for commands and tracked aliases the complete pathname of the
 command is printed.
-.It ulimit Oo Fl H \*(Ba Fl S Oc Oo Fl a \*(Ba Fl tfdscmlpn Oo Ar value Oc Oc
+.It ulimit Xo
+.Op Fl H \*(Ba Fl S
+.Op Fl a \*(Ba Fl tfdscmlpnv Op Ar value
+.Xc
 Inquire about or set the hard or soft limits on processes or set new
 limits.
 The choice between hard limit (which no process is allowed to
@@ -1719,9 +1760,9 @@ is specified, the soft limit is displayed or both limits are set.
 If both are specified, the last one wins.
 .El
 .Pp
+.Bl -tag -width Fl
 The limit to be interrogated or set, then, is chosen by specifying
 any one of these flags:
-.Bl -tag -width Fl
 .It Fl a
 show all the current limits
 .It Fl b
@@ -1750,6 +1791,8 @@ show or set the limit on the number of processes this user can
 have at one time
 .It Fl n
 show or set the limit on the number of files a process can have open at once
+.It Fl v
+show or set the limit on how large a process address space can be
 .El
 .Pp
 If none of these is specified, it is the limit on file size that is shown
@@ -1766,7 +1809,10 @@ Set the value of umask (see
 .Xr umask 2 )
 to the specified octal value.
 If the argument is omitted, the umask value is printed.
-.It unalias Oo Fl a Oc Oo Ar name Oc
+.It unalias Xo
+.Op Fl a
+.Op Ar name
+.Xc
 If
 .Ar name
 is specified, the shell removes that alias.

@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.10 2009/01/11 02:46:27 christos Exp $	*/
+/*	$NetBSD: clock.c,v 1.9 2003/08/19 08:31:18 dsl Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)clock.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: clock.c,v 1.10 2009/01/11 02:46:27 christos Exp $");
+__RCSID("$NetBSD: clock.c,v 1.9 2003/08/19 08:31:18 dsl Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -56,14 +56,13 @@ __RCSID("$NetBSD: clock.c,v 1.10 2009/01/11 02:46:27 christos Exp $");
  */
 
 clock_t
-clock(void)
+clock()
 {
 	struct rusage ru;
 	clock_t hz = CLOCKS_PER_SEC;
 
 	if (getrusage(RUSAGE_SELF, &ru))
 		return ((clock_t) -1);
-	return (clock_t)((ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) * hz +
-	    (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec + 50)
-	    / 100 * hz / 10000);
+	return (ru.ru_utime.tv_sec + ru.ru_stime.tv_sec) * hz +
+	    (ru.ru_utime.tv_usec + ru.ru_stime.tv_usec + 50) / 100 * hz / 10000;
 }

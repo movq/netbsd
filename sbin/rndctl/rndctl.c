@@ -1,4 +1,4 @@
-/*	$NetBSD: rndctl.c,v 1.18 2008/11/06 16:01:54 apb Exp $	*/
+/*	$NetBSD: rndctl.c,v 1.17.28.1 2009/01/08 23:00:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997 Michael Graff.
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: rndctl.c,v 1.18 2008/11/06 16:01:54 apb Exp $");
+__RCSID("$NetBSD: rndctl.c,v 1.17.28.1 2009/01/08 23:00:16 snj Exp $");
 #endif
 
 

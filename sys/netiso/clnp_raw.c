@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_raw.c,v 1.33 2008/12/17 20:51:38 cegger Exp $	*/
+/*	$NetBSD: clnp_raw.c,v 1.32 2008/08/09 13:52:05 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_raw.c,v 1.33 2008/12/17 20:51:38 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_raw.c,v 1.32 2008/08/09 13:52:05 dogcow Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -298,7 +298,8 @@ clnp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			error = EISCONN;
 			break;
 		}
-		rp = malloc(sizeof(*rp), M_PCB, M_WAITOK|M_ZERO);
+		MALLOC(rp, struct rawisopcb *, sizeof *rp, M_PCB,
+		    M_WAITOK|M_ZERO);
 		if (rp == 0)
 			return (ENOBUFS);
 		so->so_pcb = rp;

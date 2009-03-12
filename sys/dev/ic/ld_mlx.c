@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_mlx.c,v 1.19 2009/01/16 04:20:28 mhitch Exp $	*/
+/*	$NetBSD: ld_mlx.c,v 1.18.4.1 2009/01/16 22:58:33 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_mlx.c,v 1.19 2009/01/16 04:20:28 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_mlx.c,v 1.18.4.1 2009/01/16 22:58:33 bouyer Exp $");
 
 #include "rnd.h"
 

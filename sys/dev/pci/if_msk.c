@@ -1,4 +1,4 @@
-/* $NetBSD: if_msk.c,v 1.22 2008/11/18 09:30:43 chris Exp $ */
+/* $NetBSD: if_msk.c,v 1.21.6.1 2008/11/20 03:12:08 snj Exp $ */
 /*	$OpenBSD: if_msk.c,v 1.42 2007/01/17 02:43:02 krw Exp $	*/
 
 /*
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_msk.c,v 1.22 2008/11/18 09:30:43 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_msk.c,v 1.21.6.1 2008/11/20 03:12:08 snj Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"

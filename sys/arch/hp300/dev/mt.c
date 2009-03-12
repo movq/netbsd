@@ -1,4 +1,4 @@
-/*	$NetBSD: mt.c,v 1.46 2009/01/13 13:35:51 yamt Exp $	*/
+/*	$NetBSD: mt.c,v 1.45 2008/06/17 21:06:57 he Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mt.c,v 1.46 2009/01/13 13:35:51 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mt.c,v 1.45 2008/06/17 21:06:57 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -500,7 +500,7 @@ mtstrategy(struct buf *bp)
 		}
 	}
 	s = splbio();
-	bufq_put(sc->sc_tab, bp);
+	BUFQ_PUT(sc->sc_tab, bp);
 	if (sc->sc_active == 0) {
 		sc->sc_active = 1;
 		mtustart(sc);
@@ -547,7 +547,7 @@ mtstart(void *arg)
 
 	dlog(LOG_DEBUG, "%s start", device_xname(sc->sc_dev));
 	sc->sc_flags &= ~MTF_WRT;
-	bp = bufq_peek(sc->sc_tab);
+	bp = BUFQ_PEEK(sc->sc_tab);
 	if ((sc->sc_flags & MTF_ALIVE) == 0 &&
 	    ((bp->b_flags & B_CMD) == 0 || bp->b_cmd != MTRESET))
 		goto fatalerror;
@@ -726,10 +726,10 @@ fatalerror:
 	bp->b_error = EIO;
 done:
 	sc->sc_flags &= ~(MTF_HITEOF | MTF_HITBOF);
-	(void)bufq_get(sc->sc_tab);
+	(void)BUFQ_GET(sc->sc_tab);
 	biodone(bp);
 	hpibfree(device_parent(sc->sc_dev), &sc->sc_hq);
-	if ((bp = bufq_peek(sc->sc_tab)) == NULL)
+	if ((bp = BUFQ_PEEK(sc->sc_tab)) == NULL)
 		sc->sc_active = 0;
 	else
 		mtustart(sc);
@@ -748,7 +748,7 @@ mtgo(void *arg)
 	int rw;
 
 	dlog(LOG_DEBUG, "%s go", device_xname(sc->sc_dev));
-	bp = bufq_peek(sc->sc_tab);
+	bp = BUFQ_PEEK(sc->sc_tab);
 	rw = bp->b_flags & B_READ;
 	hpibgo(sc->sc_hpibno, sc->sc_slave, rw ? MTT_READ : MTL_WRITE,
 	    bp->b_data, bp->b_bcount, rw, rw != 0);
@@ -762,7 +762,7 @@ mtintr(void *arg)
 	int i;
 	u_char cmdbuf[4];
 
-	bp = bufq_peek(sc->sc_tab);
+	bp = BUFQ_PEEK(sc->sc_tab);
 	if (bp == NULL) {
 		log(LOG_ERR, "%s intr: bp == NULL", device_xname(sc->sc_dev));
 		return;
@@ -908,10 +908,10 @@ mtintr(void *arg)
 	cmdbuf[0] = MTE_COMPLETE | MTE_IDLE;
 	(void) hpibsend(sc->sc_hpibno, sc->sc_slave, MTL_ECMD, cmdbuf, 1);
 	bp->b_flags &= ~B_CMD;
-	(void)bufq_get(sc->sc_tab);
+	(void)BUFQ_GET(sc->sc_tab);
 	biodone(bp);
 	hpibfree(device_parent(sc->sc_dev), &sc->sc_hq);
-	if (bufq_peek(sc->sc_tab) == NULL)
+	if (BUFQ_PEEK(sc->sc_tab) == NULL)
 		sc->sc_active = 0;
 	else
 		mtustart(sc);

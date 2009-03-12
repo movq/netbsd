@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.328 2009/02/13 22:41:02 apb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.322 2008/09/14 15:03:17 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -107,13 +107,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.328 2009/02/13 22:41:02 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.322 2008/09/14 15:03:17 tsutsui Exp $");
 
 #include "opt_adb.h"
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"
 #include "opt_kgdb.h"
-#include "opt_modular.h"
 #include "opt_compat_netbsd.h"
 #include "akbd.h"
 #include "macfb.h"
@@ -147,7 +146,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.328 2009/02/13 22:41:02 apb Exp $");
 #endif
 #define ELFSIZE 32
 #include <sys/exec_elf.h>
-#include <sys/device.h>
 
 #include <m68k/cacheops.h>
 
@@ -378,12 +376,12 @@ consinit(void)
 #if NZSC > 0 && defined(KGDB)
 		zs_kgdb_init();
 #endif
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 		/*
 		 * Initialize kernel debugger, if compiled in.
 		 */
 
-		ksyms_addsyms_elf(symsize, ssym, esym);
+		ksyms_init(symsize, ssym, esym);
 #endif
 
 		if (boothowto & RB_KDB) {
@@ -548,8 +546,6 @@ cpu_reboot(int howto, char *bootstr)
  haltsys:
 	/* Run any shutdown hooks. */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		/* First try to power down under VIA control. */
@@ -778,15 +774,15 @@ dumpsys(void)
 			return;
 	}
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n",
-		    major(dumpdev), minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
+		    minor(dumpdev));
 		return;
 	}
 	dump = bdev->d_dump;
 	blkno = dumplo;
 
-	printf("\ndumping to dev %u,%u offset %ld\n",
-	    major(dumpdev), minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
+	    minor(dumpdev), dumplo);
 
 	printf("dump ");
 

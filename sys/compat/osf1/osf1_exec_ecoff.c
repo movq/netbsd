@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_exec_ecoff.c,v 1.21 2008/11/15 00:49:53 njoly Exp $ */
+/* $NetBSD: osf1_exec_ecoff.c,v 1.20.24.1 2008/11/20 03:25:42 snj Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_exec_ecoff.c,v 1.21 2008/11/15 00:49:53 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_exec_ecoff.c,v 1.20.24.1 2008/11/20 03:25:42 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

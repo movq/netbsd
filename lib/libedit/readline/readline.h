@@ -1,4 +1,4 @@
-/*	$NetBSD: readline.h,v 1.25 2009/02/12 13:39:49 sketch Exp $	*/
+/*	$NetBSD: readline.h,v 1.23 2008/04/29 06:53:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@ typedef KEYMAP_ENTRY *Keymap;
 
 #ifndef CTRL
 #include <sys/ioctl.h>
-#if !defined(__sun) && !defined(__hpux) && !defined(_AIX)
+#if !defined(__sun__) && !defined(__hpux__)
 #include <sys/ttydefaults.h>
 #endif
 #ifndef CTRL
@@ -183,7 +183,6 @@ int		 _rl_abort_internal(void);
 int		 _rl_qsort_string_compare(char **, char **);
 char 	       **rl_completion_matches(const char *, rl_compentry_func_t *);
 void		 rl_forced_update_display(void);
-int		 rl_set_prompt(const char *);
 
 /*
  * The following are not implemented

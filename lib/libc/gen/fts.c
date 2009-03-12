@@ -1,4 +1,4 @@
-/*	$NetBSD: fts.c,v 1.38 2009/02/28 14:34:18 pgoyette Exp $	*/
+/*	$NetBSD: fts.c,v 1.34.4.2 2009/08/16 22:41:23 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)fts.c	8.6 (Berkeley) 8/14/94";
 #else
-__RCSID("$NetBSD: fts.c,v 1.38 2009/02/28 14:34:18 pgoyette Exp $");
+__RCSID("$NetBSD: fts.c,v 1.34.4.2 2009/08/16 22:41:23 bouyer Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -627,8 +627,8 @@ fts_build(FTS *sp, int type)
 	DIR *dirp;
 	void *oldaddr;
 	size_t dnamlen;
-	int cderrno, descend, level, nlinks, saved_errno, nostat, doadjust;
-	size_t len, maxlen;
+	int cderrno, descend, len, level, nlinks, saved_errno, nostat, doadjust;
+	size_t maxlen;
 #ifdef FTS_WHITEOUT
 	int oflag;
 #endif

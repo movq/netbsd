@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.86 2009/01/24 05:06:06 mrg Exp $
+# $NetBSD: GENERIC,v 1.83.2.1 2010/11/21 03:05:08 riz Exp $
 #
 # GENERIC machine description file
 #
@@ -72,7 +72,7 @@ options 	KTRACE		# system call tracing via ktrace(1)
 #options 	SYSVSHM		# System V-like memory sharing
 #options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
-#options 	MODULAR		# new style module framework
+#options 	LKM		# loadable kernel modules
 
 options 	USERCONF		# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -103,7 +103,6 @@ options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
 #options 	BSDDISKLABEL_EI	# endian independent disklabel support
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
@@ -332,6 +331,10 @@ bthub*	at btuart?
 # Bluetooth Keyboard
 #btkbd*	at bthidev? reportid ?
 #wskbd*	at btkbd? console ? mux 1
+
+# Bluetooth Apple Magic Mouse
+#btmagic* at bthub?
+#wsmouse* at btmagic? mux 0
 
 # Bluetooth Audio support
 #btsco*	at bthub?

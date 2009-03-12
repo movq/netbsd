@@ -1,7 +1,7 @@
-/*	$NetBSD: latency2.c,v 1.4 2009/01/28 21:52:49 ad Exp $	*/
+/*	$NetBSD: latency2.c,v 1.3 2008/06/16 01:41:21 rmind Exp $	*/
 
 /*-
- * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -96,8 +96,6 @@ main(int argc, char *argv[])
 	cpuset_t *cs;
 	int cpuid;
 
-	(void)setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
-
 	if (geteuid() != 0) {
 		errx(1, "run me as root");
 	}
@@ -112,18 +110,16 @@ main(int argc, char *argv[])
 		err(1, "siginal");
 	}
 
-	if (argc < 2) {
-		cs = cpuset_create();
-		if (cs == NULL) {
-			err(1, "cpuset_create");
-		}
-		cpuset_zero(cs);
-		cpuid = pthread_curcpu_np();
-		cpuset_set(cpuid, cs);
-		if (_sched_setaffinity(0, 0, cpuset_size(cs), cs) < 0) {
-			err(1, "_sched_setaffinity");
-		}
-		cpuset_destroy(cs);
+	cs = cpuset_create();
+	if (cs == NULL) {
+		err(1, "cpuset_create");
+	}
+	cpuset_zero(cs);
+
+	cpuid = pthread_curcpu_np();
+	cpuset_set(cpuid, cs);
+	if (_sched_setaffinity(0, 0, cpuset_size(cs), cs) < 0) {
+		err(1, "_sched_setaffinity");
 	}
 
 	sp.sched_priority = sched_get_priority_max(SCHED_FIFO) - 2;
@@ -146,6 +142,7 @@ main(int argc, char *argv[])
 		}
 	} while (!done);
 
+	cpuset_destroy(cs);
 	printf("\nmin=%ldns, max=%ldns, mean=%ldns\n", min, max, sum / samples);
 	return 0;
 }

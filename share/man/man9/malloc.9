@@ -1,4 +1,4 @@
-.\"	$NetBSD: malloc.9,v 1.46 2009/03/09 17:29:25 joerg Exp $
+.\"	$NetBSD: malloc.9,v 1.42.4.1 2009/02/02 19:56:40 snj Exp $
 .\"
 .\" Copyright (c) 1996, 2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -48,11 +48,14 @@
 .In sys/malloc.h
 .Ft void *
 .Fn malloc "unsigned long size" "struct malloc_type *type" "int flags"
+.Fn MALLOC "space" "cast" "unsigned long size" "struct malloc_type *type" \
+    "int flags"
 .Ft void *
 .Fn realloc "void *addr" "unsigned long newsize" "struct malloc_type *type" \
     "int flags"
 .Ft void
 .Fn free "void *addr" "struct malloc_type *type"
+.Fn FREE "void *addr" "struct malloc_type *type"
 .Ft unsigned long
 .Fn malloc_roundup "unsigned long size"
 .Ft void
@@ -129,6 +132,38 @@ If the new size is 0, then
 .Fn realloc
 behaves exactly as
 .Fn free .
+.Pp
+The
+.Fn MALLOC
+macro variant is functionally equivalent to
+.Bd -literal -offset indent
+(space) = (cast)malloc((u_long)(size), type, flags)
+.Ed
+.Pp
+and the
+.Fn FREE
+macro variant is equivalent to
+.Bd -literal -offset indent
+free((void *)(addr), type)
+.Ed
+.Pp
+The
+.Fn MALLOC
+macro is intended to be used with a compile-time constant
+.Fa size
+so that the compiler can do constant folding.
+In the comparison to
+.Fn malloc
+and
+.Fn free
+functions, the
+.Fn MALLOC
+and
+.Fn FREE
+macros may be faster, at the cost of increased code size.
+There is no difference between the memory allocated with MALLOC and malloc.
+i.e., no matter which MALLOC or malloc is used to allocate the memory,
+either FREE or free can be used to free it.
 .Pp
 Unlike its standard C library counterpart
 .Pq Xr malloc 3 ,
@@ -244,6 +279,18 @@ The
 function attaches the malloc type
 .Fa type
 to the kernel memory allocator.
+This is intended for use by LKMs; malloc types included in modules
+statically-linked into the kernel are automatically registered with
+the kernel memory allocator.
+However, it is possible to define malloc types without automatically
+registering them using
+.Fn MALLOC_JUSTDEFINE
+or
+.Fn MALLOC_JUSTDEFINE_LIMIT .
+Apart from not automatically registering to the kernel a boot time,
+these functions are equivalent to their counterparts.
+They can be used when a separate LKM codepath for initialization is
+not desired.
 .Pp
 The
 .Fn malloc_type_detach
@@ -309,8 +356,8 @@ and
 .Fn free
 functions.
 Failing consistency checks will cause a panic or a system console message:
-.Pp
 .Bl -bullet -offset indent -compact
+.Pp
 .It
 panic:
 .Dq malloc - bogus type

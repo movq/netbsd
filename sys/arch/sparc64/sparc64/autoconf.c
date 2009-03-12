@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.161 2009/02/13 22:41:03 apb Exp $ */
+/*	$NetBSD: autoconf.c,v 1.156.4.1 2008/12/04 02:10:47 snj Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,11 +48,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.161 2009/02/13 22:41:03 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.156.4.1 2008/12/04 02:10:47 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
@@ -252,7 +251,7 @@ bootstrap(void *o0, void *bootargs, void *bootsize, void *o3, void *ofw)
 	void *bi;
 	long bmagic;
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	struct btinfo_symtab *bi_sym;
 #endif
 	struct btinfo_count *bi_count;
@@ -312,9 +311,9 @@ die_old_boot_loader:
 		panic("Kernel end address is not found in bootinfo.\n");
 	}
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	LOOKUP_BOOTINFO(bi_sym, BTINFO_SYMTAB);
-	ksyms_addsyms_elf(bi_sym->nsym, (int *)(u_long)bi_sym->ssym,
+	ksyms_init(bi_sym->nsym, (int *)(u_long)bi_sym->ssym,
 			(int *)(u_long)bi_sym->esym);
 #ifdef DDB
 #ifdef __arch64__
@@ -630,9 +629,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		ma.ma_name = sbuf;
 		ma.ma_node = node;
 		if (OF_getprop(node, "upa-portid", &portid, sizeof(portid)) !=
-		    sizeof(portid) && 
-		    OF_getprop(node, "portid", &portid, sizeof(portid)) !=
-		    sizeof(portid))
+		    sizeof(portid)) 
 			portid = -1;
 		ma.ma_upaid = portid;
 

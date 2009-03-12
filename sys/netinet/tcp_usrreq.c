@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_usrreq.c,v 1.152 2009/03/11 05:55:22 mrg Exp $	*/
+/*	$NetBSD: tcp_usrreq.c,v 1.149.4.2 2009/09/26 18:34:29 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.152 2009/03/11 05:55:22 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.149.4.2 2009/09/26 18:34:29 snj Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -362,14 +362,15 @@ tcp_usrreq(struct socket *so, int req,
 	case PRU_LISTEN:
 #ifdef INET
 		if (inp && inp->inp_lport == 0) {
-			error = in_pcbbind(inp, NULL, l);
+			error = in_pcbbind(inp, (struct mbuf *)0, l);
 			if (error)
 				break;
 		}
 #endif
 #ifdef INET6
 		if (in6p && in6p->in6p_lport == 0) {
-			error = in6_pcbbind(in6p, NULL, NULL);
+			error = in6_pcbbind(in6p, (struct mbuf *)0,
+			    (struct lwp *)0);
 			if (error)
 				break;
 		}
@@ -388,7 +389,7 @@ tcp_usrreq(struct socket *so, int req,
 #ifdef INET
 		if (inp) {
 			if (inp->inp_lport == 0) {
-				error = in_pcbbind(inp, NULL, l);
+				error = in_pcbbind(inp, (struct mbuf *)0, l);
 				if (error)
 					break;
 			}
@@ -398,7 +399,8 @@ tcp_usrreq(struct socket *so, int req,
 #ifdef INET6
 		if (in6p) {
 			if (in6p->in6p_lport == 0) {
-				error = in6_pcbbind(in6p, NULL, NULL);
+				error = in6_pcbbind(in6p, (struct mbuf *)0,
+				    (struct lwp *)0);
 				if (error)
 					break;
 			}
@@ -1108,7 +1110,6 @@ sysctl_net_inet_ip_ports(SYSCTLFN_ARGS)
 	 */
 	switch (rnode->sysctl_num) {
 	case IPCTL_ANONPORTMIN:
-	case IPV6CTL_ANONPORTMIN:
 		if (tmp >= apmax)
 			return (EINVAL);
 #ifndef IPNOPRIVPORTS
@@ -1118,7 +1119,6 @@ sysctl_net_inet_ip_ports(SYSCTLFN_ARGS)
 		break;
 
 	case IPCTL_ANONPORTMAX:
-	case IPV6CTL_ANONPORTMAX:
                 if (apmin >= tmp)
 			return (EINVAL);
 #ifndef IPNOPRIVPORTS
@@ -1129,7 +1129,6 @@ sysctl_net_inet_ip_ports(SYSCTLFN_ARGS)
 
 #ifndef IPNOPRIVPORTS
 	case IPCTL_LOWPORTMIN:
-	case IPV6CTL_LOWPORTMIN:
 		if (tmp >= lpmax ||
 		    tmp > IPPORT_RESERVEDMAX ||
 		    tmp < IPPORT_RESERVEDMIN)
@@ -1137,7 +1136,6 @@ sysctl_net_inet_ip_ports(SYSCTLFN_ARGS)
 		break;
 
 	case IPCTL_LOWPORTMAX:
-	case IPV6CTL_LOWPORTMAX:
 		if (lpmin >= tmp ||
 		    tmp > IPPORT_RESERVEDMAX ||
 		    tmp < IPPORT_RESERVEDMIN)
@@ -1555,14 +1553,18 @@ sysctl_inpcblist(SYSCTLFN_ARGS)
 
 		if (len >= elem_size && elem_count > 0) {
 			error = copyout(&pcb, dp, out_size);
-			if (error)
+			if (error) {
+				mutex_exit(softnet_lock);
 				return (error);
+			}
 			dp += elem_size;
 			len -= elem_size;
 		}
-		needed += elem_size;
-		if (elem_count > 0 && elem_count != INT_MAX)
-			elem_count--;
+		if (elem_count > 0) {
+			needed += elem_size;
+			if (elem_count != INT_MAX)
+				elem_count--;
+		}
 	}
 
 	*oldlenp = needed;
@@ -1696,6 +1698,12 @@ sysctl_net_inet_tcp_setup2(struct sysctllog **clog, int pf, const char *pfname,
 		       SYSCTL_DESCR("Lower limit for TCP maximum segment size"),
 		       NULL, 0, &tcp_minmss, 0,
 		       CTL_NET, pf, IPPROTO_TCP, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "msl",
+		       SYSCTL_DESCR("Maximum Segment Life"),
+		       NULL, 0, &tcp_msl, 0,
+		       CTL_NET, pf, IPPROTO_TCP, TCPCTL_MSL, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "syn_cache_limit",

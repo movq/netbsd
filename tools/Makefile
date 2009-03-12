@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.127 2009/02/25 22:28:36 sketch Exp $
+#	$NetBSD: Makefile,v 1.124 2008/10/25 22:12:41 apb Exp $
 
 .include <bsd.own.mk>
 
@@ -89,7 +89,7 @@ SUBDIR+=	sgivol
 SUBDIR+=	sparkcrc
 .endif
 
-.if (${MACHINE_ARCH} == "sparc" || ${MACHINE_ARCH} == "sparc64")
+.if (${MACHINE} == "sparc" || ${MACHINE} == "sparc64")
 SUBDIR+=	fgen
 .endif
 

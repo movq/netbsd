@@ -1,4 +1,4 @@
-/*      $NetBSD: clock.c,v 1.3 2009/01/12 11:32:44 tsutsui Exp $ */
+/*      $NetBSD: clock.c,v 1.2 2008/05/04 00:01:08 martin Exp $ */
 
 /* Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -32,9 +32,8 @@
 
 #include <machine/dec_prom.h>
 #include <stand/common/common.h>
-#include <lib/libsa/net.h>
 
-satime_t
+long
 getsecs()
 {
 	long ticks;

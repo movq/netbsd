@@ -1,4 +1,4 @@
-/*	$NetBSD: db_variables.c,v 1.42 2009/03/11 23:22:57 martin Exp $	*/
+/*	$NetBSD: db_variables.c,v 1.39.54.2 2009/03/12 23:26:22 snj Exp $	*/
 
 /*
  * Mach Operating System
@@ -27,19 +27,26 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_variables.c,v 1.42 2009/03/11 23:22:57 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_variables.c,v 1.39.54.2 2009/03/12 23:26:22 snj Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_ddbparam.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
 
-#include <ddb/ddb.h>
+#include <machine/db_machdep.h>
+
 #include <ddb/ddbvar.h>
+
+#include <ddb/db_lex.h>
+#include <ddb/db_variables.h>
+#include <ddb/db_command.h>
+#include <ddb/db_sym.h>
+#include <ddb/db_extern.h>
+#include <ddb/db_output.h>
+
 
 /*
  * If this is non-zero, the DDB will be entered when the system
@@ -101,7 +108,6 @@ db_rw_internal_variable(const struct db_variable *vp, db_expr_t *valp, int rw)
 /*
  * sysctl(3) access to the DDB variables defined above.
  */
-#ifdef _KERNEL
 SYSCTL_SETUP(sysctl_ddb_setup, "sysctl ddb subtree setup")
 {
 
@@ -168,7 +174,6 @@ SYSCTL_SETUP(sysctl_ddb_setup, "sysctl ddb subtree setup")
 		       NULL, 0, &db_cmd_on_enter, DB_LINE_MAXLEN,
 		       CTL_DDB, CTL_CREATE, CTL_EOL);
 }
-#endif	/* _KERNEL */
 
 int
 db_find_variable(const struct db_variable **varp)

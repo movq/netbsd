@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.58 2009/02/14 10:20:55 bjh21 Exp $
+# $NetBSD: GENERIC,v 1.55 2008/08/10 15:31:20 tls Exp $
 #
 # GENERIC machine description file
 # 
@@ -68,6 +68,7 @@ file-system	PTYFS		# /dev/pts/N support
 options 	QUOTA		# UFS quotas
 options 	NFSSERVER	# Sun NFS-compatible file system server
 options 	FFS_EI		# FFS endianness-independence support
+options 	SOFTDEP		# FFS soft updates support.
 options 	WAPBL		# File system journaling support - Experimental
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -125,6 +126,7 @@ options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 #options 	IRQSTATS	# manage IRQ statistics
+#options 	LKM		# loadable kernel modules
 #options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 options 	NTP		# Kernel PLL for ntpd(8).
@@ -167,8 +169,10 @@ iic0		at iociic0
 pcfrtc0		at iic0 addr 0x50	# Real-time clock
 
 arckbd0 	at ioc0 bank 0 offset 0x04 # System keyboard
-wskbd0		at arckbd0
-wsmouse0	at arckbd0
+arcwskbd0	at arckbd0		# Logical devices...
+wskbd0		at arcwskbd0
+arcwsmouse0	at arckbd0
+wsmouse0	at arcwsmouse0
 
 ioeb0		at ioc0 bank 5		# I/O Extension Block (A5000)
 latches0	at ioc0 bank 5		# Printer/FDC control latches (Arc)

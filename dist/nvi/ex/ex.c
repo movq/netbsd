@@ -1,4 +1,4 @@
-/*	$NetBSD: ex.c,v 1.4 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: ex.c,v 1.1.1.2.6.3 2010/01/09 01:53:03 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -438,7 +438,7 @@ loop:	ecp = wp->ecq.lh_first;
 			break;
 		case 'E': case 'F': case 'N': case 'P': case 'T': case 'V':
 			newscreen = 1;
-			p[0] = tolower(p[0]);
+			p[0] = TOLOWER(p[0]);
 			break;
 		}
 
@@ -486,7 +486,7 @@ loop:	ecp = wp->ecq.lh_first;
 				/* FALLTHROUGH */
 			default:
 unknown:			if (newscreen)
-					p[0] = toupper(p[0]);
+					p[0] = TOUPPER(p[0]);
 				ex_unknown(sp, p, namelen);
 				goto err;
 			}
@@ -1421,13 +1421,13 @@ addr_verify:
 	 */
 	if (sp->ep != NULL && ecp->flagoff) {
 		if (ecp->flagoff < 0) {
-			if (sp->lno <= (db_recno_t)(-ecp->flagoff)) {
+			if (sp->lno <= -ecp->flagoff) {
 				msgq(sp, M_ERR,
 				    "088|Flag offset to before line 1");
 				goto err;
 			}
 		} else {
-			if (!NPFITS(DB_MAX_RECORDS, sp->lno, (db_recno_t)ecp->flagoff)) {
+			if (!NPFITS(DB_MAX_RECORDS, sp->lno, ecp->flagoff)) {
 				ex_badaddr(sp, NULL, A_NOTSET, NUM_OVER);
 				goto err;
 			}
@@ -1825,7 +1825,6 @@ ex_line(SCR *sp, EXCMD *ecp, MARK *mp, int *isaddrp, int *errp)
 	EX_PRIVATE *exp;
 	GS *gp;
 	long total, val;
-	unsigned long uval;
 	int isneg;
 	int (*sf) __P((SCR *, MARK *, MARK *, CHAR_T *, size_t, CHAR_T **, u_int));
 	CHAR_T *endp;
@@ -1859,17 +1858,17 @@ ex_line(SCR *sp, EXCMD *ecp, MARK *mp, int *isaddrp, int *errp)
 		*isaddrp = 1;
 		F_SET(ecp, E_ABSMARK);
 
-		if ((nret = nget_uslong(sp, &uval, ecp->cp, &endp, 10)) != NUM_OK) {
+		if ((nret = nget_slong(sp, &val, ecp->cp, &endp, 10)) != NUM_OK) {
 			ex_badaddr(sp, NULL, A_NOTSET, nret);
 			*errp = 1;
 			return (0);
 		}
-		if (!NPFITS(DB_MAX_RECORDS, 0, uval)) {
+		if (!NPFITS(DB_MAX_RECORDS, 0, val)) {
 			ex_badaddr(sp, NULL, A_NOTSET, NUM_OVER);
 			*errp = 1;
 			return (0);
 		}
-		mp->lno = uval;
+		mp->lno = val;
 		mp->cno = 0;
 		ecp->clen -= (endp - ecp->cp);
 		ecp->cp = endp;
@@ -2044,14 +2043,14 @@ search:		mp->lno = sp->lno;
 	 */
 	if (*isaddrp && total != 0) {
 		if (total < 0) {
-			if ((db_recno_t)-total > mp->lno) {
+			if (-total > mp->lno) {
 				msgq(sp, M_ERR,
 			    "097|Reference to a line number less than 0");
 				*errp = 1;
 				return (0);
 			}
 		} else
-			if (!NPFITS(DB_MAX_RECORDS, mp->lno, (unsigned long)total)) {
+			if (!NPFITS(DB_MAX_RECORDS, mp->lno, total)) {
 				ex_badaddr(sp, NULL, A_NOTSET, NUM_OVER);
 				*errp = 1;
 				return (0);

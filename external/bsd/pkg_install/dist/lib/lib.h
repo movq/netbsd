@@ -1,4 +1,4 @@
-/* $NetBSD: lib.h,v 1.1.1.5 2009/03/08 14:51:38 joerg Exp $ */
+/* $NetBSD: lib.h,v 1.1.1.1.6.4 2010/02/04 06:45:58 snj Exp $ */
 
 /* from FreeBSD Id: lib.h,v 1.25 1997/10/08 07:48:03 charnier Exp */
 
@@ -65,6 +65,10 @@
 #endif
 
 /* Macros */
+#ifndef __UNCONST
+#define __UNCONST(a)	((void *)(unsigned long)(const void *)(a))
+#endif
+
 #define SUCCESS	(0)
 #define	FAIL	(-1)
 
@@ -165,12 +169,11 @@ typedef enum pl_ent_t {
 	PLIST_SRC,		/* 10 */
 	PLIST_DISPLAY,		/* 11 */
 	PLIST_PKGDEP,		/* 12 */
-	PLIST_MTREE,		/* 13 */
-	PLIST_DIR_RM,		/* 14 */
-	PLIST_IGNORE_INST,	/* 15 */
-	PLIST_OPTION,		/* 16 */
-	PLIST_PKGCFL,		/* 17 */
-	PLIST_BLDDEP		/* 18 */
+	PLIST_DIR_RM,		/* 13 */
+	PLIST_OPTION,		/* 14 */
+	PLIST_PKGCFL,		/* 15 */
+	PLIST_BLDDEP,		/* 16 */
+	PLIST_PKGDIR		/* 17 */
 }       pl_ent_t;
 
 /* Enumerated constants for build info */
@@ -180,7 +183,9 @@ typedef enum bi_ent_t {
 	BI_MACHINE_ARCH,	/*  2 */
 	BI_IGNORE_RECOMMENDED,	/*  3 */
 	BI_USE_ABI_DEPENDS,	/*  4 */
-	BI_ENUM_COUNT		/*  5 */
+	BI_LICENSE,		/*  5 */
+	BI_PKGTOOLS_VERSION,	/*  6 */
+	BI_ENUM_COUNT		/*  7 */
 }	bi_ent_t;
 
 /* Types */
@@ -252,7 +257,6 @@ int	some_installed_package_conflicts_with(const char *, const char *, char **, c
 
 /* Prototypes */
 /* Misc */
-void    cleanup(int);
 void    show_version(void);
 int	fexec(const char *, ...);
 int	fexec_skipempty(const char *, ...);
@@ -304,12 +308,15 @@ Boolean isfile(const char *);
 Boolean isbrokenlink(const char *);
 Boolean isempty(const char *);
 int     URLlength(const char *);
-Boolean make_preserve_name(char *, size_t, char *, char *);
+Boolean make_preserve_name(char *, size_t, const char *, const char *);
 void    remove_files(const char *, const char *);
-int     delete_hierarchy(const char *, Boolean, Boolean);
 int     format_cmd(char *, size_t, const char *, const char *, const char *);
 
 int	recursive_remove(const char *, int);
+
+void	add_pkgdir(const char *, const char *, const char *);
+void	delete_pkgdir(const char *, const char *, const char *);
+int	has_pkgdir(const char *);
 
 /* pkg_io.c: Local and remote archive handling */
 struct archive;
@@ -318,12 +325,13 @@ struct archive_entry;
 struct archive *open_archive(const char *);
 struct archive *find_archive(const char *, int);
 void	process_pkg_path(void);
+struct url *find_best_package(const char *, const char *, int);
 
 /* Packing list */
 plist_t *new_plist_entry(void);
 plist_t *last_plist(package_t *);
 plist_t *find_plist(package_t *, pl_ent_t);
-char   *find_plist_option(package_t *, char *);
+char   *find_plist_option(package_t *, const char *);
 void    plist_delete(package_t *, Boolean, pl_ent_t, char *);
 void    free_plist(package_t *);
 void    mark_plist(package_t *);
@@ -336,7 +344,7 @@ void	stringify_plist(package_t *, char **, size_t *, const char *);
 void	parse_plist(package_t *, const char *);
 void    read_plist(package_t *, FILE *);
 void    append_plist(package_t *, FILE *);
-int     delete_package(Boolean, Boolean, package_t *, Boolean, const char *);
+int     delete_package(Boolean, package_t *, Boolean, const char *);
 
 /* Package Database */
 int     pkgdb_open(int);
@@ -347,10 +355,18 @@ int	pkgdb_dump(void);
 int     pkgdb_remove(const char *);
 int	pkgdb_remove_pkg(const char *);
 char   *pkgdb_refcount_dir(void);
-char   *_pkgdb_getPKGDB_FILE(char *, unsigned);
-const char *_pkgdb_getPKGDB_DIR(void);
-void	_pkgdb_setPKGDB_DIR(const char *);
-
+char   *pkgdb_get_database(void);
+const char   *pkgdb_get_dir(void);
+/*
+ * Priorities:
+ * 0 builtin default
+ * 1 config file
+ * 2 environment
+ * 3 command line
+ * 4 destdir/views reset
+ */
+void	pkgdb_set_dir(const char *, int);
+char   *pkgdb_pkg_dir(const char *);
 char   *pkgdb_pkg_file(const char *, const char *);
 
 /* List of packages functions */
@@ -397,6 +413,13 @@ int detached_gpg_verify(const char *, size_t, const char *, size_t,
 int detached_gpg_sign(const char *, size_t, char **, size_t *, const char *,
     const char *);
 
+/* License handling */
+int add_licenses(const char *);
+int acceptable_license(const char *);
+int acceptable_pkg_license(const char *);
+void load_license_lists(void);
+
+/* Helper functions for memory allocation */
 char *xstrdup(const char *);
 void *xrealloc(void *, size_t);
 void *xcalloc(size_t, size_t);
@@ -412,7 +435,10 @@ extern const char *certs_packages;
 extern const char *certs_pkg_vulnerabilities;
 extern const char *check_vulnerabilities;
 extern const char *config_file;
+extern const char *config_pkg_dbdir;
 extern const char *config_pkg_path;
+extern const char *config_pkg_refcount_dbdir;
+extern const char *do_license_check;
 extern const char *verified_installation;
 extern const char *gpg_cmd;
 extern const char *gpg_keyring_pkgvuln;
@@ -426,5 +452,8 @@ extern const char *pkg_vulnerabilities_file;
 extern const char *pkg_vulnerabilities_url;
 extern const char *ignore_advisories;
 extern const char tnf_vulnerability_base[];
+
+extern const char *acceptable_licenses;
+extern const char *default_acceptable_licenses;
 
 #endif				/* _INST_LIB_LIB_H_ */

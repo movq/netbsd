@@ -1,4 +1,4 @@
-/*	$NetBSD: bios32.c,v 1.15 2009/02/17 12:23:33 jmcneill Exp $	*/
+/*	$NetBSD: bios32.c,v 1.13 2008/04/28 20:23:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -60,11 +60,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bios32.c,v 1.15 2009/02/17 12:23:33 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bios32.c,v 1.13 2008/04/28 20:23:12 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h> 
+#include <sys/malloc.h>
 
 #include <dev/isa/isareg.h>
 #include <machine/isa_machdep.h>
@@ -179,7 +180,7 @@ bios32_init()
 #endif
 		pmap_update(pmap_kernel());
 
-		aprint_debug("SMBIOS rev. %d.%d @ 0x%lx (%d entries)\n",
+		aprint_normal("SMBIOS rev. %d.%d @ 0x%lx (%d entries)\n",
 			    sh->majrev, sh->minrev, (u_long)sh->addr,
 			    sh->count);
 

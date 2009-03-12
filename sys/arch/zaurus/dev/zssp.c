@@ -1,4 +1,4 @@
-/*	$NetBSD: zssp.c,v 1.7 2009/03/11 09:10:39 nonaka Exp $	*/
+/*	$NetBSD: zssp.c,v 1.3 2007/10/17 19:58:35 garbled Exp $	*/
 /*	$OpenBSD: zaurus_ssp.c,v 1.6 2005/04/08 21:58:49 uwe Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zssp.c,v 1.7 2009/03/11 09:10:39 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zssp.c,v 1.3 2007/10/17 19:58:35 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,24 +42,24 @@ __KERNEL_RCSID(0, "$NetBSD: zssp.c,v 1.7 2009/03/11 09:10:39 nonaka Exp $");
 #define	SSCR0_LZ9JG18		0x01ab
 
 struct zssp_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 };
 
-static int	zssp_match(device_t, cfdata_t, void *);
-static void	zssp_attach(device_t, device_t, void *);
+static int	zssp_match(struct device *, struct cfdata *, void *);
+static void	zssp_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(zssp, sizeof(struct zssp_softc),
+CFATTACH_DECL(zssp, sizeof(struct zssp_softc),
 	zssp_match, zssp_attach, NULL, NULL);
 
 static void	zssp_init(void);
-static bool	zssp_resume(device_t dv PMF_FN_ARGS);
+static void	zssp_powerhook(int, void *);
 
 static struct zssp_softc *zssp_sc;
 
 static int
-zssp_match(device_t parent, cfdata_t cf, void *aux)
+zssp_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	if (zssp_sc != NULL)
@@ -69,26 +69,26 @@ zssp_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-zssp_attach(device_t parent, device_t self, void *aux)
+zssp_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct zssp_softc *sc = device_private(self);
-
-	sc->sc_dev = self;
-	zssp_sc = sc;
-
-	aprint_normal("\n");
-	aprint_naive("\n");
+	struct zssp_softc *sc = (struct zssp_softc *)self;
 
 	sc->sc_iot = &pxa2x0_bs_tag;
 	if (bus_space_map(sc->sc_iot, PXA2X0_SSP1_BASE, PXA2X0_SSP_SIZE,
 	    0, &sc->sc_ioh)) {
-		aprint_error_dev(sc->sc_dev, "can't map bus space\n");
+		printf(": can't map bus space\n");
 		return;
 	}
 
-	if (!pmf_device_register(sc->sc_dev, NULL, zssp_resume))
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't establish power handler\n");
+	zssp_sc = sc;
+
+	printf("\n");
+
+	if (powerhook_establish(sc->sc_dev.dv_xname, zssp_powerhook, sc)
+	    == NULL) {
+		printf("%s: can't establish power hook\n",
+		    sc->sc_dev.dv_xname);
+	}
 
 	zssp_init();
 }
@@ -115,16 +115,16 @@ zssp_init(void)
 	pxa2x0_gpio_set_function(GPIO_TG_CS_C3000, GPIO_OUT|GPIO_SET);
 }
 
-static bool
-zssp_resume(device_t dv PMF_FN_ARGS)
+static void
+zssp_powerhook(int why, void *arg)
 {
 	int s;
 
-	s = splhigh();
-	zssp_init();
-	splx(s);
-
-	return true;
+	if (why == PWR_RESUME) {
+		s = splhigh();
+		zssp_init();
+		splx(s);
+	}
 }
 
 /*
@@ -221,7 +221,7 @@ zssp_ic_send(int ic, uint32_t data)
 		zssp_write_lz9jg18(data);
 		return 0;
 	default:
-		aprint_error("zssp: zssp_ic_send: invalid IC %d\n", ic);
+		printf("zssp_ic_send: invalid IC %d\n", ic);
 		return 0;
 	}
 }
@@ -230,8 +230,7 @@ int
 zssp_read_max1111(uint32_t cmd)
 {
 	struct zssp_softc *sc;
-	int data[3];
-	int voltage[3];	/* voltage[0]: dummy */
+	int voltage[2];
 	int i;
 	int s;
 
@@ -249,14 +248,24 @@ zssp_read_max1111(uint32_t cmd)
 
 	delay(1);
 
-	memset(data, 0, sizeof(data));
-	data[0] = cmd;
-	for (i = 0; i < __arraycount(data); i++) {
-		bus_space_write_4(sc->sc_iot, sc->sc_ioh, SSP_SSDR, data[i]);
+	/* Send the command word and read a dummy word back. */
+	bus_space_write_4(sc->sc_iot, sc->sc_ioh, SSP_SSDR, cmd);
+	while ((bus_space_read_4(sc->sc_iot, sc->sc_ioh, SSP_SSSR)
+	    & SSSR_TNF) != SSSR_TNF)
+		continue;	/* poll */
+	/* XXX is this delay necessary? */
+	delay(1);
+	while ((bus_space_read_4(sc->sc_iot, sc->sc_ioh, SSP_SSSR)
+	    & SSSR_RNE) != SSSR_RNE)
+		continue;	/* poll */
+	(void) bus_space_read_4(sc->sc_iot, sc->sc_ioh, SSP_SSDR);
+
+	for (i = 0; i < 2; i++) {
+		bus_space_write_4(sc->sc_iot, sc->sc_ioh, SSP_SSDR, 0);
 		while ((bus_space_read_4(sc->sc_iot, sc->sc_ioh, SSP_SSSR)
 		    & SSSR_TNF) != SSSR_TNF)
 			continue;	/* poll */
-		/* XXX is this delay necessary? */
+		/* XXX again, is this delay necessary? */
 		delay(1);
 		while ((bus_space_read_4(sc->sc_iot, sc->sc_ioh, SSP_SSSR)
 		    & SSSR_RNE) != SSSR_RNE)
@@ -274,9 +283,14 @@ zssp_read_max1111(uint32_t cmd)
 	splx(s);
 
 	/* XXX no idea what this means, but it's what Linux would do. */
-	if ((voltage[1] & 0xc0) != 0 || (voltage[2] & 0x3f) != 0)
-		return -1;
-	return ((voltage[1] << 2) & 0xfc) | ((voltage[2] >> 6) & 0x03);
+	if ((voltage[0] & 0xc0) != 0 || (voltage[1] & 0x3f) != 0) {
+		voltage[0] = -1;
+	} else {
+		voltage[0] = ((voltage[0] << 2) & 0xfc) |
+		    ((voltage[1] >> 6) & 0x03);
+	}
+
+	return voltage[0];
 }
 
 /* XXX - only does CS_ADS7846 */

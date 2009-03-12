@@ -1,4 +1,4 @@
-/*      $NetBSD: xpci_xenbus.c,v 1.2 2009/03/06 23:35:34 bouyer Exp $      */
+/*      $NetBSD: xpci_xenbus.c,v 1.2.6.3 2009/10/04 00:00:14 snj Exp $      */
 
 /*
  * Copyright (c) 2009 Manuel Bouyer.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.2 2009/03/06 23:35:34 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.2.6.3 2009/10/04 00:00:14 snj Exp $");
 
 #include "opt_xen.h"
 #include "rnd.h"

@@ -1,4 +1,4 @@
-/* $NetBSD: prep_machdep.c,v 1.6 2009/02/13 22:41:03 apb Exp $ */
+/* $NetBSD: prep_machdep.c,v 1.3 2008/04/28 20:23:32 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -37,9 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.6 2009/02/13 22:41:03 apb Exp $");
-
-#include "opt_modular.h"
+__KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.3 2008/04/28 20:23:32 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/extent.h>
@@ -62,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: prep_machdep.c,v 1.6 2009/02/13 22:41:03 apb Exp $")
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 extern void *endsym, *startsym;
 #endif
 extern struct mem_region physmemr[2], availmemr[2];
@@ -167,8 +165,8 @@ prep_initppc(u_long startkernel, u_long endkernel, u_int args)
 	/* Initialize pmap module */
 	pmap_bootstrap(startkernel, endkernel);
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
 #endif
 
 #ifdef DDB

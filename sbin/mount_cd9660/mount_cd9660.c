@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_cd9660.c,v 1.30 2009/01/03 23:09:41 christos Exp $	*/
+/*	$NetBSD: mount_cd9660.c,v 1.28 2008/08/05 20:57:45 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -46,7 +46,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)mount_cd9660.c	8.7 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: mount_cd9660.c,v 1.30 2009/01/03 23:09:41 christos Exp $");
+__RCSID("$NetBSD: mount_cd9660.c,v 1.28 2008/08/05 20:57:45 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -74,7 +74,6 @@ static const struct mntopt mopts[] = {
 	{ "extatt", 0, ISOFSMNT_EXTATT, 1 },
 	{ "gens", 0, ISOFSMNT_GENS, 1 },
 	{ "maplcase", 1, ISOFSMNT_NOCASETRANS, 1 },
-	{ "casetrans", 1, ISOFSMNT_NOCASETRANS, 1 },
 	{ "nrr", 0, ISOFSMNT_NORRIP, 1 },
 	{ "rrip", 1, ISOFSMNT_NORRIP, 1 },
 	{ "joliet", 1, ISOFSMNT_NOJOLIET, 1 },
@@ -103,9 +102,8 @@ mount_cd9660_parseargs(int argc, char **argv,
 	mntoptparse_t mp;
 	char *dev, *dir;
 
-	memset(args, 0, sizeof(*args));
 	*mntflags = opts = 0;
-	optind = optreset = 1;
+	memset(args, 0, sizeof(*args));
 	while ((ch = getopt(argc, argv, "egijo:r")) != -1)
 		switch (ch) {
 		case 'e':
@@ -138,7 +136,6 @@ mount_cd9660_parseargs(int argc, char **argv,
 		default:
 			usage();
 		}
-
 	argc -= optind;
 	argv += optind;
 
@@ -155,8 +152,7 @@ mount_cd9660_parseargs(int argc, char **argv,
 	/*
 	 * ISO 9660 filesystems are not writable.
 	 */
-	if ((*mntflags & MNT_GETARGS) == 0)
-		*mntflags |= MNT_RDONLY;
+	*mntflags |= MNT_RDONLY;
 	args->fspec = dev;
 	args->flags = opts;
 }

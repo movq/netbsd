@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.7 2009/02/03 12:49:00 tsutsui Exp $
+# $NetBSD: Makefile,v 1.6.134.1 2009/02/06 02:09:05 snj Exp $
 
 PROG = ustarboot
 

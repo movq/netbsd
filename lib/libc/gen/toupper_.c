@@ -1,4 +1,4 @@
-/*	$NetBSD: toupper_.c,v 1.11 2009/01/11 02:46:27 christos Exp $	*/
+/*	$NetBSD: toupper_.c,v 1.9.38.1 2009/01/15 03:24:06 snj Exp $	*/
 
 /*
  * Written by J.T. Conklin <jtc@NetBSD.org>.
@@ -7,7 +7,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_RCS) && !defined(lint)
-__RCSID("$NetBSD: toupper_.c,v 1.11 2009/01/11 02:46:27 christos Exp $");
+__RCSID("$NetBSD: toupper_.c,v 1.9.38.1 2009/01/15 03:24:06 snj Exp $");
 #endif /* LIBC_RCS and not lint */
 
 #include <stdio.h>

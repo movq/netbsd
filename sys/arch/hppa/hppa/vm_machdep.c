@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.34 2008/11/19 18:35:58 ad Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.33.4.2 2010/02/22 16:07:59 snj Exp $	*/
 
 /*	$OpenBSD: vm_machdep.c,v 1.25 2001/09/19 20:50:56 mickey Exp $	*/
 
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.34 2008/11/19 18:35:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.33.4.2 2010/02/22 16:07:59 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,6 +55,47 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.34 2008/11/19 18:35:58 ad Exp $");
 #include <uvm/uvm.h>
 
 #include <hppa/hppa/machdep.h>
+
+/*
+ * Dump the machine specific header information at the start of a core dump.
+ */
+int
+cpu_coredump(struct lwp *l, void *iocookie, struct core *core)
+{
+	struct md_coredump md_core;
+	struct coreseg cseg;
+	int error;
+
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*core, COREMAGIC, MID_MACHINE, 0);
+		core->c_hdrsize = ALIGN(sizeof(*core));
+		core->c_seghdrsize = ALIGN(sizeof(cseg));
+		core->c_cpusize = sizeof(md_core);
+		core->c_nseg++;
+		return 0;
+	}
+
+	error = process_read_regs(l, &md_core.md_reg);
+	if (error)
+		return error;
+
+	/* Save floating point registers. */
+	error = process_read_fpregs(l, &md_core.md_fpreg);
+	if (error)
+		return error;
+
+	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
+	cseg.c_addr = 0;
+	cseg.c_size = core->c_cpusize;
+
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+	    core->c_seghdrsize);
+	if (error)
+		return error;
+
+	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
+	    sizeof(md_core));
+}
 
 void
 cpu_swapin(struct lwp *l)
@@ -163,7 +204,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	 */
 	osp = sp;
 
-	/* lwp_trampoline's frame */
+	/* setfunc_trampoline's frame */
 	sp += HPPA_FRAME_SIZE;
 
 	*(register_t *)(sp + HPPA_FRAME_PSP) = osp;
@@ -203,7 +244,7 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	sp += HPPA_FRAME_SIZE;
 
 	*(register_t *)(sp + HPPA_FRAME_PSP) = osp;
-	*(register_t *)(sp + HPPA_FRAME_CRP) = (register_t)lwp_trampoline;
+	*(register_t *)(sp + HPPA_FRAME_CRP) = (register_t)setfunc_trampoline;
 
 	*HPPA_FRAME_CARG(2, sp) = KERNMODE(func);
 	*HPPA_FRAME_CARG(3, sp) = (register_t)arg;

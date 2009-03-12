@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.12 2009/01/11 23:20:38 cegger Exp $ */
+/*	$NetBSD: kgdb_machdep.c,v 1.11 2008/04/28 20:23:37 martin Exp $ */
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -121,7 +121,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.12 2009/01/11 23:20:38 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.11 2008/04/28 20:23:37 martin Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_multiprocessor.h"
@@ -225,10 +225,11 @@ kgdb_suspend()
  * noting on the console why nothing else is going on.
  */
 void
-kgdb_connect(int verbose)
+kgdb_connect(verbose)
+	int verbose;
 {
 
-	if (kgdb_dev == NODEV)
+	if (kgdb_dev < 0)
 		return;
 #if NFB > 0
 	fb_unblank();
@@ -256,10 +257,10 @@ kgdb_connect(int verbose)
  * Decide what to do on panic.
  */
 void
-kgdb_panic(void)
+kgdb_panic()
 {
 
-	if (kgdb_dev != NODEV && kgdb_debug_panic)
+	if (kgdb_dev >= 0 && kgdb_debug_panic)
 		kgdb_connect(kgdb_active == 0);
 }
 

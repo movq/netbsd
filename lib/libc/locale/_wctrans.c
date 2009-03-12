@@ -1,4 +1,4 @@
-/*	$NetBSD: _wctrans.c,v 1.13 2009/01/18 22:03:19 tnozaki Exp $	*/
+/*	$NetBSD: _wctrans.c,v 1.6.32.2 2009/01/22 22:04:28 snj Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -60,7 +60,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: _wctrans.c,v 1.13 2009/01/18 22:03:19 tnozaki Exp $");
+__RCSID("$NetBSD: _wctrans.c,v 1.6.32.2 2009/01/22 22:04:28 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

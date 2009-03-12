@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.c,v 1.99 2008/11/19 18:36:03 ad Exp $	*/
+/*	$NetBSD: linux_socket.c,v 1.98.4.2 2009/11/28 15:45:02 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.99 2008/11/19 18:36:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.98.4.2 2009/11/28 15:45:02 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_inet.h"
@@ -73,8 +73,10 @@ __KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.99 2008/11/19 18:36:03 ad Exp $")
 
 #include <lib/libkern/libkern.h>
 
+#ifdef INET6
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
+#endif
 
 #include <compat/sys/socket.h>
 #include <compat/sys/sockio.h>
@@ -114,6 +116,7 @@ int linux_to_bsd_so_sockopt(int);
 int linux_to_bsd_ip_sockopt(int);
 int linux_to_bsd_tcp_sockopt(int);
 int linux_to_bsd_udp_sockopt(int);
+int linux_getifname(struct lwp *, register_t *, void *);
 int linux_getifconf(struct lwp *, register_t *, void *);
 int linux_getifhwaddr(struct lwp *, register_t *, u_int, void *);
 static int linux_get_sa(struct lwp *, int, struct mbuf **,
@@ -408,6 +411,10 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 	struct mbuf     *nam;
 	u_int8_t	*control;
 	struct mbuf     *ctl_mbuf = NULL;
+
+	error = copyin(SCARG(uap, msg), &msg, sizeof(msg));
+	if (error)
+		return error;
 
 	msg.msg_flags = MSG_IOVUSRSPACE;
 
@@ -963,6 +970,29 @@ linux_sys_getsockopt(struct lwp *l, const struct linux_sys_getsockopt_args *uap,
 }
 
 int
+linux_getifname(struct lwp *l, register_t *retval, void *data)
+{
+	struct ifnet *ifp;
+	struct linux_ifreq ifr;
+	int error;
+
+	error = copyin(data, &ifr, sizeof(ifr));
+	if (error)
+		return error;
+
+	if (ifr.ifr_ifru.ifru_ifindex >= if_indexlim)
+		return ENODEV;
+	
+	ifp = ifindex2ifnet[ifr.ifr_ifru.ifru_ifindex];
+	if (ifp == NULL)
+		return ENODEV;
+
+	strncpy(ifr.ifr_name, ifp->if_xname, sizeof(ifr.ifr_name));
+
+	return copyout(&ifr, data, sizeof(ifr));
+}
+
+int
 linux_getifconf(struct lwp *l, register_t *retval, void *data)
 {
 	struct linux_ifreq ifr, *ifrp;
@@ -1183,6 +1213,10 @@ linux_ioctl_socket(struct lwp *l, const struct linux_sys_ioctl_args *uap, regist
 	retval[0] = 0;
 
 	switch (com) {
+	case LINUX_SIOCGIFNAME:
+		error = linux_getifname(l, retval, SCARG(uap, data));
+		dosys = 0;
+		break;
 	case LINUX_SIOCGIFCONF:
 		error = linux_getifconf(l, retval, SCARG(uap, data));
 		dosys = 0;
@@ -1397,6 +1431,7 @@ linux_get_sa(struct lwp *l, int s, struct mbuf **mp,
 		DPRINTF(("AF_UNSPEC family adjusted to %d\n", bdom));
 	}
 
+#ifdef INET6
 	/*
 	 * Older Linux IPv6 code uses obsolete RFC2133 struct sockaddr_in6,
 	 * which lacks the scope id compared with RFC2553 one. If we detect
@@ -1425,6 +1460,7 @@ linux_get_sa(struct lwp *l, int s, struct mbuf **mp,
 		salen = sizeof (struct sockaddr_in6);
 		sin6->sin6_scope_id = 0;
 	}
+#endif
 
 	if (bdom == AF_INET)
 		salen = sizeof(struct sockaddr_in);

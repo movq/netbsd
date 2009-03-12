@@ -1,4 +1,4 @@
-/*	$NetBSD: locks.c,v 1.27 2009/02/07 01:50:29 pooka Exp $	*/
+/*	$NetBSD: locks.c,v 1.20 2008/10/10 13:14:41 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 /*
- * Copyright (c) 2007, 2008 Antti Kantee.  All Rights Reserved.
+ * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
  *
  * Development of this software was supported by the
  * Finnish Cultural Foundation.
@@ -54,54 +54,34 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locks.c,v 1.27 2009/02/07 01:50:29 pooka Exp $");
-
 #include <sys/param.h>
-#include <sys/atomic.h>
-#include <sys/kmem.h>
 #include <sys/mutex.h>
 #include <sys/rwlock.h>
+#include <sys/atomic.h>
 
 #include <rump/rumpuser.h>
 
 #include "rump_private.h"
 
-/*
- * We map locks to pthread routines.  The difference between kernel
- * and rumpuser routines is that while the kernel uses static
- * storage, rumpuser allocates the object from the heap.  This
- * indirection is necessary because we don't know the size of
- * pthread objects here.  It is also benefitial, since we can
- * be easily compatible with the kernel ABI because all kernel
- * objects regardless of machine architecture are always at least
- * the size of a pointer.  The downside, of course, is a performance
- * penalty.
- */
-
-#define RUMPMTX(mtx) (*(struct rumpuser_mtx **)(mtx))
-
 void
 mutex_init(kmutex_t *mtx, kmutex_type_t type, int ipl)
 {
 
-	CTASSERT(sizeof(kmutex_t) >= sizeof(void *));
-
-	rumpuser_mutex_init((struct rumpuser_mtx **)mtx);
+	rumpuser_mutex_init(&mtx->kmtx_mtx);
 }
 
 void
 mutex_destroy(kmutex_t *mtx)
 {
 
-	rumpuser_mutex_destroy(RUMPMTX(mtx));
+	rumpuser_mutex_destroy(mtx->kmtx_mtx);
 }
 
 void
 mutex_enter(kmutex_t *mtx)
 {
 
-	rumpuser_mutex_enter(RUMPMTX(mtx));
+	rumpuser_mutex_enter(mtx->kmtx_mtx);
 }
 
 void
@@ -116,14 +96,14 @@ int
 mutex_tryenter(kmutex_t *mtx)
 {
 
-	return rumpuser_mutex_tryenter(RUMPMTX(mtx));
+	return rumpuser_mutex_tryenter(mtx->kmtx_mtx);
 }
 
 void
 mutex_exit(kmutex_t *mtx)
 {
 
-	rumpuser_mutex_exit(RUMPMTX(mtx));
+	rumpuser_mutex_exit(mtx->kmtx_mtx);
 }
 
 void
@@ -138,10 +118,8 @@ int
 mutex_owned(kmutex_t *mtx)
 {
 
-	return rumpuser_mutex_held(RUMPMTX(mtx));
+	return rumpuser_mutex_held(mtx->kmtx_mtx);
 }
-
-#define RUMPRW(rw) (*(struct rumpuser_rw **)(rw))
 
 /* reader/writer locks */
 
@@ -149,37 +127,35 @@ void
 rw_init(krwlock_t *rw)
 {
 
-	CTASSERT(sizeof(krwlock_t) >= sizeof(void *));
-
-	rumpuser_rw_init((struct rumpuser_rw **)rw);
+	rumpuser_rw_init(&rw->krw_pthlock);
 }
 
 void
 rw_destroy(krwlock_t *rw)
 {
 
-	rumpuser_rw_destroy(RUMPRW(rw));
+	rumpuser_rw_destroy(rw->krw_pthlock);
 }
 
 void
 rw_enter(krwlock_t *rw, const krw_t op)
 {
 
-	rumpuser_rw_enter(RUMPRW(rw), op == RW_WRITER);
+	rumpuser_rw_enter(rw->krw_pthlock, op == RW_WRITER);
 }
 
 int
 rw_tryenter(krwlock_t *rw, const krw_t op)
 {
 
-	return rumpuser_rw_tryenter(RUMPRW(rw), op == RW_WRITER);
+	return rumpuser_rw_tryenter(rw->krw_pthlock, op == RW_WRITER);
 }
 
 void
 rw_exit(krwlock_t *rw)
 {
 
-	rumpuser_rw_exit(RUMPRW(rw));
+	rumpuser_rw_exit(rw->krw_pthlock);
 }
 
 /* always fails */
@@ -194,34 +170,33 @@ int
 rw_write_held(krwlock_t *rw)
 {
 
-	return rumpuser_rw_wrheld(RUMPRW(rw));
+	return rumpuser_rw_wrheld(rw->krw_pthlock);
 }
 
 int
 rw_read_held(krwlock_t *rw)
 {
 
-	return rumpuser_rw_rdheld(RUMPRW(rw));
+	return rumpuser_rw_rdheld(rw->krw_pthlock);
 }
 
 int
 rw_lock_held(krwlock_t *rw)
 {
 
-	return rumpuser_rw_held(RUMPRW(rw));
+	return rumpuser_rw_held(rw->krw_pthlock);
 }
 
 /* curriculum vitaes */
 
-#define RUMPCV(cv) (*(struct rumpuser_cv **)(cv))
+/* forgive me for I have sinned */
+#define RUMPCV(a) ((struct rumpuser_cv *)(__UNCONST((a)->cv_wmesg)))
 
 void
 cv_init(kcondvar_t *cv, const char *msg)
 {
 
-	CTASSERT(sizeof(kcondvar_t) >= sizeof(void *));
-
-	rumpuser_cv_init((struct rumpuser_cv **)cv);
+	rumpuser_cv_init((struct rumpuser_cv **)__UNCONST(&cv->cv_wmesg));
 }
 
 void
@@ -235,33 +210,30 @@ void
 cv_wait(kcondvar_t *cv, kmutex_t *mtx)
 {
 
-	rumpuser_cv_wait(RUMPCV(cv), RUMPMTX(mtx));
+	rumpuser_cv_wait(RUMPCV(cv), mtx->kmtx_mtx);
 }
 
 int
 cv_wait_sig(kcondvar_t *cv, kmutex_t *mtx)
 {
 
-	rumpuser_cv_wait(RUMPCV(cv), RUMPMTX(mtx));
+	rumpuser_cv_wait(RUMPCV(cv), mtx->kmtx_mtx);
 	return 0;
 }
 
 int
 cv_timedwait(kcondvar_t *cv, kmutex_t *mtx, int ticks)
 {
-	struct timespec ts, tick;
+#ifdef DIAGNOSTIC
 	extern int hz;
-
-	nanotime(&ts);
-	tick.tv_sec = ticks / hz;
-	tick.tv_nsec = (ticks % hz) * (1000000000/hz);
-	timespecadd(&ts, &tick, &ts);
+#endif
 
 	if (ticks == 0) {
 		cv_wait(cv, mtx);
 		return 0;
 	} else {
-		return rumpuser_cv_timedwait(RUMPCV(cv), RUMPMTX(mtx), &ts);
+		KASSERT(hz == 100);
+		return rumpuser_cv_timedwait(RUMPCV(cv), mtx->kmtx_mtx, ticks);
 	}
 }
 
@@ -297,13 +269,13 @@ cv_has_waiters(kcondvar_t *cv)
  * giant lock
  */
 
-static volatile int lockcnt;
+static int lockcnt;
 void
 _kernel_lock(int nlocks)
 {
 
 	while (nlocks--) {
-		rumpuser_mutex_enter(rump_giantlock);
+		mutex_enter(&rump_giantlock);
 		lockcnt++;
 	}
 }
@@ -312,7 +284,7 @@ void
 _kernel_unlock(int nlocks, int *countp)
 {
 
-	if (!rumpuser_mutex_held(rump_giantlock)) {
+	if (!mutex_owned(&rump_giantlock)) {
 		KASSERT(nlocks == 0);
 		if (countp)
 			*countp = 0;
@@ -330,7 +302,7 @@ _kernel_unlock(int nlocks, int *countp)
 	KASSERT(nlocks <= lockcnt);
 	while (nlocks--) {
 		lockcnt--;
-		rumpuser_mutex_exit(rump_giantlock);
+		mutex_exit(&rump_giantlock);
 	}
 }
 

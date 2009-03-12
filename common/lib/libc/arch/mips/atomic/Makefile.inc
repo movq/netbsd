@@ -1,7 +1,6 @@
-#	$NetBSD: Makefile.inc,v 1.9 2009/01/04 17:54:29 pooka Exp $
+#	$NetBSD: Makefile.inc,v 1.8 2008/09/29 08:43:00 ad Exp $
 
-.if defined(LIB) && (${LIB} == "kern" || ${LIB} == "c" || ${LIB} == "pthread" \
-	|| ${LIB} == "rump")
+.if defined(LIB) && (${LIB} == "kern" || ${LIB} == "c" || ${LIB} == "pthread")
 
 SRCS+=	atomic_add_32_cas.c atomic_add_32_nv_cas.c atomic_and_32_cas.c \
 	atomic_and_32_nv_cas.c atomic_dec_32_cas.c atomic_dec_32_nv_cas.c \
@@ -21,7 +20,7 @@ CPPFLAGS+= -D__HAVE_ASM_ATOMIC_CAS_UP
 
 .endif
 
-.if defined(LIB) && (${LIB} == "kern" || ${LIB} == "rump")
+.if defined(LIB) && (${LIB} == "kern")
 
 SRCS+=	membar_ops.S
 

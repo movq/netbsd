@@ -1,4 +1,4 @@
-#	$NetBSD: BRANCHES,v 1.276 2009/02/08 21:46:04 jym Exp $
+#	$NetBSD: BRANCHES,v 1.269 2008/10/27 08:13:08 skrll Exp $
 #
 # This file contains a list of branches that exist in the NetBSD CVS
 # tree and their current state.
@@ -146,7 +146,7 @@ Notes:
 
 Branch:		netbsd-2
 Description:    The NetBSD 2 release branch
-Status:		Terminated
+Status:		Active
 Start Date:	23 Dec 2004
 End Date:
 Base Tag:	netbsd-2-base
@@ -158,7 +158,7 @@ Notes:
 Branch:		netbsd-2-0
 Description:	Originally the NetBSD 2.0 release branch and now the branch 
 		tracking security/critical fixes for the NetBSD 2.0 series
-Status:		Terminated
+Status:		Active
 Start Date:	28 Mar 2004 and changed for security/critical function on
        		23 Dec 2004
 End Date:
@@ -172,7 +172,7 @@ Notes:		Branch was re-purposed to security/critical change function
 
 Branch:		netbsd-2-1
 Description:	Tracking security/critical fixes for NetBSD 2.1
-Status:		Terminated
+Status:		Active
 Start Date:     26 Oct 2005 
 End Date:
 Base Tag:	netbsd-2-1-RELEASE
@@ -204,26 +204,15 @@ Scope:		Entire tree. (src + xsrc)
 Notes:
 		Commits restricted to Release Engineering.
 
-Branch:		netbsd-5
-Description:	The NetBSD 5 release branch
-Status:		Active
-Start Date:	31 Oct 2008
-End Date:
-Base Tag:	netbsd-5-base
-Maintainer:	5.0 Release Engineering <releng-5@NetBSD.org>
-Scope:		Entire tree. (src + xsrc)
-Notes:
-		Commits restricted to Release Engineering.
-
 ########################################################################
 # Individual developers' branches (Active/Dormant):
 ########################################################################
 
 Branch:		ad-audiomp
 Description:	Add MP locking to the audio drivers
-Status:		Terminated
+Status:		Active
 Start Date:	28 February 2007
-End Date:	7 December 2008
+End Date:
 Base Tag:	ad-audiomp-base
 Maintainer:	Andrew Doran <ad@NetBSD.org>
 Scope:		kernel
@@ -252,16 +241,6 @@ Notes:		Making the audio drivers MP safe is necessary before efforts
 		"while true; do mixerctl -a > /dev/null; done" may suffice).
 		Play audio, run lockstat and verify that that there is
 		contention on the ISR lock.
-
-Branch:		ad-audiomp2
-Description:	Add MP locking to the audio drivers
-Status:		Active
-Start Date:	7 December 2008
-End Date:	
-Base Tag:	ad-audiomp2-base
-Maintainer:	Andrew Doran <ad@NetBSD.org>
-Scope:		kernel
-Notes:		Ressurect ad-audiomp, make the audio drivers MP safe.
 
 Branch:		bjh21-hydra
 Description:	Simtec Hydra support and ARM SMP in general
@@ -322,6 +301,18 @@ Maintainer:	Gregory McGarry <gmcgarry@NetBSD.org>
 Scope:		kernel
 Notes:		merge pcred and ucred and poolify
 
+Branch:         haad-dm
+Description:    Add support for LVM to NetBSD
+Status:         Active
+Start Date:     7 July 2008
+End Date:
+Base Tag:       haad-dm-base
+Maintainer:     Adam Hamsik <haad@NetBSD.org>
+Scope:          kernel
+Notes:          LVM support is based on Linux lvm2tools, 
+                libdevmapper library and NetBSD device-mapper
+                driver. 
+
 Branch:		hpcarm-cleanup
 Description:	Fix build problems for hpcarm
 Status:		Active
@@ -345,19 +336,6 @@ Notes:		To check out the kernel source tree,
 			cvs checkout -ritohy-usb1 src/sys/dev/usb/filelist
 		2. update files in the branch
 			sh -e src/sys/dev/usb/filelist
-
-Branch:		jym-xensuspend
-Description:	Implement xm save/restore/migrate for NetBSD domU
-Status:		Active
-Start Date:	2009-02-08
-End Date:
-Base Tag:	jym-xensuspend-base
-Maintainer:	Jean-Yves Migeon <jym@NetBSD.org>
-Scope:		kernel
-Notes:		This branch contains the code required to support the Xen
-		save/restore/migrate facilities. It affects domU frontend
-		drivers (xbd, xennet, xencons, hypervisor), autoconf(9)
-		machinery, as well as MD code (mostly pmap(9)).
 
 Branch:		kame
 Description:	KAME Project
@@ -821,18 +799,6 @@ Scope:		syssrc
 Notes:		The goal is to get rid of the existing device switch tables in
 		port-dependent conf.c and to generate them dynamically by
 		config(8).
-
-Branch:         haad-dm
-Description:    Add support for LVM to NetBSD
-Status:         Terminated; merged with -current
-Start Date:     7 July 2008
-End Date:	19 December 2008
-Base Tag:       haad-dm-base
-Maintainer:     Adam Hamsik <haad@NetBSD.org>
-Scope:          kernel
-Notes:          LVM support is based on Linux lvm2tools, 
-                libdevmapper library and NetBSD device-mapper
-                driver. 
 
 Branch:		is-newarp
 Description:	ARP for non-Ethernet
@@ -1687,16 +1653,6 @@ Scope:		kernel
 Notes:		Results in consolidation of Alchemy (mips/dev/alchemy/aucom.c)
 		com support, and also removes a nasty hack from Atheros com.
 
-Branch:		christos-time_t
-Description:	Change time_t and dev_t to 64 bit quantities; fix timeval
-		and timespec.
-Status:		merged
-Start Date:	29 March 2008
-End Date:	10 January 2009
-Base Tag:	christos-time_t-base
-Maintainer:	Christos Zoulas <christos@NetBSD.org>
-Scope:		kernel, libc, libutil, userland
-Notes:		Requires a major bump of all libraries except libc, libutil.
 ########################################################################
 # Other:
 ########################################################################

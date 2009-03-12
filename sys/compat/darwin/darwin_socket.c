@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_socket.c,v 1.21 2009/01/11 02:45:47 christos Exp $ */
+/*	$NetBSD: darwin_socket.c,v 1.20 2008/04/28 20:23:41 martin Exp $ */
 
 /*-
  * Copyright (c) 2004, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_socket.c,v 1.21 2009/01/11 02:45:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_socket.c,v 1.20 2008/04/28 20:23:41 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_socket.c,v 1.21 2009/01/11 02:45:47 christos 
 
 #include <compat/mach/mach_vm.h>
 
-#include <compat/darwin/darwin_types.h>
 #include <compat/darwin/darwin_audit.h>
 #include <compat/darwin/darwin_socket.h>
 #include <compat/darwin/darwin_syscallargs.h>

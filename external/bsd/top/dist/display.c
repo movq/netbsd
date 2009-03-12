@@ -702,8 +702,8 @@ display_resize()
 
 	/* allocate space for the screen and color buffers */
 	bufsize = newsize;
-	screenbuf = ecalloc(bufsize, sizeof(char));
-	colorbuf = ecalloc(bufsize, sizeof(char));
+	screenbuf = (char *)calloc(bufsize, sizeof(char));
+	colorbuf = (char *)calloc(bufsize, sizeof(char));
 	if (screenbuf == NULL || colorbuf == NULL)
 	{
 	    /* oops! */
@@ -718,8 +718,6 @@ display_resize()
     }
 
     /* adjust total lines on screen to lines available for procs */
-    if (top_lines < y_procs)
-	return -1;
     top_lines -= y_procs;
 
     /* return number of lines available */
@@ -833,12 +831,12 @@ display_init(struct statics *statics, int percpuinfo)
 	/* save pointers and allocate space for names */
 	procstate_names = statics->procstate_names;
 	num_procstates = string_count(procstate_names);
-	lprocstates = ecalloc(num_procstates, sizeof(int));
+	lprocstates = (int *)calloc(num_procstates, sizeof(int));
 
 	cpustate_names = statics->cpustate_names;
 	num_cpustates = string_count(cpustate_names);
-	lcpustates = ecalloc(num_cpustates, sizeof(int) * ncpu);
-	cpustate_columns = ecalloc(num_cpustates, sizeof(int));
+	lcpustates = (int *)calloc(num_cpustates, sizeof(int) * ncpu);
+	cpustate_columns = (int *)calloc(num_cpustates, sizeof(int));
 	memory_names = statics->memory_names;
 	num_memory = string_count(memory_names);
 
@@ -851,7 +849,8 @@ display_init(struct statics *statics, int percpuinfo)
 	    *ip++ = cpustate_total_length;
 	    if ((i = strlen(*pp++)) > 0)
 	    {
-		cpustate_total_length += i + 8;
+		cpustate_total_length += i + 7;
+		/* strlen(" 100% ") is 6, strlen(" 99.9% ") is 7. Never 8. */
 	    }
 	}
     }
@@ -866,7 +865,7 @@ display_init(struct statics *statics, int percpuinfo)
     header_cidx = color_tag("header");
 
     /* color tags for cpu states */
-    cpustate_cidx = emalloc(num_cpustates * sizeof(int));
+    cpustate_cidx = (int *)malloc(num_cpustates * sizeof(int));
     i = 0;
     p = strcpyend(scratchbuf, "cpu.");
     while (i < num_cpustates)
@@ -878,7 +877,7 @@ display_init(struct statics *statics, int percpuinfo)
     /* color tags for kernel */
     if (num_kernel > 0)
     {
-	kernel_cidx = emalloc(num_kernel * sizeof(int));
+	kernel_cidx = (int *)malloc(num_kernel * sizeof(int));
 	i = 0;
 	p = strcpyend(scratchbuf, "kernel.");
 	while (i < num_kernel)
@@ -889,7 +888,7 @@ display_init(struct statics *statics, int percpuinfo)
     }
 
     /* color tags for memory */
-    memory_cidx = emalloc(num_memory * sizeof(int));
+    memory_cidx = (int *)malloc(num_memory * sizeof(int));
     i = 0;
     p = strcpyend(scratchbuf, "memory.");
     while (i < num_memory)
@@ -901,7 +900,7 @@ display_init(struct statics *statics, int percpuinfo)
     /* color tags for swap */
     if (num_swap > 0)
     {
-	swap_cidx = emalloc(num_swap * sizeof(int));
+	swap_cidx = (int *)malloc(num_swap * sizeof(int));
 	i = 0;
 	p = strcpyend(scratchbuf, "swap.");
 	while (i < num_swap)
@@ -1148,28 +1147,29 @@ cpustates_tag(int c)
 
 {
     register char *use;
+    unsigned width, u;
 
     static char fmttag[100];
 
-    char *short_tag = ncpu > 1 && multi ? "CPU%d: " : "CPU: ";
-    char *long_tag = ncpu > 1 && multi ? "CPU%d states: " : "CPU states: ";
+    char *short_tag = !multi || ncpu <= 1 ? "CPU: " : "CPU%0*d";
+    char *long_tag = !multi || ncpu <= 1 ? "CPU states: " : "CPU%0*d states: ";
 
-    /* if length + strlen(long_tag) >= screen_width, then we have to
-       use the shorter tag (we subtract 2 to account for ": ") */
-    if (cpustate_total_length + (int)strlen(long_tag) - 2 - ((ncpu > 1) ? 1 : 0)
-	>= screen_width)
-    {
-	use = short_tag;
-    }
-    else
-    {
-	use = long_tag;
+    for (width=0, u=ncpu; u>0; u /= 10) {
+	++width;
     }
 
-    snprintf(fmttag, sizeof(fmttag), use, c);
+    /* if length + strlen(long_tag) > screen_width, then we have to
+       use the shorter tag */
+
+    snprintf(fmttag, sizeof(fmttag), long_tag, width, c);
+
+    if (cpustate_total_length + strlen(fmttag)  > screen_width) {
+    	snprintf(fmttag, sizeof(fmttag), short_tag, width, c);
+    }
 
     /* set x_cpustates accordingly then return result */
     x_cpustates = strlen(fmttag);
+
     return(fmttag);
 }
 
@@ -1691,7 +1691,7 @@ new_message_v(char *msgfmt, va_list ap)
     if (i != message_first)
     {
 	/* insert it in to message_buf */
-	message_buf[i] = estrdup(msg);
+	message_buf[i] = strdup(msg);
 	dprintf("new_message_v: new message inserted in slot %d\n", i);
 
 	/* remember if the buffer is empty and set the index */

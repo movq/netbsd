@@ -1,4 +1,4 @@
-/*	$NetBSD: natm.c,v 1.18 2008/12/17 20:51:38 cegger Exp $	*/
+/*	$NetBSD: natm.c,v 1.16 2008/05/22 00:59:19 dyoung Exp $	*/
 
 /*
  *
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: natm.c,v 1.18 2008/12/17 20:51:38 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: natm.c,v 1.16 2008/05/22 00:59:19 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -200,7 +200,7 @@ struct proc *p;
       ATM_PH_SETVCI(&api.aph, npcb->npcb_vci);
       api.rxhand = npcb;
       s2 = splnet();
-      if (ifp->if_ioctl(ifp, SIOCATMENA, &api) != 0) {
+      if (ifp->if_ioctl == NULL || ifp->if_ioctl(ifp, SIOCATMENA, &api) != 0) {
 	splx(s2);
 	npcb_free(npcb, NPCB_REMOVE);
         error = EIO;
@@ -230,7 +230,8 @@ struct proc *p;
       ATM_PH_SETVCI(&api.aph, npcb->npcb_vci);
       api.rxhand = npcb;
       s2 = splnet();
-      ifp->if_ioctl(ifp, SIOCATMDIS, &api);
+      if (ifp->if_ioctl != NULL)
+	  ifp->if_ioctl(ifp, SIOCATMDIS, &api);
       splx(s);
 
       npcb_free(npcb, NPCB_REMOVE);
@@ -383,7 +384,7 @@ next:
   if (npcb->npcb_flags & NPCB_DRAIN) {
     m_freem(m);
     if (npcb->npcb_inq == 0)
-      free(npcb, M_PCB);			/* done! */
+      FREE(npcb, M_PCB);			/* done! */
     goto next;
   }
 

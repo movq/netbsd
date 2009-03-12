@@ -1,4 +1,4 @@
-/*	$NetBSD: net_stub.c,v 1.8 2009/01/23 21:57:35 pooka Exp $	*/
+/*	$NetBSD: net_stub.c,v 1.4 2008/10/16 16:40:39 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -25,9 +25,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: net_stub.c,v 1.8 2009/01/23 21:57:35 pooka Exp $");
-
 #include <sys/param.h>
 #include <sys/protosw.h>
 #include <sys/socketvar.h>
@@ -38,23 +35,23 @@ __KERNEL_RCSID(0, "$NetBSD: net_stub.c,v 1.8 2009/01/23 21:57:35 pooka Exp $");
 #include <compat/sys/socket.h>
 #include <compat/sys/sockio.h>
 
-int __rumpnet_stub(void);
+int __rtioctl_unimpl(u_long, void *, struct lwp *);
 int
-__rumpnet_stub(void)
+__rtioctl_unimpl(u_long req, void *data, struct lwp *l)
 {
 
-	panic("rumpnet stubs only, linking against librumpnet_net required");
+	panic("%s: not implemented, librumpnet_net required", __func__);
 }
-__weak_alias(rtioctl,__rumpnet_stub);
-__weak_alias(rt_walktree,__rumpnet_stub);
-__weak_alias(rtrequest,__rumpnet_stub);
-__weak_alias(rtrequest,__rumpnet_stub);
-__weak_alias(ifioctl,__rumpnet_stub);
-__weak_alias(ifunit,__rumpnet_stub);
-__weak_alias(ifreq_setaddr,__rumpnet_stub);
-__weak_alias(rt_msg1,__rumpnet_stub);
-__weak_alias(route_enqueue,__rumpnet_stub);
-__weak_alias(route_cb,__rumpnet_stub);
+__weak_alias(rtioctl,__rtioctl_unimpl);
+
+int __ifioctl_unimpl(struct socket *, u_long, void *, struct lwp *);
+int
+__ifioctl_unimpl(struct socket *so, u_long cmd, void *data, struct lwp *l)
+{
+
+	panic("%s: not implemented, librumpnet_net required", __func__);
+}
+__weak_alias(ifioctl,__ifioctl_unimpl);
 
 struct ifnet_head ifnet;
 

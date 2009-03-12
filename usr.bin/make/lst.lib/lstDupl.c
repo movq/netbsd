@@ -1,4 +1,4 @@
-/*	$NetBSD: lstDupl.c,v 1.16 2009/01/23 21:26:30 dsl Exp $	*/
+/*	$NetBSD: lstDupl.c,v 1.14 2006/10/27 21:37:25 dsl Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -33,14 +33,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: lstDupl.c,v 1.16 2009/01/23 21:26:30 dsl Exp $";
+static char rcsid[] = "$NetBSD: lstDupl.c,v 1.14 2006/10/27 21:37:25 dsl Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)lstDupl.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lstDupl.c,v 1.16 2009/01/23 21:26:30 dsl Exp $");
+__RCSID("$NetBSD: lstDupl.c,v 1.14 2006/10/27 21:37:25 dsl Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -56,15 +56,15 @@ __RCSID("$NetBSD: lstDupl.c,v 1.16 2009/01/23 21:26:30 dsl Exp $");
 /*-
  *-----------------------------------------------------------------------
  * Lst_Duplicate --
- *	Duplicate an entire list. If a function to copy a void *is
+ *	Duplicate an entire list. If a function to copy a ClientData is
  *	given, the individual client elements will be duplicated as well.
  *
  * Input:
  *	l		the list to duplicate
- *	copyProc	A function to duplicate each void *
+ *	copyProc	A function to duplicate each ClientData
  *
  * Results:
- *	The new Lst structure or NULL if failure.
+ *	The new Lst structure or NILLST if failure.
  *
  * Side Effects:
  *	A new list is created.
@@ -78,26 +78,26 @@ Lst_Duplicate(Lst l, DuplicateProc *copyProc)
     List 	list = l;
 
     if (!LstValid (l)) {
-	return NULL;
+	return (NILLST);
     }
 
     nl = Lst_Init(list->isCirc);
-    if (nl == NULL) {
-	return NULL;
+    if (nl == NILLST) {
+	return (NILLST);
     }
 
     ln = list->firstPtr;
-    while (ln != NULL) {
-	if (copyProc != NULL) {
+    while (ln != NilListNode) {
+	if (copyProc != NOCOPY) {
 	    if (Lst_AtEnd(nl, copyProc(ln->datum)) == FAILURE) {
-		return NULL;
+		return (NILLST);
 	    }
 	} else if (Lst_AtEnd(nl, ln->datum) == FAILURE) {
-	    return NULL;
+	    return (NILLST);
 	}
 
 	if (list->isCirc && ln == list->lastPtr) {
-	    ln = NULL;
+	    ln = NilListNode;
 	} else {
 	    ln = ln->nextPtr;
 	}

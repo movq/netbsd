@@ -1,4 +1,4 @@
-/*	$NetBSD: union_subr.c,v 1.34 2008/12/17 20:51:35 cegger Exp $	*/
+/*	$NetBSD: union_subr.c,v 1.33 2008/03/21 21:55:00 ad Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.34 2008/12/17 20:51:35 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.33 2008/03/21 21:55:00 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -528,7 +528,8 @@ loop:
 		goto out;
 	}
 
-	(*vpp)->v_data = malloc(sizeof(struct union_node), M_TEMP, M_WAITOK);
+	MALLOC((*vpp)->v_data, void *, sizeof(struct union_node),
+		M_TEMP, M_WAITOK);
 
 	(*vpp)->v_vflag |= vflag;
 	(*vpp)->v_iflag |= iflag;
@@ -609,8 +610,8 @@ union_freevp(struct vnode *vp)
 	if (un->un_path)
 		free(un->un_path, M_TEMP);
 
-	free(vp->v_data, M_TEMP);
-	vp->v_data = NULL;
+	FREE(vp->v_data, M_TEMP);
+	vp->v_data = 0;
 
 	return (0);
 }

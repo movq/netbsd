@@ -1,4 +1,4 @@
-.\"	$NetBSD: logger.1,v 1.11 2008/11/01 14:03:12 wiz Exp $
+.\"	$NetBSD: logger.1,v 1.9 2003/08/07 11:14:23 agc Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)logger.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd August 17, 2008
+.Dd June 6, 1993
 .Dt LOGGER 1
 .Os
 .Sh NAME
@@ -38,9 +38,7 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl is
-.Op Fl d Ar SD
 .Op Fl f Ar file
-.Op Fl m Ar msgid
 .Op Fl p Ar pri
 .Op Fl t Ar tag
 .Op Ar message ...
@@ -52,47 +50,37 @@ system log module.
 .Pp
 Options:
 .Pp
-.Bl -tag -width "messageXX"
-.It Fl d Ar sd
-Log this in the structured data (SD) field.
-.Po
-.Ar sd
-has to be passed as one argument and will require careful quoting when used from
-the shell.
-.Pc
-.It Fl f Ar file
-Log the specified file.
+.Bl -tag -width "message"
 .It Fl i
 Log the process id of the logger process
 with each line.
-.It Fl m Ar msgid
-The MSGID used for the message.
+.It Fl s
+Log the message to standard error, as well as the system log.
+.It Fl f Ar file
+Log the specified file.
 .It Fl p Ar pri
 Enter the message with the specified priority.
-The priority may be specified numerically or as a
-.Dq facility.level
+The priority may be specified numerically or as a ``facility.level''
 pair.
-For example,
-.Dq \-p local3.info
-logs the message(s) as
+For example, ``\-p local3.info'' logs the message(s) as
 .Ar info Ns rmational
 level in the
 .Ar local3
 facility.
-The default is
-.Dq user.notice .
-.It Fl s
-Log the message to standard error, as well as the system log.
+The default is ``user.notice.''
 .It Fl t Ar tag
 Mark every line in the log with the specified
 .Ar tag  .
 .It Ar message
 Write the message to log; if not specified, and the
 .Fl f
-flag is not provided, standard input is logged.
+flag is not
+provided, standard input is logged.
 .El
-.Sh RETURN VALUES
-.Ex -std logger
+.Pp
+The
+.Nm
+utility exits 0 on success, and \*[Gt]0 if an error occurs.
 .Sh EXAMPLES
 .Bd -literal -offset indent -compact
 logger System rebooted

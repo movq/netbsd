@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_percpu.c,v 1.9 2008/12/15 11:59:22 ad Exp $	*/
+/*	$NetBSD: subr_percpu.c,v 1.8.10.1 2009/02/02 03:34:29 snj Exp $	*/
 
 /*-
  * Copyright (c)2007,2008 YAMAMOTO Takashi,
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_percpu.c,v 1.9 2008/12/15 11:59:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_percpu.c,v 1.8.10.1 2009/02/02 03:34:29 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>

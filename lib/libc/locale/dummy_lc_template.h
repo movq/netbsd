@@ -1,4 +1,4 @@
-/* $NetBSD: dummy_lc_template.h,v 1.2 2009/01/11 02:46:28 christos Exp $ */
+/* $NetBSD: dummy_lc_template.h,v 1.2.2.2 2009/01/15 03:24:07 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,

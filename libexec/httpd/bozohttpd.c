@@ -1,4 +1,4 @@
-/*	$NetBSD: bozohttpd.c,v 1.10 2009/02/09 17:06:11 joerg Exp $	*/
+/*	$NetBSD: bozohttpd.c,v 1.7.8.4 2010/10/15 23:25:45 snj Exp $	*/
 
 /*	$eterna: bozohttpd.c,v 1.142 2008/03/03 03:36:11 mrg Exp $	*/
 
@@ -111,7 +111,7 @@
 #define INDEX_HTML		"index.html"
 #endif
 #ifndef SERVER_SOFTWARE
-#define SERVER_SOFTWARE		"bozohttpd/20080303"
+#define SERVER_SOFTWARE		"bozohttpd/20080303-nb1"
 #endif
 #ifndef DIRECT_ACCESS_FILE
 #define DIRECT_ACCESS_FILE	".bzdirect"
@@ -978,7 +978,7 @@ process_request(http_req *request)
 			sz -= WRSZ;
 			addr += WRSZ;
 		}
-		if (sz && (size_t)bozowrite(STDOUT_FILENO, addr, sz) != sz)
+		if (sz && bozowrite(STDOUT_FILENO, addr, sz) != sz)
 			error(1, "final write failed: %s", strerror(errno));
 		debug((DEBUG_OBESE, "wrote %d bytes", (int)sz));
 		if (munmap(oaddr, mappedsz) < 0)
@@ -1038,6 +1038,9 @@ check_virtual(http_req *request)
 	if (strncasecmp(myname, request->hr_host, len) != 0) {
 		s = 0;
 		for (i = scandir(vpath, &list, 0, 0); i--; list++) {
+			if (strcmp((*list)->d_name, ".") == 0 ||
+			    strcmp((*list)->d_name, "..") == 0)
+				continue;
 			debug((DEBUG_OBESE, "looking at dir``%s''",
 			    (*list)->d_name));
 			if (strncasecmp((*list)->d_name, request->hr_host,
@@ -1327,12 +1330,12 @@ handle_redirect(http_req *request, const char *url, int absolute)
 	int query = 0;
 
 	if (url == NULL) {
-		if (asprintf(&urlbuf, "%s/", request->hr_file) < 0)
+		if (asprintf(&urlbuf, "/%s/", request->hr_file) < 0)
 			error(1, "asprintf");
 		url = urlbuf;
 	}
 	
-	if (strlen(request->hr_query)) {
+	if (request->hr_query && strlen(request->hr_query)) {
 	  query = 1;
 	}
 
@@ -1706,7 +1709,7 @@ http_error(int code, http_req *request, const char *msg)
 		    "</body></html>\n",
 		    header, header, request->hr_file, reason,
 		    myname, portbuf, myname, portbuf);
-		if (size >= (int)sizeof buf)
+		if (size >= sizeof buf)
 			warning("http_error buffer too small, truncated");
 	} else
 		size = 0;

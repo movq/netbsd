@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ni.c,v 1.5 2009/01/12 11:32:45 tsutsui Exp $ */
+/*	$NetBSD: if_ni.c,v 1.4 2007/03/04 06:00:56 christos Exp $ */
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -92,7 +92,7 @@
 #define DELAY(x)	{volatile int i = x * 3;while (--i);}
 #define WAITREG(csr,val) while (NI_RREG(csr) & val);
 
-static int ni_get(struct iodesc *, void *, size_t, saseconds_t);
+static int ni_get(struct iodesc *, void *, size_t, time_t);
 static int ni_put(struct iodesc *, void *, size_t);
 
 static int *syspte, allocbase, niaddr;
@@ -449,19 +449,17 @@ niopen(struct open_file *f, int adapt, int ctlr, int unit, int part)
 }
 
 int
-ni_get(struct iodesc *desc, void *pkt, size_t maxlen, saseconds_t timeout)
+ni_get(struct iodesc *desc, void *pkt, size_t maxlen, time_t timeout)
 {
 	struct ni_dg *data;
 	struct ni_bbd *bd;
-	satime_t nsec = getsecs();
+	int nsec = getsecs() + timeout;
 	int len, idx;
 
-loop:
-	while ((data = REMQHI(&gvp->nc_forwr)) == 0 &&
-	    ((getsecs() - nsec) < timeout))
+loop:	while ((data = REMQHI(&gvp->nc_forwr)) == 0 && (nsec > getsecs()))
 		;
 
-	if ((getsecs() - nsec) >= timeout)
+	if (nsec <= getsecs())
 		return 0;
 
 	switch (data->nd_opcode) {

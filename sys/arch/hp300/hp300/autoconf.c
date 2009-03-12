@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.92 2008/12/19 17:11:57 pgoyette Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.91 2008/06/22 16:29:36 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2002 The NetBSD Foundation, Inc.
@@ -136,7 +136,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.92 2008/12/19 17:11:57 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.91 2008/06/22 16:29:36 tsutsui Exp $");
 
 #include "hil.h"
 #include "dvbox.h"
@@ -380,9 +380,8 @@ cpu_rootconf(void)
 	 * pick the network interface device to use.
 	 */
 	if (rootspec == NULL) {
-		vops = vfs_getopsbyname(MOUNT_NFS);
-		if (vops != NULL && vops->vfs_mountroot != NULL &&
-		    strcmp(rootfstype, MOUNT_NFS) == 0) {
+		vops = vfs_getopsbyname("nfs");
+		if (vops != NULL && vops->vfs_mountroot == mountroot) {
 			for (dd = LIST_FIRST(&dev_data_list);
 			    dd != NULL; dd = LIST_NEXT(dd, dd_list)) {
 				if (device_class(dd->dd_dev) == DV_IFNET) {
@@ -396,8 +395,6 @@ cpu_rootconf(void)
 				dv = NULL;
 			}
 		}
-		if (vops != NULL)
-			vfs_delref(vops);
 	}
 
 	/*

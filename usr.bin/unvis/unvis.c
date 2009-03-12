@@ -1,4 +1,4 @@
-/*	$NetBSD: unvis.c,v 1.12 2009/02/10 23:06:31 christos Exp $	*/
+/*	$NetBSD: unvis.c,v 1.11 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)unvis.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: unvis.c,v 1.12 2009/02/10 23:06:31 christos Exp $");
+__RCSID("$NetBSD: unvis.c,v 1.11 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -48,41 +48,35 @@ __RCSID("$NetBSD: unvis.c,v 1.12 2009/02/10 23:06:31 christos Exp $");
 #include <unistd.h>
 #include <vis.h>
 
-static int eflags;
+int eflags;
 
-static void process(FILE *fp, const char *filename);
+int	main __P((int, char **));
+void process __P((FILE *fp, const char *filename));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	FILE *fp;
 	int ch;
 
-	setprogname(argv[0]);
-	while ((ch = getopt(argc, argv, "hm")) != -1)
+	while ((ch = getopt(argc, argv, "h")) != -1)
 		switch((char)ch) {
 		case 'h':
 			eflags |= VIS_HTTPSTYLE;
 			break;
-		case 'm':
-			eflags |= VIS_MIMESTYLE;
-			break;
 		case '?':
 		default:
-			(void)fprintf(stderr,
-			    "Usage: %s [-h|-m] [file...]\n", getprogname());
-			return 1;
+			(void) fprintf(stderr, "usage: unvis [-h] [file...]\n");
+			exit(1);
 		}
 	argc -= optind;
 	argv += optind;
 
-	if ((eflags & (VIS_HTTPSTYLE|VIS_MIMESTYLE)) ==
-	    (VIS_HTTPSTYLE|VIS_MIMESTYLE))
-		errx(1, "Can't specify -m and -h at the same time");
-
 	if (*argv)
 		while (*argv) {
-			if ((fp = fopen(*argv, "r")) != NULL)
+			if ((fp=fopen(*argv, "r")) != NULL)
 				process(fp, *argv);
 			else
 				warn("%s", *argv);
@@ -90,11 +84,13 @@ main(int argc, char *argv[])
 		}
 	else
 		process(stdin, "<stdin>");
-	return 0;
+	exit(0);
 }
 
-static void
-process(FILE *fp, const char *filename)
+void
+process(fp, filename)
+	FILE *fp;
+	const char *filename;
 {
 	int offset = 0, c, ret;
 	int state = 0;
@@ -105,10 +101,10 @@ process(FILE *fp, const char *filename)
 	again:
 		switch(ret = unvis(&outc, (char)c, &state, eflags)) {
 		case UNVIS_VALID:
-			(void)putchar(outc);
+			putchar(outc);
 			break;
 		case UNVIS_VALIDPUSH:
-			(void)putchar(outc);
+			putchar(outc);
 			goto again;
 		case UNVIS_SYNBAD:
 			warnx("%s: offset: %d: can't decode", filename, offset);
@@ -123,5 +119,5 @@ process(FILE *fp, const char *filename)
 		}
 	}
 	if (unvis(&outc, (char)0, &state, eflags | UNVIS_END) == UNVIS_VALID)
-		(void)putchar(outc);
+		putchar(outc);
 }

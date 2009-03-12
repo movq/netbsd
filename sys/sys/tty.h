@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.h,v 1.86 2009/01/22 20:40:20 drochner Exp $	*/
+/*	$NetBSD: tty.h,v 1.82.8.1 2009/02/06 02:05:18 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -233,8 +233,11 @@ struct speedtab {
 TAILQ_HEAD(ttylist_head, tty);		/* the ttylist is a TAILQ */
 
 #ifdef _KERNEL
+#include <sys/mallocvar.h>
 
 extern kmutex_t	tty_lock;
+
+MALLOC_DECLARE(M_TTYS);
 
 extern	int tty_count;			/* number of ttys in global ttylist */
 extern	struct ttychars ttydefaults;
@@ -297,7 +300,19 @@ bool	 ttypull(struct tty *);
 int	clalloc(struct clist *, int, int);
 void	clfree(struct clist *);
 
-extern int (*ttcompatvec)(struct tty *, u_long, void *, int, struct lwp *);
+#if defined(_KERNEL_OPT)
+#include "opt_compat_freebsd.h"
+#include "opt_compat_sunos.h"
+#include "opt_compat_svr4.h"
+#include "opt_compat_43.h"
+#include "opt_compat_osf1.h"
+#endif
+
+#if defined(COMPAT_43) || defined(COMPAT_SUNOS) || defined(COMPAT_SVR4) || \
+    defined(COMPAT_FREEBSD) || defined(COMPAT_OSF1) || defined(LKM)
+# define COMPAT_OLDTTY
+int 	ttcompat(struct tty *, u_long, void *, int, struct lwp *);
+#endif
 
 #endif /* _KERNEL */
 

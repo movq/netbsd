@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_argv.c,v 1.3 2009/01/13 15:43:27 christos Exp $ */
+/*	$NetBSD: ex_argv.c,v 1.1.1.2.6.2 2009/01/20 03:02:35 snj Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994

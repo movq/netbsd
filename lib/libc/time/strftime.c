@@ -1,11 +1,11 @@
-/*	$NetBSD: strftime.c,v 1.19 2009/01/11 02:46:30 christos Exp $	*/
+/*	$NetBSD: strftime.c,v 1.18 2007/07/31 20:19:16 ginsbach Exp $	*/
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char	elsieid[] = "@(#)strftime.c	7.64";
 #else
-__RCSID("$NetBSD: strftime.c,v 1.19 2009/01/11 02:46:30 christos Exp $");
+__RCSID("$NetBSD: strftime.c,v 1.18 2007/07/31 20:19:16 ginsbach Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -294,11 +294,10 @@ label:
 					mkt = mktime(&tm);
 					/* CONSTCOND */
 					if (TYPE_SIGNED(time_t))
-						(void) snprintf(buf, sizeof(buf),
-						    "%lld", (long long) mkt);
-					else	(void) snprintf(buf, sizeof(buf),
-						    "%llu", (unsigned long long)
-						    mkt);
+						(void) sprintf(buf, "%ld",
+							(long) mkt);
+					else	(void) sprintf(buf, "%lu",
+							(unsigned long) mkt);
 					pt = _add(buf, pt, ptlim);
 				}
 				continue;
@@ -580,7 +579,7 @@ const char * const	ptlim;
 {
 	char	buf[INT_STRLEN_MAXIMUM(int) + 1];
 
-	(void) snprintf(buf, sizeof(buf), format, n);
+	(void) sprintf(buf, format, n);
 	return _add(buf, pt, ptlim);
 }
 

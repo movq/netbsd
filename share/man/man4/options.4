@@ -1,4 +1,4 @@
-.\"	$NetBSD: options.4,v 1.375 2009/03/11 19:54:05 joerg Exp $
+.\"	$NetBSD: options.4,v 1.369.2.2 2008/11/18 01:56:58 snj Exp $
 .\"
 .\" Copyright (c) 1996
 .\" 	Perry E. Metzger.  All rights reserved.
@@ -30,9 +30,9 @@
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd February 6, 2009
-.Dt OPTIONS 4
+.Dd November 14, 2008
 .Os
+.Dt OPTIONS 4
 .Sh NAME
 .Nm options
 .Nd Miscellaneous kernel configuration options
@@ -62,14 +62,21 @@ form removes a previously specified option.
 .Ss Keywords
 The following keywords are recognized in a kernel configuration file:
 .Bl -ohang
-.It Sy cinclude Qq Ar filename
+.It Sy cinclude Xo
+.Qq Ar filename
+.Xc
 Conditionally includes another kernel configuration file whose name is
 .Ar filename ,
 which may be double-quoted and may be an explicit path or relative to
 the kernel source directory.
 Failure to open the named file is ignored.
-.It Sy config Ar exec_name No root on Ar rootdev Oo type Ar fstype Oc \
-Oo dumps on Ar dumpdev Oc
+.It Sy config Xo
+.Ar exec_name
+.No root on
+.Ar rootdev
+.Op type Ar fstype
+.Op dumps on Ar dumpdev
+.Xc
 Defines a configuration whose kernel executable is named
 .Ar exec_name ,
 normally
@@ -93,8 +100,12 @@ The root
 and
 .Ar dumpdev
 are optional and assumed to be wild carded if they are not specified.
-.It Ar device_instance No at Ar attachment \
-Oo Ar locators value Oo ... Oc Oc Oo flags Ar value Oc
+.It Ar device_instance Xo
+at
+.Ar attachment
+.Op Ar locators value Op ...
+.Op flags Ar value
+.Xc
 Define an instance of the device driver
 .Ar device_instance
 that attaches to the bus or device named
@@ -111,19 +122,27 @@ often may be a wild card,
 Some device drivers have one or more
 .Ar flags
 that can be adjusted to affect the way they operate.
-.It Sy file-system Ar fs_name Op , Ar fs_name Op ...
+.It Sy file-system Xo
+.Ar fs_name Op , Ar fs_name Op ...
+.Xc
 Include support for the file-system
 .Ar fs_name .
-.It Sy ident Qq Ar string
+.It Sy ident Xo
+.Qq Ar string
+.Xc
 Sets the kernel identification string to
 .Ar string .
-.It Sy include Qq Ar filename
+.It Sy include Xo
+.Qq Ar filename
+.Xc
 Functions the same as
 .Ar cinclude ,
 except failure to open
 .Ar filename
 produces a fatal error.
-.It Sy options Ar option_name Op , Ar option_name=value Op ...
+.It Sy options Xo
+.Ar option_name Op , Ar option_name=value Op ...
+.Xc
 Specifies (or sets) the option, or comma-separated list of options,
 .Ar option_name .
 Some options expect to be assigned a value, which may be an integer,
@@ -137,7 +156,9 @@ Options that are not defined by device definition files are passed to
 the compile process as
 .Fl D
 flags to the C compiler.
-.It Sy makeoptions Ar name=value
+.It Sy makeoptions Xo
+.Ar name=value
+.Xc
 Defines a
 .Xr make 1
 macro
@@ -145,9 +166,13 @@ macro
 with the value
 .Ar value
 in the kernel Makefile.
-.It Sy maxusers Ar integer
+.It Sy maxusers Xo
+.Ar integer
+.Xc
 Set the maxusers variable in the kernel.
-.It Sy no Ar keyword Ar name Op Ar arguments Op ...
+.It Sy no Xo
+.Ar keyword Ar name Op Ar arguments Op ...
+.Xc
 For the
 .Xr config 1
 .Ar keywords
@@ -165,7 +190,10 @@ include "arch/i386/conf/GENERIC"
 no options COMPAT_09
 no pseudo-device bridge
 .Ed
-.It Sy pseudo-device Ar name Op Ar N
+.It Sy pseudo-device Xo
+.Ar name
+.Op Ar N
+.Xc
 Includes support for the pseudo-device
 .Ar name .
 Some pseudo-devices can have multiple or
@@ -673,11 +701,11 @@ the very earliest parts of kernel initialization.
 .Bl -ohang
 .It Cd file-system FFS
 Includes code implementing the Berkeley Fast File System
-.Po Em FFS Pc .
+.Em ( FFS ) .
 Most machines need this if they are not running diskless.
 .It Cd file-system EXT2FS
 Includes code implementing the Second Extended File System
-.Po Em EXT2FS Pc ,
+.Em ( EXT2FS ) ,
 revision 0 and revision 1 with the
 .Em filetype
 and
@@ -695,7 +723,7 @@ for details.
 .It Cd file-system LFS
 .Bq Em EXPERIMENTAL
 Include the Log-structured File System
-.Po Em LFS Pc .
+.Em ( LFS ) .
 See
 .Xr mount_lfs 8
 and
@@ -703,7 +731,7 @@ and
 for details.
 .It Cd file-system MFS
 Include the Memory File System
-.Po Em MFS Pc .
+.Em ( MFS ) .
 This file system stores files in swappable memory, and produces
 notable performance improvements when it is used as the file store
 for
@@ -1113,6 +1141,13 @@ Synonym of
 .El
 .Ss Miscellaneous Options
 .Bl -ohang
+.It Cd options LKM
+Enable loadable kernel modules.
+See
+.Xr lkm 4
+for details.
+.Em NOTE :
+not available on all architectures.
 .It Cd options MEMORY_DISK_DYNAMIC
 This option makes the
 .Xr md 4
@@ -1146,17 +1181,16 @@ disk, to be populated with
 Do not include the interface to a userland memory disk server process.
 Per default, this option is set to 1, including the support code.
 Useful for install media kernels.
-.It Cd options MEMORY_DISK_RBFLAGS=value
-This option sets the
-.Xr reboot 2
-flags used when booting with a memory disk as root file system.
-Possible values include
-.Dv RB_AUTOBOOT
-(boot in the usual fashion - default value), and
-.Dv RB_SINGLE
-(boot in single-user mode).
 .It Cd options MODULAR
-Enables the framework for kernel modules.
+Enables the new framework for kernel modules, which will eventually
+replace LKMs.
+This adds an in-kernel linker and loader, and requires userland support
+to be useful.
+See the
+.Sy MKMODULAR
+variable in
+.Xr mk.conf 5
+for more details.
 .It Cd options VND_COMPRESSION
 Enables the
 .Xr vnd 4
@@ -2451,6 +2485,19 @@ and Hades.
 .El
 .Ss i386-specific Options
 .Bl -ohang
+.It Cd options COMPAT_30_PTHREAD
+Enable binary compatibility with
+.Nx 3.0
+libpthread.
+.Nx 3.0
+libpthread uses hardcoded values for GDT entries on i386.
+The order of GDT entries in kernel changed, this option restores the
+order to what it was in
+.Nx 3.0 .
+libpthread from
+.Nx 4.0
+and later was fixed to not use hardcoded values and will work with or
+without this option.
 .It Cd options ENHANCED_SPEEDSTEP
 Include support for the
 .Tn Enhanced SpeedStep Technology
@@ -2761,7 +2808,6 @@ bolded
 .Xr msgsnd 2 ,
 .Xr ntp_adjtime 2 ,
 .Xr ntp_gettime 2 ,
-.Xr reboot 2 ,
 .Xr semctl 2 ,
 .Xr semget 2 ,
 .Xr semop 2 ,
@@ -2774,6 +2820,7 @@ bolded
 .Xr ddb 4 ,
 .Xr inet 4 ,
 .Xr iso 4 ,
+.Xr lkm 4 ,
 .Xr md 4 ,
 .Xr ns 4 ,
 .Xr pcibios 4 ,

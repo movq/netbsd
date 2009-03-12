@@ -874,7 +874,7 @@ cmd_command(globalstate *gstate)
     {
 	if (linebuf[0] != '\0')
 	{
-	    gstate->pselect.command = estrdup(linebuf);
+	    gstate->pselect.command = strdup(linebuf);
 	}
     }
     return CMD_REFRESH;

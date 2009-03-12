@@ -1,4 +1,4 @@
-/* 	$NetBSD: cdplay.c,v 1.41 2009/02/22 08:32:25 dholland Exp $	*/
+/* 	$NetBSD: cdplay.c,v 1.39 2008/07/16 17:26:25 drochner Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cdplay.c,v 1.41 2009/02/22 08:32:25 dholland Exp $");
+__RCSID("$NetBSD: cdplay.c,v 1.39 2008/07/16 17:26:25 drochner Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -953,11 +953,9 @@ print_status(const char *arg)
 		printf("shuffle play:\t%s\n", (shuffle != 0) ? "on" : "off");
 	if (digital)
 		printf("digital xfer:\tto %s "
-		       "(%d frames per wakeup, %lld.%06lds period)\n",
-		    da.auname, da.fpw, 
-		    (long long)itv_timer.it_interval.tv_sec,
-		    
-		    (long)itv_timer.it_interval.tv_usec);
+		       "(%d frames per wakeup, %ld.%06lds period)\n",
+		    da.auname, da.fpw, itv_timer.it_interval.tv_sec,
+		    itv_timer.it_interval.tv_usec);
 	else
 		printf("digital xfer:\toff\n");
 
@@ -1347,7 +1345,7 @@ openaudio()
 	int rc, aei;
 
 	if (da.afd > -1)
-		return (1);
+	return (1);
 	da.afd = open(da.auname, O_WRONLY);
 	if (da.afd < 0) {
 		warn("openaudio");

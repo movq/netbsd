@@ -1,4 +1,4 @@
-/*	$NetBSD: queue.h,v 1.51 2009/03/11 06:51:53 mrg Exp $	*/
+/*	$NetBSD: queue.h,v 1.49.6.1 2008/11/20 03:22:38 snj Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -387,11 +387,6 @@ struct {								\
 	for ((var) = ((head)->sqh_first);				\
 		(var);							\
 		(var) = ((var)->field.sqe_next))
-
-#define	SIMPLEQ_FOREACH_SAFE(var, head, field, next)			\
-	for ((var) = ((head)->sqh_first);				\
-		(var) && ((next = ((var)->field.sqe_next)), 1);		\
-		(var) = (next))
 
 /*
  * Simple queue access methods.

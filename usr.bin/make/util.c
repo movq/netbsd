@@ -1,15 +1,15 @@
-/*	$NetBSD: util.c,v 1.48 2009/01/29 09:03:04 dholland Exp $	*/
+/*	$NetBSD: util.c,v 1.45.2.1 2008/11/09 05:07:23 snj Exp $	*/
 
 /*
  * Missing stuff from OS's
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: util.c,v 1.48 2009/01/29 09:03:04 dholland Exp $";
+static char rcsid[] = "$NetBSD: util.c,v 1.45.2.1 2008/11/09 05:07:23 snj Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.48 2009/01/29 09:03:04 dholland Exp $");
+__RCSID("$NetBSD: util.c,v 1.45.2.1 2008/11/09 05:07:23 snj Exp $");
 #endif
 #endif
 
@@ -286,7 +286,7 @@ getwd(char *pathname)
     if (stat("/", &st_root) == -1) {
 	(void)sprintf(pathname,
 			"getwd: Cannot stat \"/\" (%s)", strerror(errno));
-	return NULL;
+	return (NULL);
     }
     pathbuf[MAXPATHLEN - 1] = '\0';
     pathptr = &pathbuf[MAXPATHLEN - 1];
@@ -297,7 +297,7 @@ getwd(char *pathname)
     if (lstat(".", &st_cur) == -1) {
 	(void)sprintf(pathname,
 			"getwd: Cannot stat \".\" (%s)", strerror(errno));
-	return NULL;
+	return (NULL);
     }
     nextpathptr = strrcpy(nextpathptr, "../");
 
@@ -316,13 +316,13 @@ getwd(char *pathname)
 	    (void)sprintf(pathname,
 			    "getwd: Cannot stat directory \"%s\" (%s)",
 			    nextpathptr, strerror(errno));
-	    return NULL;
+	    return (NULL);
 	}
 	if ((dp = opendir(nextpathptr)) == NULL) {
 	    (void)sprintf(pathname,
 			    "getwd: Cannot open directory \"%s\" (%s)",
 			    nextpathptr, strerror(errno));
-	    return NULL;
+	    return (NULL);
 	}
 
 	/* look in the parent for the entry with the same inode */
@@ -346,7 +346,7 @@ getwd(char *pathname)
 			"getwd: Cannot stat \"%s\" (%s)",
 			d->d_name, strerror(errno));
 		    (void)closedir(dp);
-		    return NULL;
+		    return (NULL);
 		}
 		/* check if we found it yet */
 		if (st_next.st_ino == st_cur.st_ino &&
@@ -358,7 +358,7 @@ getwd(char *pathname)
 	    (void)sprintf(pathname,
 		"getwd: Cannot find \".\" in \"..\"");
 	    (void)closedir(dp);
-	    return NULL;
+	    return (NULL);
 	}
 	st_cur = st_dotdot;
 	pathptr = strrcpy(pathptr, d->d_name);
@@ -486,10 +486,10 @@ strftime(char *buf, size_t len, const char *fmt, const struct tm *tm)
 			s = snprintf(buf, len, "%s", months[tm->tm_mon]);
 			break;
 		case 'd':
-			s = snprintf(buf, len, "%02d", tm->tm_mday);
+			s = snprintf(buf, len, "%s", tm->tm_mday);
 			break;
 		case 'Y':
-			s = snprintf(buf, len, "%d", 1900 + tm->tm_year);
+			s = snprintf(buf, len, "%s", 1900 + tm->tm_year);
 			break;
 		default:
 			s = snprintf(buf, len, "Unsupported format %c",

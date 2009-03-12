@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_subr.c,v 1.26 2009/02/13 22:29:00 plunky Exp $	*/
+/*	$NetBSD: umap_subr.c,v 1.25.44.1 2009/02/23 08:36:04 snj Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umap_subr.c,v 1.26 2009/02/13 22:29:00 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umap_subr.c,v 1.25.44.1 2009/02/23 08:36:04 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

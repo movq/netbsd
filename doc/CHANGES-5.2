@@ -1,0 +1,966 @@
+# $NetBSD: CHANGES-5.2,v 1.1.2.38 2010/12/21 22:26:44 riz Exp $
+
+A complete list of changes from the NetBSD 5.0 release to the NetBSD 5.1
+release:
+
+gnu/usr.bin/groff/tmac/mdoc.local		patched by hand
+sys/sys/param.h					patched by hand
+
+	Welcome to 5.1_STABLE.
+	[riz]
+
+crypto/dist/openssl/ssl/t1_lib.c		patch
+
+	Fix a race condition. (CVE-2010-3864)
+	[christos, ticket #1479]
+
+sys/arch/x86/x86/bus_dma.c			1.54
+sys/arch/xen/x86/xen_bus_dma.c			1.21
+
+	Fix _xen_bus_dmamem_alloc_range() and _bus_dmamem_alloc_range() to
+	allow a boundary limit smaller than size. PR#42980
+	[bouyer, ticket #1348]
+
+lib/libc/citrus/modules/citrus_utf1632.c	1.10-1.11 via patch
+
+	Fix byte order bugs.
+	[tnozaki, ticket #1356]
+
+mii/igphy.c					1.21
+mii/igphyvar.h					1.1
+mii/inbmphyreg.h				1.2
+sys/dev/pci/if_wm.c				1.196-1.199,1.202,1.205
+sys/dev/pci/if_wmvar.h				1.9
+sys/dev/pci/if_wmreg.h				1.36-1.39
+sys/dev/pci/pcireg.h				1.61-1.64
+sys/dev/pci/pcidevs				1.1023
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Update wm(4): Fix PR#30349, add support for 82575, 82576, 82580(ER).
+	Add two workarounds for ICH8 with igp3.  Workaround for 82566 Kumeran
+	PCS lock loss.
+	[msaitoh, ticket #1358]
+
+sys/dev/mii/miidevs				1.89, 1.93
+sys/dev/mii/miidevs.h				regen
+sys/dev/mii/miidevs_data.h			regen
+sys/dev/mii/brgphy.c				1.49, 1.52
+sys/dev/pci/if_bge.c				1.170-1.181
+sys/dev/pci/if_bgereg.h				1.53-1.56
+sys/dev/pci/if_bgevar.h				1.2-1.5
+sys/dev/pci/pcidevs				1.1017, 1.1021
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Update bge(4)/brgphy(4): support for BCM5705F,BCM5714,SBCM5715S,
+	BCM5717,BCM5718,BCM5720,BCM5723,BCM5724,BCM5751F,BCM5753F,
+	BCM5756,BCM5761,BCM5761E,BCM5761S,BCM5761SE,BCM5764,BCM5781,BCM5784M,
+	BCM5903M,BCM57760,BCM57761,BCM57765,BCM57780,BCM57781,BCM57785,
+	BCM57788,BCM57790,BCM57791 and BCM57795.
+	Also BCM5461, BCM5464, BCM5784 and BCM5761, and many bugfixes.
+	[msaitoh, ticket #1359]
+
+usr.bin/passwd/local_passwd.c			1.34
+usr.bin/passwd/pam_passwd.c			1.5
+
+	Log successful and unsuccessful attempts to change passwords, via -l
+	or pam, to ease IT audit guideline compliance.  Patch from Richard
+	Hansen of BBN in private mail.
+	[gdt, ticket #1360]
+
+sys/dev/pci/agp_i810.c				1.67
+sys/dev/pci/agp_intel.c				1.35
+sys/dev/pci/pcidevs				1.1026
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Add (non-IGP) AGP port support for Intel 82855GM.
+	[jakllsch, ticket #1362]
+
+distrib/notes/atari/hardware			1.23
+share/man/man4/we.4				1.17
+sys/arch/atari/conf/GENERIC.in			1.84
+sys/arch/atari/conf/ATARITT			regen
+sys/arch/atari/conf/FALCON			regen
+sys/arch/atari/conf/HADES			regen
+sys/arch/atari/conf/MILAN-ISAIDE		regen
+sys/arch/atari/conf/MILAN-PCIIDE		regen
+sys/arch/atari/conf/SMALL030			regen
+sys/arch/atari/conf/files.atari			1.116
+sys/arch/atari/vme/if_we_vme.c			1.1
+sys/arch/atari/vme/if_we_vme.c			1.2
+
+	Add support for the SMC Elite Ultra Ethernet with the SMC_TT
+	VME-ISA bridge.
+	[tsutsui, ticket #1366]
+
+distrib/notes/atari/hardware			1.24
+sys/arch/atari/atari/autoconf.c			1.57
+sys/arch/atari/conf/GENERIC.in			1.85
+sys/arch/atari/conf/HADES			regen
+sys/arch/atari/conf/HADES.in			1.10-11
+sys/arch/atari/conf/MILAN-ISAIDE		regen
+sys/arch/atari/conf/MILAN-PCIIDE		regen
+sys/arch/atari/conf/MILAN.in			1.24-25
+sys/arch/atari/conf/files.atari			1.117
+sys/arch/atari/dev/if_ne_mb.c			1.1-2
+sys/arch/x68k/dev/if_ne_intio.c			1.16
+sys/arch/x68k/dev/if_ne_neptune.c		1.20
+sys/conf/files					1.980
+sys/dev/ic/dp8390.c				1.74-75
+sys/dev/ic/ne2000.c				1.62,1.65-66,1.68,1.71-72
+sys/dev/ic/ne2000var.h				1.21, 1.25
+sys/dev/isa/if_ne_isa.c				1.27
+sys/dev/isapnp/if_ne_isapnp.c			1.27
+
+	Added NE2000 with 8bit bus width support and EtherNEC Ethernet
+	support. 
+	[tsutsui, ticket #1367]
+
+sys/arch/atari/conf/ATARITT			regen
+sys/arch/atari/conf/FALCON			regen
+sys/arch/atari/conf/GENERIC.in			1.86
+sys/arch/atari/conf/HADES			regen
+sys/arch/atari/conf/MILAN-ISAIDE		regen
+sys/arch/atari/conf/MILAN-PCIIDE		regen
+sys/arch/atari/conf/SMALL030			regen
+sys/arch/atari/dev/ser.c			1.49 via patch
+
+	Allow atari users to change serial console behavior with
+	binpatch(8), and disable options SERCONSOLE in default kernels.
+	[tsutsui, ticket #1368]
+
+usr.bin/ftp/fetch.c				1.189 via patch
+
+	avoid NULL dereference in log output if the command line parser
+	failed to extract a port number from the URL
+	[lukem, ticket #1369]
+
+usr.bin/ftp/extern.h				1.78
+usr.bin/ftp/fetch.c				1.192
+usr.bin/ftp/util.c				1.153 via patch
+
+	Parse HTTP 'Date' entries in the `C' locale rather than the user's.
+	Fix from [bin/42917] (with minor changes), from KAMADA Ken'ichi.
+	[lukem, ticket #1370]
+
+distrib/atari/floppies/install/list		1.13
+distrib/atari/floppies/prepare/list		1.7
+
+	Add dd(1) to install ramdisk binaries.
+	[tsutsui, ticket #1371]
+
+sys/arch/atari/dev/atari5380.c			1.54
+sys/arch/atari/dev/dma.c			1.25
+
+	Always schedule callback functions via add_sicallback(),
+	which calls softint_schedule(9).
+	[tsutsui, ticket #1373]
+
+share/man/man4/udav.4				1.4
+sys/dev/usb/if_udav.c				1.30
+sys/dev/usb/usbdevs				1.549
+sys/dev/usb/usbdevs.h				regen
+sys/dev/usb/usbdevs_data.h			regen
+
+	Add support for SUNRISING SR9600 Fast Ethernet.
+	[jmcneill, ticket #1379]
+
+sys/dev/pckbport/synaptics.c			1.22-24
+sys/dev/pckbport/synapticsreg.h			1.6
+
+	Fix the synaptics touchpad passthrough device support. PR#42853.
+	[plunky, ticket #1383]
+
+sys/dev/pci/if_pcn.c				1.51
+
+	silence "boot -z"
+	[hubertf, ticket #1385]
+
+sys/dev/isa/pcppi.c				1.33
+sys/dev/pad/pad.c				1.11
+sys/dev/raidframe/rf_netbsdkintf.c		1.258
+sys/dev/scsipi/cd.c				1.288
+sys/kern/subr_autoconf.c			1.169
+
+	'boot -z' bogons
+	[hubertf, ticket #1386]
+
+sys/dev/ic/esiop.c				1.52 via patch
+sys/dev/ic/siop.c				1.95 via patch
+
+	Improve error paths in (e)siop_scsipi_request(). PR#42844
+	[mhitch, ticket #1390]
+
+sys/dev/pci/piixpm.c				1.28
+
+	Fix dmesg output for piixpm (cosmetic).  PR#43278
+	[martin, ticket #1391]
+
+crypto/dist/ssh/misc.c			patch
+
+	Fix tunnelling (ssh -w).
+	[jnemeth, ticket #1392]
+
+external/bsd/fetch/dist/libfetch/common.c	patch
+external/bsd/fetch/dist/libfetch/common.h	patch
+external/bsd/fetch/dist/libfetch/ftp.c		patch
+
+	Update to libfetch-2.31.  Fixes PR#43013
+	[joerg, ticket #1351]
+
+dist/ipf/HISTORY				1.28
+share/man/man4/drm.4				1.11
+
+	Language fix: upto date -> up to date.
+	[mbalmer, ticket #1393]
+
+sys/dev/pci/aac_pci.c				1.31
+
+	SUN X4140's version of this board. From FreeBSD.
+	[is, ticket #1394]
+
+lib/libc/sys/ioctl.2				1.21 via patch
+
+	Correctly spell 'acknowledged'.
+	[mbalmer, ticket #1395]
+
+sbin/restore/symtab.c				1.26
+
+	Fix grammar in a line of output.
+	[mbalmer, ticket #1397]
+
+lib/libusbhid/data.c				1.6
+
+	Stop hid_get_data() reading an extra byte.
+	[plunky, ticket #1398]
+
+sys/dev/usb/ukbdmap.c				patch
+
+	Enable Hungarian keyboard layout on USB keyboards.
+	[ahoka, ticket #1399]
+
+distrib/sets/lists/base/md.amd64		patch
+distrib/sets/lists/comp/md.amd64		patch
+
+	Fix amd64 setlists for certain non-default builds.
+	[dholland, ticket #1402]
+
+sys/arch/i386/i386/autoconf.c			1.94
+sys/arch/x86/conf/files.x86			1.49
+sys/arch/x86/x86/intr.c				1.60
+
+	Fix GENERIC/i386 compilation with 'options INTRDEBUG'.
+	[hubertf, ticket #1403]
+
+sys/external/bsd/drm/dist/bsd-core/radeon_drv.c	patch
+
+	Allow suspend with radeondrm.
+	[mrg, ticket #1406]
+
+distrib/sets/lists/man/mi			1.1210
+share/man/man4/btmagic.4			1.1
+share/man/man4/Makefile				1.517 via patch
+sys/arch/alpha/conf/GENERIC			1.337
+sys/arch/amd64/conf/GENERIC			1.279
+sys/arch/amd64/conf/XEN3_DOM0			1.54
+sys/arch/evbarm/conf/GUMSTIX			1.49
+sys/arch/evbarm/conf/MPCSA_GENERIC		1.16
+sys/arch/evbppc/conf/OPENBLOCKS266_OPT		1.14
+sys/arch/hpcarm/conf/JORNADA720			1.78
+sys/arch/hpcsh/conf/GENERIC			1.91
+sys/arch/i386/conf/ALL				1.258
+sys/arch/i386/conf/GENERIC			1.983
+sys/arch/i386/conf/XEN2_DOM0			patch
+sys/arch/iyonix/conf/GENERIC			1.60
+sys/arch/sparc64/conf/GENERIC			1.129
+sys/dev/bluetooth/btdev.h			1.9
+sys/dev/bluetooth/btmagic.c			1.1
+sys/dev/bluetooth/files.bluetooth		1.14
+sys/dev/usb/hid.c				1.29-30
+sys/dev/usb/hid.h				1.13
+sys/dev/usb/usbdevs				1.550
+sys/dev/usb/usbdevs.h				regen
+sys/dev/usb/usbdevs_data.h			regen
+usr.sbin/btdevctl/print.c			1.10
+usr.sbin/btdevctl/sdp.c				1.8 via patch
+
+	Add Apple Magic Mouse driver btmagic(4).
+	[plunky, ticket #1407]
+
+bin/date/date.c					1.53
+
+	Don't blow up on date +''. From Robert Elz in followup to PR 39392.
+	[dholland, ticket #1411]
+
+sys/kern/sys_lwp.c				1.50
+
+	Follow the correct locking protocol when creating an LWP and the
+	process is stopping.
+	[skrll, ticket #1415]
+
+sys/arch/amd64/conf/XEN3_DOM0			1.55
+sys/arch/i386/conf/XEN2_DOM0			patch
+
+	Sync DKWEDGE options with GENERIC
+	[bouyer, ticket #1419]
+
+sys/uvm/uvm_bio.c				1.69-70 via patch
+sys/uvm/uvm_fault.c				1.175 via patch
+sys/uvm/uvm_map.c				1.292 via patch
+sys/uvm/uvm_pager.c				1.98 via patch
+
+	UVM pmap_update() fixes.
+	[rmind, ticket #1421]
+
+external/bsd/top/dist/display.c			1.8 via patch
+
+	Avoid steps and other artefacts in head for more than 9 CPUs.
+	[is, ticket #1422]
+
+doc/3RDPARTY					1.768
+external/ibm-public/postfix/dist/HISTORY	patch
+external/ibm-public/postfix/dist/RELEASE_NOTES	patch
+external/ibm-public/postfix/dist/makedefs	patch
+external/ibm-public/postfix/dist/README_FILES/ADDRESS_REWRITING_README patch
+external/ibm-public/postfix/dist/README_FILES/ADDRESS_VERIFICATION_README patch
+external/ibm-public/postfix/dist/README_FILES/CONNECTION_CACHE_README patch
+external/ibm-public/postfix/dist/README_FILES/DATABASE_README patch
+external/ibm-public/postfix/dist/README_FILES/FILTER_README patch
+external/ibm-public/postfix/dist/README_FILES/MAILDROP_README patch
+external/ibm-public/postfix/dist/README_FILES/MILTER_README patch
+external/ibm-public/postfix/dist/README_FILES/OVERVIEW patch
+external/ibm-public/postfix/dist/README_FILES/RELEASE_NOTES patch
+external/ibm-public/postfix/dist/README_FILES/SASL_README patch
+external/ibm-public/postfix/dist/README_FILES/SMTPD_PROXY_README patch
+external/ibm-public/postfix/dist/README_FILES/SOHO_README patch
+external/ibm-public/postfix/dist/README_FILES/STANDARD_CONFIGURATION_README patch
+external/ibm-public/postfix/dist/README_FILES/TLS_README patch
+external/ibm-public/postfix/dist/conf/access	patch
+external/ibm-public/postfix/dist/conf/header_checks patch
+external/ibm-public/postfix/dist/conf/master.cf patch
+external/ibm-public/postfix/dist/conf/postfix-script patch
+external/ibm-public/postfix/dist/conf/transport patch
+external/ibm-public/postfix/dist/html/ADDRESS_REWRITING_README.html patch
+external/ibm-public/postfix/dist/html/ADDRESS_VERIFICATION_README.html patch
+external/ibm-public/postfix/dist/html/CONNECTION_CACHE_README.html patch
+external/ibm-public/postfix/dist/html/DATABASE_README.html patch
+external/ibm-public/postfix/dist/html/FILTER_README.html patch
+external/ibm-public/postfix/dist/html/MAILDROP_README.html patch
+external/ibm-public/postfix/dist/html/MILTER_README.html patch
+external/ibm-public/postfix/dist/html/MULTI_INSTANCE_README.html patch
+external/ibm-public/postfix/dist/html/Makefile.in patch
+external/ibm-public/postfix/dist/html/OVERVIEW.html patch
+external/ibm-public/postfix/dist/html/SASL_README.html patch
+external/ibm-public/postfix/dist/html/SMTPD_PROXY_README.html patch
+external/ibm-public/postfix/dist/html/SOHO_README.html patch
+external/ibm-public/postfix/dist/html/STANDARD_CONFIGURATION_README.html patch
+external/ibm-public/postfix/dist/html/TLS_README.html patch
+external/ibm-public/postfix/dist/html/VIRTUAL_README.html patch
+external/ibm-public/postfix/dist/html/access.5.html patch
+external/ibm-public/postfix/dist/html/bounce.8.html patch
+external/ibm-public/postfix/dist/html/cleanup.8.html patch
+external/ibm-public/postfix/dist/html/defer.8.html patch
+external/ibm-public/postfix/dist/html/header_checks.5.html patch
+external/ibm-public/postfix/dist/html/lmtp.8.html patch
+external/ibm-public/postfix/dist/html/oqmgr.8.html patch
+external/ibm-public/postfix/dist/html/pcre_table.5.html patch
+external/ibm-public/postfix/dist/html/pickup.8.html patch
+external/ibm-public/postfix/dist/html/pipe.8.html patch
+external/ibm-public/postfix/dist/html/postcat.1.html patch
+external/ibm-public/postfix/dist/html/postconf.1.html patch
+external/ibm-public/postfix/dist/html/postconf.5.html patch
+external/ibm-public/postfix/dist/html/postfix-wrapper.5.html patch
+external/ibm-public/postfix/dist/html/postmulti.1.html patch
+external/ibm-public/postfix/dist/html/postqueue.1.html patch
+external/ibm-public/postfix/dist/html/qmgr.8.html patch
+external/ibm-public/postfix/dist/html/qmqpd.8.html patch
+external/ibm-public/postfix/dist/html/regexp_table.5.html patch
+external/ibm-public/postfix/dist/html/smtp.8.html patch
+external/ibm-public/postfix/dist/html/smtpd.8.html patch
+external/ibm-public/postfix/dist/html/trace.8.html patch
+external/ibm-public/postfix/dist/html/transport.5.html patch
+external/ibm-public/postfix/dist/html/trivial-rewrite.8.html patch
+external/ibm-public/postfix/dist/html/verify.8.html patch
+external/ibm-public/postfix/dist/html/virtual.5.html patch
+external/ibm-public/postfix/dist/html/virtual.8.html patch
+external/ibm-public/postfix/dist/man/Makefile.in patch
+external/ibm-public/postfix/dist/man/man1/postcat.1 patch
+external/ibm-public/postfix/dist/man/man1/postconf.1 patch
+external/ibm-public/postfix/dist/man/man1/postmulti.1 patch
+external/ibm-public/postfix/dist/man/man1/postqueue.1 patch
+external/ibm-public/postfix/dist/man/man5/access.5 patch
+external/ibm-public/postfix/dist/man/man5/header_checks.5 patch
+external/ibm-public/postfix/dist/man/man5/pcre_table.5 patch
+external/ibm-public/postfix/dist/man/man5/postconf.5 patch
+external/ibm-public/postfix/dist/man/man5/postfix-wrapper.5 patch
+external/ibm-public/postfix/dist/man/man5/regexp_table.5 patch
+external/ibm-public/postfix/dist/man/man5/transport.5 patch
+external/ibm-public/postfix/dist/man/man8/bounce.8 patch
+external/ibm-public/postfix/dist/man/man8/cleanup.8 patch
+external/ibm-public/postfix/dist/man/man8/oqmgr.8 patch
+external/ibm-public/postfix/dist/man/man8/pickup.8 patch
+external/ibm-public/postfix/dist/man/man8/pipe.8 patch
+external/ibm-public/postfix/dist/man/man8/qmgr.8 patch
+external/ibm-public/postfix/dist/man/man8/qmqpd.8 patch
+external/ibm-public/postfix/dist/man/man8/smtp.8 patch
+external/ibm-public/postfix/dist/man/man8/smtpd.8 patch
+external/ibm-public/postfix/dist/man/man8/trivial-rewrite.8 patch
+external/ibm-public/postfix/dist/man/man8/verify.8 patch
+external/ibm-public/postfix/dist/man/man8/virtual.8 patch
+external/ibm-public/postfix/dist/mantools/make-relnotes patch
+external/ibm-public/postfix/dist/mantools/make_soho_readme patch
+external/ibm-public/postfix/dist/mantools/postlink patch
+external/ibm-public/postfix/dist/proto/ADDRESS_REWRITING_README.html patch
+external/ibm-public/postfix/dist/proto/ADDRESS_VERIFICATION_README.html patch
+external/ibm-public/postfix/dist/proto/CONNECTION_CACHE_README.html patch
+external/ibm-public/postfix/dist/proto/DATABASE_README.html patch
+external/ibm-public/postfix/dist/proto/FILTER_README.html patch
+external/ibm-public/postfix/dist/proto/MAILDROP_README.html patch
+external/ibm-public/postfix/dist/proto/MILTER_README.html patch
+external/ibm-public/postfix/dist/proto/OVERVIEW.html patch
+external/ibm-public/postfix/dist/proto/SASL_README.html patch
+external/ibm-public/postfix/dist/proto/SMTPD_PROXY_README.html patch
+external/ibm-public/postfix/dist/proto/STANDARD_CONFIGURATION_README.html patch
+external/ibm-public/postfix/dist/proto/TLS_README.html patch
+external/ibm-public/postfix/dist/proto/access	patch
+external/ibm-public/postfix/dist/proto/header_checks patch
+external/ibm-public/postfix/dist/proto/pcre_table patch
+external/ibm-public/postfix/dist/proto/postconf.proto patch
+external/ibm-public/postfix/dist/proto/postfix-wrapper patch
+external/ibm-public/postfix/dist/proto/regexp_table patch
+external/ibm-public/postfix/dist/proto/transport patch
+external/ibm-public/postfix/dist/src/bounce/bounce.c patch
+external/ibm-public/postfix/dist/src/cleanup/Makefile.in patch
+external/ibm-public/postfix/dist/src/cleanup/cleanup.c patch
+external/ibm-public/postfix/dist/src/cleanup/cleanup.h patch
+external/ibm-public/postfix/dist/src/cleanup/cleanup_bounce.c patch
+external/ibm-public/postfix/dist/src/cleanup/cleanup_envelope.c patch
+external/ibm-public/postfix/dist/src/cleanup/cleanup_extracted.c patch
+external/ibm-public/postfix/dist/src/cleanup/cleanup_init.c patch
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.c patch
+external/ibm-public/postfix/dist/src/cleanup/cleanup_state.c patch
+external/ibm-public/postfix/dist/src/dns/dns.h	patch
+external/ibm-public/postfix/dist/src/dns/dns_lookup.c patch
+external/ibm-public/postfix/dist/src/global/Makefile.in patch
+external/ibm-public/postfix/dist/src/global/cleanup_user.h patch
+external/ibm-public/postfix/dist/src/global/db_common.c patch
+external/ibm-public/postfix/dist/src/global/dict_ldap.c patch
+external/ibm-public/postfix/dist/src/global/mail_copy.c patch
+external/ibm-public/postfix/dist/src/global/mail_params.c patch
+external/ibm-public/postfix/dist/src/global/mail_params.h patch
+external/ibm-public/postfix/dist/src/global/mail_queue.h patch
+external/ibm-public/postfix/dist/src/global/mail_version.h patch
+external/ibm-public/postfix/dist/src/global/record.c patch
+external/ibm-public/postfix/dist/src/global/record.h patch
+external/ibm-public/postfix/dist/src/global/sys_exits.c patch
+external/ibm-public/postfix/dist/src/local/Makefile.in patch
+external/ibm-public/postfix/dist/src/local/command.c patch
+external/ibm-public/postfix/dist/src/local/file.c patch
+external/ibm-public/postfix/dist/src/local/local.h patch
+external/ibm-public/postfix/dist/src/local/recipient.c patch
+external/ibm-public/postfix/dist/src/master/Makefile.in patch
+external/ibm-public/postfix/dist/src/master/mail_server.h patch
+external/ibm-public/postfix/dist/src/master/master_avail.c patch
+external/ibm-public/postfix/dist/src/master/master_ent.c patch
+external/ibm-public/postfix/dist/src/master/multi_server.c patch
+external/ibm-public/postfix/dist/src/master/single_server.c patch
+external/ibm-public/postfix/dist/src/master/trigger_server.c patch
+external/ibm-public/postfix/dist/src/milter/milter.c patch
+external/ibm-public/postfix/dist/src/milter/milter8.c patch
+external/ibm-public/postfix/dist/src/milter/test-milter.c patch
+external/ibm-public/postfix/dist/src/oqmgr/qmgr.c patch
+external/ibm-public/postfix/dist/src/oqmgr/qmgr_message.c patch
+external/ibm-public/postfix/dist/src/pickup/pickup.c patch
+external/ibm-public/postfix/dist/src/pipe/pipe.c patch
+external/ibm-public/postfix/dist/src/postcat/Makefile.in patch
+external/ibm-public/postfix/dist/src/postcat/postcat.c patch
+external/ibm-public/postfix/dist/src/postconf/Makefile.in patch
+external/ibm-public/postfix/dist/src/postconf/postconf.c patch
+external/ibm-public/postfix/dist/src/postdrop/postdrop.c patch
+external/ibm-public/postfix/dist/src/postmulti/postmulti.c patch
+external/ibm-public/postfix/dist/src/postqueue/postqueue.c patch
+external/ibm-public/postfix/dist/src/proxymap/proxymap.c patch
+external/ibm-public/postfix/dist/src/qmgr/qmgr.c patch
+external/ibm-public/postfix/dist/src/qmgr/qmgr_message.c patch
+external/ibm-public/postfix/dist/src/qmqpd/qmqpd.c patch
+external/ibm-public/postfix/dist/src/smtp/Makefile.in patch
+external/ibm-public/postfix/dist/src/smtp/lmtp_params.c patch
+external/ibm-public/postfix/dist/src/smtp/smtp.c patch
+external/ibm-public/postfix/dist/src/smtp/smtp.h patch
+external/ibm-public/postfix/dist/src/smtp/smtp_chat.c patch
+external/ibm-public/postfix/dist/src/smtp/smtp_connect.c patch
+external/ibm-public/postfix/dist/src/smtp/smtp_params.c patch
+external/ibm-public/postfix/dist/src/smtp/smtp_proto.c patch
+external/ibm-public/postfix/dist/src/smtp/smtp_trouble.c patch
+external/ibm-public/postfix/dist/src/smtpd/Makefile.in patch
+external/ibm-public/postfix/dist/src/smtpd/smtpd.c patch
+external/ibm-public/postfix/dist/src/smtpd/smtpd.h patch
+external/ibm-public/postfix/dist/src/smtpd/smtpd_check.c patch
+external/ibm-public/postfix/dist/src/smtpd/smtpd_exp.ref patch
+external/ibm-public/postfix/dist/src/smtpd/smtpd_proxy.c patch
+external/ibm-public/postfix/dist/src/smtpd/smtpd_proxy.h patch
+external/ibm-public/postfix/dist/src/smtpd/smtpd_state.c patch
+external/ibm-public/postfix/dist/src/smtpd/smtpd_xforward.c patch
+external/ibm-public/postfix/dist/src/tls/tls_bio_ops.c patch
+external/ibm-public/postfix/dist/src/tls/tls_certkey.c patch
+external/ibm-public/postfix/dist/src/tls/tls_dh.c patch
+external/ibm-public/postfix/dist/src/trivial-rewrite/resolve.c patch
+external/ibm-public/postfix/dist/src/trivial-rewrite/trivial-rewrite.c patch
+external/ibm-public/postfix/dist/src/trivial-rewrite/trivial-rewrite.h patch
+external/ibm-public/postfix/dist/src/util/Makefile.in patch
+external/ibm-public/postfix/dist/src/util/dict.c patch
+external/ibm-public/postfix/dist/src/util/dict_db.c patch
+external/ibm-public/postfix/dist/src/util/dict_dbm.c patch
+external/ibm-public/postfix/dist/src/util/dict_ht.c patch
+external/ibm-public/postfix/dist/src/util/dict_ht.h patch
+external/ibm-public/postfix/dist/src/util/dict_open.c patch
+external/ibm-public/postfix/dist/src/util/events.c patch
+external/ibm-public/postfix/dist/src/util/events.h patch
+external/ibm-public/postfix/dist/src/util/htable.c patch
+external/ibm-public/postfix/dist/src/util/htable.h patch
+external/ibm-public/postfix/dist/src/util/inet_addr_local.c patch
+external/ibm-public/postfix/dist/src/util/iostuff.h patch
+external/ibm-public/postfix/dist/src/util/match_list.c patch
+external/ibm-public/postfix/dist/src/util/read_wait.c patch
+external/ibm-public/postfix/dist/src/util/sys_defs.h patch
+external/ibm-public/postfix/dist/src/util/unix_recv_fd.c patch
+external/ibm-public/postfix/dist/src/util/unix_send_fd.c patch
+external/ibm-public/postfix/dist/src/util/upass_listen.c patch
+external/ibm-public/postfix/dist/src/util/valid_hostname.c patch
+external/ibm-public/postfix/dist/src/verify/Makefile.in patch
+external/ibm-public/postfix/dist/src/verify/verify.c patch
+external/ibm-public/postfix/dist/src/virtual/virtual.c patch
+external/ibm-public/postfix/dist/src/xsasl/xsasl_cyrus_security.c patch
+external/ibm-public/postfix/dist/src/xsasl/xsasl_dovecot_server.c patch
+external/ibm-public/postfix/lib/util/Makefile	patch
+external/ibm-public/postfix/libexec/Makefile	patch
+external/ibm-public/postfix/libexec/local/Makefile patch
+external/ibm-public/postfix/dist/RELEASE_NOTES-2.6 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in14a new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in14b new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in14c new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in14d new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in14e new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in14f new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in14g new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in15a new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in15b new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in15c new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in15d new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in15e new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in15f new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in15g new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in15h new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.in15i new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14a1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14a2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14b1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14b2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14c1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14c2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14d1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14d2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14e1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14e2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14f1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14f2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14g1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref14g2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15a1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15a2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15b1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15b2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15c1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15c2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15d1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15d2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15e1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15e2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15f1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15f2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15g1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15g2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15h1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15h2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15i1 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.ref15i2 new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg14a new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg14b new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg14c new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg14d new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg14e new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg14f new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg14g new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg15a new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg15b new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg15c new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg15d new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg15e new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg15f new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg15g new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg15h new file
+external/ibm-public/postfix/dist/src/cleanup/cleanup_milter.reg15i new file
+external/ibm-public/postfix/dist/src/cleanup/test-queue-file14 new file
+external/ibm-public/postfix/dist/src/cleanup/test-queue-file15 new file
+external/ibm-public/postfix/dist/src/global/addr_match_list.c new file
+external/ibm-public/postfix/dist/src/global/addr_match_list.h new file
+external/ibm-public/postfix/dist/src/local/bounce_workaround.c new file
+external/ibm-public/postfix/dist/src/master/event_server.c new file
+external/ibm-public/postfix/dist/src/postcat/b_test.ref new file
+external/ibm-public/postfix/dist/src/postcat/bh_test.ref new file
+external/ibm-public/postfix/dist/src/postcat/default_test.ref new file
+external/ibm-public/postfix/dist/src/postcat/e_test.ref new file
+external/ibm-public/postfix/dist/src/postcat/eb_test.ref new file
+external/ibm-public/postfix/dist/src/postcat/eh_test.ref new file
+external/ibm-public/postfix/dist/src/postcat/h_test.ref new file
+external/ibm-public/postfix/dist/src/postcat/test-queue-file new file
+external/ibm-public/postfix/dist/src/util/dict_cache.c new file
+external/ibm-public/postfix/dist/src/util/dict_cache.h new file
+external/ibm-public/postfix/dist/src/util/dict_seq.in new file
+external/ibm-public/postfix/dist/src/util/dict_seq.ref new file
+external/ibm-public/postfix/dist/src/util/unix_pass_fd_fix.c new file
+
+	Update Postfix to version 2.7.1:
+	- Improved before-queue content filter performance. With
+	  "smtpd_proxy_options = speed_adjust", the Postfix SMTP server
+	  receives the entire message before it connects to a before-queue
+	  content filter. Typically, this allows Postfix to handle the same
+	  mail load with fewer content filter processes.
+	- Improved address verification performance. The verify database is now
+	  persistent by default, and it is automatically cleaned periodically.
+	  Under overload conditions, the Postfix SMTP server no longer waits
+	  up to 6 seconds for an address probe to complete.
+	- Support for reputation management based on the local SMTP client
+	  IP address. This is typically implemented with
+	  "FILTER transportname:" actions in access maps or header/body checks,
+	  and mail delivery transports in master.cf with
+	  unique smtp_bind_address values.
+	[tron, ticket #1425]
+
+usr.bin/progress/progress.c			1.18
+
+	Fix argument handling of the "-b" option on 64bit platforms.
+	[tron, ticket #1429]
+
+usr.bin/make/job.c				1.152 via patch
+
+	PR/43643: David A. Holland: dash prefix broken with make -j
+	[dholland, ticket #1433]
+
+sys/fs/msdosfs/msdosfs_lookup.c			1.22
+
+	Return EINVAL for rename and delete operations to the
+	root directory instead of the erroneous EROFS.
+	[mlelstv, ticket #1434]
+
+sys/dev/dkwedge/dk.c				1.57 via patch
+
+	Avoid a lockdebug panic for dk(4) on raid(4).
+	[bouyer, ticket #1435]
+
+sys/dev/pci/ahcisata_pci.c			1.22 via patch
+
+	Add NVIDIA MCP77 to the quirk table, so ahcisata will attach when the
+	BIOS is set to 'RAID' mode.
+	[jmcneill, ticket #1437]
+
+share/man/man4/ath.4				1.28 via patch
+
+	Remove AR9280 and AR9285 from the supported chips list.
+	[jmcneill, ticket #1438]
+
+sys/netinet6/esp_aesctr.c			1.13
+sys/netinet6/esp_core.c				1.46
+
+	Fix some code paths where pointers are dereferenced after checking that
+	they are NULL.
+	[jym, ticket #1440]
+
+sys/dev/pci/hdaudio/hdaudio.c			1.7
+sys/dev/pci/hdaudio/hdaudio_afg.c		1.23
+sys/dev/pci/hdaudio/hdaudio_pci.c		1.6
+sys/dev/pci/hdaudio/hdaudio_pci.h		1.1
+
+	Add support for nvidia hdaudio controllers.
+	[jmcneill, ticket #1441]
+
+sys/dev/pci/hdaudio/hdaudio_afg.c		1.25
+
+	Fix kern/43542: 32kHz playback sounds like hissing analog TV snow.
+	[jmcneill, ticket #1442]
+
+lib/libutil/parsedate.3				1.7 via patch
+lib/libutil/parsedate.y				1.5
+
+	Add support for parsing the data format "@<seconds since epoch>" e.g.
+	"@735275209" for "Tue Apr 20 03:06:49 UTC 1993". This change was
+	inspired by coreutil's "date" utility.
+	[tron, ticket #1443]
+
+sys/netinet6/in6_proto.c			1.89
+sys/netinet6/ip6_etherip.c			1.14
+sys/netinet6/ip6_etherip.h			1.2
+
+	Make the EtherIP in IPv6 input path work.
+	[jakllsch, ticket #1445]
+
+usr.sbin/sa/usrdb.c				1.14
+
+	Fix corruption of /var/account/usracct files on LP64 platforms.
+	[dholland, ticket #1446]
+
+sys/dev/ic/ciss.c				1.23
+
+	Fix a performance problem with the ciss(4) driver. PR#39686.
+	[pettai, ticket #1452]
+
+sys/arch/vax/vsa/dz_vsbus.c			1.41
+sys/arch/vax/vsa/spx.c				1.3
+sys/dev/dec/dz.c				1.39
+
+	Make SPX work as console device on VAXstation 4000/9x.
+	[hans, ticket #1459]
+
+sbin/routed/if.c				1.29
+
+	Fix routed crashing on startup on sparc64.  PR#43695
+	[martin, ticket #1460]
+
+sys/netbt/hci_link.c				1.22
+
+	Fix bluetooth connection for some Broadcom controllers.
+	[plunky, ticket #1461]
+
+sys/dev/acpi/wb_acpi.c				1.3 via patch
+sys/dev/ic/w83l518d.c				1.2 via patch
+sys/dev/ic/w83l518d_sdmmc.c			1.2 via patch
+sys/dev/ic/w83l518d_sdmmc.h			1.2 via patch
+sys/dev/ic/w83l518dvar.h			1.2 via patch
+
+	Add wb(4) power management support.
+	[jmcneill, ticket #1462]
+
+sys/kern/subr_disk.c				1.100
+
+	Fix an issue with >2TB disks.
+	[mrg, ticket #1463]
+
+sbin/gpt/gpt.c					1.11-12
+
+	Ignore GPT errors from the end of the disk if the label at the
+	beginning of the disk was not found.  PR#43105
+	[christos, ticket #1464]
+
+dist/nvi/vi/v_search.c				1.3
+
+	Fix nvi ^A handling.  PR#44006
+	[christos, ticket #1467]
+
+sys/dev/raidframe/raidframevar.h		1.14 via patch
+sys/dev/raidframe/rf_copyback.c			1.43 via patch
+sys/dev/raidframe/rf_disks.c			1.74 via patch
+sys/dev/raidframe/rf_netbsdkintf.c		1.275 via patch
+sys/dev/raidframe/rf_reconstruct.c		1.109 via patch
+
+	Add support for >2TB raid devices.
+	[mrg, ticket #1468]
+
+dist/pppd/pppd/ccp.h				1.2
+
+	Fix MPPE in pppd.  PR#42390
+	[dholland, ticket #1469]
+
+sys/dev/pci/fwohci_pci.c			1.35
+sys/dev/pci/pcidevs				1.1019
+sys/dev/pci/pcidevs.h				regen
+sys/dev/pci/pcidevs_data.h			regen
+
+	Do not attach to Powerbook G3 onboard Firewire controllers.
+	[macallan, ticket #1470]
+
+sys/dev/pci/aceride.c				1.28
+
+	Add a workaround for 48-bit LBA DMA access bug on M5229 rev. <= 0xc4.
+	[nakayama, ticket #1471]
+
+sys/arch/xen/xen/if_xennet_xenbus.c		1.42-43,1.45 via patch
+
+	Fix xennet hotplug and implment feature-rx-copy. Improves
+	support under Linux dom0.
+	[jym, ticket #1473]
+
+lib/libc/stdlib/getenv.c			1.33 via patch
+
+	Fix a bug in getenv(3) and getenv_r(3) which would return bogus
+  	results under certain circumstances.
+	[tron, ticket #1474]
+
+sys/arch/xen/x86/cpu.c				1.52
+
+	Fix an array overflow when cpuid >= 32.
+	[bouyer, ticket #1475]
+
+usr.bin/passwd/yp_passwd.c			1.34
+
+	PR/43852: Wolfgang Stukenbrock: yp_passwd command may destroy NIS
+	database entries when used on a server that includes users via
+	netgroups.
+	[dholland, ticket #1476]
+
+sys/kern/vfs_wapbl.c				1.38 via patch
+
+	Fix an error that can lead to file system corruption and 
+	freeing free block" panics.
+	[hannken, ticket #1477]
+
+sys/dev/usb/if_kuereg.h				1.12
+
+	Fix panic due to unaligned memory access on MIPS and ARM. 
+	[tsutsui, ticket #1480]
+
+sys/arch/arc/pci/necpb.c			1.33
+
+	Fix multifunction PCI cards on arc.
+	[tsutsui, ticket #1481]
+
+usr.bin/comm/comm.c				1.18
+
+	Don't include newlines when comparing to prevent errors when lines have
+	characters that sort lower such as tabs.
+	[darcy, ticket #1172]
+
+distrib/shark/instkernel/instkernel/Makefile	1.19-21 via patch
+etc/etc.shark/Makefile.inc			1.11-12 via patch
+
+	Install a.out version of INSTALL kernel in release. PR#41672
+	[is/tsutsui, ticket #1127]
+
+x11/bin/xinit/Makefile				1.8
+
+	Disable USE_PAM on ports which have legacy non-XFree86 servers.
+	[tsutsui, ticket #1482]
+
+sys/arch/dreamcast/dev/gdrom.c			1.27
+
+	Dreamcast: Fix unexpected "Bad address" errors on file read ops.
+	[tsutsui, ticket #1483]
+
+sys/arch/hpcmips/dev/plumohci.c			1.13
+
+	Fix ohci(4) panics for TX39XX (hpcmips).  PR#43473
+	[tsutsui, ticket #1484]
+
+sys/arch/hpcmips/tx/txcom.c			1.42-43
+
+	hpcmips com fixes.  PR#43472, PR#43474.
+	[tsutsui, ticket #1485]
+
+sys/dev/usb/umass_quirks.c			1.82 via patch
+sys/dev/usb/usbdevs				1.564 via patch
+sys/dev/usb/usbdevs.h				regen
+sys/dev/usb/usbdevs_data.h			regen
+
+	Add support for Kingston DT Mini 10 pendrive, with quirk.
+	[sborrill, ticket #1489]
+
+sys/dev/ic/iavc.c				1.8
+
+	Make this compile.
+	[riz, ticket #1418]
+
+sys/dev/ic/mpt.c				1.14
+sys/dev/ic/mpt.h				1.7
+sys/dev/ic/mpt_debug.c				1.7
+sys/dev/ic/mpt_netbsd.c				1.15
+
+	Add byte-swapping so that this works on BE platforms.  The logic
+	is based on the current freebsd driver.  Fixes PR 42870.
+	[riz, ticket #1487]
+
+sys/dev/pci/drm/files.pcidrm				patch
+sys/external/bsd/drm/dist/bsd-core/drmP.h		patch
+sys/external/bsd/drm/dist/bsd-core/drm_pciids.h		patch
+sys/external/bsd/drm/dist/bsd-core/drm_sysctl.c		patch
+sys/external/bsd/drm/dist/shared-core/r600_blit.c	new file
+sys/external/bsd/drm/dist/shared-core/r600_cp.c		patch
+sys/external/bsd/drm/dist/shared-core/radeon_cp.c	patch
+sys/external/bsd/drm/dist/shared-core/radeon_cs.c	new file
+sys/external/bsd/drm/dist/shared-core/radeon_drm.h	patch
+sys/external/bsd/drm/dist/shared-core/radeon_drv.h	patch
+sys/external/bsd/drm/dist/shared-core/radeon_state.c	patch
+
+	Implement DRM_RADEON_CS ioctl, necessary for r600_dri to function.
+	[mrg, ticket #1488]
+
+sbin/dump_lfs/Makefile				1.10
+sbin/ifconfig/Makefile				1.40
+sbin/sysctl/Makefile				1.18
+usr.bin/mkdep/Makefile				1.16
+usr.sbin/racoonctl/Makefile			1.3 via patch
+usr.sbin/services_mkdb/Makefile			1.5
+
+	Disable stray debug options.
+	[uwe, ticket #1490]
+
+usr.bin/xlint/lint1/Makefile			1.41
+
+	Comment out CFLAGS+=-g.
+	[uwe, ticket #1491]
+
+sys/net/if_tap.c				1.66
+
+	Make tap_dev_ioctl() properly return an error.  PR#44131.
+	[christos, ticket #1492]
+
+lib/libc/rpc/xdr_rec.c				1.31 via patch
+
+	Don't overwrite not-allocated memory.  PR#44132.
+	[dholland, ticket #1493]
+
+etc/mtree/special				1.132
+
+	Add "optional" keyword to rc.d/xdm and rc.d/xfs. PR#43307.
+	[uwe, ticket #1494]
+
+crypto/external/bsd/openssl/dist/ssl/s3_clnt.c	1.3 via patch
+crypto/external/bsd/openssl/dist/ssl/s3_srvr.c	1.6 via patch
+
+	openssl security patch of the day:
+	Fix a flaw in the OpenSSL SSL/TLS server code where an old bug
+	workaround allows malicous clients to modify the stored session cache
+	ciphersuite. In some cases the ciphersuite can be downgraded to a
+	weaker one on subsequent connections. See
+	http://www.openssl.org/news/secadv_20101202.txt
+	(CVE-2010-4180)
+	[drochner, ticket #1509]
+
+crypto/external/bsd/openssl/dist/ssl/t1_lib.c	1.3 via patch
+
+	fix bug introduced by last security patch, from upstream CVS:
+	Don't assume a decode error if session tlsext_ecpointformatlist is
+	not NULL: it can be legitimately set elsewhere.
+	[drochner, ticket #1510]
+
+sys/arch/acorn32/stand/lib/riscospart.c		1.3
+
+	Use partition_cyl_high and partition_cyl_low to find the "RiscBSD"
+	partition.
+	[skrll, ticket #1495]
+
+sys/kern/init_main.c				1.418
+
+	Fix LOCKDEBUG panic 'uninitialized lock'.
+	[skrll, ticket #1496]
+
+sys/arch/dreamcast/dev/g2/aica.c		1.19
+
+	Workaround to make dreamcast audio work.
+	[tsutsui, ticket #1497]
+
+sys/dev/audio.c					1.252
+
+	Fix buffer overrun.
+	[tsutsui, ticket #1498]
+

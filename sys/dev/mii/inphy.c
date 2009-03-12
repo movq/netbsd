@@ -1,4 +1,4 @@
-/*	$NetBSD: inphy.c,v 1.51 2009/02/16 08:00:42 cegger Exp $	*/
+/*	$NetBSD: inphy.c,v 1.48.10.1 2009/05/01 01:29:20 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: inphy.c,v 1.51 2009/02/16 08:00:42 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: inphy.c,v 1.48.10.1 2009/05/01 01:29:20 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -157,6 +157,9 @@ inphyattach(device_t parent, device_t self, void *aux)
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -249,7 +252,6 @@ inphy_status(struct mii_softc *sc)
 			mii->mii_media_active |= IFM_NONE;
 			return;
 		}
-
 		scr = PHY_READ(sc, MII_INPHY_SCR);
 		if (scr & SCR_S100)
 			mii->mii_media_active |= IFM_100_TX;
@@ -259,9 +261,6 @@ inphy_status(struct mii_softc *sc)
 			mii->mii_media_active |= IFM_10_T;
 		if (scr & SCR_FDX)
 			mii->mii_media_active |= IFM_FDX;
-
-		if (mii->mii_media_active & IFM_FDX)
-			mii->mii_media_active |= mii_phy_flowstatus(sc);
 	} else
 		mii->mii_media_active = ife->ifm_media;
 }

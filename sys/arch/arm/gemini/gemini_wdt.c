@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_wdt.c,v 1.2 2008/11/01 07:43:19 cliff Exp $	*/
+/*	$NetBSD: gemini_wdt.c,v 1.1 2008/10/24 04:23:18 matt Exp $	*/
 
 /*
  * OMAP watchdog timers, common code
@@ -197,4 +197,15 @@ geminiwdt_tickle(struct sysmon_wdog *smw)
 
 	splx(s);
 	return 0;
+}
+
+void
+geminiwdt_reboot(void)
+{
+	int s = splhigh();
+
+	geminiwdt_set_timeout(30);
+	geminiwdt_start();
+	delay(100);
+	splx(s);
 }

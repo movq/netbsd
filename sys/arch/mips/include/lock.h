@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.17 2009/01/12 03:05:10 pooka Exp $	*/
+/*	$NetBSD: lock.h,v 1.16 2008/04/28 20:23:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2007 The NetBSD Foundation, Inc.
@@ -39,8 +39,6 @@
 #ifndef _MIPS_LOCK_H_
 #define	_MIPS_LOCK_H_
 
-#include <sys/param.h>
-
 static __inline int
 __SIMPLELOCK_LOCKED_P(__cpu_simple_lock_t *__ptr)
 {
@@ -65,7 +63,7 @@ __cpu_simple_lock_set(__cpu_simple_lock_t *__ptr)
 	*__ptr = __SIMPLELOCK_LOCKED;
 }
 
-#ifndef _HARDKERNEL
+#ifndef _KERNEL
 
 static __inline int
 __cpu_simple_lock_try(__cpu_simple_lock_t *lp)
@@ -142,7 +140,7 @@ mb_memory(void)
 }
 #endif	/* MIPS1 */
 
-#else	/* !_HARDKERNEL */
+#else	/* !_KERNEL */
 
 unsigned _atomic_cas_uint(volatile unsigned *, unsigned, unsigned);
 void	mb_read(void);
@@ -158,7 +156,7 @@ __cpu_simple_lock_try(__cpu_simple_lock_t *lp)
 	    __SIMPLELOCK_UNLOCKED;
 }
 
-#endif	/* _HARDKERNEL */
+#endif	/* _KERNEL */
 
 static __inline void
 __cpu_simple_lock_init(__cpu_simple_lock_t *lp)

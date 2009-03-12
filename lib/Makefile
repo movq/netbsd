@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.133 2009/01/26 06:27:33 mrg Exp $
+#	$NetBSD: Makefile,v 1.128.2.1 2009/01/16 21:41:10 bouyer Exp $
 #	from: @(#)Makefile	5.25.1.1 (Berkeley) 5/7/91
 
 .include <bsd.own.mk>
@@ -11,12 +11,12 @@ SUBDIR=	csu libc .WAIT libarch \
 	libpthread_dbg libpuffs libresolv librmt librpcsvc librt libsdp \
 	libterm libusbhid libutil libwrap liby libz
 
+.if (${MKATF} != "no")
+SUBDIR+= libatf-c libatf-c++
+.endif
+
 # libform and libmenu need libcurses
 SUBDIR+=	.WAIT libform libmenu 
-
-.if (${MKATF} != "no")
-SUBDIR+= ../external/bsd/atf/lib/libatf-c ../external/bsd/atf/lib/libatf-c++
-.endif
 
 .if (${MKSKEY} != "no")
 SUBDIR+= libskey
@@ -85,6 +85,7 @@ SUBDIR+=	libkrb5		# depends on libcrypto and more
 .endif
 
 SUBDIR+=	librefuse	# depends on libpuffs
+
 SUBDIR+=	librumpuser	# depends on libpthread
 
 # XXX These bind9/ISC libraries should depend on each other but the
@@ -118,14 +119,10 @@ SUBDIR+=	libpam		# depends on libkrb5, libkafs and more
 .endif
 
 SUBDIR+=	librumpnet	# depends on librump
-SUBDIR+=	librumpvfs	# depends on librump
+SUBDIR+=	libukfs		# depends on librump
 
 #==================== 4th library dependency barrier ====================
 SUBDIR+=	.WAIT
-SUBDIR+=	libukfs		# depends on librump and librumpvfs
-
-#==================== 5th library dependency barrier ====================
-SUBDIR+=	.WAIT
-SUBDIR+=	libp2k		# depends on libpuffs, librumpvfs and libukfs
+SUBDIR+=	libp2k		# depends on libpuffs and libukfs
 
 .include <bsd.subdir.mk>

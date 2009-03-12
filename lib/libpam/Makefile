@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.2 2004/12/12 08:18:42 christos Exp $
+# $NetBSD: Makefile,v 1.2.32.2 2010/11/25 00:27:20 riz Exp $
 # Copyright 1998 Juniper Networks, Inc.
 # All rights reserved.
 #

@@ -32,7 +32,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-static char const n8_id[] = "$Id: helper.c,v 1.2 2008/11/03 04:31:01 tls Exp $";
+static char const n8_id[] = "$Id: helper.c,v 1.1.2.1 2008/11/09 04:57:06 snj Exp $";
 /*****************************************************************************/
 /** @file helper.c                                                           *
  *  @brief BSDi System Call Abstraction.                                     *

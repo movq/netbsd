@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec.c,v 1.110 2008/12/17 20:51:33 cegger Exp $	*/
+/*	$NetBSD: linux_exec.c,v 1.108 2008/10/28 11:42:30 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 1994, 1995, 1998, 2000, 2007, 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec.c,v 1.110 2008/12/17 20:51:33 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec.c,v 1.108 2008/10/28 11:42:30 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,7 +89,7 @@ void linux_userret(void);
 
 struct uvm_object *emul_linux_object;
 
-struct emul emul_linux = {
+const struct emul emul_linux = {
 	"linux",
 	"/emul/linux",
 #ifndef __HAVE_MINIMAL_EMUL
@@ -139,13 +139,13 @@ linux_e_proc_init(p, parent, forkflags)
 
 	if (!e) {
 		/* allocate new Linux emuldata */
-		e = malloc(sizeof(struct linux_emuldata),
+		MALLOC(e, void *, sizeof(struct linux_emuldata),
 			M_EMULDATA, M_WAITOK);
 	} else  {
 		mutex_enter(proc_lock);
 		e->s->refs--;
 		if (e->s->refs == 0)
-			free(e->s, M_EMULDATA);
+			FREE(e->s, M_EMULDATA);
 		mutex_exit(proc_lock);
 	}
 
@@ -163,7 +163,7 @@ linux_e_proc_init(p, parent, forkflags)
 		if (ep == NULL) {
 			killproc(p, "FORK_SHAREVM while emuldata is NULL\n");
 			mutex_exit(proc_lock);
-			free(e, M_EMULDATA);
+			FREE(e, M_EMULDATA);
 			return;
 		}
 #endif
@@ -172,7 +172,7 @@ linux_e_proc_init(p, parent, forkflags)
 	} else {
 		struct vmspace *vm;
 
-		s = malloc(sizeof(struct linux_emuldata_shared),
+		MALLOC(s, void *, sizeof(struct linux_emuldata_shared),
 			M_EMULDATA, M_WAITOK);
 		s->refs = 1;
 
@@ -256,10 +256,10 @@ linux_e_proc_exit(struct proc *p)
 	/* free Linux emuldata and set the pointer to null */
 	e->s->refs--;
 	if (e->s->refs == 0)
-		free(e->s, M_EMULDATA);
+		FREE(e->s, M_EMULDATA);
 	p->p_emuldata = NULL;
 	mutex_exit(proc_lock);
-	free(e, M_EMULDATA);
+	FREE(e, M_EMULDATA);
 }
 
 /*

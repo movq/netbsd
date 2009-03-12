@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs.h,v 1.110 2008/12/12 19:45:16 pooka Exp $	*/
+/*	$NetBSD: puffs.h,v 1.108.4.4 2009/10/27 20:37:38 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -218,10 +218,13 @@ struct puffs_ops {
 	    uint8_t *, off_t, size_t *, const struct puffs_cred *, int);
 	int (*puffs_node_write)(struct puffs_usermount *, puffs_cookie_t,
 	    uint8_t *, off_t, size_t *, const struct puffs_cred *, int);
+	int (*puffs_node_abortop)(struct puffs_usermount *, puffs_cookie_t,
+	    const struct puffs_cn *);
 
-	/* XXX: this shouldn't be here */
-	void (*puffs_cache_write)(struct puffs_usermount *,
-	    puffs_cookie_t, size_t, struct puffs_cacherun *);
+#if 0
+	/* enable next time this structure is changed */
+	void *puffs_ops_spare[32];
+#endif
 };
 
 typedef	int (*pu_pathbuild_fn)(struct puffs_usermount *,
@@ -354,8 +357,8 @@ enum {
 	int fsname##_node_write(struct puffs_usermount *,		\
 	    puffs_cookie_t, uint8_t *, off_t, size_t *,			\
 	    const struct puffs_cred *, int);				\
-	int fsname##_cache_write(struct puffs_usermount *,		\
-	    puffs_cookie_t, size_t, struct puffs_cacheinfo *);
+	int fsname##_node_abortop(struct puffs_usermount *,		\
+	    puffs_cookie_t, const struct puffs_cn *);
 
 #define PUFFSOP_INIT(ops)						\
     ops = malloc(sizeof(struct puffs_ops));				\
@@ -415,6 +418,7 @@ typedef void (*puffs_framev_cb)(struct puffs_usermount *,
 
 __BEGIN_DECLS
 
+#define PUFFS_DEFER ((void *)-1)
 struct puffs_usermount *_puffs_init(int, struct puffs_ops *, const char *,
 				    const char *, void *, uint32_t);
 int		puffs_mount(struct puffs_usermount *, const char *, int, void*);
@@ -443,6 +447,8 @@ void			puffs_setspecific(struct puffs_usermount *, void *);
 void			puffs_setmaxreqlen(struct puffs_usermount *, size_t);
 size_t			puffs_getmaxreqlen(struct puffs_usermount *);
 void			puffs_setfhsize(struct puffs_usermount *, size_t, int);
+void			puffs_setmntinfo(struct puffs_usermount *,
+					 const char *, const char *);
 
 void			puffs_setncookiehash(struct puffs_usermount *, int);
 

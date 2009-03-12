@@ -1,4 +1,4 @@
-/*	$NetBSD: atexit.c,v 1.2 2009/01/30 23:19:12 ad Exp $	*/
+/*	$NetBSD: atexit.c,v 1.1.38.1 2009/02/02 22:05:27 snj Exp $	*/
 
 /*
  * Program to test atexit(3) and __cxa_atexit()/__cxa_finalize().

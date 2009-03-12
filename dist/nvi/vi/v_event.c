@@ -1,4 +1,4 @@
-/*	$NetBSD: v_event.c,v 1.3 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: v_event.c,v 1.1.1.2.6.1 2009/01/20 02:41:13 snj Exp $ */
 
 /*-
  * Copyright (c) 1996
@@ -61,7 +61,7 @@ v_c_settop(SCR *sp, VICMD *vp)
                 SMAP_FLUSH(smp);
 		if (vs_line(sp, smp, &ty, &tx))
 			return (1);
-		if (ty != (size_t)-1) {
+		if (ty != -1) {
 			y = ty;
 			x = tx;
 		}

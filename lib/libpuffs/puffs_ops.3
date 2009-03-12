@@ -1,4 +1,4 @@
-.\"	$NetBSD: puffs_ops.3,v 1.23 2009/02/20 14:26:56 pooka Exp $
+.\"	$NetBSD: puffs_ops.3,v 1.21.4.2 2009/04/12 02:24:16 snj Exp $
 .\"
 .\" Copyright (c) 2007 Antti Kantee.  All rights reserved.
 .\"
@@ -48,7 +48,7 @@
 .Fc
 .Ft int
 .Fo puffs_fs_nodetofh
-.Fa "struct puffs_usermount *pu" "puffs_cookie_t cookie" "void *fid"
+.Fa "struct puffs_usermount *pu" "puffs_cooie_t cookie" "void *fid"
 .Fa "size_t *fidsize"
 .Fc
 .Ft void
@@ -563,7 +563,7 @@ The target directory and target name are given by
 and
 .Fa pcn_targ ,
 respectively.
-.B If
+.Em If
 the target node already exists, it is specified by
 .Fa targ
 and must be replaced atomically.

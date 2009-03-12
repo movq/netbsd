@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_timervar.h,v 1.2 2008/11/09 08:56:47 cliff Exp $	*/
+/*	$NetBSD: gemini_timervar.h,v 1.1 2008/10/24 04:23:18 matt Exp $	*/
 
 
 /*
@@ -38,7 +38,7 @@
 #define _GEMINI_TIMER_H
 
 #ifndef STATHZ
-# define STATHZ	HZ
+# define STATHZ	64
 #endif
 
 typedef struct timer_factors {

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.16 2008/12/27 16:17:24 tsutsui Exp $	*/
+/*	$NetBSD: intr.c,v 1.15.6.1 2009/01/06 23:52:42 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.16 2008/12/27 16:17:24 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.15.6.1 2009/01/06 23:52:42 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

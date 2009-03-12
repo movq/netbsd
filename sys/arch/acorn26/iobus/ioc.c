@@ -1,4 +1,4 @@
-/* $NetBSD: ioc.c,v 1.18 2009/01/18 20:31:08 bjh21 Exp $ */
+/* $NetBSD: ioc.c,v 1.16 2007/12/03 15:33:02 ad Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000 Ben Harris
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ioc.c,v 1.18 2009/01/18 20:31:08 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioc.c,v 1.16 2007/12/03 15:33:02 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -52,26 +52,26 @@ __KERNEL_RCSID(0, "$NetBSD: ioc.c,v 1.18 2009/01/18 20:31:08 bjh21 Exp $");
 
 #include "locators.h"
 
-static int ioc_match(device_t parent, cfdata_t cf, void *aux);
-static void ioc_attach(device_t parent, device_t self, void *aux);
-static int ioc_search(device_t parent, cfdata_t cf,
+static int ioc_match(struct device *parent, struct cfdata *cf, void *aux);
+static void ioc_attach(struct device *parent, struct device *self, void *aux);
+static int ioc_search(struct device *parent, struct cfdata *cf,
 		      const int *ldesc, void *aux);
 static int ioc_print(void *aux, const char *pnp);
 static int ioc_irq_clock(void *cookie);
 static int ioc_irq_statclock(void *cookie);
 static u_int ioc_get_timecount(struct timecounter *);
 
-CFATTACH_DECL_NEW(ioc, sizeof(struct ioc_softc),
+CFATTACH_DECL(ioc, sizeof(struct ioc_softc),
     ioc_match, ioc_attach, NULL, NULL);
 
-device_t the_ioc;
+struct device *the_ioc;
 
 /*
  * Autoconfiguration glue
  */
 
 static int
-ioc_match(device_t parent, cfdata_t cf, void *aux)
+ioc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	/*
@@ -87,18 +87,18 @@ ioc_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-ioc_attach(device_t parent, device_t self, void *aux)
+ioc_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ioc_softc *sc = device_private(self);
+	struct ioc_softc *sc = (void *)self;
 	struct iobus_attach_args *ioa = aux;
 	bus_space_tag_t bst;
 	bus_space_handle_t bsh;
 
-	sc->sc_dev = the_ioc = self;
+	the_ioc = self;
 	sc->sc_bst = ioa->ioa_tag;
 	if (bus_space_map(ioa->ioa_tag, ioa->ioa_base, 0x00200000,
 			  0, &(sc->sc_bsh)) != 0)
-		panic("%s: couldn't map", device_xname(self));
+		panic("%s: couldn't map", sc->sc_dev.dv_xname);
 	bst = sc->sc_bst;
 	bsh = sc->sc_bsh;
 	/* Now we need to set up bits of the IOC */
@@ -117,7 +117,7 @@ ioc_attach(device_t parent, device_t self, void *aux)
 	 * Timer 2 is set up by whatever's connected to BAUD.
 	 * Timer 3 is set up by the arckbd driver.
 	 */
-	aprint_normal("\n");
+	printf("\n");
 
 	config_search_ia(ioc_search, self, "ioc", NULL);
 }
@@ -125,9 +125,10 @@ ioc_attach(device_t parent, device_t self, void *aux)
 extern struct bus_space ioc_bs_tag;
 
 static int
-ioc_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+ioc_search(struct device *parent, struct cfdata *cf,
+	   const int *ldesc, void *aux)
 {
-	struct ioc_softc *sc = device_private(parent);
+	struct ioc_softc *sc = (void *)parent;
 	struct ioc_attach_args ioc;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -179,7 +180,7 @@ ioc_print(void *aux, const char *pnp)
 int
 ioc_irq_status(int irq)
 {
-	struct ioc_softc *sc = device_private(the_ioc);
+	struct ioc_softc *sc = (void *)the_ioc;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 
@@ -194,7 +195,7 @@ ioc_irq_status(int irq)
 u_int32_t
 ioc_irq_status_full()
 {
-	struct ioc_softc *sc = device_private(the_ioc);
+	struct ioc_softc *sc = (void *)the_ioc;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 
@@ -210,7 +211,7 @@ ioc_irq_status_full()
 void
 ioc_irq_setmask(u_int32_t mask)
 {
-	struct ioc_softc *sc = device_private(the_ioc);
+	struct ioc_softc *sc = (void *)the_ioc;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 
@@ -228,7 +229,7 @@ ioc_irq_waitfor(int irq)
 void
 ioc_irq_clear(int mask)
 {
-	struct ioc_softc *sc = device_private(the_ioc);
+	struct ioc_softc *sc = (void *)the_ioc;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 
@@ -245,9 +246,9 @@ ioc_irq_clear(int mask)
  * else.
  */
 
-int ioc_get_irq_level(device_t self, int irq)
+int ioc_get_irq_level(struct device *self, int irq)
 {
-	struct ioc_softc *sc = device_private(self);
+	struct ioc_softc *sc = (void *)self;
 
 	switch (irq) {
 	case IOC_IRQ_IF:
@@ -270,7 +271,7 @@ int ioc_get_irq_level(device_t self, int irq)
 void
 ioc_fiq_setmask(u_int32_t mask)
 {
-	struct ioc_softc *sc = device_private(the_ioc);
+	struct ioc_softc *sc = (void *)the_ioc;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 
@@ -283,9 +284,9 @@ ioc_fiq_setmask(u_int32_t mask)
  * Counters
  */
 
-void ioc_counter_start(device_t self, int counter, int value)
+void ioc_counter_start(struct device *self, int counter, int value)
 {
-	struct ioc_softc *sc = device_private(self);
+	struct ioc_softc *sc = (void *)self;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 	int tlow, thigh, tgo;
@@ -296,7 +297,7 @@ void ioc_counter_start(device_t self, int counter, int value)
 	case 2:	tlow = IOC_T2LOW; thigh = IOC_T2HIGH; tgo = IOC_T2GO; break;
 	case 3:	tlow = IOC_T3LOW; thigh = IOC_T3HIGH; tgo = IOC_T3GO; break;
 	default: panic("%s: ioc_counter_start: bad counter (%d)",
-	    device_xname(self), counter);
+		       self->dv_xname, counter);
 	}
 	bus_space_write_1(bst, bsh, tlow, value & 0xff);
 	bus_space_write_1(bst, bsh, thigh, value >> 8 & 0xff);
@@ -323,7 +324,7 @@ cpu_initclocks(void)
 	int minint, statint;
 
 	KASSERT(the_ioc != NULL);
-	sc = device_private(the_ioc);
+	sc = (struct ioc_softc *)the_ioc;
 	stathz = hz; /* XXX what _should_ it be? */
 
 	if (hz == 0 || IOC_TIMER_RATE % hz != 0 ||
@@ -331,18 +332,19 @@ cpu_initclocks(void)
 		panic("ioc_initclocks: Impossible clock rate: %d Hz", hz);
 	ioc_counter_start(the_ioc, 0, t0_count);
 	evcnt_attach_dynamic(&sc->sc_clkev, EVCNT_TYPE_INTR, NULL,
-	    device_xname(sc->sc_dev), "clock");
+	    sc->sc_dev.dv_xname, "clock");
 	sc->sc_clkirq = irq_establish(IOC_IRQ_TM0, IPL_CLOCK, ioc_irq_clock,
 	    NULL, &sc->sc_clkev);
 	sc->sc_tc.tc_get_timecount = ioc_get_timecount;
 	sc->sc_tc.tc_counter_mask = ~(u_int)0;
 	sc->sc_tc.tc_frequency = IOC_TIMER_RATE;
-	sc->sc_tc.tc_name = device_xname(sc->sc_dev);
+	sc->sc_tc.tc_name = sc->sc_dev.dv_xname;
 	sc->sc_tc.tc_quality = 100;
 	sc->sc_tc.tc_priv = sc;
 	tc_init(&sc->sc_tc);
-	aprint_verbose_dev(sc->sc_dev, "%d Hz clock interrupting at %s\n",
-	    hz, irq_string(sc->sc_clkirq));
+	if (bootverbose)
+		printf("%s: %d Hz clock interrupting at %s\n",
+		    the_ioc->dv_xname, hz, irq_string(sc->sc_clkirq));
 	
 	if (stathz) {
 		profhz = stathz; /* Makes life simpler */
@@ -359,19 +361,20 @@ cpu_initclocks(void)
 		ioc_counter_start(the_ioc, 1, statint);
 
 		evcnt_attach_dynamic(&sc->sc_sclkev, EVCNT_TYPE_INTR, NULL,
-		    device_xname(sc->sc_dev), "statclock");
+		    sc->sc_dev.dv_xname, "statclock");
 		sc->sc_sclkirq = irq_establish(IOC_IRQ_TM1, IPL_HIGH,
 		    ioc_irq_statclock, NULL, &sc->sc_sclkev);
-		aprint_verbose_dev(sc->sc_dev,
-		    "%d Hz statclock interrupting at %s\n",
-		    stathz, irq_string(sc->sc_sclkirq));
+		if (bootverbose)
+			printf("%s: %d Hz statclock interrupting at %s\n",
+			    the_ioc->dv_xname, stathz,
+			    irq_string(sc->sc_sclkirq));
 	}
 }
 
 static int
 ioc_irq_clock(void *cookie)
 {
-	struct ioc_softc *sc = device_private(the_ioc);
+	struct ioc_softc *sc = (void *)the_ioc;
 
 	sc->sc_tcbase += t0_count + 1;
 	hardclock(cookie);
@@ -381,7 +384,7 @@ ioc_irq_clock(void *cookie)
 static int
 ioc_irq_statclock(void *cookie)
 {
-	struct ioc_softc *sc = device_private(the_ioc);
+	struct ioc_softc *sc = (void *)the_ioc;
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
 	int r, newint;

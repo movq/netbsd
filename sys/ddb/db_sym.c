@@ -1,4 +1,4 @@
-/*	$NetBSD: db_sym.c,v 1.59 2009/03/07 22:02:17 ad Exp $	*/
+/*	$NetBSD: db_sym.c,v 1.57 2008/10/24 13:55:42 christos Exp $	*/
 
 /*
  * Mach Operating System
@@ -27,18 +27,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_sym.c,v 1.59 2009/03/07 22:02:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_sym.c,v 1.57 2008/10/24 13:55:42 christos Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_ddbparam.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/ksyms.h>
 
-#include <ddb/ddb.h>
+#include <machine/db_machdep.h>
+
+#include <ddb/db_lex.h>
+#include <ddb/db_sym.h>
+#include <ddb/db_output.h>
+#include <ddb/db_extern.h>
+#include <ddb/db_command.h>
 
 static void		db_symsplit(char *, char **, char **);
 
@@ -50,7 +54,6 @@ static int using_aout_symtab;
 const db_symformat_t *db_symformat;
 static db_forall_func_t db_sift;
 extern db_symformat_t db_symformat_aout;
-extern db_symformat_t db_symformat_elf;
 #endif
 
 
@@ -62,22 +65,14 @@ extern db_symformat_t db_symformat_elf;
 void
 ddb_init(int symsize, void *vss, void *vse)
 {
-#ifdef _KERNEL
-# ifdef DB_AOUT_SYMBOLS
+#ifdef DB_AOUT_SYMBOLS
 	db_symformat = &db_symformat_aout;
 	if ((*db_symformat->sym_init)(symsize, vss, vse, TBLNAME) == true) {
 		using_aout_symtab = true;
 		return;
 	}
-# endif
-	ksyms_addsyms_elf(symsize, vss, vse);	/* Will complain if necessary */
-#else	/* _KERNEL */
-	db_symformat = &db_symformat_elf;
-	if ((*db_symformat->sym_init)(symsize, vss, vse, TBLNAME) == true) {
-		using_aout_symtab = true;
-		return;
-	}
-#endif	/* _KERNEL */
+#endif
+	ksyms_init(symsize, vss, vse);	/* Will complain if necessary */
 }
 
 bool
@@ -96,10 +91,8 @@ db_value_of_name(const char *name, db_expr_t *valuep)
 {
 	char symbol[128];
 	char *mod, *sym;
-#ifdef _KERNEL
 	unsigned long uval;
 	long val;
-#endif
 
 #ifdef DB_AOUT_SYMBOLS
 	db_sym_t	ssym;
@@ -118,7 +111,6 @@ db_value_of_name(const char *name, db_expr_t *valuep)
 #endif
 	(void)strlcpy(symbol, name, sizeof(symbol));
 	db_symsplit(symbol, &mod, &sym);
-#ifdef _KERNEL
 	if (ksyms_getval_unlocked(mod, sym, &uval, KSYMS_EXTERN) == 0) {
 		val = (long) uval;
 		*valuep = (db_expr_t)val;
@@ -129,7 +121,6 @@ db_value_of_name(const char *name, db_expr_t *valuep)
 		*valuep = (db_expr_t)val;
 		return true;
 	}
-#endif
 	return false;
 }
 
@@ -189,9 +180,7 @@ db_sift(db_symtab_t *stab, db_sym_t sym, char *name,
 void
 db_sifting(char *symstr, int mode)
 {
-#ifdef _KERNEL
 	char *mod, *sym;
-#endif
 
 #ifdef DB_AOUT_SYMBOLS
 	struct db_sift_args dsa;
@@ -205,11 +194,9 @@ db_sifting(char *symstr, int mode)
 	}
 #endif
 
-#ifdef _KERNEL
 	db_symsplit(symstr, &mod, &sym);
 	if (ksyms_sift(mod, sym, mode) == ENODEV)
 		db_error("invalid symbol table name");
-#endif
 }
 
 /*
@@ -220,12 +207,10 @@ db_sym_t
 db_search_symbol(db_addr_t val, db_strategy_t strategy, db_expr_t *offp)
 {
 	unsigned int diff;
-	db_sym_t ret = DB_SYM_NULL;
-#ifdef _KERNEL
 	unsigned long naddr;
+	db_sym_t ret = DB_SYM_NULL;
 	const char *mod;
 	const char *sym;
-#endif
 
 #ifdef DB_AOUT_SYMBOLS
 	db_expr_t newdiff;
@@ -244,13 +229,11 @@ db_search_symbol(db_addr_t val, db_strategy_t strategy, db_expr_t *offp)
 	}
 #endif
 
-#ifdef _KERNEL
 	if (ksyms_getname(&mod, &sym, (vaddr_t)val, strategy) == 0) {
 		(void)ksyms_getval_unlocked(mod, sym, &naddr, KSYMS_ANY);
 		diff = val - (db_addr_t)naddr;
 		ret = (db_sym_t)naddr;
 	} else
-#endif
 		diff = 0;
 	*offp = diff;
 	return ret;
@@ -262,9 +245,7 @@ db_search_symbol(db_addr_t val, db_strategy_t strategy, db_expr_t *offp)
 void
 db_symbol_values(db_sym_t sym, const char **namep, db_expr_t *valuep)
 {
-#ifdef _KERNEL
 	const char *mod;
-#endif
 
 	if (sym == DB_SYM_NULL) {
 		*namep = 0;
@@ -281,13 +262,11 @@ db_symbol_values(db_sym_t sym, const char **namep, db_expr_t *valuep)
 	}
 #endif
 
-#ifdef _KERNEL
 	if (ksyms_getname(&mod, namep, (vaddr_t)sym,
 	    KSYMS_ANY|KSYMS_EXACT) == 0) {
 		if (valuep)
 			*valuep = sym;
 	} else
-#endif
 		*namep = NULL;
 }
 
@@ -318,10 +297,8 @@ void
 db_symstr(char *buf, size_t buflen, db_expr_t off, db_strategy_t strategy)
 {
 	const char  *name;
-#ifdef _KERNEL
 	const char *mod;
 	unsigned long val;
-#endif
 
 #ifdef DB_AOUT_SYMBOLS
 	if (using_aout_symtab) {
@@ -359,7 +336,6 @@ db_symstr(char *buf, size_t buflen, db_expr_t off, db_strategy_t strategy)
 		return;
 	}
 #endif
-#ifdef _KERNEL
 	if (ksyms_getname(&mod, &name, (vaddr_t)off,
 	    strategy|KSYMS_CLOSEST) == 0) {
 		(void)ksyms_getval_unlocked(mod, name, &val, KSYMS_ANY);
@@ -382,7 +358,6 @@ db_symstr(char *buf, size_t buflen, db_expr_t off, db_strategy_t strategy)
 		}
 	}
 	strlcpy(buf, db_num_to_str(off), buflen);
-#endif
 }
 
 void
@@ -390,11 +365,9 @@ db_printsym(db_expr_t off, db_strategy_t strategy,
     void (*pr)(const char *, ...))
 {
 	const char  *name;
-#ifdef _KERNEL
 	const char *mod;
 	unsigned long uval;
 	long val;
-#endif
 #ifdef notyet
 	char *filename;
 	int  linenum;
@@ -434,7 +407,6 @@ db_printsym(db_expr_t off, db_strategy_t strategy,
 		return;
 	}
 #endif
-#ifdef _KERNEL
 	if (ksyms_getname(&mod, &name, (vaddr_t)off,
 	    strategy|KSYMS_CLOSEST) == 0) {
 		(void)ksyms_getval_unlocked(mod, name, &uval, KSYMS_ANY);
@@ -456,7 +428,6 @@ db_printsym(db_expr_t off, db_strategy_t strategy,
 			return;
 		}
 	}
-#endif
 	(*pr)(db_num_to_str(off));
 	return;
 }

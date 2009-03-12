@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.13 2009/01/18 00:24:29 lukem Exp $	*/
+/*	$NetBSD: parse.c,v 1.12.2.1 2009/08/14 20:42:53 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 David Young.  All rights reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: parse.c,v 1.13 2009/01/18 00:24:29 lukem Exp $");
+__RCSID("$NetBSD: parse.c,v 1.12.2.1 2009/08/14 20:42:53 snj Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -236,7 +236,7 @@ parse_linkaddr(const char *addr, struct sockaddr_storage *ss)
 	uint8_t octet = 0, val;
 	struct sockaddr_dl *sdl;
 	const char *p;
-	size_t i;
+	int i;
 
 	memset(ss, 0, sizeof(*ss));
 	ss->ss_family = AF_LINK;
@@ -685,8 +685,7 @@ pkw_match(const struct parser *p, const struct match *im,
 		o = u->u_obj;
 		break;
 	case KW_T_STR:
-		o = (prop_object_t)prop_data_create_data_nocopy(u->u_str,
-		    strlen(u->u_str));
+		o = (prop_object_t)prop_string_create_cstring_nocopy(u->u_str);
 		if (o == NULL)
 			goto err;
 		break;
@@ -763,7 +762,7 @@ int
 pbranch_setbranches(struct pbranch *pb, const struct branch *brs, size_t nbr)
 {
 	struct branch *b;
-	size_t i;
+	int i;
 
 	dbg_warnx("%s: nbr %zu", __func__, nbr);
 
@@ -855,7 +854,7 @@ pkw_setwords(struct pkw *pk, parser_exec_t defexec, const char *defkey,
     const struct kwinst *kws, size_t nkw, struct parser *defnext)
 {
 	struct kwinst *k;
-	size_t i;
+	int i;
 
 	for (i = 0; i < nkw; i++) {
 		if (kws[i].k_word == NULL)
@@ -937,7 +936,7 @@ parse(int argc, char **argv, const struct parser *p0, struct match *matches,
 	const struct parser *p = p0;
 
 	for (i = 0; i < argc && p != NULL; i++) {
-		if ((size_t)(m - matches) >= *nmatch) {
+		if (m - matches >= *nmatch) {
 			errno = EFBIG;
 			rc = -1;
 			break;
@@ -948,7 +947,7 @@ parse(int argc, char **argv, const struct parser *p0, struct match *matches,
 		p = m->m_nextparser;
 		lastm = m++;
 	}
-	for (; (size_t)(m - matches) < *nmatch && p != NULL; ) {
+	for (; m - matches < *nmatch && p != NULL; ) {
 		rc = (*p->p_methods->pm_match)(p, lastm, m, i, NULL);
 		if (rc != 0)
 			break;
@@ -964,15 +963,14 @@ out:
 int
 matches_exec(const struct match *matches, prop_dictionary_t oenv, size_t nmatch)
 {
-	size_t i;
-	int rc = 0;
+	int i, rc = 0;
 	const struct match *m;
 	parser_exec_t pexec;
 	prop_dictionary_t d;
 
 	for (i = 0; i < nmatch; i++) {
 		m = &matches[i];
-		dbg_warnx("%s.%d: i %zu", __func__, __LINE__, i);
+		dbg_warnx("%s.%d: i %d", __func__, __LINE__, i);
 		pexec = (m->m_parser->p_exec != NULL)
 		    ? m->m_parser->p_exec : m->m_exec;
 		if (pexec == NULL)

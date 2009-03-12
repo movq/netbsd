@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.lib.mk,v 1.295 2009/01/17 12:09:58 he Exp $
+#	$NetBSD: bsd.lib.mk,v 1.289.2.3 2009/06/06 22:10:12 bouyer Exp $
 #	@(#)bsd.lib.mk	8.3 (Berkeley) 4/22/94
 
 .include <bsd.init.mk>
@@ -69,19 +69,13 @@ DPADD+=		${LIBDO.${_lib}}/lib${_lib}.so
 
 ##### Build and install rules
 MKDEP_SUFFIXES?=	.o .po .so .go .ln
-
-# Use purely kernel private headers in rump builds
-.if !defined(RUMPKERNEL)
 CPPFLAGS+=	${DESTDIR:D-nostdinc ${CPPFLAG_ISYSTEM} ${DESTDIR}/usr/include}
 CXXFLAGS+=	${DESTDIR:D-nostdinc++ ${CPPFLAG_ISYSTEMXX} ${DESTDIR}/usr/include/g++}
-.endif
 
 .if !defined(SHLIB_MAJOR) && exists(${SHLIB_VERSION_FILE})		# {
 SHLIB_MAJOR != . ${SHLIB_VERSION_FILE} ; echo $$major
 SHLIB_MINOR != . ${SHLIB_VERSION_FILE} ; echo $$minor
 SHLIB_TEENY != . ${SHLIB_VERSION_FILE} ; echo $$teeny
-
-DPADD+=	${SHLIB_VERSION_FILE}
 
 # Check for higher installed library versions.
 .if !defined(NOCHECKVER) && !defined(NOCHECKVER_${LIB}) && \
@@ -438,8 +432,6 @@ _YLSRCS=	${SRCS:M*.[ly]:C/\..$/.c/} ${YHEADER:D${SRCS:M*.y:.y=.h}}
 
 realall: ${SRCS} ${ALLOBJS:O} ${_LIBS}
 
-# If you change this, please consider reflecting the change in
-# the override in sys/rump/Makefile.rump.
 .if !target(__archivebuild)
 __archivebuild: .USE
 	${_MKTARGET_BUILD}
@@ -513,10 +505,10 @@ lib${LIB}.so.${SHLIB_FULLVERSION}: ${SOLIB} ${DPADD} ${DPLIBC} \
 	rm -f lib${LIB}.so.${SHLIB_FULLVERSION}
 .if defined(DESTDIR)
 	${LIBCC} ${LDLIBC} -Wl,-nostdlib -B${_GCC_CRTDIR}/ -B${DESTDIR}/usr/lib/ \
-	    -Wl,-x -shared ${SHLIB_SHFLAGS} -o ${.TARGET} \
+	    ${_LIBLDOPTS} \
+	    -Wl,-x -shared ${SHLIB_SHFLAGS} ${LDFLAGS} -o ${.TARGET} \
 	    -Wl,--whole-archive ${SOLIB} \
 	    -Wl,--no-whole-archive ${LDADD} \
-	    ${_LIBLDOPTS} ${LDFLAGS} \
 	    -L${_GCC_LIBGCCDIR}
 .else
 	${LIBCC} ${LDLIBC} -Wl,-x -shared ${SHLIB_SHFLAGS} ${LDFLAGS} \
@@ -722,6 +714,9 @@ ${DESTDIR}${LINTLIBDIR}/llib-l${LIB}.ln: llib-l${LIB}.ln
 .endif	# !target(libinstall)						# }
 
 ##### Pull in related .mk logic
+LINKSOWN?= ${LIBOWN}
+LINKSGRP?= ${LIBGRP}
+LINKSMODE?= ${LIBMODE}
 .include <bsd.man.mk>
 .include <bsd.nls.mk>
 .include <bsd.files.mk>

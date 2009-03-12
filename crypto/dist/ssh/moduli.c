@@ -1,5 +1,5 @@
-/*	$NetBSD: moduli.c,v 1.6 2009/02/16 20:53:54 christos Exp $	*/
-/* $OpenBSD: moduli.c,v 1.21 2008/06/26 09:19:40 djm Exp $ */
+/*	$NetBSD: moduli.c,v 1.5 2007/03/10 23:05:25 christos Exp $	*/
+/* $OpenBSD: moduli.c,v 1.18 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright 1994 Phil Karn <karn@qualcomm.com>
  * Copyright 1996-1998, 2003 William Allen Simpson <wsimpson@greendragon.com>
@@ -38,12 +38,11 @@
  * Second step: test primes' safety (processor intensive)
  */
 #include "includes.h"
-__RCSID("$NetBSD: moduli.c,v 1.6 2009/02/16 20:53:54 christos Exp $");
+__RCSID("$NetBSD: moduli.c,v 1.5 2007/03/10 23:05:25 christos Exp $");
 
 #include <sys/types.h>
 
 #include <openssl/bn.h>
-#include <openssl/dh.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -52,7 +51,6 @@ __RCSID("$NetBSD: moduli.c,v 1.6 2009/02/16 20:53:54 christos Exp $");
 #include <time.h>
 
 #include "xmalloc.h"
-#include "dh.h"
 #include "log.h"
 
 /*
@@ -61,6 +59,27 @@ __RCSID("$NetBSD: moduli.c,v 1.6 2009/02/16 20:53:54 christos Exp $");
 
 /* need line long enough for largest moduli plus headers */
 #define QLINESIZE		(100+8192)
+
+/* Type: decimal.
+ * Specifies the internal structure of the prime modulus.
+ */
+#define QTYPE_UNKNOWN		(0)
+#define QTYPE_UNSTRUCTURED	(1)
+#define QTYPE_SAFE		(2)
+#define QTYPE_SCHNORR		(3)
+#define QTYPE_SOPHIE_GERMAIN	(4)
+#define QTYPE_STRONG		(5)
+
+/* Tests: decimal (bit field).
+ * Specifies the methods used in checking for primality.
+ * Usually, more than one test is used.
+ */
+#define QTEST_UNTESTED		(0x00)
+#define QTEST_COMPOSITE		(0x01)
+#define QTEST_SIEVE		(0x02)
+#define QTEST_MILLER_RABIN	(0x04)
+#define QTEST_JACOBI		(0x08)
+#define QTEST_ELLIPTIC		(0x10)
 
 /*
  * Size: decimal.
@@ -309,26 +328,20 @@ gen_candidates(FILE *out, u_int32_t memory, u_int32_t power, BIGNUM *start)
 
 	/* validation check: count the number of primes tried */
 	largetries = 0;
-	if ((q = BN_new()) == NULL)
-		fatal("BN_new failed");
+	q = BN_new();
 
 	/*
 	 * Generate random starting point for subprime search, or use
 	 * specified parameter.
 	 */
-	if ((largebase = BN_new()) == NULL)
-		fatal("BN_new failed");
-	if (start == NULL) {
-		if (BN_rand(largebase, power, 1, 1) == 0)
-			fatal("BN_rand failed");
-	} else {
-		if (BN_copy(largebase, start) == NULL)
-			fatal("BN_copy: failed");
-	}
+	largebase = BN_new();
+	if (start == NULL)
+		BN_rand(largebase, power, 1, 1);
+	else
+		BN_copy(largebase, start);
 
 	/* ensure odd */
-	if (BN_set_bit(largebase, 0) == 0)
-		fatal("BN_set_bit: failed");
+	BN_set_bit(largebase, 0);
 
 	time(&time_start);
 
@@ -412,13 +425,10 @@ gen_candidates(FILE *out, u_int32_t memory, u_int32_t power, BIGNUM *start)
 			continue; /* Definitely composite, skip */
 
 		debug2("test q = largebase+%u", 2 * j);
-		if (BN_set_word(q, 2 * j) == 0)
-			fatal("BN_set_word failed");
-		if (BN_add(q, q, largebase) == 0)
-			fatal("BN_add failed");
-		if (qfileout(out, MODULI_TYPE_SOPHIE_GERMAIN,
-		    MODULI_TESTS_SIEVE, largetries,
-		    (power - 1) /* MSB */, (0), q) == -1) {
+		BN_set_word(q, 2 * j);
+		BN_add(q, q, largebase);
+		if (qfileout(out, QTYPE_SOPHIE_GERMAIN, QTEST_SIEVE,
+		    largetries, (power - 1) /* MSB */, (0), q) == -1) {
 			ret = -1;
 			break;
 		}
@@ -461,21 +471,20 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted)
 
 	time(&time_start);
 
-	if ((p = BN_new()) == NULL)
-		fatal("BN_new failed");
-	if ((q = BN_new()) == NULL)
-		fatal("BN_new failed");
-	if ((ctx = BN_CTX_new()) == NULL)
-		fatal("BN_CTX_new failed");
+	p = BN_new();
+	q = BN_new();
+	ctx = BN_CTX_new();
 
 	debug2("%.24s Final %u Miller-Rabin trials (%x generator)",
 	    ctime(&time_start), trials, generator_wanted);
 
 	res = 0;
 	lp = xmalloc(QLINESIZE + 1);
-	while (fgets(lp, QLINESIZE + 1, in) != NULL) {
+	while (fgets(lp, QLINESIZE, in) != NULL) {
+		int ll = strlen(lp);
+
 		count_in++;
-		if (strlen(lp) < 14 || *lp == '!' || *lp == '#') {
+		if (ll < 14 || *lp == '!' || *lp == '#') {
 			debug2("%10u: comment or short line", count_in);
 			continue;
 		}
@@ -490,7 +499,7 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted)
 		/* tests */
 		in_tests = strtoul(cp, &cp, 10);
 
-		if (in_tests & MODULI_TESTS_COMPOSITE) {
+		if (in_tests & QTEST_COMPOSITE) {
 			debug2("%10u: known composite", count_in);
 			continue;
 		}
@@ -509,31 +518,26 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted)
 
 		/* modulus (hex) */
 		switch (in_type) {
-		case MODULI_TYPE_SOPHIE_GERMAIN:
+		case QTYPE_SOPHIE_GERMAIN:
 			debug2("%10u: (%u) Sophie-Germain", count_in, in_type);
 			a = q;
-			if (BN_hex2bn(&a, cp) == 0)
-				fatal("BN_hex2bn failed");
+			BN_hex2bn(&a, cp);
 			/* p = 2*q + 1 */
-			if (BN_lshift(p, q, 1) == 0)
-				fatal("BN_lshift failed");
-			if (BN_add_word(p, 1) == 0)
-				fatal("BN_add_word failed");
+			BN_lshift(p, q, 1);
+			BN_add_word(p, 1);
 			in_size += 1;
 			generator_known = 0;
 			break;
-		case MODULI_TYPE_UNSTRUCTURED:
-		case MODULI_TYPE_SAFE:
-		case MODULI_TYPE_SCHNORR:
-		case MODULI_TYPE_STRONG:
-		case MODULI_TYPE_UNKNOWN:
+		case QTYPE_UNSTRUCTURED:
+		case QTYPE_SAFE:
+		case QTYPE_SCHNORR:
+		case QTYPE_STRONG:
+		case QTYPE_UNKNOWN:
 			debug2("%10u: (%u)", count_in, in_type);
 			a = p;
-			if (BN_hex2bn(&a, cp) == 0)
-				fatal("BN_hex2bn failed");
+			BN_hex2bn(&a, cp);
 			/* q = (p-1) / 2 */
-			if (BN_rshift(q, p, 1) == 0)
-				fatal("BN_rshift failed");
+			BN_rshift(q, p, 1);
 			break;
 		default:
 			debug2("Unknown prime type");
@@ -553,7 +557,7 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted)
 			continue;
 		}
 
-		if (in_tests & MODULI_TESTS_MILLER_RABIN)
+		if (in_tests & QTEST_MILLER_RABIN)
 			in_tries += trials;
 		else
 			in_tries = trials;
@@ -627,8 +631,7 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted)
 		}
 		debug("%10u: q is almost certainly prime", count_in);
 
-		if (qfileout(out, MODULI_TYPE_SAFE,
-		    in_tests | MODULI_TESTS_MILLER_RABIN,
+		if (qfileout(out, QTYPE_SAFE, (in_tests | QTEST_MILLER_RABIN),
 		    in_tries, in_size, generator_known, p)) {
 			res = -1;
 			break;

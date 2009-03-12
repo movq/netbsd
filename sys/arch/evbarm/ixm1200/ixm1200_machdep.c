@@ -1,4 +1,4 @@
-/*	$NetBSD: ixm1200_machdep.c,v 1.38 2009/02/13 22:41:01 apb Exp $ */
+/*	$NetBSD: ixm1200_machdep.c,v 1.34 2008/04/27 18:58:46 matt Exp $ */
 
 /*
  * Copyright (c) 2002, 2003
@@ -67,10 +67,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixm1200_machdep.c,v 1.38 2009/02/13 22:41:01 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixm1200_machdep.c,v 1.34 2008/04/27 18:58:46 matt Exp $");
 
 #include "opt_ddb.h"
-#include "opt_modular.h"
 #include "opt_pmap_debug.h"
 
 #include <sys/param.h>
@@ -90,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixm1200_machdep.c,v 1.38 2009/02/13 22:41:01 apb Exp
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 #include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
@@ -241,7 +240,6 @@ cpu_reboot(howto, bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("Halted while still in the ICE age.\n");
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
@@ -271,8 +269,6 @@ cpu_reboot(howto, bootstr)
 
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -361,7 +357,7 @@ initarm(void *arg)
 	u_int kerneldatasize, symbolsize;
 	vaddr_t l1pagetable;
 	vaddr_t freemempos;
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
         Elf_Shdr *sh;
 #endif
 
@@ -395,7 +391,7 @@ initarm(void *arg)
 	pmap_debug(-1);
 #endif
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
         if (! memcmp(&end, "\177ELF", 4)) {
                 sh = (Elf_Shdr *)((char *)&end + ((Elf_Ehdr *)&end)->e_shoff);
                 loop = ((Elf_Ehdr *)&end)->e_shnum;
@@ -742,8 +738,8 @@ initarm(void *arg)
 	printf("bootstrap done.\n");
 #endif
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf(symbolsize, ((int *)&end), ((char *)&end) + symbolsize);
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(symbolsize, ((int *)&end), ((char *)&end) + symbolsize);
 #endif
 
 #ifdef DDB

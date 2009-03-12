@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ar5416_cal_adcdc.c,v 1.1.1.1 2008/12/11 04:46:48 alc Exp $
+ * $Id: ar5416_cal_adcdc.c,v 1.1.1.1.10.2 2009/08/07 06:43:47 snj Exp $
  */
 #include "opt_ah.h"
 

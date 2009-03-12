@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.11 2009/01/27 21:59:24 christos Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.8.10.3 2009/02/02 21:38:50 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.

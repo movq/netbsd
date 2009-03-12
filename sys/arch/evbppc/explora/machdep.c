@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.27 2009/02/13 22:41:01 apb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.23 2008/08/08 06:29:21 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,14 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.27 2009/02/13 22:41:01 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.23 2008/08/08 06:29:21 hannken Exp $");
 
 #include "opt_explora.h"
-#include "opt_modular.h"
 #include "ksyms.h"
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/msgbuf.h>
 #include <sys/kernel.h>
@@ -46,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.27 2009/02/13 22:41:01 apb Exp $");
 #include <sys/user.h>
 #include <sys/reboot.h>
 #include <sys/ksyms.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -61,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.27 2009/02/13 22:41:01 apb Exp $");
 #include <powerpc/spr.h>
 #include <powerpc/ibm4xx/dcr403cgx.h>
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 #include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
@@ -264,6 +261,11 @@ bootstrap(u_int startkernel, u_int endkernel)
 	 * Initialize pmap module.
 	 */
 	pmap_bootstrap(startkernel, endkernel);
+
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(0, NULL, NULL);
+#endif
+
 	fake_mapiodev = 0;
 }
 
@@ -373,8 +375,6 @@ cpu_reboot(int howto, char *what)
 		/*XXX dumpsys()*/;
 
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
 		printf("halted\n\n");

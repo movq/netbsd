@@ -1,4 +1,4 @@
-/*	$NetBSD: if_eca.c,v 1.11 2009/01/19 23:43:14 bjh21 Exp $	*/
+/*	$NetBSD: if_eca.c,v 1.8 2007/10/17 19:52:52 garbled Exp $	*/
 
 /*-
  * Copyright (c) 2001 Ben Harris
@@ -29,7 +29,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: if_eca.c,v 1.11 2009/01/19 23:43:14 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_eca.c,v 1.8 2007/10/17 19:52:52 garbled Exp $");
 
 #include <sys/device.h>
 #include <sys/malloc.h>
@@ -51,8 +51,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_eca.c,v 1.11 2009/01/19 23:43:14 bjh21 Exp $");
 #include <dev/ic/mc6854reg.h>
 #include <arch/acorn26/ioc/if_ecavar.h>
 
-static int eca_match(device_t, cfdata_t, void *);
-static void eca_attach(device_t, device_t, void *);
+static int eca_match(struct device *, struct cfdata *, void *);
+static void eca_attach(struct device *, struct device *, void *);
 
 static int eca_init(struct ifnet *);
 static void eca_stop(struct ifnet *ifp, int disable);
@@ -73,11 +73,11 @@ static void eca_gotframe(void *);
 
 struct eca_softc *eca_fiqowner;
 
-CFATTACH_DECL_NEW(eca, sizeof(struct eca_softc),
+CFATTACH_DECL(eca, sizeof(struct eca_softc),
     eca_match, eca_attach, NULL, NULL);
 
 static int
-eca_match(device_t parent, cfdata_t cf, void *aux)
+eca_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct ioc_attach_args *ioc = aux;
 
@@ -90,21 +90,20 @@ eca_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-eca_attach(device_t parent, device_t self, void *aux)
+eca_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct eca_softc *sc = device_private(self);
+	struct eca_softc *sc = (void *)self;
 	struct ioc_attach_args *ioc = aux;
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	u_int8_t myaddr[ECO_ADDR_LEN];
 
-	sc->sc_dev = self;
 	sc->sc_iot = ioc->ioc_sync_t;
 	sc->sc_ioh = ioc->ioc_sync_h;
 
 	myaddr[0] = cmos_read(0x40);
 	myaddr[1] = 0;
 
-	aprint_normal(": station %s", eco_sprintf(myaddr));
+	printf(": station %s", eco_sprintf(myaddr));
 	/* It's traditional to print the clock state at boot. */
 	if ((bus_space_read_1(sc->sc_iot, sc->sc_ioh, MC6854_SR2) &
 	    MC6854_SR2_NDCD))
@@ -112,7 +111,7 @@ eca_attach(device_t parent, device_t self, void *aux)
 
 	/* Initialise ifnet structure. */
 
-	strcpy(ifp->if_xname, device_xname(sc->sc_dev));
+	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
 	ifp->if_softc = sc;
 	ifp->if_init = eca_init;
 	ifp->if_stop = eca_stop;
@@ -121,11 +120,11 @@ eca_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ec.ec_claimwire = eca_claimwire;
 	sc->sc_ec.ec_txframe = eca_txframe;
 
-	sc->sc_rx_soft = softint_establish(IPL_SOFTNET, eca_gotframe, sc);
-	sc->sc_tx_soft = softint_establish(IPL_SOFTNET, eca_txdone, sc);
+	sc->sc_rx_soft = softintr_establish(IPL_SOFTNET, eca_gotframe, sc);
+	sc->sc_tx_soft = softintr_establish(IPL_SOFTNET, eca_txdone, sc);
 	if (sc->sc_rx_soft == NULL || sc->sc_tx_soft == NULL) {
-		aprint_error_dev(sc->sc_dev,
-		    "failed to establish software interrupt\n");
+		printf("\n%s: failed to establish software interrupt\n",
+		    sc->sc_dev.dv_xname);
 		return;
 	}
 
@@ -137,7 +136,7 @@ eca_attach(device_t parent, device_t self, void *aux)
 	sc->sc_fiqhandler.fh_flags = 0;
 	sc->sc_fiqhandler.fh_regs = &sc->sc_fiqstate.efs_rx_fiqregs;
 
-	aprint_normal("\n");
+	printf("\n");
 }
 
 static int
@@ -233,7 +232,7 @@ eca_txframe(struct ifnet *ifp, struct mbuf *m)
 	sc->sc_fiqstate.efs_fiqhandler = eca_fiqhandler_tx;
 	sc->sc_transmitting = 1;
 	sc->sc_txmbuf = m;
-	fr.fr_r8 = (register_t)sc->sc_ioh;
+	fr.fr_r8 = (register_t)sc->sc_ioh.a1;
 	fr.fr_r9 = (register_t)sc->sc_txmbuf->m_data;
 	fr.fr_r10 = (register_t)sc->sc_txmbuf->m_len;
 	fr.fr_r11 = (register_t)&sc->sc_fiqstate;
@@ -266,17 +265,16 @@ eca_tx_downgrade(void)
 	} else {
 		sr1 = bus_space_read_1(iot, ioh, MC6854_SR1);
 		if (sr1 & MC6854_SR1_TXU)
-			log(LOG_ERR, "%s: Tx underrun\n",
-			    device_xname(sc->sc_dev));
+			log(LOG_ERR, "%s: Tx underrun\n", sc->sc_dev.dv_xname);
 		else if (sr1 & MC6854_SR1_NCTS)
 			log(LOG_WARNING, "%s: collision\n",
-			    device_xname(sc->sc_dev));
+			    sc->sc_dev.dv_xname);
 		else {
 			log(LOG_ERR, "%s: incomplete transmission\n",
-			    device_xname(sc->sc_dev));
-			snprintb(buf, 128, MC6854_SR1_BITS, sr1);
+			    sc->sc_dev.dv_xname);
+			bitmask_snprintf(sr1, MC6854_SR1_BITS, buf, 128);
 			log(LOG_ERR, "%s: SR1 = %s\n",
-			    device_xname(sc->sc_dev), buf);
+			    sc->sc_dev.dv_xname, buf);
 		}
 		bus_space_write_1(iot, ioh, MC6854_CR2,
 		    sc->sc_cr2 | MC6854_CR2_CLR_TX_ST);
@@ -291,7 +289,7 @@ eca_tx_downgrade(void)
 	ioc_fiq_setmask(IOC_FIQ_BIT(FIQ_EFIQ));
 	/* End code from eca_init_rx_hard(). */
 
-	softint_schedule(sc->sc_tx_soft);
+	softintr_schedule(sc->sc_tx_soft);
 }
 
 /*
@@ -360,7 +358,7 @@ eca_init_rx_soft(struct eca_softc *sc)
 	struct fiqregs *fr = &sc->sc_fiqstate.efs_rx_fiqregs;
 
 	memset(fr, 0, sizeof(*fr));
-	fr->fr_r8 = (register_t)sc->sc_ioh;
+	fr->fr_r8 = (register_t)sc->sc_ioh.a1;
 	fr->fr_r9 = (register_t)sc->sc_rcvmbuf->m_data;
 	fr->fr_r10 = (register_t)ECO_ADDR_LEN;
 	fr->fr_r11 = (register_t)&sc->sc_fiqstate;
@@ -440,7 +438,7 @@ eca_rx_downgrade(void)
 	struct eca_softc *sc = eca_fiqowner;
 
 	sc->sc_sr2 = bus_space_read_1(sc->sc_iot, sc->sc_ioh, MC6854_SR2);
-	softint_schedule(sc->sc_rx_soft);
+	softintr_schedule(sc->sc_rx_soft);
 }
 
 /*
@@ -475,8 +473,7 @@ eca_gotframe(void *arg)
 		if (eca_init_rxbuf(sc, M_DONTWAIT) == 0) {
 			ifp->if_ipackets++; /* XXX packet vs frame? */
 			/* Trim the tail of the mbuf chain. */
-			mtail->m_len =
-			    (char *)(fr.fr_r9) - mtod(mtail, char *);
+			mtail->m_len = (void *)(fr.fr_r9) - mtail->m_data;
 			m_freem(mtail->m_next);
 			mtail->m_next = NULL;
 			/* Set up the header of the chain. */
@@ -494,8 +491,8 @@ eca_gotframe(void *arg)
 		fiq_getregs(&fr);
 		mtail = sc->sc_fiqstate.efs_rx_curmbuf;
 		log(LOG_ERR, "%s: Rx overrun (state = %d, len = %ld)\n",
-		    device_xname(sc->sc_dev), sc->sc_ec.ec_state,
-		    (char *)(fr.fr_r9) - mtod(mtail, char *));
+		    sc->sc_dev.dv_xname, sc->sc_ec.ec_state,
+		    (void *)(fr.fr_r9) - mtail->m_data);
 		ifp->if_ierrors++;
 
 		/* Discard the rest of the frame. */
@@ -503,20 +500,19 @@ eca_gotframe(void *arg)
 			bus_space_write_1(iot, ioh, MC6854_CR1,
 			    sc->sc_cr1 | MC6854_CR1_DISCONTINUE);
 	} else if (sr2 & MC6854_SR2_RXABT) {
-		log(LOG_NOTICE, "%s: Rx abort\n", device_xname(sc->sc_dev));
+		log(LOG_NOTICE, "%s: Rx abort\n", sc->sc_dev.dv_xname);
 		ifp->if_ierrors++;
 	} else if (sr2 & MC6854_SR2_ERR) {
-		log(LOG_NOTICE, "%s: CRC error\n", device_xname(sc->sc_dev));
+		log(LOG_NOTICE, "%s: CRC error\n", sc->sc_dev.dv_xname);
 		ifp->if_ierrors++;
 	}
 
 	if (__predict_false(sr2 & MC6854_SR2_NDCD)) {
-		log(LOG_ERR, "%s: No clock\n", device_xname(sc->sc_dev));
+		log(LOG_ERR, "%s: No clock\n", sc->sc_dev.dv_xname);
 		ifp->if_ierrors++;
 	}
 	if (sc->sc_fiqstate.efs_rx_curmbuf == NULL) {
-		log(LOG_NOTICE, "%s: Oversized frame\n",
-		    device_xname(sc->sc_dev));
+		log(LOG_NOTICE, "%s: Oversized frame\n", sc->sc_dev.dv_xname);
 		ifp->if_ierrors++;
 		/* Discard the rest of the frame. */
 		if (!sc->sc_transmitting)

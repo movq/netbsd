@@ -1,4 +1,4 @@
-#	$NetBSD: DEVNAMES,v 1.245 2009/02/19 00:55:48 jmcneill Exp $
+#	$NetBSD: DEVNAMES,v 1.242.4.3 2010/01/27 21:17:55 sborrill Exp $
 #
 # This file contains all used device names and defined attributes in
 # alphabetical order. New devices added to the system somewhere should first
@@ -81,6 +81,7 @@ ams			mac68k
 ams			macppc
 an			MI
 ap			newsmips
+apc			sparc
 apecs			alpha
 apm			i386
 aps			MI
@@ -90,6 +91,8 @@ arckbd			acorn26
 arcmsr			MI
 arcpp			acorn26
 arcvideo		acorn26
+arcwskbd		acorn26
+arcwsmouse		acorn26
 aria			MI
 arp			MI		Attribute
 artsata			MI
@@ -727,6 +730,7 @@ lmc			MI
 lms			bebox
 lms			i386
 lockstat		MI
+lom			sparc64
 lp			atari
 lp			vax
 lpa			vax
@@ -1369,6 +1373,8 @@ uyap			MI
 va			vax
 vcons			MI		Attribute
 veriexec		MI
+vesabios		i386
+vesafb			i386
 vesagtf			MI		Attribute
 vga			MI
 vge			MI

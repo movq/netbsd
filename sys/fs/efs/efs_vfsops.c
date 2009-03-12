@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_vfsops.c,v 1.17 2008/12/01 14:34:50 pooka Exp $	*/
+/*	$NetBSD: efs_vfsops.c,v 1.16.4.1 2009/01/06 23:34:46 snj Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble <rumble@ephemeral.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_vfsops.c,v 1.17 2008/12/01 14:34:50 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_vfsops.c,v 1.16.4.1 2009/01/06 23:34:46 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

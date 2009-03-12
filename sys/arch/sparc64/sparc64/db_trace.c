@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.41 2008/11/25 15:41:12 nakayama Exp $ */
+/*	$NetBSD: db_trace.c,v 1.40.6.1 2008/11/27 03:46:32 snj Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.41 2008/11/25 15:41:12 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.40.6.1 2008/11/27 03:46:32 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>

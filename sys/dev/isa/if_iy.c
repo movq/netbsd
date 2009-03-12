@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iy.c,v 1.83 2008/12/17 15:41:24 cegger Exp $	*/
+/*	$NetBSD: if_iy.c,v 1.80 2008/04/28 20:23:52 martin Exp $	*/
 /* #define IYDEBUG */
 /* #define IYMEMDEBUG */
 
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.83 2008/12/17 15:41:24 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.80 2008/04/28 20:23:52 martin Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -412,20 +412,19 @@ struct iy_softc *sc;
 		bus_space_write_2(iot, ioh, HOST_ADDR_REG, p);
 
 		v = le16toh(bus_space_read_stream_2(iot, ioh, MEM_PORT_REG));
-		snprintb(sbuf, sizeof(sbuf), "\020\006Ab\010Dn", v);
+		bitmask_snprintf(v, "\020\006Ab\010Dn", sbuf, sizeof(sbuf));
 		printf("0x%04x: %s ", p, sbuf);
 
 		v = le16toh(bus_space_read_stream_2(iot, ioh, MEM_PORT_REG));
-		snprintb(sbuf, sizeof(sbuf), 
-		    "\020\6MAX_COL\7HRT_BEAT\010TX_DEF\011UND_RUN"
-		    "\012JERR\013LST_CRS\014LTCOL\016TX_OK\020COLL", v);
+		bitmask_snprintf(v, "\020\6MAX_COL\7HRT_BEAT\010TX_DEF\011UND_RUN\012JERR\013LST_CRS\014LTCOL\016TX_OK\020COLL",
+				 sbuf, sizeof(sbuf));
 		printf("0x%s", sbuf);
 
 		p = le16toh(bus_space_read_stream_2(iot, ioh, MEM_PORT_REG));
 		printf(" 0x%04x", p);
 
 		v = le16toh(bus_space_read_stream_2(iot, ioh, MEM_PORT_REG));
-		snprintb(sbuf, sizeof(sbuf), "\020\020Ch", v);
+		bitmask_snprintf(v, "\020\020Ch", sbuf, sizeof(sbuf));
 		printf(" 0x%s\n", sbuf);
 
 	} while (v & 0x8000);
@@ -489,10 +488,8 @@ struct iy_softc *sc;
 	{
 		char sbuf[128];
 
-		snprintb(sbuf, sizeof(sbuf), 
-		    "\020\1PRMSC\2NOBRDST\3SEECRC\4LENGTH\5NOSaIns\6MultiIA",
-		    temp);
-			
+		bitmask_snprintf(temp, "\020\1PRMSC\2NOBRDST\3SEECRC\4LENGTH\5NOSaIns\6MultiIA",
+				 sbuf, sizeof(sbuf));
 		printf("%s: RECV_MODES set to %s\n", device_xname(&sc->sc_dev), sbuf);
 	}
 #endif
@@ -509,9 +506,8 @@ struct iy_softc *sc;
 	{
 		char sbuf[128];
 
-		snprintb(sbuf, sizeof(sbuf),
-		    "\020\1LnkInDis\2PolCor\3TPE\4JabberDis\5NoAport\6BNC",
-		    temp);
+		bitmask_snprintf(temp, "\020\1LnkInDis\2PolCor\3TPE\4JabberDis\5NoAport\6BNC",
+				 sbuf, sizeof(sbuf));
 		printf("%s: media select was 0x%s ", device_xname(&sc->sc_dev), sbuf);
 	}
 #endif
@@ -549,9 +545,8 @@ struct iy_softc *sc;
 	{
 		char sbuf[128];
 
-		snprintb(sbuf, sizeof(sbuf),
-		    "\020\1LnkInDis\2PolCor\3TPE\4JabberDis\5NoAport\6BNC",
-		    temp);
+		bitmask_snprintf(temp, "\020\1LnkInDis\2PolCor\3TPE\4JabberDis\5NoAport\6BNC",
+				 sbuf, sizeof(sbuf));
 		printf("changed to 0x%s\n", sbuf);
 	}
 #endif
@@ -567,14 +562,13 @@ struct iy_softc *sc;
 	{
 		char sbuf[128];
 
-		snprintb(sbuf, sizeof(sbuf),
-		    "\020\4bad_irq\010flash/boot present", temp);
-				
+		bitmask_snprintf(temp, "\020\4bad_irq\010flash/boot present",
+				 sbuf, sizeof(sbuf));
 		printf("%s: int no was %s\n", device_xname(&sc->sc_dev), sbuf);
 
 		temp = bus_space_read_1(iot, ioh, INT_NO_REG);
-		snprintb(sbuf, sizeof(sbuf),
-		    "\020\4bad_irq\010flash/boot present", temp);
+		bitmask_snprintf(temp, "\020\4bad_irq\010flash/boot present",
+				 sbuf, sizeof(sbuf));
 		printf("%s: int no now %s\n", device_xname(&sc->sc_dev), sbuf);
 	}
 #endif
@@ -589,9 +583,8 @@ struct iy_softc *sc;
 	{
 		char sbuf[128];
 
-		snprintb(sbuf, sizeof(sbuf), "\020\2WORD_WIDTH\010INT_ENABLE",
-		    temp);
-			
+		bitmask_snprintf(temp, "\020\2WORD_WIDTH\010INT_ENABLE",
+				 sbuf, sizeof(sbuf));
 		printf("%s: HW access is %s\n", device_xname(&sc->sc_dev), sbuf);
 	}
 #endif
@@ -602,8 +595,8 @@ struct iy_softc *sc;
 		char sbuf[128];
 
 		temp = bus_space_read_1(iot, ioh, REG1);
-		snprintb(sbuf, sizeof(sbuf), "\020\2WORD_WIDTH\010INT_ENABLE",
-		    temp);
+		bitmask_snprintf(temp, "\020\2WORD_WIDTH\010INT_ENABLE",
+				 sbuf, sizeof(sbuf));
 		printf("%s: HW access is %s\n", device_xname(&sc->sc_dev), sbuf);
 	}
 #endif
@@ -976,13 +969,13 @@ iyintr(arg)
 	if (status & ALL_INTS) {
 		char sbuf[128];
 
-		snprintb(sbuf, sizeof(sbuf), "\020\1RX_STP\2RX\3TX\4EXEC",
-		    status);
+		bitmask_snprintf(status, "\020\1RX_STP\2RX\3TX\4EXEC",
+				 sbuf, sizeof(sbuf));
 		printf("%s: got interrupt %s", device_xname(&sc->sc_dev), sbuf);
 
 		if (status & EXEC_INT) {
-			snprintb(sbuf, sizeof(sbuf), 
-			     "\020\6ABORT", bus_space_read_1(iot, ioh, 0));
+			bitmask_snprintf(bus_space_read_1(iot, ioh, 0),
+					 "\020\6ABORT", sbuf, sizeof(sbuf));
 			printf(" event %s\n", sbuf);
 		} else
 			printf("\n");
@@ -1119,10 +1112,8 @@ struct iy_softc *sc;
 		{
 			char sbuf[128];
 
-			snprintb(sbuf, sizeof(sbuf),
-			    "\020\1RCLD\2IA_MCH\010SHORT\011OVRN\013ALGERR"
-			    "\014CRCERR\015LENERR\016RCVOK\020TYP", rxstatus);
-
+			bitmask_snprintf(rxstatus, "\020\1RCLD\2IA_MCH\010SHORT\011OVRN\013ALGERR\014CRCERR\015LENERR\016RCVOK\020TYP",
+					 sbuf, sizeof(sbuf));
 			printf("%s: pck at 0x%04x stat %s next 0x%x len 0x%x\n",
 			    device_xname(&sc->sc_dev), rxadrs, sbuf, rxnext, rxlen);
 		}
@@ -1172,11 +1163,8 @@ struct iy_softc *sc;
 		{
 			char sbuf[128];
 
-			snprintb(sbuf, sizeof(sbuf),
-			    "\020\6MAX_COL\7HRT_BEAT\010TX_DEF"
-			    "\011UND_RUN\012JERR\013LST_CRS"
-			    "\014LTCOL\016TX_OK\020COLL", txstat2);
-
+			bitmask_snprintf(txstat2, "\020\6MAX_COL\7HRT_BEAT\010TX_DEF\011UND_RUN\012JERR\013LST_CRS\014LTCOL\016TX_OK\020COLL",
+					 sbuf, sizeof(sbuf));
 			printf("txstat 0x%x stat2 0x%s next 0x%x len 0x%x\n",
 			       txstatus, sbuf, txnext, txlen);
 		}
@@ -1198,7 +1186,10 @@ struct iy_softc *sc;
 }
 
 int
-iyioctl(struct ifnet *ifp, u_long cmd, void *data)
+iyioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	u_long cmd;
+	void *data;
 {
 	struct iy_softc *sc;
 	struct ifaddr *ifa;
@@ -1218,50 +1209,46 @@ iyioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
-		iyinit(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
+			iyinit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
+			iyinit(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		sc->promisc = ifp->if_flags & (IFF_PROMISC | IFF_ALLMULTI);
-		/* XXX re-use ether_ioctl() */
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 			iystop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+			   (ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			iyinit(sc);
-			break;
-		default:
+		} else {
 			/*
 			 * Reset the interface to pick up changes in any other
 			 * flags that affect hardware registers.
 			 */
 			iystop(sc);
 			iyinit(sc);
-			break;
 		}
 #ifdef IYDEBUGX
 		if (ifp->if_flags & IFF_DEBUG)
@@ -1292,7 +1279,7 @@ iyioctl(struct ifnet *ifp, u_long cmd, void *data)
 		error = ifmedia_ioctl(ifp, ifr, &sc->iy_ifmedia, cmd);
 		break;
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 	}
 	splx(s);
 	return error;

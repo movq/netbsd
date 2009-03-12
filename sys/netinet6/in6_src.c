@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.45 2009/01/11 02:45:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.43 2008/04/15 03:57:04 thorpej Exp $");
 
 #include "opt_inet.h"
 
@@ -910,7 +910,7 @@ lookup_addrsel_policy(struct sockaddr_in6 *key)
 /*
  * Subroutines to manage the address selection policy table via sysctl.
  */
-struct sel_walkarg {
+struct walkarg {
 	size_t	w_total;
 	size_t	w_given;
 	void *	w_where;
@@ -934,7 +934,7 @@ in6_src_sysctl(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 		goto end;
 	}
 	if (oldp || oldlenp) {
-		struct sel_walkarg w;
+		struct walkarg w;
 		size_t oldlen = *oldlenp;
 
 		memset(&w, 0, sizeof(w));
@@ -1026,7 +1026,9 @@ add_addrsel_policyent(struct in6_addrpolicy *newpolicy)
 		}
 	}
 
-	new = malloc(sizeof(*new), M_IFADDR, M_WAITOK|M_ZERO);
+	MALLOC(new, struct addrsel_policyent *, sizeof(*new), M_IFADDR,
+	       M_WAITOK);
+	bzero(new, sizeof(*new));
 
 	/* XXX: should validate entry */
 	new->ape_policy = *newpolicy;
@@ -1078,7 +1080,7 @@ static int
 dump_addrsel_policyent(struct in6_addrpolicy *pol, void *arg)
 {
 	int error = 0;
-	struct sel_walkarg *w = arg;
+	struct walkarg *w = arg;
 
 	if (w->w_where && (char *)w->w_where + sizeof(*pol) <= (char *)w->w_limit) {
 		if ((error = copyout(pol, w->w_where, sizeof(*pol))) != 0)

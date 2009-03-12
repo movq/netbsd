@@ -1,4 +1,4 @@
-/*	$NetBSD: db_expr.c,v 1.16 2009/03/07 22:02:17 ad Exp $	*/
+/*	$NetBSD: db_expr.c,v 1.15 2007/02/22 06:41:01 thorpej Exp $	*/
 
 /*
  * Mach Operating System
@@ -30,12 +30,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_expr.c,v 1.16 2009/03/07 22:02:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_expr.c,v 1.15 2007/02/22 06:41:01 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
 
-#include <ddb/ddb.h>
+#include <machine/db_machdep.h>
+
+#include <ddb/db_access.h>
+#include <ddb/db_command.h>
+#include <ddb/db_extern.h>
+#include <ddb/db_lex.h>
+#include <ddb/db_output.h>
+#include <ddb/db_sym.h>
+#include <ddb/db_variables.h>
 
 static bool db_term(db_expr_t *);
 static bool db_unary(db_expr_t *);

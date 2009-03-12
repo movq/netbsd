@@ -1,4 +1,4 @@
-/*	$NetBSD: makeinfo.h,v 1.2 2009/02/28 19:14:15 joerg Exp $	*/
+/*	$NetBSD: makeinfo.h,v 1.1.1.7.4.1 2009/03/27 15:08:32 msaitoh Exp $	*/
 
 /* makeinfo.h -- declarations for Makeinfo.
    Id: makeinfo.h,v 1.17 2004/11/30 02:03:23 karl Exp

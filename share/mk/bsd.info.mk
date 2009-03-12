@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.info.mk,v 1.39 2009/02/28 19:18:52 joerg Exp $
+#	$NetBSD: bsd.info.mk,v 1.38.26.1 2009/03/27 15:08:32 msaitoh Exp $
 
 .include <bsd.init.mk>
 

@@ -1,32 +1,28 @@
-# $NetBSD: Makefile,v 1.75 2009/01/16 01:59:23 haad Exp $
+# $NetBSD: Makefile,v 1.68.2.4 2009/05/10 21:32:57 snj Exp $
 
 .include <bsd.own.mk>
 
-#
-# NOTE:
-#
-# If you're adding new scripts, don't forget to update following:
+# if you're adding new scripts, don't forget to update followings.
 #	src/distrib/sets/lists/etc/mi
 #	src/etc/mtree/special
 #	src/usr.sbin/postinstall/postinstall
-#
 
 CONFIGFILES=\
 		DAEMON LOGIN NETWORKING SERVERS \
 		accounting altqd amd apmd \
 		bootconf.sh bootparams btattach btconfig btdevctl bthcid \
 		ccd cgd cleartmp cron \
-		dhclient dhcpd dhcrelay dmesg downinterfaces envsys \
+		dhclient dhcpcd dhcpd dhcrelay dmesg downinterfaces envsys \
 		fsck ftp_proxy ftpd \
 		hostapd httpd \
 		identd ifwatchd inetd ipfilter ipfs ipmon ipnat ipsec \
 		irdaattach iscsi_target isdnd \
 		kdc \
-		ldconfig local lpd lvm\
+		ldconfig lkm1 lkm2 lkm3 local lpd \
 		mixerctl mopd motd mountall mountcritlocal mountcritremote \
 		mountd moused mrouted \
 		named ndbootd network newsyslog nfsd nfslocking ntpd ntpdate \
-		perusertmp pf pf_boot pflogd postfix powerd ppp pwcheck \
+		perusertmp pf pf_boot pflogd poffd postfix powerd ppp pwcheck \
 		quota \
 		racoon rpcbind raidframe raidframeparity rarpd rbootd rndctl \
 		root route6d routed rtadvd rtclocaltime rtsold rwho \

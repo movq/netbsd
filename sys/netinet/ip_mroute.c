@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_mroute.c,v 1.117 2008/12/19 18:49:39 cegger Exp $	*/
+/*	$NetBSD: ip_mroute.c,v 1.116 2008/10/01 16:01:51 rmind Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.117 2008/12/19 18:49:39 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.116 2008/10/01 16:01:51 rmind Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -841,7 +841,8 @@ add_vif(struct vifctl *vifcp)
 			return (EINVAL);
 
 		/* Create a fake encapsulation interface. */
-		ifp = malloc(sizeof(*ifp), M_MRTABLE, M_WAITOK|M_ZERO);
+		ifp = (struct ifnet *)malloc(sizeof(*ifp), M_MRTABLE, M_WAITOK);
+		bzero(ifp, sizeof(*ifp));
 		snprintf(ifp->if_xname, sizeof(ifp->if_xname),
 			 "mdecap%d", vifcp->vifc_vifi);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_el.c,v 1.81 2008/11/07 00:20:07 dyoung Exp $	*/
+/*	$NetBSD: if_el.c,v 1.80 2008/04/08 20:08:50 cegger Exp $	*/
 
 /*
  * Copyright (c) 1994, Matthew E. Kimmel.  Permission is hereby granted
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.81 2008/11/07 00:20:07 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.80 2008/04/08 20:08:50 cegger Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -682,7 +682,10 @@ bad:
  * Process an ioctl request. This code needs some work - it looks pretty ugly.
  */
 int
-elioctl(struct ifnet *ifp, u_long cmd, void *data)
+elioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	u_long cmd;
+	void *data;
 {
 	struct el_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -692,53 +695,49 @@ elioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
-		elinit(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
+			elinit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
+			elinit(sc);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX re-use ether_ioctl() */
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 			elstop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			elinit(sc);
-			break;
-		default:
+		} else {
 			/*
 			 * Some other important flag might have changed, so
 			 * reset.
 			 */
 			elreset(sc);
-			break;
 		}
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 

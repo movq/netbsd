@@ -1,4 +1,4 @@
-/*	$NetBSD: regex2.h,v 1.2 2009/01/02 00:32:11 tnozaki Exp $ */
+/*	$NetBSD: regex2.h,v 1.1.1.2.6.1 2009/01/20 03:14:17 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994 Henry Spencer.

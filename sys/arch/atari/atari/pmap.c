@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.113 2009/01/17 07:17:35 tsutsui Exp $	*/
+/*	$NetBSD: pmap.c,v 1.105.6.3 2009/01/08 22:45:30 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -100,7 +100,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.113 2009/01/17 07:17:35 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.105.6.3 2009/01/08 22:45:30 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -235,7 +235,7 @@ static void	pmap_pvdump(paddr_t);
  * convert to a vax protection code.
  */
 #define pte_prot(m, p)	(protection_codes[p])
-u_int	protection_codes[8];
+int	protection_codes[8];
 
 /*
  * Kernel page table page management.
@@ -274,8 +274,7 @@ vsize_t		Sysptsize = VM_KERNEL_PT_PAGES;
 
 struct pv_entry	*pv_table;	/* array of entries, one per page */
 
-static struct pmap kernel_pmap_store;
-struct pmap	*const kernel_pmap_ptr = &kernel_pmap_store;
+struct pmap	kernel_pmap_store;
 struct vm_map	*pt_map;
 struct vm_map_kernel pt_map_store;
 
@@ -315,6 +314,12 @@ void		pmap_collect1(pmap_t, paddr_t, paddr_t);
 #define		PRM_TFLUSH	0x01
 #define		PRM_CFLUSH	0x02
 #define		PRM_KEEPPTPAGE	0x04
+
+/*
+ * All those kernel PT submaps that BSD is so fond of
+ */
+void 	*CADDR1, *CADDR2;
+char	*vmmap;
 
 #define	PAGE_IS_MANAGED(pa)	(pmap_initialized			\
 				 && vm_physseg_find(atop((pa)), NULL) != -1)
@@ -652,7 +657,8 @@ pmap_create()
 		printf("pmap_create\n");
 #endif
 
-	pmap = malloc(sizeof(*pmap), M_VMPMAP, M_WAITOK|M_ZERO);
+	pmap = malloc(sizeof *pmap, M_VMPMAP, M_WAITOK);
+	bzero(pmap, sizeof(*pmap));
 	pmap_pinit(pmap);
 	return (pmap);
 }

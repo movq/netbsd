@@ -1,4 +1,4 @@
-/*  $NetBSD: ufs_wapbl.c,v 1.5 2009/02/22 20:28:07 ad Exp $ */
+/*  $NetBSD: ufs_wapbl.c,v 1.2.8.1 2008/12/14 11:56:04 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2003,2006,2008 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_wapbl.c,v 1.5 2009/02/22 20:28:07 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_wapbl.c,v 1.2.8.1 2008/12/14 11:56:04 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -400,9 +400,12 @@ wapbl_ufs_rename(void *v)
 	 *    completing our work, the link count
 	 *    may be wrong, but correctable.
 	 */
+	ip->i_ffs_effnlink++;
 	ip->i_nlink++;
 	DIP_ASSIGN(ip, nlink, ip->i_nlink);
 	ip->i_flag |= IN_CHANGE;
+	if (DOINGSOFTDEP(fvp))
+		softdep_change_linkcnt(ip);
 	if ((error = UFS_UPDATE(fvp, NULL, NULL, UPDATE_DIROP)) != 0) {
 		goto bad;
 	}
@@ -427,14 +430,20 @@ wapbl_ufs_rename(void *v)
 				error = EMLINK;
 				goto bad;
 			}
+			tdp->i_ffs_effnlink++;
 			tdp->i_nlink++;
 			DIP_ASSIGN(tdp, nlink, tdp->i_nlink);
 			tdp->i_flag |= IN_CHANGE;
+			if (DOINGSOFTDEP(tdvp))
+				softdep_change_linkcnt(tdp);
 			if ((error = UFS_UPDATE(tdvp, NULL, NULL,
 			    UPDATE_DIROP)) != 0) {
+				tdp->i_ffs_effnlink--;
 				tdp->i_nlink--;
 				DIP_ASSIGN(tdp, nlink, tdp->i_nlink);
 				tdp->i_flag |= IN_CHANGE;
+				if (DOINGSOFTDEP(tdvp))
+					softdep_change_linkcnt(tdp);
 				goto bad;
 			}
 		}
@@ -444,9 +453,12 @@ wapbl_ufs_rename(void *v)
 		pool_cache_put(ufs_direct_cache, newdir);
 		if (error != 0) {
 			if (doingdirectory && newparent) {
+				tdp->i_ffs_effnlink--;
 				tdp->i_nlink--;
 				DIP_ASSIGN(tdp, nlink, tdp->i_nlink);
 				tdp->i_flag |= IN_CHANGE;
+				if (DOINGSOFTDEP(tdvp))
+					softdep_change_linkcnt(tdp);
 				(void)UFS_UPDATE(tdvp, NULL, NULL,
 						 UPDATE_WAIT | UPDATE_DIROP);
 			}
@@ -481,7 +493,7 @@ wapbl_ufs_rename(void *v)
 		 * (both directories, or both not directories).
 		 */
 		if ((txp->i_mode & IFMT) == IFDIR) {
-			if (txp->i_nlink > 2 ||
+			if (txp->i_ffs_effnlink > 2 ||
 			    !ufs_dirempty(txp, tdp->i_number, tcnp->cn_cred)) {
 				error = ENOTEMPTY;
 				goto bad;
@@ -500,12 +512,26 @@ wapbl_ufs_rename(void *v)
 		    newparent : doingdirectory, IN_CHANGE | IN_UPDATE)) != 0)
 			goto bad;
 		if (doingdirectory) {
+			if (!newparent) {
+				tdp->i_ffs_effnlink--;
+				if (DOINGSOFTDEP(tdvp))
+					softdep_change_linkcnt(tdp);
+			}
+			txp->i_ffs_effnlink--;
+			if (DOINGSOFTDEP(tvp))
+				softdep_change_linkcnt(txp);
+		}
+		if (doingdirectory && !DOINGSOFTDEP(tvp)) {
 			/*
 			 * Truncate inode. The only stuff left in the directory
 			 * is "." and "..". The "." reference is inconsequential
 			 * since we are quashing it. We have removed the "."
 			 * reference and the reference in the parent directory,
-			 * but there may be other hard links.
+			 * but there may be other hard links. The soft
+			 * dependency code will arrange to do these operations
+			 * after the parent directory entry has been deleted on
+			 * disk, so when running with that code we avoid doing
+			 * them now.
 			 */
 			if (!newparent) {
 				tdp->i_nlink--;
@@ -668,11 +694,14 @@ wapbl_ufs_rename(void *v)
  bad:
 	if (doingdirectory)
 		ip->i_flag &= ~IN_RENAME;
+	ip->i_ffs_effnlink--;
 	ip->i_nlink--;
 	DIP_ASSIGN(ip, nlink, ip->i_nlink);
 	ip->i_flag |= IN_CHANGE;
 	ip->i_flag &= ~IN_RENAME;
 	UFS_WAPBL_UPDATE(fvp, NULL, NULL, 0);
+	if (DOINGSOFTDEP(fvp))
+		softdep_change_linkcnt(ip);
  done:
 	UFS_WAPBL_END(fdvp->v_mount);
 	vput(fdvp);
@@ -699,7 +728,6 @@ wapbl_ufs_rename(void *v)
 }
 
 #ifdef WAPBL_DEBUG_INODES
-#error WAPBL_DEBUG_INODES: not functional before ufs_wapbl.c is updated
 void
 ufs_wapbl_verify_inodes(struct mount *mp, const char *str)
 {
@@ -727,6 +755,7 @@ ufs_wapbl_verify_inodes(struct mount *mp, const char *str)
 			panic("wapbl_verify: mp %p: dirty vnode %p (inode %p): 0x%x\n",
 				mp, vp, ip, ip->i_flag);
 		}
+		KDASSERT(ip->i_nlink == ip->i_ffs_effnlink);
 
 		simple_unlock(&mntvnode_slock);
 		{

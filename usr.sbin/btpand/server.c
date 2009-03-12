@@ -1,4 +1,4 @@
-/*	$NetBSD: server.c,v 1.2 2009/01/24 17:29:28 plunky Exp $	*/
+/*	$NetBSD: server.c,v 1.1.6.1 2009/01/26 00:56:15 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: server.c,v 1.2 2009/01/24 17:29:28 plunky Exp $");
+__RCSID("$NetBSD: server.c,v 1.1.6.1 2009/01/26 00:56:15 snj Exp $");
 
 #include <sys/ioctl.h>
 

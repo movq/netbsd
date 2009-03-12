@@ -1,4 +1,4 @@
-$NetBSD: usbdevs,v 1.523 2009/02/14 17:01:23 jakllsch Exp $
+$NetBSD: usbdevs,v 1.519.4.8 2010/11/26 17:29:13 riz Exp $
 
 /*
  * Copyright (c) 1998-2004 The NetBSD Foundation, Inc.
@@ -28,10 +28,6 @@ $NetBSD: usbdevs,v 1.523 2009/02/14 17:01:23 jakllsch Exp $
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
- * Use "make -f Makefile.usbdevs" to regenerate usbdevs.h and usbdevs_data.h
  */
 
 /*
@@ -264,7 +260,6 @@ vendor EICON		0x0734	Eicon Networks
 vendor DIGITALSTREAM	0x074e	Digital Stream
 vendor AUREAL		0x0755	Aureal Semiconductor
 vendor MIDIMAN		0x0763	Midiman
-vendor CYBERPOWER	0x0764  CyberPower Systems, Inc.
 vendor SURECOM		0x0769	Surecom Technology
 vendor LINKSYS2		0x077b	Linksys
 vendor GRIFFIN		0x077d	Griffin Technology
@@ -419,6 +414,7 @@ vendor VTECH		0x0f88	VTech
 vendor FALCOM		0x0f94	Falcom Wireless Communications GmbH
 vendor RIM		0x0fca	Research In Motion
 vendor DYNASTREAM	0x0fcf	Dynastream Innovations
+vendor SUNRISING	0x0fe6	SUNRISING
 vendor QUALCOMM		0x1004	Qualcomm
 vendor GIGABYTE		0x1044	GIGABYTE
 vendor MOTOROLA		0x1063	Motorola
@@ -459,6 +455,7 @@ vendor SILICOM		0x1485	Silicom
 vendor RALINK		0x1485	Ralink Technology
 vendor RALINK_2		0x148f	Ralink Technology
 vendor CONCEPTRONIC	0x14b2	Conceptronic
+vendor SUPERTOP		0x14cd  SuperTop
 vendor PLANEX3		0x14ea	Planex Communications
 vendor SILICONPORTALS	0x1527	Silicon Portals
 vendor OQO		0x1557	OQO
@@ -684,6 +681,7 @@ product AOX USB101		0x0008	USB ethernet controller engine
 product APPLE EXT_KBD		0x020c	Apple Extended USB Keyboard
 product APPLE OPTMOUSE		0x0302	Optical mouse
 product APPLE MIGHTYMOUSE	0x0304	Mighty Mouse
+product APPLE MAGICMOUSE	0x030d	Magic Mouse
 product APPLE EXT_KBD_HUB	0x1003	Hub in Apple Extended USB Keyboard
 product APPLE SPEAKERS		0x1101	Speakers
 product APPLE IPHONE		0x1290	iPhone
@@ -898,9 +896,6 @@ product CSR BLUETOOTH_NF	0xffff	Bluetooth USB Adapter
 /* CTX products */
 product CTX EX1300		0x9999	Ex1300 hub
 
-/* CyberPower Systems, Inc. products */
-product CYBERPOWER UPS		0x0501	Uninterruptible Power Supply
-
 /* CyberTAN Technology products */
 product CYBERTAN TG54USB	0x1666	TG54USB
 
@@ -1065,7 +1060,8 @@ product FREECOM DVD		0xfc01	Connector for DVD drive
 
 /* Future Technology Devices products */
 product FTDI SERIAL_8U232AM	0x6001	8U232AM Serial converter
-product FTDI SERIAL_2232C	0x6010	2232C USB FAST SERIAL ADAPTER
+product FTDI SERIAL_2232C	0x6010	2232C USB dual FAST SERIAL ADAPTER
+product FTDI SERIAL_4232H	0x6011	2232H USB quad FAST SERIAL ADAPTER
 product FTDI PS2KBDMS		0x8371	PS/2 Keyboard/Mouse
 product FTDI SERIAL_8U100AX	0x8372	8U100AX Serial converter
 product FTDI MHAM_KW		0xeee8	KW
@@ -1213,7 +1209,6 @@ product HP 959C			0x1104	Deskjet 959C
 product HP 568J			0x1116	Jornada 568
 product HP 930C			0x1204	DeskJet 930c
 product HP P2000U		0x1801	Inkjet P-2000U
-product HP RNDIS		0x1c1d	Generic RNDIS
 product HP 640C			0x2004	DeskJet 640c
 product HP 4670V		0x3005	ScanJet 4670v
 product HP P1100		0x3102	Photosmart P1100
@@ -1377,6 +1372,7 @@ product KEYSPAN UIA11		0x0202	UIA-11 remote control
 /* Kingston products */
 product KINGSTON XX1		0x0008	Ethernet Adapter
 product KINGSTON KNU101TX	0x000a	KNU101TX USB Ethernet
+product KINGSTON DTMINI10	0x162c	DT Mini 10 
 
 /* Kodak products */
 product KODAK DC220		0x0100	Digital Science DC220
@@ -1551,6 +1547,8 @@ product MICROSOFT XBOX_DVD_PLAYBACK	0x0284	Xbox DVD Movie Playback Kit
 product MICROSOFT XBOX_CONTROLLER_S10	0x0285	Xbox Controller S (1.0)
 product MICROSOFT XBOX_CONTROLLER_HUB	0x0288	Xbox Controller Hub
 product MICROSOFT XBOX_CONTROLLER_S12	0x0289	Xbox Controller S (1.2)
+product MICROSOFT 24GHZ_XCVR10		0x071d  2.4GHz Transceiver V1.0
+product MICROSOFT 24GHZ_XCVR20		0x071f  2.4GHz Transceiver V2.0
 
 /* Microtech products */
 product MICROTECH SCSIDB25	0x0004	USB-SCSI-DB25
@@ -2199,6 +2197,12 @@ product SUN KEYBOARD_TYPE_6	0x0005	Type 6 USB keyboard
 product SUN KEYBOARD_TYPE_7	0x00a2	Type 7 USB keyboard
 /* XXX The above is a North American PC style keyboard possibly */
 product SUN MOUSE		0x0100	Type 6 USB mouse
+
+/* SUNRISING products */
+product SUNRISING SR9600	0x8101	SR9600 Ethernet
+
+/* SuperTop products */
+product SUPERTOP IDEBRIDGE      0x6600  SuperTop IDE Bridge
 
 /* Supra products */
 product DIAMOND2 SUPRAEXPRESS56K 0x07da Supra Express 56K modem

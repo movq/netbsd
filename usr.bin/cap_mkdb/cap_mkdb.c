@@ -1,4 +1,4 @@
-/*	$NetBSD: cap_mkdb.c,v 1.25 2009/02/18 20:00:32 christos Exp $	*/
+/*	$NetBSD: cap_mkdb.c,v 1.24 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -40,13 +40,12 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)cap_mkdb.c	8.2 (Berkeley) 4/27/95";
 #endif
-__RCSID("$NetBSD: cap_mkdb.c,v 1.25 2009/02/18 20:00:32 christos Exp $");
+__RCSID("$NetBSD: cap_mkdb.c,v 1.24 2008/07/21 14:19:21 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/stat.h>
 
-#include <assert.h>
 #include <db.h>
 #include <err.h>
 #include <fcntl.h>
@@ -85,7 +84,6 @@ int
 main(int argc, char *argv[])
 {
 	int c, byteorder;
-	char *p;
 
 	capname = NULL;
 	byteorder = 0;
@@ -141,8 +139,7 @@ main(int argc, char *argv[])
 
 	if (capdbp->close(capdbp) < 0)
 		err(1, "%s", capname);
-	assert((p = strrchr(buf, '.')) != NULL);
-	*p = '\0';
+	*strrchr(buf, '.') = '\0';
 	if (rename(capname, buf) == -1)
 		err(1, "rename");
 	free(capname);

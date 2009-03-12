@@ -1,4 +1,4 @@
-#	$NetBSD: dot.profile,v 1.3 2008/11/25 14:25:59 ad Exp $
+#	$NetBSD: dot.profile,v 1.1 2006/06/02 22:11:07 hubertf Exp $
 #
 # Copyright (c) 1997 Perry E. Metzger
 # Copyright (c) 1994 Christopher G. Demetriou
@@ -35,29 +35,36 @@
 
 PATH=/sbin:/bin:/usr/bin:/usr/sbin:/
 export PATH
-TERM=wsvt25
-export TERM
+TERM=pc3
 HOME=/
 export HOME
 BLOCKSIZE=1k
 export BLOCKSIZE
 EDITOR=ed
 export EDITOR
+BOOTMODEL=@BOOTMODEL@
+export BOOTMODEL
+
+if [ "${BOOTMODEL}" = "big" ]; then
+	TERM=wsvt25
+fi
+export TERM
 
 umask 022
+
+ROOTDEV=/dev/md0a
 
 if [ "X${DONEPROFILE}" = "X" ]; then
 	DONEPROFILE=YES
 	export DONEPROFILE
 
-	echo ''
-	echo 'Please wait.'
+	# set up some sane defaults
+	echo 'erase ^?, werase ^W, kill ^U, intr ^C'
+	stty newcrt werase ^W intr ^C kill ^U erase ^?
 	echo ''
 
-	# set up some sane defaults
-	stty newcrt werase ^W intr ^C kill ^U erase ^H
-	mount -t tmpfs tmpfs /tmp
-	mount -t tmpfs -o union tmpfs /etc
+	# mount the ramdisk read write
+	mount -u $ROOTDEV /
 
 	grep() sed -n "/$1/p"
 

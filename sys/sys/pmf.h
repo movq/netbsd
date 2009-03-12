@@ -1,4 +1,4 @@
-/* $NetBSD: pmf.h,v 1.14 2009/02/06 01:19:33 dyoung Exp $ */
+/* $NetBSD: pmf.h,v 1.12 2008/05/05 00:16:18 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,8 +30,6 @@
 #define _SYS_PMF_H
 
 #ifdef _KERNEL
-
-#include <sys/types.h>
 
 typedef enum {
 	PMFE_DISPLAY_ON,
@@ -97,7 +95,6 @@ bool		pmf_device_resume_self(device_t);
 
 bool		pmf_device_recursive_suspend(device_t PMF_FN_PROTO);
 bool		pmf_device_recursive_resume(device_t PMF_FN_PROTO);
-bool		pmf_device_resume_descendants(device_t PMF_FN_PROTO);
 bool		pmf_device_resume_subtree(device_t PMF_FN_PROTO);
 
 struct ifnet;

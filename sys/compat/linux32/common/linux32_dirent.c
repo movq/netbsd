@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_dirent.c,v 1.8 2008/12/29 14:33:40 njoly Exp $ */
+/*	$NetBSD: linux32_dirent.c,v 1.6.4.1 2010/03/17 02:59:52 snj Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.8 2008/12/29 14:33:40 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.6.4.1 2010/03/17 02:59:52 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -65,8 +65,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_dirent.c,v 1.8 2008/12/29 14:33:40 njoly Exp
 #include <compat/linux/common/linux_misc.h>
 #include <compat/linux/common/linux_oldolduname.h>
 #include <compat/linux/common/linux_dirent.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -229,8 +227,12 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == (void *)SCARG_P32(uap, dent))
+	if (outp == (void *)SCARG_P32(uap, dent)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 	if (oldcall)
@@ -252,9 +254,9 @@ int
 linux32_sys_getdents64(struct lwp *l, const struct linux32_sys_getdents64_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(int) fd;
-		syscallarg(linux32_dirent64p_t) dent;
-		syscallarg(unsigned int) count;
+		syscallcarg(int) fd;
+		syscallcarg(linux32_dirent64p_t) dent;
+		syscallcarg(unsigned int) count;
 	} */
 	struct linux_sys_getdents64_args ua;
 

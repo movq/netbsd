@@ -1,4 +1,4 @@
-/*	$NetBSD: v_txt.c,v 1.5 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: v_txt.c,v 1.1.1.2.6.4 2009/10/18 09:58:03 sborrill Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994
@@ -276,8 +276,7 @@ v_txt(SCR *sp, VICMD *vp, MARK *tm, const CHAR_T *lp, size_t len, ARG_CHAR_T pro
 	int hexcnt;		/* Hex character count. */
 	int showmatch;		/* Showmatch set on this character. */
 	int wm_set, wm_skip;	/* Wrapmargin happened, blank skip flags. */
-	size_t max;
-	int tmp;
+	int max, tmp;
 	CHAR_T *p;
 
 	gp = sp->gp;
@@ -1725,16 +1724,16 @@ txt_ai_resolve(SCR *sp, TEXT *tp, int *changedp)
 	/*
 	 * If there are no spaces, or no tabs after spaces and less than
 	 * ts spaces, it's already minimal.
-	 * Keep analysing if expandtabs is set.
+	 * Keep analysing if expandtab is set.
 	 */
 	if ((!spaces || (!tab_after_sp && spaces < ts)) &&
-	    !O_ISSET(sp, O_EXPANDTABS))
+	    !O_ISSET(sp, O_EXPANDTAB))
 		return;
 
 	/* Count up spaces/tabs needed to get to the target. */
 	cno = 0;
 	tabs = 0;
-	if (!O_ISSET(sp, O_EXPANDTABS)) {
+	if (!O_ISSET(sp, O_EXPANDTAB)) {
 		for (; cno + COL_OFF(cno, ts) <= scno; ++tabs)
 			cno += COL_OFF(cno, ts);
 	}
@@ -1962,7 +1961,7 @@ txt_dent(SCR *sp, TEXT *tp, int isindent)
 	else {
 		cno = current;
 		tabs = 0;
-		if (!O_ISSET(sp, O_EXPANDTABS)) {
+		if (!O_ISSET(sp, O_EXPANDTAB)) {
 			for (; cno + COL_OFF(cno, ts) <= target; ++tabs)
 				cno += COL_OFF(cno, ts);
 		}
@@ -2216,7 +2215,7 @@ txt_fc_col(SCR *sp, int argc, ARGS **argv)
 	} else {
 		/* Figure out the number of columns. */
 		numcols = (sp->cols - 1) / colwidth;
-		if ((size_t)argc > numcols) {
+		if (argc > numcols) {
 			numrows = argc / numcols;
 			if (argc % numcols)
 				++numrows;
@@ -2233,7 +2232,7 @@ txt_fc_col(SCR *sp, int argc, ARGS **argv)
 				if (nf)
 					FREE_SPACE(sp, pp, 0);
 				CHK_INTR;
-				if ((base += numrows) >= (size_t)argc)
+				if ((base += numrows) >= argc)
 					break;
 				(void)ex_printf(sp,
 				    "%*s", (int)(colwidth - cnt), "");

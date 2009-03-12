@@ -1,4 +1,4 @@
-/*      $NetBSD: pciback.c,v 1.4 2009/03/06 22:02:17 bouyer Exp $      */
+/*      $NetBSD: pciback.c,v 1.4.6.5 2009/10/03 23:59:32 snj Exp $      */
 
 /*
  * Copyright (c) 2009 Manuel Bouyer.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciback.c,v 1.4 2009/03/06 22:02:17 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciback.c,v 1.4.6.5 2009/10/03 23:59:32 snj Exp $");
 
 #include "opt_xen.h"
 #include "rnd.h"

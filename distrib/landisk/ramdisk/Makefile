@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2009/01/25 22:08:38 abs Exp $
+#	$NetBSD: Makefile,v 1.1 2008/04/14 17:24:56 skrll Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -19,9 +19,8 @@ IMAGEENDIAN=	le
 IMAGEDEPENDS=	${CRUNCHBIN} \
 		disktab.preinstall dot.hdprofile dot.profile \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
-		${NETBSDSRCDIR}/etc/netconfig \
-		${NETBSDSRCDIR}/distrib/common/protocols \
-		${NETBSDSRCDIR}/distrib/common/services
+		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \
+		${NETBSDSRCDIR}/etc/services
 
 IMAGETAR_RELEASEDIR=	installation/netboot
 

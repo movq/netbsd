@@ -1,4 +1,4 @@
-/*	$NetBSD: tap.c,v 1.2 2009/03/10 22:12:17 plunky Exp $	*/
+/*	$NetBSD: tap.c,v 1.1.6.1 2009/03/18 05:14:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tap.c,v 1.2 2009/03/10 22:12:17 plunky Exp $");
+__RCSID("$NetBSD: tap.c,v 1.1.6.1 2009/03/18 05:14:04 snj Exp $");
 
 #include <sys/ioctl.h>
 #include <sys/uio.h>

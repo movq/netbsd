@@ -1,4 +1,4 @@
-/* $NetBSD: citrus_bcs_strtoul.c,v 1.3 2009/01/11 02:46:24 christos Exp $ */
+/* $NetBSD: citrus_bcs_strtoul.c,v 1.3.2.3 2009/01/15 03:59:40 snj Exp $ */
 
 /*-
  * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: citrus_bcs_strtoul.c,v 1.3 2009/01/11 02:46:24 christos Exp $");
+__RCSID("$NetBSD: citrus_bcs_strtoul.c,v 1.3.2.3 2009/01/15 03:59:40 snj Exp $");
 #endif /* not lint */
 
 #include <assert.h>

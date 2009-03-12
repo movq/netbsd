@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.59 2009/02/24 06:03:55 yamt Exp $	*/
+/*	$NetBSD: intr.c,v 1.57.6.1 2010/11/21 02:46:24 riz Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -133,8 +133,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.59 2009/02/24 06:03:55 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.57.6.1 2010/11/21 02:46:24 riz Exp $");
 
+#include "opt_intrdebug.h"
 #include "opt_multiprocessor.h"
 #include "opt_acpi.h"
 
@@ -144,13 +145,11 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.59 2009/02/24 06:03:55 yamt Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <sys/kmem.h>
 #include <sys/proc.h>
 #include <sys/errno.h>
 #include <sys/intr.h>
 #include <sys/cpu.h>
 #include <sys/atomic.h>
-#include <sys/xcall.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -192,6 +191,7 @@ static int intr_find_pcibridge(int, pcitag_t *, pci_chipset_tag_t *);
 #endif
 
 kmutex_t x86_intr_lock;
+bool x86_intr_lock_initted;
 
 /*
  * Fill in default interrupt table (in case of spurious interrupt
@@ -216,6 +216,61 @@ intr_default_setup(void)
 	 * Eventually might want to check if it's actually there.
 	 */
 	i8259_default_setup();
+}
+
+struct nmi_handler {
+	int				(*n_func)(void *);
+	void				*n_arg;
+	SLIST_ENTRY(nmi_handler)	n_next;
+};
+
+SLIST_HEAD(nmi_handler_head, nmi_handler) nmi_handlers =
+    SLIST_HEAD_INITIALIZER(nmi_handler_head);
+
+void *
+nmi_establish(int (*func)(void *), void *arg)
+{
+	struct nmi_handler *n;
+
+	n = malloc(sizeof(*n), M_DEVBUF, cold ? M_NOWAIT : M_WAITOK);
+
+	if (n == NULL)
+		return NULL;
+
+	n->n_func = func;
+	n->n_arg = arg;
+	SLIST_INSERT_HEAD(&nmi_handlers, n, n_next);
+	KASSERT(SLIST_FIRST(&nmi_handlers) == n);
+	return n;
+}
+
+bool
+nmi_disestablish(void *n0)
+{
+	struct nmi_handler *n;
+
+	SLIST_FOREACH(n, &nmi_handlers, n_next) {
+		if (n == n0)
+			break;
+	}
+	if (n == NULL)
+		return false;
+	SLIST_REMOVE(&nmi_handlers, n, nmi_handler, n_next);
+	free(n, M_DEVBUF);
+	return true;
+}
+
+int
+nmi_dispatch(void)
+{
+	int handled = 0;
+	struct nmi_handler *n;
+
+	SLIST_FOREACH(n, &nmi_handlers, n_next) {
+		if ((*n->n_func)(n->n_arg))
+			handled = 1;
+	}
+	return handled;
 }
 
 /*
@@ -442,7 +497,7 @@ intr_allocate_slot_cpu(struct cpu_info *ci, struct pic *pic, int pin,
 
 	isp = ci->ci_isources[slot];
 	if (isp == NULL) {
-		isp = malloc(sizeof (struct intrsource),
+		MALLOC(isp, struct intrsource *, sizeof (struct intrsource),
 		    M_DEVBUF, M_NOWAIT|M_ZERO);
 		if (isp == NULL) {
 			mutex_exit(&x86_intr_lock);
@@ -532,7 +587,7 @@ intr_allocate_slot(struct pic *pic, int pin, int level,
 	if (idtvec == 0) {
 		mutex_enter(&x86_intr_lock);
 		evcnt_detach(&ci->ci_isources[slot]->is_evcnt);
-		free(ci->ci_isources[slot], M_DEVBUF);
+		FREE(ci->ci_isources[slot], M_DEVBUF);
 		ci->ci_isources[slot] = NULL;
 		mutex_exit(&x86_intr_lock);
 		return EBUSY;
@@ -763,7 +818,7 @@ intr_disestablish(struct intrhand *ih)
 
 	if (source->is_handlers == NULL) {
 		evcnt_detach(&source->is_evcnt);
-		free(source, M_DEVBUF);
+		FREE(source, M_DEVBUF);
 		ci->ci_isources[ih->ih_slot] = NULL;
 		if (pic != &i8259_pic)
 			idt_vec_free(idtvec);
@@ -858,7 +913,8 @@ cpu_intr_init(struct cpu_info *ci)
 #endif
 
 #if NLAPIC > 0
-	isp = malloc(sizeof (struct intrsource), M_DEVBUF, M_WAITOK|M_ZERO);
+	MALLOC(isp, struct intrsource *, sizeof (struct intrsource), M_DEVBUF,
+	    M_WAITOK|M_ZERO);
 	if (isp == NULL)
 		panic("can't allocate fixed interrupt source");
 	isp->is_recurse = Xrecurse_lapic_ltimer;
@@ -871,7 +927,8 @@ cpu_intr_init(struct cpu_info *ci)
 	    device_xname(ci->ci_dev), "timer");
 
 #ifdef MULTIPROCESSOR
-	isp = malloc(sizeof (struct intrsource), M_DEVBUF, M_WAITOK|M_ZERO);
+	MALLOC(isp, struct intrsource *, sizeof (struct intrsource), M_DEVBUF,
+	    M_WAITOK|M_ZERO);
 	if (isp == NULL)
 		panic("can't allocate fixed interrupt source");
 	isp->is_recurse = Xrecurse_lapic_ipi;
@@ -887,7 +944,8 @@ cpu_intr_init(struct cpu_info *ci)
 #endif
 #endif
 
-	isp = malloc(sizeof (struct intrsource), M_DEVBUF, M_WAITOK|M_ZERO);
+	MALLOC(isp, struct intrsource *, sizeof (struct intrsource), M_DEVBUF,
+	    M_WAITOK|M_ZERO);
 	if (isp == NULL)
 		panic("can't allocate fixed interrupt source");
 	isp->is_recurse = Xpreemptrecurse;
@@ -966,7 +1024,8 @@ softint_init_md(lwp_t *l, u_int level, uintptr_t *machdep)
 
 	ci = l->l_cpu;
 
-	isp = malloc(sizeof (struct intrsource), M_DEVBUF, M_WAITOK|M_ZERO);
+	MALLOC(isp, struct intrsource *, sizeof (struct intrsource), M_DEVBUF,
+	    M_WAITOK|M_ZERO);
 	if (isp == NULL)
 		panic("can't allocate fixed interrupt source");
 	isp->is_recurse = Xsoftintr;

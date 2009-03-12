@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_misc.c,v 1.164 2009/01/11 12:44:47 tsutsui Exp $	*/
+/*	$NetBSD: sunos_misc.c,v 1.161.4.1 2010/03/17 02:59:52 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -50,7 +50,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos_misc.c,v 1.164 2009/01/11 12:44:47 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos_misc.c,v 1.161.4.1 2010/03/17 02:59:52 snj Exp $");
+
+#if defined(_KERNEL_OPT)
+#include "opt_nfsserver.h"
+#include "opt_ptrace.h"
+#include "fs_nfs.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,14 +129,14 @@ sunos_sys_stime(struct lwp *l, const struct sunos_sys_stime_args *uap, register_
 int
 sunos_sys_wait4(struct lwp *l, const struct sunos_sys_wait4_args *uap, register_t *retval)
 {
-	struct compat_50_sys_wait4_args bsd_ua;
+	struct sys_wait4_args bsd_ua;
 
 	SCARG(&bsd_ua, pid) = SCARG(uap, pid) == 0 ? WAIT_ANY : SCARG(uap, pid);
 	SCARG(&bsd_ua, status) = SCARG(uap, status);
 	SCARG(&bsd_ua, options) = SCARG(uap, options);
 	SCARG(&bsd_ua, rusage) = SCARG(uap, rusage);
 
-	return (compat_50_sys_wait4(l, &bsd_ua, retval));
+	return (sys_wait4(l, &bsd_ua, retval));
 }
 
 int
@@ -292,12 +298,18 @@ sunos_sys_mount(struct lwp *l, const struct sunos_sys_mount_args *uap, register_
 	    UIO_USERSPACE, 0, &dummy);
 }
 
+#if defined(NFS)
 int
 async_daemon(struct lwp *l, const void *v, register_t *retval)
 {
+	struct sys_nfssvc_args ouap;
 
-	return kpause("fakeniod", false, 0, NULL);
+	SCARG(&ouap, flag) = NFSSVC_BIOD;
+	SCARG(&ouap, argp) = NULL;
+
+	return (sys_nfssvc(l, &ouap, retval));
 }
+#endif /* NFS */
 
 void	native_to_sunos_sigset(const sigset_t *, int *);
 void	sunos_to_native_sigset(const int, sigset_t *);
@@ -459,8 +471,12 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == SCARG(uap, buf))
+	if (outp == SCARG(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;		/* update the vnode offset */
 
 eof:
@@ -714,6 +730,7 @@ sunos_sys_open(struct lwp *l, const struct sunos_sys_open_args *uap, register_t 
 	return ret;
 }
 
+#if defined (NFSSERVER)
 int
 sunos_sys_nfssvc(struct lwp *l, const struct sunos_sys_nfssvc_args *uap, register_t *retval)
 {
@@ -743,6 +760,7 @@ sunos_sys_nfssvc(struct lwp *l, const struct sunos_sys_nfssvc_args *uap, registe
 	return (ENOSYS);
 #endif
 }
+#endif /* NFSSERVER */
 
 int
 sunos_sys_ustat(struct lwp *l, const struct sunos_sys_ustat_args *uap, register_t *retval)
@@ -872,8 +890,7 @@ sunos_sys_mknod(struct lwp *l, const struct sunos_sys_mknod_args *uap, register_
 		return sys_mkfifo(l, &fifo_ua, retval);
 	}
 
-	return compat_50_sys_mknod(l,
-	    (const struct compat_50_sys_mknod_args *)uap, retval);
+	return sys_mknod(l, (const struct sys_mknod_args *)uap, retval);
 }
 
 #define SUNOS_SC_ARG_MAX	1
@@ -961,6 +978,7 @@ sunos_sys_setrlimit(struct lwp *l, const struct sunos_sys_setrlimit_args *uap, r
 	return compat_43_sys_setrlimit(l, &ua_43, retval);
 }
 
+#if defined(PTRACE) || defined(_LKM)
 /* for the m68k machines */
 #ifndef PT_GETFPREGS
 #define PT_GETFPREGS -1
@@ -976,16 +994,20 @@ static const int sreq2breq[] = {
 	PT_GETREGS,     PT_SETREGS,     PT_GETFPREGS,   PT_SETFPREGS
 };
 static const int nreqs = sizeof(sreq2breq) / sizeof(sreq2breq[0]);
+#endif /* PTRACE || _LKM */
 
 int
 sunos_sys_ptrace(struct lwp *l, const struct sunos_sys_ptrace_args *uap, register_t *retval)
 {
+#if defined(PTRACE) || defined(_LKM)
 	struct sys_ptrace_args pa;
 	int req;
 
+#ifdef _LKM
 #define	sys_ptrace sysent[SYS_ptrace].sy_call 
 	if (sys_ptrace == sys_nosys)
 		return ENOSYS;
+#endif
 
 	req = SCARG(uap, req);
 
@@ -1002,6 +1024,9 @@ sunos_sys_ptrace(struct lwp *l, const struct sunos_sys_ptrace_args *uap, registe
 	SCARG(&pa, data) = SCARG(uap, data);
 
 	return sys_ptrace(l, &pa, retval);
+#else
+	return ENOSYS;
+#endif /* PTRACE || _LKM */
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_input.c,v 1.292 2009/01/29 20:38:22 pooka Exp $	*/
+/*	$NetBSD: tcp_input.c,v 1.291.4.5 2010/06/11 23:36:07 riz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -145,7 +145,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.292 2009/01/29 20:38:22 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.291.4.5 2010/06/11 23:36:07 riz Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -242,6 +242,7 @@ int	tcp_log_refused;
 int	tcp_do_autorcvbuf = 0;
 int	tcp_autorcvbuf_inc = 16 * 1024;
 int	tcp_autorcvbuf_max = 256 * 1024;
+int	tcp_msl = (TCPTV_MSL / PR_SLOWHZ);
 
 static int tcp_rst_ppslim_count = 0;
 static struct timeval tcp_rst_ppslim_last;
@@ -404,15 +405,8 @@ static void tcp6_log_refused(const struct ip6_hdr *, const struct tcphdr *);
 struct mowner tcp_reass_mowner = MOWNER_INIT("tcp", "reass");
 #endif /* defined(MBUFTRACE) */
 
-static struct pool tcpipqent_pool;
-
-void
-tcpipqent_init()
-{
-
-	pool_init(&tcpipqent_pool, sizeof(struct ipqent), 0, 0, 0, "tcpipqepl",
-	    NULL, IPL_VM);
-}
+static POOL_INIT(tcpipqent_pool, sizeof(struct ipqent), 0, 0, 0, "tcpipqepl",
+    NULL, IPL_VM);
 
 struct ipqent *
 tcpipqent_alloc(void)
@@ -2104,7 +2098,7 @@ after_listen:
 			tcps[TCP_STAT_RCVDUPBYTE] += todrop;
 			TCP_STAT_PUTREF();
 		} else if ((tiflags & TH_RST) &&
-			   th->th_seq != tp->last_ack_sent) {
+			   th->th_seq != tp->rcv_nxt) {
 			/*
 			 * Test for reset before adjusting the sequence
 			 * number for overlapping data.
@@ -2230,7 +2224,7 @@ after_listen:
 	 *	Close the tcb.
 	 */
 	if (tiflags & TH_RST) {
-		if (th->th_seq != tp->last_ack_sent)
+		if (th->th_seq != tp->rcv_nxt)
 			goto dropafterack_ratelim;
 
 		switch (tp->t_state) {
@@ -2495,7 +2489,8 @@ after_listen:
 			if (ourfinisacked) {
 				tp->t_state = TCPS_TIME_WAIT;
 				tcp_canceltimers(tp);
-				TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * TCPTV_MSL);
+				TCP_TIMER_ARM(tp, TCPT_2MSL, 
+						2 * PR_SLOWHZ * tcp_msl);
 				soisdisconnected(so);
 			}
 			break;
@@ -2519,7 +2514,7 @@ after_listen:
 		 * it and restart the finack timer.
 		 */
 		case TCPS_TIME_WAIT:
-			TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * TCPTV_MSL);
+			TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * PR_SLOWHZ * tcp_msl);
 			goto dropafterack;
 		}
 	}
@@ -2703,7 +2698,7 @@ dodata:							/* XXX */
 		case TCPS_FIN_WAIT_2:
 			tp->t_state = TCPS_TIME_WAIT;
 			tcp_canceltimers(tp);
-			TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * TCPTV_MSL);
+			TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * PR_SLOWHZ * tcp_msl);
 			soisdisconnected(so);
 			break;
 
@@ -2711,7 +2706,7 @@ dodata:							/* XXX */
 		 * In TIME_WAIT state restart the 2 MSL time_wait timer.
 		 */
 		case TCPS_TIME_WAIT:
-			TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * TCPTV_MSL);
+			TCP_TIMER_ARM(tp, TCPT_2MSL, 2 * PR_SLOWHZ * tcp_msl);
 			break;
 		}
 	}
@@ -3312,7 +3307,8 @@ do {									\
 } while (/*CONSTCOND*/0)
 #endif /* INET6 */
 
-static struct pool syn_cache_pool;
+POOL_INIT(syn_cache_pool, sizeof(struct syn_cache), 0, 0, 0, "synpl", NULL,
+    IPL_SOFTNET);
 
 /*
  * We don't estimate RTT with SYNs, so each packet starts with the default
@@ -3347,21 +3343,15 @@ syn_cache_put(struct syn_cache *sc)
 	if (sc->sc_ipopts)
 		(void) m_free(sc->sc_ipopts);
 	rtcache_free(&sc->sc_route);
-	if (callout_invoking(&sc->sc_timer))
-		sc->sc_flags |= SCF_DEAD;
-	else {
-		callout_destroy(&sc->sc_timer);
-		pool_put(&syn_cache_pool, sc);
-	}
+	sc->sc_flags |= SCF_DEAD;
+	if (!callout_invoking(&sc->sc_timer))
+		callout_schedule(&(sc)->sc_timer, 1);
 }
 
 void
 syn_cache_init(void)
 {
 	int i;
-
-	pool_init(&syn_cache_pool, sizeof(struct syn_cache), 0, 0, 0,
-	    "synpl", NULL, IPL_SOFTNET);
 
 	/* Initialize the hash buckets. */
 	for (i = 0; i < tcp_syn_cache_size; i++)
@@ -3516,7 +3506,11 @@ syn_cache_timer(void *arg)
  dropit:
 	TCP_STATINC(TCP_STAT_SC_TIMED_OUT);
 	syn_cache_rm(sc);
-	syn_cache_put(sc);	/* calls pool_put but see spl above */
+	if (sc->sc_ipopts)
+		(void) m_free(sc->sc_ipopts);
+	rtcache_free(&sc->sc_route);
+	callout_destroy(&sc->sc_timer);
+	pool_put(&syn_cache_pool, sc);
 	KERNEL_UNLOCK_ONE(NULL);
 	mutex_exit(softnet_lock);
 }
@@ -4189,6 +4183,11 @@ syn_cache_add(struct sockaddr *src, struct sockaddr *dst, struct tcphdr *th,
 		syn_cache_insert(sc, tp);
 	} else {
 		s = splsoftnet();
+		/*
+		 * syn_cache_put() will try to schedule the timer, so
+		 * we need to initialize it
+		 */
+		SYN_CACHE_TIMER_ARM(sc);
 		syn_cache_put(sc);
 		splx(s);
 		TCP_STATINC(TCP_STAT_SC_DROPPED);

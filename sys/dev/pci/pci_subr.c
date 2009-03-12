@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_subr.c,v 1.77 2009/01/20 13:54:43 jmcneill Exp $	*/
+/*	$NetBSD: pci_subr.c,v 1.75.10.1 2009/02/24 03:50:48 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Zubin D. Dittia.  All rights reserved.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_subr.c,v 1.77 2009/01/20 13:54:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_subr.c,v 1.75.10.1 2009/02/24 03:50:48 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_pci.h"
@@ -299,48 +299,29 @@ static const struct pci_class pci_class[] = {
 /*
  * Descriptions of of known vendors and devices ("products").
  */
+struct pci_vendor {
+	pci_vendor_id_t		vendor;
+	const char		*vendorname;
+};
+struct pci_product {
+	pci_vendor_id_t		vendor;
+	pci_product_id_t	product;
+	const char		*productname;
+};
 
 #include <dev/pci/pcidevs_data.h>
-#endif /* PCIVERBOSE */
-
-#ifdef PCIVERBOSE
-#ifndef _KERNEL
-#include <string.h>
-#endif
-static const char *
-pci_untokenstring(const uint16_t *token, char *buf, size_t len)
-{
-	char *cp = buf;
-
-	buf[0] = '\0';
-	for (; *token != 0; token++) {
-		cp = buf + strlcat(buf, pci_words + *token, len - 2);
-		cp[0] = ' ';
-		cp[1] = '\0';
-	}
-	*cp = '\0';
-	return cp != buf ? buf : NULL;
-}
 #endif /* PCIVERBOSE */
 
 const char *
 pci_findvendor(pcireg_t id_reg)
 {
 #ifdef PCIVERBOSE
-	static char buf[256];
 	pci_vendor_id_t vendor = PCI_VENDOR(id_reg);
-	size_t n;
+	int n;
 
-	for (n = 0; n < __arraycount(pci_vendors); n++) {
-		if (pci_vendors[n] == vendor)
-			return pci_untokenstring(&pci_vendors[n+1], buf,
-			    sizeof(buf));
-
-		/* Skip Tokens */
-		n++;
-		while (pci_vendors[n] != 0 && n < __arraycount(pci_vendors))
-			n++;
-	}
+	for (n = 0; n < pci_nvendors; n++)
+		if (pci_vendors[n].vendor == vendor)
+			return (pci_vendors[n].vendorname);
 #endif
 	return (NULL);
 }
@@ -349,21 +330,14 @@ const char *
 pci_findproduct(pcireg_t id_reg)
 {
 #ifdef PCIVERBOSE
-	static char buf[256];
 	pci_vendor_id_t vendor = PCI_VENDOR(id_reg);
 	pci_product_id_t product = PCI_PRODUCT(id_reg);
-	size_t n;
+	int n;
 
-	for (n = 0; n < __arraycount(pci_products); n++) {
-		if (pci_products[n] == vendor && pci_products[n+1] == product)
-			return pci_untokenstring(&pci_products[n+2], buf,
-			    sizeof(buf));
-
-		/* Skip Tokens */
-		n += 2;
-		while (pci_products[n] != 0 && n < __arraycount(pci_products))
-			n++;
-	}
+	for (n = 0; n < pci_nproducts; n++)
+		if (pci_products[n].vendor == vendor &&
+		    pci_products[n].product == product)
+			return (pci_products[n].productname);
 #endif
 	return (NULL);
 }

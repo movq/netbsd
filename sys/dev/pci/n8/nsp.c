@@ -77,7 +77,8 @@
 #include <sys/mbuf.h>
 #include <sys/device.h>
 #include <sys/queue.h>
-#include <sys/module.h>
+
+#include <sys/lkm.h>
 #include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
@@ -110,7 +111,7 @@ static void nsp_attach(struct device *parent, struct device *self, void *aux);
 static int nsp_detach(device_t dev, int flags);
 
 
-#ifdef _MODULE
+#ifdef _LKM
 CFATTACH_DECL(nsp2000, sizeof(struct nsp_softc), nsp_probe, nsp_attach, nsp_detach, NULL);
 
 int nsp2000_lkmentry(struct lkm_table *lkmtp, int cmd, int ver);
@@ -148,7 +149,7 @@ nsp2000_lkmentry(struct lkm_table *lkmtp, int cmd, int ver)
 	LKM_DISPATCH(lkmtp, cmd, NULL, lkm_nofunc, lkm_nofunc, lkm_nofunc);
 
 }
-#else /* _MODULE */
+#else /* _LKM */
 CFATTACH_DECL(nsp, sizeof(struct nsp_softc), nsp_probe, nsp_attach, nsp_detach, NULL);
 #endif
 
@@ -1991,7 +1992,7 @@ n8_kprocess(void *arg, struct cryptkop *krp, int hint)
 		 * where b is the second parties private key
 		 */
 
-		event.usrCallback = n8_kcallback_setup;
+		event.usrCallback = n8_kcallback_setup;;
 		event.usrData = (void *)req;
 
 		req->op.dh.keymaterial.p =

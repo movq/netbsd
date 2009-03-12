@@ -1,4 +1,4 @@
-/* $NetBSD: aliasname_local.h,v 1.3 2009/01/11 02:46:28 christos Exp $ */
+/* $NetBSD: aliasname_local.h,v 1.1.42.1 2009/01/15 03:24:07 snj Exp $ */
 
 /*-
  * Copyright (c)2002 YAMAMOTO Takashi,

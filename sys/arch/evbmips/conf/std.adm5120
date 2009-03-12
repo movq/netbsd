@@ -1,4 +1,4 @@
-# $NetBSD: std.adm5120,v 1.2 2008/12/11 05:42:18 alc Exp $
+# $NetBSD: std.adm5120,v 1.1.56.1 2009/08/07 06:43:26 snj Exp $
 
 machine evbmips mips
 include		"conf/std"	# MI standard options

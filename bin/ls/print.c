@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.45 2009/02/14 08:02:04 lukem Exp $	*/
+/*	$NetBSD: print.c,v 1.42 2006/12/14 14:15:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.5 (Berkeley) 7/28/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.45 2009/02/14 08:02:04 lukem Exp $");
+__RCSID("$NetBSD: print.c,v 1.42 2006/12/14 14:15:26 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,7 +65,6 @@ extern int termwidth;
 static int	printaname(FTSENT *, int, int);
 static void	printlink(FTSENT *);
 static void	printtime(time_t);
-static void	printtotal(DISPLAY *dp);
 static int	printtype(u_int);
 
 static time_t	now;
@@ -95,8 +94,19 @@ printlong(DISPLAY *dp)
 
 	now = time(NULL);
 
-	printtotal(dp);		/* "total: %u\n" */
-	
+	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size)) {
+		if (f_humanize) {
+			if ((humanize_number(szbuf, sizeof(szbuf), (int64_t)dp->stotal,
+			    "", HN_AUTOSCALE,
+			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+				err(1, "humanize_number");
+			(void)printf("total %s\n", szbuf);
+		} else {
+			(void)printf("total %llu\n",
+			    (long long)(howmany(dp->btotal, blocksize)));
+		}
+	}
+
 	for (p = dp->list; p; p = p->fts_link) {
 		if (IS_NOPRINT(p))
 			continue;
@@ -128,9 +138,9 @@ printlong(DISPLAY *dp)
 		if (f_flags)
 			(void)printf("%-*s ", dp->s_flags, np->flags);
 		if (S_ISCHR(sp->st_mode) || S_ISBLK(sp->st_mode))
-			(void)printf("%*lld, %*lld ",
-			    dp->s_major, (long long)major(sp->st_rdev),
-			    dp->s_minor, (long long)minor(sp->st_rdev));
+			(void)printf("%*u, %*u ",
+			    dp->s_major, major(sp->st_rdev), dp->s_minor,
+			    minor(sp->st_rdev));
 		else
 			if (f_humanize) {
 				if ((humanize_number(szbuf, sizeof(szbuf),
@@ -171,6 +181,7 @@ printcol(DISPLAY *dp)
 	FTSENT *p;
 	int base, chcnt, col, colwidth, num;
 	int numcols, numrows, row;
+	char szbuf[5];
 
 	colwidth = dp->maxlen;
 	if (f_inode)
@@ -213,8 +224,18 @@ printcol(DISPLAY *dp)
 	if (num % numcols)
 		++numrows;
 
-	printtotal(dp);				/* "total: %u\n" */
-
+	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size)) {
+		if (f_humanize) {
+			if ((humanize_number(szbuf, sizeof(szbuf), (int64_t)dp->stotal,
+			    "", HN_AUTOSCALE,
+			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+				err(1, "humanize_number");
+			(void)printf("total %s\n", szbuf);
+		} else {
+			(void)printf("total %llu\n",
+			    (long long)(howmany(dp->btotal, blocksize)));
+		}
+	}
 	for (row = 0; row < numrows; ++row) {
 		for (base = row, chcnt = col = 0; col < numcols; ++col) {
 			chcnt = printaname(array[base], dp->s_inode,
@@ -234,6 +255,7 @@ printacol(DISPLAY *dp)
 	FTSENT *p;
 	int chcnt, col, colwidth;
 	int numcols;
+	char szbuf[5];
 
 	colwidth = dp->maxlen;
 	if (f_inode)
@@ -257,8 +279,18 @@ printacol(DISPLAY *dp)
 	numcols = termwidth / colwidth;
 	colwidth = termwidth / numcols;		/* spread out if possible */
 
-	printtotal(dp);				/* "total: %u\n" */
-
+	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size)) {
+		if (f_humanize) {
+			if ((humanize_number(szbuf, sizeof(szbuf), (int64_t)dp->stotal,
+			    "", HN_AUTOSCALE,
+			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
+				err(1, "humanize_number");
+			(void)printf("total %s\n", szbuf);
+		} else {
+			(void)printf("total %llu\n",
+			    (long long)(howmany(dp->btotal, blocksize)));
+		}
+	}
 	chcnt = col = 0;
 	for (p = dp->list; p; p = p->fts_link) {
 		if (IS_NOPRINT(p))
@@ -300,7 +332,7 @@ printstream(DISPLAY *dp)
 			continue;
 		if (col > 0) {
 			(void)putchar(','), col++;
-			if (col + 1 + extwidth + (int)p->fts_namelen >= termwidth)
+			if (col + 1 + extwidth + p->fts_namelen >= termwidth)
 				(void)putchar('\n'), col = 0;
 			else
 				(void)putchar(' '), col++;
@@ -372,30 +404,6 @@ printtime(time_t ftime)
 			(void)putchar(longstring[i]);
 	}
 	(void)putchar(' ');
-}
-
-/*
- * Display total used disk space in the form "total: %u\n".
- * Note: POSIX (IEEE Std 1003.1-2001) says this should be always in 512 blocks,
- * but we humanise it with -h and use 1024 with -k.
- */
-static void
-printtotal(DISPLAY *dp)
-{
-	char szbuf[5];
-	
-	if (dp->list->fts_level != FTS_ROOTLEVEL && (f_longform || f_size)) {
-		if (f_humanize) {
-			if ((humanize_number(szbuf, sizeof(szbuf), (int64_t)dp->stotal,
-			    "", HN_AUTOSCALE,
-			    (HN_DECIMAL | HN_B | HN_NOSPACE))) == -1)
-				err(1, "humanize_number");
-			(void)printf("total %s\n", szbuf);
-		} else {
-			(void)printf("total %llu\n",
-			    (long long)(howmany(dp->btotal, blocksize)));
-		}
-	}
 }
 
 static int

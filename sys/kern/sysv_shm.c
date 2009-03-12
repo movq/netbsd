@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_shm.c,v 1.116 2009/03/06 20:31:54 joerg Exp $	*/
+/*	$NetBSD: sysv_shm.c,v 1.113.2.1 2009/01/14 17:54:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2007 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_shm.c,v 1.116 2009/03/06 20:31:54 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_shm.c,v 1.113.2.1 2009/01/14 17:54:21 snj Exp $");
 
 #define SYSVSHM
 
@@ -496,8 +496,7 @@ err_detach:
  * Shared memory control operations.
  */
 int
-sys___shmctl50(struct lwp *l, const struct sys___shmctl50_args *uap,
-    register_t *retval)
+sys___shmctl13(struct lwp *l, const struct sys___shmctl13_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) shmid;
@@ -973,11 +972,7 @@ shminit(void)
 	shm_cv = (void *)((uintptr_t)shmsegs +
 	    ALIGN(shminfo.shmmni * sizeof(struct shmid_ds)));
 
-	if (shminfo.shmmax == 0)
-		shminfo.shmmax = max(physmem / 4, 1024) * PAGE_SIZE;
-	else
-		shminfo.shmmax *= PAGE_SIZE;
-	shminfo.shmall = shminfo.shmmax / PAGE_SIZE;
+	shminfo.shmmax *= PAGE_SIZE;
 
 	for (i = 0; i < shminfo.shmmni; i++) {
 		cv_init(&shm_cv[i], "shmwait");

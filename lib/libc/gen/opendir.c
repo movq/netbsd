@@ -1,4 +1,4 @@
-/*	$NetBSD: opendir.c,v 1.35 2009/01/11 02:46:27 christos Exp $	*/
+/*	$NetBSD: opendir.c,v 1.33 2008/01/10 09:49:04 elad Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,14 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)opendir.c	8.7 (Berkeley) 12/10/94";
 #else
-__RCSID("$NetBSD: opendir.c,v 1.35 2009/01/11 02:46:27 christos Exp $");
+__RCSID("$NetBSD: opendir.c,v 1.33 2008/01/10 09:49:04 elad Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include "reentrant.h"
 #include "extern.h"
-
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
@@ -58,10 +57,6 @@ __RCSID("$NetBSD: opendir.c,v 1.35 2009/01/11 02:46:27 christos Exp $");
 
 #define	MAXITERATIONS	100
 
-static DIR	*__opendir_common(int, const char *, int);
-
-__weak_alias(fdopendir,_fdopendir)
-
 /*
  * Open a directory.
  */
@@ -77,26 +72,8 @@ opendir(const char *name)
 DIR *
 __opendir2(const char *name, int flags)
 {
-	int fd;
-
-	if ((fd = open(name, O_RDONLY | O_NONBLOCK)) == -1)
-		return NULL;
-	return __opendir_common(fd, name, flags);
-}
-
-#ifndef __LIBC12_SOURCE__
-DIR *
-_fdopendir(int fd)
-{
-
-	return __opendir_common(fd, NULL, DTF_HIDEW|DTF_NODUP);
-}
-#endif
-
-static DIR *
-__opendir_common(int fd, const char *name, int flags)
-{
 	DIR *dirp = NULL;
+	int fd;
 	int serrno;
 	struct stat sb;
 	int pagesz;
@@ -106,7 +83,8 @@ __opendir_common(int fd, const char *name, int flags)
 
 	_DIAGASSERT(name != NULL);
 
-	if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1)
+	if ((fd = open(name, O_RDONLY | O_NONBLOCK)) == -1 ||
+	    fcntl(fd, F_SETFD, FD_CLOEXEC) == -1)
 		goto error;
 	if (fstat(fd, &sb) || !S_ISDIR(sb.st_mode)) {
 		errno = ENOTDIR;

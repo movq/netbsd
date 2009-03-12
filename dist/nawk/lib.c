@@ -533,6 +533,11 @@ void SYNTAX(const char *fmt, ...)
 	eprint();
 }
 
+void fpecatch(int n)
+{
+	FATAL("floating point exception %d", n);
+}
+
 extern int bracecnt, brackcnt, parencnt;
 
 void bracecheck(void)

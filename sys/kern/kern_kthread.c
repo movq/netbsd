@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_kthread.c,v 1.26 2009/01/30 04:09:35 agc Exp $	*/
+/*	$NetBSD: kern_kthread.c,v 1.24.10.2 2009/02/02 22:02:24 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2007, 2009 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_kthread.c,v 1.26 2009/01/30 04:09:35 agc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_kthread.c,v 1.24.10.2 2009/02/02 22:02:24 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

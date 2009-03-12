@@ -1,4 +1,4 @@
-/*	$NetBSD: files.c,v 1.9 2009/01/20 18:20:48 drochner Exp $	*/
+/*	$NetBSD: files.c,v 1.7 2007/11/30 23:19:18 dsl Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -382,7 +382,7 @@ fixdevsw(void)
 		    !expr_eval(dm->dm_opts, fixsel, NULL))
 			continue;
 
-		if (dm->dm_cmajor != NODEVMAJOR) {
+		if (dm->dm_cmajor != -1) {
 			if (ht_lookup(cdevmtab, intern(dm->dm_name)) != NULL) {
 				cfgxerror(dm->dm_srcfile, dm->dm_srcline,
 				       "device-major of character device '%s' "
@@ -404,7 +404,7 @@ fixdevsw(void)
 				      dm->dm_name, dm->dm_cmajor);
 			}
 		}
-		if (dm->dm_bmajor != NODEVMAJOR) {
+		if (dm->dm_bmajor != -1) {
 			if (ht_lookup(bdevmtab, intern(dm->dm_name)) != NULL) {
 				cfgxerror(dm->dm_srcfile, dm->dm_srcline,
 				       "device-major of block device '%s' "
@@ -501,7 +501,7 @@ expr_eval(struct nvlist *expr, int (*fn)(const char *, void *), void *context)
 {
 	int lhs, rhs;
 
-	switch (expr->nv_num) {
+	switch (expr->nv_int) {
 
 	case FX_ATOM:
 		return ((*fn)(expr->nv_name, context));
@@ -519,7 +519,7 @@ expr_eval(struct nvlist *expr, int (*fn)(const char *, void *), void *context)
 		rhs = expr_eval(expr->nv_next, fn, context);
 		return (lhs | rhs);
 	}
-	panic("expr_eval %lld", expr->nv_num);
+	panic("expr_eval %d", expr->nv_int);
 	/* NOTREACHED */
 	return (0);
 }
@@ -534,7 +534,7 @@ expr_free(struct nvlist *expr)
 
 	/* This loop traverses down the RHS of each subexpression. */
 	for (; expr != NULL; expr = rhs) {
-		switch (expr->nv_num) {
+		switch (expr->nv_int) {
 
 		/* Atoms and !-exprs have no left hand side. */
 		case FX_ATOM:
@@ -548,7 +548,7 @@ expr_free(struct nvlist *expr)
 			break;
 
 		default:
-			panic("expr_free %lld", expr->nv_num);
+			panic("expr_free %d", expr->nv_int);
 		}
 		rhs = expr->nv_next;
 		nvfree(expr);
@@ -574,7 +574,7 @@ static void
 pr0(struct nvlist *e)
 {
 
-	switch (e->nv_num) {
+	switch (e->nv_int) {
 	case FX_ATOM:
 		printf(" %s", e->nv_name);
 		return;
@@ -588,7 +588,7 @@ pr0(struct nvlist *e)
 		printf(" (|");
 		break;
 	default:
-		printf(" (?%lld?", e->nv_num);
+		printf(" (?%d?", e->nv_int);
 		break;
 	}
 	if (e->nv_ptr)

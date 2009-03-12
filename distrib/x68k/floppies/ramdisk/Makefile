@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.31 2009/01/25 22:08:39 abs Exp $
+#	$NetBSD: Makefile,v 1.29 2008/05/11 09:35:53 isaki Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 IMAGE=			inst.fs
-IMAGESIZE=		1400k
+IMAGESIZE=		1300k
 # `floppy-root' cannot be used now, due to size issue.
 #IMAGE_RELEASEDIR=	installation/floppy
 
@@ -23,7 +23,7 @@ IMAGEDEPENDS+= 	${CRUNCHBIN} \
 		${DESTDIR}/usr/mdec/boot ${DESTDIR}/usr/mdec/mboot \
 		${DESTDIR}/usr/mdec/sdboot_ufs \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
-		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/distrib/common/protocols
+		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols
 SMALLPROG_INET6=1
 
 .if ${USE_INET6} != "no"

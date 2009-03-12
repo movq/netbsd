@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctlfs.c,v 1.10 2009/01/18 10:10:47 lukem Exp $	*/
+/*	$NetBSD: sysctlfs.c,v 1.9.4.1 2009/05/30 16:49:35 snj Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: sysctlfs.c,v 1.10 2009/01/18 10:10:47 lukem Exp $");
+__RCSID("$NetBSD: sysctlfs.c,v 1.9.4.1 2009/05/30 16:49:35 snj Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -158,7 +158,8 @@ getnode(struct puffs_usermount *pu, struct puffs_pathobj *po, int nodetype)
 	struct puffs_node *pn;
 	struct sfsnode *sfs;
 	SfsName myname, *sname;
-	size_t sl, i;
+	size_t sl;
+	int i;
 
 	/*
 	 * Check if we need to create a new in-memory node or if we
@@ -458,8 +459,8 @@ sysctlfs_node_lookup(struct puffs_usermount *pu, void *opc,
 	struct puffs_node *pn_new;
 	struct sfsnode *sfs_dir = pn_dir->pn_data, *sfs_new;
 	SfsName *sname = PCNPATH(pcn);
-	size_t sl, i;
-	int nodetype;
+	size_t sl;
+	int i, nodetype;
 
 	assert(ISADIR(sfs_dir));
 
@@ -555,9 +556,10 @@ sysctlfs_node_readdir(struct puffs_usermount *pu, void *opc,
 	struct puffs_pathobj po;
 	struct sfsnode *sfs_dir = pn_dir->pn_data, *sfs_ent;
 	SfsName *sname;
-	size_t sl, i;
+	size_t sl;
 	enum vtype vt;
 	ino_t id;
+	int i;
 
 	*ncookies = 0;
 
@@ -627,7 +629,10 @@ sysctlfs_node_read(struct puffs_usermount *pu, void *opc, uint8_t *buf,
 		return EISDIR;
 
 	doprint(sfs, &pn->pn_po, localbuf, sizeof(localbuf));
-	xfer = MIN(*resid, strlen(localbuf) - offset);
+	if (strlen(localbuf) < offset)
+		xfer = 0;
+	else
+		xfer = MIN(*resid, strlen(localbuf) - offset);
 
 	if (xfer <= 0)
 		return 0;

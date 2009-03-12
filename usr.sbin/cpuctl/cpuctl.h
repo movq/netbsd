@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuctl.h,v 1.2 2008/12/16 22:44:51 christos Exp $	*/
+/*	$NetBSD: cpuctl.h,v 1.1.8.1 2008/12/23 03:36:43 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.

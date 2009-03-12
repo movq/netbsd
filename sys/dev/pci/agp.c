@@ -1,4 +1,4 @@
-/*	$NetBSD: agp.c,v 1.65 2009/01/27 08:39:33 markd Exp $	*/
+/*	$NetBSD: agp.c,v 1.62.4.1 2009/05/05 18:17:57 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -65,7 +65,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp.c,v 1.65 2009/01/27 08:39:33 markd Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp.c,v 1.62.4.1 2009/05/05 18:17:57 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

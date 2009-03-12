@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.13 2009/02/14 13:56:41 abs Exp $
+#	$NetBSD: Makefile,v 1.12 2007/07/29 14:34:45 nonaka Exp $
 
-.if (${MACHINE_ARCH} == "i386" || \
+.if (${MACHINE} == "i386" || \
      ${MACHINE} == "hpcmips" || \
      ${MACHINE} == "hpcsh" || \
      ${MACHINE} == "macppc" || \
-     ${MACHINE_ARCH} == "sparc" || \
+     ${MACHINE} == "sparc" || \
      ${MACHINE} == "zaurus")
 PROG=	apmd
 SRCS=	apmd.c apmsubr.c

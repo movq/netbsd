@@ -1,4 +1,4 @@
-/*	$NetBSD: tftp.c,v 1.29 2009/01/17 14:00:36 tsutsui Exp $	 */
+/*	$NetBSD: tftp.c,v 1.26 2008/05/11 11:29:12 chris Exp $	 */
 
 /*
  * Copyright (c) 1996
@@ -90,16 +90,16 @@ static const int tftperrors[8] = {
 	EINVAL,			/* ??? */
 };
 
-static ssize_t recvtftp(struct iodesc *, void *, size_t, saseconds_t);
-static int tftp_makereq(struct tftp_handle *);
-static int tftp_getnextblock(struct tftp_handle *);
+static ssize_t recvtftp __P((struct iodesc *, void *, size_t, time_t));
+static int tftp_makereq __P((struct tftp_handle *));
+static int tftp_getnextblock __P((struct tftp_handle *));
 #ifndef TFTP_NOTERMINATE
-static void tftp_terminate(struct tftp_handle *);
+static void tftp_terminate __P((struct tftp_handle *));
 #endif
-static ssize_t tftp_size_of_file(struct tftp_handle *tftpfile);
+static ssize_t tftp_size_of_file __P((struct tftp_handle *tftpfile));
 
 static ssize_t
-recvtftp(struct iodesc *d, void *pkt, size_t len, saseconds_t tleft)
+recvtftp(struct iodesc *d, void *pkt, size_t len, time_t tleft)
 {
 	ssize_t n;
 	struct tftphdr *t;
@@ -270,7 +270,6 @@ tftp_open(const char *path, struct open_file *f)
 		return res;
 	}
 	f->f_fsdata = (void *)tftpfile;
-	fsmod = "nfs";
 	return 0;
 }
 
@@ -322,14 +321,14 @@ tftp_read(struct open_file *f, void *addr, size_t size, size_t *resid)
 
 			offinblock = tftpfile->off % SEGSIZE;
 
-			if (offinblock > tftpfile->validsize) {
+			inbuffer = tftpfile->validsize - offinblock;
+			if (inbuffer < 0) {
 #ifdef DEBUG
 				printf("tftp: invalid offset %d\n",
 				    tftpfile->off);
 #endif
 				return EINVAL;
 			}
-			inbuffer = tftpfile->validsize - offinblock;
 			count = (size < inbuffer ? size : inbuffer);
 			(void)memcpy(addr,
 			    tftpfile->lastdata.t.th_data + offinblock,

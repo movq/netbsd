@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_misc.c,v 1.145 2009/01/11 02:45:50 christos Exp $	 */
+/*	$NetBSD: svr4_misc.c,v 1.144.6.1 2010/03/17 02:59:52 snj Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_misc.c,v 1.145 2009/01/11 02:45:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_misc.c,v 1.144.6.1 2010/03/17 02:59:52 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -305,8 +305,12 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == (char *) SCARG(uap, dp))
+	if (outp == (char *) SCARG(uap, dp)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 eof:
@@ -426,8 +430,12 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == SCARG(uap, buf))
+	if (outp == SCARG(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 eof:
@@ -521,7 +529,11 @@ svr4_mknod(struct lwp *l, register_t *retval, const char *path, svr4_mode_t mode
 		SCARG(&ap, mode) = mode;
 		return sys_mkfifo(l, &ap, retval);
 	} else {
-		return do_sys_mknod(l, path, mode, dev, retval);
+		struct sys_mknod_args ap;
+		SCARG(&ap, path) = path;
+		SCARG(&ap, mode) = mode;
+		SCARG(&ap, dev) = dev;
+		return sys_mknod(l, &ap, retval);
 	}
 }
 

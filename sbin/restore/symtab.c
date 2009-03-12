@@ -1,4 +1,4 @@
-/*	$NetBSD: symtab.c,v 1.24 2009/02/22 15:28:43 yamt Exp $	*/
+/*	$NetBSD: symtab.c,v 1.23.28.1 2010/11/21 02:30:17 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)symtab.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: symtab.c,v 1.24 2009/02/22 15:28:43 yamt Exp $");
+__RCSID("$NetBSD: symtab.c,v 1.23.28.1 2010/11/21 02:30:17 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -233,7 +233,7 @@ addentry(const char *name, ino_t inum, int type)
 	}
 	np = freelist;
 	freelist = np->e_next;
-	memset(np, 0, sizeof(struct entry));
+	memset(np, 0, (long)sizeof(struct entry));
 
 	np->e_type = type & ~LINK;
 	ep = lookupparent(name);
@@ -455,7 +455,7 @@ dumpsymtable(const char *filename, int32_t checkpt)
 	FILE *fd;
 	struct symtableheader hdr;
 
-	vprintf(stdout, "Check pointing the restore\n");
+	vprintf(stdout, "Checkpointing the restore\n");
 	if (Nflag)
 		return;
 	if ((fd = fopen(filename, "w")) == NULL) {

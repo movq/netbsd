@@ -1,4 +1,4 @@
-/* $NetBSD: if_ie.c,v 1.20 2008/11/07 00:20:01 dyoung Exp $ */
+/* $NetBSD: if_ie.c,v 1.19 2007/10/17 19:52:54 garbled Exp $ */
 
 /*
  * Copyright (c) 1995 Melvin Tang-Richardson.
@@ -53,7 +53,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.20 2008/11/07 00:20:01 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.19 2007/10/17 19:52:54 garbled Exp $");
 
 #define IGNORE_ETHER1_IDROM_CHECKSUM
 
@@ -614,10 +614,14 @@ iezero(sc, p, size)
  */
 
 int
-ieioctl(struct ifnet *ifp, unsigned long cmd, void *data)
+ieioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	u_long cmd;
+	void *data;
 {
     struct ie_softc *sc = ifp->if_softc;
     struct ifaddr *ifa = (struct ifaddr *)data;
+/*    struct ifreq *ifr = (struct ifreq *)data;*/
     int s;
     int error=0;
 
@@ -625,9 +629,9 @@ ieioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 
     switch ( cmd )
     {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 	    ifp->if_flags |= IFF_UP;
-	    switch (ifa->ifa_addr->sa_family ) {
+	    switch ( ifa->ifa_addr->sa_family ) {
 #ifdef INET
 		case AF_INET:
 		    ieinit(sc);
@@ -646,8 +650,6 @@ ieioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 #define DOCLR(a,b) (a->if_flags&=~b)
 
 	case SIOCSIFFLAGS:
-	    if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-		return error;
 	    sc->promisc = ifp->if_flags & ( IFF_PROMISC | IFF_ALLMULTI );
 
 	    if ( IZCLR(ifp,IFF_UP) && IZSET(ifp,IFF_RUNNING) )
@@ -669,8 +671,7 @@ ieioctl(struct ifnet *ifp, unsigned long cmd, void *data)
             }
 
 	default:
-	    error = ether_ioctl(ifp, cmd, data);
-	    break;
+	    error = EINVAL;
     }
     (void)splx(s);
     return error;

@@ -1,4 +1,4 @@
-/*	$NetBSD: thread-stub.c,v 1.21 2009/01/30 23:21:03 ad Exp $	*/
+/*	$NetBSD: thread-stub.c,v 1.20.6.1 2009/02/02 22:07:40 snj Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2009 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: thread-stub.c,v 1.21 2009/01/30 23:21:03 ad Exp $");
+__RCSID("$NetBSD: thread-stub.c,v 1.20.6.1 2009/02/02 22:07:40 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 /*

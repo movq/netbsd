@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_vfsops.c,v 1.270 2009/02/22 20:28:07 ad Exp $	*/
+/*	$NetBSD: lfs_vfsops.c,v 1.267.6.1 2009/04/04 18:11:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007, 2007
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.270 2009/02/22 20:28:07 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.267.6.1 2009/04/04 18:11:17 snj Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_lfs.h"
@@ -111,7 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.270 2009/02/22 20:28:07 ad Exp $");
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/genfs_node.h>
 
-MODULE(MODULE_CLASS_VFS, lfs, "ffs");
+MODULE(MODULE_CLASS_VFS, lfs, NULL);
 
 static int lfs_gop_write(struct vnode *, struct vm_page **, int, int);
 static bool lfs_issequential_hole(const struct ufsmount *,
@@ -181,7 +181,6 @@ static const struct ufs_ops lfs_ufsops = {
 	.uo_valloc = lfs_valloc,
 	.uo_vfree = lfs_vfree,
 	.uo_balloc = lfs_balloc,
-	.uo_unmark_vnode = lfs_unmark_vnode,
 };
 
 struct shortlong {
@@ -1047,8 +1046,8 @@ lfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	    lfs_writerd, NULL, NULL, "lfs_writer") != 0)
 		panic("fork lfs_writer");
 
-	printf("WARNING: the log-structured file system is experimental and "
-	    "may be unstable\n");
+	printf("WARNING: the log-structured file system is experimental\n"
+	    "WARNING: it may cause system crashes and/or corrupt data\n");
 
 	return (0);
 
@@ -1854,7 +1853,7 @@ lfs_vinit(struct mount *mp, struct vnode **vpp)
 	int i;
 
 	ip->i_mode = ip->i_ffs1_mode;
-	ip->i_nlink = ip->i_ffs1_nlink;
+	ip->i_ffs_effnlink = ip->i_nlink = ip->i_ffs1_nlink;
 	ip->i_lfs_osize = ip->i_size = ip->i_ffs1_size;
 	ip->i_flags = ip->i_ffs1_flags;
 	ip->i_gen = ip->i_ffs1_gen;

@@ -1,4 +1,4 @@
-/*	$NetBSD: logger.c,v 1.13 2008/11/13 15:51:07 christos Exp $	*/
+/*	$NetBSD: logger.c,v 1.10 2008/07/21 14:19:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)logger.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: logger.c,v 1.13 2008/11/13 15:51:07 christos Exp $");
+__RCSID("$NetBSD: logger.c,v 1.10 2008/07/21 14:19:23 lukem Exp $");
 #endif /* not lint */
 
 #include <errno.h>
@@ -69,27 +69,19 @@ main(int argc, char *argv[])
 {
 	int ch, logflags, pri;
 	const char *tag;
-	const char *sd = "-";
-	const char *msgid = "-";
 	char buf[1024];
 
 	tag = NULL;
 	pri = LOG_NOTICE;
 	logflags = 0;
-	while ((ch = getopt(argc, argv, "d:f:im:p:st:")) != -1)
+	while ((ch = getopt(argc, argv, "f:ip:st:")) != -1)
 		switch((char)ch) {
-		case 'd':		/* structured data field */
-			sd = optarg;
-			break;
 		case 'f':		/* file to log */
 			if (freopen(optarg, "r", stdin) == NULL)
 				err(EXIT_FAILURE, "%s", optarg);
 			break;
 		case 'i':		/* log process id also */
 			logflags |= LOG_PID;
-			break;
-		case 'm':		/* msgid field */
-			msgid = optarg;
 			break;
 		case 'p':		/* priority */
 			pri = pencode(optarg);
@@ -119,11 +111,11 @@ main(int argc, char *argv[])
 		for (p = buf, endp = buf + sizeof(buf) - 2; *argv != NULL;) {
 			len = strlen(*argv);
 			if (p + len > endp && p > buf) {
-				syslogp(pri, msgid, sd, "%s", buf);
+				syslog(pri, "%s", buf);
 				p = buf;
 			}
 			if (len > sizeof(buf) - 1)
-				syslogp(pri, msgid, sd, "%s", *argv++);
+				syslog(pri, "%s", *argv++);
 			else {
 				if (p != buf)
 					*p++ = ' ';
@@ -132,13 +124,10 @@ main(int argc, char *argv[])
 			}
 		}
 		if (p != buf)
-			syslogp(pri, msgid, sd, "%s", buf);
-	} else	/* TODO: allow syslog-protocol messages from file/stdin
-		 *       but that will require parsing the line to split
-		 *       it into three fields.
-		 */
+			syslog(pri, "%s", buf);
+	} else
 		while (fgets(buf, sizeof(buf), stdin) != NULL)
-			syslogp(pri, msgid, sd, "%s", buf);
+			syslog(pri, "%s", buf);
 
 	exit(EXIT_SUCCESS);
 	/* NOTREACHED */
@@ -191,8 +180,7 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "%s: [-is] [-f file] [-p pri] [-t tag] "
-	    "[-m msgid] [-d SD] [ message ... ]\n",
+	    "%s: [-is] [-f file] [-p pri] [-t tag] [ message ... ]\n",
 	    getprogname());
 	exit(EXIT_FAILURE);
 }

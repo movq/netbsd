@@ -1,4 +1,4 @@
-/*	$NetBSD: dumpsys.c,v 1.6 2009/01/11 02:45:45 christos Exp $	*/
+/*	$NetBSD: dumpsys.c,v 1.4.10.1 2009/02/02 03:30:33 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000, 2004, 2006, 2008 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dumpsys.c,v 1.6 2009/01/11 02:45:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dumpsys.c,v 1.4.10.1 2009/02/02 03:30:33 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -169,14 +169,12 @@ dodumpsys(void)
 	if (dumpsize == 0)
 		cpu_dumpconf();
 	if (dumplo <= 0 || dumpsize == 0) {
-		printf("\ndump to dev %llu,%llu not possible\n",
-		    (unsigned long long)major(dumpdev),
-		    (unsigned long long)minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
+		    minor(dumpdev));
 		return;
 	}
-	printf("\ndumping to dev %llu,%llu offset %ld\n",
-	    (unsigned long long)major(dumpdev),
-	    (unsigned long long)minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
+	    minor(dumpdev), dumplo);
 
 	psize = (*bdev->d_psize)(dumpdev);
 	printf("dump ");

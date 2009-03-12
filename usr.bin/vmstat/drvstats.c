@@ -1,4 +1,4 @@
-/*	$NetBSD: drvstats.c,v 1.5 2009/01/18 07:20:00 lukem Exp $	*/
+/*	$NetBSD: drvstats.c,v 1.4 2006/10/17 15:13:08 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 John M. Vinopal
@@ -114,7 +114,7 @@ void
 drvswap(void)
 {
 	u_int64_t tmp;
-	size_t	i;
+	int	i;
 
 #define	SWAP(fld) do {							\
 	tmp = cur.fld;							\
@@ -184,8 +184,9 @@ void
 drvreadstats(void)
 {
 	struct io_stats	cur_drive, *p;
-	size_t		size, i;
+	size_t		size;
 	int		mib[3];
+	int		i;
 
 	p = iostathead;
 
@@ -313,9 +314,9 @@ drvinit(int selected)
 	struct io_stats	cur_drive, *p;
 	struct clockinfo clockinfo;
 	char		errbuf[_POSIX2_LINE_MAX];
-	size_t		size, i;
+	size_t		size;
 	static int	once = 0;
-	int		mib[3];
+	int		i, mib[3];
 
 	if (once)
 		return (1);
@@ -452,7 +453,7 @@ deref_kptr(void *kptr, void *ptr, size_t len)
 {
 	char buf[128];
 
-	if ((size_t)kvm_read(kd, (u_long)kptr, (char *)ptr, len) != len) {
+	if (kvm_read(kd, (u_long)kptr, (char *)ptr, len) != len) {
 		(void)memset(buf, 0, sizeof(buf));
 		(void)snprintf(buf, sizeof buf, "can't dereference kptr 0x%lx",
 		    (u_long)kptr);

@@ -1,4 +1,4 @@
-/*	$NetBSD: readline.c,v 1.81 2009/02/21 23:31:56 christos Exp $	*/
+/*	$NetBSD: readline.c,v 1.75 2008/04/29 06:53:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include "config.h"
 #if !defined(lint) && !defined(SCCSID)
-__RCSID("$NetBSD: readline.c,v 1.81 2009/02/21 23:31:56 christos Exp $");
+__RCSID("$NetBSD: readline.c,v 1.75 2008/04/29 06:53:01 martin Exp $");
 #endif /* not lint && not SCCSID */
 
 #include <sys/types.h>
@@ -52,10 +52,13 @@ __RCSID("$NetBSD: readline.c,v 1.81 2009/02/21 23:31:56 christos Exp $");
 #else
 #include "np/vis.h"
 #endif
-#include "readline/readline.h"
+#ifdef HAVE_ALLOCA_H
+#include <alloca.h>
+#endif
 #include "el.h"
 #include "fcns.h"		/* for EL_NUM_FCNS */
 #include "histedit.h"
+#include "readline/readline.h"
 #include "filecomplete.h"
 
 void rl_prep_terminal(int);
@@ -220,22 +223,6 @@ _getc_function(EditLine *el, char *c)
  */
 
 /*
- * Set the prompt
- */
-int
-rl_set_prompt(const char *prompt)
-{
-	if (!prompt)
-		prompt = "";
-	if (rl_prompt != NULL && strcmp(rl_prompt, prompt) == 0) 
-		return 0;
-	if (rl_prompt)
-		free(rl_prompt);
-	rl_prompt = strdup(prompt);
-	return rl_prompt == NULL ? -1 : 0;
-}
-
-/*
  * initialize rl compat stuff
  */
 int
@@ -281,7 +268,8 @@ rl_initialize(void)
 		el_set(e, EL_GETCFN, _getc_function);
 
 	/* for proper prompt printing in readline() */
-	if (rl_set_prompt("") == -1) {
+	rl_prompt = strdup("");
+	if (rl_prompt == NULL) {
 		history_end(h);
 		el_end(e);
 		return -1;
@@ -355,8 +343,14 @@ readline(const char *p)
 	(void)setjmp(topbuf);
 
 	/* update prompt accordingly to what has been passed */
-	if (rl_set_prompt(prompt) == -1)
-		return NULL;
+	if (!prompt)
+		prompt = "";
+	if (strcmp(rl_prompt, prompt) != 0) {
+		free(rl_prompt);
+		rl_prompt = strdup(prompt);
+		if (rl_prompt == NULL)
+			return NULL;
+	}
 
 	if (rl_pre_input_hook)
 		(*rl_pre_input_hook)(NULL, 0);
@@ -454,7 +448,7 @@ _rl_compat_sub(const char *str, const char *what, const char *with,
 		} else
 			*r++ = *s++;
 	}
-	*r = '\0';
+	*r = 0;
 	return(result);
 }
 
@@ -475,7 +469,7 @@ get_history_event(const char *cmd, int *cindex, int qchar)
 		return(NULL);
 
 	/* find out which event to take */
-	if (cmd[idx] == history_expansion_char || cmd[idx] == '\0') {
+	if (cmd[idx] == history_expansion_char || cmd[idx] == 0) {
 		if (history(h, &ev, H_FIRST) != 0)
 			return(NULL);
 		*cindex = cmd[idx]? (idx + 1):idx;
@@ -697,7 +691,7 @@ _history_expand_command(const char *command, size_t offs, size_t cmdlen,
 	if (aptr)
 		free(aptr);
 
-	if (*cmd == '\0' || ((size_t)(cmd - (command + offs)) >= cmdlen)) {
+	if (*cmd == 0 || (cmd - (command + offs) >= cmdlen)) {
 		*result = tmp;
 		return(1);
 	}
@@ -707,7 +701,7 @@ _history_expand_command(const char *command, size_t offs, size_t cmdlen,
 			continue;
 		else if (*cmd == 'h') {		/* remove trailing path */
 			if ((aptr = strrchr(tmp, '/')) != NULL)
-				*aptr = '\0';
+				*aptr = 0;
 		} else if (*cmd == 't') {	/* remove leading path */
 			if ((aptr = strrchr(tmp, '/')) != NULL) {
 				aptr = strdup(aptr + 1);
@@ -716,7 +710,7 @@ _history_expand_command(const char *command, size_t offs, size_t cmdlen,
 			}
 		} else if (*cmd == 'r') {	/* remove trailing suffix */
 			if ((aptr = strrchr(tmp, '.')) != NULL)
-				*aptr = '\0';
+				*aptr = 0;
 		} else if (*cmd == 'e') {	/* remove all but suffix */
 			if ((aptr = strrchr(tmp, '.')) != NULL) {
 				aptr = strdup(aptr);
@@ -984,31 +978,31 @@ history_arg_extract(int start, int end, const char *str)
 	max--;
 
 	if (start == '$')
-		start = (int)max;
+		start = max;
 	if (end == '$')
-		end = (int)max;
+		end = max;
 	if (end < 0)
-		end = (int)max + end + 1;
+		end = max + end + 1;
 	if (start < 0)
 		start = end;
 
-	if (start < 0 || end < 0 || (size_t)start > max || (size_t)end > max || start > end)
+	if (start < 0 || end < 0 || start > max || end > max || start > end)
 		return(NULL);
 
-	for (i = start, len = 0; i <= (size_t)end; i++)
+	for (i = start, len = 0; i <= end; i++)
 		len += strlen(arr[i]) + 1;
 	len++;
 	result = malloc(len);
 	if (result == NULL)
 		return NULL;
 
-	for (i = start, len = 0; i <= (size_t)end; i++) {
+	for (i = start, len = 0; i <= end; i++) {
 		(void)strcpy(result + len, arr[i]);
 		len += strlen(arr[i]);
-		if (i < (size_t)end)
+		if (i < end)
 			result[len++] = ' ';
 	}
-	result[len] = '\0';
+	result[len] = 0;
 
 	for (i = 0; arr[i]; i++)
 		free(arr[i]);
@@ -1280,8 +1274,7 @@ int
 history_total_bytes(void)
 {
 	HistEvent ev;
-	int curr_num;
-	size_t size;
+	int curr_num, size;
 
 	if (history(h, &ev, H_CURR) != 0)
 		return (-1);
@@ -1296,7 +1289,7 @@ history_total_bytes(void)
 	/* get to the same position as before */
 	history(h, &ev, H_PREV_EVENT, curr_num);
 
-	return (int)(size);
+	return (size);
 }
 
 
@@ -1488,7 +1481,7 @@ void
 rl_display_match_list(char **matches, int len, int max)
 {
 
-	fn_display_match_list(e, matches, (size_t)len, (size_t)max);
+	fn_display_match_list(e, matches, len, max);
 }
 
 static const char *
@@ -1497,8 +1490,7 @@ _rl_completion_append_character_function(const char *dummy
     __attribute__((__unused__)))
 {
 	static char buf[2];
-	buf[0] = rl_completion_append_character;
-	buf[1] = '\0';
+	buf[1] = rl_completion_append_character;
 	return buf;
 }
 
@@ -1526,8 +1518,7 @@ rl_complete(int ignore __attribute__((__unused__)), int invoking_key)
 	    (CPFunction *)rl_completion_entry_function,
 	    rl_attempted_completion_function,
 	    rl_basic_word_break_characters, rl_special_prefixes,
-	    _rl_completion_append_character_function,
-	    (size_t)rl_completion_query_items,
+	    _rl_completion_append_character_function, rl_completion_query_items,
 	    &rl_completion_type, &rl_attempted_completion_over,
 	    &rl_point, &rl_end);
 }
@@ -1647,7 +1638,7 @@ int
 rl_add_defun(const char *name, Function *fun, int c)
 {
 	char dest[8];
-	if ((size_t)c >= sizeof(map) / sizeof(map[0]) || c < 0)
+	if (c >= sizeof(map) / sizeof(map[0]) || c < 0)
 		return -1;
 	map[(unsigned char)c] = fun;
 	el_set(e, EL_ADDFN, name, name, rl_bind_wrapper);
@@ -1688,7 +1679,9 @@ rl_callback_handler_install(const char *prompt, VCPFunction *linefunc)
 	if (e == NULL) {
 		rl_initialize();
 	}
-	(void)rl_set_prompt(prompt);
+	if (rl_prompt)
+		free(rl_prompt);
+	rl_prompt = prompt ? strdup(strchr(prompt, *prompt)) : NULL;
 	rl_linefunc = linefunc;
 	el_set(e, EL_UNBUFFERED, 1);
 }   
@@ -1776,10 +1769,9 @@ rl_stuff_char(int c)
 static int
 _rl_event_read_char(EditLine *el, char *cp)
 {
-	int	n;
-	ssize_t num_read = 0;
+	int	n, num_read = 0;
 
-	*cp = '\0';
+	*cp = 0;
 	while (rl_event_hook) {
 
 		(*rl_event_hook)();
@@ -1813,7 +1805,7 @@ _rl_event_read_char(EditLine *el, char *cp)
 	}
 	if (!rl_event_hook)
 		el_set(el, EL_GETCFN, EL_BUILTIN_GETCFN);
-	return (int)num_read;
+	return(num_read);
 }
 
 static void
@@ -1821,8 +1813,8 @@ _rl_update_pos(void)
 {
 	const LineInfo *li = el_line(e);
 
-	rl_point = (int)(li->cursor - li->buffer);
-	rl_end = (int)(li->lastchar - li->buffer);
+	rl_point = li->cursor - li->buffer;
+	rl_end = li->lastchar - li->buffer;
 }
 
 void

@@ -1,4 +1,4 @@
-/*      $NetBSD: xengnt.c,v 1.13 2009/01/19 18:27:02 jym Exp $      */
+/*      $NetBSD: xengnt.c,v 1.10.4.1 2010/01/30 19:14:20 snj Exp $      */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xengnt.c,v 1.13 2009/01/19 18:27:02 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xengnt.c,v 1.10.4.1 2010/01/30 19:14:20 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -55,22 +55,18 @@ __KERNEL_RCSID(0, "$NetBSD: xengnt.c,v 1.13 2009/01/19 18:27:02 jym Exp $");
 
 #define NR_GRANT_ENTRIES_PER_PAGE (PAGE_SIZE / sizeof(grant_entry_t))
 
-/* Current number of frames making up the grant table */
 int gnt_nr_grant_frames;
-/* Maximum number of frames that can make up the grant table */
 int gnt_max_grant_frames;
 
 /* table of free grant entries */
 grant_ref_t *gnt_entries;
-/* last free entry */
 int last_gnt_entry;
-/* empty entry in the list */
-#define XENGNT_NO_ENTRY 0xffffffff
 
 /* VM address of the grant table */
 grant_entry_t *grant_table;
 
 static grant_ref_t xengnt_get_entry(void);
+#define XENGNT_NO_ENTRY 0xffffffff
 static void xengnt_free_entry(grant_ref_t);
 static void xengnt_resume(void);
 static int xengnt_more_entries(void);
@@ -110,9 +106,6 @@ xengnt_init()
 
 }
 
-/*
- * Resume grant table state
- */
 static void
 xengnt_resume()
 {
@@ -129,23 +122,23 @@ xengnt_resume()
  * Returns 0 on success, ENOMEM on failure
  */
 static int
-xengnt_more_entries(void)
+xengnt_more_entries()
 {
 	gnttab_setup_table_t setup;
-	unsigned long *pages;
+	u_long *pages;
 	int nframes_new = gnt_nr_grant_frames + 1;
 	int i;
 
 	if (gnt_nr_grant_frames == gnt_max_grant_frames)
 		return ENOMEM;
 
-	pages = malloc(nframes_new * sizeof(long), M_DEVBUF, M_NOWAIT);
+	pages = malloc(nframes_new * sizeof(u_long), M_DEVBUF, M_NOWAIT);
 	if (pages == NULL)
 		return ENOMEM;
 
 	setup.dom = DOMID_SELF;
 	setup.nr_frames = nframes_new;
-	xenguest_handle(setup.frame_list) = pages;
+	setup.frame_list = pages;
 
 	/*
 	 * setup the grant table, made of nframes_new frames
@@ -170,7 +163,7 @@ xengnt_more_entries(void)
 	 * the grant table frames
 	 */
 	pmap_kenter_ma(((vaddr_t)grant_table) + gnt_nr_grant_frames * PAGE_SIZE,
-	    pages[gnt_nr_grant_frames] << PAGE_SHIFT, VM_PROT_WRITE);
+	    ((paddr_t)pages[gnt_nr_grant_frames]) << PAGE_SHIFT, VM_PROT_WRITE);
 
 	/*
 	 * add the grant entries associated to the last grant table frame
@@ -240,12 +233,8 @@ xengnt_grant_access(domid_t dom, paddr_t ma, int ro, grant_ref_t *entryp)
 		return ENOMEM;
 
 	grant_table[*entryp].frame = ma >> PAGE_SHIFT;
-	grant_table[*entryp].domid = dom;
-	/*
-	 * ensure that the above values reach global visibility 
-	 * before permitting frame's access (done when we set flags)
-	 */
-	xen_rmb();
+	grant_table[*entryp].domid  = dom;
+	x86_lfence();
 	grant_table[*entryp].flags =
 	    GTF_permit_access | (ro ? GTF_readonly : 0);
 	return 0;
@@ -275,12 +264,8 @@ xengnt_grant_transfer(domid_t dom, grant_ref_t *entryp)
 		return ENOMEM;
 
 	grant_table[*entryp].frame = 0;
-	grant_table[*entryp].domid = dom;
-	/*
-	 * ensure that the above values reach global visibility 
-	 * before permitting frame's transfer (done when we set flags)
-	 */
-	xen_rmb();
+	grant_table[*entryp].domid  =dom;
+	x86_lfence();
 	grant_table[*entryp].flags = GTF_accept_transfer;
 	return 0;
 }

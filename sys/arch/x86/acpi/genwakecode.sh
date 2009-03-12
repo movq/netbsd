@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: genwakecode.sh,v 1.3 2009/01/18 13:55:31 hans Exp $
+# $NetBSD: genwakecode.sh,v 1.2.28.1 2009/03/27 14:50:36 msaitoh Exp $
 
 AWK=${AWK:=awk}
 HEXDUMP=${HEXDUMP:=hexdump}

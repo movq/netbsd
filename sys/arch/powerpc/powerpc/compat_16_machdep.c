@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.12 2008/11/21 20:21:12 he Exp $	*/
+/*	$NetBSD: compat_16_machdep.c,v 1.11 2008/04/24 18:39:21 ad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,13 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.12 2008/11/21 20:21:12 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.11 2008/04/24 18:39:21 ad Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
 #include "opt_altivec.h"
 #include "opt_ppcarch.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/mount.h>
@@ -57,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.12 2008/11/21 20:21:12 he Ex
  * Send a signal to process.
  */
 void
-sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
+sendsig_sigcontext(int sig, const sigset_t *mask, u_long code)
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
@@ -66,8 +64,6 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct trapframe *tf;
 	struct utrapframe *utf = &frame.sc_frame;
 	int onstack, error;
-	int sig = ksi->ksi_signo;
-	u_long code = KSI_TRAPCODE(ksi);
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
 	tf = trapframe(l);

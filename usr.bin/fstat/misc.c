@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.3 2009/02/26 17:30:51 christos Exp $	*/
+/*	$NetBSD: misc.c,v 1.2.6.1 2009/03/30 16:52:18 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: misc.c,v 1.3 2009/02/26 17:30:51 christos Exp $");
+__RCSID("$NetBSD: misc.c,v 1.2.6.1 2009/03/30 16:52:18 snj Exp $");
 
 #include <stdbool.h>
 #include <sys/param.h>

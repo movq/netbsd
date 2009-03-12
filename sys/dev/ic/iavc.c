@@ -1,4 +1,4 @@
-/*	$NetBSD: iavc.c,v 1.8 2009/01/23 19:49:16 christos Exp $	*/
+/*	$NetBSD: iavc.c,v 1.7.14.1 2010/12/02 23:42:37 snj Exp $	*/
 
 /*
  * Copyright (c) 2001-2003 Cubical Solutions Ltd. All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iavc.c,v 1.8 2009/01/23 19:49:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iavc.c,v 1.7.14.1 2010/12/02 23:42:37 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

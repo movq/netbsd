@@ -1,4 +1,4 @@
-/*	$NetBSD: opattern.c,v 1.1.1.2 2009/02/02 20:44:06 joerg Exp $	*/
+/*	$NetBSD: opattern.c,v 1.1.1.1.6.2 2010/02/03 00:38:22 snj Exp $	*/
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -7,7 +7,7 @@
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
 #endif
-__RCSID("$NetBSD: opattern.c,v 1.1.1.2 2009/02/02 20:44:06 joerg Exp $");
+__RCSID("$NetBSD: opattern.c,v 1.1.1.1.6.2 2010/02/03 00:38:22 snj Exp $");
 
 /*
  * FreeBSD install - a package for the installation and maintainance

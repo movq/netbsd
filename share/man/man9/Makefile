@@ -1,10 +1,10 @@
-#       $NetBSD: Makefile,v 1.277 2009/01/16 09:51:34 uebayasi Exp $
+#       $NetBSD: Makefile,v 1.270.2.4 2008/12/01 01:28:11 snj Exp $
 
 #	Makefile for section 9 (kernel function and variable) manual pages.
 
 MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	altq.9 arc4random.9 arp.9 audio.9 autoconf.9 \
-	bcdtobin.9 bcmp.9 bcopy.9 bluetooth.9 bzero.9 \
+	bcdtobin.9 bitmask_snprintf.9 bcmp.9 bcopy.9 bluetooth.9 bzero.9 \
 	buffercache.9 bufq.9 bus_dma.9 bus_space.9 \
 	callout.9 cardbus.9 cnmagic.9 condvar.9 config.9 cons.9 copy.9 \
 	coredump_write.9 \
@@ -82,7 +82,7 @@ MLINKS+=accept_filter.9 accept_filt_get.9
 MLINKS+=arp.9 arp_ifinit.9 arp.9 arpresolve.9 arp.9 arpintr.9
 MLINKS+=autoconf.9 config_search_loc.9 \
 	autoconf.9 config_search_ia.9 \
-	autoconf.9 config_found_sm_loc.9 \
+	autoconf.9 config_found_sm.9 \
 	autoconf.9 config_found_ia.9 \
 	autoconf.9 config_found.9 \
 	autoconf.9 config_match.9 \
@@ -152,11 +152,10 @@ MLINKS+=bus_dma.9 bus_dmamap_create.9 bus_dma.9 bus_dmamap_destroy.9 \
 	bus_dma.9 bus_dmamem_map.9 bus_dma.9 bus_dmamem_unmap.9 \
 	bus_dma.9 bus_dmamem_mmap.9 \
 	bus_dma.9 bus_dmatag_subregion.9 bus_dma.9 bus_dmatag_destroy.9
-MLINKS+=callout.9 callout_init.9 callout.9 callout_destroy.9 \
-	callout.9 callout_reset.9 callout.9 callout_schedule.9 \
-	callout.9 callout_setfunc.9 callout.9 callout_stop.9 \
-	callout.9 callout_pending.9 callout.9 callout_expired.9 \
-	callout.9 callout_invoking.9 callout.9 callout_ack.9 \
+MLINKS+=callout.9 callout_init.9 callout.9 callout_reset.9 \
+	callout.9 callout_schedule.9 callout.9 callout_setfunc.9 \
+	callout.9 callout_stop.9 callout.9 callout_pending.9 \
+	callout.9 callout_destroy.9 \
 	callout.9 timeout.9 callout.9 untimeout.9
 MLINKS+=cardbus.9 cardbus_attach_card.9 \
 	cardbus.9 cardbus_detach_card.9 \

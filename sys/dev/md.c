@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.57 2009/01/13 13:35:52 yamt Exp $	*/
+/*	$NetBSD: md.c,v 1.56.6.1 2009/05/11 20:07:08 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross, Leo Weppelman.
@@ -46,9 +46,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: md.c,v 1.57 2009/01/13 13:35:52 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: md.c,v 1.56.6.1 2009/05/11 20:07:08 bouyer Exp $");
 
 #include "opt_md.h"
+#include "opt_tftproot.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -118,6 +119,8 @@ extern struct cfdriver md_cd;
 CFATTACH_DECL_NEW(md, sizeof(struct md_softc),
 	0, md_attach, 0, NULL);
 
+extern size_t md_root_size;
+
 /*
  * This is called if we are configured as a pseudo-device
  */
@@ -127,6 +130,14 @@ mdattach(int n)
 	int i;
 	cfdata_t cf;
 
+#ifdef TFTPROOT
+	/* 
+	 * Attachement of md0 must be done after md_root_setconf(), 
+	 * because the RAMdisk is not loaded yet.
+	 */
+	if (md_root_size == 0)
+		return;
+#endif
 	if (config_cfattach_attach("md", &md_ca)) {
 		printf("md: cfattach_attach failed\n");
 		return;
@@ -291,7 +302,7 @@ mdstrategy(struct buf *bp)
 #if MEMORY_DISK_SERVER
 	case MD_UMEM_SERVER:
 		/* Just add this job to the server's queue. */
-		bufq_put(sc->sc_buflist, bp);
+		BUFQ_PUT(sc->sc_buflist, bp);
 		wakeup((void *)sc);
 		/* see md_server_loop() */
 		/* no biodone in this case */
@@ -439,7 +450,7 @@ md_server_loop(struct md_softc *sc)
 
 	for (;;) {
 		/* Wait for some work to arrive. */
-		while ((bp = bufq_get(sc->sc_buflist)) == NULL) {
+		while ((bp = BUFQ_GET(sc->sc_buflist)) == NULL) {
 			error = tsleep((void *)sc, md_sleep_pri, "md_idle", 0);
 			if (error)
 				return error;

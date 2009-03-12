@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.10 2008/12/20 12:42:36 ad Exp $	*/
+/*	$NetBSD: param.h,v 1.9.4.1 2009/02/16 03:04:38 snj Exp $	*/
 
 #ifdef __x86_64__
 

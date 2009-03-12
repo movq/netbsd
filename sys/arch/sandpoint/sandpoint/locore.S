@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.15 2009/02/13 22:41:03 apb Exp $	*/
+/*	$NetBSD: locore.S,v 1.13 2008/04/19 02:01:03 nisimura Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -35,7 +35,6 @@
 #include "opt_ddb.h"
 #include "fs_kernfs.h"
 #include "opt_ipkdb.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_openpic.h"
 #include "opt_ppcparam.h"
@@ -97,7 +96,7 @@ __start:
 	mtspr	1008,8
 
 /* compute end of kernel memory */
-#if NKSYMS || defined(DDB) || defined(MODULAR) || defined(KERNFS)
+#if NKSYMS || defined(DDB) || defined(LKM) || defined(KERNFS)
 	lis	7,_C_LABEL(startsym)@ha
 	addi	7,7,_C_LABEL(startsym)@l
 	stw	3,0(7)

@@ -1,4 +1,4 @@
-/*	$NetBSD: sync_subr.c,v 1.38 2009/02/22 22:26:53 rmind Exp $	*/
+/*	$NetBSD: sync_subr.c,v 1.34.20.1 2009/02/24 04:13:35 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sync_subr.c,v 1.38 2009/02/22 22:26:53 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sync_subr.c,v 1.34.20.1 2009/02/24 04:13:35 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,7 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: sync_subr.c,v 1.38 2009/02/22 22:26:53 rmind Exp $")
 #include <sys/vnode.h>
 #include <sys/buf.h>
 #include <sys/errno.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/syncfs/syncfs.h>
@@ -109,8 +109,8 @@ vn_initialize_syncerd()
 
 	syncer_last = SYNCER_MAXDELAY + 2;
 
-	syncer_workitem_pending =
-	    kmem_alloc(syncer_last * sizeof (struct synclist), KM_SLEEP);
+	syncer_workitem_pending = malloc(syncer_last * sizeof (struct synclist),
+	    M_VNODE, M_WAITOK);
 
 	for (i = 0; i < syncer_last; i++)
 		TAILQ_INIT(&syncer_workitem_pending[i]);
@@ -291,11 +291,20 @@ sched_sync(void *v)
 				    synced ? syncdelay : lockdelay);
 			}
 		}
-		mutex_exit(&syncer_mutex);
+
+		mutex_exit(&syncer_data_lock);
+
+		/*
+		 * Do soft update processing.
+		 */
+		if (bioopsp != NULL)
+			(*bioopsp->io_sync)(NULL);
 
 		/*
 		 * Wait until there are more workitems to process.
 		 */
+		mutex_exit(&syncer_mutex);
+		mutex_enter(&syncer_data_lock);
 		if (rushjob > 0) {
 			/*
 			 * The variable rushjob allows the kernel to speed

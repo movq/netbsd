@@ -1,4 +1,4 @@
-/*	$NetBSD: acpivar.h,v 1.34 2008/11/17 23:29:49 joerg Exp $	*/
+/*	$NetBSD: acpivar.h,v 1.33.4.1 2008/11/25 18:22:37 snj Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.

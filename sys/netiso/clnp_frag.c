@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_frag.c,v 1.21 2008/12/17 20:51:38 cegger Exp $	*/
+/*	$NetBSD: clnp_frag.c,v 1.20 2007/05/02 20:40:28 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_frag.c,v 1.21 2008/12/17 20:51:38 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_frag.c,v 1.20 2007/05/02 20:40:28 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -420,7 +420,8 @@ clnp_newpkt(
 	 * Allocate new clnp fragl structure to act as header of all
 	 * fragments for this datagram.
 	 */
-	cfh = malloc(sizeof (struct clnp_fragl), M_FTABLE, M_NOWAIT);
+	MALLOC(cfh, struct clnp_fragl *, sizeof (struct clnp_fragl),
+	   M_FTABLE, M_NOWAIT);
 	if (cfh == NULL) {
 		return (0);
 	}
@@ -431,7 +432,7 @@ clnp_newpkt(
 	 */
 	cfh->cfl_orighdr = m_copy(m, 0, (int) clnp->cnf_hdr_len);
 	if (cfh->cfl_orighdr == NULL) {
-		free(cfh, M_FTABLE);
+		FREE(cfh, M_FTABLE);
 		return (0);
 	}
 	/* Fill in rest of fragl structure */
@@ -852,7 +853,7 @@ clnp_comp_pdu(
 		}
 
 		/* free cfh */
-		free(cfh, M_FTABLE);
+		FREE(cfh, M_FTABLE);
 
 		return (hdr);
 	}

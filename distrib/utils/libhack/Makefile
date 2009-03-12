@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.22 2009/01/02 00:20:18 tnozaki Exp $
+# $NetBSD: Makefile,v 1.21.14.1 2009/01/15 03:24:06 snj Exp $
 #
 # Stubs to kill off some things from libc:
 # This save space on a boot system.

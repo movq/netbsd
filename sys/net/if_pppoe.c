@@ -1,4 +1,4 @@
-/* $NetBSD: if_pppoe.c,v 1.94 2009/02/19 15:17:50 christos Exp $ */
+/* $NetBSD: if_pppoe.c,v 1.93.4.1 2009/02/25 03:15:32 snj Exp $ */
 
 /*-
  * Copyright (c) 2002, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pppoe.c,v 1.94 2009/02/19 15:17:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_pppoe.c,v 1.93.4.1 2009/02/25 03:15:32 snj Exp $");
 
 #include "pppoe.h"
 #include "bpfilter.h"

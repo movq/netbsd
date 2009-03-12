@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cue.c,v 1.54 2008/11/07 00:20:12 dyoung Exp $	*/
+/*	$NetBSD: if_cue.c,v 1.53 2008/05/24 16:40:58 cube Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cue.c,v 1.54 2008/11/07 00:20:12 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cue.c,v 1.53 2008/05/24 16:40:58 cube Exp $");
 
 #if defined(__NetBSD__)
 #include "opt_inet.h"
@@ -1162,7 +1162,7 @@ cue_ioctl(struct ifnet *ifp, u_long command, void *data)
 	s = splnet();
 
 	switch(command) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		cue_init(sc);
 
@@ -1187,8 +1187,6 @@ cue_ioctl(struct ifnet *ifp, u_long command, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, command, data)) != 0)
-			break;
 		if (ifp->if_flags & IFF_UP) {
 			if (ifp->if_flags & IFF_RUNNING &&
 			    ifp->if_flags & IFF_PROMISC &&
@@ -1215,7 +1213,7 @@ cue_ioctl(struct ifnet *ifp, u_long command, void *data)
 		error = 0;
 		break;
 	default:
-		error = ether_ioctl(ifp, command, data);
+		error = EINVAL;
 		break;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_cscope.c,v 1.4 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: ex_cscope.c,v 1.1.1.2.6.3 2009/11/28 16:03:26 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1994, 1996
@@ -242,14 +242,14 @@ cscope_add(SCR *sp, EXCMD *cmdp, const CHAR_T *dname)
 	 * name regardless so that we can use it as a base for searches.
 	 */
 	if (stat(np, &sb)) {
-		msgq(sp, M_SYSERR, np);
+		msgq(sp, M_SYSERR, "%s", np);
 		return (1);
 	}
 	if (S_ISDIR(sb.st_mode)) {
 		(void)snprintf(path, sizeof(path),
 		    "%s/%s", np, CSCOPE_DBFILE);
 		if (stat(path, &sb)) {
-			msgq(sp, M_SYSERR, path);
+			msgq(sp, M_SYSERR, "%s", path);
 			return (1);
 		}
 		dbname = CSCOPE_DBFILE;
@@ -322,7 +322,7 @@ get_paths(SCR *sp, CSC *csc)
 		len = sb.st_size;
 		MALLOC_RET(sp, csc->pbuf, char *, len + 1);
 		if ((fd = open(buf, O_RDONLY, 0)) < 0 ||
-		    (size_t)read(fd, csc->pbuf, len) != len) {
+		    read(fd, csc->pbuf, len) != len) {
 			 msgq_str(sp, M_SYSERR, buf, "%s");
 			 if (fd >= 0)
 				(void)close(fd);

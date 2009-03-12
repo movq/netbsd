@@ -1,4 +1,4 @@
-/* $NetBSD: if_vge.c,v 1.44 2009/02/09 12:11:16 nonaka Exp $ */
+/* $NetBSD: if_vge.c,v 1.41.14.4 2008/12/07 19:10:53 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2004
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.44 2009/02/09 12:11:16 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.41.14.4 2008/12/07 19:10:53 bouyer Exp $");
 
 /*
  * VIA Networking Technologies VT612x PCI gigabit ethernet NIC driver.
@@ -114,6 +114,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.44 2009/02/09 12:11:16 nonaka Exp $");
 #include <dev/pci/pcidevs.h>
 
 #include <dev/pci/if_vgereg.h>
+
+#define VGE_JUMBO_MTU		9000
 
 #define VGE_IFQ_MAXLEN		64
 
@@ -292,8 +294,6 @@ struct vge_softc {
 
 static inline void vge_set_txaddr(struct vge_txfrag *, bus_addr_t);
 static inline void vge_set_rxaddr(struct vge_rxdesc *, bus_addr_t);
-
-static int vge_ifflags_cb(struct ethercom *);
 
 static int vge_match(struct device *, struct cfdata *, void *);
 static void vge_attach(struct device *, struct device *, void *);
@@ -1056,7 +1056,6 @@ vge_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	if_attach(ifp);
 	ether_ifattach(ifp, eaddr);
-	ether_set_ifflags_cb(&sc->sc_ethercom, vge_ifflags_cb);
 
 	callout_init(&sc->sc_timeout, 0);
 	callout_setfunc(&sc->sc_timeout, vge_tick, sc);
@@ -1485,7 +1484,7 @@ vge_intr(void *arg)
 	for (;;) {
 
 		status = CSR_READ_4(sc, VGE_ISR);
-		/* If the card has gone away the read returns 0xffffffff. */
+		/* If the card has gone away the read returns 0xffff. */
 		if (status == 0xFFFFFFFF)
 			break;
 
@@ -1999,26 +1998,6 @@ vge_miibus_statchg(struct device *self)
 }
 
 static int
-vge_ifflags_cb(struct ethercom *ec)
-{
-	struct ifnet *ifp = &ec->ec_if;
-	struct vge_softc *sc = ifp->if_softc;
-	int change = ifp->if_flags ^ sc->sc_if_flags;
-
-	if ((change & ~(IFF_CANTCHANGE|IFF_DEBUG)) != 0)
-		return ENETRESET;
-	else if ((change & IFF_PROMISC) == 0)
-		return 0;
-
-	if ((ifp->if_flags & IFF_PROMISC) == 0)
-		CSR_CLRBIT_1(sc, VGE_RXCTL, VGE_RXCTL_RX_PROMISC);
-	else
-		CSR_SETBIT_1(sc, VGE_RXCTL, VGE_RXCTL_RX_PROMISC);
-	vge_setmulti(sc);
-	return 0;
-}
-
-static int
 vge_ioctl(struct ifnet *ifp, u_long command, void *data)
 {
 	struct vge_softc *sc;
@@ -2031,8 +2010,41 @@ vge_ioctl(struct ifnet *ifp, u_long command, void *data)
 
 	s = splnet();
 
-	if ((error = ether_ioctl(ifp, command, data)) == ENETRESET) {
+	switch (command) {
+	case SIOCSIFMTU:
+		if (ifr->ifr_mtu > VGE_JUMBO_MTU)
+			error = EINVAL;
+		else if ((error = ifioctl_common(ifp, command, data)) == ENETRESET)
+			error = 0;
+		break;
+	case SIOCSIFFLAGS:
+		if (ifp->if_flags & IFF_UP) {
+			if (ifp->if_flags & IFF_RUNNING &&
+			    ifp->if_flags & IFF_PROMISC &&
+			    (sc->sc_if_flags & IFF_PROMISC) == 0) {
+				CSR_SETBIT_1(sc, VGE_RXCTL,
+				    VGE_RXCTL_RX_PROMISC);
+				vge_setmulti(sc);
+			} else if (ifp->if_flags & IFF_RUNNING &&
+			    (ifp->if_flags & IFF_PROMISC) == 0 &&
+			    sc->sc_if_flags & IFF_PROMISC) {
+				CSR_CLRBIT_1(sc, VGE_RXCTL,
+				    VGE_RXCTL_RX_PROMISC);
+				vge_setmulti(sc);
+                        } else
+				vge_init(ifp);
+		} else {
+			if (ifp->if_flags & IFF_RUNNING)
+				vge_stop(ifp, 1);
+		}
+		sc->sc_if_flags = ifp->if_flags;
+		break;
+	default:
+		if ((error = ether_ioctl(ifp, command, data)) != ENETRESET)
+			break;
+
 		error = 0;
+
 		if (command != SIOCADDMULTI && command != SIOCDELMULTI)
 			;
 		else if (ifp->if_flags & IFF_RUNNING) {
@@ -2042,8 +2054,8 @@ vge_ioctl(struct ifnet *ifp, u_long command, void *data)
 			 */
 			vge_setmulti(sc);
 		}
+		break;
 	}
-	sc->sc_if_flags = ifp->if_flags;
 
 	splx(s);
 	return error;
@@ -2139,7 +2151,7 @@ vge_suspend(struct device *dev)
 
 	sc = device_get_softc(dev);
 
-	vge_stop(sc);
+	vge_stop(&sc->sc_ethercom.ec_if, 1);
 
         for (i = 0; i < 5; i++)
 		sc->sc_saved_maps[i] =

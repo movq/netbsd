@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stf.c,v 1.68 2008/11/07 00:20:13 dyoung Exp $	*/
+/*	$NetBSD: if_stf.c,v 1.67 2008/10/24 17:07:33 dyoung Exp $	*/
 /*	$KAME: if_stf.c,v 1.62 2001/06/07 22:32:16 itojun Exp $ */
 
 /*
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.68 2008/11/07 00:20:13 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.67 2008/10/24 17:07:33 dyoung Exp $");
 
 #include "opt_inet.h"
 
@@ -683,7 +683,7 @@ stf_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	error = 0;
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifa = (struct ifaddr *)data;
 		if (ifa == NULL || ifa->ifa_addr->sa_family != AF_INET6) {
 			error = EAFNOSUPPORT;
@@ -718,7 +718,7 @@ stf_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ifioctl_common(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 

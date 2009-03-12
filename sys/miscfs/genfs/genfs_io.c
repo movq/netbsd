@@ -1,4 +1,4 @@
-/*	$NetBSD: genfs_io.c,v 1.19 2009/02/23 21:27:51 rmind Exp $	*/
+/*	$NetBSD: genfs_io.c,v 1.13.4.3 2010/09/07 19:33:35 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfs_io.c,v 1.19 2009/02/23 21:27:51 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfs_io.c,v 1.13.4.3 2010/09/07 19:33:35 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: genfs_io.c,v 1.19 2009/02/23 21:27:51 rmind Exp $");
 #include <sys/file.h>
 #include <sys/kauth.h>
 #include <sys/fstrans.h>
-#include <sys/buf.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/genfs_node.h>
@@ -127,6 +126,7 @@ genfs_getpages(void *v)
 	bool has_trans = false;
 	const bool overwrite = (flags & PGO_OVERWRITE) != 0;
 	const bool blockalloc = write && (flags & PGO_NOBLOCKALLOC) == 0;
+	const bool glocked = (flags & PGO_GLOCKHELD) != 0;
 	voff_t origvsize;
 	UVMHIST_FUNC("genfs_getpages"); UVMHIST_CALLED(ubchist);
 
@@ -215,6 +215,7 @@ startover:
 	if (flags & PGO_LOCKED) {
 		int nfound;
 
+		KASSERT(!glocked);
 		npages = *ap->a_count;
 #if defined(DEBUG)
 		for (i = 0; i < npages; i++) {
@@ -229,7 +230,7 @@ startover:
 			error = EBUSY;
 			goto out_err;
 		}
-		if (!rw_tryenter(&gp->g_glock, RW_READER)) {
+		if (!genfs_node_rdtrylock(vp)) {
 			genfs_rel_pages(ap->a_m, npages);
 
 			/*
@@ -244,7 +245,7 @@ startover:
 				}
 			}
 		} else {
-			rw_exit(&gp->g_glock);
+			genfs_node_unlock(vp);
 		}
 		error = (ap->a_m[ap->a_centeridx] == NULL ? EBUSY : 0);
 		goto out_err;
@@ -303,14 +304,19 @@ startover:
 	 * check if our idea of v_size is still valid.
 	 */
 
-	if (blockalloc) {
-		rw_enter(&gp->g_glock, RW_WRITER);
-	} else {
-		rw_enter(&gp->g_glock, RW_READER);
+	KASSERT(!glocked || genfs_node_wrlocked(vp));
+	if (!glocked) {
+		if (blockalloc) {
+			genfs_node_wrlock(vp);
+		} else {
+			genfs_node_rdlock(vp);
+		}
 	}
 	mutex_enter(&uobj->vmobjlock);
 	if (vp->v_size < origvsize) {
-		rw_exit(&gp->g_glock);
+		if (!glocked) {
+			genfs_node_unlock(vp);
+		}
 		if (pgs != pgs_onstack)
 			kmem_free(pgs, pgs_size);
 		goto startover;
@@ -318,7 +324,9 @@ startover:
 
 	if (uvn_findpages(uobj, origoffset, &npages, &pgs[ridx],
 	    async ? UFP_NOWAIT : UFP_ALL) != orignpages) {
-		rw_exit(&gp->g_glock);
+		if (!glocked) {
+			genfs_node_unlock(vp);
+		}
 		KASSERT(async != 0);
 		genfs_rel_pages(&pgs[ridx], orignpages);
 		mutex_exit(&uobj->vmobjlock);
@@ -339,7 +347,9 @@ startover:
 		}
 	}
 	if (i == npages) {
-		rw_exit(&gp->g_glock);
+		if (!glocked) {
+			genfs_node_unlock(vp);
+		}
 		UVMHIST_LOG(ubchist, "returning cached pages", 0,0,0,0);
 		npages += ridx;
 		goto out;
@@ -350,7 +360,9 @@ startover:
 	 */
 
 	if (overwrite) {
-		rw_exit(&gp->g_glock);
+		if (!glocked) {
+			genfs_node_unlock(vp);
+		}
 		UVMHIST_LOG(ubchist, "PGO_OVERWRITE",0,0,0,0);
 
 		for (i = 0; i < npages; i++) {
@@ -385,7 +397,9 @@ startover:
 		npgs = npages;
 		if (uvn_findpages(uobj, startoffset, &npgs, pgs,
 		    async ? UFP_NOWAIT : UFP_ALL) != npages) {
-			rw_exit(&gp->g_glock);
+			if (!glocked) {
+				genfs_node_unlock(vp);
+			}
 			KASSERT(async != 0);
 			genfs_rel_pages(pgs, npages);
 			mutex_exit(&uobj->vmobjlock);
@@ -566,15 +580,16 @@ loopdone:
 	nestiobuf_done(mbp, skipbytes, error);
 	if (async) {
 		UVMHIST_LOG(ubchist, "returning 0 (async)",0,0,0,0);
-		rw_exit(&gp->g_glock);
+		if (!glocked) {
+			genfs_node_unlock(vp);
+		}
 		error = 0;
 		goto out_err;
 	}
 	if (bp != NULL) {
 		error = biowait(mbp);
 	}
-
-	/* Remove the mapping (make KVA available as soon as possible) */
+	putiobuf(mbp);
 	uvm_pagermapout(kva, npages);
 
 	/*
@@ -615,10 +630,9 @@ loopdone:
 			}
 		}
 	}
-	rw_exit(&gp->g_glock);
-
-	putiobuf(mbp);
-
+	if (!glocked) {
+		genfs_node_unlock(vp);
+	}
 	mutex_enter(&uobj->vmobjlock);
 
 	/*
@@ -848,7 +862,7 @@ retry:
 		endoff = trunc_page(LLONG_MAX);
 	}
 	by_list = (uobj->uo_npages <=
-	    ((endoff - startoff) >> PAGE_SHIFT) * UVM_PAGE_TREE_PENALTY);
+	    ((endoff - startoff) >> PAGE_SHIFT) * UVM_PAGE_HASH_PENALTY);
 
 #if !defined(DEBUG)
 	/*

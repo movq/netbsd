@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_split.c,v 1.18 2009/02/12 06:41:40 lukem Exp $	*/
+/*	$NetBSD: bt_split.c,v 1.17.4.1 2009/04/23 02:33:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bt_split.c,v 1.18 2009/02/12 06:41:40 lukem Exp $");
+__RCSID("$NetBSD: bt_split.c,v 1.17.4.1 2009/04/23 02:33:17 snj Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -215,7 +215,7 @@ __bt_split(BTREE *t, PAGE *sp, const DBT *key, const DBT *data, int flags,
 		}
 
 		/* Split the parent page if necessary or shift the indices. */
-		if ((uint32_t)h->upper - (uint32_t)h->lower < nbytes + sizeof(indx_t)) {
+		if (h->upper - h->lower < nbytes + sizeof(indx_t)) {
 			sp = h;
 			h = h->pgno == P_ROOT ?
 			    bt_root(t, h, &l, &r, &skip, nbytes) :
@@ -383,7 +383,7 @@ bt_page(BTREE *t, PAGE *h, PAGE **lp, PAGE **rp, indx_t *skip, size_t ilen)
 	}
 
 	/* Put the new left page for the split into place. */
-	if ((l = (PAGE *)malloc(t->bt_psize)) == NULL) {
+	if ((l = calloc(1, t->bt_psize)) == NULL) {
 		mpool_put(t->bt_mp, r, 0);
 		return (NULL);
 	}

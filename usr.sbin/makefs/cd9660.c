@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660.c,v 1.26 2009/01/16 18:02:24 pooka Exp $	*/
+/*	$NetBSD: cd9660.c,v 1.22.2.2 2010/01/02 06:45:03 snj Exp $	*/
 
 /*
  * Copyright (c) 2005 Daniel Watt, Walter Deignan, Ryan Gabrys, Alan
@@ -103,7 +103,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: cd9660.c,v 1.26 2009/01/16 18:02:24 pooka Exp $");
+__RCSID("$NetBSD: cd9660.c,v 1.22.2.2 2010/01/02 06:45:03 snj Exp $");
 #endif  /* !__lint */
 
 #include <string.h>
@@ -114,7 +114,6 @@ __RCSID("$NetBSD: cd9660.c,v 1.26 2009/01/16 18:02:24 pooka Exp $");
 #include "makefs.h"
 #include "cd9660.h"
 #include "cd9660/iso9660_rrip.h"
-#include "cd9660/cd9660_archimedes.h"
 
 /*
  * Global variables
@@ -213,8 +212,6 @@ cd9660_set_defaults(void)
 	diskStructure.rock_ridge_renamed_dir_name = 0;
 	diskStructure.rock_ridge_move_count = 0;
 	diskStructure.rr_moved_dir = 0;
-
-	diskStructure.archimedes_enabled = 0;
 
 	diskStructure.include_padding_areas = 1;
 
@@ -328,6 +325,7 @@ cd9660_parse_opts(const char *option, fsinfo_t *fsopts)
 	*/
 
 	assert(option != NULL);
+	assert(fsopts != NULL);
 
 	if (debug & DEBUG_FS_PARSE_OPTS)
 		printf("cd9660_parse_opts: got `%s'\n", option);
@@ -397,8 +395,6 @@ cd9660_parse_opts(const char *option, fsinfo_t *fsopts)
 	/* RRIP */
 	else if (CD9660_IS_COMMAND_ARG_DUAL(var, "R", "rockridge"))
 		diskStructure.rock_ridge_enabled = 1;
-	else if (CD9660_IS_COMMAND_ARG_DUAL(var, "A", "archimedes"))
-		diskStructure.archimedes_enabled = 1;
 	else if (CD9660_IS_COMMAND_ARG_DUAL(var, "K", "keep-bad-images"))
 		diskStructure.keep_bad_images = 1;
 	else if (CD9660_IS_COMMAND_ARG(var, "allow-deep-trees"))
@@ -426,13 +422,8 @@ cd9660_parse_opts(const char *option, fsinfo_t *fsopts)
 		} else {
 			cd9660_eltorito_add_boot_option(var, val);
 		}
-	} else {
-		if (val == NULL) {
-			warnx("Option `%s' doesn't contain a value", var);
-			rv = 0;
-		} else
-			rv = set_option(cd9660_options, var, val);
-	}
+	} else
+		rv = set_option(cd9660_options, var, val);
 
 	if (var)
 		free(var);
@@ -469,6 +460,7 @@ cd9660_makefs(const char *image, const char *dir, fsnode *root,
 	assert(image != NULL);
 	assert(dir != NULL);
 	assert(root != NULL);
+	assert(fsopts != NULL);
 
 	if (diskStructure.displayHelp) {
 		/*
@@ -527,10 +519,6 @@ cd9660_makefs(const char *image, const char *dir, fsnode *root,
 
 	if (diskStructure.verbose_level > 0)
 		printf("cd9660_makefs: done converting tree\n");
-
-	/* non-SUSP extensions */
-	if (diskStructure.archimedes_enabled)
-		archimedes_convert_tree(diskStructure.rootNode);
 
 	/* Rock ridge / SUSP init pass */
 	if (diskStructure.rock_ridge_enabled) {
@@ -1642,10 +1630,6 @@ cd9660_level1_convert_filename(const char *oldname, char *newname, int is_file)
 				found_ext = 1;
 			}
 		} else {
-			/* cut RISC OS file type off ISO name */
-			if (diskStructure.archimedes_enabled &&
-			    *oldname == ',' && strlen(oldname) == 4)
-				break;
 			/* Enforce 12.3 / 8 */
 			if (((namelen == 8) && !found_ext) ||
 			    (found_ext && extlen == 3)) {
@@ -1709,10 +1693,6 @@ cd9660_level2_convert_filename(const char *oldname, char *newname, int is_file)
 				found_ext = 1;
 			}
 		} else {
-			/* cut RISC OS file type off ISO name */
-			if (diskStructure.archimedes_enabled &&
-			    *oldname == ',' && strlen(oldname) == 4)
-				break;
 			if ((namelen + extlen) == 30)
 				break;
 

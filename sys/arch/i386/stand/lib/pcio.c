@@ -1,4 +1,4 @@
-/*	$NetBSD: pcio.c,v 1.25 2008/12/14 18:46:33 christos Exp $	 */
+/*	$NetBSD: pcio.c,v 1.23.8.2 2009/11/28 15:40:47 bouyer Exp $	 */
 
 /*
  * Copyright (c) 1996, 1997
@@ -71,6 +71,20 @@ static int getcomaddr(int);
 
 #define POLL_FREQ 10
 
+static void
+wait(int us)
+{
+	int prev = biosgetsystime();
+	int tgt = prev + (20 * us) / 1000000;
+	int new;
+
+	while ((new = biosgetsystime()) < tgt) {
+		if (new < prev) /* XXX timer wrapped */
+			break;
+		prev = new;
+	}
+}
+
 #ifdef SUPPORT_SERIAL
 static int
 getcomaddr(int idx)
@@ -87,16 +101,6 @@ getcomaddr(int idx)
 #endif
 
 void
-clear_pc_screen(void)
-{
-#ifdef SUPPORT_SERIAL
-	/* Clear the screen if we are on a glass tty. */
-	if (iodev == CONSDEV_PC)
-		conclr();
-#endif
-}
-
-void
 initio(int dev)
 {
 #ifdef SUPPORT_SERIAL
@@ -110,10 +114,10 @@ initio(int dev)
 
 	switch (dev) {
 	case CONSDEV_AUTO:
-		for (i = 0; i < 3; i++) {
+		for(i = 0; i < 3; i++) {
 			iodev = CONSDEV_COM0 + i;
 			btinfo_console.addr = getcomaddr(i);
-			if (!btinfo_console.addr)
+			if(!btinfo_console.addr)
 				break;
 			conputc('0' + i); /* to tell user what happens */
 			cominit_x();
@@ -157,7 +161,7 @@ ok:
 	case CONSDEV_COM3:
 		iodev = dev;
 		btinfo_console.addr = getcomaddr(iodev - CONSDEV_COM0);
-		if (!btinfo_console.addr)
+		if(!btinfo_console.addr)
 			goto nocom;
 		cominit_x();
 		break;
@@ -168,7 +172,7 @@ ok:
 		iodev = dev - CONSDEV_COM0KBD + CONSDEV_COM0;
 		i = iodev - CONSDEV_COM0;
 		btinfo_console.addr = getcomaddr(i);
-		if (!btinfo_console.addr)
+		if(!btinfo_console.addr)
 			goto nocom;
 		conputc('0' + i); /* to tell user what happens */
 		cominit_x();
@@ -211,6 +215,10 @@ nocom:
 	conputc('\n');
 	strncpy(btinfo_console.devname, iodev == CONSDEV_PC ? "pc" : "com", 16);
 
+	if (iodev == CONSDEV_PC) {
+		/* Clear screen if on a glass tty. */
+		conclr();
+	}
 #else /* !SUPPORT_SERIAL */
 	btinfo_console.devname[0] = 'p';
 	btinfo_console.devname[1] = 'c';
@@ -323,15 +331,19 @@ awaitkey(int timeout, int tell)
 
 	for (;;) {
 		if (tell && (i % POLL_FREQ) == 0) {
-			char numbuf[20];
-			int len, j;
+			char numbuf[32];
+			int len;
 
-			sprintf(numbuf, "%d ", i/POLL_FREQ);
-			len = strlen(numbuf);
-			for (j = 0; j < len; j++)
-				numbuf[len + j] = '\b';
-			numbuf[len + j] = '\0';
-			printf(numbuf);
+			len = snprintf(numbuf, sizeof(numbuf), "%d seconds. ",
+			    i/POLL_FREQ);
+			if (len > 0 && len < sizeof(numbuf)) {
+				char *p = numbuf;
+
+				printf("%s", numbuf);
+				while (*p)
+					*p++ = '\b';
+				printf("%s", numbuf);
+			}
 		}
 		if (iskey(1)) {
 			/* flush input buffer */
@@ -342,14 +354,14 @@ awaitkey(int timeout, int tell)
 			goto out;
 		}
 		if (i--)
-			delay(1000000 / POLL_FREQ);
+			wait(1000000 / POLL_FREQ);
 		else
 			break;
 	}
 
 out:
 	if (tell)
-		printf("0 \n");
+		printf("0 seconds.     \n");
 
 	return c;
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: std.iq80321,v 1.13 2009/01/05 05:53:06 briggs Exp $
+#	$NetBSD: std.iq80321,v 1.12.20.1 2009/01/09 02:43:13 snj Exp $
 #
 # standard NetBSD/evbarm for IQ80321 options
 

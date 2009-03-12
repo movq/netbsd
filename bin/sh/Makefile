@@ -1,7 +1,9 @@
-#	$NetBSD: Makefile,v 1.84 2009/02/14 08:31:14 lukem Exp $
+#	$NetBSD: Makefile,v 1.83 2008/10/25 22:23:55 apb Exp $
 #	@(#)Makefile	8.4 (Berkeley) 5/5/95
 
 .include <bsd.own.mk>
+
+WARNS=4
 
 YHEADER=1
 PROG=	sh

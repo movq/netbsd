@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_input.c,v 1.278 2009/01/19 02:27:57 christos Exp $	*/
+/*	$NetBSD: ip_input.c,v 1.275.4.1 2008/11/25 04:04:38 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -91,10 +91,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.278 2009/01/19 02:27:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.275.4.1 2008/11/25 04:04:38 snj Exp $");
 
 #include "opt_inet.h"
-#include "opt_compat_netbsd.h"
 #include "opt_gateway.h"
 #include "opt_pfil_hooks.h"
 #include "opt_ipsec.h"
@@ -172,11 +171,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.278 2009/01/19 02:27:57 christos Exp 
 #endif
 #ifndef IPMTUDISCTIMEOUT
 #define IPMTUDISCTIMEOUT (10 * 60)	/* as per RFC 1191 */
-#endif
-
-#ifdef COMPAT_50
-#include <compat/sys/time.h>
-#include <compat/sys/socket.h>
 #endif
 
 /*
@@ -1128,7 +1122,8 @@ ip_reass(struct ipqent *ipqe, struct ipq *fp, struct ipqhead *ipqhead)
 		else if (ip_nfragpackets >= ip_maxfragpackets)
 			goto dropfrag;
 		ip_nfragpackets++;
-		fp = malloc(sizeof (struct ipq), M_FTABLE, M_NOWAIT);
+		MALLOC(fp, struct ipq *, sizeof (struct ipq),
+		    M_FTABLE, M_NOWAIT);
 		if (fp == NULL)
 			goto dropfrag;
 		LIST_INSERT_HEAD(ipqhead, fp, ipq_q);
@@ -1259,7 +1254,7 @@ insert:
 	ip->ip_src = fp->ipq_src;
 	ip->ip_dst = fp->ipq_dst;
 	LIST_REMOVE(fp, ipq_q);
-	free(fp, M_FTABLE);
+	FREE(fp, M_FTABLE);
 	ip_nfragpackets--;
 	m->m_len += (ip->ip_hl << 2);
 	m->m_data -= (ip->ip_hl << 2);
@@ -1312,7 +1307,7 @@ ip_freef(struct ipq *fp)
 	    printf("ip_freef: nfrags %d != %d\n", fp->ipq_nfrags, nfrags);
 	ip_nfrags -= nfrags;
 	LIST_REMOVE(fp, ipq_q);
-	free(fp, M_FTABLE);
+	FREE(fp, M_FTABLE);
 	ip_nfragpackets--;
 }
 
@@ -2057,22 +2052,10 @@ ip_savecontrol(struct inpcb *inp, struct mbuf **mp, struct ip *ip,
     struct mbuf *m)
 {
 
-	if (inp->inp_socket->so_options & SO_TIMESTAMP 
-#ifdef SO_OTIMESTAMP
-	    || inp->inp_socket->so_options & SO_OTIMESTAMP 
-#endif
-	    ) {
+	if (inp->inp_socket->so_options & SO_TIMESTAMP) {
 		struct timeval tv;
 
 		microtime(&tv);
-#ifdef SO_OTIMESTAMP
-		if (inp->inp_socket->so_options & SO_OTIMESTAMP) {
-			struct timeval50 tv50;
-			timeval_to_timeval50(&tv, &tv50);
-			*mp = sbcreatecontrol((void *) &tv50, sizeof(tv50),
-			    SCM_OTIMESTAMP, SOL_SOCKET);
-		} else
-#endif
 		*mp = sbcreatecontrol((void *) &tv, sizeof(tv),
 		    SCM_TIMESTAMP, SOL_SOCKET);
 		if (*mp)

@@ -1,4 +1,4 @@
-.\"	$NetBSD: make.1,v 1.153 2009/01/24 13:02:33 wiz Exp $
+.\"	$NetBSD: make.1,v 1.144.2.3 2009/01/16 22:45:39 bouyer Exp $
 .\"
 .\" Copyright (c) 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	from: @(#)make.1	8.4 (Berkeley) 3/19/94
 .\"
-.Dd January 24, 2009
+.Dd November 25, 2008
 .Dt MAKE 1
 .Os
 .Sh NAME
@@ -132,8 +132,6 @@ Print all possible debugging information;
 equivalent to specifying all of the debugging flags.
 .It Ar a
 Print debugging information about archive searching and caching.
-.It Ar C
-Print debugging information about current working directory.
 .It Ar c
 Print debugging information about conditional evaluation.
 .It Ar d
@@ -248,14 +246,6 @@ may have running at any one time.
 Turns compatibility mode off, unless the
 .Ar B
 flag is also specified.
-When compatibility mode is off, all commands associated with a
-target are executed in a single shell invocation as opposed to the
-traditional one shell invocation per line.
-This can break traditional scripts which change directories on each
-command invocation and then expect to start with a fresh environment
-on the next line.
-It is more efficient to correct the scripts rather than turn backwards
-compatibility on.
 .It Fl k
 Continue processing after errors are encountered, but only on those targets
 that do not depend on the target whose creation caused the error.
@@ -506,14 +496,6 @@ a dollar sign
 If the variable name contains only a single letter, the surrounding
 braces or parentheses are not required.
 This shorter form is not recommended.
-.Pp
-If the variable name contains a dollar, then the name itself is expanded first.
-This allows almost arbitrary variable names, however names containing dollar,
-braces, parenthesis, or whitespace are really best avoided!
-.Pp
-If the result of expanding a variable contains a dollar sign
-.Pq Ql \&$
-the string is expanded again.
 .Pp
 Variable substitution occurs at two distinct times, depending on where
 the variable is being used.
@@ -1021,16 +1003,45 @@ Remove adjacent duplicate words (like
 .Sm off
 .It Cm \&:\&? Ar true_string Cm \&: Ar false_string
 .Sm on
-If the variable name (not its value), when parsed as a .if conditional
-expression, evaluates to true, return as its value the
+If the variable (actually an expression; see below)
+evaluates to true, return as its value the
 .Ar true_string ,
 otherwise return the
 .Ar false_string .
-Since the variable name is used as the expression, \&:\&? must be the
-first modifier after the variable name itself - which will, of course,
-usually contain variable expansions.
-If the expression is a single token, it will likely be treated as a check
-for the name being defined.
+The expression parser needs careful feeding to avoid surprises.
+For example the following all do what one might expect,
+.Dl ${"${NUMBERS:M42}":?match:no}
+.Dl ${${NUMBER:U0} > 0:?set:zero}
+.Dl ${empty(NUMBER):?empty:set}
+The first case expands to
+.Ql match
+if
+.Dv NUMBERS
+contains the value 42 (the quotes are important).
+The second expands to
+.Ql zero
+unless
+.Dv NUMBER
+is set to a value greater than 0.
+The last case expands to
+.Ql empty
+or
+.Ql set
+depending on whether
+.Dv NUMBER
+is empty.
+In this example, use of
+.Ql {}
+rather than
+.Ql ()
+is important to avoid the parser getting confused.
+By contrast, the following examples will
+.Em not
+behave as expected.
+.Dl ${"1 < 0":?always:no}
+.Dl ${NUMBERS:M42:?always:no}
+in both cases the expansion will always be
+.Ql always .
 .It Ar :old_string=new_string
 This is the
 .At V
@@ -1115,14 +1126,25 @@ The variable is assigned the value
 .Ar str
 after substitution.
 This modifier and its variations are useful in
-obscure situations such as wanting to set a variable when shell commands
-are being parsed.
+obscure situations such as wanting to apply modifiers to
+.Cm \&.for
+loop iteration variables which won't work due to the way
+.Cm \&.for
+loops are implemented.
 These assignment modifiers always expand to
 nothing, so if appearing in a rule line by themselves should be
 preceded with something to keep
 .Nm
 happy.
-.Pp
+As in:
+.Bd -literal
+use_foo: \&.USE
+\&.for i in ${\&.TARGET} ${\&.TARGET:R}\&.gz
+	@: ${t::=$i}
+	@echo t:R:T=${t:R:T}
+\&.endfor
+
+.Ed
 The
 .Ql Cm \&::
 helps avoid false matches with the
@@ -1420,17 +1442,16 @@ of a string comparison.
 .Pp
 When
 .Nm
-is evaluating one of these conditional expressions, and it encounters
-a (white-space separated) word it doesn't recognize, either the
+is evaluating one of these conditional expression, and it encounters
+a word it doesn't recognize, either the
 .Dq make
 or
 .Dq defined
 expression is applied to it, depending on the form of the conditional.
 If the form is
-.Ql Ic .ifdef ,
-.Ql Ic .ifndef ,
+.Ql Ic .ifdef
 or
-.Ql Ic .if
+.Ql Ic .ifndef ,
 the
 .Dq defined
 expression is applied.
@@ -1802,12 +1823,6 @@ The way that parallel makes are scheduled changed in
 .Nx 4.0
 so that .ORDER and .WAIT apply recursively to the dependant nodes.
 The algorithms used may change again in the future.
-.Pp
-The way that .for loop variables are substituted changed after
-.Nx 5.0
-so that they still appear to be variable expansions.
-In particular this stops them being treated as syntax, and removes some
-obscure problems using them in .if statements.
 .Sh SEE ALSO
 .Xr mkdep 1
 .Sh HISTORY
@@ -1815,14 +1830,3 @@ A
 .Nm
 command appeared in
 .At v7 .
-.Sh BUGS
-The
-.Nm
-syntax is difficult to parse without actually acting of the data.
-For instance finding the end of a variable use should involve scanning each
-the modifiers using the correct terminator for each field.
-In many places
-.Nm
-just counts {} and () in order to find the end of a variable expansion.
-.Pp
-There is no way of escaping a space character in a filename.

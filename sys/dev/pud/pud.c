@@ -1,4 +1,4 @@
-/*	$NetBSD: pud.c,v 1.7 2009/01/20 18:20:48 drochner Exp $	*/
+/*	$NetBSD: pud.c,v 1.6 2007/11/28 17:01:59 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007  Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pud.c,v 1.7 2009/01/20 18:20:48 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pud.c,v 1.6 2007/11/28 17:01:59 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -175,8 +175,7 @@ static int
 pudconf_reg(struct pud_dev *pd, struct pud_conf_reg *pcr)
 {
 	struct bdevsw *bsw;
-	devmajor_t cmajor, bmajor;
-	int error;
+	int cmajor, bmajor, error;
 
 	if (pcr->pm_version != (PUD_DEVELVERSION | PUD_VERSION)) {
 		printf("pud version mismatch %d vs %d\n",
@@ -190,7 +189,7 @@ pudconf_reg(struct pud_dev *pd, struct pud_conf_reg *pcr)
 		bmajor = cmajor;
 	} else {
 		bsw = NULL;
-		bmajor = NODEVMAJOR;
+		bmajor = -1;
 	}
 
 	pcr->pm_devname[PUD_DEVNAME_MAX] = '\0';

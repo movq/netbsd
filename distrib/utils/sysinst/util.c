@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.155 2009/02/11 20:33:14 abs Exp $	*/
+/*	$NetBSD: util.c,v 1.151.14.4 2009/10/10 20:22:34 sborrill Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -45,7 +45,6 @@
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #include <sys/stat.h>
-#include <sys/statvfs.h>
 #include <curses.h>
 #include <errno.h>
 #include <dirent.h>
@@ -319,14 +318,6 @@ get_via_floppy(void)
 int
 get_via_cdrom(void)
 {
-	struct statvfs sb;
-
-	/* If root is a CD-ROM and we have sets, skip this step. */
-	if (statvfs(set_dir, &sb) == 0 &&
-	    strcmp(sb.f_fstypename, "cd9660") == 0) {
-	    	strlcpy(ext_dir, set_dir, sizeof ext_dir);
-		return SET_OK;
-	}
 
 	/* Get CD-rom device name and path within CD-rom */
 	process_menu(MENU_cdromsource, NULL);
@@ -678,11 +669,19 @@ extract_file(distinfo *dist, int update, int verbose)
 
 	tarstats.nfound++;	
 	/* cd to the target root. */
-	if (update && dist->set == SET_ETC) {
+	if (update && (dist->set == SET_ETC || dist->set == SET_X11_ETC)) {
 		make_target_dir("/.sysinst");
 		target_chdir_or_die("/.sysinst");
 	} else
 		target_chdir_or_die("/");
+
+	/*
+	 * /usr/X11R7/lib/X11/xkb/symbols/pc was a directory in 5.0
+	 * but is a file in 5.1 and beyond, so on upgrades we need to
+	 * delete it before extracting the xbase set.
+	 */
+	if (update && dist->set == SET_X11_BASE)
+		run_program(0, "rm -rf usr/X11R7/lib/X11/xkb/symbols/pc");
 
 	/* now extract set files into "./". */
 	if (verbose == 0)
@@ -709,23 +708,6 @@ extract_file(distinfo *dist, int update, int verbose)
 	if (fetch_fn != NULL && clean_xfer_dir) {
 		run_program(0, "rm %s", path);
 		/* Plausibly we should unlink an empty xfer_dir as well */
-	}
-
-	if (update && dist->set == SET_ETC) {
-		int oldsendmail;
-		oldsendmail = run_program(RUN_DISPLAY | RUN_CHROOT |
-					  RUN_ERROR_OK | RUN_PROGRESS,
-					  "/usr/sbin/postinstall -s /.sysinst -d / check mailerconf");
-		if (oldsendmail == 1) {
-			msg_display(MSG_oldsendmail);
-			process_menu(MENU_yesno, NULL);
-			if (yesno) {
-				run_program(RUN_DISPLAY | RUN_CHROOT,
-					    "/usr/sbin/postinstall -s /.sysinst -d / fix mailerconf");
-			}
-		}
-		run_program(RUN_DISPLAY | RUN_CHROOT,
-			"/usr/sbin/postinstall -s /.sysinst -d / fix");
 	}
 
 	set_status[dist->set] |= SET_INSTALLED;
@@ -846,6 +828,28 @@ get_and_unpack_sets(int update, msg setupdone_msg, msg success_msg, msg failure_
 		    tarstats.nfound, tarstats.nsuccess, tarstats.nerror);
 		process_menu(MENU_ok, NULL);
 		msg_clear();
+	}
+
+	/*
+	 * postinstall needs to be run after extracting all sets, because
+	 * otherwise /var/db/obsolete will only have current information
+	 * from the base, comp, and etc sets.
+	 */
+	if (update && (set_status[SET_ETC] & SET_INSTALLED)) {
+		int oldsendmail;
+		oldsendmail = run_program(RUN_DISPLAY | RUN_CHROOT |
+					  RUN_ERROR_OK | RUN_PROGRESS,
+					  "/usr/sbin/postinstall -s /.sysinst -d / check mailerconf");
+		if (oldsendmail == 1) {
+			msg_display(MSG_oldsendmail);
+			process_menu(MENU_yesno, NULL);
+			if (yesno) {
+				run_program(RUN_DISPLAY | RUN_CHROOT,
+					    "/usr/sbin/postinstall -s /.sysinst -d / fix mailerconf");
+			}
+		}
+		run_program(RUN_DISPLAY | RUN_CHROOT,
+			"/usr/sbin/postinstall -s /.sysinst -d / fix");
 	}
 
 	/* Configure the system */
@@ -1276,24 +1280,6 @@ add_rc_conf(const char *fmt, ...)
 	f = target_fopen("/etc/rc.conf", "a");
 	if (f != 0) {
 		scripting_fprintf(NULL, "cat <<EOF >>%s/etc/rc.conf\n",
-		    target_prefix());
-		scripting_vfprintf(f, fmt, ap);
-		fclose(f);
-		scripting_fprintf(NULL, "EOF\n");
-	}
-	va_end(ap);
-}
-
-void
-add_sysctl_conf(const char *fmt, ...)
-{
-	FILE *f;
-	va_list ap;
-
-	va_start(ap, fmt);
-	f = target_fopen("/etc/sysctl.conf", "a");
-	if (f != 0) {
-		scripting_fprintf(NULL, "cat <<EOF >>%s/etc/sysctl.conf\n",
 		    target_prefix());
 		scripting_vfprintf(f, fmt, ap);
 		fclose(f);

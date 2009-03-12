@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.71 2009/03/10 20:05:30 bouyer Exp $	*/
+/*	$NetBSD: param.h,v 1.67.30.4 2009/09/30 00:08:03 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.

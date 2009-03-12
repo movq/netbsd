@@ -1,7 +1,7 @@
-/*	$NetBSD: mqueue.h,v 1.6 2009/01/20 02:15:32 rmind Exp $	*/
+/*	$NetBSD: mqueue.h,v 1.4.16.2 2009/10/16 06:37:51 snj Exp $	*/
 
 /*
- * Copyright (c) 2007, Mindaugas Rasiukevicius <rmind at NetBSD org>
+ * Copyright (c) 2007-2009 Mindaugas Rasiukevicius <rmind at NetBSD org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -95,16 +95,12 @@ struct mq_msg {
 	TAILQ_ENTRY(mq_msg)	msg_queue;
 	size_t			msg_len;
 	u_int			msg_prio;
-	int8_t			msg_ptr[1];
+	uint8_t			msg_ptr[1];
 };
 
 /* Prototypes */
 void	mqueue_sysinit(void);
 void	mqueue_print_list(void (*pr)(const char *, ...));
-int	abstimeout2timo(struct timespec *, int *);
-int	mq_send1(struct lwp *, mqd_t, const char *, size_t, unsigned, int);
-int	mq_receive1(struct lwp *, mqd_t, void *, size_t, unsigned *, int,
-    ssize_t *);
 
 #endif	/* _KERNEL */
 

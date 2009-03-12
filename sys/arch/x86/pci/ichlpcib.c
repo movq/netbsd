@@ -1,4 +1,4 @@
-/*	$NetBSD: ichlpcib.c,v 1.15 2009/03/03 06:05:28 mrg Exp $	*/
+/*	$NetBSD: ichlpcib.c,v 1.14.4.2 2009/08/16 00:16:28 snj Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ichlpcib.c,v 1.15 2009/03/03 06:05:28 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ichlpcib.c,v 1.14.4.2 2009/08/16 00:16:28 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -86,6 +86,9 @@ struct lpcib_softc {
 	uint32_t		sc_hpet_reg;
 #endif
 
+	/* Speedstep */
+	pcireg_t		sc_pmcon_orig;
+
 	/* Power management */
 	pcireg_t		sc_pirq[2];
 	pcireg_t		sc_pmcon;
@@ -96,6 +99,7 @@ static int lpcibmatch(device_t, cfdata_t, void *);
 static void lpcibattach(device_t, device_t, void *);
 static bool lpcib_suspend(device_t PMF_FN_PROTO);
 static bool lpcib_resume(device_t PMF_FN_PROTO);
+static bool lpcib_shutdown(device_t, int);
 
 static void pmtimer_configure(device_t);
 
@@ -205,6 +209,9 @@ lpcibattach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
+	sc->sc_pmcon_orig = pci_conf_read(sc->sc_pcib.sc_pc, sc->sc_pcib.sc_tag,
+	    LPCIB_PCI_GEN_PMCON_1);
+
 	/* For ICH6 and later, always enable RCBA */
 	if (sc->sc_has_rcba) {
 		pcireg_t rcba;
@@ -241,8 +248,20 @@ lpcibattach(device_t parent, device_t self, void *aux)
 #endif
 
 	/* Install power handler */
-	if (!pmf_device_register(self, lpcib_suspend, lpcib_resume))
+	if (!pmf_device_register1(self, lpcib_suspend, lpcib_resume,
+	    lpcib_shutdown))
 		aprint_error_dev(self, "couldn't establish power handler\n");
+}
+
+static bool
+lpcib_shutdown(device_t dv, int howto)
+{
+	struct lpcib_softc *sc = device_private(dv);
+
+	pci_conf_write(sc->sc_pcib.sc_pc, sc->sc_pcib.sc_tag,
+	    LPCIB_PCI_GEN_PMCON_1, sc->sc_pmcon_orig);
+
+	return true;
 }
 
 static bool
@@ -394,6 +413,7 @@ tcotimer_setmode(struct sysmon_wdog *smw)
 	struct lpcib_softc *sc = smw->smw_cookie;
 	unsigned int period;
 	uint16_t ich6period = 0;
+	uint8_t ich5period = 0;
 
 	if ((smw->smw_mode & WDOG_MODE_MASK) == WDOG_MODE_DISARMED) {
 		/* Stop the TCO timer. */
@@ -403,16 +423,16 @@ tcotimer_setmode(struct sysmon_wdog *smw)
 		 * ICH6 or newer are limited to 2s min and 613s max.
 		 * ICH5 or older are limited to 4s min and 39s max.
 		 */
+		period = lpcib_tcotimer_second_to_tick(smw->smw_period);
 		if (sc->sc_has_rcba) {
-			if (smw->smw_period < LPCIB_TCOTIMER2_MIN_TICK ||
-			    smw->smw_period > LPCIB_TCOTIMER2_MAX_TICK)
+			if (period < LPCIB_TCOTIMER2_MIN_TICK ||
+			    period > LPCIB_TCOTIMER2_MAX_TICK)
 				return EINVAL;
 		} else {
-			if (smw->smw_period < LPCIB_TCOTIMER_MIN_TICK ||
-			    smw->smw_period > LPCIB_TCOTIMER_MAX_TICK)
+			if (period < LPCIB_TCOTIMER_MIN_TICK ||
+			    period > LPCIB_TCOTIMER_MAX_TICK)
 				return EINVAL;
 		}
-		period = lpcib_tcotimer_second_to_tick(smw->smw_period);
 		
 		/* Stop the TCO timer, */
 		tcotimer_stop(sc);
@@ -427,11 +447,11 @@ tcotimer_setmode(struct sysmon_wdog *smw)
 					  LPCIB_TCO_TMR2, ich6period | period);
 		} else {
 			/* ICH5 or older */
-			period |= bus_space_read_1(sc->sc_iot, sc->sc_ioh,
+			ich5period = bus_space_read_1(sc->sc_iot, sc->sc_ioh,
 						   LPCIB_TCO_TMR);
-			period &= 0xc0;
+			ich5period &= 0xc0;
 			bus_space_write_1(sc->sc_iot, sc->sc_ioh,
-					  LPCIB_TCO_TMR, period);
+					  LPCIB_TCO_TMR, ich5period | period);
 		}
 
 		/* and start/reload the timer. */
@@ -542,8 +562,6 @@ error:
 /*
  * Linux driver says that SpeedStep on older chipsets cause
  * lockups on Dell Inspiron 8000 and 8100.
- * It should also not be enabled on systems with the 82855GM
- * Hub, which typically have an EST-enabled CPU.
  */
 static int
 speedstep_bad_hb_check(struct pci_attach_args *pa)
@@ -551,9 +569,6 @@ speedstep_bad_hb_check(struct pci_attach_args *pa)
 
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_INTEL_82815_FULL_HUB &&
 	    PCI_REVISION(pa->pa_class) < 5)
-		return 1;
-
-	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_INTEL_82855GM_MCH)
 		return 1;
 
 	return 0;

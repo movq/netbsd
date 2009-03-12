@@ -1,12 +1,12 @@
-/*	$NetBSD: db_elf.c,v 1.26 2009/03/07 22:02:17 ad Exp $	*/
+/*	$NetBSD: db_elf.c,v 1.25 2008/04/28 20:23:46 martin Exp $	*/
 
 /*-
- * Copyright (c) 1997, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Jason R. Thorpe of the Numerical Aerospace Simulation Facility,
- * NASA Ames Research Center, and by Andrew Doran.
+ * NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,16 +31,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_elf.c,v 1.26 2009/03/07 22:02:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_elf.c,v 1.25 2008/04/28 20:23:46 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 
-#include <ddb/ddb.h>
+#include <machine/db_machdep.h>
 
-#include <machine/pmap.h>
-#include <machine/vmparam.h>
+#include <ddb/db_sym.h>
+#include <ddb/db_output.h>
+#include <ddb/db_extern.h>
 
 #ifdef DB_ELF_SYMBOLS
 
@@ -60,10 +61,10 @@ static char	*db_elf_find_strtab(db_symtab_t *);
 #define	STAB_TO_SHDR(stab, e)	((Elf_Shdr *)((stab)->private + (e)->e_shoff))
 
 static bool db_elf_sym_init(int, void *, void *, const char *);
-static db_sym_t	db_elf_lookup(db_symtab_t *, const char *);
+static db_sym_t	db_elf_lookup(db_symtab_t *, char *);
 static db_sym_t	db_elf_search_symbol(db_symtab_t *, db_addr_t, db_strategy_t,
 		    db_expr_t *);
-static void	db_elf_symbol_values(db_symtab_t *, db_sym_t, const char **,
+static void	db_elf_symbol_values(db_symtab_t *, db_sym_t, char **,
 		    db_expr_t *);
 static bool db_elf_line_at_pc(db_symtab_t *, db_sym_t, char **, int *,
 		    db_expr_t);
@@ -81,23 +82,6 @@ const db_symformat_t db_symformat_elf = {
 	db_elf_sym_numargs,
 	db_elf_forall
 };
-
-static db_symtab_t db_symtabs;
-
-/*
- * Add symbol table, with given name, to symbol tables.
- */
-static int
-db_add_symbol_table(char *start, char *end, const char *name, char *ref)
-{
-
-	db_symtabs.start = start;
-	db_symtabs.end = end;
-	db_symtabs.name = name;
-	db_symtabs.private = ref;
-
-	return(0);
-}
 
 /*
  * Find the symbol table and strings; tell ddb about them.
@@ -201,6 +185,9 @@ db_elf_sym_init(
 	 */
 	if (db_add_symbol_table((char *)symtab_start,
 	    (char *)symtab_end, name, (char *)symtab) != -1) {
+		printf("[ using %lu bytes of %s ELF symbol table ]\n",
+		    (u_long)roundup(((char *)esymtab - (char *)symtab),
+		    sizeof(u_long)), name);
 		return (true);
 	}
 
@@ -222,8 +209,6 @@ db_elf_find_strtab(db_symtab_t *stab)
 	Elf_Shdr *shp = STAB_TO_SHDR(stab, elf);
 	int i;
 
-	stab = &db_symtabs;
-
 	/*
 	 * We don't load ELF header for ELF modules.
 	 * Find out if this is a loadable module. If so,
@@ -244,12 +229,10 @@ db_elf_find_strtab(db_symtab_t *stab)
  * Lookup the symbol with the given name.
  */
 static db_sym_t
-db_elf_lookup(db_symtab_t *stab, const char *symstr)
+db_elf_lookup(db_symtab_t *stab, char *symstr)
 {
 	Elf_Sym *symp, *symtab_start, *symtab_end;
 	char *strtab;
-
-	stab = &db_symtabs;
 
 	symtab_start = STAB_TO_SYMSTART(stab);
 	symtab_end = STAB_TO_SYMEND(stab);
@@ -278,8 +261,6 @@ db_elf_search_symbol(db_symtab_t *symtab, db_addr_t off, db_strategy_t strategy,
 	Elf_Sym *rsymp, *symp, *symtab_start, *symtab_end;
 	db_addr_t diff = *diffp;
 
-	symtab = &db_symtabs;
-
 	symtab_start = STAB_TO_SYMSTART(symtab);
 	symtab_end = STAB_TO_SYMEND(symtab);
 
@@ -288,11 +269,10 @@ db_elf_search_symbol(db_symtab_t *symtab, db_addr_t off, db_strategy_t strategy,
 	for (symp = symtab_start; symp < symtab_end; symp++) {
 		if (symp->st_name == 0)
 			continue;
-
 #if 0
 		/* This prevents me from seeing anythin in locore.s -- eeh */
-		if (ELF_ST_TYPE(symp->st_info) != STT_OBJECT &&
-		    ELF_ST_TYPE(symp->st_info) != STT_FUNC)
+		if (ELF_SYM_TYPE(symp->st_info) != Elf_estt_object &&
+		    ELF_SYM_TYPE(symp->st_info) != Elf_estt_func)
 			continue;
 #endif
 
@@ -338,13 +318,11 @@ db_elf_search_symbol(db_symtab_t *symtab, db_addr_t off, db_strategy_t strategy,
  * Return the name and value for a symbol.
  */
 static void
-db_elf_symbol_values(db_symtab_t *symtab, db_sym_t sym, const char **namep,
+db_elf_symbol_values(db_symtab_t *symtab, db_sym_t sym, char **namep,
     db_expr_t *valuep)
 {
 	Elf_Sym *symp = (Elf_Sym *)sym;
 	char *strtab;
-
-	symtab = &db_symtabs;
 
 	if (namep) {
 		strtab = db_elf_find_strtab(symtab);
@@ -398,8 +376,6 @@ db_elf_forall(db_symtab_t *stab, db_forall_func_t db_forall_func, void *arg)
 	char *strtab;
 	static char suffix[2];
 	Elf_Sym *symp, *symtab_start, *symtab_end;
-
-	stab = &db_symtabs;
 
 	symtab_start = STAB_TO_SYMSTART(stab);
 	symtab_end = STAB_TO_SYMEND(stab);

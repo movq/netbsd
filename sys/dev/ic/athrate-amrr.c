@@ -1,4 +1,4 @@
-/*	$NetBSD: athrate-amrr.c,v 1.11 2008/12/11 05:45:29 alc Exp $ */
+/*	$NetBSD: athrate-amrr.c,v 1.10.20.1 2009/08/07 06:43:27 snj Exp $ */
 
 /*-
  * Copyright (c) 2004 INRIA
@@ -43,7 +43,7 @@
 __FBSDID("$FreeBSD: src/sys/dev/ath/ath_rate/amrr/amrr.c,v 1.10 2005/08/09 10:19:43 rwatson Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: athrate-amrr.c,v 1.11 2008/12/11 05:45:29 alc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: athrate-amrr.c,v 1.10.20.1 2009/08/07 06:43:27 snj Exp $");
 #endif
 
 /*

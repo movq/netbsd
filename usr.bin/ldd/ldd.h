@@ -1,4 +1,4 @@
-/*	$NetBSD: ldd.h,v 1.2 2009/02/03 03:01:02 mrg Exp $	*/
+/*	$NetBSD: ldd.h,v 1.1.2.3 2009/02/25 03:09:31 snj Exp $	*/
 
 /*
  * Copyright (c) 2008 Matthew R. Green

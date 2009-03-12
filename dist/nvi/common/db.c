@@ -1,4 +1,4 @@
-/*	$NetBSD: db.c,v 1.3 2008/12/09 16:50:22 christos Exp $ */
+/*	$NetBSD: db.c,v 1.1.1.2.6.2 2009/01/20 02:50:02 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994

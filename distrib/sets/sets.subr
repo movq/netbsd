@@ -1,4 +1,4 @@
-#	$NetBSD: sets.subr,v 1.81 2009/01/24 22:14:44 rmind Exp $
+#	$NetBSD: sets.subr,v 1.71.2.5 2009/04/08 00:09:27 snj Exp $
 #
 
 #
@@ -7,7 +7,7 @@
 #	nlists			list of base sets
 #	xlists			list of x11 sets
 #	obsolete		controls if obsolete files are selected instead
-#	module			if != "no", enable MODULE sets
+#	lkm			if != "no", enable LKM sets
 #	shlib			shared library format (a.out, elf, or "")
 #	stlib			static library format (a.out, elf)
 #
@@ -46,10 +46,10 @@ MKVARS="\
 	MKKERBEROS	\
 	MKLDAP		\
 	MKLINT		\
-	MKLVM		\
 	MKMAN		\
 	MKMANPAGES	\
 	MKMANZ		\
+	MKMODULAR	\
 	MKNLS		\
 	MKNVI		\
 	MKPAM		\
@@ -57,6 +57,7 @@ MKVARS="\
 	MKPIC		\
 	MKPOSTFIX	\
 	MKPROFILE	\
+	MKSENDMAIL	\
 	MKSHARE		\
 	MKSKEY		\
 	MKX11		\
@@ -195,9 +196,9 @@ setsdir=${0%/*}
 nlists="base comp etc games man misc tests text"
 xlists="xbase xcomp xetc xfont xserver"
 obsolete=0
-module=yes
+lkm=yes
 if [ "${MACHINE}" = "evbppc" ]; then
-	module=no			# Turn off MODULEs for some ports.
+	lkm=no				# Turn off LKMs for some ports.
 fi
 # Determine lib type. Do this first so stlib also gets set.
 if [ "${OBJECT_FMT}" = "ELF" ]; then
@@ -227,7 +228,7 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 # In each file, a record consists of a path and a System Package name,
 # separated by whitespace. E.g.,
 #
-# 	# $NetBSD: sets.subr,v 1.81 2009/01/24 22:14:44 rmind Exp $
+# 	# $NetBSD: sets.subr,v 1.71.2.5 2009/04/08 00:09:27 snj Exp $
 # 	.			base-sys-root	[keyword[,...]]
 # 	./altroot		base-sys-root
 # 	./bin			base-sys-root
@@ -271,10 +272,10 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 #	kerberos		${MKKERBEROS} != no
 #	ldap			${MKLDAP} != no
 #	lint			${MKLINT} != no
-#	lvm			${MKLVM} != no
 #	man			${MKMAN} != no
 #	manpages		${MKMANPAGES} != no
 #	manz			${MKMANZ} != no
+#	modular			${MKMODULAR} != no
 #	nls			${MKNLS} != no
 #	nvi			${MKNVI} != no
 #	pam			${MKPAM} != no
@@ -282,6 +283,7 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 #	pic			${MKPIC} != no
 #	postfix			${MKPOSTFIX} != no
 #	profile			${MKPROFILE} != no
+#	sendmail		${MKSENDMAIL} != no
 #	share			${MKSHARE} != no
 #	skey			${MKSKEY} != no
 #	x11			${MKX11} != no && ${X11FLAVOUR} != "Xorg"
@@ -303,7 +305,7 @@ SUBST="${SUBST};s#@MACHINE@#${MACHINE}#g"
 #
 list_set_files()
 {
-	if [ ${MAKEVERBOSE:-2} -lt 2 ]; then
+	if [ ${MAKEVERBOSE:-2} -lt 3 ]; then
 		verbose=false
 	else
 		verbose=true
@@ -313,7 +315,7 @@ list_set_files()
 		for l in $list; do
 			echo $l
 			if $verbose; then
-				echo $l >&2
+				echo >&2 "DEBUG: list_set_files: $l"
 			fi
 		done
 	done | xargs cat | ${SED} ${SUBST} | \
@@ -403,10 +405,7 @@ list_set_files()
 #	stl.stlib
 #	shl.mi
 #	shl.shlib
-#	module.mi			if ${module} != no
-#	module.${MACHINE}		if ${module} != no
-#	module.ad.${MACHINE_ARCH}	if ${module} != no
-# (or)	module.ad.${MACHINE_CPU}	if ${module} != no
+#	lkm.mi			if ${lkm} != no
 #	rescue.shl
 #	rescue.${MACHINE}
 #	rescue.ad.${MACHINE_ARCH}
@@ -456,23 +455,9 @@ list_set_lists()
 			echo $setdir/shl.${shlib}
 		fi
 	fi
-	if [ "$module" != "no" ]; then
-		if [ -f $setdir/module.mi ]; then
-			echo $setdir/module.mi
-		fi
-		if [ -f $setdir/module.${MACHINE} ]; then
-			echo $setdir/module.${MACHINE}
-		fi
-		if [ "${MACHINE}" != "${MACHINE_ARCH}" ]; then
-			# Prefer a module.ad.${MACHINE_ARCH} over a
-			# module.ad.${MACHINE_CPU}, since the arch-
-			# specific one will be more specific than the
-			# cpu-specific one.
-			if [ -f $setdir/module.ad.${MACHINE_ARCH} ]; then
-				echo $setdir/module.ad.${MACHINE_ARCH}
-			elif [ -f $setdir/module.ad.${MACHINE_CPU} ]; then
-				echo $setdir/module.ad.${MACHINE_CPU}
-			fi
+	if [ "$lkm" != "no" ]; then
+		if [ -f $setdir/lkm.mi ]; then
+			echo $setdir/lkm.mi
 		fi
 	fi
 

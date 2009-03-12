@@ -1,4 +1,4 @@
-/*	$NetBSD: inet6.c,v 1.51 2009/02/22 07:43:01 dholland Exp $	*/
+/*	$NetBSD: inet6.c,v 1.50.6.1 2009/03/26 17:14:41 snj Exp $	*/
 /*	BSDI inet.c,v 2.3 1995/10/24 02:19:29 prb Exp	*/
 
 /*
@@ -64,7 +64,7 @@
 #if 0
 static char sccsid[] = "@(#)inet.c	8.4 (Berkeley) 4/20/94";
 #else
-__RCSID("$NetBSD: inet6.c,v 1.51 2009/02/22 07:43:01 dholland Exp $");
+__RCSID("$NetBSD: inet6.c,v 1.50.6.1 2009/03/26 17:14:41 snj Exp $");
 #endif
 #endif /* not lint */
 

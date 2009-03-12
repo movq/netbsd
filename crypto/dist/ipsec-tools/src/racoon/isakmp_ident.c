@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp_ident.c,v 1.11 2009/01/23 08:23:51 tteras Exp $	*/
+/*	$NetBSD: isakmp_ident.c,v 1.9.4.1 2009/02/08 18:42:16 snj Exp $	*/
 
 /* Id: isakmp_ident.c,v 1.21 2006/04/06 16:46:08 manubsd Exp */
 
@@ -92,7 +92,6 @@
 
 static vchar_t *ident_ir2mx __P((struct ph1handle *));
 static vchar_t *ident_ir3mx __P((struct ph1handle *));
-static int ident_recv_n __P((struct ph1handle *, struct isakmp_gen *));
 
 /* %%%
  * begin Identity Protection Mode as initiator.
@@ -156,8 +155,8 @@ ident_i1send(iph1, msg)
 #endif
 #ifdef ENABLE_HYBRID
 	/* Do we need Xauth VID? */
-	switch (iph1->rmconf->proposal->authmethod) {
-	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_I:
+	switch (RMAUTHMETHOD(iph1)) {
+	case FICTIVE_AUTH_METHOD_XAUTH_PSKEY_I:
 	case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_I:
 	case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_I:
 	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSASIG_I:
@@ -175,7 +174,7 @@ ident_i1send(iph1, msg)
 			plog(LLV_ERROR, LOCATION, NULL,
 			     "Unity vendor ID generation failed\n");
 		else
-			plist = isakmp_plist_append(plist,
+                	plist = isakmp_plist_append(plist,
 			    vid_unity, ISAKMP_NPTYPE_VID);
 		break;
 	default:
@@ -258,6 +257,7 @@ ident_i2recv(iph1, msg)
 	struct isakmp_parse_t *pa;
 	vchar_t *satmp = NULL;
 	int error = -1;
+	int vid_numeric;
 
 	/* validity check */
 	if (iph1->status != PHASE1ST_MSG1SENT) {
@@ -299,7 +299,31 @@ ident_i2recv(iph1, msg)
 
 		switch (pa->type) {
 		case ISAKMP_NPTYPE_VID:
-			handle_vendorid(iph1, pa->ptr);
+			vid_numeric = check_vendorid(pa->ptr);
+#ifdef ENABLE_NATT
+			if (iph1->rmconf->nat_traversal && natt_vendorid(vid_numeric))
+			  natt_handle_vendorid(iph1, vid_numeric);
+#endif
+#ifdef ENABLE_HYBRID
+			switch (vid_numeric) {
+			case VENDORID_XAUTH:
+				iph1->mode_cfg->flags |=
+				    ISAKMP_CFG_VENDORID_XAUTH;
+				break;
+	
+			case VENDORID_UNITY:
+				iph1->mode_cfg->flags |=
+				    ISAKMP_CFG_VENDORID_UNITY;
+				break;
+	
+			default:
+				break;
+			}
+#endif  
+#ifdef ENABLE_DPD
+			if (vid_numeric == VENDORID_DPD && iph1->rmconf->dpd)
+				iph1->dpd_support=1;
+#endif
 			break;
 		default:
 			/* don't send information, see ident_r1recv() */
@@ -377,7 +401,7 @@ ident_i2send(iph1, msg)
 		goto end;
 
 #ifdef HAVE_GSSAPI
-	if (iph1->approval->authmethod == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB &&
+	if (AUTHMETHOD(iph1) == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB &&
 	    gssapi_get_itoken(iph1, NULL) < 0)
 		goto end;
 #endif
@@ -461,7 +485,7 @@ ident_i3recv(iph1, msg)
 				goto end;
 			break;
 		case ISAKMP_NPTYPE_VID:
-			handle_vendorid(iph1, pa->ptr);
+			(void)check_vendorid(pa->ptr);
 			break;
 		case ISAKMP_NPTYPE_CR:
 			if (oakley_savecr(iph1, pa->ptr) < 0)
@@ -606,7 +630,7 @@ ident_i3send(iph1, msg0)
 		goto end;
 
 #ifdef HAVE_GSSAPI
-	if (iph1->approval->authmethod == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB &&
+	if (AUTHMETHOD(iph1) == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB &&
 	    gssapi_more_tokens(iph1)) {
 		plog(LLV_DEBUG, LOCATION, NULL, "calling get_itoken\n");
 		if (gssapi_get_itoken(iph1, &len) < 0)
@@ -730,10 +754,10 @@ ident_i4recv(iph1, msg0)
 			break;
 #endif
 		case ISAKMP_NPTYPE_VID:
-			handle_vendorid(iph1, pa->ptr);
+			(void)check_vendorid(pa->ptr);
 			break;
 		case ISAKMP_NPTYPE_N:
-			ident_recv_n(iph1, pa->ptr);
+			isakmp_check_notify(pa->ptr, iph1);
 			break;
 		default:
 			/* don't send information, see ident_r1recv() */
@@ -764,7 +788,8 @@ ident_i4recv(iph1, msg0)
 				/* msg printed inner oakley_validate_auth() */
 				goto end;
 			}
-			evt_phase1(iph1, EVT_PHASE1_AUTH_FAILED, NULL);
+			EVT_PUSH(iph1->local, iph1->remote, 
+			    EVTT_PEERPH1AUTH_FAILED, NULL);
 			isakmp_info_send_n1(iph1, type, NULL);
 			goto end;
 		}
@@ -896,11 +921,35 @@ ident_r1recv(iph1, msg)
 
 		switch (pa->type) {
 		case ISAKMP_NPTYPE_VID:
-			vid_numeric = handle_vendorid(iph1, pa->ptr);
+			vid_numeric = check_vendorid(pa->ptr);
+#ifdef ENABLE_NATT
+			if (iph1->rmconf->nat_traversal && natt_vendorid(vid_numeric))
+				natt_handle_vendorid(iph1, vid_numeric);
+#endif
 #ifdef ENABLE_FRAG
 			if ((vid_numeric == VENDORID_FRAG) &&
 			    (vendorid_frag_cap(pa->ptr) & VENDORID_FRAG_IDENT))
 				iph1->frag = 1;
+#endif   
+#ifdef ENABLE_HYBRID
+			switch (vid_numeric) {
+			case VENDORID_XAUTH:
+				iph1->mode_cfg->flags |=
+				    ISAKMP_CFG_VENDORID_XAUTH;
+				break;
+		
+			case VENDORID_UNITY:
+				iph1->mode_cfg->flags |=
+				    ISAKMP_CFG_VENDORID_UNITY;
+				break;
+	
+			default:  
+				break;
+			}
+#endif
+#ifdef ENABLE_DPD
+			if (vid_numeric == VENDORID_DPD && iph1->rmconf->dpd)
+				iph1->dpd_support=1;
 #endif
 			break;
 		default:
@@ -1154,7 +1203,7 @@ ident_r2recv(iph1, msg)
 				goto end;
 			break;
 		case ISAKMP_NPTYPE_VID:
-			handle_vendorid(iph1, pa->ptr);
+			(void)check_vendorid(pa->ptr);
 			break;
 		case ISAKMP_NPTYPE_CR:
 			plog(LLV_WARNING, LOCATION, iph1->remote,
@@ -1277,7 +1326,7 @@ ident_r2send(iph1, msg)
 		goto end;
 
 #ifdef HAVE_GSSAPI
-	if (iph1->approval->authmethod == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB)
+	if (AUTHMETHOD(iph1) == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB)
 		gssapi_get_rtoken(iph1, NULL);
 #endif
 
@@ -1404,10 +1453,10 @@ ident_r3recv(iph1, msg0)
 			break;
 #endif
 		case ISAKMP_NPTYPE_VID:
-			handle_vendorid(iph1, pa->ptr);
+			(void)check_vendorid(pa->ptr);
 			break;
 		case ISAKMP_NPTYPE_N:
-			ident_recv_n(iph1, pa->ptr);
+			isakmp_check_notify(pa->ptr, iph1);
 			break;
 		default:
 			/* don't send information, see ident_r1recv() */
@@ -1424,7 +1473,7 @@ ident_r3recv(iph1, msg0)
     {
 	int ng = 0;
 
-	switch (iph1->approval->authmethod) {
+	switch (AUTHMETHOD(iph1)) {
 	case OAKLEY_ATTR_AUTH_METHOD_PSKEY:
 #ifdef ENABLE_HYBRID
 	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_R:
@@ -1488,7 +1537,8 @@ ident_r3recv(iph1, msg0)
 				/* msg printed inner oakley_validate_auth() */
 				goto end;
 			}
-			evt_phase1(iph1, EVT_PHASE1_AUTH_FAILED, NULL);
+			EVT_PUSH(iph1->local, iph1->remote, 
+			    EVTT_PEERPH1AUTH_FAILED, NULL);
 			isakmp_info_send_n1(iph1, type, NULL);
 			goto end;
 		}
@@ -1576,7 +1626,7 @@ ident_r3send(iph1, msg)
 		goto end;
 
 #ifdef HAVE_GSSAPI
-	if (iph1->approval->authmethod == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB &&
+	if (AUTHMETHOD(iph1) == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB &&
 	    gssapi_more_tokens(iph1)) {
 		gssapi_get_rtoken(iph1, &len);
 		if (len != 0)
@@ -1670,7 +1720,7 @@ ident_ir2mx(iph1)
 	}
 
 #ifdef HAVE_GSSAPI
-	if (iph1->approval->authmethod == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB)
+	if (AUTHMETHOD(iph1) == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB)
 		gssapi_get_token_to_send(iph1, &gsstoken);
 #endif
 
@@ -1681,7 +1731,7 @@ ident_ir2mx(iph1)
 	plist = isakmp_plist_append(plist, iph1->nonce, ISAKMP_NPTYPE_NONCE);
 
 #ifdef HAVE_GSSAPI
-	if (iph1->approval->authmethod == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB)
+	if (AUTHMETHOD(iph1) == OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB)
 		plist = isakmp_plist_append(plist, gsstoken, ISAKMP_NPTYPE_GSS);
 #endif
 
@@ -1774,10 +1824,10 @@ ident_ir3mx(iph1)
 	vchar_t *gsshash = NULL;
 #endif
 
-	switch (iph1->approval->authmethod) {
+	switch (AUTHMETHOD(iph1)) {
 	case OAKLEY_ATTR_AUTH_METHOD_PSKEY:
 #ifdef ENABLE_HYBRID
-	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_I:
+	case FICTIVE_AUTH_METHOD_XAUTH_PSKEY_I:
 	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_R:
 	case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_I:
 	case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_I:
@@ -1907,28 +1957,3 @@ end:
 
 	return buf;
 }
-
-/*
- * handle a notification payload inside identity exchange.
- * called only when the packet has been verified to be encrypted.
- */
-static int
-ident_recv_n(iph1, gen)
-	struct ph1handle *iph1;
-	struct isakmp_gen *gen;
-{
-	struct isakmp_pl_n *notify = (struct isakmp_pl_n *) gen;
-	u_int type;
-
-	type = ntohs(notify->type);
-	switch (type) {
-	case ISAKMP_NTYPE_INITIAL_CONTACT:
-		iph1->initial_contact_received = TRUE;
-		break;
-	default:
-		isakmp_log_notify(iph1, notify, "identity exchange");
-		break;
-	}
-	return 0;
-}
-

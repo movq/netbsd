@@ -1,4 +1,4 @@
-/*	$NetBSD: dosfs.c,v 1.16 2008/11/24 11:27:20 ad Exp $	*/
+/*	$NetBSD: dosfs.c,v 1.14 2008/03/25 21:23:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Robert Nordier
@@ -261,7 +261,6 @@ dosfs_open(const char *path, struct open_file *fd)
 	fs->links++;
 	f->de = *de;
 	fd->f_fsdata = (void *)f;
-	fsmod = "msdos";
 
 out:
 	return err;

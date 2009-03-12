@@ -1,4 +1,4 @@
-/* $NetBSD: elantech.c,v 1.3 2008/12/30 10:44:30 jmcneill Exp $ */
+/* $NetBSD: elantech.c,v 1.3.10.4 2009/09/13 22:09:17 snj Exp $ */
 
 /*-
  * Copyright (c) 2008 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_pms.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: elantech.c,v 1.3 2008/12/30 10:44:30 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: elantech.c,v 1.3.10.4 2009/09/13 22:09:17 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

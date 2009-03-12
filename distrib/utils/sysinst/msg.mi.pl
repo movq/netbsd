@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.63 2009/01/28 16:31:49 martin Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.60.14.3 2009/05/18 19:35:14 bouyer Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -44,10 +44,6 @@ message usage
 {uzycie: sysinst [-r wersja] [-f plik-definicji]
 }
 
-/*
- * We can not use non ascii characters in this message - it is displayed
- * before the locale is set up!
- */
 message sysinst_message_language
 {Komunikaty instalacyjne w jezyku polskim}
 
@@ -226,7 +222,7 @@ message fssizesok
 {Zaakceptuj rozmiary partycji. Wolne miejsce %d %s, %d wolnych partycji.}
 
 message fssizesbad
-{Zmniejsz rozmiary partycji o %d %s (%d sektorow).}
+{Zmniejsz rozmiary partycji o %d %s (%u sektorow).}
 
 message startoutsidedisk
 {Wartosc poczatkowa ktora podales jest poza koncem dysku.
@@ -235,6 +231,13 @@ message startoutsidedisk
 message endoutsidedisk
 {Przy tej wartosci, koniec partycji znajduje sie poza koncem dysku. Rozmiar
 twojej partycji zostal zmniejszony do %d %s.
+}
+
+message toobigdisklabel
+{
+This disk is too large for a disklabel partition table to be used
+and hence cannot be used as a bootable disk or to hold the root
+partition.
 }
 
 message fspart
@@ -248,7 +251,7 @@ message fspart_header	/* XXX abbreviations (or change fspart_row below) */
 }
 
 message fspart_row
-{%9d %9d %10d %-10s %-7s %-9s %s}
+{%9lu %9lu %10lu %-10s %-7s %-9s %s}
 
 message show_all_unused_partitions
 {Pokaz wszystkie nieuzywane partycje}

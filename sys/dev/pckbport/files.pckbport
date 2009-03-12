@@ -1,4 +1,4 @@
-# $NetBSD: files.pckbport,v 1.7 2008/12/14 00:42:33 jmcneill Exp $
+# $NetBSD: files.pckbport,v 1.6.20.1 2009/09/13 22:07:47 snj Exp $
 # devices attached at pckbport, for use with wscons
 
 defflag	opt_wskbdmap.h			WSKBD_USONLY

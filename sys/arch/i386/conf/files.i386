@@ -1,7 +1,9 @@
-#	$NetBSD: files.i386,v 1.344 2009/02/19 13:06:49 jmcneill Exp $
+#	$NetBSD: files.i386,v 1.338.6.4 2009/10/07 15:41:12 sborrill Exp $
 #
 # new style config file for i386 architecture
 #
+
+version 20071109
 
 ifndef xen
 
@@ -60,9 +62,7 @@ file 	arch/i386/i386/multiboot.c	multiboot
 defflag 	POWERNOW_K7
 
 file	arch/i386/i386/autoconf.c
-file	arch/i386/i386/aout_machdep.c	exec_aout
 file	arch/i386/i386/busfunc.S
-file	arch/i386/i386/core_machdep.c	coredump
 file	arch/i386/i386/cpufunc.S
 file	arch/i386/i386/cpu_in_cksum.S	(inet | inet6) & cpu_in_cksum
 file	arch/i386/i386/db_dbgreg.S	ddb | kstack_check_dr0
@@ -132,6 +132,7 @@ file	arch/i386/i386/bios32.c		bios32 needs-flag
 # i386 specific mainbus attributes
 define	apmbus {}
 define	pnpbiosbus {}
+define	vesabiosbus {}
 
 #
 # System bus types
@@ -139,7 +140,7 @@ define	pnpbiosbus {}
 
 # XXX BIOS32 only if something that uses it is configured!
 device	mainbus: isabus, eisabus, mcabus, pcibus, bios32, acpibus,
-	cpubus, ioapicbus, apmbus, pnpbiosbus, ipmibus,
+	cpubus, ioapicbus, apmbus, pnpbiosbus, vesabiosbus, ipmibus,
 	bioscall
 attach	mainbus at root
 file	arch/i386/i386/mainbus.c	mainbus
@@ -247,6 +248,7 @@ include	"dev/isa/files.isa"
 
 # PC clock
 file	arch/x86/isa/clock.c		isa
+file	arch/x86/isa/rtc.c		isa
 
 # TSC support
 file	arch/x86/x86/tsc.c
@@ -354,6 +356,8 @@ file	arch/i386/i386/kvm86.c			kvm86
 file	arch/i386/i386/kvm86call.S		kvm86
 
 # Binary compatibility with previous NetBSD releases (COMPAT_XX)
+defflag opt_sa.h	COMPAT_30_PTHREAD
+
 file	arch/i386/i386/compat_13_machdep.c	compat_13
 file	arch/i386/i386/compat_16_machdep.c	compat_16 | compat_ibcs2
 
@@ -471,6 +475,8 @@ include	"dev/usb/files.usb"
 
 include	"dev/bluetooth/files.bluetooth"
 
+include	"dev/sdmmc/files.sdmmc"
+
 include	"dev/ieee1394/files.ieee1394"
 
 include	"arch/i386/pnpbios/files.pnpbios"
@@ -491,10 +497,20 @@ file	arch/i386/acpi/spic_acpi.c		spic_acpi
 attach	npx at acpinodebus with npx_acpi
 file	arch/i386/acpi/npx_acpi.c		npx_acpi
 
-# Obsolete vesabios/vesafb flags
-obsolete	defflag	opt_vesabios.h	VESABIOSVERBOSE
-obsolete	defparam opt_vesafb.h	VESAFB_WIDTH VESAFB_HEIGHT VESAFB_DEPTH
-obsolete	defflag	opt_vesafb.h	VESAFB_PM
+device	vesabios {}
+attach	vesabios at vesabiosbus
+file	arch/i386/bios/vesabios.c		vesabios needs-flag
+defflag	opt_vesabios.h	VESABIOSVERBOSE
+
+device	vesafb: displaydev, wsemuldisplaydev, vcons, rasops8, rasops16, rasops32, splash, bioscall
+attach	vesafb at vesabios
+file	arch/i386/bios/vesafb.c		vesafb needs-flag
+defparam opt_vesafb.h	VESAFB_WIDTH VESAFB_HEIGHT VESAFB_DEPTH
+defflag	opt_vesafb.h	VESAFB_PM
+
+device	vesatext
+attach	vesatext at vesabios
+file	arch/i386/bios/vesa_text.c	vesatext
 
 # AMD PowerNow K7
 file	arch/i386/i386/powernow_k7.c	powernow_k7

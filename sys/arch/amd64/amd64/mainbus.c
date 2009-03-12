@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.26 2008/11/10 14:36:59 cegger Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.24.8.1 2009/06/19 21:33:56 snj Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.26 2008/11/10 14:36:59 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.24.8.1 2009/06/19 21:33:56 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -161,6 +161,9 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #endif
 	int mpacpi_active = 0;
 	int numcpus = 0;
+#if NACPI > 0 || defined(MPBIOS)
+	int numioapics = 0;
+#endif
 #if defined(PCI_BUS_FIXUP)
 	int pci_maxbus = 0;
 #endif
@@ -173,9 +176,6 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #endif
 
 #if NPCI > 0
-	/*
-	 * ACPI needs to be able to access PCI configuration space.
-	 */
 	pci_mode = pci_mode_detect();
 #if defined(PCI_BUS_FIXUP)
 	if (pci_mode != 0) {
@@ -200,13 +200,13 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	 * be done later (via a callback).
 	 */
 	if (acpi_present)
-		mpacpi_active = mpacpi_scan_apics(self, &numcpus);
+		mpacpi_active = mpacpi_scan_apics(self, &numcpus, &numioapics);
 #endif
 
 	if (!mpacpi_active) {
 #ifdef MPBIOS
 		if (mpbios_present)
-			mpbios_scan(self, &numcpus);
+			mpbios_scan(self, &numcpus, &numioapics);
 		else
 #endif
 		if (numcpus == 0) {
@@ -228,6 +228,7 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	isa_dmainit(&x86_isa_chipset, X86_BUS_SPACE_IO, &isa_bus_dma_tag,
 	    self);
 #endif
+
 
 #if NACPI > 0
 	if (acpi_present) {
@@ -253,6 +254,8 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 
 #if NPCI > 0
 	if (pci_mode != 0) {
+		int npcibus = 0;
+
 		mba.mba_pba.pba_iot = X86_BUS_SPACE_IO;
 		mba.mba_pba.pba_memt = X86_BUS_SPACE_MEM;
 		mba.mba_pba.pba_dmat = &pci_bus_dma_tag;
@@ -262,17 +265,18 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 		mba.mba_pba.pba_bus = 0;
 		mba.mba_pba.pba_bridgetag = NULL;
 #if NACPI > 0 && defined(ACPI_SCANPCI)
-		if (mpacpi_active)
-			mpacpi_scan_pci(self, &mba.mba_pba, pcibusprint);
-		else
+		if (npcibus == 0 && mpacpi_active)
+			npcibus = mpacpi_scan_pci(self, &mba.mba_pba,
+			    pcibusprint);
 #endif
 #if defined(MPBIOS) && defined(MPBIOS_SCANPCI)
-		if (mpbios_scanned != 0)
-			mpbios_scan_pci(self, &mba.mba_pba, pcibusprint);
-		else
+		if (npcibus == 0 && mpbios_scanned != 0)
+			npcibus = mpbios_scan_pci(self, &mba.mba_pba,
+			    pcibusprint);
 #endif
-		config_found_ia(self, "pcibus", &mba.mba_pba, pcibusprint);
-
+		if (npcibus == 0)
+			config_found_ia(self, "pcibus", &mba.mba_pba,
+			    pcibusprint);
 #if NACPI > 0
 		if (mp_verbose)
 			acpi_pci_link_state();

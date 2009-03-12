@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.39 2008/12/21 17:42:05 tsutsui Exp $	*/
+/*	$NetBSD: intr.c,v 1.37.6.2 2008/12/27 04:00:19 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.39 2008/12/21 17:42:05 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.37.6.2 2008/12/27 04:00:19 snj Exp $");
 
 #define _HP300_INTR_H_PRIVATE
 

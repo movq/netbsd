@@ -14,7 +14,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ah_internal.h,v 1.2 2008/12/11 05:30:29 alc Exp $
+ * $Id: ah_internal.h,v 1.3.2.2 2009/08/07 06:43:30 snj Exp $
  */
 #ifndef _ATH_AH_INTERAL_H_
 #define _ATH_AH_INTERAL_H_
@@ -540,10 +540,8 @@ extern	HAL_BOOL ath_hal_wait(struct ath_hal *, u_int reg,
 extern	uint32_t ath_hal_reverseBits(uint32_t val, uint32_t n);
 
 /* printf interfaces */
-extern	void ath_hal_printf(struct ath_hal *, const char*, ...)
-		__printflike(2,3);
-extern	void ath_hal_vprintf(struct ath_hal *, const char*, va_list)
-		__printflike(2, 0);
+extern	void ath_hal_printf(struct ath_hal *, const char*, ...);
+extern	void ath_hal_vprintf(struct ath_hal *, const char*, va_list);
 extern	const char* ath_hal_ether_sprintf(const uint8_t *mac);
 
 /* allocate and free memory */
@@ -554,8 +552,7 @@ extern	void ath_hal_free(void *);
 #ifdef AH_DEBUG
 #include "ah_debug.h"
 extern	int ath_hal_debug;
-extern	void HALDEBUG(struct ath_hal *ah, u_int mask, const char* fmt, ...)
-	__printflike(3,4);
+extern	void HALDEBUG(struct ath_hal *ah, u_int mask, const char* fmt, ...);
 #else
 #define HALDEBUG(_ah, __m, _fmt, ...)
 #endif /* AH_DEBUG */

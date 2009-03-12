@@ -1,4 +1,4 @@
-/* $NetBSD: subr_autoconf.c,v 1.168 2009/02/12 18:24:18 christos Exp $ */
+/* $NetBSD: subr_autoconf.c,v 1.163.4.3 2010/11/20 17:41:27 riz Exp $ */
 
 /*
  * Copyright (c) 1996, 2000 Christopher G. Demetriou
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_autoconf.c,v 1.168 2009/02/12 18:24:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_autoconf.c,v 1.163.4.3 2010/11/20 17:41:27 riz Exp $");
 
 #include "opt_ddb.h"
 #include "drvctl.h"
@@ -797,7 +797,7 @@ rescan_with_cfdata(const struct cfdata *cf)
   
 
 	/*
-	 * "alldevs" is likely longer than a modules's cfdata, so make it
+	 * "alldevs" is likely longer than an LKM's cfdata, so make it
 	 * the outer loop.
 	 */
 	for (d = deviter_first(&di, 0); d != NULL; d = deviter_next(&di)) {
@@ -1096,6 +1096,7 @@ number(char *ep, int n)
 static void
 config_makeroom(int n, struct cfdriver *cd)
 {
+	const km_flag_t kmflags = (cold ? KM_NOSLEEP : KM_SLEEP);
 	int old, new;
 	device_t *nsp;
 
@@ -1113,7 +1114,7 @@ config_makeroom(int n, struct cfdriver *cd)
 	while (new <= n)
 		new *= 2;
 	cd->cd_ndevs = new;
-	nsp = kmem_alloc(sizeof(device_t [new]), KM_SLEEP);
+	nsp = kmem_alloc(sizeof(device_t [new]), kmflags);
 	if (nsp == NULL)
 		panic("config_attach: %sing dev array",
 		    old != 0 ? "expand" : "creat");
@@ -1185,6 +1186,7 @@ config_devalloc(const device_t parent, const cfdata_t cf, const int *locs)
 	device_t dev;
 	void *dev_private;
 	const struct cfiattrdata *ia;
+	const km_flag_t kmflags = (cold ? KM_NOSLEEP : KM_SLEEP);
 
 	cd = config_cfdriver_lookup(cf->cf_name);
 	if (cd == NULL)
@@ -1226,7 +1228,7 @@ config_devalloc(const device_t parent, const cfdata_t cf, const int *locs)
 	/* get memory for all device vars */
 	KASSERT((ca->ca_flags & DVF_PRIV_ALLOC) || ca->ca_devsize >= sizeof(struct device));
 	if (ca->ca_devsize > 0) {
-		dev_private = kmem_zalloc(ca->ca_devsize, KM_SLEEP);
+		dev_private = kmem_zalloc(ca->ca_devsize, kmflags);
 		if (dev_private == NULL)
 			panic("config_devalloc: memory allocation for device softc failed");
 	} else {
@@ -1235,7 +1237,7 @@ config_devalloc(const device_t parent, const cfdata_t cf, const int *locs)
 	}
 
 	if ((ca->ca_flags & DVF_PRIV_ALLOC) != 0) {
-		dev = kmem_zalloc(sizeof(*dev), KM_SLEEP);
+		dev = kmem_zalloc(sizeof(*dev), kmflags);
 	} else {
 		dev = dev_private;
 	}
@@ -1264,7 +1266,7 @@ config_devalloc(const device_t parent, const cfdata_t cf, const int *locs)
 		ia = cfiattr_lookup(cf->cf_pspec->cfp_iattr,
 				    parent->dv_cfdriver);
 		dev->dv_locators =
-		    kmem_alloc(sizeof(int [ia->ci_loclen + 1]), KM_SLEEP);
+		    kmem_alloc(sizeof(int [ia->ci_loclen + 1]), kmflags);
 		*dev->dv_locators++ = sizeof(int [ia->ci_loclen + 1]);
 		memcpy(dev->dv_locators, locs, sizeof(int [ia->ci_loclen]));
 	}
@@ -1641,6 +1643,7 @@ config_deactivate(device_t dev)
 void
 config_defer(device_t dev, void (*func)(device_t))
 {
+	const km_flag_t kmflags = (cold ? KM_NOSLEEP : KM_SLEEP);
 	struct deferred_config *dc;
 
 	if (dev->dv_parent == NULL)
@@ -1654,7 +1657,7 @@ config_defer(device_t dev, void (*func)(device_t))
 	}
 #endif
 
-	dc = kmem_alloc(sizeof(*dc), KM_SLEEP);
+	dc = kmem_alloc(sizeof(*dc), kmflags);
 	if (dc == NULL)
 		panic("config_defer: unable to allocate callback");
 
@@ -1671,6 +1674,7 @@ config_defer(device_t dev, void (*func)(device_t))
 void
 config_interrupts(device_t dev, void (*func)(device_t))
 {
+	const km_flag_t kmflags = (cold ? KM_NOSLEEP : KM_SLEEP);
 	struct deferred_config *dc;
 
 	/*
@@ -1689,7 +1693,7 @@ config_interrupts(device_t dev, void (*func)(device_t))
 	}
 #endif
 
-	dc = kmem_alloc(sizeof(*dc), KM_SLEEP);
+	dc = kmem_alloc(sizeof(*dc), kmflags);
 	if (dc == NULL)
 		panic("config_interrupts: unable to allocate callback");
 
@@ -1825,7 +1829,7 @@ config_finalize(void)
 	    (boothowto & AB_VERBOSE) == 0) {
 		if (config_do_twiddle) {
 			config_do_twiddle = 0;
-			printf_nolog("done.\n");
+			printf_nolog(" done.\n");
 		}
 		if (errcnt != 0) {
 			printf("WARNING: %d error%s while detecting hardware; "
@@ -2088,7 +2092,7 @@ device_pmf_driver_register(device_t dev,
 {
 	pmf_private_t *pp;
 
-	if ((pp = kmem_zalloc(sizeof(*pp), KM_SLEEP)) == NULL)
+	if ((pp = kmem_zalloc(sizeof(*pp), KM_NOSLEEP)) == NULL)
 		return false;
 	mutex_init(&pp->pp_mtx, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&pp->pp_cv, "pmfsusp");
@@ -2451,7 +2455,7 @@ device_active_register(device_t dev, void (*handler)(device_t, devactive_t))
 	splx(s);
 
 	if (old_handlers != NULL)
-		kmem_free(old_handlers, sizeof(void * [old_size]));
+		kmem_free(old_handlers, sizeof(int [old_size]));
 
 	return true;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: est.c,v 1.10 2009/02/17 12:27:13 jmcneill Exp $	*/
+/*	$NetBSD: est.c,v 1.9.10.1 2009/10/05 10:34:07 sborrill Exp $	*/
 /*
  * Copyright (c) 2003 Michael Eriksson.
  * All rights reserved.
@@ -81,7 +81,7 @@
 /* #define EST_DEBUG */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: est.c,v 1.10 2009/02/17 12:27:13 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: est.c,v 1.9.10.1 2009/10/05 10:34:07 sborrill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1088,9 +1088,17 @@ est_init_main(int vendor)
 	if (CPUID2FAMILY(curcpu()->ci_signature) == 15)
 		bus_clock = p4_get_bus_clock(curcpu());
 	else if (CPUID2FAMILY(curcpu()->ci_signature) == 6) {
-		if (vendor == CPUVENDOR_IDT)
-			bus_clock = via_get_bus_clock(curcpu());
-		else
+		if (vendor == CPUVENDOR_IDT) {
+			switch (CPUID2MODEL(curcpu()->ci_signature)) {
+			case 0xa: /* C7 Esther */
+			case 0xd: /* C7 Esther */
+				bus_clock = viac7_get_bus_clock(curcpu());
+				break;
+			default:
+				bus_clock = via_get_bus_clock(curcpu());
+				break;
+			}
+		} else
 			bus_clock = p3_get_bus_clock(curcpu());
 	}
 
@@ -1246,8 +1254,10 @@ est_init_main(int vendor)
 		    i < est_fqlist->n - 1 ? " " : "");
 	}
 
-	aprint_debug("%s: %s (%d mV) ", cpuname, est_desc, mv);
-	aprint_debug("%d (MHz): %s\n", MSR2MHZ(msr, bus_clock), freq_names);
+	aprint_normal("%s: %s (%d mV) ", cpuname, est_desc, mv);
+	aprint_normal("%d MHz\n", MSR2MHZ(msr, bus_clock));
+	aprint_normal("%s: %s frequencies available (MHz): %s\n",
+	    cpuname, est_desc, freq_names);
 
 	/*
 	 * Setup the sysctl sub-tree machdep.est.*

@@ -1,4 +1,4 @@
-/*	$NetBSD: dir-index-bozo.c,v 1.5 2009/02/04 22:55:58 tls Exp $	*/
+/*	$NetBSD: dir-index-bozo.c,v 1.4.8.1 2009/02/08 20:30:20 snj Exp $	*/
 
 /*	$eterna: dir-index-bozo.c,v 1.10 2008/03/03 03:36:11 mrg Exp $	*/
 

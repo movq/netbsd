@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_start.S,v 1.5 2008/11/20 07:49:54 cliff Exp $	*/
+/*	$NetBSD: gemini_start.S,v 1.1 2008/10/24 04:23:18 matt Exp $	*/
 
 /*
  * Machine dependant startup code for GEMINI boards.
@@ -101,11 +101,10 @@
 #include <arm/gemini/gemini_reg.h>
 #include <evbarm/gemini/gemini.h>
 
-RCSID("$NetBSD: gemini_start.S,v 1.5 2008/11/20 07:49:54 cliff Exp $")
+RCSID("$NetBSD: gemini_start.S,v 1.1 2008/10/24 04:23:18 matt Exp $")
 
 
-#if defined(VERBOSE_INIT_ARM)
-# define _PUTCHAR(addr, areg, breg, c) 			\
+#define _PUTCHAR(addr, areg, breg, c) 			\
 	ldr	areg, addr;				\
 1:							\
 	ldr	breg, [ areg, #0x14 ];	/* LSR    */	\
@@ -117,9 +116,6 @@ RCSID("$NetBSD: gemini_start.S,v 1.5 2008/11/20 07:49:54 cliff Exp $")
 	ldr	breg, [ areg, #0x14 ];	/* LSR    */	\
 	tst	breg, #0x40;		/* TSRE?  */	\
 	beq	2b;
-#else
-# define _PUTCHAR(addr, areg, breg, c)
-#endif
 
 
 /*
@@ -250,7 +246,7 @@ _C_LABEL(gemini_start):
 	mrc	p15, 0, r0, c2, c0, 0	/* Read an arbitrary value. */
 	mov	r0, r0			/* Stall until read completes. */
 
-	_PUTCHAR(Luart_vbase, r4, r3, 'e')
+	_PUTCHAR(Lconsole_vbase, r4, r3, 'e')
 
 	/*
 	 * Zero .bss
@@ -276,7 +272,7 @@ _C_LABEL(gemini_start):
 testjmp:
 #endif
 
-	_PUTCHAR(Luart_vbase, r4, r3, 'f')
+	_PUTCHAR(Lconsole_vbase, r4, r3, 'f')
 
 	adr	r0, Lstart
 	ldr	pc, [r0]
@@ -303,7 +299,7 @@ Ll1_s_frame:
 	.word	L1_S_FRAME
 Ltemp_l1_table:
 	/* Put the temporary L1 translation table at the end of SDRAM. */
-	.word	MEMSIZE * 0x100000 - L1_TABLE_SIZE
+	.word	0x10000000 + MEMSIZE * 0x100000 - L1_TABLE_SIZE
 
 /*
  * Coprocessor register initialization values
@@ -349,13 +345,9 @@ Lctl_ID_dis:
 
 	/* console addressing */
 Lconsole_pbase:
-#if 0
 	.word	CONSADDR
-#else
-	.word	GEMINI_UART_BASE
-#endif
-Luart_vbase:
-	.word	GEMINI_UART_VBASE
+Lconsole_vbase:
+	.word	GEMINI_CONSOLE_VBASE
 
 
 /* We'll modify va and pa at run time so we can use relocatable addresses. */
@@ -376,28 +368,8 @@ mmu_init_table:
 		(MEMSIZE * L1_S_SIZE + L1_S_SIZE - 1) / L1_S_SIZE,
 		L1_S_PROTO | L1_S_AP(AP_KRW) | L1_S_B | L1_S_C)
 
-	/* Map Gemini GLOBAL regs */
-	MMU_INIT(GEMINI_GLOBAL_VBASE, GEMINI_GLOBAL_BASE,
-		1,
-		L1_S_PROTO | L1_S_AP(AP_KRW))
-
-	/* Map Gemini UART */
-	MMU_INIT(GEMINI_UART_VBASE, GEMINI_UART_BASE,
-		1,
-		L1_S_PROTO | L1_S_AP(AP_KRW))
-
-	/* Map Gemini LPC Host Controlr Space */
-	MMU_INIT(GEMINI_LPCHC_VBASE, GEMINI_LPCHC_BASE,
-		1,
-		L1_S_PROTO | L1_S_AP(AP_KRW))
-
-	/* Map Gemini LPC IO Space */
-	MMU_INIT(GEMINI_LPCIO_VBASE, GEMINI_LPCIO_BASE,
-		1,
-		L1_S_PROTO | L1_S_AP(AP_KRW))
-
-	/* Map Gemini DRAM Controller Space */
-	MMU_INIT(GEMINI_DRAMC_VBASE, GEMINI_DRAMC_BASE,
+	/* Map console UART */
+	MMU_INIT(GEMINI_CONSOLE_VBASE, CONSADDR,
 		1,
 		L1_S_PROTO | L1_S_AP(AP_KRW))
 

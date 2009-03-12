@@ -1,4 +1,4 @@
-/*	$NetBSD: getpwent.c,v 1.76 2009/01/11 02:46:27 christos Exp $	*/
+/*	$NetBSD: getpwent.c,v 1.75 2008/04/28 20:22:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997-2000, 2004-2005 The NetBSD Foundation, Inc.
@@ -88,7 +88,7 @@
 #if 0
 static char sccsid[] = "@(#)getpwent.c	8.2 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: getpwent.c,v 1.76 2009/01/11 02:46:27 christos Exp $");
+__RCSID("$NetBSD: getpwent.c,v 1.75 2008/04/28 20:22:59 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -184,16 +184,13 @@ _pw_parse(const char *entry, struct passwd *pw, char *buf, size_t buflen,
  *	upon permissions, etc)
  */
 static int
-_pw_opendb(DB **db, int *version)
+_pw_opendb(DB **db)
 {
 	static int	warned;
-	DBT		key;
-	DBT		value;
 
 	const char	*dbfile = NULL;
 
 	_DIAGASSERT(db != NULL);
-	_DIAGASSERT(version != NULL);
 	if (*db != NULL)					/* open *db */
 		return NS_SUCCESS;
 
@@ -214,22 +211,6 @@ _pw_opendb(DB **db, int *version)
 		warned = 1;
 		return NS_UNAVAIL;
 	}
-	key.data = __UNCONST("VERSION");
-	key.size = strlen((char *)key.data) + 1;
-	switch ((*(*db)->get)(*db, &key, &value, 0)) {
-	case 0:
-		if (sizeof(*version) != value.size)
-			return NS_UNAVAIL;
-		(void)memcpy(version, value.data, value.size);
-		break;			/* found */
-	case 1:
-		*version = 0;		/* not found */
-		break;
-	case -1:
-		return NS_UNAVAIL;	/* error in db routines */
-	default:
-		abort();
-	}
 	return NS_SUCCESS;
 }
 
@@ -242,8 +223,7 @@ _pw_opendb(DB **db, int *version)
  */
 static int
 _pw_getkey(DB *db, DBT *key,
-	struct passwd *pw, char *buffer, size_t buflen, int *pwflags,
-	int version)
+	struct passwd *pw, char *buffer, size_t buflen, int *pwflags)
 {
 	char		*p, *t;
 	DBT		data;
@@ -278,29 +258,18 @@ _pw_getkey(DB *db, DBT *key,
 			 * THE DECODING BELOW MUST MATCH THAT IN pwd_mkdb.
 			 */
 	t = buffer;
-#define MACRO(a)	do { a } while (/*CONSTCOND*/0)
-#define	EXPAND(e)	MACRO(e = t; while ((*t++ = *p++));)
-#define	SCALAR(v)	MACRO(memmove(&(v), p, sizeof v); p += sizeof v;)
+#define	EXPAND(e)	e = t; while ((*t++ = *p++));
+#define	SCALAR(v)	memmove(&(v), p, sizeof v); p += sizeof v
 	EXPAND(pw->pw_name);
 	EXPAND(pw->pw_passwd);
 	SCALAR(pw->pw_uid);
 	SCALAR(pw->pw_gid);
-	if (version == 0) {
-		int32_t tmp;
-		SCALAR(tmp);
-		pw->pw_change = tmp;
-	} else
-		SCALAR(pw->pw_change);
+	SCALAR(pw->pw_change);
 	EXPAND(pw->pw_class);
 	EXPAND(pw->pw_gecos);
 	EXPAND(pw->pw_dir);
 	EXPAND(pw->pw_shell);
-	if (version == 0) {
-		int32_t tmp;
-		SCALAR(tmp);
-		pw->pw_expire = tmp;
-	} else
-		SCALAR(pw->pw_expire);
+	SCALAR(pw->pw_expire);
 	if (pwflags) {
 		/* See if there's any data left.  If so, read in flags. */
 		if (data.size > (size_t) (p - (char *)data.data)) {
@@ -412,7 +381,6 @@ struct files_state {
 	int	 stayopen;		/* see getpassent(3) */
 	DB	*db;			/* passwd file handle */
 	int	 keynum;		/* key counter, -1 if no more */
-	int	 version;
 };
 
 static struct files_state	_files_state;
@@ -428,7 +396,7 @@ _files_start(struct files_state *state)
 	_DIAGASSERT(state != NULL);
 
 	state->keynum = 0;
-	rv = _pw_opendb(&state->db, &state->version);
+	rv = _pw_opendb(&state->db);
 	if (rv != NS_SUCCESS)
 		return rv;
 	return NS_SUCCESS;
@@ -511,8 +479,7 @@ _files_pwscan(int *retval, struct passwd *pw, char *buffer, size_t buflen,
 		key.data = (u_char *)buffer;
 
 							/* search for key */
-		rv = _pw_getkey(state->db, &key, pw, buffer, buflen, NULL,
-		    state->version);
+		rv = _pw_getkey(state->db, &key, pw, buffer, buflen, NULL);
 		if (rv != NS_SUCCESS)			/* no match */
 			break;
 		if (pw->pw_name[0] == '+' || pw->pw_name[0] == '-') {
@@ -1662,7 +1629,6 @@ struct compat_state {
 	char		 protobuf[_GETPW_R_SIZE_MAX];
 					/* buffer for proto ptrs */
 	int		 protoflags;	/* proto passwd flags */
-	int		 version;
 };
 
 static struct compat_state	_compat_state;
@@ -1683,7 +1649,7 @@ _compat_start(struct compat_state *state)
 		DBT	pkey, pdata;
 		char	bf[MAXLOGNAME];
 
-		rv = _pw_opendb(&state->db, &state->version);
+		rv = _pw_opendb(&state->db);
 		if (rv != NS_SUCCESS)
 			return rv;
 
@@ -2068,8 +2034,7 @@ _compat_pwscan(int *retval, struct passwd *pw, char *buffer, size_t buflen,
 		key.size = fromlen + 1;
 		key.data = (u_char *)buffer;
 
-		rv = _pw_getkey(state->db, &key, pw, buffer, buflen, &pwflags,
-		    state->version);
+		rv = _pw_getkey(state->db, &key, pw, buffer, buflen, &pwflags);
 		if (rv != NS_SUCCESS)		/* stop on error */
 			break;
 

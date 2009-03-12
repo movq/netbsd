@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_uidinfo.c,v 1.4 2009/01/11 02:45:52 christos Exp $	*/
+/*	$NetBSD: kern_uidinfo.c,v 1.3.6.1 2009/03/26 17:17:31 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_uidinfo.c,v 1.4 2009/01/11 02:45:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_uidinfo.c,v 1.3.6.1 2009/03/26 17:17:31 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_uidinfo.c,v 1.4 2009/01/11 02:45:52 christos Ex
 #include <sys/proc.h>
 #include <sys/atomic.h>
 #include <sys/uidinfo.h>
+#include <sys/cpu.h>
 
 static SLIST_HEAD(uihashhead, uidinfo) *uihashtbl;
 static u_long 		uihash;
@@ -58,7 +59,7 @@ uid_init(void)
 	 * write-back for every modified 'uidinfo', thus we try to keep the
 	 * lists short.
 	 */
-	const u_int uihash_sz = (maxproc > 1 ? 1024 : 64);
+	const u_int uihash_sz = (maxcpus > 1 ? 1024 : 64);
 
 	uihashtbl = hashinit(uihash_sz, HASH_SLIST, true, &uihash);
 
@@ -137,5 +138,6 @@ chgsbsize(struct uidinfo *uip, u_long *hiwat, u_long to, rlim_t xmax)
 		return 0;
 	}
 	*hiwat = to;
+	KASSERT(nsb >= 0);
 	return 1;
 }

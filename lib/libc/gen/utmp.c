@@ -1,4 +1,4 @@
-/*	$NetBSD: utmp.c,v 1.9 2009/02/05 23:52:55 lukem Exp $	 */
+/*	$NetBSD: utmp.c,v 1.7 2008/04/28 20:22:59 martin Exp $	 */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: utmp.c,v 1.9 2009/02/05 23:52:55 lukem Exp $");
+__RCSID("$NetBSD: utmp.c,v 1.7 2008/04/28 20:22:59 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -41,7 +41,6 @@ __RCSID("$NetBSD: utmp.c,v 1.9 2009/02/05 23:52:55 lukem Exp $");
 #include <string.h>
 #include <time.h>
 #include <utmp.h>
-#include <sys/stat.h>
 
 static struct utmp utmp;
 static FILE *ut;
@@ -59,23 +58,11 @@ struct utmp *
 getutent(void)
 {
 	if (ut == NULL) {
-		struct stat st;
-		off_t numentries;
 		if ((ut = fopen(utfile, "r")) == NULL)
 			return NULL;
-		if (fstat(fileno(ut), &st) == -1)
-			goto out;
-		/*
-		 * If we have a an old version utmp file bail.
-		 */
-		numentries = st.st_size / sizeof(utmp);
-		if ((off_t)(numentries * sizeof(utmp)) != st.st_size)
-			goto out;
 	}
 	if (fread(&utmp, sizeof(utmp), 1, ut) == 1)
 		return &utmp;
-out:
-	(void)fclose(ut);
 	return NULL;
 }
 

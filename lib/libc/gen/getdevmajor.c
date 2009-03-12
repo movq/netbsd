@@ -1,4 +1,4 @@
-/*	$NetBSD: getdevmajor.c,v 1.5 2009/01/20 20:08:12 drochner Exp $ */
+/*	$NetBSD: getdevmajor.c,v 1.3 2004/12/16 04:37:25 atatat Exp $ */
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getdevmajor.c,v 1.5 2009/01/20 20:08:12 drochner Exp $");
+__RCSID("$NetBSD: getdevmajor.c,v 1.3 2004/12/16 04:37:25 atatat Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -51,25 +51,13 @@ __RCSID("$NetBSD: getdevmajor.c,v 1.5 2009/01/20 20:08:12 drochner Exp $");
 __weak_alias(getdevmajor,_getdevmajor)
 #endif
 
-/*
- * XXX temporary alias because getdevmajor() was renamed
- * in -current for some time
- */
-dev_t __getdevmajor50(const char *, mode_t);
 dev_t
-__getdevmajor50(const char *name, mode_t type)
-{
-
-	return (dev_t)getdevmajor(name, type);
-}
-
-devmajor_t
 getdevmajor(const char *name, mode_t type)
 {
 	struct kinfo_drivers kd[200], *kdp = &kd[0];
 	int rc, i;
 	size_t sz = sizeof(kd);
-	devmajor_t n = NODEVMAJOR;
+	dev_t n = (dev_t)~0;
 
 	if (type != S_IFCHR && type != S_IFBLK) {
 		errno = EINVAL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ukfs.c,v 1.22 2009/02/11 14:35:58 pooka Exp $	*/
+/*	$NetBSD: ukfs.c,v 1.10 2008/10/07 23:16:59 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008  Antti Kantee.  All Rights Reserved.
@@ -50,7 +50,6 @@
 #include <dlfcn.h>
 #include <err.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,7 +71,6 @@ struct ukfs {
 	pthread_spinlock_t ukfs_spin;
 	pid_t ukfs_nextpid;
 	struct vnode *ukfs_cdir;
-	int ukfs_devfd;
 };
 
 struct mount *
@@ -92,13 +90,6 @@ ukfs_getrvp(struct ukfs *ukfs)
 
 	return rvp;
 }
-
-#ifdef DONT_WANT_PTHREAD_LINKAGE
-#define pthread_spin_lock(a)
-#define pthread_spin_unlock(a)
-#define pthread_spin_init(a,b)
-#define pthread_spin_destroy(a)
-#endif
 
 static pid_t
 nextpid(struct ukfs *ukfs)
@@ -163,60 +154,18 @@ struct ukfs *
 ukfs_mount(const char *vfsname, const char *devpath, const char *mountpath,
 	int mntflags, void *arg, size_t alen)
 {
-	struct stat sb;
 	struct ukfs *fs = NULL;
 	struct vfsops *vfsops;
-	struct mount *mp = NULL;
-	int rv = 0, devfd = -1, rdonly;
+	struct mount *mp;
+	int rv = 0;
 
 	vfsops = rump_vfs_getopsbyname(vfsname);
 	if (vfsops == NULL) {
-		rv = ENODEV;
+		rv = ENOENT;
 		goto out;
 	}
 
-	/*
-	 * Try open and lock the device.  if we can't open it, assume
-	 * it's a file system which doesn't use a real device and let
-	 * it slide.  The mount will fail anyway if the fs requires a
-	 * device.
-	 *
-	 * XXX: strictly speaking this is not 100% correct, as virtual
-	 * file systems can use a device path which does exist and can
-	 * be opened.  E.g. tmpfs should be mountable multiple times
-	 * with "device" path "/swap", but now isn't.  But I think the
-	 * chances are so low that it's currently acceptable to let
-	 * this one slip.
-	 */
-	rdonly = mntflags & MNT_RDONLY;
-	devfd = open(devpath, rdonly ? O_RDONLY : O_RDWR);
-	if (devfd != -1) {
-		if (fstat(devfd, &sb) == -1) {
-			close(devfd);
-			devfd = -1;
-			rv = errno;
-			goto out;
-		}
-
-		/*
-		 * We do this only for non-block device since the
-		 * (NetBSD) kernel allows block device open only once.
-		 */
-		if (!S_ISBLK(sb.st_mode)) {
-			if (flock(devfd, LOCK_NB | (rdonly ? LOCK_SH:LOCK_EX))
-			    == -1) {
-				warnx("ukfs_mount: cannot get %s lock on "
-				    "device", rdonly ? "shared" : "exclusive");
-				close(devfd);
-				devfd = -1;
-				rv = errno;
-				goto out;
-			}
-		} else {
-			close(devfd);
-			devfd = -1;
-		}
-	}
+	mp = rump_mnt_init(vfsops, mntflags);
 
 	fs = malloc(sizeof(struct ukfs));
 	if (fs == NULL) {
@@ -224,7 +173,7 @@ ukfs_mount(const char *vfsname, const char *devpath, const char *mountpath,
 		goto out;
 	}
 	memset(fs, 0, sizeof(struct ukfs));
-	mp = rump_mnt_init(vfsops, mntflags);
+	pthread_spin_init(&fs->ukfs_spin, PTHREAD_PROCESS_SHARED);
 
 	rump_fakeblk_register(devpath);
 	rv = rump_mnt_mount(mp, mountpath, arg, &alen);
@@ -232,29 +181,19 @@ ukfs_mount(const char *vfsname, const char *devpath, const char *mountpath,
 	if (rv) {
 		goto out;
 	}
-	rv = rump_vfs_root(mp, &fs->ukfs_rvp, 0);
-	if (rv) {
-		goto out;
-	}
-	fs->ukfs_cdir = ukfs_getrvp(fs);
-
 	fs->ukfs_mp = mp;
-	pthread_spin_init(&fs->ukfs_spin, PTHREAD_PROCESS_SHARED);
-	fs->ukfs_devfd = devfd;
-	assert(rv == 0);
+
+	rv = rump_vfs_root(fs->ukfs_mp, &fs->ukfs_rvp, 0);
+	fs->ukfs_cdir = ukfs_getrvp(fs);
 
  out:
 	if (rv) {
-		if (mp)
-			rump_mnt_destroy(mp);
+		if (fs && fs->ukfs_mp)
+			rump_mnt_destroy(fs->ukfs_mp);
 		if (fs)
 			free(fs);
 		errno = rv;
 		fs = NULL;
-		if (devfd != -1) {
-			flock(devfd, LOCK_UN);
-			close(devfd);
-		}
 	}
 
 	return fs;
@@ -281,20 +220,26 @@ ukfs_release(struct ukfs *fs, int flags)
 	rump_mnt_destroy(fs->ukfs_mp);
 
 	pthread_spin_destroy(&fs->ukfs_spin);
-	if (fs->ukfs_devfd != -1) {
-		flock(fs->ukfs_devfd, LOCK_UN);
-		close(fs->ukfs_devfd);
-	}
 	free(fs);
 }
+
+/* don't need vn_lock(), since we don't have VXLOCK */
+#define VLE(a) rump_vp_lock_exclusive(a)
+#define VLS(a) rump_vp_lock_shared(a)
+#define VUL(a) rump_vp_unlock(a)
+#define AUL(a) assert(rump_vp_islocked(a) == 0)
 
 #define STDCALL(ukfs, thecall)						\
 	int rv = 0;							\
 									\
 	precall(ukfs);							\
-	rv = thecall;							\
+	thecall;							\
 	postcall(ukfs);							\
-	return rv;
+	if (rv) {							\
+		errno = rv;						\
+		return -1;						\
+	}								\
+	return 0;
 
 int
 ukfs_getdents(struct ukfs *ukfs, const char *dirname, off_t *off,
@@ -317,7 +262,7 @@ ukfs_getdents(struct ukfs *ukfs, const char *dirname, off_t *off,
 	cred = rump_cred_suserget();
 	rv = RUMP_VOP_READDIR(vp, uio, cred, &eofflag, NULL, NULL);
 	rump_cred_suserput(cred);
-	RUMP_VOP_UNLOCK(vp, 0);
+	VUL(vp);
 	*off = rump_uio_getoff(uio);
 	resid = rump_uio_free(uio);
 	rump_vp_rele(vp);
@@ -336,20 +281,21 @@ ssize_t
 ukfs_read(struct ukfs *ukfs, const char *filename, off_t off,
 	uint8_t *buf, size_t bufsize)
 {
-	int fd;
+	int fd, rv = 0, dummy;
 	ssize_t xfer = -1; /* XXXgcc */
 
 	precall(ukfs);
-	fd = rump_sys_open(filename, RUMP_O_RDONLY, 0);
-	if (fd == -1)
+	fd = rump_sys_open(filename, RUMP_O_RDONLY, 0, &rv);
+	if (rv)
 		goto out;
 
-	xfer = rump_sys_pread(fd, buf, bufsize, 0, off);
-	rump_sys_close(fd);
+	xfer = rump_sys_pread(fd, buf, bufsize, 0, off, &rv);
+	rump_sys_close(fd, &dummy);
 
  out:
 	postcall(ukfs);
-	if (fd == -1) {
+	if (rv) {
+		errno = rv;
 		return -1;
 	}
 	return xfer;
@@ -359,24 +305,25 @@ ssize_t
 ukfs_write(struct ukfs *ukfs, const char *filename, off_t off,
 	uint8_t *buf, size_t bufsize)
 {
-	int fd;
+	int fd, rv = 0, dummy;
 	ssize_t xfer = -1; /* XXXgcc */
 
 	precall(ukfs);
-	fd = rump_sys_open(filename, RUMP_O_WRONLY, 0);
-	if (fd == -1)
+	fd = rump_sys_open(filename, RUMP_O_WRONLY, 0, &rv);
+	if (rv)
 		goto out;
 
 	/* write and commit */
-	xfer = rump_sys_pwrite(fd, buf, bufsize, 0, off);
-	if (xfer > 0)
-		rump_sys_fsync(fd);
+	xfer = rump_sys_pwrite(fd, buf, bufsize, 0, off, &rv);
+	if (rv == 0)
+		rump_sys_fsync(fd, &dummy);
 
-	rump_sys_close(fd);
+	rump_sys_close(fd, &dummy);
 
  out:
 	postcall(ukfs);
-	if (fd == -1) {
+	if (rv) {
+		errno = rv;
 		return -1;
 	}
 	return xfer;
@@ -385,15 +332,17 @@ ukfs_write(struct ukfs *ukfs, const char *filename, off_t off,
 int
 ukfs_create(struct ukfs *ukfs, const char *filename, mode_t mode)
 {
-	int fd;
+	int rv, fd, dummy;
 
 	precall(ukfs);
-	fd = rump_sys_open(filename, RUMP_O_WRONLY | RUMP_O_CREAT, mode);
-	if (fd == -1)
-		return -1;
-	rump_sys_close(fd);
+	fd = rump_sys_open(filename, RUMP_O_WRONLY | RUMP_O_CREAT, mode, &rv);
+	rump_sys_close(fd, &dummy);
 
 	postcall(ukfs);
+	if (rv) {
+		errno = rv;
+		return -1;
+	}
 	return 0;
 }
 
@@ -401,49 +350,49 @@ int
 ukfs_mknod(struct ukfs *ukfs, const char *path, mode_t mode, dev_t dev)
 {
 
-	STDCALL(ukfs, rump_sys_mknod(path, mode, dev));
+	STDCALL(ukfs, rump_sys_mknod(path, mode, dev, &rv));
 }
 
 int
 ukfs_mkfifo(struct ukfs *ukfs, const char *path, mode_t mode)
 {
 
-	STDCALL(ukfs, rump_sys_mkfifo(path, mode));
+	STDCALL(ukfs, rump_sys_mkfifo(path, mode, &rv));
 }
 
 int
 ukfs_mkdir(struct ukfs *ukfs, const char *filename, mode_t mode)
 {
 
-	STDCALL(ukfs, rump_sys_mkdir(filename, mode));
+	STDCALL(ukfs, rump_sys_mkdir(filename, mode, &rv));
 }
 
 int
 ukfs_remove(struct ukfs *ukfs, const char *filename)
 {
 
-	STDCALL(ukfs, rump_sys_unlink(filename));
+	STDCALL(ukfs, rump_sys_unlink(filename, &rv));
 }
 
 int
 ukfs_rmdir(struct ukfs *ukfs, const char *filename)
 {
 
-	STDCALL(ukfs, rump_sys_rmdir(filename));
+	STDCALL(ukfs, rump_sys_rmdir(filename, &rv));
 }
 
 int
 ukfs_link(struct ukfs *ukfs, const char *filename, const char *f_create)
 {
 
-	STDCALL(ukfs, rump_sys_link(filename, f_create));
+	STDCALL(ukfs, rump_sys_link(filename, f_create, &rv));
 }
 
 int
 ukfs_symlink(struct ukfs *ukfs, const char *filename, const char *linkname)
 {
 
-	STDCALL(ukfs, rump_sys_symlink(filename, linkname));
+	STDCALL(ukfs, rump_sys_symlink(filename, linkname, &rv));
 }
 
 ssize_t
@@ -451,10 +400,15 @@ ukfs_readlink(struct ukfs *ukfs, const char *filename,
 	char *linkbuf, size_t buflen)
 {
 	ssize_t rv;
+	int myerr = 0;
 
 	precall(ukfs);
-	rv = rump_sys_readlink(filename, linkbuf, buflen);
+	rv = rump_sys_readlink(filename, linkbuf, buflen, &myerr);
 	postcall(ukfs);
+	if (myerr) {
+		errno = myerr;
+		return -1;
+	}
 	return rv;
 }
 
@@ -462,7 +416,7 @@ int
 ukfs_rename(struct ukfs *ukfs, const char *from, const char *to)
 {
 
-	STDCALL(ukfs, rump_sys_rename(from, to));
+	STDCALL(ukfs, rump_sys_rename(from, to, &rv));
 }
 
 int
@@ -472,8 +426,8 @@ ukfs_chdir(struct ukfs *ukfs, const char *path)
 	int rv;
 
 	precall(ukfs);
-	rv = rump_sys_chdir(path);
-	if (rv == -1)
+	rump_sys_chdir(path, &rv);
+	if (rv)
 		goto out;
 
 	newvp = rump_cdir_get();
@@ -486,70 +440,74 @@ ukfs_chdir(struct ukfs *ukfs, const char *path)
 
  out:
 	postcall(ukfs);
-	return rv;
+	if (rv) {
+		errno = rv;
+		return -1;
+	}
+	return 0;
 }
 
 int
 ukfs_stat(struct ukfs *ukfs, const char *filename, struct stat *file_stat)
 {
 
-	STDCALL(ukfs, rump_sys_stat(filename, file_stat));
+	STDCALL(ukfs, rump_sys___stat30(filename, file_stat, &rv));
 }
 
 int
 ukfs_lstat(struct ukfs *ukfs, const char *filename, struct stat *file_stat)
 {
 
-	STDCALL(ukfs, rump_sys_lstat(filename, file_stat));
+	STDCALL(ukfs, rump_sys___lstat30(filename, file_stat, &rv));
 }
 
 int
 ukfs_chmod(struct ukfs *ukfs, const char *filename, mode_t mode)
 {
 
-	STDCALL(ukfs, rump_sys_chmod(filename, mode));
+	STDCALL(ukfs, rump_sys_chmod(filename, mode, &rv));
 }
 
 int
 ukfs_lchmod(struct ukfs *ukfs, const char *filename, mode_t mode)
 {
 
-	STDCALL(ukfs, rump_sys_lchmod(filename, mode));
+	STDCALL(ukfs, rump_sys_lchmod(filename, mode, &rv));
 }
 
 int
 ukfs_chown(struct ukfs *ukfs, const char *filename, uid_t uid, gid_t gid)
 {
 
-	STDCALL(ukfs, rump_sys_chown(filename, uid, gid));
+	STDCALL(ukfs, rump_sys_chown(filename, uid, gid, &rv));
 }
 
 int
 ukfs_lchown(struct ukfs *ukfs, const char *filename, uid_t uid, gid_t gid)
 {
 
-	STDCALL(ukfs, rump_sys_lchown(filename, uid, gid));
+	STDCALL(ukfs, rump_sys_lchown(filename, uid, gid, &rv));
 }
 
 int
 ukfs_chflags(struct ukfs *ukfs, const char *filename, u_long flags)
 {
 
-	STDCALL(ukfs, rump_sys_chflags(filename, flags));
+	STDCALL(ukfs, rump_sys_chflags(filename, flags, &rv));
 }
 
 int
 ukfs_lchflags(struct ukfs *ukfs, const char *filename, u_long flags)
 {
 
-	STDCALL(ukfs, rump_sys_lchflags(filename, flags));
+	STDCALL(ukfs, rump_sys_lchflags(filename, flags, &rv));
 }
 
 int
 ukfs_utimes(struct ukfs *ukfs, const char *filename, const struct timeval *tptr)
 {
 
-	STDCALL(ukfs, rump_sys_utimes(filename, tptr));
+	STDCALL(ukfs, rump_sys_utimes(filename, tptr, &rv));
 }
 
 int
@@ -557,7 +515,7 @@ ukfs_lutimes(struct ukfs *ukfs, const char *filename,
 	      const struct timeval *tptr)
 {
 
-	STDCALL(ukfs, rump_sys_lutimes(filename, tptr));
+	STDCALL(ukfs, rump_sys_lutimes(filename, tptr, &rv));
 }
 
 /*
@@ -585,10 +543,9 @@ ukfs_modload(const char *fname)
 
 	handle = dlopen(fname, RTLD_GLOBAL);
 	if (handle == NULL) {
-		const char *dlmsg = dlerror();
-		if (strstr(dlmsg, "Undefined symbol"))
+		if (strstr(dlerror(), "Undefined symbol"))
 			return 0;
-		warnx("dlopen %s failed: %s\n", fname, dlmsg);
+		warnx("dlopen %s failed: %s\n", fname, dlerror());
 		/* XXXerrno */
 		return -1;
 	}
@@ -609,7 +566,7 @@ ukfs_modload(const char *fname)
 
 	thesym = dlsym(handle, "__start_link_set_modules");
 	if (thesym) {
-		error = rump_module_load(thesym);
+		error = rump_vfs_load(thesym);
 		if (error)
 			goto errclose;
 		return 1;
@@ -727,7 +684,7 @@ ukfs_vfstypes(char *buf, size_t buflen)
 	int mib[3];
 	struct sysctlnode q, ans[128];
 	size_t alen;
-	int i;
+	int error, i;
 
 	mib[0] = CTL_VFS;
 	mib[1] = VFS_GENERIC;
@@ -737,7 +694,8 @@ ukfs_vfstypes(char *buf, size_t buflen)
 	memset(&q, 0, sizeof(q));
 	q.sysctl_flags = SYSCTL_VERSION;
 
-	if (rump_sys___sysctl(mib, 3, ans, &alen, &q, sizeof(q)) == -1) {
+	if (rump_sys___sysctl(mib, 3, ans, &alen, &q, sizeof(q), &error) == -1){
+		errno = error;
 		return -1;
 	}
 
@@ -753,7 +711,8 @@ ukfs_vfstypes(char *buf, size_t buflen)
 	mib[1] = VFS_GENERIC;
 	mib[2] = ans[i].sysctl_num;
 
-	if (rump_sys___sysctl(mib, 3, buf, &buflen, NULL, 0) == -1) {
+	if (rump_sys___sysctl(mib, 3, buf, &buflen, NULL, 0, &error) == -1) {
+		errno = error;
 		return -1;
 	}
 

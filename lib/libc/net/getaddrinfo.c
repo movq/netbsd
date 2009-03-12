@@ -1,4 +1,4 @@
-/*	$NetBSD: getaddrinfo.c,v 1.92 2009/01/23 00:48:57 tls Exp $	*/
+/*	$NetBSD: getaddrinfo.c,v 1.91.6.1 2009/01/26 00:27:34 snj Exp $	*/
 /*	$KAME: getaddrinfo.c,v 1.29 2000/08/31 17:26:57 itojun Exp $	*/
 
 /*
@@ -55,7 +55,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getaddrinfo.c,v 1.92 2009/01/23 00:48:57 tls Exp $");
+__RCSID("$NetBSD: getaddrinfo.c,v 1.91.6.1 2009/01/26 00:27:34 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

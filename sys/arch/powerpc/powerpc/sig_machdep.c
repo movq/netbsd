@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.34 2008/11/21 20:22:30 he Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.32 2008/04/24 18:39:21 ad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,8 +32,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.34 2008/11/21 20:22:30 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.32 2008/04/24 18:39:21 ad Exp $");
 
+#include "opt_compat_netbsd.h"
 #include "opt_ppcarch.h"
 #include "opt_altivec.h"
 
@@ -52,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.34 2008/11/21 20:22:30 he Exp $");
  * Send a signal to process.
  */
 void
-sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
+sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp * const l = curlwp;
 	struct proc * const p = l->l_proc;
@@ -63,6 +64,15 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	ucontext_t uc;
 	vaddr_t sp, sip, ucp;
 	int onstack, error;
+
+	if (sd->sd_vers < 2) {
+#ifdef COMPAT_16
+		sendsig_sigcontext(ksi->ksi_signo, mask, KSI_TRAPCODE(ksi));
+		return;
+#else
+		goto nosupport;
+#endif
+	}
 
 	/* Do we need to jump onto the signal stack? */
 	onstack = (ss->ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&

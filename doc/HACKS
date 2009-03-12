@@ -1,4 +1,4 @@
-# $NetBSD: HACKS,v 1.113 2009/01/11 21:02:36 sketch Exp $
+# $NetBSD: HACKS,v 1.110.2.2 2008/12/06 21:27:36 snj Exp $
 #
 # This file is intended to document workarounds for currently unsolved
 # (mostly) compiler bugs.
@@ -308,6 +308,18 @@ descr
 	Generate .hx files and copy it in the Makefiles if they changed.
 kcah
 
+hack	rbus resource allocation work around
+cdate	10 May 2007
+who	jnemeth
+file	src/sys/dev/pcmcia/aic_pcmcia.c : 1.35
+pr	26909 31245
+descr
+	On some cards, the card align field property value interferes
+	with the rbus resource allocation causing the card not to
+	configure properly.  Setting it to 0 fixes the problem but it
+	is not the proper solution.
+kcah
+
 hack	avoid gcc4 -O1 bug in loop optimize
 cdate	29 November 2008
 who	tsutsui
@@ -472,27 +484,6 @@ port	vax
 	descr
 		Disable several warnings or use -Wno-error across Xorg sources
 		while we get them working
-	kcah
-
-	hack	32 bit time leftovers
-	cdat	11 January 2009
-	who	christos
-	file	lib/libc/time/localtime.c : 1.41
-		lib/libc/time/zic.c : 1.23
-	descr
-		The timezone compiled files still contain 32 bit time_t
-		quantities. I did not want to version the files because
-		the ``parser'' is too ugly for words. What needs to be
-		done, is to rewrite the parser from scratch also to avoid
-		potential core-dumps from parsing invalid files.
-	kcah
-
-	hack	32 bit time leftovers
-	cdat	11 January 2009
-	who	christos
-	file	various
-	descr
-		Many filesystem on-disk formats have 32 bit times.
 	kcah
 
 port	arm

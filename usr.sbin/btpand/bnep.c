@@ -1,4 +1,4 @@
-/*	$NetBSD: bnep.c,v 1.3 2009/02/04 19:24:18 plunky Exp $	*/
+/*	$NetBSD: bnep.c,v 1.1.6.1 2009/02/06 01:12:46 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bnep.c,v 1.3 2009/02/04 19:24:18 plunky Exp $");
+__RCSID("$NetBSD: bnep.c,v 1.1.6.1 2009/02/06 01:12:46 snj Exp $");
 
 #include <bluetooth.h>
 #include <sdp.h>
@@ -175,8 +175,8 @@ static bool
 bnep_recv_extension(packet_t *pkt)
 {
 	exthdr_t *eh;
-	size_t len, size;
-	uint8_t type;
+	size_t len;
+	uint8_t type, size;
 
 	do {
 		if (pkt->len < 2)
@@ -297,8 +297,7 @@ bnep_recv_control_command_not_understood(channel_t *chan, uint8_t *ptr, size_t s
 static size_t
 bnep_recv_setup_connection_req(channel_t *chan, uint8_t *ptr, size_t size)
 {
-	size_t len;
-	uint8_t off;
+	uint8_t len, off;
 	int src, dst, rsp;
 
 	if (size < 1)
@@ -400,8 +399,7 @@ static size_t
 bnep_recv_filter_net_type_set(channel_t *chan, uint8_t *ptr, size_t size)
 {
 	pfilter_t *pf;
-	int i, nf, rsp;
-	size_t len;
+	int i, len, nf, rsp;
 
 	if (size < 2)
 		return 0;
@@ -483,8 +481,7 @@ static size_t
 bnep_recv_filter_multi_addr_set(channel_t *chan, uint8_t *ptr, size_t size)
 {
 	mfilter_t *mf;
-	int i, nf, rsp;
-	size_t len;
+	int i, len, nf, rsp;
 
 	if (size < 2)
 		return 0;

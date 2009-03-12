@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.7 2009/01/18 20:50:43 bouyer Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.5.4.1 2009/01/22 20:17:13 snj Exp $	*/
 /*	NetBSD: mainbus.c,v 1.53 2003/10/27 14:11:47 junyoung Exp 	*/
 
 /*
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.7 2009/01/18 20:50:43 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.5.4.1 2009/01/22 20:17:13 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -140,6 +140,9 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #ifdef MPBIOS
 	int mpbios_present = 0;
 #endif
+#if NACPI > 0 || defined(MPBIOS)
+	int numioapics = 0;     
+#endif
 #ifdef PCI_BUS_FIXUP
 	int pci_maxbus = 0;
 #endif
@@ -178,13 +181,14 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #if NACPI > 0
 		acpi_present = acpi_probe();
 		if (acpi_present)
-			mpacpi_active = mpacpi_scan_apics(self, &numcpus);
+			mpacpi_active = mpacpi_scan_apics(self,
+			    &numcpus, &numioapics);
 		if (!mpacpi_active)
 #endif
 		{
 #ifdef MPBIOS
 			if (mpbios_present)
-				mpbios_scan(self, &numcpus);       
+				mpbios_scan(self, &numcpus, &numioapics);       
 			else
 #endif
 			if (numcpus == 0) {

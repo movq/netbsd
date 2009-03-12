@@ -1,4 +1,4 @@
-/*	$NetBSD: mntopts.h,v 1.13 2009/01/12 18:14:20 pooka Exp $	*/
+/*	$NetBSD: mntopts.h,v 1.11.4.2 2009/01/22 20:31:37 snj Exp $	*/
 
 /*-
  * Copyright (c) 1994

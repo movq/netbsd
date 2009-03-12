@@ -1,4 +1,4 @@
-/* $NetBSD: drm_drv.c,v 1.22 2009/01/31 13:49:29 bouyer Exp $ */
+/* $NetBSD: drm_drv.c,v 1.19.6.2 2009/04/23 02:28:59 snj Exp $ */
 
 /* drm_drv.h -- Generic driver template -*- linux-c -*-
  * Created: Thu Nov 23 03:10:50 2000 by gareth@valinux.com
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_drv.c,v 1.22 2009/01/31 13:49:29 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_drv.c,v 1.19.6.2 2009/04/23 02:28:59 snj Exp $");
 /*
 __FBSDID("$FreeBSD: src/sys/dev/drm/drm_drv.c,v 1.6 2006/09/07 23:04:47 anholt Exp $");
 */
@@ -114,8 +114,8 @@ static drm_ioctl_desc_t		  drm_ioctls[256] = {
 	[DRM_IOCTL_NR(DRM_IOCTL_AGP_BIND)]      = { drm_agp_bind_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY },
 	[DRM_IOCTL_NR(DRM_IOCTL_AGP_UNBIND)]    = { drm_agp_unbind_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY },
 
-	[DRM_IOCTL_NR(DRM_IOCTL_SG_ALLOC)]      = { drm_sg_alloc,    DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY },
-	[DRM_IOCTL_NR(DRM_IOCTL_SG_FREE)]       = { drm_sg_free,     DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY },
+	[DRM_IOCTL_NR(DRM_IOCTL_SG_ALLOC)]      = { drm_sg_alloc_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY },
+	[DRM_IOCTL_NR(DRM_IOCTL_SG_FREE)]       = { drm_sg_free_ioctl, DRM_AUTH|DRM_MASTER|DRM_ROOT_ONLY },
 
 	[DRM_IOCTL_NR(DRM_IOCTL_WAIT_VBLANK)]   = { drm_wait_vblank, 0 },
 };
@@ -259,10 +259,6 @@ void drm_attach(struct device *kdev, struct pci_attach_args *pa,
 int drm_detach(struct device *self, int flags)
 {
 	drm_device_t *dev = device_private(self);
-
-	/* XXX locking */
-	if (dev->open_count)
-		return EBUSY;
 	drm_unload(dev);
 	drm_units[dev->unit] = NULL;
 	return 0;
@@ -302,6 +298,7 @@ static int drm_firstopen(drm_device_t *dev)
 	int i;
 
 	DRM_SPINLOCK_ASSERT(&dev->dev_lock);
+	DRM_SPININIT(&dev->irq_lock, "DRM IRQ lock");
 
 	/* prebuild the SAREA */
 	i = drm_addmap(dev, 0, SAREA_MAX, _DRM_SHM,
@@ -413,7 +410,7 @@ static int drm_lastclose(drm_device_t *dev)
 
 	for(i = 0; i<DRM_MAX_PCI_RESOURCE; i++) {
 		if (dev->pci_map_data[i].mapped > 1) {
-			bus_space_unmap(dev->pa.pa_memt,
+			bus_space_unmap(dev->pci_map_data[i].maptype,
 					dev->pci_map_data[i].bsh,
 					dev->pci_map_data[i].size);
 			dev->pci_map_data[i].mapped = 0;
@@ -435,6 +432,8 @@ static int drm_lastclose(drm_device_t *dev)
 		TAILQ_REMOVE(&dev->files, filep, link);
 		free(filep, M_DRM);
 	}
+
+	DRM_SPINUNINIT(&dev->irq_lock);
 
 	return 0;
 }
@@ -820,7 +819,7 @@ static int
 drm_modcmd(modcmd_t cmd, void *arg)
 {
 #ifdef _MODULE
-	devmajor_t bmajor = NODEVMAJOR, cmajor = NODEVMAJOR;
+	int bmajor = -1, cmajor = -1;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:

@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.31 2009/02/12 06:35:54 lukem Exp $	*/
+/*	$NetBSD: hash.c,v 1.30 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: hash.c,v 1.31 2009/02/12 06:35:54 lukem Exp $");
+__RCSID("$NetBSD: hash.c,v 1.30 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/param.h>
@@ -161,8 +161,7 @@ __hash_open(const char *file, int flags, mode_t mode, const HASHINFO *info,
 		if (hashp->VERSION != HASHVERSION &&
 		    hashp->VERSION != OLDHASHVERSION)
 			RETURN_ERROR(EFTYPE, error1);
-		if (hashp->hash(CHARKEY, sizeof(CHARKEY)) !=
-		    (uint32_t)hashp->H_CHARKEY)
+		if (hashp->hash(CHARKEY, sizeof(CHARKEY)) != hashp->H_CHARKEY)
 			RETURN_ERROR(EFTYPE, error1);
 		/*
 		 * Figure out how many segments we need.  Max_Bucket is the
@@ -378,7 +377,7 @@ init_htab(HTAB *hashp, size_t nelem)
 	nsegs = (nbuckets - 1) / hashp->SGSIZE + 1;
 	nsegs = 1 << __log2(nsegs);
 
-	if (nsegs > (uint32_t)hashp->DSIZE)
+	if (nsegs > hashp->DSIZE)
 		hashp->DSIZE = nsegs;
 	return (alloc_segs(hashp, (int)nsegs));
 }
@@ -602,7 +601,7 @@ hash_access(HTAB *hashp, ACTION action, DBT *key, DBT *val)
 	for (bp = (uint16_t *)(void *)rbufp->page, n = *bp++, ndx = 1; ndx < n;)
 		if (bp[1] >= REAL_KEY) {
 			/* Real key/data pair */
-			if (size == (size_t)(off - *bp) &&
+			if (size == off - *bp &&
 			    memcmp(kp, rbufp->page + *bp, size) == 0)
 				goto found;
 			off = bp[1];
@@ -727,7 +726,7 @@ hash_seq(const DB *dbp, DBT *key, DBT *data, uint32_t flag)
 	for (bp = NULL; !bp || !bp[0]; ) {
 		if (!(bufp = hashp->cpage)) {
 			for (bucket = hashp->cbucket;
-			    bucket <= (uint32_t)hashp->MAX_BUCKET;
+			    bucket <= hashp->MAX_BUCKET;
 			    bucket++, hashp->cndx = 1) {
 				bufp = __get_buf(hashp, bucket, NULL, 0);
 				if (!bufp)
@@ -832,7 +831,7 @@ __expand_table(HTAB *hashp)
 		hashp->OVFL_POINT = spare_ndx;
 	}
 
-	if (new_bucket > (uint32_t)hashp->HIGH_MASK) {
+	if (new_bucket > hashp->HIGH_MASK) {
 		/* Starting a new doubling */
 		hashp->LOW_MASK = hashp->HIGH_MASK;
 		hashp->HIGH_MASK = new_bucket | hashp->LOW_MASK;

@@ -1,4 +1,4 @@
-/*	$NetBSD: bwtwovar.h,v 1.8 2009/02/23 22:44:27 jdc Exp $ */
+/*	$NetBSD: bwtwovar.h,v 1.6.10.2 2009/02/26 07:42:06 snj Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.

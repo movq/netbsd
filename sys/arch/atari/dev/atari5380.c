@@ -1,4 +1,4 @@
-/*	$NetBSD: atari5380.c,v 1.47 2009/01/24 02:02:38 tsutsui Exp $	*/
+/*	$NetBSD: atari5380.c,v 1.46.2.1 2010/11/20 01:09:27 riz Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atari5380.c,v 1.47 2009/01/24 02:02:38 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atari5380.c,v 1.46.2.1 2010/11/20 01:09:27 riz Exp $");
 
 #include "opt_atariscsi.h"
 
@@ -136,29 +136,20 @@ struct scsi_dma {
 	volatile u_char		s_hdma_ctrl;	/* Hades control register */
 };
 
-static inline void set_scsi_dma(volatile u_char *, u_long);
-static inline u_long get_scsi_dma(volatile u_char *);
+#define	set_scsi_dma(addr, val)	(void)(					\
+	{								\
+	volatile u_char	*address = (volatile u_char *)addr+1;		\
+	u_long	nval	 = (u_long)val;					\
+	__asm("movepl	%0, %1@(0)": :"d" (nval), "a" (address));	\
+	})
 
-static inline void
-set_scsi_dma(volatile u_char *addr, u_long val)
-{
-	volatile u_char *address;
-
-	address = addr + 1;
-	__asm("movepl	%0, %1@(0)": :"d" (val), "a" (address));
-}
-
-static inline u_long
-get_scsi_dma(volatile u_char *addr)
-{
-	volatile u_char	*address;
-	u_long	nval;
-
-	address = addr + 1;
-	__asm("movepl	%1@(0), %0": "=d" (nval) : "a" (address));
-
-	return nval;
-}
+#define	get_scsi_dma(addr, res)	(					\
+	{								\
+	volatile u_char	*address = (volatile u_char *)addr+1;		\
+	u_long	nval;							\
+	__asm("movepl	%1@(0), %0": "=d" (nval) : "a" (address));	\
+	res = (u_long)nval;						\
+	})
 
 /*
  * Defines for TT-DMA control register
@@ -441,12 +432,13 @@ tt_get_dma_result(SC_REQ *reqp, u_long *bytes_left)
 {
 	int	dmastat, dmstat;
 	u_char	*byte_p;
-	u_long	leftover;
+	u_long	leftover, ptr;
 
 	dmastat = SCSI_DMA->s_dma_ctrl;
 	dmstat  = GET_TT_REG(NCR5380_DMSTAT);
-	leftover = get_scsi_dma(SCSI_DMA->s_dma_cnt);
-	byte_p = (u_char *)get_scsi_dma(SCSI_DMA->s_dma_ptr);
+	get_scsi_dma(SCSI_DMA->s_dma_cnt, leftover);
+	get_scsi_dma(SCSI_DMA->s_dma_ptr, ptr);
+	byte_p = (u_char *)ptr;
 
 	if (dmastat & SD_BUSERR) {
 		/*
@@ -503,7 +495,7 @@ int poll;
 extern	int			*nofault;
 	label_t			faultbuf;
 	int			write;
-	u_long	 		count;
+	u_long	 		count, t;
 	volatile u_char		*data_p = (volatile u_char *)(stio_addr+0x741);
 
 	/*
@@ -520,6 +512,7 @@ extern	int			*nofault;
 	nofault = (int *) &faultbuf;
 
 	if (setjmp((label_t *) nofault)) {
+		u_char	*ptr;
 		u_long	cnt, tmp;
 
 		PID("drq berr");
@@ -528,14 +521,16 @@ extern	int			*nofault;
 		/*
 		 * Determine number of bytes transferred
 		 */
-		cnt = (u_long)dma_ptr - get_scsi_dma(SCSI_DMA->s_dma_ptr);
+		get_scsi_dma(SCSI_DMA->s_dma_ptr, tmp);
+		ptr = (u_char *)tmp;
+		cnt = dma_ptr - ptr;
 
 		if (cnt != 0) {
 			/*
 			 * Update the DMA pointer/count fields
 			 */
-			set_scsi_dma(SCSI_DMA->s_dma_ptr, (u_long)dma_ptr);
-			tmp = get_scsi_dma(SCSI_DMA->s_dma_cnt);
+			set_scsi_dma(SCSI_DMA->s_dma_ptr, dma_ptr);
+			get_scsi_dma(SCSI_DMA->s_dma_cnt, tmp);
 			set_scsi_dma(SCSI_DMA->s_dma_cnt, tmp - cnt);
 
 			if (tmp > cnt) {
@@ -595,8 +590,9 @@ extern	int			*nofault;
 	}
 #endif
 
-	count = get_scsi_dma(SCSI_DMA->s_dma_cnt);
-	dma_ptr = (u_char *)get_scsi_dma(SCSI_DMA->s_dma_ptr);
+	get_scsi_dma(SCSI_DMA->s_dma_cnt, count);
+	get_scsi_dma(SCSI_DMA->s_dma_ptr, t);
+	dma_ptr = (u_char *)t;
 
 	/*
 	 * Keep pushing bytes until we're done or a bus-error
@@ -1135,14 +1131,7 @@ scsi_ctrl(int sr)
 {
 	if (GET_5380_REG(NCR5380_DMSTAT) & SC_IRQ_SET) {
 		scsi_idisable();
-		if (!BASEPRI(sr))
-			add_sicallback((si_farg)ncr_ctrl_intr,
-						(void *)cur_softc, 0);
-		else {
-			spl1();
-			ncr_ctrl_intr(cur_softc);
-			spl0();
-		}
+		add_sicallback((si_farg)ncr_ctrl_intr, (void *)cur_softc, 0);
 	}
 }
 
@@ -1156,14 +1145,7 @@ scsi_dma(int sr)
 
 	if ((reqp = connected) && (reqp->dr_flag & DRIVER_IN_DMA)) {
 		scsi_idisable();
-		if (!BASEPRI(sr))
-			add_sicallback((si_farg)ncr_dma_intr,
-					(void *)cur_softc, 0);
-		else {
-			spl1();
-			ncr_dma_intr(cur_softc);
-			spl0();
-		}
+		add_sicallback((si_farg)ncr_dma_intr, (void *)cur_softc, 0);
 	}
 }
 

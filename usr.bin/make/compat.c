@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.c,v 1.76 2009/02/22 07:33:00 dholland Exp $	*/
+/*	$NetBSD: compat.c,v 1.71 2008/02/15 21:29:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: compat.c,v 1.76 2009/02/22 07:33:00 dholland Exp $";
+static char rcsid[] = "$NetBSD: compat.c,v 1.71 2008/02/15 21:29:50 christos Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)compat.c	8.2 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: compat.c,v 1.76 2009/02/22 07:33:00 dholland Exp $");
+__RCSID("$NetBSD: compat.c,v 1.71 2008/02/15 21:29:50 christos Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -119,7 +119,7 @@ __RCSID("$NetBSD: compat.c,v 1.76 2009/02/22 07:33:00 dholland Exp $");
 
 static char 	    meta[256];
 
-static GNode	    *curTarg = NULL;
+static GNode	    *curTarg = NILGNODE;
 static GNode	    *ENDNode;
 static void CompatInterrupt(int);
 
@@ -159,7 +159,7 @@ CompatInterrupt(int signo)
 {
     GNode   *gn;
 
-    if ((curTarg != NULL) && !Targ_Precious (curTarg)) {
+    if ((curTarg != NILGNODE) && !Targ_Precious (curTarg)) {
 	char	  *p1;
 	char 	  *file = Var_Value(TARGET, curTarg, &p1);
 
@@ -174,7 +174,7 @@ CompatInterrupt(int signo)
 	 */
 	if (signo == SIGINT) {
 	    gn = Targ_FindNode(".INTERRUPT", TARG_NOCREATE);
-	    if (gn != NULL) {
+	    if (gn != NILGNODE) {
 		Compat_Make(gn, gn);
 	    }
 	}
@@ -202,7 +202,7 @@ CompatInterrupt(int signo)
  *-----------------------------------------------------------------------
  */
 int
-CompatRunCommand(void *cmdp, void *gnp)
+CompatRunCommand(ClientData cmdp, ClientData gnp)
 {
     char    	  *cmdStart;	/* Start of expanded command */
     char 	  *cp, *bp;
@@ -211,8 +211,8 @@ CompatRunCommand(void *cmdp, void *gnp)
     volatile Boolean errCheck; 	/* Check errors */
     int 	  reason;   	/* Reason for child's death */
     int	    	  status;   	/* Description of child's death */
-    pid_t	  cpid;	    	/* Child actually found */
-    pid_t	  retstat;    	/* Result of wait */
+    int	    	  cpid;	    	/* Child actually found */
+    ReturnStatus  retstat;    	/* Status of fork */
     LstNode 	  cmdNode;  	/* Node where current command is located */
     const char  ** volatile av;	/* Argument vector for thing to exec */
     char	** volatile mav;/* Copy of the argument vector for freeing */
@@ -243,15 +243,15 @@ CompatRunCommand(void *cmdp, void *gnp)
 	free(cmdStart);
 	Error("%s expands to empty string", cmd);
 	return(0);
+    } else {
+	cmd = cmdStart;
     }
-    cmd = cmdStart;
     Lst_Replace(cmdNode, cmdStart);
 
     if ((gn->type & OP_SAVE_CMDS) && (gn != ENDNode)) {
 	(void)Lst_AtEnd(ENDNode->commands, cmdStart);
 	return(0);
-    }
-    if (strcmp(cmdStart, "...") == 0) {
+    } else if (strcmp(cmdStart, "...") == 0) {
 	gn->type |= OP_SAVE_CMDS;
 	return(0);
     }
@@ -312,10 +312,7 @@ CompatRunCommand(void *cmdp, void *gnp)
     if (!doIt && NoExecute(gn)) {
 	return (0);
     }
-    if (DEBUG(JOB))
-	fprintf(debug_file, "Execute: '%s'\n", cmd);
 
-again:
     if (useShell) {
 	/*
 	 * We need to pass the command off to the shell, typically
@@ -342,11 +339,7 @@ again:
 	 * No meta-characters, so no need to exec a shell. Break the command
 	 * into words to form an argument vector we can execute.
 	 */
-	mav = brk_string(cmd, &argc, TRUE, &bp);
-	if (mav == NULL) {
-		useShell = 1;
-		goto again;
-	}
+	mav =  brk_string(cmd, &argc, TRUE, &bp);
 	av = (const char **)mav;
     }
 
@@ -463,7 +456,7 @@ again:
  *-----------------------------------------------------------------------
  */
 int
-Compat_Make(void *gnp, void *pgnp)
+Compat_Make(ClientData gnp, ClientData pgnp)
 {
     GNode *gn = (GNode *)gnp;
     GNode *pgn = (GNode *)pgnp;
@@ -490,7 +483,7 @@ Compat_Make(void *gnp, void *pgnp)
 	    goto cohorts;
 	}
 
-	if (Lst_Member(gn->iParents, pgn) != NULL) {
+	if (Lst_Member(gn->iParents, pgn) != NILLNODE) {
 	    char *p1;
 	    Var_Set(IMPSRC, Var_Value(TARGET, gn, &p1), pgn, 0);
 	    if (p1)
@@ -550,7 +543,7 @@ Compat_Make(void *gnp, void *pgnp)
 	    if (!touchFlag || (gn->type & OP_MAKE)) {
 		curTarg = gn;
 		Lst_ForEach(gn->commands, CompatRunCommand, gn);
-		curTarg = NULL;
+		curTarg = NILGNODE;
 	    } else {
 		Job_Touch(gn, gn->type & OP_SILENT);
 	    }
@@ -584,7 +577,7 @@ Compat_Make(void *gnp, void *pgnp)
 	 */
 	pgn->flags &= ~REMAKE;
     } else {
-	if (Lst_Member(gn->iParents, pgn) != NULL) {
+	if (Lst_Member(gn->iParents, pgn) != NILLNODE) {
 	    char *p1;
 	    Var_Set(IMPSRC, Var_Value(TARGET, gn, &p1), pgn, 0);
 	    if (p1)
@@ -662,7 +655,7 @@ Compat_Run(Lst targs)
      */
     if (!queryFlag) {
 	gn = Targ_FindNode(".BEGIN", TARG_NOCREATE);
-	if (gn != NULL) {
+	if (gn != NILGNODE) {
 	    Compat_Make(gn, gn);
             if (gn->made == ERROR) {
                 PrintOnError("\n\nStop.");

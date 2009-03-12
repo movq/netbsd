@@ -1,4 +1,4 @@
-/*	$NetBSD: system.h,v 1.11 2009/03/06 17:03:48 apb Exp $	*/
+/*	$NetBSD: system.h,v 1.10.4.1 2009/03/27 16:28:41 msaitoh Exp $	*/
 
 /* system.h: system-dependent declarations; include this first.
    Id: system.h,v 1.12 2004/04/26 13:56:57 karl Exp

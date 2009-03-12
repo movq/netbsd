@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_process.c,v 1.146 2009/02/04 21:17:39 ad Exp $	*/
+/*	$NetBSD: sys_process.c,v 1.143.4.1 2009/02/06 01:54:09 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -118,8 +118,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.146 2009/02/04 21:17:39 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.143.4.1 2009/02/06 01:54:09 snj Exp $");
 
+#include "opt_coredump.h"
 #include "opt_ptrace.h"
 #include "opt_ktrace.h"
 
@@ -131,7 +132,7 @@ __KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.146 2009/02/04 21:17:39 ad Exp $")
 #include <sys/uio.h>
 #include <sys/user.h>
 #include <sys/ras.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/kauth.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
@@ -164,8 +165,9 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 	int error, write, tmp, req, pheld;
 	int signo;
 	ksiginfo_t ksi;
+#ifdef COREDUMP
 	char *path;
-	int len;
+#endif
 
 	error = 0;
 	req = SCARG(uap, req);
@@ -292,7 +294,9 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 	case  PT_DETACH:
 	case  PT_LWPINFO:
 	case  PT_SYSCALL:
+#ifdef COREDUMP
 	case  PT_DUMPCORE:
+#endif
 #ifdef PT_STEP
 	case  PT_STEP:
 #endif
@@ -471,27 +475,28 @@ sys_ptrace(struct lwp *l, const struct sys_ptrace_args *uap, register_t *retval)
 		uvmspace_free(vm);
 		break;
 
+#ifdef COREDUMP
 	case  PT_DUMPCORE:
 		if ((path = SCARG(uap, addr)) != NULL) {
 			char *dst;
-			len = SCARG(uap, data);
-
+			int len = SCARG(uap, data);
 			if (len < 0 || len >= MAXPATHLEN) {
 				error = EINVAL;
 				break;
 			}
-			dst = kmem_alloc(len + 1, KM_SLEEP);
+			dst = malloc(len + 1, M_TEMP, M_WAITOK);
 			if ((error = copyin(path, dst, len)) != 0) {
-				kmem_free(dst, len + 1);
+				free(dst, M_TEMP);
 				break;
 			}
 			path = dst;
 			path[len] = '\0';
 		}
-		error = (*coredump_vec)(lt, path);
+		error = coredump(lt, path);
 		if (path)
-			kmem_free(path, len + 1);
+			free(path, M_TEMP);
 		break;
+#endif
 
 #ifdef PT_STEP
 	case  PT_STEP:

@@ -26,11 +26,11 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: ah_osdep.c,v 1.1 2008/12/11 05:37:40 alc Exp $
+ * $Id: ah_osdep.c,v 1.2.4.3 2009/08/14 21:47:33 snj Exp $
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ah_osdep.c,v 1.1 2008/12/11 05:37:40 alc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ah_osdep.c,v 1.2.4.3 2009/08/14 21:47:33 snj Exp $");
 
 #include "opt_athhal.h"
 
@@ -62,10 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: ah_osdep.c,v 1.1 2008/12/11 05:37:40 alc Exp $");
 #define	EXIT	/* nothing */
 #endif
 
-extern	void ath_hal_printf(struct ath_hal *, const char*, ...)
-		__printflike(2,3);
-extern	void ath_hal_vprintf(struct ath_hal *, const char*, va_list)
-		__printflike(2, 0);
+extern	void ath_hal_printf(struct ath_hal *, const char*, ...);
+extern	void ath_hal_vprintf(struct ath_hal *, const char*, va_list);
 extern	const char* ath_hal_ether_sprintf(const u_int8_t *mac);
 extern	void *ath_hal_malloc(size_t);
 extern	void ath_hal_free(void *);
@@ -236,7 +234,6 @@ HALDEBUGn(struct ath_hal *ah, u_int level, const char* fmt, ...)
  */
 #include <sys/alq.h>
 #include <sys/pcpu.h>
-#include <contrib/dev/ath/ah_decode.h>
 
 static	struct alq *ath_hal_alq;
 static	int ath_hal_alq_emitdev;	/* need to emit DEVICE record */

@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_init_testset.c,v 1.6 2009/01/30 14:29:44 skrll Exp $	*/
+/*	$NetBSD: atomic_init_testset.c,v 1.5 2008/04/29 20:57:50 scw Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: atomic_init_testset.c,v 1.6 2009/01/30 14:29:44 skrll Exp $");
+__RCSID("$NetBSD: atomic_init_testset.c,v 1.5 2008/04/29 20:57:50 scw Exp $");
 
 #include "atomic_op_namespace.h"
 
@@ -53,21 +53,15 @@ __RCSID("$NetBSD: atomic_init_testset.c,v 1.6 2009/01/30 14:29:44 skrll Exp $");
 #define	I128	I16 I16 I16 I16 I16 I16 I16 I16
 
 static __cpu_simple_lock_t atomic_locks[128] = { I128 };
-
-#ifdef	__HAVE_ASM_ATOMIC_CAS_UP
-extern uint32_t _atomic_cas_up(volatile uint32_t *, uint32_t, uint32_t);
-#else
-static uint32_t _atomic_cas_up(volatile uint32_t *, uint32_t, uint32_t);
-#endif
-
-static uint32_t (*_atomic_cas_fn)(volatile uint32_t *, uint32_t, uint32_t) =
-    _atomic_cas_up;
+static uint32_t (*_atomic_cas_fn)(volatile uint32_t *, uint32_t, uint32_t);
 
 void	__libc_atomic_init(void) __attribute__ ((visibility("hidden")));
 
 RAS_DECL(_atomic_cas);
 
-#ifndef	__HAVE_ASM_ATOMIC_CAS_UP
+#ifdef	__HAVE_ASM_ATOMIC_CAS_UP
+extern uint32_t _atomic_cas_up(volatile uint32_t *, uint32_t, uint32_t);
+#else
 static uint32_t
 _atomic_cas_up(volatile uint32_t *ptr, uint32_t old, uint32_t new)
 {

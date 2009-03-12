@@ -1,4 +1,4 @@
-/*	$NetBSD: viaide.c,v 1.58 2008/12/21 16:27:57 nonaka Exp $	*/
+/*	$NetBSD: viaide.c,v 1.57.4.3 2010/01/09 01:56:51 snj Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: viaide.c,v 1.58 2008/12/21 16:27:57 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: viaide.c,v 1.57.4.3 2010/01/09 01:56:51 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -329,15 +329,15 @@ static const struct pciide_product_desc pciide_via_products[] =  {
 	  "VIA Technologies VT8237A SATA Controller",
 	  via_sata_chip_map_7,
 	},
+	{ PCI_PRODUCT_VIATECH_VT8237A_SATA_2,
+	  0,
+	  "VIA Technologies VT8237A (5337) SATA Controller",
+	  via_sata_chip_map_7,
+	},
 	{ PCI_PRODUCT_VIATECH_VT8237R_SATA,
 	  0,
 	  "VIA Technologies VT8237R SATA Controller",
 	  via_sata_chip_map_0,
-	},
-	{ PCI_PRODUCT_VIATECH_VT8237S_SATA,
-	  0,
-	  "VIA Technologies VT8237S SATA Controller",
-	  via_sata_chip_map_7,
 	},
 	{ 0,
 	  0,
@@ -853,6 +853,18 @@ via_sata_chip_map_common(struct pciide_softc *sc, struct pci_attach_args *pa)
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
+	/*
+	 * Enable memory-space access if it isn't already there.
+	 */
+	if (pa->pa_memt && (pa->pa_flags & PCI_FLAGS_MEM_ENABLED) == 0) {
+		pcireg_t csr;
+
+		pa->pa_flags |= PCI_FLAGS_MEM_ENABLED;
+		csr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
+		pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
+		               csr | PCI_COMMAND_MEM_ENABLE);
+	}
+
 	if (sc->sc_dma_ok) {
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_UDMA | ATAC_CAP_DMA;
 		sc->sc_wdcdev.irqack = pciide_irqack;
@@ -1082,6 +1094,8 @@ via_sata_chip_map_new(struct pciide_softc *sc, struct pci_attach_args *pa)
 			return;
 		}
 		wdc_init_shadow_regs(wdc_cp);
+		wdr->data32iot = wdr->cmd_iot;
+		wdr->data32ioh = wdr->cmd_iohs[wd_data];
 		wdcattach(wdc_cp);
 	}
 }

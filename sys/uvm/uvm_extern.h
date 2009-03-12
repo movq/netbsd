@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_extern.h,v 1.151 2009/02/18 13:16:58 yamt Exp $	*/
+/*	$NetBSD: uvm_extern.h,v 1.148.4.2 2009/04/01 00:25:23 snj Exp $	*/
 
 /*
  *
@@ -483,7 +483,6 @@ extern struct uvmexp uvmexp;
 #else
 #define UBC_WANT_UNMAP(vp) false
 #endif
-#define UBC_UNMAP_FLAG(vp) (UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0)
 
 /*
  * Shareable process virtual address space.
@@ -502,6 +501,7 @@ struct vmspace {
 	segsz_t vm_tsize;	/* text size (pages) XXX */
 	segsz_t vm_dsize;	/* data size (pages) XXX */
 	segsz_t vm_ssize;	/* stack size (pages) */
+	segsz_t vm_issize;	/* initial unmapped stack size (pages) */
 	void *	vm_taddr;	/* user virtual address of text XXX */
 	void *	vm_daddr;	/* user virtual address of data XXX */
 	void *vm_maxsaddr;	/* user VA at max stack growth */
@@ -559,13 +559,16 @@ void		cpu_swapout(struct lwp *);
 /* uvm_aobj.c */
 struct uvm_object	*uao_create(vsize_t, int);
 void			uao_detach(struct uvm_object *);
+void			uao_detach_locked(struct uvm_object *);
 void			uao_reference(struct uvm_object *);
+void			uao_reference_locked(struct uvm_object *);
 
 /* uvm_bio.c */
 void			ubc_init(void);
 void *			ubc_alloc(struct uvm_object *, voff_t, vsize_t *, int,
 			    int);
 void			ubc_release(void *, int);
+void			ubc_flush(struct uvm_object *, voff_t, voff_t);
 int			ubc_uiomove(struct uvm_object *, struct uio *, vsize_t,
 			    int, int);
 

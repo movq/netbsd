@@ -1,4 +1,4 @@
-# $NetBSD: ad.arm,v 1.31 2008/10/31 20:24:52 mrg Exp $
+# $NetBSD: ad.arm,v 1.30.2.1 2008/11/06 23:51:26 snj Exp $
 ./usr/include/arm				comp-c-include
 ./usr/include/arm/ansi.h			comp-c-include
 ./usr/include/arm/aout_machdep.h		comp-c-include

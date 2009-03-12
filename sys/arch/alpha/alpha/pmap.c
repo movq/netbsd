@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.c,v 1.238 2008/12/10 11:10:18 pooka Exp $ */
+/* $NetBSD: pmap.c,v 1.236.10.4 2009/11/15 05:54:38 snj Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001, 2007, 2008 The NetBSD Foundation, Inc.
@@ -140,7 +140,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.238 2008/12/10 11:10:18 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.236.10.4 2009/11/15 05:54:38 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -217,10 +217,9 @@ pt_entry_t	*kernel_lev1map;
  */
 static pt_entry_t *VPT;
 
-static struct pmap	kernel_pmap_store
+struct pmap	kernel_pmap_store
 	[(PMAP_SIZEOF(ALPHA_MAXPROCS) + sizeof(struct pmap) - 1)
 		/ sizeof(struct pmap)];
-struct pmap *const kernel_pmap_ptr = kernel_pmap_store;
 
 paddr_t    	avail_start;	/* PA of first available physical page */
 paddr_t		avail_end;	/* PA of last available physical page */
@@ -422,11 +421,11 @@ struct pmap_tlb_shootdown_job {
 
 static struct pmap_tlb_shootdown_q {
 	TAILQ_HEAD(, pmap_tlb_shootdown_job) pq_head;	/* queue 16b */
-	kmutex_t pq_lock;		/* spin lock on queue 12b */
+	kmutex_t pq_lock;		/* spin lock on queue 16b */
 	int pq_pte;			/* aggregate PTE bits 4b */
 	int pq_count;			/* number of pending requests 4b */
 	int pq_tbia;			/* pending global flush 4b */
-	uint8_t pq_pad[64-16-12-4-4-4];	/* pad to 64 bytes */
+	uint8_t pq_pad[64-16-16-4-4-4];	/* pad to 64 bytes */
 } pmap_tlb_shootdown_q[ALPHA_MAXPROCS] __aligned(CACHE_LINE_SIZE);
 
 /* If we have more pending jobs than this, we just nail the whole TLB. */
@@ -964,7 +963,7 @@ pmap_bootstrap(paddr_t ptaddr, u_int maxasn, u_long ncpuids)
 	for (i = 0; i < ALPHA_MAXPROCS; i++) {
 		TAILQ_INIT(&pmap_tlb_shootdown_q[i].pq_head);
 		mutex_init(&pmap_tlb_shootdown_q[i].pq_lock, MUTEX_DEFAULT,
-		    IPL_VM);
+		    IPL_SCHED);
 	}
 #endif
 
@@ -3682,7 +3681,10 @@ pmap_tlb_shootdown(pmap_t pmap, vaddr_t va, pt_entry_t pte, u_long *cpumaskp)
 			continue;
 		}
 
+		cpumask |= 1UL << ci->ci_cpuid;
+
 		pq = &pmap_tlb_shootdown_q[ci->ci_cpuid];
+		mutex_spin_enter(&pq->pq_lock);
 
 		/*
 		 * Allocate a job.
@@ -3698,7 +3700,6 @@ pmap_tlb_shootdown(pmap_t pmap, vaddr_t va, pt_entry_t pte, u_long *cpumaskp)
 		 * If a global flush is already pending, we
 		 * don't really have to do anything else.
 		 */
-		mutex_spin_enter(&pq->pq_lock);
 		pq->pq_pte |= pte;
 		if (pq->pq_tbia) {
 			mutex_spin_exit(&pq->pq_lock);
@@ -3721,7 +3722,6 @@ pmap_tlb_shootdown(pmap_t pmap, vaddr_t va, pt_entry_t pte, u_long *cpumaskp)
 			pq->pq_count++;
 			TAILQ_INSERT_TAIL(&pq->pq_head, pj, pj_list);
 		}
-		cpumask |= 1UL << ci->ci_cpuid;
 		mutex_spin_exit(&pq->pq_lock);
 	}
 

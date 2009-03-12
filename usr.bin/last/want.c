@@ -1,4 +1,4 @@
-/*	$NetBSD: want.c,v 1.12 2008/12/29 01:25:04 christos Exp $	*/
+/*	$NetBSD: want.c,v 1.11 2007/10/05 07:27:42 lukem Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -236,8 +236,7 @@ wtmp(const char *file, int namesz, int linesz, int hostsz, int numeric)
 						    fmttime(delta,
 						    fulltime | TIMEONLY | GMT));
 					else
-						printf(" (%lld+%s)\n",
-						    (long long)
+						printf(" (%ld+%s)\n",
 						    delta / SECSPERDAY,
 						    fmttime(delta,
 						    fulltime | TIMEONLY | GMT));

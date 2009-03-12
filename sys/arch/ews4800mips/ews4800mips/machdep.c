@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.16 2008/11/30 18:21:34 martin Exp $	*/
+/*	$NetBSD: machdep.c,v 1.14 2008/07/02 17:28:55 ad Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2004, 2005 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.16 2008/11/30 18:21:34 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.14 2008/07/02 17:28:55 ad Exp $");
 
 #include "opt_ddb.h"
 
@@ -41,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.16 2008/11/30 18:21:34 martin Exp $");
 #include <sys/mount.h>
 #include <sys/kcore.h>
 #include <sys/boot_flag.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -197,7 +196,7 @@ option(int argc, char *argv[], struct bootinfo *bi)
 #ifdef DDB
 	/* Load symbol table */
 	if (bi->bi_nsym)
-		ksyms_addsyms_elf(bi->bi_esym - bi->bi_ssym,
+		ksyms_init(bi->bi_esym - bi->bi_ssym,
 		    (void *)bi->bi_ssym, (void *)bi->bi_esym);
 #endif
 	/* Parse option */
@@ -295,8 +294,6 @@ cpu_reboot(int howto, char *bootstr)
 
  haltsys:
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		if (platform.poweroff) {

@@ -1,4 +1,4 @@
-.\"     $NetBSD: parsedate.3,v 1.5 2009/03/10 21:01:08 joerg Exp $
+.\"     $NetBSD: parsedate.3,v 1.4.6.1 2010/11/21 20:38:38 riz Exp $
 .\"
 .\" Copyright (c) 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 17, 2006
+.Dd Aug 28, 2010
 .Dt PARSEDATE 3
 .Os
 .Sh NAME
@@ -195,7 +195,7 @@ Timezone names:
 .Dv idle .
 .Pp
 A variety of unambiguous dates are recognized:
-.Bl -tag -compact -width "20 Jun 1994"
+.Bl -tag -compact
 .It 69-09-10
 For years between 69-99 we assume 1900+ and for years between 0-68
 we assume 2000+.
@@ -212,7 +212,7 @@ the year can be omitted
 .El
 .Pp
 As well as times:
-.Bl -tag -compact -width 12:11:01.000012
+.Bl -tag -compact
 .It 10:01
 .It 10:12pm
 .It 12:11:01.000012
@@ -220,13 +220,19 @@ As well as times:
 .El
 .Pp
 Relative items are also supported:
-.Bl -tag -compact -width "this thursday"
+.Bl -tag -compact
 .It -1 month
 .It last friday
 .It one week ago
 .It this thursday
 .It next sunday
 .It +2 years
+.El
+.Pp
+Seconds since epoch (also known as UNIX time) are also supported:
+.Bl -tag -compact -width "@735275209"
+.It @735275209
+Tue Apr 20 03:06:49 UTC 1993
 .El
 .Sh RETURN VALUES
 .Fn parsedate
@@ -236,6 +242,8 @@ if the date could not be parsed properly.
 .Sh SEE ALSO
 .Xr date 1 ,
 .Xr eeprom 8
+.Sh BUGS
+The parsedate function is not re-entrant or thread-safe.
 .Sh HISTORY
 The parser used in
 .Fn parsedate

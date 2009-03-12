@@ -1,4 +1,4 @@
-.\"	$NetBSD: BUILDING.mdoc,v 1.71 2008/12/02 22:28:21 mrg Exp $
+.\"	$NetBSD: BUILDING.mdoc,v 1.67.2.3 2009/05/11 19:40:22 bouyer Exp $
 .\"
 .\" Copyright (c) 2001-2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -33,7 +33,7 @@
 .\" Toolchain prefix for commands
 .ds toolprefix nb
 .
-.Dd September 10, 2008
+.Dd May 1, 2009
 .Dt BUILDING 8
 .Os NetBSD
 .
@@ -236,10 +236,7 @@ can be provided only in the environment or via the
 .Fl O
 flag of
 .Nm build.sh ;
-it cannot usefully be set inside a Makefile, including
-.Pa mk.conf
-or
-.Sy ${MAKECONF} .
+it cannot usefully be set inside a Makefile.
 .
 .It Sy MAKEOBJDIRPREFIX
 Top level directory of the object directory tree.
@@ -255,10 +252,7 @@ can be provided only in the environment or via the
 .Fl M
 flag of
 .Nm build.sh ;
-it cannot usefully be set inside a Makefile, including 
-.Pa mk.conf
-or
-.Sy ${MAKECONF} .
+it cannot usefully be set inside a Makefile.
 .
 .El
 .
@@ -364,34 +358,13 @@ Level of verbosity of status messages.
 Supported values:
 .Bl -tag -width xxx
 .It 0
-No descriptive messages or commands executed by
-.Xr make 1
-are shown.
+No descriptive messages are shown.
 .It 1
-Brief messages are shown describing what is being done,
-but the actual commands executed by
-.Xr make 1
-are not displayed.
+Descriptive messages are shown.
 .It 2
-Descriptive messages are shown as above (prefixed with a
-.Sq # ) ,
-and ordinary commands performed by
-.Xr make 1
-are displayed.
-.It 3
-In addition to the above, all commands performed by
-.Xr make 1
-are displayed, even if they would ordinarily have been hidden
-through use of the
-.Dq \&@
-prefix in the relevant makefile.
-.It 4
-In addition to the above, commands executed by
-.Xr make 1
-are traced through use of the
-.Xr sh 1
-.Dq Fl x
-flag.
+Descriptive messages (prefixed with a
+.Sq # )
+and command output is not suppressed.
 .El
 .DFLT
 2
@@ -539,6 +512,13 @@ unconditionally.
 Indicates whether program binaries and shared libraries should be built
 to include RCS IDs for use with
 .Xr ident 1 .
+.DFLTn
+.
+.It Sy MKSUBPIXEL
+.YorN
+For X builds, decides if subpixel rendering code in FreeType
+is turned on.
+Turned off by default because of patent issues.
 .DFLTn
 .
 .It Sy MKTTINTERP

@@ -1,4 +1,4 @@
-/*	$NetBSD: nd6.h,v 1.52 2009/01/15 18:20:48 christos Exp $	*/
+/*	$NetBSD: nd6.h,v 1.51 2008/10/24 17:07:33 dyoung Exp $	*/
 /*	$KAME: nd6.h,v 1.95 2002/06/08 11:31:06 itojun Exp $	*/
 
 /*
@@ -223,7 +223,7 @@ struct	in6_ndifreq {
 #define RTR_SOLICITATION_INTERVAL	4	/* 4sec */
 #define MAX_RTR_SOLICITATIONS		3
 
-#define ND6_INFINITE_LIFETIME		((u_int32_t)~0)
+#define ND6_INFINITE_LIFETIME		0xffffffff
 
 #ifdef _KERNEL
 /* node constants */

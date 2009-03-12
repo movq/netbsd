@@ -1,5 +1,5 @@
 #	from: @(#)Makefile.inc	5.1 (Berkeley) 2/18/91
-#	$NetBSD: Makefile.inc,v 1.54 2009/01/11 02:46:28 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.52.4.1 2009/01/15 03:24:07 snj Exp $
 
 # locale sources
 .PATH: ${ARCHDIR}/locale ${.CURDIR}/locale

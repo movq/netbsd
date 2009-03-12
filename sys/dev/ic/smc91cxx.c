@@ -1,4 +1,4 @@
-/*	$NetBSD: smc91cxx.c,v 1.71 2008/11/07 00:20:03 dyoung Exp $	*/
+/*	$NetBSD: smc91cxx.c,v 1.70 2008/09/03 20:36:24 rjs Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smc91cxx.c,v 1.71 2008/11/07 00:20:03 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smc91cxx.c,v 1.70 2008/09/03 20:36:24 rjs Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -1353,29 +1353,27 @@ smc91cxx_ioctl(ifp, cmd, data)
 	s = splnet();
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		if ((error = smc91cxx_enable(sc)) != 0)
 			break;
 		ifp->if_flags |= IFF_UP;
-		smc91cxx_init(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-			arp_ifinit(ifp, ifa);
-			break;
+		smc91cxx_init(sc);
+		arp_ifinit(ifp, ifa);
+		break;
 #endif
 		default:
+			smc91cxx_init(sc);
 			break;
 		}
 		break;
 
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX re-use ether_ioctl() */
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running,
 			 * stop it.
@@ -1383,8 +1381,8 @@ smc91cxx_ioctl(ifp, cmd, data)
 			smc91cxx_stop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
 			smc91cxx_disable(sc);
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+			   (ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface is marked up and it is stopped,
 			 * start it.
@@ -1392,16 +1390,12 @@ smc91cxx_ioctl(ifp, cmd, data)
 			if ((error = smc91cxx_enable(sc)) != 0)
 				break;
 			smc91cxx_init(sc);
-			break;
-		case IFF_UP|IFF_RUNNING:
+		} else if ((ifp->if_flags & IFF_UP) != 0) {
 			/*
 			 * Reset the interface to pick up changes in any
 			 * other flags that affect hardware registers.
 			 */
 			smc91cxx_reset(sc);
-			break;
-		case 0:
-			break;
 		}
 		break;
 
@@ -1429,7 +1423,7 @@ smc91cxx_ioctl(ifp, cmd, data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
+		error = EINVAL;
 		break;
 	}
 

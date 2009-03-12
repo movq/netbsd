@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_bswap.c,v 1.14 2008/11/23 10:09:25 mrg Exp $	*/
+/*	$NetBSD: ext2fs_bswap.c,v 1.13.28.1 2008/11/29 23:10:18 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_bswap.c,v 1.14 2008/11/23 10:09:25 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_bswap.c,v 1.13.28.1 2008/11/29 23:10:18 snj Exp $");
 
 #include <sys/types.h>
 #include <ufs/ext2fs/ext2fs.h>

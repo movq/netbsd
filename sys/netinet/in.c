@@ -1,4 +1,4 @@
-/*	$NetBSD: in.c,v 1.131 2009/02/12 19:05:36 christos Exp $	*/
+/*	$NetBSD: in.c,v 1.127.4.3 2010/05/20 05:05:58 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -91,7 +91,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in.c,v 1.131 2009/02/12 19:05:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in.c,v 1.127.4.3 2010/05/20 05:05:58 snj Exp $");
 
 #include "opt_inet.h"
 #include "opt_inet_conf.h"
@@ -322,6 +322,13 @@ in_control(struct socket *so, u_long cmd, void *data, struct ifnet *ifp,
 	case SIOCALIFADDR:
 	case SIOCDLIFADDR:
 	case SIOCSIFADDRPREF:
+		if (l == NULL)
+			return (EPERM);
+		if (kauth_authorize_network(l->l_cred, KAUTH_NETWORK_INTERFACE,
+		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, (void *)cmd,
+		    NULL) != 0)
+			return (EPERM);
+		/*FALLTHROUGH*/
 	case SIOCGIFADDRPREF:
 	case SIOCGLIFADDR:
 		if (ifp == NULL)
@@ -386,9 +393,11 @@ in_control(struct socket *so, u_long cmd, void *data, struct ifnet *ifp,
 			return (EPERM);
 
 		if (ia == 0) {
-			ia = malloc(sizeof(*ia), M_IFADDR, M_WAITOK|M_ZERO);
+			MALLOC(ia, struct in_ifaddr *, sizeof(*ia),
+			       M_IFADDR, M_WAITOK);
 			if (ia == 0)
 				return (ENOBUFS);
+			bzero((void *)ia, sizeof *ia);
 			TAILQ_INSERT_TAIL(&in_ifaddrhead, ia, ia_list);
 			IFAREF(&ia->ia_ifa);
 			ifa_insert(ifp, &ia->ia_ifa);
@@ -457,7 +466,9 @@ in_control(struct socket *so, u_long cmd, void *data, struct ifnet *ifp,
 			return (EINVAL);
 		oldaddr = ia->ia_dstaddr;
 		ia->ia_dstaddr = *satocsin(ifreq_getdstaddr(cmd, ifr));
-		if ((error = (*ifp->if_ioctl)(ifp, SIOCSIFDSTADDR, ia)) != 0) {
+		if (ifp->if_ioctl != NULL &&
+		    (error = (*ifp->if_ioctl)(ifp, SIOCSIFDSTADDR,
+		                              (void *)ia)) != 0) {
 			ia->ia_dstaddr = oldaddr;
 			return error;
 		}
@@ -558,7 +569,11 @@ in_control(struct socket *so, u_long cmd, void *data, struct ifnet *ifp,
 #endif /* MROUTING */
 
 	default:
-		return ENOTTY;
+		if (ifp == NULL || ifp->if_ioctl == NULL)
+			return EOPNOTSUPP;
+		error = (*ifp->if_ioctl)(ifp, cmd, data);
+		in_setmaxmtu();
+		break;
 	}
 
 	if (error != 0 && newifaddr) {
@@ -876,7 +891,8 @@ in_ifinit(struct ifnet *ifp, struct in_ifaddr *ia,
 	 * if this is its first address,
 	 * and to validate the address if necessary.
 	 */
-	if ((error = (*ifp->if_ioctl)(ifp, SIOCINITIFADDR, ia)) != 0)
+	if (ifp->if_ioctl &&
+	    (error = (*ifp->if_ioctl)(ifp, SIOCSIFADDR, (void *)ia)))
 		goto bad;
 	splx(s);
 	if (scrub) {
@@ -1142,7 +1158,8 @@ in_addmulti(struct in_addr *ap, struct ifnet *ifp)
 		 */
 		sockaddr_in_init(&sin, ap, 0);
 		ifreq_setaddr(SIOCADDMULTI, &ifr, sintosa(&sin));
-		if ((*ifp->if_ioctl)(ifp, SIOCADDMULTI, &ifr) != 0) {
+		if ((ifp->if_ioctl == NULL) ||
+		    (*ifp->if_ioctl)(ifp, SIOCADDMULTI,(void *)&ifr) != 0) {
 			LIST_REMOVE(inm, inm_list);
 			pool_put(&inmulti_pool, inm);
 			splx(s);
@@ -1190,7 +1207,8 @@ in_delmulti(struct in_multi *inm)
 		 */
 		sockaddr_in_init(&sin, &inm->inm_addr, 0);
 		ifreq_setaddr(SIOCDELMULTI, &ifr, sintosa(&sin));
-		(*inm->inm_ifp->if_ioctl)(inm->inm_ifp, SIOCDELMULTI, &ifr);
+		(*inm->inm_ifp->if_ioctl)(inm->inm_ifp, SIOCDELMULTI,
+							     (void *)&ifr);
 		pool_put(&inmulti_pool, inm);
 	}
 	splx(s);

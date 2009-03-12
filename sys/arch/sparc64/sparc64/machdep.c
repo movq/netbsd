@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.235 2009/01/21 09:18:32 martin Exp $ */
+/*	$NetBSD: machdep.c,v 1.227.4.2 2010/03/17 03:10:39 snj Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.235 2009/01/21 09:18:32 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.227.4.2 2010/03/17 03:10:39 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -452,7 +452,7 @@ struct sigframe_siginfo {
 	ucontext_t	sf_uc;		/* saved ucontext */
 };
 
-void
+static void
 sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
@@ -468,6 +468,18 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct rwindow *newsp;
 	/* Allocate an aligned sigframe */
 	fp = (void *)((u_long)(fp - 1) & ~0x0f);
+
+	/* Build stack frame for signal trampoline. */
+	switch (ps->sa_sigdesc[sig].sd_vers) {
+	case 0:		/* handled by sendsig_sigcontext */
+	case 1:		/* handled by sendsig_sigcontext */
+	default:	/* unknown version */
+		printf("sendsig_siginfo: bad version %d\n",
+		    ps->sa_sigdesc[sig].sd_vers);
+		sigexit(l, SIGILL);
+	case 2:
+		break;
+	}
 
 	uc.uc_flags = _UC_SIGMASK |
 	    ((l->l_sigstk.ss_flags & SS_ONSTACK)
@@ -516,6 +528,17 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
+}
+
+void
+sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
+{
+#ifdef COMPAT_16
+	if (curproc->p_sigacts->sa_sigdesc[ksi->ksi_signo].sd_vers < 2)
+		sendsig_sigcontext(ksi, mask);
+	else
+#endif
+		sendsig_siginfo(ksi, mask);
 }
 
 /*
@@ -602,8 +625,6 @@ cpu_reboot(register int howto, char *user_boot_string)
 haltsys:
 	/* Run any shutdown hooks. */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 #ifdef MULTIPROCESSOR
 	/* Stop all secondary cpus */
@@ -751,12 +772,13 @@ dumpsys()
 		return;
 	}
 	if (dumplo <= 0) {
-		printf("\ndump to dev %" PRId32 ",%" PRId32 " not possible ("
-		    "partition too small?)\n", major(dumpdev), minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible (partition"
+		    " too small?)\n", major(dumpdev),
+		    minor(dumpdev));
 		return;
 	}
-	printf("\ndumping to dev %" PRId32 ",%" PRId32 " offset %ld\n",
-	    major(dumpdev), minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
+	    minor(dumpdev), dumplo);
 
 	psize = (*bdev->d_psize)(dumpdev);
 	if (psize == -1) {
@@ -1269,7 +1291,7 @@ _bus_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 			 * We should be flushing a subrange, but we
 			 * don't know where the segments starts.
 			 */
-			dcache_flush_page(pa);
+			dcache_flush_page_all(pa);
 		}
 	}
 
@@ -1595,7 +1617,7 @@ bus_space_translate_address_generic(struct openprom_range *ranges, int nranges,
 }
 
 int
-sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
+sparc_bus_map(bus_space_tag_t t, bus_addr_t	addr, bus_size_t size,
 	int flags, vaddr_t unused, bus_space_handle_t *hp)
 {
 	vaddr_t v;
@@ -1627,13 +1649,12 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 		 * out of IO mappings, config space will not be mapped in,
 		 * rather it will be accessed through MMU bypass ASI accesses.
 		 */
-		if (flags & BUS_SPACE_MAP_LINEAR)
-			return (-1);
+		if (flags & BUS_SPACE_MAP_LINEAR) return (-1);
 		hp->_ptr = addr;
 		hp->_asi = ASI_PHYS_NON_CACHED_LITTLE;
 		hp->_sasi = ASI_PHYS_NON_CACHED;
-		DPRINTF(BSDB_MAP, ("\n%s: config type %x flags %x "
-			"addr %016llx size %016llx virt %llx\n", __func__,
+		DPRINTF(BSDB_MAP, ("\nsparc_bus_map: type %x flags %x "
+			"addr %016llx size %016llx virt %llx\n",
 			(int)t->type, (int) flags, (unsigned long long)addr,
 			(unsigned long long)size,
 			(unsigned long long)hp->_ptr));
@@ -1663,8 +1684,7 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 	}
 #endif
 
-	if (!(flags & BUS_SPACE_MAP_CACHEABLE))
-		pm_flags |= PMAP_NC;
+	if (!(flags & BUS_SPACE_MAP_CACHEABLE)) pm_flags |= PMAP_NC;
 
 	if ((err = extent_alloc(io_space, size, PAGE_SIZE,
 		0, EX_NOWAIT|EX_BOUNDZERO, (u_long *)&v)))
@@ -1682,15 +1702,14 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 	if (!(flags&BUS_SPACE_MAP_READONLY))
 		pm_prot |= VM_PROT_WRITE;
 
-	DPRINTF(BSDB_MAP, ("\n%s: type %x flags %x addr %016llx prot %02x "
-		"pm_flags %x size %016llx virt %llx paddr %016llx\n", __func__,
-		(int)t->type, (int)flags, (unsigned long long)addr, pm_prot,
-		(int)pm_flags, (unsigned long long)size,
-		(unsigned long long)hp->_ptr, (unsigned long long)pa));
+	DPRINTF(BSDB_MAP, ("\nsparc_bus_map: type %x flags %x "
+		"addr %016llx size %016llx virt %llx paddr %016llx\n",
+		(int)t->type, (int) flags, (unsigned long long)addr,
+		(unsigned long long)size, (unsigned long long)hp->_ptr,
+		(unsigned long long)pa));
 
 	do {
-		DPRINTF(BSDB_MAP, ("%s: phys %llx virt %p hp %llx\n",
-			__func__, 
+		DPRINTF(BSDB_MAP, ("sparc_bus_map: phys %llx virt %p hp %llx\n",
 			(unsigned long long)pa, (char *)v,
 			(unsigned long long)hp->_ptr));
 		pmap_kenter_pa(v, pa | pm_flags, pm_prot);

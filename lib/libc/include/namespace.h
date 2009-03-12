@@ -1,4 +1,4 @@
-/*	$NetBSD: namespace.h,v 1.137 2009/01/11 02:46:28 christos Exp $	*/
+/*	$NetBSD: namespace.h,v 1.133.4.1 2009/07/14 19:48:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
@@ -32,13 +32,11 @@
 #include <sys/cdefs.h>
 
 #ifndef __lint__
-#define aio_suspend	_aio_suspend
 #define brk		_brk
 #define catclose	_catclose
 #define catgets		_catgets
 #define catopen		_catopen
 #define daylight	_daylight
-#define difftime	_difftime
 #define err		_err
 #define errx		_errx
 #ifdef _REENTRANT
@@ -117,6 +115,14 @@
 #define SHA1Init		_SHA1Init
 #define SHA1Transform		_SHA1Transform
 #define SHA1Update		_SHA1Update
+#define SHA224_Data		_SHA224_Data
+#define SHA224_End		_SHA224_End
+#define SHA224_FileChunk	_SHA224_FileChunk
+#define SHA224_File		_SHA224_File
+#define SHA224_Final		_SHA224_Final
+#define SHA224_Init		_SHA224_Init
+#define SHA224_Transform	_SHA224_Transform
+#define SHA224_Update		_SHA224_Update
 #define SHA256_Data		_SHA256_Data
 #define SHA256_End		_SHA256_End
 #define SHA256_FileChunk	_SHA256_FileChunk
@@ -193,8 +199,6 @@
 #define clnttcp_create		_clnttcp_create
 #define clntudp_bufcreate	_clntudp_bufcreate
 #define clntudp_create		_clntudp_create
-#define clock_gettime		_clock_gettime
-#define clock_getres		_clock_getres
 #define clock_settime		_clock_settime
 #define closedir		_closedir
 #define closelog		_closelog
@@ -206,7 +210,6 @@
 #define daemon			_daemon
 #define dbopen			_dbopen
 #define devname			_devname
-#define difftime		_difftime
 #define dirname			_dirname
 #define dn_expand		_dn_expand
 #define drand48			_drand48
@@ -425,12 +428,9 @@
 #define mpool_open		_mpool_open
 #define mpool_put		_mpool_put
 #define mpool_sync		_mpool_sync
-#define mq_timedreceive		_mq_timedreceive
-#define mq_timedsend		_mq_timedsend
 #define mrand48			_mrand48
 #define nc_perror		_nc_perror
 #define nc_sperror		_nc_sperror
-#define nanosleep		_nanosleep
 #define nice			_nice
 #if 0
 #define nlist			_nlist
@@ -440,7 +440,6 @@
 #define nsdispatch		_nsdispatch
 #define offtime			_offtime
 #define opendir			_opendir
-#define fdopendir		_fdopendir
 #define openlog			_openlog
 #define openlog_r		_openlog_r
 #define pause			_pause
@@ -450,19 +449,11 @@
 #define pmap_rmtcall		_pmap_rmtcall
 #define pmap_set		_pmap_set
 #define pmap_unset		_pmap_unset
-#define pollts			_pollts
 #define popen			_popen
 #define posix2time		_posix2time
 #define pread			_pread
-#define pselect			_pselect
 #define psignal			_psignal
 #define pthread_atfork		_pthread_atfork
-#define ptree_init		ptree_init
-#define ptree_insert_node	ptree_insert_node
-#define ptree_insert_mask_node	ptree_insert_mask_node
-#define ptree_find_filtered_node	ptree_find_filtered_node
-#define ptree_remove_node	ptree_remove_node
-#define ptree_iterate		ptree_iterate
 #define putenv			_putenv
 #define pwcache_groupdb		_pwcache_groupdb
 #define pwcache_userdb		_pwcache_userdb
@@ -504,7 +495,6 @@
 #define scandir			_scandir
 #define seed48			_seed48
 #define seekdir			_seekdir
-#define select			_select
 #define send			_send
 #define setdomainname		_setdomainname
 #define setenv			_setenv
@@ -539,7 +529,6 @@
 #define shquote			_shquote
 #define siginterrupt		_siginterrupt
 #define signal			_signal
-#define sigtimedwait		_sigtimedwait
 #define sl_add			_sl_add
 #define sl_create		_sl_create
 #define sl_delete		_sl_delete
@@ -611,9 +600,6 @@
 #define syslog			_syslog
 #define syslog_r		_syslog_r
 #define syslog_ss		_syslog_ss
-#define syslogp			_syslogp
-#define syslogp_r		_syslogp_r
-#define syslogp_ss		_syslogp_ss
 #define taddr2uaddr		_taddr2uaddr
 #define tcdrain			_tcdrain
 #define tcflow			_tcflow
@@ -656,12 +642,8 @@
 #define vsyslog			_vsyslog
 #define vsyslog_r		_vsyslog_r
 #define vsyslog_ss		_vsyslog_ss
-#define vsyslogp		_vsyslogp
-#define vsyslogp_r		_vsyslogp_r
-#define vsyslogp_ss		_vsyslogp_ss
 #define wait			_wait
 #define wait3			_wait3
-#define wait4			_wait4
 #define waitpid			_waitpid
 #define wcscasecmp		_wcscasecmp
 #define wcsdup			_wcsdup

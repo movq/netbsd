@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.2 2008/12/05 22:51:42 christos Exp $ */
+/*	$NetBSD: extern.h,v 1.1.1.1.8.1 2009/01/20 02:41:11 snj Exp $ */
 
 /* Do not edit: automatically built by build/distrib. */
 SCR *api_fscreen __P((int, char *));

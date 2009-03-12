@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.h,v 1.3 2009/01/18 03:43:45 lukem Exp $ */
+/*	$NetBSD: mem.h,v 1.1.1.2.6.1 2009/01/20 02:41:11 snj Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994
@@ -41,7 +41,7 @@
 #define	BINC_RET(sp, type, lp, llen, nlen) {				\
 	CHECK_TYPE(type *, lp)						\
 	void *L__bincp;							\
-	if ((size_t)(nlen) > llen) {					\
+	if ((nlen) > llen) {						\
 		if ((L__bincp = binc(sp, lp, &(llen), nlen)) == NULL)	\
 			return (1);					\
 		/*							\

@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_sem.c,v 1.85 2009/01/11 02:45:53 christos Exp $	*/
+/*	$NetBSD: sysv_sem.c,v 1.84 2008/09/19 11:21:33 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2007 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.85 2009/01/11 02:45:53 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.84 2008/09/19 11:21:33 rmind Exp $");
 
 #define SYSVSEM
 
@@ -441,8 +441,7 @@ semundo_clear(int semid, int semnum)
 }
 
 int
-sys_____semctl50(struct lwp *l, const struct sys_____semctl50_args *uap,
-    register_t *retval)
+sys_____semctl13(struct lwp *l, const struct sys_____semctl13_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) semid;

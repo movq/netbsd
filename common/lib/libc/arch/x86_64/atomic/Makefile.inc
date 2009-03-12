@@ -1,7 +1,6 @@
-#	$NetBSD: Makefile.inc,v 1.6 2009/01/04 17:54:29 pooka Exp $
+#	$NetBSD: Makefile.inc,v 1.5 2008/09/29 08:43:01 ad Exp $
 
-.if defined(LIB) && (${LIB} == "kern" || ${LIB} == "c" || ${LIB} == "pthread" \
-	|| ${LIB} == "rump")
+.if defined(LIB) && (${LIB} == "kern" || ${LIB} == "c" || ${LIB} == "pthread")
 
 SRCS+=	atomic.S
 

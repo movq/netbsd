@@ -1,4 +1,4 @@
-#	$NetBSD: list.ldd,v 1.1 2009/01/07 00:39:24 mrg Exp $
+#	$NetBSD: list.ldd,v 1.1.2.2 2009/01/16 22:21:30 bouyer Exp $
 
 PROG	ldd
 

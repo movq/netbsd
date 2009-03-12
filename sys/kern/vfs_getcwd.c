@@ -1,4 +1,4 @@
-/* $NetBSD: vfs_getcwd.c,v 1.43 2009/01/17 07:02:35 yamt Exp $ */
+/* $NetBSD: vfs_getcwd.c,v 1.42 2008/04/28 20:24:05 martin Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.43 2009/01/17 07:02:35 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.42 2008/04/28 20:24:05 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_getcwd.c,v 1.43 2009/01/17 07:02:35 yamt Exp $")
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/uio.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/dirent.h>
 #include <sys/kauth.h>
 
@@ -158,7 +158,7 @@ getcwd_scandir(struct vnode **lvpp, struct vnode **uvpp, char **bpp,
 	dirbuflen = DIRBLKSIZ;
 	if (dirbuflen < va.va_blocksize)
 		dirbuflen = va.va_blocksize;
-	dirbuf = kmem_alloc(dirbuflen, KM_SLEEP);
+	dirbuf = (char *)malloc(dirbuflen, M_TEMP, M_WAITOK);
 
 #if 0
 unionread:
@@ -258,7 +258,7 @@ unionread:
 
 out:
 	*lvpp = NULL;
-	kmem_free(dirbuf, dirbuflen);
+	free(dirbuf, M_TEMP);
 	return error;
 }
 
@@ -524,7 +524,7 @@ sys___getcwd(struct lwp *l, const struct sys___getcwd_args *uap, register_t *ret
 	else if (len < 2)
 		return ERANGE;
 
-	path = kmem_alloc(len, KM_SLEEP);
+	path = (char *)malloc(len, M_TEMP, M_WAITOK);
 	if (!path)
 		return ENOMEM;
 
@@ -551,7 +551,7 @@ sys___getcwd(struct lwp *l, const struct sys___getcwd_args *uap, register_t *ret
 	error = copyout(bp, SCARG(uap, bufp), lenused);
 
 out:
-	kmem_free(path, len);
+	free(path, M_TEMP);
 	return error;
 }
 

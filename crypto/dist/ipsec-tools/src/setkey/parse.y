@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.y,v 1.12 2009/03/06 11:45:03 tteras Exp $	*/
+/*	$NetBSD: parse.y,v 1.10.18.2 2009/02/08 18:42:19 snj Exp $	*/
 
 /*	$KAME: parse.y,v 1.81 2003/07/01 04:01:48 itojun Exp $	*/
 
@@ -211,27 +211,11 @@ delete_command
 deleteall_command
 	:	DELETEALL ipaddropts ipaddr ipaddr protocol_spec EOT
 		{
-#ifndef __linux__
-			if (setkeymsg_addr(SADB_DELETE, $5, $3, $4, 1) < 0)
-				return -1;
-#else /* __linux__ */
-			/* linux strictly adheres to RFC2367, and returns
-			 * an error if we send an SADB_DELETE request without
-			 * an SPI. Therefore, we must first retrieve a list
-			 * of SPIs for all matching SADB entries, and then
-			 * delete each one separately. */
-			u_int32_t *spi;
-			int i, n;
+			int status;
 
-			spi = sendkeymsg_spigrep($5, $3, $4, &n);
-			for (i = 0; i < n; i++) {
-				p_spi = spi[i];
-				if (setkeymsg_addr(SADB_DELETE,
-							$5, $3, $4, 0) < 0)
-					return -1;
-			}
-			free(spi);
-#endif /* __linux__ */
+			status = setkeymsg_addr(SADB_DELETE, $5, $3, $4, 1);
+			if (status < 0)
+				return -1;
 		}
 	;
 
@@ -581,11 +565,10 @@ spdadd_command
 			last_msg_type = SADB_X_SPDADD;
 #endif
 
-			/* fixed port fields if ulp is icmp */
+			/* fixed port fields if ulp is icmpv6 */
 			if ($10.buf != NULL) {
-				if (($9 != IPPROTO_ICMPV6) &&
-					($9 != IPPROTO_ICMP) &&
-					($9 != IPPROTO_MH))
+				if ( ($9 != IPPROTO_ICMPV6) &&
+					 ($9 != IPPROTO_MH))
 					return -1;
 				free($5.buf);
 				free($8.buf);
@@ -630,10 +613,9 @@ spddelete_command
 			int status;
 			struct addrinfo *src, *dst;
 
-			/* fixed port fields if ulp is icmp */
+			/* fixed port fields if ulp is icmpv6 */
 			if ($10.buf != NULL) {
 				if (($9 != IPPROTO_ICMPV6) &&
-					($9 != IPPROTO_ICMP) &&
 					($9 != IPPROTO_MH))
 					return -1;
 				free($5.buf);

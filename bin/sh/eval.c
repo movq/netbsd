@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.96 2009/01/19 19:47:11 christos Exp $	*/
+/*	$NetBSD: eval.c,v 1.93 2008/05/26 14:55:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)eval.c	8.9 (Berkeley) 6/8/95";
 #else
-__RCSID("$NetBSD: eval.c,v 1.96 2009/01/19 19:47:11 christos Exp $");
+__RCSID("$NetBSD: eval.c,v 1.93 2008/05/26 14:55:17 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -759,13 +759,13 @@ evalcommand(union node *cmd, int flgs, struct backcmd *backcmd)
 		for (sp = varlist.list ; sp ; sp = sp->next) {
 			if (sep != 0)
 				outc(sep, &errout);
-			out2shstr(sp->text);
+			out2str(sp->text);
 			sep = ' ';
 		}
 		for (sp = arglist.list ; sp ; sp = sp->next) {
 			if (sep != 0)
 				outc(sep, &errout);
-			out2shstr(sp->text);
+			out2str(sp->text);
 			sep = ' ';
 		}
 		outc('\n', &errout);

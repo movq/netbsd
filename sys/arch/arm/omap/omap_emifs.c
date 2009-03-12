@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_emifs.c,v 1.4 2008/12/12 17:36:14 matt Exp $ */
+/*	$NetBSD: omap_emifs.c,v 1.2 2008/05/02 23:46:12 martin Exp $ */
 
 
 /*
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap_emifs.c,v 1.4 2008/12/12 17:36:14 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap_emifs.c,v 1.2 2008/05/02 23:46:12 martin Exp $");
 
 #include "locators.h"
 
@@ -116,7 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: omap_emifs.c,v 1.4 2008/12/12 17:36:14 matt Exp $");
 #include <arm/omap/omap_emifs.h>
 
 struct emifs_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	bus_dma_tag_t		sc_dmac;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
@@ -135,11 +135,11 @@ typedef struct timing_parm_info {
 } timing_parm_info;
 
 /* prototypes */
-static int	emifs_match(device_t, cfdata_t, void *);
-static void	emifs_attach(device_t, device_t, void *);
+static int	emifs_match(struct device *, struct cfdata *, void *);
+static void	emifs_attach(struct device *, struct device *, void *);
 static u_int	emifs_cvt_nsec(const timing_parm_info *, u_int, int);
-static void	emifs_set_timing(struct emifs_softc *, cfdata_t );
-static int 	emifs_search(device_t, cfdata_t,
+static void	emifs_set_timing(struct emifs_softc *, struct cfdata *);
+static int 	emifs_search(struct device *, struct cfdata *,
 			     const int *, void *);
 static int	emifs_print(void *, const char *);
 
@@ -165,13 +165,13 @@ static const timing_parm_info timing_parms[] = {
 };
 
 /* attach structures */
-CFATTACH_DECL_NEW(emifs, sizeof(struct emifs_softc),
+CFATTACH_DECL(emifs, sizeof(struct emifs_softc),
     emifs_match, emifs_attach, NULL, NULL);
 
 static int emifs_attached;
 
 static int
-emifs_match(device_t parent, cfdata_t match, void *aux)
+emifs_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	if (emifs_attached)
 		return 0;
@@ -179,12 +179,11 @@ emifs_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-emifs_attach(device_t parent, device_t self, void *aux)
+emifs_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct emifs_softc *sc = device_private(self);
+	struct emifs_softc *sc = (struct emifs_softc *)self;
 	struct mainbus_attach_args *mainbus = aux;
 
-	sc->sc_dev = self;
 	/*
 	 * mainbus->mb_iot always multiplies the offset by 4 and doesn't seem
 	 * to be widely used, so I'm just going to use the omap bus.
@@ -199,7 +198,7 @@ emifs_attach(device_t parent, device_t self, void *aux)
 		if (bus_space_map(sc->sc_iot,
 				  mainbus->mb_iobase, EMIFS_SIZE,
 				  0, &sc->sc_ioh))
-			panic("%s: Cannot map registers", device_xname(self));
+			panic("%s: Cannot map registers", self->dv_xname);
 	} else
 		sc->sc_iot = NULL;
 
@@ -257,7 +256,7 @@ emifs_cvt_nsec(const timing_parm_info *tp, u_int source_freq, int nsec)
 }
 
 static void
-emifs_set_timing(struct emifs_softc *sc, cfdata_t cf)
+emifs_set_timing(struct emifs_softc *sc, struct cfdata *cf)
 {
 	static const u_int tc_freq = OMAP_TC_CLOCK_FREQ;
 	/* We force REF to be the same frequency as TC. */
@@ -345,9 +344,10 @@ emifs_set_timing(struct emifs_softc *sc, cfdata_t cf)
 }
 
 static int
-emifs_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+emifs_search(struct device *parent, struct cfdata *cf,
+	     const int *ldesc, void *aux)
 {
-	struct emifs_softc *sc = device_private(parent);
+	struct emifs_softc *sc = (struct emifs_softc *)parent;
 	struct emifs_attach_args aa;
 
 	/* Set up the attach args. */

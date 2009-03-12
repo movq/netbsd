@@ -1,4 +1,4 @@
-/*      $NetBSD: trap.h,v 1.22 2009/02/16 23:55:31 christos Exp $     */
+/*      $NetBSD: trap.h,v 1.21.4.1 2009/02/24 03:01:10 snj Exp $     */
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.

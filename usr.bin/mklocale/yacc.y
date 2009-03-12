@@ -1,4 +1,4 @@
-/*	$NetBSD: yacc.y,v 1.27 2009/01/05 06:11:43 tnozaki Exp $	*/
+/*	$NetBSD: yacc.y,v 1.24.40.3 2009/01/15 04:21:26 snj Exp $	*/
 
 %{
 /*-
@@ -43,7 +43,7 @@
 static char sccsid[] = "@(#)yacc.y	8.1 (Berkeley) 6/6/93";
 static char rcsid[] = "$FreeBSD$";
 #else
-__RCSID("$NetBSD: yacc.y,v 1.27 2009/01/05 06:11:43 tnozaki Exp $");
+__RCSID("$NetBSD: yacc.y,v 1.24.40.3 2009/01/15 04:21:26 snj Exp $");
 #endif
 #endif /* not lint */
 

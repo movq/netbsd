@@ -1,4 +1,4 @@
-/*	$NetBSD: xen.h,v 1.31 2009/02/13 21:03:59 bouyer Exp $	*/
+/*	$NetBSD: xen.h,v 1.30.4.1 2009/10/03 23:54:05 snj Exp $	*/
 
 /*
  *

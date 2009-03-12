@@ -1,4 +1,4 @@
-/*	$NetBSD: termcap.c,v 1.55 2009/03/02 22:46:21 bad Exp $	*/
+/*	$NetBSD: termcap.c,v 1.54.18.1 2009/08/04 20:04:39 snj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)termcap.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: termcap.c,v 1.55 2009/03/02 22:46:21 bad Exp $");
+__RCSID("$NetBSD: termcap.c,v 1.54.18.1 2009/08/04 20:04:39 snj Exp $");
 #endif
 #endif /* not lint */
 

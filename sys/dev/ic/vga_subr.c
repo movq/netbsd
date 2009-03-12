@@ -1,4 +1,4 @@
-/* $NetBSD: vga_subr.c,v 1.24 2009/02/02 15:59:20 tsutsui Exp $ */
+/* $NetBSD: vga_subr.c,v 1.23 2007/12/09 20:28:00 jmcneill Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_subr.c,v 1.24 2009/02/02 15:59:20 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_subr.c,v 1.23 2007/12/09 20:28:00 jmcneill Exp $");
 
 /* for WSDISPLAY_BORDER_COLOR */
 #include "opt_wsdisplay_border.h"
@@ -149,12 +149,12 @@ vga_copyfont01(struct vga_handle *vh)
 void
 vga_setfontset(struct vga_handle *vh, int fontset1, int fontset2)
 {
-	uint8_t cmap;
-	static const uint8_t cmaptaba[] = {
+	u_int8_t cmap;
+	static const u_int8_t cmaptaba[] = {
 		0x00, 0x10, 0x01, 0x11,
 		0x02, 0x12, 0x03, 0x13
 	};
-	static const uint8_t cmaptabb[] = {
+	static const u_int8_t cmaptabb[] = {
 		0x00, 0x20, 0x04, 0x24,
 		0x08, 0x28, 0x0c, 0x2c
 	};
@@ -194,7 +194,7 @@ vga_setscreentype(struct vga_handle *vh, const struct wsscreen_descr *type)
 
 #else /* !VGA_RASTERCONSOLE */
 void
-vga_load_builtinfont(struct vga_handle *vh, uint8_t *font, int firstchar,
+vga_load_builtinfont(struct vga_handle *vh, u_int8_t *font, int firstchar,
 	int numchars)
 {
 	int i, s;
@@ -218,9 +218,11 @@ vga_load_builtinfont(struct vga_handle *vh, uint8_t *font, int firstchar,
  *	whose firmware does not use text mode at boot time.
  */
 void
-vga_reset(struct vga_handle *vh, void (*md_initfunc)(struct vga_handle *))
+vga_reset(vh, md_initfunc)
+	struct vga_handle *vh;
+	void (*md_initfunc)(struct vga_handle *);
 {
-	uint8_t reg;
+	u_int8_t reg;
 
 	if (bus_space_map(vh->vh_iot, 0x3c0, 0x10, 0, &vh->vh_ioh_vga))
 		return;
@@ -272,7 +274,7 @@ vga_reset(struct vga_handle *vh, void (*md_initfunc)(struct vga_handle *))
 #define VGA_MISCOUT	0x66
 
 /* sequencer registers */
-static const uint8_t vga_ts[] = {
+static const u_int8_t vga_ts[] = {
 	0x03,	/* 00: reset */
 	0x00,	/* 01: clocking mode */
 	0x03,	/* 02: map mask */
@@ -281,7 +283,7 @@ static const uint8_t vga_ts[] = {
 };
 
 /* CRT controller registers */
-static const uint8_t vga_crtc[] = {
+static const u_int8_t vga_crtc[] = {
 	0x5f,	/* 00: horizontal total */
 	0x4f,	/* 01: horizontal display-enable end */
 	0x50,	/* 02: start horizontal blanking */
@@ -310,7 +312,7 @@ static const uint8_t vga_crtc[] = {
 };
 
 /* graphics controller registers */
-static const uint8_t vga_gdc[] = {
+static const u_int8_t vga_gdc[] = {
 	0x00,	/* 00: set/reset map */
 	0x00,	/* 01: enable set/reset */
 	0x00,	/* 02: color compare */
@@ -323,7 +325,7 @@ static const uint8_t vga_gdc[] = {
 };
 
 /* attribute controller registers */
-static const uint8_t vga_atc[] = {
+static const u_int8_t vga_atc[] = {
 	0x00,	/* 00: internal palette  0 */
 	0x01,	/* 01: internal palette  1 */
 	0x02,	/* 02: internal palette  2 */
@@ -349,7 +351,7 @@ static const uint8_t vga_atc[] = {
 
 /* video DAC palette registers */
 /* XXX only set up 16 colors used by internal palette in ATC regsters */
-static const uint8_t vga_dacpal[] = {
+static const u_int8_t vga_dacpal[] = {
 	/* R     G     B */
 	0x00, 0x00, 0x00,	/* BLACK        */
 	0x00, 0x00, 0x2a,	/* BLUE	        */
@@ -370,7 +372,8 @@ static const uint8_t vga_dacpal[] = {
 };
 
 void
-vga_initregs(struct vga_handle *vh)
+vga_initregs(vh)
+	struct vga_handle *vh;
 {
 	int i;
 

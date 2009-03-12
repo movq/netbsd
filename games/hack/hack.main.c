@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.main.c,v 1.10 2008/01/28 06:55:41 dholland Exp $	*/
+/*	$NetBSD: hack.main.c,v 1.10.10.2 2009/06/29 23:33:53 snj Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.main.c,v 1.10 2008/01/28 06:55:41 dholland Exp $");
+__RCSID("$NetBSD: hack.main.c,v 1.10.10.2 2009/06/29 23:33:53 snj Exp $");
 #endif				/* not lint */
 
 #include <signal.h>
@@ -302,13 +302,14 @@ main(argc, argv)
 				}
 				*gp = 0;
 			} else
-				(void) strcpy(genocided, sfoo);
+				(void) strlcpy(genocided, sfoo,
+						sizeof(genocided));
 			(void) strcpy(fut_geno, genocided);
 		}
 	}
 #endif
 	setftty();
-	(void) sprintf(SAVEF, "save/%d%s", getuid(), plname);
+	(void) snprintf(SAVEF, sizeof(SAVEF), "save/%d%s", getuid(), plname);
 	regularize(SAVEF + 5);	/* avoid . or / in name */
 	if ((fd = open(SAVEF, O_RDONLY)) >= 0 &&
 	    (uptodate(fd) || unlink(SAVEF) == 666)) {
@@ -481,12 +482,12 @@ glo(foo)
 	int foo;
 {
 	/* construct the string  xlock.n  */
-	char           *tf;
+	size_t pos;
 
-	tf = lock;
-	while (*tf && *tf != '.')
-		tf++;
-	(void) sprintf(tf, ".%d", foo);
+	pos = 0;
+	while (lock[pos] && lock[pos] != '.')
+		pos++;
+	(void) snprintf(lock + pos, sizeof(lock) - pos, ".%d", foo);
 }
 
 /*

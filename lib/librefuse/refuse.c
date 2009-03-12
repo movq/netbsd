@@ -1,4 +1,4 @@
-/*	$NetBSD: refuse.c,v 1.92 2009/03/05 01:21:57 msaitoh Exp $	*/
+/*	$NetBSD: refuse.c,v 1.89 2008/08/01 15:54:09 dillo Exp $	*/
 
 /*
  * Copyright © 2007 Alistair Crooks.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: refuse.c,v 1.92 2009/03/05 01:21:57 msaitoh Exp $");
+__RCSID("$NetBSD: refuse.c,v 1.89 2008/08/01 15:54:09 dillo Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -1084,7 +1084,7 @@ puffs_fuse_node_write(struct puffs_usermount *pu, void *opc, uint8_t *buf,
 	    &rn->file_info);
 
 	if (ret > 0) {
-		if ((uint64_t)(offset + ret) > pn->pn_va.va_size)
+		if (offset + ret > pn->pn_va.va_size)
 			pn->pn_va.va_size = offset + ret;
 		*resid -= ret;
 		ret = 0;
@@ -1140,7 +1140,7 @@ puffs_fuse_node_readdir(struct puffs_usermount *pu, void *opc,
 	}
 
 	/* now, stuff results into the kernel buffers */
-	while (*readoff < (off_t)(dirh->bufsize - dirh->reslen)) {
+	while (*readoff < dirh->bufsize - dirh->reslen) {
 		/*LINTED*/
 		fromdent = (struct dirent *)((uint8_t *)dirh->dbuf + *readoff);
 
@@ -1286,7 +1286,7 @@ fuse_new(struct fuse_chan *fc, struct fuse_args *args,
 		err(EXIT_FAILURE, "fuse_new");
 	}
 
-	/* copy fuse ops to their own structure */
+	/* copy fuse ops to their own stucture */
 	(void) memcpy(&fuse->op, ops, sizeof(fuse->op));
 
 	fusectx = fuse_get_context();

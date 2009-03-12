@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_sig.c,v 1.21 2009/01/11 02:45:53 christos Exp $	*/
+/*	$NetBSD: sys_sig.c,v 1.17.4.3 2010/01/07 07:04:50 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -66,7 +66,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_sig.c,v 1.21 2009/01/11 02:45:53 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_sig.c,v 1.17.4.3 2010/01/07 07:04:50 snj Exp $");
+
+#include "opt_ptrace.h"
+#include "opt_compat_netbsd.h"
+#include "opt_compat_netbsd32.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -79,7 +83,38 @@ __KERNEL_RCSID(0, "$NetBSD: sys_sig.c,v 1.21 2009/01/11 02:45:53 christos Exp $"
 #include <sys/kauth.h>
 #include <sys/wait.h>
 #include <sys/kmem.h>
-#include <sys/module.h>
+
+#ifdef COMPAT_16
+/* ARGSUSED */
+int
+compat_16_sys___sigaction14(struct lwp *l, const struct compat_16_sys___sigaction14_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int)				signum;
+		syscallarg(const struct sigaction *)	nsa;
+		syscallarg(struct sigaction *)		osa;
+	} */
+	struct sigaction	nsa, osa;
+	int			error;
+
+	if (SCARG(uap, nsa)) {
+		error = copyin(SCARG(uap, nsa), &nsa, sizeof(nsa));
+		if (error)
+			return (error);
+	}
+	error = sigaction1(l, SCARG(uap, signum),
+	    SCARG(uap, nsa) ? &nsa : 0, SCARG(uap, osa) ? &osa : 0,
+	    NULL, 0);
+	if (error)
+		return (error);
+	if (SCARG(uap, osa)) {
+		error = copyout(&osa, SCARG(uap, osa), sizeof(osa));
+		if (error)
+			return (error);
+	}
+	return (0);
+}
+#endif
 
 /* ARGSUSED */
 int
@@ -312,8 +347,7 @@ sys_setcontext(struct lwp *l, const struct sys_setcontext_args *uap, register_t 
  * it's own sigtimedwait() wrapper to DTRT WRT individual threads.
  */
 int
-sys_____sigtimedwait50(struct lwp *l,
-    const struct sys_____sigtimedwait50_args *uap, register_t *retval)
+sys___sigtimedwait(struct lwp *l, const struct sys___sigtimedwait_args *uap, register_t *retval)
 {
 
 	return __sigtimedwait1(l, uap, retval, copyout, copyin, copyout);
@@ -328,7 +362,6 @@ sigaction1(struct lwp *l, int signum, const struct sigaction *nsa,
 	sigset_t tset;
 	int prop, error;
 	ksiginfoq_t kq;
-	static bool v0v1valid;
 
 	if (signum <= 0 || signum >= NSIG)
 		return (EINVAL);
@@ -344,62 +377,16 @@ sigaction1(struct lwp *l, int signum, const struct sigaction *nsa,
 	 * vers if a new sigaction was supplied. Emulations use legacy
 	 * kernel trampolines with version 0, alternatively check for that
 	 * too.
-	 *
-	 * If version < 2, we try to autoload the compat module.  Note
-	 * that we interlock with the unload check in compat_modcmd()
-	 * using module_lock.  If the autoload fails, we don't try it
-	 * again for this process.
 	 */
-	if (nsa != NULL) {
-		if (__predict_false(vers < 2) &&
-		    (p->p_lflag & PL_SIGCOMPAT) == 0) {
-			mutex_enter(&module_lock);
-			if (sendsig_sigcontext_vec == NULL) {
-				(void)module_autoload("compat",
-				    MODULE_CLASS_ANY);
-			}
-			if (sendsig_sigcontext_vec != NULL) {
-				/*
-				 * We need to remember if the
-				 * sigcontext method may be useable,
-				 * because libc may use it even
-				 * if siginfo is available.
-				 */
-				v0v1valid = true;
-			}
-			mutex_enter(proc_lock);
-			/*
-			 * Prevent unload of compat module while
-			 * this process remains.
-			 */
-			p->p_lflag |= PL_SIGCOMPAT;
-			mutex_exit(proc_lock);
-			mutex_exit(&module_lock);
-		}
-
-		switch (vers) {
-		case 0:
-			/* sigcontext, kernel supplied trampoline. */
-			if (tramp != NULL || !v0v1valid) {
-				return EINVAL;
-			}
-			break;
-		case 1:
-			/* sigcontext, user supplied trampoline. */
-			if (tramp == NULL || !v0v1valid) {
-				return EINVAL;
-			}
-			break;
-		case 2:
-		case 3:
-			/* siginfo, user supplied trampoline. */
-			if (tramp == NULL) {
-				return EINVAL;
-			}
-			break;
-		default:
-			return EINVAL;
-		}
+	if ((vers != 0 && tramp == NULL) ||
+#ifdef SIGTRAMP_VALID
+	    (nsa != NULL &&
+	    ((vers == 0) ?
+		(p->p_emul->e_sigcode == NULL) :
+		!SIGTRAMP_VALID(vers))) ||
+#endif
+	    (vers == 0 && tramp != NULL)) {
+		return (EINVAL);
 	}
 
 	mutex_enter(p->p_lock);
@@ -623,8 +610,7 @@ sigaltstack1(struct lwp *l, const struct sigaltstack *nss,
 }
 
 int
-__sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
-    register_t *retval,
+__sigtimedwait1(struct lwp *l, const struct sys___sigtimedwait_args *uap, register_t *retval,
     copyout_t put_info, copyin_t fetch_timeout, copyout_t put_timeout)
 {
 	/* {
@@ -636,7 +622,7 @@ __sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 	int error, signum;
 	int timo = 0;
 	struct timespec ts, tsstart, tsnow;
-	ksiginfo_t *ksi;
+	ksiginfo_t ksi;
 
 	memset(&tsstart, 0, sizeof tsstart);	 /* XXX gcc */
 
@@ -644,17 +630,16 @@ __sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 	 * Calculate timeout, if it was specified.
 	 */
 	if (SCARG(uap, timeout)) {
-		uint64_t ms;
+		error = (*fetch_timeout)(SCARG(uap, timeout), &ts, sizeof(ts));
+		if (error)
+			return error;
 
-		if ((error = (*fetch_timeout)(SCARG(uap, timeout), &ts, sizeof(ts))))
-			return (error);
+		if ((error = itimespecfix(&ts)) != 0)
+			return error;
 
-		ms = (ts.tv_sec * 1000) + (ts.tv_nsec / 1000000);
-		timo = mstohz(ms);
-		if (timo == 0 && ts.tv_sec == 0 && ts.tv_nsec > 0)
-			timo = 1;
-		if (timo <= 0)
-			return (EAGAIN);
+		timo = tstohz(&ts);
+		if (timo == 0 && ts.tv_sec == 0 && ts.tv_nsec != 0)
+			timo++;
 
 		/*
 		 * Remember current uptime, it would be used in
@@ -675,13 +660,6 @@ __sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 	 */
 	sigminusset(&sigcantmask, &l->l_sigwaitset);
 
-	/*
-	 * Allocate a ksi up front.  We can't sleep with the mutex held.
-	 */
-	ksi = ksiginfo_alloc(p, NULL, PR_WAITOK);
-	if (ksi == NULL)
-		return (ENOMEM);
-
 	mutex_enter(p->p_lock);
 
 	/*
@@ -693,8 +671,8 @@ __sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 		goto out;
 	}
 
-	if ((signum = sigget(&p->p_sigpend, ksi, 0, &l->l_sigwaitset)) == 0)
-		signum = sigget(&l->l_sigpend, ksi, 0, &l->l_sigwaitset);
+	if ((signum = sigget(&p->p_sigpend, &ksi, 0, &l->l_sigwaitset)) == 0)
+		signum = sigget(&l->l_sigpend, &ksi, 0, &l->l_sigwaitset);
 
 	if (signum != 0) {
 		/*
@@ -707,7 +685,7 @@ __sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 	/*
 	 * Set up the sigwait list.
 	 */
-	l->l_sigwaited = ksi;
+	l->l_sigwaited = &ksi;
 	LIST_INSERT_HEAD(&p->p_sigwaiters, l, l_sigwaiter);
 
 	/*
@@ -762,10 +740,8 @@ __sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 	 */
  out:
 	if (error == 0)
-		error = (*put_info)(&ksi->ksi_info, SCARG(uap, info),
-		    sizeof(ksi->ksi_info));
-
-	ksiginfo_free(ksi);
+		error = (*put_info)(&ksi.ksi_info, SCARG(uap, info),
+		    sizeof(ksi.ksi_info));
 
 	return error;
 }

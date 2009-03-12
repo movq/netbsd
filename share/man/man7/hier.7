@@ -1,4 +1,4 @@
-.\"	$NetBSD: hier.7,v 1.84 2009/01/14 01:51:29 reed Exp $
+.\"	$NetBSD: hier.7,v 1.81 2008/05/22 12:51:43 lukem Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)hier.7	8.5 (Berkeley) 6/1/94
 .\"
-.Dd January 13, 2009
+.Dd May 22, 2008
 .Dt HIER 7
 .Os
 .Sh NAME
@@ -67,10 +67,6 @@ utilities used in both single and multi-user environments
 .It Sy /boot*
 second-stage boot loader(s) for some platforms; see
 .Xr installboot 8
-.It Sy /cdrom/
-empty directory commonly used by
-system administrators as a temporary mount point for CD devices
-for ISO-9660 file systems
 .It Sy /dev/
 block, character and other special device files
 .Pp
@@ -104,9 +100,6 @@ kernel physical memory device; see
 .It Sy null
 the null device; see
 .Xr null 4
-.It Sy pts/
-mount point for the pseudo-terminal device file system; see
-.Xr mount_ptyfs 8
 .It Sy stderr
 .It Sy stdin
 .It Sy stdout
@@ -344,9 +337,6 @@ see
 .It Sy /home/
 mount point for the automounter; see
 .Xr amd 8
-.It Sy /kern/
-mount point for the kern file system; see
-.Xr mount_kernfs 8
 .It Sy /lib/
 dynamic linked libraries used by dynamic linked programs
 (such as those in
@@ -367,9 +357,6 @@ system administrators as a temporary mount point
 .It Sy /netbsd
 pure kernel executable (the operating system loaded into memory
 at boot time).
-.It Sy /proc/
-mount point for the process file system; see
-.Xr mount_procfs 8
 .It Sy /rescue/
 statically linked rescue tools, for use in system recovery
 .It Sy /root/
@@ -474,6 +461,8 @@ system daemons \*[Am] system utilities (executed by other programs)
 UUCP binaries and scripts (historically placed; to be moved)
 .El
 .Pp
+.It Sy lkm/
+loadable kernel modules
 .It Sy mdec/
 boot blocks, etc.
 .It Sy obj/
@@ -558,6 +547,8 @@ text files used by various games
 .It Sy i18n/
 internationalization databases; see
 .Xr iconv 3
+.It Sy lkm/
+documentation on the loadable kernel modules interface
 .It Sy locale/
 locale databases and gettext message catalogs; see
 .Xr setlocale 3
@@ -942,6 +933,24 @@ C library routines used in the kernel
 machine independent stand alone kernel library
 .It Sy libz/
 compression library
+.El
+.Pp
+.It Sy lkm/
+loadable kernel modules
+.Pp
+.Bl -tag -width "gdbscripts/" -compact
+.It Sy compat/
+LKM support compatibility modules;  currently unsupported.
+.It Sy netinet/
+LKM support networking modules
+.Pp
+.Bl -tag -width "if_ipl/" -compact
+.It Sy if_ipl/
+LKM for IP-Filter
+.El
+.Pp
+.It Sy vfs/
+LKM support for file systems.
 .El
 .Pp
 .It Sy miscfs/

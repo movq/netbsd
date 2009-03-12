@@ -1,4 +1,4 @@
-/*	$NetBSD: fdisk.c,v 1.117 2009/01/18 21:15:14 apb Exp $ */
+/*	$NetBSD: fdisk.c,v 1.116.6.3 2010/01/09 01:04:48 snj Exp $ */
 
 /*
  * Mach Operating System
@@ -39,7 +39,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: fdisk.c,v 1.117 2009/01/18 21:15:14 apb Exp $");
+__RCSID("$NetBSD: fdisk.c,v 1.116.6.3 2010/01/09 01:04:48 snj Exp $");
 #endif /* not lint */
 
 #define MBRPTYPENAMES
@@ -119,6 +119,16 @@ static char lbuf[LBUF];
 
 #ifndef PRIdaddr
 #define PRIdaddr PRId64
+#endif
+
+#ifndef PRId64
+#if HAVE_LONG_LONG
+#define PRId64 "lld"
+#endif
+#endif
+
+#ifndef PRIu32
+#define PRIu32 "lu"
 #endif
 
 #ifndef _PATH_DEFDISK
@@ -236,7 +246,7 @@ int	get_params(void);
 int	read_s0(daddr_t, struct mbr_sector *);
 int	write_mbr(void);
 int	yesno(const char *, ...);
-int	decimal(const char *, int, int, int, int);
+int64_t	decimal(const char *, int64_t, int, int64_t, int64_t);
 #define DEC_SEC		1		/* asking for a sector number */
 #define	DEC_RND		2		/* round to end of first track */
 #define	DEC_RND_0	4		/* round 0 to size of a track */
@@ -286,8 +296,8 @@ main(int argc, char *argv[])
 	char *cbootmenu = 0;
 #endif
 
-	int csysid, cstart, csize;	/* For the b_flag. */
-
+	int csysid;	/* For the b_flag. */
+	unsigned int cstart, csize;
 	a_flag = i_flag = u_flag = sh_flag = f_flag = s_flag = b_flag = 0;
 	v_flag = 0;
 	E_flag = 0;
@@ -345,7 +355,7 @@ main(int argc, char *argv[])
 			break;
 		case 's':	/* Partition details */
 			s_flag = 1;
-			if (sscanf(optarg, "%d/%d/%d%n", &csysid, &cstart,
+			if (sscanf(optarg, "%d/%u/%u%n", &csysid, &cstart,
 			    &csize, &n) == 3) {
 				if (optarg[n] == 0)
 					break;
@@ -2608,20 +2618,20 @@ yesno(const char *str, ...)
 	return (first == 'y' || first == 'Y');
 }
 
-int
-decimal(const char *prompt, int dflt, int flags, int minval, int maxval)
+int64_t
+decimal(const char *prompt, int64_t dflt, int flags, int64_t minval, int64_t maxval)
 {
-	int acc = 0;
+	int64_t acc = 0;
 	char *cp;
 	char ch;
 
 	for (;;) {
 		if (flags & DEC_SEC) {
-			printf("%s: [%d..%dcyl default: %d, %dcyl, %uMB] ",
+			printf("%s: [%" PRId64 "..%" PRId64 "dcyl default: %" PRId64 ", %" PRId64 "dcyl, %uMB] ",
 			    prompt, SEC_TO_CYL(minval), SEC_TO_CYL(maxval),
 			    dflt, SEC_TO_CYL(dflt), SEC_TO_MB(dflt));
 		} else
-			printf("%s: [%d..%d default: %d] ",
+			printf("%s: [%" PRId64 "..%" PRId64 " default: %" PRId64 "] ",
 			    prompt, minval, maxval, dflt);
 
 		if (!fgets(lbuf, LBUF, stdin))
@@ -2637,7 +2647,7 @@ decimal(const char *prompt, int dflt, int flags, int minval, int maxval)
 			return maxval;
 
 		if (isdigit((unsigned char)*cp) || *cp == '-') {
-			acc = strtol(lbuf, &cp, 10);
+			acc = strtoll(lbuf, &cp, 10);
 			if (flags & DEC_SEC) {
 				ch = *cp;
 				if (ch == 'g' || ch == 'G') {
@@ -2676,7 +2686,7 @@ decimal(const char *prompt, int dflt, int flags, int minval, int maxval)
 
 		if (acc >= minval && acc <= maxval)
 			return acc;
-		printf("%d is not between %d and %d.\n", acc, minval, maxval);
+		printf("%" PRId64 " is not between %" PRId64 " and %" PRId64 ".\n", acc, minval, maxval);
 	}
 }
 

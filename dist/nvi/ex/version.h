@@ -1,3 +1,3 @@
-/*	$NetBSD: version.h,v 1.2 2008/12/12 23:05:36 lukem Exp $ */
+/*	$NetBSD: version.h,v 1.1.1.1.8.2 2009/10/18 09:58:03 sborrill Exp $ */
 
-#define VI_VERSION "nvi-1.81.6nb1 (2007-11-18)"
+#define VI_VERSION "nvi-1.81.6nb5 (2009-08-11)"

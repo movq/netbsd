@@ -1,9 +1,13 @@
-#	$NetBSD: Makefile,v 1.9 2009/02/15 19:00:21 mrg Exp $
+#	$NetBSD: Makefile,v 1.4.6.6 2009/09/17 04:24:29 snj Exp $
 
 # build libraries for xorg
 
 SUBDIR=	expat libfontenc freetype libFS libICE libOSMesa \
-	libXau libXdmcp libdrm pixman xkbdata \
+	libXau libXdmcp libdrm libpciaccess
+.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
+SUBDIR+=libdrm_intel
+.endif
+SUBDIR+=pixman xkeyboard-config \
 	.WAIT \
 	dri fontconfig libSM libX11 liblbxutil \
 	.WAIT \

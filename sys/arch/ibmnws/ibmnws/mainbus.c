@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.7 2008/11/03 15:13:16 rjs Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.6 2007/10/17 19:55:01 garbled Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -49,14 +49,10 @@
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pciconf.h>
 
-int	mainbus_match(device_t, cfdata_t, void *);
-void	mainbus_attach(device_t, device_t, void *);
+int	mainbus_match(struct device *, struct cfdata *, void *);
+void	mainbus_attach(struct device *, struct device *, void *);
 
-struct mainbus_softc {
-	device_t sc_dev;		/* device tree glue */
-};
-
-CFATTACH_DECL_NEW(mainbus, sizeof(struct mainbus_softc),
+CFATTACH_DECL(mainbus, sizeof(struct device),
     mainbus_match, mainbus_attach, NULL, NULL);
 
 int	mainbus_print(void *, const char *);
@@ -75,7 +71,7 @@ struct genppc_pci_chipset *genppc_pct;
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(device_t parent, cfdata_t match, void *aux)
+mainbus_match(struct device *parent, struct cfdata *match, void *aux)
 {
 
 	if (mainbus_found)
@@ -87,9 +83,8 @@ mainbus_match(device_t parent, cfdata_t match, void *aux)
  * Attach the mainbus.
  */
 void
-mainbus_attach(device_t parent, device_t self, void *aux)
+mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct mainbus_softc *sc = device_private(self);
 	union mainbus_attach_args mba;
 	struct confargs ca;
 #if NPCI > 0
@@ -100,9 +95,8 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 
 	mainbus_found = 1;
 
-	aprint_normal("\n");
+	printf("\n");
 
-	sc->sc_dev = self;
 	ca.ca_name = "cpu";
 	ca.ca_node = 0;
 	config_found_ia(self, "mainbus", &ca, mainbus_print);

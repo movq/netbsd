@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: makerumpmanpages.sh,v 1.8 2009/02/15 18:00:16 pooka Exp $
+#	$NetBSD: makerumpmanpages.sh,v 1.4.2.1 2009/02/23 09:02:59 snj Exp $
 #
 
 IFS=' '

@@ -1,4 +1,4 @@
-/* $NetBSD: citrus_lc_messages.h,v 1.2 2009/01/11 02:46:24 christos Exp $ */
+/* $NetBSD: citrus_lc_messages.h,v 1.2.2.2 2009/01/15 03:24:06 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,

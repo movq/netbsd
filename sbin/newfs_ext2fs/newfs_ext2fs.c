@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs_ext2fs.c,v 1.8 2009/03/02 10:38:13 tsutsui Exp $	*/
+/*	$NetBSD: newfs_ext2fs.c,v 1.4 2008/07/20 01:20:23 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)newfs.c	8.13 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: newfs_ext2fs.c,v 1.8 2009/03/02 10:38:13 tsutsui Exp $");
+__RCSID("$NetBSD: newfs_ext2fs.c,v 1.4 2008/07/20 01:20:23 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,7 +54,6 @@ __RCSID("$NetBSD: newfs_ext2fs.c,v 1.8 2009/03/02 10:38:13 tsutsui Exp $");
 #include <sys/mount.h>
 
 #include <ufs/ext2fs/ext2fs.h>
-#include <ufs/ext2fs/ext2fs_dinode.h>
 
 #include <disktab.h>
 #include <err.h>
@@ -105,7 +104,6 @@ int	verbosity;		/* amount of printf() output */
 #define DEFAULT_VERBOSITY 3	/* 4 is traditional behavior of newfs(8) */
 int64_t fssize;			/* file system size */
 uint	sectorsize;		/* bytes/sector */
-uint16_t inodesize = EXT2_REV0_DINODE_SIZE;	/* inode size */
 uint	fsize = 0;		/* fragment size */
 uint	bsize = 0;		/* block size */
 uint	minfree = MINFREE;	/* free space threshold */
@@ -135,16 +133,10 @@ main(int argc, char *argv[])
 	fsi = fso = -1;
 	Fflag = Iflag = Zflag = 0;
 	verbosity = -1;
-	opstring = "D:FINO:S:V:Zb:f:i:l:m:n:s:v:";
+	opstring = "FINO:S:V:Zb:f:i:l:m:n:s:v:";
 	byte_sized = 0;
 	while ((ch = getopt(argc, argv, opstring)) != -1)
 		switch (ch) {
-		case 'D':
-			inodesize = (uint16_t)strtol(optarg, &s1, 0);
-			if (*s1 || (inodesize != 128 && inodesize != 256))
-				errx(1, "Bad inode size %d "
-				    "(only 128 and 256 supported)", inodesize);
-			break;
 		case 'F':
 			Fflag = 1;
 			break;
@@ -457,21 +449,20 @@ strsuftoi64(const char *desc, const char *arg, int64_t min, int64_t max,
 }
 
 static const char help_strings[] =
-	"\t-b bsize\tblock size\n"
-	"\t-D inodesize\tsize of an inode in bytes (128 or 256)\n"
 	"\t-F \t\tcreate file system image in regular file\n"
-	"\t-f fsize\tfragment size\n"
 	"\t-I \t\tdo not check that the file system type is `Linux Ext2'\n"
-	"\t-i density\tnumber of bytes per inode\n"
-	"\t-m minfree\tminimum free space %\n"
 	"\t-N \t\tdo not create file system, just print out parameters\n"
-	"\t-n inodes\tnumber of inodes (overrides -i density)\n"
 	"\t-O N\t\tfilesystem revision: 0 ==> REV0, 1 ==> REV1 (default 0)\n"
 	"\t-S secsize\tsector size\n"
-	"\t-s fssize\tfile system size (sectors)\n"
 	"\t-V verbose\toutput verbosity: 0 ==> none, 4 ==> max\n"
-	"\t-v volname\text2fs volume name\n"
-	"\t-Z \t\tpre-zero the image file\n";
+	"\t-Z \t\tpre-zero the image file\n"
+	"\t-b bsize\tblock size\n"
+	"\t-f fsize\tfragment size\n"
+	"\t-i density\tnumber of bytes per inode\n"
+	"\t-m minfree\tminimum free space %\n"
+	"\t-n inodes\tnumber of inodes (overrides -i density)\n"
+	"\t-s fssize\tfile system size (sectors)\n"
+	"\t-v volname\text2fs volume name\n";
 
 static void
 usage(void)

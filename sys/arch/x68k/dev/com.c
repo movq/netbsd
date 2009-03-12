@@ -1,4 +1,4 @@
-/*	$NetBSD: com.c,v 1.55 2009/01/18 02:40:05 isaki Exp $	*/
+/*	$NetBSD: com.c,v 1.53 2008/06/13 13:57:58 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.55 2009/01/18 02:40:05 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.53 2008/06/13 13:57:58 cegger Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -88,11 +88,6 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.55 2009/01/18 02:40:05 isaki Exp $");
 #include <sys/device.h>
 #include <sys/kauth.h>
 
-#ifdef KGDB
-#include <machine/remote-sl.h>
-#include <sys/kgdb.h>
-#endif
-
 #include <machine/cpu.h>
 #if 0
 #include <machine/pio.h>
@@ -113,7 +108,7 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.55 2009/01/18 02:40:05 isaki Exp $");
 #define	COM_IHIGHWATER	((3 * COM_IBUFSIZE) / 4)
 
 struct com_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	void *sc_ih;
 	struct tty *sc_tty;
 
@@ -148,8 +143,8 @@ struct com_softc {
 
 struct callout com_poll_ch;
 
-int comprobe(device_t, cfdata_t, void *);
-void comattach(device_t, device_t, void *);
+int comprobe(struct device *, struct cfdata *, void *);
+void comattach(struct device *, struct device *, void *);
 
 static int comprobe1(int);
 static void comdiag(void *);
@@ -162,7 +157,7 @@ static int comspeed(long);
 
 static u_char tiocm_xxx2mcr(int);
 
-CFATTACH_DECL_NEW(xcom, sizeof(struct com_softc),
+CFATTACH_DECL(xcom, sizeof(struct com_softc),
     comprobe, comattach, NULL, NULL);
 
 extern struct cfdriver xcom_cd;
@@ -197,6 +192,13 @@ int	comconsole = -1;
 int	comconsinit;
 int	comsopen = 0;
 int	comevents = 0;
+
+#ifdef KGDB
+#include <machine/remote-sl.h>
+extern int kgdb_dev;
+extern int kgdb_rate;
+extern int kgdb_debug_init;
+#endif
 
 #define	COMUNIT(x)	(minor(x) & 0x7F)
 #define	COMDIALOUT(x)	(minor(x) & 0x80)
@@ -303,7 +305,7 @@ comprobeHAYESP(int iobase, struct com_softc *sc)
 #endif
 
 int
-comprobe(device_t parent, cfdata_t cfp, void *aux)
+comprobe(struct device *parent, struct cfdata *cfp, void *aux)
 {
 	int iobase = (int)&IODEVbase->psx16550;
 
@@ -317,16 +319,15 @@ comprobe(device_t parent, cfdata_t cfp, void *aux)
 }
 
 void
-comattach(device_t parent, device_t dev, void *aux)
+comattach(struct device *parent, struct device *dev, void *aux)
 {
-	struct com_softc *sc = device_private(dev);
+	struct com_softc *sc = (struct com_softc *)dev;
 	int iobase = (int)&IODEVbase->psx16550;
 #ifdef COM_HAYESP
 	int	hayesp_ports[] = { 0x140, 0x180, 0x280, 0x300, 0 };
 	int	*hayespp;
 #endif
 
-	sc->sc_dev = dev;
 	com_attached = 1;
 
 	callout_init(&sc->sc_diag_ch, 0);
@@ -335,7 +336,7 @@ comattach(device_t parent, device_t dev, void *aux)
 	sc->sc_iobase = iobase;
 	sc->sc_hwflags = 0;
 	sc->sc_swflags = 0;
-	aprint_normal(": iobase %x", sc->sc_iobase);
+	printf(": iobase %x", sc->sc_iobase);
 
 #ifdef COM_HAYESP
 	/* Look for a Hayes ESP board. */
@@ -355,11 +356,11 @@ comattach(device_t parent, device_t dev, void *aux)
 	if (ISSET(inb(pio(iobase , com_iir)), IIR_FIFO_MASK) == IIR_FIFO_MASK)
 		if (ISSET(inb(pio(iobase , com_fifo)), FIFO_TRIGGER_14) == FIFO_TRIGGER_14) {
 			SET(sc->sc_hwflags, COM_HW_FIFO);
-			aprint_normal(": ns16550a, working fifo\n");
+			printf(": ns16550a, working fifo\n");
 		} else
-			aprint_normal(": ns16550, broken fifo\n");
+			printf(": ns16550, broken fifo\n");
 	else
-		aprint_normal(": ns8250 or ns16450, no fifo\n");
+		printf(": ns8250 or ns16450, no fifo\n");
 	outb(pio(iobase , com_fifo), 0);
 #ifdef COM_HAYESP
 	}
@@ -893,7 +894,7 @@ comdiag(void *arg)
 	splx(s);
 
 	log(LOG_WARNING, "%s: %d silo overflow%s, %d ibuf overflow%s\n",
-	    device_xname(sc->sc_dev),
+	    sc->sc_dev.dv_xname,
 	    overflows, overflows == 1 ? "" : "s",
 	    floods, floods == 1 ? "" : "s");
 }

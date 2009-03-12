@@ -1,5 +1,5 @@
 
-/*	$NetBSD: newportreg.h,v 1.4 2009/02/10 03:35:29 macallan Exp $	*/
+/*	$NetBSD: newportreg.h,v 1.3.88.1 2009/09/26 17:39:59 snj Exp $	*/
 
 /*
  * Copyright (c) 2003 Ilpo Ruotsalainen

@@ -1,4 +1,4 @@
-/*	$NetBSD: prompt.h,v 1.8 2009/02/21 00:05:23 christos Exp $	*/
+/*	$NetBSD: prompt.h,v 1.6 2003/08/07 16:44:32 agc Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

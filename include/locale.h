@@ -1,4 +1,4 @@
-/*	$NetBSD: locale.h,v 1.16 2009/01/11 03:04:12 christos Exp $	*/
+/*	$NetBSD: locale.h,v 1.14.34.1 2009/01/15 03:24:06 snj Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993

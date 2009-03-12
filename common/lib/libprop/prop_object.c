@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_object.c,v 1.25 2009/01/25 14:22:52 lukem Exp $	*/
+/*	$NetBSD: prop_object.c,v 1.22.4.2 2009/03/30 16:33:39 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -40,7 +40,6 @@
 #include <limits.h>
 #include <unistd.h>
 #endif
-#include <sys/atomic.h>
 
 #ifdef _STANDALONE
 void *
@@ -627,7 +626,7 @@ match_start:
 						   poi->poi_taglen))
 			break;
 	}
-	if (poi == NULL) {
+	if ((poi == NULL) || (poi->poi_tag == NULL)) {
 		while (_prop_stack_pop(&stack, &obj, &iter, &data, NULL)) {
 			iter_func = (prop_object_internalizer_continue_t)iter;
 			(*iter_func)(&stack, &obj, ctx, data, NULL);
@@ -918,7 +917,7 @@ _prop_object_internalize_map_file(const char *fname)
 		return (NULL);
 	}
 	mf->poimf_mapsize = ((size_t)sb.st_size + pgmask) & ~pgmask;
-	if (mf->poimf_mapsize < (size_t)sb.st_size) {
+	if (mf->poimf_mapsize < sb.st_size) {
 		(void) close(fd);
 		_PROP_FREE(mf, M_TEMP);
 		return (NULL);
@@ -973,6 +972,24 @@ _prop_object_internalize_unmap_file(
 #endif /* !_KERNEL && !_STANDALONE */
 
 /*
+ * Retain / release serialization --
+ *
+ * Eventually we would like to use atomic operations.  But until we have
+ * an MI API for them that is common to userland and the kernel, we will
+ * use a lock instead.
+ *
+ * We use a single global mutex for all serialization.  In the kernel, because
+ * we are still under a biglock, this will basically never contend (properties
+ * cannot be manipulated at interrupt level).  In userland, this will cost
+ * nothing for single-threaded programs.  For multi-threaded programs, there
+ * could be contention, but it probably won't cost that much unless the program
+ * makes heavy use of property lists.
+ */
+_PROP_MUTEX_DECL_STATIC(_prop_refcnt_mutex)
+#define	_PROP_REFCNT_LOCK()	_PROP_MUTEX_LOCK(_prop_refcnt_mutex)
+#define	_PROP_REFCNT_UNLOCK()	_PROP_MUTEX_UNLOCK(_prop_refcnt_mutex)
+
+/*
  * prop_object_retain --
  *	Increment the reference count on an object.
  */
@@ -980,10 +997,13 @@ void
 prop_object_retain(prop_object_t obj)
 {
 	struct _prop_object *po = obj;
-	uint32_t ncnt;
+	uint32_t ocnt;
 
-	ncnt = atomic_inc_32_nv(&po->po_refcnt);
-	_PROP_ASSERT(ncnt != 0);
+	_PROP_REFCNT_LOCK();
+	ocnt = po->po_refcnt++;
+	_PROP_REFCNT_UNLOCK();
+
+	_PROP_ASSERT(ocnt != 0xffffffffU);
 }
 
 /*
@@ -1013,11 +1033,11 @@ prop_object_release_emergency(prop_object_t obj)
 		/* Save pointerto unlock function */
 		unlock = po->po_type->pot_unlock;
 		
-		/* Dance a bit to make sure we always get the non-racy ocnt */
-		ocnt = atomic_dec_32_nv(&po->po_refcnt);
-		ocnt++;
-		_PROP_ASSERT(ocnt != 0);
+		_PROP_REFCNT_LOCK();
+    		ocnt = po->po_refcnt--;
+		_PROP_REFCNT_UNLOCK();
 
+		_PROP_ASSERT(ocnt != 0);
 		if (ocnt != 1) {
 			if (unlock != NULL)
 				unlock();
@@ -1036,7 +1056,9 @@ prop_object_release_emergency(prop_object_t obj)
 			unlock();
 		
 		parent = po;
-		atomic_inc_32(&po->po_refcnt);
+		_PROP_REFCNT_LOCK();
+		++po->po_refcnt;
+		_PROP_REFCNT_UNLOCK();
 	}
 	_PROP_ASSERT(parent);
 	/* One object was just freed. */
@@ -1073,10 +1095,11 @@ prop_object_release(prop_object_t obj)
 			/* Save pointer to object unlock function */
 			unlock = po->po_type->pot_unlock;
 			
-			ocnt = atomic_dec_32_nv(&po->po_refcnt);
-			ocnt++;
-			_PROP_ASSERT(ocnt != 0);
+			_PROP_REFCNT_LOCK();
+			ocnt = po->po_refcnt--;
+			_PROP_REFCNT_UNLOCK();
 
+			_PROP_ASSERT(ocnt != 0);
 			if (ocnt != 1) {
 				ret = 0;
 				if (unlock != NULL)
@@ -1092,7 +1115,9 @@ prop_object_release(prop_object_t obj)
 			if (ret == _PROP_OBJECT_FREE_DONE)
 				break;
 			
-			atomic_inc_32(&po->po_refcnt);
+			_PROP_REFCNT_LOCK();
+			++po->po_refcnt;
+			_PROP_REFCNT_UNLOCK();
 		} while (ret == _PROP_OBJECT_FREE_RECURSE);
 		if (ret == _PROP_OBJECT_FREE_FAILED)
 			prop_object_release_emergency(obj);

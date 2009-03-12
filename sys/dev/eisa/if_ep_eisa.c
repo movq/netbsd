@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_eisa.c,v 1.40 2009/01/31 13:54:10 martin Exp $	*/
+/*	$NetBSD: if_ep_eisa.c,v 1.39.4.1 2009/02/02 20:48:00 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ep_eisa.c,v 1.40 2009/01/31 13:54:10 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ep_eisa.c,v 1.39.4.1 2009/02/02 20:48:00 snj Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"

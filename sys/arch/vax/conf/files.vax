@@ -1,4 +1,4 @@
-#	$NetBSD: files.vax,v 1.116 2009/02/16 23:55:31 christos Exp $
+#	$NetBSD: files.vax,v 1.112.4.1 2009/02/24 03:01:09 snj Exp $
 #
 # new style config file for vax architecture
 #
@@ -55,15 +55,7 @@ file	arch/vax/vax/cmi.c		cmi
 
 attach	mem at cmi with mem_cmi
 file	arch/vax/vax/ka750.c		vax750 | mem_cmi | vaxany
-file	arch/vax/vax/ctu.c		vax750 | vax730 | mem_cmi | vaxany
-
-# Direct unibus interface
-device	ubi { tr=-1 }
-attach	ubi at mainbus
-file	arch/vax/vax/ubi.c		ubi
-
-attach	mem at ubi with mem_ubi
-file	arch/vax/vax/ka730.c		vax730 | mem_ubi | vaxany
+file	arch/vax/vax/ctu.c		vax750 | mem_cmi | vaxany
 
 device	vsbus { csr }: bus
 attach	vsbus at mainbus
@@ -116,8 +108,6 @@ attach	uba at sbi with uba_sbi
 file	arch/vax/uba/uba_sbi.c		uba_sbi
 attach	uba at cmi with uba_cmi
 file	arch/vax/uba/uba_cmi.c		uba_cmi
-attach	uba at ubi with uba_ubi
-file	arch/vax/uba/uba_ubi.c		uba_ubi
 
 # BI bus definitions
 include "dev/bi/files.bi"
@@ -318,7 +308,6 @@ file	dev/cninit.c
 file	arch/vax/vax/locore.c
 file	arch/vax/vax/mem.c
 file	arch/vax/vax/clock.c
-file	arch/vax/vax/core_machdep.c	coredump
 file	arch/vax/vax/gencons.c		vax8600 | vax780 | vax750 | vax630 |
 					vax8200 | vax680 | vax650 | vax660 |
 					vax670  | vaxany
@@ -362,11 +351,6 @@ file	arch/vax/vax/db_machdep.c	ddb
 file	arch/vax/vax/db_disasm.c	ddb
 file	arch/vax/uba/uba_dma.c		uba
 file	arch/vax/vax/multicpu.c		multiprocessor
-
-# Binary compatibility with previous NetBSD releases (COMPAT_XX)
-file	arch/vax/vax/compat_13_machdep.c 	compat_13 | compat_ultrix |
-						compat_ibcs2
-file	arch/vax/vax/compat_16_machdep.c	compat_16 | compat_ultrix
 
 include "compat/ibcs2/files.ibcs2"
 file	arch/vax/vax/ibcs2_machdep.c	compat_ibcs2

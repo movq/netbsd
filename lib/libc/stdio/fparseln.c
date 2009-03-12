@@ -1,4 +1,4 @@
-/*	$NetBSD: fparseln.c,v 1.9 2009/01/11 02:46:29 christos Exp $	*/
+/*	$NetBSD: fparseln.c,v 1.7.18.1 2009/01/15 04:21:25 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fparseln.c,v 1.9 2009/01/11 02:46:29 christos Exp $");
+__RCSID("$NetBSD: fparseln.c,v 1.7.18.1 2009/01/15 04:21:25 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

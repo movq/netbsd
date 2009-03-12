@@ -1,4 +1,4 @@
-.\" $NetBSD: pthread_cond_wait.3,v 1.12 2009/01/11 02:46:48 christos Exp $
+.\" $NetBSD: pthread_cond_wait.3,v 1.9 2008/05/26 08:43:08 wiz Exp $
 .\"
 .\" Copyright (c) 2002, 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -51,7 +51,7 @@
 .\"
 .\" $FreeBSD: src/lib/libpthread/man/pthread_cond_wait.3,v 1.16 2002/09/16 19:29:28 mini Exp $
 .\"
-.Dd December 31, 2008
+.Dd May 26, 2008
 .Dt PTHREAD_COND_WAIT 3
 .Os
 .Sh NAME
@@ -176,17 +176,6 @@ The value specified by
 or
 .Fa abstime
 is invalid.
-.El
-.Pp
-.Fn pthread_cond_wait
-and
-.Fn pthread_cond_timedwait
-may fail if:
-.Bl -tag -width Er
-.It Bq Er EPERM
-The value specified by
-.Fa mutex
-is not locked in condition wait.
 .El
 .Sh SEE ALSO
 .Xr pthread_cond_broadcast 3 ,

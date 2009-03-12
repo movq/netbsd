@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_device.c,v 1.55 2008/12/17 20:51:39 cegger Exp $	*/
+/*	$NetBSD: uvm_device.c,v 1.54.8.1 2009/06/23 06:56:52 snj Exp $	*/
 
 /*
  *
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_device.c,v 1.55 2008/12/17 20:51:39 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_device.c,v 1.54.8.1 2009/06/23 06:56:52 snj Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -143,7 +143,8 @@ udv_attach(void *arg, vm_prot_t accessprot,
 	 * Negative offsets on the object are not allowed.
 	 */
 
-	if (off != UVM_UNKNOWN_OFFSET && off < 0)
+	if ((cdev->d_flag & D_NEGOFFSAFE) == 0 &&
+	    off != UVM_UNKNOWN_OFFSET && off < 0)
 		return(NULL);
 
 	/*
@@ -221,7 +222,8 @@ udv_attach(void *arg, vm_prot_t accessprot,
 
 		mutex_exit(&udv_lock);
 		/* NOTE: we could sleep in the following malloc() */
-		udv = malloc(sizeof(*udv), M_TEMP, M_WAITOK);
+		MALLOC(udv, struct uvm_device *, sizeof(*udv), M_TEMP,
+		       M_WAITOK);
 		mutex_enter(&udv_lock);
 
 		/*
@@ -241,7 +243,7 @@ udv_attach(void *arg, vm_prot_t accessprot,
 
 		if (lcv) {
 			mutex_exit(&udv_lock);
-			free(udv, M_TEMP);
+			FREE(udv, M_TEMP);
 			continue;
 		}
 
@@ -331,7 +333,7 @@ again:
 	mutex_exit(&udv_lock);
 	mutex_exit(&uobj->vmobjlock);
 	UVM_OBJ_DESTROY(uobj);
-	free(udv, M_TEMP);
+	FREE(udv, M_TEMP);
 	UVMHIST_LOG(maphist," <- done, freed uobj=0x%x", uobj,0,0,0);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs.c,v 1.98 2009/01/08 02:28:08 lukem Exp $	*/
+/*	$NetBSD: puffs.c,v 1.92.4.4 2009/10/27 20:37:38 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: puffs.c,v 1.98 2009/01/08 02:28:08 lukem Exp $");
+__RCSID("$NetBSD: puffs.c,v 1.92.4.4 2009/10/27 20:37:38 bouyer Exp $");
 #endif /* !lint */
 
 #include <sys/param.h>
@@ -99,6 +99,7 @@ fillvnopmask(struct puffs_ops *pops, uint8_t *opmask)
 	FILLOP(print,    PRINT);
 	FILLOP(read,     READ);
 	FILLOP(write,    WRITE);
+	FILLOP(abortop,  ABORTOP);
 }
 #undef FILLOP
 
@@ -192,7 +193,7 @@ puffs_setstacksize(struct puffs_usermount *pu, size_t ss)
 
 	psize = sysconf(_SC_PAGESIZE);
 	minsize = 4*psize;
-	if (ss < (size_t)minsize || ss == PUFFS_STACKSIZE_MIN) {
+	if (ss < minsize || ss == PUFFS_STACKSIZE_MIN) {
 		if (ss != PUFFS_STACKSIZE_MIN)
 			fprintf(stderr, "puffs_setstacksize: adjusting "
 			    "stacksize to minimum %ld\n", minsize);
@@ -273,6 +274,18 @@ puffs_setspecific(struct puffs_usermount *pu, void *privdata)
 {
 
 	pu->pu_privdata = privdata;
+}
+
+void
+puffs_setmntinfo(struct puffs_usermount *pu,
+	const char *mntfromname, const char *puffsname)
+{
+	struct puffs_kargs *pargs = pu->pu_kargp;
+
+	(void)strlcpy(pargs->pa_mntfromname, mntfromname,
+	    sizeof(pargs->pa_mntfromname));
+	(void)strlcpy(pargs->pa_typename, puffsname,
+	    sizeof(pargs->pa_typename));
 }
 
 size_t
@@ -409,7 +422,7 @@ puffs_setback(struct puffs_cc *pcc, int whatback)
 int
 puffs_daemon(struct puffs_usermount *pu, int nochdir, int noclose)
 {
-	long int n;
+	ssize_t n;
 	int parent, value, fd;
 
 	if (pipe(pu->pu_dpipe) == -1)
@@ -428,12 +441,10 @@ puffs_daemon(struct puffs_usermount *pu, int nochdir, int noclose)
 	pu->pu_state |= PU_PUFFSDAEMON;
 
 	if (parent) {
-		close(pu->pu_dpipe[1]);
 		n = read(pu->pu_dpipe[0], &value, sizeof(int));
 		if (n == -1)
 			err(1, "puffs_daemon");
-		if (n != sizeof(value))
-			errx(1, "puffs_daemon got %ld bytes", n);
+		assert(n == sizeof(value));
 		if (value) {
 			errno = value;
 			err(1, "puffs_daemon");
@@ -533,7 +544,7 @@ puffs_mount(struct puffs_usermount *pu, const char *dir, int mntflags,
 do {									\
 	ssize_t al_rv;							\
 	al_rv = write(pu->pu_fd, buf, len);				\
-	if ((size_t)al_rv != len) {					\
+	if (al_rv != len) {						\
 		if (al_rv != -1)					\
 			errno = EIO;					\
 		rv = -1;						\
@@ -586,20 +597,21 @@ do {									\
 	return rv;
 }
 
+/*ARGSUSED*/
 struct puffs_usermount *
-_puffs_init(int develv, struct puffs_ops *pops, const char *mntfromname,
+_puffs_init(int dummy, struct puffs_ops *pops, const char *mntfromname,
 	const char *puffsname, void *priv, uint32_t pflags)
 {
 	struct puffs_usermount *pu;
 	struct puffs_kargs *pargs;
 	int sverrno;
 
-	if (develv != PUFFS_DEVEL_LIBVERSION) {
-		warnx("puffs_init: mounting with lib version %d, need %d",
-		    develv, PUFFS_DEVEL_LIBVERSION);
-		errno = EINVAL;
-		return NULL;
-	}
+	if (puffsname == PUFFS_DEFER)
+		puffsname = "n/a";
+	if (mntfromname == PUFFS_DEFER)
+		mntfromname = "n/a";
+	if (priv == PUFFS_DEFER)
+		priv = NULL;
 
 	pu = malloc(sizeof(struct puffs_usermount));
 	if (pu == NULL)
@@ -614,10 +626,7 @@ _puffs_init(int develv, struct puffs_ops *pops, const char *mntfromname,
 	pargs->pa_vers = PUFFSDEVELVERS | PUFFSVERSION;
 	pargs->pa_flags = PUFFS_FLAG_KERN(pflags);
 	fillvnopmask(pops, pargs->pa_vnopmask);
-	(void)strlcpy(pargs->pa_typename, puffsname,
-	    sizeof(pargs->pa_typename));
-	(void)strlcpy(pargs->pa_mntfromname, mntfromname,
-	    sizeof(pargs->pa_mntfromname));
+	puffs_setmntinfo(pu, mntfromname, puffsname);
 
 	puffs_zerostatvfs(&pargs->pa_svfsb);
 	pargs->pa_root_cookie = NULL;

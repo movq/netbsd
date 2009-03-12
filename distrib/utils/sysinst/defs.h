@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.138 2009/02/22 11:21:55 ad Exp $	*/
+/*	$NetBSD: defs.h,v 1.136.2.1 2009/05/18 19:35:14 bouyer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -187,7 +187,7 @@ typedef struct _partinfo {
 #define PIF_NODEVMTIME	0x0080		/* mount -o nodevmtime */
 #define PIF_NOEXEC	0x0100		/* mount -o noexec */
 #define PIF_NOSUID	0x0200		/* mount -o nosuid */
-#define PIF__UNUSED	0x0400		/* unused */
+#define PIF_SOFTDEP	0x0400		/* mount -o softdep */
 #define PIF_LOG		0x0800		/* mount -o log */
 #define PIF_MOUNT_OPTS	0x0ff0		/* all above mount flags */
 #define PIF_RESET	0x1000		/* internal - restore previous values */
@@ -198,14 +198,14 @@ struct ptn_info {
 	struct ptn_size {
 		int	ptn_id;
 		char	mount[20];
-		int	dflt_size;
-		int	size;
+		daddr_t	dflt_size;
+		daddr_t	size;
 		int	limit;
 		int	changed;
 	}		ptn_sizes[MAXPARTITIONS + 1];	/* +1 for delete code */
 	menu_ent	ptn_menus[MAXPARTITIONS + 1];	/* +1 for unit chg */
 	int		free_parts;
-	int		free_space;
+	daddr_t		free_space;
 	struct ptn_size	*pool_part;
 	char		exit_msg[70];
 };
@@ -239,13 +239,14 @@ int rootpart;				/* partition we install into */
 const char *disktype;		/* ST506, SCSI, ... */
 
 /* Area of disk we can allocate, start and size in disk sectors. */
-int ptstart, ptsize;
+daddr_t ptstart, ptsize;
 /* If we have an MBR boot partition, start and size in sectors */
 int bootstart, bootsize;
 
 /* Actual values for current disk - set by find_disks() or md_get_info() */
 int sectorsize;
-int dlcyl, dlhead, dlsec, dlsize, dlcylsize;
+int dlcyl, dlhead, dlsec, dlcylsize;
+daddr_t dlsize;
 int current_cylsize;
 unsigned int root_limit;		/* BIOS (etc) read limit */
 
@@ -411,7 +412,6 @@ int	set_root_shell(void);
 void	scripting_fprintf(FILE *, const char *, ...);
 void	scripting_vfprintf(FILE *, const char *, va_list);
 void	add_rc_conf(const char *, ...);
-void	add_sysctl_conf(const char *, ...);
 void	enable_rc_conf(void);
 int	check_partitions(void);
 void	set_sizemultname_cyl(void);
@@ -449,11 +449,11 @@ void	unwind_mounts(void);
 
 /* from bsddisklabel.c */
 int	make_bsd_partitions(void);
-int	save_ptn(int, int, int, int, const char *);
+int	save_ptn(int, daddr_t, daddr_t, int, const char *);
 void	set_ptn_titles(menudesc *, int, void *);
 void	set_ptn_menu(struct ptn_info *);
 int	set_ptn_size(menudesc *, void *);
-void	get_ptn_sizes(int, int, int);
+void	get_ptn_sizes(daddr_t, daddr_t, int);
 
 /* from aout2elf.c */
 int move_aout_libs(void);

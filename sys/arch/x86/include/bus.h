@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.19 2009/02/13 20:50:38 bouyer Exp $	*/
+/*	$NetBSD: bus.h,v 1.16.10.2 2009/09/29 23:54:36 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -91,7 +91,7 @@ void	_x86_memio_unmap(bus_space_tag_t t, bus_space_handle_t bsh,
 typedef struct x86_bus_dma_tag		*bus_dma_tag_t;
 typedef struct x86_bus_dmamap		*bus_dmamap_t;
 
-#define BUS_DMA_TAG_VALID(__t)    ((__t) != NULL)
+#define BUS_DMA_TAG_VALID(t)    ((t) != (bus_dma_tag_t)0)
 
 /*
  *	bus_dma_segment_t

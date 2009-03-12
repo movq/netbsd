@@ -1,4 +1,4 @@
-# $NetBSD: md.macppc,v 1.27 2008/11/29 17:57:34 tsutsui Exp $
+# $NetBSD: md.macppc,v 1.25 2006/09/29 19:03:11 macallan Exp $
 ./sbin/pdisk					base-sysutil-root
 ./usr/mdec/bootxx				base-sysutil-bin
 ./usr/mdec/installboot				base-obsolete		obsolete

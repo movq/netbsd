@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_exec.h,v 1.16 2008/11/19 18:36:03 ad Exp $	*/
+/*	$NetBSD: ibcs2_exec.h,v 1.15 2007/12/04 18:40:10 dsl Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1998 Scott Bartram
@@ -176,7 +176,7 @@ struct xiter {
 	long	xi_offset;	/* offset within segment to replicated data */
 };
 
-extern struct emul emul_ibcs2;
+extern const struct emul emul_ibcs2;
 
 #define XOUT_HDR_SIZE		(sizeof(struct xexec) + sizeof(struct xext))
 

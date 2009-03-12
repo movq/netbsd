@@ -1,4 +1,4 @@
-/* $NetBSD: opt_ah.h,v 1.1 2008/12/11 05:37:40 alc Exp $ */
+/* $NetBSD: opt_ah.h,v 1.1.10.2 2009/08/07 06:43:50 snj Exp $ */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.

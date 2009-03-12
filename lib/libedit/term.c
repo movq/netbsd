@@ -1,4 +1,4 @@
-/*	$NetBSD: term.c,v 1.50 2009/02/15 21:55:23 christos Exp $	*/
+/*	$NetBSD: term.c,v 1.47 2008/09/10 15:45:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)term.c	8.2 (Berkeley) 4/30/95";
 #else
-__RCSID("$NetBSD: term.c,v 1.50 2009/02/15 21:55:23 christos Exp $");
+__RCSID("$NetBSD: term.c,v 1.47 2008/09/10 15:45:37 christos Exp $");
 #endif
 #endif /* not lint && not SCCSID */
 
@@ -56,11 +56,12 @@ __RCSID("$NetBSD: term.c,v 1.50 2009/02/15 21:55:23 christos Exp $");
 #endif
 #ifdef HAVE_CURSES_H
 #include <curses.h>
-#elif HAVE_NCURSES_H
+#endif
+#ifdef HAVE_NCURSES_H
 #include <ncurses.h>
 #endif
 /* Solaris's term.h does horrid things. */
-#if (defined(HAVE_TERM_H) && !defined(__SunOS))
+#if (defined(HAVE_TERM_H) && !defined(SUNOS))
 #include <term.h>
 #endif
 #include <sys/types.h>
@@ -387,7 +388,7 @@ private void
 term_alloc(EditLine *el, const struct termcapstr *t, const char *cap)
 {
 	char termbuf[TC_BUFSIZE];
-	size_t tlen, clen;
+	int tlen, clen;
 	char **tlist = el->el_term.t_str;
 	char **tmp, **str = &tlist[t - tstr];
 
@@ -414,7 +415,7 @@ term_alloc(EditLine *el, const struct termcapstr *t, const char *cap)
 						/* XXX strcpy is safe */
 		(void) strcpy(*str = &el->el_term.t_buf[el->el_term.t_loc],
 		    cap);
-		el->el_term.t_loc += (int)clen + 1;	/* one for \0 */
+		el->el_term.t_loc += clen + 1;	/* one for \0 */
 		return;
 	}
 	/*
@@ -431,7 +432,7 @@ term_alloc(EditLine *el, const struct termcapstr *t, const char *cap)
 			termbuf[tlen++] = '\0';
 		}
 	memcpy(el->el_term.t_buf, termbuf, TC_BUFSIZE);
-	el->el_term.t_loc = (int)tlen;
+	el->el_term.t_loc = tlen;
 	if (el->el_term.t_loc + 3 >= TC_BUFSIZE) {
 		(void) fprintf(el->el_errfile,
 		    "Out of termcap string space.\n");
@@ -439,7 +440,7 @@ term_alloc(EditLine *el, const struct termcapstr *t, const char *cap)
 	}
 					/* XXX strcpy is safe */
 	(void) strcpy(*str = &el->el_term.t_buf[el->el_term.t_loc], cap);
-	el->el_term.t_loc += (int)clen + 1;	/* one for \0 */
+	el->el_term.t_loc += clen + 1;	/* one for \0 */
 	return;
 }
 

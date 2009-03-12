@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.own.mk,v 1.559 2009/03/09 06:25:51 apb Exp $
+#	$NetBSD: bsd.own.mk,v 1.542.2.13 2010/11/25 00:27:19 riz Exp $
 
 .if !defined(_BSD_OWN_MK_)
 _BSD_OWN_MK_=1
@@ -236,7 +236,6 @@ TOOL_FGEN=		${TOOLDIR}/bin/${_TOOL_PREFIX}fgen
 TOOL_GENASSYM=		${TOOLDIR}/bin/${_TOOL_PREFIX}genassym
 TOOL_GENCAT=		${TOOLDIR}/bin/${_TOOL_PREFIX}gencat
 TOOL_GMAKE=		${TOOLDIR}/bin/${_TOOL_PREFIX}gmake
-TOOL_GREP=		${TOOLDIR}/bin/${_TOOL_PREFIX}grep
 TOOL_GROFF=		PATH=${TOOLDIR}/lib/groff:$${PATH} ${TOOLDIR}/bin/${_TOOL_PREFIX}groff
 TOOL_HEXDUMP=		${TOOLDIR}/bin/${_TOOL_PREFIX}hexdump
 TOOL_HP300MKBOOT=	${TOOLDIR}/bin/${_TOOL_PREFIX}hp300-mkboot
@@ -305,7 +304,6 @@ TOOL_FGEN=		fgen
 TOOL_GENASSYM=		genassym
 TOOL_GENCAT=		gencat
 TOOL_GMAKE=		gmake
-TOOL_GREP=		grep
 TOOL_GROFF=		groff
 TOOL_HEXDUMP=		hexdump
 TOOL_HP300MKBOOT=	hp300-mkboot
@@ -439,6 +437,11 @@ NLSGRP?=	wheel
 NLSOWN?=	root
 NLSMODE?=	${NONBINMODE}
 
+KMODDIR?=	/usr/lkm
+KMODGRP?=	wheel
+KMODOWN?=	root
+KMODMODE?=	${NONBINMODE}
+
 KMODULEGRP?=	wheel
 KMODULEOWN?=	root
 KMODULEMODE?=	${NONBINMODE}
@@ -560,14 +563,6 @@ MACHINE_GNU_PLATFORM?=${MACHINE_GNU_ARCH}--netbsdelf
 MACHINE_GNU_PLATFORM?=${MACHINE_GNU_ARCH}--netbsd
 .endif
 
-#
-# Determine if arch uses native kernel modules with rump
-#
-.if ${MACHINE_ARCH} == "i386" || \
-    ${MACHINE_ARCH} == "x86_64"
-RUMPKMOD=	# defined
-.endif
-
 TARGETS+=	all clean cleandir depend dependall includes \
 		install lint obj regress tags html
 PHONY_NOTMAIN =	all clean cleandir depend dependall distclean includes \
@@ -670,29 +665,22 @@ ${var}?=	yes
 #
 .for var in \
 	MKCRYPTO_IDEA MKCRYPTO_MDC2 MKCRYPTO_RC5 MKDEBUG MKDEBUGLIB \
-	MKLVM \
-	MKMANZ MKOBJDIRS \
+	MKMANZ MKMODULAR MKOBJDIRS \
 	MKPCC MKPCCCMDS \
 	MKSOFTFLOAT MKSTRIPIDENT \
-	MKUNPRIVED MKUPDATE MKX11 
+	MKUNPRIVED MKUPDATE MKX11
 ${var}?=no
 .endfor
 
 #
 # Do we default to XFree86 or Xorg for this platform?
 #
-.if ${MACHINE} == "acorn32" || ${MACHINE} == "amiga" || \
-    ${MACHINE} == "cats" || ${MACHINE} == "dreamcast" || \
-    ${MACHINE} == "ews4800mips" || ${MACHINE} == "hpcarm" || \
-    ${MACHINE} == "hpcmips" || ${MACHINE} == "hpcsh" || \
-    ${MACHINE} == "mac68k" || ${MACHINE} == "netwinder" || \
-    ${MACHINE} == "newsmips" || ${MACHINE} == "ofppc" || \
-    ${MACHINE} == "pmax" || \
-    ${MACHINE} == "sparc" || ${MACHINE} == "sun3" || \
-    ${MACHINE} == "x68k" 
-X11FLAVOUR?=	XFree86
-.else
+.if ${MACHINE} == "amd64" || ${MACHINE} == "i386" || \
+    ${MACHINE} == "macppc" || ${MACHINE} == "sgimips" || \
+    ${MACHINE} == "shark" || ${MACHINE} == "sparc64"
 X11FLAVOUR?=	Xorg
+.else
+X11FLAVOUR?=	XFree86
 .endif
 
 #
@@ -835,14 +823,16 @@ X11SRCDIRMIT?=		${X11SRCDIR}/external/mit
 	FS ICE SM X11 XScrnSaver XTrap Xau Xcomposite Xcursor Xdamage \
 	Xdmcp Xevie Xext Xfixes Xfont Xft Xi Xinerama Xmu Xp Xpm XprintUtil \
 	Xrandr Xrender Xres Xt Xtst Xv XvMC Xxf86dga Xxf86misc Xxf86vm drm \
-	fontenc xkbfile xkbui Xaw lbxutil Xfontcache XprintAppUtil
+	fontenc xkbfile xkbui Xaw lbxutil Xfontcache XprintAppUtil \
+	pciaccess
 X11SRCDIR.${_lib}?=		${X11SRCDIRMIT}/lib${_lib}/dist
 .endfor
 
 .for _proto in \
 	xcmisc xext xf86bigfont bigreqs input kb x fonts fixes scrnsaver \
 	xinerama print render resource record video xf86dga xf86misc \
-	xf86vidmode composite damage trap gl randr fontcache xf86dri
+	xf86vidmode composite damage trap gl randr fontcache xf86dri \
+	dri2
 X11SRCDIR.${_proto}proto?=		${X11SRCDIRMIT}/${_proto}proto/dist
 .endfor
 
@@ -882,8 +872,8 @@ X11SRCDIR.xf86-input-${_i}?=	${X11SRCDIRMIT}/xf86-input-${_i}/dist
 .for _v in \
 	ag10e apm ark ast ati chips cirrus crime cyrix glint i128 i740 imstt \
 	intel mach64 mga neomagic newport nsc nv nvxbox pnozz r128 radeonhd \
-	rendition s3 s3virge savage siliconmotion sis sunffb suncg6 tdfx tga \
-	trident tseng vesa vga via vmware wsfb
+	rendition s3 s3virge savage siliconmotion sis sunffb suncg6 sunleo \
+	suntcx tdfx tga trident tseng vesa vga via vmware wsfb
 	
 X11SRCDIR.xf86-video-${_v}?=	${X11SRCDIRMIT}/xf86-video-${_v}/dist
 .endfor
@@ -921,11 +911,9 @@ MAKEDIRTARGET=\
 
 #
 # MAKEVERBOSE support.  Levels are:
-#	0	Minimal output ("quiet")
-#	1	Describe what is occurring
-#	2	Describe what is occurring and echo the actual command
-#	3	Ignore the effect of the "@" prefix in make commands
-#	4	Trace shell commands using the shell's -x flag
+#	0	No messages
+#	1	Enable info messages, suppress command output
+#	2	Enable info messages and command output
 #		
 MAKEVERBOSE?=		2
 
@@ -939,18 +927,12 @@ _MKMSG?=	@echo '   '
 _MKSHMSG?=	echo '   '
 _MKSHECHO?=	: echo
 .SILENT:
-.else	# MAKEVERBOSE >= 2
+.else	# MAKEVERBOSE == 2 ?
 _MKMSG?=	@echo '\#  '
 _MKSHMSG?=	echo '\#  '
 _MKSHECHO?=	echo
 .SILENT: __makeverbose_dummy_target__
-.endif	# MAKEVERBOSE >= 2
-.if ${MAKEVERBOSE} >= 3
-.MAKEFLAGS:	-dl
-.endif	# ${MAKEVERBOSE} >= 3
-.if ${MAKEVERBOSE} >= 4
-.MAKEFLAGS:	-dx
-.endif	# ${MAKEVERBOSE} >= 4
+.endif
 
 _MKMSG_BUILD?=		${_MKMSG} "  build "
 _MKMSG_CREATE?=		${_MKMSG} " create "

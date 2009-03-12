@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_pset.c,v 1.12 2009/03/03 21:55:06 rmind Exp $	*/
+/*	$NetBSD: sys_pset.c,v 1.9.4.3 2009/03/08 03:15:36 snj Exp $	*/
 
 /*
  * Copyright (c) 2008, Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_pset.c,v 1.12 2009/03/03 21:55:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_pset.c,v 1.9.4.3 2009/03/08 03:15:36 snj Exp $");
 
 #include <sys/param.h>
 

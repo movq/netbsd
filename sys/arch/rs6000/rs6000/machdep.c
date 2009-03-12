@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.7 2009/02/13 22:41:03 apb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.2 2008/04/28 20:23:34 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,11 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.7 2009/02/13 22:41:03 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2 2008/04/28 20:23:34 martin Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -119,7 +118,7 @@ struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
 paddr_t avail_end;			/* XXX temporary */
 extern register_t iosrtable[16];
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 extern void *endsym, *startsym;
 #endif
 
@@ -148,9 +147,7 @@ say_hi(void)
 {
 	printf("HELLO?!\n");
 	setled(0x55500000);
-#ifdef DDB
 	Debugger();
-#endif
 #if 0
         li      %r28,0x00000041 /* PUT A to R28*/         
         li      %r29,0x30       /* put serial addr to r29*/
@@ -383,8 +380,8 @@ initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 	consinit();
 	setled(0x41000000);
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init((int)((u_long)endsym - (u_long)startsym), startsym, endsym);
 #endif
 
 #ifdef DDB
@@ -507,8 +504,6 @@ cpu_reboot(int howto, char *what)
 
 halt_sys:
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
                 printf("\n");

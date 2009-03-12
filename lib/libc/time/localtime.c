@@ -1,4 +1,4 @@
-/*	$NetBSD: localtime.c,v 1.43 2009/01/18 10:57:15 drochner Exp $	*/
+/*	$NetBSD: localtime.c,v 1.41 2008/08/27 08:49:03 christos Exp $	*/
 
 /*
 ** This file is in the public domain, so clarified as of
@@ -10,7 +10,7 @@
 #if 0
 static char	elsieid[] = "@(#)localtime.c	7.78";
 #else
-__RCSID("$NetBSD: localtime.c,v 1.43 2009/01/18 10:57:15 drochner Exp $");
+__RCSID("$NetBSD: localtime.c,v 1.41 2008/08/27 08:49:03 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -28,8 +28,17 @@ __RCSID("$NetBSD: localtime.c,v 1.43 2009/01/18 10:57:15 drochner Exp $");
 #include "fcntl.h"
 #include "reentrant.h"
 
-#if defined(__weak_alias)
+#ifdef __weak_alias
+__weak_alias(ctime_r,_ctime_r)
 __weak_alias(daylight,_daylight)
+__weak_alias(gmtime_r,_gmtime_r)
+__weak_alias(localtime_r,_localtime_r)
+__weak_alias(offtime,_offtime)
+__weak_alias(posix2time,_posix2time)
+__weak_alias(time2posix,_time2posix)
+__weak_alias(timegm,_timegm)
+__weak_alias(timelocal,_timelocal)
+__weak_alias(timeoff,_timeoff)
 __weak_alias(tzname,_tzname)
 __weak_alias(tzset,_tzset)
 __weak_alias(tzsetwall,_tzsetwall)
@@ -111,7 +120,7 @@ struct state {
 	int		timecnt;
 	int		typecnt;
 	int		charcnt;
-	time_t		ats[TZ_MAX_TIMES];	/* time_t */
+	time_t		ats[TZ_MAX_TIMES];
 	unsigned char	types[TZ_MAX_TIMES];
 	struct ttinfo	ttis[TZ_MAX_TYPES];
 	char		chars[/*CONSTCOND*/BIGGEST(BIGGEST(TZ_MAX_CHARS + 1, sizeof gmt),
@@ -136,13 +145,13 @@ struct rule {
 */
 
 static long		detzcode P((const char * codep));
-static const char *	__getzname P((const char * strp));
+static const char *	getzname P((const char * strp));
 static const char *	getnum P((const char * strp, int * nump, int min,
 				int max));
 static const char *	getsecs P((const char * strp, long * secsp));
-static const char *	__getoffset P((const char * strp, long * offsetp));
-static const char *	__getrule P((const char * strp, struct rule * rulep));
-static void		__gmtload P((struct state * sp));
+static const char *	getoffset P((const char * strp, long * offsetp));
+static const char *	getrule P((const char * strp, struct rule * rulep));
+static void		gmtload P((struct state * sp));
 static void		gmtsub P((const time_t * timep, long offset,
 				struct tm * tmp));
 static void		localsub P((const time_t * timep, long offset,
@@ -150,7 +159,7 @@ static void		localsub P((const time_t * timep, long offset,
 static int		increment_overflow P((int * number, int delta));
 static int		normalize_overflow P((int * tensptr, int * unitsptr,
 				int base));
-static void		__settzname P((void));
+static void		settzname P((void));
 static time_t		time1 P((struct tm * tmp,
 				void(*funcp) P((const time_t *,
 				long, struct tm *)),
@@ -167,13 +176,13 @@ static void		timesub P((const time_t * timep, long offset,
 				const struct state * sp, struct tm * tmp));
 static int		tmcomp P((const struct tm * atmp,
 				const struct tm * btmp));
-static time_t		__transtime P((time_t janfirst, int year,
+static time_t		transtime P((time_t janfirst, int year,
 				const struct rule * rulep, long offset));
-static int		__tzload P((const char * name, struct state * sp));
-static int		__tzparse P((const char * name, struct state * sp,
+static int		tzload P((const char * name, struct state * sp));
+static int		tzparse P((const char * name, struct state * sp,
 				int lastditch));
-static void		__tzset_unlocked P((void));
-static void		__tzsetwall_unlocked P((void));
+static void		tzset_unlocked P((void));
+static void		tzsetwall_unlocked P((void));
 #ifdef STD_INSPIRED
 static long		leapcorr P((time_t * timep));
 #endif
@@ -194,26 +203,17 @@ static struct state	gmtmem;
 #define TZ_STRLEN_MAX 255
 #endif /* !defined TZ_STRLEN_MAX */
 
-
-static char		__lcl_TZname[TZ_STRLEN_MAX + 1];
-static int		__lcl_is_set;
-static int		__gmt_is_set;
-
-#if !defined(__LIBC12_SOURCE__)
+static char		lcl_TZname[TZ_STRLEN_MAX + 1];
+static int		lcl_is_set;
+static int		gmt_is_set;
 
 __aconst char *		tzname[2] = {
 	(__aconst char *)__UNCONST(wildabbr),
 	(__aconst char *)__UNCONST(wildabbr)
 };
 
-#else
-
-extern __aconst char *	tzname[2];
-
-#endif
-
 #ifdef _REENTRANT
-static rwlock_t __lcl_lock = RWLOCK_INITIALIZER;
+static rwlock_t lcl_lock = RWLOCK_INITIALIZER;
 #endif
 
 /*
@@ -227,13 +227,8 @@ static rwlock_t __lcl_lock = RWLOCK_INITIALIZER;
 static struct tm	tm;
 
 #ifdef USG_COMPAT
-#if !defined(__LIBC12_SOURCE__)
-long 			timezone = 0;
+long int		timezone = 0;
 int			daylight = 0;
-#else
-extern int		daylight;
-extern long		timezone __RENAME(__timezone13);
-#endif
 #endif /* defined USG_COMPAT */
 
 #ifdef ALTZONE
@@ -262,8 +257,8 @@ const char * const	codep;
 	return result;
 }
 
-void
-__settzname P((void))
+static void
+settzname P((void))
 {
 	register struct state * const	sp = lclptr;
 	register int			i;
@@ -312,8 +307,8 @@ __settzname P((void))
 	}
 }
 
-int
-__tzload(name, sp)
+static int
+tzload(name, sp)
 register const char *		name;
 register struct state * const	sp;
 {
@@ -479,7 +474,7 @@ static const int	year_lengths[2] = {
 */
 
 static const char *
-__getzname(strp)
+getzname(strp)
 register const char *	strp;
 {
 	register char	c;
@@ -573,7 +568,7 @@ long * const		secsp;
 */
 
 static const char *
-__getoffset(strp, offsetp)
+getoffset(strp, offsetp)
 register const char *	strp;
 long * const		offsetp;
 {
@@ -600,7 +595,7 @@ long * const		offsetp;
 */
 
 static const char *
-__getrule(strp, rulep)
+getrule(strp, rulep)
 const char *			strp;
 register struct rule * const	rulep;
 {
@@ -654,7 +649,7 @@ register struct rule * const	rulep;
 */
 
 static time_t
-__transtime(janfirst, year, rulep, offset)
+transtime(janfirst, year, rulep, offset)
 const time_t				janfirst;
 const int				year;
 register const struct rule * const	rulep;
@@ -749,7 +744,7 @@ const long				offset;
 */
 
 static int
-__tzparse(name, sp, lastditch)
+tzparse(name, sp, lastditch)
 const char *			name;
 register struct state * const	sp;
 const int			lastditch;
@@ -774,27 +769,27 @@ const int			lastditch;
 			stdlen = (sizeof sp->chars) - 1;
 		stdoffset = 0;
 	} else {
-		name = __getzname(name);
+		name = getzname(name);
 		stdlen = name - stdname;
 		if (stdlen < 3)
 			return -1;
 		if (*name == '\0')
 			return -1;
-		name = __getoffset(name, &stdoffset);
+		name = getoffset(name, &stdoffset);
 		if (name == NULL)
 			return -1;
 	}
-	load_result = __tzload(TZDEFRULES, sp);
+	load_result = tzload(TZDEFRULES, sp);
 	if (load_result != 0)
 		sp->leapcnt = 0;		/* so, we're off a little */
 	if (*name != '\0') {
 		dstname = name;
-		name = __getzname(name);
+		name = getzname(name);
 		dstlen = name - dstname;	/* length of DST zone name */
 		if (dstlen < 3)
 			return -1;
 		if (*name != '\0' && *name != ',' && *name != ';') {
-			name = __getoffset(name, &dstoffset);
+			name = getoffset(name, &dstoffset);
 			if (name == NULL)
 				return -1;
 		} else	dstoffset = stdoffset - SECSPERHOUR;
@@ -809,11 +804,11 @@ const int			lastditch;
 			time_t		endtime;
 
 			++name;
-			if ((name = __getrule(name, &start)) == NULL)
+			if ((name = getrule(name, &start)) == NULL)
 				return -1;
 			if (*name++ != ',')
 				return -1;
-			if ((name = __getrule(name, &end)) == NULL)
+			if ((name = getrule(name, &end)) == NULL)
 				return -1;
 			if (*name != '\0')
 				return -1;
@@ -834,9 +829,9 @@ const int			lastditch;
 			typep = sp->types;
 			janfirst = 0;
 			for (year = EPOCH_YEAR; year <= 2037; ++year) {
-				starttime = __transtime(janfirst, year, &start,
+				starttime = transtime(janfirst, year, &start,
 					stdoffset);
-				endtime = __transtime(janfirst, year, &end,
+				endtime = transtime(janfirst, year, &end,
 					dstoffset);
 				if (starttime > endtime) {
 					*atp++ = endtime;
@@ -944,19 +939,19 @@ const int			lastditch;
 }
 
 static void
-__gmtload(sp)
+gmtload(sp)
 struct state * const	sp;
 {
-	if (__tzload(gmt, sp) != 0)
-		(void) __tzparse(gmt, sp, TRUE);
+	if (tzload(gmt, sp) != 0)
+		(void) tzparse(gmt, sp, TRUE);
 }
 
 static void
-__tzsetwall_unlocked P((void))
+tzsetwall_unlocked P((void))
 {
-	if (__lcl_is_set < 0)
+	if (lcl_is_set < 0)
 		return;
-	__lcl_is_set = -1;
+	lcl_is_set = -1;
 
 #ifdef ALL_STATE
 	if (lclptr == NULL) {
@@ -964,14 +959,14 @@ __tzsetwall_unlocked P((void))
 		lclptr = (struct state *) malloc(sizeof *lclptr);
 		errno = saveerrno;
 		if (lclptr == NULL) {
-			__settzname();	/* all we can do */
+			settzname();	/* all we can do */
 			return;
 		}
 	}
 #endif /* defined ALL_STATE */
-	if (__tzload((char *) NULL, lclptr) != 0)
-		__gmtload(lclptr);
-	__settzname();
+	if (tzload((char *) NULL, lclptr) != 0)
+		gmtload(lclptr);
+	settzname();
 }
 
 #ifndef STD_INSPIRED
@@ -984,13 +979,13 @@ static
 void
 tzsetwall P((void))
 {
-	rwlock_wrlock(&__lcl_lock);
-	__tzsetwall_unlocked();
-	rwlock_unlock(&__lcl_lock);
+	rwlock_wrlock(&lcl_lock);
+	tzsetwall_unlocked();
+	rwlock_unlock(&lcl_lock);
 }
 
 static void
-__tzset_unlocked P((void))
+tzset_unlocked P((void))
 {
 	register const char *	name;
 	int saveerrno;
@@ -999,15 +994,15 @@ __tzset_unlocked P((void))
 	name = getenv("TZ");
 	errno = saveerrno;
 	if (name == NULL) {
-		__tzsetwall_unlocked();
+		tzsetwall_unlocked();
 		return;
 	}
 
-	if (__lcl_is_set > 0 && strcmp(__lcl_TZname, name) == 0)
+	if (lcl_is_set > 0 && strcmp(lcl_TZname, name) == 0)
 		return;
-	__lcl_is_set = strlen(name) < sizeof __lcl_TZname;
-	if (__lcl_is_set)
-		(void)strlcpy(__lcl_TZname, name, sizeof(__lcl_TZname));
+	lcl_is_set = strlen(name) < sizeof lcl_TZname;
+	if (lcl_is_set)
+		(void)strlcpy(lcl_TZname, name, sizeof(lcl_TZname));
 
 #ifdef ALL_STATE
 	if (lclptr == NULL) {
@@ -1015,7 +1010,7 @@ __tzset_unlocked P((void))
 		lclptr = (struct state *) malloc(sizeof *lclptr);
 		errno = saveerrno;
 		if (lclptr == NULL) {
-			__settzname();	/* all we can do */
+			settzname();	/* all we can do */
 			return;
 		}
 	}
@@ -1031,18 +1026,18 @@ __tzset_unlocked P((void))
 		lclptr->ttis[0].tt_gmtoff = 0;
 		lclptr->ttis[0].tt_abbrind = 0;
 		(void)strlcpy(lclptr->chars, gmt, sizeof(lclptr->chars));
-	} else if (__tzload(name, lclptr) != 0)
-		if (name[0] == ':' || __tzparse(name, lclptr, FALSE) != 0)
-			(void) __gmtload(lclptr);
-	__settzname();
+	} else if (tzload(name, lclptr) != 0)
+		if (name[0] == ':' || tzparse(name, lclptr, FALSE) != 0)
+			(void) gmtload(lclptr);
+	settzname();
 }
 
 void
 tzset P((void))
 {
-	rwlock_wrlock(&__lcl_lock);
-	__tzset_unlocked();
-	rwlock_unlock(&__lcl_lock);
+	rwlock_wrlock(&lcl_lock);
+	tzset_unlocked();
+	rwlock_unlock(&lcl_lock);
 }
 
 /*
@@ -1105,10 +1100,10 @@ struct tm *
 localtime(timep)
 const time_t * const	timep;
 {
-	rwlock_wrlock(&__lcl_lock);
-	__tzset_unlocked();
+	rwlock_wrlock(&lcl_lock);
+	tzset_unlocked();
 	localsub(timep, 0L, &tm);
-	rwlock_unlock(&__lcl_lock);
+	rwlock_unlock(&lcl_lock);
 	return &tm;
 }
 
@@ -1121,10 +1116,10 @@ localtime_r(timep, tmp)
 const time_t * const	timep;
 struct tm *		tmp;
 {
-	rwlock_rdlock(&__lcl_lock);
-	__tzset_unlocked();
+	rwlock_rdlock(&lcl_lock);
+	tzset_unlocked();
 	localsub(timep, 0L, tmp);
-	rwlock_unlock(&__lcl_lock);
+	rwlock_unlock(&lcl_lock);
 	return tmp;
 }
 
@@ -1143,18 +1138,18 @@ struct tm * const	tmp;
 #endif
 
 	mutex_lock(&gmt_mutex);
-	if (!__gmt_is_set) {
+	if (!gmt_is_set) {
 #ifdef ALL_STATE
 		int saveerrno;
 #endif
-		__gmt_is_set = TRUE;
+		gmt_is_set = TRUE;
 #ifdef ALL_STATE
 		saveerrno = errno;
 		gmtptr = (struct state *) malloc(sizeof *gmtptr);
 		errno = saveerrno;
 		if (gmtptr != NULL)
 #endif /* defined ALL_STATE */
-			__gmtload(gmtptr);
+			gmtload(gmtptr);
 	}
 	mutex_unlock(&gmt_mutex);
 	timesub(timep, offset, gmtptr, tmp);
@@ -1221,9 +1216,9 @@ register const struct state * const	sp;
 register struct tm * const		tmp;
 {
 	register const struct lsinfo *	lp;
-	register time_t			days;
-	register time_t			rem;
-	register time_t			y;
+	register long			days;
+	register long			rem;
+	register int			y;
 	register int			yleap;
 	register const int *		ip;
 	register long			corr;
@@ -1261,7 +1256,7 @@ register struct tm * const		tmp;
 	days = *timep / SECSPERDAY;
 	rem = *timep % SECSPERDAY;
 #ifdef mc68k
-	if (*timep == (((time_t)1) << (TYPE_BITS(time_t) - 1))) {
+	if (*timep == 0x80000000) {
 		/*
 		** A 3B1 muffs the division on the most negative number.
 		*/
@@ -1292,8 +1287,9 @@ register struct tm * const		tmp;
 	y = EPOCH_YEAR;
 #define LEAPS_THRU_END_OF(y)	((y) / 4 - (y) / 100 + (y) / 400)
 	while (days < 0 || days >= (long) year_lengths[yleap = isleap(y)]) {
-		register time_t	newy;
-		newy = (y + days / DAYSPERNYEAR);
+		register int	newy;
+
+		newy = (int)(y + days / DAYSPERNYEAR);
 		if (days < 0)
 			--newy;
 		days -= (newy - y) * DAYSPERNYEAR +
@@ -1301,7 +1297,7 @@ register struct tm * const		tmp;
 			LEAPS_THRU_END_OF(y - 1);
 		y = newy;
 	}
-	tmp->tm_year = (int) y - TM_YEAR_BASE;
+	tmp->tm_year = y - TM_YEAR_BASE;
 	tmp->tm_yday = (int) days;
 	ip = mon_lengths[yleap];
 	for (tmp->tm_mon = 0; days >= (long) ip[tmp->tm_mon]; ++(tmp->tm_mon))
@@ -1483,14 +1479,6 @@ const int		do_norm_secs;
 	*/
 	bits = TYPE_BIT(time_t) - 1;
 	/*
-	 * "tm_year" in "struct tm" is a signed 32-bit integer. It will
-	 * overflow if a time_t > 2^31*60*60*24*365 is converted,
-	 * causing tmcomp() to give wrong results and thus the
-	 * binary search below to fail.
-	 */
-	if (bits > 55)
-		bits = 55; /* could be 56 for signed time_t */
-	/*
 	** If time_t is signed, then 0 is just above the median,
 	** assuming two's complement arithmetic.
 	** If time_t is unsigned, then (1 << bits) is just above the median.
@@ -1661,10 +1649,10 @@ struct tm * const	tmp;
 {
 	time_t result;
 
-	rwlock_wrlock(&__lcl_lock);
-	__tzset_unlocked();
+	rwlock_wrlock(&lcl_lock);
+	tzset_unlocked();
 	result = time1(tmp, localsub, 0L);
-	rwlock_unlock(&__lcl_lock);
+	rwlock_unlock(&lcl_lock);
 	return (result);
 }
 
@@ -1755,10 +1743,10 @@ time_t	t;
 {
 	time_t result;
 
-	rwlock_wrlock(&__lcl_lock);
-	__tzset_unlocked();
+	rwlock_wrlock(&lcl_lock);
+	tzset_unlocked();
 	result = t - leapcorr(&t);
-	rwlock_unlock(&__lcl_lock);
+	rwlock_unlock(&lcl_lock);
 	return (result);
 }
 
@@ -1769,8 +1757,8 @@ time_t	t;
 	time_t	x;
 	time_t	y;
 
-	rwlock_wrlock(&__lcl_lock);
-	__tzset_unlocked();
+	rwlock_wrlock(&lcl_lock);
+	tzset_unlocked();
 	/*
 	** For a positive leap second hit, the result
 	** is not unique.  For a negative leap second
@@ -1785,7 +1773,7 @@ time_t	t;
 			y = x - leapcorr(&x);
 		} while (y < t);
 		if (t != y) {
-			rwlock_unlock(&__lcl_lock);
+			rwlock_unlock(&lcl_lock);
 			return x - 1;
 		}
 	} else if (y > t) {
@@ -1794,11 +1782,11 @@ time_t	t;
 			y = x - leapcorr(&x);
 		} while (y > t);
 		if (t != y) {
-			rwlock_unlock(&__lcl_lock);
+			rwlock_unlock(&lcl_lock);
 			return x + 1;
 		}
 	}
-	rwlock_unlock(&__lcl_lock);
+	rwlock_unlock(&lcl_lock);
 	return x;
 }
 

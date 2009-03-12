@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_domain.c,v 1.78 2009/03/11 05:55:22 mrg Exp $	*/
+/*	$NetBSD: uipc_domain.c,v 1.76 2008/04/24 11:38:36 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_domain.c,v 1.78 2009/03/11 05:55:22 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_domain.c,v 1.76 2008/04/24 11:38:36 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -73,17 +73,12 @@ callout_t pffasttimo_ch, pfslowtimo_ch;
 u_int	pfslowtimo_now;
 u_int	pffasttimo_now;
 
-static struct sysctllog *domain_sysctllog;
-static void sysctl_net_setup(void);
-
 void
 domaininit(void)
 {
 	__link_set_decl(domains, struct domain);
 	struct domain * const * dpp;
 	struct domain *rt_domain = NULL;
-
-	sysctl_net_setup();
 
 	/*
 	 * Add all of the domains.  Make sure the PF_ROUTE
@@ -460,9 +455,11 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 			dp += elem_size;
 			len -= elem_size;
 		}
-		needed += elem_size;
-		if (elem_count > 0 && elem_count != INT_MAX)
-			elem_count--;
+		if (elem_count > 0) {
+			needed += elem_size;
+			if (elem_count != INT_MAX)
+				elem_count--;
+		}
 	}
 	mutex_exit(&filelist_lock);
 	fputdummy(dfp);
@@ -474,42 +471,39 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 	return (error);
 }
 
-static void
-sysctl_net_setup()
+SYSCTL_SETUP(sysctl_net_setup, "sysctl net subtree setup")
 {
-
-	KASSERT(domain_sysctllog == NULL);
-	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "net", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_NET, CTL_EOL);
-	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "local",
 		       SYSCTL_DESCR("PF_LOCAL related settings"),
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_LOCAL, CTL_EOL);
-	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "stream",
 		       SYSCTL_DESCR("SOCK_STREAM settings"),
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_LOCAL, SOCK_STREAM, CTL_EOL);
-	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "dgram",
 		       SYSCTL_DESCR("SOCK_DGRAM settings"),
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_LOCAL, SOCK_DGRAM, CTL_EOL);
 
-	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "pcblist",
 		       SYSCTL_DESCR("SOCK_STREAM protocol control block list"),
 		       sysctl_unpcblist, 0, NULL, 0,
 		       CTL_NET, PF_LOCAL, SOCK_STREAM, CTL_CREATE, CTL_EOL);
-	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "pcblist",
 		       SYSCTL_DESCR("SOCK_DGRAM protocol control block list"),

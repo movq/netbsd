@@ -1,4 +1,4 @@
-/*	$NetBSD: if_jme.c,v 1.6 2009/01/31 13:57:03 bouyer Exp $	*/
+/*	$NetBSD: if_jme.c,v 1.4.6.2 2009/02/02 20:50:11 snj Exp $	*/
 
 /*
  * Copyright (c) 2008 Manuel Bouyer.  All rights reserved.
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.6 2009/01/31 13:57:03 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.4.6.2 2009/02/02 20:50:11 snj Exp $");
 
 
 #include <sys/param.h>

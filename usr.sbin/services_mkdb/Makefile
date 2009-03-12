@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2009/02/13 16:02:05 uebayasi Exp $
+#	$NetBSD: Makefile,v 1.4.18.1 2010/12/08 04:31:41 riz Exp $
 
 WARNS?=	4
 PROG=	services_mkdb

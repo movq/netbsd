@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_intio.c,v 1.13 2009/01/18 04:48:53 isaki Exp $	*/
+/*	$NetBSD: if_ne_intio.c,v 1.11.14.1 2010/11/20 00:33:47 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 Tetsuya Isaki. All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.13 2009/01/18 04:48:53 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.11.14.1 2010/11/20 00:33:47 riz Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -75,8 +75,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.13 2009/01/18 04:48:53 isaki Exp $
 #include <dev/ic/dp8390var.h>
 #include <dev/ic/ne2000reg.h>
 #include <dev/ic/ne2000var.h>
-#include <dev/ic/rtl80x9reg.h>
-#include <dev/ic/rtl80x9var.h>
 
 #include <arch/x68k/dev/intiovar.h>
 
@@ -87,6 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_intio.c,v 1.13 2009/01/18 04:48:53 isaki Exp $
 
 static int  ne_intio_match(device_t, cfdata_t, void *);
 static void ne_intio_attach(device_t, device_t, void *);
+static int  ne_intio_intr(void *);
 
 #define ne_intio_softc ne2000_softc
 
@@ -118,7 +117,7 @@ ne_intio_match(device_t parent, cfdata_t cf, void *aux)
 		return 0;
 
 	/* Check whether the board is inserted or not */
-	if (badaddr((void *)IIOV(ia->ia_addr)))
+	if (badaddr(INTIO_ADDR(ia->ia_addr)))
 		return 0;
 
 	/* Map I/O space */
@@ -188,21 +187,10 @@ ne_intio_attach(device_t parent, device_t self, void *aux)
 
 	case NE2000_TYPE_NE2000:
 		typestr = "NE2000";
-		/*
-		 * Check for a Realtek 8019.
-		 */
-		bus_space_write_1(iot, ioh, ED_P0_CR,
-			ED_CR_PAGE_0 | ED_CR_STP);
-		if (bus_space_read_1(iot, ioh, NERTL_RTL0_8019ID0) ==
-		      RTL0_8019ID0 &&
-		      bus_space_read_1(iot, ioh, NERTL_RTL0_8019ID1) ==
-		      RTL0_8019ID1) {
-			typestr = "NE2000 (RTL8019)";
-			dsc->sc_mediachange = rtl80x9_mediachange;
-			dsc->sc_mediastatus = rtl80x9_mediastatus;
-			dsc->init_card      = rtl80x9_init_card;
-			dsc->sc_media_init  = rtl80x9_media_init;
-		}
+		break;
+
+	case NE2000_TYPE_RTL8019:
+		typestr = "NE2000 (RTL8019)";
 		break;
 
 	default:
@@ -222,7 +210,19 @@ ne_intio_attach(device_t parent, device_t self, void *aux)
 	ne2000_attach(sc, NULL);
 
 	/* Establish the interrupt handler */
-	if (intio_intr_establish(ia->ia_intr, "ne", dp8390_intr, dsc))
+	if (intio_intr_establish(ia->ia_intr, "ne", ne_intio_intr, dsc))
 		aprint_error_dev(self,
 		    "couldn't establish interrupt handler\n");
+}
+
+static int
+ne_intio_intr(void *arg)
+{
+	int error;
+	int s;
+
+	s = splnet();
+	error = dp8390_intr(arg);
+	splx(s);
+	return error;
 }

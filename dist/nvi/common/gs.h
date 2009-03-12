@@ -1,4 +1,4 @@
-/*	$NetBSD: gs.h,v 1.4 2009/01/18 03:43:45 lukem Exp $ */
+/*	$NetBSD: gs.h,v 1.2.6.1 2009/01/20 02:41:11 snj Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994
@@ -108,8 +108,7 @@ struct _gs {
 #define	KEY_VAL(sp, ch)							\
 	((UCHAR_T)(ch) <= MAX_FAST_KEY ? 				\
 	    sp->gp->special_key[(UCHAR_T)ch] :				\
-	    (UCHAR_T)(ch) > (UCHAR_T)sp->gp->max_special ?		\
-		K_NOTUSED : v_key_val(sp,ch))
+	    (UCHAR_T)(ch) > sp->gp->max_special ? K_NOTUSED : v_key_val(sp,ch))
 	CHAR_T	 max_special;		/* Max special character. */
 	u_char				/* Fast lookup table. */
 	    special_key[MAX_FAST_KEY + 1];

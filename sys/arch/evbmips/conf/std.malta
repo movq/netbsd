@@ -1,4 +1,4 @@
-# $NetBSD: std.malta,v 1.6 2008/12/11 05:42:18 alc Exp $
+# $NetBSD: std.malta,v 1.5.88.1 2009/08/07 06:43:26 snj Exp $
 
 machine evbmips mips
 include		"conf/std"	# MI standard options

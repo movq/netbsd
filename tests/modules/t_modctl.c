@@ -1,4 +1,4 @@
-/*	$NetBSD: t_modctl.c,v 1.3 2009/01/04 17:56:57 jmmv Exp $	*/
+/*	$NetBSD: t_modctl.c,v 1.2.8.1 2009/01/09 02:12:50 snj Exp $	*/
 /*
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: t_modctl.c,v 1.3 2009/01/04 17:56:57 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: t_modctl.c,v 1.2.8.1 2009/01/09 02:12:50 snj Exp $");
 
 #include <sys/module.h>
 #include <sys/sysctl.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: client.c,v 1.2 2008/12/06 20:01:14 plunky Exp $	*/
+/*	$NetBSD: client.c,v 1.1.6.1 2009/02/24 02:30:08 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: client.c,v 1.2 2008/12/06 20:01:14 plunky Exp $");
+__RCSID("$NetBSD: client.c,v 1.1.6.1 2009/02/24 02:30:08 snj Exp $");
 
 #include <bluetooth.h>
 #include <errno.h>

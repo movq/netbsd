@@ -1,4 +1,4 @@
-/* $NetBSD: wcstod_test.c,v 1.2 2009/01/02 00:20:24 tnozaki Exp $ */
+/* $NetBSD: wcstod_test.c,v 1.1.30.1 2009/01/15 03:24:09 snj Exp $ */
 
 /*-
  * Copyright (c)2005 Citrus Project,

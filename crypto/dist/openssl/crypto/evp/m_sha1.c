@@ -104,13 +104,12 @@ static int init224(EVP_MD_CTX *ctx)
 	{ return SHA224_Init(ctx->md_data); }
 static int init256(EVP_MD_CTX *ctx)
 	{ return SHA256_Init(ctx->md_data); }
-/*
- * Even though there're separate SHA224_[Update|Final], we call
- * SHA256 functions even in SHA224 context. This is what happens
- * there anyway, so we can spare few CPU cycles:-)
- */
+static int update224(EVP_MD_CTX *ctx,const void *data,size_t count)
+	{ return SHA224_Update(ctx->md_data,data,count); }
 static int update256(EVP_MD_CTX *ctx,const void *data,size_t count)
 	{ return SHA256_Update(ctx->md_data,data,count); }
+static int final224(EVP_MD_CTX *ctx,unsigned char *md)
+	{ return SHA224_Final(md,ctx->md_data); }
 static int final256(EVP_MD_CTX *ctx,unsigned char *md)
 	{ return SHA256_Final(md,ctx->md_data); }
 
@@ -121,8 +120,8 @@ static const EVP_MD sha224_md=
 	SHA224_DIGEST_LENGTH,
 	EVP_MD_FLAG_PKEY_METHOD_SIGNATURE|EVP_MD_FLAG_DIGALGID_ABSENT,
 	init224,
-	update256,
-	final256,
+	update224,
+	final224,
 	NULL,
 	NULL,
 	EVP_PKEY_RSA_method,
@@ -159,8 +158,12 @@ static int init384(EVP_MD_CTX *ctx)
 static int init512(EVP_MD_CTX *ctx)
 	{ return SHA512_Init(ctx->md_data); }
 /* See comment in SHA224/256 section */
+static int update384(EVP_MD_CTX *ctx,const void *data,size_t count)
+	{ return SHA384_Update(ctx->md_data,data,count); }
 static int update512(EVP_MD_CTX *ctx,const void *data,size_t count)
 	{ return SHA512_Update(ctx->md_data,data,count); }
+static int final384(EVP_MD_CTX *ctx,unsigned char *md)
+	{ return SHA384_Final(md,ctx->md_data); }
 static int final512(EVP_MD_CTX *ctx,unsigned char *md)
 	{ return SHA512_Final(md,ctx->md_data); }
 
@@ -171,8 +174,8 @@ static const EVP_MD sha384_md=
 	SHA384_DIGEST_LENGTH,
 	EVP_MD_FLAG_PKEY_METHOD_SIGNATURE|EVP_MD_FLAG_DIGALGID_ABSENT,
 	init384,
-	update512,
-	final512,
+	update384,
+	final384,
 	NULL,
 	NULL,
 	EVP_PKEY_RSA_method,

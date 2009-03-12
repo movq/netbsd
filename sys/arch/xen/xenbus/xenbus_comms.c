@@ -1,4 +1,4 @@
-/* $NetBSD: xenbus_comms.c,v 1.12 2009/01/16 20:16:47 jym Exp $ */
+/* $NetBSD: xenbus_comms.c,v 1.10 2008/10/29 13:53:15 cegger Exp $ */
 /******************************************************************************
  * xenbus_comms.c
  *
@@ -29,11 +29,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xenbus_comms.c,v 1.12 2009/01/16 20:16:47 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xenbus_comms.c,v 1.10 2008/10/29 13:53:15 cegger Exp $");
 
 #include <sys/types.h>
 #include <sys/null.h> 
 #include <sys/errno.h> 
+#include <sys/malloc.h>
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
@@ -133,7 +134,7 @@ xb_write(const void *data, unsigned len)
 		/* Read indexes, then verify. */
 		cons = intf->req_cons;
 		prod = intf->req_prod;
-		xen_rmb();
+		x86_lfence();
 		if (!check_indexes(cons, prod)) {
 			splx(s);
 			return EIO;
@@ -150,9 +151,9 @@ xb_write(const void *data, unsigned len)
 		len -= avail;
 
 		/* Other side must not see new header until data is there. */
-		xen_rmb();
+		x86_lfence();
 		intf->req_prod += avail;
-		xen_rmb();
+		x86_lfence();
 
 		hypervisor_notify_via_evtchn(xen_start_info.store_evtchn);
 	}
@@ -179,7 +180,7 @@ xb_read(void *data, unsigned len)
 		/* Read indexes, then verify. */
 		cons = intf->rsp_cons;
 		prod = intf->rsp_prod;
-		xen_rmb();
+		x86_lfence();
 		if (!check_indexes(cons, prod)) {
 			XENPRINTF(("xb_read EIO\n"));
 			splx(s);
@@ -193,16 +194,16 @@ xb_read(void *data, unsigned len)
 			avail = len;
 
 		/* We must read header before we read data. */
-		xen_rmb();
+		x86_lfence();
 
 		memcpy(data, src, avail);
 		data = (char *)data + avail;
 		len -= avail;
 
 		/* Other side must not see free space until we've copied out */
-		xen_rmb();
+		x86_lfence();
 		intf->rsp_cons += avail;
-		xen_rmb();
+		x86_lfence();
 
 		XENPRINTF(("Finished read of %i bytes (%i to go)\n",
 		    avail, len));

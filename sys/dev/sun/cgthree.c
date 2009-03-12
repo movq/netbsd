@@ -1,4 +1,4 @@
-/*	$NetBSD: cgthree.c,v 1.20 2009/02/23 22:44:27 jdc Exp $ */
+/*	$NetBSD: cgthree.c,v 1.16.6.4 2009/02/26 07:42:06 snj Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgthree.c,v 1.20 2009/02/23 22:44:27 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgthree.c,v 1.16.6.4 2009/02/26 07:42:06 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

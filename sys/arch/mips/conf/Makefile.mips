@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.mips,v 1.54 2009/02/15 01:58:01 cube Exp $
+#	$NetBSD: Makefile.mips,v 1.50.20.1 2009/08/07 18:33:48 snj Exp $
 
 # Makefile for NetBSD
 #
@@ -55,8 +55,7 @@ AFLAGS+=	-mno-abicalls -x assembler-with-cpp -traditional-cpp ${AOPTS}
 ##
 ## (3) libkern and compat
 ##
-OPT_MODULAR=	%MODULAR%
-.if !empty(OPT_MODULAR)
+.if !empty(IDENT:M-DLKM)
 KERN_AS=	obj
 .endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ps.c,v 1.73 2009/02/14 08:04:10 lukem Exp $	*/
+/*	$NetBSD: ps.c,v 1.71.4.1 2009/04/01 00:25:20 snj Exp $	*/
 
 /*
  * Copyright (c) 2000-2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@ __COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)ps.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: ps.c,v 1.73 2009/02/14 08:04:10 lukem Exp $");
+__RCSID("$NetBSD: ps.c,v 1.71.4.1 2009/04/01 00:25:20 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -152,8 +152,7 @@ main(int argc, char *argv[])
 	struct varent *vent;
 	struct winsize ws;
 	struct kinfo_lwp *kl, *l;
-	int ch, i, j, fmt, lineno, nentries, nlwps;
-	long long flag;
+	int ch, flag, i, j, fmt, lineno, nentries, nlwps;
 	int prtheader, wflag, what, xflg, mode, showlwps;
 	char *nlistf, *memf, *swapf, errbuf[_POSIX2_LINE_MAX];
 	char *ttname;
@@ -415,7 +414,7 @@ main(int argc, char *argv[])
 		for (i = 0; i < nentries; i++) {
 			struct kinfo_proc2 *ki = &kinfo[i];
 
-			if (xflg == 0 && (ki->p_tdev == (uint32_t)NODEV ||
+			if (xflg == 0 && (ki->p_tdev == NODEV ||
 			    (ki->p_flag & P_CONTROLT) == 0))
 				continue;
 
@@ -451,7 +450,7 @@ main(int argc, char *argv[])
 	for (i = lineno = 0; i < nentries; i++) {
 		struct kinfo_proc2 *ki = &kinfo[i];
 
-		if (xflg == 0 && (ki->p_tdev == (uint32_t)NODEV ||
+		if (xflg == 0 && (ki->p_tdev == NODEV ||
 		    (ki->p_flag & P_CONTROLT ) == 0))
 			continue;
 		kl = kvm_getlwps(kd, ki->p_pid, (u_long)ki->p_paddr,
@@ -585,7 +584,7 @@ pscomp(const void *a, const void *b)
 	struct varent *ve;
 	const sigset_t *sa, *sb;
 
-#define	V_SIZE(k) (k->p_vm_dsize + k->p_vm_ssize + k->p_vm_tsize)
+#define	V_SIZE(k) ((k)->p_vm_msize)
 #define	RDIFF_N(t, n) \
 	if (((const t *)((const char *)ka + v->off))[n] > ((const t *)((const char *)kb + v->off))[n]) \
 		return 1; \
@@ -631,7 +630,7 @@ pscomp(const void *a, const void *b)
 				if (sa->__bits[i] < sb->__bits[i])
 					return -1;
 				i++;
-			} while (i < (int)__arraycount(sa->__bits));
+			} while (i < sizeof sa->__bits / sizeof sa->__bits[0]);
 			continue;
 		case INT64:
 			RDIFF(int64_t);

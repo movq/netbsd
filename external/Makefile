@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.3 2008/12/19 15:24:04 haad Exp $
+#	$NetBSD: Makefile,v 1.2.2.1 2009/09/15 06:01:40 snj Exp $
 
 SUBDIR+= lib .WAIT
 
-SUBDIR+= bsd intel-fw-eula intel-fw-public gpl2
+SUBDIR+= bsd intel-fw-eula intel-fw-public ibm-public
 
 .include <bsd.subdir.mk>

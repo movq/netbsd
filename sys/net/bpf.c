@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.c,v 1.143 2009/03/11 05:55:22 mrg Exp $	*/
+/*	$NetBSD: bpf.c,v 1.141.6.1 2009/04/04 23:36:28 snj Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.143 2009/03/11 05:55:22 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.141.6.1 2009/04/04 23:36:28 snj Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_bpf.h"
@@ -140,7 +140,7 @@ static void	bpf_timed_out(void *);
 static inline void
 		bpf_wakeup(struct bpf_d *);
 static void	catchpacket(struct bpf_d *, u_char *, u_int, u_int,
-    void *(*)(void *, const void *, size_t), struct timespec *);
+    void *(*)(void *, const void *, size_t), struct timeval *);
 static void	reset_d(struct bpf_d *);
 static int	bpf_getdltlist(struct bpf_d *, struct bpf_dltlist *);
 static int	bpf_setdlt(struct bpf_d *, u_int);
@@ -156,14 +156,15 @@ static int	bpf_kqfilter(struct file *, struct knote *);
 static void	bpf_softintr(void *);
 
 static const struct fileops bpf_fileops = {
-	bpf_read,
-	bpf_write,
-	bpf_ioctl,
-	fnullop_fcntl,
-	bpf_poll,
-	fbadop_stat,
-	bpf_close,
-	bpf_kqfilter,
+	.fo_read = bpf_read,
+	.fo_write = bpf_write,
+	.fo_ioctl = bpf_ioctl,
+	.fo_fcntl = fnullop_fcntl,
+	.fo_poll = bpf_poll,
+	.fo_stat = fbadop_stat,
+	.fo_close = bpf_close,
+	.fo_kqfilter = bpf_kqfilter,
+	.fo_drain = fnullop_drain,
 };
 
 dev_type_open(bpfopen);
@@ -863,36 +864,6 @@ bpf_ioctl(struct file *fp, u_long cmd, void *addr)
 			break;
 		}
 
-#ifdef BIOCGORTIMEOUT
-	/*
-	 * Get read timeout.
-	 */
-	case BIOCGORTIMEOUT:
-		{
-			struct timeval50 *tv = addr;
-
-			tv->tv_sec = d->bd_rtout / hz;
-			tv->tv_usec = (d->bd_rtout % hz) * tick;
-			break;
-		}
-#endif
-
-#ifdef BIOCSORTIMEOUT
-	/*
-	 * Set read timeout.
-	 */
-	case BIOCSORTIMEOUT:
-		{
-			struct timeval50 *tv = addr;
-
-			/* Compute number of ticks. */
-			d->bd_rtout = tv->tv_sec * hz + tv->tv_usec / tick;
-			if ((d->bd_rtout == 0) && (tv->tv_usec != 0))
-				d->bd_rtout = 1;
-			break;
-		}
-#endif
-
 	/*
 	 * Get read timeout.
 	 */
@@ -904,6 +875,7 @@ bpf_ioctl(struct file *fp, u_long cmd, void *addr)
 			tv->tv_usec = (d->bd_rtout % hz) * tick;
 			break;
 		}
+
 	/*
 	 * Get packet stats.
 	 */
@@ -1238,7 +1210,7 @@ bpf_tap(void *arg, u_char *pkt, u_int pktlen)
 	struct bpf_if *bp;
 	struct bpf_d *d;
 	u_int slen;
-	struct timespec ts;
+	struct timeval tv;
 	int gottime=0;
 
 	/*
@@ -1253,10 +1225,10 @@ bpf_tap(void *arg, u_char *pkt, u_int pktlen)
 		slen = bpf_filter(d->bd_filter, pkt, pktlen, pktlen);
 		if (slen != 0) {
 			if (!gottime) {
-				nanotime(&ts);
+				microtime(&tv);
 				gottime = 1;
 			}
-			catchpacket(d, pkt, pktlen, slen, memcpy, &ts);
+		catchpacket(d, pkt, pktlen, slen, (void *)memcpy, &tv);
 		}
 	}
 }
@@ -1301,7 +1273,7 @@ bpf_deliver(struct bpf_if *bp, void *(*cpfn)(void *, const void *, size_t),
 {
 	u_int slen;
 	struct bpf_d *d;
-	struct timespec ts;
+	struct timeval tv;
 	int gottime = 0;
 
 	for (d = bp->bif_dlist; d != 0; d = d->bd_next) {
@@ -1312,10 +1284,10 @@ bpf_deliver(struct bpf_if *bp, void *(*cpfn)(void *, const void *, size_t),
 		slen = bpf_filter(d->bd_filter, marg, pktlen, buflen);
 		if (slen != 0) {
 			if(!gottime) {
-				nanotime(&ts);
+				microtime(&tv);
 				gottime = 1;
 			}
-			catchpacket(d, marg, pktlen, slen, cpfn, &ts);
+			catchpacket(d, marg, pktlen, slen, cpfn, &tv);
 		}
 	}
 }
@@ -1478,7 +1450,7 @@ bpf_mtap_sl_out(void *arg, u_char *chdr, struct mbuf *m)
  */
 static void
 catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
-    void *(*cpfn)(void *, const void *, size_t), struct timespec *ts)
+    void *(*cpfn)(void *, const void *, size_t), struct timeval *tv)
 {
 	struct bpf_hdr *hp;
 	int totlen, curlen;
@@ -1532,8 +1504,7 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	 * Append the bpf header.
 	 */
 	hp = (struct bpf_hdr *)((char *)d->bd_sbuf + curlen);
-	hp->bh_tstamp.tv_sec = ts->tv_sec;
-	hp->bh_tstamp.tv_usec = ts->tv_nsec / 1000;
+	hp->bh_tstamp = *tv;
 	hp->bh_datalen = pktlen;
 	hp->bh_hdrlen = hdrlen;
 	/*
@@ -1846,9 +1817,11 @@ sysctl_net_bpf_peers(SYSCTLFN_ARGS)
 			sp += elem_size;
 			len -= elem_size;
 		}
-		needed += elem_size;
-		if (elem_count > 0 && elem_count != INT_MAX)
-			elem_count--;
+		if (elem_count > 0) {
+			needed += elem_size;
+			if (elem_count != INT_MAX)
+				elem_count--;
+		}
 	}
 	mutex_exit(&bpf_mtx);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: common.c,v 1.39 2009/01/18 09:57:26 lukem Exp $	*/
+/*	$NetBSD: common.c,v 1.38 2007/12/01 09:26:58 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)common.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: common.c,v 1.39 2009/01/18 09:57:26 lukem Exp $");
+__RCSID("$NetBSD: common.c,v 1.38 2007/12/01 09:26:58 mlelstv Exp $");
 #endif
 #endif /* not lint */
 
@@ -203,11 +203,10 @@ retryport:
  *  new-line to null and leaves it in line.
  * Returns 0 at EOF or the number of characters read.
  */
-size_t
+int
 getline(FILE *cfp)
 {
-	size_t linel = 0;
-	int c;
+	int linel = 0, c;
 	char *lp = line;
 
 	while ((c = getc(cfp)) != '\n' && linel+1<sizeof(line)) {

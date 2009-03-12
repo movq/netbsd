@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lc_isa.c,v 1.30 2009/02/13 22:39:37 bouyer Exp $ */
+/*	$NetBSD: if_lc_isa.c,v 1.29.14.1 2009/09/30 00:01:19 snj Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_lc_isa.c,v 1.30 2009/02/13 22:39:37 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_lc_isa.c,v 1.29.14.1 2009/09/30 00:01:19 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

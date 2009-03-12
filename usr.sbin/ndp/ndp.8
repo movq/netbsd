@@ -1,4 +1,4 @@
-.\"	$NetBSD: ndp.8,v 1.23 2009/03/11 18:52:54 joerg Exp $
+.\"	$NetBSD: ndp.8,v 1.22 2006/03/05 23:47:08 rpaulo Exp $
 .\"	$KAME: ndp.8,v 1.33 2005/10/19 14:57:42 suz Exp $
 .\"
 .\" Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -172,11 +172,15 @@ in this case.
 .\"
 .Pp
 .Bl -tag -width Ds -compact
-.It Ic nud
+.It Xo
+.Ic nud
+.Xc
 Turn on or off NUD (Neighbor Unreachability Detection) on the
 interface.
 NUD is usually turned on by default.
-.It Ic accept_rtadv
+.It Xo
+.Ic accept_rtadv
+.Xc
 Specify whether or not to accept Router Advertisement messages
 received on the
 .Ar interface .
@@ -185,7 +189,9 @@ unless the
 .Li net.inet6.ip6.accept_rtadv
 variable is non-0, even if the flag is on.
 This flag is set to 1 by default.
-.It Ic prefer_source
+.It Xo
+.Ic prefer_source
+.Xc
 Prefer addresses on the
 .Ar interface
 as candidates of the source address for outgoing packets.
@@ -194,7 +200,9 @@ For more details about the entire algorithm of source address
 selection, see the
 .Pa IMPLEMENTATION
 file supplied with the KAME kit.
-.It Ic disabled
+.It Xo
+.Ic disabled
+.Xc
 Disable IPv6 operation on the interface.
 When disabled, the interface discards any IPv6 packets
 received on or being sent to the interface.
@@ -205,11 +213,17 @@ a certain failure of Duplicate Address Detection.
 While the flag can be set or cleared by hand with the
 .Nm
 command, it is not generally advisable to modify this flag manually.
-.It Ic basereachable=(number)
+.It Xo
+.Ic basereachable=(number)
+.Xc
 Specify the BaseReachbleTimer on the interface in millisecond.
-.It Ic retrans=(number)
+.It Xo
+.Ic retrans=(number)
+.Xc
 Specify the RetransTimer on the interface in millisecond.
-.It Ic curhlim=(number)
+.It Xo
+.Ic curhlim=(number)
+.Xc
 Specify the Cur Hop Limit on the interface.
 .El
 .It Fl n

@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: cgram.y,v 1.42 2008/11/16 07:06:37 dholland Exp $ */
+/* $NetBSD: cgram.y,v 1.41 2008/04/25 22:18:34 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: cgram.y,v 1.42 2008/11/16 07:06:37 dholland Exp $");
+__RCSID("$NetBSD: cgram.y,v 1.41 2008/04/25 22:18:34 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -1759,7 +1759,7 @@ identifier:
 
 /* ARGSUSED */
 int
-yyerror(const char *msg)
+yyerror(char *msg)
 {
 	error(249, yytext);
 	if (++sytxerr >= 5)
@@ -1836,7 +1836,7 @@ toicon(tnode_t *tn, int required)
 }
 
 static void
-idecl(sym_t *decl, int initflg, sbuf_t *renaming)
+idecl(sym_t *decl, int initflg, sbuf_t *rename)
 {
 	char *s;
 
@@ -1845,31 +1845,31 @@ idecl(sym_t *decl, int initflg, sbuf_t *renaming)
 
 	switch (dcs->d_ctx) {
 	case EXTERN:
-		if (renaming != NULL) {
+		if (rename != NULL) {
 			if (decl->s_rename != NULL)
 				LERROR("idecl()");
 
-			s = getlblk(1, renaming->sb_len + 1);
-	                (void)memcpy(s, renaming->sb_name, renaming->sb_len + 1);
+			s = getlblk(1, rename->sb_len + 1);
+	                (void)memcpy(s, rename->sb_name, rename->sb_len + 1);
 			decl->s_rename = s;
-			freeyyv(&renaming, T_NAME);
+			freeyyv(&rename, T_NAME);
 		}
 		decl1ext(decl, initflg);
 		break;
 	case ARG:
-		if (renaming != NULL) {
+		if (rename != NULL) {
 			/* symbol renaming can't be used on function arguments */
 			error(310);
-			freeyyv(&renaming, T_NAME);
+			freeyyv(&rename, T_NAME);
 			break;
 		}
 		(void)decl1arg(decl, initflg);
 		break;
 	case AUTO:
-		if (renaming != NULL) {
+		if (rename != NULL) {
 			/* symbol renaming can't be used on automatic variables */
 			error(311);
-			freeyyv(&renaming, T_NAME);
+			freeyyv(&rename, T_NAME);
 			break;
 		}
 		decl1loc(decl, initflg);

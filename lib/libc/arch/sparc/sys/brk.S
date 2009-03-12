@@ -1,4 +1,4 @@
-/*	$NetBSD: brk.S,v 1.15 2008/11/06 13:42:55 nakayama Exp $	*/
+/*	$NetBSD: brk.S,v 1.14.8.1 2008/11/07 23:27:24 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,7 +40,7 @@
 #if 0
 	.asciz "@(#)brk.s	8.1 (Berkeley) 6/4/93"
 #else
-	RCSID("$NetBSD: brk.S,v 1.15 2008/11/06 13:42:55 nakayama Exp $")
+	RCSID("$NetBSD: brk.S,v 1.14.8.1 2008/11/07 23:27:24 snj Exp $")
 #endif
 #endif /* SYSLIBC_SCCS and not lint */
 

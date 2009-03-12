@@ -1,4 +1,4 @@
-/*	$NetBSD: pccbb.c,v 1.184 2009/03/05 01:38:12 msaitoh Exp $	*/
+/*	$NetBSD: pccbb.c,v 1.180.4.1 2009/09/30 00:00:49 snj Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 and 2000
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccbb.c,v 1.184 2009/03/05 01:38:12 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccbb.c,v 1.180.4.1 2009/09/30 00:00:49 snj Exp $");
 
 /*
 #define CBB_DEBUG
@@ -946,7 +946,7 @@ pccbb_intrinit(struct pccbb_softc *sc)
 
 	/*
 	 * XXX pccbbintr should be called under the priority lower
-	 * than any other hard interrupts.
+	 * than any other hard interupts.
 	 */
 	KASSERT(sc->sc_ih == NULL);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_BIO, pccbbintr, sc);
@@ -1045,17 +1045,6 @@ pccbbintr(void *arg)
 		    sockevent);
 	}
 
-	/* XXX sockevent == CB_SOCKET_EVENT_CSTS|CB_SOCKET_EVENT_POWER
-	 * does occur in the wild.  Check for a _POWER event before
-	 * possibly exiting because of an _CSTS event.
-	 */
-	if (sockevent & CB_SOCKET_EVENT_POWER) {
-		DPRINTF(("Powercycling because of socket event\n"));
-		/* XXX: Does not happen when attaching a 16-bit card */
-		sc->sc_pwrcycle++;
-		wakeup(&sc->sc_pwrcycle);
-	}
-
 	/* Sometimes a change of CSTSCHG# accompanies the first
 	 * interrupt from an Atheros WLAN.  That generates a
 	 * CB_SOCKET_EVENT_CSTS event on the bridge.  The event
@@ -1113,6 +1102,14 @@ pccbbintr(void *arg)
 			callout_schedule(&sc->sc_insert_ch, hz / 5);
 			sc->sc_flags |= CBB_INSERTING;
 		}
+	}
+
+	/* XXX sockevent == 9 does occur in the wild.  handle it. */
+	if (sockevent & CB_SOCKET_EVENT_POWER) {
+		DPRINTF(("Powercycling because of socket event\n"));
+		/* XXX: Does not happen when attaching a 16-bit card */
+		sc->sc_pwrcycle++;
+		wakeup(&sc->sc_pwrcycle);
 	}
 
 	return (1);
@@ -1374,9 +1371,8 @@ pccbb_power(struct pccbb_softc *sc, int command)
 	splx(s);
 	microtime(&after);
 	timersub(&after, &before, &diff);
-	aprint_debug_dev(sc->sc_dev, "wait took%s %lld.%06lds\n",
-	    (on && times < 0) ? " too long" : "", (long long)diff.tv_sec,
-	    (long)diff.tv_usec);
+	aprint_debug_dev(sc->sc_dev, "wait took%s %ld.%06lds\n",
+	    (on && times < 0) ? " too long" : "", diff.tv_sec, diff.tv_usec);
 
 	/*
 	 * Ok, wait a bit longer for things to settle.
