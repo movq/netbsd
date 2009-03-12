@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arp.c,v 1.145 2009/01/11 02:45:54 christos Exp $	*/
+/*	$NetBSD: if_arp.c,v 1.143.4.2 2009/11/21 19:43:41 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_arp.c,v 1.145 2009/01/11 02:45:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_arp.c,v 1.143.4.2 2009/11/21 19:43:41 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
@@ -459,8 +459,6 @@ arp_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 	struct in_ifaddr *ia;
 	struct ifaddr *ifa;
 	struct ifnet *ifp = rt->rt_ifp;
-	uint8_t namelen = strlen(ifp->if_xname);
-	uint8_t addrlen = ifp->if_addrlen;
 
 	if (!arpinit_done) {
 		arpinit_done = 1;
@@ -476,19 +474,6 @@ arp_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 		}
 		callout_init(&arptimer_ch, CALLOUT_MPSAFE);
 		callout_reset(&arptimer_ch, hz, arptimer, NULL);
-	}
-
-	if (req == RTM_LLINFO_UPD) {
-		struct in_addr *in;
-
-		if ((ifa = info->rti_ifa) == NULL)
-			return;
-
-		in = &ifatoia(ifa)->ia_addr.sin_addr;
-
-		arprequest(ifa->ifa_ifp, in, in,
-		    CLLADDR(ifa->ifa_ifp->if_sadl));
-		return;
 	}
 
 	if ((rt->rt_flags & RTF_GATEWAY) != 0) {
@@ -572,16 +557,15 @@ arp_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 			break;
 		}
 		/* Announce a new entry if requested. */
-		if (rt->rt_flags & RTF_ANNOUNCE) {
+		if (rt->rt_flags & RTF_ANNOUNCE)
 			arprequest(ifp,
 			    &satocsin(rt_getkey(rt))->sin_addr,
 			    &satocsin(rt_getkey(rt))->sin_addr,
 			    CLLADDR(satocsdl(gate)));
-		}
 		/*FALLTHROUGH*/
 	case RTM_RESOLVE:
 		if (gate->sa_family != AF_LINK ||
-		    gate->sa_len < sockaddr_dl_measure(namelen, addrlen)) {
+		    gate->sa_len < sockaddr_dl_measure(0, ifp->if_addrlen)) {
 			log(LOG_DEBUG, "arp_rtrequest: bad gateway value\n");
 			break;
 		}
@@ -593,7 +577,7 @@ arp_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 		 * Case 2:  This route may come from cloning, or a manual route
 		 * add with a LL address.
 		 */
-		switch (satocsdl(gate)->sdl_type) {
+		switch (ifp->if_type) {
 #if NTOKEN > 0
 		case IFT_ISO88025:
 			allocsize = sizeof(*la) + sizeof(struct token_rif);
@@ -636,8 +620,12 @@ arp_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 			 * interface.
 			 */
 			rt->rt_expire = 0;
-			(void)sockaddr_dl_setaddr(satosdl(gate), gate->sa_len,
-			    CLLADDR(ifp->if_sadl), ifp->if_addrlen);
+			if (sockaddr_dl_init(satosdl(gate), gate->sa_len,
+			    ifp->if_index, ifp->if_type, NULL, 0,
+			    CLLADDR(ifp->if_sadl), ifp->if_addrlen) == NULL) {
+				panic("%s(%s): sockaddr_dl_init cannot fail",
+				    __func__, ifp->if_xname);
+			}
 			if (useloopback)
 				ifp = rt->rt_ifp = lo0ifp;
 			/*
@@ -805,7 +793,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt, struct mbuf *m,
 		rt->rt_flags &= ~RTF_REJECT;
 		if (la->la_asked == 0 || rt->rt_expire != time_second) {
 			rt->rt_expire = time_second;
-			if (la->la_asked++ < arp_maxtries) {
+			if (la->la_asked++ < arp_maxtries)
 				arprequest(ifp,
 				    &satocsin(rt->rt_ifa->ifa_addr)->sin_addr,
 				    &satocsin(dst)->sin_addr,
@@ -814,7 +802,7 @@ arpresolve(struct ifnet *ifp, struct rtentry *rt, struct mbuf *m,
 				    CLLADDR(rt->rt_ifp->if_sadl):
 #endif
 				    CLLADDR(ifp->if_sadl));
-			} else {
+			else {
 				rt->rt_flags |= RTF_REJECT;
 				rt->rt_expire += arpt_down;
 				la->la_asked = 0;
@@ -1399,7 +1387,8 @@ in_revarpinput(struct mbuf *m)
 	if (myip_initialized)
 		goto wake;
 	tha = ar_tha(ah);
-	KASSERT(tha);
+	if (tha == NULL)
+		goto out;
 	if (memcmp(tha, CLLADDR(ifp->if_sadl), ifp->if_sadl->sdl_alen))
 		goto out;
 	memcpy(&srv_ip, ar_spa(ah), sizeof(srv_ip));
@@ -1440,7 +1429,8 @@ revarprequest(struct ifnet *ifp)
 
 	memcpy(ar_sha(ah), CLLADDR(ifp->if_sadl), ah->ar_hln);
 	tha = ar_tha(ah);
-	KASSERT(tha);
+	if (tha == NULL)
+		return;
 	memcpy(tha, CLLADDR(ifp->if_sadl), ah->ar_hln);
 
 	sa.sa_family = AF_ARP;
@@ -1549,9 +1539,9 @@ db_show_rtentry(struct rtentry *rt, void *w)
 {
 	db_printf("rtentry=%p", rt);
 
-	db_printf(" flags=0x%x refcnt=%d use=%ld expire=%lld\n",
+	db_printf(" flags=0x%x refcnt=%d use=%ld expire=%ld\n",
 			  rt->rt_flags, rt->rt_refcnt,
-			  rt->rt_use, (long long)rt->rt_expire);
+			  rt->rt_use, rt->rt_expire);
 
 	db_printf(" key="); db_print_sa(rt_getkey(rt));
 	db_printf(" mask="); db_print_sa(rt_mask(rt));

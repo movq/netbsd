@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_physio.c,v 1.89 2008/11/09 12:18:07 bouyer Exp $	*/
+/*	$NetBSD: kern_physio.c,v 1.88.4.1 2009/05/27 21:42:08 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_physio.c,v 1.89 2008/11/09 12:18:07 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_physio.c,v 1.88.4.1 2009/05/27 21:42:08 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -117,6 +117,7 @@ physio_done(struct work *wk, void *dummy)
 	size_t todo = bp->b_bufsize;
 	size_t done = bp->b_bcount - bp->b_resid;
 	struct physio_stat *ps = bp->b_private;
+	bool is_iobuf;
 
 	KASSERT(&bp->b_work == wk);
 	KASSERT(bp->b_bcount <= todo);
@@ -128,6 +129,7 @@ physio_done(struct work *wk, void *dummy)
 	uvm_vsunlock(bp->b_proc->p_vmspace, bp->b_data, todo);
 
 	mutex_enter(&ps->ps_lock);
+	is_iobuf = (bp != ps->ps_orig_bp);
 	if (__predict_false(done != todo)) {
 		off_t endoffset = dbtob(bp->b_blkno) + done;
 
@@ -163,7 +165,7 @@ physio_done(struct work *wk, void *dummy)
 	cv_signal(&ps->ps_cv);
 	mutex_exit(&ps->ps_lock);
 
-	if (bp != ps->ps_orig_bp)
+	if (is_iobuf)
 		putiobuf(bp);
 }
 
@@ -173,13 +175,10 @@ physio_biodone(struct buf *bp)
 #if defined(DIAGNOSTIC)
 	struct physio_stat *ps = bp->b_private;
 	size_t todo = bp->b_bufsize;
-	size_t done = bp->b_bcount - bp->b_resid;
 
 	KASSERT(ps->ps_running > 0);
 	KASSERT(bp->b_bcount <= todo);
 	KASSERT(bp->b_resid <= bp->b_bcount);
-	if (done == todo)
-		KASSERT(bp->b_error == 0);
 #endif /* defined(DIAGNOSTIC) */
 
 	workqueue_enqueue(physio_workqueue, &bp->b_work, NULL);

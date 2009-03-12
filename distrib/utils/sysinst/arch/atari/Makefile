@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2009/02/06 00:24:29 abs Exp $
+#	$NetBSD: Makefile,v 1.9.36.1 2009/02/08 19:16:46 snj Exp $
 #
 # Makefile for atari
 #

@@ -1,4 +1,4 @@
-/*	$NetBSD: gumstix_machdep.c,v 1.13 2009/02/13 22:41:01 apb Exp $ */
+/*	$NetBSD: gumstix_machdep.c,v 1.9 2008/04/27 18:58:46 matt Exp $ */
 /*
  * Copyright (C) 2005, 2006, 2007  WIDE Project and SOUM Corporation.
  * All rights reserved.
@@ -141,7 +141,6 @@
 #include "opt_kgdb.h"
 #include "opt_pmap_debug.h"
 #include "opt_md.h"
-#include "opt_modular.h"
 #include "opt_com.h"
 #include "md.h"
 
@@ -305,7 +304,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -333,8 +331,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -861,7 +857,7 @@ initarm(void *arg)
 	}
 #endif
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	/* Firmware doesn't load symbols. */
 	ddb_init(0, NULL, NULL);
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: stack_protector.c,v 1.3 2009/01/30 23:21:02 ad Exp $	*/
+/*	$NetBSD: stack_protector.c,v 1.2.4.1 2009/02/02 22:07:40 snj Exp $	*/
 /*	$OpenBSD: stack_protector.c,v 1.10 2006/03/31 05:34:44 deraadt Exp $	*/
 
 /*
@@ -28,7 +28,7 @@
  *
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: stack_protector.c,v 1.3 2009/01/30 23:21:02 ad Exp $");
+__RCSID("$NetBSD: stack_protector.c,v 1.2.4.1 2009/02/02 22:07:40 snj Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"

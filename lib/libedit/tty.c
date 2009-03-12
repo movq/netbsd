@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.c,v 1.30 2009/02/16 00:15:45 christos Exp $	*/
+/*	$NetBSD: tty.c,v 1.27 2008/09/10 15:45:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)tty.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: tty.c,v 1.30 2009/02/16 00:15:45 christos Exp $");
+__RCSID("$NetBSD: tty.c,v 1.27 2008/09/10 15:45:37 christos Exp $");
 #endif
 #endif /* not lint && not SCCSID */
 
@@ -45,7 +45,6 @@ __RCSID("$NetBSD: tty.c,v 1.30 2009/02/16 00:15:45 christos Exp $");
  * tty.c: tty interface stuff
  */
 #include <assert.h>
-#include <errno.h>
 #include "tty.h"
 #include "el.h"
 
@@ -1216,7 +1215,7 @@ tty_stty(EditLine *el, int argc __attribute__((__unused__)), const char **argv)
 
 	if (!argv || !*argv) {
 		int i = -1;
-		size_t len = 0, st = 0, cu;
+		int len = 0, st = 0, cu;
 		for (m = ttymodes; m->m_name; m++) {
 			if (m->m_type != i) {
 				(void) fprintf(el->el_outfile, "%s%s",
@@ -1239,9 +1238,9 @@ tty_stty(EditLine *el, int argc __attribute__((__unused__)), const char **argv)
 
 				cu = strlen(m->m_name) + (x != '\0') + 1;
 
-				if (len + cu >= (size_t)el->el_term.t_size.h) {
+				if (len + cu >= el->el_term.t_size.h) {
 					(void) fprintf(el->el_outfile, "\n%*s",
-					    (int)st, "");
+					    st, "");
 					len = st + cu;
 				} else
 					len += cu;

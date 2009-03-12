@@ -1,7 +1,7 @@
-/*	$NetBSD: if_tap.c,v 1.53 2009/03/10 22:14:57 plunky Exp $	*/
+/*	$NetBSD: if_tap.c,v 1.47.4.8 2010/12/09 04:11:39 riz Exp $	*/
 
 /*
- *  Copyright (c) 2003, 2004, 2008 The NetBSD Foundation.
+ *  Copyright (c) 2003, 2004, 2008, 2009 The NetBSD Foundation.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -33,10 +33,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.53 2009/03/10 22:14:57 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.47.4.8 2010/12/09 04:11:39 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "bpfilter.h"
+#include "opt_modular.h"
+#include "opt_compat_netbsd.h"
 #endif
 
 #include <sys/param.h>
@@ -49,9 +51,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.53 2009/03/10 22:14:57 plunky Exp $");
 #include <sys/filedesc.h>
 #include <sys/ksyms.h>
 #include <sys/poll.h>
+#include <sys/proc.h>
 #include <sys/select.h>
 #include <sys/sockio.h>
+#if defined(COMPAT_40) || defined(MODULAR)
 #include <sys/sysctl.h>
+#endif
 #include <sys/kauth.h>
 #include <sys/mutex.h>
 #include <sys/simplelock.h>
@@ -68,11 +73,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.53 2009/03/10 22:14:57 plunky Exp $");
 
 #include <compat/sys/sockio.h>
 
+#if defined(COMPAT_40) || defined(MODULAR)
 /*
  * sysctl node management
  *
  * It's not really possible to use a SYSCTL_SETUP block with
- * current module implementation, so it is easier to just define
+ * current LKM implementation, so it is easier to just define
  * our own function.
  *
  * The handler function is a "helper" in Andrew Brown's sysctl
@@ -85,6 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.53 2009/03/10 22:14:57 plunky Exp $");
 static int tap_node;
 static int	tap_sysctl_handler(SYSCTLFN_PROTO);
 SYSCTL_SETUP_PROTO(sysctl_tap_setup);
+#endif
 
 /*
  * Since we're an Ethernet device, we need the 3 following
@@ -141,14 +148,15 @@ static int	tap_fops_poll(file_t *, int);
 static int	tap_fops_kqfilter(file_t *, struct knote *);
 
 static const struct fileops tap_fileops = {
-	tap_fops_read,
-	tap_fops_write,
-	tap_fops_ioctl,
-	fnullop_fcntl,
-	tap_fops_poll,
-	fbadop_stat,
-	tap_fops_close,
-	tap_fops_kqfilter,
+	.fo_read = tap_fops_read,
+	.fo_write = tap_fops_write,
+	.fo_ioctl = tap_fops_ioctl,
+	.fo_fcntl = fnullop_fcntl,
+	.fo_poll = tap_fops_poll,
+	.fo_stat = fbadop_stat,
+	.fo_close = tap_fops_close,
+	.fo_kqfilter = tap_fops_kqfilter,
+	.fo_drain = fnullop_drain,
 };
 
 /* Helper for cloning open() */
@@ -197,7 +205,9 @@ static int	tap_init(struct ifnet *);
 static int	tap_ioctl(struct ifnet *, u_long, void *);
 
 /* Internal functions */
+#if defined(COMPAT_40) || defined(MODULAR)
 static int	tap_lifaddr(struct ifnet *, u_long, struct ifaliasreq *);
+#endif
 static void	tap_softintr(void *);
 
 /*
@@ -246,13 +256,15 @@ tap_attach(device_t parent, device_t self, void *aux)
 {
 	struct tap_softc *sc = device_private(self);
 	struct ifnet *ifp;
+#if defined(COMPAT_40) || defined(MODULAR)
 	const struct sysctlnode *node;
+	int error;
+#endif
 	uint8_t enaddr[ETHER_ADDR_LEN] =
 	    { 0xf2, 0x0b, 0xa4, 0xff, 0xff, 0xff };
 	char enaddrstr[3 * ETHER_ADDR_LEN];
 	struct timeval tv;
 	uint32_t ui;
-	int error;
 
 	sc->sc_dev = self;
 	sc->sc_sih = softint_establish(SOFTINT_CLOCK, tap_softintr, sc);
@@ -312,6 +324,7 @@ tap_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_flags = 0;
 
+#if defined(COMPAT_40) || defined(MODULAR)
 	/*
 	 * Add a sysctl node for that interface.
 	 *
@@ -334,6 +347,7 @@ tap_attach(device_t parent, device_t self, void *aux)
 	    CTL_EOL)) != 0)
 		aprint_error_dev(self, "sysctl_createv returned %d, ignoring\n",
 		    error);
+#endif
 
 	/*
 	 * Initialize the two locks for the device.
@@ -365,7 +379,10 @@ tap_detach(device_t self, int flags)
 {
 	struct tap_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
-	int error, s;
+#if defined(COMPAT_40) || defined(MODULAR)
+	int error;
+#endif
+	int s;
 
 	sc->sc_flags |= TAP_GOING;
 	s = splnet();
@@ -375,6 +392,7 @@ tap_detach(device_t self, int flags)
 
 	softint_disestablish(sc->sc_sih);
 
+#if defined(COMPAT_40) || defined(MODULAR)
 	/*
 	 * Destroying a single leaf is a very straightforward operation using
 	 * sysctl_destroyv.  One should be sure to always end the path with
@@ -384,6 +402,7 @@ tap_detach(device_t self, int flags)
 	    device_unit(sc->sc_dev), CTL_EOL)) != 0)
 		aprint_error_dev(self,
 		    "sysctl_destroyv returned %d, ignoring\n", error);
+#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 	ifmedia_delete_instance(&sc->sc_im, IFM_INST_ANY);
@@ -521,9 +540,11 @@ tap_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	case SIOCGIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->sc_im, cmd);
 		break;
+#if defined(COMPAT_40) || defined(MODULAR)
 	case SIOCSIFPHYADDR:
 		error = tap_lifaddr(ifp, cmd, (struct ifaliasreq *)data);
 		break;
+#endif
 	default:
 		error = ether_ioctl(ifp, cmd, data);
 		if (error == ENETRESET)
@@ -536,9 +557,10 @@ tap_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	return (error);
 }
 
+#if defined(COMPAT_40) || defined(MODULAR)
 /*
- * Helper function to set Ethernet address.  This shouldn't be done there,
- * and should actually be available to all Ethernet drivers, real or not.
+ * Helper function to set Ethernet address.  This has been replaced by
+ * the generic SIOCALIFADDR ioctl on a PF_LINK socket.
  */
 static int
 tap_lifaddr(struct ifnet *ifp, u_long cmd, struct ifaliasreq *ifra)
@@ -548,10 +570,11 @@ tap_lifaddr(struct ifnet *ifp, u_long cmd, struct ifaliasreq *ifra)
 	if (sa->sa_family != AF_LINK)
 		return (EINVAL);
 
-	if_set_sadl(ifp, sa->sa_data, ETHER_ADDR_LEN, false);
+	if_set_sadl(ifp, sa->sa_data, ETHER_ADDR_LEN);
 
 	return (0);
 }
+#endif
 
 /*
  * _init() would typically be called when an interface goes up,
@@ -829,6 +852,7 @@ tap_dev_close(struct tap_softc *sc)
 			if (ifp->if_bpf)
 				bpf_mtap(ifp->if_bpf, m);
 #endif
+			m_freem(m);
 		}
 	}
 	splx(s);
@@ -1032,12 +1056,10 @@ tap_fops_ioctl(file_t *fp, u_long cmd, void *data)
 static int
 tap_dev_ioctl(int unit, u_long cmd, void *data, struct lwp *l)
 {
-	struct tap_softc *sc =
-	    device_lookup_private(&tap_cd, unit);
-	int error = 0;
+	struct tap_softc *sc = device_lookup_private(&tap_cd, unit);
 
 	if (sc == NULL)
-		return (ENXIO);
+		return ENXIO;
 
 	switch (cmd) {
 	case FIONREAD:
@@ -1054,27 +1076,26 @@ tap_dev_ioctl(int unit, u_long cmd, void *data, struct lwp *l)
 			else
 				*(int *)data = m->m_pkthdr.len;
 			splx(s);
-		} break;
+			return 0;
+		} 
 	case TIOCSPGRP:
 	case FIOSETOWN:
-		error = fsetown(&sc->sc_pgid, cmd, data);
-		break;
+		return fsetown(&sc->sc_pgid, cmd, data);
 	case TIOCGPGRP:
 	case FIOGETOWN:
-		error = fgetown(sc->sc_pgid, cmd, data);
-		break;
+		return fgetown(sc->sc_pgid, cmd, data);
 	case FIOASYNC:
 		if (*(int *)data)
 			sc->sc_flags |= TAP_ASYNCIO;
 		else
 			sc->sc_flags &= ~TAP_ASYNCIO;
-		break;
+		return 0;
 	case FIONBIO:
 		if (*(int *)data)
 			sc->sc_flags |= TAP_NBIO;
 		else
 			sc->sc_flags &= ~TAP_NBIO;
-		break;
+		return 0;
 #ifdef OTAPGIFNAME
 	case OTAPGIFNAME:
 #endif
@@ -1084,13 +1105,11 @@ tap_dev_ioctl(int unit, u_long cmd, void *data, struct lwp *l)
 			struct ifnet *ifp = &sc->sc_ec.ec_if;
 
 			strlcpy(ifr->ifr_name, ifp->if_xname, IFNAMSIZ);
-		} break;
+			return 0;
+		}
 	default:
-		error = ENOTTY;
-		break;
+		return ENOTTY;
 	}
-
-	return (0);
 }
 
 static int
@@ -1218,6 +1237,7 @@ tap_kqread(struct knote *kn, long hint)
 	return rv;
 }
 
+#if defined(COMPAT_40) || defined(MODULAR)
 /*
  * sysctl management routines
  * You can set the address of an interface through:
@@ -1231,7 +1251,7 @@ tap_kqread(struct knote *kn, long hint)
  * (called a link set) which is used at init_sysctl() time to cycle
  * through all those functions to create the kernel's sysctl tree.
  *
- * It is not possible to use link sets in a module, so the
+ * It is not (currently) possible to use link sets in a LKM, so the
  * easiest is to simply call our own setup routine at load time.
  *
  * In the SYSCTL_SETUP blocks you find in the kernel, nodes have the
@@ -1345,6 +1365,7 @@ tap_sysctl_handler(SYSCTLFN_ARGS)
 	/* Commit change */
 	if (ether_nonstatic_aton(enaddr, addr) != 0)
 		return (EINVAL);
-	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN, false);
+	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN);
 	return (error);
 }
+#endif

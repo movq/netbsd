@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.README,v 1.247 2009/02/25 20:36:45 sketch Exp $
+#	$NetBSD: bsd.README,v 1.236.2.8 2009/06/06 22:10:12 bouyer Exp $
 #	@(#)bsd.README	8.2 (Berkeley) 4/2/94
 
 This is the README file for the make "include" files for the NetBSD
@@ -110,8 +110,7 @@ MAKEVERBOSE	Control how "verbose" the standard make(1) rules are.
 		    0	Minimal output ("quiet")
 		    1	Describe what is occurring
 		    2	Describe what is occurring and echo the actual command
-		    3	Ignore the effect of the "@" prefix in make commands
-		    4	Trace shell commands using the shell's -x flag
+
 
 MKATF		If "no", don't build libatf-c, libatf-c++ libraries associated
 		with the Automated Testing Framework (ATF).
@@ -229,15 +228,22 @@ MKLINKLIB	If "no", act as "MKLINT=no MKPICINSTALL=no MKPROFILE=no".
 MKLINT		If "no", don't build or install the lint libraries.
 		Default: yes
 
-MKLVM		If "no", don't build or install teh logical volume manager
-		and device mapper tools and libraries
-		Default: no
-
 MKMAN		If "no", don't build or install the man or catman pages,
 		and also acts as "MKCATPAGES=no MKHTML=no".
 		Default: yes
 
 MKMANZ		If not "no", compress manual pages at installation time.
+		Default: no
+
+MKMODULAR	If "no", don't build the versions of modload(8), modstat(8)
+		and modunload(8) that use the new modules framework present
+		in the kernel (enabled separately using 'options MODULAR'
+		int the configuration file).  Also don't build any other
+		stuff that may rely on this support, such as tests or kernel
+		modules.
+		Note: This flag will disappear when the new modules framework
+		is complete enough to replace the old LKM, effectively
+		switching it to "yes" by default.
 		Default: no
 
 MKNLS		If "no", don't build or install the NLS files and locale
@@ -656,8 +662,6 @@ TOOL_GENCAT		Generate NLS message catalogs.  [gencat]
 
 TOOL_GMAKE		GNU make utility.  [gmake]
 
-TOOL_GREP		Print lines matching a pattern.  [grep]
-
 TOOL_GROFF		Front end for groff document formatting system.  [groff]
 
 TOOL_HEXDUMP		Ascii, decimal, hexadecimal, octal dump.  [hexdump]
@@ -1015,6 +1019,11 @@ Libraries are ranlib'd when made.
 The include file <bsd.links.mk> handles the LINKS and SYMLINKS variables
 and is included from from <bsd.lib.mk> and <bsd.prog.mk>.
 
+LINKSOWN, LINKSGRP, and LINKSMODE, are relevant only if a metadata log
+is used. The defaults may be modified by other bsd.*.mk files which
+include bsd.links.mk.  In the future, these variables may be replaced
+by a method for explicitly recording hard links in a metadata log.
+
 LINKS		The list of hard links, consisting of pairs of paths:
 			source-file target-file
 		${DESTDIR} is prepended to both paths before linking.
@@ -1035,6 +1044,18 @@ SYMLINKS	The list of symbolic links, consisting of pairs of paths:
 CONFIGSYMLINKS	Similar semantics to SYMLINKS, except that the symbolic links
 		are installed by the `configinstall' target,
 		not the `install' target.
+
+LINKSOWN	Link owner.  [${BINOWN}]
+
+LINKSGRP	Link group.  [${BINGRP}]
+
+LINKSMODE	Link mode.  [${NONBINMODE}]
+
+LINKSOWN_<fn>	Link owner of the specific file <fn>.
+
+LINKSGRP_<fn>	Link group of the specific file <fn>.
+
+LINKSMODE_<fn>	Link mode of the specific file <fn>.
 
 
 =-=-=-=-=   bsd.man.mk   =-=-=-=-=

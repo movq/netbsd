@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.27 2009/01/12 11:32:45 tsutsui Exp $ */
+/*	$NetBSD: autoconf.c,v 1.26 2008/03/31 06:19:59 he Exp $ */
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -36,7 +36,6 @@
 #include <sys/param.h>
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/net.h>
 
 #include "../include/mtpr.h"
 #include "../include/sid.h"
@@ -50,6 +49,7 @@ void autoconf(void);
 void findcpu(void);
 void consinit(void);
 void scbinit(void);
+int getsecs(void);
 void scb_stray(void *);
 void longjmp(int *, int);
 void rtimer(void *);
@@ -126,7 +126,7 @@ autoconf()
 
 volatile int tickcnt;
 
-satime_t
+int
 getsecs()
 {
 	return tickcnt/100;

@@ -1,4 +1,4 @@
-/*	$NetBSD: OsdSchedule.c,v 1.9 2009/01/30 12:51:03 jmcneill Exp $	*/
+/*	$NetBSD: OsdSchedule.c,v 1.8.8.1 2009/02/02 20:37:34 snj Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: OsdSchedule.c,v 1.9 2009/01/30 12:51:03 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: OsdSchedule.c,v 1.8.8.1 2009/02/02 20:37:34 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>

@@ -1,10 +1,10 @@
 #!/bin/sh
 #
-# $NetBSD: securelevel,v 1.7 2008/11/12 12:35:52 ad Exp $
+# $NetBSD: securelevel,v 1.6 2004/10/11 15:00:51 christos Exp $
 #
 
 # PROVIDE: securelevel
-# REQUIRE: ipnat mountd
+# REQUIRE: aftermountlkm ipnat mountd
 # BEFORE:  DAEMON
 
 $_rc_subr_loaded . /etc/rc.subr

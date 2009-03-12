@@ -1,4 +1,4 @@
-/*	$NetBSD: regcomp.c,v 1.4 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: regcomp.c,v 1.1.1.2.6.3 2009/09/10 07:17:30 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994 Henry Spencer.
@@ -549,12 +549,14 @@ p_simp_re(register struct parse *p, int starordinary)
 	register sopno pos;
 	register int i;
 	register sopno subno;
+	int backsl;
 
 	pos = HERE();		/* repetion op, if any, covers from here */
 
 	assert(MORE());		/* caller should have ensured this */
 	c = GETNEXT();
-	if (c == '\\') {
+	backsl = c == '\\';
+	if (backsl) {
 		(void)REQUIRE(MORE(), REG_EESCAPE);
 		c = (unsigned char)GETNEXT();
 		switch (c) {
@@ -651,7 +653,7 @@ p_simp_re(register struct parse *p, int starordinary)
 			(void)REQUIRE(MORE(), REG_EBRACE);
 			SETERROR(REG_BADBR);
 		}
-	} else if (c == (unsigned char)'$')	/* $ (but not \$) ends it */
+	} else if (!backsl && c == (unsigned char)'$')	/* $ (but not \$) ends it */
 		return(1);
 
 	return(0);
@@ -895,7 +897,7 @@ p_b_coll_elem(register struct parse *p, int endc)
 {
 	register RCHAR_T *sp = p->next;
 	register struct cname *cp;
-	register size_t len;
+	register int len;
 
 	while (MORE() && !SEETWO(endc, ']'))
 		NEXT();
@@ -1148,7 +1150,7 @@ allocset(register struct parse *p)
 static void
 freeset(register struct parse *p, register cset *cs)
 {
-	register size_t i;
+	register int i;
 	register cset *top = &p->g->sets[p->g->ncsets];
 	register size_t css = (size_t)p->g->csetsize;
 
@@ -1172,7 +1174,7 @@ static int			/* set number */
 freezeset(register struct parse *p, register cset *cs)
 {
 	register uch h = cs->hash;
-	register size_t i;
+	register int i;
 	register cset *top = &p->g->sets[p->g->ncsets];
 	register cset *cs2;
 	register size_t css = (size_t)p->g->csetsize;
@@ -1203,7 +1205,7 @@ freezeset(register struct parse *p, register cset *cs)
 static int			/* character; there is no "none" value */
 firstch(register struct parse *p, register cset *cs)
 {
-	register size_t i;
+	register int i;
 	register size_t css = (size_t)p->g->csetsize;
 
 	for (i = 0; i < css; i++)
@@ -1220,7 +1222,7 @@ firstch(register struct parse *p, register cset *cs)
 static int
 nch(register struct parse *p, register cset *cs)
 {
-	register size_t i;
+	register int i;
 	register size_t css = (size_t)p->g->csetsize;
 	register int n = 0;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: systm.h,v 1.234 2009/02/23 20:27:59 rmind Exp $	*/
+/*	$NetBSD: systm.h,v 1.228.4.2 2009/03/15 19:43:48 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1988, 1991, 1993
@@ -157,7 +157,6 @@ void	*hashinit(u_int, enum hashtype, bool, u_long *);
 void	hashdone(void *, enum hashtype, u_long);
 int	seltrue(dev_t, int, struct lwp *);
 int	sys_nosys(struct lwp *, const void *, register_t *);
-int	sys_nomodule(struct lwp *, const void *, register_t *);
 
 void	aprint_normal(const char *, ...)
     __attribute__((__format__(__printf__,1,2)));
@@ -226,6 +225,8 @@ void	uprintf_locked(const char *, ...)
     __attribute__((__format__(__printf__,1,2)));
 void	ttyprintf(struct tty *, const char *, ...)
     __attribute__((__format__(__printf__,2,3)));
+
+char	*bitmask_snprintf(u_quad_t, const char *, char *, size_t);
 
 int	format_bytes(char *, size_t, uint64_t);
 
@@ -336,10 +337,7 @@ void	dopowerhooks(int);
  * these to be executed just before (*mountroot)() if the passed device is
  * selected as the root device.
  */
-
-#define	ROOT_FSTYPE_ANY	"?"
-
-extern const char *rootfstype;
+extern int (*mountroot)(void);
 void	*mountroothook_establish(void (*)(struct device *), struct device *);
 void	mountroothook_disestablish(void *);
 void	mountroothook_destroy(void);
@@ -473,7 +471,7 @@ void	kernel_lock_init(void);
 void	_kernel_lock(int);
 void	_kernel_unlock(int, int *);
 
-#if defined(MULTIPROCESSOR) || defined(_MODULE)
+#if defined(MULTIPROCESSOR) || defined(_LKM)
 #define	KERNEL_LOCK(count, lwp)			\
 do {						\
 	if ((count) != 0)			\

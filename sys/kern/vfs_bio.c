@@ -1,11 +1,13 @@
-/*	$NetBSD: vfs_bio.c,v 1.218 2009/03/11 05:55:22 mrg Exp $	*/
+/*	$NetBSD: vfs_bio.c,v 1.210 2008/09/11 09:14:46 hannken Exp $	*/
 
 /*-
- * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Andrew Doran, and by Wasabi Systems, Inc.
+ * by Andrew Doran.
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Wasabi Systems, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -107,7 +109,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.218 2009/03/11 05:55:22 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.210 2008/09/11 09:14:46 hannken Exp $");
 
 #include "fs_ffs.h"
 #include "opt_bufcache.h"
@@ -144,7 +146,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.218 2009/03/11 05:55:22 mrg Exp $");
 # define BUFCACHE 15
 #endif
 
-u_int	nbuf;			/* desired number of buffer headers */
+u_int	nbuf;			/* XXX - for softdep_lockedbufs */
 u_int	bufpages = BUFPAGES;	/* optional hardwired count */
 u_int	bufcache = BUFCACHE;	/* max % of RAM to use for buffer cache */
 
@@ -174,8 +176,6 @@ static void biointr(void *);
 static void biodone2(buf_t *);
 static void bref(buf_t *);
 static void brele(buf_t *);
-static void sysctl_kern_buf_setup(void);
-static void sysctl_vm_buf_setup(void);
 
 /*
  * Definitions for the buffer hash lists.
@@ -185,6 +185,7 @@ static void sysctl_vm_buf_setup(void);
 LIST_HEAD(bufhashhdr, buf) *bufhashtbl, invalhash;
 u_long	bufhash;
 struct bqueue bufqueues[BQUEUES];
+const struct bio_ops *bioopsp;	/* I/O operation notification */
 
 static kcondvar_t needbuffer_cv;
 
@@ -504,9 +505,6 @@ bufinit(void)
 	 */
 	nbuf = (bufmem_hiwater / 1024) / 3;
 	bufhashtbl = hashinit(nbuf, HASH_LIST, true, &bufhash);
-
-	sysctl_kern_buf_setup();
-	sysctl_vm_buf_setup();
 }
 
 void
@@ -722,6 +720,20 @@ bread(struct vnode *vp, daddr_t blkno, int size, kauth_cred_t cred,
 	if (error == 0 && (flags & B_MODIFY) != 0)	/* XXXX before the next code block or after? */
 		error = fscow_run(bp, true);
 
+	if (!error) {
+		struct mount *mp = wapbl_vptomp(vp);
+
+		if (mp && mp->mnt_wapbl_replay &&
+		    WAPBL_REPLAY_ISOPEN(mp)) {
+			error = WAPBL_REPLAY_READ(mp, bp->b_data, bp->b_blkno,
+			    bp->b_bcount);
+			if (error) {
+				mutex_enter(&bufcache_lock);
+				SET(bp->b_cflags, BC_INVAL);
+				mutex_exit(&bufcache_lock);
+			}
+		}
+	}
 	return error;
 }
 
@@ -959,6 +971,9 @@ bawrite(buf_t *bp)
 /*
  * Same as first half of bdwrite, mark buffer dirty, but do not release it.
  * Call with the buffer interlock held.
+ *
+ * Note: called only from biodone() through ffs softdep's io_complete()
+ * Note2: smbfs also learned about bdirty().
  */
 void
 bdirty(buf_t *bp)
@@ -977,6 +992,7 @@ bdirty(buf_t *bp)
 		reassignbuf(bp, bp->b_vp);
 	}
 }
+
 
 /*
  * Release a buffer on to the free lists.
@@ -1042,6 +1058,9 @@ brelsel(buf_t *bp, int set)
 		 * If it's invalid or empty, dissociate it from its vnode
 		 * and put on the head of the appropriate queue.
 		 */
+		if (bioopsp != NULL)
+			(*bioopsp->io_deallocate)(bp);
+
 		if (ISSET(bp->b_flags, B_LOCKED)) {
 			if (wapbl_vphaswapbl(vp = bp->b_vp)) {
 				struct mount *mp = wapbl_vptomp(vp);
@@ -1088,7 +1107,14 @@ brelsel(buf_t *bp, int set)
 			bufq = &bufqueues[BQ_LRU];
 		} else {
 			/* stale but valid data */
-			bufq = &bufqueues[BQ_AGE];
+			int has_deps;
+
+			if (bioopsp != NULL)
+				has_deps = (*bioopsp->io_countdeps)(bp, 0);
+			else
+				has_deps = 0;
+			bufq = has_deps ? &bufqueues[BQ_LRU] :
+			    &bufqueues[BQ_AGE];
 		}
 		binstailfree(bp, bufq);
 	}
@@ -1255,14 +1281,8 @@ allocbuf(buf_t *bp, int size, int preserve)
 	bp->b_bcount = size;
 
 	oldsize = bp->b_bufsize;
-	if (oldsize == desired_size) {
-		/*
-		 * Do not short cut the WAPBL resize, as the buffer length
-		 * could still have changed and this would corrupt the
-		 * tracking of the transaction length.
-		 */
+	if (oldsize == desired_size)
 		goto out;
-	}
 
 	/*
 	 * If we want a buffer of a different size, re-allocate the
@@ -1405,6 +1425,8 @@ getnewbuf(int slpflag, int slptimeo, int from_bufq)
 	}
 
 	vp = bp->b_vp;
+	if (bioopsp != NULL)
+		(*bioopsp->io_deallocate)(bp);
 
 	/* clear out various other fields */
 	bp->b_cflags = BC_BUSY;
@@ -1536,6 +1558,9 @@ biodone2(buf_t *bp)
 {
 	void (*callout)(buf_t *);
 
+	if (bioopsp != NULL)
+		(*bioopsp->io_complete)(bp);
+
 	mutex_enter(bp->b_objlock);
 	/* Note that the transfer is done. */
 	if (ISSET(bp->b_oflags, BO_DONE))
@@ -1623,6 +1648,25 @@ buf_syncwait(void)
 		    LIST_FOREACH(bp, &bufhashtbl[ihash], b_hash) {
 			if ((bp->b_cflags & (BC_BUSY|BC_INVAL)) == BC_BUSY)
 				nbusy += ((bp->b_flags & B_READ) == 0);
+			/*
+			 * With soft updates, some buffers that are
+			 * written will be remarked as dirty until other
+			 * buffers are written.
+			 */
+			if (bp->b_vp && bp->b_vp->v_mount
+			    && (bp->b_vp->v_mount->mnt_flag & MNT_SOFTDEP)
+			    && (bp->b_oflags & BO_DELWRI)) {
+				bremfree(bp);
+				bp->b_cflags |= BC_BUSY;
+				nbusy++;
+				mutex_exit(&bufcache_lock);
+				bawrite(bp);
+				if (dcount-- <= 0) {
+					printf("softdep ");
+					goto fail;
+				}
+				mutex_enter(&bufcache_lock);
+			}
 		    }
 		}
 		mutex_exit(&bufcache_lock);
@@ -1640,6 +1684,7 @@ buf_syncwait(void)
 	}
 
 	if (nbusy) {
+fail:;
 #if defined(DEBUG) || defined(DEBUG_HALT_BUSY)
 		printf("giving up\nPrinting vnodes for busy buffers\n");
 		for (ihash = 0; ihash < bufhash+1; ihash++) {
@@ -1748,9 +1793,11 @@ sysctl_dobuf(SYSCTLFN_ARGS)
 				dp += elem_size;
 				len -= elem_size;
 			}
-			needed += elem_size;
-			if (elem_count > 0 && elem_count != INT_MAX)
-				elem_count--;
+			if (elem_count > 0) {
+				needed += elem_size;
+				if (elem_count != INT_MAX)
+					elem_count--;
+			}
 		}
 		if (error != 0)
 			break;
@@ -1810,18 +1857,15 @@ sysctl_bufvm_update(SYSCTLFN_ARGS)
 	return 0;
 }
 
-static struct sysctllog *vfsbio_sysctllog;
-
-static void
-sysctl_kern_buf_setup(void)
+SYSCTL_SETUP(sysctl_kern_buf_setup, "sysctl kern.buf subtree setup")
 {
 
-	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "kern", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_KERN, CTL_EOL);
-	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "buf",
 		       SYSCTL_DESCR("Kernel buffer cache information"),
@@ -1829,37 +1873,37 @@ sysctl_kern_buf_setup(void)
 		       CTL_KERN, KERN_BUF, CTL_EOL);
 }
 
-static void
-sysctl_vm_buf_setup(void)
+SYSCTL_SETUP(sysctl_vm_buf_setup, "sysctl vm.buf* subtree setup")
 {
 
-	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "vm", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_VM, CTL_EOL);
-	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
+
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "bufcache",
 		       SYSCTL_DESCR("Percentage of physical memory to use for "
 				    "buffer cache"),
 		       sysctl_bufvm_update, 0, &bufcache, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
-	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READONLY,
 		       CTLTYPE_INT, "bufmem",
 		       SYSCTL_DESCR("Amount of kernel memory used by buffer "
 				    "cache"),
 		       NULL, 0, &bufmem, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
-	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "bufmem_lowater",
 		       SYSCTL_DESCR("Minimum amount of kernel memory to "
 				    "reserve for buffer cache"),
 		       sysctl_bufvm_update, 0, &bufmem_lowater, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
-	sysctl_createv(&vfsbio_sysctllog, 0, NULL, NULL,
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "bufmem_hiwater",
 		       SYSCTL_DESCR("Maximum amount of kernel memory to use "
@@ -2023,6 +2067,7 @@ void
 buf_init(buf_t *bp)
 {
 
+	LIST_INIT(&bp->b_dep);
 	cv_init(&bp->b_busy, "biolock");
 	cv_init(&bp->b_done, "biowait");
 	bp->b_dev = NODEV;

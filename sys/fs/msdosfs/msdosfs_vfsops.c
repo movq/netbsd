@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vfsops.c,v 1.71 2009/02/05 18:39:15 abs Exp $	*/
+/*	$NetBSD: msdosfs_vfsops.c,v 1.68.6.2 2009/02/08 19:10:44 snj Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,9 +48,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.71 2009/02/05 18:39:15 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.68.6.2 2009/02/08 19:10:44 snj Exp $");
 
 #if defined(_KERNEL_OPT)
+#include "opt_quota.h"
 #include "opt_compat_netbsd.h"
 #endif
 
@@ -843,6 +844,7 @@ msdosfs_mountfs(devvp, mp, l, argp)
 	mp->mnt_dev_bshift = pmp->pm_bnshift;
 	mp->mnt_fs_bshift = pmp->pm_cnshift;
 
+#ifdef QUOTA
 	/*
 	 * If we ever do quotas for DOS filesystems this would be a place
 	 * to fill in the info in the msdosfsmount structure. You dolt,
@@ -850,7 +852,7 @@ msdosfs_mountfs(devvp, mp, l, argp)
 	 * owners on dos filesystems. of course there is some empty space
 	 * in the directory entry where we could put uid's and gid's.
 	 */
-
+#endif
 	devvp->v_specmountpoint = mp;
 
 	return (0);
@@ -888,6 +890,8 @@ msdosfs_unmount(mp, mntflags)
 	flags = 0;
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
+#ifdef QUOTA
+#endif
 	if ((error = vflush(mp, NULLVP, flags)) != 0)
 		return (error);
 	pmp = VFSTOMSDOSFS(mp);
@@ -1035,6 +1039,9 @@ loop:
 	if ((error = VOP_FSYNC(pmp->pm_devvp, cred,
 	    waitfor == MNT_WAIT ? FSYNC_WAIT : 0, 0, 0)) != 0)
 		allerror = error;
+#ifdef QUOTA
+	/* qsync(mp); */
+#endif
 	return (allerror);
 }
 

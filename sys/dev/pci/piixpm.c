@@ -1,4 +1,4 @@
-/* $NetBSD: piixpm.c,v 1.28 2009/02/13 19:19:52 pgoyette Exp $ */
+/* $NetBSD: piixpm.c,v 1.26.4.1 2010/11/20 18:23:20 riz Exp $ */
 /*	$OpenBSD: piixpm.c,v 1.20 2006/02/27 08:25:02 grange Exp $	*/
 
 /*
@@ -22,7 +22,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: piixpm.c,v 1.28 2009/02/13 19:19:52 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: piixpm.c,v 1.26.4.1 2010/11/20 18:23:20 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -348,12 +348,9 @@ piixpm_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	}
 
 	/* Set SMBus command */
-	if (len == 0) {
-		if (cmdlen == 0)
-			ctl = PIIX_SMB_HC_CMD_QUICK;
-		else
-			ctl = PIIX_SMB_HC_CMD_BYTE;
-	} else if (len == 1)
+	if (len == 0)
+		ctl = PIIX_SMB_HC_CMD_BYTE;
+	else if (len == 1)
 		ctl = PIIX_SMB_HC_CMD_BDATA;
 	else if (len == 2)
 		ctl = PIIX_SMB_HC_CMD_WDATA;

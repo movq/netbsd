@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_pcic.c,v 1.8 2009/03/02 10:17:58 nonaka Exp $	*/
+/*	$NetBSD: pxa2x0_pcic.c,v 1.4.30.1 2009/02/19 20:39:13 snj Exp $	*/
 /*	$OpenBSD: pxa2x0_pcic.c,v 1.17 2005/12/14 15:08:51 uwe Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0_pcic.c,v 1.8 2009/03/02 10:17:58 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0_pcic.c,v 1.4.30.1 2009/02/19 20:39:13 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,8 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_pcic.c,v 1.8 2009/03/02 10:17:58 nonaka Exp $
 #include <arm/xscale/pxa2x0_pcic.h>
 
 static int	pxapcic_print(void *, const char *);
-
-static void	pxapcic_doattach(struct device *);
 
 static void	pxapcic_event_thread(void *);
 static void	pxapcic_event_process(struct pxapcic_socket *);
@@ -342,13 +340,13 @@ pxapcic_attach_common(struct pxapcic_softc *sc,
 	printf(": %d slot%s\n", sc->sc_nslots, sc->sc_nslots < 2 ? "" : "s");
 
 	if (sc->sc_nslots == 0) {
-		aprint_error_dev(sc->sc_dev, "can't attach\n");
+		aprint_error("%s: can't attach\n", sc->sc_dev.dv_xname);
 		return;
 	}
 
 	if (bus_space_map(sc->sc_iot, PXA2X0_MEMCTL_BASE, PXA2X0_MEMCTL_SIZE,
 	    0, &sc->sc_memctl_ioh)) {
-		aprint_error_dev(sc->sc_dev, "failed to map MEMCTL\n");
+		aprint_error("%s: failed to map MEMCTL\n", sc->sc_dev.dv_xname);
 		return;
 	}
 
@@ -380,7 +378,7 @@ pxapcic_attach_common(struct pxapcic_softc *sc,
 		paa.iobase = 0;
 		paa.iosize = 0x4000000;
 
-		so->pcmcia = config_found_ia(sc->sc_dev, "pcmciabus", &paa,
+		so->pcmcia = config_found_ia(&sc->sc_dev, "pcmciabus", &paa,
 		    pxapcic_print);
 
 		pxa2x0_gpio_set_function(sc->sc_irqpin[s[i]], GPIO_IN);
@@ -392,46 +390,12 @@ pxapcic_attach_common(struct pxapcic_softc *sc,
 
 		/* GPIO pin for interrupt */
 		so->irqpin = sc->sc_irqpin[s[i]];
-	}
-
-	config_interrupts(sc->sc_dev, pxapcic_doattach);
-}
-
-void
-pxapcic_doattach(struct device *self)
-{
-	struct pxapcic_softc *sc = device_private(self);
-	struct pxapcic_socket *sock;
-	int s[PXAPCIC_NSLOT];
-	int i;
-	u_int cs;
-
-	if (sc->sc_flags & PPF_REVERSE_ORDER) {
-		for (i = 0; i < sc->sc_nslots; i++) {
-			s[i] = sc->sc_nslots - 1 - i;
-		}
-	} else {
-		for (i = 0; i < sc->sc_nslots; i++) {
-			s[i] = i;
-		}
-	}
-
-	for (i = 0; i < sc->sc_nslots; i++) {
-		sock = &sc->sc_socket[s[i]];
-
-		config_pending_incr();
-
-		/* If there's a card there, attach it. */
-		cs = (*sock->pcictag->read)(sock, PXAPCIC_CARD_STATUS);
-		if (cs == PXAPCIC_CARD_VALID)
-			pxapcic_attach_card(sock);
 
 		if (kthread_create(PRI_NONE, 0, NULL, pxapcic_event_thread,
-		    sock, &sock->event_thread, "%s,%d",
-		    device_xname(sc->sc_dev), sock->socket)) {
-			aprint_error_dev(sc->sc_dev,
-			    "unable to create event thread for %d\n",
-			    sock->socket);
+		    so, &so->event_thread, "%s,%d", sc->sc_dev.dv_xname,
+		    so->socket)) {
+			printf("%s: unable to create event thread for %d\n",
+			     sc->sc_dev.dv_xname, so->socket);
 		}
 	}
 }
@@ -457,7 +421,10 @@ pxapcic_event_thread(void *arg)
 	u_int cs;
 	int present;
 
-	config_pending_decr();
+	/* If there's a card there, attach it. */
+	cs = (*sock->pcictag->read)(sock, PXAPCIC_CARD_STATUS);
+	if (cs == PXAPCIC_CARD_VALID)
+		pxapcic_attach_card(sock);
 
 	while (sock->sc->sc_shutdown == 0) {
 		(void) tsleep(sock, PWAIT, "pxapcicev", 0);

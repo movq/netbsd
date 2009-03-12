@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.105 2008/11/24 13:45:37 cegger Exp $	     */
+/*	$NetBSD: vm_machdep.c,v 1.103 2008/10/22 11:24:28 hans Exp $	     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -31,10 +31,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.105 2008/11/24 13:45:37 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.103 2008/10/22 11:24:28 hans Exp $");
 
 #include "opt_compat_ultrix.h"
 #include "opt_multiprocessor.h"
+#include "opt_coredump.h"
 #include "opt_sa.h"
 
 #include <sys/types.h>
@@ -47,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.105 2008/11/24 13:45:37 cegger Exp 
 #include <sys/core.h>
 #include <sys/mount.h>
 #include <sys/device.h>
-#include <sys/buf.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -210,6 +210,44 @@ sys_sysarch(struct lwp *l, const struct sys_sysarch_args *uap, register_t *retva
 {
 	return (ENOSYS);
 }
+
+#ifdef COREDUMP
+/*
+ * Dump the machine specific header information at the start of a core dump.
+ * First put all regs in PCB for debugging purposes. This is not an good
+ * way to do this, but good for my purposes so far.
+ */
+int
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+{
+	struct md_coredump md_core;
+	struct coreseg cseg;
+	int error;
+
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+		chdr->c_hdrsize = sizeof(struct core);
+		chdr->c_seghdrsize = sizeof(struct coreseg);
+		chdr->c_cpusize = sizeof(struct md_coredump);
+		chdr->c_nseg++;
+		return 0;
+	}
+
+	md_core.md_tf = *(struct trapframe *)l->l_addr->u_pcb.framep; /*XXX*/
+
+	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
+	cseg.c_addr = 0;
+	cseg.c_size = chdr->c_cpusize;
+
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+	    chdr->c_seghdrsize);
+	if (error)
+		return error;
+
+	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
+	    sizeof(md_core));
+}
+#endif
 
 /*
  * Map in a bunch of pages read/writable for the kernel.

@@ -1,4 +1,4 @@
-/*	$NetBSD: lwp.h,v 1.117 2009/02/04 21:17:39 ad Exp $	*/
+/*	$NetBSD: lwp.h,v 1.114.4.1 2009/02/06 01:54:09 snj Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -152,7 +152,10 @@ struct lwp {
 	/* Private data */
 	specificdata_reference
 		l_specdataref;		/* !: subsystem lwp-specific data */
-	struct timespec l_ktrcsw;	/* !: for ktrace CSW trace XXX */
+	union {
+		struct timeval tv;
+		struct timespec ts;
+	} l_ktrcsw;			/* !: for ktrace CSW trace XXX */
 	void		*l_private;	/* !: svr4-style lwp-private data */
 	struct lwp	*l_switchto;	/* !: mi_switch: switch to this LWP */
 	struct kauth_cred *l_cred;	/* !: cached credentials */
@@ -326,7 +329,7 @@ void lwp_whatis(uintptr_t, void (*)(const char *, ...));
 
 
 /*
- * Lock an LWP. XXX _MODULE
+ * Lock an LWP. XXXLKM
  */
 static inline void
 lwp_lock(lwp_t *l)
@@ -344,7 +347,7 @@ lwp_lock(lwp_t *l)
 }
 
 /*
- * Unlock an LWP. XXX _MODULE
+ * Unlock an LWP. XXXLKM
  */
 static inline void
 lwp_unlock(lwp_t *l)
@@ -386,8 +389,7 @@ int lwp_create(lwp_t *, struct proc *, vaddr_t, bool, int,
     void *, size_t, void (*)(void *), void *, lwp_t **, int);
 
 /*
- * XXX _MODULE
- * We should provide real stubs for the below that modules can use.
+ * We should provide real stubs for the below that LKMs can use.
  */
 
 static inline void

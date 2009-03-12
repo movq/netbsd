@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_defs.h,v 1.72 2009/02/24 22:25:24 sketch Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.67.2.2 2010/01/07 07:42:14 snj Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
@@ -75,7 +75,7 @@
 /* We don't include <pwd.h> here, so that "compat_pwd.h" works. */
 struct passwd;
 
-/* We don't include <grp.h> either */
+/* We don't include <grp.h> here, so that "compat_pwd.h" works. */
 struct group;
 
 /* Assume an ANSI compiler for the host. */
@@ -100,8 +100,6 @@ struct group;
 #endif
 #if !defined(__packed)
 #if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 7)
-#define __packed	__attribute__((__packed__))
-#elif defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590)
 #define __packed	__attribute__((__packed__))
 #else
 #define	__packed	error: no __packed for this compiler
@@ -234,7 +232,6 @@ void err(int, const char *, ...);
 void errx(int, const char *, ...);
 void warn(const char *, ...);
 void warnx(const char *, ...);
-void vwarnx(const char *, va_list);
 #endif
 
 #if !HAVE_ESETFUNC
@@ -332,9 +329,6 @@ int heapsort (void *, size_t, size_t, int (*)(const void *, const void *));
 #endif
 /* Make them use our version */
 #  define heapsort __nbcompat_heapsort
-
-char	       *flags_to_string(unsigned long, const char *);
-int		string_to_flags(char **, unsigned long *, unsigned long *);
 
 /*
  * HAVE_X_FROM_Y and HAVE_PWCACHE_FOODB go together, because we cannot
@@ -504,10 +498,6 @@ void *setmode(const char *);
 
 /* Some definitions not available on all systems. */
 
-#ifndef __inline
-#define __inline inline
-#endif
-
 /* <errno.h> */
 
 #ifndef EFTYPE
@@ -521,123 +511,6 @@ void *setmode(const char *);
 #endif
 #ifndef O_SHLOCK
 #define O_SHLOCK 0
-#endif
-
-/* <inttypes.h> */
-
-#if USHRT_MAX == 0xffffU		/* short is a 16-bit type */
-#ifndef PRId16
-#define PRId16 "hd"
-#endif
-#ifndef PRIi16
-#define PRIi16 "hi"
-#endif
-#ifndef PRIo16
-#define PRIo16 "ho"
-#endif
-#ifndef PRIu16
-#define PRIu16 "hu"
-#endif
-#ifndef PRIx16
-#define PRIx16 "hx"
-#endif
-#ifndef PRIX16
-#define PRIX16 "hX"
-#endif
-#endif					/* short is a 16-bit type */
-#if ! (defined(PRId16) && defined(PRIi16) && defined(PRIo16) && \
-	defined(PRIu16) && defined(PRIx16) && defined(PRIX16))
-#error "Don't know how to define PRI[diouxX]16"
-#endif
-
-#if UINT_MAX == 0xffffffffU		/* int is a 32-bit type */
-#ifndef PRId32
-#define PRId32 "d"
-#endif
-#ifndef PRIi32
-#define PRIi32 "i"
-#endif
-#ifndef PRIo32
-#define PRIo32 "o"
-#endif
-#ifndef PRIu32
-#define PRIu32 "u"
-#endif
-#ifndef PRIx32
-#define PRIx32 "x"
-#endif
-#ifndef PRIX32
-#define PRIX32 "X"
-#endif
-#endif					/* int is a 32-bit type */
-#if ULONG_MAX == 0xffffffffU		/* long is a 32-bit type */
-#ifndef PRId32
-#define PRId32 "ld"
-#endif
-#ifndef PRIi32
-#define PRIi32 "li"
-#endif
-#ifndef PRIo32
-#define PRIo32 "lo"
-#endif
-#ifndef PRIu32
-#define PRIu32 "lu"
-#endif
-#ifndef PRIx32
-#define PRIx32 "lx"
-#endif
-#ifndef PRIX32
-#define PRIX32 "lX"
-#endif
-#endif					/* long is a 32-bit type */
-#if ! (defined(PRId32) && defined(PRIi32) && defined(PRIo32) && \
-	defined(PRIu32) && defined(PRIx32) && defined(PRIX32))
-#error "Don't know how to define PRI[diouxX]32"
-#endif
-
-#if ULONG_MAX == 0xffffffffffffffffU	/* long is a 64-bit type */
-#ifndef PRId64
-#define PRId64 "ld"
-#endif
-#ifndef PRIi64
-#define PRIi64 "li"
-#endif
-#ifndef PRIo64
-#define PRIo64 "lo"
-#endif
-#ifndef PRIu64
-#define PRIu64 "lu"
-#endif
-#ifndef PRIx64
-#define PRIx64 "lx"
-#endif
-#ifndef PRIX64
-#define PRIX64 "lX"
-#endif
-#endif					/* long is a 64-bit type */
-#if ULLONG_MAX == 0xffffffffffffffffU	/* long long is a 64-bit type */
-#ifndef PRId64
-#define PRId64 "lld"
-#endif
-#ifndef PRIi64
-#define PRIi64 "lli"
-#endif
-#ifndef PRIo64
-#define PRIo64 "llo"
-#endif
-#ifndef PRIu64
-#define PRIu64 "llu"
-#endif
-#ifndef PRIx64
-#define PRIx64 "llx"
-#endif
-#ifndef PRIX64
-#define PRIX64 "llX"
-#endif
-#endif					/* long long is a 64-bit type */
-#if ! (defined(PRId64) && defined(PRIi64) && defined(PRIo64) && \
-	defined(PRIu64) && defined(PRIx64) && defined(PRIX64))
-#error "Don't know how to define PRI[diouxX]64"
 #endif
 
 /* <limits.h> */

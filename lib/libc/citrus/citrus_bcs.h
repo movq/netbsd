@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_bcs.h,v 1.6 2009/01/11 02:46:24 christos Exp $	*/
+/*	$NetBSD: citrus_bcs.h,v 1.4.10.1 2009/01/15 03:24:06 snj Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,

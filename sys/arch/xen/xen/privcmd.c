@@ -1,4 +1,4 @@
-/* $NetBSD: privcmd.c,v 1.36 2009/03/04 10:32:36 jym Exp $ */
+/* $NetBSD: privcmd.c,v 1.33.4.2 2010/01/30 19:12:26 snj Exp $ */
 
 /*-
  * Copyright (c) 2004 Christian Limpach.
@@ -32,7 +32,9 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.36 2009/03/04 10:32:36 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.33.4.2 2010/01/30 19:12:26 snj Exp $");
+
+#include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -272,10 +274,12 @@ privcmd_ioctl(void *v)
 
 	switch (ap->a_command) {
 	case IOCTL_PRIVCMD_HYPERCALL:
+#ifdef COMPAT_40
 	case IOCTL_PRIVCMD_HYPERCALL_OLD:
 	/*
 	 * oprivcmd_hypercall_t is privcmd_hypercall_t without the last entry
 	 */
+#endif
 	{
 		privcmd_hypercall_t *hc = ap->a_data;
 		if (hc->op >= (PAGE_SIZE >> 5))
@@ -336,12 +340,14 @@ privcmd_ioctl(void *v)
 		break;
 	}
 #ifndef XEN3
+#if defined(COMPAT_30)
 	case IOCTL_PRIVCMD_INITDOMAIN_EVTCHN_OLD:
 		{
 		extern int initdom_ctrlif_domcontroller_port;
 		error = initdom_ctrlif_domcontroller_port;
 		}
 		break;
+#endif /* defined(COMPAT_30) */
 	case IOCTL_PRIVCMD_INITDOMAIN_EVTCHN:
 		{
 		extern int initdom_ctrlif_domcontroller_port;
@@ -356,7 +362,7 @@ privcmd_ioctl(void *v)
 		privcmd_mmap_t *mcmd = ap->a_data;
 		privcmd_mmap_entry_t mentry;
 		vaddr_t va;
-		u_long ma;
+		paddr_t ma;
 		struct vm_map *vmm = &curlwp->l_proc->p_vmspace->vm_map;
 
 		for (i = 0; i < mcmd->num; i++) {
@@ -377,7 +383,7 @@ privcmd_ioctl(void *v)
 			if (maddr == NULL)
 				return ENOMEM;
 			va = mentry.va & ~PAGE_MASK;
-			ma = mentry.mfn <<  PGSHIFT; /* XXX ??? */
+			ma = ((paddr_t)mentry.mfn) <<  PGSHIFT; /* XXX ??? */
 			for (j = 0; j < mentry.npages; j++) {
 				maddr[j] = ma;
 				ma += PAGE_SIZE;
@@ -394,7 +400,8 @@ privcmd_ioctl(void *v)
 		int i;
 		privcmd_mmapbatch_t* pmb = ap->a_data;
 		vaddr_t va0, va;
-		u_long mfn, ma;
+		u_long mfn;
+		paddr_t ma;
 		struct vm_map *vmm;
 		struct vm_map_entry *entry;
 		vm_prot_t prot;
@@ -440,7 +447,7 @@ privcmd_ioctl(void *v)
 				    UVM_KMF_VAONLY);
 				return error;
 			}
-			ma = mfn << PGSHIFT;
+			ma = ((paddr_t)mfn) << PGSHIFT;
 			if (pmap_enter_ma(pmap_kernel(), trymap, ma, 0,
 			    prot, PMAP_CANFAIL, pmb->dom)) {
 				mfn |= 0xF0000000;
@@ -452,12 +459,15 @@ privcmd_ioctl(void *v)
 				maddr[i] = ma;
 			}
 		}
-		error = privcmd_map_obj(vmm, va0, maddr, pmb->num, pmb->dom);
-		uvm_km_free(kernel_map, trymap, PAGE_SIZE, UVM_KMF_VAONLY);
-
-		if (error != 0)
+		error  = privcmd_map_obj(vmm, va0, maddr, pmb->num, pmb->dom);
+		if (error) {
+			uvm_km_free(kernel_map, trymap, PAGE_SIZE,
+			    UVM_KMF_VAONLY);
 			return error;
-
+		}
+		uvm_km_free(kernel_map, trymap, PAGE_SIZE,
+		    UVM_KMF_VAONLY);
+		error = 0;
 		break;
 	}
 #ifndef XEN3

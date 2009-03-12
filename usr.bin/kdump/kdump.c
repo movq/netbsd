@@ -1,4 +1,4 @@
-/*	$NetBSD: kdump.c,v 1.102 2009/01/11 03:05:41 christos Exp $	*/
+/*	$NetBSD: kdump.c,v 1.99 2008/09/12 20:46:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)kdump.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: kdump.c,v 1.102 2009/01/11 03:05:41 christos Exp $");
+__RCSID("$NetBSD: kdump.c,v 1.99 2008/09/12 20:46:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -368,65 +368,34 @@ dumpheader(struct ktr_header *kth)
 		col += printf("%6d ", kth->ktr_lid);
 	col += printf("%-8.*s ", MAXCOMLEN, kth->ktr_comm);
 	if (timestamp) {
-		(void)&prevtime;
 		if (timestamp == 2) {
-			switch (kth->ktr_version) {
-			case KTRFAC_VERSION(KTRFACv0):
+			if (kth->ktr_version == KTRFACv0) {
 				if (prevtime.tv.tv_sec == 0)
 					temp.tv.tv_sec = temp.tv.tv_usec = 0;
 				else
-					timersub(&kth->ktr_otv,
+					timersub(&kth->ktr_tv,
 					    &prevtime.tv, &temp.tv);
-				prevtime.tv.tv_sec = kth->ktr_otv.tv_sec;
-				prevtime.tv.tv_usec = kth->ktr_otv.tv_usec;
-				break;
-			case KTRFAC_VERSION(KTRFACv1):
+				prevtime.tv = kth->ktr_tv;
+			} else {
 				if (prevtime.ts.tv_sec == 0)
 					temp.ts.tv_sec = temp.ts.tv_nsec = 0;
 				else
-					timespecsub(&kth->ktr_ots,
+					timespecsub(&kth->ktr_time,
 					    &prevtime.ts, &temp.ts);
-				prevtime.ts.tv_sec = kth->ktr_ots.tv_sec;
-				prevtime.ts.tv_nsec = kth->ktr_ots.tv_nsec;
-				break;
-			case KTRFAC_VERSION(KTRFACv2):
-				if (prevtime.ts.tv_sec == 0)
-					temp.ts.tv_sec = temp.ts.tv_nsec = 0;
-				else
-					timespecsub(&kth->ktr_ts,
-					    &prevtime.ts, &temp.ts);
-				prevtime.ts.tv_sec = kth->ktr_ts.tv_sec;
-				prevtime.ts.tv_nsec = kth->ktr_ts.tv_nsec;
-				break;
-			default:
-				goto badversion;
+				prevtime.ts = kth->ktr_time;
 			}
 		} else {
-			switch (kth->ktr_version) {
-			case KTRFAC_VERSION(KTRFACv0):
-				temp.tv.tv_sec = kth->ktr_otv.tv_sec;
-				temp.tv.tv_usec = kth->ktr_otv.tv_usec;
-				break;
-			case KTRFAC_VERSION(KTRFACv1):
-				temp.ts.tv_sec = kth->ktr_ots.tv_sec;
-				temp.ts.tv_nsec = kth->ktr_ots.tv_nsec;
-				break;
-			case KTRFAC_VERSION(KTRFACv2):
-				temp.ts.tv_sec = kth->ktr_ts.tv_sec;
-				temp.ts.tv_nsec = kth->ktr_ts.tv_nsec;
-				break;
-			default:
-			badversion:
-				err(1, "Unsupported ktrace version %x\n",
-				    kth->ktr_version);
-			}
+			if (kth->ktr_version == KTRFACv0)
+				temp.tv = kth->ktr_tv;
+			else
+				temp.ts = kth->ktr_time;
 		}
 		if (kth->ktr_version == KTRFACv0)
-			col += printf("%lld.%06ld ",
-			    (long long)temp.tv.tv_sec, (long)temp.tv.tv_usec);
+			col += printf("%ld.%06ld ",
+			    (long)temp.tv.tv_sec, (long)temp.tv.tv_usec);
 		else
-			col += printf("%lld.%09ld ",
-			    (long long)temp.ts.tv_sec, (long)temp.ts.tv_nsec);
+			col += printf("%ld.%09ld ",
+			    (long)temp.ts.tv_sec, (long)temp.ts.tv_nsec);
 	}
 	col += printf("%-4s  ", type);
 	return col;
@@ -915,9 +884,6 @@ ktrpsig(void *v, int len)
 				break;
 			case SI_MESGQ:
 				code = "SI_MESGQ";
-				break;
-			case SI_LWP:
-				code = "SI_LWP";
 				break;
 			default:
 				code = NULL;

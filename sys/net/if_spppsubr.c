@@ -1,4 +1,4 @@
-/*	$NetBSD: if_spppsubr.c,v 1.116 2008/11/13 22:22:24 martin Exp $	 */
+/*	$NetBSD: if_spppsubr.c,v 1.114 2008/10/03 18:33:06 pooka Exp $	 */
 
 /*
  * Synchronous PPP/Cisco link level subroutines.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.116 2008/11/13 22:22:24 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.114 2008/10/03 18:33:06 pooka Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipx.h"
@@ -1042,13 +1042,12 @@ sppp_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	s = splnet();
 	switch (cmd) {
+	case SIOCAIFADDR:
 	case SIOCSIFDSTADDR:
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		going_up = ifp->if_flags & IFF_UP &&
 			(ifp->if_flags & IFF_RUNNING) == 0;
 		going_down = (ifp->if_flags & IFF_UP) == 0 &&
@@ -1126,8 +1125,7 @@ sppp_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ifioctl_common(ifp, cmd, data);
-		break;
+		error = ENOTTY;
 	}
 	splx(s);
 	return (error);

@@ -29,7 +29,7 @@ copyright="\
  * SUCH DAMAGE.
  */
 "
-SCRIPT_ID='$NetBSD: vnode_if.sh,v 1.51 2008/11/19 14:10:49 pooka Exp $'
+SCRIPT_ID='$NetBSD: vnode_if.sh,v 1.49 2008/05/19 17:06:02 ad Exp $'
 
 # Script to produce VFS front-end sugar.
 #
@@ -48,9 +48,7 @@ SRC_ID=`head -1 $src | sed -e 's/.*\$\(.*\)\$.*/\1/'`
 
 # Names of the created files.
 out_c=vnode_if.c
-out_rumpc=../rump/librump/rumpvfs/rumpvnode_if.c
 out_h=../sys/vnode_if.h
-out_rumph=../rump/include/rump/rumpvnode_if.h
 
 # Awk program (must support nawk extensions)
 # Use "awk" at Berkeley, "nawk" or "gawk" elsewhere.
@@ -93,7 +91,7 @@ awk_parser='
 /^#/	{ next; }
 # First line of description
 /^vop_/	{
-	name=rump $1;
+	name=$1;
 	argc=0;
 	willmake=-1;
 	next;
@@ -136,18 +134,7 @@ awk_parser='
 		i++;
 	}
 
-	# XXX: replace non-portable types for rump.  We should really
-	# nuke the types from the kernel, but that is a battle for
-	# another day.
-	at = $i;
-	if (length(rump) != 0) {
-		if (at == "vm_prot_t")
-			at = "int";
-		if (at == "voff_t")
-			at = "off_t";
-	}
-	argtype[argc] = at;
-	i++;
+	argtype[argc] = $i; i++;
 	while (i < NF) {
 		argtype[argc] = argtype[argc]" "$i;
 		i++;
@@ -176,37 +163,30 @@ warning="\
 # This is to satisfy McKusick (get rid of evil spaces 8^)
 anal_retentive='s:\([^/]\*\) :\1:g'
 
-do_hfile () {
 #
 # Redirect stdout to the H file.
 #
-echo "$0: Creating $1" 1>&2
-exec > $1
-rump=$2
+echo "$0: Creating $out_h" 1>&2
+exec > $out_h
 
 # Begin stuff
-if [ -z "${rump}" ]; then
-	SYS='SYS_'
-else
-	SYS='RUMP_RUMP'
-fi
 echo -n "$warning" | sed -e 's/\$//g;s/@/\$/g;s/ $//'
 echo ""
 echo -n "$copyright"
 echo ''
-echo "#ifndef _${SYS}VNODE_IF_H_"
-echo "#define _${SYS}VNODE_IF_H_"
+echo '#ifndef _SYS_VNODE_IF_H_'
+echo '#define _SYS_VNODE_IF_H_'
 echo ''
 echo '#ifdef _KERNEL_OPT'
 echo '#include "opt_vnode_lockdebug.h"'
 echo '#endif /* _KERNEL_OPT */'
-echo "
-extern const struct vnodeop_desc ${rump}vop_default_desc;
-"
+echo '
+extern const struct vnodeop_desc vop_default_desc;
+'
 
 # Body stuff
 # This awk program needs toupper() so define it if necessary.
-sed -e "$sed_prep" $src | $awk -v rump=${rump} "$toupper"'
+sed -e "$sed_prep" $src | $awk "$toupper"'
 function doit() {
 	# Declare arg struct, descriptor.
 	printf("\n#define %s_DESCOFFSET %d\n", toupper(name), vop_offset++);
@@ -239,7 +219,7 @@ BEGIN	{
 	arg0special="";
 	vop_offset = 1; # start at 1, to count the 'default' op
 
-	printf("\n/* Special cases: */\nstruct buf;\n");
+	printf("\n/* Special cases: */\n#include <sys/buf.h>\n");
 	printf("#ifndef _KERNEL\n#include <stdbool.h>\n#endif\n\n");
 
 	argc=1;
@@ -247,7 +227,7 @@ BEGIN	{
 	argname[0]="bp";
 	lockstate[0] = -1;
 	arg0special="->b_vp";
-	name=rump "vop_bwrite";
+	name="vop_bwrite";
 	doit();
 	printf("/* End of special cases */\n");
 }
@@ -260,18 +240,13 @@ END	{
 echo '
 /* End of special cases. */'
 echo ''
-echo "#endif /* !_${SYS}VNODE_IF_H_ */"
-}
-do_hfile $out_h ''
-do_hfile $out_rumph 'rump_'
+echo '#endif /* !_SYS_VNODE_IF_H_ */'
 
-do_cfile () {
 #
 # Redirect stdout to the C file.
 #
-echo "$0: Creating $1" 1>&2
-exec > $1
-rump=$2
+echo "$0: Creating $out_c" 1>&2
+exec > $out_c
 
 # Begin stuff
 echo -n "$warning" | sed -e 's/\$//g;s/@/\$/g;s/ $//'
@@ -289,12 +264,10 @@ echo '
 #include <sys/mount.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/lock.h>'
-[ ! -z "${rump}" ] && echo '#include <rump/rumpvnode_if.h>'
+#include <sys/lock.h>
 
-echo "
-const struct vnodeop_desc ${rump}vop_default_desc = {"
-echo '	0,
+const struct vnodeop_desc vop_default_desc = {
+	0,
 	"default",
 	0,
 	NULL,
@@ -306,7 +279,7 @@ echo '	0,
 '
 
 # Body stuff
-sed -e "$sed_prep" $src | $awk -v rump=${rump} '
+sed -e "$sed_prep" $src | $awk '
 function do_offset(typematch) {
 	for (i=0; i<argc; i++) {
 		if (argtype[i] == typematch) {
@@ -421,7 +394,7 @@ BEGIN	{
 	lockstate[0] = -1;
 	arg0special="->b_vp";
 	willrele[0]=0;
-	name=rump "vop_bwrite";
+	name="vop_bwrite";
 	doit();
 	printf("\n/* End of special cases */\n");
 
@@ -435,14 +408,14 @@ echo '
 
 # Add the vfs_op_descs array to the C file.
 # Begin stuff
-echo "
-const struct vnodeop_desc * const ${rump}vfs_op_descs[] = {
-	&${rump}vop_default_desc,	/* MUST BE FIRST */
-	&${rump}vop_bwrite_desc,	/* XXX: SPECIAL CASE */
-"
+echo '
+const struct vnodeop_desc * const vfs_op_descs[] = {
+	&vop_default_desc,	/* MUST BE FIRST */
+	&vop_bwrite_desc,	/* XXX: SPECIAL CASE */
+'
 
 # Body stuff
-sed -e "$sed_prep" $src | $awk -v rump=${rump} '
+sed -e "$sed_prep" $src | $awk '
 function doit() {
 	printf("\t&%s_desc,\n", name);
 }
@@ -452,9 +425,6 @@ function doit() {
 echo '	NULL
 };
 '
-}
-do_cfile $out_c ''
-do_cfile $out_rumpc 'rump_'
 
 exit 0
 

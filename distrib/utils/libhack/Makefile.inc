@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.23 2009/01/02 00:20:18 tnozaki Exp $
+# $NetBSD: Makefile.inc,v 1.22.14.1 2009/01/15 03:24:06 snj Exp $
 #
 # Include this fragment to build libhack.o
 # It is .o and not .a to make sure these are the

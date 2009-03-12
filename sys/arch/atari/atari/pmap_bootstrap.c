@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.2 2009/01/17 07:17:35 tsutsui Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.1.2.3 2009/03/26 17:28:47 snj Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -82,12 +82,19 @@
 struct memseg	boot_segs[NMEM_SEGS];
 struct memseg	usable_segs[NMEM_SEGS];
 
+extern st_entry_t	*Sysseg;
+extern pt_entry_t	*Sysmap;
+
 extern paddr_t	avail_start;
 extern paddr_t	avail_end;
+extern vsize_t	mem_size;
+extern vaddr_t	virtual_avail;
+extern vaddr_t	virtual_end;
 #if defined(M68040) || defined(M68060)
 extern int	protostfree;
 #endif
 
+extern void *	msgbufaddr;
 extern paddr_t	msgbufpa;
 
 /*
@@ -95,6 +102,8 @@ extern paddr_t	msgbufpa;
  */
 void 		*CADDR1, *CADDR2;
 char		*vmmap;
+
+extern int	protection_codes[];
 
 /*
  *	Bootstrap the system enough to run with virtual memory.
@@ -141,7 +150,7 @@ pmap_bootstrap(vaddr_t vstart, paddr_t sysseg_pa)
 				 atop(usable_segs[i].end),
 				 atop(usable_segs[i].start),
 				 atop(usable_segs[i].end),
-				 VM_FREELIST_DEFAULT);
+				 usable_segs[i].free_list);
 
 	avail_start = usable_segs[0].start;
 	avail_end   = usable_segs[i - 1].end;
@@ -155,9 +164,9 @@ pmap_bootstrap(vaddr_t vstart, paddr_t sysseg_pa)
 	 * absolute "jmp" table.
 	 */
 	{
-		u_int *kp;
+		int *kp;
 
-		kp = (u_int *)&protection_codes;
+		kp = (int *)&protection_codes;
 		kp[VM_PROT_NONE|VM_PROT_NONE|VM_PROT_NONE] = 0;
 		kp[VM_PROT_READ|VM_PROT_NONE|VM_PROT_NONE] = PG_RO;
 		kp[VM_PROT_READ|VM_PROT_NONE|VM_PROT_EXECUTE] = PG_RO;

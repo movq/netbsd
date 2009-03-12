@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpuser.c,v 1.35 2009/02/28 15:49:12 pooka Exp $	*/
+/*	$NetBSD: rumpuser.c,v 1.21 2008/10/09 01:19:06 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
@@ -28,10 +28,7 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if !defined(lint)
-__RCSID("$NetBSD: rumpuser.c,v 1.35 2009/02/28 15:49:12 pooka Exp $");
-#endif /* !lint */
+#define malloc(a) __real_malloc(a)
 
 /* thank the maker for this */
 #ifdef __linux__
@@ -39,15 +36,18 @@ __RCSID("$NetBSD: rumpuser.c,v 1.35 2009/02/28 15:49:12 pooka Exp $");
 #define _BSD_SOURCE
 #define _FILE_OFFSET_BITS 64
 #include <features.h>
+
+#include <byteswap.h>
+#define bswap16 bswap_16
+#define bswap32 bswap_32
+#define bswap64 bswap_64
 #endif
 
+
 #include <sys/param.h>
-#include <sys/event.h>
 #include <sys/ioctl.h>
-#include <sys/mman.h>
 #include <sys/uio.h>
 
-#include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -64,59 +64,29 @@ __RCSID("$NetBSD: rumpuser.c,v 1.35 2009/02/28 15:49:12 pooka Exp $");
 #include "rumpuser_int.h"
 
 int
-rumpuser_getfileinfo(const char *path, uint64_t *size, int *ft, int *error)
+rumpuser_stat(const char *path, struct stat *sb, int *error)
 {
-	struct stat sb;
-	int rv;
 
-	rv = stat(path, &sb);
-	if (rv == -1) {
-		*error = errno;
-		return rv;
-	}
-
-	*size = sb.st_size;
-	switch (sb.st_mode & S_IFMT) {
-	case S_IFDIR:
-		*ft = RUMPUSER_FT_DIR;
-		break;
-	case S_IFREG:
-		*ft = RUMPUSER_FT_REG;
-		break;
-	case S_IFBLK:
-		*ft = RUMPUSER_FT_BLK;
-		break;
-	default:
-		*ft = RUMPUSER_FT_OTHER;
-		break;
-	}
-
-	return rv;
+	DOCALL(int, (stat(path, sb)));
 }
 
 int
-rumpuser_nanosleep(uint64_t *sec, uint64_t *nsec, int *error)
+rumpuser_lstat(const char *path, struct stat *sb, int *error)
 {
-	struct timespec rqt, rmt;
-	int rv;
 
-	/*LINTED*/
-	rqt.tv_sec = *sec;
-	/*LINTED*/
-	rqt.tv_nsec = *nsec;
+	DOCALL(int, (lstat(path, sb)));
+}
 
-	KLOCK_WRAP(rv = nanosleep(&rqt, &rmt));
-	if (rv == -1)
-		*error = errno;
+int
+rumpuser_nanosleep(const struct timespec *rqtp, struct timespec *rmtp, 
+		   int *error)
+{
 
-	*sec = rmt.tv_sec;
-	*nsec = rmt.tv_nsec;
-
-	return rv;
+	DOCALL_KLOCK(int, (nanosleep(rqtp, rmtp)));
 }
 
 void *
-rumpuser__malloc(size_t howmuch, int canfail, const char *func, int line)
+_rumpuser_malloc(size_t howmuch, int canfail, const char *func, int line)
 {
 	void *rv;
 
@@ -133,7 +103,7 @@ rumpuser__malloc(size_t howmuch, int canfail, const char *func, int line)
 }
 
 void *
-rumpuser__realloc(void *ptr, size_t howmuch, int canfail,
+_rumpuser_realloc(void *ptr, size_t howmuch, int canfail,
 	const char *func, int line)
 {
 	void *rv;
@@ -154,64 +124,11 @@ rumpuser_free(void *ptr)
 	free(ptr);
 }
 
-void *
-rumpuser_anonmmap(size_t size, int alignbit, int exec, int *error)
-{
-	void *rv;
-	int prot;
-
-	prot = PROT_READ|PROT_WRITE;
-	if (exec)
-		prot |= PROT_EXEC;
-	/* XXX: MAP_ALIGNED() is not portable */
-	rv = mmap(NULL, size, prot, MAP_ANON | MAP_ALIGNED(alignbit), -1, 0);
-	if (rv == MAP_FAILED) {
-		*error = errno;
-		return NULL;
-	}
-	return rv;
-}
-
-void
-rumpuser_unmap(void *addr, size_t len)
-{
-	int rv;
-
-	rv = munmap(addr, len);
-	assert(rv == 0);
-}
-
-void *
-rumpuser_filemmap(int fd, off_t offset, size_t len, int shared,
-	int dotruncate, int *error)
-{
-	void *rv;
-	int flags;
-
-	if (dotruncate)
-		ftruncate(fd, offset + len);
-
-	flags = MAP_FILE;
-	if (shared)
-		flags |= MAP_SHARED;
-	else
-		flags |= MAP_PRIVATE;
-
-	rv = mmap(NULL, len, PROT_READ|PROT_WRITE, flags, fd, offset);
-	if (rv == MAP_FAILED) {
-		*error = errno;
-		return NULL;
-	}
-
-	*error = 0;
-	return rv;
-}
-
 int
 rumpuser_open(const char *path, int flags, int *error)
 {
 
-	DOCALL(int, (open(path, flags, 0644)));
+	DOCALL(int, (open(path, flags)));
 }
 
 int
@@ -259,9 +176,21 @@ rumpuser_pread(int fd, void *data, size_t size, off_t offset, int *error)
 	return rv;
 }
 
+ssize_t 
+rumpuser_readv(int fd, const struct iovec *iov, int iovcnt, int *error)
+{
+	ssize_t rv;
+
+	KLOCK_WRAP(rv = readv(fd, iov, iovcnt));
+	if (rv == -1)
+		*error = errno;
+
+	return rv;
+}
+
 void
 rumpuser_read_bio(int fd, void *data, size_t size, off_t offset,
-	rump_biodone_fn biodone, void *biodonecookie)
+	void *biodonecookie)
 {
 	ssize_t rv;
 	int error = 0;
@@ -272,7 +201,7 @@ rumpuser_read_bio(int fd, void *data, size_t size, off_t offset,
 		rv = 0;
 		
 	/* LINTED: see above */
-	biodone(biodonecookie, rv, error);
+	rump_biodone(biodonecookie, rv, error);
 }
 
 ssize_t
@@ -299,9 +228,21 @@ rumpuser_pwrite(int fd, const void *data, size_t size, off_t offset, int *error)
 	return rv;
 }
 
+ssize_t 
+rumpuser_writev(int fd, const struct iovec *iov, int iovcnt, int *error)
+{
+	ssize_t rv;
+
+	KLOCK_WRAP(rv = writev(fd, iov, iovcnt));
+	if (rv == -1)
+		*error = errno;
+
+	return rv;
+}
+
 void
 rumpuser_write_bio(int fd, const void *data, size_t size, off_t offset,
-	rump_biodone_fn biodone, void *biodonecookie)
+	void *biodonecookie)
 {
 	ssize_t rv;
 	int error = 0;
@@ -312,79 +253,14 @@ rumpuser_write_bio(int fd, const void *data, size_t size, off_t offset,
 		rv = 0;
 
 	/* LINTED: see above */
-	biodone(biodonecookie, rv, error);
-}
-
-ssize_t 
-rumpuser_readv(int fd, const struct rumpuser_iovec *riov, int iovcnt,
-	int *error)
-{
-	struct iovec *iovp;
-	ssize_t rv;
-	int i;
-
-	iovp = malloc(iovcnt * sizeof(struct iovec));
-	if (iovp == NULL) {
-		*error = ENOMEM;
-		return -1;
-	}
-	for (i = 0; i < iovcnt; i++) {
-		iovp[i].iov_base = riov[i].iov_base;
-		/*LINTED*/
-		iovp[i].iov_len = riov[i].iov_len;
-	}
-
-	KLOCK_WRAP(rv = readv(fd, iovp, iovcnt));
-	if (rv == -1)
-		*error = errno;
-	free(iovp);
-
-	return rv;
-}
-
-ssize_t 
-rumpuser_writev(int fd, const struct rumpuser_iovec *riov, int iovcnt,
-	int *error)
-{
-	struct iovec *iovp;
-	ssize_t rv;
-	int i;
-
-	iovp = malloc(iovcnt * sizeof(struct iovec));
-	if (iovp == NULL) {
-		*error = ENOMEM;
-		return -1;
-	}
-	for (i = 0; i < iovcnt; i++) {
-		iovp[i].iov_base = riov[i].iov_base;
-		/*LINTED*/
-		iovp[i].iov_len = riov[i].iov_len;
-	}
-
-	KLOCK_WRAP(rv = writev(fd, iovp, iovcnt));
-	if (rv == -1)
-		*error = errno;
-	free(iovp);
-
-	return rv;
+	rump_biodone(biodonecookie, rv, error);
 }
 
 int
-rumpuser_gettime(uint64_t *sec, uint64_t *nsec, int *error)
+rumpuser_gettimeofday(struct timeval *tv, int *error)
 {
-	struct timeval tv;
-	int rv;
 
-	rv = gettimeofday(&tv, NULL);
-	if (rv == -1) {
-		*error = errno;
-		return rv;
-	}
-
-	*sec = tv.tv_sec;
-	*nsec = tv.tv_usec * 1000;
-
-	return 0;
+	DOCALL(int, gettimeofday(tv, NULL));
 }
 
 int
@@ -399,6 +275,27 @@ rumpuser_gethostname(char *name, size_t namelen, int *error)
 {
 
 	DOCALL(int, (gethostname(name, namelen)));
+}
+
+uint16_t
+rumpuser_bswap16(uint16_t value)
+{
+
+	return bswap16(value);
+}
+
+uint32_t
+rumpuser_bswap32(uint32_t value)
+{
+
+	return bswap32(value);
+}
+
+uint64_t
+rumpuser_bswap64(uint64_t value)
+{
+
+	return bswap64(value);
 }
 
 char *
@@ -422,63 +319,24 @@ rumpuser_poll(struct pollfd *fds, int nfds, int timeout, int *error)
 	DOCALL_KLOCK(int, (poll(fds, (nfds_t)nfds, timeout)));
 }
 
-int
-rumpuser_putchar(int c, int *error)
+#ifdef __linux__
+/* eewww */
+size_t strlcpy(char *, const char *, size_t);
+uint32_t arc4random(void);
+size_t
+strlcpy(char *dest, const char *src, size_t size)
 {
 
-	DOCALL(int, (putchar(c)));
+	strncpy(dest, src, size-1);
+	dest[size-1] = '\0';
+
+	return strlen(dest);
 }
 
-void
-rumpuser_panic()
+uint32_t
+arc4random()
 {
 
-	abort();
+	return (uint32_t)random();
 }
-
-void
-rumpuser_seterrno(int error)
-{
-
-	errno = error;
-}
-
-int
-rumpuser_writewatchfile_setup(int kq, int fd, intptr_t opaque, int *error)
-{
-	struct kevent kev;
-
-	if (kq == -1) {
-		kq = kqueue();
-		if (kq == -1) {
-			*error = errno;
-			return -1;
-		}
-	}
-
-	EV_SET(&kev, fd, EVFILT_VNODE, EV_ADD|EV_ENABLE|EV_CLEAR,
-	    NOTE_WRITE, 0, opaque);
-	if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1) {
-		*error = errno;
-		return -1;
-	}
-
-	return kq;
-}
-
-int
-rumpuser_writewatchfile_wait(int kq, intptr_t *opaque, int *error)
-{
-	struct kevent kev;
-	int rv;
-
-	KLOCK_WRAP(rv = kevent(kq, NULL, 0, &kev, 1, NULL));
-	if (rv == -1) {
-		*error = errno;
-		return -1;
-	}
-
-	if (opaque)
-		*opaque = kev.udata;
-	return rv;
-}
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.110 2009/02/14 08:04:09 lukem Exp $	*/
+/*	$NetBSD: print.c,v 1.106.2.1 2009/04/01 00:25:20 snj Exp $	*/
 
 /*
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.6 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.110 2009/02/14 08:04:09 lukem Exp $");
+__RCSID("$NetBSD: print.c,v 1.106.2.1 2009/04/01 00:25:20 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -383,8 +383,10 @@ groups(void *arg, VARENT *ve, int mode)
 	} else
 		left = -1;
 
-	if (ki->p_ngroups == 0)
+	if (ki->p_ngroups == 0) {
 		fmt_putc('-', &left);
+		return;
+	}
 
 	for (i = 0; i < ki->p_ngroups; i++) {
 		(void)snprintf(buf, sizeof(buf), "%d", ki->p_groups[i]);
@@ -421,8 +423,10 @@ groupnames(void *arg, VARENT *ve, int mode)
 	} else
 		left = -1;
 
-	if (ki->p_ngroups == 0)
+	if (ki->p_ngroups == 0) {
 		fmt_putc('-', &left);
+		return;
+	}
 
 	for (i = 0; i < ki->p_ngroups; i++) {
 		if (i)
@@ -491,7 +495,7 @@ state(void *arg, VARENT *ve, int mode)
 
 	case LSSLEEP:
 		if (flag & L_SINTR)	/* interruptable (long) */
-			*cp = (int)k->p_slptime >= maxslp ? 'I' : 'S';
+			*cp = k->p_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
@@ -571,7 +575,7 @@ lstate(void *arg, VARENT *ve, int mode)
 
 	case LSSLEEP:
 		if (flag & L_SINTR)	/* interruptible (long) */
-			*cp = (int)k->l_slptime >= maxslp ? 'I' : 'S';
+			*cp = k->l_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
@@ -714,7 +718,7 @@ tdev(void *arg, VARENT *ve, int mode)
 				v->width = 2;
 	} else {
 		(void)snprintf(buff, sizeof(buff),
-		    "%lld/%lld", (long long)major(dev), (long long)minor(dev));
+		    "%d/%d", major(dev), minor(dev));
 		strprintorsetwidth(v, buff, mode);
 	}
 }
@@ -973,8 +977,7 @@ vsize(void *arg, VARENT *ve, int mode)
 
 	k = arg;
 	v = ve->var;
-	intprintorsetwidth(v,
-	    pgtok(k->p_vm_dsize + k->p_vm_ssize + k->p_vm_tsize), mode);
+	intprintorsetwidth(v, pgtok(k->p_vm_msize), mode);
 }
 
 void

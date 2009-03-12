@@ -1,4 +1,4 @@
-/*	$NetBSD: fss.c,v 1.62 2009/01/13 13:35:52 yamt Exp $	*/
+/*	$NetBSD: fss.c,v 1.60.4.3 2010/03/28 17:26:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.62 2009/01/13 13:35:52 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.60.4.3 2010/03/28 17:26:26 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -274,7 +274,7 @@ fss_strategy(struct buf *bp)
 	}
 
 	bp->b_rawblkno = bp->b_blkno;
-	bufq_put(sc->sc_bufq, bp);
+	BUFQ_PUT(sc->sc_bufq, bp);
 	cv_signal(&sc->sc_work_cv);
 
 	mutex_exit(&sc->sc_slock);
@@ -446,11 +446,12 @@ fss_softc_alloc(struct fss_softc *sc)
 		sc->sc_indir_data = NULL;
 	}
 
-	if ((error = kthread_create(PRI_BIO, 0, NULL, fss_bs_thread, sc,
-	    &sc->sc_bs_lwp, device_xname(sc->sc_dev))) != 0)
-		return error;
-
 	sc->sc_flags |= FSS_BS_THREAD;
+	if ((error = kthread_create(PRI_BIO, 0, NULL, fss_bs_thread, sc,
+	    &sc->sc_bs_lwp, device_xname(sc->sc_dev))) != 0) {
+		sc->sc_flags &= ~FSS_BS_THREAD;
+		return error;
+	}
 
 	disk_attach(sc->sc_dkdev);
 
@@ -694,14 +695,6 @@ fss_create_files(struct fss_softc *sc, struct fss_set *fss,
 		sc->sc_bs_bshift = DEV_BSHIFT;
 		sc->sc_bs_bmask = FSS_FSBSIZE(sc)-1;
 	}
-
-	/*
-	 * As all IO to from/to the backing store goes through
-	 * VOP_STRATEGY() clean the buffer cache to prevent
-	 * cache incoherencies.
-	 */
-	if ((error = vinvalbuf(sc->sc_bs_vp, V_SAVE, l->l_cred, l, 0, 0)) != 0)
-		return error;
 
 	return 0;
 }
@@ -1046,7 +1039,7 @@ fss_bs_thread(void *arg)
 		 */
 
 		if (sc->sc_flags & FSS_PERSISTENT) {
-			if ((bp = bufq_get(sc->sc_bufq)) == NULL)
+			if ((bp = BUFQ_GET(sc->sc_bufq)) == NULL)
 				continue;
 			is_valid = FSS_ISVALID(sc);
 			is_read = (bp->b_flags & B_READ);
@@ -1104,7 +1097,7 @@ fss_bs_thread(void *arg)
 		/*
 		 * Process I/O requests
 		 */
-		if ((bp = bufq_get(sc->sc_bufq)) == NULL)
+		if ((bp = BUFQ_GET(sc->sc_bufq)) == NULL)
 			continue;
 		is_valid = FSS_ISVALID(sc);
 		is_read = (bp->b_flags & B_READ);

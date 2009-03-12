@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.33 2008/11/14 13:05:34 ad Exp $	*/
+/*	$NetBSD: frame.h,v 1.31 2008/10/15 06:51:18 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -141,9 +141,12 @@ struct switchframe {
 	int	sf_eip;
 };
 
-#ifdef _KERNEL
+#if (defined(COMPAT_16) || defined(COMPAT_IBCS2)) && defined(_KERNEL)
 /*
- * Old-style signal frame
+ * XXX: Really COMPAT_IBCS2 should not be using our old signal frame.
+ */
+/*
+ * Signal frame
  */
 struct sigframe_sigcontext {
 	int	sf_ra;			/* return address for handler */
@@ -154,9 +157,6 @@ struct sigframe_sigcontext {
 };
 #endif
 
-/*
- * New-style signal frame
- */
 struct sigframe_siginfo {
 	int		sf_ra;		/* return address for handler */
 	int		sf_signum;	/* "signum" argument for handler */
@@ -181,7 +181,9 @@ struct saframe {
 #ifdef _KERNEL
 void *getframe(struct lwp *, int, int *);
 void buildcontext(struct lwp *, int, void *, void *);
+#ifdef COMPAT_16
 void sendsig_sigcontext(const ksiginfo_t *, const sigset_t *);
+#endif
 #endif
 
 #endif  /* _I386_FRAME_H_ */

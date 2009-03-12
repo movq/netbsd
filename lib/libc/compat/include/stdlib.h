@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.4 2009/01/26 15:05:56 drochner Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.1 2005/09/13 01:44:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -35,12 +35,8 @@
 #define _COMPAT_STDLIB_H_
 
 __BEGIN_DECLS
-
 void	 unsetenv(const char *);
 int	 __unsetenv13(const char *);
-__aconst char *devname(int32_t, mode_t);
-__aconst char *__devname50(dev_t, mode_t);
-
 __END_DECLS
 
 #endif /* !_COMPAT_STDLIB_H_ */

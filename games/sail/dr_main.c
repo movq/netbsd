@@ -1,4 +1,4 @@
-/*	$NetBSD: dr_main.c,v 1.13 2009/03/02 06:44:22 dholland Exp $	*/
+/*	$NetBSD: dr_main.c,v 1.12 2003/08/07 09:37:42 agc Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,11 +34,10 @@
 #if 0
 static char sccsid[] = "@(#)dr_main.c	8.2 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: dr_main.c,v 1.13 2009/03/02 06:44:22 dholland Exp $");
+__RCSID("$NetBSD: dr_main.c,v 1.12 2003/08/07 09:37:42 agc Exp $");
 #endif
 #endif /* not lint */
 
-#include <err.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,12 +57,14 @@ dr_main(void)
 	signal(SIGQUIT, SIG_IGN);
 	signal(SIGTSTP, SIG_IGN);
 	if (game < 0 || game >= NSCENE) {
-		errx(1, "driver: Bad game number %d", game);
+		fprintf(stderr, "DRIVER: Bad game number %d\n", game);
+		exit(1);
 	}
 	cc = &scene[game];
 	ls = SHIP(cc->vessels);
 	if (sync_open() < 0) {
-		err(1, "driver: syncfile");
+		perror("driver: syncfile");
+		exit(1);
 	}
 	for (n = 0; n < NNATION; n++)
 		nat[n] = 0;

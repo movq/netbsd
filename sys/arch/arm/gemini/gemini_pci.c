@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_pci.c,v 1.7 2008/12/04 00:36:33 cliff Exp $	*/
+/*	$NetBSD: gemini_pci.c,v 1.3 2008/10/28 23:24:35 cliff Exp $	*/
 
 /* adapted from:
  *	NetBSD: i80312_pci.c,v 1.9 2005/12/11 12:16:51 christos Exp
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gemini_pci.c,v 1.7 2008/12/04 00:36:33 cliff Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gemini_pci.c,v 1.3 2008/10/28 23:24:35 cliff Exp $");
 
 #include <sys/cdefs.h>
 
@@ -97,6 +97,8 @@ int		gemini_pci_intr_handler(void *v);
 
 #define	PCI_CONF_LOCK(s)	(s) = disable_interrupts(I32_bit)
 #define	PCI_CONF_UNLOCK(s)	restore_interrupts((s))
+
+int gemini_pci_debug=0;
 
 struct gemini_pci_intrq {
 	SIMPLEQ_ENTRY(gemini_pci_intrq) iq_q;
@@ -203,7 +205,7 @@ gemini_pci_init(pci_chipset_tag_t pc, void *cookie)
 	 */
 
 	aprint_normal("%s: configuring Secondary PCI bus\n",
-		device_xname(sc->sc_dev));
+		sc->sc_dev.dv_xname);
 
 	/*
 	 * XXX PCI IO addr should be inherited ?
@@ -224,8 +226,8 @@ gemini_pci_init(pci_chipset_tag_t pc, void *cookie)
 	pci_configure_bus(pc, ioext, memext, NULL, 0, arm_dcache_align);
 
 	gemini_pci_conf_write(sc, 0, GEMINI_PCI_CFG_REG_MEM1,
-		PCI_CFG_REG_MEM_BASE((GEMINI_DRAM_BASE + (GEMINI_BUSBASE * 1024 * 1024)))
-		| gemini_pci_cfg_reg_mem_size(MEMSIZE * 1024 * 1024));
+		PCI_CFG_REG_MEM_BASE(GEMINI_DRAM_BASE)
+			| gemini_pci_cfg_reg_mem_size(MEMSIZE * 1024 * 1024));
 
 	extent_destroy(ioext);
 	extent_destroy(memext);
@@ -331,6 +333,12 @@ gemini_pci_conf_read(void *v, pcitag_t tag, int offset)
 	}
 
 	PCI_CONF_UNLOCK(s);
+
+	if (gemini_pci_debug) {
+		printf("conf_read: tag %#lx, %d/%d/%d, ps_addr_val %#x, rv %#x\n",
+			tag, ps.ps_b, ps.ps_d, ps.ps_f, ps.ps_addr_val, rv);
+		Debugger();
+	}
 
 	return (rv);
 }

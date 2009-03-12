@@ -1,4 +1,4 @@
-/*	$NetBSD: sync_vnops.c,v 1.26 2009/02/22 20:10:25 ad Exp $	*/
+/*	$NetBSD: sync_vnops.c,v 1.25.10.1 2009/02/24 04:13:35 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sync_vnops.c,v 1.26 2009/02/22 20:10:25 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sync_vnops.c,v 1.25.10.1 2009/02/24 04:13:35 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>

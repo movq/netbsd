@@ -1,4 +1,4 @@
-/*	$NetBSD: dbcool_ki2c.c,v 1.4 2009/01/14 03:16:57 ahoka Exp $ */
+/*	$NetBSD: dbcool_ki2c.c,v 1.3.6.1 2009/01/16 21:58:29 bouyer Exp $ */
 
 /*-
  * Copyright (C) 2005 Michael Lorenz
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dbcool_ki2c.c,v 1.4 2009/01/14 03:16:57 ahoka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dbcool_ki2c.c,v 1.3.6.1 2009/01/16 21:58:29 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: sysinfo.c,v 1.8 2009/01/06 13:35:30 tsutsui Exp $	*/
+/*	$NetBSD: sysinfo.c,v 1.7.10.1 2009/01/16 22:57:33 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

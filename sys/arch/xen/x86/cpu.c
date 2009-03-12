@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.31 2008/12/23 20:06:16 cegger Exp $	*/
+/*	$NetBSD: cpu.c,v 1.28.4.3 2010/11/22 01:43:58 riz Exp $	*/
 /* NetBSD: cpu.c,v 1.18 2004/02/20 17:35:01 yamt Exp  */
 
 /*-
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.31 2008/12/23 20:06:16 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.28.4.3 2010/11/22 01:43:58 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -82,7 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.31 2008/12/23 20:06:16 cegger Exp $");
 #include <sys/user.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/cpu.h>
 #include <sys/atomic.h>
 
@@ -173,6 +173,13 @@ static void	cpu_set_tss_gates(struct cpu_info *ci);
 uint32_t cpus_attached = 0;
 uint32_t cpus_running = 0;
 
+/* CPUID feature flags */
+uint32_t cpu_feature;  /* %edx */
+uint32_t cpu_feature2; /* %ecx */
+uint32_t cpu_feature3; /* extended features - %edx */
+uint32_t cpu_feature4; /* extended features - %ecx */
+uint32_t cpu_feature_padlock; /* VIA PadLock feature flags */
+
 bool x86_mp_online;
 paddr_t mp_trampoline_paddr = MP_TRAMPOLINE;
 
@@ -224,26 +231,22 @@ cpu_attach(device_t parent, device_t self, void *aux)
 	struct cpu_softc *sc = device_private(self);
 	struct cpu_attach_args *caa = aux;
 	struct cpu_info *ci;
-	int cpunum = caa->cpu_number;
+	static int nphycpu = 0;
 
 	sc->sc_dev = self;
 
 	/*
-	 * If we're an Application Processor, allocate a cpu_info
-	 * structure, otherwise use the primary's.
+	 * If we're the first attached CPU use the primary cpu_info,
+	 * otherwise allocate a new one.
 	 */
-	if (caa->cpu_role == CPU_ROLE_AP) {
-		ci = kmem_zalloc(sizeof(*ci), KM_SLEEP);
+	if (nphycpu > 0) {
+		ci = malloc(sizeof(*ci), M_DEVBUF, M_WAITOK | M_ZERO);
 		ci->ci_curldt = -1;
-		if (phycpu_info[cpunum] != NULL)
-			panic("cpu at apic id %d already attached?", cpunum);
-		phycpu_info[cpunum] = ci;
+		if (phycpu_info[nphycpu] != NULL)
+			panic("cpu%d already attached?", nphycpu);
+		phycpu_info[nphycpu] = ci;
 	} else {
 		ci = &phycpu_info_primary;
-		if (cpunum != 0) {
-			phycpu_info[0] = NULL;
-			phycpu_info[cpunum] = ci;
-		}
 	}
 
 	ci->ci_self = ci;
@@ -252,29 +255,9 @@ cpu_attach(device_t parent, device_t self, void *aux)
 	ci->ci_dev = self;
 	ci->ci_cpuid = caa->cpu_number;
 	ci->ci_vcpu = NULL;
+	ci->ci_index = nphycpu++;
 
-	printf(": ");
-	switch (caa->cpu_role) {
-	case CPU_ROLE_SP:
-		printf("(uniprocessor)\n");
-		ci->ci_flags |= CPUF_PRESENT | CPUF_SP | CPUF_PRIMARY;
-		break;
-
-	case CPU_ROLE_BP:
-		printf("(boot processor)\n");
-		ci->ci_flags |= CPUF_PRESENT | CPUF_BSP | CPUF_PRIMARY;
-		break;
-
-	case CPU_ROLE_AP:
-		/*
-		 * report on an AP
-		 */
-		printf("(application processor)\n");
-		break;
-
-	default:
-		panic("unknown processor type??\n");
-	}
+	printf("\n");
 	return;
 #else
 	cpu_attach_common(parent, self, aux);
@@ -358,8 +341,8 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 		}
 
 		aprint_naive(": Application Processor\n");
-		ptr = (uintptr_t)kmem_alloc(sizeof(*ci) + CACHE_LINE_SIZE - 1,
-		    KM_SLEEP);
+		ptr = (uintptr_t)malloc(sizeof(*ci) + CACHE_LINE_SIZE - 1,
+		    M_DEVBUF, M_WAITOK);
 		ci = (struct cpu_info *)((ptr + CACHE_LINE_SIZE - 1) &
 		    ~(CACHE_LINE_SIZE - 1));
 		memset(ci, 0, sizeof(*ci));
@@ -369,7 +352,8 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 		cpu_info[cpunum] = ci;
 #endif
 #ifdef TRAPLOG
-		ci->ci_tlog_base = kmem_zalloc(sizeof(struct tlog), KM_SLEEP);
+		ci->ci_tlog_base = malloc(sizeof(struct tlog),
+		    M_DEVBUF, M_WAITOK);
 #endif
 	} else {
 		aprint_naive(": %s Processor\n",
@@ -470,14 +454,9 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 		pmap_cpu_init_late(ci);
 		cpu_start_secondary(ci);
 		if (ci->ci_flags & CPUF_PRESENT) {
-			struct cpu_info *tmp;
-
 			identifycpu(ci);
-			tmp = cpu_info_list;
-			while (tmp->ci_next)
-				tmp = tmp->ci_next;
-
-			tmp->ci_next = ci;
+			ci->ci_next = cpu_info_list->ci_next;
+			cpu_info_list->ci_next = ci;
 		}
 #else
 		aprint_normal_dev(sc->sc_dev, "not started\n");
@@ -683,7 +662,6 @@ cpu_hatch(void *v)
 {
 	struct cpu_info *ci = (struct cpu_info *)v;
 	int s, i;
-	uint32_t blacklist_features;
 
 #ifdef __x86_64__
         cpu_init_msrs(ci, true);
@@ -692,9 +670,8 @@ cpu_hatch(void *v)
 	cpu_probe(ci);
 
 	/* not on Xen... */
-	blacklist_features = ~(CPUID_PGE|CPUID_PSE|CPUID_MTRR|CPUID_FXSR|CPUID_NOX); /* XXX add CPUID_SVM */
-
-	cpu_feature &= blacklist_features;
+	cpu_feature &= ~(CPUID_PGE|CPUID_PSE|CPUID_MTRR|CPUID_FXSR); /* XXX add CPUID_SVM */
+	cpu_feature3 &= ~CPUID_NOX;
 
 	KDASSERT((ci->ci_flags & CPUF_PRESENT) == 0);
 	atomic_or_32(&ci->ci_flags, CPUF_PRESENT);

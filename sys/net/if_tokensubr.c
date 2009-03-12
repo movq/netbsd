@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tokensubr.c,v 1.55 2008/11/07 00:20:13 dyoung Exp $	*/
+/*	$NetBSD: if_tokensubr.c,v 1.54.10.1 2009/11/21 19:43:41 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -92,7 +92,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.55 2008/11/07 00:20:13 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.54.10.1 2009/11/21 19:43:41 snj Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -308,10 +308,10 @@ token_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 			memcpy(edst, tokenbroadcastaddr, sizeof(edst));
 		}
 		else {
-			void *tha = (void *)ar_tha(ah);
-			KASSERT(tha);
-			if (tha)
-				bcopy(tha, (void *)edst, sizeof(edst));
+			void *tha = ar_tha(ah);
+			if (tha == NULL)
+				return 0;
+			bcopy(tha, (void *)edst, sizeof(edst));
 			trh = (struct token_header *)M_TRHSTART(m);
 			trh->token_ac = TOKEN_AC;
 			trh->token_fc = TOKEN_FC;
@@ -656,7 +656,7 @@ token_ifattach(struct ifnet *ifp, void *lla)
 	ifp->if_flags |= IFF_NOTRAILERS;
 #endif
 
-	if_set_sadl(ifp, lla, ISO88025_ADDR_LEN, true);
+	if_set_sadl(ifp, lla, ISO88025_ADDR_LEN);
 
 #if NBPFILTER > 0
 	bpfattach(ifp, DLT_IEEE802, sizeof(struct token_header));

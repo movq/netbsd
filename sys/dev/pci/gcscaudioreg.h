@@ -1,4 +1,4 @@
-/*	$NetBSD: gcscaudioreg.h,v 1.1 2008/12/28 15:16:25 jmcneill Exp $	*/
+/*	$NetBSD: gcscaudioreg.h,v 1.1.8.2 2009/05/01 01:19:09 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 SHIMIZU Ryo <ryo@nerv.org>

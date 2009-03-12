@@ -1,4 +1,4 @@
-/*	$NetBSD: gencat.c,v 1.27 2009/02/18 20:04:43 christos Exp $	*/
+/*	$NetBSD: gencat.c,v 1.25.6.1 2009/08/14 20:32:22 snj Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: gencat.c,v 1.27 2009/02/18 20:04:43 christos Exp $");
+__RCSID("$NetBSD: gencat.c,v 1.25.6.1 2009/08/14 20:32:22 snj Exp $");
 #endif
 
 /***********************************************************
@@ -117,7 +117,7 @@ static long lineno = 0;
 
 static	char   *cskip(char *);
 static	void	error(const char *);
-static	char   *getline(int);
+static	char   *get_line(int);
 static	char   *getmsg(int, char *, char);
 static	void	warning(const char *, const char *);
 static	char   *wskip(char *);
@@ -275,7 +275,7 @@ xstrdup(const char *str)
 }
 
 static char *
-getline(int fd)
+get_line(int fd)
 {
 	static long curlen = BUFSIZ;
 	static char buf[BUFSIZ], *bptr = buf, *bend = buf;
@@ -346,7 +346,7 @@ getmsg(int fd, char *cptr, char quote)
 {
 	static char *msg = NULL;
 	static long msglen = 0;
-	size_t    clen, i;
+	long    clen, i;
 	char   *tptr;
 
 	if (quote && *cptr == quote) {
@@ -373,12 +373,12 @@ getmsg(int fd, char *cptr, char quote)
 			} else {
 				*cptr = '\0';
 			}
-		} else {
+		} else
 			if (*cptr == '\\') {
 				++cptr;
 				switch (*cptr) {
 				case '\0':
-					cptr = getline(fd);
+					cptr = get_line(fd);
 					if (!cptr)
 						error("premature end of file");
 					msglen += strlen(cptr);
@@ -436,7 +436,6 @@ getmsg(int fd, char *cptr, char quote)
 			} else {
 				*tptr++ = *cptr++;
 			}
-		}
 	}
 	*tptr = '\0';
 	return (msg);
@@ -452,7 +451,7 @@ MCParse(int fd)
 
 	/* XXX: init sethead? */
 
-	while ((cptr = getline(fd))) {
+	while ((cptr = get_line(fd))) {
 		if (*cptr == '$') {
 			++cptr;
 			if (strncmp(cptr, "set", 3) == 0) {
@@ -499,13 +498,9 @@ MCParse(int fd)
 			if (isdigit((unsigned char) *cptr)) {
 				msgid = atoi(cptr);
 				cptr = cskip(cptr);
-				if (*cptr) {
+				if (*cptr)
 					cptr = wskip(cptr);
-					if (!*cptr) {
-						MCAddMsg(msgid, "");
-						continue;
-					}
-				}
+				/* if (*cptr) ++cptr; */
 			} else {
 				warning(cptr, "neither blank line nor start of a message id");
 				continue;
@@ -559,6 +554,7 @@ MCReadCat(int fd)
 		errx(1, "%s: bad magic number (%#x)", CORRUPT, cat_hdr.__magic);
 
 	cat_hdr.__mem = ntohl(cat_hdr.__mem);
+	msgcat = xmalloc(cat_hdr.__mem);
 
 	cat_hdr.__nsets = ntohl(cat_hdr.__nsets);
 	cat_hdr.__msg_hdr_offset = ntohl(cat_hdr.__msg_hdr_offset);
@@ -570,8 +566,6 @@ MCReadCat(int fd)
 	    (cat_hdr.__mem < cat_hdr.__msg_hdr_offset) ||
 	    (cat_hdr.__mem < cat_hdr.__msg_txt_offset))
 		errx(1, "%s: catalog header", CORRUPT);
-
-	msgcat = xmalloc(cat_hdr.__mem);
 
 	n = read(fd, msgcat, cat_hdr.__mem);
 	if (n < cat_hdr.__mem) {

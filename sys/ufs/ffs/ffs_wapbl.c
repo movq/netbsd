@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_wapbl.c,v 1.12 2009/02/22 20:28:06 ad Exp $	*/
+/*	$NetBSD: ffs_wapbl.c,v 1.6.8.1 2009/10/03 22:49:43 snj Exp $	*/
 
 /*-
  * Copyright (c) 2003,2006,2008 The NetBSD Foundation, Inc.
@@ -30,9 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_wapbl.c,v 1.12 2009/02/22 20:28:06 ad Exp $");
-
-#define WAPBL_INTERNAL
+__KERNEL_RCSID(0, "$NetBSD: ffs_wapbl.c,v 1.6.8.1 2009/10/03 22:49:43 snj Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -153,9 +151,8 @@ ffs_wapbl_replay_finish(struct mount *mp)
 		}
 		vput(vp);
 	}
-	wapbl_replay_stop(wr);
+	mp->mnt_wapbl_replay = 0;
 	wapbl_replay_free(wr);
-	mp->mnt_wapbl_replay = NULL;
 }
 
 /* Callback for wapbl */
@@ -194,6 +191,17 @@ ffs_wapbl_abort_sync_metadata(struct mount *mp, daddr_t *deallocblks,
 	struct fs *fs = ump->um_fs;
 	int i;
 
+	/*
+	 * I suppose we could dig around for an in use inode, but
+	 * its not really used by ffs_blkalloc, so we just fake
+	 * the couple of fields that it touches.
+	 */
+	struct inode in;
+	in.i_fs = fs;
+	in.i_devvp = ump->um_devvp;
+	in.i_dev = ump->um_dev;
+	in.i_number = -1;
+	in.i_uid = 0;
 	for (i = 0; i < dealloccnt; i++) {
 		/*
 		 * Since the above blkfree may have failed, this blkalloc might
@@ -201,7 +209,7 @@ ffs_wapbl_abort_sync_metadata(struct mount *mp, daddr_t *deallocblks,
 		 * blkfree succeeded above, then this shouldn't fail because
 		 * the buffer will be locked in the current transaction.
 		 */
-		ffs_blkalloc_ump(ump, dbtofsb(fs, deallocblks[i]),
+		ffs_blkalloc(&in, dbtofsb(fs, deallocblks[i]),
 		    dealloclens[i]);
 	}
 }
@@ -263,8 +271,11 @@ wapbl_remove_log(struct mount *mp)
 		 * remove the log inode by setting its link count back
 		 * to zero and bail.
 		 */
+		ip->i_ffs_effnlink = 0;
 		ip->i_nlink = 0;
 		DIP_ASSIGN(ip, nlink, 0);
+		if (DOINGSOFTDEP(vp))
+			softdep_change_linkcnt(ip);
 		vput(vp);
 
 	case UFS_WAPBL_JOURNALLOC_END_PARTITION:
@@ -275,7 +286,7 @@ wapbl_remove_log(struct mount *mp)
 	default:
 		printf("ffs_wapbl: unknown journal type %d\n",
 		    fs->fs_journal_location);
-		return EINVAL;
+		break;
 	}
 
 
@@ -305,7 +316,7 @@ ffs_wapbl_start(struct mount *mp)
 	uint64_t extradata;
 	int error;
 
-	if (mp->mnt_wapbl == NULL) {
+	if (mp->mnt_wapbl == 0) {
 		if (fs->fs_journal_flags & UFS_WAPBL_FLAGS_CLEAR_LOG) {
 			/* Clear out any existing journal file */
 			error = wapbl_remove_log(mp);
@@ -432,7 +443,7 @@ ffs_wapbl_stop(struct mount *mp, int force)
 			return error;
 		}
 		fs->fs_flags &= ~FS_DOWAPBL; /* Repeat in case of forced error */
-		mp->mnt_wapbl = NULL;
+		mp->mnt_wapbl = 0;
 
 #ifdef WAPBL_DEBUG
 		printf("%s: disabled logging\n", fs->fs_fsmnt);
@@ -585,7 +596,7 @@ wapbl_log_position(struct mount *mp, struct fs *fs, struct vnode *devvp,
 	error = wapbl_create_infs_log(mp, fs, devvp, startp, countp, blksizep,
 	    extradatap);
 
-	ffs_sync(mp, MNT_WAIT, FSCRED);
+	ffs_sync(mp, 1, FSCRED);
 
 	return error;
 }
@@ -617,8 +628,11 @@ wapbl_create_infs_log(struct mount *mp, struct fs *fs, struct vnode *devvp,
 	DIP_ASSIGN(ip, mode, ip->i_mode);
 	ip->i_flags = SF_LOG;
 	DIP_ASSIGN(ip, flags, ip->i_flags);
+	ip->i_ffs_effnlink = 1;
 	ip->i_nlink = 1;
 	DIP_ASSIGN(ip, nlink, 1);
+	if (DOINGSOFTDEP(vp))
+		softdep_change_linkcnt(ip);
 	ffs_update(vp, NULL, NULL, UPDATE_WAIT);
 
 	if ((error = wapbl_allocate_log_file(mp, vp)) != 0) {
@@ -627,8 +641,11 @@ wapbl_create_infs_log(struct mount *mp, struct fs *fs, struct vnode *devvp,
 		 * remove the inode by setting its link count back to
 		 * zero and bail.
 		 */
+		ip->i_ffs_effnlink = 0;
 		ip->i_nlink = 0;
 		DIP_ASSIGN(ip, nlink, 0);
+		if (DOINGSOFTDEP(vp))
+			softdep_change_linkcnt(ip);
 		vput(vp);
 
 		return error;

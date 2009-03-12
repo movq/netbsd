@@ -103,7 +103,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.22 2009/03/10 17:21:57 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.21.4.1 2009/10/04 00:03:19 snj Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_xen.h"

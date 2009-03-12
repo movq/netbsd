@@ -1,4 +1,4 @@
-/*	$NetBSD: localeio.h,v 1.3 2009/01/11 02:46:28 christos Exp $	*/
+/*	$NetBSD: localeio.h,v 1.1.8.1 2009/01/15 03:24:07 snj Exp $	*/
 /*
  * Copyright (c) 2008, The NetBSD Foundation, Inc.
  * All rights reserved.

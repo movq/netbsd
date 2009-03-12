@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.325 2009/03/10 23:58:20 martin Exp $ */
+/*	$NetBSD: pmap.c,v 1.322.20.2 2009/11/15 05:58:38 snj Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.325 2009/03/10 23:58:20 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.322.20.2 2009/11/15 05:58:38 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -352,8 +352,7 @@ void *	vmmap;			/* one reserved MI vpage for /dev/mem */
 
 smeg_t		tregion;	/* [4/3mmu] Region for temporary mappings */
 
-static struct pmap	kernel_pmap_store;	/* the kernel's pmap */
-struct pmap *const kernel_pmap_ptr = &kernel_pmap_store; /* pmap_kernel() */
+struct pmap	kernel_pmap_store;		/* the kernel's pmap */
 struct regmap	kernel_regmap_store[NKREG];	/* the kernel's regmap */
 struct segmap	kernel_segmap_store[NKREG*NSEGRG];/* the kernel's segmaps */
 
@@ -2062,7 +2061,9 @@ ctx_alloc(struct pmap *pm)
 	struct regmap *rp;
 	int gap_start, gap_end;
 	vaddr_t va;
+#if defined(SUN4M) || defined(SUN4D)
 	struct cpu_info *cpi;
+#endif
 
 /*XXX-GCC!*/gap_start=gap_end=0;
 #ifdef DEBUG
@@ -2229,8 +2230,10 @@ void
 ctx_free(struct pmap *pm)
 {
 	union ctxinfo *c;
-	struct cpu_info *cpi;
 	int ctx;
+#if defined(SUN4M) || defined(SUN4D)
+	struct cpu_info *cpi;
+#endif
 
 	c = pm->pm_ctx;
 	ctx = pm->pm_ctxnum;

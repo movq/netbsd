@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_time.c,v 1.28 2009/01/16 13:10:47 njoly Exp $ */
+/*	$NetBSD: linux32_time.c,v 1.21.4.1 2008/11/20 03:03:05 snj Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_time.c,v 1.28 2009/01/16 13:10:47 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_time.c,v 1.21.4.1 2008/11/20 03:03:05 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -66,8 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_time.c,v 1.28 2009/01/16 13:10:47 njoly Exp 
 #include <compat/linux/common/linux_misc.h>
 #include <compat/linux/common/linux_oldolduname.h>
 #include <compat/linux/common/linux_sched.h>
-#include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
@@ -88,16 +86,16 @@ int
 linux32_sys_gettimeofday(struct lwp *l, const struct linux32_sys_gettimeofday_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(netbsd32_timeval50p_t) tp;
+		syscallarg(netbsd32_timevalp_t) tp;
 		syscallarg(netbsd32_timezonep_t) tzp;
 	} */
 	struct timeval tv;
-	struct netbsd32_timeval50 tv32;
+	struct netbsd32_timeval tv32;
 	int error;
 
 	if (SCARG_P32(uap, tp) != NULL) {
 		microtime(&tv);
-		netbsd32_from_timeval50(&tv, &tv32);
+		netbsd32_from_timeval(&tv, &tv32);
 		if ((error = copyout(&tv32, SCARG_P32(uap, tp), 
 		    sizeof(tv32))) != 0)
 			return error;
@@ -117,12 +115,12 @@ int
 linux32_sys_settimeofday(struct lwp *l, const struct linux32_sys_settimeofday_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(netbsd32_timeval50p_t) tp;
+		syscallarg(netbsd32_timevalp_t) tp;
 		syscallarg(netbsd32_timezonep_t) tzp;
 	} */
 	struct linux_sys_settimeofday_args ua;
 
-	NETBSD32TOP_UAP(tp, struct timeval50);
+	NETBSD32TOP_UAP(tp, struct timeval);
 	NETBSD32TOP_UAP(tzp, struct timezone);
 
 	return linux_sys_settimeofday(l, &ua, retval);
@@ -132,7 +130,7 @@ int
 linux32_sys_time(struct lwp *l, const struct linux32_sys_time_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(linux32_timep_t) t;
+		syscallcarg(linux32_timep_t) t;
 	} */
         struct timeval atv;
         linux32_time_t tt;
@@ -151,6 +149,12 @@ linux32_sys_time(struct lwp *l, const struct linux32_sys_time_args *uap, registe
         return 0;
 }
 
+
+static inline linux32_clock_t
+timeval_to_clock_t(struct timeval *tv)
+{
+	return tv->tv_sec * hz + tv->tv_usec / (1000000 / hz);
+}
 
 #define	CONVTCK(r)	(r.tv_sec * hz + r.tv_usec / (1000000 / hz))
 
@@ -199,7 +203,7 @@ linux32_sys_stime(struct lwp *l, const struct linux32_sys_stime_args *uap, regis
 	linux32_time_t tt32;
 	int error;
 	
-	if ((error = copyin(SCARG_P32(uap, t), &tt32, sizeof tt32)) != 0)
+	if ((error = copyin(&tt32, SCARG_P32(uap, t), sizeof tt32)) != 0)
 		return error;
 
 	ts.tv_sec = (long)tt32;
@@ -351,37 +355,4 @@ linux32_sys_clock_getres(struct lwp *l,
 	return copyout(&lts, SCARG_P32(uap, tp), sizeof lts);
 
 	return 0;
-}
-
-int
-linux32_sys_clock_nanosleep(struct lwp *l, 
-    const struct linux32_sys_clock_nanosleep_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(clockid_t) which;
-		syscallarg(int) flags;
-		syscallarg(linux32_timespecp_t) rqtp;
-		syscallarg(linux32_timespecp_t) rmtp;
-	} */
-	struct linux32_timespec lrqts, lrmts;
-	struct timespec rqts, rmts;
-	int error, error1;
-
-	if (SCARG(uap, flags) != 0)
-		return EINVAL;          /* XXX deal with TIMER_ABSTIME */
-	if (SCARG(uap, which) != LINUX_CLOCK_REALTIME)
-		return EINVAL;
-
-	error = copyin(SCARG_P32(uap, rqtp), &lrqts, sizeof lrqts);
-	if (error != 0)
-		return error;
-	linux32_to_native_timespec(&rqts, &lrqts);
-
-	error = nanosleep1(l, &rqts, SCARG_P32(uap, rmtp) ? &rmts : 0);
-	if (SCARG_P32(uap, rmtp) == NULL || (error != 0 && error != EINTR))
-		return error;
-
-	native_to_linux32_timespec(&lrmts, &rmts);
-	error1 = copyout(&lrmts, SCARG_P32(uap, rmtp), sizeof lrmts);
-	return error1 ? error1 : error;
 }

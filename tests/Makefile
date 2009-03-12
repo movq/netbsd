@@ -1,11 +1,11 @@
-# $NetBSD: Makefile,v 1.14 2009/02/20 21:39:57 jmmv Exp $
+# $NetBSD: Makefile,v 1.9 2008/08/16 23:51:51 gmcgarry Exp $
 
 .include <bsd.own.mk>
 
-SUBDIR=	crypto fs games ipf kernel net util syscall
+SUBDIR=	fs games modules net util
 
-.if ${MACHINE} != "evbppc"
-SUBDIR+= modules
+.if ${MKATF} != "no"
+SUBDIR+= atf
 .endif
 
 TESTSDIR=	${TESTSBASE}

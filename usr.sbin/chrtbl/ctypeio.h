@@ -1,4 +1,4 @@
-/* $NetBSD: ctypeio.h,v 1.1 2009/01/02 00:20:23 tnozaki Exp $ */
+/* $NetBSD: ctypeio.h,v 1.1.2.2 2009/01/15 03:24:11 snj Exp $ */
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.

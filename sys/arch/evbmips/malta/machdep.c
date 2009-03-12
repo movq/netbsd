@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.32 2009/02/13 22:41:01 apb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.28 2008/07/02 17:28:55 ad Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -112,11 +112,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.32 2009/02/13 22:41:01 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.28 2008/07/02 17:28:55 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -129,7 +128,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.32 2009/02/13 22:41:01 apb Exp $");
 #include <sys/boot_flag.h>
 #include <sys/termios.h>
 #include <sys/ksyms.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -137,7 +135,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.32 2009/02/13 22:41:01 apb Exp $");
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 #include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
 #endif
@@ -330,6 +328,10 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	/*
 	 * Initialize debuggers, and break into them, if appropriate.
 	 */
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init(0, 0, 0);
+#endif
+
 #if defined(DDB)
 	if (boothowto & RB_KDB)
 		Debugger();
@@ -425,8 +427,6 @@ cpu_reboot(howto, bootstr)
 
 haltsys:
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
 		printf("\n");

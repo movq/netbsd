@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.328 2009/01/24 05:06:05 mrg Exp $
+# $NetBSD: GENERIC,v 1.325.4.2 2010/11/21 03:05:07 riz Exp $
 #
 # This machine description file is used to generate the default NetBSD
 # kernel.
@@ -19,7 +19,7 @@ include 	"arch/alpha/conf/std.alpha"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident		"GENERIC-$Revision: 1.328 $"
+ident		"GENERIC-$Revision: 1.325.4.2 $"
 
 maxusers 32
 
@@ -93,6 +93,7 @@ file-system	PTYFS		# /dev/pts/N support
 # File system options
 options 	QUOTA		# UFS quotas
 #options 	FFS_EI		# FFS Endian Independant support
+options 	SOFTDEP		# FFS soft updates support.
 options 	WAPBL		# File system journaling support - Experimental
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Sun NFS-compatible file system server
@@ -148,7 +149,6 @@ options 	COMPAT_16
 options 	COMPAT_20
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 # OSF/1 binary compatibility
 options 	COMPAT_OSF1
@@ -170,6 +170,7 @@ options 	SYSVSHM
 options 	P1003_1B_SEMAPHORE
 
 # Loadable Kernel Modules
+options 	LKM
 
 # Disable kernel security.
 #options 	INSECURE
@@ -385,6 +386,13 @@ opl*	at	yds?
 mpu*	at	cmpci?
 mpu*	at	eso?
 mpu*	at	yds?
+
+# I2O devices
+iop*	at pci? dev ? function ?	# I/O processor
+iopsp*	at iop? tid ?			# SCSI/FC-AL ports
+ld*	at iop? tid ?			# block devices
+# XXX dpti.c wants a processor type that is not assigned for x86-64
+#dpti*	at iop? tid 0			# DPT/Adaptec control interface
 
 # MII/PHY support
 exphy*	at mii? phy ?			# 3Com internal PHYs
@@ -650,6 +658,10 @@ wsmouse* at btms? mux 0
 # Bluetooth Keyboard
 btkbd* at bthidev? reportid ?
 wskbd* at btkbd? console ? mux 1
+
+# Bluetooth Apple Magic Mouse
+btmagic* at bthub?
+wsmouse* at btmagic? mux 0
 
 # Bluetooth Audio support
 btsco* at bthub?

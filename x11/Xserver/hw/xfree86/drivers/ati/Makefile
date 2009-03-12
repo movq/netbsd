@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2009/02/14 13:48:17 abs Exp $
+#	$NetBSD: Makefile,v 1.6 2008/03/08 10:38:59 phx Exp $
 
 XMODULEDIR=	${X11USRLIBDIR}/modules/drivers
 
@@ -47,9 +47,10 @@ CPPFLAGS+=	-I${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/drivers/ati \
 # provide or emulate a little-endian undirected PIO address space of
 # at least 64KB in size.  The 'first cut' configuration only explicitly
 # defines the following as providing.
-.if !(${MACHINE_ARCH} == "i386" || \
-    ${MACHINE_ARCH} == "x86_64" || \
-    ${MACHINE_ARCH} == "alpha") 
+.if !(${MACHINE} == "i386" || \
+    ${MACHINE} == "x86_64" || \
+    ${MACHINE} == "amd64"  || \
+    ${MACHINE} == "alpha") 
 CPPFLAGS+=	-DAVOID_CPIO
 .endif
 
@@ -60,7 +61,7 @@ CPPFLAGS+=	-DAVOID_CPIO
 CPPFLAGS+=	-DAVOID_NON_PCI
 .endif
 
-.if ${MACHINE_ARCH} == "sparc"
+.if ${MACHINE} == "sparc"
 CPPFLAGS+=	-DAVOID_DGA
 .endif
 

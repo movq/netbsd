@@ -1,5 +1,5 @@
 #
-#	$NetBSD: TISDP2430,v 1.9 2009/03/06 20:31:48 joerg Exp $
+#	$NetBSD: TISDP2430,v 1.6 2008/10/30 04:27:35 matt Exp $
 #
 #	TISDP2430 -- TI OMAP 2430 Eval Board Kernel
 #
@@ -46,6 +46,7 @@ file-system	PTYFS		# /dev/pts/N support
 #options 	QUOTA		# UFS quotas
 #options 	FFS_EI		# FFS Endian Independant support
 #options 	NFSSERVER
+#options 	SOFTDEP
 options 	WAPBL		# File system journaling support - Experimental
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
@@ -109,6 +110,7 @@ options 	SYSVSEM		# System V-like semaphores
 #options 	SEMUME=10	# max number of undo entries per process
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
+#options 	SHMMAXPGS=1024	# 1024 pages is the default
 
 # Device options
 
@@ -120,6 +122,7 @@ options 	SYSVSHM		# System V-like memory sharing
 
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
+#options 	LKM		# loadable kernel modules
 #options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 #options 	MIIVERBOSE	# Verbose MII autoconfuration messages

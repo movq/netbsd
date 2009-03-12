@@ -1,4 +1,4 @@
-/*	$NetBSD: wi.c,v 1.228 2008/11/12 12:36:11 ad Exp $	*/
+/*	$NetBSD: wi.c,v 1.226 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -99,7 +99,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.228 2008/11/12 12:36:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.226 2008/04/28 20:23:51 martin Exp $");
 
 #define WI_HERMES_AUTOINC_WAR	/* Work around data write autoinc bug. */
 #define WI_HERMES_STATS_WAR	/* Work around stats counter bug. */
@@ -272,11 +272,11 @@ wi_card_ident[] = {
 	{ 0,	NULL,	0 },
 };
 
-#ifndef _MODULE
+#ifndef _LKM
 /*
  * Setup sysctl(3) MIB, hw.wi.*
  *
- * TBD condition CTLFLAG_PERMANENT on being a module or not
+ * TBD condition CTLFLAG_PERMANENT on being an LKM or not
  */
 SYSCTL_SETUP(sysctl_wi, "sysctl wi(4) subtree setup")
 {
@@ -1325,8 +1325,6 @@ wi_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 		/*
 		 * Can't do promisc and hostap at the same time.  If all that's
 		 * changing is the promisc flag, try to short-circuit a call to
@@ -2262,9 +2260,8 @@ wi_set_cfg(struct ifnet *ifp, u_long cmd, void *data)
 	len = (wreq.wi_len - 1) * 2;
 	switch (wreq.wi_type) {
         case WI_RID_MAC_NODE:
-		/* XXX convert to SIOCALIFADDR, AF_LINK, IFLR_ACTIVE */
 		(void)memcpy(ic->ic_myaddr, wreq.wi_val, ETHER_ADDR_LEN);
-		if_set_sadl(ifp, ic->ic_myaddr, ETHER_ADDR_LEN, false);
+		if_set_sadl(ifp, ic->ic_myaddr, ETHER_ADDR_LEN);
 		wi_write_rid(sc, WI_RID_MAC_NODE, ic->ic_myaddr,
 		    IEEE80211_ADDR_LEN);
 		break;

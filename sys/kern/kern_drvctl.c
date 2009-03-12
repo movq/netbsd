@@ -1,4 +1,4 @@
-/* $NetBSD: kern_drvctl.c,v 1.22 2009/01/17 07:02:35 yamt Exp $ */
+/* $NetBSD: kern_drvctl.c,v 1.19.6.3 2009/05/03 22:39:49 snj Exp $ */
 
 /*
  * Copyright (c) 2004
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_drvctl.c,v 1.22 2009/01/17 07:02:35 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_drvctl.c,v 1.19.6.3 2009/05/03 22:39:49 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -35,6 +35,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_drvctl.c,v 1.22 2009/01/17 07:02:35 yamt Exp $"
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/event.h>
+#include <sys/malloc.h>
 #include <sys/kmem.h>
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
@@ -78,14 +79,15 @@ static int	drvctl_poll(struct file *, int);
 static int	drvctl_close(struct file *);
 
 static const struct fileops drvctl_fileops = {
-	drvctl_read,
-	drvctl_write,
-	drvctl_ioctl,
-	fnullop_fcntl,
-	drvctl_poll,
-	fbadop_stat,
-	drvctl_close,
-	fnullop_kqfilter
+	.fo_read = drvctl_read,
+	.fo_write = drvctl_write,
+	.fo_ioctl = drvctl_ioctl,
+	.fo_fcntl = fnullop_fcntl,
+	.fo_poll = drvctl_poll,
+	.fo_stat = fbadop_stat,
+	.fo_close = drvctl_close,
+	.fo_kqfilter = fnullop_kqfilter,
+	.fo_drain = fnullop_drain,
 };
 
 #define MAXLOCATORS 100
@@ -105,7 +107,7 @@ drvctl_init(void)
 void
 devmon_insert(const char *event, prop_dictionary_t ev)
 {
-	struct drvctl_event *dce, *odce;
+	struct drvctl_event *dce, *odce;;
 
 	mutex_enter(&drvctl_lock);
 
@@ -196,7 +198,11 @@ listdevbyname(struct devlistargs *l)
 	deviter_t di;
 	int cnt = 0, idx, error = 0;
 
-	if ((d = device_find_by_xname(l->l_devname)) == NULL)
+	if (*l->l_devname == '\0')
+		d = (device_t)NULL;
+	else if (memchr(l->l_devname, 0, sizeof(l->l_devname)) == NULL)
+		return EINVAL;
+	else if ((d = device_find_by_xname(l->l_devname)) == NULL)
 		return ENXIO;
 
 	for (child = deviter_first(&di, 0); child != NULL;
@@ -305,7 +311,6 @@ drvctl_ioctl(struct file *fp, u_long cmd, void *data)
 	int res;
 	char *ifattr;
 	int *locs;
-	size_t locs_sz = 0; /* XXXgcc */
 
 	switch (cmd) {
 	case DRVSUSPENDDEV:
@@ -336,18 +341,19 @@ drvctl_ioctl(struct file *fp, u_long cmd, void *data)
 		if (d->numlocators) {
 			if (d->numlocators > MAXLOCATORS)
 				return (EINVAL);
-			locs_sz = d->numlocators * sizeof(int);
-			locs = kmem_alloc(locs_sz, KM_SLEEP);
-			res = copyin(d->locators, locs, locs_sz);
+			locs = malloc(d->numlocators * sizeof(int), M_DEVBUF,
+				      M_WAITOK);
+			res = copyin(d->locators, locs,
+				     d->numlocators * sizeof(int));
 			if (res) {
-				kmem_free(locs, locs_sz);
+				free(locs, M_DEVBUF);
 				return (res);
 			}
 		} else
-			locs = NULL;
+			locs = 0;
 		res = rescanbus(d->busname, ifattr, d->numlocators, locs);
 		if (locs)
-			kmem_free(locs, locs_sz);
+			free(locs, M_DEVBUF);
 #undef d
 		break;
 	case DRVCTLCOMMAND:

@@ -1,4 +1,4 @@
-/*	$NetBSD: setenv.c,v 1.31 2008/11/01 00:54:47 christos Exp $	*/
+/*	$NetBSD: setenv.c,v 1.29 2005/02/17 21:22:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setenv.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: setenv.c,v 1.31 2008/11/01 00:54:47 christos Exp $");
+__RCSID("$NetBSD: setenv.c,v 1.29 2005/02/17 21:22:25 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -63,7 +63,10 @@ extern char **environ;
  *	"value".  If rewrite is set, replace any current value.
  */
 int
-setenv(const char *name, const char *value, int rewrite)
+setenv(name, value, rewrite)
+	const char *name;
+	const char *value;
+	int rewrite;
 {
 	static char **saveenv;	/* copy of previously allocated space */
 	char *c, **newenv;
@@ -85,7 +88,11 @@ setenv(const char *name, const char *value, int rewrite)
 		if (strlen(c) >= l_value)	/* old larger; copy over */
 			goto copy;
 	} else {					/* create new slot */
-		size = (size_t)(sizeof(char *) * (offset + 2));
+		size_t cnt;
+
+		for (cnt = 0; environ[cnt]; ++cnt)
+			continue;
+		size = (size_t)(sizeof(char *) * (cnt + 2));
 		if (saveenv == environ) {		/* just increase size */
 			if ((newenv = realloc(saveenv, size)) == NULL)
 				goto bad;
@@ -94,10 +101,11 @@ setenv(const char *name, const char *value, int rewrite)
 			free(saveenv);
 			if ((saveenv = malloc(size)) == NULL)
 				goto bad;
-			(void)memcpy(saveenv, environ, size - sizeof(char *));
+			(void)memcpy(saveenv, environ, cnt * sizeof(char *));
 		}
 		environ = saveenv;
-		environ[offset + 1] = NULL;
+		environ[cnt + 1] = NULL;
+		offset = (int)cnt;
 	}
 	for (cc = name; *cc && *cc != '='; ++cc)	/* no `=' in name */
 		continue;

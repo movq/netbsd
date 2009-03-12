@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.common,v 1.35 2009/02/08 00:50:07 abs Exp $
+#	$NetBSD: Makefile.common,v 1.34.6.1 2009/02/16 03:26:56 snj Exp $
 
 # These define parts of the Xserver tree that are to be
 # conditionally compiled for different platforms.  See

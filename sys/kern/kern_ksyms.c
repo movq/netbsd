@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_ksyms.c,v 1.50 2009/01/23 09:22:25 jmmv Exp $	*/
+/*	$NetBSD: kern_ksyms.c,v 1.41.4.2 2010/02/14 13:35:43 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -67,13 +67,16 @@
 /*
  * TODO:
  *
+ *	Consider replacing patricia tree with simpler binary search
+ *	for symbol tables.
+ *
  *	Add support for mmap, poll.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_ksyms.c,v 1.50 2009/01/23 09:22:25 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ksyms.c,v 1.41.4.2 2010/02/14 13:35:43 bouyer Exp $");
 
-#if defined(_KERNEL) && defined(_KERNEL_OPT)
+#ifdef _KERNEL
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"	/* for SYMTAB_SPACE */
 #endif
@@ -81,16 +84,19 @@ __KERNEL_RCSID(0, "$NetBSD: kern_ksyms.c,v 1.50 2009/01/23 09:22:25 jmmv Exp $")
 #define _KSYMS_PRIVATE
 
 #include <sys/param.h>
+#include <sys/errno.h>
 #include <sys/queue.h>
 #include <sys/exec.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
+#include <sys/malloc.h>
 #include <sys/kmem.h>
 #include <sys/proc.h>
+#include <sys/module.h>
 #include <sys/atomic.h>
 #include <sys/ksyms.h>
 
-#include <uvm/uvm_extern.h>
+#include <lib/libkern/libkern.h>
 
 #ifdef DDB
 #include <ddb/db_output.h>
@@ -128,6 +134,21 @@ TAILQ_HEAD(, ksyms_symtab) ksyms_symtabs =
     TAILQ_HEAD_INITIALIZER(ksyms_symtabs);
 static struct ksyms_symtab kernel_symtab;
 
+/*
+ * Patricia-tree-based lookup structure for the in-kernel global symbols.
+ * Based on a design by Mikael Sundstrom, msm@sm.luth.se.
+ */
+struct ptree {
+	int16_t bitno;
+	int16_t lr[2];
+} *symb;
+static int16_t baseidx;
+static int treex = 1;
+
+#define	P_BIT(key, bit) ((key[bit >> 3] >> (bit & 7)) & 1)
+#define	STRING(idx) (kernel_symtab.sd_symstart[idx].st_name + \
+			kernel_symtab.sd_strstart)
+
 static int
 ksyms_verify(void *symstart, void *strstart)
 {
@@ -146,53 +167,145 @@ ksyms_verify(void *symstart, void *strstart)
 }
 
 /*
+ * Walk down the tree until a terminal node is found.
+ */
+static int
+symbol_traverse(const char *key)
+{
+	int16_t nb, rbit = baseidx;
+
+	while (rbit > 0) {
+		nb = symb[rbit].bitno;
+		rbit = symb[rbit].lr[P_BIT(key, nb)];
+	}
+	return -rbit;
+}
+
+static int
+ptree_add(char *key, int val)
+{
+	int idx;
+	int nix, cix, bit, rbit, sb, lastrbit, svbit = 0, ix;
+	char *m, *k;
+
+	if (baseidx == 0) {
+		baseidx = -val;
+		return 0; /* First element */
+	}
+
+	/* Get string to match against */
+	idx = symbol_traverse(key);
+
+	/* Find first mismatching bit */
+	m = STRING(idx);
+	k = key;
+	if (strcmp(m, k) == 0)
+		return 1;
+
+	for (cix = 0; *m && *k && *m == *k; m++, k++, cix += 8)
+		;
+	ix = ffs((int)*m ^ (int)*k) - 1;
+	cix += ix;
+
+	/* Create new node */
+	nix = treex++;
+	bit = P_BIT(key, cix);
+	symb[nix].bitno = cix;
+	symb[nix].lr[bit] = -val;
+
+	/* Find where to insert node */
+	rbit = baseidx;
+	lastrbit = 0;
+	for (;;) {
+		if (rbit < 0)
+			break;
+		sb = symb[rbit].bitno;
+		if (sb > cix)
+			break;
+		if (sb == cix)
+			printf("symb[rbit].bitno == cix!!!\n");
+		lastrbit = rbit;
+		svbit = P_BIT(key, sb);
+		rbit = symb[rbit].lr[svbit];
+	}
+
+	/* Do the actual insertion */
+	if (lastrbit == 0) {
+		/* first element */
+		symb[nix].lr[!bit] = baseidx;
+		baseidx = nix;
+	} else {
+		symb[nix].lr[!bit] = rbit;
+		symb[lastrbit].lr[svbit] = nix;
+	}
+	return 0;
+}
+
+static int
+ptree_find(const char *key)
+{
+	int idx;
+
+	if (baseidx == 0)
+		return 0;
+	idx = symbol_traverse(key);
+
+	if (strcmp(key, STRING(idx)) == 0)
+		return idx;
+	return 0;
+}
+
+static void
+ptree_gen(char *off, struct ksyms_symtab *tab)
+{
+	Elf_Sym *sym;
+	int i, nsym;
+
+	if (off != NULL)
+		symb = (struct ptree *)ALIGN(off);
+	else
+		symb = malloc((tab->sd_symsize/sizeof(Elf_Sym)) *
+		    sizeof(struct ptree), M_DEVBUF, M_WAITOK);
+	symb--; /* sym index won't be 0 */
+
+	sym = tab->sd_symstart;
+	if ((nsym = tab->sd_symsize/sizeof(Elf_Sym)) > INT16_MAX) {
+		printf("Too many symbols for tree, skipping %d symbols\n",
+		    nsym-INT16_MAX);
+		nsym = INT16_MAX;
+	}
+	for (i = 1; i < nsym; i++) {
+		if (ELF_ST_BIND(sym[i].st_info) != STB_GLOBAL)
+			continue;
+		ptree_add(tab->sd_strstart+sym[i].st_name, i);
+		if (tab->sd_minsym == NULL ||
+		    sym[i].st_value < tab->sd_minsym->st_value)
+			tab->sd_minsym = &sym[i];
+		if (tab->sd_maxsym == NULL ||
+		    sym[i].st_value > tab->sd_maxsym->st_value)
+			tab->sd_maxsym = &sym[i];
+	}
+}
+
+/*
  * Finds a certain symbol name in a certain symbol table.
  */
 static Elf_Sym *
-findsym(const char *name, struct ksyms_symtab *table, int type)
+findsym(const char *name, struct ksyms_symtab *table)
 {
-	Elf_Sym *sym, *maxsym;
-	int low, mid, high, nglob;
-	char *str, *cmp;
+	Elf_Sym *start = table->sd_symstart;
+	int i, sz = table->sd_symsize/sizeof(Elf_Sym);
+	char *np;
+	char *realstart = table->sd_strstart - table->sd_usroffset;
 
-	sym = table->sd_symstart;
-	str = table->sd_strstart - table->sd_usroffset;
-	nglob = table->sd_nglob;
-	low = 0;
-	high = nglob;
+	if (table == &kernel_symtab && (i = ptree_find(name)) != 0)
+		return &start[i];
 
-	/*
-	 * Start with a binary search of all global symbols in this table.
-	 * Global symbols must have unique names.
-	 */
-	while (low < high) {
-		mid = (low + high) >> 1;
-		cmp = sym[mid].st_name + str;
-		if (cmp[0] < name[0] || strcmp(cmp, name) < 0) {
-			low = mid + 1; 
-		} else {
-			high = mid;
-		}
-	}
-	KASSERT(low == high);
-	if (__predict_true(low < nglob &&
-	    strcmp(sym[low].st_name + str, name) == 0)) {
-		KASSERT(ELF_ST_BIND(sym[low].st_info) == STB_GLOBAL);
-		return &sym[low];
-	}
-
-	/*
-	 * Perform a linear search of local symbols (rare).  Many local
-	 * symbols with the same name can exist so are not included in
-	 * the binary search.
-	 */
-	if (type != KSYMS_EXTERN) {
-		maxsym = sym + table->sd_symsize / sizeof(Elf_Sym);
-		for (sym += nglob; sym < maxsym; sym++) {
-			if (strcmp(name, sym->st_name + str) == 0) {
-				return sym;
-			}
-		}
+	for (i = 0; i < sz; i++) {
+		np = realstart + start[i].st_name;
+		if (name[0] == np[0] && name[1] == np[1] &&
+		    strcmp(name, np) == 0)
+			return &start[i];
 	}
 	return NULL;
 }
@@ -203,22 +316,8 @@ findsym(const char *name, struct ksyms_symtab *table, int type)
 void
 ksymsattach(int arg)
 {
-
-}
-
-void
-ksyms_init()
-{
-
-#ifdef SYMTAB_SPACE
-	if (!ksyms_initted &&
-	    strncmp(db_symtab, SYMTAB_FILLER, sizeof(SYMTAB_FILLER))) {
-		ksyms_addsyms_elf(db_symtabsize, db_symtab,
-		    db_symtab + db_symtabsize);
-	}
-#endif
-
-	mutex_init(&ksyms_lock, MUTEX_DEFAULT, IPL_NONE);
+	if (baseidx == 0)
+		ptree_gen(0, &kernel_symtab);
 }
 
 /*
@@ -234,41 +333,13 @@ ksyms_init()
  * newstart - Address to which the symbol table has to be copied during
  *            shrinking.  If NULL, it is not moved.
  */
-static const char *addsymtab_strstart;
-
-static int
-addsymtab_compar(const void *a, const void *b)
-{
-	const Elf_Sym *sa, *sb;
-
-	sa = a;
-	sb = b;
-
-	/*
-	 * Split the symbol table into two, with globals at the start
-	 * and locals at the end.
-	 */
-	if (ELF_ST_BIND(sa->st_info) != ELF_ST_BIND(sb->st_info)) {
-		if (ELF_ST_BIND(sa->st_info) == STB_GLOBAL) {
-			return -1;
-		}
-		if (ELF_ST_BIND(sb->st_info) == STB_GLOBAL) {
-			return 1;
-		}
-	}
-
-	/* Within each band, sort by name. */
-	return strcmp(sa->st_name + addsymtab_strstart,
-	    sb->st_name + addsymtab_strstart);
-}
-
 static void
 addsymtab(const char *name, void *symstart, size_t symsize,
 	  void *strstart, size_t strsize, struct ksyms_symtab *tab,
 	  void *newstart)
 {
-	Elf_Sym *sym, *nsym, ts;
-	int i, j, n, nglob;
+	Elf_Sym *sym, *nsym;
+	int i, j, n;
 	char *str;
 
 	tab->sd_symstart = symstart;
@@ -276,10 +347,11 @@ addsymtab(const char *name, void *symstart, size_t symsize,
 	tab->sd_strstart = strstart;
 	tab->sd_strsize = strsize;
 	tab->sd_name = name;
-	tab->sd_minsym = UINTPTR_MAX;
-	tab->sd_maxsym = 0;
+	tab->sd_minsym = NULL;
+	tab->sd_maxsym = NULL;
 	tab->sd_usroffset = 0;
 	tab->sd_gone = false;
+	tab->sd_malloc = false;	/* XXXLKM */
 #ifdef KSYMS_DEBUG
 	printf("newstart %p sym %p ksyms_symsz %d str %p strsz %d send %p\n",
 	    newstart, symstart, symsize, strstart, strsize,
@@ -290,7 +362,6 @@ addsymtab(const char *name, void *symstart, size_t symsize,
 	sym = tab->sd_symstart;
 	nsym = (Elf_Sym *)newstart;
 	str = tab->sd_strstart;
-	nglob = 0;
 	for (i = n = 0; i < tab->sd_symsize/sizeof(Elf_Sym); i++) {
 		/*
 		 * Remove useless symbols.
@@ -312,30 +383,15 @@ addsymtab(const char *name, void *symstart, size_t symsize,
 
 		/* Save symbol. Set it as an absolute offset */
 		nsym[n] = sym[i];
-		nsym[n].st_shndx = SHBSS;
-		j = strlen(nsym[n].st_name + str) + 1;
+		nsym[n].st_shndx = SHN_ABS;
+		j = strlen(nsym[n].st_name + tab->sd_strstart) + 1;
 		if (j > ksyms_maxlen)
 			ksyms_maxlen = j;
-		nglob += (ELF_ST_BIND(nsym[n].st_info) == STB_GLOBAL);
-
-		/* Compute min and max symbols. */
-		if (nsym[n].st_value < tab->sd_minsym) {
-		    	tab->sd_minsym = nsym[n].st_value;
-		}
-		if (nsym[n].st_value > tab->sd_maxsym) {
-		    	tab->sd_maxsym = nsym[n].st_value;
-		}
 		n++;
-	}
 
-	/* Fill the rest of the record, and sort the symbols. */
+	}
 	tab->sd_symstart = nsym;
 	tab->sd_symsize = n * sizeof(Elf_Sym);
-	tab->sd_nglob = nglob;
-	addsymtab_strstart = str;
-	if (kheapsort(nsym, n, sizeof(Elf_Sym), addsymtab_compar, &ts) != 0)
-		panic("addsymtab");
-
 	/* ksymsread() is unlocked, so membar. */
 	membar_producer();
 	TAILQ_INSERT_TAIL(&ksyms_symtabs, tab, sd_queue);
@@ -343,11 +399,17 @@ addsymtab(const char *name, void *symstart, size_t symsize,
 	ksyms_initted = true;
 }
 
+void
+ksyms_init_finalize()
+{
+	mutex_init(&ksyms_lock, MUTEX_DEFAULT, IPL_NONE);
+}
+
 /*
  * Setup the kernel symbol table stuff.
  */
 void
-ksyms_addsyms_elf(int symsize, void *start, void *end)
+ksyms_init(int symsize, void *start, void *end)
 {
 	int i, j;
 	Elf_Shdr *shdr;
@@ -355,6 +417,14 @@ ksyms_addsyms_elf(int symsize, void *start, void *end)
 	size_t strsize = 0;
 	Elf_Ehdr *ehdr;
 
+#ifdef SYMTAB_SPACE
+	if (symsize <= 0 &&
+	    strncmp(db_symtab, SYMTAB_FILLER, sizeof(SYMTAB_FILLER))) {
+		symsize = db_symtabsize;
+		start = db_symtab;
+		end = db_symtab + db_symtabsize;
+	}
+#endif
 	if (symsize <= 0) {
 		printf("[ Kernel symbol table missing! ]\n");
 		return;
@@ -404,7 +474,7 @@ ksyms_addsyms_elf(int symsize, void *start, void *end)
 	    &kernel_symtab, start);
 
 #ifdef DEBUG
-	printf("Loaded initial symtab at %p, strtab at %p, # entries %ld\n",
+	aprint_normal("Loaded initial symtab at %p, strtab at %p, # entries %ld\n",
 	    kernel_symtab.sd_symstart, kernel_symtab.sd_strstart,
 	    (long)kernel_symtab.sd_symsize/sizeof(Elf_Sym));
 #endif
@@ -419,7 +489,7 @@ ksyms_addsyms_elf(int symsize, void *start, void *end)
  * a void *rather than a pointer to avoid exposing the Elf_Ehdr type.
  */
 void
-ksyms_addsyms_explicit(void *ehdr, void *symstart, size_t symsize,
+ksyms_init_explicit(void *ehdr, void *symstart, size_t symsize,
 		    void *strstart, size_t strsize)
 {
 
@@ -442,10 +512,13 @@ ksyms_addsyms_explicit(void *ehdr, void *symstart, size_t symsize,
  */
 int
 ksyms_getval_unlocked(const char *mod, const char *sym, unsigned long *val,
-		      int type)
+    int type)
 {
 	struct ksyms_symtab *st;
 	Elf_Sym *es;
+
+	if (!ksyms_initted)
+		return ENOENT;
 
 #ifdef KSYMS_DEBUG
 	if (ksyms_debug & FOLLOW_CALLS)
@@ -454,14 +527,23 @@ ksyms_getval_unlocked(const char *mod, const char *sym, unsigned long *val,
 #endif
 
 	TAILQ_FOREACH(st, &ksyms_symtabs, sd_queue) {
-		if (__predict_false(st->sd_gone))
+		if (st->sd_gone)
 			continue;
-		if (mod != NULL && strcmp(st->sd_name, mod))
+		if (mod && strcmp(st->sd_name, mod))
 			continue;
-		if ((es = findsym(sym, st, type)) != NULL) {
+		if ((es = findsym(sym, st)) == NULL)
+			continue;
+		if (es->st_shndx == SHN_UNDEF)
+			continue;
+
+		/* Skip if bad binding */
+		if (type == KSYMS_EXTERN &&
+		    ELF_ST_BIND(es->st_info) != STB_GLOBAL)
+			continue;
+
+		if (val)
 			*val = es->st_value;
-			return 0;
-		}
+		return 0;
 	}
 	return ENOENT;
 }
@@ -471,14 +553,12 @@ ksyms_getval(const char *mod, const char *sym, unsigned long *val, int type)
 {
 	int rc;
 
-	if (!ksyms_initted)
-		return ENOENT;
-
 	mutex_enter(&ksyms_lock);
 	rc = ksyms_getval_unlocked(mod, sym, val, type);
 	mutex_exit(&ksyms_lock);
 	return rc;
 }
+
 
 /*
  * Get "mod" and "symbol" associated with an address.
@@ -502,7 +582,9 @@ ksyms_getname(const char **mod, const char **sym, vaddr_t v, int f)
 	TAILQ_FOREACH(st, &ksyms_symtabs, sd_queue) {
 		if (st->sd_gone)
 			continue;
-		if (v < st->sd_minsym || v > st->sd_maxsym)
+		if (st->sd_minsym != NULL && v < st->sd_minsym->st_value)
+			continue;
+		if (st->sd_maxsym != NULL && v > st->sd_maxsym->st_value)
 			continue;
 		sz = st->sd_symsize/sizeof(Elf_Sym);
 		for (i = 0; i < sz; i++) {
@@ -539,6 +621,252 @@ ksyms_getname(const char **mod, const char **sym, vaddr_t v, int f)
 }
 
 /*
+ * Temporary work structure for dynamic loaded symbol tables.
+ *
+ * XXX REMOVE WHEN LKMS GO.
+ */
+struct syminfo {
+	size_t cursyms;
+	size_t curnamep;
+	size_t maxsyms;
+	size_t maxnamep;
+	Elf_Sym *syms;
+	char *symnames;
+};
+
+/*
+ * Add a symbol to the temporary save area for symbols.
+ *
+ * XXX REMOVE WHEN LKMS GO.
+ */
+static void
+addsym(struct syminfo *info, const Elf_Sym *sym, const char *name,
+       const char *mod)
+{
+	int len, mlen;
+
+#ifdef KSYMS_DEBUG
+	if (ksyms_debug & FOLLOW_MORE_CALLS)
+		printf("addsym: name %s val %lx\n", name, (long)sym->st_value);
+#endif
+	len = strlen(name) + 1;
+	if (mod)
+		mlen = 1 + strlen(mod);
+	else
+		mlen = 0;
+	if (info->cursyms == info->maxsyms ||
+	    (len + mlen + info->curnamep) > info->maxnamep) {
+		printf("addsym: too many symbols, skipping '%s'\n", name);
+		return;
+	}
+	strlcpy(&info->symnames[info->curnamep], name,
+	    info->maxnamep - info->curnamep);
+	if (mlen) {
+		info->symnames[info->curnamep + len - 1] = '.';
+		strlcpy(&info->symnames[info->curnamep + len], mod,
+		    info->maxnamep - (info->curnamep + len));
+		len += mlen;
+	}
+	info->syms[info->cursyms] = *sym;
+	info->syms[info->cursyms].st_name = info->curnamep;
+	info->curnamep += len;
+	if (len > ksyms_maxlen)
+		ksyms_maxlen = len;
+	info->cursyms++;
+}
+
+/*
+ * XXX REMOVE WHEN LKMS GO.
+ */
+static int
+specialsym(const char *symname)
+{
+
+	return	!strcmp(symname, "_bss_start") ||
+	    !strcmp(symname, "__bss_start") ||
+	    !strcmp(symname, "_bss_end__") ||
+	    !strcmp(symname, "__bss_end__") ||
+	    !strcmp(symname, "_edata") ||
+	    !strcmp(symname, "_end") ||
+	    !strcmp(symname, "__end") ||
+	    !strcmp(symname, "__end__") ||
+	    !strncmp(symname, "__start_link_set_", 17) ||
+	    !strncmp(symname, "__stop_link_set_", 16);
+}
+
+/*
+ * Adds a symbol table.
+ * "name" is the module name, "start" and "size" is where the symbol table
+ * is located, and "type" is in which binary format the symbol table is.
+ * New memory for keeping the symbol table is allocated in this function.
+ * Returns 0 if success and EEXIST if the module name is in use.
+ *
+ * XXX REMOVE WHEN LKMS GO.
+ */
+int
+ksyms_addsymtab(const char *mod, void *symstart, vsize_t symsize,
+		char *strstart, vsize_t strsize)
+{
+	Elf_Sym *sym = symstart;
+	struct ksyms_symtab *st;
+	unsigned long rval;
+	int i;
+	char *name;
+	struct syminfo info;
+
+#ifdef KSYMS_DEBUG
+	if (ksyms_debug & FOLLOW_CALLS)
+		printf("ksyms_addsymtab: mod %s symsize %lx strsize %lx\n",
+		    mod, symsize, strsize);
+#endif
+
+	mutex_enter(&ksyms_lock);
+
+	/* Check if this symtab already loaded */
+	TAILQ_FOREACH(st, &ksyms_symtabs, sd_queue) {
+		if (st->sd_gone)
+			continue;
+		if (strcmp(mod, st->sd_name) == 0) {
+			mutex_exit(&ksyms_lock);
+			return EEXIST;
+		}
+	}
+
+	/*
+	 * XXX - Only add a symbol if it do not exist already.
+	 * This is because of a flaw in the current LKM implementation,
+	 * these loops will be removed once the in-kernel linker is in place.
+	 */
+	memset(&info, 0, sizeof(info));
+	for (i = 0; i < symsize/sizeof(Elf_Sym); i++) {
+		char * const symname = strstart + sym[i].st_name;
+		if (sym[i].st_name == 0)
+			continue; /* Just ignore */
+
+		/* check validity of the symbol */
+		/* XXX - save local symbols if DDB */
+		if (ELF_ST_BIND(sym[i].st_info) != STB_GLOBAL)
+			continue;
+
+		/* Check if the symbol exists */
+		if (ksyms_getval_unlocked(NULL, symname, &rval, KSYMS_EXTERN)
+		    == 0) {
+			/* Check (and complain) about differing values */
+			if (sym[i].st_value != rval &&
+			    sym[i].st_shndx != SHN_UNDEF) {
+				if (specialsym(symname)) {
+					info.maxsyms++;
+					info.maxnamep += strlen(symname) + 1 +
+					    strlen(mod) + 1;
+				} else {
+					printf("%s: symbol '%s' redeclared with"
+					    " different value (%lx != %lx)\n",
+					    mod, symname,
+					    rval, (long)sym[i].st_value);
+				}
+			}
+		} else {
+			/*
+			 * Count this symbol
+			 */
+			info.maxsyms++;
+			info.maxnamep += strlen(symname) + 1;
+		}
+	}
+
+	/*
+	 * Now that we know the sizes, malloc the structures.
+	 */
+	info.syms = malloc(sizeof(Elf_Sym)*info.maxsyms, M_DEVBUF, M_WAITOK);
+	info.symnames = malloc(info.maxnamep, M_DEVBUF, M_WAITOK);
+
+	/*
+	 * Now that we have the symbols, actually fill in the structures.
+	 */
+	for (i = 0; i < symsize/sizeof(Elf_Sym); i++) {
+		char * const symname = strstart + sym[i].st_name;
+		if (sym[i].st_name == 0)
+			continue; /* Just ignore */
+
+		/* check validity of the symbol */
+		/* XXX - save local symbols if DDB */
+		if (ELF_ST_BIND(sym[i].st_info) != STB_GLOBAL)
+			continue;
+
+		/* Check if the symbol exists */
+		if (ksyms_getval_unlocked(NULL, symname, &rval, KSYMS_EXTERN)
+		    == 0) {
+			if ((sym[i].st_value != rval) && specialsym(symname)) {
+				addsym(&info, &sym[i], symname, mod);
+			}
+		} else
+			/* Ok, save this symbol */
+			addsym(&info, &sym[i], symname, NULL);
+	}
+
+	st = kmem_zalloc(sizeof(*st), KM_SLEEP);
+	i = strlen(mod) + 1;
+	name = malloc(i, M_DEVBUF, M_WAITOK);
+	strlcpy(name, mod, i);
+	st->sd_name = name;
+	st->sd_symstart = info.syms;
+	st->sd_symsize = sizeof(Elf_Sym)*info.maxsyms;
+	st->sd_strstart = info.symnames;
+	st->sd_strsize = info.maxnamep;
+	st->sd_malloc = true;
+
+	/* Make them absolute references */
+	sym = st->sd_symstart;
+	for (i = 0; i < st->sd_symsize/sizeof(Elf_Sym); i++)
+		sym[i].st_shndx = SHN_ABS;
+
+	/* ksymsread() is unlocked, so membar. */
+	membar_producer();
+	TAILQ_INSERT_TAIL(&ksyms_symtabs, st, sd_queue);
+	ksyms_sizes_calc();
+	mutex_exit(&ksyms_lock);
+
+	return 0;
+}
+
+/*
+ * Remove a symbol table specified by name.
+ * Returns 0 if success, EBUSY if device open and ENOENT if no such name.
+ *
+ * XXX REMOVE WHEN LKMS GO.
+ */
+int
+ksyms_delsymtab(const char *mod)
+{
+	struct ksyms_symtab *st;
+
+	mutex_enter(&ksyms_lock);
+	TAILQ_FOREACH(st, &ksyms_symtabs, sd_queue) {
+		if (st->sd_gone)
+			continue;
+		if (strcmp(mod, st->sd_name) != 0)
+			continue;
+		if (ksyms_isopen) {
+			st->sd_gone = true;
+			mutex_exit(&ksyms_lock);
+			return 0;
+		} 
+		TAILQ_REMOVE(&ksyms_symtabs, st, sd_queue);
+		ksyms_sizes_calc();
+		mutex_exit(&ksyms_lock);
+		KASSERT(st->sd_malloc);
+		free(st->sd_symstart, M_DEVBUF);
+		free(st->sd_strstart, M_DEVBUF);
+		/* XXXUNCONST LINTED - const castaway */
+		free(__UNCONST(st->sd_name), M_DEVBUF);
+		kmem_free(st, sizeof(*st));
+		return 0;
+	}
+	mutex_exit(&ksyms_lock);
+	return ENOENT;
+}
+
+/*
  * Add a symbol table from a loadable module.
  */
 void
@@ -567,6 +895,7 @@ ksyms_modunload(const char *name)
 			continue;
 		if (strcmp(name, st->sd_name) != 0)
 			continue;
+		KASSERT(!st->sd_malloc);	/* XXXLKM */
 		st->sd_gone = true;
 		if (!ksyms_isopen) {
 			TAILQ_REMOVE(&ksyms_symtabs, st, sd_queue);
@@ -682,12 +1011,17 @@ ksyms_hdr_init(void *hdraddr)
 	ksyms_hdr.kh_ehdr.e_shoff = offsetof(struct ksyms_hdr, kh_shdr[0]);
 	ksyms_hdr.kh_ehdr.e_shentsize = sizeof(Elf_Shdr);
 	ksyms_hdr.kh_ehdr.e_shnum = NSECHDR;
-	ksyms_hdr.kh_ehdr.e_shstrndx = SHSTRTAB;
+	ksyms_hdr.kh_ehdr.e_shstrndx = NSECHDR - 1; /* Last section */
 
-	/* Text/data - fake */
+	/* Text */
 	ksyms_hdr.kh_phdr[0].p_type = PT_LOAD;
 	ksyms_hdr.kh_phdr[0].p_memsz = (unsigned long)-1L;
-	ksyms_hdr.kh_phdr[0].p_flags = PF_R | PF_X | PF_W;
+	ksyms_hdr.kh_phdr[0].p_flags = PF_R | PF_X;
+
+	/* Data */
+	ksyms_hdr.kh_phdr[1].p_type = PT_LOAD;
+	ksyms_hdr.kh_phdr[1].p_memsz = (unsigned long)-1L;
+	ksyms_hdr.kh_phdr[1].p_flags = PF_R | PF_W | PF_X;
 
 	/* First section is null */
 
@@ -715,14 +1049,6 @@ ksyms_hdr_init(void *hdraddr)
 	ksyms_hdr.kh_shdr[SHSTRTAB].sh_size = SHSTRSIZ;
 	ksyms_hdr.kh_shdr[SHSTRTAB].sh_addralign = sizeof(char);
 
-	/* Fifth section, ".bss". All symbols reside here. */
-	ksyms_hdr.kh_shdr[SHBSS].sh_name = 27; /* This section name offset */
-	ksyms_hdr.kh_shdr[SHBSS].sh_type = SHT_NOBITS;
-	ksyms_hdr.kh_shdr[SHBSS].sh_offset = 0;
-	ksyms_hdr.kh_shdr[SHBSS].sh_size = (unsigned long)-1L;
-	ksyms_hdr.kh_shdr[SHBSS].sh_addralign = PAGE_SIZE;
-	ksyms_hdr.kh_shdr[SHBSS].sh_flags = SHF_ALLOC | SHF_EXECINSTR;
-
 	/* Set section names */
 	strlcpy(&ksyms_hdr.kh_strtab[1], ".symtab",
 	    sizeof(ksyms_hdr.kh_strtab) - 1);
@@ -730,8 +1056,6 @@ ksyms_hdr_init(void *hdraddr)
 	    sizeof(ksyms_hdr.kh_strtab) - 9);
 	strlcpy(&ksyms_hdr.kh_strtab[17], ".shstrtab",
 	    sizeof(ksyms_hdr.kh_strtab) - 17);
-	strlcpy(&ksyms_hdr.kh_strtab[27], ".bss",
-	    sizeof(ksyms_hdr.kh_strtab) - 27);
 }
 
 static int
@@ -772,6 +1096,12 @@ ksymsclose(dev_t dev, int oflags, int devtype, struct lwp *l)
 		if (st->sd_gone) {
 			TAILQ_REMOVE(&ksyms_symtabs, st, sd_queue);
 			kmem_free(st, sizeof(*st));
+			if (st->sd_malloc) {	/* XXXLKM */
+				free(st->sd_symstart, M_DEVBUF);
+				free(st->sd_strstart, M_DEVBUF);
+				/* XXXUNCONST LINTED - const castaway */
+				free(__UNCONST(st->sd_name), M_DEVBUF);
+			}
 			resize = true;
 		}
 	}
@@ -889,7 +1219,7 @@ ksymsioctl(dev_t dev, u_long cmd, void *data, int fflag, struct lwp *l)
 		TAILQ_FOREACH(st, &ksyms_symtabs, sd_queue) {
 			if (st->sd_gone)
 				continue;
-			if ((sym = findsym(str, st, KSYMS_ANY)) == NULL)
+			if ((sym = findsym(str, st)) == NULL)
 				continue;
 #ifdef notdef
 			/* Skip if bad binding */

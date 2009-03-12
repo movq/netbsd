@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_tz.c,v 1.39 2008/11/09 13:54:06 pgoyette Exp $ */
+/* $NetBSD: acpi_tz.c,v 1.37.4.2 2008/11/11 02:14:10 snj Exp $ */
 
 /*
  * Copyright (c) 2003 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_tz.c,v 1.39 2008/11/09 13:54:06 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_tz.c,v 1.37.4.2 2008/11/11 02:14:10 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

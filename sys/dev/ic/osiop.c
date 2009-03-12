@@ -1,4 +1,4 @@
-/*	$NetBSD: osiop.c,v 1.37 2008/12/09 14:11:11 tsutsui Exp $	*/
+/*	$NetBSD: osiop.c,v 1.36.8.1 2008/12/13 21:40:06 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2001 Izumi Tsutsui.  All rights reserved.
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osiop.c,v 1.37 2008/12/09 14:11:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osiop.c,v 1.36.8.1 2008/12/13 21:40:06 bouyer Exp $");
 
 /* #define OSIOP_DEBUG */
 

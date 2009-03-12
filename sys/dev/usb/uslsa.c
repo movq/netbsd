@@ -1,4 +1,4 @@
-/* $NetBSD: uslsa.c,v 1.9 2009/01/05 17:22:18 jakllsch Exp $ */
+/* $NetBSD: uslsa.c,v 1.8.8.1 2009/01/09 03:46:54 snj Exp $ */
 
 /* from ugensa.c */
 
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uslsa.c,v 1.9 2009/01/05 17:22:18 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uslsa.c,v 1.8.8.1 2009/01/09 03:46:54 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

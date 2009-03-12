@@ -1,30 +1,4 @@
-/*	$NetBSD: pwd_mkdb.c,v 1.39 2009/03/06 19:05:11 apb Exp $	*/
-
-/*
- * Copyright (c) 2000, 2009 The NetBSD Foundation, Inc.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/*	$NetBSD: pwd_mkdb.c,v 1.34 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994
@@ -86,12 +60,12 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__COPYRIGHT("@(#) Copyright (c) 2000, 2009\
+__COPYRIGHT("@(#) Copyright (c) 2000\
  The NetBSD Foundation, Inc.  All rights reserved.\
   Copyright (c) 1991, 1993, 1994\
  The Regents of the University of California.  All rights reserved.");
 __SCCSID("from: @(#)pwd_mkdb.c	8.5 (Berkeley) 4/20/94");
-__RCSID("$NetBSD: pwd_mkdb.c,v 1.39 2009/03/06 19:05:11 apb Exp $");
+__RCSID("$NetBSD: pwd_mkdb.c,v 1.34 2008/07/21 13:36:59 lukem Exp $");
 #endif /* not lint */
 
 #if HAVE_NBTOOL_CONFIG_H
@@ -102,11 +76,6 @@ __RCSID("$NetBSD: pwd_mkdb.c,v 1.39 2009/03/06 19:05:11 apb Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-
-#ifndef HAVE_NBTOOL_CONFIG_H
-#include <machine/bswap.h>
-#endif
 
 #include <db.h>
 #include <err.h>
@@ -169,14 +138,6 @@ void	rm(const char *);
 int	scan(FILE *, struct passwd *, int *, int *);
 void	usage(void);
 void	wr_error(const char *);
-void	checkversion(DB *);
-uint32_t getversion(void);
-void	setversion(DB *);
-
-#define SWAP(sw) \
-    ((sizeof(sw) == 2 ? (typeof(sw))bswap16((uint16_t)sw) : \
-    (sizeof(sw) == 4 ? (typeof(sw))bswap32((uint32_t)sw) : \
-    (sizeof(sw) == 8 ? (typeof(sw))bswap64((uint64_t)sw) : (abort(), 0)))))
 
 int
 main(int argc, char *argv[])
@@ -298,10 +259,6 @@ main(int argc, char *argv[])
 		if (dp == NULL)
 			error(pwd_db_tmp);
 		clean |= FILE_INSECURE;
-		if (username != NULL)
-			checkversion(dp);
-		else
-			setversion(dp);
 	}
 
 	/* Open the temporary encrypted password database. */
@@ -315,10 +272,6 @@ main(int argc, char *argv[])
 	if (!edp)
 		error(pwd_Sdb_tmp);
 	clean |= FILE_SECURE;
-	if (username != NULL)
-		checkversion(edp);
-	else
-		setversion(edp);
 
 	/*
 	 * Open file for old password file.  Minor trickiness -- don't want to
@@ -654,64 +607,6 @@ bailout(void)
 }
 
 /*
- * Ensures that an existing database is up to date.
- *
- * Makes sure that the version number of an existing database matches the
- * version number setversion() writes.  If it does not, this function aborts
- * execution because updating the database without fully regenerating it will
- * leave it inconsistent.
- */
-void
-checkversion(DB *dp)
-{
-	DBT data, key;
-	int ret;
-
-	key.data = __UNCONST("VERSION");
-	key.size = strlen((const char *)key.data) + 1;
-
-	ret = (*dp->get)(dp, &key, &data, 0);
-	if (ret == -1) {
-		warnx("cannot get VERSION record from database");
-		bailout();
-	}
-
-	if (ret == 1 || *(int *)data.data != getversion()) {
-		warnx("databases are laid out according to an old version");
-		warnx("re-build the databases without -u");
-		bailout();
-	}
-}
-
-/*
- * Returns the version number we write to and expect from databases.
- */
-uint32_t
-getversion(void)
-{
-	uint32_t version = sizeof(((struct passwd *)NULL)->pw_change) != sizeof(int32_t);
-	if (lorder != BYTE_ORDER)
-		version = SWAP(version);
-	return version;
-}
-
-void
-setversion(DB *dp)
-{
-	DBT data, key;
-	uint32_t version = getversion();
-
-	key.data = __UNCONST("VERSION");
-	key.size = strlen((const char *)key.data) + 1;
-
-	data.data = &version;
-	data.size = sizeof(uint32_t);
-
-	if ((*dp->put)(dp, &key, &data, R_NOOVERWRITE) == -1)
-		wr_error("setversion");
-}
-
-/*
  * Write entries to a database for a single user. 
  *
  * The databases actually contain three copies of the original data.  Each
@@ -742,10 +637,10 @@ putdbents(DB *dp, struct passwd *pw, const char *passwd, int flags,
 	key.data = (u_char *)tbuf;
 
 	if (lorder != BYTE_ORDER) {
-		pwd.pw_uid = SWAP(pwd.pw_uid);
-		pwd.pw_gid = SWAP(pwd.pw_gid);
-		pwd.pw_change = SWAP(pwd.pw_change);
-		pwd.pw_expire = SWAP(pwd.pw_expire);
+		M_32_SWAP(pwd.pw_uid);
+		M_32_SWAP(pwd.pw_gid);
+		M_32_SWAP(pwd.pw_change);
+		M_32_SWAP(pwd.pw_expire);
 	}
 
 	/* Create insecure data. */
@@ -766,7 +661,7 @@ putdbents(DB *dp, struct passwd *pw, const char *passwd, int flags,
 	p += sizeof(pwd.pw_expire);
 	x = flags;
 	if (lorder != BYTE_ORDER)
-		x = SWAP(x);
+		M_32_SWAP(x);
 	memmove(p, &x, sizeof(x));
 	p += sizeof(flags);
 	data.size = p - buf;
@@ -783,7 +678,7 @@ putdbents(DB *dp, struct passwd *pw, const char *passwd, int flags,
 	tbuf[0] = _PW_KEYBYNUM;
 	x = lineno;
 	if (lorder != BYTE_ORDER)
-		x = SWAP(x);
+		M_32_SWAP(x);
 	memmove(tbuf + 1, &x, sizeof(x));
 	key.size = sizeof(x) + 1;
 	if ((*dp->put)(dp, &key, &data, dbflg) == -1)
@@ -818,7 +713,7 @@ deldbent(DB *dp, const char *fn, int type, void *keyp)
 	case _PW_KEYBYUID:
 		x = *(int *)keyp;
 		if (lorder != BYTE_ORDER)
-			x = SWAP(x);
+			M_32_SWAP(x);
 		memmove(tbuf + 1, &x, sizeof(x));
 		key.size = sizeof(x) + 1;
 		break;
@@ -854,7 +749,7 @@ getdbent(DB *dp, const char *fn, int type, void *keyp, struct passwd **tpwd)
 	case _PW_KEYBYUID:
 		x = *(int *)keyp;
 		if (lorder != BYTE_ORDER)
-			x = SWAP(x);
+			M_32_SWAP(x);
 		memmove(tbuf + 1, &x, sizeof(x));
 		key.size = sizeof(x) + 1;
 		break;
@@ -898,10 +793,10 @@ getdbent(DB *dp, const char *fn, int type, void *keyp, struct passwd **tpwd)
 	p += sizeof(pwd.pw_expire);
 
 	if (lorder != BYTE_ORDER) {
-		pwd.pw_uid = SWAP(pwd.pw_uid);
-		pwd.pw_gid = SWAP(pwd.pw_gid);
-		pwd.pw_change = SWAP(pwd.pw_change);
-		pwd.pw_expire = SWAP(pwd.pw_expire);
+		M_32_SWAP(pwd.pw_uid);
+		M_32_SWAP(pwd.pw_gid);
+		M_32_SWAP(pwd.pw_change);
+		M_32_SWAP(pwd.pw_expire);
 	}
 
 	*tpwd = &pwd;

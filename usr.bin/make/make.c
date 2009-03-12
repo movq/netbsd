@@ -1,4 +1,4 @@
-/*	$NetBSD: make.c,v 1.78 2009/01/23 21:26:30 dsl Exp $	*/
+/*	$NetBSD: make.c,v 1.76 2008/02/15 21:29:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -69,14 +69,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: make.c,v 1.78 2009/01/23 21:26:30 dsl Exp $";
+static char rcsid[] = "$NetBSD: make.c,v 1.76 2008/02/15 21:29:50 christos Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)make.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: make.c,v 1.78 2009/01/23 21:26:30 dsl Exp $");
+__RCSID("$NetBSD: make.c,v 1.76 2008/02/15 21:29:50 christos Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -127,17 +127,17 @@ static Lst     	toBeMade;	/* The current fringe of the graph. These
 				 * Make_Update and subtracted from by
 				 * MakeStartJobs */
 
-static int MakeAddChild(void *, void *);
-static int MakeFindChild(void *, void *);
-static int MakeUnmark(void *, void *);
-static int MakeAddAllSrc(void *, void *);
-static int MakeTimeStamp(void *, void *);
-static int MakeHandleUse(void *, void *);
+static int MakeAddChild(ClientData, ClientData);
+static int MakeFindChild(ClientData, ClientData);
+static int MakeUnmark(ClientData, ClientData);
+static int MakeAddAllSrc(ClientData, ClientData);
+static int MakeTimeStamp(ClientData, ClientData);
+static int MakeHandleUse(ClientData, ClientData);
 static Boolean MakeStartJobs(void);
-static int MakePrintStatus(void *, void *);
-static int MakeCheckOrder(void *, void *);
-static int MakeBuildChild(void *, void *);
-static int MakeBuildParent(void *, void *);
+static int MakePrintStatus(ClientData, ClientData);
+static int MakeCheckOrder(ClientData, ClientData);
+static int MakeBuildChild(ClientData, ClientData);
+static int MakeBuildParent(ClientData, ClientData);
 
 static void
 make_abort(GNode *gn, int line)
@@ -185,7 +185,7 @@ Make_TimeStamp(GNode *pgn, GNode *cgn)
  *
  */
 static int
-MakeTimeStamp(void *pgn, void *cgn)
+MakeTimeStamp(ClientData pgn, ClientData cgn)
 {
     return Make_TimeStamp((GNode *)pgn, (GNode *)cgn);
 }
@@ -362,7 +362,7 @@ Make_OODate(GNode *gn)
  *-----------------------------------------------------------------------
  */
 static int
-MakeAddChild(void *gnp, void *lp)
+MakeAddChild(ClientData gnp, ClientData lp)
 {
     GNode          *gn = (GNode *)gnp;
     Lst            l = (Lst) lp;
@@ -394,7 +394,7 @@ MakeAddChild(void *gnp, void *lp)
  *-----------------------------------------------------------------------
  */
 static int
-MakeFindChild(void *gnp, void *pgnp)
+MakeFindChild(ClientData gnp, ClientData pgnp)
 {
     GNode          *gn = (GNode *)gnp;
     GNode          *pgn = (GNode *)pgnp;
@@ -450,9 +450,9 @@ Make_HandleUse(GNode *cgn, GNode *pgn)
 		 *	prepend the child's commands to the parent.
 		 */
 		Lst cmds = pgn->commands;
-		pgn->commands = Lst_Duplicate(cgn->commands, NULL);
+		pgn->commands = Lst_Duplicate(cgn->commands, NOCOPY);
 		(void)Lst_Concat(pgn->commands, cmds, LST_CONCNEW);
-		Lst_Destroy(cmds, NULL);
+		Lst_Destroy(cmds, NOFREE);
 	    } else {
 		/*
 		 * .USE or target has no commands --
@@ -463,7 +463,7 @@ Make_HandleUse(GNode *cgn, GNode *pgn)
     }
 
     if (Lst_Open(cgn->children) == SUCCESS) {
-	while ((ln = Lst_Next(cgn->children)) != NULL) {
+	while ((ln = Lst_Next(cgn->children)) != NILLNODE) {
 	    GNode *tgn, *gn = (GNode *)Lst_Datum(ln);
 
 	    /*
@@ -482,7 +482,7 @@ Make_HandleUse(GNode *cgn, GNode *pgn)
 	    if (gn->name && gn->uname && strcmp(gn->name, gn->uname) != 0) {
 		/* See if we have a target for this node. */
 		tgn = Targ_FindNode(gn->name, TARG_NOCREATE);
-		if (tgn != NULL)
+		if (tgn != NILGNODE)
 		    gn = tgn;
 	    }
 
@@ -518,7 +518,7 @@ Make_HandleUse(GNode *cgn, GNode *pgn)
  *-----------------------------------------------------------------------
  */
 static int
-MakeHandleUse(void *cgnp, void *pgnp)
+MakeHandleUse(ClientData cgnp, ClientData pgnp)
 {
     GNode	*cgn = (GNode *)cgnp;
     GNode	*pgn = (GNode *)pgnp;
@@ -541,7 +541,7 @@ MakeHandleUse(void *cgnp, void *pgnp)
      * children the parent has. This is used by Make_Run to decide
      * whether to queue the parent or examine its children...
      */
-    if ((ln = Lst_Member(pgn->children, cgn)) != NULL) {
+    if ((ln = Lst_Member(pgn->children, cgn)) != NILLNODE) {
 	Lst_Remove(pgn->children, ln);
 	pgn->unmade--;
     }
@@ -720,7 +720,7 @@ Make_Update(GNode *cgn)
 
     /* Now mark all the parents as having one less unmade child */
     if (Lst_Open(parents) == SUCCESS) {
-	while ((ln = Lst_Next(parents)) != NULL) {
+	while ((ln = Lst_Next(parents)) != NILLNODE) {
 	    pgn = (GNode *)Lst_Datum(ln);
 	    if (DEBUG(MAKE))
 		fprintf(debug_file, "inspect parent %s%s: flags %x, "
@@ -823,7 +823,7 @@ Make_Update(GNode *cgn)
     if (Lst_Open(cgn->iParents) == SUCCESS) {
 	char	*cpref = Var_Value(PREFIX, cgn, &p1);
 
-	while ((ln = Lst_Next(cgn->iParents)) != NULL) {
+	while ((ln = Lst_Next(cgn->iParents)) != NILLNODE) {
 	    pgn = (GNode *)Lst_Datum(ln);
 	    if (pgn->flags & REMAKE) {
 		Var_Set(IMPSRC, cname, pgn, 0);
@@ -860,7 +860,7 @@ Make_Update(GNode *cgn)
  *-----------------------------------------------------------------------
  */
 static int
-MakeUnmark(void *cgnp, void *pgnp __unused)
+MakeUnmark(ClientData cgnp, ClientData pgnp __unused)
 {
     GNode	*cgn = (GNode *)cgnp;
 
@@ -876,7 +876,7 @@ MakeUnmark(void *cgnp, void *pgnp __unused)
  *
  */
 static int
-MakeAddAllSrc(void *cgnp, void *pgnp)
+MakeAddAllSrc(ClientData cgnp, ClientData pgnp)
 {
     GNode	*cgn = (GNode *)cgnp;
     GNode	*pgn = (GNode *)pgnp;
@@ -994,7 +994,7 @@ Make_DoAllVar(GNode *gn)
  */
 
 static int
-MakeCheckOrder(void *v_bn, void *ignore __unused)
+MakeCheckOrder(ClientData v_bn, ClientData ignore __unused)
 {
     GNode *bn = v_bn;
 
@@ -1007,7 +1007,7 @@ MakeCheckOrder(void *v_bn, void *ignore __unused)
 }
 
 static int
-MakeBuildChild(void *v_cn, void *toBeMade_next)
+MakeBuildChild(ClientData v_cn, ClientData toBeMade_next)
 {
     GNode *cn = v_cn;
 
@@ -1029,7 +1029,7 @@ MakeBuildChild(void *v_cn, void *toBeMade_next)
 		cn->name, cn->cohort_num);
 
     cn->made = REQUESTED;
-    if (toBeMade_next == NULL)
+    if (toBeMade_next == NILLNODE)
 	Lst_AtEnd(toBeMade, cn);
     else
 	Lst_InsertBefore(toBeMade, toBeMade_next, cn);
@@ -1046,7 +1046,7 @@ MakeBuildChild(void *v_cn, void *toBeMade_next)
 
 /* When a .ORDER RHS node completes we do this on each LHS */
 static int
-MakeBuildParent(void *v_pn, void *toBeMade_next)
+MakeBuildParent(ClientData v_pn, ClientData toBeMade_next)
 {
     GNode *pn = v_pn;
 
@@ -1165,7 +1165,7 @@ MakeStartJobs(void)
  *-----------------------------------------------------------------------
  */
 static int
-MakePrintStatusOrder(void *ognp, void *gnp)
+MakePrintStatusOrder(ClientData ognp, ClientData gnp)
 {
     GNode *ogn = ognp;
     GNode *gn = gnp;
@@ -1187,7 +1187,7 @@ MakePrintStatusOrder(void *ognp, void *gnp)
 }
 
 static int
-MakePrintStatus(void *gnp, void *v_errors)
+MakePrintStatus(ClientData gnp, ClientData v_errors)
 {
     GNode   	*gn = (GNode *)gnp;
     int 	*errors = v_errors;
@@ -1276,7 +1276,7 @@ Make_ExpandUse(Lst targs)
     GNode  *gn;		/* a temporary pointer */
     Lst    examine; 	/* List of targets to examine */
 
-    examine = Lst_Duplicate(targs, NULL);
+    examine = Lst_Duplicate(targs, NOCOPY);
 
     /*
      * Make an initial downward pass over the graph, marking nodes to be made
@@ -1300,7 +1300,7 @@ Make_ExpandUse(Lst targs)
 	if ((gn->type & OP_DOUBLEDEP) && !Lst_IsEmpty (gn->cohorts)) {
 	    /* Append all the 'cohorts' to the list of things to examine */
 	    Lst new;
-	    new = Lst_Duplicate(gn->cohorts, NULL);
+	    new = Lst_Duplicate(gn->cohorts, NOCOPY);
 	    Lst_Concat(new, examine, LST_CONCLINK);
 	    examine = new;
 	}
@@ -1344,7 +1344,7 @@ Make_ExpandUse(Lst targs)
 	    Lst_ForEach(gn->children, MakeAddChild, examine);
     }
 
-    Lst_Destroy(examine, NULL);
+    Lst_Destroy(examine, NOFREE);
 }
 
 /*-
@@ -1359,7 +1359,7 @@ Make_ExpandUse(Lst targs)
  */
 
 static int
-link_parent(void *cnp, void *pnp)
+link_parent(ClientData cnp, ClientData pnp)
 {
     GNode *cn = cnp;
     GNode *pn = pnp;
@@ -1417,7 +1417,7 @@ Make_ProcessWait(Lst targs)
     Lst_ForEach(targs, link_parent, pgn);
 
     /* Start building with the 'dummy' .MAIN' node */
-    MakeBuildChild(pgn, NULL);
+    MakeBuildChild(pgn, NILLNODE);
 
     examine = Lst_Init(FALSE);
     Lst_AtEnd(examine, pgn);
@@ -1435,14 +1435,14 @@ Make_ProcessWait(Lst targs)
 	if ((pgn->type & OP_DOUBLEDEP) && !Lst_IsEmpty (pgn->cohorts)) {
 	    /* Append all the 'cohorts' to the list of things to examine */
 	    Lst new;
-	    new = Lst_Duplicate(pgn->cohorts, NULL);
+	    new = Lst_Duplicate(pgn->cohorts, NOCOPY);
 	    Lst_Concat(new, examine, LST_CONCLINK);
 	    examine = new;
 	}
 
 	owln = Lst_First(pgn->children);
 	Lst_Open(pgn->children);
-	for (; (ln = Lst_Next(pgn->children)) != NULL; ) {
+	for (; (ln = Lst_Next(pgn->children)) != NILLNODE; ) {
 	    cgn = Lst_Datum(ln);
 	    if (cgn->type & OP_WAIT) {
 		/* Make the .WAIT node depend on the previous children */
@@ -1455,7 +1455,7 @@ Make_ProcessWait(Lst targs)
 	Lst_Close(pgn->children);
     }
 
-    Lst_Destroy(examine, NULL);
+    Lst_Destroy(examine, NOFREE);
 }
 
 /*-

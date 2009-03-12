@@ -1,4 +1,4 @@
-/* $NetBSD: atppc_acpi.c,v 1.16 2009/02/17 12:46:01 jmcneill Exp $ */
+/* $NetBSD: atppc_acpi.c,v 1.14.10.2 2009/05/01 01:38:16 snj Exp $ */
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atppc_acpi.c,v 1.16 2009/02/17 12:46:01 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atppc_acpi.c,v 1.14.10.2 2009/05/01 01:38:16 snj Exp $");
 
 #include "opt_atppc.h"
 

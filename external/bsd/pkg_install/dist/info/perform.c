@@ -1,4 +1,4 @@
-/*	$NetBSD: perform.c,v 1.1.1.7 2009/03/10 00:48:44 joerg Exp $	*/
+/*	$NetBSD: perform.c,v 1.1.1.1.6.4 2010/02/03 00:38:22 snj Exp $	*/
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -13,7 +13,7 @@
 #if HAVE_SYS_WAIT_H
 #include <sys/wait.h>
 #endif
-__RCSID("$NetBSD: perform.c,v 1.1.1.7 2009/03/10 00:48:44 joerg Exp $");
+__RCSID("$NetBSD: perform.c,v 1.1.1.1.6.4 2010/02/03 00:38:22 snj Exp $");
 
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>.
@@ -183,8 +183,10 @@ read_meta_data_from_archive(struct archive *archive,
 	meta = xcalloc(1, sizeof(*meta));
 
 	last_descr = 0;
-	if (entry != NULL)
+	if (entry != NULL) {
+		r = ARCHIVE_OK;
 		goto has_entry;
+	}
 
 	while ((r = archive_read_next_header(archive, &entry)) == ARCHIVE_OK) {
 has_entry:
@@ -228,12 +230,12 @@ has_entry:
 		if (descr->required_file)
 			--found_required;
 	}
-	if (found_required != 0) {
+
+	meta->is_installed = 0;
+	if (found_required != 0 || (r != ARCHIVE_OK && r != ARCHIVE_EOF)) {
 		free_pkg_meta(meta);
 		meta = NULL;
 	}
-
-	meta->is_installed = 0;
 
 	return meta;
 }
@@ -285,11 +287,14 @@ read_meta_data_from_pkgdb(const char *pkg)
 }
 
 static void
-build_full_reqby(lpkg_head_t *reqby, struct pkg_meta *meta)
+build_full_reqby(lpkg_head_t *reqby, struct pkg_meta *meta, int limit)
 {
 	char *iter, *eol, *next;
 	lpkg_t *lpp;
 	struct pkg_meta *meta_dep;
+
+	if (limit == 65536)
+		errx(1, "Cycle in the dependency tree, bailing out");
 
 	if (meta->is_installed == 0 || meta->meta_required_by == NULL)
 		return;
@@ -303,7 +308,7 @@ build_full_reqby(lpkg_head_t *reqby, struct pkg_meta *meta)
 		if (iter == eol)
 			continue;
 		TAILQ_FOREACH(lpp, reqby, lp_link) {
-			if (strlen(lpp->lp_name) != eol - iter)
+			if (strlen(lpp->lp_name) + iter != eol)
 				continue;
 			if (memcmp(lpp->lp_name, iter, eol - iter) == 0)
 				break;
@@ -314,12 +319,14 @@ build_full_reqby(lpkg_head_t *reqby, struct pkg_meta *meta)
 		lpp = alloc_lpkg(iter);
 		if (next != eol)
 			*eol = '\n';
-		TAILQ_INSERT_TAIL(reqby, lpp, lp_link);
+
 		meta_dep = read_meta_data_from_pkgdb(lpp->lp_name);
 		if (meta_dep == NULL)
 			continue;
-		build_full_reqby(reqby, meta_dep);
+		build_full_reqby(reqby, meta_dep, limit + 1);
 		free_pkg_meta(meta_dep);
+
+		TAILQ_INSERT_HEAD(reqby, lpp, lp_link);
 	}
 }
 
@@ -329,9 +336,9 @@ static int
 pkg_do(const char *pkg)
 {
 	struct pkg_meta *meta;
-	char    log_dir[MaxPathSize];
 	int     code = 0;
 	const char   *binpkgfile = NULL;
+	char *pkgdir;
 
 	if (IS_URL(pkg) || (fexists(pkg) && isfile(pkg))) {
 #ifdef BOOTSTRAP
@@ -363,9 +370,8 @@ pkg_do(const char *pkg)
 	         * It's not an uninstalled package, try and find it among the
 	         * installed
 	         */
-		(void) snprintf(log_dir, sizeof(log_dir), "%s/%s",
-		    _pkgdb_getPKGDB_DIR(), pkg);
-		if (!fexists(log_dir) || !(isdir(log_dir) || islinktodir(log_dir))) {
+		pkgdir = pkgdb_pkg_dir(pkg);
+		if (!fexists(pkgdir) || !(isdir(pkgdir) || islinktodir(pkgdir))) {
 			switch (add_installed_pkgs_by_basename(pkg, &pkgs)) {
 			case 1:
 				return 0;
@@ -377,6 +383,7 @@ pkg_do(const char *pkg)
 				errx(EXIT_FAILURE, "Error during search in pkgdb for %s", pkg);
 			}
 		}
+		free(pkgdir);
 		meta = read_meta_data_from_pkgdb(pkg);
 	}
 
@@ -436,7 +443,7 @@ pkg_do(const char *pkg)
 		if ((Flags & SHOW_FULL_REQBY) && meta->is_installed) {
 			lpkg_head_t reqby;
 			TAILQ_INIT(&reqby);
-			build_full_reqby(&reqby, meta);
+			build_full_reqby(&reqby, meta, 0);
 			show_list(&reqby, "Full required by list:\n");
 		}
 		if (Flags & SHOW_DESC) {
@@ -589,12 +596,6 @@ CheckForBestPkg(const char *pkgname)
 	return 0;
 }
 
-void
-cleanup(int sig)
-{
-	exit(1);
-}
-
 static int
 perform_single_pkg(const char *pkg, void *cookie)
 {
@@ -610,8 +611,6 @@ int
 pkg_perform(lpkg_head_t *pkghead)
 {
 	int     err_cnt = 0;
-
-	signal(SIGINT, cleanup);
 
 	TAILQ_INIT(&files);
 
@@ -643,7 +642,6 @@ pkg_perform(lpkg_head_t *pkghead)
 	if (Flags & SHOW_BUILD_VERSION)
 		desired_meta_data |= LOAD_BUILD_VERSION;
 
-
 	if (Which != WHICH_LIST) {
 		if (File2Pkg) {
 			/* Show all files with the package they belong to */
@@ -657,7 +655,7 @@ pkg_perform(lpkg_head_t *pkghead)
 		/* Show info on individual pkg(s) */
 		lpkg_t *lpp;
 
-		while ((lpp = TAILQ_FIRST(pkghead))) {
+		while ((lpp = TAILQ_FIRST(pkghead)) != NULL) {
 			TAILQ_REMOVE(pkghead, lpp, lp_link);
 			err_cnt += pkg_do(lpp->lp_name);
 			free_lpkg(lpp);

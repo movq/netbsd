@@ -1,4 +1,4 @@
-/*	$NetBSD: crl.c,v 1.26 2008/12/16 22:35:27 christos Exp $	*/
+/*	$NetBSD: crl.c,v 1.25 2008/03/11 05:34:03 matt Exp $	*/
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: crl.c,v 1.26 2008/12/16 22:35:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: crl.c,v 1.25 2008/03/11 05:34:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -211,10 +211,10 @@ crlintr(void *arg)
 
 				crlstat.crl_ds = mfpr(PR_STXDB);
 
-				snprintb(sbuf, sizeof(sbuf), CRLCS_BITS,
-				    crlstat.crl_cs);
-				snprintb(sbuf, sizeof(sbuf), CRLDS_BITS,
-				    crlstat.crl_ds);
+				bitmask_snprintf(crlstat.crl_cs, CRLCS_BITS,
+						 sbuf, sizeof(sbuf));
+				bitmask_snprintf(crlstat.crl_ds, CRLDS_BITS,
+						 sbuf2, sizeof(sbuf2));
 				printf("crlcs=0x%s, crlds=0x%s\n", sbuf, sbuf2);
 				break;
 			}

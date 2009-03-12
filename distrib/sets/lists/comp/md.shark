@@ -1,4 +1,4 @@
-# $NetBSD: md.shark,v 1.13 2008/10/31 20:24:52 mrg Exp $
+# $NetBSD: md.shark,v 1.12.2.1 2008/11/06 23:51:26 snj Exp $
 ./usr/include/shark				comp-c-include
 ./usr/include/shark/ansi.h			comp-c-include
 ./usr/include/shark/aout_machdep.h		comp-c-include

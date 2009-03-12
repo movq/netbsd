@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2008/11/06 22:08:39 macallan Exp $
+#	$NetBSD: Makefile,v 1.1.4.3 2009/09/17 04:24:35 snj Exp $
 
 DRIVER=		xf86-video-crime
 DRIVER_NAME=	crime_drv

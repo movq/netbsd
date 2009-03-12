@@ -1,4 +1,4 @@
-# $NetBSD: shl.mi,v 1.77 2009/02/28 15:32:29 pooka Exp $
+# $NetBSD: shl.mi,v 1.70.2.1 2009/01/16 21:41:09 bouyer Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
@@ -20,7 +20,6 @@
 ./usr/lib/libcrypto_pic.a			comp-c-piclib		crypto
 ./usr/lib/libcurses_pic.a			comp-c-piclib
 ./usr/lib/libdes_pic.a				comp-c-piclib		crypto
-./usr/lib/libdevmapper_pic.a			comp-lvm-piclib		lvm
 ./usr/lib/libdns_pic.a				comp-bind-piclib
 ./usr/lib/libedit_pic.a				comp-c-piclib
 ./usr/lib/libevent_pic.a			comp-c-piclib
@@ -60,11 +59,10 @@
 ./usr/lib/libmagic_pic.a			comp-c-piclib
 ./usr/lib/libmenu_pic.a				comp-c-piclib
 ./usr/lib/libobjc_pic.a				comp-objc-piclib
-./usr/lib/libopcodes.so.3			comp-c-shlib		bfd
-./usr/lib/libopcodes.so.3.0			comp-c-shlib		bfd
-./usr/lib/libopenpgpsdk_pic.a			comp-c-piclib		crypto
+./usr/lib/libopcodes.so.2			comp-c-shlib		bfd
+./usr/lib/libopcodes.so.2.0			comp-c-shlib		bfd
 ./usr/lib/libossaudio_pic.a			comp-c-piclib
-./usr/lib/libp2k_pic.a				comp-puffs-piclib
+./usr/lib/libp2k_pic.a				comp-c-piclib	
 ./usr/lib/libpam_pic.a				comp-c-piclib		pam
 ./usr/lib/libpcap_pic.a				comp-c-piclib
 ./usr/lib/libpci_pic.a				comp-c-piclib
@@ -72,9 +70,9 @@
 ./usr/lib/libprop_pic.a				comp-c-piclib
 ./usr/lib/libpthread_dbg_pic.a			comp-c-piclib
 ./usr/lib/libpthread_pic.a			comp-c-piclib
-./usr/lib/libpuffs_pic.a			comp-puffs-piclib
+./usr/lib/libpuffs_pic.a			comp-c-piclib
 ./usr/lib/libradius_pic.a			comp-c-piclib
-./usr/lib/librefuse_pic.a			comp-refuse-piclib
+./usr/lib/librefuse_pic.a			comp-c-piclib	
 ./usr/lib/libresolv_pic.a			comp-c-piclib
 ./usr/lib/libroken_pic.a			comp-c-piclib		kerberos
 ./usr/lib/librpcsvc_pic.a			comp-c-piclib
@@ -95,14 +93,11 @@
 ./usr/lib/librumpfs_udf_pic.a			comp-c-piclib
 ./usr/lib/librumpfs_ufs_pic.a			comp-c-piclib
 ./usr/lib/librumpnet_pic.a			comp-c-piclib
-./usr/lib/librumpnet_local_pic.a		comp-c-piclib
 ./usr/lib/librumpnet_net_pic.a			comp-c-piclib
 ./usr/lib/librumpnet_netinet_pic.a		comp-c-piclib
-./usr/lib/librumpnet_shmif_pic.a		comp-c-piclib
 ./usr/lib/librumpnet_sockin_pic.a		comp-c-piclib
 ./usr/lib/librumpnet_virtif_pic.a		comp-c-piclib
 ./usr/lib/librumpuser_pic.a			comp-c-piclib
-./usr/lib/librumpvfs_pic.a			comp-c-piclib
 ./usr/lib/libsdp_pic.a				comp-c-piclib
 ./usr/lib/libskey_pic.a				comp-c-piclib		skey
 ./usr/lib/libsl_pic.a				comp-c-piclib		kerberos

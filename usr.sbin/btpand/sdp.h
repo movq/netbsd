@@ -1,4 +1,4 @@
-/*	$NetBSD: sdp.h,v 1.2 2008/12/06 20:01:15 plunky Exp $	*/
+/*	$NetBSD: sdp.h,v 1.1.6.1 2009/02/24 02:30:08 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 Iain Hibbert

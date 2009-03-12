@@ -1,4 +1,4 @@
-/*	$NetBSD: tftp.c,v 1.30 2009/01/18 07:11:45 lukem Exp $	*/
+/*	$NetBSD: tftp.c,v 1.28 2006/10/22 16:45:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tftp.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: tftp.c,v 1.30 2009/01/18 07:11:45 lukem Exp $");
+__RCSID("$NetBSD: tftp.c,v 1.28 2006/10/22 16:45:35 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -139,12 +139,12 @@ get_options(struct tftphdr *ap, int size)
 			strlcpy(multicast, valp, sizeof(multicast));
 			pmulticast = multicast;
 			addr = strsep(&pmulticast, ",");
-			if (pmulticast == NULL)
+			if (multicast == NULL)
 				continue; /* Report error? */
 			mcport = atoi(strsep(&pmulticast, ","));
-			if (pmulticast == NULL)
+			if (multicast == NULL)
 				continue; /* Report error? */
-			mcmasterslave = atoi(pmulticast);
+			mcmasterslave = atoi(multicast);
 			mcaddr = inet_addr(addr);
 			if (mcaddr == INADDR_NONE)
 				continue; /* Report error? */
@@ -358,7 +358,7 @@ send_data:
 		if (block > 0)
 			amount += size;
 		block++;
-	} while ((size_t)size == blksize || block == 1);
+	} while (size == blksize || block == 1);
 abort:
 	(void)fclose(file);
 	stopclock();
@@ -513,7 +513,7 @@ skip_ack:
 			break;
 		}
 		amount += size;
-	} while ((size_t)size == blksize);
+	} while (size == blksize);
 abort:						/* ok to ack, since user */
 	ap->th_opcode = htons((u_short)ACK);	/* has seen err msg */
 	ap->th_block = htons((u_short)block);
@@ -634,7 +634,7 @@ nak(error, peer)
 	msglen = &tp->th_msg[length + 1] - ackbuf;
 	if (trace)
 		tpacket("sent", tp, (int)msglen);
-	if ((size_t)sendto(f, ackbuf, msglen, 0, peer, (socklen_t)peer->sa_len) != msglen)
+	if (sendto(f, ackbuf, msglen, 0, peer, (socklen_t)peer->sa_len) != msglen)
 		warn("nak");
 }
 

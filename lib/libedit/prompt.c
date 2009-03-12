@@ -1,4 +1,4 @@
-/*	$NetBSD: prompt.c,v 1.13 2009/02/21 00:05:23 christos Exp $	*/
+/*	$NetBSD: prompt.c,v 1.11 2003/08/07 16:44:32 agc Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)prompt.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: prompt.c,v 1.13 2009/02/21 00:05:23 christos Exp $");
+__RCSID("$NetBSD: prompt.c,v 1.11 2003/08/07 16:44:32 agc Exp $");
 #endif
 #endif /* not lint && not SCCSID */
 

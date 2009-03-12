@@ -1,4 +1,4 @@
-/*	$NetBSD: ex.h,v 1.3 2008/12/05 22:51:42 christos Exp $ */
+/*	$NetBSD: ex.h,v 1.2.2.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994

@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_vfsops.c,v 1.65 2009/01/22 16:05:03 cegger Exp $	*/
+/*	$NetBSD: cd9660_vfsops.c,v 1.63.6.1 2009/10/27 21:58:34 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.65 2009/01/22 16:05:03 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.63.6.1 2009/10/27 21:58:34 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -286,7 +286,8 @@ cd9660_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		}
 	} else {
 		vrele(devvp);
-		if (devvp != imp->im_devvp)
+		if (devvp != imp->im_devvp &&
+		    devvp->v_rdev != imp->im_devvp->v_rdev)
 			return (EINVAL);	/* needs translation */
 	}
 	return set_statvfs_info(path, UIO_USERSPACE, args->fspec, UIO_USERSPACE,
@@ -381,7 +382,7 @@ iso_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l,
 			sess = 0;	/* never mind */
 	}
 #ifdef ISO_DEBUG
-	printf("isofs: session offset (part %"PRId32") %d\n", DISKPART(dev), sess);
+	printf("isofs: session offset (part %d) %d\n", DISKPART(dev), sess);
 #endif
 
 	for (iso_blknum = 16; iso_blknum < 100; iso_blknum++) {

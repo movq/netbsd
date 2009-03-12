@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.157 2009/01/23 21:26:30 dsl Exp $	*/
+/*	$NetBSD: parse.c,v 1.148.2.2 2008/11/23 18:33:32 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -69,14 +69,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: parse.c,v 1.157 2009/01/23 21:26:30 dsl Exp $";
+static char rcsid[] = "$NetBSD: parse.c,v 1.148.2.2 2008/11/23 18:33:32 bouyer Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)parse.c	8.3 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: parse.c,v 1.157 2009/01/23 21:26:30 dsl Exp $");
+__RCSID("$NetBSD: parse.c,v 1.148.2.2 2008/11/23 18:33:32 bouyer Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -155,17 +155,14 @@ static GNode	    *mainNode;	/* The main target to create. This is the
 				 * first target on the first dependency
 				 * line in the first makefile */
 typedef struct IFile {
-    const char      *fname;         /* name of file */
-    int             lineno;         /* current line number in file */
-    int             first_lineno;   /* line number of start of text */
-    int             fd;             /* the open file */
-    int             cond_depth;     /* 'if' nesting when file opened */
+    const char      *fname;	    /* name of file */
+    int             lineno;	    /* line number in file */
+    int             fd;		    /* the open file */
+    int             cond_depth;	    /* 'if' nesting when file opened */
     char            *P_str;         /* point to base of string buffer */
     char            *P_ptr;         /* point to next char of string buffer */
     char            *P_end;         /* point to the end of string buffer */
     int             P_buflen;       /* current size of file buffer */
-    char            *(*nextbuf)(void *); /* Function to get more data */
-    void            *nextbuf_arg;   /* Opaque arg for nextbuf() */
 } IFile;
 
 #define IFILE_BUFLEN 0x8000
@@ -225,7 +222,7 @@ static ParseSpecial specType;
 #define	LPAREN	'('
 #define	RPAREN	')'
 /*
- * Predecessor node for handling .ORDER. Initialized to NULL when .ORDER
+ * Predecessor node for handling .ORDER. Initialized to NILGNODE when .ORDER
  * seen, then set to each successive source on the line.
  */
 static GNode	*predecessor;
@@ -288,15 +285,15 @@ static void ParseErrorInternal(const char *, size_t, int, const char *, ...)
 static void ParseVErrorInternal(FILE *, const char *, size_t, int, const char *, va_list)
      __attribute__((__format__(__printf__, 5, 0)));
 static int ParseFindKeyword(const char *);
-static int ParseLinkSrc(void *, void *);
-static int ParseDoOp(void *, void *);
+static int ParseLinkSrc(ClientData, ClientData);
+static int ParseDoOp(ClientData, ClientData);
 static void ParseDoSrc(int, const char *);
-static int ParseFindMain(void *, void *);
-static int ParseAddDir(void *, void *);
-static int ParseClearPath(void *, void *);
+static int ParseFindMain(ClientData, ClientData);
+static int ParseAddDir(ClientData, ClientData);
+static int ParseClearPath(ClientData, ClientData);
 static void ParseDoDependency(char *);
-static int ParseAddCmd(void *, void *);
-static void ParseHasCommands(void *);
+static int ParseAddCmd(ClientData, ClientData);
+static void ParseHasCommands(ClientData);
 static void ParseDoInclude(char *);
 static void ParseSetParseFile(const char *);
 #ifdef SYSVINCLUDE
@@ -475,25 +472,31 @@ void
 Parse_Error(int type, const char *fmt, ...)
 {
 	va_list ap;
-	const char *fname;
-	size_t lineno;
-
-	if (curFile == NULL) {
-		fname = NULL;
-		lineno = 0;
-	} else {
-		fname = curFile->fname;
-		lineno = curFile->lineno;
-	}
 
 	va_start(ap, fmt);
-	ParseVErrorInternal(stderr, fname, lineno, type, fmt, ap);
+	if (curFile == (IFile *)NIL) {
+		/* avoid segfault */
+		static IFile intFile = {
+		    NULL, 0, /* fd */ -1, 0, NULL, NULL, NULL, 0
+		};
+		curFile = &intFile;
+	}
+	ParseVErrorInternal(stderr, curFile->fname, curFile->lineno,
+		    type, fmt, ap);
 	va_end(ap);
 
 	if (debug_file != stderr && debug_file != stdout) {
 		va_start(ap, fmt);
-		ParseVErrorInternal(debug_file, fname, lineno, type, fmt, ap);
+		ParseVErrorInternal(debug_file, curFile->fname, curFile->lineno,
+			    type, fmt, ap);
 		va_end(ap);
+	}
+	/*
+	 * if we get this far, make sure we don't leave curFile
+	 * pointing to our dummy one.
+	 */
+	if (curFile->fname == NULL) {
+		curFile = (IFile *)NIL;
 	}
 }
 
@@ -518,7 +521,7 @@ Parse_Error(int type, const char *fmt, ...)
  *---------------------------------------------------------------------
  */
 static int
-ParseLinkSrc(void *pgnp, void *cgnp)
+ParseLinkSrc(ClientData pgnp, ClientData cgnp)
 {
     GNode          *pgn = (GNode *)pgnp;
     GNode          *cgn = (GNode *)cgnp;
@@ -558,7 +561,7 @@ ParseLinkSrc(void *pgnp, void *cgnp)
  *---------------------------------------------------------------------
  */
 static int
-ParseDoOp(void *gnp, void *opp)
+ParseDoOp(ClientData gnp, ClientData opp)
 {
     GNode          *gn = (GNode *)gnp;
     int             op = *(int *)opp;
@@ -695,7 +698,7 @@ ParseDoSrc(int tOp, const char *src)
 	 * source and the current one.
 	 */
 	gn = Targ_FindNode(src, TARG_CREATE);
-	if (predecessor != NULL) {
+	if (predecessor != NILGNODE) {
 	    (void)Lst_AtEnd(predecessor->order_succ, gn);
 	    (void)Lst_AtEnd(gn->order_pred, predecessor);
 	    if (DEBUG(PARSE)) {
@@ -754,7 +757,7 @@ ParseDoSrc(int tOp, const char *src)
  *-----------------------------------------------------------------------
  */
 static int
-ParseFindMain(void *gnp, void *dummy)
+ParseFindMain(ClientData gnp, ClientData dummy)
 {
     GNode   	  *gn = (GNode *)gnp;
     if ((gn->type & OP_NOTARGET) == 0) {
@@ -780,7 +783,7 @@ ParseFindMain(void *gnp, void *dummy)
  *-----------------------------------------------------------------------
  */
 static int
-ParseAddDir(void *path, void *name)
+ParseAddDir(ClientData path, ClientData name)
 {
     (void)Dir_AddDir((Lst) path, (char *)name);
     return(0);
@@ -800,7 +803,7 @@ ParseAddDir(void *path, void *name)
  *-----------------------------------------------------------------------
  */
 static int
-ParseClearPath(void *path, void *dummy)
+ParseClearPath(ClientData path, ClientData dummy)
 {
     Dir_ClearPath((Lst) path);
     return(dummy ? 0 : 0);
@@ -976,7 +979,7 @@ ParseDoDependency(char *line)
 		 *			main target.
 		 *  	.NOTPARALLEL	Make only one target at a time.
 		 *  	.SINGLESHELL	Create a shell for each command.
-		 *  	.ORDER	    	Must set initial predecessor to NULL
+		 *  	.ORDER	    	Must set initial predecessor to NIL
 		 */
 		switch (specType) {
 		    case ExPath:
@@ -1010,7 +1013,7 @@ ParseDoDependency(char *line)
 			compatMake = TRUE;
 			break;
 		    case Order:
-			predecessor = NULL;
+			predecessor = NILGNODE;
 			break;
 		    default:
 			break;
@@ -1025,7 +1028,7 @@ ParseDoDependency(char *line)
 
 		specType = ExPath;
 		path = Suff_GetPath(&line[5]);
-		if (path == NULL) {
+		if (path == NILLST) {
 		    Parse_Error(PARSE_FATAL,
 				 "Suffix '%s' not defined (yet)",
 				 &line[5]);
@@ -1110,7 +1113,7 @@ ParseDoDependency(char *line)
     /*
      * Don't need the list of target names anymore...
      */
-    Lst_Destroy(curTargs, NULL);
+    Lst_Destroy(curTargs, NOFREE);
     curTargs = NULL;
 
     if (!Lst_IsEmpty(targets)) {
@@ -1289,7 +1292,7 @@ ParseDoDependency(char *line)
 	    line = cp;
 	}
 	if (paths) {
-	    Lst_Destroy(paths, NULL);
+	    Lst_Destroy(paths, NOFREE);
 	}
 	if (specType == ExPath)
 	    Dir_SetPATH();
@@ -1324,7 +1327,7 @@ ParseDoDependency(char *line)
 		    gn = (GNode *)Lst_DeQueue(sources);
 		    ParseDoSrc(tOp, gn->name);
 		}
-		Lst_Destroy(sources, NULL);
+		Lst_Destroy(sources, NOFREE);
 		cp = line;
 	    } else {
 		if (*cp) {
@@ -1341,7 +1344,7 @@ ParseDoDependency(char *line)
 	}
     }
 
-    if (mainNode == NULL) {
+    if (mainNode == NILGNODE) {
 	/*
 	 * If we have yet to decide on a main target to make, in the
 	 * absence of any user input, we want the first target on
@@ -1353,7 +1356,7 @@ ParseDoDependency(char *line)
 
 out:
     if (curTargs)
-	    Lst_Destroy(curTargs, NULL);
+	    Lst_Destroy(curTargs, NOFREE);
 }
 
 /*-
@@ -1379,7 +1382,7 @@ Boolean
 Parse_IsVar(char *line)
 {
     Boolean wasSpace = FALSE;	/* set TRUE if found a space */
-    char ch;
+    Boolean haveName = FALSE;	/* Set TRUE if have a variable name */
     int level = 0;
 #define ISEQOPERATOR(c) \
 	(((c) == '+') || ((c) == ':') || ((c) == '?') || ((c) == '!'))
@@ -1390,31 +1393,70 @@ Parse_IsVar(char *line)
     for (;(*line == ' ') || (*line == '\t'); line++)
 	continue;
 
-    /* Scan for one of the assignment operators outside a variable expansion */
-    while ((ch = *line++) != 0) {
-	if (ch == '(' || ch == '{') {
-	    level++;
-	    continue;
-	}
-	if (ch == ')' || ch == '}') {
-	    level--;
-	    continue;
-	}
-	if (level != 0)
-	    continue;
-	while (ch == ' ' || ch == '\t') {
-	    ch = *line++;
-	    wasSpace = TRUE;
-	}
-	if (ch == '=')
-	    return TRUE;
-	if (*line == '=' && ISEQOPERATOR(ch))
-	    return TRUE;
-	if (wasSpace)
+    for (; *line != '=' || level != 0; line++)
+	switch (*line) {
+	case '\0':
+	    /*
+	     * end-of-line -- can't be a variable assignment.
+	     */
 	    return FALSE;
-    }
 
-    return FALSE;
+	case ' ':
+	case '\t':
+	    /*
+	     * there can be as much white space as desired so long as there is
+	     * only one word before the operator
+	     */
+	    wasSpace = TRUE;
+	    break;
+
+	case LPAREN:
+	case '{':
+	    level++;
+	    break;
+
+	case '}':
+	case RPAREN:
+	    level--;
+	    break;
+
+	default:
+	    if (wasSpace && haveName) {
+		    if (ISEQOPERATOR(*line)) {
+			/*
+			 * We must have a finished word
+			 */
+			if (level != 0)
+			    return FALSE;
+
+			/*
+			 * When an = operator [+?!:] is found, the next
+			 * character must be an = or it ain't a valid
+			 * assignment.
+			 */
+			if (line[1] == '=')
+			    return haveName;
+#ifdef SUNSHCMD
+			/*
+			 * This is a shell command
+			 */
+			if (strncmp(line, ":sh", 3) == 0)
+			    return haveName;
+#endif
+		    }
+		    /*
+		     * This is the start of another word, so not assignment.
+		     */
+		    return FALSE;
+	    }
+	    else {
+		haveName = TRUE;
+		wasSpace = FALSE;
+	    }
+	    break;
+	}
+
+    return haveName;
 }
 
 /*-
@@ -1454,7 +1496,6 @@ Parse_DoVar(char *line, GNode *ctxt)
     Boolean	   freeCp = FALSE; /* TRUE if cp needs to be freed,
 				    * i.e. if any variable expansion was
 				    * performed */
-    int depth;
 
     /*
      * Skip to variable name
@@ -1465,19 +1506,9 @@ Parse_DoVar(char *line, GNode *ctxt)
 
     /*
      * Skip to operator character, nulling out whitespace as we go
-     * XXX Rather than counting () and {} we should look for $ and
-     * then expand the variable.
      */
-    for (depth = 0, cp = line + 1; depth != 0 || *cp != '='; cp++) {
-	if (*cp == '(' || *cp == '{') {
-	    depth++;
-	    continue;
-	}
-	if (*cp == ')' || *cp == '}') {
-	    depth--;
-	    continue;
-	}
-	if (depth == 0 && isspace ((unsigned char)*cp)) {
+    for (cp = line + 1; *cp != '='; cp++) {
+	if (isspace ((unsigned char)*cp)) {
 	    *cp = '\0';
 	}
     }
@@ -1625,7 +1656,7 @@ Parse_DoVar(char *line, GNode *ctxt)
  *	A new element is added to the commands list of the node.
  */
 static int
-ParseAddCmd(void *gnp, void *cmd)
+ParseAddCmd(ClientData gnp, ClientData cmd)
 {
     GNode *gn = (GNode *)gnp;
 
@@ -1677,7 +1708,7 @@ ParseAddCmd(void *gnp, void *cmd)
  *-----------------------------------------------------------------------
  */
 static void
-ParseHasCommands(void *gnp)
+ParseHasCommands(ClientData gnp)
 {
     GNode *gn = (GNode *)gnp;
     if (!Lst_IsEmpty(gn->commands)) {
@@ -1779,11 +1810,11 @@ Parse_include_file(char *file, Boolean isSystem, int silent)
 	     * If we have a suffix specific path we should use that.
 	     */
 	    char *suff;
-	    Lst	suffPath = NULL;
+	    Lst	suffPath = NILLST;
 
 	    if ((suff = strrchr(file, '.'))) {
 		suffPath = Suff_GetPath(suff);
-		if (suffPath != NULL) {
+		if (suffPath != NILLST) {
 		    fullname = Dir_FindFile(file, suffPath);
 		}
 	    }
@@ -1821,7 +1852,7 @@ Parse_include_file(char *file, Boolean isSystem, int silent)
     }
 
     /* Start reading from this file next */
-    Parse_SetInput(fullname, 0, fd, NULL, NULL);
+    Parse_SetInput(fullname, 0, fd, NULL);
 }
 
 static void
@@ -1958,20 +1989,18 @@ ParseTrackInput(const char *name)
  *---------------------------------------------------------------------
  */
 void
-Parse_SetInput(const char *name, int line, int fd, char *(*nextbuf)(void *), void *arg)
+Parse_SetInput(const char *name, int line, int fd, char *buf)
 {
-    char *buf;
-
     if (name == NULL)
 	name = curFile->fname;
     else
 	ParseTrackInput(name);
 
     if (DEBUG(PARSE))
-	fprintf(debug_file, "Parse_SetInput: file %s, line %d, fd %d, nextbuf %p, arg %p\n",
-		name, line, fd, nextbuf, arg);
+	fprintf(debug_file, "Parse_SetInput: file %s, line %d, fd %d, buf %p\n",
+		name, line, fd, buf);
 
-    if (fd == -1 && nextbuf == NULL)
+    if (fd == -1 && buf == NULL)
 	/* sanity */
 	return;
 
@@ -1990,12 +2019,12 @@ Parse_SetInput(const char *name, int line, int fd, char *(*nextbuf)(void *), voi
      */
     curFile->fname = name;
     curFile->lineno = line;
-    curFile->first_lineno = line;
     curFile->fd = fd;
-    curFile->nextbuf = nextbuf;
-    curFile->nextbuf_arg = arg;
+    curFile->cond_depth = Cond_save_depth();
 
-    if (nextbuf == NULL) {
+    ParseSetParseFile(name);
+
+    if (buf == NULL) {
 	/*
 	 * Allocate a 32k data buffer (as stdio seems to).
 	 * Set pointers so that first ParseReadc has to do a file read.
@@ -2007,20 +2036,12 @@ Parse_SetInput(const char *name, int line, int fd, char *(*nextbuf)(void *), voi
 	curFile->P_end = buf;
 	curFile->P_buflen = IFILE_BUFLEN;
     } else {
-	/* Get first block of input data */
-	buf = curFile->nextbuf(curFile->nextbuf_arg);
-	if (buf == NULL) {
-	    /* Was all a waste of time ... */
-	    free(curFile);
-	    return;
-	}
+	/* Start reading from the start of the buffer */
 	curFile->P_str = buf;
 	curFile->P_ptr = buf;
 	curFile->P_end = NULL;
     }
 
-    curFile->cond_depth = Cond_save_depth();
-    ParseSetParseFile(name);
 }
 
 #ifdef SYSVINCLUDE
@@ -2105,20 +2126,6 @@ ParseTraditionalInclude(char *line)
 static int
 ParseEOF(void)
 {
-    char *ptr;
-
-    if (curFile->nextbuf != NULL) {
-       /* eg .for loop data, get next iteration */
-       ptr = curFile->nextbuf(curFile->nextbuf_arg);
-       curFile->P_ptr = ptr;
-       curFile->P_str = ptr;
-       curFile->lineno = curFile->first_lineno;
-       if (ptr != NULL) {
-	    /* Iterate again */
-	    return CONTINUE;
-	}
-    }
-
     /* Ensure the makefile (or loop) didn't have mismatched conditionals */
     Cond_restore_depth(curFile->cond_depth);
 
@@ -2131,7 +2138,7 @@ ParseEOF(void)
 
     curFile = Lst_DeQueue(includes);
 
-    if (curFile == NULL) {
+    if (curFile == (IFile *)NIL) {
 	/* We've run out of input */
 	Var_Delete(".PARSEDIR", VAR_GLOBAL);
 	Var_Delete(".PARSEFILE", VAR_GLOBAL);
@@ -2362,7 +2369,6 @@ ParseReadLine(void)
     char 	  *line;    	/* Result */
     int	    	  lineLength;	/* Length of result */
     int	    	  lineno;	/* Saved line # */
-    int	    	  rval;
 
     for (;;) {
 	line = ParseGetLine(0, &lineLength);
@@ -2388,17 +2394,10 @@ ParseReadLine(void)
 	case COND_PARSE:
 	    continue;
 	case COND_INVALID:    /* Not a conditional line */
-	    /* Check for .for loops */
-	    rval = For_Eval(line);
-	    if (rval == 0)
-		/* Not a .for line */
+	    if (!For_Eval(line))
 		break;
-	    if (rval < 0)
-		/* Syntax error - error printed, ignore line */
-		continue;
-	    /* Start of a .for loop */
 	    lineno = curFile->lineno;
-	    /* Accumulate loop lines until matching .endfor */
+	    /* Skip after the matching end */
 	    do {
 		line = ParseGetLine(PARSE_RAW, &lineLength);
 		if (line == NULL) {
@@ -2406,7 +2405,7 @@ ParseReadLine(void)
 			     "Unexpected end of file in for loop.\n");
 		    break;
 		}
-	    } while (For_Accum(line));
+	    } while (For_Eval(line));
 	    /* Stash each iteration as a new 'input file' */
 	    For_Run(lineno);
 	    /* Read next line from for-loop buffer */
@@ -2470,7 +2469,7 @@ Parse_File(const char *name, int fd)
     inLine = FALSE;
     fatals = 0;
 
-    Parse_SetInput(name, 0, fd, NULL, NULL);
+    Parse_SetInput(name, 0, fd, NULL);
 
     do {
 	for (; (line = ParseReadLine()) != NULL; ) {
@@ -2617,7 +2616,7 @@ Parse_File(const char *name, int fd)
 	     * Need a non-circular list for the target nodes
 	     */
 	    if (targets)
-		Lst_Destroy(targets, NULL);
+		Lst_Destroy(targets, NOFREE);
 
 	    targets = Lst_Init(FALSE);
 	    inLine = TRUE;
@@ -2659,7 +2658,7 @@ Parse_File(const char *name, int fd)
 void
 Parse_Init(void)
 {
-    mainNode = NULL;
+    mainNode = NILGNODE;
     parseIncPath = Lst_Init(FALSE);
     sysIncPath = Lst_Init(FALSE);
     defIncPath = Lst_Init(FALSE);
@@ -2675,11 +2674,11 @@ Parse_End(void)
 #ifdef CLEANUP
     Lst_Destroy(targCmds, (FreeProc *)free);
     if (targets)
-	Lst_Destroy(targets, NULL);
+	Lst_Destroy(targets, NOFREE);
     Lst_Destroy(defIncPath, Dir_Destroy);
     Lst_Destroy(sysIncPath, Dir_Destroy);
     Lst_Destroy(parseIncPath, Dir_Destroy);
-    Lst_Destroy(includes, NULL);	/* Should be empty now */
+    Lst_Destroy(includes, NOFREE);	/* Should be empty now */
 #endif
 }
 
@@ -2705,7 +2704,7 @@ Parse_MainName(void)
 
     mainList = Lst_Init(FALSE);
 
-    if (mainNode == NULL) {
+    if (mainNode == NILGNODE) {
 	Punt("no target to make.");
     	/*NOTREACHED*/
     } else if (mainNode->type & OP_DOUBLEDEP) {

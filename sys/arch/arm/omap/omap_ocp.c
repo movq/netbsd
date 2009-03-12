@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_ocp.c,v 1.4 2008/12/12 17:36:14 matt Exp $ */
+/*	$NetBSD: omap_ocp.c,v 1.2 2008/05/02 23:46:12 martin Exp $ */
 
 /*
  * Autoconfiguration support for the Texas Instruments OMAP OCP bus.
@@ -96,7 +96,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap_ocp.c,v 1.4 2008/12/12 17:36:14 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap_ocp.c,v 1.2 2008/05/02 23:46:12 martin Exp $");
 
 #include "locators.h"
 
@@ -115,24 +115,25 @@ __KERNEL_RCSID(0, "$NetBSD: omap_ocp.c,v 1.4 2008/12/12 17:36:14 matt Exp $");
 #include <arm/omap/omap_ocp.h>
 
 struct ocp_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	bus_dma_tag_t sc_dmac;
 };
 
 /* prototypes */
-static int	ocp_match(device_t, cfdata_t, void *);
-static void	ocp_attach(device_t, device_t, void *);
-static int 	ocp_search(device_t, cfdata_t, const int *, void *);
+static int	ocp_match(struct device *, struct cfdata *, void *);
+static void	ocp_attach(struct device *, struct device *, void *);
+static int 	ocp_search(struct device *, struct cfdata *,
+			     const int *, void *);
 static int	ocp_print(void *, const char *);
 
 /* attach structures */
-CFATTACH_DECL_NEW(ocp, sizeof(struct ocp_softc),
+CFATTACH_DECL(ocp, sizeof(struct ocp_softc),
     ocp_match, ocp_attach, NULL, NULL);
 
 static int ocp_attached;
 
 static int
-ocp_match(device_t parent, cfdata_t match, void *aux)
+ocp_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	if (ocp_attached)
 		return 0;
@@ -140,9 +141,9 @@ ocp_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-ocp_attach(device_t parent, device_t self, void *aux)
+ocp_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ocp_softc *sc = device_private(self);
+	struct ocp_softc *sc = (struct ocp_softc *)self;
 
 	ocp_attached = 1;
 
@@ -163,9 +164,10 @@ ocp_attach(device_t parent, device_t self, void *aux)
 }
 
 static int
-ocp_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+ocp_search(struct device *parent, struct cfdata *cf,
+	     const int *ldesc, void *aux)
 {
-	struct ocp_softc *sc = device_private(parent);
+	struct ocp_softc *sc = (struct ocp_softc *)parent;
 	struct ocp_attach_args aa;
 
 	switch (cf->cf_loc[OCPCF_MULT]) {

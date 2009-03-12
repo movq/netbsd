@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep.h,v 1.11 2009/02/13 21:03:59 bouyer Exp $ */
+/* $NetBSD: pci_machdep.h,v 1.10.8.1 2009/10/03 23:54:05 snj Exp $ */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.

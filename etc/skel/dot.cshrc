@@ -1,4 +1,4 @@
-#	$NetBSD: dot.cshrc,v 1.4 2008/11/19 18:07:20 cube Exp $
+#	$NetBSD: dot.cshrc,v 1.3.40.1 2008/11/20 03:37:42 snj Exp $
 #
 # This is the default .cshrc file.
 # Users are expected to edit it to meet their own needs.

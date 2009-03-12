@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.20 2009/03/05 13:00:45 tsutsui Exp $	*/
+/*	$NetBSD: intr.h,v 1.18.6.1 2009/01/06 23:52:42 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2007 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
 #define splx(s)			((s) & PSL_IPL ? _spl(s) : spl0())
 
 #ifdef _KERNEL
-int spl0(void);
+int spl0 __P((void));
 
 extern const uint16_t ipl2psl_table[NIPL];
 extern int idepth;

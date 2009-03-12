@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.9 2009/02/12 15:40:15 cegger Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.7.2.1 2009/02/23 08:32:53 snj Exp $	*/
 /*	NetBSD: autoconf.c,v 1.75 2003/12/30 12:33:22 pk Exp 	*/
 
 /*-
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9 2009/02/12 15:40:15 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7.2.1 2009/02/23 08:32:53 snj Exp $");
 
 #include "opt_xen.h"
 #include "opt_compat_oldboot.h"
@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9 2009/02/12 15:40:15 cegger Exp $");
 #include <sys/reboot.h>
 #endif
 #include <sys/device.h>
+#include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/fcntl.h>
 #include <sys/dkio.h>

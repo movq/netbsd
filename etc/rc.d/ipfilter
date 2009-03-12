@@ -1,10 +1,10 @@
 #!/bin/sh
 #
-# $NetBSD: ipfilter,v 1.17 2008/11/22 20:23:33 tsutsui Exp $
+# $NetBSD: ipfilter,v 1.15.20.1 2009/03/26 17:45:38 snj Exp $
 #
 
 # PROVIDE: ipfilter
-# REQUIRE: root bootconf mountcritlocal tty
+# REQUIRE: root beforenetlkm mountcritlocal tty
 
 $_rc_subr_loaded . /etc/rc.subr
 
@@ -36,7 +36,7 @@ ipfilter_prestart()
 ipfilter_start()
 {
 	echo "Enabling ipfilter."
-	/sbin/ipf -E
+	/sbin/ipf ${rc_flags} -E
 
 		# Do the flush first; since older ipf has different semantics.
 		#

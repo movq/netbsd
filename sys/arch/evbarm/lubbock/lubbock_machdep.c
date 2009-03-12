@@ -1,4 +1,4 @@
-/*	$NetBSD: lubbock_machdep.c,v 1.19 2008/11/11 06:46:41 dyoung Exp $ */
+/*	$NetBSD: lubbock_machdep.c,v 1.18 2008/04/27 18:58:46 matt Exp $ */
 
 /*
  * Copyright (c) 2002, 2003, 2005  Genetec Corporation.  All rights reserved.
@@ -112,7 +112,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lubbock_machdep.c,v 1.19 2008/11/11 06:46:41 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lubbock_machdep.c,v 1.18 2008/04/27 18:58:46 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -303,7 +303,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -334,8 +333,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;

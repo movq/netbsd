@@ -1,4 +1,4 @@
-/* $NetBSD: ipmivar.h,v 1.9 2008/11/03 12:25:53 cegger Exp $ */
+/* $NetBSD: ipmivar.h,v 1.8.4.1 2008/11/06 22:58:07 snj Exp $ */
 
 /*
  * Copyright (c) 2005 Jordan Hargrave

@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vfsops.c,v 1.87 2008/12/17 20:51:35 cegger Exp $	*/
+/*	$NetBSD: smbfs_vfsops.c,v 1.85.4.1 2009/10/03 23:05:25 snj Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.87 2008/12/17 20:51:35 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.85.4.1 2009/10/03 23:05:25 snj Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_quota.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -200,7 +204,8 @@ smbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	mp->mnt_stat.f_namemax =
 	    (vcp->vc_hflags2 & SMB_FLAGS2_KNOWS_LONG_NAMES) ? 255 : 12;
 
-	smp = malloc(sizeof(*smp), M_SMBFSDATA, M_WAITOK|M_ZERO);
+	MALLOC(smp, struct smbmount *, sizeof(*smp), M_SMBFSDATA, M_WAITOK);
+	memset(smp, 0, sizeof(*smp));
 	mp->mnt_data = smp;
 
 	smp->sm_hash = hashinit(desiredvnodes, HASH_LIST, true,
@@ -231,17 +236,17 @@ smbfs_unmount(struct mount *mp, int mntflags)
 	struct lwp *l = curlwp;
 	struct smbmount *smp = VFSTOSMBFS(mp);
 	struct smb_cred scred;
+	struct vnode *smbfs_rootvp = SMBTOV(smp->sm_root);
 	int error, flags;
 
 	SMBVDEBUG("smbfs_unmount: flags=%04x\n", mntflags);
 	flags = 0;
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
-	/* Drop the extra reference to root vnode. */
-	if (smp->sm_root) {
-		vrele(SMBTOV(smp->sm_root));
-		smp->sm_root = NULL;
-	}
+#ifdef QUOTA
+#endif
+	if (smbfs_rootvp->v_usecount > 1 && (mntflags & MNT_FORCE) == 0)
+		return EBUSY;
 
 	/* Flush all vnodes.
 	 * Keep trying to flush the vnode list for the mount while 
@@ -252,8 +257,12 @@ smbfs_unmount(struct mount *mp, int mntflags)
 	 * sufficient in this case. */
 	do {
 		smp->sm_didrele = 0;
-		error = vflush(mp, NULLVP, flags);
+		error = vflush(mp, smbfs_rootvp, flags);
 	} while (error == EBUSY && smp->sm_didrele != 0);
+	if (error)
+		return error;
+
+	vgone(smbfs_rootvp);
 
 	smb_makescred(&scred, l, l->l_cred);
 	smb_share_lock(smp->sm_share);
@@ -262,8 +271,8 @@ smbfs_unmount(struct mount *mp, int mntflags)
 
 	hashdone(smp->sm_hash, HASH_LIST, smp->sm_hashlen);
 	mutex_destroy(&smp->sm_hashlock);
-	free(smp, M_SMBFSDATA);
-	return error;
+	FREE(smp, M_SMBFSDATA);
+	return 0;
 }
 
 /*

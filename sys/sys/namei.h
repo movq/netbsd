@@ -1,11 +1,10 @@
-/*	$NetBSD: namei.h,v 1.64 2009/02/11 00:20:18 enami Exp $	*/
-
+/*	$NetBSD: namei.h,v 1.60.14.3 2010/02/14 13:30:04 bouyer Exp $	*/
 
 /*
  * WARNING: GENERATED FILE.  DO NOT EDIT
- * (edit namei.src and run make namei in src/sys/sys)
- *   by:   NetBSD: gennameih.awk,v 1.4 2008/12/03 10:54:27 ad Exp 
- *   from: NetBSD: namei.src,v 1.10 2009/02/11 00:19:11 enami Exp 
+ * (edit namei.src and run make namei)
+ *   by:   NetBSD: gennameih.awk,v 1.2 2008/04/30 13:11:00 martin Exp 
+ *   from: NetBSD: namei.src,v 1.8.14.2 2010/02/14 13:27:45 bouyer Exp 
  */
 
 /*
@@ -108,18 +107,15 @@ struct nameidata {
 /*
  * namei operational modifier flags, stored in ni_cnd.cn_flags
  */
-#define	LOCKLEAF	0x00000004	/* lock inode on return */
-#define	LOCKPARENT	0x00000008	/* want parent vnode returned locked */
-#define	TRYEMULROOT	0x00000010	/* try relative to emulation root
-					   first */
-#define	NOCACHE		0x00000020	/* name must not be left in cache */
-#define	FOLLOW		0x00000040	/* follow symbolic links */
-#define	NOFOLLOW	0x00000000	/* do not follow symbolic links
-					   (pseudo) */
-#define	EMULROOTSET	0x00000080	/* emulation root already
-					   in ni_erootdir */
-#define	NOCHROOT	0x01000000	/* no chroot on abs path lookups */
-#define	MODMASK		0x010000fc	/* mask of operational modifiers */
+#define	LOCKLEAF	0x0004	/* lock inode on return */
+#define	LOCKPARENT	0x0008	/* want parent vnode returned locked */
+#define	NOCHROOT	0x0010	/* no chroot on abs path lookups */
+#define	NOCACHE		0x0020	/* name must not be left in cache */
+#define	FOLLOW		0x0040	/* follow symbolic links */
+#define	NOFOLLOW	0x0000	/* do not follow symbolic links (pseudo) */
+#define	TRYEMULROOT	0x0010	/* try relative to emulation root first */
+#define	EMULROOTSET	0x0080	/* emulation root already in ni_erootdir */
+#define	MODMASK		0x00fc	/* mask of operational modifiers */
 /*
  * Namei parameter descriptors.
  *
@@ -147,7 +143,8 @@ struct nameidata {
 #define	DOWHITEOUT	0x0040000	/* do whiteouts */
 #define	REQUIREDIR	0x0080000	/* must be a directory */
 #define	CREATEDIR	0x0200000	/* trailing slashes are ok */
-#define	PARAMASK	0x02fff00	/* mask of parameter descriptors */
+#define	INRENAME	0x0400000	/* operation is a part of ``rename'' */
+#define	PARAMASK	0x06fff00	/* mask of parameter descriptors */
 
 /*
  * Initialization of an nameidata structure.
@@ -253,15 +250,15 @@ extern struct nchstats nchstats;
 #define NAMEI_DELETE	2
 #define NAMEI_RENAME	3
 #define NAMEI_OPMASK	3
-#define NAMEI_LOCKLEAF	0x00000004
-#define NAMEI_LOCKPARENT	0x00000008
-#define NAMEI_TRYEMULROOT	0x00000010
-#define NAMEI_NOCACHE	0x00000020
-#define NAMEI_FOLLOW	0x00000040
-#define NAMEI_NOFOLLOW	0x00000000
-#define NAMEI_EMULROOTSET	0x00000080
-#define NAMEI_NOCHROOT	0x01000000
-#define NAMEI_MODMASK	0x010000fc
+#define NAMEI_LOCKLEAF	0x0004
+#define NAMEI_LOCKPARENT	0x0008
+#define NAMEI_NOCHROOT	0x0010
+#define NAMEI_NOCACHE	0x0020
+#define NAMEI_FOLLOW	0x0040
+#define NAMEI_NOFOLLOW	0x0000
+#define NAMEI_TRYEMULROOT	0x0010
+#define NAMEI_EMULROOTSET	0x0080
+#define NAMEI_MODMASK	0x00fc
 #define NAMEI_NOCROSSMOUNT	0x0000100
 #define NAMEI_RDONLY	0x0000200
 #define NAMEI_HASBUF	0x0000400
@@ -275,6 +272,7 @@ extern struct nchstats nchstats;
 #define NAMEI_DOWHITEOUT	0x0040000
 #define NAMEI_REQUIREDIR	0x0080000
 #define NAMEI_CREATEDIR	0x0200000
-#define NAMEI_PARAMASK	0x02fff00
+#define NAMEI_INRENAME	0x0400000
+#define NAMEI_PARAMASK	0x06fff00
 
 #endif /* !_SYS_NAMEI_H_ */

@@ -1,7 +1,7 @@
-/*	$NetBSD: subr_disk.c,v 1.94 2009/01/22 14:38:35 yamt Exp $	*/
+/*	$NetBSD: subr_disk.c,v 1.93.10.2 2010/11/21 21:48:28 riz Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1999, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1999, 2000, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -67,11 +67,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.94 2009/01/22 14:38:35 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.93.10.2 2010/11/21 21:48:28 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/syslog.h>
 #include <sys/disklabel.h>
@@ -202,13 +202,18 @@ disk_attach(struct disk *diskp)
 {
 
 	/*
-	 * Allocate and initialize the disklabel structures.
+	 * Allocate and initialize the disklabel structures.  Note that
+	 * it's not safe to sleep here, since we're probably going to be
+	 * called during autoconfiguration.
 	 */
-	diskp->dk_label = kmem_zalloc(sizeof(struct disklabel), KM_SLEEP);
-	diskp->dk_cpulabel = kmem_zalloc(sizeof(struct cpu_disklabel),
-	    KM_SLEEP);
+	diskp->dk_label = malloc(sizeof(struct disklabel), M_DEVBUF, M_NOWAIT);
+	diskp->dk_cpulabel = malloc(sizeof(struct cpu_disklabel), M_DEVBUF,
+	    M_NOWAIT);
 	if ((diskp->dk_label == NULL) || (diskp->dk_cpulabel == NULL))
 		panic("disk_attach: can't allocate storage for disklabel");
+
+	memset(diskp->dk_label, 0, sizeof(struct disklabel));
+	memset(diskp->dk_cpulabel, 0, sizeof(struct cpu_disklabel));
 
 	/*
 	 * Set up the stats collection.
@@ -239,8 +244,8 @@ disk_detach(struct disk *diskp)
 	/*
 	 * Free the space used by the disklabel structures.
 	 */
-	kmem_free(diskp->dk_label, sizeof(*diskp->dk_label));
-	kmem_free(diskp->dk_cpulabel, sizeof(*diskp->dk_cpulabel));
+	free(diskp->dk_label, M_DEVBUF);
+	free(diskp->dk_cpulabel, M_DEVBUF);
 }
 
 void
@@ -269,6 +274,16 @@ disk_unbusy(struct disk *diskp, long bcount, int read)
 {
 
 	iostat_unbusy(diskp->dk_stats, bcount, read);
+}
+
+/*
+ * Return true if disk has an I/O operation in flight.
+ */
+bool
+disk_isbusy(struct disk *diskp)
+{
+
+	return iostat_isbusy(diskp->dk_stats);
 }
 
 /*
@@ -333,8 +348,8 @@ bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
 		return -1;
 	}
 
-	p_size = p->p_size << dk->dk_blkshift;
-	p_offset = p->p_offset << dk->dk_blkshift;
+	p_size = (uint64_t)p->p_size << dk->dk_blkshift;
+	p_offset = (uint64_t)p->p_offset << dk->dk_blkshift;
 #if RAW_PART == 3
 	labelsector = lp->d_partitions[2].p_offset;
 #else

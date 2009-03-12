@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.21 2009/03/06 20:31:47 joerg Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.18.20.1 2009/12/01 19:29:54 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -34,10 +34,8 @@
  *	@(#)vmparam.h	5.9 (Berkeley) 5/12/91
  */
 
-#ifndef _X86_64_VMPARAM_H_
-#define _X86_64_VMPARAM_H_
-
-#ifdef __x86_64__
+#ifndef _VMPARAM_H_
+#define _VMPARAM_H_
 
 #include <sys/tree.h>
 #include <sys/mutex.h>
@@ -105,6 +103,13 @@
 #endif
 
 /*
+ * Size of shared memory map
+ */
+#ifndef SHMMAXPGS
+#define SHMMAXPGS	2048
+#endif
+
+/*
  * Size of User Raw I/O map
  */
 #define	USRIOSIZE 	300
@@ -152,9 +157,10 @@
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
 #define VM_PHYSSEG_NOADD		/* can't add RAM after vm_mem_init */
 
-#define	VM_NFREELIST		2
+#define	VM_NFREELIST		3
 #define	VM_FREELIST_DEFAULT	0
-#define	VM_FREELIST_FIRST16	1
+#define	VM_FREELIST_FIRST4G	1
+#define	VM_FREELIST_FIRST16	2
 
 #include <x86/pmap_pv.h>
 
@@ -167,10 +173,4 @@ struct vm_page_md {
 	struct pmap_page mp_pp;
 };
 
-#else	/*	!__x86_64__	*/
-
-#include <i386/vmparam.h>
-
-#endif	/*	__x86_64__	*/
-
-#endif /* _X86_64_VMPARAM_H_ */
+#endif /* _VMPARAM_H_ */

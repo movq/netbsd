@@ -1,4 +1,4 @@
-/*	$NetBSD: run.c,v 1.65 2008/12/01 10:22:36 ad Exp $	*/
+/*	$NetBSD: run.c,v 1.64.16.1 2009/01/22 22:19:39 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

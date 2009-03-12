@@ -1,4 +1,4 @@
-/*      $NetBSD: amdtemp.c,v 1.6 2008/12/04 18:54:24 cegger Exp $ */
+/*      $NetBSD: amdtemp.c,v 1.4.10.2 2008/12/10 22:12:57 snj Exp $ */
 /*      $OpenBSD: kate.c,v 1.2 2008/03/27 04:52:03 cnst Exp $   */
 
 /* 
@@ -48,7 +48,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdtemp.c,v 1.6 2008/12/04 18:54:24 cegger Exp $ ");
+__KERNEL_RCSID(0, "$NetBSD: amdtemp.c,v 1.4.10.2 2008/12/10 22:12:57 snj Exp $ ");
 
 #include <sys/param.h>
 #include <sys/systm.h>

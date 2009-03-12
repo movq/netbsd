@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.11 2009/03/07 21:59:25 ad Exp $	*/
+/*	$NetBSD: cpu.h,v 1.9.4.2 2010/04/22 20:02:48 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -37,7 +37,7 @@
 #ifndef _X86_CPU_H_
 #define _X86_CPU_H_
 
-#if defined(_KERNEL) || defined(_KMEMUSER)
+#ifdef _KERNEL
 #if defined(_KERNEL_OPT)
 #include "opt_xen.h"
 #ifdef i386
@@ -59,6 +59,8 @@
 
 #include <sys/cpu_data.h>
 #include <sys/evcnt.h>
+
+#include <lib/libkern/libkern.h>	/* offsetof */
 
 struct intrsource;
 struct pmap;
@@ -233,7 +235,7 @@ extern struct cpu_info *cpu_info_list;
 #define CPU_STOP(_ci)	        	((_ci)->ci_func->stop(_ci))
 #define CPU_START_CLEANUP(_ci)		((_ci)->ci_func->cleanup(_ci))
 
-#if !defined(__GNUC__) || defined(_MODULE)
+#if !defined(__GNUC__) || defined(_LKM)
 /* For non-GCC and modules */
 struct cpu_info	*x86_curcpu(void);
 void	cpu_set_curpri(int);
@@ -302,9 +304,6 @@ struct timeval;
 
 extern int biosbasemem;
 extern int biosextmem;
-extern unsigned int cpu_feature;
-extern unsigned int cpu_feature2;
-extern unsigned int cpu_feature_padlock;
 extern int cpu;
 extern int cpuid_level;
 extern int cpu_class;
@@ -334,6 +333,9 @@ void 	tmx86_init_longrun(void);
 /* identcpu.c */
 void 	cpu_probe(struct cpu_info *);
 void	cpu_identify(struct cpu_info *);
+
+/* cpu_topology.c */
+void	x86_cpu_toplogy(struct cpu_info *);
 
 /* vm_machdep.c */
 void	cpu_proc_fork(struct proc *, struct proc *);
@@ -398,7 +400,7 @@ void x86_bus_space_mallocok(void);
 
 #include <machine/psl.h>	/* Must be after struct cpu_info declaration */
 
-#endif /* _KERNEL || __KMEMUSER */
+#endif /* _KERNEL */
 
 /*
  * CTL_MACHDEP definitions.

@@ -1,4 +1,4 @@
-/*	$NetBSD: icpvar.h,v 1.11 2009/01/29 12:13:30 bouyer Exp $	*/
+/*	$NetBSD: icpvar.h,v 1.10.10.1 2009/02/02 20:23:47 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.

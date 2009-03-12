@@ -1,4 +1,4 @@
-/*      $NetBSD: if_etherip.c,v 1.26 2008/12/17 20:51:36 cegger Exp $        */
+/*      $NetBSD: if_etherip.c,v 1.22.4.2 2008/11/19 03:40:27 snj Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_etherip.c,v 1.26 2008/12/17 20:51:36 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_etherip.c,v 1.22.4.2 2008/11/19 03:40:27 snj Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -611,7 +611,7 @@ etherip_clone_create(struct if_clone *ifc, int unit)
 {
 	cfdata_t cf;
 
-	cf = malloc(sizeof(struct cfdata), M_DEVBUF, M_WAITOK);
+	MALLOC(cf, cfdata_t, sizeof(struct cfdata), M_DEVBUF, M_WAITOK);
 	cf->cf_name   = etherip_cd.cd_name;
 	cf->cf_atname = etherip_ca.ca_name;
 	cf->cf_unit   = unit;
@@ -635,7 +635,7 @@ etherip_clone_destroy(struct ifnet *ifp)
 
 	if ((error = config_detach(sc->sc_dev, 0)) != 0)
 		aprint_error_dev(sc->sc_dev, "unable to detach instance\n");
-	free(cf, M_DEVBUF);
+	FREE(cf, M_DEVBUF);
 
 	return error;
 }
@@ -700,7 +700,7 @@ etherip_sysctl_handler(SYSCTLFN_ARGS)
 	if (ether_nonstatic_aton(enaddr, addr) != 0)
 		return EINVAL;
 
-	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN, false);
+	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN);
 	return error;
 }
 

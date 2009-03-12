@@ -1,4 +1,4 @@
-/*	$NetBSD: sched.h,v 1.12 2009/01/11 03:04:12 christos Exp $	*/
+/*	$NetBSD: sched.h,v 1.10.4.1 2008/11/12 23:50:29 snj Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -46,10 +46,7 @@ int	sched_setscheduler(pid_t, int, const struct sched_param *);
 int	sched_getscheduler(pid_t);
 int	sched_get_priority_max(int);
 int	sched_get_priority_min(int);
-#ifndef __LIBC12_SOURCE__
-int	sched_rr_get_interval(pid_t, struct timespec *)
-    __RENAME(__sched_rr_get_interval50);
-#endif
+int	sched_rr_get_interval(pid_t, struct timespec *);
 
 int	sched_yield(void);
 int	__libc_thr_yield(void);

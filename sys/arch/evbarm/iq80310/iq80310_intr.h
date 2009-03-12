@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310_intr.h,v 1.8 2009/02/14 12:44:20 he Exp $	*/
+/*	$NetBSD: iq80310_intr.h,v 1.7.10.1 2009/03/15 19:48:17 snj Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.

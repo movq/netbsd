@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380.c,v 1.57 2008/11/15 21:35:31 abs Exp $	*/
+/*	$NetBSD: ncr5380.c,v 1.56.2.1 2009/01/16 21:56:48 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr5380.c,v 1.57 2008/11/15 21:35:31 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr5380.c,v 1.56.2.1 2009/01/16 21:56:48 bouyer Exp $");
 
 /*
  * Bit mask of targets you want debugging to be shown

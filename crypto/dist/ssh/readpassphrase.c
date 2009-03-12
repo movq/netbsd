@@ -1,4 +1,4 @@
-/*	$NetBSD: readpassphrase.c,v 1.14 2009/02/16 20:55:22 christos Exp $	*/
+/*	$NetBSD: readpassphrase.c,v 1.12 2008/04/06 23:39:05 christos Exp $	*/
 /*
  * Copyright (c) 2000 Todd C. Miller <Todd.Miller@courtesan.com>
  * All rights reserved.

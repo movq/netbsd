@@ -1,4 +1,4 @@
-/*	$NetBSD: xen_machdep.c,v 1.5 2009/02/13 21:04:00 bouyer Exp $	*/
+/*	$NetBSD: xen_machdep.c,v 1.4.8.1 2009/10/03 23:54:05 snj Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -63,7 +63,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_machdep.c,v 1.5 2009/02/13 21:04:00 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_machdep.c,v 1.4.8.1 2009/10/03 23:54:05 snj Exp $");
 
 #include "opt_xen.h"
 

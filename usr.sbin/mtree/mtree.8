@@ -1,4 +1,4 @@
-.\"	$NetBSD: mtree.8,v 1.48 2009/03/11 18:10:05 joerg Exp $
+.\"	$NetBSD: mtree.8,v 1.45 2008/05/02 18:11:06 martin Exp $
 .\"
 .\" Copyright (c) 1989, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -56,7 +56,7 @@
 .\"
 .\"     @(#)mtree.8	8.2 (Berkeley) 12/11/93
 .\"
-.Dd February 1, 2009
+.Dd September 12, 2006
 .Dt MTREE 8
 .Os
 .Sh NAME
@@ -110,8 +110,7 @@ missing from either the file hierarchy or the specification.
 The options are as follows:
 .Bl -tag -width flag
 .It Fl c
-Print a specification for the file hierarchy originating at
-the current working directory to the standard output.
+Print a specification for the file hierarchy to the standard output.
 .It Fl d
 Ignore everything except directory type files.
 .It Fl C
@@ -141,8 +140,6 @@ Add the comma separated tags to the
 .Dq exclusion
 list.
 Non-directories with tags which are in the exclusion list are not printed with
-.Fl C
-and
 .Fl D .
 .It Fl e
 Don't complain about files that are in the file hierarchy, but not in the
@@ -156,8 +153,6 @@ Add the comma separated tags to the
 .Dq inclusion
 list.
 Non-directories with tags which are in the inclusion list are printed with
-.Fl C
-and
 .Fl D .
 If no inclusion list is provided, the default is to display all files.
 .It Fl i
@@ -184,15 +179,13 @@ keyword is not desired, suppress it with
 Do
 .Dq loose
 permissions checks, in which more stringent permissions
-will match less stringent ones.
-For example, a file marked mode 0444
+will match less stringent ones. For example, a file marked mode 0444
 will pass a check for mode 0644.
 .Dq Loose
 checks apply only to read, write and execute permissions -- in
 particular, if other bits like the sticky bit or suid/sgid bits are
 set either in the specification or the file, exact checking will be
-performed.
-This flag may not be set at the same time as the
+performed. This flag may not be set at the same time as the
 .Fl u
 or
 .Fl U
@@ -200,11 +193,9 @@ flags.
 .It Fl L
 Follow all symbolic links in the file hierarchy.
 .It Fl m
-If the schg and/or sappnd flags are specified, reset these flags.
-Note that this is only possible with securelevel less than 1 (i.e.,
-in single user mode or while the system is running in insecure
-mode).
-See
+If the schg and/or sappnd flags are specified, reset these flags. Note that
+this is only possible with securelevel less than 1 (i.e. in single user mode
+or while the system is running in insecure mode). See
 .Xr init 8
 for information on security levels.
 .It Fl M
@@ -255,8 +246,7 @@ to be created.
 Note that unless the
 .Fl i
 option is given, the schg and sappnd flags will not be set, even if
-specified.
-If
+specified. If
 .Fl m
 is given, these flags will be reset.
 Exit with a status of 0 on success,
@@ -315,7 +305,13 @@ file types.
 The argument must be one of the following forms:
 .Pp
 .Bl -tag -width 4n
-.It Ar format , Ns Ar major , Ns Ar minor
+.It Xo
+.Sm off
+.Ar format ,
+.Ar major ,
+.Ar minor
+.Sm on
+.Xc
 A device with
 .Ar major
 and
@@ -323,7 +319,14 @@ and
 fields, for an operating system specified with
 .Ar format .
 See below for valid formats.
-.It Ar format , Ns Ar major , Ns Ar unit , Ns Ar subunit
+.It Xo
+.Sm off
+.Ar format ,
+.Ar major ,
+.Ar unit ,
+.Ar subunit
+.Sm on
+.Xc
 A device with
 .Ar major ,
 .Ar unit ,
@@ -363,11 +366,9 @@ See
 .Xr mknod 8
 for more details.
 .It Sy flags
-The file flags as a symbolic name.
-See
+The file flags as a symbolic name.  See
 .Xr chflags 1
-for information on these names.
-If no flags are to be set the string
+for information on these names.  If no flags are to be set the string
 .Ql none
 may be used to override the current default.
 Note that the schg and sappnd flags are treated specially (see the
@@ -525,8 +526,7 @@ they match.
 uses
 .Xr strsvis 3
 (in VIS_CSTYLE format) to encode path names containing
-non-printable characters.
-Whitespace characters are encoded as
+non-printable characters. Whitespace characters are encoded as
 .Ql \es
 (space),
 .Ql \et

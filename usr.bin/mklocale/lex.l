@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.l,v 1.16 2009/01/05 06:11:43 tnozaki Exp $	*/
+/*	$NetBSD: lex.l,v 1.13.40.3 2009/01/15 04:21:26 snj Exp $	*/
 
 %{
 /*-
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)lex.l	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lex.l,v 1.16 2009/01/05 06:11:43 tnozaki Exp $");
+__RCSID("$NetBSD: lex.l,v 1.13.40.3 2009/01/15 04:21:26 snj Exp $");
 #endif
 #endif /* not lint */
 

@@ -1,4 +1,4 @@
-/* $NetBSD: paxctl.c,v 1.9 2009/01/18 10:01:34 lukem Exp $ */
+/* $NetBSD: paxctl.c,v 1.8 2008/08/11 10:58:02 christos Exp $ */
 
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
@@ -34,7 +34,7 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #ifdef __RCSID
-__RCSID("$NetBSD: paxctl.c,v 1.9 2009/01/18 10:01:34 lukem Exp $");
+__RCSID("$NetBSD: paxctl.c,v 1.8 2008/08/11 10:58:02 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -129,7 +129,7 @@ pax_flags_sane(uint32_t f)
 	size_t i;
 
 	for (i = 0; i < __arraycount(flags) - 1; i += 2) {
-		uint32_t g = flags[i].bits | flags[i+1].bits;
+		int g = flags[i].bits | flags[i+1].bits;
 		if ((f & g) == g)
 			return 0;
 	}
@@ -193,8 +193,7 @@ process_one(const char *name, uint32_t add_flags, uint32_t del_flags,
 		char name[ELF_NOTE_PAX_NAMESZ];
 		uint32_t flags;
 	} pax_tag;
-	int fd, size, ok = 0, flagged = 0, swap;
-	size_t i;
+	int i, fd, size, ok = 0, flagged = 0, swap;
 
 	fd = open(name, list ? O_RDONLY: O_RDWR, 0);
 	if (fd == -1) {
@@ -231,7 +230,7 @@ process_one(const char *name, uint32_t add_flags, uint32_t del_flags,
 	}
 
 	for (i = 0; i < EH(e_phnum); i++) {
-		if ((size_t)pread(fd, &p, PHSIZE, (off_t)EH(e_phoff) + i * PHSIZE) !=
+		if (pread(fd, &p, PHSIZE, (off_t)EH(e_phoff) + i * PHSIZE) !=
 		    PHSIZE) {
 			warn("Can't read program header data from `%s'", name);
 			return 1;

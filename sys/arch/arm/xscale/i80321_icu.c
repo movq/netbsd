@@ -1,4 +1,4 @@
-/*	$NetBSD: i80321_icu.c,v 1.19 2009/01/05 06:03:39 briggs Exp $	*/
+/*	$NetBSD: i80321_icu.c,v 1.18.10.1 2009/01/09 02:44:21 snj Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2006 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80321_icu.c,v 1.19 2009/01/05 06:03:39 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80321_icu.c,v 1.18.10.1 2009/01/09 02:44:21 snj Exp $");
 
 #ifndef EVBARM_SPL_NOINLINE
 #define	EVBARM_SPL_NOINLINE

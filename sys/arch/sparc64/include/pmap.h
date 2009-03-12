@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.44 2008/12/12 18:16:58 pooka Exp $	*/
+/*	$NetBSD: pmap.h,v 1.40.14.1 2010/03/17 03:10:39 snj Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -38,9 +38,6 @@
 #include <machine/pte.h>
 #include <sys/queue.h>
 #include <uvm/uvm_object.h>
-#ifdef _KERNEL
-#include <machine/cpuset.h>
-#endif
 #endif
 
 /*
@@ -171,7 +168,12 @@ struct prom_map {
    then there is an aliasing in the d$ */
 #define VA_ALIAS_MASK   (1 << 13)
 
+typedef	struct pmap *pmap_t;
+
 #ifdef	_KERNEL
+extern struct pmap kernel_pmap_;
+#define	pmap_kernel()	(&kernel_pmap_)
+
 #ifdef PMAP_COUNT_DEBUG
 /* diagnostic versions if PMAP_COUNT_DEBUG option is used */
 int pmap_count_res(struct pmap *);
@@ -209,6 +211,9 @@ void		pmap_kprotect(vaddr_t, vm_prot_t);
 void sp_tlb_flush_pte(vaddr_t, int);
 void sp_tlb_flush_ctx(int);
 void sp_tlb_flush_all(void);
+
+void		pmap_copy_page_phys(paddr_t, paddr_t);
+void		pmap_zero_page_phys(paddr_t);
 
 #ifdef MULTIPROCESSOR
 void smp_tlb_flush_pte(vaddr_t, pmap_t);

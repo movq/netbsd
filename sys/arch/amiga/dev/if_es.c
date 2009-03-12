@@ -1,4 +1,4 @@
-/*	$NetBSD: if_es.c,v 1.43 2008/11/07 00:20:01 dyoung Exp $ */
+/*	$NetBSD: if_es.c,v 1.42 2007/10/17 19:53:16 garbled Exp $ */
 
 /*
  * Copyright (c) 1995 Michael L. Hitch
@@ -38,7 +38,7 @@
 #include "opt_ns.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.43 2008/11/07 00:20:01 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_es.c,v 1.42 2007/10/17 19:53:16 garbled Exp $");
 
 #include "bpfilter.h"
 
@@ -961,7 +961,7 @@ esstart(struct ifnet *ifp)
 }
 
 int
-esioctl(struct ifnet *ifp, u_long cmd, void *data)
+esioctl(register struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct es_softc *sc = ifp->if_softc;
 	register struct ifaddr *ifa = (struct ifaddr *)data;
@@ -972,7 +972,7 @@ esioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 
 		switch (ifa->ifa_addr->sa_family) {
@@ -1005,9 +1005,6 @@ esioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX see the comment in ed_ioctl() about code re-use */
 		/*
 		 * If interface is marked down and it is running, then stop it
 		 */
@@ -1062,8 +1059,7 @@ esioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ether_ioctl(ifp, cmd, data);
-		break;
+		error = EINVAL;
 	}
 
 	splx(s);

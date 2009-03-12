@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_resource.c,v 1.150 2009/02/09 11:13:20 rmind Exp $	*/
+/*	$NetBSD: kern_resource.c,v 1.147.4.2 2009/08/14 21:15:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.150 2009/02/09 11:13:20 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.147.4.2 2009/08/14 21:15:16 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -229,6 +229,11 @@ donice(struct lwp *l, struct proc *chgp, int n)
 
 	KASSERT(mutex_owned(chgp->p_lock));
 
+	if (kauth_cred_geteuid(cred) && kauth_cred_getuid(cred) &&
+	    kauth_cred_geteuid(cred) != kauth_cred_geteuid(chgp->p_cred) &&
+	    kauth_cred_getuid(cred) != kauth_cred_geteuid(chgp->p_cred))
+		return (EPERM);
+
 	if (n > PRIO_MAX)
 		n = PRIO_MAX;
 	if (n < PRIO_MIN)
@@ -267,6 +272,9 @@ dosetrlimit(struct lwp *l, struct proc *p, int which, struct rlimit *limp)
 	int error;
 
 	if ((u_int)which >= RLIM_NLIMITS)
+		return (EINVAL);
+
+	if (limp->rlim_cur < 0 || limp->rlim_max < 0)
 		return (EINVAL);
 
 	if (limp->rlim_cur > limp->rlim_max) {
@@ -469,7 +477,7 @@ calcru(struct proc *p, struct timeval *up, struct timeval *sp,
 
 /* ARGSUSED */
 int
-sys___getrusage50(struct lwp *l, const struct sys___getrusage50_args *uap,
+sys_getrusage(struct lwp *l, const struct sys_getrusage_args *uap,
     register_t *retval)
 {
 	/* {
@@ -999,6 +1007,7 @@ SYSCTL_SETUP(sysctl_proc_setup, "sysctl proc subtree setup")
 	create_proc_plimit("maxproc",		PROC_PID_LIMIT_NPROC);
 	create_proc_plimit("descriptors",	PROC_PID_LIMIT_NOFILE);
 	create_proc_plimit("sbsize",		PROC_PID_LIMIT_SBSIZE);
+	create_proc_plimit("vmemoryuse",	PROC_PID_LIMIT_AS);
 
 #undef create_proc_plimit
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore_subr.S,v 1.50 2009/02/13 22:41:03 apb Exp $	*/
+/*	$NetBSD: locore_subr.S,v 1.48.8.1 2009/06/10 17:15:00 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,6 @@
 #include "opt_cputype.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_modular.h"
 #include "assym.h"
 
 #include <sys/syscall.h>	/* SYS___sigreturn14, SYS_exit */
@@ -40,7 +39,7 @@
 #include <sh3/mmu_sh3.h>
 #include <sh3/mmu_sh4.h>
 
-__KERNEL_RCSID(0, "$NetBSD: locore_subr.S,v 1.50 2009/02/13 22:41:03 apb Exp $")
+__KERNEL_RCSID(0, "$NetBSD: locore_subr.S,v 1.48.8.1 2009/06/10 17:15:00 bouyer Exp $")
 
 
 /*
@@ -400,7 +399,7 @@ ALTENTRY(lwp_setfunc_trampoline)
 	SET_ENTRY_SIZE(lwp_trampoline)
 
 
-#if defined(COMPAT_16) || defined(MODULAR)
+#ifdef COMPAT_16
 /*
  * LINTSTUB: Var: char sigcode[1]
  *	Signal trampoline. copied to top of user stack.
@@ -428,7 +427,7 @@ NENTRY(sigcode)
 .globl	_C_LABEL(esigcode)
 _C_LABEL(esigcode):
 	SET_ENTRY_SIZE(sigcode)
-#endif /* COMPAT_16 || MODULAR */
+#endif /* COMPAT_16 */
 
 
 /*
@@ -670,7 +669,7 @@ ENTRY(copyinstr)
 	cmp/eq	#-1,	r0
 	bf	1b
 	mov.l	.L_copyinstr_VM_MAXUSER_ADDRESS, r1
-	cmp/hs	r1,	r5
+	cmp/hs	r1,	r4
 	bt	3f
 	mov	#ENAMETOOLONG, r3
 

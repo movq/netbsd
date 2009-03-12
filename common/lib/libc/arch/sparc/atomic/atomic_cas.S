@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_cas.S,v 1.9 2009/01/12 02:53:29 pooka Exp $	*/
+/*	$NetBSD: atomic_cas.S,v 1.7 2008/05/25 15:56:12 chs Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -29,10 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/param.h>
 #include "atomic_op_asm.h"
 
-#if defined(_HARKDERNEL)
+#if defined(_KERNEL)
 
 #include <machine/psl.h>
 
@@ -52,13 +51,13 @@
 	nop								;\
 	nop
 
-#else	/* _HARDKERNEL */
+#else	/* _KERNEL */
 
 #define	MULTIPROCESSOR	1
 #define	DISABLE_INTERRUPTS		/* nothing */
 #define	RESTORE_INTERRUPTS		/* nothing */
 
-#endif	/* _HARDKERNEL */
+#endif	/* _KERNEL */
 
 #if defined(MULTIPROCESSOR)
 	.section .bss

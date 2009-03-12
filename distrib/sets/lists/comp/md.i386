@@ -1,4 +1,4 @@
-# $NetBSD: md.i386,v 1.108 2008/10/31 20:24:52 mrg Exp $
+# $NetBSD: md.i386,v 1.106.4.2 2008/11/06 23:51:26 snj Exp $
 ./usr/include/emmintrin.h			comp-c-include		gcccmds
 ./usr/include/i386				comp-c-include
 ./usr/include/i386/_G_config.h			comp-obsolete		obsolete

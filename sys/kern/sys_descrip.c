@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_descrip.c,v 1.11 2009/03/04 18:11:24 skrll Exp $	*/
+/*	$NetBSD: sys_descrip.c,v 1.7.4.1 2009/02/02 02:53:51 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_descrip.c,v 1.11 2009/03/04 18:11:24 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_descrip.c,v 1.7.4.1 2009/02/02 02:53:51 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: sys_descrip.c,v 1.11 2009/03/04 18:11:24 skrll Exp $
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/syslog.h>
 #include <sys/unistd.h>
@@ -484,7 +484,7 @@ do_sys_fstat(int fd, struct stat *sb)
  * Return status information about a file descriptor.
  */
 int
-sys___fstat50(struct lwp *l, const struct sys___fstat50_args *uap,
+sys___fstat30(struct lwp *l, const struct sys___fstat30_args *uap,
 	      register_t *retval)
 {
 	/* {
@@ -674,8 +674,6 @@ sys___posix_fadvise50(struct lwp *l,
 		syscallarg(int) advice;
 	} */
 
-	*retval = do_posix_fadvise(SCARG(uap, fd), SCARG(uap, offset),
+	return do_posix_fadvise(SCARG(uap, fd), SCARG(uap, offset),
 	    SCARG(uap, len), SCARG(uap, advice));
-
-	return 0;
 }

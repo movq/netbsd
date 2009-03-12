@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuctl.c,v 1.13 2009/01/28 22:37:09 ad Exp $	*/
+/*	$NetBSD: cpuctl.c,v 1.10.2.3 2009/02/06 01:10:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cpuctl.c,v 1.13 2009/01/28 22:37:09 ad Exp $");
+__RCSID("$NetBSD: cpuctl.c,v 1.10.2.3 2009/02/06 01:10:26 snj Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: overlay_vfsops.c,v 1.54 2008/12/05 13:05:38 ad Exp $	*/
+/*	$NetBSD: overlay_vfsops.c,v 1.53 2008/06/28 01:34:06 rumble Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 National Aeronautics & Space Administration
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.54 2008/12/05 13:05:38 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.53 2008/06/28 01:34:06 rumble Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: overlay_vfsops.c,v 1.54 2008/12/05 13:05:38 ad Exp $
 #include <miscfs/overlay/overlay.h>
 #include <miscfs/genfs/layer_extern.h>
 
-MODULE(MODULE_CLASS_VFS, overlay, "layerfs");
+MODULE(MODULE_CLASS_VFS, overlay, NULL);
 
 VFS_PROTOS(ov);
 

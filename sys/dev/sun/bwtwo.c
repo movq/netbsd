@@ -1,4 +1,4 @@
-/*	$NetBSD: bwtwo.c,v 1.22 2009/02/23 22:44:27 jdc Exp $ */
+/*	$NetBSD: bwtwo.c,v 1.18.6.4 2009/02/26 07:42:06 snj Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bwtwo.c,v 1.22 2009/02/23 22:44:27 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bwtwo.c,v 1.18.6.4 2009/02/26 07:42:06 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

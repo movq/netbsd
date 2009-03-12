@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.files.mk,v 1.40 2008/12/05 18:51:16 cube Exp $
+#	$NetBSD: bsd.files.mk,v 1.39.2.1 2008/12/06 21:58:43 snj Exp $
 
 .if !defined(_BSD_FILES_MK_)
 _BSD_FILES_MK_=1

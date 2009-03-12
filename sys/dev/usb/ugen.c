@@ -1,4 +1,4 @@
-/*	$NetBSD: ugen.c,v 1.101 2009/01/20 18:20:48 drochner Exp $	*/
+/*	$NetBSD: ugen.c,v 1.99.8.3 2010/03/09 03:54:44 snj Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ugen.c,v 1.101 2009/01/20 18:20:48 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ugen.c,v 1.99.8.3 2010/03/09 03:54:44 snj Exp $");
 
 #include "opt_ugen_bulk_ra_wb.h"
 #include "opt_compat_netbsd.h"
@@ -283,6 +283,7 @@ Static int
 ugen_set_config(struct ugen_softc *sc, int configno)
 {
 	usbd_device_handle dev = sc->sc_udev;
+	usb_config_descriptor_t *cdesc;
 	usbd_interface_handle iface;
 	usb_endpoint_descriptor_t *ed;
 	struct ugen_endpoint *sce;
@@ -307,7 +308,8 @@ ugen_set_config(struct ugen_softc *sc, int configno)
 		}
 
 	/* Avoid setting the current value. */
-	if (usbd_get_config_descriptor(dev)->bConfigurationValue != configno) {
+	cdesc = usbd_get_config_descriptor(dev);
+	if (!cdesc || cdesc->bConfigurationValue != configno) {
 		err = usbd_set_config_no(dev, configno, 1);
 		if (err)
 			return (err);
@@ -501,7 +503,7 @@ ugenclose(dev_t dev, int flag, int mode, struct lwp *l)
 	int dir;
 	int i;
 
-	USB_GET_SC(ugen, UGENUNIT(dev), sc);
+	USB_GET_SC_OPEN(ugen, UGENUNIT(dev), sc);
 
 	DPRINTFN(5, ("ugenclose: flag=%d, mode=%d, unit=%d, endpt=%d\n",
 		     flag, mode, UGENUNIT(dev), endpt));
@@ -784,7 +786,7 @@ ugenread(dev_t dev, struct uio *uio, int flag)
 	struct ugen_softc *sc;
 	int error;
 
-	USB_GET_SC(ugen, UGENUNIT(dev), sc);
+	USB_GET_SC_OPEN(ugen, UGENUNIT(dev), sc);
 
 	sc->sc_refcnt++;
 	error = ugen_do_read(sc, endpt, uio, flag);
@@ -971,7 +973,7 @@ ugenwrite(dev_t dev, struct uio *uio, int flag)
 	struct ugen_softc *sc;
 	int error;
 
-	USB_GET_SC(ugen, UGENUNIT(dev), sc);
+	USB_GET_SC_OPEN(ugen, UGENUNIT(dev), sc);
 
 	sc->sc_refcnt++;
 	error = ugen_do_write(sc, endpt, uio, flag);
@@ -1732,6 +1734,8 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 		int error;
 
 		cdesc = ugen_get_cdesc(sc, fd->ufd_config_index, &len);
+		if (cdesc == NULL)
+			return (EINVAL);
 		if (len > fd->ufd_size)
 			len = fd->ufd_size;
 		iov.iov_base = (void *)fd->ufd_data;
@@ -1839,7 +1843,7 @@ ugenioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 	struct ugen_softc *sc;
 	int error;
 
-	USB_GET_SC(ugen, UGENUNIT(dev), sc);
+	USB_GET_SC_OPEN(ugen, UGENUNIT(dev), sc);
 
 	sc->sc_refcnt++;
 	error = ugen_do_ioctl(sc, endpt, cmd, addr, flag, l);
@@ -1856,7 +1860,7 @@ ugenpoll(dev_t dev, int events, struct lwp *l)
 	int revents = 0;
 	int s;
 
-	USB_GET_SC(ugen, UGENUNIT(dev), sc);
+	USB_GET_SC_OPEN(ugen, UGENUNIT(dev), sc);
 
 	if (sc->sc_dying)
 		return (POLLHUP);
@@ -2052,7 +2056,7 @@ ugenkqfilter(dev_t dev, struct knote *kn)
 	struct klist *klist;
 	int s;
 
-	USB_GET_SC(ugen, UGENUNIT(dev), sc);
+	USB_GET_SC_OPEN(ugen, UGENUNIT(dev), sc);
 
 	if (sc->sc_dying)
 		return (ENXIO);

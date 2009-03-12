@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.96 2008/11/19 18:36:01 ad Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.95.4.2 2010/01/09 01:43:51 snj Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,9 +49,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.96 2008/11/19 18:36:01 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.95.4.2 2010/01/09 01:43:51 snj Exp $");
 
 #include "opt_multiprocessor.h"
+#include "opt_coredump.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -207,6 +208,10 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2,
 		write_user_windows();
 		opcb->pcb_psr = getpsr();
 	}
+#ifdef DIAGNOSTIC
+	else if (l1 != &lwp0)	/* XXX is this valid? */
+		panic("cpu_lwp_fork: curlwp");
+#endif
 
 	bcopy((void *)opcb, (void *)npcb, sizeof(struct pcb));
 	if (l1->l_md.md_fpstate != NULL) {
@@ -271,9 +276,10 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2,
 
 	/* Construct kernel frame to return to in cpu_switch() */
 	rp = (struct rwindow *)((u_int)npcb + TOPFRAMEOFF);
+	/**rp = *(struct rwindow *)((u_int)opcb + TOPFRAMEOFF);*/
 	rp->rw_local[0] = (int)func;		/* Function to call */
 	rp->rw_local[1] = (int)arg;		/* and its argument */
-	rp->rw_local[2] = (int)l2;		/* the new LWP */
+	rp->rw_local[2] = (int)l2;		/* new LWP */
 
 	npcb->pcb_pc = (int)lwp_trampoline - 8;
 	npcb->pcb_sp = (int)rp;
@@ -331,10 +337,52 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	rp = (struct rwindow *)((u_int)pcb + TOPFRAMEOFF);
 	rp->rw_local[0] = (int)func;		/* Function to call */
 	rp->rw_local[1] = (int)arg;		/* and its argument */
-	rp->rw_local[2] = (int)l;		/* new lwp */
 
-	pcb->pcb_pc = (int)lwp_trampoline - 8;
+	pcb->pcb_pc = (int)lwp_setfunc_trampoline - 8;
 	pcb->pcb_sp = (int)rp;
 	pcb->pcb_psr &= ~PSR_CWP;	/* Run in window #0 */
 	pcb->pcb_wim = 1;		/* Fence at window #1 */
 }
+
+#ifdef COREDUMP
+/*
+ * cpu_coredump is called to write a core dump header.
+ * (should this be defined elsewhere?  machdep.c?)
+ */
+int
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+{
+	int error;
+	struct md_coredump md_core;
+	struct coreseg cseg;
+
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
+		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
+		chdr->c_cpusize = sizeof(md_core);
+		chdr->c_nseg++;
+		return 0;
+	}
+
+	md_core.md_tf = *l->l_md.md_tf;
+	if (l->l_md.md_fpstate) {
+		if (l == cpuinfo.fplwp)
+			savefpstate(l->l_md.md_fpstate);
+		md_core.md_fpstate = *l->l_md.md_fpstate;
+	} else
+		bzero((void *)&md_core.md_fpstate, sizeof(struct fpstate));
+
+	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
+	cseg.c_addr = 0;
+	cseg.c_size = chdr->c_cpusize;
+
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+	    chdr->c_seghdrsize);
+	if (error)
+		return error;
+
+	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
+	    sizeof(md_core));
+}
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: pl_main.c,v 1.19 2009/03/02 07:33:30 dholland Exp $	*/
+/*	$NetBSD: pl_main.c,v 1.17 2006/04/20 10:57:26 drochner Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,11 +34,10 @@
 #if 0
 static char sccsid[] = "@(#)pl_main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: pl_main.c,v 1.19 2009/03/02 07:33:30 dholland Exp $");
+__RCSID("$NetBSD: pl_main.c,v 1.17 2006/04/20 10:57:26 drochner Exp $");
 #endif
 #endif /* not lint */
 
-#include <err.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>
@@ -87,11 +86,12 @@ reprint:
 		printf("\nScenario number? ");
 		fflush(stdout);
 		scanf("%d", &game);
-		while (getchar() != '\n' && !feof(stdin))
+		while (getchar() != '\n')
 			;
 	}
 	if (game < 0 || game >= NSCENE) {
-		errx(1, "Very funny.");
+		puts("Very funny.");
+		exit(1);
 	}
 	cc = &scene[game];
 	ls = SHIP(cc->vessels);
@@ -101,7 +101,8 @@ reprint:
 	foreachship(sp) {
 		if (sp->file == NULL &&
 		    (sp->file = (struct File *)calloc(1, sizeof (struct File))) == NULL) {
-			err(1, "calloc");
+			puts("OUT OF MEMORY");
+			exit(1);
 		}
 		sp->file->index = sp - SHIP(0);
 		sp->file->stern = nat[sp->nationality]++;
@@ -117,7 +118,8 @@ reprint:
 
 	hasdriver = sync_exists(game);
 	if (sync_open() < 0) {
-		err(1, "syncfile");
+		perror("sail: syncfile");
+		exit(1);
 	}
 
 	if (hasdriver) {
@@ -154,17 +156,13 @@ reprint:
 			fflush(stdout);
 			if (scanf("%d", &player) != 1 || player < 0
 			    || player >= cc->vessels) {
-				while (getchar() != '\n' && !feof(stdin))
+				while (getchar() != '\n')
 					;
 				puts("Say what?");
 				player = -1;
 			} else
-				while (getchar() != '\n' && !feof(stdin))
+				while (getchar() != '\n')
 					;
-			if (feof(stdin)) {
-				printf("\nExiting...\n");
-				leave(LEAVE_QUIT);
-			}
 		}
 		if (player < 0)
 			continue;
@@ -207,9 +205,8 @@ reprint:
 	else {
 		printf("Your name, Captain? ");
 		fflush(stdout);
-		if (fgets(captain, sizeof captain, stdin) == NULL)
-			strcpy(captain, "no name");
-		else if (*captain == '\0' || *captain == '\n')
+		fgets(captain, sizeof captain, stdin);
+		if (!*captain)
 			strcpy(captain, "no name");
 		else
 		    captain[strlen(captain) - 1] = '\0';
@@ -248,8 +245,6 @@ reprint:
 		}
 	}
 
-	printf("\n");
-	fflush(stdout);
 	initscreen();
 	draw_board();
 	snprintf(message, sizeof message, "Captain %s assuming command",

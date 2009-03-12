@@ -1,4 +1,4 @@
-/*	$NetBSD: perform.c,v 1.1.1.3 2009/02/14 17:19:14 joerg Exp $	*/
+/*	$NetBSD: perform.c,v 1.1.1.1.6.3 2010/02/03 00:38:21 snj Exp $	*/
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -7,7 +7,7 @@
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
 #endif
-__RCSID("$NetBSD: perform.c,v 1.1.1.3 2009/02/14 17:19:14 joerg Exp $");
+__RCSID("$NetBSD: perform.c,v 1.1.1.1.6.3 2010/02/03 00:38:21 snj Exp $");
 
 /*
  * FreeBSD install - a package for the installation and maintainance
@@ -99,18 +99,15 @@ fileGetContents(char *fname)
 	int     fd;
 
 	if (stat(fname, &sb) == FAIL) {
-		cleanup(0);
 		errx(2, "can't stat '%s'", fname);
 	}
 
 	contents = xmalloc((size_t) (sb.st_size) + 1);
 	fd = open(fname, O_RDONLY, 0);
 	if (fd == FAIL) {
-		cleanup(0);
 		errx(2, "unable to open '%s' for reading", fname);
 	}
-	if (read(fd, contents, (size_t) sb.st_size) != (size_t) sb.st_size) {
-		cleanup(0);
+	if (read(fd, contents, (size_t) sb.st_size) != (ssize_t) sb.st_size) {
 		errx(2, "short read on '%s' - did not get %lld bytes",
 		    fname, (long long) sb.st_size);
 	}
@@ -170,13 +167,6 @@ pkg_perform(const char *pkg)
 	}
 
 	plist.head = plist.tail = NULL;
-
-	/* If a SrcDir override is set, add it now */
-	if (SrcDir) {
-		if (Verbose && !PlistOnly)
-			printf("Using SrcDir value of %s\n", (realprefix) ? realprefix : SrcDir);
-		add_plist(&plist, PLIST_SRC, SrcDir);
-	}
 
 	/* Stick the dependencies, if any, at the top */
 	if (Pkgdeps)

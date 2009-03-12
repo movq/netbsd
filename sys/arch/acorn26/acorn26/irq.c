@@ -1,4 +1,4 @@
-/* $NetBSD: irq.c,v 1.14 2009/01/17 15:43:52 bjh21 Exp $ */
+/* $NetBSD: irq.c,v 1.8.28.2 2009/02/02 00:29:10 snj Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 Ben Harris
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irq.c,v 1.14 2009/01/17 15:43:52 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irq.c,v 1.8.28.2 2009/02/02 00:29:10 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -76,6 +76,8 @@ __KERNEL_RCSID(0, "$NetBSD: irq.c,v 1.14 2009/01/17 15:43:52 bjh21 Exp $");
 #define NIRQ 20
 extern char *irqnames[];
 
+int current_intr_depth = 0;
+
 #if NFIQ > 0
 void (*fiq_downgrade_handler)(void);
 int fiq_want_downgrade;
@@ -96,7 +98,7 @@ LIST_HEAD(irq_handler_head, irq_handler) irq_list_head =
 
 struct irq_handler {
 	LIST_ENTRY(irq_handler)	link;
-	int	(*func)(void *);
+	int	(*func) __P((void *));
 	void	*arg;
 	u_int32_t	mask;
 	int	irqnum;
@@ -127,7 +129,7 @@ irq_handler(struct irqframe *irqf)
 	int s, status, result, stray;
 	struct irq_handler *h;
 
-	curcpu()->ci_intr_depth++;
+	current_intr_depth++;
 	KASSERT(the_ioc != NULL);
 	/* Get the current interrupt state */
 	status = ioc_irq_status_full();
@@ -199,7 +201,7 @@ handled:
 #endif
 
 	hardsplx(s);
-	curcpu()->ci_intr_depth--;
+	current_intr_depth--;
 
 	/* Check if we're in the kernel restartable atomic sequence. */
 	if ((irqf->if_r15 & R15_MODE) != R15_MODE_USR) {
@@ -209,7 +211,7 @@ handled:
 		extern struct evcnt _lock_cas_restart;
 #endif
 
-		if (pc > _lock_cas && pc < _lock_cas_end) {
+		if (pc >= _lock_cas && pc < _lock_cas_end) {
 			irqf->if_r15 = (irqf->if_r15 & ~R15_PC) | 
 			    (register_t)_lock_cas;
 #ifdef ARM_LOCK_CAS_DEBUG
@@ -218,6 +220,13 @@ handled:
 		}
 	}
 	    
+}
+
+bool
+cpu_intr_p(void)
+{
+
+	return current_intr_depth != 0;
 }
 
 struct irq_handler *
@@ -230,8 +239,9 @@ irq_establish(int irqnum, int ipl, int (*func)(void *), void *arg,
 	if (irqnum >= NIRQ)
 		panic("irq_register: bad irq: %d", irqnum);
 #endif
-	new = (struct irq_handler *)malloc(sizeof(struct irq_handler),
-	       M_DEVBUF, M_WAITOK | M_ZERO);
+	MALLOC(new, struct irq_handler *, sizeof(struct irq_handler),
+	       M_DEVBUF, M_WAITOK);
+	bzero(new, sizeof(*new));
 	new->irqnum = irqnum;
 	new->mask = 1 << irqnum;
 #if NUNIXBP > 0

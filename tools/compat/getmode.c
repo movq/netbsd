@@ -1,4 +1,4 @@
-/*	$NetBSD: getmode.c,v 1.8 2008/11/04 23:31:32 dbj Exp $	*/
+/*	$NetBSD: getmode.c,v 1.7.6.1 2010/02/16 21:26:39 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

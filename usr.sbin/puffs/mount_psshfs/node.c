@@ -1,4 +1,4 @@
-/*	$NetBSD: node.c,v 1.55 2009/01/01 13:41:45 pooka Exp $	*/
+/*	$NetBSD: node.c,v 1.54.4.1 2009/01/16 01:52:17 snj Exp $	*/
 
 /*
  * Copyright (c) 2006  Antti Kantee.  All Rights Reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: node.c,v 1.55 2009/01/01 13:41:45 pooka Exp $");
+__RCSID("$NetBSD: node.c,v 1.54.4.1 2009/01/16 01:52:17 snj Exp $");
 #endif /* !lint */
 
 #include <assert.h>

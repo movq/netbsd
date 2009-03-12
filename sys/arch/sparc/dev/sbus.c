@@ -1,4 +1,4 @@
-/*	$NetBSD: sbus.c,v 1.71 2008/12/16 22:35:25 christos Exp $ */
+/*	$NetBSD: sbus.c,v 1.70 2008/06/13 13:10:18 cegger Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.71 2008/12/16 22:35:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.70 2008/06/13 13:10:18 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -660,8 +660,8 @@ static	int straytime, nstray;
 
 	afsr = bus_space_read_4(sc->sc_bustag, bh, SBUS_AFSR_REG);
 	afva = bus_space_read_4(sc->sc_bustag, bh, SBUS_AFAR_REG);
-	snprintb(bits, sizeof(bits), SBUS_AFSR_BITS, afsr);
-	printf("sbus error:\n\tAFSR %s\n", bits);
+	printf("sbus error:\n\tAFSR %s\n",
+		bitmask_snprintf(afsr, SBUS_AFSR_BITS, bits, sizeof(bits)));
 	printf("\taddress: 0x%x%x\n", afsr & SBUS_AFSR_PAH, afva);
 
 	/* For now, do the same dance as on stray interrupts */

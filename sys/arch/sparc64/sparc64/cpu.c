@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.80 2009/01/25 10:37:15 martin Exp $ */
+/*	$NetBSD: cpu.c,v 1.78.4.1 2010/03/17 02:51:09 snj Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.80 2009/01/25 10:37:15 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.78.4.1 2010/03/17 02:51:09 snj Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -60,7 +60,6 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.80 2009/01/25 10:37:15 martin Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/reboot.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -118,8 +117,7 @@ alloc_cpuinfo(u_int cpu_node)
 	/*
 	 * Check for UPAID in the cpus list.
 	 */
-	if (OF_getprop(cpu_node, "upa-portid", &portid, sizeof(portid)) <= 0 &&
-	    OF_getprop(cpu_node, "portid", &portid, sizeof(portid)) <= 0)
+	if (OF_getprop(cpu_node, "upa-portid", &portid, sizeof(portid)) <= 0)
 		panic("alloc_cpuinfo: upa-portid");
 
 	for (cpi = cpus; cpi != NULL; cpi = cpi->ci_next)
@@ -281,9 +279,7 @@ cpu_attach(struct device *parent, struct device *dev, void *aux)
 		/* void */;
 	if ((1 << i) != l && l)
 		panic("bad icache line size %d", l);
-	totalsize =
-		prom_getpropint(node, "icache-size", 0) *
-		prom_getpropint(node, "icache-associativity", 1);
+	totalsize = prom_getpropint(node, "icache-size", 0);
 	if (totalsize == 0)
 		totalsize = l *
 			prom_getpropint(node, "icache-nlines", 64) *
@@ -307,9 +303,7 @@ cpu_attach(struct device *parent, struct device *dev, void *aux)
 		/* void */;
 	if ((1 << i) != l && l)
 		panic("bad dcache line size %d", l);
-	totalsize =
-		prom_getpropint(node, "dcache-size", 0) *
-		prom_getpropint(node, "dcache-associativity", 1);
+	totalsize = prom_getpropint(node, "dcache-size", 0);
 	if (totalsize == 0)
 		totalsize = l *
 			prom_getpropint(node, "dcache-nlines", 128) *
@@ -333,9 +327,7 @@ cpu_attach(struct device *parent, struct device *dev, void *aux)
 		/* void */;
 	if ((1 << i) != l && l)
 		panic("bad ecache line size %d", l);
-	totalsize = 
-		prom_getpropint(node, "ecache-size", 0) *
-		prom_getpropint(node, "ecache-associativity", 1);
+	totalsize = prom_getpropint(node, "ecache-size", 0);
 	if (totalsize == 0)
 		totalsize = l *
 			prom_getpropint(node, "ecache-nlines", 32768) *
@@ -378,12 +370,6 @@ cpu_boot_secondary_processors()
 	struct cpu_info *ci;
 
 	sparc64_ipi_init();
-
-	if (boothowto & RB_MD1) {
-		cpus[0].ci_next = NULL;
-		sparc_ncpus = ncpu = ncpuonline = 1;
-		return;
-	}
 
 	for (ci = cpus; ci != NULL; ci = ci->ci_next) {
 		if (ci->ci_cpuid == CPU_UPAID)

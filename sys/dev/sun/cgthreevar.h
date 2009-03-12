@@ -1,4 +1,4 @@
-/*	$NetBSD: cgthreevar.h,v 1.7 2009/02/23 22:44:27 jdc Exp $ */
+/*	$NetBSD: cgthreevar.h,v 1.5.10.2 2009/02/26 07:42:06 snj Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

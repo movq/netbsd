@@ -1,4 +1,4 @@
-/* $NetBSD: localeconv.c,v 1.16 2009/01/11 02:46:28 christos Exp $ */
+/* $NetBSD: localeconv.c,v 1.14.18.1 2009/01/15 03:24:07 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: localeconv.c,v 1.16 2009/01/11 02:46:28 christos Exp $");
+__RCSID("$NetBSD: localeconv.c,v 1.14.18.1 2009/01/15 03:24:07 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>

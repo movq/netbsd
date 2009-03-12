@@ -1,4 +1,4 @@
-/*	$NetBSD: hpc.c,v 1.61 2009/02/12 06:33:57 rumble Exp $	*/
+/*	$NetBSD: hpc.c,v 1.60.30.1 2009/09/26 18:03:06 snj Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpc.c,v 1.61 2009/02/12 06:33:57 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpc.c,v 1.60.30.1 2009/09/26 18:03:06 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -144,6 +144,12 @@ static const struct hpc_device hpc1_devices[] = {
 	  23,
 	  HPCDEV_IP24 },
 
+	{ "dpclock",	/* Personal Iris/Indigo clock */
+	  HPC_BASE_ADDRESS_0,
+	  HPC1_PBUS_BBRAM, 0,
+	  -1,
+	  HPCDEV_IP12 | HPCDEV_IP20 },
+
 	{ NULL,
 	  0,
 	  0, 0,
@@ -190,6 +196,12 @@ static const struct hpc_device hpc3_devices[] = {
 	  2,	/* XXX 2 = IRQ_LOCAL0 + 2 */
 	  HPCDEV_IP22 },
 
+	{ "dsclock",	/* Indigo2/Indy/Challenge S/Challenge M clock */
+	  HPC_BASE_ADDRESS_0,
+	  HPC3_PBUS_BBRAM, 0,
+	  -1,
+	  HPCDEV_IP22 | HPCDEV_IP24 },
+
 	{ "haltwo",	/* Indigo2/Indy onboard audio */
 	  HPC_BASE_ADDRESS_0,
 	  HPC3_PBUS_CH0_DEVREGS, HPC3_PBUS_DMAREGS,
@@ -201,6 +213,12 @@ static const struct hpc_device hpc3_devices[] = {
 	  HPC3_PBUS_CH6_DEVREGS + IOC_PLP_REGS, 0,
 	  -1,
 	  HPCDEV_IP22 | HPCDEV_IP24 },
+
+	{ "panel",	/* Indy front panel */
+	  HPC_BASE_ADDRESS_0,
+	  HPC3_PBUS_CH6_DEVREGS + IOC_PANEL, 0,
+	  9,
+	  HPCDEV_IP24 },
 
 	{ NULL,
 	  0,
@@ -372,15 +390,12 @@ hpc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct gio_attach_args* ga = aux;
 
-	if (mach_type == MACH_SGI_IP12 || mach_type == MACH_SGI_IP20 ||
-	    mach_type == MACH_SGI_IP22) {
-		/* Make sure it's actually there and readable */
-		if (!platform.badaddr((void*)MIPS_PHYS_TO_KSEG1(ga->ga_addr),
-		    sizeof(u_int32_t)))
-			return 1;
-	}
+	/* Make sure it's actually there and readable */
+	if (platform.badaddr((void*)MIPS_PHYS_TO_KSEG1(ga->ga_addr),
+	    sizeof(u_int32_t)))
+		return 0;
 
-	return 0;
+	return 1;
 }
 
 static void

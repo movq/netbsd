@@ -1,4 +1,4 @@
-/*	$NetBSD: rune_local.h,v 1.12 2009/01/11 02:46:29 christos Exp $	*/
+/*	$NetBSD: rune_local.h,v 1.10.8.1 2009/01/15 03:24:08 snj Exp $	*/
 
 /*-
  * Copyright (c) 2000 Citrus Project,

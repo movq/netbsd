@@ -1,4 +1,4 @@
-/*	$NetBSD: pmsvar.h,v 1.8 2008/12/14 00:42:33 jmcneill Exp $	*/
+/*	$NetBSD: pmsvar.h,v 1.7.14.1 2009/09/13 22:07:47 snj Exp $	*/
 
 /*-
  * Copyright (c) 2004 Kentaro Kurahone.

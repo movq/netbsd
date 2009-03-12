@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.57 2008/12/18 15:42:33 cegger Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.55.4.3 2010/09/07 19:38:20 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,19 +36,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.57 2008/12/18 15:42:33 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.55.4.3 2010/09/07 19:38:20 bouyer Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
 #include "opt_coredump.h"
 #include "opt_execfmt.h"
 #include "opt_user_ldt.h"
 #include "opt_mtrr.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/exec.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/signalvar.h>
 #include <sys/systm.h>
@@ -268,6 +266,9 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	tf->tf_fs = GSEL(GUDATA32_SEL, SEL_UPL);
 	tf->tf_gs = GSEL(GUDATA32_SEL, SEL_UPL);
 
+	/* Ensure FP state is reset, if FP is used. */
+	l->l_md.md_flags &= ~MDP_USEDFPU;
+
 	tf->tf_rip = (uint64_t)catcher;
 	tf->tf_cs = GSEL(GUCODE32_SEL, SEL_UPL);
 	tf->tf_rflags &= ~PSL_CLEARSIG;
@@ -358,6 +359,9 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	tf->tf_rflags &= ~PSL_CLEARSIG;
 	tf->tf_rsp = (uint64_t)fp;
 	tf->tf_ss = GSEL(GUDATA32_SEL, SEL_UPL);
+
+	/* Ensure FP state is reset, if FP is used. */
+	l->l_md.md_flags &= ~MDP_USEDFPU;
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
@@ -632,7 +636,6 @@ x86_64_get_mtrr32(struct lwp *l, void *args, register_t *retval)
 	int32_t n;
 	struct mtrr32 *m32p, m32;
 	struct mtrr *m64p, *mp;
-	size_t size;
 
 	m64p = NULL;
 
@@ -660,8 +663,7 @@ x86_64_get_mtrr32(struct lwp *l, void *args, register_t *retval)
 	if (n <= 0 || n > (MTRR_I686_NFIXED_SOFT + MTRR_I686_NVAR_MAX))
 		return EINVAL;
 
-	size = n * sizeof(struct mtrr);
-	m64p = kmem_zalloc(size, KM_SLEEP);
+	m64p = malloc(n * sizeof (struct mtrr), M_TEMP, M_WAITOK);
 	if (m64p == NULL) {
 		error = ENOMEM;
 		goto fail;
@@ -685,11 +687,12 @@ x86_64_get_mtrr32(struct lwp *l, void *args, register_t *retval)
 	}
 fail:
 	if (m64p != NULL)
-		kmem_free(m64p, size);
+		free(m64p, M_TEMP);
 	if (error != 0)
 		n = 0;
 	copyout(&n, (void *)(uintptr_t)args32.n, sizeof n);
 	return error;
+		
 }
 
 static int
@@ -700,7 +703,6 @@ x86_64_set_mtrr32(struct lwp *l, void *args, register_t *retval)
 	struct mtrr *m64p, *mp;
 	int error, i;
 	int32_t n;
-	size_t size;
 
 	m64p = NULL;
 
@@ -725,8 +727,7 @@ x86_64_set_mtrr32(struct lwp *l, void *args, register_t *retval)
 		goto fail;
 	}
 
-	size = n * sizeof(struct mtrr);
-	m64p = kmem_zalloc(size, KM_SLEEP);
+	m64p = malloc(n * sizeof (struct mtrr), M_TEMP, M_WAITOK);
 	if (m64p == NULL) {
 		error = ENOMEM;
 		goto fail;
@@ -749,7 +750,7 @@ x86_64_set_mtrr32(struct lwp *l, void *args, register_t *retval)
 	error = mtrr_set(m64p, &n, l->l_proc, 0);
 fail:
 	if (m64p != NULL)
-		kmem_free(m64p, size);
+		free(m64p, M_TEMP);
 	if (error != 0)
 		n = 0;
 	copyout(&n, (void *)(uintptr_t)args32.n, sizeof n);
@@ -941,7 +942,9 @@ startlwp32(void *arg)
 static int
 check_sigcontext32(const struct netbsd32_sigcontext *scp, struct trapframe *tf)
 {
-	if (((scp->sc_eflags ^ tf->tf_rflags) & PSL_USERSTATIC) != 0)
+
+	if (((scp->sc_eflags ^ tf->tf_rflags) & PSL_USERSTATIC) != 0 ||
+	    !VALID_USER_CSEL32(scp->sc_cs))
 		return EINVAL;
 	if (scp->sc_fs != 0 && !VALID_USER_DSEL32(scp->sc_fs))
 		return EINVAL;
@@ -963,7 +966,8 @@ check_mcontext32(const mcontext32_t *mcp, struct trapframe *tf)
 
 	gr = mcp->__gregs;
 
-	if (((gr[_REG32_EFL] ^ tf->tf_rflags) & PSL_USERSTATIC) != 0)
+	if (((gr[_REG32_EFL] ^ tf->tf_rflags) & PSL_USERSTATIC) != 0 ||
+	    !VALID_USER_CSEL32(gr[_REG32_CS]))
 		return EINVAL;
 	if (gr[_REG32_FS] != 0 && !VALID_USER_DSEL32(gr[_REG32_FS]))
 		return EINVAL;

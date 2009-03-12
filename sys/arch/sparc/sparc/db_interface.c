@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.83 2009/03/10 23:58:20 martin Exp $ */
+/*	$NetBSD: db_interface.c,v 1.79.4.1 2009/05/30 16:57:18 snj Exp $ */
 
 /*
  * Mach Operating System
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.83 2009/03/10 23:58:20 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.79.4.1 2009/05/30 16:57:18 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -377,9 +377,9 @@ db_proc_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	db_printf("maxsaddr:%p ssiz:%d pg or %llxB\n",
 		  p->p_vmspace->vm_maxsaddr, p->p_vmspace->vm_ssize,
 		  (unsigned long long)ctob(p->p_vmspace->vm_ssize));
-	db_printf("profile timer: %lld sec %ld nsec\n",
+	db_printf("profile timer: %ld sec %ld usec\n",
 		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_sec,
-		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_nsec);
+		  p->p_stats->p_timer[ITIMER_PROF].it_value.tv_usec);
 	db_printf("pcb: %p\n", &l->l_addr->u_pcb);
 	return;
 }
@@ -396,10 +396,10 @@ db_dump_pcb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	else
 		pcb = curcpu()->curpcb;
 
-	snprintb(bits, sizeof(bits), PSR_BITS, pcb->pcb_psr);
 	db_printf("pcb@%p sp:%p pc:%p psr:%s onfault:%p\nfull windows:\n",
 		  pcb, (void *)(long)pcb->pcb_sp, (void *)(long)pcb->pcb_pc,
-		  bits, (void *)pcb->pcb_onfault);
+		  bitmask_snprintf(pcb->pcb_psr, PSR_BITS, bits, sizeof(bits)),
+		  (void *)pcb->pcb_onfault);
 
 	for (i=0; i<pcb->pcb_nsaved; i++) {
 		db_printf("win %d: at %llx local, in\n", i,

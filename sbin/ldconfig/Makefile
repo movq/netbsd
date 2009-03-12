@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.22 2008/10/31 20:24:52 mrg Exp $
+#	$NetBSD: Makefile,v 1.21.40.1 2008/11/06 23:51:27 snj Exp $
 
 .include <bsd.own.mk>   # For OBJECT_FMT
 .include <bsd.shlib.mk>

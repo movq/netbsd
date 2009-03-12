@@ -1,4 +1,4 @@
-/*	$NetBSD: regexec.c,v 1.3 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: regexec.c,v 1.1.1.2.6.2 2009/11/01 16:10:12 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994 Henry Spencer.
@@ -67,7 +67,7 @@ static int nope = 0;		/* for use in asserts; shuts lint up */
 
 /* macros for manipulating states, small version */
 #define	states	int
-#define	states1	states		/* for later use in regexec() decision */
+#define	states1	int		/* for later use in regexec() decision */
 #define	CLEAR(v)	((v) = 0)
 #define	SET0(v, n)	((v) &= ~(1 << (n)))
 #define	SET1(v, n)	((v) |= 1 << (n))
@@ -173,7 +173,7 @@ regexec(const regex_t *preg, const RCHAR_T *string, size_t nmatch, regmatch_t *p
 		return(REG_BADPAT);
 	eflags = GOODFLAGS(eflags);
 
-	if (g->nstates <= (int)(CHAR_BIT*sizeof(states1)) && !(eflags&REG_LARGE))
+	if (g->nstates <= CHAR_BIT*sizeof(states1) && !(eflags&REG_LARGE))
 		return(smatcher(g, (RCHAR_T *)__UNCONST(string), nmatch, pmatch, eflags));
 	else
 		return(lmatcher(g, (RCHAR_T *)__UNCONST(string), nmatch, pmatch, eflags));

@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctlgetmibinfo.c,v 1.7 2009/02/12 04:13:08 lukem Exp $ */
+/*	$NetBSD: sysctlgetmibinfo.c,v 1.6 2008/04/29 06:53:01 martin Exp $ */
 
 /*-
  * Copyright (c) 2003,2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: sysctlgetmibinfo.c,v 1.7 2009/02/12 04:13:08 lukem Exp $");
+__RCSID("$NetBSD: sysctlgetmibinfo.c,v 1.6 2008/04/29 06:53:01 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -124,8 +124,7 @@ relearnhead(void)
 {
 	struct sysctlnode *h, *i, *o, qnode;
 	size_t si, so;
-	int rc, name, nlen, olen, ni, oi;
-	uint32_t t;
+	int rc, name, nlen, olen, ni, oi, t;
 
 	/*
 	 * if there's nothing there, there's no need to expend any
@@ -265,7 +264,7 @@ int
 __learn_tree(int *name, u_int namelen, struct sysctlnode *pnode)
 {
 	struct sysctlnode qnode;
-	uint32_t rc;
+	int rc;
 	size_t sz;
 
 	if (pnode == NULL)
@@ -399,8 +398,8 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 #endif /* _REENTRANT */
 {
 	struct sysctlnode *pnode, *node;
-	int name[CTL_MAXNAME], n, haven;
-	u_int ni, nl;
+	int name[CTL_MAXNAME], ni, n, haven;
+	u_int nl;
 	intmax_t q;
 	char sep[2], token[SYSCTL_NAMELEN],
 		pname[SYSCTL_NAMELEN * CTL_MAXNAME + CTL_MAXNAME];
@@ -418,7 +417,7 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 		}
 		else {
 			/* this is just someone being silly */
-			if (SYSCTL_VERS((*rnode)->sysctl_flags) != (uint32_t)v)
+			if (SYSCTL_VERS((*rnode)->sysctl_flags) != v)
 				return (EINVAL);
 
 			/* XXX later deal with other people's trees */
@@ -477,7 +476,7 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 				return (-1);
 			}
 		}
-		else if (dot - piece > (intptr_t)(sizeof(token) - 1)) {
+		else if (dot - piece > sizeof(token) - 1) {
 			COPY_OUT_DATA(token, cname, csz, namelenp, nl);
 			errno = ENAMETOOLONG;
 			return (-1);

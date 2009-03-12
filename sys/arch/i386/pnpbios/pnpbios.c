@@ -1,4 +1,4 @@
-/* $NetBSD: pnpbios.c,v 1.65 2009/03/11 10:30:52 cegger Exp $ */
+/* $NetBSD: pnpbios.c,v 1.64 2008/07/11 11:58:37 cube Exp $ */
 
 /*
  * Copyright (c) 2000 Jason R. Thorpe.  All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pnpbios.c,v 1.65 2009/03/11 10:30:52 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pnpbios.c,v 1.64 2008/07/11 11:58:37 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -124,7 +124,7 @@ static int	pnpbios_sendmessage(int);
 #endif
 
 /* configuration stuff */
-static void *	pnpbios_mapit(paddr_t, u_long, int);
+static void *	pnpbios_mapit(u_long, u_long, int);
 static void *	pnpbios_find(void);
 static int	pnpbios_match(struct device *,
 			    struct cfdata *, void *);
@@ -255,9 +255,9 @@ pnpbios_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void *
-pnpbios_mapit(paddr_t addr, u_long len, int prot)
+pnpbios_mapit(u_long addr, u_long len, int prot)
 {
-	paddr_t startpa, pa, endpa;
+	u_long startpa, pa, endpa;
 	vaddr_t startva, va;
 
 	pa = startpa = x86_trunc_page(addr);

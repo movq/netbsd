@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.233 2009/03/10 23:58:20 martin Exp $ */
+/*	$NetBSD: autoconf.c,v 1.229.4.1 2009/05/30 16:57:18 snj Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,11 +48,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.233 2009/03/10 23:58:20 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.229.4.1 2009/05/30 16:57:18 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_sparc_arch.h"
 
@@ -120,7 +119,7 @@ extern	int kgdb_debug_panic;
 #endif
 extern void *bootinfo;
 
-#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
+#if !NKSYMS && !defined(DDB) && !defined(LKM)
 void bootinfo_relocate(void *);
 #endif
 
@@ -264,7 +263,7 @@ void
 bootstrap(void)
 {
 	extern struct user *proc0paddr;
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	struct btinfo_symtab *bi_sym;
 #else
 	extern int end[];
@@ -290,7 +289,7 @@ bootstrap(void)
 	}
 #endif /* SUN4M || SUN4D */
 
-#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
+#if !NKSYMS && !defined(DDB) && !defined(LKM)
 	/*
 	 * We want to reuse the memory where the symbols were stored
 	 * by the loader. Relocate the bootinfo array which is loaded
@@ -342,15 +341,16 @@ bootstrap(void)
 	}
 #endif /* SUN4 || SUN4C */
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+
+#if NKSYMS || defined(DDB) || defined(LKM)
 	if ((bi_sym = lookup_bootinfo(BTINFO_SYMTAB)) != NULL) {
 		if (bi_sym->ssym < KERNBASE) {
 			/* Assume low-loading boot loader */
 			bi_sym->ssym += KERNBASE;
 			bi_sym->esym += KERNBASE;
 		}
-		ksyms_addsyms_elf(bi_sym->nsym, (void*)bi_sym->ssym,
-		    (void*)bi_sym->esym);
+		ksyms_init(bi_sym->nsym, (int *)bi_sym->ssym,
+		    (int *)bi_sym->esym);
 	}
 #endif
 }
@@ -1869,7 +1869,7 @@ lookup_bootinfo(int type)
 	return (NULL);
 }
 
-#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
+#if !NKSYMS && !defined(DDB) && !defined(LKM)
 /*
  * Move bootinfo from the current kernel top to the proposed
  * location. As a side-effect, `kernel_top' is adjusted to point
@@ -1931,4 +1931,4 @@ bootinfo_relocate(void *newloc)
 	bootinfo = newloc;
 	kernel_top = (char *)newloc + ALIGN(bi_size);
 }
-#endif /* !NKSYMS && !defined(DDB) && !defined(MODULAR) */
+#endif /* !NKSYMS && !defined(DDB) && !defined(LKM) */

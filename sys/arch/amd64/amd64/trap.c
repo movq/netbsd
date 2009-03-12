@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.54 2009/02/24 06:03:54 yamt Exp $	*/
+/*	$NetBSD: trap.c,v 1.52.4.2 2009/08/14 21:25:34 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -68,11 +68,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.54 2009/02/24 06:03:54 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.52.4.2 2009/08/14 21:25:34 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "opt_lockdebug.h"
+#include "opt_multiprocessor.h"
+#include "opt_compat_netbsd.h"
+#include "opt_compat_ibcs2.h"
 #include "opt_xen.h"
+#if !defined(XEN)
+#include "tprof.h"
+#else /* !defined(XEN) */
+#define	NTPROF	0
+#endif /* !defined(XEN) */
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,6 +101,10 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.54 2009/02/24 06:03:54 yamt Exp $");
 
 #include <uvm/uvm_extern.h>
 
+#if NTPROF > 0
+#include <x86/tprof.h>
+#endif /* NTPROF > 0 */
+
 #include <machine/cpufunc.h>
 #include <machine/fpu.h>
 #include <machine/psl.h>
@@ -101,8 +114,6 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.54 2009/02/24 06:03:54 yamt Exp $");
 #ifdef DDB
 #include <machine/db_machdep.h>
 #endif
-
-#include <x86/nmi.h>
 
 #ifndef XEN
 #include "isa.h"
@@ -169,7 +180,9 @@ trap(struct trapframe *frame)
 	struct pcb *pcb;
 	extern char fusuintrfailure[], kcopy_fault[],
 		    resume_iret[];
+#if defined(COMPAT_10) || defined(COMPAT_IBCS2)
 	extern char IDTVEC(oosyscall)[];
+#endif
 #if 0
 	extern char resume_pop_ds[], resume_pop_es[];
 #endif
@@ -312,26 +325,35 @@ copyfault:
 	case T_STKFLT|T_USER:
 	case T_ALIGNFLT|T_USER:
 #ifdef TRAP_SIGDEBUG
-		printf("pid %d (%s): BUS (%x) at rip %lx addr %lx\n",
+		printf("pid %d (%s): BUS/SEGV (%x) at rip %lx addr %lx\n",
 		    p->p_pid, p->p_comm, type, frame->tf_rip, rcr2());
 		frame_dump(frame);
 #endif
 		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGBUS;
 		ksi.ksi_trap = type & ~T_USER;
 		ksi.ksi_addr = (void *)rcr2();
 		switch (type) {
 		case T_SEGNPFLT|T_USER:
 		case T_STKFLT|T_USER:
+			ksi.ksi_signo = SIGBUS;
 			ksi.ksi_code = BUS_ADRERR;
 			break;
 		case T_TSSFLT|T_USER:
+			ksi.ksi_signo = SIGBUS;
 			ksi.ksi_code = BUS_OBJERR;
 			break;
 		case T_ALIGNFLT|T_USER:
+			ksi.ksi_signo = SIGBUS;
 			ksi.ksi_code = BUS_ADRALN;
 			break;
+		case T_PROTFLT|T_USER:
+			ksi.ksi_signo = SIGSEGV;
+			ksi.ksi_code = SEGV_ACCERR;
+			break;
 		default:
+#ifdef DIAGNOSTIC
+			panic("unhandled type %x\n", type);
+#endif
 			break;
 		}
 		goto trapsignal;
@@ -355,6 +377,9 @@ copyfault:
 			ksi.ksi_code = ILL_COPROC;
 			break;
 		default:
+#ifdef DIAGNOSTIC
+			panic("unhandled type %x\n", type);
+#endif
 			break;
 		}
 		goto trapsignal;
@@ -362,10 +387,11 @@ copyfault:
 	case T_ARITHTRAP|T_USER:
 	case T_XMM|T_USER:
 		/* Already handled by fputrap(), fall through. */
-	case T_ASTFLT|T_USER:		/* Allow process switch */
+	case T_ASTFLT|T_USER:
+		/* Allow process switch. */
 		uvmexp.softs++;
-		if (l->l_flag & LP_OWEUPC) {
-			p->p_flag &= ~LP_OWEUPC;
+		if (l->l_pflag & LP_OWEUPC) {
+			l->l_pflag &= ~LP_OWEUPC;
 			ADDUPROF(l);
 		}
 		/* Allow a forced task switch. */
@@ -401,6 +427,9 @@ copyfault:
 			ksi.ksi_code = FPE_FLTDIV;
 			break;
 		default:
+#ifdef DIAGNOSTIC
+			panic("unhandled type %x\n", type);
+#endif
 			break;
 		}
 		goto trapsignal;
@@ -563,6 +592,7 @@ faultcommon:
 	}
 
 	case T_TRCTRAP:
+#if defined(COMPAT_10) || defined(COMPAT_IBCS2)
 		/* Check whether they single-stepped into a lcall. */
 		if (frame->tf_rip == (int)IDTVEC(oosyscall))
 			return;
@@ -570,6 +600,7 @@ faultcommon:
 			frame->tf_rflags &= ~PSL_T;
 			return;
 		}
+#endif
 		goto we_re_toast;
 
 	case T_BPTFLT|T_USER:		/* bpt instruction fault */
@@ -588,10 +619,10 @@ faultcommon:
 		break;
 
 	case T_NMI:
-#if !defined(XEN)
-		if (nmi_dispatch(frame))
+#if NTPROF > 0
+		if (tprof_pmi_nmi(frame))
 			return;
-#endif /* !defined(XEN) */
+#endif /* NTPROF > 0 */
 #if	NISA > 0
 #if defined(KGDB) || defined(DDB)
 		/* NMI can be hooked up to a pushbutton for debugging */

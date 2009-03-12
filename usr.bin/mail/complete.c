@@ -1,4 +1,4 @@
-/*	$NetBSD: complete.c,v 1.18 2009/02/11 19:22:22 christos Exp $	*/
+/*	$NetBSD: complete.c,v 1.15 2008/04/28 20:24:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997-2000,2005,2006 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: complete.c,v 1.18 2009/02/11 19:22:22 christos Exp $");
+__RCSID("$NetBSD: complete.c,v 1.15 2008/04/28 20:24:14 martin Exp $");
 #endif /* not lint */
 
 /*
@@ -54,7 +54,6 @@ __RCSID("$NetBSD: complete.c,v 1.18 2009/02/11 19:22:22 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <stringlist.h>
-#include <termcap.h>
 #include <util.h>
 
 #include <sys/param.h>
@@ -90,8 +89,8 @@ static int doglob = 1;			/* glob local file names */
 static void
 list_vertical(StringList *sl)
 {
-	int k;
-	size_t i, j, columns, lines;
+	int i, j, k;
+	int columns, lines;
 	char *p;
 	size_t w, width;
 
@@ -145,7 +144,7 @@ list_vertical(StringList *sl)
 static void
 ftpvis(char *dst, size_t dstlen, const char *src, size_t srclen)
 {
-	size_t	di, si;
+	int	di, si;
 
 	for (di = si = 0;
 	    src[si] != '\0' && di < dstlen && si < srclen;
@@ -249,7 +248,8 @@ complete_ambiguous(EditLine *el, char *word, int dolist, StringList *words)
 {
 	char insertstr[MAXPATHLEN];
 	char *lastmatch, *p;
-	size_t i, j, matchlen, wordlen;
+	int i, j;
+	size_t matchlen, wordlen;
 
 	wordlen = strlen(word);
 	if (words->sl_cur == 0)
@@ -1109,7 +1109,7 @@ my_gets(el_mode_t *em, const char *prompt, char *string)
 
 	if (buf[cnt - 1] == '\n')
 		cnt--;	/* trash the trailing LF */
-	len = MIN(sizeof(line) - 1, (size_t)cnt);
+	len = MIN(sizeof(line) - 1, cnt);
 	(void)memcpy(line, buf, len);
 	line[cnt] = '\0';
 
@@ -1173,20 +1173,13 @@ init_el_mode(
 	struct name *keys,
 	int history_size)
 {
-	FILE *nullfp;
 	el_mode_t em;
-
 	(void)memset(&em, 0, sizeof(em));
 
-	if ((nullfp = fopen(_PATH_DEVNULL, "w")) == NULL)
-		err(EXIT_FAILURE, "Cannot open `%s'", _PATH_DEVNULL);
-
-	if ((em.el = el_init(getprogname(), stdin, stdout, nullfp)) == NULL) {
+	if ((em.el = el_init(getprogname(), stdin, stdout, stderr)) == NULL) {
 		warn("el_init");
 		return em;
 	}
-	(void)fflush(nullfp);
-	(void)dup2(STDERR_FILENO, fileno(nullfp));
 
 	(void)el_set(em.el, EL_PROMPT, show_prompt);
 	(void)el_set(em.el, EL_SIGNAL, 1); /* editline handles the signals. */

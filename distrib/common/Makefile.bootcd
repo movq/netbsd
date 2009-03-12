@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.bootcd,v 1.16 2008/12/02 10:06:00 hubertf Exp $
+#	$NetBSD: Makefile.bootcd,v 1.14.2.1 2008/12/06 21:30:03 snj Exp $
 #
 # Makefile snipped to create a CD/DVD ISO
 #
@@ -29,7 +29,6 @@
 #	CDINSTKERNEL	instkernel directory (relative to ${.CURDIR})
 #	CDKERNELS	couples of the form:
 #				source	name_on_cd
-#	CDRUNTIME	files/directories to copy from $DESTDIR onto the CD
 # source kernels are copied from ${CDINSTKERNEL} (or its obj dir)
 # note that as of yet, bootxx_cd9660 can't load kernel names of more than
 # 8 chars (though they can be in a sub-directory meaning the pathname is
@@ -119,7 +118,7 @@ copy-releasedir:
 		${MKDIR} cdrom/${MACHINE}; 				\
 		curdir=$$(pwd);						\
 		release_destdir=$$(pwd)/cdrom/${MACHINE}; 		\
-		cd ${RELEASEDIR}/${RELEASEMACHINEDIR}; 			\
+		cd ${RELEASEDIR}/${RELEASEMACHINEDIR}; 				\
 		echo Copying $$(pwd) to $$release_destdir ...; 		\
 		${TOOL_PAX} 						\
 			-rw -pe -v 					\
@@ -140,17 +139,6 @@ copy-releasedir:
 		${TOOL_PAX} 						\
 			-rw -pe -v 					\
 			. $$release_destdir; 				\
-		cd $$curdir;						\
-	fi
-	if [ "X${CDRUNTIME}}" != "X" ]; then				\
-		curdir=$$(pwd);						\
-		release_destdir=$${curdir}/cdrom;			\
-		cd $$release_destdir;					\
-		cd ${DESTDIR};						\
-		for cde in ${CDRUNTIME};				\
-		do							\
-			${TOOL_PAX} -rw -pp -v $${cde} $$release_destdir;\
-		done;							\
 		cd $$curdir;						\
 	fi
 	if [ "X${CDEXTRA}${CDBUILDEXTRA}" != "X" ]; then		\
@@ -191,7 +179,7 @@ image:
 	${TOOL_MAKEFS} -t cd9660 -o ${_CDMAKEFSOPTIONS:Q} ${CDBASE}.iso cdrom
 
 .if ${CDRELEASE} == false
-release: prepare .WAIT prepare_md_post .WAIT copy-releasedir .WAIT image_md_pre .WAIT image .WAIT image_md_post
+release: prepare .WAIT prepare_md_post .WAIT copy-releasedir .WAIT image .WAIT image_md_post
 	${MKDIR} ${RELEASEDIR}/${CDROMS_RELEASEDIR}
 	${RELEASE_INSTALL} ${CDBASE}.iso ${RELEASEDIR}/${CDROMS_RELEASEDIR}
 
@@ -199,7 +187,7 @@ iso_image:
 .else
 release:
 
-iso_image: prepare .WAIT prepare_md_post .WAIT copy-releasedir .WAIT image_md_pre .WAIT image .WAIT image_md_post
+iso_image: prepare .WAIT prepare_md_post .WAIT copy-releasedir .WAIT image .WAIT image_md_post
 	${MKDIR} ${RELEASEDIR}/${CDROMS_RELEASEDIR}
 	${RELEASE_INSTALL} ${CDBASE}.iso ${RELEASEDIR}/${CDROMS_RELEASEDIR}
 .endif
@@ -209,6 +197,6 @@ clean:
 
 prepare_md_post: .PHONY
 image_md_post: .PHONY
-image_md_pre: .PHONY
+
 
 .include <bsd.prog.mk>

@@ -1,8 +1,8 @@
-/*	$NetBSD: subr_iostat.c,v 1.16 2009/01/22 14:38:35 yamt Exp $	*/
+/*	$NetBSD: subr_iostat.c,v 1.15.8.1 2009/04/04 17:49:21 snj Exp $	*/
 /*	NetBSD: subr_disk.c,v 1.69 2005/05/29 22:24:15 christos Exp	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1999, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1999, 2000, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -68,11 +68,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_iostat.c,v 1.16 2009/01/22 14:38:35 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_iostat.c,v 1.15.8.1 2009/04/04 17:49:21 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/iostat.h>
 #include <sys/sysctl.h>
 #include <sys/rwlock.h>
@@ -136,7 +136,7 @@ iostat_alloc(int32_t type, void *parent, const char *name)
 {
 	struct io_stats *stats;
 
-	stats = kmem_zalloc(sizeof(*stats), KM_SLEEP);
+	stats = malloc(sizeof(struct io_stats), M_DEVBUF, M_WAITOK|M_ZERO);
 	if (stats == NULL)
 		panic("iostat_alloc: cannot allocate memory for stats buffer");
 
@@ -176,7 +176,7 @@ iostat_free(struct io_stats *stats)
 	TAILQ_REMOVE(&iostatlist, stats, io_link);
 	iostat_count--;
 	rw_exit(&iostatlist_lock);
-	kmem_free(stats, sizeof(*stats));
+	free(stats, M_DEVBUF);
 }
 
 /*
@@ -220,6 +220,16 @@ iostat_unbusy(struct io_stats *stats, long bcount, int read)
 			stats->io_wxfer++;
 		}
 	}
+}
+
+/*
+ * Return non-zero if a device has an I/O request in flight.
+ */
+bool
+iostat_isbusy(struct io_stats *stats)
+{
+
+	return stats->io_busy != 0;
 }
 
 /*

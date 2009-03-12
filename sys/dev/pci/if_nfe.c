@@ -1,4 +1,4 @@
-/*	$NetBSD: if_nfe.c,v 1.43 2009/03/01 13:44:54 cegger Exp $	*/
+/*	$NetBSD: if_nfe.c,v 1.36.6.1 2009/03/02 20:46:03 snj Exp $	*/
 /*	$OpenBSD: if_nfe.c,v 1.77 2008/02/05 16:52:50 brad Exp $	*/
 
 /*-
@@ -21,7 +21,7 @@
 /* Driver for NVIDIA nForce MCP Fast Ethernet and Gigabit Ethernet */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_nfe.c,v 1.43 2009/03/01 13:44:54 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_nfe.c,v 1.36.6.1 2009/03/02 20:46:03 snj Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -73,8 +73,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_nfe.c,v 1.43 2009/03/01 13:44:54 cegger Exp $");
 
 #include <dev/pci/if_nfereg.h>
 #include <dev/pci/if_nfevar.h>
-
-static int nfe_ifflags_cb(struct ethercom *);
 
 int	nfe_match(device_t, cfdata_t, void *);
 void	nfe_attach(device_t, device_t, void *);
@@ -224,7 +222,6 @@ nfe_attach(device_t parent, device_t self, void *aux)
 	bus_size_t memsize;
 	pcireg_t memtype;
 	char devinfo[256];
-	int mii_flags = 0;
 
 	sc->sc_dev = self;
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
@@ -293,14 +290,11 @@ nfe_attach(device_t parent, device_t self, void *aux)
 	case PCI_PRODUCT_NVIDIA_MCP77_LAN2:
 	case PCI_PRODUCT_NVIDIA_MCP77_LAN3:
 	case PCI_PRODUCT_NVIDIA_MCP77_LAN4:
-		sc->sc_flags |= NFE_40BIT_ADDR | NFE_HW_CSUM |
-		    NFE_CORRECT_MACADDR | NFE_PWR_MGMT;
-		break;
 	case PCI_PRODUCT_NVIDIA_MCP79_LAN1:
 	case PCI_PRODUCT_NVIDIA_MCP79_LAN2:
 	case PCI_PRODUCT_NVIDIA_MCP79_LAN3:
 	case PCI_PRODUCT_NVIDIA_MCP79_LAN4:
-		sc->sc_flags |= NFE_JUMBO_SUP | NFE_40BIT_ADDR | NFE_HW_CSUM |
+		sc->sc_flags |= NFE_40BIT_ADDR | NFE_HW_CSUM |
 		    NFE_CORRECT_MACADDR | NFE_PWR_MGMT;
 		break;
 	case PCI_PRODUCT_NVIDIA_CK804_LAN1:
@@ -315,7 +309,6 @@ nfe_attach(device_t parent, device_t self, void *aux)
 	case PCI_PRODUCT_NVIDIA_MCP65_LAN4:
 		sc->sc_flags |= NFE_JUMBO_SUP | NFE_40BIT_ADDR |
 		    NFE_CORRECT_MACADDR | NFE_PWR_MGMT;
-		mii_flags = MIIF_DOPAUSE;
 		break;
 	case PCI_PRODUCT_NVIDIA_MCP55_LAN1:
 	case PCI_PRODUCT_NVIDIA_MCP55_LAN2:
@@ -370,8 +363,10 @@ nfe_attach(device_t parent, device_t self, void *aux)
 	IFQ_SET_READY(&ifp->if_snd);
 	strlcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
 
+#ifdef notyet
 	if (sc->sc_flags & NFE_USE_JUMBO)
-		sc->sc_ethercom.ec_capabilities |= ETHERCAP_JUMBO_MTU;
+		ifp->if_hardmtu = NFE_JUMBO_MTU;
+#endif
 
 #if NVLAN > 0
 	if (sc->sc_flags & NFE_HW_VLAN)
@@ -393,10 +388,8 @@ nfe_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ethercom.ec_mii = &sc->sc_mii;
 	ifmedia_init(&sc->sc_mii.mii_media, 0, ether_mediachange,
 	    ether_mediastatus);
-
 	mii_attach(self, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
-	    MII_OFFSET_ANY, mii_flags);
-
+	    MII_OFFSET_ANY, 0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL) {
 		aprint_error_dev(self, "no PHY found!\n");
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER | IFM_MANUAL,
@@ -407,7 +400,6 @@ nfe_attach(device_t parent, device_t self, void *aux)
 
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_enaddr);
-	ether_set_ifflags_cb(&sc->sc_ethercom, nfe_ifflags_cb);
 
 	callout_init(&sc->sc_tick_ch, 0);
 	callout_setfunc(&sc->sc_tick_ch, nfe_tick, sc);
@@ -555,6 +547,8 @@ nfe_intr(void *arg)
 
 	handled = 0;
 
+	NFE_WRITE(sc, NFE_IRQ_MASK, 0);
+
 	for (;;) {
 		r = NFE_READ(sc, NFE_IRQ_STATUS);
 		if ((r & NFE_IRQ_WANTED) == 0)
@@ -580,43 +574,26 @@ nfe_intr(void *arg)
 		}
 	}
 
+	NFE_WRITE(sc, NFE_IRQ_MASK, NFE_IRQ_WANTED);
+
 	if (handled && !IF_IS_EMPTY(&ifp->if_snd))
 		nfe_start(ifp);
 
 	return handled;
 }
 
-static int
-nfe_ifflags_cb(struct ethercom *ec)
-{
-	struct ifnet *ifp = &ec->ec_if;
-	struct nfe_softc *sc = ifp->if_softc;
-	int change = ifp->if_flags ^ sc->sc_if_flags;
-
-	/*
-	 * If only the PROMISC flag changes, then
-	 * don't do a full re-init of the chip, just update
-	 * the Rx filter.
-	 */
-	if ((change & ~(IFF_CANTCHANGE|IFF_DEBUG)) != 0)
-		return ENETRESET;
-	else if ((change & IFF_PROMISC) != 0)
-		nfe_setmulti(sc);
-
-	return 0;
-}
-
 int
 nfe_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct nfe_softc *sc = ifp->if_softc;
+	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa = (struct ifaddr *)data;
 	int s, error = 0;
 
 	s = splnet();
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		nfe_init(ifp);
 		switch (ifa->ifa_addr->sa_family) {
@@ -628,6 +605,35 @@ nfe_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		default:
 			break;
 		}
+		break;
+	case SIOCSIFMTU:
+		if (ifr->ifr_mtu < ETHERMIN ||
+		    ((sc->sc_flags & NFE_USE_JUMBO) &&
+		    ifr->ifr_mtu > ETHERMTU_JUMBO) ||
+		    (!(sc->sc_flags & NFE_USE_JUMBO) &&
+		    ifr->ifr_mtu > ETHERMTU))
+			error = EINVAL;
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+			error = 0;
+		break;
+	case SIOCSIFFLAGS:
+		if (ifp->if_flags & IFF_UP) {
+			/*
+			 * If only the PROMISC or ALLMULTI flag changes, then
+			 * don't do a full re-init of the chip, just update
+			 * the Rx filter.
+			 */
+			if ((ifp->if_flags & IFF_RUNNING) &&
+			    ((ifp->if_flags ^ sc->sc_if_flags) &
+			     (IFF_ALLMULTI | IFF_PROMISC)) != 0) {
+				nfe_setmulti(sc);
+			} else
+				nfe_init(ifp);
+		} else {
+			if (ifp->if_flags & IFF_RUNNING)
+				nfe_stop(ifp, 1);
+		}
+		sc->sc_if_flags = ifp->if_flags;
 		break;
 	default:
 		if ((error = ether_ioctl(ifp, cmd, data)) != ENETRESET)
@@ -641,7 +647,6 @@ nfe_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			nfe_setmulti(sc);
 		break;
 	}
-	sc->sc_if_flags = ifp->if_flags;
 
 	splx(s);
 
@@ -969,9 +974,9 @@ nfe_txeof(struct nfe_softc *sc)
 				continue;
 
 			if ((flags & NFE_TX_ERROR_V1) != 0) {
-				snprintb(buf, sizeof(buf), NFE_V1_TXERR, flags);
 				aprint_error_dev(sc->sc_dev, "tx v1 error %s\n",
-				    buf);
+				    bitmask_snprintf(flags, NFE_V1_TXERR,
+				    buf, sizeof(buf)));
 				ifp->if_oerrors++;
 			} else
 				ifp->if_opackets++;
@@ -981,9 +986,9 @@ nfe_txeof(struct nfe_softc *sc)
 				continue;
 
 			if ((flags & NFE_TX_ERROR_V2) != 0) {
-				snprintb(buf, sizeof(buf), NFE_V2_TXERR, flags);
 				aprint_error_dev(sc->sc_dev, "tx v2 error %s\n",
-				    buf);
+				    bitmask_snprintf(flags, NFE_V2_TXERR,
+				    buf, sizeof(buf)));
 				ifp->if_oerrors++;
 			} else
 				ifp->if_opackets++;
@@ -1263,9 +1268,7 @@ nfe_init(struct ifnet *ifp)
 	NFE_WRITE(sc, NFE_PWR_STATE, tmp | NFE_PWR_VALID);
 
 	s = splnet();
-	NFE_WRITE(sc, NFE_IRQ_MASK, 0);
 	nfe_intr(sc); /* XXX clear IRQ status registers */
-	NFE_WRITE(sc, NFE_IRQ_MASK, NFE_IRQ_WANTED);
 	splx(s);
 
 #if 1
@@ -1399,7 +1402,7 @@ nfe_alloc_rx_ring(struct nfe_softc *sc, struct nfe_rx_ring *ring)
 		goto fail;
 	}
 
-	memset(*desc, 0, NFE_RX_RING_COUNT * descsize);
+	bzero(*desc, NFE_RX_RING_COUNT * descsize);
 	ring->physaddr = ring->map->dm_segs[0].ds_addr;
 
 	if (sc->sc_flags & NFE_USE_JUMBO) {
@@ -1730,7 +1733,7 @@ nfe_alloc_tx_ring(struct nfe_softc *sc, struct nfe_tx_ring *ring)
 		goto fail;
 	}
 
-	memset(*desc, 0, NFE_TX_RING_COUNT * descsize);
+	bzero(*desc, NFE_TX_RING_COUNT * descsize);
 	ring->physaddr = ring->map->dm_segs[0].ds_addr;
 
 	for (i = 0; i < NFE_TX_RING_COUNT; i++) {
@@ -1837,20 +1840,20 @@ nfe_setmulti(struct nfe_softc *sc)
 	int i;
 
 	if ((ifp->if_flags & (IFF_ALLMULTI | IFF_PROMISC)) != 0) {
-		memset(addr, 0, ETHER_ADDR_LEN);
-		memset(mask, 0, ETHER_ADDR_LEN);
+		bzero(addr, ETHER_ADDR_LEN);
+		bzero(mask, ETHER_ADDR_LEN);
 		goto done;
 	}
 
-	memcpy(addr, etherbroadcastaddr, ETHER_ADDR_LEN);
-	memcpy(mask, etherbroadcastaddr, ETHER_ADDR_LEN);
+	bcopy(etherbroadcastaddr, addr, ETHER_ADDR_LEN);
+	bcopy(etherbroadcastaddr, mask, ETHER_ADDR_LEN);
 
 	ETHER_FIRST_MULTI(step, ec, enm);
 	while (enm != NULL) {
 		if (bcmp(enm->enm_addrlo, enm->enm_addrhi, ETHER_ADDR_LEN)) {
 			ifp->if_flags |= IFF_ALLMULTI;
-			memset(addr, 0, ETHER_ADDR_LEN);
-			memset(mask, 0, ETHER_ADDR_LEN);
+			bzero(addr, ETHER_ADDR_LEN);
+			bzero(mask, ETHER_ADDR_LEN);
 			goto done;
 		}
 		for (i = 0; i < ETHER_ADDR_LEN; i++) {

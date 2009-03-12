@@ -1,4 +1,4 @@
-#	$NetBSD: OPENBLOCKS266_OPT,v 1.10 2009/01/03 17:47:24 christos Exp $
+#	$NetBSD: OPENBLOCKS266_OPT,v 1.9.28.1 2010/11/21 03:05:07 riz Exp $
 #
 
 include		"arch/evbppc/conf/OPENBLOCKS266"
@@ -268,6 +268,19 @@ ugen*	at uhub? port ?
 options UGEN_BULK_RA_WB
 
 
+# PCMCIA audio devices
+esl*	at pcmcia? function ?		# ESS 1688 AudioDrive
+
+# OPL[23] FM synthesizers
+#opl*	at esl?
+
+# Audio support
+audio*	at audiobus?
+
+# MIDI support
+midi*	at midibus?
+
+
 # CardBus IEEE1394 controllers
 fwohci*	at cardbus? function ?		# IEEE1394 Open Host Controller
 
@@ -302,6 +315,10 @@ wsmouse* at btms? mux 0
 # Bluetooth Keyboard
 btkbd*	at bthidev? reportid ?
 wskbd*	at btkbd? console ? mux 1
+
+# Bluetooth Apple Magic Mouse
+btmagic* at bthub?
+wsmouse* at btmagic? mux 0
 
 # Bluetooth Audio support
 btsco*	at bthub?

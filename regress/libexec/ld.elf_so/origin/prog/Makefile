@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.5 2009/01/28 16:11:23 christos Exp $
+# $NetBSD: Makefile,v 1.4 2008/03/09 22:44:41 dholland Exp $
 
 NOMAN=# defined (must be above bsd.own.mk)
 
@@ -6,7 +6,6 @@ NOMAN=# defined (must be above bsd.own.mk)
 
 PROG=origin
 LIBFOO != cd ${.CURDIR}/../lib && ${PRINTOBJDIR}
-PROGDIR != cd ${.CURDIR} && ${PRINTOBJDIR}
 LDFLAGS+=-Wl,-R'$${ORIGIN}' -Wl,-L${LIBFOO} -lfoo
 CPPFLAGS+=-I${.CURDIR}/../lib
 
@@ -17,9 +16,7 @@ libfoo.so.0:
 
 CLEANFILES+=libfoo.so.0
 
-#	can't use ./${PROG} here because the kernel is still broken
-#	checkout the #ifdef notyet in kern_exec.c
 regress: ${PROG}
-	${PROGDIR}/${PROG}
+	./${PROG}
 
 .include <bsd.prog.mk>

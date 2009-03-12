@@ -1,4 +1,4 @@
-/*	$NetBSD: if_age.c,v 1.25 2009/03/03 23:28:44 cegger Exp $ */
+/*	$NetBSD: if_age.c,v 1.28.2.5 2009/11/08 22:03:32 snj Exp $ */
 /*	$OpenBSD: if_age.c,v 1.1 2009/01/16 05:00:34 kevlo Exp $	*/
 
 /*-
@@ -31,7 +31,7 @@
 /* Driver for Attansic Technology Corp. L1 Gigabit Ethernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.25 2009/03/03 23:28:44 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.28.2.5 2009/11/08 22:03:32 snj Exp $");
 
 #include "bpfilter.h"
 #include "vlan.h"
@@ -97,7 +97,6 @@ static void	age_mediastatus(struct ifnet *, struct ifmediareq *);
 static int	age_mediachange(struct ifnet *);
 
 static int	age_intr(void *);
-static int	age_read_vpd_word(struct age_softc *, uint32_t, uint32_t, uint32_t *);
 static int	age_dma_alloc(struct age_softc *);
 static void	age_dma_free(struct age_softc *);
 static void	age_get_macaddr(struct age_softc *, uint8_t[]);
@@ -275,7 +274,7 @@ age_attach(device_t parent, device_t self, void *aux)
 	ifmedia_init(&sc->sc_miibus.mii_media, 0, age_mediachange,
 	    age_mediastatus);
 	mii_attach(self, &sc->sc_miibus, 0xffffffff, MII_PHY_ANY,
-	   MII_OFFSET_ANY, 0);
+	   MII_OFFSET_ANY, MIIF_DOPAUSE);
 
 	if (LIST_FIRST(&sc->sc_miibus.mii_phys) == NULL) {
 		aprint_error_dev(self, "no PHY found!\n");
@@ -314,6 +313,7 @@ age_detach(device_t self, int flags)
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	int s;
 
+	pmf_device_deregister(self);
 	s = splnet();
 	age_stop(ifp, 0);
 	splx(s);
@@ -331,7 +331,10 @@ age_detach(device_t self, int flags)
 		pci_intr_disestablish(sc->sc_pct, sc->sc_irq_handle);
 		sc->sc_irq_handle = NULL;
 	}
-
+	if (sc->sc_mem_size) {
+		bus_space_unmap(sc->sc_mem_bt, sc->sc_mem_bh, sc->sc_mem_size);
+		sc->sc_mem_size = 0;
+	}
 	return 0;
 }
 
@@ -490,8 +493,13 @@ age_intr(void *arg)
 		return 0;
 
 	cmb = sc->age_rdata.age_cmb_block;
-	if (cmb == NULL)
+	if (cmb == NULL) {
+		/* Happens when bringing up the interface
+		 * w/o having a carrier. Ack. the interrupt.
+		 */
+		CSR_WRITE_4(sc, AGE_INTR_STATUS, status);
 		return 0;
+	}
 
 	/* Disable interrupts. */
 	CSR_WRITE_4(sc, AGE_INTR_STATUS, status | INTR_DIS_INT);
@@ -549,37 +557,11 @@ back:
 	return 1;
 }
 
-static int
-age_read_vpd_word(struct age_softc *sc, uint32_t vpdc, uint32_t offset,
-    uint32_t *word)
-{
-	int i;
-	pcireg_t rv;
-
-	pci_conf_write(sc->sc_pct, sc->sc_pcitag, PCI_VPD_ADDRESS(vpdc),
-	    offset << PCI_VPD_ADDRESS_SHIFT);
-	for (i = AGE_TIMEOUT; i > 0; i--) {
-		DELAY(10);
-		rv = pci_conf_read(sc->sc_pct, sc->sc_pcitag,
-		    PCI_VPD_ADDRESS(vpdc));
-		if ((rv & PCI_VPD_OPFLAG) == PCI_VPD_OPFLAG)
-			break;
-	}
-	if (i == 0) {
-		printf("%s: VPD read timeout!\n", device_xname(sc->sc_dev));
-		*word = 0;
-		return ETIMEDOUT;
-	}
-
-	*word = pci_conf_read(sc->sc_pct, sc->sc_pcitag, PCI_VPD_DATAREG(vpdc));
-	return 0;
-}
-
 static void
 age_get_macaddr(struct age_softc *sc, uint8_t eaddr[])
 {
-	uint32_t ea[2], off, reg, word;
-	int vpd_error, match, vpdc;
+	uint32_t ea[2], reg;
+	int i, vpdc;
 
 	reg = CSR_READ_4(sc, AGE_SPI_CTRL);
 	if ((reg & SPI_VPD_ENB) != 0) {
@@ -588,67 +570,22 @@ age_get_macaddr(struct age_softc *sc, uint8_t eaddr[])
 		CSR_WRITE_4(sc, AGE_SPI_CTRL, reg);
 	}
 
-	vpd_error = 0;
-	ea[0] = ea[1] = 0;
-	if ((vpd_error = pci_get_capability(sc->sc_pct, sc->sc_pcitag,
-	    PCI_CAP_VPD, &vpdc, NULL))) {
+	if (pci_get_capability(sc->sc_pct, sc->sc_pcitag,
+	    PCI_CAP_VPD, &vpdc, NULL)) {
 		/*
-		 * PCI VPD capability exists, but it seems that it's
-		 * not in the standard form as stated in PCI VPD
-		 * specification such that driver could not use
-		 * pci_get_vpd_readonly(9) with keyword 'NA'.
-		 * Search VPD data starting at address 0x0100. The data
-		 * should be used as initializers to set AGE_PAR0,
-		 * AGE_PAR1 register including other PCI configuration
-		 * registers.
+		 * PCI VPD capability found, let TWSI reload EEPROM.
+		 * This will set Ethernet address of controller.
 		 */
-		word = 0;
-		match = 0;
-		reg = 0;
-		for (off = AGE_VPD_REG_CONF_START; off < AGE_VPD_REG_CONF_END;
-		    off += sizeof(uint32_t)) {
-			vpd_error = age_read_vpd_word(sc, vpdc, off, &word);
-			if (vpd_error != 0)
-				break;
-			if (match != 0) {
-				switch (reg) {
-				case AGE_PAR0:
-					ea[0] = word;
-					break;
-				case AGE_PAR1:
-					ea[1] = word;
-					break;
-				default:
-					break;
-				}
-				match = 0;
-			} else if ((word & 0xFF) == AGE_VPD_REG_CONF_SIG) {
-				match = 1;
-				reg = word >> 16;
-			} else
+		CSR_WRITE_4(sc, AGE_TWSI_CTRL, CSR_READ_4(sc, AGE_TWSI_CTRL) |
+		    TWSI_CTRL_SW_LD_START);
+		for (i = 100; i > 0; i++) {
+			DELAY(1000);
+			reg = CSR_READ_4(sc, AGE_TWSI_CTRL);
+			if ((reg & TWSI_CTRL_SW_LD_START) == 0)
 				break;
 		}
-		if (off >= AGE_VPD_REG_CONF_END)
-			vpd_error = ENOENT;
-		if (vpd_error == 0) {
-			/*
-			 * Don't blindly trust ethernet address obtained
-			 * from VPD. Check whether ethernet address is
-			 * valid one. Otherwise fall-back to reading
-			 * PAR register.
-			 */
-			ea[1] &= 0xFFFF;
-			if ((ea[0] == 0 && ea[1] == 0) ||
-			    (ea[0] == 0xFFFFFFFF && ea[1] == 0xFFFF)) {
-				if (agedebug)
-					printf("%s: invalid ethernet address "
-				    	    "returned from VPD.\n", 
-				    	    device_xname(sc->sc_dev));
-				vpd_error = EINVAL;
-			}
-		}
-		if (vpd_error != 0 && (agedebug))
-			printf("%s: VPD access failure!\n", 
+		if (i == 0)
+			printf("%s: reloading EEPROM timeout!\n", 
 			    device_xname(sc->sc_dev));	
 	} else {
 		if (agedebug)
@@ -656,26 +593,9 @@ age_get_macaddr(struct age_softc *sc, uint8_t eaddr[])
 			    device_xname(sc->sc_dev));
 	}
 
-	/*
-	 * It seems that L1 also provides a way to extract ethernet
-	 * address via SPI flash interface. Because SPI flash memory
-	 * device of different vendors vary in their instruction
-	 * codes for read ID instruction, it's very hard to get
-	 * instructions codes without detailed information for the
-	 * flash memory device used on ethernet controller. To simplify
-	 * code, just read AGE_PAR0/AGE_PAR1 register to get ethernet
-	 * address which is supposed to be set by hardware during
-	 * power on reset.
-	 */
-	if (vpd_error != 0) {
-		/*
-		 * VPD is mapped to SPI flash memory or BIOS set it.
-		 */
-		ea[0] = CSR_READ_4(sc, AGE_PAR0);
-		ea[1] = CSR_READ_4(sc, AGE_PAR1);
-	}
+	ea[0] = CSR_READ_4(sc, AGE_PAR0);
+	ea[1] = CSR_READ_4(sc, AGE_PAR1);
 
-	ea[1] &= 0xFFFF;
 	eaddr[0] = (ea[1] >> 8) & 0xFF;
 	eaddr[1] = (ea[1] >> 0) & 0xFF;
 	eaddr[2] = (ea[0] >> 24) & 0xFF;
@@ -687,11 +607,79 @@ age_get_macaddr(struct age_softc *sc, uint8_t eaddr[])
 static void
 age_phy_reset(struct age_softc *sc)
 {
+	uint16_t reg, pn;
+	int i, linkup;
+
 	/* Reset PHY. */
 	CSR_WRITE_4(sc, AGE_GPHY_CTRL, GPHY_CTRL_RST);
-	DELAY(1000);
+	DELAY(2000);
 	CSR_WRITE_4(sc, AGE_GPHY_CTRL, GPHY_CTRL_CLR);
-	DELAY(1000);
+	DELAY(2000);
+
+#define ATPHY_DBG_ADDR		0x1D
+#define ATPHY_DBG_DATA		0x1E
+#define ATPHY_CDTC		0x16
+#define PHY_CDTC_ENB		0x0001
+#define PHY_CDTC_POFF		8
+#define ATPHY_CDTS		0x1C
+#define PHY_CDTS_STAT_OK	0x0000
+#define PHY_CDTS_STAT_SHORT	0x0100
+#define PHY_CDTS_STAT_OPEN	0x0200
+#define PHY_CDTS_STAT_INVAL	0x0300
+#define PHY_CDTS_STAT_MASK	0x0300
+
+	/* Check power saving mode. Magic from Linux. */
+	age_miibus_writereg(sc->sc_dev, sc->age_phyaddr, MII_BMCR, BMCR_RESET);
+	for (linkup = 0, pn = 0; pn < 4; pn++) {
+		age_miibus_writereg(sc->sc_dev, sc->age_phyaddr, ATPHY_CDTC,
+		    (pn << PHY_CDTC_POFF) | PHY_CDTC_ENB);
+		for (i = 200; i > 0; i--) {
+			DELAY(1000);
+			reg = age_miibus_readreg(sc->sc_dev, sc->age_phyaddr,
+			    ATPHY_CDTC);
+			if ((reg & PHY_CDTC_ENB) == 0)
+				break;
+		}
+		DELAY(1000);
+		reg = age_miibus_readreg(sc->sc_dev, sc->age_phyaddr,
+		    ATPHY_CDTS);
+		if ((reg & PHY_CDTS_STAT_MASK) != PHY_CDTS_STAT_OPEN) {
+			linkup++;
+			break;
+		}
+	}
+	age_miibus_writereg(sc->sc_dev, sc->age_phyaddr, MII_BMCR,
+	    BMCR_RESET | BMCR_AUTOEN | BMCR_STARTNEG);
+	if (linkup == 0) {
+		age_miibus_writereg(sc->sc_dev, sc->age_phyaddr,
+		    ATPHY_DBG_ADDR, 0);
+		age_miibus_writereg(sc->sc_dev, sc->age_phyaddr,
+		    ATPHY_DBG_DATA, 0x124E);
+		age_miibus_writereg(sc->sc_dev, sc->age_phyaddr,
+		    ATPHY_DBG_ADDR, 1);
+		reg = age_miibus_readreg(sc->sc_dev, sc->age_phyaddr,
+		    ATPHY_DBG_DATA);
+		age_miibus_writereg(sc->sc_dev, sc->age_phyaddr,
+		    ATPHY_DBG_DATA, reg | 0x03);
+		/* XXX */
+		DELAY(1500 * 1000);
+		age_miibus_writereg(sc->sc_dev, sc->age_phyaddr,
+		    ATPHY_DBG_ADDR, 0);
+		age_miibus_writereg(sc->sc_dev, sc->age_phyaddr,
+		    ATPHY_DBG_DATA, 0x024E);
+	}
+
+#undef ATPHY_DBG_ADDR
+#undef ATPHY_DBG_DATA
+#undef ATPHY_CDTC
+#undef PHY_CDTC_ENB
+#undef PHY_CDTC_POFF
+#undef ATPHY_CDTS
+#undef PHY_CDTS_STAT_OK
+#undef PHY_CDTS_STAT_SHORT
+#undef PHY_CDTS_STAT_OPEN
+#undef PHY_CDTS_STAT_INVAL
+#undef PHY_CDTS_STAT_MASK
 }
 
 static int
@@ -736,7 +724,7 @@ age_dma_alloc(struct age_softc *sc)
 		printf("%s: could not load DMA'able memory for Tx ring, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
 		bus_dmamem_free(sc->sc_dmat, 
-		    (bus_dma_segment_t *)&sc->age_rdata.age_tx_ring, 1);
+		    &sc->age_rdata.age_tx_ring_seg, 1);
 		return error;
 	}
 
@@ -778,7 +766,7 @@ age_dma_alloc(struct age_softc *sc)
 		printf("%s: could not load DMA'able memory for Rx ring, "
 		    "error = %i.\n", device_xname(sc->sc_dev), error);
 		bus_dmamem_free(sc->sc_dmat,
-		    (bus_dma_segment_t *)sc->age_rdata.age_rx_ring, 1);
+		    &sc->age_rdata.age_rx_ring_seg, 1);
 		return error;
 	}
 
@@ -821,7 +809,7 @@ age_dma_alloc(struct age_softc *sc)
 		printf("%s: could not load DMA'able memory for Rx return ring, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
 		bus_dmamem_free(sc->sc_dmat,
-		    (bus_dma_segment_t *)&sc->age_rdata.age_rr_ring, 1);
+		    &sc->age_rdata.age_rr_ring_seg, 1);
 		return error;
 	}
 
@@ -865,7 +853,7 @@ age_dma_alloc(struct age_softc *sc)
 		printf("%s: could not load DMA'able memory for CMB block, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
 		bus_dmamem_free(sc->sc_dmat,
-		    (bus_dma_segment_t *)&sc->age_rdata.age_cmb_block, 1);
+		    &sc->age_rdata.age_cmb_block_seg, 1);
 		return error;
 	}
 
@@ -909,7 +897,7 @@ age_dma_alloc(struct age_softc *sc)
 		printf("%s: could not load DMA'able memory for SMB block, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
 		bus_dmamem_free(sc->sc_dmat,
-		    (bus_dma_segment_t *)&sc->age_rdata.age_smb_block, 1);
+		    &sc->age_rdata.age_smb_block_seg, 1);
 		return error;
 	}
 
@@ -992,7 +980,7 @@ age_dma_free(struct age_softc *sc)
 	if (sc->age_cdata.age_tx_ring_map != NULL &&
 	    sc->age_rdata.age_tx_ring != NULL)
 		bus_dmamem_free(sc->sc_dmat,
-		    (bus_dma_segment_t *)sc->age_rdata.age_tx_ring, 1);
+		    &sc->age_rdata.age_tx_ring_seg, 1);
 	sc->age_rdata.age_tx_ring = NULL;
 	sc->age_cdata.age_tx_ring_map = NULL;
 
@@ -1002,7 +990,7 @@ age_dma_free(struct age_softc *sc)
 	if (sc->age_cdata.age_rx_ring_map != NULL &&
 	    sc->age_rdata.age_rx_ring != NULL)
 		bus_dmamem_free(sc->sc_dmat, 
-		    (bus_dma_segment_t *)sc->age_rdata.age_rx_ring, 1);
+		    &sc->age_rdata.age_rx_ring_seg, 1);
 	sc->age_rdata.age_rx_ring = NULL;
 	sc->age_cdata.age_rx_ring_map = NULL;
 
@@ -1012,7 +1000,7 @@ age_dma_free(struct age_softc *sc)
 	if (sc->age_cdata.age_rr_ring_map != NULL &&
 	    sc->age_rdata.age_rr_ring != NULL)
 		bus_dmamem_free(sc->sc_dmat, 
-		    (bus_dma_segment_t *)sc->age_rdata.age_rr_ring, 1);
+		    &sc->age_rdata.age_rr_ring_seg, 1);
 	sc->age_rdata.age_rr_ring = NULL;
 	sc->age_cdata.age_rr_ring_map = NULL;
 
@@ -1022,7 +1010,7 @@ age_dma_free(struct age_softc *sc)
 	if (sc->age_cdata.age_cmb_block_map != NULL &&
 	    sc->age_rdata.age_cmb_block != NULL)
 		bus_dmamem_free(sc->sc_dmat,
-		    (bus_dma_segment_t *)sc->age_rdata.age_cmb_block, 1);
+		    &sc->age_rdata.age_cmb_block_seg, 1);
 	sc->age_rdata.age_cmb_block = NULL;
 	sc->age_cdata.age_cmb_block_map = NULL;
 
@@ -1032,7 +1020,7 @@ age_dma_free(struct age_softc *sc)
 	if (sc->age_cdata.age_smb_block_map != NULL &&
 	    sc->age_rdata.age_smb_block != NULL)
 		bus_dmamem_free(sc->sc_dmat, 
-		    (bus_dma_segment_t *)sc->age_rdata.age_smb_block, 1);
+		    &sc->age_rdata.age_smb_block_seg, 1);
 	sc->age_rdata.age_smb_block = NULL;
 	sc->age_cdata.age_smb_block_map = NULL;
 }
@@ -1061,6 +1049,7 @@ age_start(struct ifnet *ifp)
 		if (age_encap(sc, &m_head)) {
 			if (m_head == NULL)
 				break;
+			IF_PREPEND(&ifp->if_snd, m_head);
 			ifp->if_flags |= IFF_OACTIVE;
 			break;
 		}
@@ -1157,12 +1146,10 @@ age_mac_config(struct age_softc *sc)
 	}
 	if ((IFM_OPTIONS(mii->mii_media_active) & IFM_FDX) != 0) {
 		reg |= MAC_CFG_FULL_DUPLEX;
-#ifdef notyet
 		if ((IFM_OPTIONS(mii->mii_media_active) & IFM_ETH_TXPAUSE) != 0)
 			reg |= MAC_CFG_TX_FC;
 		if ((IFM_OPTIONS(mii->mii_media_active) & IFM_ETH_RXPAUSE) != 0)
 			reg |= MAC_CFG_RX_FC;
-#endif
 	}
 
 	CSR_WRITE_4(sc, AGE_MAC_CFG, reg);
@@ -1215,30 +1202,12 @@ age_encap(struct age_softc *sc, struct mbuf **m_head)
 	if (error == EFBIG) {
 		error = 0;
 
-		MGETHDR(m, M_DONTWAIT, MT_DATA);
-		if (m == NULL) {
+		*m_head = m_pullup(*m_head, MHLEN);
+		if (*m_head == NULL) {
 			printf("%s: can't defrag TX mbuf\n", 
 			    device_xname(sc->sc_dev));
-			m_freem(*m_head);
-			*m_head = NULL;
 			return ENOBUFS;
 		}
-
-		M_COPY_PKTHDR(m, *m_head);
-		if ((*m_head)->m_pkthdr.len > MHLEN) {
-			MCLGET(m, M_DONTWAIT);
-			if (!(m->m_flags & M_EXT)) {
-				m_freem(*m_head);
-				m_freem(m);
-				*m_head = NULL;
-				return ENOBUFS;
-			}
-		}
-		m_copydata(*m_head, 0, (*m_head)->m_pkthdr.len,
-		    mtod(m, void *));
-		m_freem(*m_head);
-		m->m_len = m->m_pkthdr.len;
-		*m_head = m;
 
 		error = bus_dmamap_load_mbuf(sc->sc_dmat, map, *m_head,
 		  	    BUS_DMA_NOWAIT);
@@ -1246,10 +1215,6 @@ age_encap(struct age_softc *sc, struct mbuf **m_head)
 		if (error != 0) {
 			printf("%s: could not load defragged TX mbuf\n",
 			    device_xname(sc->sc_dev));
-			if (!error) {
-				bus_dmamap_unload(sc->sc_dmat, map);
-				error = EFBIG;
-			}
 			m_freem(*m_head);
 			*m_head = NULL;
 			return error;
@@ -1609,14 +1574,8 @@ age_reset(struct age_softc *sc)
 	int i;
 
 	CSR_WRITE_4(sc, AGE_MASTER_CFG, MASTER_RESET);
-	for (i = AGE_RESET_TIMEOUT; i > 0; i--) {
-		DELAY(1);
-		if ((CSR_READ_4(sc, AGE_MASTER_CFG) & MASTER_RESET) == 0)
-			break;
-	}
-	if (i == 0)
-		printf("%s: master reset timeout!\n", device_xname(sc->sc_dev));
-
+	CSR_READ_4(sc, AGE_MASTER_CFG);
+	DELAY(1000);
 	for (i = AGE_RESET_TIMEOUT; i > 0; i--) {
 		if ((reg = CSR_READ_4(sc, AGE_IDLE_STATUS)) == 0)
 			break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ath_cardbus.c,v 1.32 2008/12/11 05:45:29 alc Exp $ */
+/*	$NetBSD: if_ath_cardbus.c,v 1.31.4.1 2009/08/07 18:25:33 snj Exp $ */
 /*
  * Copyright (c) 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ath_cardbus.c,v 1.32 2008/12/11 05:45:29 alc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ath_cardbus.c,v 1.31.4.1 2009/08/07 18:25:33 snj Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"

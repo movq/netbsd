@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.165 2009/02/14 20:51:39 christos Exp $	*/
+/*	$NetBSD: key.c,v 1.163.4.1 2010/02/14 13:35:44 bouyer Exp $	*/
 /*	$KAME: key.c,v 1.310 2003/09/08 02:23:44 itojun Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.165 2009/02/14 20:51:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.163.4.1 2010/02/14 13:35:44 bouyer Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -657,7 +657,7 @@ key_allocsa_policy(saidx)
 	LIST_FOREACH(sah, &sahtree, chain) {
 		if (sah->state == SADB_SASTATE_DEAD)
 			continue;
-		if (key_cmpsaidx_withmode(&sah->saidx, saidx) == 0)
+		if (key_cmpsaidx_withmode(&sah->saidx, saidx))
 			goto found;
 	}
 
@@ -2950,7 +2950,7 @@ key_getsah(saidx)
 	LIST_FOREACH(sah, &sahtree, chain) {
 		if (sah->state == SADB_SASTATE_DEAD)
 			continue;
-		if (key_cmpsaidx_exactly(&sah->saidx, saidx) == 0)
+		if (key_cmpsaidx_exactly(&sah->saidx, saidx))
 			return (sah);
 	}
 
@@ -4651,6 +4651,7 @@ key_bbcmp(p1v, p2v, bits)
  * time handler.
  * scanning SPD and SAD to check status for each entries,
  * and do to remove or to expire.
+ * XXX2038: year 2038 problem may remain.
  */
 void
 key_timehandler(void *arg)
@@ -8094,7 +8095,7 @@ key_do_init(void)
 	/* initialize key statistics */
 	keystat.getspi_count = 1;
 
-	printf("IPsec: Initialized Security Association Processing.\n");
+	aprint_verbose("IPsec: Initialized Security Association Processing.\n");
 
 	return (0);
 }

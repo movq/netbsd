@@ -1,4 +1,4 @@
-/*	$NetBSD: pic.c,v 1.4 2008/12/30 05:43:14 matt Exp $	*/
+/*	$NetBSD: pic.c,v 1.3 2008/04/28 20:23:14 martin Exp $	*/
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -28,7 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.4 2008/12/30 05:43:14 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.3 2008/04/28 20:23:14 martin Exp $");
 
 #define _INTR_PRIVATE
 #include <sys/param.h>
@@ -36,7 +36,6 @@ __KERNEL_RCSID(0, "$NetBSD: pic.c,v 1.4 2008/12/30 05:43:14 matt Exp $");
 #include <sys/atomic.h>
 #include <sys/malloc.h>
 #include <sys/mallocvar.h>
-#include <sys/atomic.h>
 
 #include <arm/armreg.h>
 #include <arm/cpu.h>
@@ -62,6 +61,7 @@ struct pic_softc *pic_list[PIC_MAXPICS];
 volatile uint32_t pic_blocked_pics;
 volatile uint32_t pic_pending_pics;
 volatile uint32_t pic_pending_ipls;
+volatile uint32_t pic_pending_ipl_refcnt[NIPL];
 struct intrsource *pic_sources[PIC_MAXMAXSOURCES];
 struct intrsource *pic__iplsources[PIC_MAXMAXSOURCES];
 struct intrsource **pic_iplsource[NIPL] = {
@@ -91,12 +91,11 @@ pic_mark_pending_source(struct pic_softc *pic, struct intrsource *is)
 {
 	const uint32_t ipl_mask = __BIT(is->is_ipl);
 
-	atomic_or_32(&pic->pic_pending_irqs[is->is_irq >> 5],
-	    __BIT(is->is_irq & 0x1f));
+	pic->pic_pending_irqs[is->is_irq >> 5] |= __BIT(is->is_irq & 0x1f);
 
-	atomic_or_32(&pic->pic_pending_ipls, ipl_mask);
-	atomic_or_32(&pic_pending_ipls, ipl_mask);
-	atomic_or_32(&pic_pending_pics, __BIT(pic->pic_id));
+	pic->pic_pending_ipls |= ipl_mask;
+	pic_pending_ipls |= ipl_mask;
+	pic_pending_pics |= __BIT(pic->pic_id);
 }
 
 void
@@ -116,7 +115,7 @@ pic_mark_pending_sources(struct pic_softc *pic, size_t irq_base,
 {
 	struct intrsource ** const isbase = &pic->pic_sources[irq_base];
 	struct intrsource *is;
-	volatile uint32_t *ipending = &pic->pic_pending_irqs[irq_base >> 5];
+	uint32_t *ipending = &pic->pic_pending_irqs[irq_base >> 5];
 	uint32_t ipl_mask = 0;
 
 	if (pending == 0)
@@ -126,7 +125,7 @@ pic_mark_pending_sources(struct pic_softc *pic, size_t irq_base,
 	
 	(*pic->pic_ops->pic_block_irqs)(pic, irq_base, pending);
 
-	atomic_or_32(ipending, pending);
+	*ipending |= pending;
         while (pending != 0) {
 		int n = ffs(pending);
 		if (n-- == 0)
@@ -138,9 +137,9 @@ pic_mark_pending_sources(struct pic_softc *pic, size_t irq_base,
 		ipl_mask |= __BIT(is->is_ipl);
 	}
 
-	atomic_or_32(&pic->pic_pending_ipls, ipl_mask);
-	atomic_or_32(&pic_pending_ipls, ipl_mask);
-	atomic_or_32(&pic_pending_pics, __BIT(pic->pic_id));
+	pic->pic_pending_ipls |= ipl_mask;
+	pic_pending_ipls |= ipl_mask;
+	pic_pending_pics |= __BIT(pic->pic_id);
 
 	return ipl_mask;
 }
@@ -188,8 +187,8 @@ pic_deliver_irqs(struct pic_softc *pic, int ipl, void *frame)
 {
 	const uint32_t ipl_mask = __BIT(ipl);
 	struct intrsource *is;
-	volatile uint32_t *ipending = pic->pic_pending_irqs;
-	volatile uint32_t *iblocked = pic->pic_blocked_irqs;
+	uint32_t *ipending = pic->pic_pending_irqs;
+	uint32_t *iblocked = pic->pic_blocked_irqs;
 	size_t irq_base;
 #if PIC_MAXSOURCES > 32
 	size_t irq_count;
@@ -234,7 +233,7 @@ pic_deliver_irqs(struct pic_softc *pic, int ipl, void *frame)
 			irq = ffs(pending_irqs) - 1;
 			KASSERT(irq >= 0);
 
-			atomic_and_32(ipending, ~__BIT(irq));
+			*ipending &= ~__BIT(irq);
 			is = pic->pic_sources[irq_base + irq];
 			if (is != NULL) {
 				cpsie(I32_bit);
@@ -248,8 +247,8 @@ pic_deliver_irqs(struct pic_softc *pic, int ipl, void *frame)
 			    irq_base, *ipending, ipl);
 		} while (pending_irqs);
 		if (blocked_irqs) {
-			atomic_or_32(iblocked, blocked_irqs);
-			atomic_or_32(&pic_blocked_pics, __BIT(pic->pic_id));
+			*iblocked |= blocked_irqs;
+			pic_blocked_pics |= __BIT(pic->pic_id);
 		}
 	}
 
@@ -258,25 +257,25 @@ pic_deliver_irqs(struct pic_softc *pic, int ipl, void *frame)
 	 * Since interrupts are disabled, we don't have to be too careful
 	 * about these.
 	 */
-	if (atomic_and_32_nv(&pic->pic_pending_ipls, ~ipl_mask) == 0)
-		atomic_and_32(&pic_pending_pics, ~__BIT(pic->pic_id));
+	pic->pic_pending_ipls &= ~ipl_mask;
+	if (pic->pic_pending_ipls == 0)
+		pic_pending_pics &= ~__BIT(pic->pic_id);
 }
 
 static void
 pic_list_unblock_irqs(void)
 {
-	uint32_t blocked_pics = pic_blocked_pics;
+	uint32_t blocked = pic_blocked_pics;
 
 	pic_blocked_pics = 0;
 	for (;;) {
 		struct pic_softc *pic;
 #if PIC_MAXSOURCES > 32
-		volatile uint32_t *iblocked;
-		uint32_t blocked;
+		uint32_t *iblocked;
 		size_t irq_base;
 #endif
 
-		int pic_id = ffs(blocked_pics);
+		int pic_id = ffs(blocked);
 		if (pic_id-- == 0)
 			return;
 
@@ -286,19 +285,18 @@ pic_list_unblock_irqs(void)
 		for (irq_base = 0, iblocked = pic->pic_blocked_irqs;
 		     irq_base < pic->pic_maxsources;
 		     irq_base += 32, iblocked++) {
-			if ((blocked = *iblocked) != 0) {
+			if (*iblocked) {
 				(*pic->pic_ops->pic_unblock_irqs)(pic,
-				    irq_base, blocked);
-				atomic_and_32(iblocked, ~blocked);
+				    irq_base, *iblocked);
+				*iblocked = 0;
 			}
 		}
+		blocked &= ~__BIT(pic_id);
 #else
 		KASSERT(pic->pic_blocked_irqs[0] != 0);
 		(*pic->pic_ops->pic_unblock_irqs)(pic,
 		    0, pic->pic_blocked_irqs[0]);
-		pic->pic_blocked_irqs[0] = 0;
 #endif
-		blocked_pics &= ~__BIT(pic_id);
 	}
 }
 
@@ -306,11 +304,11 @@ pic_list_unblock_irqs(void)
 struct pic_softc *
 pic_list_find_pic_by_pending_ipl(uint32_t ipl_mask)
 {
-	uint32_t pending_pics = pic_pending_pics;
+	uint32_t pending = pic_pending_pics;
 	struct pic_softc *pic;
 
 	for (;;) {
-		int pic_id = ffs(pending_pics);
+		int pic_id = ffs(pending);
 		if (pic_id-- == 0)
 			return NULL;
 
@@ -318,7 +316,7 @@ pic_list_find_pic_by_pending_ipl(uint32_t ipl_mask)
 		KASSERT(pic != NULL);
 		if (pic->pic_pending_ipls & ipl_mask)
 			return pic;
-		pending_pics &= ~__BIT(pic_id);
+		pending &= ~__BIT(pic_id);
 	}
 }
 
@@ -332,7 +330,7 @@ pic_list_deliver_irqs(register_t psw, int ipl, void *frame)
 		pic_deliver_irqs(pic, ipl, frame);
 		KASSERT((pic->pic_pending_ipls & ipl_mask) == 0);
 	}
-	atomic_and_32(&pic_pending_ipls, ~ipl_mask);
+	pic_pending_ipls &= ~ipl_mask;
 }
 
 void

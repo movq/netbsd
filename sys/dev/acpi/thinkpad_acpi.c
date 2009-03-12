@@ -1,4 +1,4 @@
-/* $NetBSD: thinkpad_acpi.c,v 1.18 2009/02/17 12:30:31 jmcneill Exp $ */
+/* $NetBSD: thinkpad_acpi.c,v 1.16.4.1 2008/11/20 03:16:06 snj Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: thinkpad_acpi.c,v 1.18 2009/02/17 12:30:31 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: thinkpad_acpi.c,v 1.16.4.1 2008/11/20 03:16:06 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -182,7 +182,7 @@ thinkpad_attach(device_t parent, device_t self, void *opaque)
 	if (ACPI_FAILURE(rv))
 		sc->sc_cmoshdl_valid = false;
 	else {
-		aprint_debug_dev(self, "using CMOS at \\UCMS\n");
+		aprint_verbose_dev(self, "using CMOS at \\UCMS\n");
 		sc->sc_cmoshdl_valid = true;
 	}
 
@@ -194,7 +194,7 @@ thinkpad_attach(device_t parent, device_t self, void *opaque)
 			break;
 		}
 	if (sc->sc_ecdev)
-		aprint_debug_dev(self, "using EC at %s\n",
+		aprint_verbose_dev(self, "using EC at %s\n",
 		    device_xname(sc->sc_ecdev));
 
 	/* Get the supported event mask */

@@ -1,4 +1,4 @@
-/*	$NetBSD: syslogd.c,v 1.99 2009/02/06 21:09:46 mschuett Exp $	*/
+/*	$NetBSD: syslogd.c,v 1.86 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993, 1994
@@ -32,14 +32,14 @@
 #include <sys/cdefs.h>
 #ifndef lint
 __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993, 1994\
-	The Regents of the University of California.  All rights reserved.");
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)syslogd.c	8.3 (Berkeley) 4/4/94";
 #else
-__RCSID("$NetBSD: syslogd.c,v 1.99 2009/02/06 21:09:46 mschuett Exp $");
+__RCSID("$NetBSD: syslogd.c,v 1.86 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -67,31 +67,116 @@ __RCSID("$NetBSD: syslogd.c,v 1.99 2009/02/06 21:09:46 mschuett Exp $");
  *   by Peter da Silva.
  * -U and -v by Harlan Stenn.
  * Priority comparison code by Harlan Stenn.
- * TLS, syslog-protocol, and syslog-sign code by Martin Schuette.
  */
+
+#define	MAXLINE		1024		/* maximum line length */
+#define	MAXSVLINE	120		/* maximum saved line length */
+#define DEFUPRI		(LOG_USER|LOG_NOTICE)
+#define DEFSPRI		(LOG_KERN|LOG_NOTICE)
+#define TIMERINTVL	30		/* interval for checking flush, mark */
+#define TTYMSGTIME	1		/* timeout passed to ttymsg */
+
+#include <sys/param.h>
+#include <sys/socket.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#include <sys/un.h>
+#include <sys/wait.h>
+#include <sys/queue.h>
+#include <sys/event.h>
+
+#include <netinet/in.h>
+
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <grp.h>
+#include <locale.h>
+#include <netdb.h>
+#include <pwd.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <util.h>
+
+#include "utmpentry.h"
+#include "pathnames.h"
+
 #define SYSLOG_NAMES
-#include "syslogd.h"
-#include "extern.h"
-
-#ifndef DISABLE_SIGN
-#include "sign.h"
-struct sign_global_t GlobalSign = {
-	.rsid = 0,
-	.sig2_delims = STAILQ_HEAD_INITIALIZER(GlobalSign.sig2_delims)
-};
-#endif /* !DISABLE_SIGN */
-
-#ifndef DISABLE_TLS
-#include "tls.h"
-#endif /* !DISABLE_TLS */
+#include <sys/syslog.h>
 
 #ifdef LIBWRAP
+#include <tcpd.h>
+
 int allow_severity = LOG_AUTH|LOG_INFO;
 int deny_severity = LOG_AUTH|LOG_WARNING;
 #endif
 
-const char	*ConfFile = _PATH_LOGCONF;
+char	*ConfFile = _PATH_LOGCONF;
 char	ctty[] = _PATH_CONSOLE;
+
+#define FDMASK(fd)	(1 << (fd))
+
+#define	dprintf		if (Debug) printf
+
+#define MAXUNAMES	20	/* maximum number of user names */
+
+/*
+ * Flags to logmsg().
+ */
+
+#define IGN_CONS	0x001	/* don't print on console */
+#define SYNC_FILE	0x002	/* do fsync on file after printing */
+#define ADDDATE		0x004	/* add a date to the message */
+#define MARK		0x008	/* this message is a mark */
+#define	ISKERNEL	0x010	/* kernel generated message */
+
+/*
+ * This structure represents the files that will have log
+ * copies printed.
+ * We require f_file to be valid if f_type is F_FILE, F_CONSOLE, F_TTY,
+ * or if f_type is F_PIPE and f_pid > 0.
+ */
+
+struct filed {
+	struct	filed *f_next;		/* next in linked list */
+	short	f_type;			/* entry type, see below */
+	short	f_file;			/* file descriptor */
+	time_t	f_time;			/* time this was last written */
+	char	*f_host;		/* host from which to record */
+	u_char	f_pmask[LOG_NFACILITIES+1];	/* priority mask */
+	u_char	f_pcmp[LOG_NFACILITIES+1];	/* compare priority */
+#define	PRI_LT	0x1
+#define	PRI_EQ	0x2
+#define	PRI_GT	0x4
+	char	*f_program;		/* program this applies to */
+	union {
+		char	f_uname[MAXUNAMES][UT_NAMESIZE+1];
+		struct {
+			char	f_hname[MAXHOSTNAMELEN];
+			struct	addrinfo *f_addr;
+		} f_forw;		/* forwarding address */
+		char	f_fname[MAXPATHLEN];
+		struct {
+			char	f_pname[MAXPATHLEN];
+			pid_t	f_pid;
+		} f_pipe;
+	} f_un;
+	char	f_prevline[MAXSVLINE];		/* last message logged */
+	char	f_lasttime[16];			/* time of last occurrence */
+	char	f_prevhost[MAXHOSTNAMELEN];	/* host from which recd. */
+	int	f_prevpri;			/* pri of f_prevline */
+	int	f_prevlen;			/* length of f_prevline */
+	int	f_prevcount;			/* repetition cnt of prevline */
+	int	f_repeatcount;			/* number of "repeated" msgs */
+	int	f_lasterror;			/* last error on writev() */
+	int	f_flags;			/* file-specific flags */
+#define	FFLAG_SYNC	0x01
+};
 
 /*
  * Queue of about-to-be-dead processes we should watch out for.
@@ -105,21 +190,21 @@ typedef struct deadq_entry {
 } *dq_t;
 
 /*
- * The timeout to apply to processes waiting on the dead queue.	 Unit
+ * The timeout to apply to processes waiting on the dead queue.  Unit
  * of measure is "mark intervals", i.e. 20 minutes by default.
  * Processes on the dead queue will be terminated after that time.
  */
-#define DQ_TIMO_INIT	2
+#define	DQ_TIMO_INIT	2
 
 /*
  * Intervals at which we flush out "message repeated" messages,
- * in seconds after previous message is logged.	 After each flush,
+ * in seconds after previous message is logged.  After each flush,
  * we move to the next interval until we reach the largest.
  */
 int	repeatinterval[] = { 30, 120, 600 };	/* # of secs before flush */
-#define MAXREPEAT ((sizeof(repeatinterval) / sizeof(repeatinterval[0])) - 1)
-#define REPEATTIME(f)	((f)->f_time + repeatinterval[(f)->f_repeatcount])
-#define BACKOFF(f)	{ if ((size_t)(++(f)->f_repeatcount) > MAXREPEAT) \
+#define	MAXREPEAT ((sizeof(repeatinterval) / sizeof(repeatinterval[0])) - 1)
+#define	REPEATTIME(f)	((f)->f_time + repeatinterval[(f)->f_repeatcount])
+#define	BACKOFF(f)	{ if (++(f)->f_repeatcount > MAXREPEAT) \
 				 (f)->f_repeatcount = MAXREPEAT; \
 			}
 
@@ -131,51 +216,26 @@ int	repeatinterval[] = { 30, 120, 600 };	/* # of secs before flush */
 #define F_FORW		4		/* remote machine */
 #define F_USERS		5		/* list of users */
 #define F_WALL		6		/* everyone logged on */
-#define F_PIPE		7		/* pipe to program */
-#define F_TLS		8
+#define	F_PIPE		7		/* pipe to program */
 
-struct TypeInfo {
-	const char *name;
-	char	   *queue_length_string;
-	const char *default_length_string;
-	char	   *queue_size_string;
-	const char *default_size_string;
-	int64_t	    queue_length;
-	int64_t	    queue_size;
-	int   max_msg_length;
-} TypeInfo[] = {
-	/* numeric values are set in init()
-	 * -1 in length/size or max_msg_length means infinite */
-	{"UNUSED",  NULL,    "0", NULL,	  "0", 0, 0,	 0},
-	{"FILE",    NULL, "1024", NULL,	 "1M", 0, 0, 16384},
-	{"TTY",	    NULL,    "0", NULL,	  "0", 0, 0,  1024},
-	{"CONSOLE", NULL,    "0", NULL,	  "0", 0, 0,  1024},
-	{"FORW",    NULL,    "0", NULL,	 "1M", 0, 0, 16384},
-	{"USERS",   NULL,    "0", NULL,	  "0", 0, 0,  1024},
-	{"WALL",    NULL,    "0", NULL,	  "0", 0, 0,  1024},
-	{"PIPE",    NULL, "1024", NULL,	 "1M", 0, 0, 16384},
-#ifndef DISABLE_TLS
-	{"TLS",	    NULL,   "-1", NULL, "16M", 0, 0, 16384}
-#endif /* !DISABLE_TLS */
+char	*TypeNames[8] = {
+	"UNUSED",	"FILE",		"TTY",		"CONSOLE",
+	"FORW",		"USERS",	"WALL",		"PIPE"
 };
 
-struct	filed *Files = NULL;
+struct	filed *Files;
 struct	filed consfile;
 
-time_t	now;
-int	Debug = D_NONE;		/* debug flag */
+int	Debug;			/* debug flag */
 int	daemonized = 0;		/* we are not daemonized yet */
-char	*LocalFQDN = NULL;	       /* our FQDN */
-char	*oldLocalFQDN = NULL;	       /* our previous FQDN */
-char	LocalHostName[MAXHOSTNAMELEN]; /* our hostname */
-struct socketEvent *finet;	/* Internet datagram sockets and events */
-int   *funix;			/* Unix domain datagram sockets */
-#ifndef DISABLE_TLS
-struct socketEvent *TLS_Listen_Set; /* TLS/TCP sockets and events */
-#endif /* !DISABLE_TLS */
-int	Initialized = 0;	/* set when we have initialized ourselves */
+char	LocalHostName[MAXHOSTNAMELEN];	/* our hostname */
+char	oldLocalHostName[MAXHOSTNAMELEN];/* previous hostname */
+char	*LocalDomain;		/* our local domain name */
+size_t	LocalDomainLen;		/* length of LocalDomain */
+int	*finet = NULL;		/* Internet datagram sockets */
+int	Initialized;		/* set when we have initialized ourselves */
 int	ShuttingDown;		/* set when we die() */
-int	MarkInterval = 20 * 60; /* interval between marks in seconds */
+int	MarkInterval = 20 * 60;	/* interval between marks in seconds */
 int	MarkSeq = 0;		/* mark sequence number */
 int	SecureMode = 0;		/* listen only on unix domain socks */
 int	UseNameService = 1;	/* make domain name queries */
@@ -187,136 +247,81 @@ int	SyncKernel = 0;		/* write kernel messages synchronously */
 int	UniquePriority = 0;	/* only log specified priority */
 int	LogFacPri = 0;		/* put facility and priority in log messages: */
 				/* 0=no, 1=numeric, 2=names */
-bool	BSDOutputFormat = true;	/* if true emit traditional BSD Syslog lines,
-				 * otherwise new syslog-protocol lines
-				 *
-				 * Open Issue: having a global flag is the
-				 * easiest solution. If we get a more detailed
-				 * config file this could/should be changed
-				 * into a destination-specific flag.
-				 * Most output code should be ready to handle
-				 * this, it will only break some syslog-sign
-				 * configurations (e.g. with SG="0").
-				 */
-char	appname[]   = "syslogd";/* the APPNAME for own messages */
-char   *include_pid = NULL;	/* include PID in own messages */
 
+void	cfline(char *, struct filed *, char *, char *);
+char   *cvthname(struct sockaddr_storage *);
+void	deadq_enter(pid_t, const char *);
+int	deadq_remove(pid_t);
+int	decode(const char *, CODE *);
+void	die(struct kevent *);	/* SIGTERM kevent dispatch routine */
+void	domark(struct kevent *);/* timer kevent dispatch routine */
+void	fprintlog(struct filed *, int, char *);
+int	getmsgbufsize(void);
+int*	socksetup(int, const char *);
+void	init(struct kevent *);	/* SIGHUP kevent dispatch routine */
+void	logerror(const char *, ...);
+void	logmsg(int, char *, char *, int);
+void	log_deadchild(pid_t, int, const char *);
+int	matches_spec(const char *, const char *,
+		     char *(*)(const char *, const char *));
+void	printline(char *, char *, int);
+void	printsys(char *);
+int	p_open(char *, pid_t *);
+void	trim_localdomain(char *);
+void	reapchild(struct kevent *); /* SIGCHLD kevent dispatch routine */
+void	usage(void);
+void	wallmsg(struct filed *, struct iovec *, size_t);
+int	main(int, char *[]);
+void	logpath_add(char ***, int *, int *, char *);
+void	logpath_fileadd(char ***, int *, int *, char *);
 
-/* init and setup */
-void		usage(void) __attribute__((__noreturn__));
-void		logpath_add(char ***, int *, int *, const char *);
-void		logpath_fileadd(char ***, int *, int *, const char *);
-void		init(int fd, short event, void *ev);  /* SIGHUP kevent dispatch routine */
-struct socketEvent*
-		socksetup(int, const char *);
-int		getmsgbufsize(void);
-char	       *getLocalFQDN(void);
-void		trim_anydomain(char *);
-/* pipe & subprocess handling */
-int		p_open(char *, pid_t *);
-void		deadq_enter(pid_t, const char *);
-int		deadq_remove(pid_t);
-void		log_deadchild(pid_t, int, const char *);
-void		reapchild(int fd, short event, void *ev); /* SIGCHLD kevent dispatch routine */
-/* input message parsing & formatting */
-const char     *cvthname(struct sockaddr_storage *);
-void		printsys(char *);
-struct buf_msg *printline_syslogprotocol(const char*, char*, int, int);
-struct buf_msg *printline_bsdsyslog(const char*, char*, int, int);
-struct buf_msg *printline_kernelprintf(const char*, char*, int, int);
-size_t		check_timestamp(unsigned char *, char **, bool, bool);
-char	       *copy_utf8_ascii(char*, size_t);
-uint_fast32_t	get_utf8_value(const char*);
-unsigned	valid_utf8(const char *);
-static unsigned check_sd(char*);
-static unsigned check_msgid(char *);
-/* event handling */
-static void	dispatch_read_klog(int fd, short event, void *ev);
-static void	dispatch_read_finet(int fd, short event, void *ev);
-static void	dispatch_read_funix(int fd, short event, void *ev);
-static void	domark(int fd, short event, void *ev); /* timer kevent dispatch routine */
-/* log messages */
-void		logmsg_async(int, const char *, const char *, int);
-void		logmsg(struct buf_msg *);
-int		matches_spec(const char *, const char *,
-		char *(*)(const char *, const char *));
-void		udp_send(struct filed *, char *, size_t);
-void		wallmsg(struct filed *, struct iovec *, size_t);
-/* buffer & queue functions */
-size_t		message_queue_purge(struct filed *f, size_t, int);
-size_t		message_allqueues_check(void);
-static struct buf_queue *
-		find_qentry_to_delete(const struct buf_queue_head *, int, bool);
-struct buf_queue *
-		message_queue_add(struct filed *, struct buf_msg *);
-size_t		buf_queue_obj_size(struct buf_queue*);
-/* configuration & parsing */
-void		cfline(size_t, const char *, struct filed *, const char *,
-    const char *);
-void		read_config_file(FILE*, struct filed**);
-void		store_sign_delim_sg2(char*);
-int		decode(const char *, CODE *);
-bool		copy_config_value(const char *, char **, const char **,
-    const char *, int);
-bool		copy_config_value_word(char **, const char **);
+static int fkq;
 
-/* config parsing */
-#ifndef DISABLE_TLS
-void		free_cred_SLIST(struct peer_cred_head *);
-static inline void
-		free_incoming_tls_sockets(void);
-#endif /* !DISABLE_TLS */
+static struct kevent *allocevchange(void);
+static int wait_for_events(struct kevent *, size_t);
 
-/* for make_timestamp() */
-#define TIMESTAMPBUFSIZE 35
-char timestamp[TIMESTAMPBUFSIZE];
+static void dispatch_read_klog(struct kevent *);
+static void dispatch_read_finet(struct kevent *);
+static void dispatch_read_funix(struct kevent *);
 
 /*
- * Global line buffer.	Since we only process one event at a time,
+ * Global line buffer.  Since we only process one event at a time,
  * a global one will do.
  */
-char *linebuf;
-size_t linebufsize;
-
+static char *linebuf;
+static size_t linebufsize;
 static const char *bindhostname = NULL;
 
-#ifndef DISABLE_TLS
-struct TLS_Incoming TLS_Incoming_Head = \
-	SLIST_HEAD_INITIALIZER(TLS_Incoming_Head);
-extern char *SSL_ERRCODE[];
-struct tls_global_options_t tls_opt;
-#endif /* !DISABLE_TLS */
+#define	A_CNT(x)	(sizeof((x)) / sizeof((x)[0]))
 
 int
 main(int argc, char *argv[])
 {
-	int ch, j, fklog;
+	int ch, *funix, j, fklog;
 	int funixsize = 0, funixmaxsize = 0;
+	struct kevent events[16];
 	struct sockaddr_un sunx;
 	char **pp;
-	struct event *ev;
+	struct kevent *ev;
 	uid_t uid = 0;
 	gid_t gid = 0;
 	char *user = NULL;
 	char *group = NULL;
-	const char *root = "/";
+	char *root = "/";
 	char *endp;
 	struct group   *gr;
 	struct passwd  *pw;
 	unsigned long l;
 
-	/* should we set LC_TIME="C" to ensure correct timestamps&parsing? */
 	(void)setlocale(LC_ALL, "");
 
-	while ((ch = getopt(argc, argv, "b:dnsSf:m:o:p:P:ru:g:t:TUv")) != -1)
+	while ((ch = getopt(argc, argv, "b:dnsSf:m:p:P:ru:g:t:TUv")) != -1)
 		switch(ch) {
 		case 'b':
 			bindhostname = optarg;
 			break;
 		case 'd':		/* debug */
-			Debug = D_DEFAULT;
-			/* is there a way to read the integer value
-			 * for Debug as an optional argument? */
+			Debug++;
 			break;
 		case 'f':		/* configuration file */
 			ConfFile = optarg;
@@ -332,24 +337,12 @@ main(int argc, char *argv[])
 		case 'n':		/* turn off DNS queries */
 			UseNameService = 0;
 			break;
-		case 'o':		/* message format */
-			if (!strncmp(optarg, "rfc3164", sizeof("rfc3164")-1))
-				BSDOutputFormat = true;
-			else if (!strncmp(optarg, "syslog", sizeof("syslog")-1))
-				BSDOutputFormat = false;
-			else
-				usage();
-			/* TODO: implement additional output option "osyslog"
-			 *	 for old syslogd behaviour as introduced after
-			 *	 FreeBSD PR#bin/7055.
-			 */
-			break;
 		case 'p':		/* path */
-			logpath_add(&LogPaths, &funixsize,
+			logpath_add(&LogPaths, &funixsize, 
 			    &funixmaxsize, optarg);
 			break;
 		case 'P':		/* file of paths */
-			logpath_fileadd(&LogPaths, &funixsize,
+			logpath_fileadd(&LogPaths, &funixsize, 
 			    &funixmaxsize, optarg);
 			break;
 		case 'r':		/* disable "repeated" compression */
@@ -388,7 +381,6 @@ main(int argc, char *argv[])
 		usage();
 
 	setlinebuf(stdout);
-	tzset(); /* init TZ information for localtime. */
 
 	if (user != NULL) {
 		if (isdigit((unsigned char)*user)) {
@@ -396,21 +388,21 @@ main(int argc, char *argv[])
 			endp = NULL;
 			l = strtoul(user, &endp, 0);
 			if (errno || *endp != '\0')
-				goto getuser;
+	    			goto getuser;
 			uid = (uid_t)l;
-			if (uid != l) {/* TODO: never executed */
+			if (uid != l) {
 				errno = 0;
 				logerror("UID out of range");
-				die(0, 0, NULL);
+				die(NULL);
 			}
 		} else {
 getuser:
 			if ((pw = getpwnam(user)) != NULL) {
 				uid = pw->pw_uid;
 			} else {
-				errno = 0;
+				errno = 0;  
 				logerror("Cannot find user `%s'", user);
-				die(0, 0, NULL);
+				die(NULL);
 			}
 		}
 	}
@@ -421,12 +413,12 @@ getuser:
 			endp = NULL;
 			l = strtoul(group, &endp, 0);
 			if (errno || *endp != '\0')
-				goto getgroup;
+	    			goto getgroup;
 			gid = (gid_t)l;
-			if (gid != l) {/* TODO: never executed */
+			if (gid != l) {
 				errno = 0;
 				logerror("GID out of range");
-				die(0, 0, NULL);
+				die(NULL);
 			}
 		} else {
 getgroup:
@@ -435,14 +427,14 @@ getgroup:
 			} else {
 				errno = 0;
 				logerror("Cannot find group `%s'", group);
-				die(0, 0, NULL);
+				die(NULL);
 			}
 		}
 	}
 
 	if (access(root, F_OK | R_OK)) {
 		logerror("Cannot access `%s'", root);
-		die(0, 0, NULL);
+		die(NULL);
 	}
 
 	consfile.f_type = F_CONSOLE;
@@ -452,25 +444,25 @@ getgroup:
 	if (linebufsize < MAXLINE)
 		linebufsize = MAXLINE;
 	linebufsize++;
-
-	if (!(linebuf = malloc(linebufsize))) {
-		logerror("Couldn't allocate buffer");
-		die(0, 0, NULL);
+	linebuf = malloc(linebufsize);
+	if (linebuf == NULL) {
+		logerror("Couldn't allocate line buffer");
+		die(NULL);
 	}
 
 #ifndef SUN_LEN
 #define SUN_LEN(unp) (strlen((unp)->sun_path) + 2)
 #endif
 	if (funixsize == 0)
-		logpath_add(&LogPaths, &funixsize,
+		logpath_add(&LogPaths, &funixsize, 
 		    &funixmaxsize, _PATH_LOG);
 	funix = (int *)malloc(sizeof(int) * funixsize);
 	if (funix == NULL) {
 		logerror("Couldn't allocate funix descriptors");
-		die(0, 0, NULL);
+		die(NULL);
 	}
 	for (j = 0, pp = LogPaths; *pp; pp++, j++) {
-		DPRINTF(D_NET, "Making unix dgram socket `%s'\n", *pp);
+		dprintf("Making unix dgram socket `%s'\n", *pp);
 		unlink(*pp);
 		memset(&sunx, 0, sizeof(sunx));
 		sunx.sun_family = AF_LOCAL;
@@ -480,77 +472,49 @@ getgroup:
 		    (struct sockaddr *)&sunx, SUN_LEN(&sunx)) < 0 ||
 		    chmod(*pp, 0666) < 0) {
 			logerror("Cannot create `%s'", *pp);
-			die(0, 0, NULL);
+			die(NULL);
 		}
-		DPRINTF(D_NET, "Listening on unix dgram socket `%s'\n", *pp);
+		dprintf("Listening on unix dgram socket `%s'\n", *pp);
 	}
 
 	if ((fklog = open(_PATH_KLOG, O_RDONLY, 0)) < 0) {
-		DPRINTF(D_FILE, "Can't open `%s' (%d)\n", _PATH_KLOG, errno);
+		dprintf("Can't open `%s' (%d)\n", _PATH_KLOG, errno);
 	} else {
-		DPRINTF(D_FILE, "Listening on kernel log `%s' with fd %d\n",
-		    _PATH_KLOG, fklog);
+		dprintf("Listening on kernel log `%s'\n", _PATH_KLOG);
 	}
 
-#if (!defined(DISABLE_TLS) && !defined(DISABLE_SIGN))
-	/* basic OpenSSL init */
-	SSL_load_error_strings();
-	(void) SSL_library_init();
-	OpenSSL_add_all_digests();
-	/* OpenSSL PRNG needs /dev/urandom, thus initialize before chroot() */
-	if (!RAND_status())
-		logerror("Unable to initialize OpenSSL PRNG");
-	else {
-		DPRINTF(D_TLS, "Initializing PRNG\n");
-	}
-#endif /* (!defined(DISABLE_TLS) && !defined(DISABLE_SIGN)) */
-#ifndef DISABLE_SIGN
-	/* initialize rsid -- we will use that later to determine
-	 * whether sign_global_init() was already called */
-	GlobalSign.rsid = 0;
-#endif /* !DISABLE_SIGN */
-#if (IETF_NUM_PRIVALUES != (LOG_NFACILITIES<<3))
-	logerror("Warning: system defines %d priority values, but "
-	    "syslog-protocol/syslog-sign specify %d values",
-	    LOG_NFACILITIES, SIGN_NUM_PRIVALS);
-#endif
-
-	/*
+	/* 
 	 * All files are open, we can drop privileges and chroot
 	 */
-	DPRINTF(D_MISC, "Attempt to chroot to `%s'\n", root);
+	dprintf("Attempt to chroot to `%s'\n", root);  
 	if (chroot(root)) {
 		logerror("Failed to chroot to `%s'", root);
-		die(0, 0, NULL);
+		die(NULL);
 	}
-	DPRINTF(D_MISC, "Attempt to set GID/EGID to `%d'\n", gid);
+	dprintf("Attempt to set GID/EGID to `%d'\n", gid);  
 	if (setgid(gid) || setegid(gid)) {
 		logerror("Failed to set gid to `%d'", gid);
-		die(0, 0, NULL);
+		die(NULL);
 	}
-	DPRINTF(D_MISC, "Attempt to set UID/EUID to `%d'\n", uid);
+	dprintf("Attempt to set UID/EUID to `%d'\n", uid);  
 	if (setuid(uid) || seteuid(uid)) {
 		logerror("Failed to set uid to `%d'", uid);
-		die(0, 0, NULL);
+		die(NULL);
 	}
-	/*
-	 * We cannot detach from the terminal before we are sure we won't
+
+	/* 
+	 * We cannot detach from the terminal before we are sure we won't 
 	 * have a fatal error, because error message would not go to the
-	 * terminal and would not be logged because syslogd dies.
+	 * terminal and would not be logged because syslogd dies. 
 	 * All die() calls are behind us, we can call daemon()
 	 */
 	if (!Debug) {
 		(void)daemon(0, 0);
 		daemonized = 1;
-		/* tuck my process id away, if i'm not in debug mode */
-#ifdef __NetBSD_Version__
-		pidfile(NULL);
-#endif /* __NetBSD_Version__ */
-	}
 
-#define MAX_PID_LEN 5
-	include_pid = malloc(MAX_PID_LEN+1);
-	snprintf(include_pid, MAX_PID_LEN+1, "%d", getpid());
+		/* tuck my process id away, if i'm not in debug mode */
+		pidfile(NULL);
+	}
 
 	/*
 	 * Create the global kernel event descriptor.
@@ -559,14 +523,17 @@ getgroup:
 	 * API dictates that kqueue descriptors are not inherited
 	 * across forks (lame!).
 	 */
-	(void)event_init();
+	if ((fkq = kqueue()) < 0) {
+		logerror("Cannot create event queue");
+		die(NULL);	/* XXX This error is lost! */
+	}
 
 	/*
 	 * We must read the configuration file for the first time
 	 * after the kqueue descriptor is created, because we install
 	 * events during this process.
 	 */
-	init(0, 0, NULL);
+	init(NULL);
 
 	/*
 	 * Always exit on SIGTERM.  Also exit on SIGINT and SIGQUIT
@@ -575,66 +542,66 @@ getgroup:
 	(void)signal(SIGTERM, SIG_IGN);
 	(void)signal(SIGINT, SIG_IGN);
 	(void)signal(SIGQUIT, SIG_IGN);
-
-	ev = allocev();
-	signal_set(ev, SIGTERM, die, ev);
-	EVENT_ADD(ev);
-
+	ev = allocevchange();
+	EV_SET(ev, SIGTERM, EVFILT_SIGNAL, EV_ADD | EV_ENABLE, 0, 0,
+	    (intptr_t) die);
 	if (Debug) {
-		ev = allocev();
-		signal_set(ev, SIGINT, die, ev);
-		EVENT_ADD(ev);
-		ev = allocev();
-		signal_set(ev, SIGQUIT, die, ev);
-		EVENT_ADD(ev);
+		ev = allocevchange();
+		EV_SET(ev, SIGINT, EVFILT_SIGNAL, EV_ADD | EV_ENABLE, 0, 0,
+		    (intptr_t) die);
+
+		ev = allocevchange();
+		EV_SET(ev, SIGQUIT, EVFILT_SIGNAL, EV_ADD | EV_ENABLE, 0, 0,
+		    (intptr_t) die);
 	}
 
-	ev = allocev();
-	signal_set(ev, SIGCHLD, reapchild, ev);
-	EVENT_ADD(ev);
+	ev = allocevchange();
+	EV_SET(ev, SIGCHLD, EVFILT_SIGNAL, EV_ADD | EV_ENABLE, 0, 0,
+	    (intptr_t) reapchild);
 
-	ev = allocev();
-	schedule_event(&ev,
-		&((struct timeval){TIMERINTVL, 0}),
-		domark, ev);
+	ev = allocevchange();
+	EV_SET(ev, 0, EVFILT_TIMER, EV_ADD | EV_ENABLE, 0,
+	    TIMERINTVL * 1000 /* seconds -> ms */, (intptr_t) domark);
 
-	(void)signal(SIGPIPE, SIG_IGN); /* We'll catch EPIPE instead. */
+	(void)signal(SIGPIPE, SIG_IGN);	/* We'll catch EPIPE instead. */
 
 	/* Re-read configuration on SIGHUP. */
 	(void) signal(SIGHUP, SIG_IGN);
-	ev = allocev();
-	signal_set(ev, SIGHUP, init, ev);
-	EVENT_ADD(ev);
-
-#ifndef DISABLE_TLS
-	ev = allocev();
-	signal_set(ev, SIGUSR1, dispatch_force_tls_reconnect, ev);
-	EVENT_ADD(ev);
-#endif /* !DISABLE_TLS */
+	ev = allocevchange();
+	EV_SET(ev, SIGHUP, EVFILT_SIGNAL, EV_ADD | EV_ENABLE, 0, 0,
+	    (intptr_t) init);
 
 	if (fklog >= 0) {
-		ev = allocev();
-		DPRINTF(D_EVENT,
-			"register klog for fd %d with ev@%p\n", fklog, ev);
-		event_set(ev, fklog, EV_READ | EV_PERSIST,
-			dispatch_read_klog, ev);
-		EVENT_ADD(ev);
+		ev = allocevchange();
+		EV_SET(ev, fklog, EVFILT_READ, EV_ADD | EV_ENABLE,
+		    0, 0, (intptr_t) dispatch_read_klog);
 	}
 	for (j = 0, pp = LogPaths; *pp; pp++, j++) {
-		ev = allocev();
-		event_set(ev, funix[j], EV_READ | EV_PERSIST,
-			dispatch_read_funix, ev);
-		EVENT_ADD(ev);
+		ev = allocevchange();
+		EV_SET(ev, funix[j], EVFILT_READ, EV_ADD | EV_ENABLE,
+		    0, 0, (intptr_t) dispatch_read_funix);
 	}
 
-	DPRINTF(D_MISC, "Off & running....\n");
+	dprintf("Off & running....\n");
 
-	j = event_dispatch();
-	/* normal termination via die(), reaching this is an error */
-	DPRINTF(D_MISC, "event_dispatch() returned %d\n", j);
-	die(0, 0, NULL);
-	/*NOTREACHED*/
-	return 0;
+	for (;;) {
+		void (*handler)(struct kevent *);
+		int i, rv;
+
+		rv = wait_for_events(events, A_CNT(events));
+		if (rv == 0)
+			continue;
+		if (rv < 0) {
+			if (errno != EINTR)
+				logerror("kevent() failed");
+			continue;
+		}
+		dprintf("Got an event (%d)\n", rv);
+		for (i = 0; i < rv; i++) {
+			handler = (void *) events[i].udata;
+			(*handler)(&events[i]);
+		}
+	}
 }
 
 void
@@ -651,21 +618,14 @@ usage(void)
 
 /*
  * Dispatch routine for reading /dev/klog
- *
- * Note: slightly different semantic in dispatch_read functions:
- *	 - read_klog() might give multiple messages in linebuf and
- *	   leaves the task of splitting them to printsys()
- *	 - all other read functions receive one message and
- *	   then call printline() with one buffer.
  */
 static void
-dispatch_read_klog(int fd, short event, void *ev)
+dispatch_read_klog(struct kevent *ev)
 {
 	ssize_t rv;
+	int fd = ev->ident;
 
-	DPRINTF((D_CALL|D_EVENT), "Kernel log active (%d, %d, %p)"
-		" with linebuf@%p, length %zu)\n", fd, event, ev,
-		linebuf, linebufsize);
+	dprintf("Kernel log active\n");
 
 	rv = read(fd, linebuf, linebufsize - 1);
 	if (rv > 0) {
@@ -676,8 +636,10 @@ dispatch_read_klog(int fd, short event, void *ev)
 		 * /dev/klog has croaked.  Disable the event
 		 * so it won't bother us again.
 		 */
+		struct kevent *cev = allocevchange();
 		logerror("klog failed");
-		event_del(ev);
+		EV_SET(cev, fd, EVFILT_READ, EV_DISABLE,
+		    0, 0, (intptr_t) dispatch_read_klog);
 	}
 }
 
@@ -685,11 +647,12 @@ dispatch_read_klog(int fd, short event, void *ev)
  * Dispatch routine for reading Unix domain sockets.
  */
 static void
-dispatch_read_funix(int fd, short event, void *ev)
+dispatch_read_funix(struct kevent *ev)
 {
 	struct sockaddr_un myname, fromunix;
 	ssize_t rv;
 	socklen_t sunlen;
+	int fd = ev->ident;
 
 	sunlen = sizeof(myname);
 	if (getsockname(fd, (struct sockaddr *)&myname, &sunlen) != 0) {
@@ -697,25 +660,23 @@ dispatch_read_funix(int fd, short event, void *ev)
 		 * This should never happen, so ensure that it doesn't
 		 * happen again.
 		 */
+		struct kevent *cev = allocevchange();
 		logerror("getsockname() unix failed");
-		event_del(ev);
+		EV_SET(cev, fd, EVFILT_READ, EV_DISABLE,
+		    0, 0, (intptr_t) dispatch_read_funix);
 		return;
 	}
 
-	DPRINTF((D_CALL|D_EVENT|D_NET), "Unix socket (%.*s) active (%d, %d %p)"
-		" with linebuf@%p, size %zu)\n", (int)(myname.sun_len
-		- sizeof(myname.sun_len) - sizeof(myname.sun_family)),
-		myname.sun_path, fd, event, ev, linebuf, linebufsize-1);
+	dprintf("Unix socket (%s) active\n", myname.sun_path);
 
 	sunlen = sizeof(fromunix);
-	rv = recvfrom(fd, linebuf, linebufsize-1, 0,
+	rv = recvfrom(fd, linebuf, MAXLINE, 0,
 	    (struct sockaddr *)&fromunix, &sunlen);
 	if (rv > 0) {
 		linebuf[rv] = '\0';
-		printline(LocalFQDN, linebuf, 0);
+		printline(LocalHostName, linebuf, 0);
 	} else if (rv < 0 && errno != EINTR) {
-		logerror("recvfrom() unix `%.*s'",
-			myname.sun_len, myname.sun_path);
+		logerror("recvfrom() unix `%s'", myname.sun_path);
 	}
 }
 
@@ -723,7 +684,7 @@ dispatch_read_funix(int fd, short event, void *ev)
  * Dispatch routine for reading Internet sockets.
  */
 static void
-dispatch_read_finet(int fd, short event, void *ev)
+dispatch_read_finet(struct kevent *ev)
 {
 #ifdef LIBWRAP
 	struct request_info req;
@@ -731,22 +692,21 @@ dispatch_read_finet(int fd, short event, void *ev)
 	struct sockaddr_storage frominet;
 	ssize_t rv;
 	socklen_t len;
+	int fd = ev->ident;
 	int reject = 0;
 
-	DPRINTF((D_CALL|D_EVENT|D_NET), "inet socket active (%d, %d %p) "
-		" with linebuf@%p, size %zu)\n",
-		fd, event, ev, linebuf, linebufsize-1);
+	dprintf("inet socket active\n");
 
 #ifdef LIBWRAP
-	request_init(&req, RQ_DAEMON, appname, RQ_FILE, fd, NULL);
+	request_init(&req, RQ_DAEMON, "syslogd", RQ_FILE, fd, NULL);
 	fromhost(&req);
 	reject = !hosts_access(&req);
 	if (reject)
-		DPRINTF(D_NET, "access denied\n");
+		dprintf("access denied\n");
 #endif
 
 	len = sizeof(frominet);
-	rv = recvfrom(fd, linebuf, linebufsize-1, 0,
+	rv = recvfrom(fd, linebuf, MAXLINE, 0,
 	    (struct sockaddr *)&frominet, &len);
 	if (rv == 0 || (rv < 0 && errno == EINTR))
 		return;
@@ -758,7 +718,7 @@ dispatch_read_finet(int fd, short event, void *ev)
 	linebuf[rv] = '\0';
 	if (!reject)
 		printline(cvthname(&frominet), linebuf,
-		    RemoteAddDate ? ADDDATE : 0);
+			  RemoteAddDate ? ADDDATE : 0);
 }
 
 /*
@@ -767,12 +727,12 @@ dispatch_read_finet(int fd, short event, void *ev)
  * it, update everything as necessary, possibly allocating a new array
  */
 void
-logpath_add(char ***lp, int *szp, int *maxszp, const char *new)
+logpath_add(char ***lp, int *szp, int *maxszp, char *new)
 {
 	char **nlp;
 	int newmaxsz;
 
-	DPRINTF(D_FILE, "Adding `%s' to the %p logpath list\n", new, *lp);
+	dprintf("Adding `%s' to the %p logpath list\n", new, *lp);
 	if (*szp == *maxszp) {
 		if (*maxszp == 0) {
 			newmaxsz = 4;	/* start of with enough for now */
@@ -782,21 +742,21 @@ logpath_add(char ***lp, int *szp, int *maxszp, const char *new)
 		nlp = realloc(*lp, sizeof(char *) * (newmaxsz + 1));
 		if (nlp == NULL) {
 			logerror("Couldn't allocate line buffer");
-			die(0, 0, NULL);
+			die(NULL);
 		}
 		*lp = nlp;
 		*maxszp = newmaxsz;
 	}
 	if (((*lp)[(*szp)++] = strdup(new)) == NULL) {
 		logerror("Couldn't allocate logpath");
-		die(0, 0, NULL);
+		die(NULL);
 	}
 	(*lp)[(*szp)] = NULL;		/* always keep it NULL terminated */
 }
 
 /* do a file of log sockets */
 void
-logpath_fileadd(char ***lp, int *szp, int *maxszp, const char *file)
+logpath_fileadd(char ***lp, int *szp, int *maxszp, char *file)
 {
 	FILE *fp;
 	char *line;
@@ -805,10 +765,10 @@ logpath_fileadd(char ***lp, int *szp, int *maxszp, const char *file)
 	fp = fopen(file, "r");
 	if (fp == NULL) {
 		logerror("Could not open socket file list `%s'", file);
-		die(0, 0, NULL);
+		die(NULL);
 	}
 
-	while ((line = fgetln(fp, &len)) != NULL) {
+	while ((line = fgetln(fp, &len))) {
 		line[len - 1] = 0;
 		logpath_add(lp, szp, maxszp, line);
 	}
@@ -816,644 +776,15 @@ logpath_fileadd(char ***lp, int *szp, int *maxszp, const char *file)
 }
 
 /*
- * checks UTF-8 codepoint
- * returns either its length in bytes or 0 if *input is invalid
-*/
-unsigned
-valid_utf8(const char *c) {
-	unsigned rc, nb;
-
-	/* first byte gives sequence length */
-	     if ((*c & 0x80) == 0x00) return 1; /* 0bbbbbbb -- ASCII */
-	else if ((*c & 0xc0) == 0x80) return 0; /* 10bbbbbb -- trailing byte */
-	else if ((*c & 0xe0) == 0xc0) nb = 2;	/* 110bbbbb */
-	else if ((*c & 0xf0) == 0xe0) nb = 3;	/* 1110bbbb */
-	else if ((*c & 0xf8) == 0xf0) nb = 4;	/* 11110bbb */
-	else return 0; /* UTF-8 allows only up to 4 bytes */
-
-	/* catch overlong encodings */
-	if ((*c & 0xfe) == 0xc0)
-		return 0; /* 1100000b ... */
-	else if (((*c & 0xff) == 0xe0) && ((*(c+1) & 0xe0) == 0x80))
-		return 0; /* 11100000 100bbbbb ... */
-	else if (((*c & 0xff) == 0xf0) && ((*(c+1) & 0xf0) == 0x80))
-		return 0; /* 11110000 1000bbbb ... ... */
-
-	/* and also filter UTF-16 surrogates (=invalid in UTF-8) */
-	if (((*c & 0xff) == 0xed) && ((*(c+1) & 0xe0) == 0xa0))
-		return 0; /* 11101101 101bbbbb ... */
-
-	rc = nb;
-	/* check trailing bytes */
-	switch (nb) {
-	default: return 0;
-	case 4: if ((*(c+3) & 0xc0) != 0x80) return 0; /*FALLTHROUGH*/
-	case 3: if ((*(c+2) & 0xc0) != 0x80) return 0; /*FALLTHROUGH*/
-	case 2: if ((*(c+1) & 0xc0) != 0x80) return 0; /*FALLTHROUGH*/
-	}
-	return rc;
-}
-#define UTF8CHARMAX 4
-
-/*
- * read UTF-8 value
- * returns a the codepoint number
- */
-uint_fast32_t
-get_utf8_value(const char *c) {
-	uint_fast32_t sum;
-	unsigned nb, i;
-
-	/* first byte gives sequence length */
-	     if ((*c & 0x80) == 0x00) return *c;/* 0bbbbbbb -- ASCII */
-	else if ((*c & 0xc0) == 0x80) return 0; /* 10bbbbbb -- trailing byte */
-	else if ((*c & 0xe0) == 0xc0) {		/* 110bbbbb */
-		nb = 2;
-		sum = (*c & ~0xe0) & 0xff;
-	} else if ((*c & 0xf0) == 0xe0) {	/* 1110bbbb */
-		nb = 3;
-		sum = (*c & ~0xf0) & 0xff;
-	} else if ((*c & 0xf8) == 0xf0) {	/* 11110bbb */
-		nb = 4;
-		sum = (*c & ~0xf8) & 0xff;
-	} else return 0; /* UTF-8 allows only up to 4 bytes */
-
-	/* check trailing bytes -- 10bbbbbb */
-	i = 1;
-	while (i < nb) {
-		sum <<= 6;
-		sum |= ((*(c+i) & ~0xc0) & 0xff);
-		i++;
-	}
-	return sum;
-}
-
-/* note previous versions transscribe
- * control characters, e.g. \007 --> "^G"
- * did anyone rely on that?
- *
- * this new version works on only one buffer and
- * replaces control characters with a space
- */
-#define NEXTFIELD(ptr) if (*(p) == ' ') (p)++; /* SP */			\
-		       else {						\
-				DPRINTF(D_DATA, "format error\n");	\
-				if (*(p) == '\0') start = (p);		\
-				goto all_syslog_msg;			\
-		       }
-#define FORCE2ASCII(c) ((iscntrl((unsigned char)(c)) && (c) != '\t')	\
-			? ((c) == '\n' ? ' ' : '?')			\
-			: (c) & 0177)
-
-/* following syslog-protocol */
-#define printusascii(ch) (ch >= 33 && ch <= 126)
-#define sdname(ch) (ch != '=' && ch != ' ' \
-		 && ch != ']' && ch != '"' \
-		 && printusascii(ch))
-
-/* checks whether the first word of string p can be interpreted as
- * a syslog-protocol MSGID and if so returns its length.
- *
- * otherwise returns 0
- */
-static unsigned
-check_msgid(char *p)
-{
-	char *q = p;
-
-	/* consider the NILVALUE to be valid */
-	if (*q == '-' && *(q+1) == ' ')
-		return 1;
-
-	for (;;) {
-		if (*q == ' ')
-			return q - p;
-		else if (*q == '\0' || !printusascii(*q) || q - p >= MSGID_MAX)
-			return 0;
-		else
-			q++;
-	}
-}
-
-/*
- * returns number of chars found in SD at beginning of string p
- * thus returns 0 if no valid SD is found
- *
- * if ascii == true then substitute all non-ASCII chars
- * otherwise use syslog-protocol rules to allow UTF-8 in values
- * note: one pass for filtering and scanning, so a found SD
- * is always filtered, but an invalid one could be partially
- * filtered up to the format error.
- */
-static unsigned
-check_sd(char* p)
-{
-	char *q = p;
-	bool esc = false;
-
-	/* consider the NILVALUE to be valid */
-	if (*q == '-' && (*(q+1) == ' ' || *(q+1) == '\0'))
-		return 1;
-
-	for(;;) { /* SD-ELEMENT */
-		if (*q++ != '[') return 0;
-		/* SD-ID */
-		if (!sdname(*q)) return 0;
-		while (sdname(*q)) {
-			*q = FORCE2ASCII(*q);
-			q++;
-		}
-		for(;;) { /* SD-PARAM */
-			if (*q == ']') {
-				q++;
-				if (*q == ' ' || *q == '\0') return q - p;
-				else if (*q == '[') break;
-			} else if (*q++ != ' ') return 0;
-
-			/* PARAM-NAME */
-			if (!sdname(*q)) return 0;
-			while (sdname(*q)) {
-				*q = FORCE2ASCII(*q);
-				q++;
-			}
-
-			if (*q++ != '=') return 0;
-			if (*q++ != '"') return 0;
-
-			for(;;) { /* PARAM-VALUE */
-				if (esc) {
-					esc = false;
-					if (*q == '\\' || *q == '"' ||
-					    *q == ']') {
-						q++;
-						continue;
-					}
-					/* no else because invalid
-					 * escape sequences are accepted */
-				}
-				else if (*q == '"') break;
-				else if (*q == '\0' || *q == ']') return 0;
-				else if (*q == '\\') esc = true;
-				else {
-					int i;
-					i = valid_utf8(q);
-					if (i == 0)
-						*q = '?';
-					else if (i == 1)
-						*q = FORCE2ASCII(*q);
-					else /* multi byte char */
-						q += (i-1);
-				}
-				q++;
-			}
-			q++;
-		}
-	}
-}
-
-struct buf_msg *
-printline_syslogprotocol(const char *hname, char *msg,
-	int flags, int pri)
-{
-	struct buf_msg *buffer;
-	char *p, *start;
-	unsigned sdlen = 0, i = 0;
-	bool utf8allowed = false; /* for some fields */
-
-	DPRINTF((D_CALL|D_BUFFER|D_DATA), "printline_syslogprotocol("
-	    "\"%s\", \"%s\", %d, %d)\n", hname, msg, flags, pri);
-
-	buffer = buf_msg_new(0);
-	p = msg;
-	p += check_timestamp((unsigned char*) p,
-		&buffer->timestamp, true, !BSDOutputFormat);
-	DPRINTF(D_DATA, "Got timestamp \"%s\"\n", buffer->timestamp);
-
-	if (flags & ADDDATE) {
-		FREEPTR(buffer->timestamp);
-		buffer->timestamp = strdup(make_timestamp(NULL,
-			!BSDOutputFormat));
-	}
-
-	start = p;
-	NEXTFIELD(p);
-	/* extract host */
-	for (start = p;; p++) {
-		if ((*p == ' ' || *p == '\0')
-		    && start == p-1 && *(p-1) == '-') {
-			/* NILVALUE */
-			break;
-		} else if ((*p == ' ' || *p == '\0')
-		    && (start != p-1 || *(p-1) != '-')) {
-			buffer->host = strndup(start, p - start);
-			break;
-		} else {
-			*p = FORCE2ASCII(*p);
-		}
-	}
-	/* p @ SP after host */
-	DPRINTF(D_DATA, "Got host \"%s\"\n", buffer->host);
-
-	/* extract app-name */
-	NEXTFIELD(p);
-	for (start = p;; p++) {
-		if ((*p == ' ' || *p == '\0')
-		    && start == p-1 && *(p-1) == '-') {
-			/* NILVALUE */
-			break;
-		} else if ((*p == ' ' || *p == '\0')
-		    && (start != p-1 || *(p-1) != '-')) {
-			buffer->prog = strndup(start, p - start);
-			break;
-		} else {
-			*p = FORCE2ASCII(*p);
-		}
-	}
-	DPRINTF(D_DATA, "Got prog \"%s\"\n", buffer->prog);
-
-	/* extract procid */
-	NEXTFIELD(p);
-	for (start = p;; p++) {
-		if ((*p == ' ' || *p == '\0')
-		    && start == p-1 && *(p-1) == '-') {
-			/* NILVALUE */
-			break;
-		} else if ((*p == ' ' || *p == '\0')
-		    && (start != p-1 || *(p-1) != '-')) {
-			buffer->pid = strndup(start, p - start);
-			start = p;
-			break;
-		} else {
-			*p = FORCE2ASCII(*p);
-		}
-	}
-	DPRINTF(D_DATA, "Got pid \"%s\"\n", buffer->pid);
-
-	/* extract msgid */
-	NEXTFIELD(p);
-	for (start = p;; p++) {
-		if ((*p == ' ' || *p == '\0')
-		    && start == p-1 && *(p-1) == '-') {
-			/* NILVALUE */
-			start = p+1;
-			break;
-		} else if ((*p == ' ' || *p == '\0')
-		    && (start != p-1 || *(p-1) != '-')) {
-			buffer->msgid = strndup(start, p - start);
-			start = p+1;
-			break;
-		} else {
-			*p = FORCE2ASCII(*p);
-		}
-	}
-	DPRINTF(D_DATA, "Got msgid \"%s\"\n", buffer->msgid);
-
-	/* extract SD */
-	NEXTFIELD(p);
-	start = p;
-	sdlen = check_sd(p);
-	DPRINTF(D_DATA, "check_sd(\"%s\") returned %d\n", p, sdlen);
-
-	if (sdlen == 1 && *p == '-') {
-		/* NILVALUE */
-		p++;
-	} else if (sdlen > 1) {
-		buffer->sd = strndup(p, sdlen);
-		p += sdlen;
-	} else {
-		DPRINTF(D_DATA, "format error\n");
-	}
-	if	(*p == '\0') start = p;
-	else if (*p == ' ')  start = ++p; /* SP */
-	DPRINTF(D_DATA, "Got SD \"%s\"\n", buffer->sd);
-
-	/* and now the message itself
-	 * note: move back to last start to check for BOM
-	 */
-all_syslog_msg:
-	p = start;
-
-	/* check for UTF-8-BOM */
-	if (IS_BOM(p)) {
-		DPRINTF(D_DATA, "UTF-8 BOM\n");
-		utf8allowed = true;
-		p += 3;
-	}
-
-	if (*p != '\0' && !utf8allowed) {
-		size_t msglen;
-
-		msglen = strlen(p);
-		assert(!buffer->msg);
-		buffer->msg = copy_utf8_ascii(p, msglen);
-		buffer->msgorig = buffer->msg;
-		buffer->msglen = buffer->msgsize = strlen(buffer->msg)+1;
-	} else if (*p != '\0' && utf8allowed) {
-		while (*p != '\0') {
-			i = valid_utf8(p);
-			if (i == 0)
-				*p++ = '?';
-			else if (i == 1)
-				*p = FORCE2ASCII(*p);
-			p += i;
-		}
-		assert(p != start);
-		assert(!buffer->msg);
-		buffer->msg = strndup(start, p - start);
-		buffer->msgorig = buffer->msg;
-		buffer->msglen = buffer->msgsize = 1 + p - start;
-	}
-	DPRINTF(D_DATA, "Got msg \"%s\"\n", buffer->msg);
-
-	buffer->recvhost = strdup(hname);
-	buffer->pri = pri;
-	buffer->flags = flags;
-
-	return buffer;
-}
-
-/* copies an input into a new ASCII buffer
- * ASCII controls are converted to format "^X"
- * multi-byte UTF-8 chars are converted to format "<ab><cd>"
- */
-#define INIT_BUFSIZE 512
-char *
-copy_utf8_ascii(char *p, size_t p_len)
-{
-	size_t idst = 0, isrc = 0, dstsize = INIT_BUFSIZE, i;
-	char *dst, *tmp_dst;
-
-	MALLOC(dst, dstsize);
-	while (isrc < p_len) {
-		if (dstsize < idst + 10) {
-			/* check for enough space for \0 and a UTF-8
-			 * conversion; longest possible is <U+123456> */
-			tmp_dst = realloc(dst, dstsize + INIT_BUFSIZE);
-			if (!tmp_dst)
-				break;
-			dst = tmp_dst;
-			dstsize += INIT_BUFSIZE;
-		}
-
-		i = valid_utf8(&p[isrc]);
-		if (i == 0) { /* invalid encoding */
-			dst[idst++] = '?';
-			isrc++;
-		} else if (i == 1) { /* check printable */
-			if (iscntrl((unsigned char)p[isrc])
-			 && p[isrc] != '\t') {
-				if (p[isrc] == '\n') {
-					dst[idst++] = ' ';
-					isrc++;
-				} else {
-					dst[idst++] = '^';
-					dst[idst++] = p[isrc++] ^ 0100;
-				}
-			} else
-				dst[idst++] = p[isrc++];
-		} else {  /* convert UTF-8 to ASCII */
-			dst[idst++] = '<';
-			idst += snprintf(&dst[idst], dstsize - idst, "U+%x",
-			    get_utf8_value(&p[isrc]));
-			isrc += i;
-			dst[idst++] = '>';
-		}
-	}
-	dst[idst] = '\0';
-
-	/* shrink buffer to right size */
-	tmp_dst = realloc(dst, idst+1);
-	if (tmp_dst)
-		return tmp_dst;
-	else
-		return dst;
-}
-
-struct buf_msg *
-printline_bsdsyslog(const char *hname, char *msg,
-	int flags, int pri)
-{
-	struct buf_msg *buffer;
-	char *p, *start;
-	unsigned msgidlen = 0, sdlen = 0;
-
-	DPRINTF((D_CALL|D_BUFFER|D_DATA), "printline_bsdsyslog("
-		"\"%s\", \"%s\", %d, %d)\n", hname, msg, flags, pri);
-
-	buffer = buf_msg_new(0);
-	p = msg;
-	p += check_timestamp((unsigned char*) p,
-		&buffer->timestamp, false, !BSDOutputFormat);
-	DPRINTF(D_DATA, "Got timestamp \"%s\"\n", buffer->timestamp);
-
-	if (flags & ADDDATE || !buffer->timestamp) {
-		FREEPTR(buffer->timestamp);
-		buffer->timestamp = strdup(make_timestamp(NULL,
-			!BSDOutputFormat));
-	}
-
-	if (*p == ' ') p++; /* SP */
-	else goto all_bsd_msg;
-	/* in any error case we skip header parsing and
-	 * treat all following data as message content */
-
-	/* extract host */
-	for (start = p;; p++) {
-		if (*p == ' ' || *p == '\0') {
-			buffer->host = strndup(start, p - start);
-			break;
-		} else if (*p == '[' || (*p == ':'
-			&& (*(p+1) == ' ' || *(p+1) == '\0'))) {
-			/* no host in message */
-			buffer->host = LocalFQDN;
-			buffer->prog = strndup(start, p - start);
-			break;
-		} else {
-			*p = FORCE2ASCII(*p);
-		}
-	}
-	DPRINTF(D_DATA, "Got host \"%s\"\n", buffer->host);
-	/* p @ SP after host, or @ :/[ after prog */
-
-	/* extract program */
-	if (!buffer->prog) {
-		if (*p == ' ') p++; /* SP */
-		else goto all_bsd_msg;
-
-		for (start = p;; p++) {
-			if (*p == ' ' || *p == '\0') { /* error */
-				goto all_bsd_msg;
-			} else if (*p == '[' || (*p == ':'
-				&& (*(p+1) == ' ' || *(p+1) == '\0'))) {
-				buffer->prog = strndup(start, p - start);
-				break;
-			} else {
-				*p = FORCE2ASCII(*p);
-			}
-		}
-	}
-	DPRINTF(D_DATA, "Got prog \"%s\"\n", buffer->prog);
-	start = p;
-
-	/* p @ :/[ after prog */
-	if (*p == '[') {
-		p++;
-		if (*p == ' ') p++; /* SP */
-		for (start = p;; p++) {
-			if (*p == ' ' || *p == '\0') { /* error */
-				goto all_bsd_msg;
-			} else if (*p == ']') {
-				buffer->pid = strndup(start, p - start);
-				break;
-			} else {
-				*p = FORCE2ASCII(*p);
-			}
-		}
-	}
-	DPRINTF(D_DATA, "Got pid \"%s\"\n", buffer->pid);
-
-	if (*p == ']') p++;
-	if (*p == ':') p++;
-	if (*p == ' ') p++;
-
-	/* p @ msgid, @ opening [ of SD or @ first byte of message
-	 * accept either case and try to detect MSGID and SD fields
-	 *
-	 * only limitation: we do not accept UTF-8 data in
-	 * BSD Syslog messages -- so all SD values are ASCII-filtered
-	 *
-	 * I have found one scenario with 'unexpected' behaviour:
-	 * if there is only a SD intended, but a) it is short enough
-	 * to be a MSGID and b) the first word of the message can also
-	 * be parsed as an SD.
-	 * example:
-	 * "<35>Jul  6 12:39:08 tag[123]: [exampleSDID@0] - hello"
-	 * --> parsed as
-	 *     MSGID = "[exampleSDID@0]"
-	 *     SD    = "-"
-	 *     MSG   = "hello"
-	 */
-	start = p;
-	msgidlen = check_msgid(p);
-	if (msgidlen) /* check for SD in 2nd field */
-		sdlen = check_sd(p+msgidlen+1);
-
-	if (msgidlen && sdlen) {
-		/* MSGID in 1st and SD in 2nd field
-		 * now check for NILVALUEs and copy */
-		if (msgidlen == 1 && *p == '-') {
-			p++; /* - */
-			p++; /* SP */
-			DPRINTF(D_DATA, "Got MSGID \"-\"\n");
-		} else {
-			/* only has ASCII chars after check_msgid() */
-			buffer->msgid = strndup(p, msgidlen);
-			p += msgidlen;
-			p++; /* SP */
-			DPRINTF(D_DATA, "Got MSGID \"%s\"\n",
-				buffer->msgid);
-		}
-	} else {
-		/* either no msgid or no SD in 2nd field
-		 * --> check 1st field for SD */
-		DPRINTF(D_DATA, "No MSGID\n");
-		sdlen = check_sd(p);
-	}
-
-	if (sdlen == 0) {
-		DPRINTF(D_DATA, "No SD\n");
-	} else if (sdlen > 1) {
-		buffer->sd = copy_utf8_ascii(p, sdlen);
-		DPRINTF(D_DATA, "Got SD \"%s\"\n", buffer->sd);
-	} else if (sdlen == 1 && *p == '-') {
-		p++;
-		DPRINTF(D_DATA, "Got SD \"-\"\n");
-	} else {
-		DPRINTF(D_DATA, "Error\n");
-	}
-
-	if (*p == ' ') p++;
-	start = p;
-	/* and now the message itself
-	 * note: do not reset start, because we might come here
-	 * by goto and want to have the incomplete field as part
-	 * of the msg
-	 */
-all_bsd_msg:
-	if (*p != '\0') {
-		size_t msglen = strlen(p);
-		buffer->msg = copy_utf8_ascii(p, msglen);
-		buffer->msgorig = buffer->msg;
-		buffer->msglen = buffer->msgsize = strlen(buffer->msg)+1;
-	}
-	DPRINTF(D_DATA, "Got msg \"%s\"\n", buffer->msg);
-
-	buffer->recvhost = strdup(hname);
-	buffer->pri = pri;
-	buffer->flags = flags | BSDSYSLOG;
-
-	return buffer;
-}
-
-struct buf_msg *
-printline_kernelprintf(const char *hname, char *msg,
-	int flags, int pri)
-{
-	struct buf_msg *buffer;
-	char *p;
-	unsigned sdlen = 0;
-
-	DPRINTF((D_CALL|D_BUFFER|D_DATA), "printline_kernelprintf("
-		"\"%s\", \"%s\", %d, %d)\n", hname, msg, flags, pri);
-
-	buffer = buf_msg_new(0);
-	buffer->timestamp = strdup(make_timestamp(NULL, !BSDOutputFormat));
-	buffer->pri = pri;
-	buffer->flags = flags;
-
-	/* assume there is no MSGID but there might be SD */
-	p = msg;
-	sdlen = check_sd(p);
-
-	if (sdlen == 0) {
-		DPRINTF(D_DATA, "No SD\n");
-	} else if (sdlen > 1) {
-		buffer->sd = copy_utf8_ascii(p, sdlen);
-		DPRINTF(D_DATA, "Got SD \"%s\"\n", buffer->sd);
-	} else if (sdlen == 1 && *p == '-') {
-		p++;
-		DPRINTF(D_DATA, "Got SD \"-\"\n");
-	} else {
-		DPRINTF(D_DATA, "Error\n");
-	}
-
-	if (*p == ' ') p++;
-	if (*p != '\0') {
-		size_t msglen = strlen(p);
-		buffer->msg = copy_utf8_ascii(p, msglen);
-		buffer->msgorig = buffer->msg;
-		buffer->msglen = buffer->msgsize = strlen(buffer->msg)+1;
-	}
-	DPRINTF(D_DATA, "Got msg \"%s\"\n", buffer->msg);
-
-	return buffer;
-}
-
-/*
- * Take a raw input line, read priority and version, call the
- * right message parsing function, then call logmsg().
+ * Take a raw input line, decode the message, and print the message
+ * on the appropriate log files.
  */
 void
-printline(const char *hname, char *msg, int flags)
+printline(char *hname, char *msg, int flags)
 {
-	struct buf_msg *buffer;
-	int pri;
-	char *p, *q;
+	int c, pri;
+	char *p, *q, line[MAXLINE + 1];
 	long n;
-	bool bsdsyslog = true;
-
-	DPRINTF((D_CALL|D_BUFFER|D_DATA),
-		"printline(\"%s\", \"%s\", %d)\n", hname, msg, flags);
 
 	/* test for special codes */
 	pri = DEFUPRI;
@@ -1464,16 +795,9 @@ printline(const char *hname, char *msg, int flags)
 		if (*q == '>' && n >= 0 && n < INT_MAX && errno == 0) {
 			p = q + 1;
 			pri = (int)n;
-			/* check for syslog-protocol version */
-			if (*p == '1' && p[1] == ' ') {
-				p += 2;	 /* skip version and space */
-				bsdsyslog = false;
-			} else {
-				bsdsyslog = true;
-			}
 		}
 	}
-	if (pri & ~(LOG_FACMASK|LOG_PRIMASK))
+	if (pri &~ (LOG_FACMASK|LOG_PRIMASK))
 		pri = DEFUPRI;
 
 	/*
@@ -1484,13 +808,26 @@ printline(const char *hname, char *msg, int flags)
 	if ((pri & LOG_FACMASK) == LOG_KERN)
 		pri = LOG_MAKEPRI(LOG_USER, LOG_PRI(pri));
 
-	if (bsdsyslog) {
-		buffer = printline_bsdsyslog(hname, p, flags, pri);
-	} else {
-		buffer = printline_syslogprotocol(hname, p, flags, pri);
+	q = line;
+
+	while ((c = *p++) != '\0' &&
+	    q < &line[sizeof(line) - 2]) {
+		c &= 0177;
+		if (iscntrl(c))
+			if (c == '\n')
+				*q++ = ' ';
+			else if (c == '\t')
+				*q++ = '\t';
+			else {
+				*q++ = '^';
+				*q++ = c ^ 0100;
+			}
+		else
+			*q++ = c;
 	}
-	logmsg(buffer);
-	DELREF(buffer);
+	*q = '\0';
+
+	logmsg(pri, line, hname, flags);
 }
 
 /*
@@ -1499,71 +836,40 @@ printline(const char *hname, char *msg, int flags)
 void
 printsys(char *msg)
 {
-	int n, is_printf, pri, flags;
+	int n, pri, flags, is_printf;
 	char *p, *q;
-	struct buf_msg *buffer;
 
 	for (p = msg; *p != '\0'; ) {
-		bool bsdsyslog = true;
-
-		is_printf = 1;
-		flags = ISKERNEL | ADDDATE | BSDSYSLOG;
+		flags = ISKERNEL | ADDDATE;
 		if (SyncKernel)
 			flags |= SYNC_FILE;
-		if (is_printf) /* kernel printf's come out on console */
-			flags |= IGN_CONS;
 		pri = DEFSPRI;
-
+		is_printf = 1;
 		if (*p == '<') {
 			errno = 0;
 			n = (int)strtol(p + 1, &q, 10);
 			if (*q == '>' && n >= 0 && n < INT_MAX && errno == 0) {
 				p = q + 1;
-				is_printf = 0;
 				pri = n;
-				if (*p == '1') { /* syslog-protocol version */
-					p += 2;	 /* skip version and space */
-					bsdsyslog = false;
-				} else {
-					bsdsyslog = true;
-				}
+				is_printf = 0;
 			}
 		}
-		for (q = p; *q != '\0' && *q != '\n'; q++)
-			/* look for end of line; no further checks.
-			 * trust the kernel to send ASCII only */;
-		if (*q != '\0')
-			*q++ = '\0';
-
+		if (is_printf) {
+			/* kernel printf's come out on console */
+			flags |= IGN_CONS;
+		}
 		if (pri &~ (LOG_FACMASK|LOG_PRIMASK))
 			pri = DEFSPRI;
-
-		/* allow all kinds of input from kernel */
-		if (is_printf)
-			buffer = printline_kernelprintf(
-			    LocalFQDN, p, flags, pri);
-		else {
-			if (bsdsyslog)
-				buffer = printline_bsdsyslog(
-				    LocalFQDN, p, flags, pri);
-			else
-				buffer = printline_syslogprotocol(
-				    LocalFQDN, p, flags, pri);
-		}
-
-		/* set fields left open */
-		if (!buffer->prog)
-			buffer->prog = strdup(_PATH_UNIX);
-		if (!buffer->host)
-			buffer->host = LocalFQDN;
-		if (!buffer->recvhost)
-			buffer->recvhost = LocalFQDN;
-
-		logmsg(buffer);
-		DELREF(buffer);
+		for (q = p; *q != '\0' && *q != '\n'; q++)
+			/* look for end of line */;
+		if (*q != '\0')
+			*q++ = '\0';
+		logmsg(pri, p, LocalHostName, flags);
 		p = q;
 	}
 }
+
+time_t	now;
 
 /*
  * Check to see if `name' matches the provided specification, using the
@@ -1579,10 +885,10 @@ matches_spec(const char *name, const char *spec,
 	size_t len;
 
 	if (name[0] == '\0')
-		return 0;
+		return (0);
 
 	if (strchr(name, ',')) /* sanity */
-		return 0;
+		return (0);
 
 	len = strlen(name);
 	cursor = spec;
@@ -1592,197 +898,10 @@ matches_spec(const char *name, const char *spec,
 		next = *cursor;
 
 		if (prev == ',' && (next == '\0' || next == ','))
-			return 1;
+			return (1);
 	}
 
-	return 0;
-}
-
-/*
- * wrapper with old function signature,
- * keeps calling code shorter and hides buffer allocation
- */
-void
-logmsg_async(int pri, const char *sd, const char *msg, int flags)
-{
-	struct buf_msg *buffer;
-	size_t msglen;
-
-	DPRINTF((D_CALL|D_DATA), "logmsg_async(%d, \"%s\", \"%s\", %d)\n",
-	    pri, sd, msg, flags);
-
-	if (msg) {
-		msglen = strlen(msg);
-		msglen++;		/* adds \0 */
-		buffer = buf_msg_new(msglen);
-		buffer->msglen = strlcpy(buffer->msg, msg, msglen) + 1;
-	} else {
-		buffer = buf_msg_new(0);
-	}
-	if (sd) buffer->sd = strdup(sd);
-	buffer->timestamp = strdup(make_timestamp(NULL, !BSDOutputFormat));
-	buffer->prog = appname;
-	buffer->pid = include_pid;
-	buffer->recvhost = buffer->host = LocalFQDN;
-	buffer->pri = pri;
-	buffer->flags = flags;
-
-	logmsg(buffer);
-	DELREF(buffer);
-}
-
-/* read timestamp in from_buf, convert into a timestamp in to_buf
- *
- * returns length of timestamp found in from_buf (= number of bytes consumed)
- */
-size_t
-check_timestamp(unsigned char *from_buf, char **to_buf,
-	bool from_iso, bool to_iso)
-{
-	unsigned char *q;
-	int p;
-	bool found_ts = false;
-
-	DPRINTF((D_CALL|D_DATA), "check_timestamp(%p = \"%s\", from_iso=%d, "
-	    "to_iso=%d)\n", from_buf, from_buf, from_iso, to_iso);
-
-	if (!from_buf) return 0;
-	/*
-	 * Check to see if msg looks non-standard.
-	 * looks at every char because we do not have a msg length yet
-	 */
-	/* detailed checking adapted from Albert Mietus' sl_timestamp.c */
-	if (from_iso) {
-		if (from_buf[4] == '-' && from_buf[7] == '-'
-		    && from_buf[10] == 'T' && from_buf[13] == ':'
-		    && from_buf[16] == ':'
-		    && isdigit(from_buf[0]) && isdigit(from_buf[1])
-		    && isdigit(from_buf[2]) && isdigit(from_buf[3])  /* YYYY */
-		    && isdigit(from_buf[5]) && isdigit(from_buf[6])
-		    && isdigit(from_buf[8]) && isdigit(from_buf[9])  /* mm dd */
-		    && isdigit(from_buf[11]) && isdigit(from_buf[12]) /* HH */
-		    && isdigit(from_buf[14]) && isdigit(from_buf[15]) /* MM */
-		    && isdigit(from_buf[17]) && isdigit(from_buf[18]) /* SS */
-		    )  {
-			/* time-secfrac */
-			if (from_buf[19] == '.')
-				for (p=20; isdigit(from_buf[p]); p++) /* NOP*/;
-			else
-				p = 19;
-			/* time-offset */
-			if (from_buf[p] == 'Z'
-			 || ((from_buf[p] == '+' || from_buf[p] == '-')
-			    && from_buf[p+3] == ':'
-			    && isdigit(from_buf[p+1]) && isdigit(from_buf[p+2])
-			    && isdigit(from_buf[p+4]) && isdigit(from_buf[p+5])
-			 ))
-				found_ts = true;
-		}
-	} else {
-		if (from_buf[3] == ' ' && from_buf[6] == ' '
-		    && from_buf[9] == ':' && from_buf[12] == ':'
-		    && (from_buf[4] == ' ' || isdigit(from_buf[4]))
-		    && isdigit(from_buf[5]) /* dd */
-		    && isdigit(from_buf[7])  && isdigit(from_buf[8])   /* HH */
-		    && isdigit(from_buf[10]) && isdigit(from_buf[11])  /* MM */
-		    && isdigit(from_buf[13]) && isdigit(from_buf[14])  /* SS */
-		    && isupper(from_buf[0]) && islower(from_buf[1]) /* month */
-		    && islower(from_buf[2]))
-			found_ts = true;
-	}
-	if (!found_ts) {
-		if (from_buf[0] == '-' && from_buf[1] == ' ') {
-			/* NILVALUE */
-			if (to_iso) {
-				/* with ISO = syslog-protocol output leave
-			 	 * it as is, because it is better to have
-			 	 * no timestamp than a wrong one.
-			 	 */
-				*to_buf = strdup("-");
-			} else {
-				/* with BSD Syslog the field is reqired
-				 * so replace it with current time
-				 */
-				*to_buf = strdup(make_timestamp(NULL, false));
-			}
-			return 2;
-		}
-		return 0;
-	}
-
-	if (!from_iso && !to_iso) {
-		/* copy BSD timestamp */
-		DPRINTF(D_CALL, "check_timestamp(): copy BSD timestamp\n");
-		*to_buf = strndup((char *)from_buf, BSD_TIMESTAMPLEN);
-		return BSD_TIMESTAMPLEN;
-	} else if (from_iso && to_iso) {
-		/* copy ISO timestamp */
-		DPRINTF(D_CALL, "check_timestamp(): copy ISO timestamp\n");
-		if (!(q = (unsigned char *) strchr((char *)from_buf, ' ')))
-			q = from_buf + strlen((char *)from_buf);
-		*to_buf = strndup((char *)from_buf, q - from_buf);
-		return q - from_buf;
-	} else if (from_iso && !to_iso) {
-		/* convert ISO->BSD */
-		struct tm parsed;
-		time_t timeval;
-		char tsbuf[MAX_TIMESTAMPLEN];
-		int i = 0;
-
-		DPRINTF(D_CALL, "check_timestamp(): convert ISO->BSD\n");
-		for(i = 0; i < MAX_TIMESTAMPLEN && from_buf[i] != '\0'
-		    && from_buf[i] != '.' && from_buf[i] != ' '; i++)
-			tsbuf[i] = from_buf[i]; /* copy date & time */
-		for(; i < MAX_TIMESTAMPLEN && from_buf[i] != '\0'
-		    && from_buf[i] != '+' && from_buf[i] != '-'
-		    && from_buf[i] != 'Z' && from_buf[i] != ' '; i++)
-			;			   /* skip fraction digits */
-		for(; i < MAX_TIMESTAMPLEN && from_buf[i] != '\0'
-		    && from_buf[i] != ':' && from_buf[i] != ' ' ; i++)
-			tsbuf[i] = from_buf[i]; /* copy TZ */
-		if (from_buf[i] == ':') i++;	/* skip colon */
-		for(; i < MAX_TIMESTAMPLEN && from_buf[i] != '\0'
-		    && from_buf[i] != ' ' ; i++)
-			tsbuf[i] = from_buf[i]; /* copy TZ */
-
-		(void)memset(&parsed, 0, sizeof(parsed));
-		parsed.tm_isdst = -1;
-		(void)strptime(tsbuf, "%FT%T%z", &parsed);
-		timeval = mktime(&parsed);
-
-		*to_buf = strndup(make_timestamp(&timeval, false),
-		    BSD_TIMESTAMPLEN);
-		return i;
-	} else if (!from_iso && to_iso) {
-		/* convert BSD->ISO */
-		struct tm parsed;
-		struct tm *current;
-		time_t timeval;
-		char *rc;
-
-		(void)memset(&parsed, 0, sizeof(parsed));
-		parsed.tm_isdst = -1;
-		DPRINTF(D_CALL, "check_timestamp(): convert BSD->ISO\n");
-		rc = strptime((char *)from_buf, "%b %d %T", &parsed);
-		current = gmtime(&now);
-
-		/* use current year and timezone */
-		parsed.tm_isdst = current->tm_isdst;
-		parsed.tm_gmtoff = current->tm_gmtoff;
-		parsed.tm_year = current->tm_year;
-		if (current->tm_mon == 0 && parsed.tm_mon == 11)
-			parsed.tm_year--;
-
-		timeval = mktime(&parsed);
-		rc = make_timestamp(&timeval, true);
-		*to_buf = strndup(rc, MAX_TIMESTAMPLEN-1);
-
-		return BSD_TIMESTAMPLEN;
-	} else {
-		DPRINTF(D_MISC,
-			"Executing unreachable code in check_timestamp()\n");
-		return 0;
-	}
+	return (0);
 }
 
 /*
@@ -1790,33 +909,65 @@ check_timestamp(unsigned char *from_buf, char **to_buf,
  * the priority.
  */
 void
-logmsg(struct buf_msg *buffer)
+logmsg(int pri, char *msg, char *from, int flags)
 {
 	struct filed *f;
-	int fac, omask, prilev;
+	int fac, msglen, omask, prilev, i;
+	char *timestamp;
+	char prog[NAME_MAX + 1];
+	char buf[MAXLINE + 1];
 
-	DPRINTF((D_CALL|D_BUFFER), "logmsg: buffer@%p, pri 0%o/%d, flags 0x%x,"
-	    " timestamp \"%s\", from \"%s\", sd \"%s\", msg \"%s\"\n",
-	    buffer, buffer->pri, buffer->pri, buffer->flags,
-	    buffer->timestamp, buffer->recvhost, buffer->sd, buffer->msg);
+	dprintf("logmsg: pri 0%o, flags 0x%x, from %s, msg %s\n",
+	    pri, flags, from, msg);
 
 	omask = sigblock(sigmask(SIGHUP)|sigmask(SIGALRM));
 
-	/* sanity check */
-	assert(buffer->refcount == 1);
-	assert(buffer->msglen <= buffer->msgsize);
-	assert(buffer->msgorig <= buffer->msg);
-	assert((buffer->msg && buffer->msglen == strlen(buffer->msg)+1)
-	      || (!buffer->msg && !buffer->msglen));
-	if (!buffer->msg && !buffer->sd && !buffer->msgid)
-		DPRINTF(D_BUFFER, "Empty message?\n");
+	/*
+	 * Check to see if msg looks non-standard.
+	 */
+	msglen = strlen(msg);
+	if (msglen < 16 || msg[3] != ' ' || msg[6] != ' ' ||
+	    msg[9] != ':' || msg[12] != ':' || msg[15] != ' ')
+		flags |= ADDDATE;
+
+	(void)time(&now);
+	if (flags & ADDDATE)
+		timestamp = ctime(&now) + 4;
+	else {
+		timestamp = msg;
+		msg += 16;
+		msglen -= 16;
+	}
+
+	/* skip leading whitespace */
+	while (isspace((unsigned char)*msg)) {
+		msg++;
+		msglen--;
+	}
 
 	/* extract facility and priority level */
-	if (buffer->flags & MARK)
+	if (flags & MARK)
 		fac = LOG_NFACILITIES;
 	else
-		fac = LOG_FAC(buffer->pri);
-	prilev = LOG_PRI(buffer->pri);
+		fac = LOG_FAC(pri);
+	prilev = LOG_PRI(pri);
+
+	/* extract program name */
+	for (i = 0; i < NAME_MAX; i++) {
+		if (!isprint((unsigned char)msg[i]) ||
+		    msg[i] == ':' || msg[i] == '[')
+			break;
+		prog[i] = msg[i];
+	}
+	prog[i] = '\0';
+
+	/* add kernel prefix for kernel messages */
+	if (flags & ISKERNEL) {
+		snprintf(buf, sizeof(buf), "%s: %s",
+		    _PATH_UNIX, msg);
+		msg = buf;
+		msglen = strlen(buf);
+	}
 
 	/* log the message to the particular outputs */
 	if (!Initialized) {
@@ -1824,94 +975,76 @@ logmsg(struct buf_msg *buffer)
 		f->f_file = open(ctty, O_WRONLY, 0);
 
 		if (f->f_file >= 0) {
-			DELREF(f->f_prevmsg);
-			f->f_prevmsg = NEWREF(buffer);
-			fprintlog(f, NEWREF(buffer), NULL);
-			DELREF(buffer);
+			(void)strncpy(f->f_lasttime, timestamp, 15);
+			fprintlog(f, flags, msg);
 			(void)close(f->f_file);
 		}
 		(void)sigsetmask(omask);
 		return;
 	}
-
 	for (f = Files; f; f = f->f_next) {
 		/* skip messages that are incorrect priority */
-		if (!MATCH_PRI(f, fac, prilev)
+		if (!(((f->f_pcmp[fac] & PRI_EQ) && (f->f_pmask[fac] == prilev))
+		     ||((f->f_pcmp[fac] & PRI_LT) && (f->f_pmask[fac] < prilev))
+		     ||((f->f_pcmp[fac] & PRI_GT) && (f->f_pmask[fac] > prilev))
+		     )
 		    || f->f_pmask[fac] == INTERNAL_NOPRI)
 			continue;
 
 		/* skip messages with the incorrect host name */
-		/* do we compare with host (IMHO correct) or recvhost */
-		/* (compatible)? */
-		if (f->f_host != NULL && buffer->host != NULL) {
-			char shost[MAXHOSTNAMELEN + 1], *h;
-			if (!BSDOutputFormat) {
-				h = buffer->host;
-			} else {
-				(void)strlcpy(shost, buffer->host,
-				    sizeof(shost));
-				trim_anydomain(shost);
-				h = shost;
-			}
+		if (f->f_host != NULL) {
 			switch (f->f_host[0]) {
 			case '+':
-				if (! matches_spec(h, f->f_host + 1,
-				    strcasestr))
+				if (! matches_spec(from, f->f_host + 1,
+						   strcasestr))
 					continue;
 				break;
 			case '-':
-				if (matches_spec(h, f->f_host + 1,
-				    strcasestr))
+				if (matches_spec(from, f->f_host + 1,
+						 strcasestr))
 					continue;
 				break;
 			}
 		}
 
 		/* skip messages with the incorrect program name */
-		if (f->f_program != NULL && buffer->prog != NULL) {
+		if (f->f_program != NULL) {
 			switch (f->f_program[0]) {
 			case '+':
-				if (!matches_spec(buffer->prog,
-				    f->f_program + 1, strstr))
+				if (! matches_spec(prog, f->f_program + 1,
+						   strstr))
 					continue;
 				break;
 			case '-':
-				if (matches_spec(buffer->prog,
-				    f->f_program + 1, strstr))
+				if (matches_spec(prog, f->f_program + 1,
+						 strstr))
 					continue;
 				break;
 			default:
-				if (!matches_spec(buffer->prog,
-				    f->f_program, strstr))
+				if (! matches_spec(prog, f->f_program,
+						   strstr))
 					continue;
 				break;
 			}
 		}
 
-		if (f->f_type == F_CONSOLE && (buffer->flags & IGN_CONS))
+		if (f->f_type == F_CONSOLE && (flags & IGN_CONS))
 			continue;
 
 		/* don't output marks to recently written files */
-		if ((buffer->flags & MARK)
-		 && (now - f->f_time) < MarkInterval / 2)
+		if ((flags & MARK) && (now - f->f_time) < MarkInterval / 2)
 			continue;
 
 		/*
 		 * suppress duplicate lines to this file unless NoRepeat
 		 */
-#define MSG_FIELD_EQ(x) ((!buffer->x && !f->f_prevmsg->x) ||	\
-    (buffer->x && f->f_prevmsg->x && !strcmp(buffer->x, f->f_prevmsg->x)))
-
-		if ((buffer->flags & MARK) == 0 &&
-		    f->f_prevmsg &&
-		    buffer->msglen == f->f_prevmsg->msglen &&
+		if ((flags & MARK) == 0 && msglen == f->f_prevlen &&
 		    !NoRepeat &&
-		    MSG_FIELD_EQ(host) &&
-		    MSG_FIELD_EQ(sd) &&
-		    MSG_FIELD_EQ(msg)
-		    ) {
+		    !strcmp(msg, f->f_prevline) &&
+		    !strcasecmp(from, f->f_prevhost)) {
+			(void)strncpy(f->f_lasttime, timestamp, 15);
 			f->f_prevcount++;
-			DPRINTF(D_DATA, "Msg repeated %d times, %ld sec of %d\n",
+			dprintf("Msg repeated %d times, %ld sec of %d\n",
 			    f->f_prevcount, (long)(now - f->f_time),
 			    repeatinterval[f->f_repeatcount]);
 			/*
@@ -1921,59 +1054,67 @@ logmsg(struct buf_msg *buffer)
 			 * in the future.
 			 */
 			if (now > REPEATTIME(f)) {
-				fprintlog(f, NEWREF(buffer), NULL);
-				DELREF(buffer);
+				fprintlog(f, flags, (char *)NULL);
 				BACKOFF(f);
 			}
 		} else {
 			/* new line, save it */
 			if (f->f_prevcount)
-				fprintlog(f, NULL, NULL);
+				fprintlog(f, 0, (char *)NULL);
 			f->f_repeatcount = 0;
-			DELREF(f->f_prevmsg);
-			f->f_prevmsg = NEWREF(buffer);
-			fprintlog(f, NEWREF(buffer), NULL);
-			DELREF(buffer);
+			f->f_prevpri = pri;
+			(void)strncpy(f->f_lasttime, timestamp, 15);
+			(void)strncpy(f->f_prevhost, from,
+					sizeof(f->f_prevhost));
+			if (msglen < MAXSVLINE) {
+				f->f_prevlen = msglen;
+				(void)strlcpy(f->f_prevline, msg,
+				    sizeof(f->f_prevline));
+				fprintlog(f, flags, (char *)NULL);
+			} else {
+				f->f_prevline[0] = 0;
+				f->f_prevlen = 0;
+				fprintlog(f, flags, msg);
+			}
 		}
 	}
 	(void)sigsetmask(omask);
 }
 
-/*
- * format one buffer into output format given by flag BSDOutputFormat
- * line is allocated and has to be free()d by caller
- * size_t pointers are optional, if not NULL then they will return
- *   different lenghts used for formatting and output
- */
-#define OUT(x) ((x)?(x):"-")
-bool
-format_buffer(struct buf_msg *buffer, char **line, size_t *ptr_linelen,
-	size_t *ptr_msglen, size_t *ptr_tlsprefixlen, size_t *ptr_prilen)
+void
+fprintlog(struct filed *f, int flags, char *msg)
 {
-#define FPBUFSIZE 30
-	static char ascii_empty[] = "";
-	char fp_buf[FPBUFSIZE] = "\0";
-	char *hostname, *shorthostname = NULL;
-	char *ascii_sd = ascii_empty;
-	char *ascii_msg = ascii_empty;
-	size_t linelen, msglen, tlsprefixlen, prilen, j;
+	struct iovec iov[10];
+	struct iovec *v;
+	struct addrinfo *r;
+	int j, l, lsent, fail, retry;
+	char line[MAXLINE + 1], repbuf[80], greetings[200];
+#define ADDEV() assert(++v - iov < A_CNT(iov))
 
-	DPRINTF(D_CALL, "format_buffer(%p)\n", buffer);
-	if (!buffer) return false;
-
-	/* All buffer fields are set with strdup(). To avoid problems
-	 * on memory exhaustion we allow them to be empty and replace
-	 * the essential fields with already allocated generic values.
-	 */
-	if (!buffer->timestamp)
-		buffer->timestamp = timestamp;
-	if (!buffer->host && !buffer->recvhost)
-		buffer->host = LocalFQDN;
+	v = iov;
+	if (f->f_type == F_WALL) {
+		v->iov_base = greetings;
+		v->iov_len = snprintf(greetings, sizeof greetings,
+		    "\r\n\7Message from syslogd@%s at %.24s ...\r\n",
+		    f->f_prevhost, ctime(&now));
+		ADDEV();
+		v->iov_base = "";
+		v->iov_len = 0;
+		ADDEV();
+	} else {
+		v->iov_base = f->f_lasttime;
+		v->iov_len = 15;
+		ADDEV();
+		v->iov_base = " ";
+		v->iov_len = 1;
+		ADDEV();
+	}
 
 	if (LogFacPri) {
+		static char fp_buf[30];
 		const char *f_s = NULL, *p_s = NULL;
-		int fac = buffer->pri & LOG_FACMASK;
-		int pri = LOG_PRI(buffer->pri);
+		int fac = f->f_prevpri & LOG_FACMASK;
+		int pri = LOG_PRI(f->f_prevpri);
 		char f_n[5], p_n[5];
 
 		if (LogFacPri > 1) {
@@ -2001,336 +1142,126 @@ format_buffer(struct buf_msg *buffer, char **line, size_t *ptr_linelen,
 			p_s = p_n;
 		}
 		snprintf(fp_buf, sizeof(fp_buf), "<%s.%s>", f_s, p_s);
+		v->iov_base = fp_buf;
+		v->iov_len = strlen(fp_buf);
+	} else {
+		v->iov_base = "";
+		v->iov_len = 0;
 	}
+	ADDEV();
 
-	/* hostname or FQDN */
-	hostname = (buffer->host ? buffer->host : buffer->recvhost);
-	if (BSDOutputFormat
-	 && (shorthostname = strdup(hostname))) {
-		/* if the previous BSD output format with "host [recvhost]:"
-		 * gets implemented, this is the right place to distinguish
-		 * between buffer->host and buffer->recvhost
-		 */
-		trim_anydomain(shorthostname);
-		hostname = shorthostname;
+	v->iov_base = f->f_prevhost;
+	v->iov_len = strlen(v->iov_base);
+	ADDEV();
+	v->iov_base = " ";
+	v->iov_len = 1;
+	ADDEV();
+
+	if (msg) {
+		v->iov_base = msg;
+		v->iov_len = strlen(msg);
+	} else if (f->f_prevcount > 1) {
+		v->iov_base = repbuf;
+		v->iov_len = snprintf(repbuf, sizeof repbuf,
+		    "last message repeated %d times", f->f_prevcount);
+	} else {
+		v->iov_base = f->f_prevline;
+		v->iov_len = f->f_prevlen;
 	}
+	ADDEV();
 
-	/* new message formatting:
-	 * instead of using iov always assemble one complete TLS-ready line
-	 * with length and priority (depending on BSDOutputFormat either in
-	 * BSD Syslog or syslog-protocol format)
-	 *
-	 * additionally save the length of the prefixes,
-	 * so UDP destinations can skip the length prefix and
-	 * file/pipe/wall destinations can omit length and priority
-	 */
-	/* first determine required space */
-	if (BSDOutputFormat) {
-		/* only output ASCII chars */
-		if (buffer->sd)
-			ascii_sd = copy_utf8_ascii(buffer->sd,
-				strlen(buffer->sd));
-		if (buffer->msg) {
-			if (IS_BOM(buffer->msg))
-				ascii_msg = copy_utf8_ascii(buffer->msg,
-					buffer->msglen - 1);
-			else /* assume already converted at input */
-				ascii_msg = buffer->msg;
-		}
-		msglen = snprintf(NULL, 0, "<%d>%s%.15s %s %s%s%s%s: %s%s%s",
-			     buffer->pri, fp_buf, buffer->timestamp,
-			     hostname, OUT(buffer->prog),
-			     buffer->pid ? "[" : "",
-			     buffer->pid ? buffer->pid : "",
-			     buffer->pid ? "]" : "", ascii_sd,
-			     (buffer->sd && buffer->msg ? " ": ""), ascii_msg);
-	} else
-		msglen = snprintf(NULL, 0, "<%d>1 %s%s %s %s %s %s %s%s%s",
-			     buffer->pri, fp_buf, buffer->timestamp,
-			     hostname, OUT(buffer->prog), OUT(buffer->pid),
-			     OUT(buffer->msgid), OUT(buffer->sd),
-			     (buffer->msg ? " ": ""),
-			     (buffer->msg ? buffer->msg: ""));
-	/* add space for length prefix */
-	tlsprefixlen = 0;
-	for (j = msglen; j; j /= 10)
-		tlsprefixlen++;
-	/* one more for the space */
-	tlsprefixlen++;
-
-	prilen = snprintf(NULL, 0, "<%d>", buffer->pri);
-	if (!BSDOutputFormat)
-		prilen += 2; /* version char and space */
-	MALLOC(*line, msglen + tlsprefixlen + 1);
-	if (BSDOutputFormat)
-		linelen = snprintf(*line,
-		     msglen + tlsprefixlen + 1,
-		     "%zu <%d>%s%.15s %s %s%s%s%s: %s%s%s",
-		     msglen, buffer->pri, fp_buf, buffer->timestamp,
-		     hostname, OUT(buffer->prog),
-		     (buffer->pid ? "[" : ""),
-		     (buffer->pid ? buffer->pid : ""),
-		     (buffer->pid ? "]" : ""), ascii_sd,
-		     (buffer->sd && buffer->msg ? " ": ""), ascii_msg);
-	else
-		linelen = snprintf(*line,
-		     msglen + tlsprefixlen + 1,
-		     "%zu <%d>1 %s%s %s %s %s %s %s%s%s",
-		     msglen, buffer->pri, fp_buf, buffer->timestamp,
-		     hostname, OUT(buffer->prog), OUT(buffer->pid),
-		     OUT(buffer->msgid), OUT(buffer->sd),
-		     (buffer->msg ? " ": ""),
-		     (buffer->msg ? buffer->msg: ""));
-	DPRINTF(D_DATA, "formatted %zu octets to: '%.*s' (linelen %zu, "
-	    "msglen %zu, tlsprefixlen %zu, prilen %zu)\n", linelen,
-	    (int)linelen, *line, linelen, msglen, tlsprefixlen, prilen);
-
-	FREEPTR(shorthostname);
-	if (ascii_sd != ascii_empty)
-		FREEPTR(ascii_sd);
-	if (ascii_msg != ascii_empty && ascii_msg != buffer->msg)
-		FREEPTR(ascii_msg);
-
-	if (ptr_linelen)      *ptr_linelen	= linelen;
-	if (ptr_msglen)	      *ptr_msglen	= msglen;
-	if (ptr_tlsprefixlen) *ptr_tlsprefixlen = tlsprefixlen;
-	if (ptr_prilen)	      *ptr_prilen	= prilen;
-	return true;
-}
-
-/*
- * if qentry == NULL: new message, if temporarily undeliverable it will be enqueued
- * if qentry != NULL: a temporarily undeliverable message will not be enqueued,
- *		    but after delivery be removed from the queue
- */
-void
-fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentry)
-{
-	static char crnl[] = "\r\n";
-	struct buf_msg *buffer = passedbuffer;
-	struct iovec iov[4];
-	struct iovec *v = iov;
-	bool error = false;
-	int e = 0, len = 0;
-	size_t msglen, linelen, tlsprefixlen, prilen;
-	char *p, *line = NULL, *lineptr = NULL;
-#ifndef DISABLE_TLS
-	bool newhash = false;
-#endif
-#define REPBUFSIZE 80
-	char greetings[200];
-#define ADDEV() do { v++; assert((size_t)(v - iov) < A_CNT(iov)); } while(/*CONSTCOND*/0)
-
-	DPRINTF(D_CALL, "fprintlog(%p, %p, %p)\n", f, buffer, qentry);
-
+	dprintf("Logging to %s", TypeNames[f->f_type]);
 	f->f_time = now;
 
-	/* increase refcount here and lower again at return.
-	 * this enables the buffer in the else branch to be freed
-	 * --> every branch needs one NEWREF() or buf_msg_new()! */
-	if (buffer) {
-		NEWREF(buffer);
-	} else {
-		if (f->f_prevcount > 1) {
-			/* possible syslog-sign incompatibility:
-			 * assume destinations f1 and f2 share one SG and
-			 * get the same message sequence.
-			 *
-			 * now both f1 and f2 generate "repeated" messages
-			 * "repeated" messages are different due to different
-			 * timestamps
-			 * the SG will get hashes for the two "repeated" messages
-			 *
-			 * now both f1 and f2 are just fine, but a verification
-			 * will report that each 'lost' a message, i.e. the
-			 * other's "repeated" message
-			 *
-			 * conditions for 'safe configurations':
-			 * - use NoRepeat option,
-			 * - use SG 3, or
-			 * - have exactly one destination for every PRI
+	switch (f->f_type) {
+	case F_UNUSED:
+		dprintf("\n");
+		break;
+
+	case F_FORW:
+		dprintf(" %s\n", f->f_un.f_forw.f_hname);
+			/*
+			 * check for local vs remote messages
+			 * (from FreeBSD PR#bin/7055)
 			 */
-			buffer = buf_msg_new(REPBUFSIZE);
-			buffer->msglen = snprintf(buffer->msg, REPBUFSIZE,
-			    "last message repeated %d times", f->f_prevcount);
-			buffer->timestamp =
-				strdup(make_timestamp(NULL, !BSDOutputFormat));
-			buffer->pri = f->f_prevmsg->pri;
-			buffer->host = LocalFQDN;
-			buffer->prog = appname;
-			buffer->pid = include_pid;
-
+		if (strcasecmp(f->f_prevhost, LocalHostName)) {
+			l = snprintf(line, sizeof(line) - 1,
+				     "<%d>%.15s [%s]: %s",
+				     f->f_prevpri, (char *) iov[0].iov_base,
+				     f->f_prevhost, (char *) iov[5].iov_base);
 		} else {
-			buffer = NEWREF(f->f_prevmsg);
+			l = snprintf(line, sizeof(line) - 1, "<%d>%.15s %s",
+				     f->f_prevpri, (char *) iov[0].iov_base,
+				     (char *) iov[5].iov_base);
 		}
-	}
-
-	/* no syslog-sign messages to tty/console/... */
-	if ((buffer->flags & SIGN_MSG)
-	    && ((f->f_type == F_UNUSED)
-	    || (f->f_type == F_TTY)
-	    || (f->f_type == F_CONSOLE)
-	    || (f->f_type == F_USERS)
-	    || (f->f_type == F_WALL))) {
-		DELREF(buffer);
-		return;
-	}
-
-	/* buffering works only for few types */
-	if (qentry
-	    && (f->f_type != F_TLS)
-	    && (f->f_type != F_PIPE)
-	    && (f->f_type != F_FILE)) {
-		logerror("Warning: unexpected message in buffer");
-		DELREF(buffer);
-		return;
-	}
-
-	if (!format_buffer(buffer, &line,
-	    &linelen, &msglen, &tlsprefixlen, &prilen)) {
-		DPRINTF(D_CALL, "format_buffer() failed, skip message\n");
-		DELREF(buffer);
-		return;
-	}
-	/* assert maximum message length */
-	if (TypeInfo[f->f_type].max_msg_length != -1
-	    && (size_t)TypeInfo[f->f_type].max_msg_length
-	    < linelen - tlsprefixlen - prilen) {
-		linelen = TypeInfo[f->f_type].max_msg_length
-		    + tlsprefixlen + prilen;
-		DPRINTF(D_DATA, "truncating oversized message to %zu octets\n",
-		    linelen);
-	}
-
-#ifndef DISABLE_SIGN
-	/* keep state between appending the hash (before buffer is sent)
-	 * and possibly sending a SB (after buffer is sent): */
-	/* get hash */
-	if (!(buffer->flags & SIGN_MSG) && !qentry) {
-		char *hash = NULL;
-		struct signature_group_t *sg;
-
-		if ((sg = sign_get_sg(buffer->pri, f)) != NULL) {
-			if (sign_msg_hash(line + tlsprefixlen, &hash))
-				newhash = sign_append_hash(hash, sg);
-			else
-				DPRINTF(D_SIGN,
-					"Unable to hash line \"%s\"\n", line);
-		}
-	}
-#endif /* !DISABLE_SIGN */
-
-	/* set start and length of buffer and/or fill iovec */
-	switch (f->f_type) {
-	case F_UNUSED:
-		/* nothing */
-		break;
-	case F_TLS:
-		/* nothing, as TLS uses whole buffer to send */
-		lineptr = line;
-		len = linelen;
-		break;
-	case F_FORW:
-		lineptr = line + tlsprefixlen;
-		len = linelen - tlsprefixlen;
-		break;
-	case F_PIPE:
-	case F_FILE:  /* fallthrough */
-		if (f->f_flags & FFLAG_FULL) {
-			v->iov_base = line + tlsprefixlen;
-			v->iov_len = linelen - tlsprefixlen;
-		} else {
-			v->iov_base = line + tlsprefixlen + prilen;
-			v->iov_len = linelen - tlsprefixlen - prilen;
-		}
-		ADDEV();
-		v->iov_base = &crnl[1];
-		v->iov_len = 1;
-		ADDEV();
-		break;
-	case F_CONSOLE:
-	case F_TTY:
-		/* filter non-ASCII */
-		p = line;
-		while (*p) {
-			*p = FORCE2ASCII(*p);
-			p++;
-		}
-		v->iov_base = line + tlsprefixlen + prilen;
-		v->iov_len = linelen - tlsprefixlen - prilen;
-		ADDEV();
-		v->iov_base = crnl;
-		v->iov_len = 2;
-		ADDEV();
-		break;
-	case F_WALL:
-		v->iov_base = greetings;
-		v->iov_len = snprintf(greetings, sizeof(greetings),
-		    "\r\n\7Message from syslogd@%s at %s ...\r\n",
-		    (buffer->host ? buffer->host : buffer->recvhost),
-		    buffer->timestamp);
-		ADDEV();
-	case F_USERS: /* fallthrough */
-		/* filter non-ASCII */
-		p = line;
-		while (*p) {
-			*p = FORCE2ASCII(*p);
-			p++;
-		}
-		v->iov_base = line + tlsprefixlen + prilen;
-		v->iov_len = linelen - tlsprefixlen - prilen;
-		ADDEV();
-		v->iov_base = &crnl[1];
-		v->iov_len = 1;
-		ADDEV();
-		break;
-	}
-
-	/* send */
-	switch (f->f_type) {
-	case F_UNUSED:
-		DPRINTF(D_MISC, "Logging to %s\n", TypeInfo[f->f_type].name);
-		break;
-
-	case F_FORW:
-		DPRINTF(D_MISC, "Logging to %s %s\n",
-		    TypeInfo[f->f_type].name, f->f_un.f_forw.f_hname);
-		udp_send(f, lineptr, len);
-		break;
-
-#ifndef DISABLE_TLS
-	case F_TLS:
-		DPRINTF(D_MISC, "Logging to %s %s\n",
-		    TypeInfo[f->f_type].name,
-		    f->f_un.f_tls.tls_conn->hostname);
-		/* make sure every message gets queued once
-		 * it will be removed when sendmsg is sent and free()d */
-		if (!qentry)
-			qentry = message_queue_add(f, NEWREF(buffer));
-		(void)tls_send(f, lineptr, len, qentry);
-		break;
-#endif /* !DISABLE_TLS */
-
-	case F_PIPE:
-		DPRINTF(D_MISC, "Logging to %s %s\n",
-		    TypeInfo[f->f_type].name, f->f_un.f_pipe.f_pname);
-		if (f->f_un.f_pipe.f_pid == 0) {
-			/* (re-)open */
-			if ((f->f_file = p_open(f->f_un.f_pipe.f_pname,
-			    &f->f_un.f_pipe.f_pid)) < 0) {
+		if (l > MAXLINE)
+			l = MAXLINE;
+		if (finet) {
+			lsent = -1;
+			fail = 0;
+			for (r = f->f_un.f_forw.f_addr; r; r = r->ai_next) {
+				retry = 0;
+				for (j = 0; j < *finet; j++) {
+#if 0 
+					/*
+					 * should we check AF first, or just
+					 * trial and error? FWD
+					 */
+					if (r->ai_family ==
+					    address_family_of(finet[j+1])) 
+#endif
+sendagain:
+					lsent = sendto(finet[j+1], line, l, 0,
+					    r->ai_addr, r->ai_addrlen);
+					if (lsent == -1) {
+						switch (errno) {
+						case ENOBUFS:
+							/* wait/retry/drop */
+							if (++retry < 5) {
+								usleep(1000);
+								goto sendagain;
+							}
+							break;
+						case EHOSTDOWN:
+						case EHOSTUNREACH:
+						case ENETDOWN:
+							/* drop */
+							break;
+						default:
+							/* busted */
+							fail++;
+							break;
+						}
+					} else if (lsent == l) 
+						break;
+				}
+			}
+			if (lsent != l && fail) {
 				f->f_type = F_UNUSED;
-				message_queue_freeall(f);
+				logerror("sendto() failed");
+			}
+		}
+		break;
+
+	case F_PIPE:
+		dprintf(" %s\n", f->f_un.f_pipe.f_pname);
+		v->iov_base = "\n";
+		v->iov_len = 1;
+		ADDEV();
+		if (f->f_un.f_pipe.f_pid == 0) {
+			if ((f->f_file = p_open(f->f_un.f_pipe.f_pname,
+						&f->f_un.f_pipe.f_pid)) < 0) {
+				f->f_type = F_UNUSED;
 				logerror(f->f_un.f_pipe.f_pname);
 				break;
-			} else if (!qentry) /* prevent recursion */
-				SEND_QUEUE(f);
+			}
 		}
 		if (writev(f->f_file, iov, v - iov) < 0) {
-			e = errno;
+			int e = errno;
 			if (f->f_un.f_pipe.f_pid > 0) {
 				(void) close(f->f_file);
 				deadq_enter(f->f_un.f_pipe.f_pid,
-				    f->f_un.f_pipe.f_pname);
+					    f->f_un.f_pipe.f_pname);
 			}
 			f->f_un.f_pipe.f_pid = 0;
 			/*
@@ -2349,7 +1280,6 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 				if ((f->f_file = p_open(f->f_un.f_pipe.f_pname,
 				     &f->f_un.f_pipe.f_pid)) < 0) {
 					f->f_type = F_UNUSED;
-					message_queue_freeall(f);
 					logerror(f->f_un.f_pipe.f_pname);
 					break;
 				}
@@ -2358,44 +1288,46 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 					if (f->f_un.f_pipe.f_pid > 0) {
 					    (void) close(f->f_file);
 					    deadq_enter(f->f_un.f_pipe.f_pid,
-						f->f_un.f_pipe.f_pname);
+							f->f_un.f_pipe.f_pname);
 					}
 					f->f_un.f_pipe.f_pid = 0;
-					error = true;	/* enqueue on return */
 				} else
 					e = 0;
 			}
-			if (e != 0 && !error) {
+			if (e != 0) {
 				errno = e;
 				logerror(f->f_un.f_pipe.f_pname);
 			}
 		}
-		if (e == 0 && qentry) { /* sent buffered msg */
-			message_queue_remove(f, qentry);
-		}
 		break;
 
 	case F_CONSOLE:
-		if (buffer->flags & IGN_CONS) {
-			DPRINTF(D_MISC, "Logging to %s (ignored)\n",
-				TypeInfo[f->f_type].name);
+		if (flags & IGN_CONS) {
+			dprintf(" (ignored)\n");
 			break;
 		}
 		/* FALLTHROUGH */
 
 	case F_TTY:
 	case F_FILE:
-		DPRINTF(D_MISC, "Logging to %s %s\n",
-			TypeInfo[f->f_type].name, f->f_un.f_fname);
+		dprintf(" %s\n", f->f_un.f_fname);
+		if (f->f_type != F_FILE) {
+			v->iov_base = "\r\n";
+			v->iov_len = 2;
+		} else {
+			v->iov_base = "\n";
+			v->iov_len = 1;
+		}
+		ADDEV();
 	again:
 		if (writev(f->f_file, iov, v - iov) < 0) {
-			e = errno;
+			int e = errno;
 			if (f->f_type == F_FILE && e == ENOSPC) {
 				int lasterror = f->f_lasterror;
 				f->f_lasterror = e;
 				if (lasterror != e)
 					logerror(f->f_un.f_fname);
-				error = true;	/* enqueue on return */
+				break;
 			}
 			(void)close(f->f_file);
 			/*
@@ -2407,7 +1339,6 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 				if (f->f_file < 0) {
 					f->f_type = F_UNUSED;
 					logerror(f->f_un.f_fname);
-					message_queue_freeall(f);
 				} else
 					goto again;
 			} else {
@@ -2415,98 +1346,24 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 				errno = e;
 				f->f_lasterror = e;
 				logerror(f->f_un.f_fname);
-				message_queue_freeall(f);
 			}
 		} else {
 			f->f_lasterror = 0;
-			if ((buffer->flags & SYNC_FILE)
-			 && (f->f_flags & FFLAG_SYNC))
+			if ((flags & SYNC_FILE) && (f->f_flags & FFLAG_SYNC))
 				(void)fsync(f->f_file);
-			/* Problem with files: We cannot check beforehand if
-			 * they would be writeable and call send_queue() first.
-			 * So we call send_queue() after a successful write,
-			 * which means the first message will be out of order.
-			 */
-			if (!qentry) /* prevent recursion */
-				SEND_QUEUE(f);
-			else if (qentry) /* sent buffered msg */
-				message_queue_remove(f, qentry);
 		}
 		break;
 
 	case F_USERS:
 	case F_WALL:
-		DPRINTF(D_MISC, "Logging to %s\n", TypeInfo[f->f_type].name);
+		dprintf("\n");
+		v->iov_base = "\r\n";
+		v->iov_len = 2;
+		ADDEV();
 		wallmsg(f, iov, v - iov);
 		break;
 	}
 	f->f_prevcount = 0;
-
-	if (error && !qentry)
-		message_queue_add(f, NEWREF(buffer));
-#ifndef DISABLE_SIGN
-	if (newhash) {
-		struct signature_group_t *sg;
-		sg = sign_get_sg(buffer->pri, f);
-		(void)sign_send_signature_block(sg, false);
-	}
-#endif /* !DISABLE_SIGN */
-	/* this belongs to the ad-hoc buffer at the first if(buffer) */
-	DELREF(buffer);
-	/* TLS frees on its own */
-	if (f->f_type != F_TLS)
-		FREEPTR(line);
-}
-
-/* send one line by UDP */
-void
-udp_send(struct filed *f, char *line, size_t len)
-{
-	int lsent, fail, retry, j;
-	struct addrinfo *r;
-
-	DPRINTF((D_NET|D_CALL), "udp_send(f=%p, line=\"%s\", "
-	    "len=%zu) to dest.\n", f, line, len);
-
-	if (!finet)
-		return;
-
-	lsent = -1;
-	fail = 0;
-	assert(f->f_type == F_FORW);
-	for (r = f->f_un.f_forw.f_addr; r; r = r->ai_next) {
-		retry = 0;
-		for (j = 0; j < finet->fd; j++) {
-sendagain:
-			lsent = sendto(finet[j+1].fd, line, len, 0,
-			    r->ai_addr, r->ai_addrlen);
-			if (lsent == -1) {
-				switch (errno) {
-				case ENOBUFS:
-					/* wait/retry/drop */
-					if (++retry < 5) {
-						usleep(1000);
-						goto sendagain;
-					}
-					break;
-				case EHOSTDOWN:
-				case EHOSTUNREACH:
-				case ENETDOWN:
-					/* drop */
-					break;
-				default:
-					/* busted */
-					fail++;
-					break;
-				}
-			} else if ((size_t)lsent == len)
-				break;
-		}
-		if ((size_t)lsent != len && fail) {
-			f->f_type = F_UNUSED;
-			logerror("sendto() failed");
-		}
-	}
 }
 
 /*
@@ -2518,7 +1375,6 @@ sendagain:
 void
 wallmsg(struct filed *f, struct iovec *iov, size_t iovcnt)
 {
-#ifdef __NetBSD_Version__
 	static int reenter;			/* avoid calling ourselves */
 	int i;
 	char *p;
@@ -2553,12 +1409,10 @@ wallmsg(struct filed *f, struct iovec *iov, size_t iovcnt)
 		}
 	}
 	reenter = 0;
-#endif /* __NetBSD_Version__ */
 }
 
 void
-/*ARGSUSED*/
-reapchild(int fd, short event, void *ev)
+reapchild(struct kevent *ev)
 {
 	int status;
 	pid_t pid;
@@ -2583,7 +1437,7 @@ reapchild(int fd, short event, void *ev)
 				(void) close(f->f_file);
 				f->f_un.f_pipe.f_pid = 0;
 				log_deadchild(pid, status,
-				    f->f_un.f_pipe.f_pname);
+					      f->f_un.f_pipe.f_pname);
 				break;
 			}
 		}
@@ -2591,92 +1445,82 @@ reapchild(int fd, short event, void *ev)
 }
 
 /*
- * Return a printable representation of a host address (FQDN if available)
+ * Return a printable representation of a host address.
  */
-const char *
+char *
 cvthname(struct sockaddr_storage *f)
 {
 	int error;
-	int niflag = NI_DGRAM;
+	const int niflag = NI_DGRAM;
 	static char host[NI_MAXHOST], ip[NI_MAXHOST];
 
 	error = getnameinfo((struct sockaddr*)f, ((struct sockaddr*)f)->sa_len,
-	    ip, sizeof ip, NULL, 0, NI_NUMERICHOST|niflag);
+			ip, sizeof ip, NULL, 0, NI_NUMERICHOST|niflag);
 
-	DPRINTF(D_CALL, "cvthname(%s)\n", ip);
+	dprintf("cvthname(%s)\n", ip);
 
 	if (error) {
-		DPRINTF(D_NET, "Malformed from address %s\n",
-		    gai_strerror(error));
-		return "???";
+		dprintf("Malformed from address %s\n", gai_strerror(error));
+		return ("???");
 	}
 
 	if (!UseNameService)
-		return ip;
+		return (ip);
 
 	error = getnameinfo((struct sockaddr*)f, ((struct sockaddr*)f)->sa_len,
-	    host, sizeof host, NULL, 0, niflag);
+			host, sizeof host, NULL, 0, niflag);
 	if (error) {
-		DPRINTF(D_NET, "Host name for your address (%s) unknown\n", ip);
-		return ip;
+		dprintf("Host name for your address (%s) unknown\n", ip);
+		return (ip);
 	}
 
-	return host;
+	trim_localdomain(host);
+
+	return (host);
 }
 
 void
-trim_anydomain(char *host)
+trim_localdomain(char *host)
 {
-	bool onlydigits = true;
-	int i;
+	size_t hl;
 
-	if (!BSDOutputFormat)
-		return;
+	hl = strlen(host);
+	if (hl > 0 && host[hl - 1] == '.')
+		host[--hl] = '\0';
 
-	/* if non-digits found, then assume hostname and cut at first dot (this
-	 * case also covers IPv6 addresses which should not contain dots),
-	 * if only digits then assume IPv4 address and do not cut at all */
-	for (i = 0; host[i]; i++) {
-		if (host[i] == '.' && !onlydigits)
-			host[i] = '\0';
-		else if (!isdigit((unsigned char)host[i]) && host[i] != '.')
-			onlydigits = false;
-	}
+	if (hl > LocalDomainLen && host[hl - LocalDomainLen - 1] == '.' &&
+	    strcasecmp(&host[hl - LocalDomainLen], LocalDomain) == 0)
+		host[hl - LocalDomainLen - 1] = '\0';
 }
 
-static void
-/*ARGSUSED*/
-domark(int fd, short event, void *ev)
+void
+domark(struct kevent *ev)
 {
-	struct event *ev_pass = (struct event *)ev;
 	struct filed *f;
 	dq_t q, nextq;
-	sigset_t newmask, omask;
 
-	schedule_event(&ev_pass,
-		&((struct timeval){TIMERINTVL, 0}),
-		domark, ev_pass);
-	DPRINTF((D_CALL|D_EVENT), "domark()\n");
+	/*
+	 * XXX Should we bother to adjust for the # of times the timer
+	 * has expired (i.e. in case we miss one?).  This information is
+	 * returned to us in ev->data.
+	 */
 
-	BLOCK_SIGNALS(omask, newmask);
 	now = time((time_t *)NULL);
 	MarkSeq += TIMERINTVL;
 	if (MarkSeq >= MarkInterval) {
-		logmsg_async(LOG_INFO, NULL, "-- MARK --", ADDDATE|MARK);
+		logmsg(LOG_INFO, "-- MARK --", LocalHostName, ADDDATE|MARK);
 		MarkSeq = 0;
 	}
 
 	for (f = Files; f; f = f->f_next) {
 		if (f->f_prevcount && now >= REPEATTIME(f)) {
-			DPRINTF(D_DATA, "Flush %s: repeated %d times, %d sec.\n",
-			    TypeInfo[f->f_type].name, f->f_prevcount,
+			dprintf("Flush %s: repeated %d times, %d sec.\n",
+			    TypeNames[f->f_type], f->f_prevcount,
 			    repeatinterval[f->f_repeatcount]);
-			fprintlog(f, NULL, NULL);
+			fprintlog(f, 0, (char *)NULL);
 			BACKOFF(f);
 		}
 	}
-	message_allqueues_check();
-	RESTORE_SIGNALS(omask);
 
 	/* Walk the dead queue, and see if we should signal somebody. */
 	for (q = TAILQ_FIRST(&deadq_head); q != NULL; q = nextq) {
@@ -2707,14 +1551,6 @@ domark(int fd, short event, void *ev)
 			q->dq_timeout--;
 		}
 	}
-#ifndef DISABLE_SIGN
-	if (GlobalSign.rsid) {	/* check if initialized */
-		struct signature_group_t *sg;
-		STAILQ_FOREACH(sg, &GlobalSign.SigGroups, entries) {
-			sign_send_certificate_block(sg);
-		}
-	}
-#endif /* !DISABLE_SIGN */
 }
 
 /*
@@ -2727,7 +1563,6 @@ logerror(const char *fmt, ...)
 	va_list ap;
 	char tmpbuf[BUFSIZ];
 	char buf[BUFSIZ];
-	char *outbuf;
 
 	/* If there's an error while trying to log an error, give up. */
 	if (logerror_running)
@@ -2735,116 +1570,88 @@ logerror(const char *fmt, ...)
 	logerror_running = 1;
 
 	va_start(ap, fmt);
+
 	(void)vsnprintf(tmpbuf, sizeof(tmpbuf), fmt, ap);
+
 	va_end(ap);
 
-	if (errno) {
-		(void)snprintf(buf, sizeof(buf), "%s: %s",
+	if (errno)
+		(void)snprintf(buf, sizeof(buf), "syslogd: %s: %s", 
 		    tmpbuf, strerror(errno));
-		outbuf = buf;
-	} else {
-		(void)snprintf(buf, sizeof(buf), "%s", tmpbuf);
-		outbuf = tmpbuf;
-	}
+	else
+		(void)snprintf(buf, sizeof(buf), "syslogd: %s", tmpbuf);
 
-	if (daemonized)
-		logmsg_async(LOG_SYSLOG|LOG_ERR, NULL, outbuf, ADDDATE);
+	if (daemonized) 
+		logmsg(LOG_SYSLOG|LOG_ERR, buf, LocalHostName, ADDDATE);
 	if (!daemonized && Debug)
-		DPRINTF(D_MISC, "%s\n", outbuf);
+		dprintf("%s\n", buf);
 	if (!daemonized && !Debug)
-		printf("%s\n", outbuf);
+		printf("%s\n", buf);
 
 	logerror_running = 0;
 }
 
-/*
- * Print syslogd info some place.
- */
 void
-loginfo(const char *fmt, ...)
+die(struct kevent *ev)
 {
-	va_list ap;
-	char buf[BUFSIZ];
-
-	va_start(ap, fmt);
-	(void)vsnprintf(buf, sizeof(buf), fmt, ap);
-	va_end(ap);
-
-	DPRINTF(D_MISC, "%s\n", buf);
-	logmsg_async(LOG_SYSLOG|LOG_INFO, NULL, buf, ADDDATE);
-}
-
-#ifndef DISABLE_TLS
-static inline void
-free_incoming_tls_sockets(void)
-{
-	struct TLS_Incoming_Conn *tls_in;
-	int i;
-
-	/*
-	 * close all listening and connected TLS sockets
-	 */
-	if (TLS_Listen_Set)
-		for (i = 0; i < TLS_Listen_Set->fd; i++) {
-			if (close(TLS_Listen_Set[i+1].fd) == -1)
-				logerror("close() failed");
-			DEL_EVENT(TLS_Listen_Set[i+1].ev);
-			FREEPTR(TLS_Listen_Set[i+1].ev);
-		}
-	FREEPTR(TLS_Listen_Set);
-	/* close/free incoming TLS connections */
-	while (!SLIST_EMPTY(&TLS_Incoming_Head)) {
-		tls_in = SLIST_FIRST(&TLS_Incoming_Head);
-		SLIST_REMOVE_HEAD(&TLS_Incoming_Head, entries);
-		FREEPTR(tls_in->inbuf);
-		free_tls_conn(tls_in->tls_conn);
-		free(tls_in);
-	}
-}
-#endif /* !DISABLE_TLS */
-
-void
-/*ARGSUSED*/
-die(int fd, short event, void *ev)
-{
-	struct filed *f, *next;
+	struct filed *f;
 	char **p;
-	sigset_t newmask, omask;
-	int i;
-	size_t j;
 
 	ShuttingDown = 1;	/* Don't log SIGCHLDs. */
-	/* prevent recursive signals */
-	BLOCK_SIGNALS(omask, newmask);
-
-	errno = 0;
-	if (ev != NULL)
-		logerror("Exiting on signal %d", fd);
-	else
-		logerror("Fatal error, exiting");
-
-	/*
-	 *  flush any pending output
-	 */
 	for (f = Files; f != NULL; f = f->f_next) {
 		/* flush any pending output */
 		if (f->f_prevcount)
-			fprintlog(f, NULL, NULL);
-		SEND_QUEUE(f);
+			fprintlog(f, 0, (char *)NULL);
+		if (f->f_type == F_PIPE && f->f_un.f_pipe.f_pid > 0) {
+			(void) close(f->f_file);
+			f->f_un.f_pipe.f_pid = 0;
+		}
 	}
+	errno = 0;
+	if (ev != NULL)
+		logerror("Exiting on signal %d", (int) ev->ident);
+	else
+		logerror("Fatal error, exiting");
+	for (p = LogPaths; p && *p; p++)
+		unlink(*p);
+	exit(0);
+}
 
-#ifndef DISABLE_TLS
-	free_incoming_tls_sockets();
-#endif /* !DISABLE_TLS */
-#ifndef DISABLE_SIGN
-	sign_global_free();
-#endif /* !DISABLE_SIGN */
+/*
+ *  INIT -- Initialize syslogd from configuration table
+ */
+void
+init(struct kevent *ev)
+{
+	size_t i;
+	FILE *cf;
+	struct filed *f, *next, **nextp;
+	char *p;
+	char cline[LINE_MAX];
+	char prog[NAME_MAX + 1];
+	char host[MAXHOSTNAMELEN];
+	char hostMsg[2*MAXHOSTNAMELEN + 40];
+
+	dprintf("init\n");
+
+	(void)strlcpy(oldLocalHostName, LocalHostName,
+		      sizeof(oldLocalHostName));
+	(void)gethostname(LocalHostName, sizeof(LocalHostName));
+	if ((p = strchr(LocalHostName, '.')) != NULL) {
+		*p++ = '\0';
+		LocalDomain = p;
+	} else
+		LocalDomain = "";
+	LocalDomainLen = strlen(LocalDomain);
 
 	/*
 	 *  Close all open log files.
 	 */
+	Initialized = 0;
 	for (f = Files; f != NULL; f = next) {
-		message_queue_freeall(f);
+		/* flush any pending output */
+		if (f->f_prevcount)
+			fprintlog(f, 0, (char *)NULL);
 
 		switch (f->f_type) {
 		case F_FILE:
@@ -2855,6 +1662,8 @@ die(int fd, short event, void *ev)
 		case F_PIPE:
 			if (f->f_un.f_pipe.f_pid > 0) {
 				(void)close(f->f_file);
+				deadq_enter(f->f_un.f_pipe.f_pid,
+					    f->f_un.f_pipe.f_pname);
 			}
 			f->f_un.f_pipe.f_pid = 0;
 			break;
@@ -2862,296 +1671,54 @@ die(int fd, short event, void *ev)
 			if (f->f_un.f_forw.f_addr)
 				freeaddrinfo(f->f_un.f_forw.f_addr);
 			break;
-#ifndef DISABLE_TLS
-		case F_TLS:
-			free_tls_conn(f->f_un.f_tls.tls_conn);
-			break;
-#endif /* !DISABLE_TLS */
 		}
 		next = f->f_next;
-		DELREF(f->f_prevmsg);
-		FREEPTR(f->f_program);
-		FREEPTR(f->f_host);
-		DEL_EVENT(f->f_sq_event);
+		if (f->f_program != NULL)
+			free(f->f_program);
+		if (f->f_host != NULL)
+			free(f->f_host);
 		free((char *)f);
 	}
+	Files = NULL;
+	nextp = &Files;
 
 	/*
-	 *  Close all open UDP sockets
+	 *  Close all open sockets
 	 */
+
 	if (finet) {
-		for (i = 0; i < finet->fd; i++) {
-			if (close(finet[i+1].fd) < 0) {
+		for (i = 0; i < *finet; i++) {
+			if (close(finet[i+1]) < 0) {
 				logerror("close() failed");
-				die(0, 0, NULL);
+				die(NULL);
 			}
-			DEL_EVENT(finet[i+1].ev);
-			FREEPTR(finet[i+1].ev);
-		}
-		FREEPTR(finet);
-	}
-
-	/* free config options */
-	for (j = 0; j < A_CNT(TypeInfo); j++) {
-		FREEPTR(TypeInfo[j].queue_length_string);
-		FREEPTR(TypeInfo[j].queue_size_string);
-	}
-
-#ifndef DISABLE_TLS
-	FREEPTR(tls_opt.CAdir);
-	FREEPTR(tls_opt.CAfile);
-	FREEPTR(tls_opt.keyfile);
-	FREEPTR(tls_opt.certfile);
-	FREEPTR(tls_opt.x509verify);
-	FREEPTR(tls_opt.bindhost);
-	FREEPTR(tls_opt.bindport);
-	FREEPTR(tls_opt.server);
-	FREEPTR(tls_opt.gen_cert);
-	free_cred_SLIST(&tls_opt.cert_head);
-	free_cred_SLIST(&tls_opt.fprint_head);
-	FREE_SSL_CTX(tls_opt.global_TLS_CTX);
-#endif /* !DISABLE_TLS */
-
-	FREEPTR(funix);
-	for (p = LogPaths; p && *p; p++)
-		unlink(*p);
-	exit(0);
-}
-
-#ifndef DISABLE_SIGN
-/*
- * get one "sign_delim_sg2" item, convert and store in ordered queue
- */
-void
-store_sign_delim_sg2(char *tmp_buf)
-{
-	struct string_queue *sqentry, *sqe1, *sqe2;
-
-	if(!(sqentry = malloc(sizeof(*sqentry)))) {
-		logerror("Unable to allocate memory");
-		return;
-	}
-	/*LINTED constcond/null effect */
-	assert(sizeof(int64_t) == sizeof(uint_fast64_t));
-	if (dehumanize_number(tmp_buf, (int64_t*) &(sqentry->key)) == -1
-	    || sqentry->key > (LOG_NFACILITIES<<3)) {
-		DPRINTF(D_PARSE, "invalid sign_delim_sg2: %s\n", tmp_buf);
-		free(sqentry);
-		FREEPTR(tmp_buf);
-		return;
-	}
-	sqentry->data = tmp_buf;
-
-	if (STAILQ_EMPTY(&GlobalSign.sig2_delims)) {
-		STAILQ_INSERT_HEAD(&GlobalSign.sig2_delims,
-		    sqentry, entries);
-		return;
-	}
-
-	/* keep delimiters sorted */
-	sqe1 = sqe2 = STAILQ_FIRST(&GlobalSign.sig2_delims);
-	if (sqe1->key > sqentry->key) {
-		STAILQ_INSERT_HEAD(&GlobalSign.sig2_delims,
-		    sqentry, entries);
-		return;
-	}
-
-	while ((sqe1 = sqe2)
-	   && (sqe2 = STAILQ_NEXT(sqe1, entries))) {
-		if (sqe2->key > sqentry->key) {
-			break;
-		} else if (sqe2->key == sqentry->key) {
-			DPRINTF(D_PARSE, "duplicate sign_delim_sg2: %s\n",
-			    tmp_buf);
-			FREEPTR(sqentry);
-			FREEPTR(tmp_buf);
-			return;
 		}
 	}
-	STAILQ_INSERT_AFTER(&GlobalSign.sig2_delims, sqe1, sqentry, entries);
-}
-#endif /* !DISABLE_SIGN */
 
-/*
- * read syslog.conf
- */
-void
-read_config_file(FILE *cf, struct filed **f_ptr)
-{
-	size_t linenum = 0;
-	size_t i;
-	struct filed *f, **nextp;
-	char cline[LINE_MAX];
-	char prog[NAME_MAX + 1];
-	char host[MAXHOSTNAMELEN];
-	const char *p;
-	char *q;
-	bool found_keyword;
-#ifndef DISABLE_TLS
-	struct peer_cred *cred = NULL;
-	struct peer_cred_head *credhead = NULL;
-#endif /* !DISABLE_TLS */
-#ifndef DISABLE_SIGN
-	char *sign_sg_str = NULL;
-#endif /* !DISABLE_SIGN */
-#if (!defined(DISABLE_TLS) || !defined(DISABLE_SIGN))
-	char *tmp_buf = NULL;
-#endif /* (!defined(DISABLE_TLS) || !defined(DISABLE_SIGN)) */
-	/* central list of recognized configuration keywords
-	 * and an address for their values as strings */
-	const struct config_keywords {
-		const char *keyword;
-		char **variable;
-	} config_keywords[] = {
-#ifndef DISABLE_TLS
-		/* TLS settings */
-		{"tls_ca",		  &tls_opt.CAfile},
-		{"tls_cadir",		  &tls_opt.CAdir},
-		{"tls_cert",		  &tls_opt.certfile},
-		{"tls_key",		  &tls_opt.keyfile},
-		{"tls_verify",		  &tls_opt.x509verify},
-		{"tls_bindport",	  &tls_opt.bindport},
-		{"tls_bindhost",	  &tls_opt.bindhost},
-		{"tls_server",		  &tls_opt.server},
-		{"tls_gen_cert",	  &tls_opt.gen_cert},
-		/* special cases in parsing */
-		{"tls_allow_fingerprints",&tmp_buf},
-		{"tls_allow_clientcerts", &tmp_buf},
-		/* buffer settings */
-		{"tls_queue_length",	  &TypeInfo[F_TLS].queue_length_string},
-		{"tls_queue_size",	  &TypeInfo[F_TLS].queue_size_string},
-#endif /* !DISABLE_TLS */
-		{"file_queue_length",	  &TypeInfo[F_FILE].queue_length_string},
-		{"pipe_queue_length",	  &TypeInfo[F_PIPE].queue_length_string},
-		{"file_queue_size",	  &TypeInfo[F_FILE].queue_size_string},
-		{"pipe_queue_size",	  &TypeInfo[F_PIPE].queue_size_string},
-#ifndef DISABLE_SIGN
-		/* syslog-sign setting */
-		{"sign_sg",		  &sign_sg_str},
-		/* also special case in parsing */
-		{"sign_delim_sg2",	  &tmp_buf},
-#endif /* !DISABLE_SIGN */
-	};
-
-	DPRINTF(D_CALL, "read_config_file()\n");
-
-	/* free all previous config options */
-	for (i = 0; i < A_CNT(TypeInfo); i++) {
-		if (TypeInfo[i].queue_length_string
-		    && TypeInfo[i].queue_length_string
-		    != TypeInfo[i].default_length_string) {
-			FREEPTR(TypeInfo[i].queue_length_string);
-			TypeInfo[i].queue_length_string =
-				strdup(TypeInfo[i].default_length_string);
-		 }
-		if (TypeInfo[i].queue_size_string
-		    && TypeInfo[i].queue_size_string
-		    != TypeInfo[i].default_size_string) {
-			FREEPTR(TypeInfo[i].queue_size_string);
-			TypeInfo[i].queue_size_string =
-				strdup(TypeInfo[i].default_size_string);
-		 }
-	}
-	for (i = 0; i < A_CNT(config_keywords); i++)
-		FREEPTR(*config_keywords[i].variable);
 	/*
-	 * global settings
+	 *  Reset counter of forwarding actions
 	 */
-	while (fgets(cline, sizeof(cline), cf) != NULL) {
-		linenum++;
-		for (p = cline; isspace((unsigned char)*p); ++p)
-			continue;
-		if ((*p == '\0') || (*p == '#'))
-			continue;
 
-		for (i = 0; i < A_CNT(config_keywords); i++) {
-			if (copy_config_value(config_keywords[i].keyword,
-			    config_keywords[i].variable, &p, ConfFile,
-			    linenum)) {
-				DPRINTF((D_PARSE|D_MEM),
-				    "found option %s, saved @%p\n",
-				    config_keywords[i].keyword,
-				    *config_keywords[i].variable);
-#ifndef DISABLE_SIGN
-				if (!strcmp("sign_delim_sg2",
-				    config_keywords[i].keyword))
-					do {
-						store_sign_delim_sg2(tmp_buf);
-					} while (copy_config_value_word(
-					    &tmp_buf, &p));
+	NumForwards=0;
 
-#endif /* !DISABLE_SIGN */
-
-#ifndef DISABLE_TLS
-				/* special cases with multiple parameters */
-				if (!strcmp("tls_allow_fingerprints",
-				    config_keywords[i].keyword))
-					credhead = &tls_opt.fprint_head;
-				else if (!strcmp("tls_allow_clientcerts",
-				    config_keywords[i].keyword))
-					credhead = &tls_opt.cert_head;
-
-				if (credhead) do {
-					if(!(cred = malloc(sizeof(*cred)))) {
-						logerror("Unable to "
-							"allocate memory");
-						break;
-					}
-					cred->data = tmp_buf;
-					tmp_buf = NULL;
-					SLIST_INSERT_HEAD(credhead,
-						cred, entries);
-				} while /* additional values? */
-					(copy_config_value_word(&tmp_buf, &p));
-				credhead = NULL;
-				break;
-#endif /* !DISABLE_TLS */
-			}
-		}
-	}
-	/* convert strings to integer values */
-	for (i = 0; i < A_CNT(TypeInfo); i++) {
-		if (!TypeInfo[i].queue_length_string
-		    || dehumanize_number(TypeInfo[i].queue_length_string,
-		    &TypeInfo[i].queue_length) == -1)
-			TypeInfo[i].queue_length = strtol(
-			    TypeInfo[i].default_length_string, NULL, 10);
-		if (!TypeInfo[i].queue_size_string
-		    || dehumanize_number(TypeInfo[i].queue_size_string,
-		    &TypeInfo[i].queue_size) == -1)
-			TypeInfo[i].queue_size = strtol(
-			    TypeInfo[i].default_size_string, NULL, 10);
+	/* open the configuration file */
+	if ((cf = fopen(ConfFile, "r")) == NULL) {
+		dprintf("Cannot open `%s'\n", ConfFile);
+		*nextp = (struct filed *)calloc(1, sizeof(*f));
+		cfline("*.ERR\t/dev/console", *nextp, "*", "*");
+		(*nextp)->f_next = (struct filed *)calloc(1, sizeof(*f));
+		cfline("*.PANIC\t*", (*nextp)->f_next, "*", "*");
+		Initialized = 1;
+		return;
 	}
 
-#ifndef DISABLE_SIGN
-	if (sign_sg_str) {
-		if (sign_sg_str[1] == '\0'
-		    && (sign_sg_str[0] == '0' || sign_sg_str[0] == '1'
-		    || sign_sg_str[0] == '2' || sign_sg_str[0] == '3'))
-			GlobalSign.sg = sign_sg_str[0] - '0';
-		else {
-			GlobalSign.sg = SIGN_SG;
-			DPRINTF(D_MISC, "Invalid sign_sg value `%s', "
-			    "use default value `%d'\n",
-			    sign_sg_str, GlobalSign.sg);
-		}
-	} else	/* disable syslog-sign */
-		GlobalSign.sg = -1;
-#endif /* !DISABLE_SIGN */
-
-	rewind(cf);
-	linenum = 0;
 	/*
 	 *  Foreach line in the conf table, open that file.
 	 */
 	f = NULL;
-	nextp = &f;
-
 	strcpy(prog, "*");
 	strcpy(host, "*");
 	while (fgets(cline, sizeof(cline), cf) != NULL) {
-		linenum++;
-		found_keyword = false;
 		/*
 		 * check for end-of-section, comments, strip off trailing
 		 * spaces and newline character.  #!prog is treated specially:
@@ -3166,19 +1733,6 @@ read_config_file(FILE *cf, struct filed **f_ptr)
 			if (*p != '!' && *p != '+' && *p != '-')
 				continue;
 		}
-
-		for (i = 0; i < A_CNT(config_keywords); i++) {
-			if (!strncasecmp(p, config_keywords[i].keyword,
-				strlen(config_keywords[i].keyword))) {
-				DPRINTF(D_PARSE,
-				    "skip cline %zu with keyword %s\n",
-				    linenum, config_keywords[i].keyword);
-				found_keyword = true;
-			}
-		}
-		if (found_keyword)
-			continue;
-
 		if (*p == '+' || *p == '-') {
 			host[0] = *p++;
 			while (isspace((unsigned char)*p))
@@ -3187,8 +1741,6 @@ read_config_file(FILE *cf, struct filed **f_ptr)
 				strcpy(host, "*");
 				continue;
 			}
-			/* the +hostname expression will continue
-			 * to use the LocalHostName, not the FQDN */
 			for (i = 1; i < MAXHOSTNAMELEN - 1; i++) {
 				if (*p == '@') {
 					(void)strncpy(&host[i], LocalHostName,
@@ -3222,214 +1774,18 @@ read_config_file(FILE *cf, struct filed **f_ptr)
 			prog[i] = '\0';
 			continue;
 		}
-		for (q = strchr(cline, '\0'); isspace((unsigned char)*--q);)
+		for (p = strchr(cline, '\0'); isspace((unsigned char)*--p);)
 			continue;
-		*++q = '\0';
-		if ((f = calloc(1, sizeof(*f))) == NULL) {
-			logerror("alloc failed");
-			die(0, 0, NULL);
-		}
-		if (!*f_ptr) *f_ptr = f; /* return first node */
+		*++p = '\0';
+		f = (struct filed *)calloc(1, sizeof(*f));
 		*nextp = f;
 		nextp = &f->f_next;
-		cfline(linenum, cline, f, prog, host);
-	}
-}
-
-/*
- *  INIT -- Initialize syslogd from configuration table
- */
-void
-/*ARGSUSED*/
-init(int fd, short event, void *ev)
-{
-	FILE *cf;
-	int i;
-	struct filed *f, *newf, **nextp, *f2;
-	char *p;
-	sigset_t newmask, omask;
-	char *tls_status_msg = NULL;
-#ifndef DISABLE_TLS
-	struct peer_cred *cred = NULL;
-#endif /* !DISABLE_TLS */
-
-	/* prevent recursive signals */
-	BLOCK_SIGNALS(omask, newmask);
-
-	DPRINTF((D_EVENT|D_CALL), "init\n");
-
-	/*
-	 * be careful about dependencies and order of actions:
-	 * 1. flush buffer queues
-	 * 2. flush -sign SBs
-	 * 3. flush/delete buffer queue again, in case an SB got there
-	 * 4. close files/connections
-	 */
-
-	/*
-	 *  flush any pending output
-	 */
-	for (f = Files; f != NULL; f = f->f_next) {
-		/* flush any pending output */
-		if (f->f_prevcount)
-			fprintlog(f, NULL, NULL);
-		SEND_QUEUE(f);
-	}
-	/* some actions only on SIGHUP and not on first start */
-	if (Initialized) {
-#ifndef DISABLE_SIGN
-		sign_global_free();
-#endif /* !DISABLE_SIGN */
-#ifndef DISABLE_TLS
-		free_incoming_tls_sockets();
-#endif /* !DISABLE_TLS */
-		Initialized = 0;
-	}
-	/*
-	 *  Close all open log files.
-	 */
-	for (f = Files; f != NULL; f = f->f_next) {
-		switch (f->f_type) {
-		case F_FILE:
-		case F_TTY:
-		case F_CONSOLE:
-			(void)close(f->f_file);
-			break;
-		case F_PIPE:
-			if (f->f_un.f_pipe.f_pid > 0) {
-				(void)close(f->f_file);
-				deadq_enter(f->f_un.f_pipe.f_pid,
-				    f->f_un.f_pipe.f_pname);
-			}
-			f->f_un.f_pipe.f_pid = 0;
-			break;
-		case F_FORW:
-			if (f->f_un.f_forw.f_addr)
-				freeaddrinfo(f->f_un.f_forw.f_addr);
-			break;
-#ifndef DISABLE_TLS
-		case F_TLS:
-			free_tls_sslptr(f->f_un.f_tls.tls_conn);
-			break;
-#endif /* !DISABLE_TLS */
-		}
+		cfline(cline, f, prog, host);
 	}
 
-	/*
-	 *  Close all open UDP sockets
-	 */
-	if (finet) {
-		for (i = 0; i < finet->fd; i++) {
-			if (close(finet[i+1].fd) < 0) {
-				logerror("close() failed");
-				die(0, 0, NULL);
-			}
-			DEL_EVENT(finet[i+1].ev);
-			FREEPTR(finet[i+1].ev);
-		}
-		FREEPTR(finet);
-	}
-
-	/* get FQDN and hostname/domain */
-	FREEPTR(oldLocalFQDN);
-	oldLocalFQDN = LocalFQDN;
-	LocalFQDN = getLocalFQDN();
-	if ((p = strchr(LocalFQDN, '.')) != NULL)
-		(void)strlcpy(LocalHostName, LocalFQDN, 1+p-LocalFQDN);
-	else
-		(void)strlcpy(LocalHostName, LocalFQDN, sizeof(LocalHostName));
-
-	/*
-	 *  Reset counter of forwarding actions
-	 */
-
-	NumForwards=0;
-
-	/* new destination list to replace Files */
-	newf = NULL;
-	nextp = &newf;
-
-	/* open the configuration file */
-	if ((cf = fopen(ConfFile, "r")) == NULL) {
-		DPRINTF(D_FILE, "Cannot open `%s'\n", ConfFile);
-		*nextp = (struct filed *)calloc(1, sizeof(*f));
-		cfline(0, "*.ERR\t/dev/console", *nextp, "*", "*");
-		(*nextp)->f_next = (struct filed *)calloc(1, sizeof(*f));
-		cfline(0, "*.PANIC\t*", (*nextp)->f_next, "*", "*");
-		Initialized = 1;
-		RESTORE_SIGNALS(omask);
-		return;
-	}
-
-#ifndef DISABLE_TLS
-	/* init with new TLS_CTX
-	 * as far as I see one cannot change the cert/key of an existing CTX
-	 */
-	FREE_SSL_CTX(tls_opt.global_TLS_CTX);
-
-	free_cred_SLIST(&tls_opt.cert_head);
-	free_cred_SLIST(&tls_opt.fprint_head);
-#endif /* !DISABLE_TLS */
-
-	/* read and close configuration file */
-	read_config_file(cf, &newf);
-	newf = *nextp;
+	/* close the configuration file */
 	(void)fclose(cf);
-	DPRINTF(D_MISC, "read_config_file() returned newf=%p\n", newf);
 
-#define MOVE_QUEUE(dst, src) do {				\
-	struct buf_queue *buf;					\
-	STAILQ_CONCAT(&dst->f_qhead, &src->f_qhead);		\
-	STAILQ_FOREACH(buf, &dst->f_qhead, entries) {		\
-	      dst->f_qelements++;				\
-	      dst->f_qsize += buf_queue_obj_size(buf);		\
-	}							\
-	src->f_qsize = 0;					\
-	src->f_qelements = 0;					\
-} while (/*CONSTCOND*/0)
-
-	/*
-	 *  Free old log files.
-	 */
-	for (f = Files; f != NULL;) {
-		struct filed *ftmp;
-
-		/* check if a new logfile is equal, if so pass the queue */
-		for (f2 = newf; f2 != NULL; f2 = f2->f_next) {
-			if (f->f_type == f2->f_type
-			    && ((f->f_type == F_PIPE
-			    && !strcmp(f->f_un.f_pipe.f_pname,
-			    f2->f_un.f_pipe.f_pname))
-#ifndef DISABLE_TLS
-			    || (f->f_type == F_TLS
-			    && !strcmp(f->f_un.f_tls.tls_conn->hostname,
-			    f2->f_un.f_tls.tls_conn->hostname)
-			    && !strcmp(f->f_un.f_tls.tls_conn->port,
-			    f2->f_un.f_tls.tls_conn->port))
-#endif /* !DISABLE_TLS */
-			    || (f->f_type == F_FORW
-			    && !strcmp(f->f_un.f_forw.f_hname,
-			    f2->f_un.f_forw.f_hname)))) {
-				DPRINTF(D_BUFFER, "move queue from f@%p "
-				    "to f2@%p\n", f, f2);
-				MOVE_QUEUE(f2, f);
-			 }
-		}
-		message_queue_freeall(f);
-		DELREF(f->f_prevmsg);
-#ifndef DISABLE_TLS
-		if (f->f_type == F_TLS)
-			free_tls_conn(f->f_un.f_tls.tls_conn);
-#endif /* !DISABLE_TLS */
-		FREEPTR(f->f_program);
-		FREEPTR(f->f_host);
-		DEL_EVENT(f->f_sq_event);
-
-		ftmp = f->f_next;
-		free((char *)f);
-		f = ftmp;
-	}
-	Files = newf;
 	Initialized = 1;
 
 	if (Debug) {
@@ -3439,7 +1795,7 @@ init(int fd, short event, void *ev)
 					printf("X ");
 				else
 					printf("%d ", f->f_pmask[i]);
-			printf("%s: ", TypeInfo[f->f_type].name);
+			printf("%s: ", TypeNames[f->f_type]);
 			switch (f->f_type) {
 			case F_FILE:
 			case F_TTY:
@@ -3450,11 +1806,7 @@ init(int fd, short event, void *ev)
 			case F_FORW:
 				printf("%s", f->f_un.f_forw.f_hname);
 				break;
-#ifndef DISABLE_TLS
-			case F_TLS:
-				printf("[%s]", f->f_un.f_tls.tls_conn->hostname);
-				break;
-#endif /* !DISABLE_TLS */
+
 			case F_PIPE:
 				printf("%s", f->f_un.f_pipe.f_pname);
 				break;
@@ -3474,129 +1826,44 @@ init(int fd, short event, void *ev)
 	finet = socksetup(PF_UNSPEC, bindhostname);
 	if (finet) {
 		if (SecureMode) {
-			for (i = 0; i < finet->fd; i++) {
-				if (shutdown(finet[i+1].fd, SHUT_RD) < 0) {
+			for (i = 0; i < *finet; i++) {
+				if (shutdown(finet[i+1], SHUT_RD) < 0) {
 					logerror("shutdown() failed");
-					die(0, 0, NULL);
+					die(NULL);
 				}
 			}
 		} else
-			DPRINTF(D_NET, "Listening on inet and/or inet6 socket\n");
-		DPRINTF(D_NET, "Sending on inet and/or inet6 socket\n");
+			dprintf("Listening on inet and/or inet6 socket\n");
+		dprintf("Sending on inet and/or inet6 socket\n");
 	}
 
-#ifndef DISABLE_TLS
-	/* TLS setup -- after all local destinations opened  */
-	DPRINTF(D_PARSE, "Parsed options: tls_ca: %s, tls_cadir: %s, "
-	    "tls_cert: %s, tls_key: %s, tls_verify: %s, "
-	    "bind: %s:%s, max. queue_lengths: %"
-	    PRId64 ", %" PRId64 ", %" PRId64 ", "
-	    "max. queue_sizes: %"
-	    PRId64 ", %" PRId64 ", %" PRId64 "\n",
-	    tls_opt.CAfile, tls_opt.CAdir,
-	    tls_opt.certfile, tls_opt.keyfile, tls_opt.x509verify,
-	    tls_opt.bindhost, tls_opt.bindport,
-	    TypeInfo[F_TLS].queue_length, TypeInfo[F_FILE].queue_length,
-	    TypeInfo[F_PIPE].queue_length,
-	    TypeInfo[F_TLS].queue_size, TypeInfo[F_FILE].queue_size,
-	    TypeInfo[F_PIPE].queue_size);
-	SLIST_FOREACH(cred, &tls_opt.cert_head, entries) {
-		DPRINTF(D_PARSE, "Accepting peer certificate "
-		    "from file: \"%s\"\n", cred->data);
-	}
-	SLIST_FOREACH(cred, &tls_opt.fprint_head, entries) {
-		DPRINTF(D_PARSE, "Accepting peer certificate with "
-		    "fingerprint: \"%s\"\n", cred->data);
-	}
-
-	/* Note: The order of initialization is important because syslog-sign
-	 * should use the TLS cert for signing. -- So we check first if TLS
-	 * will be used and initialize it before starting -sign.
-	 *
-	 * This means that if we are a client without TLS destinations TLS
-	 * will not be initialized and syslog-sign will generate a new key.
-	 * -- Even if the user has set a usable tls_cert.
-	 * Is this the expected behaviour? The alternative would be to always
-	 * initialize the TLS structures, even if they will not be needed
-	 * (or only needed to read the DSA key for -sign).
-	 */
-
-	/* Initialize TLS only if used */
-	if (tls_opt.server)
-		tls_status_msg = init_global_TLS_CTX();
-	else
-		for (f = Files; f; f = f->f_next) {
-			if (f->f_type != F_TLS)
-				continue;
-			tls_status_msg = init_global_TLS_CTX();
-			break;
-		}
-
-#endif /* !DISABLE_TLS */
-
-#ifndef DISABLE_SIGN
-	/* only initialize -sign if actually used */
-	if (GlobalSign.sg == 0 || GlobalSign.sg == 1 || GlobalSign.sg == 2)
-		(void)sign_global_init(Files);
-	else if (GlobalSign.sg == 3)
-		for (f = Files; f; f = f->f_next)
-			if (f->f_flags & FFLAG_SIGN) {
-				(void)sign_global_init(Files);
-				break;
-			}
-#endif /* !DISABLE_SIGN */
-
-#ifndef DISABLE_TLS
-	if (tls_status_msg) {
-		loginfo(tls_status_msg);
-		free(tls_status_msg);
-	}
-	DPRINTF((D_NET|D_TLS), "Preparing sockets for TLS\n");
-	TLS_Listen_Set =
-		socksetup_tls(PF_UNSPEC, tls_opt.bindhost, tls_opt.bindport);
-
-	for (f = Files; f; f = f->f_next) {
-		if (f->f_type != F_TLS)
-			continue;
-		if (!tls_connect(f->f_un.f_tls.tls_conn)) {
-			logerror("Unable to connect to TLS server %s",
-			    f->f_un.f_tls.tls_conn->hostname);
-			/* Reconnect after x seconds  */
-			schedule_event(&f->f_un.f_tls.tls_conn->event,
-			    &((struct timeval){TLS_RECONNECT_SEC, 0}),
-			    tls_reconnect, f->f_un.f_tls.tls_conn);
-		}
-	}
-#endif /* !DISABLE_TLS */
-
-	loginfo("restart");
+	logmsg(LOG_SYSLOG|LOG_INFO, "syslogd: restart", LocalHostName, ADDDATE);
+	dprintf("syslogd: restarted\n");
 	/*
 	 * Log a change in hostname, but only on a restart (we detect this
 	 * by checking to see if we're passed a kevent).
 	 */
-	if (oldLocalFQDN && strcmp(oldLocalFQDN, LocalFQDN) != 0)
-		loginfo("host name changed, \"%s\" to \"%s\"",
-		    oldLocalFQDN, LocalFQDN);
-
-	RESTORE_SIGNALS(omask);
+	if (ev != NULL && strcmp(oldLocalHostName, LocalHostName) != 0) {
+		(void)snprintf(hostMsg, sizeof(hostMsg),
+		    "syslogd: host name changed, \"%s\" to \"%s\"",
+		    oldLocalHostName, LocalHostName);
+		logmsg(LOG_SYSLOG|LOG_INFO, hostMsg, LocalHostName, ADDDATE);
+		dprintf("%s\n", hostMsg);
+	}
 }
 
 /*
  * Crack a configuration file line
  */
 void
-cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
-    const char *host)
+cfline(char *line, struct filed *f, char *prog, char *host)
 {
 	struct addrinfo hints, *res;
 	int    error, i, pri, syncfile;
-	const char   *p, *q;
-	char *bp;
+	char   *bp, *p, *q;
 	char   buf[MAXLINE];
 
-	DPRINTF((D_CALL|D_PARSE),
-		"cfline(%zu, \"%s\", f, \"%s\", \"%s\")\n",
-		linenum, line, prog, host);
+	dprintf("cfline(\"%s\", f, \"%s\", \"%s\")\n", line, prog, host);
 
 	errno = 0;	/* keep strerror() stuff out of logerror messages */
 
@@ -3604,32 +1871,32 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 	memset(f, 0, sizeof(*f));
 	for (i = 0; i <= LOG_NFACILITIES; i++)
 		f->f_pmask[i] = INTERNAL_NOPRI;
-	STAILQ_INIT(&f->f_qhead);
-
-	/*
+	
+	/* 
 	 * There should not be any space before the log facility.
 	 * Check this is okay, complain and fix if it is not.
 	 */
 	q = line;
 	if (isblank((unsigned char)*line)) {
 		errno = 0;
-		logerror("Warning: `%s' space or tab before the log facility",
+		logerror(
+		    "Warning: `%s' space or tab before the log facility",
 		    line);
 		/* Fix: strip all spaces/tabs before the log facility */
 		while (*q++ && isblank((unsigned char)*q))
 			/* skip blanks */;
-		line = q;
+		line = q; 
 	}
 
-	/*
+	/* 
 	 * q is now at the first char of the log facility
-	 * There should be at least one tab after the log facility
+	 * There should be at least one tab after the log facility 
 	 * Check this is okay, and complain and fix if it is not.
 	 */
 	q = line + strlen(line);
 	while (!isblank((unsigned char)*q) && (q != line))
 		q--;
-	if ((q == line) && strlen(line)) {
+	if ((q == line) && strlen(line)) { 
 		/* No tabs or space in a non empty line: complain */
 		errno = 0;
 		logerror(
@@ -3637,13 +1904,13 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 		    line);
 		return;
 	}
-
+	
 	/* save host name, if any */
 	if (*host == '*')
 		f->f_host = NULL;
 	else {
 		f->f_host = strdup(host);
-		trim_anydomain(f->f_host);
+		trim_localdomain(f->f_host);
 	}
 
 	/* save program name, if any */
@@ -3747,15 +2014,6 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 	while (isblank((unsigned char)*p))
 		p++;
 
-	/*
-	 * should this be "#ifndef DISABLE_SIGN" or is it a general option?
-	 * '+' before file destination: write with PRI field for later
-	 * verification
-	 */
-	if (*p == '+') {
-		f->f_flags |= FFLAG_FULL;
-		p++;
-	}
 	if (*p == '-') {
 		syncfile = 0;
 		p++;
@@ -3764,21 +2022,6 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 
 	switch (*p) {
 	case '@':
-#ifndef DISABLE_SIGN
-		if (GlobalSign.sg == 3)
-			f->f_flags |= FFLAG_SIGN;
-#endif /* !DISABLE_SIGN */
-#ifndef DISABLE_TLS
-		if (*(p+1) == '[') {
-			/* TLS destination */
-			if (!parse_tls_destination(p, f, linenum)) {
-				logerror("Unable to parse action %s", p);
-				break;
-			}
-			f->f_type = F_TLS;
-			break;
-		}
-#endif /* !DISABLE_TLS */
 		(void)strlcpy(f->f_un.f_forw.f_hname, ++p,
 		    sizeof(f->f_un.f_forw.f_hname));
 		memset(&hints, 0, sizeof(hints));
@@ -3797,10 +2040,6 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 		break;
 
 	case '/':
-#ifndef DISABLE_SIGN
-		if (GlobalSign.sg == 3)
-			f->f_flags |= FFLAG_SIGN;
-#endif /* !DISABLE_SIGN */
 		(void)strlcpy(f->f_un.f_fname, p, sizeof(f->f_un.f_fname));
 		if ((f->f_file = open(p, O_WRONLY|O_APPEND, 0)) < 0) {
 			f->f_type = F_UNUSED;
@@ -3818,8 +2057,6 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 		break;
 
 	case '|':
-		if (GlobalSign.sg == 3)
-			f->f_flags |= FFLAG_SIGN;
 		f->f_un.f_pipe.f_pid = 0;
 		(void) strlcpy(f->f_un.f_pipe.f_pname, p + 1,
 		    sizeof(f->f_un.f_pipe.f_pname));
@@ -3859,7 +2096,7 @@ decode(const char *name, CODE *codetab)
 	char *p, buf[40];
 
 	if (isdigit((unsigned char)*name))
-		return atoi(name);
+		return (atoi(name));
 
 	for (p = buf; *name && p < &buf[sizeof(buf) - 1]; p++, name++) {
 		if (isupper((unsigned char)*name))
@@ -3870,9 +2107,9 @@ decode(const char *name, CODE *codetab)
 	*p = '\0';
 	for (c = codetab; c->c_name; c++)
 		if (!strcmp(buf, c->c_name))
-			return c->c_val;
+			return (c->c_val);
 
-	return -1;
+	return (-1);
 }
 
 /*
@@ -3881,7 +2118,6 @@ decode(const char *name, CODE *codetab)
 int
 getmsgbufsize(void)
 {
-#ifdef __NetBSD_Version__
 	int msgbufsize, mib[2];
 	size_t size;
 
@@ -3889,49 +2125,22 @@ getmsgbufsize(void)
 	mib[1] = KERN_MSGBUFSIZE;
 	size = sizeof msgbufsize;
 	if (sysctl(mib, 2, &msgbufsize, &size, NULL, 0) == -1) {
-		DPRINTF(D_MISC, "Couldn't get kern.msgbufsize\n");
-		return 0;
+		dprintf("Couldn't get kern.msgbufsize\n");
+		return (0);
 	}
-	return msgbufsize;
-#else
-	return MAXLINE;
-#endif /* __NetBSD_Version__ */
+	return (msgbufsize);
 }
 
-/*
- * Retrieve the hostname, via sysctl.
- */
-char *
-getLocalFQDN(void)
-{
-	int mib[2];
-	char *hostname;
-	size_t len;
-
-	mib[0] = CTL_KERN;
-	mib[1] = KERN_HOSTNAME;
-	sysctl(mib, 2, NULL, &len, NULL, 0);
-
-	if (!(hostname = malloc(len))) {
-		logerror("Unable to allocate memory");
-		die(0,0,NULL);
-	} else if (sysctl(mib, 2, hostname, &len, NULL, 0) == -1) {
-		DPRINTF(D_MISC, "Couldn't get kern.hostname\n");
-		(void)gethostname(hostname, sizeof(len));
-	}
-	return hostname;
-}
-
-struct socketEvent *
+int *
 socksetup(int af, const char *hostname)
 {
 	struct addrinfo hints, *res, *r;
-	int error, maxs;
-	int on = 1;
-	struct socketEvent *s, *socks;
+	struct kevent *ev;
+	int error, maxs, *s, *socks;
+	const int on = 1;
 
 	if(SecureMode && !NumForwards)
-		return NULL;
+		return(NULL);
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_flags = AI_PASSIVE;
@@ -3941,66 +2150,59 @@ socksetup(int af, const char *hostname)
 	if (error) {
 		logerror(gai_strerror(error));
 		errno = 0;
-		die(0, 0, NULL);
+		die(NULL);
 	}
 
 	/* Count max number of sockets we may open */
 	for (maxs = 0, r = res; r; r = r->ai_next, maxs++)
 		continue;
-	socks = calloc(maxs+1, sizeof(*socks));
+	socks = malloc((maxs+1) * sizeof(int));
 	if (!socks) {
 		logerror("Couldn't allocate memory for sockets");
-		die(0, 0, NULL);
+		die(NULL);
 	}
 
-	socks->fd = 0;	 /* num of sockets counter at start of array */
+	*socks = 0;   /* num of sockets counter at start of array */
 	s = socks + 1;
 	for (r = res; r; r = r->ai_next) {
-		s->fd = socket(r->ai_family, r->ai_socktype, r->ai_protocol);
-		if (s->fd < 0) {
+		*s = socket(r->ai_family, r->ai_socktype, r->ai_protocol);
+		if (*s < 0) {
 			logerror("socket() failed");
 			continue;
 		}
-		if (r->ai_family == AF_INET6 && setsockopt(s->fd, IPPROTO_IPV6,
+		if (r->ai_family == AF_INET6 && setsockopt(*s, IPPROTO_IPV6,
 		    IPV6_V6ONLY, &on, sizeof(on)) < 0) {
 			logerror("setsockopt(IPV6_V6ONLY) failed");
-			close(s->fd);
+			close(*s);
 			continue;
 		}
 
 		if (!SecureMode) {
-			if (bind(s->fd, r->ai_addr, r->ai_addrlen) < 0) {
+			if (bind(*s, r->ai_addr, r->ai_addrlen) < 0) {
 				logerror("bind() failed");
-				close(s->fd);
+				close(*s);
 				continue;
 			}
-			s->ev = allocev();
-			event_set(s->ev, s->fd, EV_READ | EV_PERSIST,
-				dispatch_read_finet, s->ev);
-			if (event_add(s->ev, NULL) == -1) {
-				DPRINTF((D_EVENT|D_NET),
-				    "Failure in event_add()\n");
-			} else {
-				DPRINTF((D_EVENT|D_NET),
-				    "Listen on UDP port "
-				    "(event@%p)\n", s->ev);
-			}
+			ev = allocevchange();
+			EV_SET(ev, *s, EVFILT_READ, EV_ADD | EV_ENABLE,
+			    0, 0, (intptr_t) dispatch_read_finet);
 		}
 
-		socks->fd++;  /* num counter */
+		*socks = *socks + 1;
 		s++;
 	}
 
-	if (res)
-		freeaddrinfo(res);
-	if (socks->fd == 0) {
+	if (*socks == 0) {
 		free (socks);
 		if(Debug)
-			return NULL;
+			return(NULL);
 		else
-			die(0, 0, NULL);
+			die(NULL);
 	}
-	return socks;
+	if (res)
+		freeaddrinfo(res);
+
+	return(socks);
 }
 
 /*
@@ -4010,27 +2212,26 @@ socksetup(int af, const char *hostname)
 int
 p_open(char *prog, pid_t *rpid)
 {
-	static char sh[] = "sh", mc[] = "-c";
 	int pfd[2], nulldesc, i;
 	pid_t pid;
 	char *argv[4];	/* sh -c cmd NULL */
 	char errmsg[200];
 
 	if (pipe(pfd) == -1)
-		return -1;
+		return (-1);
 	if ((nulldesc = open(_PATH_DEVNULL, O_RDWR)) == -1) {
 		/* We are royally screwed anyway. */
-		return -1;
+		return (-1);
 	}
 
 	switch ((pid = fork())) {
 	case -1:
 		(void) close(nulldesc);
-		return -1;
+		return (-1);
 
 	case 0:
-		argv[0] = sh;
-		argv[1] = mc;
+		argv[0] = "sh";
+		argv[1] = "-c";
 		argv[2] = prog;
 		argv[3] = NULL;
 
@@ -4075,7 +2276,7 @@ p_open(char *prog, pid_t *rpid)
 		logerror(errmsg);
 	}
 	*rpid = pid;
-	return pfd[1];
+	return (pfd[1]);
 }
 
 void
@@ -4117,10 +2318,10 @@ deadq_remove(pid_t pid)
 		if (q->dq_pid == pid) {
 			TAILQ_REMOVE(&deadq_head, q, dq_entries);
 			free(q);
-			return 1;
+			return (1);
 		}
 	}
-	return 0;
+	return (0);
 }
 
 void
@@ -4147,529 +2348,28 @@ log_deadchild(pid_t pid, int status, const char *name)
 	logerror(buf);
 }
 
-struct event *
-allocev(void)
+static struct kevent changebuf[8];
+static int nchanges;
+
+static struct kevent *
+allocevchange(void)
 {
-	struct event *ev;
 
-	if (!(ev = calloc(1, sizeof(*ev))))
-		logerror("Unable to allocate memory");
-	return ev;
-}
-
-/* *ev is allocated if necessary */
-void
-schedule_event(struct event **ev, struct timeval *tv,
-	void (*cb)(int, short, void *), void *arg)
-{
-	if (!*ev && !(*ev = allocev())) {
-		return;
-	}
-	event_set(*ev, 0, 0, cb, arg);
-	DPRINTF(D_EVENT, "event_add(%s@%p)\n", "schedule_ev", *ev); \
-	if (event_add(*ev, tv) == -1) {
-		DPRINTF(D_EVENT, "Failure in event_add()\n");
-	}
-}
-
-#ifndef DISABLE_TLS
-/* abbreviation for freeing credential lists */
-void
-free_cred_SLIST(struct peer_cred_head *head)
-{
-	struct peer_cred *cred;
-
-	while (!SLIST_EMPTY(head)) {
-		cred = SLIST_FIRST(head);
-		SLIST_REMOVE_HEAD(head, entries);
-		FREEPTR(cred->data);
-		free(cred);
-	}
-}
-#endif /* !DISABLE_TLS */
-
-/*
- * send message queue after reconnect
- */
-/*ARGSUSED*/
-void
-send_queue(int fd, short event, void *arg)
-{
-	struct filed *f = (struct filed *) arg;
-	struct buf_queue *qentry;
-#define SQ_CHUNK_SIZE 250
-	size_t cnt = 0;
-
-	if (f->f_type == F_TLS) {
-		/* use a flag to prevent recursive calls to send_queue() */
-		if (f->f_un.f_tls.tls_conn->send_queue)
-			return;
-		else
-			f->f_un.f_tls.tls_conn->send_queue = true;
-	}
-	DPRINTF((D_DATA|D_CALL), "send_queue(f@%p with %zu msgs, "
-		"cnt@%p = %zu)\n", f, f->f_qelements, &cnt, cnt);
-
-	while ((qentry = STAILQ_FIRST(&f->f_qhead))) {
-#ifndef DISABLE_TLS
-		/* send_queue() might be called with an unconnected destination
-		 * from init() or die() or one message might take longer,
-		 * leaving the connection in state ST_WAITING and thus not
-		 * ready for the next message.
-		 * this check is a shortcut to skip these unnecessary calls */
-		if (f->f_type == F_TLS
-		    && f->f_un.f_tls.tls_conn->state != ST_TLS_EST) {
-			DPRINTF(D_TLS, "abort send_queue(cnt@%p = %zu) "
-			    "on TLS connection in state %d\n",
-			    &cnt, cnt, f->f_un.f_tls.tls_conn->state);
-			return;
-		 }
-#endif /* !DISABLE_TLS */
-		fprintlog(f, qentry->msg, qentry);
-
-		/* Sending a long queue can take some time during which
-		 * SIGHUP and SIGALRM are blocked and no events are handled.
-		 * To avoid that we only send SQ_CHUNK_SIZE messages at once
-		 * and then reschedule ourselves to continue. Thus the control
-		 * will return first from all signal-protected functions so a
-		 * possible SIGHUP/SIGALRM is handled and then back to the
-		 * main loop which can handle possible input.
-		 */
-		if (++cnt >= SQ_CHUNK_SIZE) {
-			if (!f->f_sq_event) { /* alloc on demand */
-				f->f_sq_event = allocev();
-				event_set(f->f_sq_event, 0, 0, send_queue, f);
-			}
-			if (event_add(f->f_sq_event, &((struct timeval){0, 1})) == -1) {
-				DPRINTF(D_EVENT, "Failure in event_add()\n");
-			}
-			break;
-		}
-	}
-	if (f->f_type == F_TLS)
-		f->f_un.f_tls.tls_conn->send_queue = false;
-}
-
-/*
- * finds the next queue element to delete
- *
- * has stateful behaviour, before using it call once with reset = true
- * after that every call will return one next queue elemen to delete,
- * depending on strategy either the oldest or the one with the lowest priority
- */
-static struct buf_queue *
-find_qentry_to_delete(const struct buf_queue_head *head, int strategy,
-    bool reset)
-{
-	static int pri;
-	static struct buf_queue *qentry_static;
-
-	struct buf_queue *qentry_tmp;
-
-	if (reset || STAILQ_EMPTY(head)) {
-		pri = LOG_DEBUG;
-		qentry_static = STAILQ_FIRST(head);
-		return NULL;
+	if (nchanges == A_CNT(changebuf)) {
+		/* XXX Error handling could be improved. */
+		(void) wait_for_events(NULL, 0);
 	}
 
-	/* find elements to delete */
-	if (strategy == PURGE_BY_PRIORITY) {
-		qentry_tmp = qentry_static;
-		while ((qentry_tmp = STAILQ_NEXT(qentry_tmp, entries)) != NULL)
-		{
-			if (LOG_PRI(qentry_tmp->msg->pri) == pri) {
-				/* save the successor, because qentry_tmp
-				 * is probably deleted by the caller */
-				qentry_static = STAILQ_NEXT(qentry_tmp, entries);
-				return qentry_tmp;
-			}
-		}
-		/* nothing found in while loop --> next pri */
-		if (--pri)
-			return find_qentry_to_delete(head, strategy, false);
-		else
-			return NULL;
-	} else /* strategy == PURGE_OLDEST or other value */ {
-		qentry_tmp = qentry_static;
-		qentry_static = STAILQ_NEXT(qentry_tmp, entries);
-		return qentry_tmp;  /* is NULL on empty queue */
-	}
+	return (&changebuf[nchanges++]);
 }
 
-/* note on TAILQ: newest message added at TAIL,
- *		  oldest to be removed is FIRST
- */
-/*
- * checks length of a destination's message queue
- * if del_entries == 0 then assert queue length is
- *   less or equal to configured number of queue elements
- * otherwise del_entries tells how many entries to delete
- *
- * returns the number of removed queue elements
- * (which not necessarily means free'd messages)
- *
- * strategy PURGE_OLDEST to delete oldest entry, e.g. after it was resent
- * strategy PURGE_BY_PRIORITY to delete messages with lowest priority first,
- *	this is much slower but might be desirable when unsent messages have
- *	to be deleted, e.g. in call from domark()
- */
-size_t
-message_queue_purge(struct filed *f, size_t del_entries, int strategy)
+static int
+wait_for_events(struct kevent *events, size_t nevents)
 {
-	size_t removed = 0;
-	struct buf_queue *qentry = NULL;
+	int rv;
 
-	DPRINTF((D_CALL|D_BUFFER), "purge_message_queue(%p, %zu, %d) with "
-	    "f_qelements=%zu and f_qsize=%zu\n",
-	    f, del_entries, strategy,
-	    f->f_qelements, f->f_qsize);
-
-	/* reset state */
-	(void)find_qentry_to_delete(&f->f_qhead, strategy, true);
-
-	while (removed < del_entries
-	    || (TypeInfo[f->f_type].queue_length != -1
-	    && (size_t)TypeInfo[f->f_type].queue_length > f->f_qelements)
-	    || (TypeInfo[f->f_type].queue_size != -1
-	    && (size_t)TypeInfo[f->f_type].queue_size > f->f_qsize)) {
-		qentry = find_qentry_to_delete(&f->f_qhead, strategy, 0);
-		if (message_queue_remove(f, qentry))
-			removed++;
-		else
-			break;
-	}
-	return removed;
-}
-
-/* run message_queue_purge() for all destinations to free memory */
-size_t
-message_allqueues_purge(void)
-{
-	size_t sum = 0;
-	struct filed *f;
-
-	for (f = Files; f; f = f->f_next)
-		sum += message_queue_purge(f,
-		    f->f_qelements/10, PURGE_BY_PRIORITY);
-
-	DPRINTF(D_BUFFER,
-	    "message_allqueues_purge(): removed %zu buffer entries\n", sum);
-	return sum;
-}
-
-/* run message_queue_purge() for all destinations to check limits */
-size_t
-message_allqueues_check(void)
-{
-	size_t sum = 0;
-	struct filed *f;
-
-	for (f = Files; f; f = f->f_next)
-		sum += message_queue_purge(f, 0, PURGE_BY_PRIORITY);
-	DPRINTF(D_BUFFER,
-	    "message_allqueues_check(): removed %zu buffer entries\n", sum);
-	return sum;
-}
-
-struct buf_msg *
-buf_msg_new(const size_t len)
-{
-	struct buf_msg *newbuf;
-
-	CALLOC(newbuf, sizeof(*newbuf));
-
-	if (len) { /* len = 0 is valid */
-		MALLOC(newbuf->msg, len);
-		newbuf->msgorig = newbuf->msg;
-		newbuf->msgsize = len;
-	}
-	return NEWREF(newbuf);
-}
-
-void
-buf_msg_free(struct buf_msg *buf)
-{
-	if (!buf)
-		return;
-
-	buf->refcount--;
-	if (buf->refcount == 0) {
-		FREEPTR(buf->timestamp);
-		/* small optimizations: the host/recvhost may point to the
-		 * global HostName/FQDN. of course this must not be free()d
-		 * same goes for appname and include_pid
-		 */
-		if (buf->recvhost != buf->host
-		    && buf->recvhost != LocalHostName
-		    && buf->recvhost != LocalFQDN
-		    && buf->recvhost != oldLocalFQDN)
-			FREEPTR(buf->recvhost);
-		if (buf->host != LocalHostName
-		    && buf->host != LocalFQDN
-		    && buf->host != oldLocalFQDN)
-			FREEPTR(buf->host);
-		if (buf->prog != appname)
-			FREEPTR(buf->prog);
-		if (buf->pid != include_pid)
-			FREEPTR(buf->pid);
-		FREEPTR(buf->msgid);
-		FREEPTR(buf->sd);
-		FREEPTR(buf->msgorig);	/* instead of msg */
-		FREEPTR(buf);
-	}
-}
-
-size_t
-buf_queue_obj_size(struct buf_queue *qentry)
-{
-	size_t sum = 0;
-
-	if (!qentry)
-		return 0;
-	sum += sizeof(*qentry)
-	    + sizeof(*qentry->msg)
-	    + qentry->msg->msgsize
-	    + SAFEstrlen(qentry->msg->timestamp)+1
-	    + SAFEstrlen(qentry->msg->msgid)+1;
-	if (qentry->msg->prog
-	    && qentry->msg->prog != include_pid)
-		sum += strlen(qentry->msg->prog)+1;
-	if (qentry->msg->pid
-	    && qentry->msg->pid != appname)
-		sum += strlen(qentry->msg->pid)+1;
-	if (qentry->msg->recvhost
-	    && qentry->msg->recvhost != LocalHostName
-	    && qentry->msg->recvhost != LocalFQDN
-	    && qentry->msg->recvhost != oldLocalFQDN)
-		sum += strlen(qentry->msg->recvhost)+1;
-	if (qentry->msg->host
-	    && qentry->msg->host != LocalHostName
-	    && qentry->msg->host != LocalFQDN
-	    && qentry->msg->host != oldLocalFQDN)
-		sum += strlen(qentry->msg->host)+1;
-
-	return sum;
-}
-
-bool
-message_queue_remove(struct filed *f, struct buf_queue *qentry)
-{
-	if (!f || !qentry || !qentry->msg)
-		return false;
-
-	assert(!STAILQ_EMPTY(&f->f_qhead));
-	STAILQ_REMOVE(&f->f_qhead, qentry, buf_queue, entries);
-	f->f_qelements--;
-	f->f_qsize -= buf_queue_obj_size(qentry);
-
-	DPRINTF(D_BUFFER, "msg @%p removed from queue @%p, new qlen = %zu\n",
-	    qentry->msg, f, f->f_qelements);
-	DELREF(qentry->msg);
-	FREEPTR(qentry);
-	return true;
-}
-
-/*
- * returns *qentry on success and NULL on error
- */
-struct buf_queue *
-message_queue_add(struct filed *f, struct buf_msg *buffer)
-{
-	struct buf_queue *qentry;
-
-	/* check on every call or only every n-th time? */
-	message_queue_purge(f, 0, PURGE_BY_PRIORITY);
-
-	while (!(qentry = malloc(sizeof(*qentry)))
-	    && message_queue_purge(f, 1, PURGE_OLDEST))
-		continue;
-	if (!qentry) {
-		logerror("Unable to allocate memory");
-		DPRINTF(D_BUFFER, "queue empty, no memory, msg dropped\n");
-		return NULL;
-	} else {
-		qentry->msg = buffer;
-		f->f_qelements++;
-		f->f_qsize += buf_queue_obj_size(qentry);
-		STAILQ_INSERT_TAIL(&f->f_qhead, qentry, entries);
-
-		DPRINTF(D_BUFFER, "msg @%p queued @%p, qlen = %zu\n",
-		    buffer, f, f->f_qelements);
-		return qentry;
-	}
-}
-
-void
-message_queue_freeall(struct filed *f)
-{
-	struct buf_queue *qentry;
-
-	if (!f) return;
-	DPRINTF(D_MEM, "message_queue_freeall(f@%p) with f_qhead@%p\n", f,
-	    &f->f_qhead);
-
-	while (!STAILQ_EMPTY(&f->f_qhead)) {
-		qentry = STAILQ_FIRST(&f->f_qhead);
-		STAILQ_REMOVE(&f->f_qhead, qentry, buf_queue, entries);
-		DELREF(qentry->msg);
-		FREEPTR(qentry);
-	}
-
-	f->f_qelements = 0;
-	f->f_qsize = 0;
-}
-
-#ifndef DISABLE_TLS
-/* utility function for tls_reconnect() */
-struct filed *
-get_f_by_conninfo(struct tls_conn_settings *conn_info)
-{
-	struct filed *f;
-
-	for (f = Files; f; f = f->f_next) {
-		if ((f->f_type == F_TLS) && f->f_un.f_tls.tls_conn == conn_info)
-			return f;
-	}
-	DPRINTF(D_TLS, "get_f_by_conninfo() called on invalid conn_info\n");
-	return NULL;
-}
-
-/*
- * Called on signal.
- * Lets the admin reconnect without waiting for the reconnect timer expires.
- */
-/*ARGSUSED*/
-void
-dispatch_force_tls_reconnect(int fd, short event, void *ev)
-{
-	struct filed *f;
-	DPRINTF((D_TLS|D_CALL|D_EVENT), "dispatch_force_tls_reconnect()\n");
-	for (f = Files; f; f = f->f_next) {
-		if (f->f_type == F_TLS &&
-		    f->f_un.f_tls.tls_conn->state == ST_NONE)
-			tls_reconnect(fd, event, f->f_un.f_tls.tls_conn);
-	}
-}
-#endif /* !DISABLE_TLS */
-
-/*
- * return a timestamp in a static buffer,
- * either format the timestamp given by parameter in_now
- * or use the current time if in_now is NULL.
- */
-char *
-make_timestamp(time_t *in_now, bool iso)
-{
-	int frac_digits = 6;
-	struct timeval tv;
-	time_t mytime;
-	struct tm ltime;
-	int len = 0;
-	int tzlen = 0;
-	/* uses global var: time_t now; */
-
-	if (in_now) {
-		mytime = *in_now;
-	} else {
-		gettimeofday(&tv, NULL);
-		mytime = now = (time_t) tv.tv_sec;
-	}
-
-	if (!iso) {
-		strlcpy(timestamp, ctime(&mytime) + 4, TIMESTAMPBUFSIZE);
-		timestamp[BSD_TIMESTAMPLEN] = '\0';
-		return timestamp;
-	}
-
-	localtime_r(&mytime, &ltime);
-	len += strftime(timestamp, TIMESTAMPBUFSIZE, "%FT%T", &ltime);
-	snprintf(&(timestamp[len]), frac_digits+2, ".%.*ld",
-		frac_digits, (long)tv.tv_usec);
-	len += frac_digits+1;
-	tzlen = strftime(&(timestamp[len]), TIMESTAMPBUFSIZE-len, "%z", &ltime);
-	len += tzlen;
-
-	if (tzlen == 5) {
-		/* strftime gives "+0200", but we need "+02:00" */
-		timestamp[len+1] = timestamp[len];
-		timestamp[len] = timestamp[len-1];
-		timestamp[len-1] = timestamp[len-2];
-		timestamp[len-2] = ':';
-	}
-	return timestamp;
-}
-
-/* auxillary code to allocate memory and copy a string */
-bool
-copy_string(char **mem, const char *p, const char *q)
-{
-	const size_t len = 1 + q - p;
-	if (!(*mem = malloc(len))) {
-		logerror("Unable to allocate memory for config");
-		return false;
-	}
-	strlcpy(*mem, p, len);
-	return true;
-}
-
-/* keyword has to end with ",  everything until next " is copied */
-bool
-copy_config_value_quoted(const char *keyword, char **mem, const char **p)
-{
-	const char *q;
-	if (strncasecmp(*p, keyword, strlen(keyword)))
-		return false;
-	q = *p += strlen(keyword);
-	if (!(q = strchr(*p, '"'))) {
-		logerror("unterminated \"\n");
-		return false;
-	}
-	if (!(copy_string(mem, *p, q)))
-		return false;
-	*p = ++q;
-	return true;
-}
-
-/* for config file:
- * following = required but whitespace allowed, quotes optional
- * if numeric, then conversion to integer and no memory allocation
- */
-bool
-copy_config_value(const char *keyword, char **mem,
-	const char **p, const char *file, int line)
-{
-	if (strncasecmp(*p, keyword, strlen(keyword)))
-		return false;
-	*p += strlen(keyword);
-
-	while (isspace((unsigned char)**p))
-		*p += 1;
-	if (**p != '=') {
-		logerror("expected \"=\" in file %s, line %d", file, line);
-		return false;
-	}
-	*p += 1;
-
-	return copy_config_value_word(mem, p);
-}
-
-/* copy next parameter from a config line */
-bool
-copy_config_value_word(char **mem, const char **p)
-{
-	const char *q;
-	while (isspace((unsigned char)**p))
-		*p += 1;
-	if (**p == '"')
-		return copy_config_value_quoted("\"", mem, p);
-
-	/* without quotes: find next whitespace or end of line */
-	(void)((q = strchr(*p, ' ')) || (q = strchr(*p, '\t'))
-	     || (q = strchr(*p, '\n')) || (q = strchr(*p, '\0')));
-
-	if (q-*p == 0 || !(copy_string(mem, *p, q)))
-		return false;
-
-	*p = ++q;
-	return true;
+	rv = kevent(fkq, nchanges ? changebuf : NULL, nchanges,
+		    events, nevents, NULL);
+	nchanges = 0;
+	return (rv);
 }

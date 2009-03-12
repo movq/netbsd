@@ -1,4 +1,4 @@
-/*	$NetBSD: irframe_tty.c,v 1.56 2009/01/11 14:28:13 mlelstv Exp $	*/
+/*	$NetBSD: irframe_tty.c,v 1.54.8.1 2009/04/10 18:12:53 snj Exp $	*/
 
 /*
  * TODO
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irframe_tty.c,v 1.56 2009/01/11 14:28:13 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irframe_tty.c,v 1.54.8.1 2009/04/10 18:12:53 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -309,7 +309,7 @@ irframetopen(dev_t dev, struct tty *tp)
 	tp->t_sc = sc;
 	sc->sc_tp = tp;
 	aprint_normal("%s attached at tty%02d\n", device_xname(d),
-	    (int)minor(tp->t_dev));
+	    minor(tp->t_dev));
 
 	DPRINTF(("%s: set sc=%p\n", __func__, sc));
 
@@ -349,7 +349,7 @@ irframetclose(struct tty *tp, int flag)
 		irt_buffer(sc, 0);
 		tp->t_sc = NULL;
 		aprint_normal("%s detached from tty%02d\n",
-		    device_xname(sc->sc_irp.sc_dev), (int)minor(tp->t_dev));
+		    device_xname(sc->sc_irp.sc_dev), minor(tp->t_dev));
 
 		if (sc->sc_tp == tp) {
 			cfdata = device_cfdata(sc->sc_irp.sc_dev);

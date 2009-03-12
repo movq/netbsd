@@ -1,4 +1,4 @@
-/*	$NetBSD: namei.src,v 1.10 2009/02/11 00:19:11 enami Exp $	*/
+/*	$NetBSD: namei.src,v 1.8.14.2 2010/02/14 13:27:45 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1985, 1989, 1991, 1993
@@ -100,18 +100,15 @@ NAMEIFL	OPMASK		3	/* mask for operation */
 /*
  * namei operational modifier flags, stored in ni_cnd.cn_flags
  */
-NAMEIFL	LOCKLEAF	0x00000004	/* lock inode on return */
-NAMEIFL	LOCKPARENT	0x00000008	/* want parent vnode returned locked */
-NAMEIFL	TRYEMULROOT	0x00000010	/* try relative to emulation root
-					   first */
-NAMEIFL	NOCACHE		0x00000020	/* name must not be left in cache */
-NAMEIFL	FOLLOW		0x00000040	/* follow symbolic links */
-NAMEIFL	NOFOLLOW	0x00000000	/* do not follow symbolic links
-					   (pseudo) */
-NAMEIFL	EMULROOTSET	0x00000080	/* emulation root already
-					   in ni_erootdir */
-NAMEIFL	NOCHROOT	0x01000000	/* no chroot on abs path lookups */
-NAMEIFL	MODMASK		0x010000fc	/* mask of operational modifiers */
+NAMEIFL	LOCKLEAF	0x0004	/* lock inode on return */
+NAMEIFL	LOCKPARENT	0x0008	/* want parent vnode returned locked */
+NAMEIFL	NOCHROOT	0x0010	/* no chroot on abs path lookups */
+NAMEIFL	NOCACHE		0x0020	/* name must not be left in cache */
+NAMEIFL	FOLLOW		0x0040	/* follow symbolic links */
+NAMEIFL	NOFOLLOW	0x0000	/* do not follow symbolic links (pseudo) */
+NAMEIFL	TRYEMULROOT	0x0010	/* try relative to emulation root first */
+NAMEIFL	EMULROOTSET	0x0080	/* emulation root already in ni_erootdir */
+NAMEIFL	MODMASK		0x00fc	/* mask of operational modifiers */
 /*
  * Namei parameter descriptors.
  *
@@ -139,7 +136,8 @@ NAMEIFL	ISWHITEOUT	0x0020000	/* found whiteout */
 NAMEIFL	DOWHITEOUT	0x0040000	/* do whiteouts */
 NAMEIFL	REQUIREDIR	0x0080000	/* must be a directory */
 NAMEIFL	CREATEDIR	0x0200000	/* trailing slashes are ok */
-NAMEIFL	PARAMASK	0x02fff00	/* mask of parameter descriptors */
+NAMEIFL	INRENAME	0x0400000	/* operation is a part of ``rename'' */
+NAMEIFL	PARAMASK	0x06fff00	/* mask of parameter descriptors */
 
 /*
  * Initialization of an nameidata structure.

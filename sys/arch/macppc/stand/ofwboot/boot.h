@@ -17,6 +17,4 @@ struct open_file;
 void changedisk_hook(struct open_file *of);
 #endif
 
-void freeall(void);
-
 #endif /* BOOT_H_ */

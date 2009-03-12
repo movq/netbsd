@@ -1,4 +1,4 @@
-/*	$NetBSD: esp.c,v 1.57 2008/12/16 22:35:24 christos Exp $	*/
+/*	$NetBSD: esp.c,v 1.56 2008/04/28 20:23:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.57 2008/12/16 22:35:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esp.c,v 1.56 2008/04/28 20:23:30 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -505,9 +505,8 @@ esp_dma_intr(struct ncr53c9x_softc *sc)
 			if (esp_debug) {
 				char sbuf[256];
 
-				snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-				    (*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)));
-				
+				bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)),
+						 NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 				printf("esp_dma_isintr = 0x%s\n", sbuf);
 			}
 #endif
@@ -749,12 +748,12 @@ esp_dma_reset(struct ncr53c9x_softc *sc)
 	if (esp_debug) {
 		char sbuf[256];
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)),
+		    NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrstat = 0x%s\n", sbuf);
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRMASK)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRMASK)),
+		    NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrmask = 0x%s\n", sbuf);
 	}
 #endif
@@ -1919,12 +1918,12 @@ esp_dmacb_shutdown(void *arg)
 	if (esp_debug) {
 		char sbuf[256];
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)),
+		    NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrstat = 0x%s\n", sbuf);
 
-		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS, 
-		    (*(volatile u_long *)IIOV(NEXT_P_INTRMASK)));
+		bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRMASK)),
+		    NEXT_INTR_BITS, sbuf, sizeof(sbuf));
 		printf("  *intrmask = 0x%s\n", sbuf);
 	}
 #endif

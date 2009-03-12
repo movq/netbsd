@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.wakecode.inc,v 1.4 2009/01/18 13:55:31 hans Exp $
+# $NetBSD: Makefile.wakecode.inc,v 1.3.26.1 2009/03/27 14:50:36 msaitoh Exp $
 # FreeBSD: src/sys/i386/acpica/Makefile,v 1.3 2002/05/01 21:54:07 peter Exp
 
 ACPI_WAKECODE_S=	${S}/arch/${MACHINE}/acpi/acpi_wakecode.S

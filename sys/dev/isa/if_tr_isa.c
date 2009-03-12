@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_isa.c,v 1.19 2009/02/13 22:39:10 bouyer Exp $	*/
+/*	$NetBSD: if_tr_isa.c,v 1.18.10.1 2009/09/29 23:59:45 snj Exp $	*/
 
 /* XXXJRT changes isa_attach_args too early!! */
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_isa.c,v 1.19 2009/02/13 22:39:10 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_isa.c,v 1.18.10.1 2009/09/29 23:59:45 snj Exp $");
 
 #undef TRISADEBUG
 

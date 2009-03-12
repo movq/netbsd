@@ -1,12 +1,11 @@
-#	$NetBSD: Makefile,v 1.2 2008/11/28 08:57:54 dogcow Exp $
+#	$NetBSD: Makefile,v 1.1 2008/10/30 05:40:43 mrg Exp $
 
 NOLINT= # defined
 NOMAN=	# defined
 NONLS=	# defined
 NOINFO=	# defined
 NOSHARE=	# defined
-LIBDPLIBS=	rump    ${.CURDIR}/../librump	 ukfs	${.CURDIR}/../libukfs \
-		rumpvfs ${.CURDIR}/../librumpvfs
+LIBDPLIBS=	rump    ${.CURDIR}/../librump	 ukfs	${.CURDIR}/../libukfs
 
 NOCHECKVER=	# defined
 

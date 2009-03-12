@@ -1,8 +1,11 @@
-/*	$NetBSD: kern_event.c,v 1.61 2009/01/11 02:45:52 christos Exp $	*/
+/*	$NetBSD: kern_event.c,v 1.60.6.2 2010/01/09 01:08:39 snj Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -55,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.61 2009/01/11 02:45:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.60.6.2 2010/01/09 01:08:39 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,8 +107,15 @@ static void	filt_timerdetach(struct knote *);
 static int	filt_timer(struct knote *, long hint);
 
 static const struct fileops kqueueops = {
-	(void *)enxio, (void *)enxio, kqueue_ioctl, kqueue_fcntl, kqueue_poll,
-	kqueue_stat, kqueue_close, kqueue_kqfilter
+	.fo_read = (void *)enxio,
+	.fo_write = (void *)enxio,
+	.fo_ioctl = kqueue_ioctl,
+	.fo_fcntl = kqueue_fcntl,
+	.fo_poll = kqueue_poll,
+	.fo_stat = kqueue_stat,
+	.fo_close = kqueue_close,
+	.fo_kqfilter = kqueue_kqfilter,
+	.fo_drain = fnullop_drain,
 };
 
 static const struct filterops kqread_filtops =
@@ -281,7 +291,7 @@ kfilter_register(const char *name, const struct filterops *filtops,
 	if (user_kfilterc + 1 > user_kfiltermaxc) {
 		/* Grow in KFILTER_EXTENT chunks. */
 		user_kfiltermaxc += KFILTER_EXTENT;
-		len = user_kfiltermaxc * sizeof(struct filter *);
+		len = user_kfiltermaxc * sizeof(*kfilter);
 		kfilter = kmem_alloc(len, KM_SLEEP);
 		memset((char *)kfilter + user_kfiltersz, 0, len - user_kfiltersz);
 		if (user_kfilters != NULL) {
@@ -704,17 +714,17 @@ sys_kqueue(struct lwp *l, const void *v, register_t *retval)
 /*
  * kevent(2) system call.
  */
-int
+static int
 kevent_fetch_changes(void *private, const struct kevent *changelist,
-    struct kevent *changes, size_t index, int n)
+		     struct kevent *changes, size_t index, int n)
 {
 
 	return copyin(changelist + index, changes, n * sizeof(*changes));
 }
 
-int
+static int
 kevent_put_events(void *private, struct kevent *events,
-    struct kevent *eventlist, size_t index, int n)
+		  struct kevent *eventlist, size_t index, int n)
 {
 
 	return copyout(events, eventlist + index, n * sizeof(*events));
@@ -728,8 +738,7 @@ static const struct kevent_ops kevent_native_ops = {
 };
 
 int
-sys___kevent50(struct lwp *l, const struct sys___kevent50_args *uap,
-    register_t *retval)
+sys_kevent(struct lwp *l, const struct sys_kevent_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) fd;

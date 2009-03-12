@@ -1,4 +1,4 @@
-/* $NetBSD: setlocale_local.h,v 1.2 2009/01/11 02:46:29 christos Exp $ */
+/* $NetBSD: setlocale_local.h,v 1.2.2.2 2009/01/15 03:24:08 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,

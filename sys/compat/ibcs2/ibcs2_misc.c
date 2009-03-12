@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_misc.c,v 1.105 2009/01/11 02:45:47 christos Exp $	*/
+/*	$NetBSD: ibcs2_misc.c,v 1.104.6.1 2010/03/17 02:59:51 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_misc.c,v 1.105 2009/01/11 02:45:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_misc.c,v 1.104.6.1 2010/03/17 02:59:51 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -473,8 +473,12 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == SCARG(uap, buf))
+	if (outp == SCARG(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 eof:
@@ -603,8 +607,12 @@ again:
 		resid -= ibcs2_reclen;
 	}
 	/* if we squished out the whole block, try again */
-	if (outp == SCARG(uap, buf))
+	if (outp == SCARG(uap, buf)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;		/* update the vnode offset */
 eof:
 	*retval = SCARG(uap, nbytes) - resid;
@@ -633,8 +641,11 @@ ibcs2_sys_mknod(struct lwp *l, const struct ibcs2_sys_mknod_args *uap, register_
 		SCARG(&ap, mode) = SCARG(uap, mode);
 		return sys_mkfifo(l, &ap, retval);
 	} else {
-		return do_sys_mknod(l, SCARG(uap, path), SCARG(uap, mode),
-		    SCARG(uap, dev), retval);
+		struct sys_mknod_args ap;
+		SCARG(&ap, path) = SCARG(uap, path);
+		SCARG(&ap, mode) = SCARG(uap, mode);
+		SCARG(&ap, dev) = SCARG(uap, dev);
+		return sys_mknod(l, &ap, retval);
 	}
 }
 
@@ -1348,11 +1359,11 @@ ibcs2_sys_settimeofday(struct lwp *l, const struct ibcs2_sys_settimeofday_args *
 	/* {
 		syscallarg(struct timeval *) tp;
 	} */
-	struct compat_50_sys_settimeofday_args ap;
+	struct sys_settimeofday_args ap;
 
 	SCARG(&ap, tv) = SCARG(uap, tp);
 	SCARG(&ap, tzp) = NULL;
-	return compat_50_sys_settimeofday(l, &ap, retval);
+	return sys_settimeofday(l, &ap, retval);
 }
 
 int

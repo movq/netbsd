@@ -1,4 +1,4 @@
-/*	$NetBSD: devname.c,v 1.19 2009/01/20 18:20:48 drochner Exp $	*/
+/*	$NetBSD: devname.c,v 1.17 2008/04/28 20:22:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
 #if 0
 static char sccsid[] = "@(#)devname.c	8.2 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: devname.c,v 1.19 2009/01/20 18:20:48 drochner Exp $");
+__RCSID("$NetBSD: devname.c,v 1.17 2008/04/28 20:22:59 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -113,8 +113,7 @@ devname(dev, type)
 	DBT data, key;
 	DEVC *ptr, **pptr;
 	static DEVC **devtb = NULL;
-	static devmajor_t pts;
-	static int pts_valid = 0;
+	static dev_t pts = (dev_t)~1;
 
 	if (!db && !failure &&
 	    !(db = dbopen(_PATH_DEVDB, O_RDONLY, 0, DB_HASH, NULL))) {
@@ -123,7 +122,7 @@ devname(dev, type)
 	}
 	/* initialise dev cache */
 	if (!failure && devtb == NULL) {
-		devtb = calloc(DEV_SZ, sizeof(DEVC *));
+		devtb = (DEVC **)calloc(DEV_SZ, sizeof(DEVC *));
 		if (devtb == NULL)
 			failure= 1;
 	}
@@ -131,7 +130,7 @@ devname(dev, type)
 		return (NULL);
 
 	/* see if we have this dev/type cached */
-	pptr = devtb + (size_t)((dev + type) % DEV_SZ);
+	pptr = devtb + ((dev + type) % DEV_SZ);
 	ptr = *pptr;
 
 	if (ptr && ptr->valid > 0 && ptr->dev == dev && ptr->type == type) {
@@ -141,14 +140,14 @@ devname(dev, type)
 	}
 
 	if (ptr == NULL)
-		*pptr = ptr = malloc(sizeof(DEVC));
+		*pptr = ptr = (DEVC *)malloc(sizeof(DEVC));
 
 	/*
 	 * Keys are a mode_t followed by a dev_t.  The former is the type of
 	 * the file (mode & S_IFMT), the latter is the st_rdev field.  Be
 	 * sure to clear any padding that may be found in bkey.
 	 */
-	(void)memset(&bkey, 0, sizeof(bkey));
+	memset(&bkey, 0, sizeof(bkey));
 	bkey.dev = dev;
 	bkey.type = type;
 	key.data = &bkey;
@@ -166,15 +165,12 @@ devname(dev, type)
 			return (NULL);
 		ptr->valid = INVALID;
 		if (type == S_IFCHR) {
-			if (!pts_valid) {
+			if (pts == (dev_t)~1)
 				pts = getdevmajor("pts", S_IFCHR);
-				pts_valid = 1;
-			}
-			if (pts != NODEVMAJOR && major(dev) == pts) {
+			if (pts != (dev_t)~0 && major(dev) == pts) {
 				(void)snprintf(ptr->name, sizeof(ptr->name),
 				    "%s%d", _PATH_DEV_PTS +
-				    sizeof(_PATH_DEV) - 1,
-				    minor(dev));
+				    sizeof(_PATH_DEV) - 1, minor(dev));
 				ptr->valid = VALID;
 			}
 		}

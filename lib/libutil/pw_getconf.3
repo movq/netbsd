@@ -1,4 +1,4 @@
-.\"	$NetBSD: pw_getconf.3,v 1.11 2008/12/26 21:02:28 wiz Exp $
+.\"	$NetBSD: pw_getconf.3,v 1.9 2005/09/10 21:55:35 wiz Exp $
 .\"
 .\" Copyright 1997 Niels Provos <provos@physnet.uni-hamburg.de>
 .\" All rights reserved.
@@ -30,12 +30,11 @@
 .\"
 .\" from OpenBSD: pw_getconf.3,v 1.5 1999/09/21 04:52:46 csapuntz Exp
 .\"
-.Dd December 25, 2008
+.Dd August 18, 2005
 .Dt PW_GETCONF 3
 .Os
 .Sh NAME
-.Nm pw_getconf ,
-.Nm pw_getpwconf
+.Nm pw_getconf
 .Nd password encryption configuration access function
 .Sh LIBRARY
 .Lb libutil
@@ -43,8 +42,6 @@
 .In util.h
 .Ft void
 .Fn pw_getconf "char *data" "size_t len" "const char *key" "const char *option"
-.Ft void
-.Fn pw_getpwconf "char *data" "size_t len" "const struct passwd *pwd" "const char *option"
 .Sh DESCRIPTION
 The
 .Fn pw_getconf
@@ -76,33 +73,23 @@ They are as follows:
 .El
 .Pp
 An empty string is returned for all errors.
-.Pp
-.Nm pw_getpwconf
-returns the value for the option specified for the particular user
-specified in
-.Ar pwd .
-If that option is not found, then it tries to find the option in
-the primary group of that user, and if that fails, then it returns
-the default entry.
 .Sh FILES
 .Bl -tag -width /etc/passwd.conf -compact
 .It Pa /etc/passwd.conf
 .El
 .Sh ERRORS
 .Fn pw_getconf
-and
-.Fn pw_getpwconf
 will fail if:
 .Bl -tag -width Er
-.It Bq Er ENOENT
-There is no option named
-.Pa option
-in the specified key.
 .It Bq Er ENOTDIR
 There is no key in
 .Pa /etc/passwd.conf
 named
 .Pa key .
+.It Bq Er ENOENT
+There is no option named
+.Pa option
+in the specified key.
 .El
 .Sh SEE ALSO
 .Xr passwd 5 ,

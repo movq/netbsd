@@ -1,11 +1,8 @@
-/*	$NetBSD: subr_kobj.c,v 1.34 2009/02/13 22:41:04 apb Exp $	*/
+/*	$NetBSD: subr_kobj.c,v 1.24.4.2 2009/06/17 20:20:54 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
- *
- * This code is derived from software developed for The NetBSD Foundation
- * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -62,10 +59,10 @@
  * TODO: adjust kmem_alloc() calls to avoid needless fragmentation.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_kobj.c,v 1.34 2009/02/13 22:41:04 apb Exp $");
-
 #include "opt_modular.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: subr_kobj.c,v 1.24.4.2 2009/06/17 20:20:54 bouyer Exp $");
 
 #define	ELFSIZE		ARCH_ELFSIZE
 
@@ -83,13 +80,14 @@ __KERNEL_RCSID(0, "$NetBSD: subr_kobj.c,v 1.34 2009/02/13 22:41:04 apb Exp $");
 #include <sys/vnode.h>
 #include <sys/fcntl.h>
 #include <sys/ksyms.h>
-#include <sys/module.h>
+#include <sys/lkm.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
 
 #include <machine/stdarg.h>
 
 #include <uvm/uvm_extern.h>
+
 
 typedef struct {
 	void		*addr;
@@ -120,7 +118,7 @@ typedef enum kobjtype {
 } kobjtype_t;
 
 struct kobj {
-	char		ko_name[MAXMODNAME];
+	char		ko_name[MAXLKMNAME];
 	kobjtype_t	ko_type;
 	void		*ko_source;
 	ssize_t		ko_memsize;
@@ -145,7 +143,7 @@ struct kobj {
 };
 
 static int	kobj_relocate(kobj_t, bool);
-static int	kobj_checksyms(kobj_t, bool);
+static int	kobj_checkdup(kobj_t);
 static void	kobj_error(const char *, ...);
 static int	kobj_read(kobj_t, void **, size_t, off_t);
 static int	kobj_read_bits(kobj_t, void *, size_t, off_t);
@@ -154,7 +152,7 @@ static void	kobj_free(kobj_t, void *, size_t);
 static void	kobj_close(kobj_t);
 static int	kobj_load(kobj_t);
 
-extern struct vm_map *module_map;
+extern struct vm_map *lkm_map;
 
 /*
  * kobj_load_file:
@@ -193,7 +191,16 @@ kobj_load_file(kobj_t *kop, const char *filename, const char *base,
 		    filename, filename);
 		NDINIT(&nd, LOOKUP, FOLLOW | NOCHROOT, UIO_SYSSPACE, path);
 		error = vn_open(&nd, FREAD, 0);
+		if (error != 0) {
+			strlcat(path, ".o", MAXPATHLEN);
+			NDINIT(&nd, LOOKUP, FOLLOW | NOCHROOT, UIO_SYSSPACE,
+			    path);
+			error = vn_open(&nd, FREAD, 0);
+		}
 		PNBUF_PUT(path);
+		if (error != 0) {
+			goto out;
+		}
 	}
 
  out:
@@ -458,7 +465,7 @@ kobj_load(kobj_t ko)
 	if (hdr->e_shstrndx != 0 && shdr[hdr->e_shstrndx].sh_size != 0 &&
 	    shdr[hdr->e_shstrndx].sh_type == SHT_STRTAB) {
 		ko->ko_shstrtabsz = shdr[hdr->e_shstrndx].sh_size;
-		error = kobj_read(ko, (void **)&ko->ko_shstrtab,
+		error = kobj_read(ko, (void *)&ko->ko_shstrtab,
 		    shdr[hdr->e_shstrndx].sh_size,
 		    shdr[hdr->e_shstrndx].sh_offset);
 		if (error != 0) {
@@ -497,7 +504,7 @@ kobj_load(kobj_t ko)
 	if (ko->ko_type == KT_MEMORY) {
 		mapbase += (vaddr_t)ko->ko_source;
 	} else {
-		mapbase = uvm_km_alloc(module_map, round_page(mapsize),
+		mapbase = uvm_km_alloc(lkm_map, round_page(mapsize),
 		    0, UVM_KMF_WIRED | UVM_KMF_EXEC);
 		if (mapbase == 0) {
 			error = ENOMEM;
@@ -628,7 +635,7 @@ kobj_load(kobj_t ko)
 	 * Perform local relocations only.  Relocations relating to global
 	 * symbols will be done by kobj_affix().
 	 */
-	error = kobj_checksyms(ko, false);
+	error = kobj_checkdup(ko);
 	if (error == 0) {
 		error = kobj_relocate(ko, true);
 	}
@@ -668,7 +675,7 @@ kobj_unload(kobj_t ko)
 		}
 	}
 	if (ko->ko_address != 0 && ko->ko_type != KT_MEMORY) {
-		uvm_km_free(module_map, ko->ko_address, round_page(ko->ko_size),
+		uvm_km_free(lkm_map, ko->ko_address, round_page(ko->ko_size),
 		    UVM_KMF_WIRED);
 	}
 	if (ko->ko_ksyms == true) {
@@ -726,32 +733,21 @@ kobj_affix(kobj_t ko, const char *name)
 
 	strlcpy(ko->ko_name, name, sizeof(ko->ko_name));
 
-	/* Cache addresses of undefined symbols. */
-	error = kobj_checksyms(ko, true);
-
 	/* Now do global relocations. */
-	if (error == 0)
-		error = kobj_relocate(ko, false);
+	error = kobj_relocate(ko, false);
 
 	/*
 	 * Now that we know the name, register the symbol table.
-	 * Do after global relocations because ksyms will pack
-	 * the table.
+	 * Do after global relocations because ksyms will pack it.
 	 */
-	if (error == 0) {
-		ksyms_modload(ko->ko_name, ko->ko_symtab, ko->ko_symcnt *
-		    sizeof(Elf_Sym), ko->ko_strtab, ko->ko_strtabsz);
-		ko->ko_ksyms = true;
-	}
+	ksyms_modload(ko->ko_name, ko->ko_symtab, ko->ko_symcnt *
+	    sizeof(Elf_Sym), ko->ko_strtab, ko->ko_strtabsz);
+	ko->ko_ksyms = true;
 
 	/* Jettison unneeded memory post-link. */
 	kobj_jettison(ko);
 
-	/*
-	 * Notify MD code that a module has been loaded.
-	 *
-	 * Most architectures use this opportunity to flush their caches.
-	 */
+	/* Notify MD code that a module has been loaded. */
 	if (error == 0) {
 		error = kobj_machdep(ko, (void *)ko->ko_address, ko->ko_size,
 		    true);
@@ -807,25 +803,25 @@ kobj_jettison(kobj_t ko)
 {
 	int i;
 
-	for (i = 0; i < ko->ko_nrel; i++) {
-		if (ko->ko_reltab[i].rel) {
-			kobj_free(ko, ko->ko_reltab[i].rel,
-			    ko->ko_reltab[i].size);
-		}
-	}
-	for (i = 0; i < ko->ko_nrela; i++) {
-		if (ko->ko_relatab[i].rela) {
-			kobj_free(ko, ko->ko_relatab[i].rela,
-			    ko->ko_relatab[i].size);
-		}
-	}
 	if (ko->ko_reltab != NULL) {
+		for (i = 0; i < ko->ko_nrel; i++) {
+			if (ko->ko_reltab[i].rel) {
+				kobj_free(ko, ko->ko_reltab[i].rel,
+				    ko->ko_reltab[i].size);
+			}
+		}
 		kobj_free(ko, ko->ko_reltab, ko->ko_nrel *
 		    sizeof(*ko->ko_reltab));
 		ko->ko_reltab = NULL;
 		ko->ko_nrel = 0;
 	}
 	if (ko->ko_relatab != NULL) {
+		for (i = 0; i < ko->ko_nrela; i++) {
+			if (ko->ko_relatab[i].rela) {
+				kobj_free(ko, ko->ko_relatab[i].rela,
+				    ko->ko_relatab[i].size);
+			}
+		}
 		kobj_free(ko, ko->ko_relatab, ko->ko_nrela *
 		    sizeof(*ko->ko_relatab));
 		ko->ko_relatab = NULL;
@@ -848,6 +844,8 @@ kobj_sym_lookup(kobj_t ko, uintptr_t symidx)
 {
 	const Elf_Sym *sym;
 	const char *symbol;
+	int error;
+	u_long addr;
 
 	/* Don't even try to lookup the symbol if the index is bogus. */
 	if (symidx >= ko->ko_symcnt)
@@ -857,7 +855,7 @@ kobj_sym_lookup(kobj_t ko, uintptr_t symidx)
 
 	/* Quick answer if there is a definition included. */
 	if (sym->st_shndx != SHN_UNDEF) {
-		return (uintptr_t)sym->st_value;
+		return sym->st_value;
 	}
 
 	/* If we get here, then it is undefined and needs a lookup. */
@@ -877,7 +875,16 @@ kobj_sym_lookup(kobj_t ko, uintptr_t symidx)
 			return 0;
 		}
 
-		return (uintptr_t)sym->st_value;
+		/*
+		 * Don't need to lock, as it is known that the symbol
+		 * tables aren't going to change (we hold module_lock).
+		 */
+		error = ksyms_getval(NULL, symbol, &addr, KSYMS_ANY);
+		if (error != 0) {
+			kobj_error("symbol `%s' not found", symbol);
+			return (uintptr_t)0;
+		}
+		return (uintptr_t)addr;
 
 	case STB_WEAK:
 		kobj_error("weak symbols not supported\n");
@@ -907,53 +914,33 @@ kobj_findbase(kobj_t ko, int sec)
 }
 
 /*
- * kobj_checksyms:
+ * kobj_checkdup:
  *
- *	Scan symbol table for duplicates or resolve references to
- *	exernal symbols.
+ *	Scan symbol table for duplicates.
  */
 static int
-kobj_checksyms(kobj_t ko, bool undefined)
+kobj_checkdup(kobj_t ko)
 {
 	unsigned long rval;
 	Elf_Sym *sym, *ms;
 	const char *name;
-	int error;
+	bool dup;
 
-	error = 0;
-
+	dup = false;
 	for (ms = (sym = ko->ko_symtab) + ko->ko_symcnt; sym < ms; sym++) {
 		/* Check validity of the symbol. */
 		if (ELF_ST_BIND(sym->st_info) != STB_GLOBAL ||
 		    sym->st_name == 0)
 			continue;
-		if (undefined != (sym->st_shndx == SHN_UNDEF)) {
-			continue;
-		}
 
-		/*
-		 * Look it up.  Don't need to lock, as it is known that
-		 * the symbol tables aren't going to change (we hold
-		 * module_lock).
-		 */
+		/* Check if the symbol already exists */
 		name = ko->ko_strtab + sym->st_name;
-		if (ksyms_getval_unlocked(NULL, name, &rval,
-		    KSYMS_EXTERN) != 0) {
-			if (undefined) {
-				kobj_error("symbol `%s' not found", name);
-				error = ENOEXEC;
-			}
+		if (ksyms_getval(NULL, name, &rval, KSYMS_EXTERN) != 0) {
 			continue;
 		}
 
-		/* Save values of undefined globals. */
-		if (undefined) {
-			sym->st_value = (Elf_Addr)rval;
-			continue;
-		}
-
-		/* Check (and complain) about differing values. */
-		if (sym->st_value == rval) {
+		/* Check (and complain) about differing values */
+		if (sym->st_value == rval || sym->st_shndx == SHN_UNDEF) {
 			continue;
 		}
 		if (strcmp(name, "_bss_start") == 0 ||
@@ -969,10 +956,10 @@ kobj_checksyms(kobj_t ko, bool undefined)
 		    	continue;
 		}
 		kobj_error("global symbol `%s' redefined\n", name);
-		error = ENOEXEC;
+		dup = true;
 	}
 
-	return error;
+	return dup ? EEXIST : 0;
 }
 
 /*

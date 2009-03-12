@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_cpu.c,v 1.41 2009/01/19 23:04:26 njoly Exp $	*/
+/*	$NetBSD: kern_cpu.c,v 1.36.4.2 2008/11/13 00:04:07 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -56,9 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.41 2009/01/19 23:04:26 njoly Exp $");
-
-#include "opt_compat_netbsd.h"
+__KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.36.4.2 2008/11/13 00:04:07 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,10 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.41 2009/01/19 23:04:26 njoly Exp $");
 #include <sys/callout.h>
 
 #include <uvm/uvm_extern.h>
-
-#ifdef COMPAT_50
-#include <compat/sys/cpuio.h>
-#endif
 
 void	cpuctlattach(int);
 
@@ -163,20 +157,8 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 
 	mutex_enter(&cpu_lock);
 	switch (cmd) {
-#ifdef IOC_CPU_OSETSTATE
-		cpustate_t csb;
-
-	case IOC_CPU_OSETSTATE: {
-		cpustate50_t *ocs = data;
-		cpustate50_to_cpustate(ocs, &csb);
-		cs = &csb;
-		error = 1;
-		/*FALLTHROUGH*/
-	}
-#endif
 	case IOC_CPU_SETSTATE:
-		if (error == 0)
-			cs = data;
+		cs = data;
 		error = kauth_authorize_system(l->l_cred,
 		    KAUTH_SYSTEM_CPU, KAUTH_REQ_SYSTEM_CPU_SETSTATE, cs, NULL,
 		    NULL);
@@ -194,18 +176,8 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 		error = cpu_setstate(ci, cs->cs_online);
 		break;
 
-#ifdef IOC_CPU_OGETSTATE
-	case IOC_CPU_OGETSTATE: {
-		cpustate50_t *ocs = data;
-		cpustate50_to_cpustate(ocs, &csb);
-		cs = &csb;
-		error = 1;
-		/*FALLTHROUGH*/
-	}
-#endif
 	case IOC_CPU_GETSTATE:
-		if (error == 0)
-			cs = data;
+		cs = data;
 		id = cs->cs_id;
 		memset(cs, 0, sizeof(*cs));
 		cs->cs_id = id;
@@ -220,13 +192,6 @@ cpuctl_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 			cs->cs_online = true;
 		cs->cs_intr = true;
 		cs->cs_lastmod = ci->ci_schedstate.spc_lastmod;
-#ifdef IOC_CPU_OGETSTATE
-		if (cmd == IOC_CPU_OGETSTATE) {
-			cpustate50_t *ocs = data;
-			cpustate_to_cpustate50(cs, ocs);
-			error = 0;
-		}
-#endif
 		break;
 
 	case IOC_CPU_MAPID:
@@ -400,11 +365,4 @@ cpu_setstate(struct cpu_info *ci, bool online)
 
 	spc->spc_lastmod = time_second;
 	return 0;
-}
-
-bool
-cpu_softintr_p(void)
-{
-
-	return (curlwp->l_pflag & LP_INTR) != 0;
 }

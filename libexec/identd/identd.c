@@ -1,4 +1,4 @@
-/* $NetBSD: identd.c,v 1.32 2009/01/18 00:37:53 lukem Exp $ */
+/* $NetBSD: identd.c,v 1.31 2006/09/29 17:02:04 christos Exp $ */
 
 /*
  * identd.c - TCP/IP Ident protocol server.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: identd.c,v 1.32 2009/01/18 00:37:53 lukem Exp $");
+__RCSID("$NetBSD: identd.c,v 1.31 2006/09/29 17:02:04 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -325,7 +325,7 @@ idhandle(int fd, const char *charset, const char *fmt, const char *osname,
 	socklen_t len;
 	uid_t uid;
 	ssize_t n;
-	size_t qlen;
+	ssize_t qlen;
 
 	lport = fport = 0;
 
@@ -672,8 +672,7 @@ sysctl_proxy_getuid(struct sockaddr_storage *ss, struct sockaddr *proxy,
     uid_t *uid)
 {
 	struct sockaddr_storage new[2];
-	int rc, name[CTL_MAXNAME];
-	size_t i;
+	int i, rc, name[CTL_MAXNAME];
 	struct kinfo_pcb *kp;
 	size_t sz, len;
 	const char *list;

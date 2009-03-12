@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.c,v 1.230 2009/01/22 20:40:20 drochner Exp $	*/
+/*	$NetBSD: tty.c,v 1.227.4.2 2009/10/11 18:03:21 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.230 2009/01/22 20:40:20 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.227.4.2 2009/10/11 18:03:21 sborrill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,6 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.230 2009/01/22 20:40:20 drochner Exp $");
 #include <sys/kernel.h>
 #include <sys/vnode.h>
 #include <sys/syslog.h>
+#include <sys/malloc.h>
 #include <sys/kmem.h>
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
@@ -88,8 +89,6 @@ __KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.230 2009/01/22 20:40:20 drochner Exp $");
 #include <sys/sysctl.h>
 #include <sys/kauth.h>
 #include <sys/intr.h>
-#include <sys/ioctl_compat.h>
-#include <sys/module.h>
 
 #include <machine/stdarg.h>
 
@@ -198,8 +197,6 @@ static void *tty_sigsih;
 struct ttylist_head ttylist = TAILQ_HEAD_INITIALIZER(ttylist);
 int tty_count;
 kmutex_t tty_lock;
-krwlock_t ttcompat_lock;
-int (*ttcompatvec)(struct tty *, u_long, void *, int, struct lwp *);
 
 uint64_t tk_cancc;
 uint64_t tk_nin;
@@ -312,7 +309,9 @@ ttylopen(dev_t device, struct tty *tp)
 	if (!ISSET(tp->t_state, TS_ISOPEN)) {
 		SET(tp->t_state, TS_ISOPEN);
 		memset(&tp->t_winsize, 0, sizeof(tp->t_winsize));
+#ifdef COMPAT_OLDTTY
 		tp->t_flags = 0;
+#endif
 	}
 	mutex_spin_exit(&tty_lock);
 	return (0);
@@ -851,6 +850,7 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	case  TIOCSTAT:
 	case  TIOCSTI:
 	case  TIOCSWINSZ:
+#ifdef COMPAT_OLDTTY
 	case  TIOCLBIC:
 	case  TIOCLBIS:
 	case  TIOCLSET:
@@ -859,6 +859,7 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	case  TIOCSETN:
 	case  TIOCSETP:
 	case  TIOCSLTC:
+#endif
 		mutex_spin_enter(&tty_lock);
 		while (isbackground(curproc, tp) &&
 		    p->p_pgrp->pg_jobc && (p->p_lflag & PL_PPWAIT) == 0 &&
@@ -1246,24 +1247,11 @@ ttioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 		mutex_spin_exit(&tty_lock);
 		break;
 	default:
-		/* We may have to load the compat module for this. */
-		for (;;) {
-			rw_enter(&ttcompat_lock, RW_READER);
-			if (ttcompatvec != NULL) {
-				break;
-			}
-			rw_exit(&ttcompat_lock);
-			mutex_enter(&module_lock);
-			(void)module_autoload("compat", MODULE_CLASS_ANY);
-			if (ttcompatvec == NULL) {
-				mutex_exit(&module_lock);
-				return EPASSTHROUGH;
-			}
-			mutex_exit(&module_lock);
-		}
-		error = (*ttcompatvec)(tp, cmd, data, flag, l);
-		rw_exit(&ttcompat_lock);
-		return error;
+#ifdef COMPAT_OLDTTY
+		return (ttcompat(tp, cmd, data, flag, l));
+#else
+		return (EPASSTHROUGH);
+#endif
 	}
 	return (0);
 }
@@ -1666,6 +1654,9 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 	int		c, first, error, has_stime, last_cc;
 	long		lflag, slp;
 	struct timeval	now, stime;
+
+	if (uio->uio_resid == 0)
+		return 0;
 
 	stime.tv_usec = 0;	/* XXX gcc */
 	stime.tv_sec = 0;	/* XXX gcc */
@@ -2723,7 +2714,6 @@ tty_init(void)
 {
 
 	mutex_init(&tty_lock, MUTEX_DEFAULT, IPL_VM);
-	rw_init(&ttcompat_lock);
 	tty_sigsih = softint_establish(SOFTINT_CLOCK, ttysigintr, NULL);
 	KASSERT(tty_sigsih != NULL);
 }

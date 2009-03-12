@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.119 2009/02/25 19:56:49 mhitch Exp $     */
+/*	$NetBSD: trap.c,v 1.116.4.3 2009/03/02 20:04:57 snj Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -33,7 +33,7 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.119 2009/02/25 19:56:49 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.116.4.3 2009/03/02 20:04:57 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"

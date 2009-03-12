@@ -1,4 +1,4 @@
-/*	$NetBSD: vi.c,v 1.30 2009/02/21 23:31:56 christos Exp $	*/
+/*	$NetBSD: vi.c,v 1.27 2006/10/22 07:48:13 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)vi.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: vi.c,v 1.30 2009/02/21 23:31:56 christos Exp $");
+__RCSID("$NetBSD: vi.c,v 1.27 2006/10/22 07:48:13 mrg Exp $");
 #endif
 #endif /* not lint && not SCCSID */
 
@@ -68,7 +68,7 @@ cv_action(EditLine *el, int c)
 		if (!(c & YANK))
 			cv_undo(el);
 		cv_yank(el, el->el_line.buffer,
-		    (int)(el->el_line.lastchar - el->el_line.buffer));
+			    el->el_line.lastchar - el->el_line.buffer);
 		el->el_chared.c_vcmd.action = NOP;
 		el->el_chared.c_vcmd.pos = 0;
 		if (!(c & YANK)) {
@@ -92,12 +92,12 @@ private el_action_t
 cv_paste(EditLine *el, int c)
 {
 	c_kill_t *k = &el->el_chared.c_kill;
-	size_t len = (size_t)(k->last - k->buf);
+	int len = k->last - k->buf;
 
 	if (k->buf == NULL || len == 0)
 		return (CC_ERROR);
 #ifdef DEBUG_PASTE
-	(void) fprintf(el->el_errfile, "Paste: \"%.*s\"\n", (int)len, k->buf);
+	(void) fprintf(el->el_errfile, "Paste: \"%.*s\"\n", len, k->buf);
 #endif
 
 	cv_undo(el);
@@ -105,10 +105,10 @@ cv_paste(EditLine *el, int c)
 	if (!c && el->el_line.cursor < el->el_line.lastchar)
 		el->el_line.cursor++;
 
-	c_insert(el, (int)len);
+	c_insert(el, len);
 	if (el->el_line.cursor + len > el->el_line.lastchar)
 		return (CC_ERROR);
-	(void) memcpy(el->el_line.cursor, k->buf, len);
+	(void) memcpy(el->el_line.cursor, k->buf, len +0u);
 
 	return (CC_REFRESH);
 }
@@ -363,7 +363,7 @@ vi_substitute_line(EditLine *el, int c __attribute__((__unused__)))
 
 	cv_undo(el);
 	cv_yank(el, el->el_line.buffer,
-	    (int)(el->el_line.lastchar - el->el_line.buffer));
+		    el->el_line.lastchar - el->el_line.buffer);
 	(void) em_kill_line(el, 0);
 	el->el_map.current = el->el_map.key;
 	return (CC_REFRESH);
@@ -381,7 +381,7 @@ vi_change_to_eol(EditLine *el, int c __attribute__((__unused__)))
 
 	cv_undo(el);
 	cv_yank(el, el->el_line.cursor,
-	    (int)(el->el_line.lastchar - el->el_line.cursor));
+		    el->el_line.lastchar - el->el_line.cursor);
 	(void) ed_kill_line(el, 0);
 	el->el_map.current = el->el_map.key;
 	return (CC_REFRESH);
@@ -521,8 +521,7 @@ vi_undo(EditLine *el, int c __attribute__((__unused__)))
 	/* switch line buffer and undo buffer */
 	el->el_chared.c_undo.buf = el->el_line.buffer;
 	el->el_chared.c_undo.len = el->el_line.lastchar - el->el_line.buffer;
-	el->el_chared.c_undo.cursor =
-	    (int)(el->el_line.cursor - el->el_line.buffer);
+	el->el_chared.c_undo.cursor = el->el_line.cursor - el->el_line.buffer;
 	el->el_line.limit = un.buf + (el->el_line.limit - el->el_line.buffer);
 	el->el_line.buffer = un.buf;
 	el->el_line.cursor = un.buf + un.cursor;
@@ -647,7 +646,7 @@ vi_kill_line_prev(EditLine *el, int c __attribute__((__unused__)))
 	while (cp < el->el_line.cursor)
 		*kp++ = *cp++;	/* copy it */
 	el->el_chared.c_kill.last = kp;
-	c_delbefore(el, (int)(el->el_line.cursor - el->el_line.buffer));
+	c_delbefore(el, el->el_line.cursor - el->el_line.buffer);
 	el->el_line.cursor = el->el_line.buffer;	/* zap! */
 	return (CC_REFRESH);
 }
@@ -803,7 +802,7 @@ vi_match(EditLine *el, int c)
 {
 	const char match_chars[] = "()[]{}";
 	char *cp;
-	size_t delta, i, count;
+	int delta, i, count;
 	char o_ch, c_ch;
 
 	*el->el_line.lastchar = '\0';		/* just in case */
@@ -878,7 +877,7 @@ vi_yank_end(EditLine *el, int c)
 {
 
 	cv_yank(el, el->el_line.cursor,
-	    (int)(el->el_line.lastchar - el->el_line.cursor));
+		el->el_line.lastchar - el->el_line.cursor);
 	return CC_REFRESH;
 }
 
@@ -1000,8 +999,7 @@ vi_histedit(EditLine *el, int c)
 {
 	int fd;
 	pid_t pid;
-	ssize_t st;
-	int status;
+	int st;
 	char tempfile[] = "/tmp/histedit.XXXXXXXXXX";
 	char *cp;
 
@@ -1014,7 +1012,7 @@ vi_histedit(EditLine *el, int c)
 	if (fd < 0)
 		return CC_ERROR;
 	cp = el->el_line.buffer;
-	write(fd, cp, (size_t)(el->el_line.lastchar - cp));
+	write(fd, cp, el->el_line.lastchar - cp +0u);
 	write(fd, "\n", 1);
 	pid = fork();
 	switch (pid) {
@@ -1024,14 +1022,14 @@ vi_histedit(EditLine *el, int c)
 		return CC_ERROR;
 	case 0:
 		close(fd);
-		execlp("vi", "vi", tempfile, (char *)NULL);
+		execlp("vi", "vi", tempfile, NULL);
 		exit(0);
 		/*NOTREACHED*/
 	default:
-		while (waitpid(pid, &status, 0) != pid)
+		while (waitpid(pid, &st, 0) != pid)
 			continue;
-		lseek(fd, (off_t)0, SEEK_SET);
-		st = read(fd, cp, (size_t)(el->el_line.limit - cp));
+		lseek(fd, 0ll, SEEK_SET);
+		st = read(fd, cp, el->el_line.limit - cp +0u);
 		if (st > 0 && cp[st - 1] == '\n')
 			st--;
 		el->el_line.cursor = cp;
@@ -1080,7 +1078,7 @@ vi_history_word(EditLine *el, int c)
 		return CC_ERROR;
 
 	cv_undo(el);
-	len = (int)(wep - wsp);
+	len = wep - wsp;
 	if (el->el_line.cursor < el->el_line.lastchar)
 		el->el_line.cursor++;
 	c_insert(el, len + 1);

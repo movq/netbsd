@@ -1,7 +1,9 @@
-#	$NetBSD: files.amd64,v 1.62 2009/02/14 20:22:59 cube Exp $
+#	$NetBSD: files.amd64,v 1.60.8.2 2009/10/07 15:41:12 sborrill Exp $
 #
 # new style config file for amd64 architecture
 #
+
+version 20071109
 
 ifndef xen
 
@@ -31,7 +33,6 @@ defflag eisa.h EISA
 file	arch/amd64/amd64/amd64func.S
 file	arch/amd64/amd64/autoconf.c
 file	arch/amd64/amd64/busfunc.S
-file	arch/amd64/amd64/core_machdep.c		coredump
 file	arch/amd64/amd64/cpu_in_cksum.S		(inet | inet6) & cpu_in_cksum
 file	arch/amd64/amd64/cpufunc.S
 file	arch/amd64/amd64/db_disasm.c		ddb
@@ -111,6 +112,7 @@ include	"dev/isa/files.isa"
 
 # PC clock
 file 	arch/x86/isa/clock.c 			isa
+file	arch/x86/isa/rtc.c			isa
 
 # TSC timecounter support
 file	arch/x86/x86/tsc.c
@@ -176,7 +178,9 @@ include	"dev/usb/files.usb"
 
 include "dev/bluetooth/files.bluetooth"
 
-include	"dev/ieee1394/files.ieee1394"
+include "dev/sdmmc/files.sdmmc"
+
+include "dev/ieee1394/files.ieee1394"
 include "dev/apm/files.apm"
 include "dev/acpi/files.acpi"
 file	arch/amd64/acpi/acpi_wakeup_low.S	acpi

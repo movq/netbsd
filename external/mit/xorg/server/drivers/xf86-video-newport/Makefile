@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2009/02/14 03:15:15 macallan Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2009/02/25 19:51:41 snj Exp $
 
 DRIVER=		xf86-video-newport
 DRIVER_NAME=	newport_drv

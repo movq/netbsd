@@ -27,7 +27,7 @@
  *	i4b_ipr.c - isdn4bsd IP over raw HDLC ISDN network driver
  *	---------------------------------------------------------
  *
- *	$Id: i4b_ipr.c,v 1.31 2008/11/09 15:48:13 martin Exp $
+ *	$Id: i4b_ipr.c,v 1.29 2008/02/07 01:22:03 dyoung Exp $
  *
  * $FreeBSD$
  *
@@ -59,7 +59,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.31 2008/11/09 15:48:13 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.29 2008/02/07 01:22:03 dyoung Exp $");
 
 #include "irip.h"
 #include "opt_irip.h"
@@ -560,10 +560,19 @@ iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 /*---------------------------------------------------------------------------*
  *	process ioctl
  *---------------------------------------------------------------------------*/
+#ifdef __FreeBSD__
+static int
+iripioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data)
+#else
 static int
 iripioctl(struct ifnet *ifp, u_long cmd, void *data)
+#endif
 {
+#if defined(__FreeBSD__) || defined(__bsdi__)
+	struct ipr_softc *sc = &ipr_softc[ifp->if_unit];
+#else
 	struct ipr_softc *sc = ifp->if_softc;
+#endif
 
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -575,7 +584,7 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 	switch (cmd)
 	{
 		case SIOCAIFADDR:	/* add interface address */
-		case SIOCINITIFADDR:	/* set interface address */
+		case SIOCSIFADDR:	/* set interface address */
 		case SIOCSIFDSTADDR:	/* set interface destination address */
 			if(ifa->ifa_addr->sa_family != AF_INET)
 				error = EAFNOSUPPORT;
@@ -584,10 +593,10 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 			break;
 
 		case SIOCSIFFLAGS:	/* set interface flags */
-			if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-				break;
-			if ((ifr->ifr_flags & IFF_UP) == 0) {
-				if (sc->sc_if.if_flags & IFF_RUNNING) {
+			if(!(ifr->ifr_flags & IFF_UP))
+			{
+				if(sc->sc_if.if_flags & IFF_RUNNING)
+				{
 					/* disconnect ISDN line */
 					i4b_l4_drvrdisc(sc->sc_cdp->cdid);
 					sc->sc_if.if_flags &= ~IFF_RUNNING;
@@ -600,10 +609,10 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 				iripclearqueues(sc);
 			}
 
-#if 0
 			if(ifr->ifr_flags & IFF_DEBUG)
-				; /* enable debug messages */
-#endif
+			{
+				/* enable debug messages */
+			}
 
 			break;
 
@@ -627,12 +636,18 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 #ifdef IPR_VJ
 		case IPRIOCSMAXCID:
 			{
+#if defined(__FreeBSD_version) && __FreeBSD_version >= 400005
+			struct proc *p = curproc;	/* XXX */
+
+			if((error = suser(p)) != 0)
+#else
 			struct lwp *l = curlwp;		/* XXX */
 
 			if((error = kauth_authorize_network(l->l_cred,
 			    KAUTH_NETWORK_INTERFACE,
 			    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp,
 			    (void *)cmd, NULL)) != 0)
+#endif
 				break;
 		        sl_compress_setup(sc->sc_compr, *(int *)data);
 			}
@@ -640,9 +655,7 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 #endif
 #endif
 		default:
-			error = ifioctl_common(ifp, cmd, data);
-			if (error == ENETRESET)
-				error = 0;
+			error = EINVAL;
 			break;
 	}
 

@@ -26,7 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: ah_osdep.h,v 1.1 2008/12/11 05:37:40 alc Exp $
+ * $Id: ah_osdep.h,v 1.1.10.2 2009/08/07 06:43:50 snj Exp $
  */
 
 #ifndef _ATH_AH_OSDEP_H_

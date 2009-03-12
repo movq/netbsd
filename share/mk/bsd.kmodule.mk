@@ -1,7 +1,4 @@
-#	$NetBSD: bsd.kmodule.mk,v 1.18 2009/01/24 22:14:45 rmind Exp $
-
-# We are not building this with PIE
-MKPIE=no
+#	$NetBSD: bsd.kmodule.mk,v 1.13.2.2 2009/06/06 22:10:12 bouyer Exp $
 
 .include <bsd.init.mk>
 .include <bsd.klinks.mk>
@@ -74,7 +71,7 @@ ${_PROG}:	.MADE					# no build at install
 		${INSTALL_DIR} $$d; \
 	done
 	${INSTALL_DIR} ${KMODULEDIR}
-	${INSTALL_FILE} -o ${KMODULEOWN} -g ${KMODULEGRP} -m ${KMODULEMODE} \
+	${INSTALL_FILE} -o ${KMODOWN} -g ${KMODGRP} -m ${KMODMODE} \
 		${.ALLSRC} ${.TARGET}
 
 kmodinstall::	${_PROG}
@@ -96,6 +93,9 @@ lint: ${LOBJS}
 .endif
 
 ##### Pull in related .mk logic
+LINKSOWN?= ${KMODULEOWN}
+LINKSGRP?= ${KMODULEGRP}
+LINKSMODE?= ${KMODULEMODE}
 .include <bsd.man.mk>
 .include <bsd.links.mk>
 .include <bsd.dep.mk>

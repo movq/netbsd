@@ -1,11 +1,8 @@
-/*	$NetBSD: vfs_syscalls.c,v 1.390 2009/02/23 20:33:30 ad Exp $	*/
+/*	$NetBSD: vfs_syscalls.c,v 1.376.4.5 2010/02/14 13:27:45 bouyer Exp $	*/
 
 /*-
- * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Andrew Doran.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -66,12 +63,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.390 2009/02/23 20:33:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.376.4.5 2010/02/14 13:27:45 bouyer Exp $");
 
-#ifdef _KERNEL_OPT
+#include "opt_compat_netbsd.h"
+#include "opt_compat_43.h"
 #include "opt_fileassoc.h"
 #include "veriexec.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,6 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.390 2009/02/23 20:33:30 ad Exp $"
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/uio.h>
+#include <sys/malloc.h>
 #include <sys/kmem.h>
 #include <sys/dirent.h>
 #include <sys/sysctl.h>
@@ -97,16 +95,20 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.390 2009/02/23 20:33:30 ad Exp $"
 #include <sys/kauth.h>
 #include <sys/atomic.h>
 #include <sys/module.h>
-#include <sys/buf.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/syncfs/syncfs.h>
 #include <miscfs/specfs/specdev.h>
 
+#ifdef COMPAT_30
+#include "opt_nfsserver.h"
 #include <nfs/rpcv2.h>
+#endif
 #include <nfs/nfsproto.h>
+#ifdef COMPAT_30
 #include <nfs/nfs.h>
 #include <nfs/nfs_var.h>
+#endif
 
 MALLOC_DEFINE(M_MOUNT, "mount", "vfs mount struct");
 
@@ -127,10 +129,10 @@ int dovfsusermount = 0;
  * Mount a file system.
  */
 
+#if defined(COMPAT_09) || defined(COMPAT_43)
 /*
  * This table is used to maintain compatibility with 4.3BSD
- * and NetBSD 0.9 mount syscalls - and possibly other systems.
- * Note, the order is important!
+ * and NetBSD 0.9 mount syscalls.  Note, the order is important!
  *
  * Do not modify this table. It should only contain filesystems
  * supported by NetBSD 0.9 and 4.3BSD.
@@ -149,6 +151,7 @@ const char * const mountcompatnames[] = {
 };
 const int nmountcompatnames = sizeof(mountcompatnames) /
     sizeof(mountcompatnames[0]);
+#endif /* COMPAT_09 || COMPAT_43 */
 
 static int
 mount_update(struct lwp *l, struct vnode *vp, const char *path, int flags,
@@ -212,24 +215,21 @@ mount_update(struct lwp *l, struct vnode *vp, const char *path, int flags,
 
 	error = VFS_MOUNT(mp, path, data, data_len);
 
+#if defined(COMPAT_30) && defined(NFSSERVER)
 	if (error && data != NULL) {
 		int error2;
 
-		/*
-		 * Update failed; let's try and see if it was an
-		 * export request.  For compat with 3.0 and earlier.
-		 */
-		error2 = vfs_hooks_reexport(mp, path, data);
+		/* Update failed; let's try and see if it was an
+		 * export request. */
+		error2 = nfs_update_exports_30(mp, path, data, l);
 
-		/*
-		 * Only update error code if the export request was
+		/* Only update error code if the export request was
 		 * understood but some problem occurred while
-		 * processing it.
-		 */
+		 * processing it. */
 		if (error2 != EJUSTRETURN)
 			error = error2;
 	}
-
+#endif
 	if (mp->mnt_iflag & IMNT_WANTRDWR)
 		mp->mnt_flag &= ~MNT_RDONLY;
 	if (error)
@@ -259,6 +259,7 @@ mount_get_vfsops(const char *fstype, struct vfsops **vfsops)
 	/* Copy file-system type from userspace.  */
 	error = copyinstr(fstype, fstypename, sizeof(fstypename), NULL);
 	if (error) {
+#if defined(COMPAT_09) || defined(COMPAT_43)
 		/*
 		 * Historically, filesystem types were identified by numbers.
 		 * If we get an integer for the filesystem type instead of a
@@ -271,18 +272,23 @@ mount_get_vfsops(const char *fstype, struct vfsops **vfsops)
 			return ENODEV;
 		strlcpy(fstypename, mountcompatnames[fsindex],
 		    sizeof(fstypename));
+#else
+		return error;
+#endif
 	}
 
-	/* Accept `ufs' as an alias for `ffs', for compatibility. */
+#ifdef	COMPAT_10
+	/* Accept `ufs' as an alias for `ffs'. */
 	if (strcmp(fstypename, "ufs") == 0)
 		fstypename[0] = 'f';
+#endif
 
 	if ((*vfsops = vfs_getopsbyname(fstypename)) != NULL)
 		return 0;
 
 	/* If we can autoload a vfs module, try again */
 	mutex_enter(&module_lock);
-	(void)module_autoload(fstype, MODULE_CLASS_VFS);
+	(void)module_autoload(fstypename, MODULE_CLASS_VFS);
 	mutex_exit(&module_lock);
 
 	if ((*vfsops = vfs_getopsbyname(fstypename)) != NULL)
@@ -437,6 +443,24 @@ mount_getargs(struct lwp *l, struct vnode *vp, const char *path, int flags,
 	return (error);
 }
 
+#ifdef COMPAT_40
+/* ARGSUSED */
+int
+compat_40_sys_mount(struct lwp *l, const struct compat_40_sys_mount_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(const char *) type;
+		syscallarg(const char *) path;
+		syscallarg(int) flags;
+		syscallarg(void *) data;
+	} */
+	register_t dummy;
+
+	return do_sys_mount(l, NULL, SCARG(uap, type), SCARG(uap, path),
+	    SCARG(uap, flags), SCARG(uap, data), UIO_USERSPACE, 0, &dummy);
+}
+#endif
+
 int
 sys___mount50(struct lwp *l, const struct sys___mount50_args *uap, register_t *retval)
 {
@@ -499,18 +523,18 @@ do_sys_mount(struct lwp *l, struct vfsops *vfsops, const char *type,
 			/* No length supplied, use default for filesystem */
 			data_len = vfsops->vfs_min_mount_data;
 			if (data_len > VFS_MAX_MOUNT_DATA) {
+				/* maybe a force loaded old LKM */
 				error = EINVAL;
 				goto done;
 			}
-			/*
-			 * Hopefully a longer buffer won't make copyin() fail.
-			 * For compatibility with 3.0 and earlier.
-			 */
+#ifdef COMPAT_30
+			/* Hopefully a longer buffer won't make copyin() fail */
 			if (flags & MNT_UPDATE
 			    && data_len < sizeof (struct mnt_export_args30))
 				data_len = sizeof (struct mnt_export_args30);
+#endif
 		}
-		data_buf = kmem_alloc(data_len, KM_SLEEP);
+		data_buf = malloc(data_len, M_TEMP, M_WAITOK);
 
 		/* NFS needs the buffer even for mnt_getargs .... */
 		error = copyin(data, data_buf, data_len);
@@ -543,7 +567,7 @@ do_sys_mount(struct lwp *l, struct vfsops *vfsops, const char *type,
 	    	vput(vp);
 	}
 	if (data_buf != data)
-		kmem_free(data_buf, data_len);
+		free(data_buf, M_TEMP);
 	return (error);
 }
 
@@ -713,8 +737,10 @@ dounmount(struct mount *mp, int flags, struct lwp *l)
 
 	/*
 	 * XXX Syncer must be frozen when we get here.  This should really
-	 * be done on a per-mountpoint basis, but the syncer doesn't work
-	 * like that.
+	 * be done on a per-mountpoint basis, but especially the softdep
+	 * code possibly called from the syncer doesn't exactly work on a
+	 * per-mountpoint basis, so the softdep code would become a maze
+	 * of vfs_busy() calls.
 	 *
 	 * The caller of dounmount() must acquire syncer_mutex because
 	 * the syncer itself acquires locks in syncer_mutex -> vfs_busy
@@ -883,25 +909,25 @@ done:
 			return error;
 		}
 		len = strlen(bp);
-		if (len != 1) {
-			/*
-			 * for mount points that are below our root, we can see
-			 * them, so we fix up the pathname and return them. The
-			 * rest we cannot see, so we don't allow viewing the
-			 * data.
-			 */
-			if (strncmp(bp, sp->f_mntonname, len) == 0 &&
-			    ((c = sp->f_mntonname[len]) == '/' || c == '\0')) {
-				(void)strlcpy(sp->f_mntonname,
-				    c == '\0' ? "/" : &sp->f_mntonname[len],
+		/*
+		 * for mount points that are below our root, we can see
+		 * them, so we fix up the pathname and return them. The
+		 * rest we cannot see, so we don't allow viewing the
+		 * data.
+		 */
+		if (strncmp(bp, sp->f_mntonname, len) == 0 &&
+		    ((c = sp->f_mntonname[len]) == '/' || c == '\0')) {
+			(void)strlcpy(sp->f_mntonname, &sp->f_mntonname[len],
+			    sizeof(sp->f_mntonname));
+			if (sp->f_mntonname[0] == '\0')
+				(void)strlcpy(sp->f_mntonname, "/",
 				    sizeof(sp->f_mntonname));
-			} else {
-				if (root)
-					(void)strlcpy(sp->f_mntonname, "/",
-					    sizeof(sp->f_mntonname));
-				else
-					error = EPERM;
-			}
+		} else {
+			if (root)
+				(void)strlcpy(sp->f_mntonname, "/",
+				    sizeof(sp->f_mntonname));
+			else
+				error = EPERM;
 		}
 		PNBUF_PUT(path);
 	}
@@ -1756,7 +1782,7 @@ do_fhstat(struct lwp *l, const void *ufhp, size_t fhsize, struct stat *sb)
 
 /* ARGSUSED */
 int
-sys___fhstat50(struct lwp *l, const struct sys___fhstat50_args *uap, register_t *retval)
+sys___fhstat40(struct lwp *l, const struct sys___fhstat40_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const void *) fhp;
@@ -1829,22 +1855,13 @@ sys___fhstatvfs140(struct lwp *l, const struct sys___fhstatvfs140_args *uap, reg
  */
 /* ARGSUSED */
 int
-sys___mknod50(struct lwp *l, const struct sys___mknod50_args *uap,
-    register_t *retval)
+sys_mknod(struct lwp *l, const struct sys_mknod_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const char *) path;
-		syscallarg(mode_t) mode;
-		syscallarg(dev_t) dev;
+		syscallarg(int) mode;
+		syscallarg(int) dev;
 	} */
-	return do_sys_mknod(l, SCARG(uap, path), SCARG(uap, mode),
-	    SCARG(uap, dev), retval);
-}
-
-int
-do_sys_mknod(struct lwp *l, const char *pathname, mode_t mode, dev_t dev,
-    register_t *retval)
-{
 	struct proc *p = l->l_proc;
 	struct vnode *vp;
 	struct vattr vattr;
@@ -1860,7 +1877,7 @@ do_sys_mknod(struct lwp *l, const char *pathname, mode_t mode, dev_t dev,
 
 	optype = VOP_MKNOD_DESCOFFSET;
 
-	VERIEXEC_PATH_GET(pathname, seg, cpath, path);
+	VERIEXEC_PATH_GET(SCARG(uap, path), seg, cpath, path);
 	NDINIT(&nd, CREATE, LOCKPARENT | TRYEMULROOT, seg, cpath);
 
 	if ((error = namei(&nd)) != 0)
@@ -1871,10 +1888,11 @@ do_sys_mknod(struct lwp *l, const char *pathname, mode_t mode, dev_t dev,
 	else {
 		VATTR_NULL(&vattr);
 		/* We will read cwdi->cwdi_cmask unlocked. */
-		vattr.va_mode = (mode & ALLPERMS) &~ p->p_cwdi->cwdi_cmask;
-		vattr.va_rdev = dev;
+		vattr.va_mode =
+		    (SCARG(uap, mode) & ALLPERMS) &~ p->p_cwdi->cwdi_cmask;
+		vattr.va_rdev = SCARG(uap, dev);
 
-		switch (mode & S_IFMT) {
+		switch (SCARG(uap, mode) & S_IFMT) {
 		case S_IFMT:	/* used by badsect to flag bad sectors */
 			vattr.va_type = VBAD;
 			break;
@@ -2427,7 +2445,7 @@ do_sys_stat(const char *path, unsigned int nd_flags, struct stat *sb)
  */
 /* ARGSUSED */
 int
-sys___stat50(struct lwp *l, const struct sys___stat50_args *uap, register_t *retval)
+sys___stat30(struct lwp *l, const struct sys___stat30_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const char *) path;
@@ -2447,7 +2465,7 @@ sys___stat50(struct lwp *l, const struct sys___stat50_args *uap, register_t *ret
  */
 /* ARGSUSED */
 int
-sys___lstat50(struct lwp *l, const struct sys___lstat50_args *uap, register_t *retval)
+sys___lstat30(struct lwp *l, const struct sys___lstat30_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const char *) path;
@@ -2935,8 +2953,7 @@ out:
  */
 /* ARGSUSED */
 int
-sys___utimes50(struct lwp *l, const struct sys___utimes50_args *uap,
-    register_t *retval)
+sys_utimes(struct lwp *l, const struct sys_utimes_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const char *) path;
@@ -2952,8 +2969,7 @@ sys___utimes50(struct lwp *l, const struct sys___utimes50_args *uap,
  */
 /* ARGSUSED */
 int
-sys___futimes50(struct lwp *l, const struct sys___futimes50_args *uap,
-    register_t *retval)
+sys_futimes(struct lwp *l, const struct sys_futimes_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) fd;
@@ -2976,8 +2992,7 @@ sys___futimes50(struct lwp *l, const struct sys___futimes50_args *uap,
  * version does not follow links.
  */
 int
-sys___lutimes50(struct lwp *l, const struct sys___lutimes50_args *uap,
-    register_t *retval)
+sys_lutimes(struct lwp *l, const struct sys_lutimes_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const char *) path;
@@ -3010,7 +3025,7 @@ do_sys_utimes(struct lwp *l, struct vnode *vp, const char *path, int flag,
 
 		vanull = false;
 		if (seg != UIO_SYSSPACE) {
-			error = copyin(tptr, tv, sizeof (tv));
+			error = copyin(tptr, &tv, sizeof (tv));
 			if (error != 0)
 				return error;
 			tptr = tv;
@@ -3036,7 +3051,7 @@ do_sys_utimes(struct lwp *l, struct vnode *vp, const char *path, int flag,
 	if (setbirthtime)
 		vattr.va_birthtime = ts[1];
 	if (vanull)
-		vattr.va_flags |= VA_UTIMES_NULL;
+		vattr.va_vaflags |= VA_UTIMES_NULL;
 	error = VOP_SETATTR(vp, &vattr, l->l_cred);
 	VOP_UNLOCK(vp, 0);
 
@@ -3140,6 +3155,9 @@ sys_fsync(struct lwp *l, const struct sys_fsync_args *uap, register_t *retval)
 	vp = fp->f_data;
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_FSYNC(vp, fp->f_cred, FSYNC_WAIT, 0, 0);
+	if (error == 0 && bioopsp != NULL &&
+	    vp->v_mount && (vp->v_mount->mnt_flag & MNT_SOFTDEP))
+		(*bioopsp->io_fsync)(vp, 0);
 	VOP_UNLOCK(vp, 0);
 	fd_putfile(SCARG(uap, fd));
 	return (error);
@@ -3208,6 +3226,11 @@ sys_fsync_range(struct lwp *l, const struct sys_fsync_range_args *uap, register_
 	vp = fp->f_data;
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_FSYNC(vp, fp->f_cred, nflags, s, e);
+
+	if (error == 0 && bioopsp != NULL &&
+	    vp->v_mount && (vp->v_mount->mnt_flag & MNT_SOFTDEP))
+		(*bioopsp->io_fsync)(vp, nflags);
+
 	VOP_UNLOCK(vp, 0);
 out:
 	fd_putfile(SCARG(uap, fd));
@@ -3294,7 +3317,7 @@ do_sys_rename(const char *from, const char *to, enum uio_seg seg, int retain)
 	uint32_t saveflag;
 	int error;
 
-	NDINIT(&fromnd, DELETE, LOCKPARENT | SAVESTART | TRYEMULROOT,
+	NDINIT(&fromnd, DELETE, LOCKPARENT | SAVESTART | TRYEMULROOT | INRENAME,
 	    seg, from);
 	if ((error = namei(&fromnd)) != 0)
 		return (error);
@@ -3359,7 +3382,7 @@ do_sys_rename(const char *from, const char *to, enum uio_seg seg, int retain)
 
 	NDINIT(&tond, RENAME,
 	    LOCKPARENT | LOCKLEAF | NOCACHE | SAVESTART | TRYEMULROOT
-	      | (fvp->v_type == VDIR ? CREATEDIR : 0),
+	      | INRENAME | (fvp->v_type == VDIR ? CREATEDIR : 0),
 	    seg, to);
 	if ((error = namei(&tond)) != 0) {
 		VFS_RENAMELOCK_EXIT(fs);
@@ -3401,21 +3424,17 @@ do_sys_rename(const char *from, const char *to, enum uio_seg seg, int retain)
 #if NVERIEXEC > 0
 	if (!error) {
 		char *f1, *f2;
-		size_t f1_len;
-		size_t f2_len;
 
-		f1_len = fromnd.ni_cnd.cn_namelen + 1;
-		f1 = kmem_alloc(f1_len, KM_SLEEP);
-		strlcpy(f1, fromnd.ni_cnd.cn_nameptr, f1_len);
+		f1 = malloc(fromnd.ni_cnd.cn_namelen + 1, M_TEMP, M_WAITOK);
+		strlcpy(f1, fromnd.ni_cnd.cn_nameptr, fromnd.ni_cnd.cn_namelen + 1);
 
-		f2_len = tond.ni_cnd.cn_namelen + 1;
-		f2 = kmem_alloc(f2_len, KM_SLEEP);
-		strlcpy(f2, tond.ni_cnd.cn_nameptr, f2_len);
+		f2 = malloc(tond.ni_cnd.cn_namelen + 1, M_TEMP, M_WAITOK);
+		strlcpy(f2, tond.ni_cnd.cn_nameptr, tond.ni_cnd.cn_namelen + 1);
 
 		error = veriexec_renamechk(l, fvp, f1, tvp, f2);
 
-		kmem_free(f1, f1_len);
-		kmem_free(f2, f2_len);
+		free(f1, M_TEMP);
+		free(f2, M_TEMP);
 	}
 #endif /* NVERIEXEC > 0 */
 

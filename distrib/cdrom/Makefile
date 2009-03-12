@@ -1,12 +1,12 @@
-# $NetBSD: Makefile,v 1.40 2009/03/09 11:34:37 tsutsui Exp $
+# $NetBSD: Makefile,v 1.38 2008/10/25 22:27:34 apb Exp $
 #
 # Consult "*.conf" for the configuration variables; this Makefile is typically
 # not edited for basic configuration changes.
 ##############################################################################
 
-all:	cdimages
-
 .include <bsd.own.mk>
+
+all:
 
 .if exists(site.conf)
 .include "site.conf"
@@ -224,7 +224,7 @@ INTDIRS.${image}?=
 ADDFILES.${image}?=
 
 # For a source only cd just ignore the shared/ALL directory
-.if ${ports} != "source" && exists(${DISTRIBDIR}/shared/ALL)
+.if ${ports} != "source"
 bports=			shared/ALL
 .endif
 .for port in ${ports}					# {
@@ -235,8 +235,7 @@ ADDFILES.${image}+=	${ADDFILES.${port}}
 MKISOFS_ARGS.${image}+=	${MKISOFS_ARGS.${port}}
 # add shared/ALL and shared/${MACHINE_ARCH} to BASE_PORTS.${image}
 bports+=		${port}
-.if defined(MACHINE_ARCH.${port}) &&	\
-    exists(${DISTRIBDIR}/shared/${MACHINE_ARCH.${port}})
+.if defined(MACHINE_ARCH.${port})
 bports+=		shared/${MACHINE_ARCH.${port}}
 .endif
 .endfor							# }
@@ -364,7 +363,7 @@ USE-FILE: .USE
 ##### Makefile rules #####
 
 .for image in ${CD_IMAGES}			# {
-cdimages: ${IMAGEDIR}/${image}.iso
+all: ${IMAGEDIR}/${image}.iso
 
 stage-${image}:
 	mkdir -p ${STAGEDIR}/${image} ${EXTFILEDIR}
@@ -417,10 +416,10 @@ size-${image}: stage-${image} extfileprep fileprep-${image}
 .endif
 	@size=$$((`cd ${STAGEDIR}/${image} && \
 		   ${MKISOFS} ${MKISOFS_ARGS} ${MKISOFS_ARGS.${image}} \
-			-print-size . 2>&1 \
+			-print-size . 2>&1
 		   | tee /dev/stderr \
-		   | ${TOOL_SED} '/=/!d;s/^[^=]*=//'` \
-	       \* 2048)) && \
+		   | ${TOOL_SED} '/=/!d;s/^[^=]*=//'`
+	       * 2048)) && \
 	if [ "${SUN_BOOT_ARGS.${image}}" != "" ]; then \
 		size=$$(($$(($$size + 327679)) / 327680 * 327680)) && \
 		bootfiles=`for f in ${SUN_BOOT_ARGS.${image}:N-:O}; do echo $$f; done | uniq` && \

@@ -1,4 +1,4 @@
-/*	$NetBSD: vi.h,v 1.3 2008/12/05 22:51:43 christos Exp $ */
+/*	$NetBSD: vi.h,v 1.2.6.1 2009/01/20 02:41:13 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994

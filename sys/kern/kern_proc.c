@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_proc.c,v 1.147 2009/01/24 22:42:32 rmind Exp $	*/
+/*	$NetBSD: kern_proc.c,v 1.144 2008/10/15 06:51:20 wrstuden Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.147 2009/01/24 22:42:32 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.144 2008/10/15 06:51:20 wrstuden Exp $");
 
 #include "opt_kstack.h"
 #include "opt_maxuprc.h"
@@ -80,7 +80,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.147 2009/01/24 22:42:32 rmind Exp $"
 #include <sys/uio.h>
 #include <sys/malloc.h>
 #include <sys/pool.h>
-#include <sys/pset.h>
 #include <sys/mbuf.h>
 #include <sys/ioctl.h>
 #include <sys/tty.h>
@@ -144,7 +143,7 @@ static pid_t pid_max = PID_MAX;		/* largest value we allocate */
 
 /* Components of the first process -- never freed. */
 
-extern struct emul emul_netbsd;	/* defined in kern_exec.c */
+extern const struct emul emul_netbsd;	/* defined in kern_exec.c */
 
 struct session session0 = {
 	.s_count = 1,
@@ -201,7 +200,6 @@ struct lwp lwp0 __aligned(MIN_LWP_ALIGNMENT) = {
 	.l_priority = PRI_USER + NPRI_USER - 1,
 	.l_inheritedprio = -1,
 	.l_class = SCHED_OTHER,
-	.l_psid = PS_NONE,
 	.l_pi_lenders = SLIST_HEAD_INITIALIZER(&lwp0.l_pi_lenders),
 	.l_name = __UNCONST("swapper"),
 };
@@ -497,7 +495,7 @@ expand_pid_table(void)
 	if (pt_size != pid_tbl_mask + 1) {
 		/* Another process beat us to it... */
 		mutex_exit(proc_lock);
-		free(new_pt, M_PROC);
+		FREE(new_pt, M_PROC);
 		return;
 	}
 
@@ -556,7 +554,7 @@ expand_pid_table(void)
 		pid_alloc_lim <<= 1;	/* doubles number of free slots... */
 
 	mutex_exit(proc_lock);
-	free(n_pt, M_PROC);
+	FREE(n_pt, M_PROC);
 }
 
 struct proc *

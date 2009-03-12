@@ -1,4 +1,4 @@
-/*	$NetBSD: cl_term.c,v 1.2 2008/12/05 22:51:42 christos Exp $ */
+/*	$NetBSD: cl_term.c,v 1.1.1.2.6.1 2009/01/20 02:41:11 snj Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994

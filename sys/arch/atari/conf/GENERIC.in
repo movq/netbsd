@@ -1,5 +1,5 @@
 #
-#	$NetBSD: GENERIC.in,v 1.80 2009/03/06 23:38:07 abs Exp $
+#	$NetBSD: GENERIC.in,v 1.73.4.8 2010/11/20 00:47:55 riz Exp $
 #
 # Generic atari
 #
@@ -134,6 +134,7 @@ options 	WAPBL		# File system journaling support - Experimental
 #if !defined(SMALL030_KERNEL)
 #options 	QUOTA		# Disk quotas for local disks
 #options 	FFS_EI		# FFS Endian Independant support
+options 	SOFTDEP		# FFS soft updates support.
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server side code
 #options 	EXT2FS_SYSTEM_FLAGS	# makes ext2fs file flags (append and
@@ -166,7 +167,6 @@ options 	COMPAT_16	# Compatibility with NetBSD 1.6
 options 	COMPAT_20	# Compatibility with NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
-options 	COMPAT_50	# NetBSD 5.0 compatibility.
 #if !defined(SMALL030_KERNEL)
 #options 	COMPAT_09	# has no meaning on the atari
 #options 	COMPAT_SUNOS	# Support to run Sun-3 executables
@@ -231,7 +231,7 @@ options 	DISKLABEL_NBDA		# NetBSD disklabels (required)
 options 	DISKLABEL_AHDI		# NetBSD/AHDI disklabels
 #if !defined(SMALL030_KERNEL)
 #if !defined(FALCON_KERNEL)
-options 	SERCONSOLE		# modem1 console support, breaks Falcon
+#options 	SERCONSOLE		# modem1 console support, breaks Falcon
 #endif /* !FALCON_KERNEL */
 options 	RELOC_KERNEL		# TT/Falcon: relocate kernel to TT-RAM
 options 	MSGBUFSIZE=32768        # size of kernel msg. buffer
@@ -345,12 +345,14 @@ grfcc2		at grfbus0	# 3rd graphics driver
 ite2		at grfcc2	# 3rd tty
 lp0		at mainbus0	# centronics printer
 ser0		at mainbus0	# UART on first 68901 (ttyB0)
+ne0		at mainbus0	# EtherNEC on Atari ROM cartridge slot
 
 #if defined(TT030_KERNEL)
 avmebus0	at mainbus0	# VME bus
 vme0		at avmebus0
 le0		at vme0	irq 5	# Lance ethernet (Riebl/PAM).
 le0		at vme0 irq 4	# Lance ethernet (BVME410).
+we0		at vme0 irq 4	# SMC Elite Ultra with SMC_TT VME-ISA bridge
 et0		at vme0		# Crazy Dots II
 #endif /* TT030_KERNEL */
 #endif /* SMALL030_KERNEL */

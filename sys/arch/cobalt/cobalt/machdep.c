@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.102 2009/02/13 22:41:01 apb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.98 2008/07/02 17:28:55 ad Exp $	*/
 
 /*-
  * Copyright (c) 2006 Izumi Tsutsui.  All rights reserved.
@@ -50,11 +50,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.102 2009/02/13 22:41:01 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.98 2008/07/02 17:28:55 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_modular.h"
 #include "opt_execfmt.h"
 
 #include <sys/param.h>
@@ -68,7 +67,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.102 2009/02/13 22:41:01 apb Exp $");
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
 #include <sys/cpu.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -87,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.102 2009/02/13 22:41:01 apb Exp $");
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 #include <machine/db_machdep.h>
 #include <ddb/db_extern.h>
 #define ELFSIZE		DB_ELFSIZE
@@ -153,7 +151,7 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 	u_long first, last;
 	extern char edata[], end[];
 	const char *bi_msg;
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	int nsym = 0;
 	char *ssym = 0;
 	struct btinfo_symtab *bi_syms;
@@ -166,7 +164,7 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 	if (memcmp(((Elf_Ehdr *)end)->e_ident, ELFMAG, SELFMAG) == 0 &&
 	    ((Elf_Ehdr *)end)->e_ident[EI_CLASS] == ELFCLASS) {
 		esym = end;
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 		esym += ((Elf_Ehdr *)end)->e_entry;
 #endif
 		kernend = (char *)mips_round_page(esym);
@@ -210,7 +208,7 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 	} else
 		bi_msg = "invalid bootinfo (standalone boot?)\n";
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
 
 	/* Load symbol table if present */
@@ -285,10 +283,12 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 
 	decode_bootstring();
 
-#if NKSYMS || defined(DDB) || defined(MODULAR)
+#if NKSYMS || defined(DDB) || defined(LKM)
 	/* init symbols if present */
 	if ((bi_syms != NULL) && (esym != NULL))
-		ksyms_addsyms_elf(esym - ssym, ssym, esym);
+		ksyms_init(esym - ssym, ssym, esym);
+	else
+		ksyms_init(0, NULL, NULL);
 #endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
@@ -396,8 +396,6 @@ cpu_reboot(int howto, char *bootstr)
 
  haltsys:
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
 		printf("\n");

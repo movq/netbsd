@@ -1,4 +1,4 @@
-#	$NetBSD: NetBSD.dist,v 1.393 2009/03/03 06:01:56 mrg Exp $
+#	$NetBSD: NetBSD.dist,v 1.385.2.5 2009/10/10 19:53:24 sborrill Exp $
 #	@(#)4.4BSD.dist	8.1 (Berkeley) 6/13/93
 
 # Do not customize this file as it may be overwritten on upgrades.
@@ -33,6 +33,7 @@
 ./etc/defaults
 ./etc/fonts
 ./etc/fonts/conf.d
+./etc/fonts/conf.avail
 ./etc/iscsi
 ./etc/kerberosV
 ./etc/mail
@@ -251,7 +252,6 @@
 ./usr/X11R7/include/GL
 ./usr/X11R7/include/GL/internal
 ./usr/X11R7/include/X11
-./usr/X11R7/include/X11/drm
 ./usr/X11R7/include/X11/dri
 ./usr/X11R7/include/X11/ICE
 ./usr/X11R7/include/X11/PM
@@ -267,6 +267,7 @@
 ./usr/X11R7/include/X11/extensions
 ./usr/X11R7/include/X11/fonts
 ./usr/X11R7/include/X11/pixmaps
+./usr/X11R7/include/drm
 ./usr/X11R7/include/fontconfig
 ./usr/X11R7/include/freetype2
 ./usr/X11R7/include/freetype2/freetype
@@ -362,32 +363,28 @@
 ./usr/X11R7/lib/X11/xedit/lisp/progmodes
 ./usr/X11R7/lib/X11/xkb
 ./usr/X11R7/lib/X11/xkb/compat
-./usr/X11R7/lib/X11/xkb/compiled
 ./usr/X11R7/lib/X11/xkb/geometry
-./usr/X11R7/lib/X11/xkb/geometry/digital
-./usr/X11R7/lib/X11/xkb/geometry/ibm
-./usr/X11R7/lib/X11/xkb/geometry/sgi
+./usr/X11R7/lib/X11/xkb/geometry/digital_vndr
+./usr/X11R7/lib/X11/xkb/geometry/sgi_vndr
 ./usr/X11R7/lib/X11/xkb/keycodes
-./usr/X11R7/lib/X11/xkb/keycodes/digital
-./usr/X11R7/lib/X11/xkb/keycodes/sgi
+./usr/X11R7/lib/X11/xkb/keycodes/digital_vndr
+./usr/X11R7/lib/X11/xkb/keycodes/sgi_vndr
 ./usr/X11R7/lib/X11/xkb/keymap
-./usr/X11R7/lib/X11/xkb/keymap/digital
-./usr/X11R7/lib/X11/xkb/keymap/sgi
-./usr/X11R7/lib/X11/xkb/keymap/sun
+./usr/X11R7/lib/X11/xkb/keymap/digital_vndr
+./usr/X11R7/lib/X11/xkb/keymap/sgi_vndr
+./usr/X11R7/lib/X11/xkb/keymap/sun_vndr
 ./usr/X11R7/lib/X11/xkb/rules
 ./usr/X11R7/lib/X11/xkb/semantics
 ./usr/X11R7/lib/X11/xkb/symbols
-./usr/X11R7/lib/X11/xkb/symbols/digital
-./usr/X11R7/lib/X11/xkb/symbols/fujitsu
-./usr/X11R7/lib/X11/xkb/symbols/hp
-./usr/X11R7/lib/X11/xkb/symbols/macintosh
-./usr/X11R7/lib/X11/xkb/symbols/nec
-./usr/X11R7/lib/X11/xkb/symbols/pc
-./usr/X11R7/lib/X11/xkb/symbols/sgi
-./usr/X11R7/lib/X11/xkb/symbols/sharp
-./usr/X11R7/lib/X11/xkb/symbols/sony
-./usr/X11R7/lib/X11/xkb/symbols/sun
-./usr/X11R7/lib/X11/xkb/symbols/xfree68
+./usr/X11R7/lib/X11/xkb/symbols/digital_vndr
+./usr/X11R7/lib/X11/xkb/symbols/fujitsu_vndr
+./usr/X11R7/lib/X11/xkb/symbols/hp_vndr
+./usr/X11R7/lib/X11/xkb/symbols/macintosh_vndr
+./usr/X11R7/lib/X11/xkb/symbols/nec_vndr
+./usr/X11R7/lib/X11/xkb/symbols/sgi_vndr
+./usr/X11R7/lib/X11/xkb/symbols/sony_vndr
+./usr/X11R7/lib/X11/xkb/symbols/sun_vndr
+./usr/X11R7/lib/X11/xkb/symbols/xfree68_vndr
 ./usr/X11R7/lib/X11/xkb/torture
 ./usr/X11R7/lib/X11/xkb/types
 ./usr/X11R7/lib/modules
@@ -397,6 +394,7 @@
 ./usr/X11R7/lib/modules/drivers
 ./usr/X11R7/lib/modules/input
 ./usr/X11R7/lib/pkgconfig
+./usr/X11R7/lib/xorg
 ./usr/X11R7/libexec
 ./usr/X11R7/man
 ./usr/X11R7/man/cat1
@@ -417,6 +415,7 @@
 ./usr/X11R7/share
 ./usr/X11R7/share/examples
 ./usr/X11R7/share/examples/ssh-askpass
+./usr/X11R7/share/pciids
 ./usr/bin
 ./usr/games
 ./usr/games/hide		gname=games mode=0750
@@ -494,7 +493,6 @@
 ./usr/include/nfs
 ./usr/include/ntfs
 ./usr/include/objc
-./usr/include/openpgpsdk
 ./usr/include/openssl
 ./usr/include/prop
 ./usr/include/protocols
@@ -542,20 +540,12 @@
 ./usr/libdata/debug/usr/tests/atf/formats
 ./usr/libdata/debug/usr/tests/atf/test_programs
 ./usr/libdata/debug/usr/tests/atf/tools
-./usr/libdata/debug/usr/tests/crypto
-./usr/libdata/debug/usr/tests/crypto/libcrypto
 ./usr/libdata/debug/usr/tests/fs
 ./usr/libdata/debug/usr/tests/fs/puffs
 ./usr/libdata/debug/usr/tests/fs/tmpfs
-./usr/libdata/debug/usr/tests/ipf
-./usr/libdata/debug/usr/tests/kernel
-./usr/libdata/debug/usr/tests/kernel/kqueue
-./usr/libdata/debug/usr/tests/kernel/kqueue/read
-./usr/libdata/debug/usr/tests/kernel/kqueue/write
 ./usr/libdata/debug/usr/tests/modules
 ./usr/libdata/debug/usr/tests/net
 ./usr/libdata/debug/usr/tests/net/sys
-./usr/libdata/debug/usr/tests/syscall
 ./usr/libdata/debug/usr/tests/util
 ./usr/libdata/debug/usr/tests/util/df
 ./usr/libdata/debug/usr/tests/util/id
@@ -566,6 +556,7 @@
 ./usr/libexec/ching
 ./usr/libexec/lpr
 ./usr/libexec/postfix
+./usr/lkm
 ./usr/mdec
 ./usr/pkg			ignore optional
 ./usr/sbin
@@ -867,18 +858,26 @@
 ./usr/share/locale/fr_BE.ISO8859-1/LC_MESSAGES
 ./usr/share/locale/fr_BE.ISO8859-15
 ./usr/share/locale/fr_BE.ISO8859-15/LC_MESSAGES
+./usr/share/locale/fr_BE.UTF-8
+./usr/share/locale/fr_BE.UTF-8/LC_MESSAGES
 ./usr/share/locale/fr_CA.ISO8859-1
 ./usr/share/locale/fr_CA.ISO8859-1/LC_MESSAGES
 ./usr/share/locale/fr_CA.ISO8859-15
 ./usr/share/locale/fr_CA.ISO8859-15/LC_MESSAGES
+./usr/share/locale/fr_CA.UTF-8
+./usr/share/locale/fr_CA.UTF-8/LC_MESSAGES
 ./usr/share/locale/fr_CH.ISO8859-1
 ./usr/share/locale/fr_CH.ISO8859-1/LC_MESSAGES
 ./usr/share/locale/fr_CH.ISO8859-15
 ./usr/share/locale/fr_CH.ISO8859-15/LC_MESSAGES
+./usr/share/locale/fr_CH.UTF-8
+./usr/share/locale/fr_CH.UTF-8/LC_MESSAGES
 ./usr/share/locale/fr_FR.ISO8859-1
 ./usr/share/locale/fr_FR.ISO8859-1/LC_MESSAGES
 ./usr/share/locale/fr_FR.ISO8859-15
 ./usr/share/locale/fr_FR.ISO8859-15/LC_MESSAGES
+./usr/share/locale/fr_FR.UTF-8
+./usr/share/locale/fr_FR.UTF-8/LC_MESSAGES
 ./usr/share/locale/gl
 ./usr/share/locale/gl/LC_MESSAGES
 ./usr/share/locale/he
@@ -1407,41 +1406,17 @@
 ./usr/tests/atf/formats
 ./usr/tests/atf/test_programs
 ./usr/tests/atf/tools
-./usr/tests/crypto
-./usr/tests/crypto/libcrypto
 ./usr/tests/fs
 ./usr/tests/fs/puffs
 ./usr/tests/fs/tmpfs
 ./usr/tests/games
-./usr/tests/ipf
-./usr/tests/ipf/expected
-./usr/tests/ipf/input
-./usr/tests/ipf/regress
-./usr/tests/kernel
-./usr/tests/kernel/kqueue
-./usr/tests/kernel/kqueue/read
-./usr/tests/kernel/kqueue/write
 ./usr/tests/modules
 ./usr/tests/net
 ./usr/tests/net/sys
-./usr/tests/syscall
 ./usr/tests/util
-./usr/tests/util/awk
-./usr/tests/util/bzip2
-./usr/tests/util/config
-./usr/tests/util/config/support
-./usr/tests/util/config/support/arch
-./usr/tests/util/config/support/arch/regress
-./usr/tests/util/config/support/arch/regress/conf
-./usr/tests/util/config/support/conf
-./usr/tests/util/cut
 ./usr/tests/util/df
-./usr/tests/util/grep
 ./usr/tests/util/id
-./usr/tests/util/m4
-./usr/tests/util/make
 ./usr/tests/util/ps
-./usr/tests/util/sdiff
 ./usr/tests/util/sh
 ./var
 ./var/account
@@ -1477,7 +1452,6 @@
 ./var/db/obsolete
 ./var/db/postfix		uname=postfix gname=postfix mode=0755
 ./var/db/xdm
-./var/db/xkb
 ./var/games			uname=games gname=games mode=0775
 ./var/games/hackdir		uname=games gname=games mode=0775
 ./var/games/hackdir/save	uname=games gname=games mode=0770

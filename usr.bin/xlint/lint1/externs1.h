@@ -1,4 +1,4 @@
-/*	$NetBSD: externs1.h,v 1.25 2009/03/02 20:53:10 christos Exp $	*/
+/*	$NetBSD: externs1.h,v 1.23 2008/07/31 15:21:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -62,7 +62,7 @@ extern	int	blklev;
 extern	int	mblklev;
 extern	int	yydebug;
 
-extern	int	yyerror(const char *);
+extern	int	yyerror(char *);
 extern	int	yyparse(void);
 
 /*
@@ -166,7 +166,6 @@ extern	sym_t	*ename(sym_t *, int, int);
 extern	void	decl1ext(sym_t *, int);
 extern	void	cpuinfo(sym_t *, sym_t *);
 extern	int	isredec(sym_t *, int *);
-extern	int	eqptrtype(type_t *, type_t *, int);
 extern	int	eqtype(type_t *, type_t *, int, int, int *);
 extern	void	compltyp(sym_t *, sym_t *);
 extern	sym_t	*decl1arg(sym_t *, int);

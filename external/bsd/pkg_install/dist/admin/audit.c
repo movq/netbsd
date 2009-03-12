@@ -1,4 +1,4 @@
-/*	$NetBSD: audit.c,v 1.1.1.4 2009/02/14 17:19:08 joerg Exp $	*/
+/*	$NetBSD: audit.c,v 1.1.1.2.6.3 2010/02/03 00:38:21 snj Exp $	*/
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -7,7 +7,7 @@
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
 #endif
-__RCSID("$NetBSD: audit.c,v 1.1.1.4 2009/02/14 17:19:08 joerg Exp $");
+__RCSID("$NetBSD: audit.c,v 1.1.1.2.6.3 2010/02/03 00:38:21 snj Exp $");
 
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>.
@@ -202,7 +202,7 @@ check_and_read_pkg_vulnerabilities(void)
 		if (now < 0)
 			warnx("pkg-vulnerabilities is from the future");
 		else if (now > 86400 * 7)
-			warnx("pkg-vulnerabilities is out of day (%ld days old)",
+			warnx("pkg-vulnerabilities is out of date (%ld days old)",
 			    (long)(now / 86400));
 		else if (verbose >= 2)
 			warnx("pkg-vulnerabilities is %ld day%s old",
@@ -379,7 +379,7 @@ fetch_pkg_vulnerabilities(int argc, char **argv)
 		err(EXIT_FAILURE, "Cannot create pkg-vulnerability file %s",
 		    pkg_vulnerabilities_file);
 
-	if (write(fd, buf, buf_len) != buf_len)
+	if (write(fd, buf, buf_len) != (ssize_t)buf_len)
 		err(EXIT_FAILURE, "Cannot write pkg-vulnerability file");
 	if (close(fd) == -1)
 		err(EXIT_FAILURE, "Cannot close pkg-vulnerability file after write");

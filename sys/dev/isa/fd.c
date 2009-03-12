@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.91 2009/01/13 13:35:53 yamt Exp $	*/
+/*	$NetBSD: fd.c,v 1.87.10.1 2009/01/22 20:00:32 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2008 The NetBSD Foundation, Inc.
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.91 2009/01/13 13:35:53 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.87.10.1 2009/01/22 20:00:32 snj Exp $");
 
 #include "rnd.h"
 #include "opt_ddb.h"
@@ -728,7 +728,7 @@ fdstrategy(struct buf *bp)
 
 	/* Queue transfer on drive, activate drive and controller if idle. */
 	mutex_enter(&fdc->sc_mtx);
-	bufq_put(fd->sc_q, bp);
+	BUFQ_PUT(fd->sc_q, bp);
 	callout_stop(&fd->sc_motoroff_ch);		/* a good idea */
 	if (fd->sc_active == 0)
 		fdstart(fd);
@@ -776,11 +776,11 @@ fdfinish(struct fd_softc *fd, struct buf *bp)
 	 * another drive is waiting to be serviced, since there is a long motor
 	 * startup delay whenever we switch.
 	 */
-	(void)bufq_get(fd->sc_q);
+	(void)BUFQ_GET(fd->sc_q);
 	if (TAILQ_NEXT(fd, sc_drivechain) && ++fd->sc_ops >= 8) {
 		fd->sc_ops = 0;
 		TAILQ_REMOVE(&fdc->sc_drives, fd, sc_drivechain);
-		if (bufq_peek(fd->sc_q) != NULL)
+		if (BUFQ_PEEK(fd->sc_q) != NULL)
 			TAILQ_INSERT_TAIL(&fdc->sc_drives, fd, sc_drivechain);
 		else
 			fd->sc_active = 0;
@@ -963,26 +963,36 @@ fdcstart(struct fdc_softc *fdc)
 	(void)fdcintr1(fdc);
 }
 
-static void
-fdcpstatus(int n, struct fdc_softc *fdc)
+void
+fdcstatus(device_t dv, int n, const char *s)
 {
+	struct fdc_softc *fdc = device_private(device_parent(dv));
 	char bits[64];
+
+	if (n == 0) {
+		out_fdc(fdc->sc_iot, fdc->sc_ioh, NE7CMD_SENSEI);
+		(void) fdcresult(fdc);
+		n = 2;
+	}
+
+	aprint_normal_dev(dv, "%s", s);
 
 	switch (n) {
 	case 0:
 		printf("\n");
 		break;
 	case 2:
-		snprintb(bits, sizeof(bits), NE7_ST0BITS, fdc->sc_status[0]);
-		printf(" (st0 %s cyl %d)\n", bits, fdc->sc_status[1]);
+		printf(" (st0 %s cyl %d)\n",
+		    bitmask_snprintf(fdc->sc_status[0], NE7_ST0BITS,
+		    bits, sizeof(bits)), fdc->sc_status[1]);
 		break;
 	case 7:
-		snprintb(bits, sizeof(bits), NE7_ST0BITS, fdc->sc_status[0]);
-		printf(" (st0 %s", bits);
-		snprintb(bits, sizeof(bits), NE7_ST1BITS, fdc->sc_status[1]);
-		printf(" st1 %s", bits);
-		snprintb(bits, sizeof(bits), NE7_ST2BITS, fdc->sc_status[2]);
-		printf(" st2 %s", bits);
+		printf(" (st0 %s", bitmask_snprintf(fdc->sc_status[0],
+		    NE7_ST0BITS, bits, sizeof(bits)));
+		printf(" st1 %s", bitmask_snprintf(fdc->sc_status[1],
+		    NE7_ST1BITS, bits, sizeof(bits)));
+		printf(" st2 %s", bitmask_snprintf(fdc->sc_status[2],
+		    NE7_ST2BITS, bits, sizeof(bits)));
 		printf(" cyl %d head %d sec %d)\n",
 		    fdc->sc_status[3], fdc->sc_status[4], fdc->sc_status[5]);
 		break;
@@ -992,22 +1002,6 @@ fdcpstatus(int n, struct fdc_softc *fdc)
 		break;
 #endif
 	}
-}
-
-void
-fdcstatus(device_t dv, int n, const char *s)
-{
-	struct fdc_softc *fdc = device_private(device_parent(dv));
-
-	if (n == 0) {
-		out_fdc(fdc->sc_iot, fdc->sc_ioh, NE7CMD_SENSEI);
-		(void) fdcresult(fdc);
-		n = 2;
-	}
-	fdcpstatus(n, fdc);
-
-	aprint_normal_dev(dv, "%s", s);
-
 }
 
 void
@@ -1022,7 +1016,7 @@ fdctimeout(void *arg)
 #endif
 	fdcstatus(fd->sc_dev, 0, "timeout");
 
-	if (bufq_peek(fd->sc_q) != NULL)
+	if (BUFQ_PEEK(fd->sc_q) != NULL)
 		fdc->sc_state++;
 	else
 		fdc->sc_state = DEVIDLE;
@@ -1062,7 +1056,7 @@ loop:
 	}
 
 	/* Is there a transfer to this drive?  If not, deactivate drive. */
-	bp = bufq_peek(fd->sc_q);
+	bp = BUFQ_PEEK(fd->sc_q);
 	if (bp == NULL) {
 		fd->sc_ops = 0;
 		TAILQ_REMOVE(&fdc->sc_drives, fd, sc_drivechain);
@@ -1345,11 +1339,12 @@ fdcintr(void *arg)
 void
 fdcretry(struct fdc_softc *fdc)
 {
+	char bits[64];
 	struct fd_softc *fd;
 	struct buf *bp;
 
 	fd = TAILQ_FIRST(&fdc->sc_drives);
-	bp = bufq_peek(fd->sc_q);
+	bp = BUFQ_PEEK(fd->sc_q);
 
 	if (fd->sc_opts & FDOPT_NORETRY)
 	    goto fail;
@@ -1374,7 +1369,23 @@ fdcretry(struct fdc_softc *fdc)
 		if ((fd->sc_opts & FDOPT_SILENT) == 0) {
 			diskerr(bp, "fd", "hard error", LOG_PRINTF,
 				fd->sc_skip / FDC_BSIZE, NULL);
-			fdcpstatus(7, fdc);
+
+			printf(" (st0 %s",
+			       bitmask_snprintf(fdc->sc_status[0],
+						NE7_ST0BITS, bits,
+						sizeof(bits)));
+			printf(" st1 %s",
+			       bitmask_snprintf(fdc->sc_status[1],
+						NE7_ST1BITS, bits,
+						sizeof(bits)));
+			printf(" st2 %s",
+			       bitmask_snprintf(fdc->sc_status[2],
+						NE7_ST2BITS, bits,
+						sizeof(bits)));
+			printf(" cyl %d head %d sec %d)\n",
+			       fdc->sc_status[3],
+			       fdc->sc_status[4],
+			       fdc->sc_status[5]);
 		}
 
 		bp->b_error = EIO;
@@ -1407,13 +1418,9 @@ fdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 #endif
 		memset(&buffer, 0, sizeof(buffer));
 
+		buffer.d_secpercyl = fd->sc_type->seccyl;
 		buffer.d_type = DTYPE_FLOPPY;
 		buffer.d_secsize = FDC_BSIZE;
-		buffer.d_nsectors = fd->sc_type->sectrac;
-		buffer.d_ntracks = fd->sc_type->heads;
-		buffer.d_ncylinders = fd->sc_type->cyls;
-		buffer.d_secpercyl = fd->sc_type->seccyl;
-		buffer.d_secperunit = fd->sc_type->size;
 
 		if (readdisklabel(dev, fdstrategy, &buffer, NULL) != NULL)
 			return EINVAL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sl.c,v 1.114 2008/12/17 20:51:36 cegger Exp $	*/
+/*	$NetBSD: if_sl.c,v 1.112 2008/06/15 16:37:21 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1989, 1992, 1993
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.114 2008/12/17 20:51:36 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.112 2008/06/15 16:37:21 christos Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -231,7 +231,7 @@ sl_clone_create(struct if_clone *ifc, int unit)
 {
 	struct sl_softc *sc;
 
-	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAIT|M_ZERO);
+	MALLOC(sc, struct sl_softc *, sizeof(*sc), M_DEVBUF, M_WAIT|M_ZERO);
 	sc->sc_unit = unit;
 	if_initname(&sc->sc_if, ifc->ifc_name, unit);
 	sc->sc_if.if_softc = sc;
@@ -267,7 +267,7 @@ sl_clone_destroy(struct ifnet *ifp)
 #endif
 	if_detach(ifp);
 
-	free(sc, M_DEVBUF);
+	FREE(sc, M_DEVBUF);
 	return 0;
 }
 
@@ -984,7 +984,7 @@ slioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		if (ifa->ifa_addr->sa_family == AF_INET)
 			ifp->if_flags |= IFF_UP;
 		else
@@ -1053,8 +1053,7 @@ slioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = ifioctl_common(ifp, cmd, data);
-		break;
+		error = EINVAL;
 	}
 	splx(s);
 	return error;

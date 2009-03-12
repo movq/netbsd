@@ -1,4 +1,4 @@
-/* $NetBSD: expr.y,v 1.36 2009/01/20 14:22:37 joerg Exp $ */
+/* $NetBSD: expr.y,v 1.34 2008/04/30 13:39:13 martin Exp $ */
 
 /*_
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 %{
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: expr.y,v 1.36 2009/01/20 14:22:37 joerg Exp $");
+__RCSID("$NetBSD: expr.y,v 1.34 2008/04/30 13:39:13 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.799 2009/03/07 22:08:07 ad Exp $
+# $NetBSD: mi,v 1.780.2.16 2009/10/18 19:02:34 snj Exp $
 #
 # Note:	Don't delete entries from here - mark them as "obsolete" instead,
 #	unless otherwise stated below.
@@ -89,6 +89,7 @@
 ./etc/disklabels				base-obsolete		obsolete
 ./etc/fonts					base-x11-root
 ./etc/fonts/conf.d				base-x11-root
+./etc/fonts/conf.avail				base-x11-root
 ./etc/iscsi					base-sysutil-root
 ./etc/kerberosIV				base-obsolete		obsolete
 ./etc/kerberosV					base-krb5-root
@@ -119,41 +120,41 @@
 ./lib/libdes.so					base-obsolete		obsolete
 ./lib/libssp.so					base-obsolete		obsolete
 ./libdata					base-sys-root
-./libdata/firmware				base-firmware-root
-./libdata/firmware/if_ipw			base-firmware-root
-./libdata/firmware/if_ipw/LICENSE		base-firmware-root
-./libdata/firmware/if_ipw/ipw2100-1.2-i.fw	base-firmware-root
-./libdata/firmware/if_ipw/ipw2100-1.2-p.fw	base-firmware-root
-./libdata/firmware/if_ipw/ipw2100-1.2.fw	base-firmware-root
-./libdata/firmware/if_iwi			base-firmware-root
-./libdata/firmware/if_iwi/LICENSE.ipw2200-fw	base-firmware-root
-./libdata/firmware/if_iwi/ipw2200-bss.fw	base-firmware-root
-./libdata/firmware/if_iwi/ipw2200-ibss.fw	base-firmware-root
-./libdata/firmware/if_iwi/ipw2200-sniffer.fw	base-firmware-root
-./libdata/firmware/if_iwn			base-firmware-root
-./libdata/firmware/if_iwn/LICENSE.iwlwifi-4965-ucode	base-firmware-root
-./libdata/firmware/if_iwn/README.iwlwifi-4965-ucode	base-firmware-root
-./libdata/firmware/if_iwn/iwlwifi-4965-1.ucode	base-firmware-root
-./libdata/firmware/if_wpi			base-firmware-root
+./libdata/firmware				base-sys-root
+./libdata/firmware/if_ipw			base-sys-root
+./libdata/firmware/if_ipw/LICENSE		base-sys-root
+./libdata/firmware/if_ipw/ipw2100-1.2-i.fw	base-sys-root
+./libdata/firmware/if_ipw/ipw2100-1.2-p.fw	base-sys-root
+./libdata/firmware/if_ipw/ipw2100-1.2.fw	base-sys-root
+./libdata/firmware/if_iwi			base-sys-root
+./libdata/firmware/if_iwi/LICENSE.ipw2200-fw	base-sys-root
+./libdata/firmware/if_iwi/ipw2200-bss.fw	base-sys-root
+./libdata/firmware/if_iwi/ipw2200-ibss.fw	base-sys-root
+./libdata/firmware/if_iwi/ipw2200-sniffer.fw	base-sys-root
+./libdata/firmware/if_iwn			base-sys-root
+./libdata/firmware/if_iwn/LICENSE.iwlwifi-4965-ucode	base-sys-root
+./libdata/firmware/if_iwn/README.iwlwifi-4965-ucode	base-sys-root
+./libdata/firmware/if_iwn/iwlwifi-4965-1.ucode	base-sys-root
+./libdata/firmware/if_wpi			base-sys-root
 ./libdata/firmware/if_wpi/LICENSE.ipw3945-ucode	base-sys-root obsolete
 ./libdata/firmware/if_wpi/README.ipw3945-ucode	base-sys-root obsolete
 ./libdata/firmware/if_wpi/ipw3945.ucode		base-sys-root obsolete
-./libdata/firmware/if_wpi/LICENSE.iwlwifi-3945-ucode	base-firmware-root
-./libdata/firmware/if_wpi/README.iwlwifi-3945-ucode	base-firmware-root
-./libdata/firmware/if_wpi/iwlwifi-3945.ucode		base-firmware-root
-./libdata/firmware/ral				base-firmware-root
-./libdata/firmware/ral/ral-license		base-firmware-root
-./libdata/firmware/ral/ral-rt2561		base-firmware-root
-./libdata/firmware/ral/ral-rt2561s		base-firmware-root
-./libdata/firmware/ral/ral-rt2661		base-firmware-root
-./libdata/firmware/rum				base-firmware-root
-./libdata/firmware/rum/rum-license		base-firmware-root
-./libdata/firmware/rum/rum-rt2573		base-firmware-root
-./libdata/firmware/zyd				base-firmware-root
-./libdata/firmware/zyd/zd1211-licence		base-firmware-root obsolete
-./libdata/firmware/zyd/zd1211-license		base-firmware-root
-./libdata/firmware/zyd/zyd-zd1211		base-firmware-root
-./libdata/firmware/zyd/zyd-zd1211b		base-firmware-root
+./libdata/firmware/if_wpi/LICENSE.iwlwifi-3945-ucode	base-sys-root
+./libdata/firmware/if_wpi/README.iwlwifi-3945-ucode	base-sys-root
+./libdata/firmware/if_wpi/iwlwifi-3945.ucode		base-sys-root
+./libdata/firmware/ral				base-sys-root
+./libdata/firmware/ral/ral-license		base-sys-root
+./libdata/firmware/ral/ral-rt2561		base-sys-root
+./libdata/firmware/ral/ral-rt2561s		base-sys-root
+./libdata/firmware/ral/ral-rt2661		base-sys-root
+./libdata/firmware/rum				base-sys-root
+./libdata/firmware/rum/rum-license		base-sys-root
+./libdata/firmware/rum/rum-rt2573		base-sys-root
+./libdata/firmware/zyd				base-sys-root
+./libdata/firmware/zyd/zd1211-licence		base-sys-root obsolete
+./libdata/firmware/zyd/zd1211-license		base-sys-root
+./libdata/firmware/zyd/zyd-zd1211		base-sys-root
+./libdata/firmware/zyd/zyd-zd1211b		base-sys-root
 ./libexec					base-sys-root
 ./libexec/dhcpcd-hooks				base-dhcpcd-root
 ./libexec/dhcpcd-hooks/01-test			base-dhcpcd-root
@@ -187,7 +188,6 @@
 ./sbin/dkctl					base-sysutil-root
 ./sbin/dkscan_bsdlabel				base-sysutil-root
 ./sbin/dmesg					base-sysutil-root
-./sbin/dmsetup					base-lvm-root		lvm
 ./sbin/drvctl					base-sysutil-root
 ./sbin/dump					base-sysutil-root
 ./sbin/dump_lfs					base-sysutil-root
@@ -211,11 +211,10 @@
 ./sbin/ipppctl					base-netutil-root
 ./sbin/ispppcontrol				base-obsolete		obsolete
 ./sbin/lmcctl					base-obsolete		obsolete
-./sbin/lvm					base-lvm-root		lvm
 ./sbin/mbrlabel					base-sysutil-root
 ./sbin/mknod					base-sysutil-root
 ./sbin/modload					base-sysutil-root
-./sbin/modstat					base-sysutil-root
+./sbin/modstat					base-sysutil-root	modular
 ./sbin/modunload				base-sysutil-root
 ./sbin/mount					base-sysutil-root
 ./sbin/mount_ados				base-adosfs-root
@@ -481,7 +480,7 @@
 ./usr/X11R7/include/GL/internal			base-x11-root
 ./usr/X11R7/include/X11				base-x11-root
 ./usr/X11R7/include/X11/dri			base-x11-root
-./usr/X11R7/include/X11/drm			base-x11-root
+./usr/X11R7/include/X11/drm			base-x11-root		obsolete
 ./usr/X11R7/include/X11/ICE			base-x11-root
 ./usr/X11R7/include/X11/PM			base-x11-root
 ./usr/X11R7/include/X11/SM			base-x11-root
@@ -496,6 +495,7 @@
 ./usr/X11R7/include/X11/extensions		base-x11-root
 ./usr/X11R7/include/X11/fonts			base-x11-root
 ./usr/X11R7/include/X11/pixmaps			base-x11-root
+./usr/X11R7/include/drm				base-x11-root
 ./usr/X11R7/include/fontconfig			base-x11-root
 ./usr/X11R7/include/freetype2			base-x11-root
 ./usr/X11R7/include/freetype2/freetype		base-x11-root
@@ -591,32 +591,46 @@
 ./usr/X11R7/lib/X11/xedit/lisp/progmodes	base-x11-root
 ./usr/X11R7/lib/X11/xkb				base-x11-root
 ./usr/X11R7/lib/X11/xkb/compat			base-x11-root
-./usr/X11R7/lib/X11/xkb/compiled		base-x11-root
 ./usr/X11R7/lib/X11/xkb/geometry		base-x11-root
-./usr/X11R7/lib/X11/xkb/geometry/digital	base-x11-root
-./usr/X11R7/lib/X11/xkb/geometry/ibm		base-x11-root
-./usr/X11R7/lib/X11/xkb/geometry/sgi		base-x11-root
+./usr/X11R7/lib/X11/xkb/geometry/digital	-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/geometry/digital_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/geometry/ibm		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/geometry/sgi		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/geometry/sgi_vndr	base-x11-root
 ./usr/X11R7/lib/X11/xkb/keycodes		base-x11-root
-./usr/X11R7/lib/X11/xkb/keycodes/digital	base-x11-root
-./usr/X11R7/lib/X11/xkb/keycodes/sgi		base-x11-root
+./usr/X11R7/lib/X11/xkb/keycodes/digital	-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/keycodes/digital_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/keycodes/sgi		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/keycodes/sgi_vndr	base-x11-root
 ./usr/X11R7/lib/X11/xkb/keymap			base-x11-root
-./usr/X11R7/lib/X11/xkb/keymap/digital		base-x11-root
-./usr/X11R7/lib/X11/xkb/keymap/sgi		base-x11-root
-./usr/X11R7/lib/X11/xkb/keymap/sun		base-x11-root
+./usr/X11R7/lib/X11/xkb/keymap/digital		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/keymap/digital_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/keymap/sgi		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/keymap/sgi_vndr		base-x11-root
+./usr/X11R7/lib/X11/xkb/keymap/sun		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/keymap/sun_vndr		base-x11-root
 ./usr/X11R7/lib/X11/xkb/rules			base-x11-root
 ./usr/X11R7/lib/X11/xkb/semantics		base-x11-root
 ./usr/X11R7/lib/X11/xkb/symbols			base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/digital		base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/fujitsu		base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/hp		base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/macintosh	base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/nec		base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/pc		base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/sgi		base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/sharp		base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/sony		base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/sun		base-x11-root
-./usr/X11R7/lib/X11/xkb/symbols/xfree68		base-x11-root
+./usr/X11R7/lib/X11/xkb/symbols/digital		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/digital_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/symbols/fujitsu		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/fujitsu_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/symbols/hp		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/hp_vndr		base-x11-root
+./usr/X11R7/lib/X11/xkb/symbols/macintosh	-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/macintosh_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/symbols/nec		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/nec_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/symbols/sgi		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/sgi_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/symbols/sharp		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/sony		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/sony_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/symbols/sun		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/sun_vndr	base-x11-root
+./usr/X11R7/lib/X11/xkb/symbols/xfree68		-obsolete-	obsolete
+./usr/X11R7/lib/X11/xkb/symbols/xfree68_vndr	base-x11-root
 ./usr/X11R7/lib/X11/xkb/torture			base-x11-root
 ./usr/X11R7/lib/X11/xkb/types			base-x11-root
 ./usr/X11R7/lib/modules				base-x11-root
@@ -626,6 +640,7 @@
 ./usr/X11R7/lib/modules/fonts			base-x11-root
 ./usr/X11R7/lib/modules/input			base-x11-root
 ./usr/X11R7/lib/pkgconfig			base-x11-root
+./usr/X11R7/lib/xorg				base-x11-root
 ./usr/X11R7/libexec				base-x11-root
 ./usr/X11R7/man					base-x11-root
 ./usr/X11R7/man/cat1				base-x11-root
@@ -646,12 +661,12 @@
 ./usr/X11R7/share				base-x11-root
 ./usr/X11R7/share/examples			base-x11-root
 ./usr/X11R7/share/examples/ssh-askpass		base-x11-root
+./usr/X11R7/share/pciids			base-x11-root
 ./usr/bin					base-sys-usr
 ./usr/bin/Mail					base-mail-bin
 ./usr/bin/apply					base-util-bin
 ./usr/bin/apropos				base-man-bin
 ./usr/bin/at					base-cron-bin
-./usr/bin/atf-check				base-atf-bin
 ./usr/bin/atf-config				base-atf-bin
 ./usr/bin/atf-report				base-atf-bin
 ./usr/bin/atf-run				base-atf-bin
@@ -776,7 +791,8 @@
 ./usr/bin/lam					base-util-bin
 ./usr/bin/last					base-util-bin
 ./usr/bin/lastcomm				base-util-bin
-./usr/bin/ld					base-util-bin		bfd
+# needed by modload for now
+./usr/bin/ld					comp-util-bin		bfd
 ./usr/bin/ldapadd				base-ldap-bin		ldap
 ./usr/bin/ldapcompare				base-ldap-bin		ldap
 ./usr/bin/ldapdelete				base-ldap-bin		ldap
@@ -825,7 +841,7 @@
 ./usr/bin/mkfifo				base-util-bin
 ./usr/bin/mklocale				base-locale-bin
 ./usr/bin/mktemp				base-util-bin
-./usr/bin/modstat				base-obsolete		obsolete
+./usr/bin/modstat				base-util-bin		!modular
 ./usr/bin/more					base-util-bin
 ./usr/bin/mset					base-tn3270-bin
 ./usr/bin/msgs					base-util-bin
@@ -845,7 +861,6 @@
 ./usr/bin/nvi					base-obsolete		obsolete
 ./usr/bin/nview					base-obsolete		obsolete
 ./usr/bin/od					base-util-bin
-./usr/bin/openpgp				base-crypto-bin		crypto
 ./usr/bin/openssl				base-crypto-bin		crypto
 ./usr/bin/page					base-util-bin
 ./usr/bin/pagesize				base-util-bin
@@ -928,7 +943,6 @@
 ./usr/bin/sum					base-util-bin
 ./usr/bin/sysstat				base-util-bin
 ./usr/bin/systat				base-util-bin
-./usr/bin/tabs					base-util-bin
 ./usr/bin/tail					base-util-bin
 ./usr/bin/talk					base-netutil-bin
 ./usr/bin/tar					base-util-bin
@@ -1053,7 +1067,7 @@
 ./usr/include/fs/efs				base-c-usr
 ./usr/include/fs/hfs				base-c-usr
 ./usr/include/fs/hfsp				base-obsolete		obsolete
-./usr/include/fs/puffs				base-puffs-usr
+./usr/include/fs/puffs				base-c-usr
 ./usr/include/fs/smbfs				base-c-usr
 ./usr/include/fs/sysvbfs			base-c-usr
 ./usr/include/fs/tmpfs				base-c-usr
@@ -1068,6 +1082,7 @@
 ./usr/include/g++/tr1				base-cxx-usr
 ./usr/include/gssapi				base-c-usr
 ./usr/include/gssapi/rpc			base-obsolete		obsolete
+./usr/include/dev/pci/hdaudio			base-c-usr
 ./usr/include/isofs				base-c-usr
 ./usr/include/isofs/cd9660			base-c-usr
 ./usr/include/kadm5				base-c-usr
@@ -1108,7 +1123,6 @@
 ./usr/include/nfs				base-c-usr
 ./usr/include/ntfs				base-c-usr
 ./usr/include/objc				base-objc-usr
-./usr/include/openpgpsdk			base-c-usr
 ./usr/include/openssl				base-c-usr
 ./usr/include/prop				base-c-usr
 ./usr/include/protocols				base-c-usr
@@ -1193,7 +1207,7 @@
 ./usr/libexec/atf-cleanup			base-atf-bin
 ./usr/libexec/atf-exec				base-atf-bin
 ./usr/libexec/atf-format			base-atf-bin
-./usr/libexec/atf-killpg			base-atf-bin		obsolete
+./usr/libexec/atf-killpg			base-atf-bin
 ./usr/libexec/atrun				base-cron-bin
 ./usr/libexec/ching				base-games-usr
 ./usr/libexec/comsat				base-mail-bin
@@ -1238,10 +1252,15 @@
 ./usr/libexec/postfix/lmtp			base-postfix-bin	postfix
 ./usr/libexec/postfix/local			base-postfix-bin	postfix
 ./usr/libexec/postfix/master			base-postfix-bin	postfix
-./usr/libexec/postfix/nqmgr			base-obsolete	obsolete
+./usr/libexec/postfix/nqmgr			base-obsolete		obsolete
 ./usr/libexec/postfix/oqmgr			base-postfix-bin	postfix
 ./usr/libexec/postfix/pickup			base-postfix-bin	postfix
 ./usr/libexec/postfix/pipe			base-postfix-bin	postfix
+./usr/libexec/postfix/post-install		base-postfix-bin	postfix
+./usr/libexec/postfix/postfix-files		base-postfix-bin	postfix
+./usr/libexec/postfix/postfix-script		base-postfix-bin	postfix
+./usr/libexec/postfix/postfix-wrapper		base-postfix-bin	postfix
+./usr/libexec/postfix/postmulti-script		base-postfix-bin	postfix
 ./usr/libexec/postfix/proxymap			base-postfix-bin	postfix
 ./usr/libexec/postfix/qmgr			base-postfix-bin	postfix
 ./usr/libexec/postfix/qmqpd			base-obsolete		obsolete
@@ -1286,39 +1305,7 @@
 ./usr/libexec/uucpd				base-obsolete		obsolete
 ./usr/libexec/uugetty				base-obsolete		obsolete
 ./usr/libexec/virecover				base-util-bin
-./usr/lkm					base-obsolete		obsolete
-./usr/lkm/adosfs.o				base-obsolete		obsolete
-./usr/lkm/bsdcomp.o				base-obsolete		obsolete
-./usr/lkm/cd9660.o				base-obsolete		obsolete
-./usr/lkm/coda.o				base-obsolete		obsolete
-./usr/lkm/coda5.o				base-obsolete		obsolete
-./usr/lkm/deflate.o				base-obsolete		obsolete
-./usr/lkm/efs.o					base-obsolete		obsolete
-./usr/lkm/ext2fs.o				base-obsolete		obsolete
-./usr/lkm/fdesc.o				base-obsolete		obsolete
-./usr/lkm/filecorefs.o				base-obsolete		obsolete
-./usr/lkm/hfs.o					base-obsolete		obsolete
-./usr/lkm/hfsp.o				base-obsolete		obsolete
-./usr/lkm/if_ipl.o				base-obsolete		obsolete
-./usr/lkm/lfs.o					base-obsolete		obsolete
-./usr/lkm/kernfs.o				base-obsolete		obsolete
-./usr/lkm/mfs.o					base-obsolete		obsolete
-./usr/lkm/msdosfs.o				base-obsolete		obsolete
-./usr/lkm/ntfs.o				base-obsolete		obsolete
-./usr/lkm/nullfs.o				base-obsolete		obsolete
-./usr/lkm/overlay.o				base-obsolete		obsolete
-./usr/lkm/pf.o					base-obsolete		obsolete
-./usr/lkm/portal.o				base-obsolete		obsolete
-./usr/lkm/procfs.o				base-obsolete		obsolete
-./usr/lkm/ptyfs.o				base-obsolete		obsolete
-./usr/lkm/puffs.o				base-obsolete		obsolete
-./usr/lkm/smbfs.o				base-obsolete		obsolete
-./usr/lkm/tap.o					base-obsolete		obsolete
-./usr/lkm/tmpfs.o				base-obsolete		obsolete
-./usr/lkm/udf.o					base-obsolete		obsolete
-./usr/lkm/umapfs.o				base-obsolete		obsolete
-./usr/lkm/union.o				base-obsolete		obsolete
-./usr/lkm/vnd.o					base-obsolete		obsolete
+./usr/lkm					base-sys-usr
 ./usr/mdec					base-sys-usr
 ./usr/sbin					base-sys-usr
 ./usr/sbin/ac					base-sysutil-bin
@@ -1349,7 +1336,6 @@
 ./usr/sbin/chrtbl				base-sysutil-bin
 ./usr/sbin/cnwctl				base-netutil-bin
 ./usr/sbin/cpuctl				base-sysutil-bin
-./usr/sbin/crash				base-sysutil-bin
 ./usr/sbin/cron					base-cron-bin
 ./usr/sbin/daicctl				base-isdn-bin
 ./usr/sbin/dbsym				base-sysutil-bin	bfd
@@ -1381,7 +1367,7 @@
 ./usr/sbin/fsinfo				base-sysutil-bin
 ./usr/sbin/fssconfig				base-sysutil-bin
 ./usr/sbin/ftp-proxy				base-pf-bin		pf
-./usr/sbin/fusermount				base-refuse-bin
+./usr/sbin/fusermount				base-miscfs-bin	
 ./usr/sbin/fwctl				base-sysutil-bin
 ./usr/sbin/g711conv				base-obsolete		obsolete
 ./usr/sbin/getencstat				base-sysutil-bin
@@ -1397,6 +1383,7 @@
 ./usr/sbin/groupdel				base-sysutil-bin
 ./usr/sbin/groupinfo				base-sysutil-bin
 ./usr/sbin/groupmod				base-sysutil-bin
+./usr/sbin/hdaudioctl				base-sysutil-bin
 ./usr/sbin/hlfsd				base-amd-bin
 ./usr/sbin/host					base-obsolete		obsolete
 ./usr/sbin/hostapd				base-sysutil-bin
@@ -1464,10 +1451,10 @@
 ./usr/sbin/mopd					base-bootserver-bin
 ./usr/sbin/mopprobe				base-bootserver-bin
 ./usr/sbin/moptrace				base-bootserver-bin
-./usr/sbin/mount_9p				base-puffs-bin
-./usr/sbin/mount_psshfs				base-puffs-bin
-./usr/sbin/mount_puffsportal			base-puffs-bin
-./usr/sbin/mount_sysctlfs			base-puffs-bin
+./usr/sbin/mount_9p				base-miscfs-bin	
+./usr/sbin/mount_psshfs				base-miscfs-bin	
+./usr/sbin/mount_puffsportal			base-miscfs-bin	
+./usr/sbin/mount_sysctlfs			base-miscfs-bin	
 ./usr/sbin/mountd				base-nfsserver-bin
 ./usr/sbin/moused				base-sysutil-bin
 ./usr/sbin/mrinfo				base-router-bin
@@ -1526,6 +1513,7 @@
 ./usr/sbin/postlock				base-postfix-bin	postfix
 ./usr/sbin/postlog				base-postfix-bin	postfix
 ./usr/sbin/postmap				base-postfix-bin	postfix
+./usr/sbin/postmulti				base-postfix-bin	postfix
 ./usr/sbin/postqueue				base-postfix-bin	postfix
 ./usr/sbin/postsuper				base-postfix-bin	postfix
 ./usr/sbin/powerd				base-sysutil-bin
@@ -1565,19 +1553,19 @@
 ./usr/sbin/rtadvd				base-router-bin		use_inet6
 ./usr/sbin/rtquery				base-netutil-bin
 ./usr/sbin/rtsold				base-netutil-bin	inet6
-./usr/sbin/rump_cd9660				base-puffs-bin
-./usr/sbin/rump_efs				base-puffs-bin
-./usr/sbin/rump_ext2fs				base-puffs-bin
-./usr/sbin/rump_ffs				base-puffs-bin
-./usr/sbin/rump_hfs				base-puffs-bin
-./usr/sbin/rump_lfs				base-puffs-bin
-./usr/sbin/rump_msdos				base-puffs-bin
-./usr/sbin/rump_nfs				base-puffs-bin
-./usr/sbin/rump_ntfs				base-puffs-bin
-./usr/sbin/rump_syspuffs			base-puffs-bin
-./usr/sbin/rump_sysvbfs				base-puffs-bin
-./usr/sbin/rump_tmpfs				base-puffs-bin
-./usr/sbin/rump_udf				base-puffs-bin
+./usr/sbin/rump_cd9660				base-miscfs-bin	
+./usr/sbin/rump_efs				base-miscfs-bin	
+./usr/sbin/rump_ext2fs				base-miscfs-bin	
+./usr/sbin/rump_ffs				base-miscfs-bin	
+./usr/sbin/rump_hfs				base-miscfs-bin	
+./usr/sbin/rump_lfs				base-miscfs-bin	
+./usr/sbin/rump_msdos				base-miscfs-bin	
+./usr/sbin/rump_nfs				base-miscfs-bin	
+./usr/sbin/rump_ntfs				base-miscfs-bin	
+./usr/sbin/rump_syspuffs			base-miscfs-bin	
+./usr/sbin/rump_sysvbfs				base-miscfs-bin	
+./usr/sbin/rump_tmpfs				base-miscfs-bin	
+./usr/sbin/rump_udf				base-miscfs-bin	
 ./usr/sbin/rwhod				base-netutil-bin
 ./usr/sbin/sa					base-sysutil-bin
 ./usr/sbin/screenblank				base-sysutil-bin
@@ -2903,6 +2891,13 @@
 ./usr/share/locale/fr_BE.ISO8859-15/LC_MONETARY	base-locale-fr		nls
 ./usr/share/locale/fr_BE.ISO8859-15/LC_NUMERIC	base-locale-fr		nls
 ./usr/share/locale/fr_BE.ISO8859-15/LC_TIME	base-locale-fr		nls
+./usr/share/locale/fr_BE.UTF-8			base-locale-fr
+./usr/share/locale/fr_BE.UTF-8/LC_CTYPE		base-locale-fr		nls
+./usr/share/locale/fr_BE.UTF-8/LC_MESSAGES	base-locale-fr
+./usr/share/locale/fr_BE.UTF-8/LC_MESSAGES/SYS_LC_MESSAGES	base-locale-fr	nls
+./usr/share/locale/fr_BE.UTF-8/LC_MONETARY	base-locale-fr		nls
+./usr/share/locale/fr_BE.UTF-8/LC_NUMERIC	base-locale-fr		nls
+./usr/share/locale/fr_BE.UTF-8/LC_TIME		base-locale-fr		nls
 ./usr/share/locale/fr_CA.ISO8859-1		base-locale-fr
 ./usr/share/locale/fr_CA.ISO8859-1/LC_CTYPE	base-locale-fr		nls
 ./usr/share/locale/fr_CA.ISO8859-1/LC_MESSAGES	base-locale-fr
@@ -2917,6 +2912,13 @@
 ./usr/share/locale/fr_CA.ISO8859-15/LC_MONETARY	base-locale-fr		nls
 ./usr/share/locale/fr_CA.ISO8859-15/LC_NUMERIC	base-locale-fr		nls
 ./usr/share/locale/fr_CA.ISO8859-15/LC_TIME	base-locale-fr		nls
+./usr/share/locale/fr_CA.UTF-8			base-locale-fr
+./usr/share/locale/fr_CA.UTF-8/LC_CTYPE		base-locale-fr		nls
+./usr/share/locale/fr_CA.UTF-8/LC_MESSAGES	base-locale-fr
+./usr/share/locale/fr_CA.UTF-8/LC_MESSAGES/SYS_LC_MESSAGES	base-locale-fr	nls
+./usr/share/locale/fr_CA.UTF-8/LC_MONETARY	base-locale-fr		nls
+./usr/share/locale/fr_CA.UTF-8/LC_NUMERIC	base-locale-fr		nls
+./usr/share/locale/fr_CA.UTF-8/LC_TIME		base-locale-fr		nls
 ./usr/share/locale/fr_CH.ISO8859-1		base-locale-fr
 ./usr/share/locale/fr_CH.ISO8859-1/LC_CTYPE	base-locale-fr		nls
 ./usr/share/locale/fr_CH.ISO8859-1/LC_MESSAGES	base-locale-fr
@@ -2931,6 +2933,13 @@
 ./usr/share/locale/fr_CH.ISO8859-15/LC_MONETARY	base-locale-fr		nls
 ./usr/share/locale/fr_CH.ISO8859-15/LC_NUMERIC	base-locale-fr		nls
 ./usr/share/locale/fr_CH.ISO8859-15/LC_TIME	base-locale-fr		nls
+./usr/share/locale/fr_CH.UTF-8			base-locale-fr
+./usr/share/locale/fr_CH.UTF-8/LC_CTYPE		base-locale-fr		nls
+./usr/share/locale/fr_CH.UTF-8/LC_MESSAGES	base-locale-fr
+./usr/share/locale/fr_CH.UTF-8/LC_MESSAGES/SYS_LC_MESSAGES	base-locale-fr	nls
+./usr/share/locale/fr_CH.UTF-8/LC_MONETARY	base-locale-fr		nls
+./usr/share/locale/fr_CH.UTF-8/LC_NUMERIC	base-locale-fr		nls
+./usr/share/locale/fr_CH.UTF-8/LC_TIME		base-locale-fr		nls
 ./usr/share/locale/fr_FR.ISO8859-1		base-locale-fr
 ./usr/share/locale/fr_FR.ISO8859-1/LC_CTYPE	base-locale-fr		nls
 ./usr/share/locale/fr_FR.ISO8859-1/LC_MESSAGES	base-locale-fr
@@ -2945,6 +2954,13 @@
 ./usr/share/locale/fr_FR.ISO8859-15/LC_MONETARY	base-locale-fr		nls
 ./usr/share/locale/fr_FR.ISO8859-15/LC_NUMERIC	base-locale-fr		nls
 ./usr/share/locale/fr_FR.ISO8859-15/LC_TIME	base-locale-fr		nls
+./usr/share/locale/fr_FR.UTF-8			base-locale-fr
+./usr/share/locale/fr_FR.UTF-8/LC_CTYPE		base-locale-fr		nls
+./usr/share/locale/fr_FR.UTF-8/LC_MESSAGES	base-locale-fr
+./usr/share/locale/fr_FR.UTF-8/LC_MESSAGES/SYS_LC_MESSAGES	base-locale-fr	nls
+./usr/share/locale/fr_FR.UTF-8/LC_MONETARY	base-locale-fr		nls
+./usr/share/locale/fr_FR.UTF-8/LC_NUMERIC	base-locale-fr		nls
+./usr/share/locale/fr_FR.UTF-8/LC_TIME		base-locale-fr		nls
 ./usr/share/locale/gl				base-locale-gl
 ./usr/share/locale/gl/LC_MESSAGES		base-locale-gl
 ./usr/share/locale/gl/LC_MESSAGES/grep.mo	base-util_locale-gl	nls
@@ -3810,40 +3826,40 @@
 ./usr/share/misc/usb_hid_usages			base-reference-share	share
 ./usr/share/misc/vgrindefs.db			base-groff-share	share
 ./usr/share/mk					base-util-share
-./usr/share/mk/bsd.README			base-mk-share		share
-./usr/share/mk/bsd.crypto.mk			base-obsolete		obsolete
-./usr/share/mk/bsd.dep.mk			base-mk-share		share
-./usr/share/mk/bsd.depall.mk			base-obsolete		obsolete
-./usr/share/mk/bsd.doc.mk			base-mk-share		share
-./usr/share/mk/bsd.endian.mk			base-mk-share		share
-./usr/share/mk/bsd.files.mk			base-mk-share		share
-./usr/share/mk/bsd.gcc.mk			base-mk-share		share
-./usr/share/mk/bsd.hostlib.mk			base-mk-share		share
-./usr/share/mk/bsd.hostprog.mk			base-mk-share		share
-./usr/share/mk/bsd.inc.mk			base-mk-share		share
-./usr/share/mk/bsd.info.mk			base-mk-share		share
-./usr/share/mk/bsd.init.mk			base-mk-share		share
-./usr/share/mk/bsd.kernobj.mk			base-mk-share		share
-./usr/share/mk/bsd.kinc.mk			base-mk-share		share
-./usr/share/mk/bsd.klinks.mk			base-mk-share		share
-./usr/share/mk/bsd.kmod.mk			base-obsolete		obsolete
-./usr/share/mk/bsd.kmodule.mk			base-mk-share		share
-./usr/share/mk/bsd.lib.mk			base-mk-share		share
-./usr/share/mk/bsd.links.mk			base-mk-share		share
-./usr/share/mk/bsd.man.mk			base-mk-share		share
-./usr/share/mk/bsd.nls.mk			base-mk-share		share
-./usr/share/mk/bsd.obj.mk			base-mk-share		share
-./usr/share/mk/bsd.own.mk			base-mk-share		share
-./usr/share/mk/bsd.port.mk			base-obsolete		obsolete
-./usr/share/mk/bsd.port.subdir.mk		base-obsolete		obsolete
-./usr/share/mk/bsd.prog.mk			base-mk-share		share
-./usr/share/mk/bsd.rpc.mk			base-mk-share		share
-./usr/share/mk/bsd.shlib.mk			base-mk-share		share
-./usr/share/mk/bsd.subdir.mk			base-mk-share		share
-./usr/share/mk/bsd.sys.mk			base-mk-share		share
-./usr/share/mk/bsd.test.mk			base-mk-share		share
-./usr/share/mk/bsd.x11.mk			base-mk-share		share
-./usr/share/mk/sys.mk				base-mk-share		share
+./usr/share/mk/bsd.README			comp-util-share		share
+./usr/share/mk/bsd.crypto.mk			comp-obsolete		obsolete
+./usr/share/mk/bsd.dep.mk			comp-util-share		share
+./usr/share/mk/bsd.depall.mk			comp-obsolete		obsolete
+./usr/share/mk/bsd.doc.mk			comp-util-share		share
+./usr/share/mk/bsd.endian.mk			comp-util-share		share
+./usr/share/mk/bsd.files.mk			comp-util-share		share
+./usr/share/mk/bsd.gcc.mk			comp-util-share		share
+./usr/share/mk/bsd.hostlib.mk			comp-util-share		share
+./usr/share/mk/bsd.hostprog.mk			comp-util-share		share
+./usr/share/mk/bsd.inc.mk			comp-util-share		share
+./usr/share/mk/bsd.info.mk			comp-util-share		share
+./usr/share/mk/bsd.init.mk			comp-util-share		share
+./usr/share/mk/bsd.kernobj.mk			comp-util-share		share
+./usr/share/mk/bsd.kinc.mk			comp-util-share		share
+./usr/share/mk/bsd.klinks.mk			comp-util-share		share
+./usr/share/mk/bsd.kmod.mk			comp-util-share		share
+./usr/share/mk/bsd.kmodule.mk			comp-util-share		share
+./usr/share/mk/bsd.lib.mk			comp-util-share		share
+./usr/share/mk/bsd.links.mk			comp-util-share		share
+./usr/share/mk/bsd.man.mk			comp-util-share		share
+./usr/share/mk/bsd.nls.mk			comp-util-share		share
+./usr/share/mk/bsd.obj.mk			comp-util-share		share
+./usr/share/mk/bsd.own.mk			comp-util-share		share
+./usr/share/mk/bsd.port.mk			comp-obsolete		obsolete
+./usr/share/mk/bsd.port.subdir.mk		comp-obsolete		obsolete
+./usr/share/mk/bsd.prog.mk			comp-util-share		share
+./usr/share/mk/bsd.rpc.mk			comp-util-share		share
+./usr/share/mk/bsd.shlib.mk			comp-util-share		share
+./usr/share/mk/bsd.subdir.mk			comp-util-share		share
+./usr/share/mk/bsd.sys.mk			comp-util-share		share
+./usr/share/mk/bsd.test.mk			comp-util-share		share
+./usr/share/mk/bsd.x11.mk			comp-util-share		share
+./usr/share/mk/sys.mk				base-util-share		share
 ./usr/share/ms					base-groff-share
 ./usr/share/nls					base-locale-share
 # C locale is required by POSIX, so is installed if any locales are.
@@ -4952,7 +4968,6 @@
 ./var/db/obsolete/text				base-sys-root
 ./var/db/postfix				base-postfix-root
 ./var/db/xdm					base-sys-root
-./var/db/xkb					base-sys-root
 ./var/empty					base-obsolete		obsolete
 ./var/games					base-games-root
 ./var/games/hackdir				base-games-root

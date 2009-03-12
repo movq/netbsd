@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsd.c,v 1.56 2008/11/21 07:48:35 pooka Exp $	*/
+/*	$NetBSD: nfsd.c,v 1.54 2008/07/21 13:36:59 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)nfsd.c	8.9 (Berkeley) 3/29/95";
 #else
-__RCSID("$NetBSD: nfsd.c,v 1.56 2008/11/21 07:48:35 pooka Exp $");
+__RCSID("$NetBSD: nfsd.c,v 1.54 2008/07/21 13:36:59 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -81,11 +81,7 @@ __RCSID("$NetBSD: nfsd.c,v 1.56 2008/11/21 07:48:35 pooka Exp $");
 
 /* Global defs */
 #ifdef DEBUG
-#define	syslog(e, s, args...)						\
-do {									\
-    fprintf(stderr,(s), ## args);					\
-    fprintf(stderr, "\n");						\
-} while (/*CONSTCOND*/0)
+#define	syslog(e, s)	fprintf(stderr,(s))
 int	debug = 1;
 #else
 int	debug = 0;
@@ -96,7 +92,7 @@ void	nonfs __P((int));
 void	usage __P((void));
 
 static void *
-worker(void *dummy)
+child(void *dummy)
 {
 	struct	nfsd_srvargs nsd;
 	int nfssvc_flag;
@@ -334,7 +330,7 @@ main(argc, argv)
 		pthread_t t;
 		int error;
 
-		error = pthread_create(&t, NULL, worker, NULL);
+		error = pthread_create(&t, NULL, child, NULL);
 		if (error) {
 			errno = error;
 			syslog(LOG_ERR, "pthread_create: %m");

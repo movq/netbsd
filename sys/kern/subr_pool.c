@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_pool.c,v 1.171 2008/11/11 16:13:03 ad Exp $	*/
+/*	$NetBSD: subr_pool.c,v 1.170.4.1 2008/11/17 18:46:11 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1999, 2000, 2002, 2007, 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_pool.c,v 1.171 2008/11/11 16:13:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_pool.c,v 1.170.4.1 2008/11/17 18:46:11 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pool.h"

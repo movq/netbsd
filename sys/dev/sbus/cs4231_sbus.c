@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4231_sbus.c,v 1.43 2008/12/16 22:35:35 christos Exp $	*/
+/*	$NetBSD: cs4231_sbus.c,v 1.42 2008/04/29 18:07:11 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2002, 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4231_sbus.c,v 1.43 2008/12/16 22:35:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4231_sbus.c,v 1.42 2008/04/29 18:07:11 ad Exp $");
 
 #include "audio.h"
 #if NAUDIO > 0
@@ -224,9 +224,10 @@ cs4231_sbus_regdump(char *label, struct cs4231_sbus_softc *sc)
 	printf("dmacnc: 0x%x\n",
 		bus_space_read_4(sc->sc_bh, sc->sc_bh, APC_DMA_CNC));
 
-	snprintb(bits, sizeof(bits), APC_BITS,
-	    bus_space_read_4(sc->sc_bh, sc->sc_bh, APC_DMA_CSR));
-	printf("apc_dmacsr=%s\n", bits);
+	printf("apc_dmacsr=%s\n",
+		bitmask_snprintf(
+			bus_space_read_4(sc->sc_bh, sc->sc_bh, APC_DMA_CSR),
+				APC_BITS, bits, sizeof(bits)));
 
 	ad1848_dump_regs(&sc->sc_cs4231.sc_ad1848);
 }
@@ -274,10 +275,8 @@ cs4231_sbus_trigger_output(void *addr, void *start, void *end, int blksize,
 		bus_space_read_4(sbsc->sc_bt, sbsc->sc_bh, APC_DMA_PNC)));
 
 	csr = bus_space_read_4(sbsc->sc_bt, sbsc->sc_bh, APC_DMA_CSR);
-#ifdef AUDIO_DEBUG
-	snprintb(bits, sizeof(bits), APC_BITS, csr);
-#endif
-	DPRINTF(("trigger_output: csr=%s\n", bits));
+	DPRINTF(("trigger_output: csr=%s\n",
+		 bitmask_snprintf(csr, APC_BITS, bits, sizeof(bits))));
 	if ((csr & PDMA_GO) == 0 || (csr & APC_PPAUSE) != 0) {
 		int cfg;
 
@@ -296,11 +295,8 @@ cs4231_sbus_trigger_output(void *addr, void *start, void *end, int blksize,
 		ad_write(&sc->sc_ad1848, SP_INTERFACE_CONFIG,
 			 (cfg | PLAYBACK_ENABLE));
 	} else {
-#ifdef AUDIO_DEBUG
-		snprintb(bits, sizeof(bits), APC_BITS, csr);
-#endif
-		DPRINTF(("trigger_output: already: csr=%s\n", bits));
-			 
+		DPRINTF(("trigger_output: already: csr=%s\n",
+			 bitmask_snprintf(csr, APC_BITS, bits, sizeof(bits))));
 	}
 
 	/* load next block if we can */
@@ -337,10 +333,8 @@ cs4231_sbus_halt_output(void *addr)
 	sc->sc_playback.t_active = 0;
 
 	csr = bus_space_read_4(sbsc->sc_bt, sbsc->sc_bh, APC_DMA_CSR);
-#ifdef AUDIO_DEBUG
-	snprintb(bits, sizeof(bits), APC_BITS, csr);
-#endif
-	DPRINTF(("halt_output: csr=%s\n", bits));
+	DPRINTF(("halt_output: csr=%s\n",
+		 bitmask_snprintf(csr, APC_BITS, bits, sizeof(bits))));
 
 	csr &= ~APC_INTR_MASK;	/* do not clear interrupts accidentally */
 	csr |= APC_PPAUSE;	/* pause playback (let current complete) */
@@ -351,10 +345,9 @@ cs4231_sbus_halt_output(void *addr)
 		do {
 			csr = bus_space_read_4(sbsc->sc_bt, sbsc->sc_bh,
 				APC_DMA_CSR);
-#ifdef AUDIO_DEBUG
-			snprintb(bits, sizeof(bits), APC_BITS, csr);
-#endif
-			DPRINTF(("halt_output: csr=%s\n", bits));
+			DPRINTF(("halt_output: csr=%s\n",
+				 bitmask_snprintf(csr, APC_BITS,
+						  bits, sizeof(bits))));
 		} while ((csr & APC_PM) == 0);
 
 	cfg = ad_read(&sc->sc_ad1848, SP_INTERFACE_CONFIG);
@@ -390,10 +383,8 @@ cs4231_sbus_trigger_input(void *addr, void *start, void *end, int blksize,
 		return ret;
 
 	csr = bus_space_read_4(sbsc->sc_bt, sbsc->sc_bh, APC_DMA_CSR);
-#ifdef AUDIO_DEBUG
-	snprintb(bits, sizeof(bits), APC_BITS, csr);
-#endif
-	DPRINTF(("trigger_input: csr=%s\n", bits));
+	DPRINTF(("trigger_input: csr=%s\n",
+		 bitmask_snprintf(csr, APC_BITS, bits, sizeof(bits))));
 	DPRINTF(("trigger_input: was: %x %d, %x %d\n",
 		bus_space_read_4(sbsc->sc_bt, sbsc->sc_bh, APC_DMA_CVA),
 		bus_space_read_4(sbsc->sc_bt, sbsc->sc_bh, APC_DMA_CC),
@@ -429,10 +420,8 @@ cs4231_sbus_trigger_input(void *addr, void *start, void *end, int blksize,
 		ad_write(&sc->sc_ad1848, SP_INTERFACE_CONFIG,
 			 (cfg | CAPTURE_ENABLE));
 	} else {
-#ifdef AUDIO_DEBUG
-		snprintb(bits, sizeof(bits), APC_BITS, csr);
-#endif
-		DPRINTF(("trigger_input: already: csr=%s\n", bits));
+		DPRINTF(("trigger_input: already: csr=%s\n",
+			 bitmask_snprintf(csr, APC_BITS, bits, sizeof(bits))));
 	}
 
 	/* supply next block if we can */
@@ -468,11 +457,8 @@ cs4231_sbus_halt_input(void *addr)
 	sc->sc_capture.t_active = 0;
 
 	csr = bus_space_read_4(sbsc->sc_bt, sbsc->sc_bh, APC_DMA_CSR);
-#ifdef AUDIO_DEBUG
-	snprintb(bits, sizeof(bits), APC_BITS, csr);
-#endif
-	DPRINTF(("halt_input: csr=%s\n", bits));
-		 
+	DPRINTF(("halt_input: csr=%s\n",
+		 bitmask_snprintf(csr, APC_BITS, bits, sizeof(bits))));
 
 	csr &= ~APC_INTR_MASK;	/* do not clear interrupts accidentally */
 	csr |= APC_CPAUSE;
@@ -483,12 +469,9 @@ cs4231_sbus_halt_input(void *addr)
 		do {
 			csr = bus_space_read_4(sbsc->sc_bt, sbsc->sc_bh,
 				APC_DMA_CSR);
-#ifdef AUDIO_DEBUG
-			snprintb(bits, sizeof(bits), APC_BITS, csr);
-#endif
-			DPRINTF(("halt_input: csr=%s\n", bits));
-
-					
+			DPRINTF(("halt_input: csr=%s\n",
+				 bitmask_snprintf(csr, APC_BITS,
+						  bits, sizeof(bits))));
 		} while ((csr & APC_CM) == 0);
 
 	cfg = ad_read(&sc->sc_ad1848, SP_INTERFACE_CONFIG);
@@ -529,19 +512,15 @@ cs4231_sbus_intr(void *arg)
 #endif
 
 	status = ADREAD(&sc->sc_ad1848, AD1848_STATUS);
-#ifdef AUDIO_DEBUG
-	snprintb(bits, sizeof(bits), AD_R2_BITS, status);
-#endif
 	DPRINTF(("%s: status: %s\n", device_xname(&sc->sc_ad1848.sc_dev),
-	    bits));
+		bitmask_snprintf(status, AD_R2_BITS, bits, sizeof(bits))));
 	if (status & INTERRUPT_STATUS) {
 #ifdef AUDIO_DEBUG
 		int reason;
 
 		reason = ad_read(&sc->sc_ad1848, CS_IRQ_STATUS);
-		snprintb(bits, sizeof(bits), CS_I24_BITS, reason);
 		DPRINTF(("%s: i24: %s\n", device_xname(&sc->sc_ad1848.sc_dev),
-		    bits));
+		  bitmask_snprintf(reason, CS_I24_BITS, bits, sizeof(bits))));
 #endif
 		/* clear ad1848 interrupt */
 		ADWRITE(&sc->sc_ad1848, AD1848_STATUS, 0);
@@ -591,9 +570,8 @@ cs4231_sbus_intr(void *arg)
 	/* got an interrupt we don't know how to handle */
 	if (!served) {
 #ifdef DIAGNOSTIC
-	        snprintb(bits, sizeof(bits), APC_BITS, csr);
-		printf("%s: unhandled csr=%s\n",
-		    device_xname(&sc->sc_ad1848.sc_dev), bits);
+		printf("%s: unhandled csr=%s\n", device_xname(&sc->sc_ad1848.sc_dev),
+		       bitmask_snprintf(csr, APC_BITS, bits, sizeof(bits)));
 #endif
 		/* evcnt? */
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.26 2008/11/19 06:24:04 matt Exp $	*/
+/*	$NetBSD: mem.c,v 1.21 2008/08/07 04:15:52 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -72,11 +72,11 @@
  * Memory special file
  */
 
-#include "opt_arm32_pmap.h"
 #include "opt_compat_netbsd.h"
+#include "opt_arm32_pmap.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.26 2008/11/19 06:24:04 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.21 2008/08/07 04:15:52 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -92,31 +92,25 @@ __KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.26 2008/11/19 06:24:04 matt Exp $");
 
 #include <uvm/uvm_extern.h>
 
-extern vaddr_t memhook;			/* in pmap.c (poor name!) */
-extern kmutex_t memlock;		/* in pmap.c */
-extern void *zeropage;			/* in pmap.c */
+extern vaddr_t memhook;            /* poor name! */
+void *zeropage;
+int physlock;
 
 dev_type_read(mmrw);
 dev_type_ioctl(mmioctl);
 dev_type_mmap(mmmmap);
 
 const struct cdevsw mem_cdevsw = {
-	.d_open = nullopen,
-	.d_close = nullclose, 
-	.d_read = mmrw,
-	.d_write = mmrw,
-	.d_ioctl = mmioctl,
-	.d_stop = nostop,
-	.d_tty = notty,
-	.d_poll = nopoll,
-	.d_mmap = mmmmap,
-	.d_kqfilter = nokqfilter,
-	.d_flag = D_MPSAFE
+	nullopen, nullclose, mmrw, mmrw, mmioctl,
+	nostop, notty, nopoll, mmmmap, nokqfilter,
 };
 
 /*ARGSUSED*/
 int
-mmrw(dev_t dev, struct uio *uio, int flags)
+mmrw(dev, uio, flags)
+	dev_t dev;
+	struct uio *uio;
+	int flags;
 {
 	vaddr_t o, v, m;
 	int c;
@@ -124,6 +118,17 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 	int error = 0;
 	vm_prot_t prot;
 
+	if (minor(dev) == DEV_MEM) {
+		/* lock against other uses of shared vmmap */
+		while (physlock > 0) {
+			physlock++;
+			error = tsleep((void *)&physlock, PZERO | PCATCH,
+			    "mmrw", 0);
+			if (error)
+				return (error);
+		}
+		physlock = 1;
+	}
 	while (uio->uio_resid > 0 && error == 0) {
 		iov = uio->uio_iov;
 		if (iov->iov_len == 0) {
@@ -151,7 +156,6 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 				m += o & arm_cache_prefer_mask;
 			}
 #endif
-			mutex_enter(&memlock);
 			pmap_enter(pmap_kernel(), m,
 			    trunc_page(v), prot, prot|PMAP_WIRED);
 			pmap_update(pmap_kernel());
@@ -160,7 +164,6 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 			error = uiomove((char *)m + o, c, uio);
 			pmap_remove(pmap_kernel(), m, m + PAGE_SIZE);
 			pmap_update(pmap_kernel());
-			mutex_exit(&memlock);
 			break;
 
 		case DEV_KMEM:
@@ -185,6 +188,11 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 				uio->uio_resid = 0;
 				return (0);
 			}
+			if (zeropage == NULL) {
+				zeropage = (void *)
+				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
+				memset(zeropage, 0, PAGE_SIZE);
+			}
 			c = min(iov->iov_len, PAGE_SIZE);
 			error = uiomove(zeropage, c, uio);
 			break;
@@ -193,11 +201,20 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 			return (ENXIO);
 		}
 	}
+	if (minor(dev) == DEV_MEM) {
+/*unlock:*/
+		if (physlock > 1)
+			wakeup((void *)&physlock);
+		physlock = 0;
+	}
 	return (error);
 }
 
 paddr_t
-mmmmap(dev_t dev, off_t off, int prot)
+mmmmap(dev, off, prot)
+	dev_t dev;
+	off_t off;
+	int prot;
 {
 	struct lwp *l = curlwp;	/* XXX */
 

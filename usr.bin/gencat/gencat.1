@@ -1,4 +1,4 @@
-.\" $NetBSD: gencat.1,v 1.12 2009/03/09 19:24:32 joerg Exp $
+.\" $NetBSD: gencat.1,v 1.10 2008/10/19 17:57:19 wiz Exp $
 .\"
 .\" Copyright (c) 2007 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -29,9 +29,9 @@
 .\"
 .\" Written by Kee Hinckley <nazgul@somewhere.com>
 .\"
-.Dd November 4, 2008
-.Dt GENCAT 1
+.Dd October 17, 2008
 .Os
+.Dt GENCAT 1
 .Sh NAME
 .Nm gencat
 .Nd generates a Native Language Support (NLS) message catalog file
@@ -132,16 +132,18 @@ the set identifier specified by the last
 .Li $set
 directive, and the message identifier
 .Ar m .
-If the
-.Ar message-text
-is empty and there is a space or tab character
-following the message identifier,
-an empty string is stored in the message catalog.
+.\" XXX Required by POSIX; the code must be fixed first.
+.\" If the
+.\" .Ar message-text
+.\" is empty and there is a space or tab character
+.\" following the message identifier,
+.\" an empty string is stored in the message catalog.
 If no
 .Ar message-text
 is provided,
-and if there is no space or tab character following the message
-identifier,
+.\" XXX Required by POSIX; the code must be fixed first.
+.\" and if there is no space or tab character following the message
+.\" identifier,
 the message with the message identifier
 .Ar m
 in the current set is removed from the catalog.

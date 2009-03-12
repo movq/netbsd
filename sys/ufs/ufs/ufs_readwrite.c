@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_readwrite.c,v 1.94 2009/02/22 20:28:07 ad Exp $	*/
+/*	$NetBSD: ufs_readwrite.c,v 1.92 2008/10/19 18:17:14 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.94 2009/02/22 20:28:07 ad Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.92 2008/10/19 18:17:14 hannken Exp $");
 
 #ifdef LFS_READWRITE
 #define	FS			struct lfs
@@ -405,14 +405,15 @@ WRITE(void *v)
 		 */
 
 		ubc_flags |= UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
-		error = ubc_uiomove(&vp->v_uobj, uio, bytelen,
-		    IO_ADV_DECODE(ioflag), ubc_flags);
+		error = ubc_uiomove(&vp->v_uobj, uio, bytelen, UVM_ADV_RANDOM,
+		    ubc_flags);
 
 		/*
 		 * update UVM's notion of the size now that we've
 		 * copied the data into the vnode's pages.
 		 *
 		 * we should update the size even when uiomove failed.
+		 * otherwise ffs_truncate can't flush soft update states.
 		 */
 
 		if (vp->v_size < newoff) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: pw_scan.c,v 1.22 2009/01/29 10:41:39 enami Exp $	*/
+/*	$NetBSD: pw_scan.c,v 1.20 2005/02/01 23:47:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994, 1995
@@ -36,7 +36,7 @@
 #else
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: pw_scan.c,v 1.22 2009/01/29 10:41:39 enami Exp $");
+__RCSID("$NetBSD: pw_scan.c,v 1.20 2005/02/01 23:47:38 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #if defined(_LIBC)
@@ -60,24 +60,23 @@ __RCSID("$NetBSD: pw_scan.c,v 1.22 2009/01/29 10:41:39 enami Exp $");
 #endif /* ! HAVE_NBTOOL_CONFIG_H */
 
 static int
-gettime(long long *res, const char *p, int *flags, int dowarn, int flag)
+gettime(long *res, const char *p, int *flags, int dowarn, int flag)
 {
-	long long l;
+	long l;
 	char *ep;
-	const char *vp;
 
 	if (*p == '\0') {
 		*flags |= flag;
 		*res = 0;
 		return 1;
 	}
-	l = strtoll(p, &ep, 0);
+	l = strtol(p, &ep, 0);
 	if (p == ep || *ep != '\0') {
-		vp = "Invalid number";
+		ep = __UNCONST("Invalid number");
 		goto done;
 	}
-	if (errno == ERANGE && (l == LLONG_MAX || l == LLONG_MIN)) {
-		vp = strerror(errno);
+	if (errno == ERANGE && (l == LONG_MAX || l == LONG_MIN)) {
+		ep = strerror(errno);
 		goto done;
 	}
 
@@ -85,7 +84,7 @@ gettime(long long *res, const char *p, int *flags, int dowarn, int flag)
 	return 1;
 done:
 	if (dowarn) {
-		warnx("%s `%s' for %s time", vp, p,
+		warnx("%s `%s' for %s time", ep, p,
 		    flag == _PASSWORD_NOEXP ? "expiration" : "change");
 	}
 	return 0;
@@ -135,7 +134,7 @@ pw_scan( char *bp, struct passwd *pw, int *flags)
 #endif
 {
 	unsigned long id;
-	long long ti;
+	long ti;
 	int root, inflags;
 	int dowarn;
 	const char *p, *sh;
@@ -201,13 +200,13 @@ pw_scan( char *bp, struct passwd *pw, int *flags)
 			goto fmt;
 		if (!gettime(&ti, p, flags, dowarn, _PASSWORD_NOCHG))
 			return 0;
-		pw->pw_change = ti;
+		pw->pw_change = (time_t)ti;
 
 		if (!(p = strsep(&bp, ":")))		/* expire */
 			goto fmt;
 		if (!gettime(&ti, p, flags, dowarn, _PASSWORD_NOEXP))
 			return 0;
-		pw->pw_expire = ti;
+		pw->pw_expire = (time_t)ti;
 	}
 
 	pw->pw_gecos = strsep(&bp, ":");		/* gecos */

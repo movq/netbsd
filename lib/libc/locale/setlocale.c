@@ -1,4 +1,4 @@
-/* $NetBSD: setlocale.c,v 1.57 2009/03/09 02:22:25 tnozaki Exp $ */
+/* $NetBSD: setlocale.c,v 1.54.4.2 2009/03/12 23:52:06 snj Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: setlocale.c,v 1.57 2009/03/09 02:22:25 tnozaki Exp $");
+__RCSID("$NetBSD: setlocale.c,v 1.54.4.2 2009/03/12 23:52:06 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/cdefs.h>

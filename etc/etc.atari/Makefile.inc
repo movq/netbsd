@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.19 2009/01/24 22:33:39 abs Exp $
+#	$NetBSD: Makefile.inc,v 1.17.6.2 2009/01/26 03:30:53 snj Exp $
 #
 #	etc.atari/Makefile.inc -- atari-specific etc Makefile targets
 #

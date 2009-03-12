@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_loopfilter.c,v 1.9 2008/12/23 20:49:19 christos Exp $	*/
+/*	$NetBSD: ntp_loopfilter.c,v 1.8.18.1 2009/01/16 03:01:13 snj Exp $	*/
 
 /*
  * ntp_loopfilter.c - implements the NTP loop filter algorithm

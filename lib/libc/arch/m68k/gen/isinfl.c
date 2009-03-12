@@ -1,4 +1,4 @@
-/*	$NetBSD: isinfl.c,v 1.6 2009/01/30 07:00:45 mhitch Exp $	*/
+/*	$NetBSD: isinfl.c,v 1.5.10.1 2009/02/02 20:45:51 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,7 +40,7 @@
 #if 0
 static char sccsid[] = "@(#)isinf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: isinfl.c,v 1.6 2009/01/30 07:00:45 mhitch Exp $");
+__RCSID("$NetBSD: isinfl.c,v 1.5.10.1 2009/02/02 20:45:51 snj Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

@@ -114,8 +114,7 @@ CONFIGURATION
                        the value of .CURDIR.  Used only if MAKEOBJDIRPREFIX is
                        not defined.  MAKEOBJDIR can be provided only in the
                        environment or via the -O flag of build.sh; it cannot
-                       usefully be set inside a Makefile, including mk.conf or
-                       ${MAKECONF}.
+                       usefully be set inside a Makefile.
 
      MAKEOBJDIRPREFIX  Top level directory of the object directory tree.  If
                        specified, must be an absolute path.  If this is
@@ -123,8 +122,7 @@ CONFIGURATION
                        .OBJDIR for the current directory.  The current direc-
                        tory may be read only.  MAKEOBJDIRPREFIX can be pro-
                        vided only in the environment or via the -M flag of
-                       build.sh; it cannot usefully be set inside a Makefile,
-                       including mk.conf or ${MAKECONF}.
+                       build.sh; it cannot usefully be set inside a Makefile.
 
    "make" variables
      Several variables control the behavior of NetBSD builds.  Unless other-
@@ -167,24 +165,12 @@ CONFIGURATION
      MAKEVERBOSE
                  Level of verbosity of status messages.  Supported values:
 
-                 0    No descriptive messages or commands executed by make(1)
-                      are shown.
+                 0    No descriptive messages are shown.
 
-                 1    Brief messages are shown describing what is being done,
-                      but the actual commands executed by make(1) are not dis-
-                      played.
+                 1    Descriptive messages are shown.
 
-                 2    Descriptive messages are shown as above (prefixed with a
-                      `#'), and ordinary commands performed by make(1) are
-                      displayed.
-
-                 3    In addition to the above, all commands performed by
-                      make(1) are displayed, even if they would ordinarily
-                      have been hidden through use of the ``@'' prefix in the
-                      relevant makefile.
-
-                 4    In addition to the above, commands executed by make(1)
-                      are traced through use of the sh(1) ``-x'' flag.
+                 2    Descriptive messages (prefixed with a `#') and command
+                      output is not suppressed.
 
                  Default: 2
 
@@ -292,6 +278,12 @@ CONFIGURATION
                  Can be set to ``yes'' or ``no''.  Indicates whether program
                  binaries and shared libraries should be built to include RCS
                  IDs for use with ident(1).
+
+                 Default: ``no''
+
+     MKSUBPIXEL  Can be set to ``yes'' or ``no''.  For X builds, decides if
+                 subpixel rendering code in FreeType is turned on.  Turned off
+                 by default because of patent issues.
 
                  Default: ``no''
 
@@ -900,4 +892,4 @@ HISTORY
      The build.sh based build scheme was introduced for NetBSD 1.6 as
      USE_NEW_TOOLCHAIN, and re-worked to TOOLCHAIN_MISSING after that.
 
-NetBSD                        September 10, 2008                        NetBSD
+NetBSD                            May 1, 2009                           NetBSD

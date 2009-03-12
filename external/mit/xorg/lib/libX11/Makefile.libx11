@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.libx11,v 1.6 2009/03/10 16:36:07 mrg Exp $
+#	$NetBSD: Makefile.libx11,v 1.5.2.1 2009/09/17 04:24:31 snj Exp $
 
 LIB=	X11
 .PATH:	${X11SRCDIR.${LIB}}/src

@@ -1,4 +1,4 @@
-/*	$NetBSD: zapm.c,v 1.5 2009/03/11 09:04:31 nonaka Exp $	*/
+/*	$NetBSD: zapm.c,v 1.3 2007/07/29 14:31:24 nonaka Exp $	*/
 /*	$OpenBSD: zaurus_apm.c,v 1.13 2006/12/12 23:14:28 dim Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zapm.c,v 1.5 2009/03/11 09:04:31 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zapm.c,v 1.3 2007/07/29 14:31:24 nonaka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: zapm.c,v 1.5 2009/03/11 09:04:31 nonaka Exp $");
 #endif
 
 struct zapm_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 	void *sc_apmdev;
 
 	struct callout sc_cyclic_poll;
@@ -76,10 +76,10 @@ struct zapm_softc {
 	int minutes_left;
 };
 
-static int	zapm_match(device_t, cfdata_t, void *);
-static void	zapm_attach(device_t, device_t, void *);
+static int	zapm_match(struct device *, struct cfdata *, void *);
+static void	zapm_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(zapm, sizeof(struct zapm_softc),
+CFATTACH_DECL(zapm, sizeof(struct zapm_softc),
     zapm_match, zapm_attach, NULL, NULL);
 
 static int	zapm_hook(void *, int, long, void *);
@@ -118,7 +118,7 @@ static void	zapm_poll1(void *, int);
 #define	CYCLIC_TIME	(60 * hz)	/* 60s */
 
 static int
-zapm_match(device_t parent, cfdata_t cf, void *aux)
+zapm_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	if (!ZAURUS_ISC3000)
@@ -127,15 +127,12 @@ zapm_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 static void
-zapm_attach(device_t parent, device_t self, void *aux)
+zapm_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct zapm_softc *sc = device_private(self);
 	struct apmdev_attach_args aaa;
 
-	sc->sc_dev = self;
-
 	aprint_normal(": pseudo power management module\n");
-	aprint_naive("\n");
 
 	/* machine-depent part */
 	callout_init(&sc->sc_cyclic_poll, 0);
@@ -500,44 +497,10 @@ struct battery_info {
 };
 
 static const struct battery_threshold zaurus_battery_life_c3000[] = {
-	{ 100,	212,	CONFIG_HOOK_BATT_HIGH		},
-	{  98,	212,	CONFIG_HOOK_BATT_HIGH		},
-	{  95,	211,	CONFIG_HOOK_BATT_HIGH		},
-	{  93,	210,	CONFIG_HOOK_BATT_HIGH		},
-	{  90,	209,	CONFIG_HOOK_BATT_HIGH		},
-	{  88,	208,	CONFIG_HOOK_BATT_HIGH		},
-	{  85,	207,	CONFIG_HOOK_BATT_HIGH		},
-	{  83,	206,	CONFIG_HOOK_BATT_HIGH		},
-	{  80,	205,	CONFIG_HOOK_BATT_HIGH		},
-	{  78,	204,	CONFIG_HOOK_BATT_HIGH		},
-	{  75,	203,	CONFIG_HOOK_BATT_HIGH		},
-	{  73,	202,	CONFIG_HOOK_BATT_HIGH		},
-	{  70,	201,	CONFIG_HOOK_BATT_HIGH		},
-	{  68,	200,	CONFIG_HOOK_BATT_HIGH		},
-	{  65,	199,	CONFIG_HOOK_BATT_HIGH		},
-	{  63,	198,	CONFIG_HOOK_BATT_HIGH		},
-	{  60,	197,	CONFIG_HOOK_BATT_HIGH		},
-	{  58,	196,	CONFIG_HOOK_BATT_HIGH		},
-	{  55,	195,	CONFIG_HOOK_BATT_HIGH		},
-	{  53,	194,	CONFIG_HOOK_BATT_HIGH		},
-	{  50,	193,	CONFIG_HOOK_BATT_HIGH		},
-	{  48,	192,	CONFIG_HOOK_BATT_HIGH		},
-	{  45,	192,	CONFIG_HOOK_BATT_HIGH		},
-	{  43,	191,	CONFIG_HOOK_BATT_HIGH		},
-	{  40,	191,	CONFIG_HOOK_BATT_HIGH		},
-	{  38,	190,	CONFIG_HOOK_BATT_HIGH		},
-	{  35,	190,	CONFIG_HOOK_BATT_HIGH		},
-	{  33,	189,	CONFIG_HOOK_BATT_HIGH		},
-	{  30,	188,	CONFIG_HOOK_BATT_HIGH		},
-	{  28,	187,	CONFIG_HOOK_BATT_LOW		},
-	{  25,	186,	CONFIG_HOOK_BATT_LOW		},
-	{  23,	185,	CONFIG_HOOK_BATT_LOW		},
-	{  20,	184,	CONFIG_HOOK_BATT_LOW		},
-	{  18,	183,	CONFIG_HOOK_BATT_LOW		},
-	{  15,	182,	CONFIG_HOOK_BATT_LOW		},
-	{  13,	181,	CONFIG_HOOK_BATT_LOW		},
-	{  10,	180,	CONFIG_HOOK_BATT_LOW		},
-	{   8,	179,	CONFIG_HOOK_BATT_LOW		},
+	{ 100,	194,	CONFIG_HOOK_BATT_HIGH		},
+	{  75,	188,	CONFIG_HOOK_BATT_HIGH		},
+	{  50,	184,	CONFIG_HOOK_BATT_HIGH		},
+	{  25,	180,	CONFIG_HOOK_BATT_LOW		},
 	{   5,	178,	CONFIG_HOOK_BATT_LOW		},
 	{   0,	  0,	CONFIG_HOOK_BATT_CRITICAL	}
 };
@@ -562,7 +525,7 @@ static int	zapm_get_battery_compartment_state(struct zapm_softc *);
 static int	zapm_get_charge_complete_state(struct zapm_softc *);
 static void	zapm_set_charging(struct zapm_softc *, int);
 static int	zapm_charge_complete(struct zapm_softc *);
-static int	max1111_adc_value_avg(int chan, int pause);
+static int	max1111_adc_value_avg(int, int);
 static int	zapm_get_battery_volt(void);
 static int	zapm_battery_state(int volt);
 static int	zapm_battery_life(int volt);
@@ -677,9 +640,8 @@ static int
 max1111_adc_value_avg(int chan, int pause)
 {
 	int val[5];
-	int sum;
-	int minv, maxv, v;
-	int i;
+	int i, j, k, x;
+	int sum = 0;
 
 	DPRINTF(("max1111_adc_value_avg: chan = %d, pause = %d\n",
 	    chan, pause));
@@ -691,30 +653,27 @@ max1111_adc_value_avg(int chan, int pause)
 		DPRINTF(("max1111_adc_value_avg: chan[%d] = %d\n", i, val[i]));
 	}
 
-	/* get max value */
-	v = val[0];
-	minv = 0;
+	x = val[0];
+	j = 0;
 	for (i = 1; i < 5; i++) {
-		if (v < val[i]) {
-			v = val[i];
-			minv = i;
+		if (x < val[i]) {
+			x = val[i];
+			j = i;
 		}
 	}
 
-	/* get min value */
-	v = val[4];
-	maxv = 4;
+	x = val[4];
+	k = 4;
 	for (i = 3; i >= 0; i--) {
-		if (v > val[i]) {
-			v = val[i];
-			maxv = i;
+		if (x > val[i]) {
+			x = val[i];
+			k = i;
 		}
 	}
 
-	DPRINTF(("max1111_adc_value_avg: minv = %d, maxv = %d\n", minv, maxv));
-	sum = 0;
+	DPRINTF(("max1111_adc_value_avg: j = %d, k = %d\n", j, k));
 	for (i = 0; i < 5; i++) {
-		if (i == minv || i == maxv)
+		if (i == j || i == k)
 			continue;
 		sum += val[i];
 	}

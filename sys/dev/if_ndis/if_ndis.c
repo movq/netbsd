@@ -35,7 +35,7 @@
 __FBSDID("$FreeBSD: src/sys/dev/if_ndis/if_ndis.c,v 1.69.2.6 2005/03/31 04:24:36 wpaul Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.20 2008/11/12 12:36:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.18.14.1 2009/08/14 21:06:04 snj Exp $");
 #endif
 
 #ifdef __FreeBSD__
@@ -59,7 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ndis.c,v 1.20 2008/11/12 12:36:11 ad Exp $");
 #ifdef __FreeBSD__
 #include <sys/module.h>
 #else /* __NetBSD__ */
-#include <sys/module.h>
+#include <sys/lkm.h>
 #endif
 
 #include <sys/proc.h>
@@ -332,7 +332,7 @@ ndis_setmulti(sc)
 		error = ndis_set_info(sc, OID_GEN_CURRENT_PACKET_FILTER,
 		    &sc->ndis_filter, &len);
         if (error) {
-		aprint_error_dev(sc->ndif_dev, "set filter failed: %d\n", 
+		aprint_error_dev(sc->ndis_dev, "set filter failed: %d\n", 
 			     error);
         }
 		return;
@@ -693,7 +693,7 @@ ndis_attach(dev)
 	}
 
 	/* Tell the user what version of the API the driver is using. */
-	aprint_normal_dev(&sc->ndis_dev, "NDIS API version: %d.%d\n",
+	aprint_normal_dev(sc->ndis_dev, "NDIS API version: %d.%d\n",
 		      sc->ndis_chars->nmc_version_major,
 		      sc->ndis_chars->nmc_version_minor);
 
@@ -2522,7 +2522,10 @@ ndis_getstate_80211(sc)
 }
 
 static int
-ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
+ndis_ioctl(ifp, command, data)
+	struct ifnet		*ifp;
+	u_long			command;
+	void *			data;
 {
 	struct ndis_softc	*sc = ifp->if_softc;
 	struct ifreq		*ifr = (struct ifreq *) data;
@@ -2538,8 +2541,6 @@ ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
 
 	switch(command) {
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, command, data)) != 0)
-			break;
 		if (ifp->if_flags & IFF_UP) {
 			if (ifp->if_flags & IFF_RUNNING &&
 			    ifp->if_flags & IFF_PROMISC &&
@@ -2560,7 +2561,11 @@ ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
 				    OID_GEN_CURRENT_PACKET_FILTER,
 				    &sc->ndis_filter, &i);
 			} else
+#ifdef __FreeBSD__			
+				ndis_init(sc);
+#else /* __NetBSD__ */
 				ndis_init(ifp);
+#endif
 		} else {
 			if (ifp->if_flags & IFF_RUNNING)
 				ndis_stop(sc);
@@ -2594,7 +2599,7 @@ ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
 			error = ifmedia_ioctl(ifp, ifr, &sc->ifmedia, command);
 		break;
 	case SIOCSIFCAP:
-		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
+		if ((error = ether_ioctl(ifp, command, data)) == ENETRESET) {
 			ndis_set_offload(sc);
 			error = 0;
 		}
@@ -2613,7 +2618,11 @@ ndis_ioctl(struct ifnet *ifp, u_long command, void *data)
 	default:
 		sc->ndis_skip = 1;
 		if (sc->ndis_80211) {
+#ifdef __FreeBSD__		
+			error = ieee80211_ioctl(ifp, command, data);
+#else /* __NetBSD__ */
 			error = ieee80211_ioctl(&sc->ic, command, data);
+#endif
 
 			if (error == ENETRESET) {
 				ndis_setstate_80211(sc);

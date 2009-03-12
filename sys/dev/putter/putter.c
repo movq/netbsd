@@ -1,4 +1,4 @@
-/*	$NetBSD: putter.c,v 1.19 2009/01/20 18:20:48 drochner Exp $	*/
+/*	$NetBSD: putter.c,v 1.16.4.1 2009/04/04 23:36:27 snj Exp $	*/
 
 /*
  * Copyright (c) 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.19 2009/01/20 18:20:48 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: putter.c,v 1.16.4.1 2009/04/04 23:36:27 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -176,14 +176,15 @@ static int putter_fop_kqfilter(file_t *, struct knote *);
 
 
 static const struct fileops putter_fileops = {
-	putter_fop_read,
-	putter_fop_write,
-	putter_fop_ioctl,
-	fnullop_fcntl,
-	putter_fop_poll,
-	fbadop_stat,
-	putter_fop_close,
-	putter_fop_kqfilter
+	.fo_read = putter_fop_read,
+	.fo_write = putter_fop_write,
+	.fo_ioctl = putter_fop_ioctl,
+	.fo_fcntl = fnullop_fcntl,
+	.fo_poll = putter_fop_poll,
+	.fo_stat = fbadop_stat,
+	.fo_close = putter_fop_close,
+	.fo_kqfilter = putter_fop_kqfilter,
+	.fo_drain = fnullop_drain,
 };
 
 static int
@@ -619,7 +620,7 @@ static int
 putter_modcmd(modcmd_t cmd, void *arg)
 {
 #ifdef _MODULE
-	devmajor_t bmajor = NODEVMAJOR, cmajor = NODEVMAJOR;
+	int bmajor = -1, cmajor = -1;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:

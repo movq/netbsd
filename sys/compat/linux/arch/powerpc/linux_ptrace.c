@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ptrace.c,v 1.21 2008/12/17 20:51:33 cegger Exp $ */
+/*	$NetBSD: linux_ptrace.c,v 1.19 2008/04/28 20:23:43 martin Exp $ */
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_ptrace.c,v 1.21 2008/12/17 20:51:33 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_ptrace.c,v 1.19 2008/04/28 20:23:43 martin Exp $");
+
+#include "opt_ptrace.h"
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -167,8 +169,9 @@ linux_sys_ptrace_arch(struct lwp *l, const struct linux_sys_ptrace_args *uap, re
 
 	switch (request) {
 	case  LINUX_PTRACE_GETREGS:
-		regs = malloc(sizeof(struct reg), M_TEMP, M_WAITOK);
-		linux_regs = malloc(sizeof(*linux_regs), M_TEMP, M_WAITOK);
+		MALLOC(regs, struct reg*, sizeof(struct reg), M_TEMP, M_WAITOK);
+		MALLOC(linux_regs, struct linux_pt_regs*, sizeof(*linux_regs),
+		    M_TEMP, M_WAITOK);
 
 		error = process_read_regs(lt, regs);
 		if (error != 0)
@@ -195,8 +198,9 @@ linux_sys_ptrace_arch(struct lwp *l, const struct linux_sys_ptrace_args *uap, re
 		goto out;
 
 	case  LINUX_PTRACE_SETREGS:
-		regs = malloc(sizeof(struct reg), M_TEMP, M_WAITOK);
-		linux_regs = malloc(sizeof(*linux_regs), M_TEMP, M_WAITOK);
+		MALLOC(regs, struct reg*, sizeof(struct reg), M_TEMP, M_WAITOK);
+		MALLOC(linux_regs, struct linux_pt_regs*, sizeof(*linux_regs),
+		    M_TEMP, M_WAITOK);
 
 		error = copyin((void *)SCARG(uap, data), linux_regs,
 			 sizeof(struct linux_pt_regs));
@@ -215,8 +219,10 @@ linux_sys_ptrace_arch(struct lwp *l, const struct linux_sys_ptrace_args *uap, re
 		goto out;
 
 	case  LINUX_PTRACE_GETFPREGS:
-		fpregs = malloc(sizeof(struct fpreg), M_TEMP, M_WAITOK);
-		linux_fpreg = malloc(32*sizeof(double), M_TEMP, M_WAITOK);
+		MALLOC(fpregs, struct fpreg *, sizeof(struct fpreg),
+		    M_TEMP, M_WAITOK);
+		MALLOC(linux_fpreg, double *,
+		    32*sizeof(double), M_TEMP, M_WAITOK);
 
 		error = process_read_fpregs(lt, fpregs);
 		if (error != 0)
@@ -233,8 +239,10 @@ linux_sys_ptrace_arch(struct lwp *l, const struct linux_sys_ptrace_args *uap, re
 		goto out;
 
 	case  LINUX_PTRACE_SETFPREGS:
-		fpregs = malloc(sizeof(struct fpreg), M_TEMP, M_WAITOK);
-		linux_fpreg = malloc(32*sizeof(double), M_TEMP, M_WAITOK);
+		MALLOC(fpregs, struct fpreg *, sizeof(struct fpreg),
+		    M_TEMP, M_WAITOK);
+		MALLOC(linux_fpreg, double *,
+		    32*sizeof(double), M_TEMP, M_WAITOK);
 		error = copyin((void *)SCARG(uap, data), linux_fpreg,
 			 32*sizeof(double));
 		if (error != 0)
@@ -249,7 +257,7 @@ linux_sys_ptrace_arch(struct lwp *l, const struct linux_sys_ptrace_args *uap, re
 
 	case  LINUX_PTRACE_PEEKUSR:
 		addr = SCARG(uap, addr);
-		regs = malloc(sizeof(struct reg), M_TEMP, M_WAITOK);
+		MALLOC(regs, struct reg*, sizeof(struct reg), M_TEMP, M_WAITOK);
 		error = process_read_regs(lt, regs);
 		if (error)
 			goto out;
@@ -312,7 +320,7 @@ linux_sys_ptrace_arch(struct lwp *l, const struct linux_sys_ptrace_args *uap, re
 
 	case  LINUX_PTRACE_POKEUSR: /* XXX Not tested */
 		addr = SCARG(uap, addr);
-		regs = malloc(sizeof(struct reg), M_TEMP, M_WAITOK);
+		MALLOC(regs, struct reg*, sizeof(struct reg), M_TEMP, M_WAITOK);
 		error = process_read_regs(lt, regs);
 		if (error)
 			goto out;
@@ -374,12 +382,12 @@ linux_sys_ptrace_arch(struct lwp *l, const struct linux_sys_ptrace_args *uap, re
 
 	 out:
 	if (regs)
-		free(regs, M_TEMP);
+		FREE(regs, M_TEMP);
 	if (fpregs)
-		free(fpregs, M_TEMP);
+		FREE(fpregs, M_TEMP);
 	if (linux_regs)
-		free(linux_regs, M_TEMP);
+		FREE(linux_regs, M_TEMP);
 	if (linux_fpreg)
-		free(linux_fpreg, M_TEMP);
+		FREE(linux_fpreg, M_TEMP);
 	return (error);
 }

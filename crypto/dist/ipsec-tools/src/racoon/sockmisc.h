@@ -1,4 +1,4 @@
-/*	$NetBSD: sockmisc.h,v 1.9 2009/02/11 15:18:59 vanhu Exp $	*/
+/*	$NetBSD: sockmisc.h,v 1.8.8.1 2009/02/08 18:42:19 snj Exp $	*/
 
 /* Id: sockmisc.h,v 1.9 2005/10/05 16:55:41 manubsd Exp */
 
@@ -34,15 +34,6 @@
 #ifndef _SOCKMISC_H
 #define _SOCKMISC_H
 
-#ifndef IP_IPSEC_POLICY
-#define IP_IPSEC_POLICY 16	/* XXX: from linux/in.h */
-#endif
-
-#ifndef IPV6_IPSEC_POLICY
-#define IPV6_IPSEC_POLICY 34	/* XXX: from linux/???.h per
-				   "Tom Lendacky" <toml@us.ibm.com> */
-#endif
-
 struct netaddr {
 	union {
 		struct sockaddr sa;
@@ -57,7 +48,6 @@ extern const int niflags;
 extern int cmpsaddrwop __P((const struct sockaddr *, const struct sockaddr *));
 extern int cmpsaddrwild __P((const struct sockaddr *, const struct sockaddr *));
 extern int cmpsaddrstrict __P((const struct sockaddr *, const struct sockaddr *));
-extern int cmpsaddrmagic __P((const struct sockaddr *, const struct sockaddr *));
 
 #ifdef ENABLE_NATT 
 #define CMPSADDR(saddr1, saddr2) cmpsaddrstrict((saddr1), (saddr2))

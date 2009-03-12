@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_write.c,v 1.10 2009/01/10 22:06:29 bjh21 Exp $	*/
+/*	$NetBSD: cd9660_write.c,v 1.9.4.1 2010/01/02 06:45:03 snj Exp $	*/
 
 /*
  * Copyright (c) 2005 Daniel Watt, Walter Deignan, Ryan Gabrys, Alan
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: cd9660_write.c,v 1.10 2009/01/10 22:06:29 bjh21 Exp $");
+__RCSID("$NetBSD: cd9660_write.c,v 1.9.4.1 2010/01/02 06:45:03 snj Exp $");
 #endif  /* !__lint */
 
 static int cd9660_write_volume_descriptors(FILE *);

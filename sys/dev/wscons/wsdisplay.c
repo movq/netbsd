@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay.c,v 1.126 2009/01/22 20:40:20 drochner Exp $ */
+/* $NetBSD: wsdisplay.c,v 1.122.6.2 2009/02/06 02:05:18 snj Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -31,10 +31,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay.c,v 1.126 2009/01/22 20:40:20 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay.c,v 1.122.6.2 2009/02/06 02:05:18 snj Exp $");
 
 #include "opt_wsdisplay_compat.h"
 #include "opt_wsmsgattrs.h"
+#include "opt_compat_netbsd.h"
 #include "wskbd.h"
 #include "wsmux.h"
 #include "wsdisplay.h"
@@ -56,9 +57,9 @@ __KERNEL_RCSID(0, "$NetBSD: wsdisplay.c,v 1.126 2009/01/22 20:40:20 drochner Exp
 #include <sys/vnode.h>
 #include <sys/kauth.h>
 
-#include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wseventvar.h>
 #include <dev/wscons/wsmuxvar.h>
+#include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsksymvar.h>
 #include <dev/wscons/wsksymdef.h>
@@ -1312,8 +1313,6 @@ wsdisplay_internal_ioctl(struct wsdisplay_softc *sc, struct wsscreen *scr,
 	case WSDISPLAYIO_SMSGATTRS:
 		return (ENODEV);
 #endif
-	case WSDISPLAYIO_SETVERSION:
-		return wsevent_setversion(&sc->evar, *(int *)data);
 	}
 
 	/* check ioctls for display */

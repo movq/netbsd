@@ -1,4 +1,4 @@
-/*	$NetBSD: file.h,v 1.18 2009/03/06 19:42:54 apb Exp $	*/
+/*	$NetBSD: file.h,v 1.17.4.1 2009/03/27 16:28:41 msaitoh Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.

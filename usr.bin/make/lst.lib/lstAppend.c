@@ -1,4 +1,4 @@
-/*	$NetBSD: lstAppend.c,v 1.14 2009/01/23 21:26:30 dsl Exp $	*/
+/*	$NetBSD: lstAppend.c,v 1.12 2006/10/27 21:37:25 dsl Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -33,14 +33,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: lstAppend.c,v 1.14 2009/01/23 21:26:30 dsl Exp $";
+static char rcsid[] = "$NetBSD: lstAppend.c,v 1.12 2006/10/27 21:37:25 dsl Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)lstAppend.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lstAppend.c,v 1.14 2009/01/23 21:26:30 dsl Exp $");
+__RCSID("$NetBSD: lstAppend.c,v 1.12 2006/10/27 21:37:25 dsl Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -69,18 +69,18 @@ __RCSID("$NetBSD: lstAppend.c,v 1.14 2009/01/23 21:26:30 dsl Exp $");
  *	A new ListNode is created and linked in to the List. The lastPtr
  *	field of the List will be altered if ln is the last node in the
  *	list. lastPtr and firstPtr will alter if the list was empty and
- *	ln was NULL.
+ *	ln was NILLNODE.
  *
  *-----------------------------------------------------------------------
  */
 ReturnStatus
-Lst_InsertAfter(Lst l, LstNode ln, void *d)
+Lst_InsertAfter(Lst l, LstNode ln, ClientData d)
 {
     List 	list;
     ListNode	lNode;
     ListNode	nLNode;
 
-    if (LstValid (l) && (ln == NULL && LstIsEmpty (l))) {
+    if (LstValid (l) && (ln == NILLNODE && LstIsEmpty (l))) {
 	goto ok;
     }
 
@@ -96,11 +96,11 @@ Lst_InsertAfter(Lst l, LstNode ln, void *d)
     nLNode->datum = d;
     nLNode->useCount = nLNode->flags = 0;
 
-    if (lNode == NULL) {
+    if (lNode == NilListNode) {
 	if (list->isCirc) {
 	    nLNode->nextPtr = nLNode->prevPtr = nLNode;
 	} else {
-	    nLNode->nextPtr = nLNode->prevPtr = NULL;
+	    nLNode->nextPtr = nLNode->prevPtr = NilListNode;
 	}
 	list->firstPtr = list->lastPtr = nLNode;
     } else {
@@ -108,7 +108,7 @@ Lst_InsertAfter(Lst l, LstNode ln, void *d)
 	nLNode->nextPtr = lNode->nextPtr;
 
 	lNode->nextPtr = nLNode;
-	if (nLNode->nextPtr != NULL) {
+	if (nLNode->nextPtr != NilListNode) {
 	    nLNode->nextPtr->prevPtr = nLNode;
 	}
 

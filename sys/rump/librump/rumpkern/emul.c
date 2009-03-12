@@ -1,4 +1,4 @@
-/*	$NetBSD: emul.c,v 1.79 2009/02/27 15:15:19 pooka Exp $	*/
+/*	$NetBSD: emul.c,v 1.53 2008/10/14 10:42:27 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
@@ -27,8 +27,7 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.79 2009/02/27 15:15:19 pooka Exp $");
+#define malloc(a,b,c) __wrap_malloc(a,b,c)
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -48,13 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.79 2009/02/27 15:15:19 pooka Exp $");
 #include <sys/cpu.h>
 #include <sys/kmem.h>
 #include <sys/poll.h>
-#include <sys/timetc.h>
 #include <sys/tprintf.h>
-#include <sys/module.h>
-#include <sys/tty.h>
-#include <sys/reboot.h>
-
-#include <dev/cons.h>
+#include <sys/timetc.h>
 
 #include <machine/stdarg.h>
 
@@ -78,11 +72,6 @@ const int schedppq = 1;
 int hardclock_ticks;
 bool mp_online = false;
 struct vm_map *mb_map;
-struct timeval boottime;
-struct emul emul_netbsd;
-int cold = 1;
-int boothowto;
-struct tty *constty;
 
 char hostname[MAXHOSTNAMELEN];
 size_t hostnamelen;
@@ -102,23 +91,89 @@ int domainnamelen;
 
 const struct filterops seltrue_filtops;
 
-#define DEVSW_SIZE 255
-const struct bdevsw *bdevsw0[DEVSW_SIZE]; /* XXX storage size */
-const struct bdevsw **bdevsw = bdevsw0;
-const int sys_cdevsws = DEVSW_SIZE;
-int max_cdevsws = DEVSW_SIZE;
+void
+panic(const char *fmt, ...)
+{
+	va_list ap;
 
-const struct cdevsw *cdevsw0[DEVSW_SIZE]; /* XXX storage size */
-const struct cdevsw **cdevsw = cdevsw0;
-const int sys_bdevsws = DEVSW_SIZE;
-int max_bdevsws = DEVSW_SIZE;
+	va_start(ap, fmt);
+	printf("panic: ");
+	vprintf(fmt, ap);
+	va_end(ap);
+	printf("\n");
+	abort();
+}
 
-struct devsw_conv devsw_conv0;
-struct devsw_conv *devsw_conv = &devsw_conv0;
-int max_devsw_convs = 0;
-int mem_no = 2;
+void
+log(int level, const char *fmt, ...)
+{
+	va_list ap;
 
-kmutex_t tty_lock;
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+}
+
+void
+vlog(int level, const char *fmt, va_list ap)
+{
+
+	vprintf(fmt, ap);
+}
+
+void
+uprintf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+}
+
+/* relegate this to regular printf */
+tpr_t
+tprintf_open(struct proc *p)
+{
+
+	return (tpr_t)0x111;
+}
+
+void
+tprintf(tpr_t tpr, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+}
+
+void
+tprintf_close(tpr_t tpr)
+{
+
+}
+
+void
+printf_nolog(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_normal(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vprintf(fmt, ap);
+	va_end(ap);
+}
 
 int
 copyin(const void *uaddr, void *kaddr, size_t len)
@@ -181,9 +236,18 @@ uiomove(void *buf, size_t n, struct uio *uio)
 	struct iovec *iov;
 	uint8_t *b = buf;
 	size_t cnt;
+	int rv;
 
 	if (uio->uio_vmspace != UIO_VMSPACE_SYS)
 		panic("%s: vmspace != UIO_VMSPACE_SYS", __func__);
+
+	/*
+	 * See if rump ubc code claims the offset.  This is of course
+	 * a blatant violation of abstraction levels, but let's keep
+	 * me simple & stupid for now.
+	 */
+	if (rump_ubc_magic_uiomove(buf, n, uio, &rv, NULL))
+		return rv;
 
 	while (n && uio->uio_resid) {
 		iov = uio->uio_iov;
@@ -219,6 +283,13 @@ uio_setup_sysspace(struct uio *uio)
 	uio->uio_vmspace = UIO_VMSPACE_SYS;
 }
 
+const struct bdevsw *
+bdevsw_lookup(dev_t dev)
+{
+
+	return (const struct bdevsw *)1;
+}
+
 devclass_t
 device_class(device_t dev)
 {
@@ -232,13 +303,9 @@ device_class(device_t dev)
 void
 getmicrouptime(struct timeval *tvp)
 {
-	uint64_t sec, nsec;
 	int error;
 
-	/* XXX: this is wrong, does not report *uptime* */
-	rumpuser_gettime(&sec, &nsec, &error);
-	tvp->tv_sec = sec;
-	tvp->tv_usec = nsec / 1000;
+	rumpuser_gettimeofday(tvp, &error);
 }
 
 void
@@ -256,7 +323,7 @@ malloc_type_detach(struct malloc_type *type)
 }
 
 void *
-kern_malloc(unsigned long size, struct malloc_type *type, int flags)
+__wrap_malloc(unsigned long size, struct malloc_type *type, int flags)
 {
 	void *rv;
 
@@ -267,40 +334,14 @@ kern_malloc(unsigned long size, struct malloc_type *type, int flags)
 	return rv;
 }
 
-void *
-kern_realloc(void *ptr, unsigned long size, struct malloc_type *type, int flags)
-{
-
-	return rumpuser_malloc(size, (flags & (M_CANFAIL | M_NOWAIT)) != 0);
-}
-
-void
-kern_free(void *ptr, struct malloc_type *type)
-{
-
-	rumpuser_free(ptr);
-}
-
-static void
-gettime(struct timespec *ts)
-{
-	uint64_t sec, nsec;
-	int error;
-
-	rumpuser_gettime(&sec, &nsec, &error);
-	ts->tv_sec = sec;
-	ts->tv_nsec = nsec;
-}
-
 void
 nanotime(struct timespec *ts)
 {
+	struct timeval tv;
+	int error;
 
-	if (rump_threads) {
-		rump_gettime(ts);
-	} else {
-		gettime(ts);
-	}
+	rumpuser_gettimeofday(&tv, &error);
+	TIMEVAL_TO_TIMESPEC(&tv, ts);
 }
 
 /* hooray for mick, so what if I do */
@@ -314,22 +355,31 @@ getnanotime(struct timespec *ts)
 void
 microtime(struct timeval *tv)
 {
-	struct timespec ts;
+	int error;
 
-	if (rump_threads) {
-		rump_gettime(&ts);
-		TIMESPEC_TO_TIMEVAL(tv, &ts);
-	} else {
-		gettime(&ts);
-		TIMESPEC_TO_TIMEVAL(tv, &ts);
-	}
+	rumpuser_gettimeofday(tv, &error);
 }
 
 void
 getmicrotime(struct timeval *tv)
 {
+	int error;
 
-	microtime(tv);
+	rumpuser_gettimeofday(tv, &error);
+}
+
+void
+bdev_strategy(struct buf *bp)
+{
+
+	panic("%s: not supported", __func__);
+}
+
+int
+bdev_type(dev_t dev)
+{
+
+	return D_DISK;
 }
 
 struct kthdesc {
@@ -350,8 +400,6 @@ threadbouncer(void *arg)
 	rumpuser_set_curlwp(k->mylwp);
 	kmem_free(k, sizeof(struct kthdesc));
 
-	if ((curlwp->l_pflag & LP_MPSAFE) == 0)
-		KERNEL_LOCK(1, NULL);
 	f(thrarg);
 	panic("unreachable, should kthread_exit()");
 }
@@ -360,44 +408,19 @@ int
 kthread_create(pri_t pri, int flags, struct cpu_info *ci,
 	void (*func)(void *), void *arg, lwp_t **newlp, const char *fmt, ...)
 {
-	char thrstore[MAXCOMLEN];
-	const char *thrname = NULL;
-	va_list ap;
 	struct kthdesc *k;
 	struct lwp *l;
 	int rv;
 
-	thrstore[0] = '\0';
-	if (fmt) {
-		va_start(ap, fmt);
-		vsnprintf(thrstore, sizeof(thrstore), fmt, ap);
-		va_end(ap);
-		thrname = thrstore;
-	}
-
-	/*
-	 * We don't want a module unload thread.
-	 * (XXX: yes, this is a kludge too, and the kernel should
-	 * have a more flexible method for configuring which threads
-	 * we want).
-	 */
-	if (strcmp(thrstore, "modunload") == 0) {
-		return 0;
-	}
-
 	if (!rump_threads) {
 		/* fake them */
-		if (strcmp(thrstore, "vrele") == 0) {
+		if (strcmp(fmt, "vrele") == 0) {
 			printf("rump warning: threads not enabled, not starting"
 			   " vrele thread\n");
 			return 0;
-		} else if (strcmp(thrstore, "cachegc") == 0) {
+		} else if (strcmp(fmt, "cachegc") == 0) {
 			printf("rump warning: threads not enabled, not starting"
 			   " namecache g/c thread\n");
-			return 0;
-		} else if (strcmp(thrstore, "nfssilly") == 0) {
-			printf("rump warning: threads not enabled, not enabling"
-			   " nfs silly rename\n");
 			return 0;
 		} else
 			panic("threads not available, setenv RUMP_THREADS 1");
@@ -411,9 +434,7 @@ kthread_create(pri_t pri, int flags, struct cpu_info *ci,
 	k->f = func;
 	k->arg = arg;
 	k->mylwp = l = rump_setup_curlwp(0, rump_nextlid(), 0);
-	if (flags & KTHREAD_MPSAFE)
-		l->l_pflag |= LP_MPSAFE;
-	rv = rumpuser_thread_create(threadbouncer, k, thrname);
+	rv = rumpuser_thread_create(threadbouncer, k);
 	if (rv)
 		return rv;
 
@@ -426,9 +447,6 @@ void
 kthread_exit(int ecode)
 {
 
-	if ((curlwp->l_pflag & LP_MPSAFE) == 0)
-		KERNEL_UNLOCK_ONE(NULL);
-	rump_clear_curlwp();
 	rumpuser_thread_exit();
 }
 
@@ -512,14 +530,15 @@ kpause(const char *wmesg, bool intr, int timeo, kmutex_t *mtx)
 {
 	extern int hz;
 	int rv, error;
-	uint64_t sec, nsec;
+	struct timespec time;
 	
 	if (mtx)
 		mutex_exit(mtx);
 
-	sec = timeo / hz;
-	nsec = (timeo % hz) * (1000000000 / hz);
-	rv = rumpuser_nanosleep(&sec, &nsec, &error);
+	time.tv_sec = timeo / hz;
+	time.tv_nsec = (timeo % hz) * (1000000000 / hz);
+
+	rv = rumpuser_nanosleep(&time, NULL, &error);
 	
 	if (mtx)
 		mutex_enter(mtx);
@@ -597,8 +616,23 @@ assert_sleepable(void)
 	/* always sleepable, although we should improve this */
 }
 
+int
+devsw_attach(const char *devname, const struct bdevsw *bdev, int *bmajor,
+	const struct cdevsw *cdev, int *cmajor)
+{
+
+	panic("%s: not implemented", __func__);
+}
+
+int
+devsw_detach(const struct bdevsw *bdev, const struct cdevsw *cdev)
+{
+
+	panic("%s: not implemented", __func__);
+}
+
 void
-tc_setclock(const struct timespec *ts)
+tc_setclock(struct timespec *ts)
 {
 
 	panic("%s: not implemented", __func__);
@@ -617,96 +651,3 @@ proc_crmod_leave(kauth_cred_t c1, kauth_cred_t c2, bool sugid)
 
 	panic("%s: not implemented", __func__);
 }
-
-void
-module_init_md()
-{
-
-	/*
-	 * Nothing for now.  However, we should load the librump
-	 * symbol table.
-	 */
-}
-
-/* us and them, after all we're only ordinary seconds */
-static void
-rump_delay(unsigned int us)
-{
-	uint64_t sec, nsec;
-	int error;
-
-	sec = us / 1000000;
-	nsec = (us % 1000000) * 1000;
-
-	if (__predict_false(sec != 0))
-		printf("WARNING: over 1s delay\n");
-
-	rumpuser_nanosleep(&sec, &nsec, &error);
-}
-void (*delay_func)(unsigned int) = rump_delay;
-
-void
-kpreempt_disable()
-{
-
-	/* XXX: see below */
-	KPREEMPT_DISABLE(curlwp);
-}
-
-void
-kpreempt_enable()
-{
-
-	/* try to make sure kpreempt_disable() is only used from panic() */
-	panic("kpreempt not supported");
-}
-
-void
-sessdelete(struct session *ss)
-{
-
-	panic("sessdelete() impossible, session %p", ss);
-}
-
-int
-ttycheckoutq(struct tty *tp, int wait)
-{
-
-	return 1;
-}
-
-void
-cnputc(int c)
-{
-	int error;
-
-	rumpuser_putchar(c, &error);
-}
-
-void
-cnflush()
-{
-
-	/* done */
-}
-
-int
-tputchar(int c, int flags, struct tty *tp)
-{
-
-	cnputc(c);
-	return 0;
-}
-
-void
-cpu_reboot(int howto, char *bootstr)
-{
-
-	rumpuser_panic();
-}
-
-/* XXX: static, but not used except to make spcopy.S link */
-#ifdef __hppa__
-#undef curlwp
-struct lwp *curlwp = &lwp0;
-#endif

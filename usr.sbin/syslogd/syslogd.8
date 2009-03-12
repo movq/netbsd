@@ -1,4 +1,4 @@
-.\"	$NetBSD: syslogd.8,v 1.47 2009/02/01 12:59:05 wiz Exp $
+.\"	$NetBSD: syslogd.8,v 1.42.24.1 2009/02/02 21:00:47 snj Exp $
 .\"
 .\" Copyright (c) 1983, 1986, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     from: @(#)syslogd.8	8.1 (Berkeley) 6/6/93
 .\"
-.Dd February 1, 2009
+.Dd February 1, 2008
 .Dt SYSLOGD 8
 .Os
 .Sh NAME
@@ -49,9 +49,6 @@
 .Ek
 .Bk -words
 .Op Fl m Ar mark_interval
-.Ek
-.Bk -words
-.Op Fl o Ar output_format
 .Ek
 .Bk -words
 .Op Fl P Ar file_list
@@ -81,7 +78,7 @@ which corresponds to it is used.
 .It Fl d
 Enable debugging to the standard output,
 and do not disassociate from the controlling terminal.
-.It Fl f Ar config_file
+.It Fl f
 Specify the pathname of an alternative configuration file;
 the default is
 .Pa /etc/syslog.conf .
@@ -89,24 +86,16 @@ the default is
 Set GID to
 .Ar group
 after the sockets and log files have been opened.
-.It Fl m Ar mark_interval
+.It Fl m
 Select the number of minutes between ``mark'' messages;
 the default is 20 minutes.
 .It Fl n
 Do not perform hostname lookups; report only numeric addresses.
-.It Fl o Ar output_format
-Select output message format.
-.Bl -hang
-.It Em rfc3164
-traditional BSD Syslog format (default)
-.It Em syslog
-new syslog-protocol format
-.El
 .It Fl P
 Specify the pathname of a file containing a list of sockets to be
 created.
 The format of the file is simply one socket per line.
-.It Fl p Ar log_socket
+.It Fl p
 Specify the pathname of a log socket.
 Multiple
 .Fl p
@@ -230,12 +219,19 @@ Refer to
 .Xr hosts_access 5
 for details.
 .Ss SYSLOG PROTOCOL NOTES
+The message sent to
 .Nm
-accepts messages in traditional BSD Syslog or in newer Syslog Protocol
-format.
-See RFC 3164 (BSD Syslog) and RFC
-.Em nnnn
-(Syslog Protocol) for detailed description of the message format.
+should consist of a single line.
+The message can contain a priority code, which should be a preceding
+decimal number in angle braces, for example,
+.Sq Aq 5 .
+This priority code should map into the priorities defined in the
+include file
+.Aq Pa sys/syslog.h .
+See RFC 3164 for detailed description of the message format.
+.Pp
+Messages from the local kernel that are not tagged with a priority code
+receive the default facility
 .Dv LOG_KERN
 and priority
 .Dv LOG_NOTICE .
@@ -268,12 +264,6 @@ The kernel log device.
 .%N 3164
 .%D August 2001
 .%T The BSD syslog Protocol
-.Re
-.Rs
-.%R Internet-Draft
-.%N draft-ietf-syslog-protocol-23
-.%D September 2007
-.%T The syslog Protocol
 .Re
 .Sh HISTORY
 The

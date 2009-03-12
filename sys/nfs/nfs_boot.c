@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_boot.c,v 1.79 2009/03/04 06:56:25 nisimura Exp $	*/
+/*	$NetBSD: nfs_boot.c,v 1.77 2008/10/27 13:24:01 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1997 The NetBSD Foundation, Inc.
@@ -35,13 +35,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_boot.c,v 1.79 2009/03/04 06:56:25 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_boot.c,v 1.77 2008/10/27 13:24:01 cegger Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_nfs.h"
 #include "opt_tftproot.h"
 #include "opt_nfs_boot.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,13 +71,11 @@ __KERNEL_RCSID(0, "$NetBSD: nfs_boot.c,v 1.79 2009/03/04 06:56:25 nisimura Exp $
 #include <nfs/nfsdiskless.h>
 
 /*
- * There are three implementations of NFS diskless boot.
+ * There are two implementations of NFS diskless boot.
  * One implementation uses BOOTP (RFC951, RFC1048),
- * Sun RPC/bootparams or static configuration.  See the
- * files:
- *    nfs_bootdhcp.c:   BOOTP (RFC951, RFC1048)
- *    nfs_bootparam.c:  Sun RPC/bootparams
- *    nfs_bootstatic.c: honour config(1) description
+ * the other uses Sun RPC/bootparams.  See the files:
+ *    nfs_bootp.c:   BOOTP (RFC951, RFC1048)
+ *    nfs_bootsun.c: Sun RPC/bootparams
  */
 #if defined(NFS_BOOT_BOOTP) || defined(NFS_BOOT_DHCP)
 int nfs_boot_rfc951 = 1; /* BOOTP enabled (default) */
@@ -606,7 +602,9 @@ nfs_boot_getfh(struct nfs_dlmount *ndm, struct lwp *l)
 
 	/* Set port number for NFS use. */
 	/* XXX: NFS port is always 2049, right? */
+#ifdef NFS_BOOT_TCP
 retry:
+#endif
 	error = krpc_portmap(sin, NFS_PROG,
 		    (args->flags & NFSMNT_NFSV3) ? NFS_VER3 : NFS_VER2,
 		    (args->sotype == SOCK_STREAM) ? IPPROTO_TCP : IPPROTO_UDP,
@@ -614,10 +612,12 @@ retry:
 	if (port == htons(0))
 		error = EIO;
 	if (error) {
+#ifdef NFS_BOOT_TCP
 		if (args->sotype == SOCK_STREAM) {
 			args->sotype = SOCK_DGRAM;
 			goto retry;
 		}
+#endif
 		printf("nfs_boot: portmap NFS, error=%d\n", error);
 		return (error);
 	}

@@ -1,5 +1,5 @@
-/*	$Id: mpcsa_machdep.c,v 1.3 2008/11/11 06:46:41 dyoung Exp $	*/
-/*	$NetBSD: mpcsa_machdep.c,v 1.3 2008/11/11 06:46:41 dyoung Exp $	*/
+/*	$Id: mpcsa_machdep.c,v 1.2 2008/07/03 01:15:39 matt Exp $	*/
+/*	$NetBSD: mpcsa_machdep.c,v 1.2 2008/07/03 01:15:39 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.3 2008/11/11 06:46:41 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpcsa_machdep.c,v 1.2 2008/07/03 01:15:39 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -201,7 +201,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("\r\n");
 		printf("The operating system has halted.\r\n");
 		printf("Please press any key to reboot.\r\n");
@@ -231,8 +230,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;

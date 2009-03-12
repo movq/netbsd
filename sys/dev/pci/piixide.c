@@ -1,4 +1,4 @@
-/*	$NetBSD: piixide.c,v 1.49 2009/03/09 13:13:25 christos Exp $	*/
+/*	$NetBSD: piixide.c,v 1.47.4.1 2009/12/18 05:48:07 snj Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.49 2009/03/09 13:13:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.47.4.1 2009/12/18 05:48:07 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -241,26 +241,6 @@ static const struct pciide_product_desc pciide_intel_products[] =  {
 	  "Intel 82801I Serial ATA Controller (ICH9)",
 	  piixsata_chip_map,
 	},
-	{ PCI_PRODUCT_INTEL_82801I_SATA_4,
-	  0,
-	  "Intel 82801I Mobile Serial ATA Controller (ICH9)",
-	  piixsata_chip_map,
-	},
-	{ PCI_PRODUCT_INTEL_82801I_SATA_5,
-	  0,
-	  "Intel 82801I Mobile Serial ATA Controller (ICH9)",
-	  piixsata_chip_map,
-	},
-	{ PCI_PRODUCT_INTEL_82801I_SATA_6,
-	  0,
-	  "Intel 82801I Mobile Serial ATA Controller (ICH9)",
-	  piixsata_chip_map,
-	},
-	{ PCI_PRODUCT_INTEL_82801I_SATA_7,
-	  0,
-	  "Intel 82801I Mobile Serial ATA Controller (ICH9)",
-	  piixsata_chip_map,
-	},
 	{ PCI_PRODUCT_INTEL_63XXESB_SATA,
 	  0,
 	  "Intel 631xESB/632xESB Serial ATA Controller",
@@ -287,9 +267,45 @@ static const struct pciide_product_desc pciide_intel_products[] =  {
 	  piixsata_chip_map,
 	},
 	{
-	  PCI_PRODUCT_INTEL_82965PM_IDE,
+	  PCI_PRODUCT_INTEL_3400_SATA_1,
 	  0,
-	  "Intel 82965PM IDE controller",
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_1,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_2,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_3,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_4,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_5,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{
+	  PCI_PRODUCT_INTEL_3400_SATA_6,
+	  0,
+	  "Intel 3400 Serial ATA Controller",
 	  piixsata_chip_map,
 	},
 	{ 0,

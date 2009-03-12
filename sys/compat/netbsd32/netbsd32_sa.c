@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_sa.c,v 1.10 2009/01/21 10:01:42 tron Exp $	*/
+/*	$NetBSD: netbsd32_sa.c,v 1.7.4.1 2008/11/22 04:54:42 snj Exp $	*/
 
 /*
  *  Copyright (c) 2005 The NetBSD Foundation.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_sa.c,v 1.10 2009/01/21 10:01:42 tron Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_sa.c,v 1.7.4.1 2008/11/22 04:54:42 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

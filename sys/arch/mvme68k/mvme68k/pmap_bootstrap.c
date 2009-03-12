@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.31 2009/01/17 07:17:36 tsutsui Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.29 2008/01/12 09:54:29 tsutsui Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.31 2009/01/17 07:17:36 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.29 2008/01/12 09:54:29 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/kcore.h>
@@ -49,17 +49,22 @@ __KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.31 2009/01/17 07:17:36 tsutsui 
 
 #include <uvm/uvm_extern.h>
 
-#define RELOC(v, t)	*((t*)((uintptr_t)&(v) + firstpa))
-#define RELOCPTR(v, t)	((t)((uintptr_t)RELOC((v), t) + firstpa))
+#define RELOC(v, t)	*((t*)((u_int)&(v) + firstpa))
 
 extern char *kernel_text, *etext;
+extern int Sysptsize;
 extern char *proc0paddr;
+extern st_entry_t *Sysseg;
+extern pt_entry_t *Sysptmap, *Sysmap;
 
 extern int maxmem, physmem;
 extern paddr_t avail_start, avail_end;
+extern vaddr_t virtual_avail, virtual_end;
+extern vsize_t mem_size;
 extern phys_ram_seg_t mem_clusters[];
 extern int mem_cluster_cnt;
 extern paddr_t msgbufpa;
+extern int protection_codes[];
 
 /*
  * Special purpose kernel virtual addresses, used for mapping
@@ -490,9 +495,9 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 	 * absolute "jmp" table.
 	 */
 	{
-		u_int *kp;
+		int *kp;
 
-		kp = &RELOC(protection_codes, u_int);
+		kp = &RELOC(protection_codes, int);
 		kp[VM_PROT_NONE|VM_PROT_NONE|VM_PROT_NONE] = 0;
 		kp[VM_PROT_READ|VM_PROT_NONE|VM_PROT_NONE] = PG_RO;
 		kp[VM_PROT_READ|VM_PROT_NONE|VM_PROT_EXECUTE] = PG_RO;
@@ -508,9 +513,7 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 	 * just initialize pointers.
 	 */
 	{
-		struct pmap *kpm;
-
-		kpm = RELOCPTR(kernel_pmap_ptr, struct pmap *);
+		struct pmap *kpm = &RELOC(kernel_pmap_store, struct pmap);
 
 		kpm->pm_stab = RELOC(Sysseg, st_entry_t *);
 		kpm->pm_ptab = RELOC(Sysmap, pt_entry_t *);

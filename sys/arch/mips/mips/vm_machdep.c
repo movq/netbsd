@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.122 2008/11/19 18:36:00 ad Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.121.4.1 2009/06/09 17:45:01 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -76,10 +76,11 @@
  *	@(#)vm_machdep.c	8.3 (Berkeley) 1/4/94
  */
 
-#include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.122 2008/11/19 18:36:00 ad Exp $");
-
 #include "opt_ddb.h"
+#include "opt_coredump.h"
+
+#include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.121.4.1 2009/06/09 17:45:01 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -198,7 +199,7 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	pcb->pcb_context[1] = (intptr_t)arg;			/* S1 */
 	pcb->pcb_context[MIPS_CURLWP_CARD - 16] = (intptr_t)l;	/* S? */
 	pcb->pcb_context[8] = (intptr_t)f;			/* SP */
-	pcb->pcb_context[10] = (intptr_t)lwp_trampoline;	/* RA */
+	pcb->pcb_context[10] = (intptr_t)setfunc_trampoline;	/* RA */
 #ifdef IPL_ICU_MASK
 	pcb->pcb_ppl = 0;	/* machine depenedend interrupt mask */
 #endif
@@ -242,6 +243,48 @@ cpu_lwp_free2(struct lwp *l)
 
 	(void)l;
 }
+
+#ifdef COREDUMP
+/*
+ * Dump the machine specific segment at the start of a core dump.
+ */
+int
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+{
+	int error;
+	struct coreseg cseg;
+	struct cpustate {
+		struct frame frame;
+		struct fpreg fpregs;
+	} cpustate;
+
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+		chdr->c_hdrsize = ALIGN(sizeof(struct core));
+		chdr->c_seghdrsize = ALIGN(sizeof(struct coreseg));
+		chdr->c_cpusize = sizeof(struct cpustate);
+		chdr->c_nseg++;
+		return 0;
+	}
+
+	if ((l->l_md.md_flags & MDP_FPUSED) && l == fpcurlwp)
+		savefpregs(l);
+	cpustate.frame = *(struct frame *)l->l_md.md_regs;
+	cpustate.fpregs = l->l_addr->u_pcb.pcb_fpregs;
+
+	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
+	cseg.c_addr = 0;
+	cseg.c_size = chdr->c_cpusize;
+
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+	    chdr->c_seghdrsize);
+	if (error)
+		return error;
+
+	return coredump_write(iocookie, UIO_SYSSPACE, &cpustate,
+	    chdr->c_cpusize);
+}
+#endif
 
 /*
  * Map a user I/O request into kernel virtual address space.

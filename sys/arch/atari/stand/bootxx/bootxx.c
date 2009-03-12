@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.13 2009/01/06 13:35:30 tsutsui Exp $	*/
+/*	$NetBSD: bootxx.c,v 1.12.88.1 2009/01/16 22:57:33 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -61,7 +61,7 @@ bootxx(void *readsector, void *disklabel, int autoboot)
 	setheap(end, (void*)(LOADADDR3 - 4));
 
 	printf("\033v\nNetBSD/atari secondary bootloader"
-						" ($Revision: 1.13 $)\n\n");
+						" ($Revision: 1.12.88.1 $)\n\n");
 
 	if (init_dskio(readsector, disklabel, -1))
 		return -1;

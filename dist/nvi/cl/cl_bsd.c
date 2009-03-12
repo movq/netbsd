@@ -1,4 +1,4 @@
-/*	$NetBSD: cl_bsd.c,v 1.3 2008/12/05 22:51:42 christos Exp $ */
+/*	$NetBSD: cl_bsd.c,v 1.2.6.1 2009/01/20 02:41:11 snj Exp $ */
 
 /*-
  * Copyright (c) 1995, 1996

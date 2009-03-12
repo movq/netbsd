@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_page.c,v 1.144 2009/02/27 23:29:08 drochner Exp $	*/
+/*	$NetBSD: uvm_page.c,v 1.140.6.3 2009/03/02 20:51:35 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_page.c,v 1.144 2009/02/27 23:29:08 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_page.c,v 1.140.6.3 2009/03/02 20:51:35 snj Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_readahead.h"
@@ -1517,7 +1517,6 @@ uvm_page_unbusy(struct vm_page **pgs, int npgs)
 			uvm_pagefree(pg);
 		} else {
 			UVMHIST_LOG(ubchist, "unbusying pg %p", pg,0,0,0);
-			KASSERT((pg->flags & PG_FAKE) == 0);
 			pg->flags &= ~(PG_WANTED|PG_BUSY);
 			UVM_PAGE_OWN(pg, NULL);
 		}

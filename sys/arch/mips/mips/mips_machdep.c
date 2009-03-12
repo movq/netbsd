@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_machdep.c,v 1.208 2009/01/22 11:01:32 dogcow Exp $	*/
+/*	$NetBSD: mips_machdep.c,v 1.205.4.2 2009/06/09 17:45:01 snj Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -112,7 +112,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.208 2009/01/22 11:01:32 dogcow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.205.4.2 2009/06/09 17:45:01 snj Exp $");
 
 #include "opt_cputype.h"
 
@@ -193,7 +193,7 @@ extern long	*mips64_locoresw[];
 
 mips_locore_jumpvec_t mips_locore_jumpvec;
 
-long *mips_locoresw[3];
+long *mips_locoresw[4];
 
 int cpu_arch;
 int cpu_mhz;

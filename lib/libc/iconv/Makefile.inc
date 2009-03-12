@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.4 2009/01/11 02:46:28 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.2.38.1 2009/01/15 03:24:06 snj Exp $
 
 .PATH:	${ARCHDIR}/iconv ${.CURDIR}/iconv
 

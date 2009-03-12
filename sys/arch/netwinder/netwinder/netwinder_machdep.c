@@ -1,4 +1,4 @@
-/*	$NetBSD: netwinder_machdep.c,v 1.69 2008/11/30 18:21:35 martin Exp $	*/
+/*	$NetBSD: netwinder_machdep.c,v 1.66 2008/04/27 18:58:47 matt Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netwinder_machdep.c,v 1.69 2008/11/30 18:21:35 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netwinder_machdep.c,v 1.66 2008/04/27 18:58:47 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -264,7 +264,6 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
-		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -295,8 +294,6 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
-
-	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -854,6 +851,11 @@ initarm(void *arg)
 	 */
 	if (nwbootinfo.bi_pagesize == 0xdeadbeef)
 		printf("WARNING: NeTTrom boot info corrupt\n");
+
+#if NKSYMS || defined(DDB) || defined(LKM)
+	/* Firmware doesn't load symbols. */
+	ksyms_init(0, NULL, NULL);
+#endif
 
 #ifdef DDB
 	db_machine_init();

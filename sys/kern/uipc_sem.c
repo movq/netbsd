@@ -1,7 +1,7 @@
-/*	$NetBSD: uipc_sem.c,v 1.29 2008/11/14 15:49:21 ad Exp $	*/
+/*	$NetBSD: uipc_sem.c,v 1.26 2008/10/22 11:17:08 ad Exp $	*/
 
 /*-
- * Copyright (c) 2003, 2007, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2003, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -56,7 +56,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.29 2008/11/14 15:49:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.26 2008/10/22 11:17:08 ad Exp $");
+
+#include "opt_posix.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,12 +70,13 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.29 2008/11/14 15:49:21 ad Exp $");
 #include <sys/kmem.h>
 #include <sys/fcntl.h>
 #include <sys/kauth.h>
-#include <sys/module.h>
-#include <sys/mount.h>
-#include <sys/syscall.h>
-#include <sys/syscallargs.h>
-#include <sys/syscallvar.h>
+#include <sys/sysctl.h>
 
+#include <sys/mount.h>
+
+#include <sys/syscallargs.h>
+
+#define SEM_MAX 128
 #define SEM_MAX_NAMELEN	14
 #define SEM_VALUE_MAX (~0U)
 #define SEM_HASHTBL_SIZE 13
@@ -81,25 +84,12 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.29 2008/11/14 15:49:21 ad Exp $");
 #define SEM_TO_ID(x)	(((x)->ks_id))
 #define SEM_HASH(id)	((id) % SEM_HASHTBL_SIZE)
 
-MODULE(MODULE_CLASS_MISC, ksem, NULL);
-
-static const struct syscall_package ksem_syscalls[] = {
-	{ SYS__ksem_init, 0, (sy_call_t *)sys__ksem_init },
-	{ SYS__ksem_open, 0, (sy_call_t *)sys__ksem_open },
-	{ SYS__ksem_unlink, 0, (sy_call_t *)sys__ksem_unlink },
-	{ SYS__ksem_close, 0, (sy_call_t *)sys__ksem_close },
-	{ SYS__ksem_post, 0, (sy_call_t *)sys__ksem_post },
-	{ SYS__ksem_wait, 0, (sy_call_t *)sys__ksem_wait },
-	{ SYS__ksem_trywait, 0, (sy_call_t *)sys__ksem_trywait },
-	{ SYS__ksem_getvalue, 0, (sy_call_t *)sys__ksem_getvalue },
-	{ SYS__ksem_destroy, 0, (sy_call_t *)sys__ksem_destroy },
-	{ 0, 0, NULL },
-};
+MALLOC_DEFINE(M_SEM, "p1003_1b_sem", "p1003_1b semaphores");
 
 /*
  * Note: to read the ks_name member, you need either the ks_interlock
- * or the ksem_mutex.  To write the ks_name member, you need both.  Make
- * sure the order is ksem_mutex -> ks_interlock.
+ * or the ksem_slock.  To write the ks_name member, you need both.  Make
+ * sure the order is ksem_slock -> ks_interlock.
  */
 struct ksem {
 	LIST_ENTRY(ksem) ks_entry;	/* global list entry */
@@ -114,7 +104,7 @@ struct ksem {
 	gid_t ks_gid;			/* creator gid */
 	unsigned int ks_value;		/* current value */
 	unsigned int ks_waiters;	/* number of waiters */
-	intptr_t ks_id;			/* unique identifier */
+	semid_t ks_id;			/* unique identifier */
 };
 
 struct ksem_ref {
@@ -130,23 +120,22 @@ struct ksem_proc {
 LIST_HEAD(ksem_list, ksem);
 
 /*
- * ksem_mutex protects ksem_head and nsems.  Only named semaphores go
+ * ksem_slock protects ksem_head and nsems.  Only named semaphores go
  * onto ksem_head.
  */
 static kmutex_t ksem_mutex;
 static struct ksem_list ksem_head = LIST_HEAD_INITIALIZER(&ksem_head);
 static struct ksem_list ksem_hash[SEM_HASHTBL_SIZE];
+static u_int sem_max = SEM_MAX;
 static int nsems = 0;
 
 /*
- * ksem_counter is the last assigned intptr_t.  It needs to be COMPAT_NETBSD32
- * friendly, even though intptr_t itself is defined as uintptr_t.
+ * ksem_counter is the last assigned semid_t.  It needs to be COMPAT_NETBSD32
+ * friendly, even though semid_t itself is defined as uintptr_t.
  */
 static uint32_t ksem_counter = 1;
 
 static specificdata_key_t ksem_specificdata_key;
-static void *ksem_ehook;
-static void *ksem_fhook;
 
 static void
 ksem_free(struct ksem *ks)
@@ -284,7 +273,7 @@ ksem_perm(struct lwp *l, struct ksem *ks)
 }
 
 static struct ksem *
-ksem_lookup_byid(intptr_t id)
+ksem_lookup_byid(semid_t id)
 {
 	struct ksem *ks;
 
@@ -349,7 +338,7 @@ ksem_create(struct lwp *l, const char *name, struct ksem **ksret,
 	cv_init(&ret->ks_cv, "psem");
 
 	mutex_enter(&ksem_mutex);
-	if (nsems >= ksem_max) {
+	if (nsems >= sem_max) {
 		mutex_exit(&ksem_mutex);
 		if (ret->ks_name != NULL)
 			kmem_free(ret->ks_name, ret->ks_namelen);
@@ -376,18 +365,18 @@ sys__ksem_init(struct lwp *l, const struct sys__ksem_init_args *uap, register_t 
 {
 	/* {
 		unsigned int value;
-		intptr_t *idp;
+		semid_t *idp;
 	} */
 
 	return do_ksem_init(l, SCARG(uap, value), SCARG(uap, idp), copyout);
 }
 
 int
-do_ksem_init(struct lwp *l, unsigned int value, intptr_t *idp,
+do_ksem_init(struct lwp *l, unsigned int value, semid_t *idp,
     copyout_t docopyout)
 {
 	struct ksem *ks;
-	intptr_t id;
+	semid_t id;
 	int error;
 
 	/* Note the mode does not matter for anonymous semaphores. */
@@ -415,7 +404,7 @@ sys__ksem_open(struct lwp *l, const struct sys__ksem_open_args *uap, register_t 
 		int oflag;
 		mode_t mode;
 		unsigned int value;
-		intptr_t *idp;
+		semid_t *idp;
 	} */
 
 	return do_ksem_open(l, SCARG(uap, name), SCARG(uap, oflag),
@@ -424,13 +413,13 @@ sys__ksem_open(struct lwp *l, const struct sys__ksem_open_args *uap, register_t 
 
 int
 do_ksem_open(struct lwp *l, const char *semname, int oflag, mode_t mode,
-     unsigned int value, intptr_t *idp, copyout_t docopyout)
+     unsigned int value, semid_t *idp, copyout_t docopyout)
 {
 	char name[SEM_MAX_NAMELEN + 1];
 	size_t done;
 	int error;
 	struct ksem *ksnew, *ks;
-	intptr_t id;
+	semid_t id;
 
 	error = copyinstr(semname, name, sizeof(name), &done);
 	if (error)
@@ -532,7 +521,7 @@ do_ksem_open(struct lwp *l, const char *semname, int oflag, mode_t mode,
 
 /* We must have a read lock on the ksem_proc list! */
 static struct ksem *
-ksem_lookup_proc(struct ksem_proc *kp, intptr_t id)
+ksem_lookup_proc(struct ksem_proc *kp, semid_t id)
 {
 	struct ksem_ref *ksr;
 
@@ -591,7 +580,7 @@ int
 sys__ksem_close(struct lwp *l, const struct sys__ksem_close_args *uap, register_t *retval)
 {
 	/* {
-		intptr_t id;
+		semid_t id;
 	} */
 	struct ksem_proc *kp;
 	struct ksem_ref *ksr;
@@ -627,7 +616,7 @@ int
 sys__ksem_post(struct lwp *l, const struct sys__ksem_post_args *uap, register_t *retval)
 {
 	/* {
-		intptr_t id;
+		semid_t id;
 	} */
 	struct ksem_proc *kp;
 	struct ksem *ks;
@@ -658,7 +647,7 @@ sys__ksem_post(struct lwp *l, const struct sys__ksem_post_args *uap, register_t 
 }
 
 static int
-ksem_wait(struct lwp *l, intptr_t id, int tryflag)
+ksem_wait(struct lwp *l, semid_t id, int tryflag)
 {
 	struct ksem_proc *kp;
 	struct ksem *ks;
@@ -697,7 +686,7 @@ int
 sys__ksem_wait(struct lwp *l, const struct sys__ksem_wait_args *uap, register_t *retval)
 {
 	/* {
-		intptr_t id;
+		semid_t id;
 	} */
 
 	return ksem_wait(l, SCARG(uap, id), 0);
@@ -707,7 +696,7 @@ int
 sys__ksem_trywait(struct lwp *l, const struct sys__ksem_trywait_args *uap, register_t *retval)
 {
 	/* {
-		intptr_t id;
+		semid_t id;
 	} */
 
 	return ksem_wait(l, SCARG(uap, id), 1);
@@ -717,7 +706,7 @@ int
 sys__ksem_getvalue(struct lwp *l, const struct sys__ksem_getvalue_args *uap, register_t *retval)
 {
 	/* {
-		intptr_t id;
+		semid_t id;
 		unsigned int *value;
 	} */
 	struct ksem_proc *kp;
@@ -745,7 +734,7 @@ int
 sys__ksem_destroy(struct lwp *l, const struct sys__ksem_destroy_args *uap, register_t *retval)
 {
 	/* {
-		intptr_t id;
+		semid_t id;
 	} */
 	struct ksem_proc *kp;
 	struct ksem_ref *ksr;
@@ -830,64 +819,51 @@ ksem_exechook(struct proc *p, void *arg)
 	}
 }
 
-static int
-ksem_fini(bool interface)
-{
-	int error;
-
-	if (interface) {
-		error = syscall_disestablish(NULL, ksem_syscalls);
-		if (error != 0) {
-			return error;
-		}
-		if (nsems != 0) {
-			error = syscall_establish(NULL, ksem_syscalls);
-			KASSERT(error == 0);
-			return EBUSY;
-		}
-	}
-	exechook_disestablish(ksem_ehook);
-	forkhook_disestablish(ksem_fhook);
-	proc_specific_key_delete(ksem_specificdata_key);
-	mutex_destroy(&ksem_mutex);
-	return 0;
-}
-
-static int
+void
 ksem_init(void)
 {
-	int error, i;
+	int i, error;
 
 	mutex_init(&ksem_mutex, MUTEX_DEFAULT, IPL_NONE);
+	exechook_establish(ksem_exechook, NULL);
+	forkhook_establish(ksem_forkhook);
+
 	for (i = 0; i < SEM_HASHTBL_SIZE; i++)
 		LIST_INIT(&ksem_hash[i]);
+
 	error = proc_specific_key_create(&ksem_specificdata_key,
-	    ksem_proc_dtor);
-	if (error != 0) {
-		mutex_destroy(&ksem_mutex);
-		return error;
-	}
-	ksem_ehook = exechook_establish(ksem_exechook, NULL);
-	ksem_fhook = forkhook_establish(ksem_forkhook);
-	error = syscall_establish(NULL, ksem_syscalls);
-	if (error != 0) {
-		(void)ksem_fini(false);
-	}
-	return error;
+					 ksem_proc_dtor);
+	KASSERT(error == 0);
+	posix_semaphores = 200112;
 }
 
-static int
-ksem_modcmd(modcmd_t cmd, void *arg)
+/*
+ * Sysctl initialization and nodes.
+ */
+
+SYSCTL_SETUP(sysctl_posix_sem_setup, "sysctl kern.posix subtree setup")
 {
+	const struct sysctlnode *node = NULL;
 
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		return ksem_init();
+	sysctl_createv(clog, 0, NULL, NULL,
+		CTLFLAG_PERMANENT,
+		CTLTYPE_NODE, "kern", NULL,
+		NULL, 0, NULL, 0,
+		CTL_KERN, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, &node,
+		CTLFLAG_PERMANENT,
+		CTLTYPE_NODE, "posix",
+		SYSCTL_DESCR("POSIX options"),
+		NULL, 0, NULL, 0,
+		CTL_KERN, CTL_CREATE, CTL_EOL);
 
-	case MODULE_CMD_FINI:
-		return ksem_fini(true);
+	if (node == NULL)
+		return;
 
-	default:
-		return ENOTTY;
-	}
+	sysctl_createv(clog, 0, &node, NULL,
+		CTLFLAG_PERMANENT | CTLFLAG_READWRITE,
+		CTLTYPE_INT, "semmax",
+		SYSCTL_DESCR("Maximal number of semaphores"),
+		NULL, 0, &sem_max, 0,
+		CTL_CREATE, CTL_EOL);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_time.c,v 1.28 2009/01/11 02:45:48 christos Exp $ */
+/*	$NetBSD: linux_time.c,v 1.25.6.1 2008/11/20 03:03:05 snj Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_time.c,v 1.28 2009/01/11 02:45:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_time.c,v 1.25.6.1 2008/11/20 03:03:05 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/ucred.h>
@@ -57,8 +57,10 @@ __KERNEL_RCSID(0, "$NetBSD: linux_time.c,v 1.28 2009/01/11 02:45:48 christos Exp
 
 #include <compat/common/compat_util.h>
 
-void native_to_linux_timespec(struct linux_timespec *, struct timespec *);
-void linux_to_native_timespec(struct timespec *, struct linux_timespec *);
+static void native_to_linux_timespec(struct linux_timespec *,
+				     struct timespec *);
+static void linux_to_native_timespec(struct timespec *,
+				     struct linux_timespec *);
 /*
  * This is not implemented for alpha yet
  */
@@ -77,13 +79,13 @@ int
 linux_sys_gettimeofday(struct lwp *l, const struct linux_sys_gettimeofday_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(struct timeval50 *) tz;
+		syscallarg(struct timeval *) tz;
 		syscallarg(struct timezone *) tzp;
 	} */
 	int error = 0;
 
 	if (SCARG(uap, tp)) {
-		error = compat_50_sys_gettimeofday(l, (const void *)uap, retval);
+		error = sys_gettimeofday(l, (const void *)uap, retval);
 		if (error)
 			return (error);
 	}
@@ -101,13 +103,13 @@ int
 linux_sys_settimeofday(struct lwp *l, const struct linux_sys_settimeofday_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(struct timeval50 *) tp;
+		syscallarg(struct timeval *) tp;
 		syscallarg(struct timezone *) tzp;
 	} */
 	int error = 0;
 
 	if (SCARG(uap, tp)) {
-		error = compat_50_sys_settimeofday(l, (const void *)uap, retval);
+		error = sys_settimeofday(l, (const void *)uap, retval);
 		if (error)
 			return (error);
 	}
@@ -127,14 +129,14 @@ linux_sys_settimeofday(struct lwp *l, const struct linux_sys_settimeofday_args *
 
 #endif /* __i386__ || __m68k__ || __powerpc__ || __mips__ || __arm__ */
 
-void
+static void
 native_to_linux_timespec(struct linux_timespec *ltp, struct timespec *ntp)
 {
 	ltp->tv_sec = ntp->tv_sec;
 	ltp->tv_nsec = ntp->tv_nsec;
 }
 
-void
+static void
 linux_to_native_timespec(struct timespec *ntp, struct linux_timespec *ltp)
 {
 	ntp->tv_sec = ltp->tv_sec;

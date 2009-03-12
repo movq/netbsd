@@ -1,4 +1,4 @@
-/*	$NetBSD: libi386.h,v 1.30 2009/02/16 22:39:30 jmcneill Exp $	*/
+/*	$NetBSD: libi386.h,v 1.26 2008/10/11 11:06:20 joerg Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -55,7 +55,6 @@ void printmemlist(void);
 void reboot(void);
 void gateA20(void);
 
-void clear_pc_screen(void);
 void initio(int);
 #define CONSDEV_PC 0
 #define CONSDEV_COM0 1
@@ -91,6 +90,9 @@ struct bootblk_command {
 };
 void bootmenu(void);
 void docommand(char *);
+
+/* getsecs.c */
+time_t getsecs(void);
 
 /* in "user code": */
 void command_help(char *);
@@ -133,8 +135,3 @@ int dosopen(char *);
 int dosread(int, char *, int);
 int dosseek(int, int, int);
 extern int doserrno;	/* in dos_file.S */
-
-void module_add(char *);
-
-struct btinfo_framebuffer;
-void framebuffer_configure(struct btinfo_framebuffer *);

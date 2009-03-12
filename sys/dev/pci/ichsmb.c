@@ -1,4 +1,4 @@
-/*	$NetBSD: ichsmb.c,v 1.19 2009/02/03 16:27:13 pgoyette Exp $	*/
+/*	$NetBSD: ichsmb.c,v 1.17 2008/10/01 15:38:14 christos Exp $	*/
 /*	$OpenBSD: ichiic.c,v 1.18 2007/05/03 09:36:26 dlg Exp $	*/
 
 /*
@@ -22,7 +22,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ichsmb.c,v 1.19 2009/02/03 16:27:13 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ichsmb.c,v 1.17 2008/10/01 15:38:14 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -228,7 +228,7 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 		DELAY(ICHIIC_DELAY);
 	}
 #ifdef ICHIIC_DEBUG
-	snprintb(fbuf, sizeof(fbuf), LPCIB_SMB_HS_BITS, st);
+	bitmask_snprintf(st, LPCIB_SMB_HS_BITS, fbuf, sizeof(fbuf));
 	printf("%s: exec: st 0x%s\n", device_xname(sc->sc_dev), fbuf);
 #endif
 	if (st & LPCIB_SMB_HS_BUSY)
@@ -269,12 +269,9 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	}
 
 	/* Set SMBus command */
-	if (len == 0) {
-		if (cmdlen == 0)
-			ctl = LPCIB_SMB_HC_CMD_QUICK;
-		else
-			ctl = LPCIB_SMB_HC_CMD_BYTE;
-	} else if (len == 1)
+	if (len == 0)
+		ctl = LPCIB_SMB_HC_CMD_BYTE;
+	else if (len == 1)
 		ctl = LPCIB_SMB_HC_CMD_BDATA;
 	else if (len == 2)
 		ctl = LPCIB_SMB_HC_CMD_WDATA;
@@ -314,7 +311,7 @@ timeout:
 	/*
 	 * Transfer timeout. Kill the transaction and clear status bits.
 	 */
-	snprintb(fbuf, sizeof(fbuf), LPCIB_SMB_HS_BITS, st);
+	bitmask_snprintf(st, LPCIB_SMB_HS_BITS, fbuf, sizeof(fbuf));
 	aprint_error_dev(sc->sc_dev,
 	    "exec: op %d, addr 0x%02x, cmdlen %zd, len %zd, "
 	    "flags 0x%02x: timeout, status 0x%s\n",
@@ -324,7 +321,7 @@ timeout:
 	DELAY(ICHIIC_DELAY);
 	st = bus_space_read_1(sc->sc_iot, sc->sc_ioh, LPCIB_SMB_HS);
 	if ((st & LPCIB_SMB_HS_FAILED) == 0) {
-		snprintb(fbuf, sizeof(fbuf), LPCIB_SMB_HS_BITS, st);
+		bitmask_snprintf(st, LPCIB_SMB_HS_BITS, fbuf, sizeof(fbuf));
 		aprint_error_dev(sc->sc_dev, "abort failed, status 0x%s\n",
 		    fbuf);
 	}
@@ -352,7 +349,7 @@ ichsmb_intr(void *arg)
 		return (0);
 
 #ifdef ICHIIC_DEBUG
-	snprintb(fbuf, sizeof(fbuf), LPCIB_SMB_HS_BITS, st);
+	bitmask_snprintf(st, LPCIB_SMB_HS_BITS, fbuf, sizeof(fbuf));
 	printf("%s: intr st 0x%s\n", device_xname(sc->sc_dev), fbuf);
 #endif
 

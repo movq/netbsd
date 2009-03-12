@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2009/02/20 02:43:02 uebayasi Exp $
+#	$NetBSD: Makefile,v 1.1.2.1 2008/11/06 23:51:26 snj Exp $
 
 NOMAN=	# defined
 
@@ -22,10 +22,10 @@ LDFLAGS+=		-m32
 .CURDIR:=${NETBSDSRCDIR}/libexec/ld.elf_so
 
 # XXX
-.if ${MACHINE_ARCH} == "sparc64"
+.if ${MACHINE} == "sparc64"
 PROG=		ld.elf_so-sparc
 ARCHSUBDIR=	sparc
-.elif ${MACHINE_ARCH} == "x86_64"
+.elif ${MACHINE} == "amd64"
 PROG=		ld.elf_so-i386
 ARCHSUBDIR=	i386
 .endif
@@ -34,11 +34,5 @@ ARCHSUBDIR=	i386
 dependall: ${PROG}
 
 .include "${.CURDIR}/Makefile"
-
-.if ${MACHINE_ARCH} == "sparc64"
-# XXX: Turn on big pic for sparc, because we somehow are generating GOT13
-# relocations. Why?!?
-CPPFLAGS+=-fPIC
-.endif
 
 .endif

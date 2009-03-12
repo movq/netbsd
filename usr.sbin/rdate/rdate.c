@@ -1,4 +1,4 @@
-/*	$NetBSD: rdate.c,v 1.18 2009/03/10 00:26:20 jakllsch Exp $	*/
+/*	$NetBSD: rdate.c,v 1.17 2007/03/10 01:19:55 hubertf Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -39,7 +39,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rdate.c,v 1.18 2009/03/10 00:26:20 jakllsch Exp $");
+__RCSID("$NetBSD: rdate.c,v 1.17 2007/03/10 01:19:55 hubertf Exp $");
 #endif /* lint */
 
 #include <sys/types.h>
@@ -57,7 +57,7 @@ __RCSID("$NetBSD: rdate.c,v 1.18 2009/03/10 00:26:20 jakllsch Exp $");
 #include <util.h>
 
 /* seconds from midnight Jan 1900 - 1970 */
-#define DIFFERENCE 2208988800ULL
+#define DIFFERENCE 2208988800UL
 
 	int	main(int, char **);
 static	void	usage(void);
@@ -77,7 +77,6 @@ main(int argc, char *argv[])
 	int             pr = 0, silent = 0, s;
 	int		slidetime = 0;
 	int		adjustment;
-	uint32_t	data;
 	time_t          tim;
 	char           *hname;
 	const char     *emsg = NULL;
@@ -138,11 +137,11 @@ main(int argc, char *argv[])
 	if (s < 0)
 		err(1, "%s", emsg);
 
-	if (read(s, &data, sizeof(uint32_t)) != sizeof(uint32_t))
+	if (read(s, &tim, sizeof(time_t)) != sizeof(time_t))
 		err(1, "Could not read data");
 
 	(void) close(s);
-	tim = ntohl(data) - DIFFERENCE;
+	tim = ntohl(tim) - DIFFERENCE;
 
 	if (!pr) {
 	    struct timeval  tv;

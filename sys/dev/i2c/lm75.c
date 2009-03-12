@@ -1,4 +1,4 @@
-/*	$NetBSD: lm75.c,v 1.20 2009/01/09 17:20:31 briggs Exp $	*/
+/*	$NetBSD: lm75.c,v 1.19 2008/04/06 20:25:59 cegger Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lm75.c,v 1.20 2009/01/09 17:20:31 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lm75.c,v 1.19 2008/04/06 20:25:59 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -226,18 +226,26 @@ lmtemp_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 static uint32_t
 lmtemp_decode_lm75(const uint8_t *buf)
 {
-	int temp;
+	int neg, temp;
 	uint32_t val;
 
-	/*
-	 * LM75 temps are the most-significant 9 bits of a 16-bit reg.
-	 * sign-extend the MSB and add in the 0.5 from the LSB
-	 */
-	temp = (int8_t) buf[0];
-	temp = (temp << 1) + ((buf[1] >> 7) & 0x1);
+	if (buf[0] & 1) {
+		/* Below 0C */
+		temp = ~buf[1] + 1;
+		neg = 1;
+	} else {
+		temp = buf[1];
+		neg = 0;
+	}
 
 	/* Temp is given in 1/2 deg. C, we convert to uK. */
-	val = temp * 500000 + 273150000;
+	val = ((neg ? -temp : temp) / 2) * 1000000 + 273150000;
+	if (temp & 1) {
+		if (neg)
+			val -= 500000;
+		else
+			val += 500000;
+	}
 
 	return val;
 }

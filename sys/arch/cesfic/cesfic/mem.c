@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.12 2008/12/19 18:49:38 cegger Exp $	*/
+/*	$NetBSD: mem.c,v 1.11 2007/03/05 12:30:37 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.12 2008/12/19 18:49:38 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.11 2007/03/05 12:30:37 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -200,7 +200,8 @@ mmrw(dev, uio, flags)
 			 */
 			if (devzeropage == NULL) {
 				devzeropage = (void *)
-				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK|M_ZERO);
+				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
+				bzero(devzeropage, PAGE_SIZE);
 			}
 			c = min(iov->iov_len, PAGE_SIZE);
 			error = uiomove(devzeropage, c, uio);

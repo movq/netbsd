@@ -1,4 +1,4 @@
-/*	$NetBSD: fpsetsticky.c,v 1.5 2009/01/25 16:44:41 skrll Exp $	*/
+/*	$NetBSD: fpsetsticky.c,v 1.4.26.1 2009/01/26 00:54:12 snj Exp $	*/
 
 /*	$OpenBSD: fpsetsticky.c,v 1.4 2004/01/05 06:06:16 otto Exp $	*/
 
@@ -8,7 +8,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpsetsticky.c,v 1.5 2009/01/25 16:44:41 skrll Exp $");
+__RCSID("$NetBSD: fpsetsticky.c,v 1.4.26.1 2009/01/26 00:54:12 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>

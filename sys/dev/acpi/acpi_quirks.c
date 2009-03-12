@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_quirks.c,v 1.10 2009/01/25 02:26:30 christos Exp $	*/
+/*	$NetBSD: acpi_quirks.c,v 1.9.24.1 2009/02/24 02:53:25 snj Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: acpi_quirks.c,v 1.10 2009/01/25 02:26:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_quirks.c,v 1.9.24.1 2009/02/24 02:53:25 snj Exp $");
 
 #include "opt_acpi.h"
 

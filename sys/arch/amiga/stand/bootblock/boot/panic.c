@@ -1,4 +1,4 @@
-/* $NetBSD: panic.c,v 1.3 2009/01/12 07:42:30 tsutsui Exp $ */
+/* $NetBSD: panic.c,v 1.2 2008/04/28 20:23:13 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -32,9 +32,8 @@
 /*
  * A dummy panic() to reduce size of bootblock.
  */
-#include <lib/libsa/stand.h>
 
 void
-panic(const char *p, ...)
+panic(char *p)
 {
 }

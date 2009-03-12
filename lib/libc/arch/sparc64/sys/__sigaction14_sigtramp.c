@@ -1,4 +1,4 @@
-/*	$NetBSD: __sigaction14_sigtramp.c,v 1.9 2009/01/11 02:46:24 christos Exp $	*/
+/*	$NetBSD: __sigaction14_sigtramp.c,v 1.7.6.1 2008/11/25 18:18:53 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: __sigaction14_sigtramp.c,v 1.9 2009/01/11 02:46:24 christos Exp $");
+__RCSID("$NetBSD: __sigaction14_sigtramp.c,v 1.7.6.1 2008/11/25 18:18:53 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>

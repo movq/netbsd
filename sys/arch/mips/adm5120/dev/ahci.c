@@ -1,4 +1,4 @@
-/*	$NetBSD: ahci.c,v 1.5 2008/12/16 22:35:24 christos Exp $	*/
+/*	$NetBSD: ahci.c,v 1.4 2008/05/27 21:24:15 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahci.c,v 1.5 2008/12/16 22:35:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahci.c,v 1.4 2008/05/27 21:24:15 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -349,12 +349,11 @@ ahci_intr(void *arg)
 	}
 
 #ifdef AHCI_DEBUG
-	snprintb(bitbuf, sizeof(bitbuf),
-	    ((sl11read(sc, SL11_CTRL) & SL11_CTRL_SUSPEND)
-	    ? "\20\x8""D+\7RESUME\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA"
-	    : "\20\x8""D+\7RESET\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA"),
-	    r);
-		
+	bitmask_snprintf(r,
+		(sl11read(sc, SL11_CTRL) & SL11_CTRL_SUSPEND)
+		? "\20\x8""D+\7RESUME\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA"
+		: "\20\x8""D+\7RESET\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA",
+		bitbuf, sizeof(bitbuf));
 	DPRINTF(D_XFER, ("I=%s ", bitbuf));
 #endif /* AHCI_DEBUG */
 #endif
@@ -1633,8 +1632,9 @@ ahci_transaction(struct ahci_softc *sc, usbd_pipe_handle pipe,
 
 	DPRINTF(D_XFER, ("t=%d i=%x ", AHCI_TIMEOUT - timeout, isr));
 #if AHCI_DEBUG
-	snprintb(str, sizeof(str),
-	    "\20\x8STALL\7NAK\6OV\5SETUP\4DATA1\3TIMEOUT\2ERR\1ACK", result);
+	bitmask_snprintf(result,
+		"\20\x8STALL\7NAK\6OV\5SETUP\4DATA1\3TIMEOUT\2ERR\1ACK",
+		str, sizeof(str));
 	DPRINTF(D_XFER, ("STAT=%s ", str));
 #endif
 

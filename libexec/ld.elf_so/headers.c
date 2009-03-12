@@ -1,4 +1,4 @@
-/*	$NetBSD: headers.c,v 1.27 2009/01/06 04:01:46 mrg Exp $	 */
+/*	$NetBSD: headers.c,v 1.26.10.1 2009/01/16 22:21:30 bouyer Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: headers.c,v 1.27 2009/01/06 04:01:46 mrg Exp $");
+__RCSID("$NetBSD: headers.c,v 1.26.10.1 2009/01/16 22:21:30 bouyer Exp $");
 #endif /* not lint */
 
 #include <err.h>

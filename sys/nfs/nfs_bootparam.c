@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_bootparam.c,v 1.35 2008/11/19 18:36:09 ad Exp $	*/
+/*	$NetBSD: nfs_bootparam.c,v 1.34 2008/10/27 10:58:22 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1997 The NetBSD Foundation, Inc.
@@ -34,12 +34,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_bootparam.c,v 1.35 2008/11/19 18:36:09 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_bootparam.c,v 1.34 2008/10/27 10:58:22 cegger Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_nfs_boot.h"
-#include "arp.h"
-#endif
+#include "opt_inet.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,6 +67,8 @@ __KERNEL_RCSID(0, "$NetBSD: nfs_bootparam.c,v 1.35 2008/11/19 18:36:09 ad Exp $"
 #include <nfs/nfsmount.h>
 #include <nfs/nfsdiskless.h>
 #include <nfs/nfs_var.h>
+
+#include "arp.h"
 
 /*
  * There are two implementations of NFS diskless boot.
@@ -126,6 +126,7 @@ nfs_bootparam(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 	}
 
 	error = EADDRNOTAVAIL;
+#ifdef INET
 #if NARP > 0
 	if (ifp->if_type == IFT_ETHER || ifp->if_type == IFT_FDDI) {
 		/*
@@ -133,6 +134,7 @@ nfs_bootparam(struct nfs_diskless *nd, struct lwp *lwp, int *flags)
 		 */
 		error = revarpwhoarewe(ifp, &arps_ip, &my_ip);
 	}
+#endif
 #endif
 	if (error) {
 		printf("revarp failed, error=%d\n", error);

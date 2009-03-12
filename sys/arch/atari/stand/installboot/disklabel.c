@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.c,v 1.3 2009/01/06 13:35:30 tsutsui Exp $	*/
+/*	$NetBSD: disklabel.c,v 1.2.164.1 2009/01/16 22:57:33 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens

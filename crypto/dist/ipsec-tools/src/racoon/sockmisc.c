@@ -1,4 +1,4 @@
-/*	$NetBSD: sockmisc.c,v 1.13 2009/02/11 15:18:59 vanhu Exp $	*/
+/*	$NetBSD: sockmisc.c,v 1.12.4.1 2009/02/08 18:42:19 snj Exp $	*/
 
 /* Id: sockmisc.c,v 1.24 2006/05/07 21:32:59 manubsd Exp */
 
@@ -56,25 +56,20 @@
 
 #include "var.h"
 #include "misc.h"
-#include "vmbuf.h"
 #include "plog.h"
 #include "sockmisc.h"
 #include "debug.h"
 #include "gcmalloc.h"
 #include "debugrm.h"
 #include "libpfkey.h"
-#include "isakmp_var.h"
 
-#ifdef NOUSE_PRIVSEP
-#define BIND bind
-#define SOCKET socket
-#define SETSOCKOPT setsockopt
-#else
-#include "admin.h"
-#include "privsep.h"
-#define BIND privsep_bind
-#define SOCKET privsep_socket
-#define SETSOCKOPT privsep_setsockopt
+#ifndef IP_IPSEC_POLICY
+#define IP_IPSEC_POLICY 16	/* XXX: from linux/in.h */
+#endif
+
+#ifndef IPV6_IPSEC_POLICY
+#define IPV6_IPSEC_POLICY 34	/* XXX: from linux/???.h per
+				   "Tom Lendacky" <toml@us.ibm.com> */
 #endif
 
 const int niflags = 0;
@@ -198,76 +193,6 @@ cmpsaddrwild(addr1, addr2)
 }
 
 /*
- * compare two sockaddr with port, taking care specific situation:
- * one addr has 0 as port, and the other has 500 (network order), return equal
- * OUT:	0: equal.
- *	1: not equal.
- */
-int
-cmpsaddrmagic(addr1, addr2)
-	const struct sockaddr *addr1;
-	const struct sockaddr *addr2;
-{
-	caddr_t sa1, sa2;
-	u_short port1, port2;
-
-	if (addr1 == 0 && addr2 == 0)
-		return 0;
-	if (addr1 == 0 || addr2 == 0)
-		return 1;
-
-#ifdef __linux__
-	if (addr1->sa_family != addr2->sa_family)
-		return 1;
-#else
-	if (addr1->sa_len != addr2->sa_len
-	 || addr1->sa_family != addr2->sa_family)
-		return 1;
-
-#endif /* __linux__ */
-
-	switch (addr1->sa_family) {
-	case AF_INET:
-		sa1 = (caddr_t)&((struct sockaddr_in *)addr1)->sin_addr;
-		sa2 = (caddr_t)&((struct sockaddr_in *)addr2)->sin_addr;
-		port1 = ((struct sockaddr_in *)addr1)->sin_port;
-		port2 = ((struct sockaddr_in *)addr2)->sin_port;
-		plog(LLV_DEBUG, LOCATION, NULL, "cmpsaddr_magic: port1 == %d, port2 == %d\n", port1, port2);
-		if (!((port1 == IPSEC_PORT_ANY && port2 == ntohs(PORT_ISAKMP)) ||
-			  (port2 == IPSEC_PORT_ANY && port1 == ntohs(PORT_ISAKMP)) ||
-		      (port1 == port2))){			
-			plog(LLV_DEBUG, LOCATION, NULL, "cmpsaddr_magic: ports mismatch\n");
-			return 1;
-		}
-		plog(LLV_DEBUG, LOCATION, NULL, "cmpsaddr_magic: ports matched\n");
-		if (memcmp(sa1, sa2, sizeof(struct in_addr)) != 0)
-			return 1;
-		break;
-#ifdef INET6
-	case AF_INET6:
-		sa1 = (caddr_t)&((struct sockaddr_in6 *)addr1)->sin6_addr;
-		sa2 = (caddr_t)&((struct sockaddr_in6 *)addr2)->sin6_addr;
-		port1 = ((struct sockaddr_in6 *)addr1)->sin6_port;
-		port2 = ((struct sockaddr_in6 *)addr2)->sin6_port;
-		if (!((port1 == IPSEC_PORT_ANY && port2 == PORT_ISAKMP) ||
-			  (port2 == IPSEC_PORT_ANY && port1 == PORT_ISAKMP) ||
-		      (port1 == port2)))
-			return 1;
-		if (memcmp(sa1, sa2, sizeof(struct in6_addr)) != 0)
-			return 1;
-		if (((struct sockaddr_in6 *)addr1)->sin6_scope_id !=
-		    ((struct sockaddr_in6 *)addr2)->sin6_scope_id)
-			return 1;
-		break;
-#endif
-	default:
-		return 1;
-	}
-
-	return 0;
-}
-
-/*
  * compare two sockaddr with strict match on port.
  * OUT:	0: equal.
  *	1: not equal.
@@ -345,7 +270,7 @@ getlocaladdr(remote)
 	}
 	
 	/* get real interface received packet */
-	if ((s = SOCKET(remote->sa_family, SOCK_DGRAM, 0)) < 0) {
+	if ((s = socket(remote->sa_family, SOCK_DGRAM, 0)) < 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"socket (%s)\n", strerror(errno));
 		goto err;
@@ -711,7 +636,7 @@ sendfromto(s, buf, buflen, src, dst, cnt)
 			 * Better approach is to prepare bind'ed udp sockets for
 			 * each of the interface addresses.
 			 */
-			sendsock = SOCKET(src->sa_family, SOCK_DGRAM, 0);
+			sendsock = socket(src->sa_family, SOCK_DGRAM, 0);
 			if (sendsock < 0) {
 				plog(LLV_ERROR, LOCATION, NULL,
 					"socket (%s)\n", strerror(errno));
@@ -746,8 +671,7 @@ sendfromto(s, buf, buflen, src, dst, cnt)
 				return -1;
 			}
 
-			if (BIND(sendsock, (struct sockaddr *)src,
-				 sysdep_sa_len(src)) < 0) {
+			if (bind(sendsock, (struct sockaddr *)src, sysdep_sa_len(src)) < 0) {
 				plog(LLV_ERROR, LOCATION, NULL,
 					"bind 1 (%s)\n", strerror(errno));
 				close(sendsock);
@@ -811,7 +735,7 @@ setsockopt_bypass(so, family)
 			ipsec_strerror());
 		return -1;
 	}
-	if (SETSOCKOPT(so, level,
+	if (setsockopt(so, level,
 	               (level == IPPROTO_IP ?
 	                         IP_IPSEC_POLICY : IPV6_IPSEC_POLICY),
 	               buf, ipsec_get_policylen(buf)) < 0) {
@@ -830,7 +754,7 @@ setsockopt_bypass(so, family)
 			ipsec_strerror());
 		return -1;
 	}
-	if (SETSOCKOPT(so, level,
+	if (setsockopt(so, level,
 	               (level == IPPROTO_IP ?
 	                         IP_IPSEC_POLICY : IPV6_IPSEC_POLICY),
 	               buf, ipsec_get_policylen(buf)) < 0) {
@@ -1139,8 +1063,6 @@ extract_port (const struct sockaddr *addr)
     return port;
 
   switch (addr->sa_family) {
-    case AF_UNSPEC:
-      break;
     case AF_INET:
       port = ((struct sockaddr_in *)addr)->sin_port;
       break;

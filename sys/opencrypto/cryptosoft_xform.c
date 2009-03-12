@@ -1,4 +1,4 @@
-/*	$NetBSD: cryptosoft_xform.c,v 1.9 2008/12/17 20:51:38 cegger Exp $ */
+/*	$NetBSD: cryptosoft_xform.c,v 1.8.20.1 2009/05/03 17:24:45 snj Exp $ */
 /*	$FreeBSD: src/sys/opencrypto/xform.c,v 1.1.2.1 2002/11/21 23:34:23 sam Exp $	*/
 /*	$OpenBSD: xform.c,v 1.19 2002/08/16 22:47:25 dhartmei Exp $	*/
 
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: cryptosoft_xform.c,v 1.9 2008/12/17 20:51:38 cegger Exp $");
+__KERNEL_RCSID(1, "$NetBSD: cryptosoft_xform.c,v 1.8.20.1 2009/05/03 17:24:45 snj Exp $");
 
 #include <crypto/blowfish/blowfish.h>
 #include <crypto/cast128/cast128.h>
@@ -125,6 +125,8 @@ static	int SHA512Update_int(void *, const u_int8_t *, u_int16_t);
 
 static u_int32_t deflate_compress(u_int8_t *, u_int32_t, u_int8_t **);
 static u_int32_t deflate_decompress(u_int8_t *, u_int32_t, u_int8_t **);
+static u_int32_t gzip_compress(u_int8_t *, u_int32_t, u_int8_t **);
+static u_int32_t gzip_decompress(u_int8_t *, u_int32_t, u_int8_t **);
 
 /* Encryption instances */
 static const struct swcr_enc_xform swcr_enc_xform_null = {
@@ -278,6 +280,12 @@ static const struct swcr_comp_algo swcr_comp_algo_deflate = {
 	deflate_decompress
 };
 
+static const struct swcr_comp_algo swcr_comp_algo_gzip = {
+	&comp_algo_deflate,
+	gzip_compress,
+	gzip_decompress
+};
+
 /*
  * Encryption wrapper routines.
  */
@@ -325,7 +333,7 @@ des1_setkey(u_int8_t **sched, const u_int8_t *key, int len)
 	des_key_schedule *p;
 	int err;
 
-	p = malloc(sizeof (des_key_schedule),
+	MALLOC(p, des_key_schedule *, sizeof (des_key_schedule),
 		M_CRYPTO_DATA, M_NOWAIT|M_ZERO);
 	if (p != NULL) {
 		des_set_key((des_cblock *)__UNCONST(key), p[0]);
@@ -340,7 +348,7 @@ static void
 des1_zerokey(u_int8_t **sched)
 {
 	bzero(*sched, sizeof (des_key_schedule));
-	free(*sched, M_CRYPTO_DATA);
+	FREE(*sched, M_CRYPTO_DATA);
 	*sched = NULL;
 }
 
@@ -368,7 +376,7 @@ des3_setkey(u_int8_t **sched, const u_int8_t *key, int len)
 	des_key_schedule *p;
 	int err;
 
-	p = malloc(3*sizeof (des_key_schedule),
+	MALLOC(p, des_key_schedule *, 3*sizeof (des_key_schedule),
 		M_CRYPTO_DATA, M_NOWAIT|M_ZERO);
 	if (p != NULL) {
 		des_set_key((des_cblock *)__UNCONST(key +  0), p[0]);
@@ -385,7 +393,7 @@ static void
 des3_zerokey(u_int8_t **sched)
 {
 	bzero(*sched, 3*sizeof (des_key_schedule));
-	free(*sched, M_CRYPTO_DATA);
+	FREE(*sched, M_CRYPTO_DATA);
 	*sched = NULL;
 }
 
@@ -408,7 +416,7 @@ blf_setkey(u_int8_t **sched, const u_int8_t *key, int len)
 {
 	int err;
 
-	*sched = malloc(sizeof(BF_KEY),
+	MALLOC(*sched, u_int8_t *, sizeof(BF_KEY),
 		M_CRYPTO_DATA, M_NOWAIT|M_ZERO);
 	if (*sched != NULL) {
 		BF_set_key((BF_KEY *) *sched, len, key);
@@ -422,7 +430,7 @@ static void
 blf_zerokey(u_int8_t **sched)
 {
 	bzero(*sched, sizeof(BF_KEY));
-	free(*sched, M_CRYPTO_DATA);
+	FREE(*sched, M_CRYPTO_DATA);
 	*sched = NULL;
 }
 
@@ -443,7 +451,7 @@ cast5_setkey(u_int8_t **sched, const u_int8_t *key, int len)
 {
 	int err;
 
-	*sched = malloc(sizeof(cast128_key), M_CRYPTO_DATA,
+	MALLOC(*sched, u_int8_t *, sizeof(cast128_key), M_CRYPTO_DATA,
 	       M_NOWAIT|M_ZERO);
 	if (*sched != NULL) {
 		cast128_setkey((cast128_key *)*sched, key, len);
@@ -457,7 +465,7 @@ static void
 cast5_zerokey(u_int8_t **sched)
 {
 	bzero(*sched, sizeof(cast128_key));
-	free(*sched, M_CRYPTO_DATA);
+	FREE(*sched, M_CRYPTO_DATA);
 	*sched = NULL;
 }
 
@@ -482,7 +490,7 @@ skipjack_setkey(u_int8_t **sched, const u_int8_t *key, int len)
 	/* XXX assumes bytes are aligned on sizeof(u_char) == 1 boundaries.
 	 * Will this break a pdp-10, Cray-1, or GE-645 port?
 	 */
-	*sched = malloc(10 * (sizeof(u_int8_t *) + 0x100),
+	MALLOC(*sched, u_int8_t *, 10 * (sizeof(u_int8_t *) + 0x100),
 		M_CRYPTO_DATA, M_NOWAIT|M_ZERO);
 
 	if (*sched != NULL) {
@@ -506,7 +514,7 @@ static void
 skipjack_zerokey(u_int8_t **sched)
 {
 	bzero(*sched, 10 * (sizeof(u_int8_t *) + 0x100));
-	free(*sched, M_CRYPTO_DATA);
+	FREE(*sched, M_CRYPTO_DATA);
 	*sched = NULL;
 }
 
@@ -528,7 +536,7 @@ rijndael128_setkey(u_int8_t **sched, const u_int8_t *key, int len)
 {
 	int err;
 
-	*sched = malloc(sizeof(rijndael_ctx), M_CRYPTO_DATA,
+	MALLOC(*sched, u_int8_t *, sizeof(rijndael_ctx), M_CRYPTO_DATA,
 	    M_NOWAIT|M_ZERO);
 	if (*sched != NULL) {
 		rijndael_set_key((rijndael_ctx *) *sched, key, len * 8);
@@ -542,7 +550,7 @@ static void
 rijndael128_zerokey(u_int8_t **sched)
 {
 	bzero(*sched, sizeof(rijndael_ctx));
-	free(*sched, M_CRYPTO_DATA);
+	FREE(*sched, M_CRYPTO_DATA);
 	*sched = NULL;
 }
 
@@ -643,4 +651,16 @@ deflate_decompress(data, size, out)
 	u_int8_t **out;
 {
 	return deflate_global(data, size, 1, out);
+}
+
+static u_int32_t
+gzip_compress(u_int8_t *data, u_int32_t size, u_int8_t **out)
+{
+	return gzip_global(data, size, 0, out);
+}
+
+static u_int32_t
+gzip_decompress(u_int8_t *data, u_int32_t size, u_int8_t **out)
+{
+	return gzip_global(data, size, 1, out);
 }

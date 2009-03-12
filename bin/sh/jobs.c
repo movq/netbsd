@@ -1,4 +1,4 @@
-/*	$NetBSD: jobs.c,v 1.68 2008/12/21 17:16:11 christos Exp $	*/
+/*	$NetBSD: jobs.c,v 1.66 2008/10/16 15:36:23 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)jobs.c	8.5 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: jobs.c,v 1.68 2008/12/21 17:16:11 christos Exp $");
+__RCSID("$NetBSD: jobs.c,v 1.66 2008/10/16 15:36:23 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -95,8 +95,6 @@ STATIC void restartjob(struct job *);
 STATIC void freejob(struct job *);
 STATIC struct job *getjob(const char *, int);
 STATIC int dowait(int, struct job *);
-#define WBLOCK	1
-#define WNOFREE 2
 STATIC int waitproc(int, struct job *, int *);
 STATIC void cmdtxt(union node *);
 STATIC void cmdlist(union node *, int);
@@ -617,7 +615,7 @@ waitcmd(int argc, char **argv)
 				jp++;
 				continue;
 			}
-			if (dowait(WBLOCK, NULL) == -1)
+			if (dowait(1, (struct job *)NULL) == -1)
 			       return 128 + SIGINT;
 			jp = jobtab;
 		}
@@ -632,10 +630,10 @@ waitcmd(int argc, char **argv)
 		}
 		/* loop until process terminated or stopped */
 		while (job->state == JOBRUNNING) {
-			if (dowait(WBLOCK|WNOFREE, job) == -1)
+			if (dowait(1, (struct job *)NULL) == -1)
 			       return 128 + SIGINT;
 		}
-		status = job->ps[job->nprocs - 1].status;
+		status = job->ps[job->nprocs].status;
 		if (WIFEXITED(status))
 			retval = WEXITSTATUS(status);
 #if JOBS
@@ -982,7 +980,7 @@ waitforjob(struct job *jp)
 	INTOFF;
 	TRACE(("waitforjob(%%%d) called\n", jp - jobtab + 1));
 	while (jp->state == JOBRUNNING) {
-		dowait(WBLOCK, jp);
+		dowait(1, jp);
 	}
 #if JOBS
 	if (jp->jobctl) {
@@ -1032,7 +1030,7 @@ waitforjob(struct job *jp)
  */
 
 STATIC int
-dowait(int flags, struct job *job)
+dowait(int block, struct job *job)
 {
 	int pid;
 	int status;
@@ -1043,9 +1041,9 @@ dowait(int flags, struct job *job)
 	int stopped;
 	extern volatile char gotsig[];
 
-	TRACE(("dowait(%x) called\n", flags));
+	TRACE(("dowait(%d) called\n", block));
 	do {
-		pid = waitproc(flags & WBLOCK, job, &status);
+		pid = waitproc(block, job, &status);
 		TRACE(("wait returns pid %d, status %d\n", pid, status));
 	} while (pid == -1 && errno == EINTR && gotsig[SIGINT - 1] == 0);
 	if (pid <= 0)
@@ -1087,8 +1085,7 @@ dowait(int flags, struct job *job)
 		int mode = 0;
 		if (!rootshell || !iflag)
 			mode = SHOW_SIGNALLED;
-		if ((job == thisjob && (flags & WNOFREE) == 0) ||
-		    (job != thisjob && (flags & WNOFREE) != 0))
+		if (job == thisjob)
 			mode = SHOW_SIGNALLED | SHOW_NO_FREE;
 		if (mode)
 			showjob(out2, thisjob, mode);

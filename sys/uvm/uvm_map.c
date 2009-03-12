@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_map.c,v 1.269 2009/01/13 14:04:35 yamt Exp $	*/
+/*	$NetBSD: uvm_map.c,v 1.263.4.4 2010/11/21 18:09:00 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_map.c,v 1.269 2009/01/13 14:04:35 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_map.c,v 1.263.4.4 2010/11/21 18:09:00 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_uvmhist.h"
@@ -756,9 +756,6 @@ vm_map_busy(struct vm_map *map)
 
 /*
  * vm_map_locked_p: return true if the map is write locked.
- *
- * => only for debug purposes like KASSERTs.
- * => should not be used to verify that a map is not locked.
  */
 
 bool
@@ -2328,6 +2325,7 @@ uvm_unmap_remove(struct vm_map *map, vaddr_t start, vaddr_t end,
 			 * and we should free any such pages immediately.
 			 * this is mostly used for kmem_map and mb_map.
 			 */
+			KASSERT(vm_map_pmap(map) == pmap_kernel());
 
 			if ((entry->flags & UVM_MAP_KMAPENT) == 0) {
 				uvm_km_pgremove_intrsafe(map, entry->start,
@@ -2432,8 +2430,15 @@ uvm_unmap_remove(struct vm_map *map, vaddr_t start, vaddr_t end,
 		first_entry = entry;
 		entry = next;
 	}
+
+	/*
+	 * Note: if map is dying, leave pmap_update() for pmap_destroy(),
+	 * which will be called later.
+	 */
 	if ((map->flags & VM_MAP_DYING) == 0) {
 		pmap_update(vm_map_pmap(map));
+	} else {
+		KASSERT(vm_map_pmap(map) != pmap_kernel());
 	}
 
 	uvm_map_check(map, "unmap_remove leave");
@@ -5028,8 +5033,8 @@ uvm_page_printit(struct vm_page *pg, bool full,
 	char pqbuf[128];
 
 	(*pr)("PAGE %p:\n", pg);
-	snprintb(pgbuf, sizeof(pgbuf), page_flagbits, pg->flags);
-	snprintb(pqbuf, sizeof(pqbuf), page_pqflagbits, pg->pqflags);
+	bitmask_snprintf(pg->flags, page_flagbits, pgbuf, sizeof(pgbuf));
+	bitmask_snprintf(pg->pqflags, page_pqflagbits, pqbuf, sizeof(pqbuf));
 	(*pr)("  flags=%s, pqflags=%s, wire_count=%d, pa=0x%lx\n",
 	    pgbuf, pqbuf, pg->wire_count, (long)VM_PAGE_TO_PHYS(pg));
 	(*pr)("  uobject=%p, uanon=%p, offset=0x%llx loan_count=%d\n",
@@ -5136,7 +5141,8 @@ uvm_map_create(pmap_t pmap, vaddr_t vmin, vaddr_t vmax, int flags)
 {
 	struct vm_map *result;
 
-	result = malloc(sizeof(struct vm_map), M_VMMAP, M_WAITOK);
+	MALLOC(result, struct vm_map *, sizeof(struct vm_map),
+	    M_VMMAP, M_WAITOK);
 	uvm_map_setup(result, vmin, vmax, flags);
 	result->pmap = pmap;
 	return(result);

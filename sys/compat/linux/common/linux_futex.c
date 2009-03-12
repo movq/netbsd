@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_futex.c,v 1.23 2009/02/23 20:28:58 rmind Exp $ */
+/*	$NetBSD: linux_futex.c,v 1.18.4.2 2009/03/16 01:20:37 snj Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: linux_futex.c,v 1.23 2009/02/23 20:28:58 rmind Exp $");
+__KERNEL_RCSID(1, "$NetBSD: linux_futex.c,v 1.18.4.2 2009/03/16 01:20:37 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
@@ -53,11 +53,8 @@ __KERNEL_RCSID(1, "$NetBSD: linux_futex.c,v 1.23 2009/02/23 20:28:58 rmind Exp $
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_futex.h>
 #include <compat/linux/common/linux_ipc.h>
-#include <compat/linux/common/linux_sched.h>
 #include <compat/linux/common/linux_sem.h>
 #include <compat/linux/linux_syscallargs.h>
-
-void linux_to_native_timespec(struct timespec *, struct linux_timespec *);
 
 struct futex;
 
@@ -97,7 +94,7 @@ static ONCE_DECL(futex_once);
 static int
 futex_init(void)
 {
-	FUTEXPRINTF(("futex_init: initializing futex\n"));
+	printf("futex_init: initializing futex\n");
 	mutex_init(&futex_lock, MUTEX_DEFAULT, IPL_NONE);
 	return 0;
 }
@@ -115,18 +112,18 @@ linux_sys_futex(struct lwp *l, const struct linux_sys_futex_args *uap, register_
 		syscallarg(int *) uaddr;
 		syscallarg(int) op;
 		syscallarg(int) val;
-		syscallarg(const struct linux_timespec *) timeout;
+		syscallarg(const struct timespec *) timeout;
 		syscallarg(int *) uaddr2;
 		syscallarg(int) val3;
 	} */
 	int val;
 	int ret;
-	struct linux_timespec timeout = { 0, 0 };
+	struct timespec timeout = { 0, 0 };
 	int error = 0;
 	struct futex *f;
 	struct futex *newf;
 	int timeout_hz;
-	struct timespec ts;
+	struct timeval tv = {0, 0};
 	struct futex *f2;
 	int op_ret;
 
@@ -168,12 +165,11 @@ linux_sys_futex(struct lwp *l, const struct linux_sys_futex_args *uap, register_
 		    SCARG(uap, uaddr), val, (long long)timeout.tv_sec,
 		    timeout.tv_nsec));
 
-		linux_to_native_timespec(&ts, &timeout);
-		if ((error = itimespecfix(&ts)) != 0) {
-			FUTEX_SYSTEM_UNLOCK;
-			return error;
-		}
-		timeout_hz = tstohz(&ts);
+		tv.tv_usec = timeout.tv_sec * 1000000 + timeout.tv_nsec / 1000;
+		timeout_hz = tvtohz(&tv);
+
+		if (timeout.tv_sec == 0 && timeout.tv_nsec == 0)
+			timeout_hz = 0;
 
 		/*
 		 * If the user process requests a non null timeout,
@@ -183,7 +179,8 @@ linux_sys_futex(struct lwp *l, const struct linux_sys_futex_args *uap, register_
 		 * We use a minimal timeout of 1/hz. Maybe it would make
 		 * sense to just return ETIMEDOUT without sleeping.
 		 */
-		if (SCARG(uap, timeout) != NULL && timeout_hz == 0)
+		if (((timeout.tv_sec != 0) || (timeout.tv_nsec != 0)) &&
+		    (timeout_hz == 0))
 			timeout_hz = 1;
 
 		f = futex_get(SCARG(uap, uaddr), FUTEX_UNLOCKED);
@@ -501,6 +498,8 @@ linux_sys_set_robust_list(struct lwp *l,
 	struct proc *p = l->l_proc;
 	struct linux_emuldata *led = p->p_emuldata;
 
+	if (SCARG(uap, len) != sizeof(*(led->robust_futexes)))
+		return EINVAL;
 	led->robust_futexes = SCARG(uap, head);
 	*retval = 0;
 	return 0;
@@ -511,13 +510,13 @@ linux_sys_get_robust_list(struct lwp *l,
     const struct linux_sys_get_robust_list_args *uap, register_t *retval)
 {
 	struct linux_emuldata *led;
-	struct linux_robust_list_head *head;
-	size_t len = sizeof(struct linux_robust_list_head);
+	struct linux_robust_list_head **head;
+	size_t len = sizeof(*led->robust_futexes);
 	int error = 0;
 
 	if (!SCARG(uap, pid)) {
 		led = l->l_proc->p_emuldata;
-		head = led->robust_futexes;
+		head = &led->robust_futexes;
 	} else {
 		struct proc *p;
 
@@ -528,15 +527,14 @@ linux_sys_get_robust_list(struct lwp *l,
 			return ESRCH;
 		}
 		led = p->p_emuldata;
-		head = led->robust_futexes;
+		head = &led->robust_futexes;
 		mutex_exit(proc_lock);
 	}
 
-	error = copyout(&len, SCARG(uap, len), sizeof(size_t));
+	error = copyout(&len, SCARG(uap, len), sizeof(len));
 	if (error)
 		return error;
-	return copyout(head, SCARG(uap, head),
-	    sizeof(struct linux_robust_list_head));
+	return copyout(head, SCARG(uap, head), sizeof(*head));
 }
 
 static int
@@ -587,29 +585,30 @@ fetch_robust_entry(struct linux_robust_list **entry,
 void
 release_futexes(struct proc *p)
 {
-	struct linux_robust_list_head *head = NULL;
-	struct linux_robust_list *entry, *next_entry = NULL, *pending;
+	struct linux_robust_list_head head;
+	struct linux_robust_list *entry, *next_entry, *pending;
 	unsigned int limit = 2048, pi, next_pi, pip;
 	struct linux_emuldata *led;
 	unsigned long futex_offset;
 	int rc;
 
 	led = p->p_emuldata;
-	head = led->robust_futexes;
-
-	if (head == NULL)
+	if (led->robust_futexes == NULL)
 		return;
 
-	if (fetch_robust_entry(&entry, &head->list.next, &pi))
+	if (copyin(led->robust_futexes, &head, sizeof(head)))
 		return;
 
-	if (copyin(&head->futex_offset, &futex_offset, sizeof(unsigned long)))
+	if (fetch_robust_entry(&entry, &head.list.next, &pi))
 		return;
 
-	if (fetch_robust_entry(&pending, &head->pending_list, &pip))
+	if (copyin(&head.futex_offset, &futex_offset, sizeof(unsigned long)))
 		return;
 
-	while (entry != &head->list) {
+	if (fetch_robust_entry(&pending, &head.pending_list, &pip))
+		return;
+
+	while (entry != &head.list) {
 		rc = fetch_robust_entry(&next_entry, &entry->next, &next_pi);
 
 		if (entry != pending)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci.c,v 1.156 2008/12/16 22:35:35 christos Exp $ */
+/*	$NetBSD: ehci.c,v 1.154.4.2 2010/06/12 01:05:44 riz Exp $ */
 
 /*
  * Copyright (c) 2004-2008 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.156 2008/12/16 22:35:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.154.4.2 2010/06/12 01:05:44 riz Exp $");
 
 #include "ohci.h"
 #include "uhci.h"
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.156 2008/12/16 22:35:35 christos Exp $");
 #define DPRINTFN(n,x)	do { if (ehcidebug>(n)) printf x; } while (0)
 int ehcidebug = 0;
 #ifndef __NetBSD__
-#define snprintb((q), (f), "%b", q,f,b,l) snprintf((b), (l))
+#define bitmask_snprintf(q,f,b,l) snprintf((b), (l), "%b", (q), (f))
 #endif
 #else
 #define DPRINTF(x)
@@ -966,9 +966,9 @@ ehci_idone(struct ehci_xfer *ex)
 #ifdef EHCI_DEBUG
 		char sbuf[128];
 
-		snprintb(sbuf, sizeof(sbuf),
-		    "\20\7HALTED\6BUFERR\5BABBLE\4XACTERR\3MISSED\1PINGSTATE",
-		    (u_int32_t)status);
+		bitmask_snprintf((u_int32_t)status,
+				 "\20\7HALTED\6BUFERR\5BABBLE\4XACTERR"
+				 "\3MISSED\1PINGSTATE", sbuf, sizeof(sbuf));
 
 		DPRINTFN(2, ("ehci_idone: error, addr=%d, endpt=0x%02x, "
 			  "status 0x%s\n",
@@ -1437,9 +1437,9 @@ ehci_dump_qtd(ehci_qtd_t *qtd)
 	printf(" altnext="); ehci_dump_link(qtd->qtd_altnext, 0);
 	printf("\n");
 	s = le32toh(qtd->qtd_status);
-	snprintb(sbuf, sizeof(sbuf),
-	    "\20\10ACTIVE\7HALTED\6BUFERR\5BABBLE\4XACTERR"
-	    "\3MISSED\2SPLIT\1PING", EHCI_QTD_GET_STATUS(s));
+	bitmask_snprintf(EHCI_QTD_GET_STATUS(s),
+			 "\20\10ACTIVE\7HALTED\6BUFERR\5BABBLE\4XACTERR"
+			 "\3MISSED\2SPLIT\1PING", sbuf, sizeof(sbuf));
 	printf("  status=0x%08x: toggle=%d bytes=0x%x ioc=%d c_page=0x%x\n",
 	       s, EHCI_QTD_GET_TOGGLE(s), EHCI_QTD_GET_BYTES(s),
 	       EHCI_QTD_GET_IOC(s), EHCI_QTD_GET_C_PAGE(s));
@@ -1615,11 +1615,14 @@ ehci_open(usbd_pipe_handle pipe)
 		    );
 		sqh->qh.qh_endphub = htole32(
 		    EHCI_QH_SET_MULT(1) |
-		    EHCI_QH_SET_HUBA(hshubaddr) |
-		    EHCI_QH_SET_PORT(hshubport) |
-		    EHCI_QH_SET_CMASK(0x08) | /* XXX */
 		    EHCI_QH_SET_SMASK(xfertype == UE_INTERRUPT ? 0x02 : 0)
 		    );
+		if (speed != EHCI_QH_SPEED_HIGH)
+			sqh->qh.qh_endphub |= htole32(
+			    EHCI_QH_SET_PORT(hshubport) |
+			    EHCI_QH_SET_HUBA(hshubaddr) |
+			    EHCI_QH_SET_CMASK(0x08) /* XXX */
+			);
 		sqh->qh.qh_curqtd = EHCI_NULL;
 		/* Fill the overlay qTD */
 		sqh->qh.qh_qtd.qtd_next = EHCI_NULL;

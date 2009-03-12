@@ -1,4 +1,4 @@
-/*	$NetBSD: siop.c,v 1.61 2009/01/10 19:10:50 mhitch Exp $ */
+/*	$NetBSD: siop.c,v 1.58.30.2 2009/01/16 21:33:45 bouyer Exp $ */
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -70,7 +70,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.61 2009/01/10 19:10:50 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.58.30.2 2009/01/16 21:33:45 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -562,8 +562,8 @@ siopinitialize(struct siop_softc *sc)
 	 * malloc sc_acb to ensure that DS is on a long word boundary.
 	 */
 
-	sc->sc_acb = malloc(sizeof(struct siop_acb) * SIOP_NACB,
-		M_DEVBUF, M_NOWAIT);
+	MALLOC(sc->sc_acb, struct siop_acb *,
+		sizeof(struct siop_acb) * SIOP_NACB, M_DEVBUF, M_NOWAIT);
 	if (sc->sc_acb == NULL)
 		panic("siopinitialize: ACB malloc failed!");
 

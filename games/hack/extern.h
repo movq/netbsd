@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.9 2009/01/18 00:34:03 lukem Exp $	*/
+/*	$NetBSD: extern.h,v 1.8.6.1 2009/06/29 23:31:28 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -236,7 +236,7 @@ int dosuspend(void);
 
 /* hack.lev.c */
 void savelev(int, xchar);
-void bwrite(int, const void *, size_t);
+void bwrite(int, const void *, unsigned);
 void saveobjchn(int, struct obj *);
 void savemonchn(int, struct monst *);
 void savegoldchn(int, struct gold *);
@@ -356,7 +356,7 @@ char *sitoa(int);
 char *typename(int);
 char *xname(struct obj *);
 char *doname(struct obj *);
-void setan(const char *, char *);
+void setan(const char *, char *, size_t);
 char *aobjnam(struct obj *, const char *);
 char *Doname(struct obj *);
 struct obj *readobjnam(char *);

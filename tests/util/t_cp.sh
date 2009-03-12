@@ -1,6 +1,6 @@
-# $NetBSD: t_cp.sh,v 1.3 2009/01/19 07:15:46 jmmv Exp $
+# $NetBSD: t_cp.sh,v 1.2 2008/04/30 13:11:00 martin Exp $
 #
-# Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
+# Copyright (c) 2007 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -62,7 +62,7 @@ file_to_file_simple() {
 	rm -f file2
 	umask 022
 	chmod 777 file
-	atf_check -s eq:0 -o empty -e empty cp file file2
+	atf_check 'cp file file2' 0 null null
 	cp_compare file_to_file_simple file file2
 	if [ `stat -f "%Lp" file2` != "755" ]; then
 		atf_fail "new file not created with umask"
@@ -80,7 +80,7 @@ file_to_file_preserve() {
 	rm file3
 	chmod 644 file
 	chflags nodump file
-	atf_check -s eq:0 -o empty -e empty cp -p file file3
+	atf_check 'cp -p file file3' 0 null null
 	finfo=`stat -f "%p%u%g%m%z%f" file`
 	f3info=`stat -f "%p%u%g%m%z%f" file3`
 	if [ $finfo != $f3info ]; then
@@ -92,7 +92,7 @@ file_to_file_noflags() {
 	rm file3
 	chmod 644 file
 	chflags nodump file
-	atf_check -s eq:0 -o empty -e empty cp -p -N file file3
+	atf_check 'cp -p -N file file3' 0 null null
 	finfo=`stat -f "%f" file`
 	f3info=`stat -f "%f" file3`
 	if [ $finfo = $f3info ]; then
@@ -106,7 +106,7 @@ file_to_link_head() {
 }
 file_to_link_body() {
 	reset
-	atf_check -s eq:0 -o empty -e empty cp file2 link
+	atf_check 'cp file2 link' 0 null null
 	cp_compare file_to_link file file2
 }
 
@@ -117,8 +117,8 @@ link_to_file_head() {
 link_to_file_body() {
 	reset
 	# file and link are identical (not copied).
-	atf_check -s eq:1 -o empty -e ignore cp link file
-	atf_check -s eq:0 -o empty -e empty cp link file2
+	atf_check 'cp link file' 1 null ignore
+	atf_check 'cp link file2' 0 null null
 	cp_compare link_to_file file file2
 }
 
@@ -129,7 +129,7 @@ file_over_link_head() {
 }
 file_over_link_body() {
 	reset
-	atf_check -s eq:0 -o empty -e empty cp -P file link
+	atf_check 'cp -P file link' 0 null null
 	cp_compare file_over_link file link
 }
 
@@ -140,7 +140,7 @@ link_over_file_head() {
 }
 link_over_file_body() {
 	reset
-	atf_check -s eq:0 -o empty -e empty cp -P link file
+	atf_check 'cp -P link file' 0 null null
 	if [ `readlink link` != `readlink file` ]; then
 		atf_fail "readlink link != readlink file"
 	fi
@@ -153,8 +153,8 @@ files_to_dir_head() {
 files_to_dir_body() {
 	reset
 	# can't copy multiple files to a file
-	atf_check -s eq:1 -o empty -e ignore cp file file2 file3
-	atf_check -s eq:0 -o empty -e empty cp file file2 link dir
+	atf_check 'cp file file2 file3' 1 null ignore
+	atf_check 'cp file file2 link dir' 0 null null
 	cp_compare files_to_dir file "dir/file"
 }
 
@@ -166,8 +166,8 @@ dir_to_file_head() {
 dir_to_file_body() {
 	reset
 	# can't copy a dir onto a file
-	atf_check -s eq:1 -o empty -e ignore cp dir file
-	atf_check -s eq:1 -o empty -e ignore cp -R dir file
+	atf_check 'cp dir file' 1 null ignore
+	atf_check 'cp -R dir file' 1 null ignore
 }
 
 atf_test_case file_to_linkdir
@@ -177,12 +177,12 @@ file_to_linkdir_head() {
 }
 file_to_linkdir_body() {
 	reset
-	atf_check -s eq:0 -o empty -e empty cp file dirlink
+	atf_check 'cp file dirlink' 0 null null
 	cp_compare file_to_linkdir file "dir/file"
 
 	# overwrite the link
-	atf_check -s eq:0 -o empty -e empty cp -P file dirlink
-	atf_check -s eq:1 -o empty -e empty readlink dirlink
+	atf_check 'cp -P file dirlink' 0 null null
+	atf_check 'readlink dirlink' 1 null null # P didn't overwrite the link
 	cp_compare file_to_linkdir file dirlink
 }
 
@@ -194,21 +194,21 @@ linkdir_to_file_head() {
 linkdir_to_file_body() {
 	reset
 	# cannot copy a dir onto a file
-	atf_check -s eq:1 -o empty -e ignore cp dirlink file
+	atf_check 'cp dirlink file' 1 null ignore
 
 	# overwrite the link
-	atf_check -s eq:0 -o empty -e empty cp -P dirlink file
+	atf_check 'cp -P dirlink file' 0 null null
 	if [ `readlink file` != `readlink dirlink` ]; then
 		atf_fail "readlink link != readlink file"
 	fi
 }
 
 dir_to_dne_no_R() {
-	atf_check -s eq:1 -o empty -e ignore cp dir dir2
+	atf_check 'cp dir dir2' 1 null ignore
 }
 
 dir_to_dne() {
-	atf_check -s eq:0 -o empty -e empty cp -R dir dir2
+	atf_check 'cp -R dir dir2' 0 null null
 	cp_compare dir_to_dne "dir/file" "dir2/file"
 	readlink dir2/link >/dev/null
 	if [ $? -gt 0 ]; then
@@ -218,12 +218,12 @@ dir_to_dne() {
 
 dir_to_dir_H() {
 	dir_to_dir_setup
-	atf_check -s eq:0 -o empty -e empty cp -R dir dir2
+	atf_check 'cp -R dir dir2' 0 null null
 
 	chmod 777 dir
 
 	# copy a dir into a dir, only command-line links are followed
-	atf_check -s eq:0 -o empty -e empty cp -R -H dirlink dir2
+	atf_check 'cp -R -H dirlink dir2' 0 null null
 	cp_compare dir_to_dir_H "dir/file" "dir2/dirlink/file"
 	readlink dir2/dirlink/link >/dev/null
 	if [ $? -gt 0 ]; then
@@ -239,14 +239,14 @@ dir_to_dir_H() {
 
 dir_to_dir_L() {
 	dir_to_dir_setup
-	atf_check -s eq:0 -o empty -e empty cp -R dir dir2
-	atf_check -s eq:0 -o empty -e empty cp -R -H dirlink dir2
+	atf_check 'cp -R dir dir2' 0 null null
+	atf_check 'cp -R -H dirlink dir2' 0 null null
 
 	# copy a dir into a dir, following all links
-	atf_check -s eq:0 -o empty -e empty cp -R -H -L dirlink dir2/dirlink
+	atf_check 'cp -R -H -L dirlink dir2/dirlink' 0 null null
 	cp_compare dir_to_dir_L "dir/file" "dir2/dirlink/dirlink/file"
 	# fail if -R -L copied a link as a link
-	atf_check -s eq:1 -o ignore -e empty readlink dir2/dirlink/dirlink/link
+	atf_check 'readlink dir2/dirlink/dirlink/link' 1 ignore null
 }
 
 dir_to_dir_subdir_exists() {
@@ -256,7 +256,7 @@ dir_to_dir_subdir_exists() {
 
 	mkdir -p dir/1 dir/2 dir/3 target/2
 	echo "file" > dir/2/file
-	atf_check -s eq:0 -o empty -e empty cp -R dir/* target
+	atf_check 'cp -R dir/* target' 0 null null
 	cp_compare dir_to_dir_subdir_exists "dir/2/file" "target/2/file"
 }
 

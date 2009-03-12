@@ -1,4 +1,4 @@
-/*	$NetBSD: cgi-bozo.c,v 1.11 2009/03/11 06:53:25 mrg Exp $	*/
+/*	$NetBSD: cgi-bozo.c,v 1.7.8.3 2009/02/24 03:15:07 snj Exp $	*/
 
 /*	$eterna: cgi-bozo.c,v 1.18 2008/03/03 03:36:11 mrg Exp $	*/
 
@@ -316,7 +316,7 @@ finish_cgi_output(http_req *request, int in, int nph)
 	ssize_t	len;
 	ssize_t rbytes;
 	SIMPLEQ_HEAD(, headers)	headers;
-	struct	headers *hdr, *nhdr;
+	struct	headers *hdr;
 	int	write_header, nheaders = 0;
 
 	/* much of this code is like read_request()'s header loop. hmmm... */
@@ -365,7 +365,7 @@ finish_cgi_output(http_req *request, int in, int nph)
 	if (nheaders) {
 		debug((DEBUG_OBESE, "process_cgi:  writing delayed HTTP "
 				    "headers .."));
-		SIMPLEQ_FOREACH_SAFE(hdr, &headers, h_next, nhdr) {
+		SIMPLEQ_FOREACH(hdr, &headers, h_next) {
 			bozoprintf("%s: %s\r\n", hdr->h_header, hdr->h_value);
 			free(hdr->h_header);
 			free(hdr);

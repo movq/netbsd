@@ -1,4 +1,4 @@
-/*	$NetBSD: uba_common.h,v 1.6 2008/11/19 15:39:10 hans Exp $ */
+/*	$NetBSD: uba_common.h,v 1.5.14.1 2008/11/22 04:57:33 snj Exp $ */
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: xdr_float.c,v 1.35 2009/02/14 06:26:42 lukem Exp $	*/
+/*	$NetBSD: xdr_float.c,v 1.34 2006/09/15 00:01:24 cherry Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)xdr_float.c 1.12 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)xdr_float.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: xdr_float.c,v 1.35 2009/02/14 06:26:42 lukem Exp $");
+__RCSID("$NetBSD: xdr_float.c,v 1.34 2006/09/15 00:01:24 cherry Exp $");
 #endif
 #endif
 
@@ -117,7 +117,7 @@ xdr_float(xdrs, fp)
 	struct ieee_single is;
 	struct vax_single vs, *vsp;
 	struct sgl_limits *lim;
-	size_t i;
+	int i;
 #endif
 	switch (xdrs->x_op) {
 
@@ -223,7 +223,7 @@ xdr_double(xdrs, dp)
 	struct	ieee_double id;
 	struct	vax_double vd;
 	struct dbl_limits *lim;
-	size_t i;
+	int i;
 #endif
 
 	switch (xdrs->x_op) {

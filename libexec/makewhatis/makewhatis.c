@@ -1,4 +1,4 @@
-/*	$NetBSD: makewhatis.c,v 1.46 2008/11/16 06:26:12 dholland Exp $	*/
+/*	$NetBSD: makewhatis.c,v 1.44.4.1 2009/04/04 23:42:48 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 #if !defined(lint)
 __COPYRIGHT("@(#) Copyright (c) 1999\
  The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: makewhatis.c,v 1.46 2008/11/16 06:26:12 dholland Exp $");
+__RCSID("$NetBSD: makewhatis.c,v 1.44.4.1 2009/04/04 23:42:48 snj Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -71,7 +71,7 @@ __RCSID("$NetBSD: makewhatis.c,v 1.46 2008/11/16 06:26:12 dholland Exp $");
 
 typedef struct manpagestruct manpage;
 struct manpagestruct {
-	manpage *mp_left, *mp_right;
+	manpage *mp_left,*mp_right;
 	ino_t	 mp_inode;
 	size_t	 mp_sdoff;
 	size_t	 mp_sdlen;
@@ -80,14 +80,14 @@ struct manpagestruct {
 
 typedef struct whatisstruct whatis;
 struct whatisstruct {
-	whatis	*wi_left, *wi_right;
+	whatis	*wi_left,*wi_right;
 	char	*wi_data;
 	char	wi_prefix[1];
 };
 
 int		main(int, char * const *);
 static char	*findwhitespace(char *);
-static char	*strmove(char *, char *);
+static char	*strmove(char *,char *);
 static char	*GetS(gzFile, char *, size_t);
 static int	pathnamesection(const char *, const char *);
 static int	manpagesection(char *);
@@ -102,7 +102,7 @@ static int	manpreprocess(char *);
 static char	*nroff(const char *, gzFile *);
 static char	*parsemanpage(const char *, gzFile *, int);
 static char	*getwhatisdata(char *);
-static void	processmanpages(manpage **, whatis **);
+static void	processmanpages(manpage **,whatis **);
 static void	dumpwhatis(FILE *, whatis *);
 static int	makewhatis(char * const *manpath);
 
@@ -160,10 +160,10 @@ main(int argc, char *const *argv)
 	}
 	argc -= optind;
 	argv += optind;
-
+			
 	if (argc >= 1) {
 		manpath = &argv[0];
-
+	
 	    mkwhatis:
 		return makewhatis(manpath);
 	}
@@ -222,7 +222,7 @@ main(int argc, char *const *argv)
 				jobs++;
 				break;
 			}
-
+			
 		}
 
 		globfree(&pg);
@@ -235,7 +235,7 @@ main(int argc, char *const *argv)
 			retval = EXIT_FAILURE;
 		jobs--;
 	}
-
+				
 	return retval;
 }
 
@@ -248,8 +248,6 @@ makewhatis(char * const * manpath)
 	whatis	*dest;
 	FILE	*out;
 	size_t	sdoff, sdlen;
-	int	outfd;
-	struct stat st_before, st_after;
 
 	if ((fts = fts_open(manpath, FTS_LOGICAL, NULL)) == NULL)
 		err(EXIT_FAILURE, "Cannot open `%s'", *manpath);
@@ -277,11 +275,9 @@ makewhatis(char * const * manpath)
 						if (lsl == NULL)
 							lsl = s;
 					}
-
-					/*
-					 * Include trailing '/', so we get
-					 * 'arch/'.
-					 */
+					
+					/* Include trailing '/', so we get
+					 * 'arch/'. */
 					sdoff = s + 1 - fe->fts_path;
 					sdlen = lsl - s + 1;
 				} else {
@@ -332,74 +328,15 @@ makewhatis(char * const * manpath)
 	if (chdir(manpath[0]) == -1)
 		err(EXIT_FAILURE, "Cannot change dir to `%s'", manpath[0]);
 
-	/*
-	 * makewhatis runs unattended, so it needs to be able to
-	 * recover if the last run crashed out. Therefore, if
-	 * whatisdb_new exists and is more than (arbitrarily) sixteen
-	 * hours old, nuke it. If it exists but is not so old, refuse
-	 * to run until it's cleaned up, in case another makewhatis is
-	 * already running. Also, open the output with O_EXCL to make
-	 * sure we get our own, in case two copies start exactly at
-	 * once. (Unlikely? Maybe, maybe not, if two copies of cron
-	 * end up running.)
-	 *
-	 * Similarly, before renaming the file after we finish writing
-	 * to it, make sure it's still the same file we opened. This
-	 * can't be completely race-free, but getting caught by it
-	 * would require an unexplained sixteen-hour-or-more lag
-	 * between the last mtime update when we wrote to it and when
-	 * we get to the stat call *and* another makewhatis starting
-	 * out to write at exactly the wrong moment. Not impossible,
-	 * but not likely enough to worry about.
-	 *
-	 * This is maybe unnecessarily elaborate, but generating
-	 * corrupted output isn't so good either.
-	 */
-
-	if (stat(whatisdb_new, &st_before) == 0) {
-		if (st_before.st_mtime - time(NULL) > 16*60*60) {
-			/* Don't complain if someone else just removed it. */
-			if (unlink(whatisdb_new) == -1 && errno != ENOENT) {
-				err(EXIT_FAILURE, "Could not remove `%s'",
-				    whatisdb_new);
-			} else {
-				warnx("Removed stale `%s'", whatisdb_new);
-			}
-		} else {
-			errx(EXIT_FAILURE, "The file `%s' already exists "
-			    "-- am I already running?", whatisdb_new);
-		}
-	} else if (errno != ENOENT) {
-		/* Something unexpected happened. */
-		err(EXIT_FAILURE, "Cannot stat `%s'", whatisdb_new);
-	}
-
-	outfd = open(whatisdb_new, O_WRONLY|O_CREAT|O_EXCL,
-	    S_IRUSR|S_IRGRP|S_IROTH);
-	if (outfd < 0)
+	(void)unlink(whatisdb_new);
+	if ((out = fopen(whatisdb_new, "w")) == NULL)
 		err(EXIT_FAILURE, "Cannot open `%s'", whatisdb_new);
-
-	if (fstat(outfd, &st_before) == -1)
-		err(EXIT_FAILURE, "Cannot fstat `%s'", whatisdb_new);
-
-	if ((out = fdopen(outfd, "w")) == NULL)
-		err(EXIT_FAILURE, "Cannot fdopen `%s'", whatisdb_new);
 
 	dumpwhatis(out, dest);
 	if (fchmod(fileno(out), S_IRUSR|S_IRGRP|S_IROTH) == -1)
 		err(EXIT_FAILURE, "Cannot chmod `%s'", whatisdb_new);
 	if (fclose(out) != 0)
 		err(EXIT_FAILURE, "Cannot close `%s'", whatisdb_new);
-
-	if (stat(whatisdb_new, &st_after) == -1)
-		err(EXIT_FAILURE, "Cannot stat `%s' (after writing)",
-		    whatisdb_new);
-
-	if (st_before.st_dev != st_after.st_dev ||
-	    st_before.st_ino != st_after.st_ino) {
-		errx(EXIT_FAILURE, "The file `%s' changed under me; giving up",
-		    whatisdb_new);
-	}
 
 	if (rename(whatisdb_new, whatisdb) == -1)
 		err(EXIT_FAILURE, "Could not rename `%s' to `%s'",
@@ -420,8 +357,8 @@ findwhitespace(char *str)
 	return str;
 }
 
-static char *
-strmove(char *dest, char *src)
+static char
+*strmove(char *dest,char *src)
 {
 	return memmove(dest, src, strlen(src) + 1);
 }
@@ -500,7 +437,7 @@ createsectionstring(char *section_id)
 }
 
 static void
-addmanpage(manpage **tree, ino_t inode, char *name, size_t sdoff, size_t sdlen)
+addmanpage(manpage **tree,ino_t inode,char *name, size_t sdoff, size_t sdlen)
 {
 	manpage *mp;
 
@@ -540,6 +477,7 @@ addwhatis(whatis **tree, char *data, char *prefix)
 
 	while ((wi = *tree) != NULL) {
 		result = strcmp(data, wi->wi_data);
+		if (result == 0) result = strcmp(prefix, wi->wi_prefix);
 		if (result == 0) return;
 		tree = result < 0 ? &wi->wi_left : &wi->wi_right;
 	}
@@ -1117,7 +1055,7 @@ processmanpages(manpage **source, whatis **dest)
 		char *data;
 
 		if (mp->mp_left != NULL)
-			processmanpages(&mp->mp_left, dest);
+			processmanpages(&mp->mp_left,dest);
 
 		if ((data = getwhatisdata(mp->mp_name)) != NULL) {
 			/* Pass eventual directory prefix to addwhatis() */

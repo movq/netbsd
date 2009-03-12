@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.76 2008/11/19 23:04:34 cegger Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.74.4.1 2009/06/09 17:52:58 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,11 +32,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.76 2008/11/19 23:04:34 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.74.4.1 2009/06/09 17:52:58 snj Exp $");
 
 #include "opt_altivec.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcarch.h"
+#include "opt_coredump.h"
 
 #include <sys/param.h>
 #include <sys/core.h>
@@ -45,7 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.76 2008/11/19 23:04:34 cegger Exp $
 #include <sys/systm.h>
 #include <sys/user.h>
 #include <sys/vnode.h>
-#include <sys/buf.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -185,6 +185,60 @@ cpu_lwp_free(struct lwp *l, int proc)
 
 }
 
+#ifdef COREDUMP
+/*
+ * Write the machine-dependent part of a core dump.
+ */
+int
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+{
+	struct coreseg cseg;
+	struct md_coredump md_core;
+	struct pcb *pcb = &l->l_addr->u_pcb;
+	int error;
+
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*chdr, COREMAGIC, MID_POWERPC, 0);
+		chdr->c_hdrsize = ALIGN(sizeof *chdr);
+		chdr->c_seghdrsize = ALIGN(sizeof cseg);
+		chdr->c_cpusize = sizeof md_core;
+		chdr->c_nseg++;
+		return 0;
+	}
+
+	md_core.frame = *trapframe(l);
+	if (pcb->pcb_flags & PCB_FPU) {
+#ifdef PPC_HAVE_FPU
+		if (pcb->pcb_fpcpu)
+			save_fpu_lwp(l, FPU_SAVE);
+#endif
+		md_core.fpstate = pcb->pcb_fpu;
+	} else
+		memset(&md_core.fpstate, 0, sizeof(md_core.fpstate));
+
+#ifdef ALTIVEC
+	if (pcb->pcb_flags & PCB_ALTIVEC) {
+		if (pcb->pcb_veccpu)
+			save_vec_lwp(l, ALTIVEC_SAVE);
+		md_core.vstate = pcb->pcb_vr;
+	} else
+#endif
+		memset(&md_core.vstate, 0, sizeof(md_core.vstate));
+
+	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
+	cseg.c_addr = 0;
+	cseg.c_size = chdr->c_cpusize;
+
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+		    chdr->c_seghdrsize);
+	if (error)
+		return error;
+
+	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
+	    sizeof(md_core));
+}
+#endif
+
 #ifdef PPC_IBM4XX
 /*
  * Map a range of user addresses into the kernel.
@@ -297,7 +351,7 @@ vunmapbuf(struct buf *bp, vsize_t len)
 void
 cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 {
-	extern void fork_trampoline(void);
+	extern void setfunc_trampoline(void);
 	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct trapframe *tf;
 	struct callframe *cf;
@@ -305,7 +359,7 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 
 	tf = trapframe(l);
 	cf = (struct callframe *) ((uintptr_t)tf & ~(CALLFRAMELEN-1));
-	cf->lr = (register_t)cpu_lwp_bootstrap;
+	cf->lr = (register_t)setfunc_trampoline;
 	cf--;
 	cf->sp = (register_t) (cf+1);
 	cf->r31 = (register_t) func;

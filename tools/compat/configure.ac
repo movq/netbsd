@@ -1,4 +1,4 @@
-#	$NetBSD: configure.ac,v 1.69 2009/02/03 05:22:40 dbj Exp $
+#	$NetBSD: configure.ac,v 1.67.2.2 2009/10/03 21:28:00 snj Exp $
 #
 # Autoconf definition file for libnbcompat.
 #
@@ -24,7 +24,7 @@ AC_CONFIG_HEADERS(nbtool_config.h)
 AC_CONFIG_FILES(defs.mk)
 
 # Autoheader header and footer
-AH_TOP([/*      $NetBSD: configure.ac,v 1.69 2009/02/03 05:22:40 dbj Exp $    */
+AH_TOP([/*      $NetBSD: configure.ac,v 1.67.2.2 2009/10/03 21:28:00 snj Exp $    */
  
 #ifndef __NETBSD_NBTOOL_CONFIG_H__
 #define __NETBSD_NBTOOL_CONFIG_H__])

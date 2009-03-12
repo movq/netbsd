@@ -1,4 +1,4 @@
-/*	$NetBSD: buf.c,v 1.24 2009/01/17 13:29:37 dsl Exp $	*/
+/*	$NetBSD: buf.c,v 1.22 2008/10/06 22:09:21 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: buf.c,v 1.24 2009/01/17 13:29:37 dsl Exp $";
+static char rcsid[] = "$NetBSD: buf.c,v 1.22 2008/10/06 22:09:21 joerg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)buf.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: buf.c,v 1.24 2009/01/17 13:29:37 dsl Exp $");
+__RCSID("$NetBSD: buf.c,v 1.22 2008/10/06 22:09:21 joerg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -87,6 +87,7 @@ __RCSID("$NetBSD: buf.c,v 1.24 2009/01/17 13:29:37 dsl Exp $");
  *	Functions for automatically-expanded buffers.
  */
 
+#include    "sprite.h"
 #include    "make.h"
 #include    "buf.h"
 
@@ -94,22 +95,56 @@ __RCSID("$NetBSD: buf.c,v 1.24 2009/01/17 13:29:37 dsl Exp $");
 #define max(a,b)  ((a) > (b) ? (a) : (b))
 #endif
 
+/*
+ * BufExpand --
+ * 	Expand the given buffer to hold the given number of additional
+ *	bytes.
+ *	Makes sure there's room for an extra NULL byte at the end of the
+ *	buffer in case it holds a string.
+ */
+#define BufExpand(bp,nb) \
+ 	while (bp->left < (nb)+1) {\
+	    int newSize = (bp)->size * 2; \
+	    Byte  *newBuf = (Byte *)bmake_realloc((bp)->buffer, newSize); \
+	    \
+	    (bp)->inPtr = newBuf + ((bp)->inPtr - (bp)->buffer); \
+	    (bp)->outPtr = newBuf + ((bp)->outPtr - (bp)->buffer);\
+	    (bp)->buffer = newBuf;\
+	    (bp)->size = newSize;\
+	    (bp)->left = newSize - ((bp)->inPtr - (bp)->buffer);\
+	}
+
 #define BUF_DEF_SIZE	256 	/* Default buffer size */
 
 /*-
  *-----------------------------------------------------------------------
- * Buf_Expand_1 --
- *	Extend buffer for single byte add.
+ * Buf_OvAddByte --
+ *	Add a single byte to the buffer.  left is zero or negative.
+ *
+ * Results:
+ *	None.
+ *
+ * Side Effects:
+ *	The buffer may be expanded.
  *
  *-----------------------------------------------------------------------
  */
 void
-Buf_Expand_1(Buffer *bp)
+Buf_OvAddByte(Buffer bp, int byte)
 {
-    bp->size += max(bp->size, 16);
-    bp->buffer = bmake_realloc(bp->buffer, bp->size);
-}
+    int nbytes = 1;
+    bp->left = 0;
+    BufExpand(bp, nbytes);
 
+    *bp->inPtr++ = byte;
+    bp->left--;
+
+    /*
+     * Null-terminate
+     */
+    *bp->inPtr = 0;
+}
+
 /*-
  *-----------------------------------------------------------------------
  * Buf_AddBytes --
@@ -124,22 +159,21 @@ Buf_Expand_1(Buffer *bp)
  *-----------------------------------------------------------------------
  */
 void
-Buf_AddBytes(Buffer *bp, int numBytes, const Byte *bytesPtr)
+Buf_AddBytes(Buffer bp, int numBytes, const Byte *bytesPtr)
 {
-    int count = bp->count;
-    Byte *ptr;
 
-    if (__predict_false(count + numBytes >= bp->size)) {
-	bp->size += max(bp->size, numBytes + 16);
-	bp->buffer = bmake_realloc(bp->buffer, bp->size);
-    }
+    BufExpand(bp, numBytes);
 
-    ptr = bp->buffer + count;
-    bp->count = count + numBytes;
-    ptr[numBytes] = 0;
-    memcpy(ptr, bytesPtr, numBytes);
+    memcpy(bp->inPtr, bytesPtr, numBytes);
+    bp->inPtr += numBytes;
+    bp->left -= numBytes;
+
+    /*
+     * Null-terminate
+     */
+    *bp->inPtr = 0;
 }
-
+
 /*-
  *-----------------------------------------------------------------------
  * Buf_GetAll --
@@ -154,18 +188,19 @@ Buf_AddBytes(Buffer *bp, int numBytes, const Byte *bytesPtr)
  *-----------------------------------------------------------------------
  */
 Byte *
-Buf_GetAll(Buffer *bp, int *numBytesPtr)
+Buf_GetAll(Buffer bp, int *numBytesPtr)
 {
 
-    if (numBytesPtr != NULL)
-	*numBytesPtr = bp->count;
+    if (numBytesPtr != NULL) {
+	*numBytesPtr = bp->inPtr - bp->outPtr;
+    }
 
-    return (bp->buffer);
+    return (bp->outPtr);
 }
-
+
 /*-
  *-----------------------------------------------------------------------
- * Buf_Empty --
+ * Buf_Discard --
  *	Throw away bytes in a buffer.
  *
  * Results:
@@ -177,13 +212,38 @@ Buf_GetAll(Buffer *bp, int *numBytesPtr)
  *-----------------------------------------------------------------------
  */
 void
-Buf_Empty(Buffer *bp)
+Buf_Discard(Buffer bp, int numBytes)
 {
 
-    bp->count = 0;
-    *bp->buffer = 0;
+    if (bp->inPtr - bp->outPtr <= numBytes) {
+	bp->inPtr = bp->outPtr = bp->buffer;
+	bp->left = bp->size;
+	*bp->inPtr = 0;
+    } else {
+	bp->outPtr += numBytes;
+    }
 }
-
+
+/*-
+ *-----------------------------------------------------------------------
+ * Buf_Size --
+ *	Returns the number of bytes in the given buffer. Doesn't include
+ *	the null-terminating byte.
+ *
+ * Results:
+ *	The number of bytes.
+ *
+ * Side Effects:
+ *	None.
+ *
+ *-----------------------------------------------------------------------
+ */
+int
+Buf_Size(Buffer buf)
+{
+    return (buf->inPtr - buf->outPtr);
+}
+
 /*-
  *-----------------------------------------------------------------------
  * Buf_Init --
@@ -202,18 +262,24 @@ Buf_Empty(Buffer *bp)
  *
  *-----------------------------------------------------------------------
  */
-void
-Buf_Init(Buffer *bp, int size)
+Buffer
+Buf_Init(int size)
 {
+    Buffer bp;	  	/* New Buffer */
+
+    bp = bmake_malloc(sizeof(*bp));
+
     if (size <= 0) {
 	size = BUF_DEF_SIZE;
     }
-    bp->size = size;
-    bp->count = 0;
+    bp->left = bp->size = size;
     bp->buffer = bmake_malloc(size);
-    *bp->buffer = 0;
-}
+    bp->inPtr = bp->outPtr = bp->buffer;
+    *bp->inPtr = 0;
 
+    return (bp);
+}
+
 /*-
  *-----------------------------------------------------------------------
  * Buf_Destroy --
@@ -224,27 +290,46 @@ Buf_Init(Buffer *bp, int size)
  *	freeData	TRUE if the data should be destroyed
  *
  * Results:
- *	Data buffer, NULL if freed
+ *	None.
  *
  * Side Effects:
  *	The buffer is freed.
  *
  *-----------------------------------------------------------------------
  */
-Byte *
-Buf_Destroy(Buffer *buf, Boolean freeData)
+void
+Buf_Destroy(Buffer buf, Boolean freeData)
 {
-    Byte *data;
 
-    data = buf->buffer;
     if (freeData) {
-	free(data);
-	data = NULL;
+	free(buf->buffer);
     }
-
-    buf->size = 0;
-    buf->count = 0;
-    buf->buffer = NULL;
-
-    return data;
+    free(buf);
+}
+
+/*-
+ *-----------------------------------------------------------------------
+ * Buf_ReplaceLastByte --
+ *     Replace the last byte in a buffer.
+ *
+ * Input:
+ *	buf		buffer to augment
+ *	byte		byte to be written
+ *
+ * Results:
+ *     None.
+ *
+ * Side Effects:
+ *     If the buffer was empty intially, then a new byte will be added.
+ *     Otherwise, the last byte is overwritten.
+ *
+ *-----------------------------------------------------------------------
+ */
+void
+Buf_ReplaceLastByte(Buffer buf, int byte)
+{
+    if (buf->inPtr == buf->outPtr)
+        Buf_AddByte(buf, byte);
+    else
+        *(buf->inPtr - 1) = byte;
 }

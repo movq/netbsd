@@ -1,4 +1,4 @@
-/*	$NetBSD: i82557var.h,v 1.45 2009/03/11 13:12:41 tsutsui Exp $	*/
+/*	$NetBSD: i82557var.h,v 1.40.4.1 2008/12/14 11:52:40 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2001 The NetBSD Foundation, Inc.
@@ -191,7 +191,7 @@ struct fxp_softc {
 	bus_dmamap_t sc_rxmaps[FXP_NRFABUFS]; /* free receive buffer DMA maps */
 	int	sc_rxfree;		/* free map index */
 	int	sc_rxidle;		/* # of seconds RX has been idle */
-	uint16_t sc_txcmd;		/* transmit command (LITTLE ENDIAN) */
+	u_int16_t sc_txcmd;		/* transmit command (LITTLE ENDIAN) */
 
 	/*
 	 * Control data structures.
@@ -222,9 +222,8 @@ struct fxp_softc {
 #define	FXPF_EXT_TXCB		0x0080	/* enable extended TxCB */
 #define	FXPF_UCODE_LOADED	0x0100	/* microcode is loaded */
 #define	FXPF_EXT_RFA		0x0200	/* enable extended RFD */
+#define	FXPF_IPCB		0x0400	/* use IPCB */
 #define	FXPF_RECV_WORKAROUND	0x0800	/* receiver lock-up workaround */
-#define	FXPF_FC			0x1000	/* has flow control */
-#define	FXPF_82559_RXCSUM	0x2000	/* enable 82559 compat RX checksum */
 
 	int	sc_int_delay;		/* interrupt delay */
 	int	sc_bundle_max;		/* max packet bundle */
@@ -308,7 +307,7 @@ do {									\
 	bus_dmamap_t __rxmap = M_GETCTX((m), bus_dmamap_t);		\
 	struct mbuf *__p_m;						\
 	struct fxp_rfa *__rfa, *__p_rfa;				\
-	uint32_t __v;							\
+	u_int32_t __v;							\
 									\
 	(m)->m_data = (m)->m_ext.ext_buf + (sc)->sc_rfa_size +		\
 	    RFA_ALIGNMENT_FUDGE;					\

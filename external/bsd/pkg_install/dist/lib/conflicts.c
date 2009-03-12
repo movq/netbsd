@@ -1,4 +1,4 @@
-/*	$NetBSD: conflicts.c,v 1.1.1.2 2009/02/02 20:44:05 joerg Exp $	*/
+/*	$NetBSD: conflicts.c,v 1.1.1.1.6.3 2010/02/03 00:38:22 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007 Roland Illig <rillig@NetBSD.org>.
@@ -48,7 +48,7 @@
 #include <sys/cdefs.h>
 #endif
 
-__RCSID("$NetBSD: conflicts.c,v 1.1.1.2 2009/02/02 20:44:05 joerg Exp $");
+__RCSID("$NetBSD: conflicts.c,v 1.1.1.1.6.3 2010/02/03 00:38:22 snj Exp $");
 
 #if HAVE_ERR_H
 #include <err.h>
@@ -75,15 +75,16 @@ struct package_conflict {
 static FILE *
 fopen_contents(const char *pkgname, const char *mode)
 {
-	char fname[MaxPathSize];
+	char *fname;
 	FILE *f;
 
-	snprintf(fname, sizeof(fname), "%s/%s/%s", _pkgdb_getPKGDB_DIR(), pkgname, CONTENTS_FNAME);
+	fname = pkgdb_pkg_file(pkgname, CONTENTS_FNAME);
 	f = fopen(fname, mode);
 	if (f == NULL) {
 		err(EXIT_FAILURE, "%s", fname);
 		/* NOTREACHED */
 	}
+	free(fname);
 	return f;
 }
 
@@ -162,5 +163,4 @@ int main(int argc, char **argv)
 		printf("no\n");
 	return 0;
 }
-void cleanup(int i) {}
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: md_root.c,v 1.28 2008/12/28 23:00:39 tsutsui Exp $	*/
+/*	$NetBSD: md_root.c,v 1.25.20.3 2009/01/06 23:59:06 snj Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.28 2008/12/28 23:00:39 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.25.20.3 2009/01/06 23:59:06 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

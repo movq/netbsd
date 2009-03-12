@@ -1,4 +1,4 @@
-.\"	$NetBSD: kmem_alloc.9,v 1.8 2008/12/29 15:57:01 wiz Exp $
+.\"	$NetBSD: kmem_alloc.9,v 1.6.10.1 2009/02/02 19:16:17 snj Exp $
 .\"
 .\" Copyright (c)2006 YAMAMOTO Takashi,
 .\" All rights reserved.
@@ -55,8 +55,7 @@ If the allocation cannot be satisfied immediatley, sleep until enough
 memory is available.
 .It KM_NOSLEEP
 Don't sleep.
-Immediately return
-.Dv NULL
+Immediately return NULL
 if there is not enough memory available.
 It should only be used when failure to allocate will not have harmful,
 user-visible effects.

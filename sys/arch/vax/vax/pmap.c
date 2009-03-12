@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.165 2009/02/13 22:41:03 apb Exp $	   */
+/*	$NetBSD: pmap.c,v 1.160 2008/04/24 15:35:27 ad Exp $	   */
 /*
  * Copyright (c) 1994, 1998, 1999, 2003 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -30,11 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.165 2009/02/13 22:41:03 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.160 2008/04/24 15:35:27 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_cputype.h"
-#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
 #include "opt_pipe.h"
@@ -93,8 +92,7 @@ uintptr_t scratch;
 #define SCRATCHPAGES	4
 
 
-static struct pmap kernel_pmap_store;
-struct pmap *const kernel_pmap_ptr = &kernel_pmap_store;
+struct pmap kernel_pmap_store;
 
 struct	pte *Sysmap;		/* System page table */
 struct	pv_entry *pv_table;	/* array of entries, one per LOGICAL page */
@@ -239,8 +237,8 @@ calc_kvmsize(vsize_t usrptsize)
 #if VAX46 || VAX49
 	kvmsize += 0x800000; /* 8 MB framebuffer */
 #endif
-#ifdef MODULAR
-	/* Modules are allocated out of kernel_map */
+#ifdef LKM
+	/* LKMs are allocated out of kernel_map */
 #define MAXLKMSIZ	0x100000	/* XXX */
 	kvmsize += MAXLKMSIZ;
 #endif
@@ -891,7 +889,7 @@ pmap_create(void)
 {
 	struct pmap *pmap;
 
-	pmap = malloc(sizeof(*pmap), M_VMPMAP, M_WAITOK|M_ZERO);
+	MALLOC(pmap, struct pmap *, sizeof(*pmap), M_VMPMAP, M_WAITOK|M_ZERO);
 	pmap_pinit(pmap);
 	simple_lock_init(&pmap->pm_lock);
 	return (pmap);
@@ -965,7 +963,7 @@ pmap_destroy(pmap_t pmap)
 			panic("pmap_destroy used pmap");
 #endif
 		pmap_release(pmap);
-		free(pmap, M_VMPMAP);
+		FREE(pmap, M_VMPMAP);
 	}
 }
 

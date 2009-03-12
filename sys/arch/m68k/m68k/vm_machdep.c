@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.27 2008/11/19 18:35:59 ad Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.26.30.1 2009/06/05 18:34:47 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -77,7 +77,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.27 2008/11/19 18:35:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.26.30.1 2009/06/05 18:34:47 snj Exp $");
+
+#include "opt_coredump.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -129,6 +131,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	struct trapframe *tf;
 	struct switchframe *sf;
 	extern struct pcb *curpcb;
+	extern void lwp_trampoline(void);
 
 	l2->l_md.md_flags = l1->l_md.md_flags;
 
@@ -171,8 +174,9 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct trapframe *tf = (struct trapframe *)l->l_md.md_regs;
 	struct switchframe *sf = (struct switchframe *)tf - 1;
+	extern void setfunc_trampoline(void);
 
-	sf->sf_pc = (u_int)lwp_trampoline;
+	sf->sf_pc = (u_int)setfunc_trampoline;
 	pcb->pcb_regs[6] = (int)func;		/* A2 */
 	pcb->pcb_regs[7] = (int)arg;		/* A3 */
 	pcb->pcb_regs[11] = (int)sf;		/* SSP */
@@ -191,6 +195,60 @@ cpu_lwp_free2(struct lwp *l)
 
 	/* Nothing to do */
 }
+
+#ifdef COREDUMP
+/*
+ * Dump the machine specific header information at the start of a core dump.
+ */
+struct md_core {
+	struct reg intreg;
+	struct fpreg freg;
+};
+
+int
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+{
+	struct md_core md_core;
+	struct coreseg cseg;
+	int error;
+
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
+		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
+		chdr->c_cpusize = sizeof(md_core);
+		chdr->c_nseg++;
+		return 0;
+	}
+
+	/* Save integer registers. */
+	error = process_read_regs(l, &md_core.intreg);
+	if (error)
+		return error;
+
+	if (fputype) {
+		/* Save floating point registers. */
+		error = process_read_fpregs(l, &md_core.freg);
+		if (error)
+			return error;
+	} else {
+		/* Make sure these are clear. */
+		memset((void *)&md_core.freg, 0, sizeof(md_core.freg));
+	}
+
+	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
+	cseg.c_addr = 0;
+	cseg.c_size = chdr->c_cpusize;
+
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+	    chdr->c_seghdrsize);
+	if (error)
+		return error;
+
+	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
+	    sizeof(md_core));
+}
+#endif
 
 /*
  * Map a user I/O request into kernel virtual address space.

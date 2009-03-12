@@ -1,4 +1,4 @@
-/* $NetBSD: vfs_dirhash.c,v 1.10 2009/02/06 23:56:26 enami Exp $ */
+/* $NetBSD: vfs_dirhash.c,v 1.4.2.6 2009/05/03 13:21:36 bouyer Exp $ */
 
 /*
  * Copyright (c) 2008 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_dirhash.c,v 1.10 2009/02/06 23:56:26 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_dirhash.c,v 1.4.2.6 2009/05/03 13:21:36 bouyer Exp $");
 
 /* CLEAN UP! */
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: vs_msg.c,v 1.2 2008/12/05 22:51:43 christos Exp $ */
+/*	$NetBSD: vs_msg.c,v 1.1.1.2.6.1 2009/01/20 02:41:13 snj Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994

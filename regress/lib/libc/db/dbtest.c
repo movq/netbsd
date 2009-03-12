@@ -1,4 +1,4 @@
-/*	$NetBSD: dbtest.c,v 1.18 2009/01/25 17:00:09 nonaka Exp $	*/
+/*	$NetBSD: dbtest.c,v 1.16 2008/07/21 14:33:31 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)dbtest.c	8.17 (Berkeley) 9/1/94";
 #else
-__RCSID("$NetBSD: dbtest.c,v 1.18 2009/01/25 17:00:09 nonaka Exp $");
+__RCSID("$NetBSD: dbtest.c,v 1.16 2008/07/21 14:33:31 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -201,7 +201,7 @@ main(int argc, char *argv[])
 			/* Don't display the newline, if CR at EOL. */
 			if (p[len - 2] == '\r')
 				--len;
-			if ((size_t)write(ofd, p + 1, len - 1) != (len - 1) ||
+			if (write(ofd, p + 1, len - 1) != len - 1 ||
 			    write(ofd, "\n", 1) != 1)
 				err(1, "write failed");
 			break;
@@ -345,7 +345,7 @@ compare(DBT *db1, DBT *db2)
 	u_char *p1, *p2;
 
 	if (db1->size != db2->size)
-		printf("compare failed: key->data len %zu != data len %zu\n",
+		printf("compare failed: key->data len %lu != data len %lu\n",
 		    db1->size, db2->size);
 
 	len = MIN(db1->size, db2->size);

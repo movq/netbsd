@@ -1,4 +1,4 @@
-/*	$NetBSD: bmtphy.c,v 1.29 2009/01/18 10:00:51 mrg Exp $	*/
+/*	$NetBSD: bmtphy.c,v 1.27 2008/05/04 17:06:09 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bmtphy.c,v 1.29 2009/01/18 10:00:51 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bmtphy.c,v 1.27 2008/05/04 17:06:09 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,6 +164,9 @@ bmtphyattach(device_t parent, device_t self, void *aux)
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -270,9 +273,6 @@ bmtphy_status(struct mii_softc *sc)
 			mii->mii_media_active |= IFM_FDX;
 		else
 			mii->mii_media_active |= IFM_HDX;
-
-		if (mii->mii_media_active & IFM_FDX)
-			mii->mii_media_active |= mii_phy_flowstatus(sc);
 	} else
 		mii->mii_media_active = ife->ifm_media;
 }

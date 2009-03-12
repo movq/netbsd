@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_icp.c,v 1.23 2009/01/29 12:14:40 bouyer Exp $	*/
+/*	$NetBSD: ld_icp.c,v 1.22.4.1 2009/02/02 20:24:38 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.23 2009/01/29 12:14:40 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.22.4.1 2009/02/02 20:24:38 snj Exp $");
 
 #include "rnd.h"
 

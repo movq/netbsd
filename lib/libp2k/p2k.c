@@ -1,4 +1,4 @@
-/*	$NetBSD: p2k.c,v 1.9 2009/02/22 20:28:05 ad Exp $	*/
+/*	$NetBSD: p2k.c,v 1.5 2008/10/07 23:14:58 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
@@ -138,13 +138,19 @@ p2k_run_fs(const char *vfsname, const char *devpath, const char *mountpath,
 {
 	char typebuf[PUFFS_TYPELEN];
 	struct puffs_ops *pops;
-	struct puffs_usermount *pu = NULL;
+	struct puffs_usermount *pu;
 	struct puffs_node *pn_root;
 	struct vnode *rvp;
-	struct ukfs *ukfs = NULL;
+	struct ukfs *ukfs;
 	extern int puffs_fakecc;
-	int rv = -1, sverrno;
-	bool dodaemon;
+	int rv, sverrno;
+
+	rv = -1;
+	if (ukfs_init() == -1)
+		return -1;
+	ukfs = ukfs_mount(vfsname, devpath, mountpath, mntflags, arg, alen);
+	if (ukfs == NULL)
+		return -1;
 
 	PUFFSOP_INIT(pops);
 
@@ -182,35 +188,16 @@ p2k_run_fs(const char *vfsname, const char *devpath, const char *mountpath,
 	PUFFSOP_SET(pops, p2k, node, inactive);
 	PUFFSOP_SET(pops, p2k, node, reclaim);
 
-	dodaemon = true;
-	if (getenv("P2K_DEBUG") != NULL) {
-		puffs_flags |= PUFFS_FLAG_OPDUMP;
-		dodaemon = false;
-	}
-	if (getenv("P2K_NODETACH") != NULL) {
-		dodaemon = false;
-	}
-
 	strcpy(typebuf, "p2k|");
 	if (strcmp(vfsname, "puffs") == 0) { /* XXX */
 		struct puffs_kargs *args = arg;
 		strlcat(typebuf, args->pa_typename, sizeof(typebuf));
-		dodaemon = false;
 	} else {
 		strlcat(typebuf, vfsname, sizeof(typebuf));
 	}
 
-	pu = puffs_init(pops, devpath, typebuf, NULL, puffs_flags);
+	pu = puffs_init(pops, devpath, typebuf, ukfs_getmp(ukfs), puffs_flags);
 	if (pu == NULL)
-		goto out;
-
-	if (dodaemon)
-		puffs_daemon(pu, 1, 1);
-
-	if (ukfs_init() == -1)
-		return -1;
-	ukfs = ukfs_mount(vfsname, devpath, mountpath, mntflags, arg, alen);
-	if (ukfs == NULL)
 		goto out;
 
 	rvp = ukfs_getrvp(ukfs);
@@ -222,19 +209,13 @@ p2k_run_fs(const char *vfsname, const char *devpath, const char *mountpath,
 
 	puffs_set_prepost(pu, makelwp, clearlwp);
 
-	puffs_setspecific(pu, ukfs_getmp(ukfs));
 	if ((rv = puffs_mount(pu, mountpath, mntflags, rvp))== -1)
 		goto out;
 	rv = puffs_mainloop(pu);
-	puffs_exit(pu, 1);
-	pu = NULL;
 
  out:
 	sverrno = errno;
-	if (ukfs)
-		ukfs_release(ukfs, UKFS_RELFLAG_NOUNMOUNT);
-	if (pu)
-		puffs_cancel(pu, sverrno);
+	ukfs_release(ukfs, UKFS_RELFLAG_NOUNMOUNT);
 	if (rv) {
 		errno = sverrno;
 		rv = -1;
@@ -304,6 +285,8 @@ p2k_fs_sync(struct puffs_usermount *pu, int waitfor,
 	cred = cred_create(pcr);
 	rv = rump_vfs_sync(mp, waitfor, (kauth_cred_t)cred);
 	cred_destroy(cred);
+
+	rump_bioops_sync();
 
 	return rv;
 }

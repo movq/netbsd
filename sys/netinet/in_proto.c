@@ -1,4 +1,4 @@
-/*	$NetBSD: in_proto.c,v 1.97 2009/02/28 18:31:12 pooka Exp $	*/
+/*	$NetBSD: in_proto.c,v 1.94 2008/04/24 11:38:37 ad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.97 2009/02/28 18:31:12 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.94 2008/04/24 11:38:37 ad Exp $");
 
 #include "opt_mrouting.h"
 #include "opt_eon.h"			/* ISO CLNL over IP */
@@ -69,7 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.97 2009/02/28 18:31:12 pooka Exp $");
 #include "opt_inet.h"
 #include "opt_ipsec.h"
 #include "opt_pim.h"
-#include "opt_gateway.h"
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -259,7 +258,6 @@ const struct protosw inetsw[] = {
 {	.pr_domain = &inetdomain,
 	.pr_protocol = IPPROTO_IP,
 	.pr_slowtimo = ipflow_slowtimo,
-	.pr_init = ipflow_poolinit,
 },
 #endif /* GATEWAY */
 #ifdef IPSEC
@@ -450,8 +448,7 @@ struct domain inetdomain = {
 	.dom_protosw = inetsw,
 	.dom_protoswNPROTOSW = &inetsw[__arraycount(inetsw)],
 	.dom_rtattach = rn_inithead,
-	.dom_rtoffset = 32,
-	.dom_maxrtkey = sizeof(struct ip_pack4),
+	.dom_rtoffset = 32, .dom_maxrtkey = sizeof(struct sockaddr_in),
 #ifdef IPSELSRC
 	.dom_ifattach = in_domifattach,
 	.dom_ifdetach = in_domifdetach,

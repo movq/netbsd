@@ -1,4 +1,4 @@
-/*	$NetBSD: hme.c,v 1.70 2009/03/07 16:46:25 tsutsui Exp $	*/
+/*	$NetBSD: hme.c,v 1.66.10.4 2009/11/13 20:57:27 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.70 2009/03/07 16:46:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.66.10.4 2009/11/13 20:57:27 sborrill Exp $");
 
 /* #define HMEDEBUG */
 
@@ -91,7 +91,7 @@ int		hme_ioctl(struct ifnet *, u_long, void *);
 void		hme_tick(void *);
 void		hme_watchdog(struct ifnet *);
 void		hme_shutdown(void *);
-int		hme_init(struct hme_softc *);
+int		hme_init(struct ifnet *);
 void		hme_meminit(struct hme_softc *);
 void		hme_mifinit(struct hme_softc *);
 void		hme_reset(struct hme_softc *);
@@ -238,6 +238,7 @@ hme_config(sc)
 	ifp->if_softc = sc;
 	ifp->if_start = hme_start;
 	ifp->if_ioctl = hme_ioctl;
+	ifp->if_init = hme_init;
 	ifp->if_watchdog = hme_watchdog;
 	ifp->if_flags =
 	    IFF_BROADCAST | IFF_SIMPLEX | IFF_NOTRAILERS | IFF_MULTICAST;
@@ -338,7 +339,7 @@ hme_reset(sc)
 	int s;
 
 	s = splnet();
-	(void)hme_init(sc);
+	(void)hme_init(&sc->sc_ethercom.ec_if);
 	splx(s);
 }
 
@@ -453,10 +454,10 @@ hme_meminit(sc)
  * and transmit/receive descriptor rings.
  */
 int
-hme_init(sc)
-	struct hme_softc *sc;
+hme_init(ifp)
+	struct ifnet *ifp;
 {
-	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+	struct hme_softc *sc = (struct hme_softc *)ifp->if_softc;
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t seb = sc->sc_seb;
 	bus_space_handle_t etx = sc->sc_etx;
@@ -807,9 +808,8 @@ hme_get(sc, ri, flags)
 			while (optsum >> 16)
 				optsum = (optsum >> 16) + (optsum & 0xffff);
 
-			/* Deduct the ip opts sum from the hwsum (rfc 1624). */
-			m0->m_pkthdr.csum_data = ~((~m0->m_pkthdr.csum_data) -
-						   ~optsum);
+			/* Deduct the ip opts sum from the hwsum. */
+			m0->m_pkthdr.csum_data += (uint16_t)~optsum;
 
 			while (m0->m_pkthdr.csum_data >> 16)
 				m0->m_pkthdr.csum_data =
@@ -1086,9 +1086,9 @@ hme_eint(sc, status)
 			device_xname(&sc->sc_dev), cf, st, sm);
 		return (1);
 	}
-	snprintb(bits, sizeof(bits), HME_SEB_STAT_BITS, status);
-	printf("%s: status=%s\n", device_xname(&sc->sc_dev), bits);
-		
+
+	printf("%s: status=%s\n", device_xname(&sc->sc_dev),
+		bitmask_snprintf(status, HME_SEB_STAT_BITS, bits,sizeof(bits)));
 	return (1);
 }
 
@@ -1382,7 +1382,10 @@ hme_mediachange(ifp)
  * Process an ioctl request.
  */
 int
-hme_ioctl(struct ifnet *ifp, unsigned long cmd, void *data)
+hme_ioctl(ifp, cmd, data)
+	struct ifnet *ifp;
+	u_long cmd;
+	void *data;
 {
 	struct hme_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -1392,7 +1395,7 @@ hme_ioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
@@ -1400,46 +1403,39 @@ hme_ioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 				hme_setladrf(sc);
 			else {
 				ifp->if_flags |= IFF_UP;
-				error = hme_init(sc);
+				error = hme_init(ifp);
 			}
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
 			ifp->if_flags |= IFF_UP;
-			error = hme_init(sc);
+			error = hme_init(ifp);
 			break;
 		}
 		break;
 
 	case SIOCSIFFLAGS:
 #ifdef HMEDEBUG
-		{
-			struct ifreq *ifr = data;
-			sc->sc_debug =
-			    (ifr->ifr_flags & IFF_DEBUG) != 0 ? 1 : 0;
-		}
+		sc->sc_debug = (ifp->if_flags & IFF_DEBUG) != 0 ? 1 : 0;
 #endif
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
 
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_RUNNING:
+		if ((ifp->if_flags & IFF_UP) == 0 &&
+		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 			hme_stop(sc, false);
 			ifp->if_flags &= ~IFF_RUNNING;
-			break;
-		case IFF_UP:
+		} else if ((ifp->if_flags & IFF_UP) != 0 &&
+		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
-			error = hme_init(sc);
-			break;
-		case IFF_UP|IFF_RUNNING:
+			error = hme_init(ifp);
+		} else if ((ifp->if_flags & IFF_UP) != 0) {
 			/*
 			 * If setting debug or promiscuous mode, do not reset
 			 * the chip; for everything else, call hme_init()
@@ -1451,16 +1447,13 @@ hme_ioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 				    == (sc->sc_if_flags & (~RESETIGN)))
 					hme_setladrf(sc);
 				else
-					error = hme_init(sc);
+					error = hme_init(ifp);
 			}
 #undef RESETIGN
-			break;
-		case 0:
-			break;
 		}
 
 		if (sc->sc_ec_capenable != sc->sc_ethercom.ec_capenable)
-			error = hme_init(sc);
+			error = hme_init(ifp);
 
 		break;
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.7 2009/01/11 02:46:24 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.5.32.1 2009/01/15 03:24:06 snj Exp $
 
 # sources
 .PATH: ${ARCHDIR}/citrus ${.CURDIR}/citrus

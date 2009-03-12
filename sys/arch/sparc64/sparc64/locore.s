@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.288 2008/12/15 06:44:56 mrg Exp $	*/
+/*	$NetBSD: locore.s,v 1.286.2.2 2010/03/17 03:10:39 snj Exp $	*/
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath
@@ -3666,31 +3666,6 @@ setup_sparcintr:
 	bne,pn	CCCR, 1b		! No, try again
 	 EMPTY
 2:
-#ifdef NOT_DEBUG
-	set	_C_LABEL(intrdebug), %g7
-	ld	[%g7], %g7
-	btst	INTRDEBUG_VECTOR, %g7
-	bz,pt	%icc, 97f
-	 nop
-
-	cmp	%g6, 0xa		! ignore clock interrupts?
-	bz,pt	%icc, 97f
-	 nop
-
-	STACKFRAME(-CC64FSZ)		! Get a clean register window
-	LOAD_ASCIZ(%o0,\
-	    "interrupt_vector: number %lx softint mask %lx pil %lu slot %p\r\n")
-	mov	%g2, %o1
-	rdpr	%pil, %o3
-	mov	%g1, %o4
-	GLOBTOLOC
-	clr	%g4
-	call	prom_printf
-	 mov	%g6, %o2
-	LOCTOGLOB
-	restore
-97:
-#endif
 	mov	1, %g7
 	sll	%g7, %g6, %g6
 	wr	%g6, 0, SET_SOFTINT	! Invoke a softint
@@ -3711,7 +3686,7 @@ ret_from_intr_vector:
 	NOTREACHED
 
 3:
-#ifdef NOT_DEBUG	/* always do this */
+#ifdef NOT_DEBUG
 	set	_C_LABEL(intrdebug), %g6
 	ld	[%g6], %g6
 	btst	INTRDEBUG_SPUR, %g6
@@ -4155,7 +4130,6 @@ sparc_intr_retry:
 	bne,pn	CCCR, 1b
 	 EMPTY
 2:
-
 	add	%sp, CC64FSZ+STKB, %o2	! tf = %sp + CC64FSZ + STKB
 	LDPTR	[%l2 + IH_PEND], %l7	! save ih->ih_pending
 	membar	#LoadStore
@@ -4163,29 +4137,6 @@ sparc_intr_retry:
 	membar	#Sync
 	LDPTR	[%l2 + IH_FUN], %o4	! ih->ih_fun
 	LDPTR	[%l2 + IH_ARG], %o0	! ih->ih_arg
-
-#ifdef NOT_DEBUG
-	set	_C_LABEL(intrdebug), %o3
-	ld	[%o2], %o3
-	btst	INTRDEBUG_FUNC, %o3
-	bz,a,pt	%icc, 97f
-	 nop
-
-	cmp	%l6, 0xa		! ignore clock interrupts?
-	bz,pt	%icc, 97f
-	 nop
-
-	STACKFRAME(-CC64FSZ)		! Get a clean register window
-	LOAD_ASCIZ(%o0, "sparc_interrupt: func %p arg %p\r\n")
-	mov	%i0, %o2		! arg
-	GLOBTOLOC
-	call	prom_printf
-	 mov	%i4, %o1		! func
-	LOCTOGLOB
-	restore
-97:
-	mov	%l4, %o1
-#endif
 
 	wrpr	%g0, PSTATE_INTR, %pstate	! Reenable interrupts
 	jmpl	%o4, %o7		! handled = (*ih->ih_fun)(...)
@@ -4196,11 +4147,7 @@ sparc_intr_retry:
 
 	brz,pn	%l1, 0f
 	 add	%l5, %o0, %l5
-#ifdef SCHIZO_BUS_SPACE_BROKEN 
-	stxa	%g0, [%l1] ASI_PHYS_NON_CACHED		! Clear intr source
-#else
 	stx	%g0, [%l1]		! Clear intr source
-#endif
 	membar	#Sync			! Should not be needed
 0:
 	cmp	%l7, -1
@@ -4225,15 +4172,11 @@ intrcmplt:
 	dec	%l5
 	st	%l5, [%l4 + %lo(CPUINFO_VA+CI_IDEPTH)]
 
-#ifdef NOT_DEBUG
+#ifdef DEBUG
 	set	_C_LABEL(intrdebug), %o2
 	ld	[%o2], %o2
 	btst	INTRDEBUG_FUNC, %o2
 	bz,a,pt	%icc, 97f
-	 nop
-
-	cmp	%l6, 0xa		! ignore clock interrupts?
-	bz,pt	%icc, 97f
 	 nop
 
 	STACKFRAME(-CC64FSZ)		! Get a clean register window
@@ -5299,6 +5242,24 @@ cpu_mp_startup_end:
 ENTRY(get_romtba)
 	retl
 	 rdpr	%tba, %o0
+/*
+ * int get_maxctx(void)
+ *
+ * Get number of available contexts.
+ *
+ */
+	.align 8
+ENTRY(get_maxctx)
+	set	CTX_SECONDARY, %o1		! Store -1 in the context register
+	mov	-1, %o2
+	stxa	%o2, [%o1] ASI_DMMU
+	membar	#Sync
+	ldxa	[%o1] ASI_DMMU, %o0		! then read it back
+	membar	#Sync
+	stxa	%g0, [%o1] ASI_DMMU
+	membar	#Sync
+	retl
+	 inc	%o0
 
 /*
  * openfirmware(cell* param);
@@ -5687,14 +5648,14 @@ ENTRY(sp_tlb_flush_all)
 #endif
 
 /*
- * blast_dcache()
+ * sp_blast_dcache()
  *
  * Clear out all of D$ regardless of contents
  * Does not modify %o0
  *
  */
 	.align 8
-ENTRY(blast_dcache)
+ENTRY(sp_blast_dcache)
 /*
  * We turn off interrupts for the duration to prevent RED exceptions.
  */
@@ -5721,6 +5682,33 @@ ENTRY(blast_dcache)
 	retl
 	 wrpr	%o3, %pstate
 #endif
+
+#ifdef MULTIPROCESSOR
+/*
+ * void sparc64_ipi_blast_dcache(int dcache_size, int dcache_line_size)
+ *
+ * Clear out all of D$ regardless of contents
+ *
+ * On entry:
+ *	%g2 = dcache_size
+ *	%g3 = dcache_line_size
+ */
+	.align 8
+ENTRY(sparc64_ipi_blast_dcache)
+	sub	%g2, %g3, %g2
+1:
+	stxa	%g0, [%g2] ASI_DCACHE_TAG
+	membar	#Sync
+	brnz,pt	%g2, 1b
+	 sub	%g2, %g3, %g2
+
+	sethi	%hi(KERNBASE), %g5
+	flush	%g5
+	membar	#Sync
+
+	ba,a	ret_from_intr_vector
+	 nop
+#endif /* MULTIPROCESSOR */
 
 /*
  * blast_icache()
@@ -6853,6 +6841,16 @@ ENTRY(lwp_trampoline)
 	ba,a,pt	%icc, return_from_trap
 	 nop
 
+	/*
+	 * Like lwp_trampoline, but for cpu_setfunc(), i.e. without newlwp
+	 * arguement and will not call lwp_startup.
+	 */
+ENTRY(setfunc_trampoline)
+	call	%l0			! re-use current frame
+	 mov	%l1, %o0
+	ba,a,pt	%icc, return_from_trap
+	 nop
+
 /*
  * {fu,su}{,i}{byte,word}
  */
@@ -7141,22 +7139,19 @@ ENTRY(probeset)
 	 membar	#StoreStore|#StoreLoad
 
 /*
- * pmap_zero_page(pa)
+ * pmap_zero_page_phys(pa)
  *
  * Zero one page physically addressed
  *
  * Block load/store ASIs do not exist for physical addresses,
  * so we won't use them.
  *
- * While we do the zero operation, we also need to blast away
- * the contents of the D$.  We will execute a flush at the end
- * to sync the I$.
+ * We will execute a flush at the end to sync the I$.
+ *
+ * This version expects to have the dcache_flush_page_all(pa)
+ * to have been called before calling into here.
  */
-	.data
-paginuse:
-	.word	0
-	.text
-ENTRY(pmap_zero_page)
+ENTRY(pmap_zero_page_phys)
 #ifndef _LP64
 	COMBINE(%o0, %o1, %o0)
 #endif
@@ -7200,7 +7195,7 @@ ENTRY(pmap_zero_page)
 	 wr	%g0, ASI_PRIMARY_NOFAULT, %asi	! Make C code happy
 
 /*
- * pmap_copy_page(paddr_t src, paddr_t dst)
+ * pmap_copy_page_phys(paddr_t src, paddr_t dst)
  *
  * Copy one page physically addressed
  * We need to use a global reg for ldxa/stxa
@@ -7209,10 +7204,11 @@ ENTRY(pmap_zero_page)
  * 32-bit stack.  We will unroll the loop by 4 to
  * improve performance.
  *
- * XXX We also need to blast the D$ and flush like
- * XXX pmap_zero_page.
+ * This version expects to have the dcache_flush_page_all(pa)
+ * to have been called before calling into here.
+ *
  */
-ENTRY(pmap_copy_page)
+ENTRY(pmap_copy_page_phys)
 #ifndef _LP64
 	COMBINE(%o0, %o1, %o0)
 	COMBINE(%o2, %o3, %o1)
@@ -7268,6 +7264,7 @@ ENTRY(pmap_copy_page)
 	retl
 	 mov	%o4, %g1		! Restore g1
 #endif
+
 /*
  * extern int64_t pseg_get(struct pmap *pm, vaddr_t addr);
  *
@@ -9621,6 +9618,48 @@ ENTRY(sparc64_ipi_drop_fpstate)
 	IPIEVC_INC(IPI_EVCNT_FPU_FLUSH,%g2,%g3)
 	ba,a	ret_from_intr_vector
 	 nop
+
+/*
+ * IPI handler to drop the current FPU state.
+ * void sparc64_ipi_dcache_flush_page(paddr_t pa, int line_size)
+ *
+ * On entry:
+ *	%g2 = pa
+ *	%g3 = line_size
+ */
+ENTRY(sparc64_ipi_dcache_flush_page)
+	mov	-1, %g1		! Generate mask for tag: bits [29..2]
+	srlx	%g2, 13-2, %g5	! Tag is PA bits <40:13> in bits <29:2>
+	clr	%g4
+	srl	%g1, 2, %g1	! Now we have bits <29:0> set
+	set	(2*NBPG), %g7
+	ba,pt	%icc, 1f
+	 andn	%g1, 3, %g1	! Now we have bits <29:2> set
+
+	.align 8
+1:
+	ldxa	[%g4] ASI_DCACHE_TAG, %g6
+	mov	%g4, %g2
+	deccc	32, %g7
+	bl,pn	%icc, 2f
+	 inc	32, %g4
+
+	xor	%g6, %g5, %g6
+	andcc	%g6, %g1, %g0
+	bne,pt	%xcc, 1b
+	 membar	#LoadStore
+
+	stxa	%g0, [%g2] ASI_DCACHE_TAG
+	ba,pt	%icc, 1b
+	 membar	#StoreLoad
+2:
+
+	sethi	%hi(KERNBASE), %g5
+	flush	%g5
+	membar	#Sync
+	ba,a	ret_from_intr_vector
+	 nop
+
 #endif
 
 /*

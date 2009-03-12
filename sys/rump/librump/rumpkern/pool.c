@@ -1,4 +1,4 @@
-/*	$NetBSD: pool.c,v 1.12 2009/01/23 13:14:16 pooka Exp $	*/
+/*	$NetBSD: pool.c,v 1.10 2008/10/14 10:32:38 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
@@ -26,11 +26,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pool.c,v 1.12 2009/01/23 13:14:16 pooka Exp $");
-
-#ifndef RUMP_USE_REAL_ALLOCATORS
 
 #include <sys/param.h>
 #include <sys/mount.h>
@@ -202,4 +197,3 @@ pool_page_free_nointr(struct pool *pp, void *item)
 
 	return pool_put(pp, item);
 }
-#endif /* RUMP_USE_REAL_ALLOCATORS */

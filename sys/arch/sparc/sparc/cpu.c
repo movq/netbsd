@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.213 2009/03/10 23:58:20 martin Exp $ */
+/*	$NetBSD: cpu.c,v 1.211.8.1 2009/05/30 16:57:18 snj Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.213 2009/03/10 23:58:20 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.211.8.1 2009/05/30 16:57:18 snj Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"

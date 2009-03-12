@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_subr.c,v 1.51 2008/12/16 22:35:25 christos Exp $	*/
+/*	$NetBSD: cpu_subr.c,v 1.50 2008/10/14 22:54:22 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2001 Matt Thomas.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.51 2008/12/16 22:35:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.50 2008/10/14 22:54:22 macallan Exp $");
 
 #include "opt_ppcparam.h"
 #include "opt_multiprocessor.h"
@@ -569,7 +569,7 @@ cpu_setup(self, ci)
 		bitmask = HID0_BITMASK;
 		break;
 	}
-	snprintb(hidbuf, sizeof hidbuf, bitmask, hid0);
+	bitmask_snprintf(hid0, bitmask, hidbuf, sizeof hidbuf);
 	aprint_normal("%s: HID0 %s, powersave: %d\n", self->dv_xname, hidbuf,
 	    powersave);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_verifiedexec.c,v 1.112 2008/12/14 23:20:23 elad Exp $	*/
+/*	$NetBSD: kern_verifiedexec.c,v 1.111.4.1 2008/12/18 00:56:27 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_verifiedexec.c,v 1.112 2008/12/14 23:20:23 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_verifiedexec.c,v 1.111.4.1 2008/12/18 00:56:27 snj Exp $");
 
 #include "opt_veriexec.h"
 

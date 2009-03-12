@@ -1,4 +1,4 @@
-.\"	$NetBSD: bozohttpd.8,v 1.9 2009/03/11 13:39:33 joerg Exp $
+.\"	$NetBSD: bozohttpd.8,v 1.5 2008/09/13 14:00:34 reed Exp $
 .\"
 .\"	$eterna: bozohttpd.8,v 1.78 2008/03/03 03:36:11 mrg Exp $
 .\"
@@ -28,9 +28,8 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd December 6, 2008
+.Dd March 3, 2008
 .Dt HTTPD 8
-.Os
 .Sh NAME
 .Nm httpd
 .Nd hyper text transfer protocol version 1.1 daemon
@@ -44,7 +43,6 @@
 .Op Fl c Ar cgibin
 .Op Fl i Ar address
 .Op Fl p Ar pubdir
-.Op Fl t Ar chrootdir
 .Op Fl v Ar virtualroot
 .Op Fl x Ar index
 .Op Fl Z Ar cert privkey
@@ -70,7 +68,7 @@ option for virtual hosting.)
 .Nm
 is designed to be small, simple and relatively featureless,
 hopefully increasing its security.
-.Ss OPTIONS
+.Sh OPTIONS
 The following options are available:
 .Bl -tag -width xxxcgibin
 .It Fl b
@@ -97,9 +95,9 @@ The
 directory is expected to contain the CGI programs to be used.
 .Nm
 looks for URL's in the form of
-.Em /cgi-bin/\*[Lt]scriptname\*[Gt]
+.Em /cgi-bin/<scriptname>
 where
-.Em \*[Lt]scriptname\*[Gt]
+.Em <scriptname>
 is a valid CGI program in the
 .Ar cgibin
 directory.
@@ -125,8 +123,7 @@ Also see
 .It Fl I Ar port
 This option is only valid with the
 .Fl b
-option.
-It causes
+option.  It causes
 .Ar port
 to use used as the port to bind daemon mode.
 The default is the
@@ -135,8 +132,7 @@ port.
 .It Fl i Ar address
 This option is only valid with the
 .Fl b
-option.
-It causes
+option.  It causes
 .Ar address
 to use used as the address to bind daemon mode.
 If otherwise unspecified, the address used to bind is derived from the
@@ -149,13 +145,13 @@ content type and encoding.
 This option takes four additional arguments containing
 the file prefix, its
 .Dq Content-Type ,
-.Dq Content-Encoding ,
+.Dq Content-Encoding
 and
 .Dq Content-Encoding
 for HTTP/1.1 connections, respectively.
-If any of these are a single dash
-.Pq Dq - ,
-the empty string is used instead.
+If any of these are a single
+.Dq -
+(dash), the empty string is used instead.
 Multiple
 .Fl M
 options may be passed.
@@ -257,8 +253,7 @@ to
 .Ar index .
 .It Fl Z Ar certificate_path privatekey_path
 This option sets the path to the server certificate file and the private key file
-in pem format.
-It also causes
+in pem format.  It also causes
 .Nm
 to start SSL mode.
 .El
@@ -274,7 +269,7 @@ since version 20040828, they take multiple options (2 in the case of
 .Fl C
 and 4 in the case of
 .Fl M . )
-.Ss INETD CONFIGURATION
+.Sh INETD CONFIGURATION
 As
 .Nm
 uses
@@ -309,106 +304,6 @@ Using the
 .Xr inetd 8 ,
 you can provide multiple IP-address based HTTP servers by having multiple
 listening ports with different configurations.
-.Ss NOTES
-This server supports the
-.Em HTTP/0.9 ,
-.Em HTTP/1.0 ,
-and
-.Em HTTP/1.1
-standards.
-Support for these protocols is very minimal and many optional features are
-not supported.
-.Pp
-.Nm
-can be compiled without CGI support (NO_CGIBIN_SUPPORT), user
-transformations (NO_USER_SUPPORT), directory index support (NO_DIRINDEX_SUPPORT),
-daemon mode support (NO_DAEMON_MODE), and dynamic MIME content
-(NO_DYNAMIC_CONTENT), and SSL support (NO_SSL_SUPPORT) by defining the listed
-macros when building
-.Nm .
-.Ss HTTP BASIC AUTHORISATION
-.Nm
-has support for HTTP Basic Authorisation.
-If a file named
-.Pa .htpasswd
-exists in the directory of the current request,
-.Nm
-will restrict access to documents in that directory
-using the RFC 2617 HTTP
-.Dq Basic
-authentication scheme.
-.Pp
-Note:
-This does not recursively protect any sub-directories.
-.Pp
-The
-.Pa .htpasswd
-file contains lines delimited with a colon containing
-usernames and passwords hashed with
-.Xr crypt 3 ,
-for example:
-.Bd -literal
-heather:$1$pZWI4tH/$DzDPl63i6VvVRv2lJNV7k1
-jeremy:A.xewbx2DpQ8I
-.Ed
-.Pp
-On
-.Nx ,
-the
-.Xr pwhash 1
-utility may be used to generate hashed passwords.
-.Pp
-While
-.Nm
-distributed with
-.Nx
-has support for HTTP Basic Authorisation enabled by default,
-the portable distribution it is excluded.
-Compile
-.Nm
-with
-.Dq -DDO_HTPASSWD
-on the compiler command line to enable this support.
-It may require
-linking with the crypt library, using
-.Dq -lcrypt .
-.Ss SSL SUPPORT
-.Nm
-has support for SSLv2, SSLv3, and TLSv1 protocols that is included by
-default.
-It requires linking with the crypto and ssl library, using
-.Dq -lcrypto -lssl .
-To disable SSL SUPPORT compile
-.Nm
-with
-.Dq -DNO_SSL_SUPPORT
-on the compiler command line.
-.Sh FILES
-.Nm
-looks for a couple of special files in directories that allow certain features
-to be provided on a per-directory basis.
-In addition to the
-.Pa .htpasswd
-used by HTTP basic authorisation,
-if a
-.Pa .bzdirect
-file is found (contents are irrelevant)
-.Nm
-will allow direct access even with the
-.Fl r
-option.
-If a
-.Pa .bzredirect
-symbolic link is found,
-.Nm
-will perform a smart redirect to the target of this symlink.
-The target is assumed to live on the same server.
-If a
-.Pa .bzabsredirect
-symbolic link is found,
-.Nm
-will redirect to the absolute url pointed to by this symlink.
-This is useful to redirect to different servers.
 .Sh EXAMPLES
 To configure set of virtual hosts, one would use an
 .Xr inetd.conf 5
@@ -432,6 +327,104 @@ Typically this, this will be like:
 .Bd -literal
 httpd -C .php /usr/pkg/bin/php /var/www
 .Ed
+.Sh NOTES
+This server supports the
+.Em HTTP/0.9 ,
+.Em HTTP/1.0
+and
+.Em HTTP/1.1
+standards.
+Support for these protocols is very minimal and many optional features are
+not supported.
+.Pp
+.Nm
+can be compiled without CGI support (NO_CGIBIN_SUPPORT), user
+transformations (NO_USER_SUPPORT), directory index support (NO_DIRINDEX_SUPPORT),
+daemon mode support (NO_DAEMON_MODE), and dynamic MIME content
+(NO_DYNAMIC_CONTENT), and SSL support (NO_SSL_SUPPORT) by defining the listed
+macros when building
+.Nm .
+.Sh HTTP BASIC AUTHORISATION
+.Nm
+has support for HTTP Basic Authorisation.
+If a file named
+.Pa .htpasswd
+exists in the directory of the current request,
+.Nm
+will restrict access to documents in that directory
+using the RFC 2617 HTTP
+.Dq Basic
+authentication scheme.
+.Pp
+Note:
+This does not recursively protect any sub-directories.
+.Pp
+The
+.Pa .htpasswd
+file contains lines delimited with a colon containing
+usernames and passwords hashed with
+.Xr crypt 3 ,
+for example:
+.Bd -literal
+heather:$1$pZWI4tH/$DzDPl63i6VvVRv2lJNV7k1 
+jeremy:A.xewbx2DpQ8I
+.Ed
+.Pp
+On
+.Nx ,
+the
+.Xr pwhash 1
+utility may be used to generate hashed passwords.
+.Pp
+While 
+.Nm
+distributed with
+.Nx
+has support for HTTP Basic Authorisation enabled by default,
+the portable distribution it is excluded.
+Compile
+.Nm
+with
+.Dq -DDO_HTPASSWD
+on the compiler command line to enable this support.  It may require
+linking with the crypt library, using
+.Dq -lcrypt .
+.Sh FILES
+.Nm
+looks for a couple of special files in directories that allow certain features
+to be provided on a per-directory basis.
+In addition to the
+.Pa .htpasswd 
+used by HTTP basic authorisation,
+if a
+.Pa .bzdirect
+file is found (contents are irrelevant)
+.Nm
+will allow direct access even with the
+.Fl r
+option.
+If a
+.Pa .bzredirect
+symbolic link is found,
+.Nm
+will perform a smart redirect to the target of this symlink.
+The target is assumed to live on the same server.
+If a
+.Pa .bzabsredirect
+symbolic link is found,
+.Nm
+will redirect to the absolute url pointed to by this symlink.
+This is useful to redirect to different servers.
+.Sh SSL SUPPORT
+.Nm
+has support for SSLv2, SSLv3, and TLSv1 protocols that is included by
+default. It requires linking with the crypto and ssl library, using
+.Dq -lcrypto -lssl .
+To disable SSL SUPPORT compile
+.Nm
+with
+.Dq -DNO_SSL_SUPPORT
+on the compiler command line.
 .Sh SEE ALSO
 .Xr inetd.conf 5 ,
 .Xr inetd 8
@@ -516,7 +509,7 @@ provided man page fixes
 .It
 Luke Mewburn
 .Aq lukem@netbsd.org
-provided many various fixes, including cgi-bin fixes and enhancements,
+provided many various fixes, including cgi-bin fixes & enhancements,
 HTTP basic authorisation support and much code clean up
 .It
 Jeremy C. Reed

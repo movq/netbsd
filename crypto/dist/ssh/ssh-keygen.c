@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh-keygen.c,v 1.30 2009/02/16 20:53:55 christos Exp $	*/
-/* $OpenBSD: ssh-keygen.c,v 1.171 2008/07/13 21:22:52 sthen Exp $ */
+/*	$NetBSD: ssh-keygen.c,v 1.29 2008/04/06 23:38:20 christos Exp $	*/
+/* $OpenBSD: ssh-keygen.c,v 1.165 2008/01/19 22:37:19 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1994 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -14,7 +14,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: ssh-keygen.c,v 1.30 2009/02/16 20:53:55 christos Exp $");
+__RCSID("$NetBSD: ssh-keygen.c,v 1.29 2008/04/06 23:38:20 christos Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -66,8 +66,6 @@ int change_passphrase = 0;
 int change_comment = 0;
 
 int quiet = 0;
-
-int log_level = SYSLOG_LEVEL_INFO;
 
 /* Flag indicating that we want to hash a known_hosts file */
 int hash_hosts = 0;
@@ -501,7 +499,7 @@ do_fingerprint(struct passwd *pw)
 {
 	FILE *f;
 	Key *public;
-	char *comment = NULL, *cp, *ep, line[16*1024], *fp, *ra;
+	char *comment = NULL, *cp, *ep, line[16*1024], *fp;
 	int i, skip = 0, num = 0, invalid = 1;
 	enum fp_rep rep;
 	enum fp_type fptype;
@@ -519,14 +517,9 @@ do_fingerprint(struct passwd *pw)
 	public = key_load_public(identity_file, &comment);
 	if (public != NULL) {
 		fp = key_fingerprint(public, fptype, rep);
-		ra = key_fingerprint(public, fptype, SSH_FP_RANDOMART);
-		printf("%u %s %s (%s)\n", key_size(public), fp, comment,
-		    key_type(public));
-		if (log_level >= SYSLOG_LEVEL_VERBOSE)
-			printf("%s\n", ra);
+		printf("%u %s %s\n", key_size(public), fp, comment);
 		key_free(public);
 		xfree(comment);
-		xfree(ra);
 		xfree(fp);
 		exit(0);
 	}
@@ -584,12 +577,8 @@ do_fingerprint(struct passwd *pw)
 			}
 			comment = *cp ? cp : comment;
 			fp = key_fingerprint(public, fptype, rep);
-			ra = key_fingerprint(public, fptype, SSH_FP_RANDOMART);
-			printf("%u %s %s (%s)\n", key_size(public), fp,
-			    comment ? comment : "no comment", key_type(public));
-			if (log_level >= SYSLOG_LEVEL_VERBOSE)
-				printf("%s\n", ra);
-			xfree(ra);
+			printf("%u %s %s\n", key_size(public), fp,
+			    comment ? comment : "no comment");
 			xfree(fp);
 			key_free(public);
 			invalid = 0;
@@ -606,29 +595,12 @@ do_fingerprint(struct passwd *pw)
 static void
 print_host(FILE *f, const char *name, Key *public, int hash)
 {
-	if (print_fingerprint) {
-		enum fp_rep rep;
-		enum fp_type fptype;
-		char *fp, *ra;
-
-		fptype = print_bubblebabble ? SSH_FP_SHA1 : SSH_FP_MD5;
-		rep =    print_bubblebabble ? SSH_FP_BUBBLEBABBLE : SSH_FP_HEX;
-		fp = key_fingerprint(public, fptype, rep);
-		ra = key_fingerprint(public, fptype, SSH_FP_RANDOMART);
-		printf("%u %s %s (%s)\n", key_size(public), fp, name,
-		    key_type(public));
-		if (log_level >= SYSLOG_LEVEL_VERBOSE)
-			printf("%s\n", ra);
-		xfree(ra);
-		xfree(fp);
-	} else {
-		if (hash && (name = host_hash(name, NULL, 0)) == NULL)
-			fatal("hash_host failed");
-		fprintf(f, "%s ", name);
-		if (!key_write(public, f))
-			fatal("key_write failed");
-		fprintf(f, "\n");
-	}
+	if (hash && (name = host_hash(name, NULL, 0)) == NULL)
+		fatal("hash_host failed");
+	fprintf(f, "%s ", name);
+	if (!key_write(public, f))
+		fatal("key_write failed");
+	fprintf(f, "\n");
 }
 
 static void
@@ -1081,6 +1053,7 @@ main(int argc, char **argv)
 	int opt, type, fd, download = 0;
 	u_int32_t memory = 0, generator_wanted = 0, trials = 100;
 	int do_gen_candidates = 0, do_screen_candidates = 0;
+	int log_level = SYSLOG_LEVEL_INFO;
 	BIGNUM *start = NULL;
 	FILE *f;
 	const char *errstr;
@@ -1246,10 +1219,6 @@ main(int argc, char **argv)
 	}
 	if (change_passphrase && change_comment) {
 		printf("Can only have one of -p and -c.\n");
-		usage();
-	}
-	if (print_fingerprint && (delete_host || hash_hosts)) {
-		printf("Cannot use -l with -D or -R.\n");
 		usage();
 	}
 	if (delete_host || hash_hosts || find_host)
@@ -1456,15 +1425,10 @@ passphrase_again:
 
 	if (!quiet) {
 		char *fp = key_fingerprint(public, SSH_FP_MD5, SSH_FP_HEX);
-		char *ra = key_fingerprint(public, SSH_FP_MD5,
-		    SSH_FP_RANDOMART);
 		printf("Your public key has been saved in %s.\n",
 		    identity_file);
 		printf("The key fingerprint is:\n");
 		printf("%s %s\n", fp, comment);
-		printf("The key's randomart image is:\n");
-		printf("%s\n", ra);
-		xfree(ra);
 		xfree(fp);
 	}
 

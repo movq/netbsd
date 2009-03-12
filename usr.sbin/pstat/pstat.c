@@ -1,4 +1,4 @@
-/*	$NetBSD: pstat.c,v 1.113 2009/03/11 06:00:11 mrg Exp $	*/
+/*	$NetBSD: pstat.c,v 1.110.4.3 2009/09/26 19:02:27 snj Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)pstat.c	8.16 (Berkeley) 5/9/95";
 #else
-__RCSID("$NetBSD: pstat.c,v 1.113 2009/03/11 06:00:11 mrg Exp $");
+__RCSID("$NetBSD: pstat.c,v 1.110.4.3 2009/09/26 19:02:27 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,11 +52,12 @@ __RCSID("$NetBSD: pstat.c,v 1.113 2009/03/11 06:00:11 mrg Exp $");
 #include <sys/ucred.h>
 #include <stdbool.h>
 #define _KERNEL
-#include <sys/file.h>
-#include <ufs/ufs/inode.h>
 #define NFS
 #include <sys/mount.h>
 #undef NFS
+#include <sys/file.h>
+#include <ufs/ufs/inode.h>
+#include <ufs/ufs/ufsmount.h>
 #include <sys/uio.h>
 #include <miscfs/genfs/layer.h>
 #undef _KERNEL
@@ -285,14 +286,6 @@ main(int argc, char *argv[])
 						 when pointer is printed
 						 in hexadecimal. */
 
-static void
-devprintf(char *buf, size_t buflen, dev_t dev)
-{
-	(void)snprintf(buf, buflen, "%llu,%llu",
-	    (unsigned long long)major(dev),
-	    (unsigned long long)minor(dev));
-}
-
 void
 vnodemode(void)
 {
@@ -475,6 +468,7 @@ ufs_print(struct vnode *vp, int ovflw)
 		struct ufs1_dinode dp1;
 		struct ufs2_dinode dp2;
 	} dip;
+	struct ufsmount ump;
 	char flags[sizeof(ufs_flags) / sizeof(ufs_flags[0])];
 	char dev[4 + 1 + 7 + 1]; /* 12bit marjor + 20bit minor */
 	char *name;
@@ -482,13 +476,15 @@ ufs_print(struct vnode *vp, int ovflw)
 	dev_t rdev;
 
 	KGETRET(VTOI(vp), &inode, sizeof(struct inode), "vnode's inode");
-	KGETRET(ip->i_din.ffs1_din, &dip, sizeof (struct ufs1_dinode),
-	    "inode's dinode");
+	KGETRET(ip->i_ump, &ump, sizeof(struct ufsmount),
+	    "vnode's mount point");
 
-	if (ip->i_size == dip.dp1.di_size)
+	if (ump.um_fstype == UFS1) {
+		KGETRET(ip->i_din.ffs1_din, &dip, sizeof (struct ufs1_dinode),
+		    "inode's dinode");
 		rdev = dip.dp1.di_rdev;
-	else {
-		KGETRET(ip->i_din.ffs1_din, &dip, sizeof (struct ufs2_dinode),
+	} else {
+		KGETRET(ip->i_din.ffs2_din, &dip, sizeof (struct ufs2_dinode),
 		    "inode's UFS2 dinode");
 		rdev = dip.dp2.di_rdev;
 	}
@@ -504,7 +500,8 @@ ufs_print(struct vnode *vp, int ovflw)
 	if (S_ISCHR(ip->i_mode) || S_ISBLK(ip->i_mode)) {
 		if (usenumflag ||
 		    (name = devname(rdev, type)) == NULL) {
-			devprintf(dev, sizeof(dev), rdev);
+			snprintf(dev, sizeof(dev), "%d,%d",
+			    major(rdev), minor(rdev));
 			name = dev;
 		}
 		PRWORD(ovflw, " %*s", 8, 1, name);
@@ -538,7 +535,8 @@ ext2fs_print(struct vnode *vp, int ovflw)
 	if (S_ISCHR(dip.e2di_mode) || S_ISBLK(dip.e2di_mode)) {
 		if (usenumflag ||
 		    (name = devname(dip.e2di_rdev, type)) == NULL) {
-			devprintf(dev, sizeof(dev), dip.e2di_rdev);
+			snprintf(dev, sizeof(dev), "%d,%d",
+			    major(dip.e2di_rdev), minor(dip.e2di_rdev));
 			name = dev;
 		}
 		PRWORD(ovflw, " %*s", 8, 1, name);
@@ -590,7 +588,8 @@ nfs_print(struct vnode *vp, int ovflw)
 		type = S_IFBLK;
 	device:
 		if (usenumflag || (name = devname(va.va_rdev, type)) == NULL) {
-			devprintf(dev, sizeof(dev), va.va_rdev);
+			(void)snprintf(dev, sizeof(dev), "%d,%d",
+			    major(va.va_rdev), minor(va.va_rdev));
 			name = dev;
 		}
 		PRWORD(ovflw, " %*s", 8, 1, name);
@@ -793,7 +792,8 @@ ttyprt(struct tty *tp)
 	int n, ovflw;
 
 	if (usenumflag || (name = devname(tp->t_dev, S_IFCHR)) == NULL) {
-		devprintf(dev, sizeof(dev), tp->t_dev);
+		(void)snprintf(dev, sizeof(dev), "0x%3x:%x",
+		    major(tp->t_dev), minor(tp->t_dev));
 		name = dev;
 	}
 	ovflw = 0;

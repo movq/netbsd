@@ -1,4 +1,4 @@
-/*	$NetBSD: crypto_openssl.c,v 1.16 2009/01/10 19:08:40 tteras Exp $	*/
+/*	$NetBSD: crypto_openssl.c,v 1.15.4.1 2009/02/08 18:42:15 snj Exp $	*/
 
 /* Id: crypto_openssl.c,v 1.47 2006/05/06 20:42:09 manubsd Exp */
 
@@ -130,9 +130,9 @@ eay_str2asn1dn(str, len)
 	int len;
 {
 	X509_NAME *name;
-	char *buf, *dst;
+	char *buf;
 	char *field, *value;
-	int i;
+	int i, j;
 	vchar_t *ret = NULL;
 	caddr_t p;
 
@@ -148,38 +148,15 @@ eay_str2asn1dn(str, len)
 
 	name = X509_NAME_new();
 
-	dst = field = &buf[0];
+	field = &buf[0];
 	value = NULL;
 	for (i = 0; i < len; i++) {
-		if (buf[i] == '\\') {
-			/* Escape characters specified in RFC 2253 */
-			if (i < len - 1 &&
-			    strchr("\\,=+<>#;", buf[i+1]) != NULL) {
-				*dst++ = buf[++i];
-				continue;
-			} else if (i < len - 2) {
-				/* RFC 2253 hexpair character escape */
-				long u;
-				char esc_str[3];
-				char *endptr;
-
-				esc_str[0] = buf[++i];
-				esc_str[1] = buf[++i];
-				esc_str[2] = '\0';
-				u = strtol(esc_str, &endptr, 16);
-				if (*endptr != '\0' || u < 0 || u > 255)
-					goto err;
-				*dst++ = u;
-				continue;
-			} else
-				goto err;
-		}
 		if (!value && buf[i] == '=') {
-			*dst = '\0';
-			dst = value = &buf[i + 1];
+			buf[i] = '\0';
+			value = &buf[i + 1];
 			continue;
 		} else if (buf[i] == ',' || buf[i] == '/') {
-			*dst = '\0';
+			buf[i] = '\0';
 
 			plog(LLV_DEBUG, LOCATION, NULL, "DN: %s=%s\n",
 			     field, value);
@@ -196,16 +173,16 @@ eay_str2asn1dn(str, len)
 				     "%s\n", eay_strerror());
 				goto err;
 			}
-
-			while (i + 1 < len && buf[i + 1] == ' ') i++;
-			dst = field = &buf[i + 1];
+			for (j = i + 1; j < len; j++) {
+				if (buf[j] != ' ')
+					break;
+			}
+			field = &buf[j];
 			value = NULL;
 			continue;
-		} else {
-			*dst++  = buf[i];
 		}
 	}
-	*dst = '\0';
+	buf[len] = '\0';
 
 	plog(LLV_DEBUG, LOCATION, NULL, "DN: %s=%s\n",
 	     field, value);

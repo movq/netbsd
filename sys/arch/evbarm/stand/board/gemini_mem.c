@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_mem.c,v 1.2 2008/11/11 06:32:15 cliff Exp $	*/
+/*	$NetBSD: gemini_mem.c,v 1.1 2008/10/30 06:23:13 cliff Exp $	*/
 
 /* adapted from:
  *	NetBSD: integrator_mem.c,v 1.4 2006/01/16 19:34:53 he Exp
@@ -49,20 +49,14 @@
 
 #include "board.h"
 
-/*
- * constrain MEMSIZE to avoid stepping out of smallest-case
- * Gemini CPU Remap Control remapped-private memory size
- * "bad" things can happen if the gzboot heap is in
- * non-core-private memory.
- */
-#define MEMSIZE	(32 * 1024 * 1024)	/* 32MB */
+#define MEMSIZE	(128 * 1024 * 1024)	/* XXX */
 
 void
 mem_init(void)
 {
 	uint32_t heap, size;
 
-	size = MEMSIZE;
+	size = MEMSIZE;			/* XXX */
 
 	/* Start is always 0. */
 	heap = size - BOARD_HEAP_SIZE;

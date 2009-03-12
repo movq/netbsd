@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_vnops.c,v 1.17 2008/12/01 14:34:50 pooka Exp $	*/
+/*	$NetBSD: efs_vnops.c,v 1.14.20.4 2009/01/06 23:38:41 snj Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble <rumble@ephemeral.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_vnops.c,v 1.17 2008/12/01 14:34:50 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_vnops.c,v 1.14.20.4 2009/01/06 23:38:41 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -216,6 +216,10 @@ efs_getattr(void *v)
 	
 	return (0);
 }
+
+#ifndef UBC_UNMAP_FLAG
+#define UBC_UNMAP_FLAG(_ap)	(UBC_WANT_UNMAP((_ap)->a_vp) ? UBC_UNMAP : 0)
+#endif
 
 /*
  * Read a file.

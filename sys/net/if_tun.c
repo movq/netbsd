@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tun.c,v 1.110 2008/11/20 21:55:15 dyoung Exp $	*/
+/*	$NetBSD: if_tun.c,v 1.107 2008/06/15 16:37:21 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, Julian Onions <jpo@cs.nott.ac.uk>
@@ -15,7 +15,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.110 2008/11/20 21:55:15 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.107 2008/06/15 16:37:21 christos Exp $");
 
 #include "opt_inet.h"
 
@@ -378,7 +378,7 @@ out_nolock:
 }
 
 /*
- * Call at splnet().
+ * Call at splnet() with tp locked.
  */
 static void
 tuninit(struct tun_softc *tp)
@@ -388,7 +388,6 @@ tuninit(struct tun_softc *tp)
 
 	TUNDEBUG("%s: tuninit\n", ifp->if_xname);
 
-	simple_lock(&tp->tun_lock);
 	ifp->if_flags |= IFF_UP | IFF_RUNNING;
 
 	tp->tun_flags &= ~(TUN_IASET|TUN_DSTADDR);
@@ -427,7 +426,6 @@ tuninit(struct tun_softc *tp)
 #endif /* INET6 */
 	}
 
-	simple_unlock(&tp->tun_lock);
 	return;
 }
 
@@ -442,9 +440,10 @@ tun_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	struct ifreq *ifr = data;
 
 	s = splnet();
+	simple_lock(&tp->tun_lock);
 
 	switch (cmd) {
-	case SIOCINITIFADDR:
+	case SIOCSIFADDR:
 		tuninit(tp);
 		TUNDEBUG("%s: address set\n", ifp->if_xname);
 		break;
@@ -484,10 +483,13 @@ tun_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			break;
 		}
 		break;
+	case SIOCSIFFLAGS:
+		break;
 	default:
-		error = ifioctl_common(ifp, cmd, data);
+		error = EINVAL;
 	}
 
+	simple_unlock(&tp->tun_lock);
 	splx(s);
 	return (error);
 }

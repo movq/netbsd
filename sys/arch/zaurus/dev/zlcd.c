@@ -1,4 +1,4 @@
-/*	$NetBSD: zlcd.c,v 1.9 2009/01/29 16:00:33 nonaka Exp $	*/
+/*	$NetBSD: zlcd.c,v 1.7 2007/10/17 19:58:35 garbled Exp $	*/
 /*	$OpenBSD: zaurus_lcd.c,v 1.20 2006/06/02 20:50:14 miod Exp $	*/
 /* NetBSD: lubbock_lcd.c,v 1.1 2003/08/09 19:38:53 bsh Exp */
 
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zlcd.c,v 1.9 2009/01/29 16:00:33 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zlcd.c,v 1.7 2007/10/17 19:58:35 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -148,14 +148,11 @@ const struct sharp_lcd_backlight sharp_zaurus_C3000_bl[] = {
 	{  -1, -1, -1 },	/* 7: Invalid */
 };
 
-static int	lcd_match(device_t, cfdata_t, void *);
-static void	lcd_attach(device_t, device_t, void *);
+static int	lcd_match(struct device *, struct cfdata *, void *);
+static void	lcd_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(zlcd, sizeof(struct pxa2x0_lcd_softc),
+CFATTACH_DECL(zlcd, sizeof(struct pxa2x0_lcd_softc),
 	lcd_match, lcd_attach, NULL, NULL);
-
-static bool	lcd_suspend(device_t dv PMF_FN_ARGS);
-static bool	lcd_resume(device_t dv PMF_FN_ARGS);
 
 void	lcd_cnattach(void);
 int	lcd_max_brightness(void);
@@ -165,21 +162,20 @@ void	lcd_set_brightness_internal(int);
 int	lcd_get_backlight(void);
 void	lcd_set_backlight(int);
 void	lcd_blank(int);
+void	lcd_power(int, void *);
 
 static int
-lcd_match(device_t parent, cfdata_t cf, void *aux)
+lcd_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	return 1;
 }
 
 static void
-lcd_attach(device_t parent, device_t self, void *aux)
+lcd_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct pxa2x0_lcd_softc *sc = device_private(self);
+	struct pxa2x0_lcd_softc *sc = (struct pxa2x0_lcd_softc *)self;
 	struct wsemuldisplaydev_attach_args aa;
-
-	sc->dev = self;
 
 	pxa2x0_lcd_attach_sub(sc, aux, CURRENT_DISPLAY);
 
@@ -193,8 +189,7 @@ lcd_attach(device_t parent, device_t self, void *aux)
 	/* Start with approximately 40% of full brightness. */
 	lcd_set_brightness(3);
 
-	if (!pmf_device_register(sc->dev, lcd_suspend, lcd_resume))
-		aprint_error_dev(sc->dev, "couldn't establish power handler\n");
+	(void) powerhook_establish(sc->dev.dv_xname, lcd_power, sc);
 }
 
 void
@@ -202,31 +197,6 @@ lcd_cnattach(void)
 {
 
 	pxa2x0_lcd_cnattach(&lcd_std_screen, CURRENT_DISPLAY);
-}
-
-/*
- * power management
- */
-static bool
-lcd_suspend(device_t dv PMF_FN_ARGS)
-{
-	struct pxa2x0_lcd_softc *sc = device_private(dv);
-
-	lcd_set_brightness(0);
-	pxa2x0_lcd_suspend(sc);
-
-	return true;
-}
-
-static bool
-lcd_resume(device_t dv PMF_FN_ARGS)
-{
-	struct pxa2x0_lcd_softc *sc = device_private(dv);
-
-	pxa2x0_lcd_resume(sc);
-	lcd_set_brightness(lcd_get_brightness());
-
-	return true;
 }
 
 /*
@@ -519,5 +489,23 @@ lcd_blank(int blank)
 	} else {
 		lcdisblank = 0;
 		lcd_set_brightness(lcd_get_brightness());
+	}
+}
+
+void
+lcd_power(int why, void *v)
+{
+
+	switch (why) {
+	case PWR_SUSPEND:
+	case PWR_STANDBY:
+		lcd_set_brightness(0);
+		pxa2x0_lcd_power(why, v);
+		break;
+
+	case PWR_RESUME:
+		pxa2x0_lcd_power(why, v);
+		lcd_set_brightness(lcd_get_brightness());
+		break;
 	}
 }

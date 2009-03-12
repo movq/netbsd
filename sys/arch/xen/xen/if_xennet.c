@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xennet.c,v 1.61 2009/01/16 20:16:47 jym Exp $	*/
+/*	$NetBSD: if_xennet.c,v 1.60.2.1 2010/03/28 17:07:26 snj Exp $	*/
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xennet.c,v 1.61 2009/01/16 20:16:47 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xennet.c,v 1.60.2.1 2010/03/28 17:07:26 snj Exp $");
 
 #include "opt_inet.h"
 #include "opt_nfs_boot.h"
@@ -551,7 +551,7 @@ xennet_interface_status_change(netif_fe_interface_status_t *status)
 		 * we've probably just requeued some packets.
 		 */
 		sc->sc_backend_state = BEST_CONNECTED;
-		xen_wmb();
+		x86_sfence();
 		hypervisor_notify_via_evtchn(status->evtchn);  
 		network_tx_buf_gc(sc);
 
@@ -657,8 +657,10 @@ xennet_rx_push_buffer(struct xennet_softc *sc, int id)
 	(void)HYPERVISOR_multicall(rx_mcl, nr_pfns+1);
 
 	/* Check return status of HYPERVISOR_dom_mem_op(). */
-	if ( rx_mcl[nr_pfns].args[5] != nr_pfns )
-		panic("Unable to reduce memory reservation\n");
+	if ( rx_mcl[nr_pfns].args[5] != nr_pfns ) {
+		printf("xennet_rx_push_buffer: unable to reduce memory "
+		    "reservation (%lu != %d)\n", rx_mcl[nr_pfns].args[5], nr_pfns);
+	}
 
 	/* Above is a suitable barrier to ensure backend will see requests. */
 	sc->sc_rx->req_prod = ringidx;
@@ -702,7 +704,7 @@ xen_network_handler(void *arg)
 
  again:
 	resp_prod = sc->sc_rx->resp_prod;
-	xen_rmb(); /* ensure we see all requests up to resp_prod */
+	x86_lfence(); /* ensure we see all requests up to resp_prod */
 	for (ringidx = sc->sc_rx_resp_cons;
 	     ringidx != resp_prod;
 	     ringidx++) {
@@ -826,7 +828,7 @@ xen_network_handler(void *arg)
 
 	sc->sc_rx_resp_cons = ringidx;
 	sc->sc_rx->event = resp_prod + 1;
-	xen_rmb();
+	x86_lfence();
 	  /* ensure backend see the new sc_rx->event before we start again */
 
 	if (sc->sc_rx->resp_prod != resp_prod)
@@ -892,7 +894,7 @@ network_tx_buf_gc(struct xennet_softc *sc)
 		 */
 		sc->sc_tx->event = /* atomic */
 			prod + (sc->sc_tx_entries >> 1) + 1;
-		xen_rmb();
+		x86_lfence();
 	} while (prod != sc->sc_tx->resp_prod);
 
 	if (sc->sc_tx->resp_prod == sc->sc_tx->req_prod)
@@ -994,8 +996,10 @@ network_alloc_rx_buffers(struct xennet_softc *sc)
 	(void)HYPERVISOR_multicall(rx_mcl, nr_pfns+1);
 
 	/* Check return status of HYPERVISOR_dom_mem_op(). */
-	if (rx_mcl[nr_pfns].args[5] != nr_pfns)
-		panic("Unable to reduce memory reservation\n");
+	if (rx_mcl[nr_pfns].args[5] != nr_pfns) {
+		printf("xennet_alloc_rx_buffers: unable to reduce memory "
+		    "reservation (%lu != %d)\n", rx_mcl[nr_pfns].args[5], nr_pfns);
+	}
 
 	/* Above is a suitable barrier to ensure backend will see requests. */
 	sc->sc_rx->req_prod = ringidx;
@@ -1143,12 +1147,12 @@ xennet_softstart(void *arg)
 		txreq->addr = xpmap_ptom(pa);
 		txreq->size = m->m_pkthdr.len;
 
-		xen_rmb();
+		x86_lfence();
 		idx++;
 		sc->sc_tx->req_prod = idx;
 
 		sc->sc_tx_entries++; /* XXX atomic */
-		xen_rmb();
+		x86_lfence();
 
 #ifdef XENNET_DEBUG
 		DPRINTFN(XEDB_MEM, ("packet addr %p/%p, physical %p/%p, "
@@ -1168,7 +1172,7 @@ xennet_softstart(void *arg)
 #endif
 	}
 
-	xen_rmb();
+	x86_lfence();
 	if (sc->sc_tx->resp_prod != idx) {
 		hypervisor_notify_via_evtchn(sc->sc_evtchn);
 		ifp->if_timer = 5;

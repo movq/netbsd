@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_zyd.c,v 1.52 2007/02/11 00:08:04 jsg Exp $	*/
-/*	$NetBSD: if_zyd.c,v 1.16 2009/01/03 03:43:23 yamt Exp $	*/
+/*	$NetBSD: if_zyd.c,v 1.14 2008/09/21 09:38:27 freza Exp $	*/
 
 /*-
  * Copyright (c) 2006 by Damien Bergamini <damien.bergamini@free.fr>
@@ -22,7 +22,7 @@
  * ZyDAS ZD1211/ZD1211B USB WLAN driver.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.16 2009/01/03 03:43:23 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.14 2008/09/21 09:38:27 freza Exp $");
 
 #include "bpfilter.h"
 
@@ -262,7 +262,7 @@ zyd_attachhook(void *xsc)
 		aprint_error_dev(sc->sc_dev,
 		    "failed to allocate firmware memory\n");
 		firmware_close(fwh);
-		return ENOMEM;
+		return ENOMEM;;
 	}
 	error = firmware_read(fwh, 0, fw, size);
 	firmware_close(fwh);
@@ -2419,24 +2419,18 @@ zyd_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 	case SIOCSIFFLAGS:
-		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
-			break;
-		/* XXX re-use ether_ioctl() */
-		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
-		case IFF_UP:
-			zyd_init(ifp);
-			break;
-		case IFF_RUNNING:
-			zyd_stop(ifp, 1);
-			break;
-		default:
-			break;
+		if (ifp->if_flags & IFF_UP) {
+			if (!(ifp->if_flags & IFF_RUNNING))
+				zyd_init(ifp);
+		} else {
+			if (ifp->if_flags & IFF_RUNNING)
+				zyd_stop(ifp, 1);
 		}
 		break;
 
 	default:
 		if (!sc->attached)
-			error = ENXIO;
+			error = ENOTTY;
 		else
 			error = ieee80211_ioctl(ic, cmd, data);
 	}

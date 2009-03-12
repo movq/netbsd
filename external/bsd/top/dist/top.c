@@ -468,8 +468,7 @@ do_arguments(globalstate *gstate, int ac, char **av)
 	default:
 	    fprintf(stderr, "\
 Top version %s\n\
-Usage: %s [-1CISTabcinqtuv] [-d count] [-m mode] [-o field] [-p pid]\n\
-           [-s time] [-U username] [number]\n",
+Usage: %s [-1ISTabcinqu] [-d x] [-s x] [-o field] [-U username] [-p pid] [number]\n",
 		    version_string(), myname);
 	    exit(EX_USAGE);
 	}
@@ -757,7 +756,7 @@ main(int argc, char *argv[])
 #endif
 
     /* initialization */
-    gstate = ecalloc(1, sizeof(globalstate));
+    gstate = (globalstate *)calloc(1, sizeof(globalstate));
     gstate->statics = &statics;
     time_mark(NULL);
 
@@ -891,7 +890,7 @@ main(int argc, char *argv[])
     /* initialize display */
     if ((gstate->max_topn = display_init(&statics, gstate->percpustates)) == -1)
     {
-	fprintf(stderr, "%s: display too small\n", myname);
+	fprintf(stderr, "%s: can't allocate sufficient memory\n", myname);
 	exit(EX_OSERR);
     }
 

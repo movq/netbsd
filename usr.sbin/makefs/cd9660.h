@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660.h,v 1.13 2009/01/10 22:06:29 bjh21 Exp $	*/
+/*	$NetBSD: cd9660.h,v 1.12.4.1 2010/01/02 06:45:03 snj Exp $	*/
 
 /*
  * Copyright (c) 2005 Daniel Watt, Walter Deignan, Ryan Gabrys, Alan
@@ -287,7 +287,6 @@ typedef struct _iso9660_disk {
 	int rock_ridge_move_count;
 	cd9660node *rr_moved_dir;
 
-	int archimedes_enabled;
 
 	/* Spec breaking options */
 	u_char allow_deep_trees;

@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.80 2008/12/30 13:15:49 pooka Exp $
+#	$NetBSD: genassym.cf,v 1.76.4.2 2009/02/02 03:22:55 snj Exp $
 
 #
 # Copyright (c) 1998, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -107,7 +107,7 @@ include <xen/xen-public/xen.h>
 endif
 endif
 
-if defined(_KERNEL) && defined(_KERNEL_OPT)
+if defined(_KERNEL) && !defined(_LKM)
 include "ioapic.h"
 ifndef XEN
 include "apmbios.h"
@@ -138,7 +138,7 @@ include <machine/i82093reg.h>
 include <machine/i82093var.h>
 endif
 
-if defined(_KERNEL) && defined(_KERNEL_OPT)
+if defined(_KERNEL) && !defined(_LKM)
 include "isa.h"
 endif
 if NISA > 0
@@ -458,7 +458,7 @@ define CPU_INFO_VCPU		offsetof(struct cpu_info, ci_vcpu)
 ifdef XEN3
 define START_INFO_SHARED_INFO	offsetof(struct start_info, shared_info)
 define START_INFO_FLAGS		offsetof(struct start_info, flags)
-define START_INFO_CONSOLE_MFN	offsetof(struct start_info, console.domU.mfn)
+define START_INFO_CONSOLE_MFN	offsetof(struct start_info, console_mfn)
 define START_INFO_STORE_MFN	offsetof(struct start_info, store_mfn)
 else
 define START_INFO_SHARED_INFO	offsetof(start_info_t, shared_info)

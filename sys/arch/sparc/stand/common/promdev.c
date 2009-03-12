@@ -1,4 +1,4 @@
-/*	$NetBSD: promdev.c,v 1.22 2009/01/12 11:32:44 tsutsui Exp $ */
+/*	$NetBSD: promdev.c,v 1.21.14.1 2010/01/23 17:47:36 bouyer Exp $ */
 
 /*
  * Copyright (c) 1993 Paul Kranenburg
@@ -45,7 +45,6 @@
 #include <machine/pte.h>
 
 #include <lib/libsa/stand.h>
-#include <lib/libsa/net.h>
 #include <lib/libkern/libkern.h>
 #include <sparc/stand/common/promdev.h>
 
@@ -214,6 +213,15 @@ devopen(struct open_file *f, const char *fname, char **file)
 #ifdef NOTDEF_DEBUG
 	printf("devopen: Checking disklabel for RAID partition\n");
 #endif
+
+		/*
+		 * Don't check disklabel on floppy boot since
+		 * reopening it could cause Data Access Exception later.
+		 */
+		if (strncmp(prom_bootdevice, "fd", 2) == 0 ||
+		    strstr(prom_bootdevice, "SUNW,fdtwo") != NULL ||
+		    strstr(prom_bootdevice, "fdthree") != NULL)
+			return 0;
 
 		/*
 		 * We need to read from the raw partition (i.e. the
@@ -506,7 +514,7 @@ getchar(void)
 	return (prom_getchar());
 }
 
-satime_t
+time_t
 getsecs(void)
 {
 

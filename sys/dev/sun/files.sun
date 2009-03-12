@@ -1,4 +1,4 @@
-# $NetBSD: files.sun,v 1.16 2008/12/05 11:52:42 jdc Exp $
+# $NetBSD: files.sun,v 1.14.18.2 2009/01/08 21:44:07 snj Exp $
 #
 # Configuration file for devices found on Sun machines.
 #

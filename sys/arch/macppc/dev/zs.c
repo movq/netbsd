@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.48 2008/12/07 08:24:26 tsutsui Exp $	*/
+/*	$NetBSD: zs.c,v 1.47.6.1 2008/12/13 21:38:47 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Bill Studenmund
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.48 2008/12/07 08:24:26 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.47.6.1 2008/12/13 21:38:47 bouyer Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"

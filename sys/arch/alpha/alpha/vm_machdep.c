@@ -1,4 +1,4 @@
-/* $NetBSD: vm_machdep.c,v 1.97 2008/11/19 18:35:57 ad Exp $ */
+/* $NetBSD: vm_machdep.c,v 1.96.30.1 2009/06/09 17:38:39 snj Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,8 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.97 2008/11/19 18:35:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.96.30.1 2009/06/09 17:38:39 snj Exp $");
+#include "opt_coredump.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,6 +48,49 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.97 2008/11/19 18:35:57 ad Exp $");
 #include <machine/alpha.h>
 #include <machine/pmap.h>
 #include <machine/reg.h>
+
+#ifdef COREDUMP
+/*
+ * Dump the machine specific header information at the start of a core dump.
+ */
+int
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
+{
+	int error;
+	struct md_coredump cpustate;
+	struct coreseg cseg;
+
+	if (iocookie == NULL) {
+		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
+		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
+		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
+		chdr->c_cpusize = sizeof(cpustate);
+		chdr->c_nseg++;
+		return 0;
+	}
+
+	cpustate.md_tf = *l->l_md.md_tf;
+	cpustate.md_tf.tf_regs[FRAME_SP] = alpha_pal_rdusp();	/* XXX */
+	if (l->l_md.md_flags & MDP_FPUSED) {
+		if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
+			fpusave_proc(l, 1);
+		cpustate.md_fpstate = l->l_addr->u_pcb.pcb_fp;
+	} else
+		memset(&cpustate.md_fpstate, 0, sizeof(cpustate.md_fpstate));
+
+	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
+	cseg.c_addr = 0;
+	cseg.c_size = chdr->c_cpusize;
+
+	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
+	    chdr->c_seghdrsize);
+	if (error)
+		return error;
+
+	return coredump_write(iocookie, UIO_SYSSPACE, &cpustate,
+	    sizeof(cpustate));
+}
+#endif
 
 void
 cpu_lwp_free(struct lwp *l, int proc)
@@ -85,6 +129,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
     void (*func)(void *), void *arg)
 {
 	struct user *up = l2->l_addr;
+	extern void lwp_trampoline(void);
 
 	l2->l_md.md_tf = l1->l_md.md_tf;
 	l2->l_md.md_flags = l1->l_md.md_flags & (MDP_FPUSED | MDP_FP_C);
@@ -150,7 +195,19 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 		l2tf->tf_regs[FRAME_A3] = 0;		/* no error */
 		l2tf->tf_regs[FRAME_A4] = 1;		/* is child */
 
-		cpu_setfunc(l2, func, arg);
+		up = l2->l_addr;
+		up->u_pcb.pcb_hw.apcb_ksp =
+		    (u_int64_t)l2->l_md.md_tf;
+		up->u_pcb.pcb_context[0] =
+		    (u_int64_t)func;			/* s0: pc */
+		up->u_pcb.pcb_context[1] =
+		    (u_int64_t)exception_return;	/* s1: ra */
+		up->u_pcb.pcb_context[2] =
+		    (u_int64_t)arg;			/* s2: arg */
+		up->u_pcb.pcb_context[3] =
+		    (u_int64_t)l2;			/* s3: lwp */
+		up->u_pcb.pcb_context[7] =
+		    (u_int64_t)lwp_trampoline;		/* ra: assembly magic */
 	}
 }
 
@@ -161,6 +218,7 @@ cpu_setfunc(l, func, arg)
 	void *arg;
 {
 	struct user *up = l->l_addr;
+	extern void setfunc_trampoline(void);
 
 	up->u_pcb.pcb_hw.apcb_ksp =
 	    (u_int64_t)l->l_md.md_tf;
@@ -170,10 +228,8 @@ cpu_setfunc(l, func, arg)
 	    (u_int64_t)exception_return;	/* s1: ra */
 	up->u_pcb.pcb_context[2] =
 	    (u_int64_t)arg;			/* s2: arg */
-	up->u_pcb.pcb_context[3] =
-	    (u_int64_t)l;			/* s3: lwp */
 	up->u_pcb.pcb_context[7] =
-	    (u_int64_t)lwp_trampoline;		/* ra: assembly magic */
+	    (u_int64_t)setfunc_trampoline;	/* ra: assembly magic */
 }	
 
 /*

@@ -1,4 +1,4 @@
-# $NetBSD: md.hp300,v 1.40 2008/11/29 17:57:33 tsutsui Exp $
+# $NetBSD: md.hp300,v 1.38 2004/11/28 11:14:41 jmc Exp $
 ./usr/mdec/bootct				base-sysutil-bin
 ./usr/mdec/bootrd				base-sysutil-bin
 ./usr/mdec/bootsd				base-sysutil-bin

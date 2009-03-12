@@ -1,5 +1,5 @@
-/*	$NetBSD: session.c,v 1.49 2009/02/16 20:53:55 christos Exp $	*/
-/* $OpenBSD: session.c,v 1.241 2008/06/16 13:22:53 dtucker Exp $ */
+/*	$NetBSD: session.c,v 1.48 2008/06/22 15:42:50 christos Exp $	*/
+/* $OpenBSD: session.c,v 1.233 2008/03/26 21:28:14 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -35,14 +35,13 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: session.c,v 1.49 2009/02/16 20:53:55 christos Exp $");
+__RCSID("$NetBSD: session.c,v 1.48 2008/06/22 15:42:50 christos Exp $");
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/param.h>
-#include <sys/queue.h>
 
 #include <errno.h>
 #include <grp.h>
@@ -93,13 +92,13 @@ __RCSID("$NetBSD: session.c,v 1.49 2009/02/16 20:53:55 christos Exp $");
 /* func */
 
 Session *session_new(void);
-void	session_set_fds(Session *, int, int, int, int);
+void	session_set_fds(Session *, int, int, int);
 void	session_pty_cleanup(Session *);
 void	session_proctitle(Session *);
 int	session_setup_x11fwd(Session *);
-int	do_exec_pty(Session *, const char *);
-int	do_exec_no_pty(Session *, const char *);
-int	do_exec(Session *, const char *);
+void	do_exec_pty(Session *, const char *);
+void	do_exec_no_pty(Session *, const char *);
+void	do_exec(Session *, const char *);
 void	do_login(Session *, const char *);
 void	do_child(Session *, const char *);
 void	do_motd(void);
@@ -124,9 +123,8 @@ extern Buffer loginmsg;
 const char *original_command = NULL;
 
 /* data */
-static int sessions_first_unused = -1;
-static int sessions_nalloc = 0;
-static Session *sessions = NULL;
+#define MAX_SESSIONS 10
+Session	sessions[MAX_SESSIONS];
 
 #define SUBSYSTEM_NONE		0
 #define SUBSYSTEM_EXT		1
@@ -160,7 +158,7 @@ static int
 auth_input_request_forwarding(struct passwd * pw)
 {
 	Channel *nc;
-	int sock = -1;
+	int sock;
 	struct sockaddr_un sunaddr;
 
 	if (auth_sock_name != NULL) {
@@ -172,48 +170,43 @@ auth_input_request_forwarding(struct passwd * pw)
 	temporarily_use_uid(pw);
 
 	/* Allocate a buffer for the socket name, and format the name. */
-	auth_sock_dir = xstrdup("/tmp/ssh-XXXXXXXXXX");
+	auth_sock_name = xmalloc(MAXPATHLEN);
+	auth_sock_dir = xmalloc(MAXPATHLEN);
+	strlcpy(auth_sock_dir, "/tmp/ssh-XXXXXXXXXX", MAXPATHLEN);
 
 	/* Create private directory for socket */
 	if (mkdtemp(auth_sock_dir) == NULL) {
 		packet_send_debug("Agent forwarding disabled: "
 		    "mkdtemp() failed: %.100s", strerror(errno));
 		restore_uid();
+		xfree(auth_sock_name);
 		xfree(auth_sock_dir);
+		auth_sock_name = NULL;
 		auth_sock_dir = NULL;
-		goto authsock_err;
+		return 0;
 	}
-
-	xasprintf(&auth_sock_name, "%s/agent.%ld",
-	    auth_sock_dir, (long) getpid());
+	snprintf(auth_sock_name, MAXPATHLEN, "%s/agent.%ld",
+		 auth_sock_dir, (long) getpid());
 
 	/* Create the socket. */
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (sock < 0) {
-		error("socket: %.100s", strerror(errno));
-		restore_uid();
-		goto authsock_err;
-	}
+	if (sock < 0)
+		packet_disconnect("socket: %.100s", strerror(errno));
 
 	/* Bind it to the name. */
 	memset(&sunaddr, 0, sizeof(sunaddr));
 	sunaddr.sun_family = AF_UNIX;
 	strlcpy(sunaddr.sun_path, auth_sock_name, sizeof(sunaddr.sun_path));
 
-	if (bind(sock, (struct sockaddr *)&sunaddr, sizeof(sunaddr)) < 0) {
-		error("bind: %.100s", strerror(errno));
-		restore_uid();
-		goto authsock_err;
-	}
+	if (bind(sock, (struct sockaddr *)&sunaddr, sizeof(sunaddr)) < 0)
+		packet_disconnect("bind: %.100s", strerror(errno));
 
 	/* Restore the privileged uid. */
 	restore_uid();
 
 	/* Start listening on the socket. */
-	if (listen(sock, SSH_LISTEN_BACKLOG) < 0) {
-		error("listen: %.100s", strerror(errno));
-		goto authsock_err;
-	}
+	if (listen(sock, SSH_LISTEN_BACKLOG) < 0)
+		packet_disconnect("listen: %.100s", strerror(errno));
 
 	/* Allocate a channel for the authentication agent socket. */
 	/* this shouldn't matter if its hpn or not - cjr */
@@ -223,19 +216,6 @@ auth_input_request_forwarding(struct passwd * pw)
 	    0, "auth socket", 1);
 	strlcpy(nc->path, auth_sock_name, sizeof(nc->path));
 	return 1;
-
- authsock_err:
-	if (auth_sock_name != NULL)
-		xfree(auth_sock_name);
-	if (auth_sock_dir != NULL) {
-		rmdir(auth_sock_dir);
-		xfree(auth_sock_dir);
-	}
-	if (sock != -1)
-		close(sock);
-	auth_sock_name = NULL;
-	auth_sock_dir = NULL;
-	return 0;
 }
 
 static void
@@ -348,8 +328,7 @@ do_authenticated1(Authctxt *authctxt)
 			break;
 
 		case SSH_CMSG_AGENT_REQUEST_FORWARDING:
-			if (!options.allow_agent_forwarding ||
-			    no_agent_forwarding_flag || compat13) {
+			if (no_agent_forwarding_flag || compat13) {
 				debug("Authentication agent forwarding not permitted for this authentication.");
 				break;
 			}
@@ -368,7 +347,8 @@ do_authenticated1(Authctxt *authctxt)
 			}
 			debug("Received TCP/IP port forwarding request.");
 			if (channel_input_port_forward_request(s->pw->pw_uid == 0,
-			      options.gateway_ports) < 0) {
+			      options.gateway_ports, options.hpn_disabled,
+                              options.hpn_buffer_size) < 0) {
 				debug("Port forwarding failed.");
 				break;
 			}
@@ -437,14 +417,10 @@ do_authenticated1(Authctxt *authctxt)
 			if (type == SSH_CMSG_EXEC_CMD) {
 				command = packet_get_string(&dlen);
 				debug("Exec command '%.500s'", command);
-				if (do_exec(s, command) != 0)
-					packet_disconnect(
-					    "command execution failed");
+				do_exec(s, command);
 				xfree(command);
 			} else {
-				if (do_exec(s, NULL) != 0)
-					packet_disconnect(
-					    "shell execution failed");
+				do_exec(s, NULL);
 			}
 			packet_check_eom();
 			session_close(s);
@@ -469,54 +445,22 @@ do_authenticated1(Authctxt *authctxt)
 	}
 }
 
-#define USE_PIPES
 /*
  * This is called to fork and execute a command when we have no tty.  This
  * will call do_child from the child, and server_loop from the parent after
  * setting up file descriptors and such.
  */
-int
+void
 do_exec_no_pty(Session *s, const char *command)
 {
 	pid_t pid;
-#ifdef USE_PIPES
-	int pin[2], pout[2], perr[2];
 
-	/* Allocate pipes for communicating with the program. */
-	if (pipe(pin) < 0) {
-		error("%s: pipe in: %.100s", __func__, strerror(errno));
-		return -1;
-	}
-	if (pipe(pout) < 0) {
-		error("%s: pipe out: %.100s", __func__, strerror(errno));
-		close(pin[0]);
-		close(pin[1]);
-		return -1;
-	}
-	if (pipe(perr) < 0) {
-		error("%s: pipe err: %.100s", __func__, strerror(errno));
-		close(pin[0]);
-		close(pin[1]);
-		close(pout[0]);
-		close(pout[1]);
-		return -1;
-	}
-#else
 	int inout[2], err[2];
-
 	/* Uses socket pairs to communicate with the program. */
-	if (socketpair(AF_UNIX, SOCK_STREAM, 0, inout) < 0) {
-		error("%s: socketpair #1: %.100s", __func__, strerror(errno));
-		return -1;
-	}
-	if (socketpair(AF_UNIX, SOCK_STREAM, 0, err) < 0) {
-		error("%s: socketpair #2: %.100s", __func__, strerror(errno));
-		close(inout[0]);
-		close(inout[1]);
-		return -1;
-	}
-#endif
-
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, inout) < 0 ||
+	    socketpair(AF_UNIX, SOCK_STREAM, 0, err) < 0)
+		packet_disconnect("Could not create socket pairs: %.100s",
+				  strerror(errno));
 	if (s == NULL)
 		fatal("do_exec_no_pty: no session");
 
@@ -530,29 +474,11 @@ do_exec_no_pty(Session *s, const char *command)
 #endif
 
 	/* Fork the child. */
-	switch ((pid = fork())) {
-	case -1:
-		error("%s: fork: %.100s", __func__, strerror(errno));
-#ifdef USE_PIPES
-		close(pin[0]);
-		close(pin[1]);
-		close(pout[0]);
-		close(pout[1]);
-		close(perr[0]);
-		close(perr[1]);
-#else
-		close(inout[0]);
-		close(inout[1]);
-		close(err[0]);
-		close(err[1]);
-#endif
-		return -1;
-	case 0:
+	if ((pid = fork()) == 0) {
 		is_child = 1;
 
 		/* Child.  Reinitialize the log since the pid has changed. */
-		log_init(__progname, options.log_level,
-		    options.log_facility, log_stderr);
+		log_init(__progname, options.log_level, options.log_facility, log_stderr);
 
 		/*
 		 * Create a new session and process group since the 4.4BSD
@@ -561,28 +487,6 @@ do_exec_no_pty(Session *s, const char *command)
 		if (setsid() < 0)
 			error("setsid failed: %.100s", strerror(errno));
 
-#ifdef USE_PIPES
-		/*
-		 * Redirect stdin.  We close the parent side of the socket
-		 * pair, and make the child side the standard input.
-		 */
-		close(pin[1]);
-		if (dup2(pin[0], 0) < 0)
-			perror("dup2 stdin");
-		close(pin[0]);
-
-		/* Redirect stdout. */
-		close(pout[0]);
-		if (dup2(pout[1], 1) < 0)
-			perror("dup2 stdout");
-		close(pout[1]);
-
-		/* Redirect stderr. */
-		close(perr[0]);
-		if (dup2(perr[1], 2) < 0)
-			perror("dup2 stderr");
-		close(perr[1]);
-#else
 		/*
 		 * Redirect stdin, stdout, and stderr.  Stdin and stdout will
 		 * use the same socket, as some programs (particularly rdist)
@@ -592,43 +496,21 @@ do_exec_no_pty(Session *s, const char *command)
 		close(err[1]);
 		if (dup2(inout[0], 0) < 0)	/* stdin */
 			perror("dup2 stdin");
-		if (dup2(inout[0], 1) < 0)	/* stdout (same as stdin) */
+		if (dup2(inout[0], 1) < 0)	/* stdout.  Note: same socket as stdin. */
 			perror("dup2 stdout");
-		close(inout[0]);
 		if (dup2(err[0], 2) < 0)	/* stderr */
 			perror("dup2 stderr");
-		close(err[0]);
-#endif
 
 		/* Do processing for the child (exec command etc). */
 		do_child(s, command);
 		/* NOTREACHED */
-	default:
-		break;
 	}
-
+	if (pid < 0)
+		packet_disconnect("fork failed: %.100s", strerror(errno));
 	s->pid = pid;
 	/* Set interactive/non-interactive mode. */
 	packet_set_interactive(s->display != NULL);
 
-#ifdef USE_PIPES
-	/* We are the parent.  Close the child sides of the pipes. */
-	close(pin[0]);
-	close(pout[1]);
-	close(perr[1]);
-
-	if (compat20) {
-		if (s->is_subsystem) {
-			close(perr[0]);
-			perr[0] = -1;
-		}
-		session_set_fds(s, pin[1], pout[0], perr[0], 0);
-	} else {
-		/* Enter the interactive session. */
-		server_loop(pid, pin[1], pout[0], perr[0]);
-		/* server_loop has closed pin[1], pout[0], and perr[0]. */
-	}
-#else
 	/* We are the parent.  Close the child sides of the socket pairs. */
 	close(inout[0]);
 	close(err[0]);
@@ -638,16 +520,11 @@ do_exec_no_pty(Session *s, const char *command)
 	 * handle the case that fdin and fdout are the same.
 	 */
 	if (compat20) {
-		session_set_fds(s, inout[1], inout[1],
-		    s->is_subsystem ? -1 : err[1], 0);
-		if (s->is_subsystem)
-			close(err[1]);
+		session_set_fds(s, inout[1], inout[1], s->is_subsystem ? -1 : err[1]);
 	} else {
 		server_loop(pid, inout[1], inout[1], err[1]);
 		/* server_loop has closed inout[1] and err[1]. */
 	}
-#endif
-	return 0;
 }
 
 /*
@@ -656,7 +533,7 @@ do_exec_no_pty(Session *s, const char *command)
  * setting up file descriptors, controlling tty, updating wtmp, utmp,
  * lastlog, and other such operations.
  */
-int
+void
 do_exec_pty(Session *s, const char *command)
 {
 	int fdout, ptyfd, ttyfd, ptymaster;
@@ -675,46 +552,12 @@ do_exec_pty(Session *s, const char *command)
 	}
 #endif
 
-	/*
-	 * Create another descriptor of the pty master side for use as the
-	 * standard input.  We could use the original descriptor, but this
-	 * simplifies code in server_loop.  The descriptor is bidirectional.
-	 * Do this before forking (and cleanup in the child) so as to
-	 * detect and gracefully fail out-of-fd conditions.
-	 */
-	if ((fdout = dup(ptyfd)) < 0) {
-		error("%s: dup #1: %s", __func__, strerror(errno));
-		close(ttyfd);
-		close(ptyfd);
-		return -1;
-	}
-	/* we keep a reference to the pty master */
-	if ((ptymaster = dup(ptyfd)) < 0) {
-		error("%s: dup #2: %s", __func__, strerror(errno));
-		close(ttyfd);
-		close(ptyfd);
-		close(fdout);
-		return -1;
-	}
-
 	/* Fork the child. */
-	switch ((pid = fork())) {
-	case -1:
-		error("%s: fork: %.100s", __func__, strerror(errno));
-		close(fdout);
-		close(ptymaster);
-		close(ttyfd);
-		close(ptyfd);
-		return -1;
-	case 0:
+	if ((pid = fork()) == 0) {
 		is_child = 1;
 
-		close(fdout);
-		close(ptymaster);
-
 		/* Child.  Reinitialize the log because the pid has changed. */
-		log_init(__progname, options.log_level,
-		    options.log_facility, log_stderr);
+		log_init(__progname, options.log_level, options.log_facility, log_stderr);
 		/* Close the master side of the pseudo tty. */
 		close(ptyfd);
 
@@ -736,41 +579,49 @@ do_exec_pty(Session *s, const char *command)
 		if (!(options.use_login && command == NULL))
 			do_login(s, command);
 
-		/*
-		 * Do common processing for the child, such as execing
-		 * the command.
-		 */
+		/* Do common processing for the child, such as execing the command. */
 		do_child(s, command);
 		/* NOTREACHED */
-	default:
-		break;
 	}
+	if (pid < 0)
+		packet_disconnect("fork failed: %.100s", strerror(errno));
 	s->pid = pid;
 
 	/* Parent.  Close the slave side of the pseudo tty. */
 	close(ttyfd);
 
-	/* Enter interactive session. */
+	/*
+	 * Create another descriptor of the pty master side for use as the
+	 * standard input.  We could use the original descriptor, but this
+	 * simplifies code in server_loop.  The descriptor is bidirectional.
+	 */
+	fdout = dup(ptyfd);
+	if (fdout < 0)
+		packet_disconnect("dup #1 failed: %.100s", strerror(errno));
+
+	/* we keep a reference to the pty master */
+	ptymaster = dup(ptyfd);
+	if (ptymaster < 0)
+		packet_disconnect("dup #2 failed: %.100s", strerror(errno));
 	s->ptymaster = ptymaster;
+
+	/* Enter interactive session. */
 	packet_set_interactive(1);
 	if (compat20) {
-		session_set_fds(s, ptyfd, fdout, -1, 1);
+		session_set_fds(s, ptyfd, fdout, -1);
 	} else {
 		server_loop(pid, ptyfd, fdout, -1);
 		/* server_loop _has_ closed ptyfd and fdout. */
 	}
-	return 0;
 }
 
 /*
  * This is called to fork and execute a command.  If another command is
  * to be forced, execute that instead.
  */
-int
+void
 do_exec(Session *s, const char *command)
 {
-	int ret;
-
 	if (options.adm_forced_command) {
 		original_command = command;
 		command = options.adm_forced_command;
@@ -797,9 +648,9 @@ do_exec(Session *s, const char *command)
 	}
 #endif
 	if (s->ttyfd != -1)
-		ret = do_exec_pty(s, command);
+		do_exec_pty(s, command);
 	else
-		ret = do_exec_no_pty(s, command);
+		do_exec_no_pty(s, command);
 
 	original_command = NULL;
 
@@ -809,8 +660,6 @@ do_exec(Session *s, const char *command)
 	 * multiple copies of the login messages.
 	 */
 	buffer_clear(&loginmsg);
-
-	return ret;
 }
 
 
@@ -1244,7 +1093,7 @@ do_rc_files(Session *s, const char *shell)
 
 	/* ignore _PATH_SSH_USER_RC for subsystems and admin forced commands */
 	if (!s->is_subsystem && options.adm_forced_command == NULL &&
-	    !no_user_rc && stat(_PATH_SSH_USER_RC, &st) >= 0) {
+	    !no_user_rc &&  (stat(_PATH_SSH_USER_RC, &st) >= 0)) {
 		snprintf(cmd, sizeof cmd, "%s -c '%s %s'",
 		    shell, _PATH_BSHELL, _PATH_SSH_USER_RC);
 		if (debug_flag)
@@ -1528,7 +1377,6 @@ do_child(Session *s, const char *command)
 	char *argv[ARGV_MAX];
 	const char *shell, *shell0, *hostname = NULL;
 	struct passwd *pw = s->pw;
-	int r = 0;
 
 	/* remove hostkey from the child's memory */
 	destroy_sensitive_data();
@@ -1631,14 +1479,12 @@ do_child(Session *s, const char *command)
 
 	/* Change current directory to the user's home directory. */
 	if (chdir(pw->pw_dir) < 0) {
-		/* Suppress missing homedir warning for chroot case */
-		r = login_getcapbool(lc, "requirehome", 0);
-		if (r || options.chroot_directory == NULL)
-			fprintf(stderr, "Could not chdir to home "
-			    "directory %s: %s\n", pw->pw_dir,
-			    strerror(errno));
-		if (r)
+		fprintf(stderr, "Could not chdir to home directory %s: %s\n",
+		    pw->pw_dir, strerror(errno));
+#ifdef HAVE_LOGIN_CAP
+		if (login_getcapbool(lc, "requirehome", 0))
 			exit(1);
+#endif
 	}
 
 	closefrom(STDERR_FILENO + 1);
@@ -1716,79 +1562,43 @@ do_child(Session *s, const char *command)
 	exit(1);
 }
 
-void
-session_unused(int id)
-{
-	debug3("%s: session id %d unused", __func__, id);
-	if (id >= options.max_sessions ||
-	    id >= sessions_nalloc) {
-		fatal("%s: insane session id %d (max %d nalloc %d)",
-		    __func__, id, options.max_sessions, sessions_nalloc);
-	}
-	bzero(&sessions[id], sizeof(*sessions));
-	sessions[id].self = id;
-	sessions[id].used = 0;
-	sessions[id].chanid = -1;
-	sessions[id].ptyfd = -1;
-	sessions[id].ttyfd = -1;
-	sessions[id].ptymaster = -1;
-	sessions[id].x11_chanids = NULL;
-	sessions[id].next_unused = sessions_first_unused;
-	sessions_first_unused = id;
-}
-
 Session *
 session_new(void)
 {
-	Session *s, *tmp;
-
-	if (sessions_first_unused == -1) {
-		if (sessions_nalloc >= options.max_sessions)
-			return NULL;
-		debug2("%s: allocate (allocated %d max %d)",
-		    __func__, sessions_nalloc, options.max_sessions);
-		tmp = xrealloc(sessions, sessions_nalloc + 1,
-		    sizeof(*sessions));
-		if (tmp == NULL) {
-			error("%s: cannot allocate %d sessions",
-			    __func__, sessions_nalloc + 1);
-			return NULL;
+	int i;
+	static int did_init = 0;
+	if (!did_init) {
+		debug("session_new: init");
+		for (i = 0; i < MAX_SESSIONS; i++) {
+			sessions[i].used = 0;
 		}
-		sessions = tmp;
-		session_unused(sessions_nalloc++);
+		did_init = 1;
 	}
-
-	if (sessions_first_unused >= sessions_nalloc ||
-	    sessions_first_unused < 0) {
-		fatal("%s: insane first_unused %d max %d nalloc %d",
-		    __func__, sessions_first_unused, options.max_sessions,
-		    sessions_nalloc);
+	for (i = 0; i < MAX_SESSIONS; i++) {
+		Session *s = &sessions[i];
+		if (! s->used) {
+			memset(s, 0, sizeof(*s));
+			s->chanid = -1;
+			s->ptyfd = -1;
+			s->ttyfd = -1;
+			s->used = 1;
+			s->self = i;
+			s->x11_chanids = NULL;
+			debug("session_new: session %d", i);
+			return s;
+		}
 	}
-
-	s = &sessions[sessions_first_unused];
-	if (s->used) {
-		fatal("%s: session %d already used",
-		    __func__, sessions_first_unused);
-	}
-	sessions_first_unused = s->next_unused;
-	s->used = 1;
-	s->next_unused = -1;
-	debug("session_new: session %d", s->self);
-
-	return s;
+	return NULL;
 }
 
 static void
 session_dump(void)
 {
 	int i;
-	for (i = 0; i < sessions_nalloc; i++) {
+	for (i = 0; i < MAX_SESSIONS; i++) {
 		Session *s = &sessions[i];
-
-		debug("dump: used %d next_unused %d session %d %p "
-		    "channel %d pid %ld",
+		debug("dump: used %d session %d %p channel %d pid %ld",
 		    s->used,
-		    s->next_unused,
 		    s->self,
 		    s,
 		    s->chanid,
@@ -1818,7 +1628,7 @@ Session *
 session_by_tty(char *tty)
 {
 	int i;
-	for (i = 0; i < sessions_nalloc; i++) {
+	for (i = 0; i < MAX_SESSIONS; i++) {
 		Session *s = &sessions[i];
 		if (s->used && s->ttyfd != -1 && strcmp(s->tty, tty) == 0) {
 			debug("session_by_tty: session %d tty %s", i, tty);
@@ -1834,11 +1644,10 @@ static Session *
 session_by_channel(int id)
 {
 	int i;
-	for (i = 0; i < sessions_nalloc; i++) {
+	for (i = 0; i < MAX_SESSIONS; i++) {
 		Session *s = &sessions[i];
 		if (s->used && s->chanid == id) {
-			debug("session_by_channel: session %d channel %d",
-			    i, id);
+			debug("session_by_channel: session %d channel %d", i, id);
 			return s;
 		}
 	}
@@ -1852,7 +1661,7 @@ session_by_x11_channel(int id)
 {
 	int i, j;
 
-	for (i = 0; i < sessions_nalloc; i++) {
+	for (i = 0; i < MAX_SESSIONS; i++) {
 		Session *s = &sessions[i];
 
 		if (s->x11_chanids == NULL || !s->used)
@@ -1875,7 +1684,7 @@ session_by_pid(pid_t pid)
 {
 	int i;
 	debug("session_by_pid: pid %ld", (long)pid);
-	for (i = 0; i < sessions_nalloc; i++) {
+	for (i = 0; i < MAX_SESSIONS; i++) {
 		Session *s = &sessions[i];
 		if (s->used && s->pid == pid)
 			return s;
@@ -1931,8 +1740,7 @@ session_pty_req(Session *s)
 
 	/* Allocate a pty and open it. */
 	debug("Allocating pty.");
-	if (!PRIVSEP(pty_allocate(&s->ptyfd, &s->ttyfd, s->tty,
-	    sizeof(s->tty)))) {
+	if (!PRIVSEP(pty_allocate(&s->ptyfd, &s->ttyfd, s->tty, sizeof(s->tty)))) {
 		if (s->term)
 			xfree(s->term);
 		s->term = NULL;
@@ -1985,7 +1793,8 @@ session_subsystem_req(Session *s)
 				s->is_subsystem = SUBSYSTEM_EXT;
 			}
 			debug("subsystem: exec() %s", cmd);
-			success = do_exec(s, cmd) == 0;
+			do_exec(s, cmd);
+			success = 1;
 			break;
 		}
 	}
@@ -2028,19 +1837,19 @@ static int
 session_shell_req(Session *s)
 {
 	packet_check_eom();
-	return do_exec(s, NULL) == 0;
+	do_exec(s, NULL);
+	return 1;
 }
 
 static int
 session_exec_req(Session *s)
 {
-	u_int len, success;
-
+	u_int len;
 	char *command = packet_get_string(&len);
 	packet_check_eom();
-	success = do_exec(s, command) == 0;
+	do_exec(s, command);
 	xfree(command);
-	return success;
+	return 1;
 }
 
 static int
@@ -2050,7 +1859,8 @@ session_break_req(Session *s)
 	packet_get_int();	/* ignored */
 	packet_check_eom();
 
-	if (s->ttyfd == -1 || tcsendbreak(s->ttyfd, 0) < 0)
+	if (s->ttyfd == -1 ||
+	    tcsendbreak(s->ttyfd, 0) < 0)
 		return 0;
 	return 1;
 }
@@ -2095,7 +1905,7 @@ session_auth_agent_req(Session *s)
 {
 	static int called = 0;
 	packet_check_eom();
-	if (no_agent_forwarding_flag || !options.allow_agent_forwarding) {
+	if (no_agent_forwarding_flag) {
 		debug("session_auth_agent_req: no_agent_forwarding_flag");
 		return 0;
 	}
@@ -2151,7 +1961,7 @@ session_input_channel_req(Channel *c, const char *rtype)
 }
 
 void
-session_set_fds(Session *s, int fdin, int fdout, int fderr, int is_tty)
+session_set_fds(Session *s, int fdin, int fdout, int fderr)
 {
 	if (!compat20)
 		fatal("session_set_fds: called for proto != 2.0");
@@ -2165,12 +1975,14 @@ session_set_fds(Session *s, int fdin, int fdout, int fderr, int is_tty)
 	channel_set_fds(s->chanid,
 	    fdout, fdin, fderr,
 	    fderr == -1 ? CHAN_EXTENDED_IGNORE : CHAN_EXTENDED_READ,
-	    1, is_tty, CHAN_SES_WINDOW_DEFAULT);
-	else 
+	    1,
+	    CHAN_SES_WINDOW_DEFAULT);
+	else
 		channel_set_fds(s->chanid,
 		    fdout, fdin, fderr,
-	            fderr == -1 ? CHAN_EXTENDED_IGNORE : CHAN_EXTENDED_READ,
-		    1, is_tty, options.hpn_buffer_size);
+		    fderr == -1 ? CHAN_EXTENDED_IGNORE : CHAN_EXTENDED_READ,
+		    1,
+		    options.hpn_buffer_size);
 }
 
 /*
@@ -2202,9 +2014,8 @@ session_pty_cleanup2(Session *s)
 	 * the pty cleanup, so that another process doesn't get this pty
 	 * while we're still cleaning up.
 	 */
-	if (s->ptymaster != -1 && close(s->ptymaster) < 0)
-		error("close(s->ptymaster/%d): %s",
-		    s->ptymaster, strerror(errno));
+	if (close(s->ptymaster) < 0)
+		error("close(s->ptymaster/%d): %s", s->ptymaster, strerror(errno));
 
 	/* unlink pty from session */
 	s->ttyfd = -1;
@@ -2360,6 +2171,7 @@ session_close(Session *s)
 		xfree(s->auth_data);
 	if (s->auth_proto)
 		xfree(s->auth_proto);
+	s->used = 0;
 	if (s->env != NULL) {
 		for (i = 0; i < s->num_env; i++) {
 			xfree(s->env[i].name);
@@ -2368,7 +2180,6 @@ session_close(Session *s)
 		xfree(s->env);
 	}
 	session_proctitle(s);
-	session_unused(s->self);
 }
 
 void
@@ -2432,7 +2243,7 @@ void
 session_destroy_all(void (*closefunc)(Session *))
 {
 	int i;
-	for (i = 0; i < sessions_nalloc; i++) {
+	for (i = 0; i < MAX_SESSIONS; i++) {
 		Session *s = &sessions[i];
 		if (s->used) {
 			if (closefunc != NULL)
@@ -2449,7 +2260,7 @@ session_tty_list(void)
 	static char buf[1024];
 	int i;
 	buf[0] = '\0';
-	for (i = 0; i < sessions_nalloc; i++) {
+	for (i = 0; i < MAX_SESSIONS; i++) {
 		Session *s = &sessions[i];
 		if (s->used && s->ttyfd != -1) {
 			char *p;
@@ -2512,7 +2323,8 @@ session_setup_x11fwd(Session *s)
 	}
 	if (x11_create_display_inet(options.x11_display_offset,
 	    options.x11_use_localhost, s->single_connection,
-	    &s->display_number, &s->x11_chanids) == -1) {
+	    &s->display_number, &s->x11_chanids, 
+	    options.hpn_disabled, options.hpn_buffer_size) == -1) {
 		debug("x11_create_display_inet failed.");
 		return 0;
 	}

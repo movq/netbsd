@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 2009/02/18 13:26:15 yamt Exp $
+#	$NetBSD: Makefile,v 1.7.2.1 2009/01/20 02:45:36 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -58,6 +58,7 @@ options_def.h: options.awk options.c
 .PATH: ${DIST}/vi ${DIST}/ex ${DIST}/cl
 .PATH: ${DIST}/common
 .PATH: ${DIST}/regex
-.PATH: ${DIST}/docs/vi.man
+
+BUILDSYMLINKS=	${DIST}/docs/vi.man/vi.1 vi.1
 
 .include <bsd.prog.mk>

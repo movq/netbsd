@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.174 2009/01/19 07:08:29 jmmv Exp $
+#	$NetBSD: Makefile,v 1.171 2008/10/29 16:49:33 christos Exp $
 #	from: @(#)Makefile	8.3 (Berkeley) 1/7/94
 
 .include <bsd.own.mk>
@@ -23,12 +23,16 @@ SUBDIR= apply apropos asa at audio awk \
 	renice rev revoke rfcomm_sppd rlogin rpcgen rpcinfo rs rsh rup \
 	ruptime rusers rwall rwho script sdiff sdpquery sed seq shar shlock \
 	showmount shuffle sockstat soelim sort spell split stat su systat \
-	tabs tail talk tcopy tee telnet tftp time tip tn3270 touch tput \
+	tail talk tcopy tee telnet tftp time tip tn3270 touch tput \
 	tr true tset tsort tty ul uname unexpand unifdef \
 	uniq units unvis usbhidaction usbhidctl users utoppya \
 	uudecode uuencode uuidgen vacation vgrind vis vmstat vndcompress w \
 	wall wc what whatis whereis who whois window \
 	write xargs xinstall xlint xstr yacc yes
+
+.if (${MKATF} != "no")
+SUBDIR+= atf-compile atf-config atf-report atf-run atf-version
+.endif
 
 .if (${MKHESIOD} != "no")
 SUBDIR+= hesinfo
@@ -37,6 +41,10 @@ SUBDIR+= hesinfo
 .if (${MKKERBEROS} != "no")
 SUBDIR+= compile_et kdestroy kgetcred kinit klist mk_cmds string2key
 SUBDIR+= hxtool verify_krb5_conf gss krb5-config
+.endif
+
+.if (!(${MKMODULAR} != "no"))
+SUBDIR+= modstat
 .endif
 
 .if (${MKSKEY} != "no")

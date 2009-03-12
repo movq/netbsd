@@ -1,4 +1,4 @@
-/* $NetBSD: cfb.c,v 1.56 2008/12/17 20:51:34 cegger Exp $ */
+/* $NetBSD: cfb.c,v 1.55 2008/07/09 13:19:33 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.56 2008/12/17 20:51:34 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cfb.c,v 1.55 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -258,12 +258,13 @@ cfbattach(device_t parent, device_t self, void *aux)
 		sc->nscreens = 1;
 	}
 	else {
-		ri = malloc(sizeof(struct rasops_info),
-			M_DEVBUF, M_NOWAIT|M_ZERO);
+		MALLOC(ri, struct rasops_info *, sizeof(struct rasops_info),
+			M_DEVBUF, M_NOWAIT);
 		if (ri == NULL) {
 			printf(": can't alloc memory\n");
 			return;
 		}
+		memset(ri, 0, sizeof(struct rasops_info));
 
 		ri->ri_hw = (void *)ta->ta_addr;
 		cfb_common_init(ri);

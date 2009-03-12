@@ -1,10 +1,10 @@
 #!/bin/sh
 #
-# $NetBSD: mountall,v 1.6 2008/12/01 14:47:14 tsutsui Exp $
+# $NetBSD: mountall,v 1.4 2004/08/13 18:08:03 mycroft Exp $
 #
 
-# REQUIRE: mountcritremote named ypbind
 # PROVIDE: mountall
+# REQUIRE: beforemountlkm
 
 $_rc_subr_loaded . /etc/rc.subr
 

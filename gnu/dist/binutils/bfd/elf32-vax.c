@@ -1310,7 +1310,12 @@ elf_vax_size_dynamic_sections (output_bfd, info)
 	}
 
       /* Allocate memory for the section contents.  */
-      s->contents = (bfd_byte *) bfd_alloc (dynobj, s->size);
+      /* FIXME: This should be a call to bfd_alloc not bfd_zalloc.
+	 Unused entries should be reclaimed before the section's contents
+	 are written out, but at the moment this does not happen.  Thus in
+	 order to prevent writing out garbage, we initialise the section's
+	 contents to zero.  */
+      s->contents = (bfd_byte *) bfd_zalloc (dynobj, s->size);
       if (s->contents == NULL && s->size != 0)
 	return FALSE;
     }
@@ -1531,11 +1536,9 @@ elf_vax_relocate_section (output_bfd, info, input_bfd, input_section,
 	      || h->root.type == bfd_link_hash_defweak)
 	      && ((r_type == R_VAX_PLT32
 		   && h->plt.offset != (bfd_vma) -1
-		   && !h->forced_local
 		   && elf_hash_table (info)->dynamic_sections_created)
 		  || (r_type == R_VAX_GOT32
 		      && h->got.offset != (bfd_vma) -1
-		      && !h->forced_local
 		      && elf_hash_table (info)->dynamic_sections_created
 		      && (! info->shared
 			  || (! info->symbolic && h->dynindx != -1)
@@ -1565,7 +1568,7 @@ elf_vax_relocate_section (output_bfd, info, input_bfd, input_section,
 	case R_VAX_GOT32:
 	  /* Relocation is to the address of the entry for this symbol
 	     in the global offset table.  */
-	  if (h == NULL || h->got.offset == (bfd_vma) -1 || h->forced_local)
+	  if (h == NULL || h->got.offset == (bfd_vma) -1)
 	    break;
 
 	  /* Relocation is the offset of the entry for this symbol in
@@ -1631,7 +1634,6 @@ elf_vax_relocate_section (output_bfd, info, input_bfd, input_section,
 	    break;
 
 	  if (h->plt.offset == (bfd_vma) -1
-	      || h->forced_local
 	      || !elf_hash_table (info)->dynamic_sections_created)
 	    {
 	      /* We didn't make a PLT entry for this symbol.  This

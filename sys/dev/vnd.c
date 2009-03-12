@@ -1,4 +1,4 @@
-/*	$NetBSD: vnd.c,v 1.193 2009/02/05 17:32:10 haad Exp $	*/
+/*	$NetBSD: vnd.c,v 1.187.4.4 2010/01/30 19:00:46 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2008 The NetBSD Foundation, Inc.
@@ -130,7 +130,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vnd.c,v 1.193 2009/02/05 17:32:10 haad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vnd.c,v 1.187.4.4 2010/01/30 19:00:46 snj Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "fs_nfs.h"
@@ -194,7 +194,7 @@ struct vndxfer {
 #define VNDLABELDEV(dev) \
     (MAKEDISKDEV(major((dev)), vndunit((dev)), RAW_PART))
 
-/* called by main() at boot time */
+/* called by main() at boot time (XXX: and the LKM driver) */
 void	vndattach(int);
 
 static void	vndclear(struct vnd_softc *, int);
@@ -338,7 +338,7 @@ vndopen(dev_t dev, int flags, int mode, struct lwp *l)
 
 #ifdef DEBUG
 	if (vnddebug & VDB_FOLLOW)
-		printf("vndopen(0x%"PRIx64", 0x%x, 0x%x, %p)\n", dev, flags, mode, l);
+		printf("vndopen(0x%x, 0x%x, 0x%x, %p)\n", dev, flags, mode, l);
 #endif
 	sc = device_lookup_private(&vnd_cd, unit);
 	if (sc == NULL) {
@@ -402,7 +402,7 @@ vndclose(dev_t dev, int flags, int mode, struct lwp *l)
 
 #ifdef DEBUG
 	if (vnddebug & VDB_FOLLOW)
-		printf("vndclose(0x%"PRIx64", 0x%x, 0x%x, %p)\n", dev, flags, mode, l);
+		printf("vndclose(0x%x, 0x%x, 0x%x, %p)\n", dev, flags, mode, l);
 #endif
 	sc = device_lookup_private(&vnd_cd, unit);
 	if (sc == NULL)
@@ -521,7 +521,7 @@ vndstrategy(struct buf *bp)
 	if (vnddebug & VDB_FOLLOW)
 		printf("vndstrategy(%p): unit %d\n", bp, unit);
 #endif
-	bufq_put(vnd->sc_tab, bp);
+	BUFQ_PUT(vnd->sc_tab, bp);
 	wakeup(&vnd->sc_tab);
 	splx(s);
 	return;
@@ -606,7 +606,7 @@ vndthread(void *arg)
 		struct buf *obp;
 		struct buf *bp;
 
-		obp = bufq_get(vnd->sc_tab);
+		obp = BUFQ_GET(vnd->sc_tab);
 		if (obp == NULL) {
 			tsleep(&vnd->sc_tab, PRIBIO, "vndbp", 0);
 			continue;
@@ -862,6 +862,7 @@ vndiodone(struct buf *bp)
 	struct vndxfer *vnx = VND_BUFTOXFER(bp);
 	struct vnd_softc *vnd = vnx->vx_vnd;
 	struct buf *obp = bp->b_private;
+	int s = splbio();
 
 	KASSERT(&vnx->vx_buf == bp);
 	KASSERT(vnd->sc_active > 0);
@@ -877,6 +878,7 @@ vndiodone(struct buf *bp)
 	if (vnd->sc_active == 0) {
 		wakeup(&vnd->sc_tab);
 	}
+	splx(s);
 	obp->b_error = bp->b_error;
 	obp->b_resid = bp->b_resid;
 	buf_destroy(bp);
@@ -893,7 +895,7 @@ vndread(dev_t dev, struct uio *uio, int flags)
 
 #ifdef DEBUG
 	if (vnddebug & VDB_FOLLOW)
-		printf("vndread(0x%"PRIx64", %p)\n", dev, uio);
+		printf("vndread(0x%x, %p)\n", dev, uio);
 #endif
 
 	sc = device_lookup_private(&vnd_cd, unit);
@@ -915,7 +917,7 @@ vndwrite(dev_t dev, struct uio *uio, int flags)
 
 #ifdef DEBUG
 	if (vnddebug & VDB_FOLLOW)
-		printf("vndwrite(0x%"PRIx64", %p)\n", dev, uio);
+		printf("vndwrite(0x%x, %p)\n", dev, uio);
 #endif
 
 	sc = device_lookup_private(&vnd_cd, unit);
@@ -966,7 +968,7 @@ vndioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 
 #ifdef DEBUG
 	if (vnddebug & VDB_FOLLOW)
-		printf("vndioctl(0x%"PRIx64", 0x%lx, %p, 0x%x, %p): unit %d\n",
+		printf("vndioctl(0x%x, 0x%lx, %p, 0x%x, %p): unit %d\n",
 		    dev, cmd, data, flag, l->l_proc, unit);
 #endif
 	vnd = device_lookup_private(&vnd_cd, unit);
@@ -1004,6 +1006,7 @@ vndioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	case DIOCKLABEL:
 	case DIOCWLABEL:
 	case DIOCGDEFLABEL:
+	case DIOCCACHESYNC:
 #ifdef __HAVE_OLD_DISKLABEL
 	case ODIOCGDINFO:
 	case ODIOCSDINFO:
@@ -1442,6 +1445,13 @@ unlock_and_exit:
 		memcpy(data, &newlabel, sizeof (struct olddisklabel));
 		break;
 #endif
+
+	case DIOCCACHESYNC:
+		vn_lock(vnd->sc_vp, LK_EXCLUSIVE | LK_RETRY);
+		error = VOP_FSYNC(vnd->sc_vp, vnd->sc_cred,
+		    FSYNC_WAIT | FSYNC_DATAONLY | FSYNC_CACHE, 0, 0);
+		VOP_UNLOCK(vnd->sc_vp, 0);
+		return error;
 
 	default:
 		return (ENOTTY);
@@ -1912,59 +1922,3 @@ vnd_set_properties(struct vnd_softc *vnd)
 	if (odisk_info)
 		prop_object_release(odisk_info);
 }
-
-#ifdef _MODULE
-
-#include <sys/module.h>
-
-MODULE(MODULE_CLASS_DRIVER, vnd, NULL);
-CFDRIVER_DECL(vnd, DV_DISK, NULL);
-
-static int
-vnd_modcmd(modcmd_t cmd, void *arg)
-{
-	int bmajor = -1, cmajor = -1,  error = 0;
-	
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		error = config_cfdriver_attach(&vnd_cd);
-		if (error)
-			break;
-
-		error = config_cfattach_attach(vnd_cd.cd_name, &vnd_ca);
-	        if (error) {
-			config_cfdriver_detach(&vnd_cd);
-			aprint_error("%s: unable to register cfattach\n",
-			    vnd_cd.cd_name);
-			break;
-		}
-		
-		error = devsw_attach("vnd", &vnd_bdevsw, &bmajor,
-		    &vnd_cdevsw, &cmajor);
-		if (error) {
-			config_cfattach_detach(vnd_cd.cd_name, &vnd_ca);
-			config_cfdriver_detach(&vnd_cd);
-			break;
-		}
-		
-		break;
-
-	case MODULE_CMD_FINI:
-		error = config_cfattach_detach(vnd_cd.cd_name, &vnd_ca);
-		if (error)
-			break;
-		config_cfdriver_detach(&vnd_cd);
-		devsw_detach(&vnd_bdevsw, &vnd_cdevsw);
-		break;
-
-	case MODULE_CMD_STAT:
-		return ENOTTY;
-
-	default:
-		return ENOTTY;
-	}
-
-	return error;
-}
-
-#endif

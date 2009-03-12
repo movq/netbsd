@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_sun4m.c,v 1.17 2009/03/10 23:58:20 martin Exp $	*/
+/*	$NetBSD: timer_sun4m.c,v 1.16.56.1 2009/05/30 16:57:18 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.17 2009/03/10 23:58:20 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timer_sun4m.c,v 1.16.56.1 2009/05/30 16:57:18 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

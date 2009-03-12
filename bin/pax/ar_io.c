@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)ar_io.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: ar_io.c,v 1.49 2009/02/03 05:22:40 dbj Exp $");
+__RCSID("$NetBSD: ar_io.c,v 1.48.18.1 2009/10/03 21:27:59 snj Exp $");
 #endif
 #endif /* not lint */
 

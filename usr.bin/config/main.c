@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.34 2009/02/14 21:28:58 cube Exp $	*/
+/*	$NetBSD: main.c,v 1.32 2008/10/20 11:02:18 ad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -420,7 +420,7 @@ main(int argc, char **argv)
 	 * Ready to go.  Build all the various files.
 	 */
 	if (mksymlinks() || mkmakefile() || mkheaders() || mkswap() ||
-	    mkioconf() || (do_devsw ? mkdevsw() : 0) || mkident() || errors)
+	    mkioconf() || (do_devsw ? mkdevsw() : 0) || mkident())
 		stop();
 	(void)printf("Build directory is %s\n", builddir);
 	(void)printf("Don't forget to run \"make depend\"\n");
@@ -1086,7 +1086,7 @@ cfcrosscheck(struct config *cf, const char *what, struct nvlist *nv)
 		if (has_attr(dev->d_attrs, s_ifnet))
 			devunit = nv->nv_ifunit;	/* XXX XXX XXX */
 		else
-			devunit = (int)(minor(nv->nv_num) / maxpartitions);
+			devunit = minor((uint32_t)nv->nv_int) / maxpartitions;
 		if (devbase_has_instances(dev, devunit))
 			continue;
 		if (devbase_has_instances(dev, STAR) &&

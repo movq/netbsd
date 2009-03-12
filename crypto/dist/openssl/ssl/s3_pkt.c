@@ -313,9 +313,9 @@ fprintf(stderr, "Record type=%d, Length=%d\n", rr->type, rr->length);
 			if (version != s->version)
 				{
 				SSLerr(SSL_F_SSL3_GET_RECORD,SSL_R_WRONG_VERSION_NUMBER);
-				/* Send back error using their
-				 * version number :-) */
-				s->version=version;
+                                if ((s->version & 0xFF00) == (version & 0xFF00))
+                                	/* Send back error using their minor version number :-) */
+					s->version = (unsigned short)version;
 				al=SSL_AD_PROTOCOL_VERSION;
 				goto f_err;
 				}
@@ -1041,6 +1041,7 @@ start:
 
 		if (SSL_is_init_finished(s) &&
 			!(s->s3->flags & SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS) &&
+			(s->s3->flags & SSL3_FLAGS_ALLOW_UNSAFE_LEGACY_RENEGOTIATION) &&
 			!s->s3->renegotiate)
 			{
 			ssl3_renegotiate(s);
@@ -1173,7 +1174,8 @@ start:
 	if ((s->s3->handshake_fragment_len >= 4) &&	!s->in_handshake)
 		{
 		if (((s->state&SSL_ST_MASK) == SSL_ST_OK) &&
-			!(s->s3->flags & SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS))
+			!(s->s3->flags & SSL3_FLAGS_NO_RENEGOTIATE_CIPHERS) &&
+			(s->s3->flags & SSL3_FLAGS_ALLOW_UNSAFE_LEGACY_RENEGOTIATION))
 			{
 #if 0 /* worked only because C operator preferences are not as expected (and
        * because this is not really needed for clients except for detecting
@@ -1288,6 +1290,13 @@ int ssl3_do_change_cipher_spec(SSL *s)
 
 	if (s->s3->tmp.key_block == NULL)
 		{
+		if (s->session == NULL) 
+			{
+			/* might happen if dtls1_read_bytes() calls this */
+			SSLerr(SSL_F_SSL3_DO_CHANGE_CIPHER_SPEC,SSL_R_CCS_RECEIVED_EARLY);
+			return (0);
+			}
+
 		s->session->cipher=s->s3->tmp.new_cipher;
 		if (!s->method->ssl3_enc->setup_key_block(s)) return(0);
 		}

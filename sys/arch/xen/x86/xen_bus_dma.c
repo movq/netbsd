@@ -1,4 +1,4 @@
-/*	$NetBSD: xen_bus_dma.c,v 1.14 2009/01/24 19:03:12 bouyer Exp $	*/
+/*	$NetBSD: xen_bus_dma.c,v 1.11.8.3 2010/11/19 23:19:12 riz Exp $	*/
 /*	NetBSD bus_dma.c,v 1.21 2005/04/16 07:53:35 yamt Exp */
 
 /*-
@@ -32,11 +32,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_bus_dma.c,v 1.14 2009/01/24 19:03:12 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_bus_dma.c,v 1.11.8.3 2010/11/19 23:19:12 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>
 
@@ -60,7 +61,7 @@ static inline int get_order(unsigned long size)
 }
 
 static int
-_xen_alloc_contig(bus_size_t size, bus_size_t alignment, bus_size_t boundary,
+_xen_alloc_contig(bus_size_t size, bus_size_t alignment,
     struct pglist *mlistp, int flags, bus_addr_t low, bus_addr_t high)
 {
 	int order, i;
@@ -74,9 +75,9 @@ _xen_alloc_contig(bus_size_t size, bus_size_t alignment, bus_size_t boundary,
 
 	/*
 	 * When requesting a contigous memory region, the hypervisor will
-	 * return a memory range aligned on size. This will automagically
-	 * handle "boundary", but the only way to enforce alignment
-	 * is to request a memory region of size max(alignment, size).
+	 * return a memory range aligned on size. 
+	 * The only way to enforce alignment is to request a memory region
+	 * of size max(alignment, size).
 	 */
 	order = max(get_order(size), get_order(alignment));
 	npages = (1 << order);
@@ -84,8 +85,8 @@ _xen_alloc_contig(bus_size_t size, bus_size_t alignment, bus_size_t boundary,
 	KASSERT(npages >= npagesreq);
 
 	/* get npages from UWM, and give them back to the hypervisor */
-	error = uvm_pglistalloc(npages << PAGE_SHIFT, 0, avail_end, 0, 0,
-	    mlistp, npages, (flags & BUS_DMA_NOWAIT) == 0);
+	error = uvm_pglistalloc(((psize_t)npages) << PAGE_SHIFT,
+            0, avail_end, 0, 0, mlistp, npages, (flags & BUS_DMA_NOWAIT) == 0);
 	if (error)
 		return (error);
 
@@ -95,12 +96,13 @@ _xen_alloc_contig(bus_size_t size, bus_size_t alignment, bus_size_t boundary,
 		xpmap_phys_to_machine_mapping[
 		    (pa - XPMAP_OFFSET) >> PAGE_SHIFT] = INVALID_P2M_ENTRY;
 #ifdef XEN3
-		xenguest_handle(res.extent_start) = &mfn;
+		res.extent_start = &mfn;
 		res.nr_extents = 1;
 		res.extent_order = 0;
+		res.address_bits = 0;
 		res.domid = DOMID_SELF;
 		if (HYPERVISOR_memory_op(XENMEM_decrease_reservation, &res)
-		    != 1) {
+		    < 0) {
 #ifdef DEBUG
 			printf("xen_alloc_contig: XENMEM_decrease_reservation "
 			    "failed!\n");
@@ -127,17 +129,15 @@ _xen_alloc_contig(bus_size_t size, bus_size_t alignment, bus_size_t boundary,
 	}
 	/* Get the new contiguous memory extent */
 #ifdef XEN3
-	xenguest_handle(res.extent_start) = &mfn;
+	res.extent_start = &mfn;
 	res.nr_extents = 1;
 	res.extent_order = order;
 	res.address_bits = get_order(high) + PAGE_SHIFT;
 	res.domid = DOMID_SELF;
-	error = HYPERVISOR_memory_op(XENMEM_increase_reservation, &res);
-	if (error != 1) {
+	if (HYPERVISOR_memory_op(XENMEM_increase_reservation, &res) < 0) {
 #ifdef DEBUG
 		printf("xen_alloc_contig: XENMEM_increase_reservation "
-		    "failed: %d (order %d address_bits %d)\n",
-		    error, order, res.address_bits);
+		    "failed!\n");
 #endif
 		error = ENOMEM;
 		pg = NULL;
@@ -162,12 +162,13 @@ _xen_alloc_contig(bus_size_t size, bus_size_t alignment, bus_size_t boundary,
 		pa = VM_PAGE_TO_PHYS(pg);
 		xpmap_phys_to_machine_mapping[
 		    (pa - XPMAP_OFFSET) >> PAGE_SHIFT] = mfn+i;
-		xpq_queue_machphys_update((mfn+i) << PAGE_SHIFT, pa);
+		xpq_queue_machphys_update(((paddr_t)(mfn+i)) << PAGE_SHIFT, pa);
 		/* while here, give extra pages back to UVM */
 		if (i >= npagesreq) {
 			TAILQ_REMOVE(mlistp, pg, pageq.queue);
 			uvm_pagefree(pg);
 		}
+
 	}
 	/* Flush updates through and flush the TLB */
 	xpq_queue_tlb_flush();
@@ -195,7 +196,7 @@ failed:
 	for (pg = mlistp->tqh_first; pg != NULL; pg = pgnext) {
 		pgnext = pg->pageq.queue.tqe_next;
 #ifdef XEN3
-		xenguest_handle(res.extent_start) = &mfn;
+		res.extent_start = &mfn;
 		res.nr_extents = 1;
 		res.extent_order = 0;
 		res.address_bits = 32;
@@ -217,7 +218,7 @@ failed:
 		pa = VM_PAGE_TO_PHYS(pg);
 		xpmap_phys_to_machine_mapping[
 		    (pa - XPMAP_OFFSET) >> PAGE_SHIFT] = mfn;
-		xpq_queue_machphys_update((mfn) << PAGE_SHIFT, pa);
+		xpq_queue_machphys_update(((paddr_t)mfn) << PAGE_SHIFT, pa);
 		TAILQ_REMOVE(mlistp, pg, pageq.queue);
 		uvm_pagefree(pg);
 	}
@@ -244,21 +245,32 @@ _xen_bus_dmamem_alloc_range(bus_dma_tag_t t, bus_size_t size,
 	struct pglist mlist;
 	int curseg, error;
 	int doingrealloc = 0;
+	bus_size_t uboundary;
 
 	/* Always round the size. */
 	size = round_page(size);
 
 	KASSERT((alignment & (alignment - 1)) == 0);
 	KASSERT((boundary & (boundary - 1)) == 0);
+	KASSERT(boundary >= PAGE_SIZE || boundary == 0);
+		    
 	if (alignment < PAGE_SIZE)
 		alignment = PAGE_SIZE;
-	if (boundary != 0 && boundary < size)
-		return (EINVAL);
 
 	/*
 	 * Allocate pages from the VM system.
+	 * We accept boundaries < size, splitting in multiple segments
+	 * if needed. uvm_pglistalloc does not, so compute an appropriate
+	 * boundary: next power of 2 >= size
 	 */
-	error = uvm_pglistalloc(size, 0, avail_end, alignment, boundary,
+	if (boundary == 0)
+		uboundary = 0;
+	else {
+		uboundary = boundary;
+		while (uboundary < size)
+			uboundary = uboundary << 1;
+	}
+	error = uvm_pglistalloc(size, 0, avail_end, alignment, uboundary,
 	    &mlist, nsegs, (flags & BUS_DMA_NOWAIT) == 0);
 	if (error)
 		return (error);
@@ -282,14 +294,18 @@ again:
 		curaddr = _BUS_VM_PAGE_TO_BUS(m);
 		if (curaddr < low || curaddr >= high)
 			goto badaddr;
-		if (curaddr == (lastaddr + PAGE_SIZE)) {
+		if (curaddr == (lastaddr + PAGE_SIZE) &&
+		    (lastaddr & boundary) == (curaddr & boundary)) {
 			segs[curseg].ds_len += PAGE_SIZE;
-			if ((lastaddr & boundary) != (curaddr & boundary))
-				goto dorealloc;
 		} else {
 			curseg++;
-			if (curseg >= nsegs || (curaddr & (alignment - 1)) != 0)
-				goto dorealloc;
+			if (curseg >= nsegs ||
+			    (curaddr & (alignment - 1)) != 0) {
+				if (doingrealloc)
+					return EFBIG;
+				else
+					goto dorealloc;
+			}
 			segs[curseg].ds_addr = curaddr;
 			segs[curseg].ds_len = PAGE_SIZE;
 		}
@@ -306,8 +322,7 @@ badaddr:
 	if (curaddr < low) {
 		/* no way to enforce this */
 		printf("_xen_bus_dmamem_alloc_range: no way to "
-		    "enforce address range (0x%" PRIx64 " - 0x%" PRIx64 ")\n",
-		    (uint64_t)low, (uint64_t)high);
+		    "enforce address range\n");
 		uvm_pglistfree(&mlist);
 		return EINVAL;
 	}
@@ -344,7 +359,7 @@ dorealloc:
 		segs[curseg].ds_len = 0;
 	}
 	error = _xen_alloc_contig(size, alignment,
-	    boundary, &mlist, flags, low, high);
+	    &mlist, flags, low, high);
 	if (error)
 		return error;
 	goto again;

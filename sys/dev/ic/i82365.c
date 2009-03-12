@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365.c,v 1.104 2009/03/06 17:10:41 hauke Exp $	*/
+/*	$NetBSD: i82365.c,v 1.102.14.1 2009/08/14 21:37:03 snj Exp $	*/
 
 /*
  * Copyright (c) 2004 Charles M. Hannum.  All rights reserved.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365.c,v 1.104 2009/03/06 17:10:41 hauke Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365.c,v 1.102.14.1 2009/08/14 21:37:03 snj Exp $");
 
 #define	PCICDEBUG
 
@@ -369,12 +369,11 @@ pcic_power(why, arg)
 			if (sc->irq != -1)
 			    reg |= sc->irq << PCIC_CSC_INTR_IRQ_SHIFT;
 			pcic_write(h, PCIC_CSC_INTR, reg);
-#ifdef PCICDEBUG
-			snprintb(bitbuf, sizeof(bitbuf), PCIC_CSC_INTR_FORMAT,
-			    pcic_read(h, PCIC_CSC_INTR));
-#endif
 			DPRINTF(("%s: CSC_INTR was zero; reset to %s\n",
-			    device_xname(&sc->dev), bitbuf));
+			    device_xname(&sc->dev),
+			    bitmask_snprintf(pcic_read(h, PCIC_CSC_INTR),
+				PCIC_CSC_INTR_FORMAT,
+				bitbuf, sizeof(bitbuf))));
 		}
 
 		/*
@@ -398,7 +397,6 @@ pcic_attach_socket(h)
 	struct pcmciabus_attach_args paa;
 	struct pcic_softc *sc = (struct pcic_softc *)h->ph_parent;
 	int locs[PCMCIABUSCF_NLOCS];
-	char cs[4];
 
 	/* initialize the rest of the handle */
 
@@ -425,21 +423,6 @@ pcic_attach_socket(h)
 		return;
 	}
 
-	/*
-	 * queue creation of a kernel thread to handle insert/removal events.
-	 */
-#ifdef DIAGNOSTIC
-	if (h->event_thread != NULL)
-		panic("pcic_attach_socket: event thread");
-#endif
-	config_pending_incr();
-	snprintf(cs, sizeof(cs), "%d,%d", h->chip, h->socket);
-
-	if (kthread_create(PRI_NONE, 0, NULL, pcic_event_thread, h,
-	    &h->event_thread, "%s,%s", device_xname(h->ph_parent), cs)) {
-		aprint_error_dev(h->ph_parent, "unable to create event thread for sock 0x%02x\n", h->sock);
-		panic("pcic_attach_socket");
-	}
 }
 
 /*
@@ -467,6 +450,7 @@ pcic_attach_socket_finish(h)
 {
 	struct pcic_softc *sc = (struct pcic_softc *)h->ph_parent;
 	int reg;
+	char cs[4];
 
 	DPRINTF(("%s: attach finish socket %ld\n", device_xname(h->ph_parent),
 	    (long) (h - &sc->handle[0])));
@@ -520,6 +504,22 @@ pcic_attach_socket_finish(h)
 		h->laststate = PCIC_LASTSTATE_PRESENT;
 	} else {
 		h->laststate = PCIC_LASTSTATE_EMPTY;
+	}
+
+	/*
+	 * queue creation of a kernel thread to handle insert/removal events.
+	 */
+#ifdef DIAGNOSTIC
+	if (h->event_thread != NULL)
+		panic("pcic_attach_socket: event thread");
+#endif
+	config_pending_incr();
+	snprintf(cs, sizeof(cs), "%d,%d", h->chip, h->socket);
+
+	if (kthread_create(PRI_NONE, 0, NULL, pcic_event_thread, h,
+	    &h->event_thread, "%s,%s", device_xname(h->ph_parent), cs)) {
+		aprint_error_dev(h->ph_parent, "unable to create event thread for sock 0x%02x\n", h->sock);
+		panic("pcic_attach_socket");
 	}
 }
 
@@ -1328,11 +1328,7 @@ pcic_delay(h, timo, wmesg)
 #endif
 	DPRINTF(("pcic_delay: \"%s\" %p, sleep %d ms\n",
 	    wmesg, h->event_thread, timo));
-	if (doing_shutdown)
-		delay(timo * 1000);
-	else
-		tsleep(pcic_delay, PWAIT, wmesg,
-		    roundup(timo * hz, 1000) / 1000);
+	tsleep(pcic_delay, PWAIT, wmesg, roundup(timo * hz, 1000) / 1000);
 }
 
 void

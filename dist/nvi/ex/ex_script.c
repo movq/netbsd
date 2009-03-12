@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_script.c,v 1.4 2009/01/18 03:45:50 lukem Exp $ */
+/*	$NetBSD: ex_script.c,v 1.2.6.1 2009/01/20 02:41:12 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -302,8 +302,7 @@ sscr_exec(SCR *sp, db_recno_t lno)
 	SCRIPT *sc;
 	db_recno_t last_lno;
 	size_t blen, len, last_len, tlen;
-	int isempty, matchprompt, rval;
-	ssize_t nw;
+	int isempty, matchprompt, nw, rval;
 	CHAR_T *bp = NULL;
 	CHAR_T *p;
 
@@ -342,7 +341,7 @@ empty:			msgq(sp, M_BERR, "151|No command to execute");
 
 	/* Push the line to the shell. */
 	sc = sp->script;
-	if ((size_t)(nw = write(sc->sh_master, p, len)) != len)
+	if ((nw = write(sc->sh_master, p, len)) != len)
 		goto err2;
 	rval = 0;
 	if (write(sc->sh_master, "\n", 1) != 1) {

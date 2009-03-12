@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.c,v 1.39 2009/02/16 22:39:30 jmcneill Exp $	 */
+/*	$NetBSD: exec.c,v 1.33 2008/10/11 11:06:20 joerg Exp $	 */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -128,55 +128,12 @@ boot_module_t *boot_modules;
 bool boot_modules_enabled = true;
 bool kernel_loaded;
 
-static struct btinfo_framebuffer btinfo_framebuffer;
-
 static struct btinfo_modulelist *btinfo_modulelist;
 static size_t btinfo_modulelist_size;
 static uint32_t image_end;
 static char module_base[64] = "/";
 
 static void	module_init(void);
-
-void
-framebuffer_configure(struct btinfo_framebuffer *fb)
-{
-	if (fb)
-		btinfo_framebuffer = *fb;
-	else {
-		btinfo_framebuffer.physaddr = 0;
-		btinfo_framebuffer.flags = 0;
-	}
-}
-
-void
-module_add(char *name)
-{
-	boot_module_t *bm, *bmp;
-	size_t len;
-	char *str;
-
-	while (*name == ' ' || *name == '\t')
-		++name;
-
-	bm = alloc(sizeof(boot_module_t));
-	len = strlen(name) + 1;
-	str = alloc(len);
-	if (bm == NULL || str == NULL) {
-		printf("couldn't allocate module\n");
-		return;
-	}
-	memcpy(str, name, len);
-	bm->bm_path = str;
-	bm->bm_next = NULL;
-	if (boot_modules == NULL)
-		boot_modules = bm;
-	else {
-		for (bmp = boot_modules; bmp->bm_next;
-		    bmp = bmp->bm_next)
-			;
-		bmp->bm_next = bm;
-	}
-}
 
 static int
 common_load_kernel(const char *file, u_long *basemem, u_long *extmem,
@@ -226,11 +183,6 @@ common_load_kernel(const char *file, u_long *basemem, u_long *extmem,
 		return EIO;
 
 	close(fd);
-
-	/* Now we know the root fs type, load modules for it. */
-	module_add(fsmod);
-	if (fsmod2 != NULL && strcmp(fsmod, fsmod2) != 0)
-		module_add(fsmod2);
 
 	/*
 	 * Gather some information for the kernel. Do this after the
@@ -283,8 +235,6 @@ exec_netbsd(const char *file, physaddr_t loadaddr, int boothowto, int floppy)
 	BI_ALLOC(32); /* ??? */
 
 	BI_ADD(&btinfo_console, BTINFO_CONSOLE, sizeof(struct btinfo_console));
-	BI_ADD(&btinfo_framebuffer, BTINFO_FRAMEBUFFER,
-	    sizeof(struct btinfo_framebuffer));
 
 	if (common_load_kernel(file, &basemem, &extmem, loadaddr, floppy, marks))
 		goto out;
@@ -351,12 +301,12 @@ module_path(boot_module_t *bm)
 	return buf;
 }
 
-static int
+static int 
 module_open(boot_module_t *bm, int mode)
 {
 	int fd;
 	const char *path;
-
+		
 	/* check the expanded path first */
 	path = module_path(bm);
 	fd = open(path, mode);

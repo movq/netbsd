@@ -1,7 +1,7 @@
-/*	$NetBSD: init_main.c,v 1.383 2009/03/05 06:37:03 yamt Exp $	*/
+/*	$NetBSD: init_main.c,v 1.371.2.5 2010/12/21 22:21:42 riz Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -97,23 +97,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.383 2009/03/05 06:37:03 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.371.2.5 2010/12/21 22:21:42 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipsec.h"
-#include "opt_modular.h"
 #include "opt_ntp.h"
 #include "opt_pipe.h"
+#include "opt_posix.h"
 #include "opt_syscall_debug.h"
 #include "opt_sysv.h"
 #include "opt_fileassoc.h"
 #include "opt_ktrace.h"
 #include "opt_pax.h"
-#include "opt_compat_netbsd.h"
 #include "opt_wapbl.h"
 
-#include "ksyms.h"
 #include "rnd.h"
+#include "ksyms.h"
 #include "sysmon_envsys.h"
 #include "sysmon_power.h"
 #include "sysmon_taskq.h"
@@ -167,7 +166,6 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.383 2009/03/05 06:37:03 yamt Exp $")
 #include <sys/once.h>
 #include <sys/ksyms.h>
 #include <sys/uidinfo.h>
-#include <sys/kprintf.h>
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #endif
@@ -180,12 +178,18 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.383 2009/03/05 06:37:03 yamt Exp $")
 #ifdef SYSVMSG
 #include <sys/msg.h>
 #endif
+#ifdef P1003_1B_SEMAPHORE
+#include <sys/ksem.h>
+#endif
 #include <sys/domain.h>
 #include <sys/namei.h>
 #if NRND > 0
 #include <sys/rnd.h>
 #endif
 #include <sys/pipe.h>
+#ifdef LKM
+#include <sys/lkm.h>
+#endif
 #if NVERIEXEC > 0
 #include <sys/verified_exec.h>
 #endif /* NVERIEXEC > 0 */
@@ -229,11 +233,6 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.383 2009/03/05 06:37:03 yamt Exp $")
 
 #include <secmodel/secmodel.h>
 
-#ifdef COMPAT_50
-#include <compat/sys/time.h>
-struct timeval50 boottime50;
-#endif
-
 extern struct proc proc0;
 extern struct lwp lwp0;
 extern struct cwdinfo cwdi0;
@@ -247,7 +246,7 @@ struct	proc *initproc;
 struct	vnode *rootvp, *swapdev_vp;
 int	boothowto;
 int	cold = 1;			/* still working on startup */
-struct timespec boottime;	        /* time at system startup - will only follow settime deltas */
+struct timeval boottime;	        /* time at system startup - will only follow settime deltas */
 
 int	start_init_exec;		/* semaphore for start_init() */
 
@@ -272,7 +271,7 @@ __secmodel_none(void)
 void
 main(void)
 {
-	struct timespec time;
+	struct timeval time;
 	struct lwp *l;
 	struct proc *p;
 	int s, error;
@@ -295,27 +294,24 @@ main(void)
 
 	kernel_lock_init();
 	once_init();
+	mutex_init(&cpu_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	uvm_init();
-
-#if ((NKSYMS > 0) || (NDDB > 0) || (NMODULAR > 0))
-	ksyms_init();
-#endif
-	kprintf_init();
 
 	percpu_init();
 
 	/* Initialize lock caches. */
 	mutex_obj_init();
 
+#if NKSYMS > 0
+	ksyms_init_finalize();
+#endif
+
 	/* Initialize the extent manager. */
 	extent_init();
 
 	/* Do machine-dependent initialization. */
 	cpu_startup();
-
-	/* Initialize the sysctl subsystem. */
-	sysctl_init();
 
 	/* Initialize callouts, part 1. */
 	callout_startup();
@@ -358,9 +354,6 @@ main(void)
 	/* Create process 0 (the swapper). */
 	proc0_init();
 
-	/* Disable preemption during boot. */
-	kpreempt_disable();
-
 	/* Initialize the UID hash table. */
 	uid_init();
 
@@ -371,7 +364,6 @@ main(void)
 	time_init();
 
 	/* Initialize the run queues, turnstiles and sleep queues. */
-	mutex_init(&cpu_lock, MUTEX_DEFAULT, IPL_NONE);
 	sched_rqinit();
 	turnstile_init();
 	sleeptab_init(&sleeptab);
@@ -391,6 +383,9 @@ main(void)
 	 * allocate mbufs or mbuf clusters during autoconfiguration.
 	 */
 	mbinit();
+
+	/* Initialize the sysctl subsystem. */
+	sysctl_init();
 
 	/* Initialize I/O statistics. */
 	iostat_init();
@@ -423,11 +418,11 @@ main(void)
 	/* Initialize the file descriptor system. */
 	fd_sys_init();
 
-	/* Initialize cwd structures */
-	cwd_sys_init();
-
 	/* Initialize kqueue. */
 	kqueue_init();
+
+	/* Initialize asynchronous I/O. */
+	aio_sysinit();
 
 	/* Initialize message queues. */
 	mqueue_sysinit();
@@ -475,15 +470,17 @@ main(void)
 
 	configure2();
 
-	/* Now timer is working.  Enable preemption. */
-	kpreempt_enable();
-
 	ubc_init();		/* must be after autoconfig */
 
 #ifdef SYSVSHM
 	/* Initialize System V style shared memory. */
 	shminit();
 #endif
+
+	vmem_rehash_start();	/* must be before exec_init */
+
+	/* Initialize exec structures */
+	exec_init(1);		/* seminit calls exithook_establish() */
 
 #ifdef SYSVSEM
 	/* Initialize System V style semaphores. */
@@ -493,6 +490,11 @@ main(void)
 #ifdef SYSVMSG
 	/* Initialize System V style message queues. */
 	msginit();
+#endif
+
+#ifdef P1003_1B_SEMAPHORE
+	/* Initialize posix semaphores */
+	ksem_init();
 #endif
 
 #if NVERIEXEC > 0
@@ -627,20 +629,13 @@ main(void)
 	 * from the file system.  Reset l->l_rtime as it may have been
 	 * munched in mi_switch() after the time got set.
 	 */
-	getnanotime(&time);
+	getmicrotime(&time);
 	boottime = time;
-#ifdef COMPAT_50
-	{
-		struct timeval tv;
-		TIMESPEC_TO_TIMEVAL(&tv, &time);
-		timeval_to_timeval50(&tv, &boottime50);
-	}
-#endif
 	mutex_enter(proc_lock);
 	LIST_FOREACH(p, &allproc, p_list) {
 		KASSERT((p->p_flag & PK_MARKER) == 0);
 		mutex_enter(p->p_lock);
-		TIMESPEC_TO_TIMEVAL(&p->p_stats->p_start, &time);
+		p->p_stats->p_start = time;
 		LIST_FOREACH(l, &p->p_lwps, l_sibling) {
 			lwp_lock(l);
 			memset(&l->l_rtime, 0, sizeof(l->l_rtime));
@@ -670,11 +665,6 @@ main(void)
 	if (workqueue_create(&uvm.aiodone_queue, "aiodoned",
 	    uvm_aiodone_worker, NULL, PRI_VM, IPL_NONE, WQ_MPSAFE))
 		panic("fork aiodoned");
-
-	vmem_rehash_start();
-
-	/* Initialize exec structures */
-	exec_init(1);
 
 	/*
 	 * Okay, now we can let init(8) exec!  It's off to userland!
@@ -836,7 +826,7 @@ start_init(void *arg)
 			*flagsp++ = '\0';
 			i = flagsp - flags;
 #ifdef DEBUG
-			printf("init: copying out flags `%s' %d\n", flags, i);
+			aprint_normal("init: copying out flags `%s' %d\n", flags, i);
 #endif
 			arg1 = STACK_ALLOC(ucp, i);
 			ucp = STACK_MAX(arg1, i);
@@ -848,7 +838,7 @@ start_init(void *arg)
 		 */
 		i = strlen(path) + 1;
 #ifdef DEBUG
-		printf("init: copying out path `%s' %d\n", path, i);
+		aprint_normal("init: copying out path `%s' %d\n", path, i);
 #else
 		if (boothowto & RB_ASKNAME || path != initpaths[0])
 			printf("init: trying %s\n", path);

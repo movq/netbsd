@@ -532,12 +532,14 @@ int ssl3_accept(SSL *s)
 				 */
 				if (s->s3->handshake_buffer)
 					ssl3_digest_cached_records(s);
-				for (dgst_num=0; dgst_num<SSL_MAX_DIGEST;dgst_num++)	
-					if (s->s3->handshake_dgst[dgst_num]) 
-						{
-						s->method->ssl3_enc->cert_verify_mac(s,EVP_MD_CTX_type(s->s3->handshake_dgst[dgst_num]),&(s->s3->tmp.cert_verify_md[offset]));
-						offset+=EVP_MD_CTX_size(s->s3->handshake_dgst[dgst_num]);
-						}		
+				if (s->s3->handshake_dgst != NULL) {
+					for (dgst_num=0; dgst_num<SSL_MAX_DIGEST;dgst_num++)	
+						if (s->s3->handshake_dgst[dgst_num]) 
+							{
+							s->method->ssl3_enc->cert_verify_mac(s,EVP_MD_CTX_type(s->s3->handshake_dgst[dgst_num]),&(s->s3->tmp.cert_verify_md[offset]));
+							offset+=EVP_MD_CTX_size(s->s3->handshake_dgst[dgst_num]);
+							}		
+					}
 				}
 			break;
 
@@ -763,6 +765,14 @@ int ssl3_get_client_hello(SSL *s)
 #endif
 	STACK_OF(SSL_CIPHER) *ciphers=NULL;
 
+	if (s->new_session
+	    && !(s->s3->flags&SSL3_FLAGS_ALLOW_UNSAFE_LEGACY_RENEGOTIATION))
+		{
+		al=SSL_AD_HANDSHAKE_FAILURE;
+		SSLerr(SSL_F_SSL3_GET_CLIENT_HELLO, ERR_R_INTERNAL_ERROR);
+		goto f_err;
+		}
+
 	/* We do this so that we will respond with our native type.
 	 * If we are TLSv1 and we get SSLv3, we will respond with TLSv1,
 	 * This down switching should be handled by a different method.
@@ -949,12 +959,17 @@ int ssl3_get_client_hello(SSL *s)
 			}
 		if (j == 0)
 			{
+/* Disabled because it can be used in a ciphersuite downgrade
+ * attack: CVE-2010-4180.
+ */
+#if 0
 			if ((s->options & SSL_OP_NETSCAPE_REUSE_CIPHER_CHANGE_BUG) && (sk_SSL_CIPHER_num(ciphers) == 1))
 				{
 				/* Very bad for multi-threading.... */
 				s->session->cipher=sk_SSL_CIPHER_value(ciphers, 0);
 				}
 			else
+#endif
 				{
 				/* we need to have the cipher in the cipher
 				 * list if we are asked to reuse it */

@@ -1,4 +1,4 @@
-/*	$NetBSD: setup.c,v 1.85 2009/02/25 13:52:18 christos Exp $	*/
+/*	$NetBSD: setup.c,v 1.84.2.1 2009/10/03 22:49:42 snj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setup.c	8.10 (Berkeley) 5/9/95";
 #else
-__RCSID("$NetBSD: setup.c,v 1.85 2009/02/25 13:52:18 christos Exp $");
+__RCSID("$NetBSD: setup.c,v 1.84.2.1 2009/10/03 22:49:42 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -173,24 +173,35 @@ setup(const char *dev, const char *origdev)
 		doskipclean = 0;
 		pwarn("USING ALTERNATE SUPERBLOCK AT %d\n", bflag);
 	}
-	if (sblock->fs_flags & FS_DOWAPBL) {
-		if (preen) {
-			if (!quiet)
-				pwarn("file system is journaled; not checking\n");
-			return (-1);
+	/* ffs_superblock_layout() == 2 */
+	if (sblock->fs_magic != FS_UFS1_MAGIC ||
+	    (sblock->fs_old_flags & FS_FLAGS_UPDATED) != 0) {
+		/* can have WAPBL */
+		if (check_wapbl() != 0) {
+			doskipclean = 0;
 		}
-		if (!quiet)
-			pwarn("** File system is journaled; replaying journal\n");
-		replay_wapbl();
-		doskipclean = 0;
-		sblock->fs_flags &= ~FS_DOWAPBL;
-		sbdirty();
-		/* Although we may have updated the superblock from the
-		 * journal, we are still going to do a full check, so we
-		 * don't bother to re-read the superblock from the journal.
-		 * XXX, instead we could re-read the superblock and then not
-		 * force doskipclean = 0 
-		 */
+		if (sblock->fs_flags & FS_DOWAPBL) {
+			if (preen) {
+				if (!quiet)
+					pwarn("file system is journaled; "
+					    "not checking\n");
+				return (-1);
+			}
+			if (!quiet)
+				pwarn("** File system is journaled; "
+				    "replaying journal\n");
+			replay_wapbl();
+			doskipclean = 0;
+			sblock->fs_flags &= ~FS_DOWAPBL;
+			sbdirty();
+			/* Although we may have updated the superblock from
+			 * the journal, we are still going to do a full check,
+			 * so we don't bother to re-read the superblock from
+			 * the journal.
+			 * XXX, instead we could re-read the superblock and
+			 * then not force doskipclean = 0 
+			 */
+		}
 	}
 	if (debug)
 		printf("clean = %d\n", sblock->fs_clean);
@@ -1004,7 +1015,7 @@ calcsb(const char *dev, int devfd, struct fs *fs)
 		pfatal("%s: CANNOT FIGURE OUT OLD CYLINDERS PER GROUP\n", dev);
 		return 0;
 	}
-	memcpy(fs, sblk.b_un.b_fs, sizeof(struct fs));
+	memcpy(fs, &sblk.b_un.b_fs, sizeof(struct fs));
 	nspf = fs->fs_fsize / geo.dg_secsize;
 	fs->fs_old_nspf = nspf;
 	for (fs->fs_fsbtodb = 0, i = nspf; i > 1; i >>= 1)

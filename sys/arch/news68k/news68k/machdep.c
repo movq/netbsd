@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.80 2009/02/13 22:41:02 apb Exp $	*/
+/*	$NetBSD: machdep.c,v 1.72.4.1 2009/02/02 03:30:33 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -77,11 +77,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.80 2009/02/13 22:41:02 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.72.4.1 2009/02/02 03:30:33 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -401,8 +400,6 @@ cpu_reboot(int howto, char *bootstr)
 	/* Run any shutdown hooks. */
 	doshutdownhooks();
 
-	pmf_system_shutdown(boothowto);
-
 #if defined(PANICWAIT) && !defined(DDB)
 	if ((howto & RB_HALT) == 0 && panicstr) {
 		printf("hit any key to reboot...\n");
@@ -611,15 +608,15 @@ dumpsys(void)
 			return;
 	}
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n",
-		    major(dumpdev), minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
+		    minor(dumpdev));
 		return;
 	}
 	dump = bdev->d_dump;
 	blkno = dumplo;
 
-	printf("\ndumping to dev %u,%u offset %ld\n",
-	    major(dumpdev), minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
+	    minor(dumpdev), dumplo);
 
 	printf("dump ");
 
@@ -999,12 +996,16 @@ intrhand_lev3(void)
 {
 	int stat;
 
+	idepth++;
+
 	stat = *int_status;
 	intrcnt[3]++;
 	uvmexp.intrs++;
 #if 1
 	printf("level 3 interrupt: INT_STATUS = 0x%02x\n", stat);
 #endif
+
+	idepth--;
 }
 
 extern int leintr(int);
@@ -1014,6 +1015,8 @@ void
 intrhand_lev4(void)
 {
 	int stat;
+
+	idepth++;
 
 #define INTST_LANCE	0x04
 #define INTST_SCSI	0x80
@@ -1035,6 +1038,8 @@ intrhand_lev4(void)
 #if 0
 	printf("level 4 interrupt\n");
 #endif
+
+	idepth--;
 }
 
 /*
@@ -1077,8 +1082,8 @@ consinit(void)
 		(*cn_tab->cn_init)(cn_tab);
 		break;
 	}
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf((int)esym - (int)&end - sizeof(Elf32_Ehdr),
+#if NKSYMS || defined(DDB) || defined(LKM)
+	ksyms_init((int)esym - (int)&end - sizeof(Elf32_Ehdr),
 		    (void *)&end, esym);
 #endif
 #ifdef DDB

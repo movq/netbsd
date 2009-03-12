@@ -1,4 +1,4 @@
-/*	$NetBSD: tree.c,v 1.55 2009/03/02 20:53:11 christos Exp $	*/
+/*	$NetBSD: tree.c,v 1.53 2008/09/27 02:30:46 matt Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: tree.c,v 1.55 2009/03/02 20:53:11 christos Exp $");
+__RCSID("$NetBSD: tree.c,v 1.53 2008/09/27 02:30:46 matt Exp $");
 #endif
 
 #include <stdlib.h>
@@ -214,7 +214,7 @@ initmtab(void)
 		    "INIT" } },
 		{ FARG,   { 1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,
 		    "FARG" } },
-		{ NOOP,   { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, NULL } }
+		{ NOOP }
 	};
 	int	i;
 
@@ -1105,8 +1105,6 @@ typeok(op_t op, int arg, tnode_t *ln, tnode_t *rn)
 		}
 
 		if (rt == PTR && lt == PTR) {
-			if (eqptrtype(lstp, rstp, 1))
-				break;
 			if (!eqtype(lstp, rstp, 1, 0, NULL))
 				illptrc(mp, ltp, rtp);
 			break;
@@ -3294,14 +3292,14 @@ parg(	int	n,		/* pos of arg */
 	tnode_t	*tn)		/* argument */
 {
 	tnode_t	*ln;
-	int	dowarn;
+	int	warn;
 
 	ln = xcalloc(1, sizeof (tnode_t));
 	ln->tn_type = tduptyp(tp);
 	ln->tn_type->t_const = 0;
 	ln->tn_lvalue = 1;
 	if (typeok(FARG, n, ln, tn)) {
-		if (!eqtype(tp, tn->tn_type, 1, 0, (dowarn = 0, &dowarn)) || dowarn)
+		if (!eqtype(tp, tn->tn_type, 1, 0, (warn = 0, &warn)) || warn)
 			tn = convert(FARG, n, tp, tn);
 	}
 	free(ln);
@@ -3369,7 +3367,7 @@ constant(tnode_t *tn, int required)
  * for the expression.
  */
 void
-expr(tnode_t *tn, int vctx, int tctx, int dofreeblk)
+expr(tnode_t *tn, int vctx, int tctx, int freeblk)
 {
 
 	if (tn == NULL && nerr == 0)
@@ -3406,7 +3404,7 @@ expr(tnode_t *tn, int vctx, int tctx, int dofreeblk)
 		displexpr(tn, 0);
 
 	/* free the tree memory */
-	if (dofreeblk)
+	if (freeblk)
 		tfreeblk();
 }
 
@@ -3937,7 +3935,7 @@ precconf(tnode_t *tn)
 	op_t	lop, rop = NOOP;
 	int	lparn, rparn = 0;
 	mod_t	*mp;
-	int	dowarn;
+	int	warn;
 
 	if (!hflag)
 		return;
@@ -3958,22 +3956,22 @@ precconf(tnode_t *tn)
 		rop = rn->tn_op;
 	}
 
-	dowarn = 0;
+	warn = 0;
 
 	switch (tn->tn_op) {
 	case SHL:
 	case SHR:
 		if (!lparn && (lop == PLUS || lop == MINUS)) {
-			dowarn = 1;
+			warn = 1;
 		} else if (!rparn && (rop == PLUS || rop == MINUS)) {
-			dowarn = 1;
+			warn = 1;
 		}
 		break;
 	case LOGOR:
 		if (!lparn && lop == LOGAND) {
-			dowarn = 1;
+			warn = 1;
 		} else if (!rparn && rop == LOGAND) {
-			dowarn = 1;
+			warn = 1;
 		}
 		break;
 	case AND:
@@ -3981,16 +3979,16 @@ precconf(tnode_t *tn)
 	case OR:
 		if (!lparn && lop != tn->tn_op) {
 			if (lop == PLUS || lop == MINUS) {
-				dowarn = 1;
+				warn = 1;
 			} else if (lop == AND || lop == XOR) {
-				dowarn = 1;
+				warn = 1;
 			}
 		}
-		if (!dowarn && !rparn && rop != tn->tn_op) {
+		if (!warn && !rparn && rop != tn->tn_op) {
 			if (rop == PLUS || rop == MINUS) {
-				dowarn = 1;
+				warn = 1;
 			} else if (rop == AND || rop == XOR) {
-				dowarn = 1;
+				warn = 1;
 			}
 		}
 		break;
@@ -4054,7 +4052,7 @@ precconf(tnode_t *tn)
 		break;
 	}
 
-	if (dowarn) {
+	if (warn) {
 		/* precedence confusion possible: parenthesize! */
 		warning(169);
 	}

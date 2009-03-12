@@ -1,4 +1,4 @@
-/* 	$NetBSD: footbridge_intr.h,v 1.14 2009/02/13 08:37:52 he Exp $	*/
+/* 	$NetBSD: footbridge_intr.h,v 1.13.10.1 2009/03/15 19:45:58 snj Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.

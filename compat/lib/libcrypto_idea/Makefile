@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2008/11/03 23:43:16 mlelstv Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2008/11/22 16:41:06 snj Exp $
 
 NOLINT= # defined
 NOMAN=	# defined

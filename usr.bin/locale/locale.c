@@ -1,4 +1,4 @@
-/*	$NetBSD: locale.c,v 1.7 2009/01/16 13:30:07 hira Exp $	*/
+/*	$NetBSD: locale.c,v 1.5.28.2 2009/01/26 00:46:33 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Alexey Zelkin <phantom@FreeBSD.org>
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: locale.c,v 1.7 2009/01/16 13:30:07 hira Exp $");
+__RCSID("$NetBSD: locale.c,v 1.5.28.2 2009/01/26 00:46:33 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.21 2009/01/04 15:34:18 tsutsui Exp $	*/
+/*	$NetBSD: intr.c,v 1.20.20.1 2009/01/14 17:50:25 snj Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.21 2009/01/04 15:34:18 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.20.20.1 2009/01/14 17:50:25 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>

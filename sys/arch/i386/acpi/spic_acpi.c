@@ -1,4 +1,4 @@
-/*	$NetBSD: spic_acpi.c,v 1.21 2009/02/21 00:30:37 jmcneill Exp $	*/
+/*	$NetBSD: spic_acpi.c,v 1.20.10.1 2009/05/01 01:39:24 snj Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spic_acpi.c,v 1.21 2009/02/21 00:30:37 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spic_acpi.c,v 1.20.10.1 2009/05/01 01:39:24 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

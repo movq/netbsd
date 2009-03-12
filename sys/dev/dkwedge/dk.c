@@ -1,4 +1,4 @@
-/*	$NetBSD: dk.c,v 1.43 2009/01/13 13:35:53 yamt Exp $	*/
+/*	$NetBSD: dk.c,v 1.42.6.3 2010/11/21 18:50:17 riz Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005, 2006, 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dk.c,v 1.43 2009/01/13 13:35:53 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dk.c,v 1.42.6.3 2010/11/21 18:50:17 riz Exp $");
 
 #include "opt_dkwedge.h"
 
@@ -93,6 +93,7 @@ struct dkwedge_softc {
 static void	dkstart(struct dkwedge_softc *);
 static void	dkiodone(struct buf *);
 static void	dkrestart(void *);
+static void	dkminphys(struct buf *);
 
 static dev_type_open(dkopen);
 static dev_type_close(dkclose);
@@ -475,17 +476,18 @@ dkwedge_del(struct dkwedge_info *dkw)
 
 	/* Clean up the parent. */
 	mutex_enter(&sc->sc_dk.dk_openlock);
-	mutex_enter(&sc->sc_parent->dk_rawlock);
 	if (sc->sc_dk.dk_openmask) {
+		mutex_enter(&sc->sc_parent->dk_rawlock);
 		if (sc->sc_parent->dk_rawopens-- == 1) {
 			KASSERT(sc->sc_parent->dk_rawvp != NULL);
+			mutex_exit(&sc->sc_parent->dk_rawlock);
 			(void) vn_close(sc->sc_parent->dk_rawvp, FREAD | FWRITE,
 			    NOCRED);
 			sc->sc_parent->dk_rawvp = NULL;
-		}
+		} else
+			mutex_exit(&sc->sc_parent->dk_rawlock);
 		sc->sc_dk.dk_openmask = 0;
 	}
-	mutex_exit(&sc->sc_parent->dk_rawlock);
 	mutex_exit(&sc->sc_dk.dk_openlock);
 
 	/* Announce our departure. */
@@ -967,7 +969,6 @@ dkclose(dev_t dev, int flags, int fmt, struct lwp *l)
 	KASSERT(sc->sc_dk.dk_openmask != 0);
 
 	mutex_enter(&sc->sc_dk.dk_openlock);
-	mutex_enter(&sc->sc_parent->dk_rawlock);
 
 	if (fmt == S_IFCHR)
 		sc->sc_dk.dk_copenmask &= ~1;
@@ -977,15 +978,17 @@ dkclose(dev_t dev, int flags, int fmt, struct lwp *l)
 	    sc->sc_dk.dk_copenmask | sc->sc_dk.dk_bopenmask;
 
 	if (sc->sc_dk.dk_openmask == 0) {
+		mutex_enter(&sc->sc_parent->dk_rawlock);
 		if (sc->sc_parent->dk_rawopens-- == 1) {
 			KASSERT(sc->sc_parent->dk_rawvp != NULL);
+			mutex_exit(&sc->sc_parent->dk_rawlock);
 			error = vn_close(sc->sc_parent->dk_rawvp,
 			    FREAD | FWRITE, NOCRED);
 			sc->sc_parent->dk_rawvp = NULL;
-		}
+		} else
+			mutex_exit(&sc->sc_parent->dk_rawlock);
 	}
 
-	mutex_exit(&sc->sc_parent->dk_rawlock);
 	mutex_exit(&sc->sc_dk.dk_openlock);
 
 	return (error);
@@ -1021,7 +1024,7 @@ dkstrategy(struct buf *bp)
 	/* Place it in the queue and start I/O on the unit. */
 	s = splbio();
 	sc->sc_iopend++;
-	bufq_put(sc->sc_bufq, bp);
+	BUFQ_PUT(sc->sc_bufq, bp);
 	dkstart(sc);
 	splx(s);
 	return;
@@ -1044,9 +1047,9 @@ dkstart(struct dkwedge_softc *sc)
 	struct buf *bp, *nbp;
 
 	/* Do as much work as has been enqueued. */
-	while ((bp = bufq_peek(sc->sc_bufq)) != NULL) {
+	while ((bp = BUFQ_PEEK(sc->sc_bufq)) != NULL) {
 		if (sc->sc_state != DKW_STATE_RUNNING) {
-			(void) bufq_get(sc->sc_bufq);
+			(void) BUFQ_GET(sc->sc_bufq);
 			if (sc->sc_iopend-- == 1 &&
 			    (sc->sc_flags & DK_F_WAIT_DRAIN) != 0) {
 				sc->sc_flags &= ~DK_F_WAIT_DRAIN;
@@ -1072,7 +1075,7 @@ dkstart(struct dkwedge_softc *sc)
 			return;
 		}
 
-		(void) bufq_get(sc->sc_bufq);
+		(void) BUFQ_GET(sc->sc_bufq);
 
 		nbp->b_data = bp->b_data;
 		nbp->b_flags = bp->b_flags;
@@ -1100,13 +1103,14 @@ dkstart(struct dkwedge_softc *sc)
  * dkiodone:
  *
  *	I/O to a wedge has completed; alert the top half.
- *	NOTE: Must be called at splbio()!
  */
 static void
 dkiodone(struct buf *bp)
 {
 	struct buf *obp = bp->b_private;
 	struct dkwedge_softc *sc = dkwedge_lookup(obp->b_dev);
+
+	int s = splbio();
 
 	if (bp->b_error != 0)
 		obp->b_error = bp->b_error;
@@ -1125,6 +1129,7 @@ dkiodone(struct buf *bp)
 
 	/* Kick the queue in case there is more work we can do. */
 	dkstart(sc);
+	splx(s);
 }
 
 /*
@@ -1145,6 +1150,23 @@ dkrestart(void *v)
 }
 
 /*
+ * dkminphys:
+ *
+ *	Call parent's minphys function.
+ */
+static void
+dkminphys(struct buf *bp)
+{
+	struct dkwedge_softc *sc = dkwedge_lookup(bp->b_dev);
+	dev_t dev;
+
+	dev = bp->b_dev;
+	bp->b_dev = sc->sc_pdev;
+	(*sc->sc_parent->dk_driver->d_minphys)(bp);
+	bp->b_dev = dev;
+}
+
+/*
  * dkread:		[devsw entry point]
  *
  *	Read from a wedge.
@@ -1157,8 +1179,7 @@ dkread(dev_t dev, struct uio *uio, int flags)
 	if (sc->sc_state != DKW_STATE_RUNNING)
 		return (ENXIO);
 
-	return (physio(dkstrategy, NULL, dev, B_READ,
-		       sc->sc_parent->dk_driver->d_minphys, uio));
+	return (physio(dkstrategy, NULL, dev, B_READ, dkminphys, uio));
 }
 
 /*
@@ -1174,8 +1195,7 @@ dkwrite(dev_t dev, struct uio *uio, int flags)
 	if (sc->sc_state != DKW_STATE_RUNNING)
 		return (ENXIO);
 
-	return (physio(dkstrategy, NULL, dev, B_WRITE,
-		       sc->sc_parent->dk_driver->d_minphys, uio));
+	return (physio(dkstrategy, NULL, dev, B_WRITE, dkminphys, uio));
 }
 
 /*

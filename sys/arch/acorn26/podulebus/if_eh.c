@@ -1,4 +1,4 @@
-/* $NetBSD: if_eh.c,v 1.15 2009/01/21 23:36:30 bjh21 Exp $ */
+/* $NetBSD: if_eh.c,v 1.14.10.1 2009/02/02 00:55:28 snj Exp $ */
 
 /*-
  * Copyright (c) 2000 Ben Harris
@@ -45,7 +45,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: if_eh.c,v 1.15 2009/01/21 23:36:30 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_eh.c,v 1.14.10.1 2009/02/02 00:55:28 snj Exp $");
 
 #include <sys/systm.h>
 #include <sys/device.h>

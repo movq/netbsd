@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.26 2008/11/25 15:41:11 nakayama Exp $ */
+/*	$NetBSD: db_machdep.h,v 1.25.4.1 2008/11/27 03:46:31 snj Exp $ */
 
 /*
  * Mach Operating System

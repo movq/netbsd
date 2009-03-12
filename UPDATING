@@ -1,4 +1,4 @@
-$NetBSD: UPDATING,v 1.193 2009/02/08 11:58:25 skrll Exp $
+$NetBSD: UPDATING,v 1.178.2.3 2010/06/12 01:55:43 riz Exp $
 
 This file (UPDATING) is intended to be a brief reference to recent
 changes that might cause problems in the build process, and a guide for
@@ -16,81 +16,35 @@ See also: BUILDING, build.sh, Makefile.
 Recent changes:
 ^^^^^^^^^^^^^^^
 
-20090126:
-	The __posix_fadvise50 system call changed assembly stub type. You need to
-	'rm -f __posix_fadvise50.*' in the libc build directory to avoid using
-	the old assembly stub.
+20090616:
+	Native Xorg was upgraded.  Builds will need a clean objdir for
+	src/external/mit/xorg.  Upgrading a system from sets will not
+	work properly yet as the /usr/X11R7/lib/X11/xkb/symbols/pc
+	subdirectory has been changed into a file, and this needs to
+	be manually "rm -r"'ed before installing xbase.tgz.
 
-20090202:
+20090530:
 	pkg_install now depends on the pkgdb cache for automatic conflict
 	detection.  It is recommented to rebuild the cache with
 	``pkg_admin rebuild''.
 
-20090110:
-	time_t and dev_t have been bumped to 64 bit quantities. To upgrade:
-	1. Make sure your kernel has COMPAT_50 in it. Build and install.
-	   This is needed even in the MODULAR kernel because there is
-	   conditionally compiled code in rtsock.c.
-	2. make sure build.sh completes and the binaries in a chroot work
-	   before installing.
-	3. If you don't use build.sh and you build directly to root, and
-	   your build breaks in the middle, don't despair. Make sure headers
-	   are installed properly, and start building libraries first libc
-	   and libutil, install them and then continue building all the
-	   libraries in src/lib and src/gnu/lib and install them. Once
-	   the new libraries are installed, you can restart the build.
-	4. If you compile packages and you notice link time warnings,
-	   rebuild the required packages to update their shared libraries.
-	   Any package you rebuild will require rebuilding all the packages
-	   that depend on it.
-	5. Next time you run pwd_mkdb with the new binary, the file
-	   will be upgraded and it will not be backwards compatible.
-	6. The utmpx/wtmpx files (/var/run/utmpx and /var/log/wtmpx, see
-	   lastlogx(5)) have been versioned, and there is a heuristic
-	   for utmp. You are better off removing the old files after
-	   upgrading.  The automated clearing of /var/run during
-	   boot, and the automated rotating of files in /var/log by
-	   newsyslog(8), may mean that you do not have to remove the
-	   files manually.
-	7. The optional accounting file (/var/account/acct, see
-	   accton(8)) has not been versioned, and will need to be
-	   removed.  The automatic rotation of the accounting file by
-	   /etc/daily limits the bad consequences of failure to remove
-	   the file.
-
-20081219:
-	config(1) has been updated, and one of the files it creates -
-	swapnetbsd.o - has changed format.  You need to rebuild config
-	(done automatically by build.sh) and then you need to rerun
-	config on all kernel configuration files before rebuilding those
-	kernels.
+	audit-packages.conf(5) has been superseded by pkg_install.conf(5).
+	The default configuration is the same.  Support for pkg_view(1) has
+	been retired.  The functionality of audit-packages(1) and
+	download-vulnerability-list(1) has moved into pkg_admin(1), wrapper
+	scripts that handle the common use cases are provided.
 
 20081205:
 	If you build with MKX11=no, you should remove /etc/rc.d/xdm and
 	/etc/rc.d/xfs from DESTDIR because those files were moved to the xetc
 	set and will appear as extra files for MKX11=no update builds.
 
-20081122:
-	On i386, various kernel options(4) in GENERIC including
-	file systems have been disabled and moved into kernel modules.
-	Before trying a new GENERIC kernel, you have to prepare the
-	following files as well as a new GENERIC kernel:
-
-	- build and install kernel modules from src/sys/modules
-
-	- install the latest bootloader, which will load a module
-	  for the file system from which the kernel is loaded automatically
-
-	If you have to load your kernel from a file system which is not of
-	the same type as the root file system, you have to load the necessary
-	file system module manually on the boot prompt or in the boot.cfg file.
-
 20080827:
 	If you built and installed a libc from sources between
 	2008/08/20 and 2008/08/26 you got a broken strtouq(3)
 	which results in false errors reported by lint(1).
 	Since this breaks the libc build itself, manual help is
-	needed -- lint must be disabled temporarily, e.g.:
+	needed -- lint must be disabled temporarily, e.g:
 	  $ (cd lib/libc && make MKLINT=no dependall install)
 
 20080813:
