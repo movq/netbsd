@@ -1,4 +1,4 @@
-/*	$NetBSD: display.h,v 1.6 2009/03/15 00:50:47 dholland Exp $	*/
+/*	$NetBSD: display.h,v 1.7 2009/03/15 03:33:56 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,10 +31,14 @@
 
 #include <stdbool.h>
 
-void display_show_obp(int which, bool show);
-void display_show_dbp(int which, bool show);
-void display_refresh_slot_w(void);
+void display_set_obp(int which, bool show);
+void display_set_dbp(int which, bool show);
+
+void display_scroll_pageup(void);
+void display_scroll_pagedown(void);
+void display_adjust_view(void);
 
 void display_hide_prompt(void);
 void display_reshow_prompt(void);
-void display_adjust_view(void);
+void display_force_full_redraw(void);
+void display_redraw(void);
