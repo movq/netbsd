@@ -1,4 +1,4 @@
-/*	$NetBSD: socket_p.h,v 1.1 2009/03/22 15:02:22 christos Exp $	*/
+/*	$NetBSD: socket_p.h,v 1.1.1.1 2009/03/22 15:02:22 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")

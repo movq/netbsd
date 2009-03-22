@@ -1,4 +1,4 @@
-/*	$NetBSD: lfsr.c,v 1.1 2009/03/22 15:02:04 christos Exp $	*/
+/*	$NetBSD: lfsr.c,v 1.1.1.1 2009/03/22 15:02:04 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")

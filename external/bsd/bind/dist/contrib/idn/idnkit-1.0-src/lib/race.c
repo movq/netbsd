@@ -1,4 +1,4 @@
-/*	$NetBSD: race.c,v 1.1 2009/03/22 14:57:35 christos Exp $	*/
+/*	$NetBSD: race.c,v 1.1.1.1 2009/03/22 14:57:35 christos Exp $	*/
 
 #ifndef lint
 static char *rcsid = "Id: race.c,v 1.1.1.1 2003/06/04 00:26:07 marka Exp";

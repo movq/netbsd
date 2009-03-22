@@ -1,4 +1,4 @@
-/*	$NetBSD: formatcheck.h,v 1.1 2009/03/22 15:02:11 christos Exp $	*/
+/*	$NetBSD: formatcheck.h,v 1.1.1.1 2009/03/22 15:02:11 christos Exp $	*/
 
 /*
  * Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")

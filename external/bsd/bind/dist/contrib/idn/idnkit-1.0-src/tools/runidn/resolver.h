@@ -1,4 +1,4 @@
-/*	$NetBSD: resolver.h,v 1.1 2009/03/22 14:57:49 christos Exp $	*/
+/*	$NetBSD: resolver.h,v 1.1.1.1 2009/03/22 14:57:49 christos Exp $	*/
 
 /* Id: resolver.h,v 1.1.1.1 2003/06/04 00:27:13 marka Exp */
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: localencoding.h,v 1.1 2009/03/22 14:57:22 christos Exp $	*/
+/*	$NetBSD: localencoding.h,v 1.1.1.1 2009/03/22 14:57:22 christos Exp $	*/
 
 /* Id: localencoding.h,v 1.1.1.1 2003/06/04 00:25:38 marka Exp */
 /*

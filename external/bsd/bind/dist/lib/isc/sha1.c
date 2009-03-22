@@ -1,4 +1,4 @@
-/*	$NetBSD: sha1.c,v 1.1 2009/03/22 15:02:08 christos Exp $	*/
+/*	$NetBSD: sha1.c,v 1.1.1.1 2009/03/22 15:02:08 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
@@ -19,7 +19,7 @@
 
 /* Id: sha1.c,v 1.18 2007/06/19 23:47:17 tbox Exp */
 
-/*	$NetBSD: sha1.c,v 1.1 2009/03/22 15:02:08 christos Exp $	*/
+/*	$NetBSD: sha1.c,v 1.1.1.1 2009/03/22 15:02:08 christos Exp $	*/
 /*	$OpenBSD: sha1.c,v 1.9 1997/07/23 21:12:32 kstailey Exp $	*/
 
 /*! \file

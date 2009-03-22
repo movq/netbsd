@@ -1,4 +1,4 @@
-/*	$NetBSD: destroyobj.c,v 1.1 2009/03/22 14:58:03 christos Exp $	*/
+/*	$NetBSD: destroyobj.c,v 1.1.1.1 2009/03/22 14:58:03 christos Exp $	*/
 
 /* destroyobj [-s $slot] [-i $id | -l $label] [-p $pin] */
 

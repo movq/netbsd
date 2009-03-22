@@ -1,4 +1,4 @@
-/*	$NetBSD: loc.c,v 1.1 2009/03/22 14:58:04 christos Exp $	*/
+/*	$NetBSD: loc.c,v 1.1.1.1 2009/03/22 14:58:04 christos Exp $	*/
 
 #include "loc.h"
 

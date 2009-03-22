@@ -1,4 +1,4 @@
-/*	$NetBSD: t_rbt.c,v 1.1 2009/03/22 14:56:35 christos Exp $	*/
+/*	$NetBSD: t_rbt.c,v 1.1.1.1 2009/03/22 14:56:35 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")

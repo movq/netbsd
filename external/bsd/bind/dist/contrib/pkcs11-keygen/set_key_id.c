@@ -1,4 +1,4 @@
-/*	$NetBSD: set_key_id.c,v 1.1 2009/03/22 14:58:04 christos Exp $	*/
+/*	$NetBSD: set_key_id.c,v 1.1.1.1 2009/03/22 14:58:04 christos Exp $	*/
 
 /* set_key_id [-s slot] [-p $pin] -n $keytag {-i $id | -l $label} */
 

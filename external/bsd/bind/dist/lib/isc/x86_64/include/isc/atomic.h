@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic.h,v 1.1 2009/03/22 15:02:29 christos Exp $	*/
+/*	$NetBSD: atomic.h,v 1.1.1.1 2009/03/22 15:02:29 christos Exp $	*/
 
 /*
  * Copyright (C) 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")

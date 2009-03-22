@@ -1,4 +1,4 @@
-/*	$NetBSD: debug.h,v 1.1 2009/03/22 14:57:21 christos Exp $	*/
+/*	$NetBSD: debug.h,v 1.1.1.1 2009/03/22 14:57:21 christos Exp $	*/
 
 /* Id: debug.h,v 1.1.1.1 2003/06/04 00:25:36 marka Exp */
 /*

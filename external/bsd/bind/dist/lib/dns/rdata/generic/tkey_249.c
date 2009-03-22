@@ -1,4 +1,4 @@
-/*	$NetBSD: tkey_249.c,v 1.1 2009/03/22 15:01:56 christos Exp $	*/
+/*	$NetBSD: tkey_249.c,v 1.1.1.1 2009/03/22 15:01:56 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")

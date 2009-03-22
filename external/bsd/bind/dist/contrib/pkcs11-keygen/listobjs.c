@@ -1,4 +1,4 @@
-/*	$NetBSD: listobjs.c,v 1.1 2009/03/22 14:58:04 christos Exp $	*/
+/*	$NetBSD: listobjs.c,v 1.1.1.1 2009/03/22 14:58:04 christos Exp $	*/
 
 /* listobjs [-P] [-s slot] [-i $id | -l $label] [-p $pin] */
 

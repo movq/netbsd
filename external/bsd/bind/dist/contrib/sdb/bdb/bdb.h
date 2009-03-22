@@ -1,4 +1,4 @@
-/*	$NetBSD: bdb.h,v 1.1 2009/03/22 14:58:12 christos Exp $	*/
+/*	$NetBSD: bdb.h,v 1.1.1.1 2009/03/22 14:58:12 christos Exp $	*/
 
 /*
  * Copyright (C) 2002  Nuno M. Rodrigues.

@@ -1,4 +1,4 @@
-/*	$NetBSD: rdatalist.c,v 1.1 2009/03/22 15:01:21 christos Exp $	*/
+/*	$NetBSD: rdatalist.c,v 1.1.1.1 2009/03/22 15:01:21 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")

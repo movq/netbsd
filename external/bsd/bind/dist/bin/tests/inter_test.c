@@ -1,4 +1,4 @@
-/*	$NetBSD: inter_test.c,v 1.1 2009/03/22 14:56:22 christos Exp $	*/
+/*	$NetBSD: inter_test.c,v 1.1.1.1 2009/03/22 14:56:22 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
