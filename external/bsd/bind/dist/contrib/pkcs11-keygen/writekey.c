@@ -1,4 +1,4 @@
-/*	$NetBSD: writekey.c,v 1.1 2009/03/22 14:58:04 christos Exp $	*/
+/*	$NetBSD: writekey.c,v 1.1.1.1 2009/03/22 14:58:04 christos Exp $	*/
 
 /* writekey [-s $slot] [-p $pin] -l $label -i $id -f $filename */
 

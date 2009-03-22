@@ -1,4 +1,4 @@
-/*	$NetBSD: delimitermap.h,v 1.1 2009/03/22 14:57:21 christos Exp $	*/
+/*	$NetBSD: delimitermap.h,v 1.1.1.1 2009/03/22 14:57:21 christos Exp $	*/
 
 /* Id: delimitermap.h,v 1.1.1.1 2003/06/04 00:25:37 marka Exp */
 /*

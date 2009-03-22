@@ -1,4 +1,4 @@
-/*	$NetBSD: api.h,v 1.1 2009/03/22 14:57:24 christos Exp $	*/
+/*	$NetBSD: api.h,v 1.1.1.1 2009/03/22 14:57:24 christos Exp $	*/
 
 /* Id: api.h,v 1.1.1.1 2003/06/04 00:25:45 marka Exp */
 /*

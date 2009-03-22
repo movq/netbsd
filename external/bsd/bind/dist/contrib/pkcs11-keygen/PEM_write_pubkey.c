@@ -1,4 +1,4 @@
-/*	$NetBSD: PEM_write_pubkey.c,v 1.1 2009/03/22 14:58:03 christos Exp $	*/
+/*	$NetBSD: PEM_write_pubkey.c,v 1.1.1.1 2009/03/22 14:58:03 christos Exp $	*/
 
 /* OpenSSL tool
  *

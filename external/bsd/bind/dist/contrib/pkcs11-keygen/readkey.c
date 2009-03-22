@@ -1,4 +1,4 @@
-/*	$NetBSD: readkey.c,v 1.1 2009/03/22 14:58:04 christos Exp $	*/
+/*	$NetBSD: readkey.c,v 1.1.1.1 2009/03/22 14:58:04 christos Exp $	*/
 
 /* readkey [-s $slot] -l $label [-p $pin] -f $filename */
 

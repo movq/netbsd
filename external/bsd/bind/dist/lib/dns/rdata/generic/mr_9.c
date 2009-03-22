@@ -1,4 +1,4 @@
-/*	$NetBSD: mr_9.c,v 1.1 2009/03/22 15:01:53 christos Exp $	*/
+/*	$NetBSD: mr_9.c,v 1.1.1.1 2009/03/22 15:01:53 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: update.h,v 1.1 2009/03/22 14:56:14 christos Exp $	*/
+/*	$NetBSD: update.h,v 1.1.1.1 2009/03/22 14:56:14 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")

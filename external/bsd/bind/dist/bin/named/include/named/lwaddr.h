@@ -1,4 +1,4 @@
-/*	$NetBSD: lwaddr.h,v 1.1 2009/03/22 14:56:13 christos Exp $	*/
+/*	$NetBSD: lwaddr.h,v 1.1.1.1 2009/03/22 14:56:13 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")

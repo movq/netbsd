@@ -1,4 +1,4 @@
-/*	$NetBSD: dllstub.c,v 1.1 2009/03/22 14:57:54 christos Exp $	*/
+/*	$NetBSD: dllstub.c,v 1.1.1.1 2009/03/22 14:57:54 christos Exp $	*/
 
 /* Id: dllstub.c,v 1.1.1.1 2003/06/04 00:27:51 marka Exp */
 

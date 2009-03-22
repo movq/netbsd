@@ -1,4 +1,4 @@
-/*	$NetBSD: zone2bdb.c,v 1.1 2009/03/22 14:58:11 christos Exp $	*/
+/*	$NetBSD: zone2bdb.c,v 1.1.1.1 2009/03/22 14:58:11 christos Exp $	*/
 
 /*
  * Copyright (C) 2002  Nuno M. Rodrigues.

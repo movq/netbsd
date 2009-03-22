@@ -1,4 +1,4 @@
-/*	$NetBSD: txt_16.c,v 1.1 2009/03/22 15:01:56 christos Exp $	*/
+/*	$NetBSD: txt_16.c,v 1.1.1.1 2009/03/22 15:01:56 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")

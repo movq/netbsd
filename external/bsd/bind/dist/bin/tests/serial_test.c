@@ -1,4 +1,4 @@
-/*	$NetBSD: serial_test.c,v 1.1 2009/03/22 14:56:25 christos Exp $	*/
+/*	$NetBSD: serial_test.c,v 1.1.1.1 2009/03/22 14:56:25 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: genkey.c,v 1.1 2009/03/22 14:58:03 christos Exp $	*/
+/*	$NetBSD: genkey.c,v 1.1.1.1 2009/03/22 14:58:03 christos Exp $	*/
 
 /* genkey - pkcs11 rsa key generator
  *

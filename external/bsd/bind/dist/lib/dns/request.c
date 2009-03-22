@@ -1,4 +1,4 @@
-/*	$NetBSD: request.c,v 1.1 2009/03/22 15:01:24 christos Exp $	*/
+/*	$NetBSD: request.c,v 1.1.1.1 2009/03/22 15:01:24 christos Exp $	*/
 
 /*
  * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")
