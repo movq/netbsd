@@ -1,4 +1,4 @@
-/*	$NetBSD: paths.h,v 1.1 2009/04/12 15:33:51 christos Exp $	*/
+/*	$NetBSD: paths.h,v 1.1.1.1 2009/04/12 15:33:51 christos Exp $	*/
 
 /*
  * Copyright (C) 2007  Internet Systems Consortium, Inc. ("ISC")

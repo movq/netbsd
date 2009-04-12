@@ -1,4 +1,4 @@
-/*	$NetBSD: hmac_link.c,v 1.1 2009/04/12 15:33:32 christos Exp $	*/
+/*	$NetBSD: hmac_link.c,v 1.1.1.1 2009/04/12 15:33:32 christos Exp $	*/
 
 #ifdef HMAC_MD5
 #ifndef LINT

@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_rdata.c,v 1.1 2009/04/12 15:33:49 christos Exp $	*/
+/*	$NetBSD: ns_rdata.c,v 1.1.1.1 2009/04/12 15:33:49 christos Exp $	*/
 
 /*
  * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")

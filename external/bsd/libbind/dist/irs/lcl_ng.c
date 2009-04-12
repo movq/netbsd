@@ -1,4 +1,4 @@
-/*	$NetBSD: lcl_ng.c,v 1.1 2009/04/12 15:33:38 christos Exp $	*/
+/*	$NetBSD: lcl_ng.c,v 1.1.1.1 2009/04/12 15:33:38 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")

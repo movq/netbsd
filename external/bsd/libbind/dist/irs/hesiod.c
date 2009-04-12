@@ -1,4 +1,4 @@
-/*	$NetBSD: hesiod.c,v 1.1 2009/04/12 15:33:37 christos Exp $	*/
+/*	$NetBSD: hesiod.c,v 1.1.1.1 2009/04/12 15:33:37 christos Exp $	*/
 
 #if defined(LIBC_SCCS) && !defined(lint)
 static const char rcsid[] = "Id: hesiod.c,v 1.7 2005/07/28 06:51:48 marka Exp";
