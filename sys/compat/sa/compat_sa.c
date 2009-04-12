@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sa.c,v 1.6 2008/10/28 22:11:36 wrstuden Exp $	*/
+/*	$NetBSD: compat_sa.c,v 1.6.2.4 2009/03/12 23:11:32 snj Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2004, 2005, 2006 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
 #include "opt_ktrace.h"
 #include "opt_multiprocessor.h"
 #include "opt_sa.h"
-__KERNEL_RCSID(0, "$NetBSD: compat_sa.c,v 1.6 2008/10/28 22:11:36 wrstuden Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_sa.c,v 1.6.2.4 2009/03/12 23:11:32 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,6 +69,15 @@ __KERNEL_RCSID(0, "$NetBSD: compat_sa.c,v 1.6 2008/10/28 22:11:36 wrstuden Exp $
  * entry points we still need.
  */
 #ifdef KERN_SA
+
+/*
+ * SA_CONCURRENCY is buggy can lead to kernel crashes.
+ */
+#ifdef SA_CONCURRENCY
+#ifndef MULTIPROCESSOR
+	#error "SA_CONCURRENCY is only valid on MULTIPROCESSOR kernels"
+#endif
+#endif
 
 /*
  * memory pool for sadata structures
@@ -101,7 +110,7 @@ static inline void sa_setstackfree(struct sastack *, struct sadata *);
 static struct sastack *sa_getstack(struct sadata *);
 static inline struct sastack *sa_getstack0(struct sadata *);
 static inline int sast_compare(struct sastack *, struct sastack *);
-#ifdef MULTIPROCESSOR
+#ifdef SA_CONCURRENCY
 static int sa_increaseconcurrency(struct lwp *, int);
 #endif
 static void sa_switchcall(void *);
@@ -821,7 +830,7 @@ sys_sa_enable(struct lwp *l, const void *v, register_t *retval)
  *	Must be called with sa_mutex locked. Will unlock and relock as
  * needed, and will lock p_lock. Will exit with sa_mutex locked.
  */
-#ifdef MULTIPROCESSOR
+#ifdef SA_CONCURRENCY
 
 static int
 sa_increaseconcurrency(struct lwp *l, int concurrency)
@@ -916,7 +925,7 @@ sys_sa_setconcurrency(struct lwp *l, const struct sys_sa_setconcurrency_args *ua
 {
 	struct proc *p = l->l_proc;
 	struct sadata *sa = p->p_sa;
-#ifdef MULTIPROCESSOR
+#ifdef SA_CONCURRENCY
 	struct sadata_vp *vp = l->l_savp;
 	struct lwp *l2;
 	int ncpus;
@@ -944,7 +953,7 @@ sys_sa_setconcurrency(struct lwp *l, const struct sys_sa_setconcurrency_args *ua
 	 * XXX Should we ever support hot-plug CPUs, this will need
 	 * adjustment.
 	 */
-#ifdef MULTIPROCESSOR
+#ifdef SA_CONCURRENCY
 	mutex_enter(&sa->sa_mutex);
 
 	if (SCARG(uap, concurrency) > sa->sa_maxconcurrency) {
@@ -959,7 +968,7 @@ sys_sa_setconcurrency(struct lwp *l, const struct sys_sa_setconcurrency_args *ua
 	DPRINTFN(11,("sys_sa_concurrency(%d.%d) want %d, have %d, max %d\n",
 		     p->p_pid, l->l_lid, SCARG(uap, concurrency),
 		     sa->sa_concurrency, sa->sa_maxconcurrency));
-#ifdef MULTIPROCESSOR
+#ifdef SA_CONCURRENCY
 	if (SCARG(uap, concurrency) <= sa->sa_concurrency) {
 		mutex_exit(&sa->sa_mutex);
 		return 0;
@@ -1863,7 +1872,7 @@ sa_putcachelwp(struct proc *p, struct lwp *l)
 	p->p_nlwps--;
 	l->l_prflag |= LPR_DETACHED;
 #endif
-	l->l_flag |= (LW_SA | LW_SINTR);
+	l->l_flag |= LW_SA;
 	membar_producer();
 	DPRINTFN(5,("sa_putcachelwp(%d.%d) Adding LWP %d to cache\n",
 	    p->p_pid, curlwp->l_lid, l->l_lid));
@@ -2528,7 +2537,6 @@ sa_unblock_userret(struct lwp *l)
 	sleepq_enter(&vp->savp_woken, l, &vp->savp_mutex);
 	sleepq_enqueue(&vp->savp_woken, &vp->savp_woken, sa_lwpwoken_wmesg,
 	    &sa_sobj);
-	l->l_flag |= LW_SINTR;
 	uvm_lwp_hold(l);
 	vp->savp_woken_count++;
 	//l->l_stat = LSSUSPENDED;
@@ -2597,5 +2605,4 @@ debug_print_sa(struct proc *p)
 
 #endif
 
-#else /* KERN_SA */
 #endif /* KERN_SA */

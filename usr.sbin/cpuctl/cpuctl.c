@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuctl.c,v 1.10 2008/10/15 08:22:06 ad Exp $	*/
+/*	$NetBSD: cpuctl.c,v 1.10.2.3 2009/02/06 01:10:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cpuctl.c,v 1.10 2008/10/15 08:22:06 ad Exp $");
+__RCSID("$NetBSD: cpuctl.c,v 1.10.2.3 2009/02/06 01:10:26 snj Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -147,13 +147,13 @@ void
 cpu_identify(char **argv)
 {
 	char name[32];
-	int id, np;
+	unsigned int id, np;
 	cpuset_t *cpuset;
 
-	id = getcpuid(argv);
-	snprintf(name, sizeof(name), "cpu%d", id);
-
 	np = sysconf(_SC_NPROCESSORS_CONF);
+	id = getcpuid(argv);
+	snprintf(name, sizeof(name), "cpu%u", id);
+
 	if (np != 0) {
 		cpuset = cpuset_create();
 		if (cpuset == NULL)
@@ -179,10 +179,16 @@ getcpuid(char **argv)
 {
 	char *argp;
 	u_int id;
+	long np;
 
-	id = (int)strtoul(argv[0], &argp, 0);
+	id = (u_int)strtoul(argv[0], &argp, 0);
 	if (*argp != '\0')
 		usage();
+
+	np = sysconf(_SC_NPROCESSORS_CONF);
+	if (id >= np)
+		errx(EXIT_FAILURE, "Invalid CPU number");
+
 	return id;
 }
 
@@ -201,10 +207,10 @@ cpu_list(char **argv)
 
 	for (i = 0; i < cnt; i++) {
 		cs.cs_id = i;
-		if (ioctl(fd, IOC_CPU_MAPID, &cs.cs_id) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_MAPID");
 		if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
 			err(EXIT_FAILURE, "IOC_CPU_GETINFO");
+		if (ioctl(fd, IOC_CPU_MAPID, &cs.cs_id) < 0)
+			err(EXIT_FAILURE, "IOC_CPU_MAPID");
 		if (cs.cs_online)
 			state = "online";
 		else

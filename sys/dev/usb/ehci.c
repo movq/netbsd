@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci.c,v 1.154 2008/10/14 18:32:53 jmcneill Exp $ */
+/*	$NetBSD: ehci.c,v 1.154.4.2 2010/06/12 01:05:44 riz Exp $ */
 
 /*
  * Copyright (c) 2004-2008 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.154 2008/10/14 18:32:53 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.154.4.2 2010/06/12 01:05:44 riz Exp $");
 
 #include "ohci.h"
 #include "uhci.h"
@@ -908,6 +908,9 @@ ehci_idone(struct ehci_xfer *ex)
 
 				status = le32toh(itd->itd.itd_ctl[i]);
 				len = EHCI_ITD_GET_LEN(status);
+				if (EHCI_ITD_GET_STATUS(status) != 0)
+					len = 0; /*No valid data on error*/
+
 				xfer->frlengths[nframes++] = len;
 				actlen += len;
 			}
@@ -918,11 +921,6 @@ ehci_idone(struct ehci_xfer *ex)
 
 		xfer->actlen = actlen;
 		xfer->status = USBD_NORMAL_COMPLETION;
-		if (xfer->rqflags & URQ_DEV_DMABUF) {
-       		usb_syncmem(&xfer->dmabuf, 0, ex->isoc_len,
-				BUS_DMASYNC_POSTWRITE | BUS_DMASYNC_POSTREAD);
-		}
-
 		goto end;
 	}
 
@@ -1617,11 +1615,14 @@ ehci_open(usbd_pipe_handle pipe)
 		    );
 		sqh->qh.qh_endphub = htole32(
 		    EHCI_QH_SET_MULT(1) |
-		    EHCI_QH_SET_HUBA(hshubaddr) |
-		    EHCI_QH_SET_PORT(hshubport) |
-		    EHCI_QH_SET_CMASK(0x08) | /* XXX */
 		    EHCI_QH_SET_SMASK(xfertype == UE_INTERRUPT ? 0x02 : 0)
 		    );
+		if (speed != EHCI_QH_SPEED_HIGH)
+			sqh->qh.qh_endphub |= htole32(
+			    EHCI_QH_SET_PORT(hshubport) |
+			    EHCI_QH_SET_HUBA(hshubaddr) |
+			    EHCI_QH_SET_CMASK(0x08) /* XXX */
+			);
 		sqh->qh.qh_curqtd = EHCI_NULL;
 		/* Fill the overlay qTD */
 		sqh->qh.qh_qtd.qtd_next = EHCI_NULL;
@@ -3953,11 +3954,12 @@ ehci_device_isoc_start(usbd_xfer_handle xfer)
 			if (page_offs >= dma_buf->block->size)
 				break;
 
-			int page = DMAADDR(dma_buf, page_offs);
+			long long page = DMAADDR(dma_buf, page_offs);
 			page = EHCI_PAGE(page);
 			itd->itd.itd_bufr[j] =
-			    htole32(EHCI_ITD_SET_BPTR(page) | 
-				    EHCI_LINK_ITD);
+			    htole32(EHCI_ITD_SET_BPTR(page));
+			itd->itd.itd_bufr_hi[j] =
+			    htole32(page >> 32);
 		}
 
 		/*
@@ -3989,6 +3991,9 @@ ehci_device_isoc_start(usbd_xfer_handle xfer)
 	stop = itd;
 	stop->xfer_next = NULL;
 	exfer->isoc_len = total_length;
+
+	usb_syncmem(&exfer->xfer.dmabuf, 0, total_length,
+		BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
 
 	/*
 	 * Part 2: Transfer descriptors have now been set up, now they must

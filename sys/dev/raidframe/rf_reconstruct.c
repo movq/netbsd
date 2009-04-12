@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_reconstruct.c,v 1.105 2008/09/23 21:36:35 oster Exp $	*/
+/*	$NetBSD: rf_reconstruct.c,v 1.105.4.3 2009/12/10 22:59:17 snj Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  ************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_reconstruct.c,v 1.105 2008/09/23 21:36:35 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_reconstruct.c,v 1.105.4.3 2009/12/10 22:59:17 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
@@ -234,7 +234,7 @@ rf_ReconstructFailedDisk(RF_Raid_t *raidPtr, RF_RowCol_t col)
 int
 rf_ReconstructFailedDiskBasic(RF_Raid_t *raidPtr, RF_RowCol_t col)
 {
-	RF_ComponentLabel_t c_label;
+	RF_ComponentLabel_t *c_label;
 	RF_RaidDisk_t *spareDiskPtr = NULL;
 	RF_RaidReconDesc_t *reconDesc;
 	RF_RowCol_t scol;
@@ -289,17 +289,14 @@ rf_ReconstructFailedDiskBasic(RF_Raid_t *raidPtr, RF_RowCol_t col)
 	if (!rc) {
 		/* fix up the component label */
 		/* Don't actually need the read here.. */
-		raidread_component_label(
-                        raidPtr->raid_cinfo[scol].ci_dev,
-			raidPtr->raid_cinfo[scol].ci_vp,
-			&c_label);
+		c_label = raidget_component_label(raidPtr, scol);
 
-		raid_init_component_label( raidPtr, &c_label);
-		c_label.row = 0;
-		c_label.column = col;
-		c_label.clean = RF_RAID_DIRTY;
-		c_label.status = rf_ds_optimal;
-		c_label.partitionSize = raidPtr->Disks[scol].partitionSize;
+		raid_init_component_label(raidPtr, c_label);
+		c_label->row = 0;
+		c_label->column = col;
+		c_label->clean = RF_RAID_DIRTY;
+		c_label->status = rf_ds_optimal;
+		c_label->partitionSize = raidPtr->Disks[scol].partitionSize;
 
 		/* We've just done a rebuild based on all the other
 		   disks, so at this point the parity is known to be
@@ -313,11 +310,7 @@ rf_ReconstructFailedDiskBasic(RF_Raid_t *raidPtr, RF_RowCol_t col)
 
 		/* XXXX MORE NEEDED HERE */
 
-		raidwrite_component_label(
-                        raidPtr->raid_cinfo[scol].ci_dev,
-			raidPtr->raid_cinfo[scol].ci_vp,
-			&c_label);
-
+		raidflush_component_label(raidPtr, scol);
 	} else {
 		/* Reconstruct failed. */
 
@@ -350,7 +343,7 @@ rf_ReconstructInPlace(RF_Raid_t *raidPtr, RF_RowCol_t col)
 	RF_RaidDisk_t *spareDiskPtr = NULL;
 	RF_RaidReconDesc_t *reconDesc;
 	const RF_LayoutSW_t *lp;
-	RF_ComponentLabel_t c_label;
+	RF_ComponentLabel_t *c_label;
 	int     numDisksDone = 0, rc;
 	struct partinfo dpart;
 	struct vnode *vp;
@@ -515,15 +508,13 @@ rf_ReconstructInPlace(RF_Raid_t *raidPtr, RF_RowCol_t col)
 
 		/* fix up the component label */
 		/* Don't actually need the read here.. */
-		raidread_component_label(raidPtr->raid_cinfo[col].ci_dev,
-					 raidPtr->raid_cinfo[col].ci_vp,
-					 &c_label);
+		c_label = raidget_component_label(raidPtr, col);
 
 		RF_LOCK_MUTEX(raidPtr->mutex);
-		raid_init_component_label(raidPtr, &c_label);
+		raid_init_component_label(raidPtr, c_label);
 
-		c_label.row = 0;
-		c_label.column = col;
+		c_label->row = 0;
+		c_label->column = col;
 
 		/* We've just done a rebuild based on all the other
 		   disks, so at this point the parity is known to be
@@ -534,10 +525,7 @@ rf_ReconstructInPlace(RF_Raid_t *raidPtr, RF_RowCol_t col)
 		raidPtr->parity_good = RF_RAID_CLEAN;
 		RF_UNLOCK_MUTEX(raidPtr->mutex);
 
-		raidwrite_component_label(raidPtr->raid_cinfo[col].ci_dev,
-					  raidPtr->raid_cinfo[col].ci_vp,
-					  &c_label);
-
+		raidflush_component_label(raidPtr, col);
 	} else {
 		/* Reconstruct-in-place failed.  Disk goes back to
 		   "failed" status, regardless of what it was before.  */
@@ -626,6 +614,12 @@ rf_ContinueReconstructFailedDisk(RF_RaidReconDesc_t *reconDesc)
 	done = 0;
 	while (!done) {
 		
+		if (raidPtr->waitShutdown) {
+			/* someone is unconfiguring this array... bail on the reconstruct.. */
+			recon_error = 1;
+			break;
+		}
+
 		num_writes = 0;
 		
 		/* issue a read for each surviving disk */
@@ -670,8 +664,10 @@ rf_ContinueReconstructFailedDisk(RF_RaidReconDesc_t *reconDesc)
 				   done dealing with the reads that are
 				   finished, we don't want to wait for any
 				   writes */
-				if (status == RF_RECON_WRITE_ERROR)
+				if (status == RF_RECON_WRITE_ERROR) {
 					write_error = 1;
+					num_writes++;
+				}
 				
 			} else if (status == RF_RECON_READ_STOPPED) {
 				/* count this component as being "done" */
@@ -712,12 +708,13 @@ rf_ContinueReconstructFailedDisk(RF_RaidReconDesc_t *reconDesc)
 			status = ProcessReconEvent(raidPtr, event);
 			
 			if (status == RF_RECON_WRITE_ERROR) {
+				num_writes++;
 				recon_error = 1;
 				raidPtr->reconControl->error = 1;
 				/* an error was encountered at the very end... bail */
 			} else if (status == RF_RECON_WRITE_DONE) {
 				num_writes++;
-			}
+			} /* else it's something else, and we don't care */
 		}
 		if (recon_error || 
 		    (raidPtr->reconControl->lastPSID == lastPSID)) {
@@ -1047,6 +1044,12 @@ ProcessReconEvent(RF_Raid_t *raidPtr, RF_ReconEvent_t *event)
 		/* A write I/O failed to complete */
 	case RF_REVENT_WRITE_FAILED:
 		retcode = RF_RECON_WRITE_ERROR;
+
+		/* This is an error, but it was a pending write.
+		   Account for it. */
+		RF_LOCK_MUTEX(raidPtr->reconControl->rb_mutex);
+		raidPtr->reconControl->pending_writes--;
+		RF_UNLOCK_MUTEX(raidPtr->reconControl->rb_mutex);
 
 		rbuf = (RF_ReconBuffer_t *) event->arg;
 

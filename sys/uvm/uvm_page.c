@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_page.c,v 1.140 2008/07/04 10:56:59 ad Exp $	*/
+/*	$NetBSD: uvm_page.c,v 1.140.6.3 2009/03/02 20:51:35 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_page.c,v 1.140 2008/07/04 10:56:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_page.c,v 1.140.6.3 2009/03/02 20:51:35 snj Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_readahead.h"
@@ -1071,7 +1071,7 @@ uvm_pagealloc_strat(struct uvm_object *obj, voff_t off, struct vm_anon *anon,
 	int lcv, try1, try2, zeroit = 0, color;
 	struct uvm_cpu *ucpu;
 	struct vm_page *pg;
-	bool use_reserve;
+	lwp_t *l;
 
 	KASSERT(obj == NULL || anon == NULL);
 	KASSERT(anon == NULL || off == 0);
@@ -1102,16 +1102,20 @@ uvm_pagealloc_strat(struct uvm_object *obj, voff_t off, struct vm_anon *anon,
 	 * fail if any of these conditions is true:
 	 * [1]  there really are no free pages, or
 	 * [2]  only kernel "reserved" pages remain and
-	 *        the page isn't being allocated to a kernel object.
+	 *        reserved pages have not been requested.
 	 * [3]  only pagedaemon "reserved" pages remain and
 	 *        the requestor isn't the pagedaemon.
+	 * we make kernel reserve pages available if called by a
+	 * kernel thread or a realtime thread.
 	 */
-
-	use_reserve = (flags & UVM_PGA_USERESERVE) ||
-		(obj && UVM_OBJ_IS_KERN_OBJECT(obj));
-	if ((uvmexp.free <= uvmexp.reserve_kernel && !use_reserve) ||
+	l = curlwp;
+	if (__predict_true(l != NULL) && lwp_eprio(l) >= PRI_KTHREAD) {
+		flags |= UVM_PGA_USERESERVE;
+	}
+	if ((uvmexp.free <= uvmexp.reserve_kernel &&
+	    (flags & UVM_PGA_USERESERVE) == 0) ||
 	    (uvmexp.free <= uvmexp.reserve_pagedaemon &&
-	     !(use_reserve && curlwp == uvm.pagedaemon_lwp)))
+	     curlwp != uvm.pagedaemon_lwp))
 		goto fail;
 
 #if PGFL_NQUEUES != 2
@@ -1192,7 +1196,7 @@ uvm_pagealloc_strat(struct uvm_object *obj, voff_t off, struct vm_anon *anon,
 			ucpu->page_idle_zero = vm_page_zero_enable;
 		}
 	}
-	mutex_spin_exit(&uvm_fpageqlock);
+	KASSERT(pg->pqflags == PQ_FREE);
 
 	pg->offset = off;
 	pg->uobject = obj;
@@ -1208,6 +1212,8 @@ uvm_pagealloc_strat(struct uvm_object *obj, voff_t off, struct vm_anon *anon,
 		}
 		pg->pqflags = 0;
 	}
+	mutex_spin_exit(&uvm_fpageqlock);
+
 #if defined(UVM_PAGE_TRKOWN)
 	pg->owner_tag = NULL;
 #endif
@@ -1347,6 +1353,7 @@ uvm_pagefree(struct vm_page *pg)
 #endif /* DEBUG */
 
 	KASSERT((pg->flags & PG_PAGEOUT) == 0);
+	KASSERT(!(pg->pqflags & PQ_FREE));
 	KASSERT(mutex_owned(&uvm_pageqlock) || !uvmpdpol_pageisqueued_p(pg));
 	KASSERT(pg->uobject == NULL || mutex_owned(&pg->uobject->vmobjlock));
 	KASSERT(pg->uobject != NULL || pg->uanon == NULL ||
@@ -1434,13 +1441,13 @@ uvm_pagefree(struct vm_page *pg)
 	color = VM_PGCOLOR_BUCKET(pg);
 	queue = (iszero ? PGFL_ZEROS : PGFL_UNKNOWN);
 
-	pg->pqflags = PQ_FREE;
 #ifdef DEBUG
 	pg->uobject = (void *)0xdeadbeef;
 	pg->uanon = (void *)0xdeadbeef;
 #endif
 
 	mutex_spin_enter(&uvm_fpageqlock);
+	pg->pqflags = PQ_FREE;
 
 #ifdef DEBUG
 	if (iszero)
@@ -1617,6 +1624,8 @@ uvm_pageidlezero(void)
 				LIST_REMOVE(pg, listq.list); /* per-cpu list */
 				ucpu->pages[PGFL_UNKNOWN]--;
 				uvmexp.free--;
+				KASSERT(pg->pqflags == PQ_FREE);
+				pg->pqflags = 0;
 				mutex_spin_exit(&uvm_fpageqlock);
 #ifdef PMAP_PAGEIDLEZERO
 				if (!PMAP_PAGEIDLEZERO(VM_PAGE_TO_PHYS(pg))) {
@@ -1629,6 +1638,7 @@ uvm_pageidlezero(void)
 					 */
 
 					mutex_spin_enter(&uvm_fpageqlock);
+					pg->pqflags = PQ_FREE;
 					LIST_INSERT_HEAD(&gpgfl->pgfl_buckets[
 					    nextbucket].pgfl_queues[
 					    PGFL_UNKNOWN], pg, pageq.list);
@@ -1646,6 +1656,7 @@ uvm_pageidlezero(void)
 				pg->flags |= PG_ZERO;
 
 				mutex_spin_enter(&uvm_fpageqlock);
+				pg->pqflags = PQ_FREE;
 				LIST_INSERT_HEAD(&gpgfl->pgfl_buckets[
 				    nextbucket].pgfl_queues[PGFL_ZEROS],
 				    pg, pageq.list);

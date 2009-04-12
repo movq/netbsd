@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_extern.h,v 1.148 2008/08/08 14:41:50 skrll Exp $	*/
+/*	$NetBSD: uvm_extern.h,v 1.148.4.2 2009/04/01 00:25:23 snj Exp $	*/
 
 /*
  *
@@ -219,6 +219,11 @@ typedef voff_t pgoff_t;		/* XXX: number of pages within a uvm object */
  */
 #define	UVM_LK_ENTER	0x00000001	/* map locked on entry */
 #define	UVM_LK_EXIT	0x00000002	/* leave map locked on exit */
+
+/*
+ * Default number of pages to allocate on the stack
+ */
+#define	UBC_MAX_PAGES	8
 
 /*
  * structures
@@ -496,6 +501,7 @@ struct vmspace {
 	segsz_t vm_tsize;	/* text size (pages) XXX */
 	segsz_t vm_dsize;	/* data size (pages) XXX */
 	segsz_t vm_ssize;	/* stack size (pages) */
+	segsz_t vm_issize;	/* initial unmapped stack size (pages) */
 	void *	vm_taddr;	/* user virtual address of text XXX */
 	void *	vm_daddr;	/* user virtual address of data XXX */
 	void *vm_maxsaddr;	/* user VA at max stack growth */

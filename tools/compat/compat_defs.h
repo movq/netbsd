@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_defs.h,v 1.67 2008/10/20 10:28:38 apb Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.67.2.2 2010/01/07 07:42:14 snj Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
@@ -38,7 +38,6 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <grp.h>
 #include <limits.h>
 #include <paths.h>
 #include <stdarg.h>
@@ -75,6 +74,9 @@
 
 /* We don't include <pwd.h> here, so that "compat_pwd.h" works. */
 struct passwd;
+
+/* We don't include <grp.h> here, so that "compat_pwd.h" works. */
+struct group;
 
 /* Assume an ANSI compiler for the host. */
 
@@ -258,7 +260,7 @@ char *fgetln(FILE *, size_t *);
 int flock(int, int);
 #endif
 
-#if !HAVE_FPARSELN || defined(__NetBSD__)
+#if !HAVE_FPARSELN || BROKEN_FPARSELN || defined(__NetBSD__)
 # define FPARSELN_UNESCESC	0x01
 # define FPARSELN_UNESCCONT	0x02
 # define FPARSELN_UNESCCOMM	0x04

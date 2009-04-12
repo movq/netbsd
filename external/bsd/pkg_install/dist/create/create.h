@@ -1,4 +1,4 @@
-/* $NetBSD: create.h,v 1.1.1.1 2008/09/30 19:00:26 joerg Exp $ */
+/* $NetBSD: create.h,v 1.1.1.1.6.3 2010/02/03 00:38:21 snj Exp $ */
 
 /* from FreeBSD Id: create.h,v 1.13 1997/10/08 07:46:19 charnier Exp */
 
@@ -51,15 +51,12 @@ extern char *BuildInfo;
 extern char *SizePkg;
 extern char *SizeAll;
 extern char *Preserve;
-extern char *SrcDir;
 extern char *realprefix;
 extern char *DefaultOwner;
 extern char *DefaultGroup;
-extern char PlayPen[];
-extern size_t PlayPenSize;
+extern const char *CompressionType;
 extern int PlistOnly;
 extern int RelativeLinks;
-extern int ReorderDirs;
 extern int update_pkgdb;
 extern int create_views;
 

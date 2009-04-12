@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.9 2008/10/25 19:13:40 mrg Exp $	*/
+/*	$NetBSD: cpu.h,v 1.9.4.2 2010/04/22 20:02:48 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -304,9 +304,6 @@ struct timeval;
 
 extern int biosbasemem;
 extern int biosextmem;
-extern unsigned int cpu_feature;
-extern unsigned int cpu_feature2;
-extern unsigned int cpu_feature_padlock;
 extern int cpu;
 extern int cpuid_level;
 extern int cpu_class;
@@ -336,6 +333,9 @@ void 	tmx86_init_longrun(void);
 /* identcpu.c */
 void 	cpu_probe(struct cpu_info *);
 void	cpu_identify(struct cpu_info *);
+
+/* cpu_topology.c */
+void	x86_cpu_toplogy(struct cpu_info *);
 
 /* vm_machdep.c */
 void	cpu_proc_fork(struct proc *, struct proc *);

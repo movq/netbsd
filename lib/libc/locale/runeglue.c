@@ -1,4 +1,4 @@
-/*	$NetBSD: runeglue.c,v 1.12 2007/09/29 07:55:45 tnozaki Exp $	*/
+/*	$NetBSD: runeglue.c,v 1.12.12.2 2009/01/22 21:40:18 snj Exp $	*/
 
 /*-
  * Copyright (c)1999 Citrus Project,
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: runeglue.c,v 1.12 2007/09/29 07:55:45 tnozaki Exp $");
+__RCSID("$NetBSD: runeglue.c,v 1.12.12.2 2009/01/22 21:40:18 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define _CTYPE_PRIVATE
@@ -47,8 +47,8 @@ __RCSID("$NetBSD: runeglue.c,v 1.12 2007/09/29 07:55:45 tnozaki Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
-#include "citrus/citrus_module.h"
-#include "citrus/citrus_ctype.h"
+#include "citrus_module.h"
+#include "citrus_ctype.h"
 #include "rune.h"
 #include "rune_local.h"
 
@@ -67,7 +67,7 @@ __runetable_to_netbsd_ctype(rl)
 	unsigned char *new_ctype;
 	short *new_toupper, *new_tolower;
 
-	_DIAGASSERT(locale != NULL);
+	_DIAGASSERT(rl != NULL);
 
 	new_ctype = malloc(sizeof(*new_ctype) * (1 + _CTYPE_NUM_CHARS));
 	if (!new_ctype)

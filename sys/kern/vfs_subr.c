@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_subr.c,v 1.357 2008/09/24 09:33:40 ad Exp $	*/
+/*	$NetBSD: vfs_subr.c,v 1.357.4.9 2010/01/11 00:02:09 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2004, 2005, 2007, 2008 The NetBSD Foundation, Inc.
@@ -76,12 +76,22 @@
  * change from a non-zero value to zero, again the interlock must be
  * held.
  *
- * Changing the usecount from a non-zero value to a non-zero value can
- * safely be done using atomic operations, without the interlock held.
+ * There's a flag bit, VC_XLOCK, embedded in v_usecount.
+ * To raise v_usecount, if the VC_XLOCK bit is set in it, the interlock
+ * must be held.
+ * To modify the VC_XLOCK bit, the interlock must be held.
+ * We always keep the usecount (v_usecount & VC_MASK) non-zero while the
+ * VC_XLOCK bit is set.
+ *
+ * Unless the VC_XLOCK bit is set, changing the usecount from a non-zero
+ * value to a non-zero value can safely be done using atomic operations,
+ * without the interlock held.
+ * Even if the VC_XLOCK bit is set, decreasing the usecount to a non-zero
+ * value can be done using atomic operations, without the interlock held.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.357 2008/09/24 09:33:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.357.4.9 2010/01/11 00:02:09 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -360,14 +370,27 @@ try_nextlist:
 	vp->v_freelisthd = NULL;
 	mutex_exit(&vnode_free_list_lock);
 
+	if (vp->v_usecount != 0) {
+		/*
+		 * was referenced again before we got the interlock
+		 * Don't return to freelist - the holder of the last
+		 * reference will destroy it.
+		 */
+		mutex_exit(&vp->v_interlock);
+		mutex_enter(&vnode_free_list_lock);
+		goto retry;
+	}
+
 	/*
 	 * The vnode is still associated with a file system, so we must
 	 * clean it out before reusing it.  We need to add a reference
 	 * before doing this.  If the vnode gains another reference while
 	 * being cleaned out then we lose - retry.
 	 */
-	atomic_inc_uint(&vp->v_usecount);
+	atomic_add_int(&vp->v_usecount, 1 + VC_XLOCK);
 	vclean(vp, DOCLOSE);
+	KASSERT(vp->v_usecount >= 1 + VC_XLOCK);
+	atomic_add_int(&vp->v_usecount, -VC_XLOCK);
 	if (vp->v_usecount == 1) {
 		/* We're about to dirty it. */
 		vp->v_iflag &= ~VI_CLEAN;
@@ -1221,7 +1244,7 @@ vtryget(vnode_t *vp)
 		return false;
 	}
 	for (use = vp->v_usecount;; use = next) {
-		if (use == 0) { 
+		if (use == 0 || __predict_false((use & VC_XLOCK) != 0)) {
 			/* Need interlock held if first reference. */
 			return false;
 		}
@@ -1276,6 +1299,22 @@ vget(vnode_t *vp, int flags)
 		vrelel(vp, 0);
 		return ENOENT;
 	}
+
+	if ((vp->v_iflag & VI_INACTNOW) != 0) {
+		/*
+		 * if it's being desactived, wait for it to complete.
+		 * Make sure to not return a clean vnode.
+		 */
+		 if ((flags & LK_NOWAIT) != 0) {
+			vrelel(vp, 0);
+			return EBUSY;
+		}
+		vwait(vp, VI_INACTNOW);
+		if ((vp->v_iflag & VI_CLEAN) != 0) {
+			vrelel(vp, 0);
+			return ENOENT;
+		}
+	}
 	if (flags & LK_TYPE_MASK) {
 		error = vn_lock(vp, flags | LK_INTERLOCK);
 		if (error != 0) {
@@ -1302,7 +1341,7 @@ vput(vnode_t *vp)
 
 /*
  * Try to drop reference on a vnode.  Abort if we are releasing the
- * last reference.
+ * last reference.  Note: this _must_ succeed if not the last reference.
  */
 static inline bool
 vtryrele(vnode_t *vp)
@@ -1310,9 +1349,10 @@ vtryrele(vnode_t *vp)
 	u_int use, next;
 
 	for (use = vp->v_usecount;; use = next) {
-		if (use == 1) { 
+		if (use == 1) {
 			return false;
 		}
+		KASSERT((use & VC_MASK) > 1);
 		next = atomic_cas_uint(&vp->v_usecount, use, use - 1);
 		if (__predict_true(next == use)) {
 			return true;
@@ -1334,7 +1374,8 @@ vrelel(vnode_t *vp, int flags)
 	KASSERT((vp->v_iflag & VI_MARKER) == 0);
 	KASSERT(vp->v_freelisthd == NULL);
 
-	if (vp->v_op == dead_vnodeop_p && (vp->v_iflag & VI_CLEAN) == 0) {
+	if (__predict_false(vp->v_op == dead_vnodeop_p &&
+	    (vp->v_iflag & (VI_CLEAN|VI_XLOCK)) == 0)) {
 		vpanic(vp, "dead but not clean");
 	}
 
@@ -1348,8 +1389,10 @@ vrelel(vnode_t *vp, int flags)
 		return;
 	}
 	if (vp->v_usecount <= 0 || vp->v_writecount != 0) {
-		vpanic(vp, "vput: bad ref count");
+		vpanic(vp, "vrelel: bad ref count");
 	}
+
+	KASSERT((vp->v_iflag & VI_XLOCK) == 0);
 
 	/*
 	 * If not clean, deactivate the vnode, but preserve
@@ -1368,14 +1411,30 @@ vrelel(vnode_t *vp, int flags)
 			/* The pagedaemon can't wait around; defer. */
 			defer = true;
 		} else if (curlwp == vrele_lwp) {
-			/* We have to try harder. */
-			vp->v_iflag &= ~VI_INACTREDO;
+			/*
+			 * We have to try harder. But we can't sleep
+			 * with VI_INACTNOW as vget() may be waiting on it.
+			 */
+			vp->v_iflag &= ~(VI_INACTREDO|VI_INACTNOW);
+			cv_broadcast(&vp->v_cv);
 			error = vn_lock(vp, LK_EXCLUSIVE | LK_INTERLOCK |
 			    LK_RETRY);
 			if (error != 0) {
 				/* XXX */
 				vpanic(vp, "vrele: unable to lock %p");
 			}
+			mutex_enter(&vp->v_interlock);
+			/*
+			 * if we did get another reference while
+			 * sleeping, don't try to inactivate it yet.
+			 */
+			if (__predict_false(vtryrele(vp))) {
+				VOP_UNLOCK(vp, 0);
+				mutex_exit(&vp->v_interlock);
+				return;
+			}
+			vp->v_iflag |= VI_INACTNOW;
+			mutex_exit(&vp->v_interlock);
 			defer = false;
 		} else if ((vp->v_iflag & VI_LAYER) != 0) {
 			/* 
@@ -1411,6 +1470,7 @@ vrelel(vnode_t *vp, int flags)
 			if (++vrele_pending > (desiredvnodes >> 8))
 				cv_signal(&vrele_cv); 
 			mutex_exit(&vrele_lock);
+			cv_broadcast(&vp->v_cv);
 			mutex_exit(&vp->v_interlock);
 			return;
 		}
@@ -1435,6 +1495,7 @@ vrelel(vnode_t *vp, int flags)
 		VOP_INACTIVE(vp, &recycle);
 		mutex_enter(&vp->v_interlock);
 		vp->v_iflag &= ~VI_INACTNOW;
+		cv_broadcast(&vp->v_cv);
 		if (!recycle) {
 			if (vtryrele(vp)) {
 				mutex_exit(&vp->v_interlock);
@@ -1841,9 +1902,9 @@ vclean(vnode_t *vp, int flags)
 	cache_purge(vp);
 
 	/* Done with purge, notify sleepers of the grim news. */
+	mutex_enter(&vp->v_interlock);
 	vp->v_op = dead_vnodeop_p;
 	vp->v_tag = VT_NON;
-	mutex_enter(&vp->v_interlock);
 	vp->v_vnlock = &vp->v_lock;
 	KNOTE(&vp->v_klist, NOTE_REVOKE);
 	vp->v_iflag &= ~(VI_XLOCK | VI_FREEING);
@@ -1989,6 +2050,11 @@ vrevoke(vnode_t *vp)
 	mutex_enter(&vp->v_interlock);
 	if ((vp->v_iflag & VI_CLEAN) != 0) {
 		mutex_exit(&vp->v_interlock);
+		return;
+	} else if (vp->v_type != VBLK && vp->v_type != VCHR) {
+		atomic_inc_uint(&vp->v_usecount);
+		vclean(vp, DOCLOSE);
+		vrelel(vp, 0);
 		return;
 	} else {
 		dev = vp->v_rdev;
@@ -2184,7 +2250,7 @@ sysctl_kern_vnode(SYSCTLFN_ARGS)
 			}
 			memcpy(&vbuf, vp, VNODESZ);
 			mutex_exit(&mntvnode_lock);
-			if ((error = copyout(vp, bp, VPTRSZ)) ||
+			if ((error = copyout(&vp, bp, VPTRSZ)) ||
 			   (error = copyout(&vbuf, bp + VPTRSZ, VNODESZ))) {
 			   	mutex_enter(&mntvnode_lock);
 				(void)vunmark(mvp);
@@ -2480,6 +2546,8 @@ void
 vattr_null(struct vattr *vap)
 {
 
+	memset(vap, 0, sizeof(*vap));
+
 	vap->va_type = VNON;
 
 	/*
@@ -2506,7 +2574,6 @@ vattr_null(struct vattr *vap)
 	vap->va_flags = VNOVAL;
 	vap->va_rdev = VNOVAL;
 	vap->va_bytes = VNOVAL;
-	vap->va_vaflags = 0;
 }
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))

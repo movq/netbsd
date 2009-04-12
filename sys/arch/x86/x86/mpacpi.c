@@ -1,4 +1,4 @@
-/*	$NetBSD: mpacpi.c,v 1.69 2008/08/26 12:04:18 cegger Exp $	*/
+/*	$NetBSD: mpacpi.c,v 1.69.4.2 2009/06/19 21:33:57 snj Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpacpi.c,v 1.69 2008/08/26 12:04:18 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpacpi.c,v 1.69.4.2 2009/06/19 21:33:57 snj Exp $");
 
 #include "acpi.h"
 #include "opt_acpi.h"
@@ -1165,7 +1165,7 @@ int
 mpacpi_scan_pci(struct device *self, struct pcibus_attach_args *pba,
 	        cfprint_t print)
 {
-	int i;
+	int i, cnt = 0;
 	struct mp_bus *mpb;
 	struct pci_attach_args;
 
@@ -1176,9 +1176,10 @@ mpacpi_scan_pci(struct device *self, struct pcibus_attach_args *pba,
 		if (!strcmp(mpb->mb_name, "pci") && mpb->mb_configured == 0) {
 			pba->pba_bus = i;
 			config_found_ia(self, "pcibus", pba, print);
+			++cnt;
 		}
 	}
-	return 0;
+	return cnt;
 }
 
 #endif
@@ -1200,8 +1201,12 @@ mpacpi_findintr_linkdev(struct mp_intr_map *mip)
 		    acpi_pci_link_name(mip->linkdev), irq, line);
 	if (irq == X86_PCI_INTERRUPT_LINE_NO_CONNECTION)
 		return ENOENT;
-	if (irq != line)
-		panic("mpacpi_findintr_linkdev: irq mismatch");
+	if (irq != line) {
+		aprint_error("%s: mpacpi_findintr_linkdev:"
+		    " irq mismatch (%d vs %d)\n",
+		    acpi_pci_link_name(mip->linkdev), irq, line);
+		return ENOENT;
+	}
 
 	/*
 	 * Convert ACPICA values to MPS values

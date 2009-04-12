@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.es,v 1.21 2008/02/04 01:54:56 riz Exp $	*/
+/*	$NetBSD: msg.mi.es,v 1.21.14.3 2009/05/18 19:35:14 bouyer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -44,6 +44,9 @@ message usage
 
 message sysinst_message_language
 {Mensajes de instalación en castellano}
+
+message sysinst_message_locale
+{es_ES.ISO8859-15}
 
 message Yes {Sí}
 message No {No}
@@ -227,7 +230,7 @@ message fssizesok
 {Aceptar los tamaños de las particiones.  Espacio libre %d %s, %d particiones libres.}
 
 message fssizesbad
-{Reducir los tamaños de las particiones en %d %s (%d sectores).}
+{Reducir los tamaños de las particiones en %d %s (%u sectores).}
 
 message startoutsidedisk
 {El valor del comienzo que ha especificado está mas allá del final del disco.
@@ -238,6 +241,13 @@ message endoutsidedisk
 El tamaño de la partición se ha truncado a %d %s.
 
 Presione Intro para continuar
+}
+
+message toobigdisklabel
+{
+This disk is too large for a disklabel partition table to be used
+and hence cannot be used as a bootable disk or to hold the root
+partition.
 }
 
 message fspart
@@ -252,7 +262,7 @@ message fspart_header
 }
 
 message fspart_row
-{%10d %9d %10d %-10s %-5s %-5s %s}
+{%10lu %9lu %10lu %-10s %-5s %-5s %s}
 
 message show_all_unused_partitions
 {Mostrar todas las particiones no usadas}
@@ -993,3 +1003,9 @@ el sendmail eliminado.  ¿Desea actualizar el fichero /etc/mailer.conf
 automáticamente para que apunte a postfix?  Si escoge "No" tendrá que
 actualizar /etc/mailer.conf usted mismo para asegurarse de que los mensajes
 de correo electrónico se envíen correctamente.}
+
+message license
+{To use the network interface %s, you must agree to the license in
+file %s.
+To view this file now, you can type ^Z, look at the contents of
+the file and then type "fg" to resume.}

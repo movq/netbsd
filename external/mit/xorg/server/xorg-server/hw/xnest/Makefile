@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2008/10/14 23:37:19 cube Exp $
+#	$NetBSD: Makefile,v 1.6.4.2 2009/09/17 04:24:41 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -41,6 +41,8 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xnest \
 
 CPPFLAGS.Events.c=	-Wno-error
 CPPFLAGS.Screen.c=	-Wno-error
+CPPFLAGS.Color.c=	-Wno-error
+CPPFLAGS.Window.c=	-Wno-error
 CPPFLAGS.miinitext.c=	-UDPMSExtension
 
 .include "../../Makefile.Xserver"
@@ -52,22 +54,22 @@ LDADD+=	${LDADD.dix} \
 	${LDADD.xfixes} \
 	${LDADD.Xext} \
 	${LDADD.dbe} \
-	${LDADD.XTrap} \
 	${LDADD.record} \
-	${LDADD.render} \
 	${LDADD.randr} \
+	${LDADD.render} \
 	${LDADD.damageext} \
 	${LDADD.miext/damage} \
 	${LDADD.cw/cw} \
 	${LDADD.miext/shadow} \
 	${LDADD.Xi} \
 	${LDADD.xkb} \
+	${LDADD.xkbstubs} \
 	${LDADD.composite} \
-	${LDADD.dix/xpstubs} \
 	${LDADD.os} \
+	${LDADD.glx} \
 	-lXfont -lXext -lfontenc \
 	-lpixman-1 -lX11 -lXau \
-	-lXdmcp -lfreetype -lm
+	-lXdmcp -lfreetype -lm -lcrypto
 
 DPADD+=	${LDADD.dix} \
 	${DPADD.fb} \
@@ -76,7 +78,6 @@ DPADD+=	${LDADD.dix} \
 	${DPADD.xfixes} \
 	${DPADD.Xext} \
 	${DPADD.dbe} \
-	${DPADD.XTrap} \
 	${DPADD.record} \
 	${DPADD.render} \
 	${DPADD.randr} \
@@ -87,11 +88,11 @@ DPADD+=	${LDADD.dix} \
 	${DPADD.Xi} \
 	${DPADD.xkb} \
 	${DPADD.composite} \
-	${DPADD.dix/xpstubs} \
 	${DPADD.os} \
+	${DPADD.glx} \
 	${LIBXFONT} ${LIBXEXT} ${LIBFONTENC} \
 	${LIBPIXMAN-1} ${LIBX11} ${LIBXAU} \
-	${LIBXDMCP} ${LIBFREETYPE} ${LIBM}
+	${LIBXDMCP} ${LIBFREETYPE} ${LIBM} ${LIBCRYPTO}
 
 .if ${MACHINE_ARCH} == "i386"
 LDADD+=	-li386
@@ -101,6 +102,11 @@ DPADD+=	${LIBI386}
 .if ${MACHINE_ARCH} == "x86_64"
 LDADD+=	-lx86_64
 DPADD+=	${LIBX86_64}
+.endif
+
+.if ${MACHINE_ARCH} == "alpha"
+LDADD+=	-lalpha
+DPADD+=	${LIBALPHA}
 .endif
 
 .include <bsd.x11.mk>

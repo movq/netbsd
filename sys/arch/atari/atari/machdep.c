@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.150 2008/07/02 17:28:55 ad Exp $	*/
+/*	$NetBSD: machdep.c,v 1.150.6.2 2009/02/02 03:30:32 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.150 2008/07/02 17:28:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.150.6.2 2009/02/02 03:30:32 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -573,7 +573,7 @@ dumpsys(void)
 		 */
 		n = nbytes - i;
 		if (n && (n % (1024*1024)) == 0)
-			printf("%d ", n / (1024 * 1024));
+			printf_nolog("%d ", n / (1024 * 1024));
 
 		/*
 		 * Limit transfer to BYTES_PER_DUMP
@@ -808,7 +808,20 @@ call_sicallbacks(void)
 			si->next = si_free;
 			si_free  = si;
 			splx(s);
+
+			/*
+			 * Raise spl for BASEPRI() checks to see
+			 * nested interrupts in some drivers using callbacks
+			 * since modern MI softint(9) doesn't seem to do it
+			 * in !__HAVE_FAST_SOFTINTS case.
+			 *
+			 * XXX: This is just a workaround hack.
+			 *      Each driver should raise spl in its handler
+			 *      to avoid nested interrupts if necessary.
+			 */
+			s = splsoftnet();	/* XXX */
 			function(rock1, rock2);
+			splx(s);
 		}
 	} while (si);
 #ifdef DIAGNOSTIC

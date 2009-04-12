@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.111 2008/06/13 13:10:18 cegger Exp $	*/
+/*	$NetBSD: zs.c,v 1.111.6.2 2009/06/09 17:50:34 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.111 2008/06/13 13:10:18 cegger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.111.6.2 2009/06/09 17:50:34 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -397,8 +397,11 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 	struct zs_chanstate *cs;
 	int s, channel;
 	static int didintr, prevpri;
+#if (NKBD > 0) || (NMS > 0)
 	int ch0_is_cons = 0;
+#endif
 
+	memset(&zsc_args, 0, sizeof zsc_args);
 	if (zsd == NULL) {
 		aprint_error(": configuration incomplete\n");
 		return;
@@ -422,6 +425,7 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 		int hwflags;
 
 		zsc_args.channel = channel;
+		zsc_args.hwflags = 0;
 		cs = &zsc->zsc_cs_store[channel];
 		zsc->zsc_cs[channel] = cs;
 
@@ -454,7 +458,9 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 		if (zsc->zsc_promunit == 1) {
 			if ((hwflags & ZS_HWFLAG_CONSOLE_INPUT) != 0 &&
 			    !channel) {
+#if (NKBD > 0) || (NMS > 0)
 				ch0_is_cons = 1;
+#endif
 			}
 		} else {
 			zsc_args.hwflags = hwflags;

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.own.mk,v 1.542 2008/10/29 23:46:52 macallan Exp $
+#	$NetBSD: bsd.own.mk,v 1.542.2.11 2009/10/20 01:28:59 snj Exp $
 
 .if !defined(_BSD_OWN_MK_)
 _BSD_OWN_MK_=1
@@ -125,10 +125,16 @@ USETOOLS?=	no
 .if !defined(HOST_OSTYPE)
 _HOST_OSNAME!=	uname -s
 _HOST_OSREL!=	uname -r
-_HOST_ARCH!=	uname -p 2>/dev/null || uname -m
+# For _HOST_ARCH, if uname -p fails, or prints "unknown", or prints
+# something that does not look like an identifier, then use uname -m.
+_HOST_ARCH!=	uname -p 2>/dev/null
+_HOST_ARCH:=	${HOST_ARCH:tW:C/.*[^-_A-Za-z0-9].*//:S/unknown//}
+.if empty(_HOST_ARCH)
+_HOST_ARCH!=	uname -m
+.endif
 HOST_OSTYPE:=	${_HOST_OSNAME}-${_HOST_OSREL:C/\([^\)]*\)//g:[*]:C/ /_/g}-${_HOST_ARCH:C/\([^\)]*\)//g:[*]:C/ /_/g}
 .MAKEOVERRIDES+= HOST_OSTYPE
-.endif
+.endif # !defined(HOST_OSTYPE)
 
 .if ${USETOOLS} == "yes"						# {
 
@@ -649,7 +655,6 @@ MKCOMPAT:=	no
 	MKOBJ \
 	MKPAM \
 	MKPF MKPIC MKPICINSTALL MKPICLIB MKPOSTFIX MKPROFILE \
-	MKPUFFS \
 	MKSHARE MKSKEY MKSTATICLIB \
 	MKYP
 ${var}?=	yes
@@ -663,9 +668,20 @@ ${var}?=	yes
 	MKMANZ MKMODULAR MKOBJDIRS \
 	MKPCC MKPCCCMDS \
 	MKSOFTFLOAT MKSTRIPIDENT \
-	MKUNPRIVED MKUPDATE MKX11 MKXORG
+	MKUNPRIVED MKUPDATE MKX11
 ${var}?=no
 .endfor
+
+#
+# Do we default to XFree86 or Xorg for this platform?
+#
+.if ${MACHINE} == "amd64" || ${MACHINE} == "i386" || \
+    ${MACHINE} == "macppc" || ${MACHINE} == "sgimips" || \
+    ${MACHINE} == "shark" || ${MACHINE} == "sparc64"
+X11FLAVOUR?=	Xorg
+.else
+X11FLAVOUR?=	XFree86
+.endif
 
 #
 # Force some options off if their dependencies are off.
@@ -786,7 +802,7 @@ ${var}?= yes
 X11SRCDIR?=		/usr/xsrc
 X11SRCDIR.xc?=		${X11SRCDIR}/xfree/xc
 X11SRCDIR.local?=	${X11SRCDIR}/local
-.if ${MKXORG} != "no"
+.if ${X11FLAVOUR} == "Xorg"
 X11ROOTDIR?=		/usr/X11R7
 .else
 X11ROOTDIR?=		/usr/X11R6
@@ -807,14 +823,16 @@ X11SRCDIRMIT?=		${X11SRCDIR}/external/mit
 	FS ICE SM X11 XScrnSaver XTrap Xau Xcomposite Xcursor Xdamage \
 	Xdmcp Xevie Xext Xfixes Xfont Xft Xi Xinerama Xmu Xp Xpm XprintUtil \
 	Xrandr Xrender Xres Xt Xtst Xv XvMC Xxf86dga Xxf86misc Xxf86vm drm \
-	fontenc xkbfile xkbui Xaw lbxutil Xfontcache XprintAppUtil
+	fontenc xkbfile xkbui Xaw lbxutil Xfontcache XprintAppUtil \
+	pciaccess
 X11SRCDIR.${_lib}?=		${X11SRCDIRMIT}/lib${_lib}/dist
 .endfor
 
 .for _proto in \
 	xcmisc xext xf86bigfont bigreqs input kb x fonts fixes scrnsaver \
 	xinerama print render resource record video xf86dga xf86misc \
-	xf86vidmode composite damage trap gl randr fontcache xf86dri
+	xf86vidmode composite damage trap gl randr fontcache xf86dri \
+	dri2
 X11SRCDIR.${_proto}proto?=		${X11SRCDIRMIT}/${_proto}proto/dist
 .endfor
 
@@ -823,7 +841,7 @@ X11SRCDIR.${_proto}proto?=		${X11SRCDIRMIT}/${_proto}proto/dist
 	xkbcomp xorg-cf-files imake xorg-server xbiff xkbdata \
 	xbitmaps appres xeyes xev xedit sessreg pixman \
 	beforelight bitmap editres makedepend fonttosfnt fslsfonts \
-	fstobdf MesaDemos MesaLib ico iceauth lbxproxy listres lndir \
+	fstobdf MesaDemos MesaGLUT MesaLib ico iceauth lbxproxy listres lndir \
 	luit xproxymanagementprotocol mkfontdir oclock proxymngr rgb \
 	setxkbmap smproxy twm viewres x11perf xauth xcalc xclipboard \
 	xclock xcmsdb xconsole xcutsel xditview xdpyinfo xdriinfo xdm \
@@ -842,7 +860,7 @@ X11SRCDIR.${_proto}proto?=		${X11SRCDIRMIT}/${_proto}proto/dist
 	font-bitstream-100dpi font-bitstream-75dpi font-bitstream-type1 \
 	font-cursor-misc font-daewoo-misc font-dec-misc font-ibm-type1 \
 	font-isas-misc font-jis-misc font-misc-misc font-mutt-misc \
-	font-util ttf-bitstream-vera encodings
+	font-sony-misc font-util ttf-bitstream-vera encodings
 X11SRCDIR.${_dir}?=		${X11SRCDIRMIT}/${_dir}/dist
 .endfor
 
@@ -852,18 +870,15 @@ X11SRCDIR.xf86-input-${_i}?=	${X11SRCDIRMIT}/xf86-input-${_i}/dist
 .endfor
 
 .for _v in \
-	apm ark ast ati chips cirrus cyrix glint i128 i740 imstt intel \
-	mach64 mga neomagic nsc nv nvxbox r128 radeonhd rendition \
-	s3 s3virge savage \
-	siliconmotion sis sunffb suncg6 tdfx tga trident tseng vesa vga via \
-	vmware wsfb
+	ag10e apm ark ast ati chips cirrus crime cyrix glint i128 i740 imstt \
+	intel mach64 mga neomagic newport nsc nv nvxbox pnozz r128 radeonhd \
+	rendition s3 s3virge savage siliconmotion sis sunffb suncg6 sunleo \
+	suntcx tdfx tga trident tseng vesa vga via vmware wsfb
+	
 X11SRCDIR.xf86-video-${_v}?=	${X11SRCDIRMIT}/xf86-video-${_v}/dist
 .endfor
 
-# Default to no old Xserver builds for now
-MKXORG_WITH_XSRC_XSERVER?=	no
-
-.if ${MKXORG} != no
+.if ${X11FLAVOUR} == "Xorg"
 X11DRI?=			yes
 .endif
 

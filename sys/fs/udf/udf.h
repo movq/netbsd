@@ -1,4 +1,4 @@
-/* $NetBSD: udf.h,v 1.27 2008/09/27 13:05:34 reinoud Exp $ */
+/* $NetBSD: udf.h,v 1.27.4.4 2009/07/09 19:44:34 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -30,6 +30,7 @@
 #define _FS_UDF_UDF_H_
 
 #include <sys/queue.h>
+#include <sys/rb.h>
 #include <sys/uio.h>
 #include <sys/mutex.h>
 
@@ -48,30 +49,31 @@ extern int udf_verbose;
 #define UDF_COMPLETE_DELETE
 
 /* debug categories */
-#define UDF_DEBUG_VOLUMES	0x000001
-#define UDF_DEBUG_LOCKING	0x000002
-#define UDF_DEBUG_NODE		0x000004
-#define UDF_DEBUG_LOOKUP	0x000008
-#define UDF_DEBUG_READDIR	0x000010
-#define UDF_DEBUG_FIDS		0x000020
-#define UDF_DEBUG_DESCRIPTOR	0x000040
-#define UDF_DEBUG_TRANSLATE	0x000080
-#define UDF_DEBUG_STRATEGY	0x000100
-#define UDF_DEBUG_READ		0x000200
-#define UDF_DEBUG_WRITE		0x000400
-#define UDF_DEBUG_CALL		0x000800
-#define UDF_DEBUG_ATTR		0x001000
-#define UDF_DEBUG_EXTATTR	0x002000
-#define UDF_DEBUG_ALLOC		0x004000
-#define UDF_DEBUG_ADWLK		0x008000
-#define UDF_DEBUG_DIRHASH	0x010000
-#define UDF_DEBUG_NOTIMPL	0x020000
-#define UDF_DEBUG_SHEDULE	0x040000
-#define UDF_DEBUG_ECCLINE	0x080000
-#define UDF_DEBUG_SYNC		0x100000
-#define UDF_DEBUG_PARANOIA	0x200000
-#define UDF_DEBUG_PARANOIDADWLK	0x400000
-#define UDF_DEBUG_NODEDUMP	0x800000
+#define UDF_DEBUG_VOLUMES	0x0000001
+#define UDF_DEBUG_LOCKING	0x0000002
+#define UDF_DEBUG_NODE		0x0000004
+#define UDF_DEBUG_LOOKUP	0x0000008
+#define UDF_DEBUG_READDIR	0x0000010
+#define UDF_DEBUG_FIDS		0x0000020
+#define UDF_DEBUG_DESCRIPTOR	0x0000040
+#define UDF_DEBUG_TRANSLATE	0x0000080
+#define UDF_DEBUG_STRATEGY	0x0000100
+#define UDF_DEBUG_READ		0x0000200
+#define UDF_DEBUG_WRITE		0x0000400
+#define UDF_DEBUG_CALL		0x0000800
+#define UDF_DEBUG_ATTR		0x0001000
+#define UDF_DEBUG_EXTATTR	0x0002000
+#define UDF_DEBUG_ALLOC		0x0004000
+#define UDF_DEBUG_ADWLK		0x0008000
+#define UDF_DEBUG_DIRHASH	0x0010000
+#define UDF_DEBUG_NOTIMPL	0x0020000
+#define UDF_DEBUG_SHEDULE	0x0040000
+#define UDF_DEBUG_ECCLINE	0x0080000
+#define UDF_DEBUG_SYNC		0x0100000
+#define UDF_DEBUG_PARANOIA	0x0200000
+#define UDF_DEBUG_PARANOIDADWLK	0x0400000
+#define UDF_DEBUG_NODEDUMP	0x0800000
+#define UDF_DEBUG_RESERVE	0x1000000
 
 /* initial value of udf_verbose */
 #define UDF_DEBUGGING		0
@@ -104,7 +106,7 @@ extern int udf_verbose;
 /* DON'T change these: they identify 13thmonkey's UDF implementation */
 #define APP_NAME		"*NetBSD UDF"
 #define APP_VERSION_MAIN	0
-#define APP_VERSION_SUB		4
+#define APP_VERSION_SUB		5
 #define IMPL_NAME		"*NetBSD kernel UDF"
 
 
@@ -116,17 +118,15 @@ extern int udf_verbose;
 #define UDF_ECCBUF_HASHSIZE	(1<<UDF_ECCBUF_HASHBITS)
 #define UDF_ECCBUF_HASHMASK	(UDF_ECCBUF_HASHSIZE -1)
 
-#define UDF_DIRHASH_DEFAULTMEM	(1024*1024)
-#define UDF_DIRHASH_HASHBITS	5
-#define UDF_DIRHASH_HASHSIZE	(1<<UDF_DIRHASH_HASHBITS)
-#define UDF_DIRHASH_HASHMASK	(UDF_DIRHASH_HASHSIZE -1)
-
-#define UDF_ECCLINE_MAXFREE	10			/* picked */
-#define UDF_ECCLINE_MAXBUSY	100			/* picked */
+#define UDF_ECCLINE_MAXFREE	5			/* picked, needs calculation */
+#define UDF_ECCLINE_MAXBUSY	100			/* picked, needs calculation */
 
 #define UDF_MAX_MAPPINGS	(MAXPHYS/DEV_BSIZE)	/* 128 */
 #define UDF_VAT_CHUNKSIZE	(64*1024)		/* picked */
 #define UDF_SYMLINKBUFLEN	(64*1024)		/* picked */
+
+#define UDF_DISC_SLACK		(128)			/* picked, at least 64 kb or 128 */
+#define UDF_ISO_VRS_SIZE	(32*2048)		/* 32 ISO `sectors' */
 
 
 /* structure space */
@@ -147,14 +147,15 @@ extern int udf_verbose;
 
 
 /* RW content hint for allocation and other purposes */
-#define UDF_C_INVALID		 0	/* not relevant */
+#define UDF_C_ABSOLUTE		 0	/* blob to write at absolute */
 #define UDF_C_PROCESSED		 0	/* not relevant */
 #define UDF_C_USERDATA		 1	/* all but userdata is metadata */
 #define UDF_C_DSCR		 2	/* update sectornr and CRC */
-#define UDF_C_NODE		 3	/* file/dir node, update sectornr and CRC */
-#define UDF_C_FIDS		 4	/* update all contained fids */
-#define UDF_C_METADATA_SBM	 5	/* space bitmap, update sectornr and CRC */
-#define UDF_C_EXTATTRS		 6	/* dunno what to do yet */
+#define UDF_C_FLOAT_DSCR	 3	/* update sectornr and CRC; sequential */
+#define UDF_C_NODE		 4	/* file/dir node, update sectornr and CRC */
+#define UDF_C_FIDS		 5	/* update all contained fids */
+#define UDF_C_METADATA_SBM	 6	/* space bitmap, update sectornr and CRC */
+#define UDF_C_EXTATTRS		 7	/* dunno what to do yet */
 
 /* use unused b_freelistindex for our UDF_C_TYPE */
 #define b_udf_c_type	b_freelistindex
@@ -184,12 +185,14 @@ extern int udf_verbose;
 /* logical volume open/close actions */
 #define UDF_OPEN_SESSION	  0x01  /* if needed writeout VRS + VDS	     */
 #define UDF_CLOSE_SESSION	  0x02	/* close session after writing VAT   */
-#define UDF_WRITE_VAT		  0x04	/* sequential VAT filesystem         */
-#define UDF_WRITE_LVINT		  0x08	/* write out open lvint              */
-#define UDF_WRITE_PART_BITMAPS	  0x10	/* write out partition space bitmaps */
-#define UDF_APPENDONLY_LVINT	  0x20	/* no shifting, only appending       */
-#define UDFLOGVOL_BITS "\20\1OPENSESSION\2CLOSESESSION\3WRITEVAT\4WRITELVINT"\
-			  "\5APPENDONLY"
+#define UDF_FINALISE_DISC	  0x04	/* close session after writing VAT   */
+#define UDF_WRITE_VAT		  0x08	/* sequential VAT filesystem         */
+#define UDF_WRITE_LVINT		  0x10	/* write out open lvint              */
+#define UDF_WRITE_PART_BITMAPS	  0x20	/* write out partition space bitmaps */
+#define UDF_APPENDONLY_LVINT	  0x40	/* no shifting, only appending       */
+#define UDFLOGVOL_BITS "\20\1OPEN_SESSION\2CLOSE_SESSION\3FINALISE_DISC" \
+			"\4WRITE_VAT\5WRITE_LVINT\6WRITE_PART_BITMAPS" \
+			"\7APPENDONLY_LVINT"
 
 /* logical volume error handling actions */
 #define UDF_UPDATE_TRACKINFO	  0x01	/* update trackinfo and re-shedule   */
@@ -331,15 +334,14 @@ struct udf_mount {
 	/* hash table to lookup icb -> udf_node and sorted list for sync */
 	kmutex_t	ihash_lock;
 	kmutex_t	get_node_lock;
-	LIST_HEAD(, udf_node) udf_nodes[UDF_INODE_HASHSIZE];
-	LIST_HEAD(, udf_node) sorted_udf_nodes;		/* sorted sync list  */
+	struct rb_tree	udf_node_tree;
 
 	/* syncing */
 	int		syncing;			/* are we syncing?   */
 	kcondvar_t 	dirtynodes_cv;			/* sleeping on sync  */
 
 	/* late allocation */
-	uint32_t		 uncomitted_lb;		/* for free space    */
+	int32_t			 uncommitted_lbs[UDF_PARTITIONS];
 	struct long_ad		*la_node_ad_cpy;		/* issue buf */
 	uint64_t		*la_lmapping, *la_pmapping;	/* issue buf */
 
@@ -351,6 +353,11 @@ struct udf_mount {
 	void			*strategy_private;
 };
 
+
+#define RBTOUDFNODE(node) \
+	((node) ? \
+	 (void *)((uintptr_t)(node) - offsetof(struct udf_node, rbnode)) \
+	 : NULL)
 
 /*
  * UDF node describing a file/directory.
@@ -366,6 +373,9 @@ struct udf_node {
 	kcondvar_t		 node_lock;		/* sleeping lock */
 	char const		*lock_fname;
 	int			 lock_lineno;
+
+	/* rb_node for fast lookup and fast sequentual visiting */
+	struct rb_node		 rbnode;
 
 	/* one of `fe' or `efe' can be set, not both (UDF file entry dscr.)  */
 	struct file_entry	*fe;
@@ -386,14 +396,12 @@ struct udf_node {
 	struct lockf		*lockf;			/* lock list         */
 	uint32_t		 outstanding_bufs;	/* file data         */
 	uint32_t		 outstanding_nodedscr;	/* node dscr         */
+	int32_t			 uncommitted_lbs;	/* in UBC            */
 
 	/* references to associated nodes */
 	struct udf_node		*extattr;
 	struct udf_node		*streamdir;
 	struct udf_node		*my_parent;		/* if extended attr. */
-
-	LIST_ENTRY(udf_node)	 hashchain;		/* inside hash line  */
-	LIST_ENTRY(udf_node)	 sortchain;		/* sorted udf nodes  */
 };
 
 

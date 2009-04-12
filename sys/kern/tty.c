@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.c,v 1.227 2008/08/08 07:18:03 uebayasi Exp $	*/
+/*	$NetBSD: tty.c,v 1.227.4.2 2009/10/11 18:03:21 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.227 2008/08/08 07:18:03 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty.c,v 1.227.4.2 2009/10/11 18:03:21 sborrill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -373,7 +373,7 @@ ttyclose(struct tty *tp)
  * ttyinput() helper.
  * Call with the tty lock held.
  */
-static int
+/* XXX static */ int
 ttyinput_wlock(int c, struct tty *tp)
 {
 	int	iflag, lflag, i, error;
@@ -1654,6 +1654,9 @@ ttread(struct tty *tp, struct uio *uio, int flag)
 	int		c, first, error, has_stime, last_cc;
 	long		lflag, slp;
 	struct timeval	now, stime;
+
+	if (uio->uio_resid == 0)
+		return 0;
 
 	stime.tv_usec = 0;	/* XXX gcc */
 	stime.tv_sec = 0;	/* XXX gcc */

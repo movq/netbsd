@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.359 2008/10/19 22:05:20 apb Exp $
+#	$NetBSD: Makefile,v 1.359.2.6 2010/01/30 19:21:15 snj Exp $
 #	from: @(#)Makefile	8.7 (Berkeley) 5/25/95
 
 # Environment variables without default values:
@@ -88,7 +88,7 @@ INSTALLATION_DIRS=	binary binary/sets binary/kernel installation
 BINOWN= root
 BINGRP= wheel
 UTMPGRP= utmp
-BIN1+=	audit-packages.conf bootptab changelist csh.cshrc csh.login \
+BIN1+=	bootptab changelist csh.cshrc csh.login \
 	csh.logout daily daily.conf dm.conf envsys.conf floppytab ftpchroot \
 	ftpusers gettytab group hosts hosts.lpd inetd.conf lkm.conf \
 	locate.conf login.conf mailer.conf man.conf monthly monthly.conf \
@@ -158,11 +158,13 @@ distribution: .PHONY .MAKE check_DESTDIR distrib-dirs
 	${MAKEDIRTARGET} ${NETBSDSRCDIR} install _DISTRIB=
 .endif	# !INSTALL_DONE
 	${MAKEDIRTARGET} . install-etc-files
-.if ${MKXORG} != "no"
+. if ${MKX11} != "no"
+.  if ${X11FLAVOUR} == "Xorg"
 	${MAKEDIRTARGET} ${NETBSDSRCDIR}/external/mit/xorg distribution
-.elif ${MKX11} != "no"
+.  else
 	${MAKEDIRTARGET} ${NETBSDSRCDIR}/x11 distribution
-.endif
+.  endif
+. endif
 	${MAKEDIRTARGET} ${NETBSDSRCDIR}/distrib/sets makesetfiles
 .endif	# !DISTRIBUTION_DONE
 
@@ -190,7 +192,7 @@ RELEASEVARS=	BSDOBJDIR BSDSRCDIR BUILDID \
 		MKMAN MKMANZ MKNLS MKNVI MKOBJ MKOBJDIRS \
 		MKPAM MKPF MKPIC MKPICINSTALL MKPICLIB MKPOSTFIX MKPROFILE \
 		MKSHARE MKSKEY MKSOFTFLOAT MKSTATICLIB \
-		MKUNPRIVED MKUPDATE MKX11 MKXORG MKYP \
+		MKUNPRIVED MKUPDATE MKX11 MKYP \
 		NBUILDJOBS NETBSDSRCDIR \
 		NOCLEANDIR NODISTRIBDIRS NOINCLUDES \
 		OBJMACHINE \
@@ -198,7 +200,7 @@ RELEASEVARS=	BSDOBJDIR BSDSRCDIR BUILDID \
 		USE_HESIOD USE_INET6 USE_JEMALLOC USE_KERBEROS USE_LDAP \
 		USE_PAM USE_SKEY USE_YP \
 		USETOOLS USR_OBJMACHINE \
-		X11SRCDIR
+		X11SRCDIR X11FLAVOUR
 
 params: .PHONY
 .for var in ${RELEASEVARS}
@@ -302,7 +304,7 @@ install-etc-files: .PHONY .MAKE check_DESTDIR MAKEDEV
 		${BINOWN} operator	664	/etc/dumpdates  \
 		${BINOWN} operator	600	/etc/skeykeys \
 		root wheel		600	/var/at/at.deny \
-		nobody ${BINGRP}	664	/var/db/locate.database \
+		root wheel		644	/var/db/locate.database \
 		${BINOWN} ${BINGRP}	600	/var/log/authlog \
 		root wheel		600	/var/log/cron \
 		${BINOWN} ${UTMPGRP}	664	/var/log/lastlog \
@@ -348,7 +350,7 @@ install-etc-files: .PHONY .MAKE check_DESTDIR MAKEDEV
 	${MAKEDIRTARGET} ${NETBSDSRCDIR}/usr.bin/ssh configinstall
 .endif
 .if (${MKPOSTFIX} != "no")
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/gnu/usr.sbin/postfix configinstall
+	${MAKEDIRTARGET} ${NETBSDSRCDIR}/external/ibm-public/postfix configinstall
 .endif
 
 
@@ -357,18 +359,18 @@ install-etc-files: .PHONY .MAKE check_DESTDIR MAKEDEV
 #
 OBSOLETE.dir=		${.OBJDIR}/obsolete.dir
 OBSOLETE.files=		base comp etc games man misc tests text
-.if ${MKX11} != "no" || ${MKXORG} != "no"
+.if ${MKX11} != "no"
 OBSOLETE.files+=	xbase xcomp xetc xfont xserver
 .endif
 
 install-obsolete-lists: .PHONY .MAKE
 	mkdir -p ${OBSOLETE.dir}
-.if ${MKX11} != "no" || ${MKXORG} != "no"
+.if ${MKX11} != "no"
 	(cd ${NETBSDSRCDIR}/distrib/sets && \
-	    MAKE=${MAKE:Q} ${HOST_SH} ./makeobsolete -b -t ${OBSOLETE.dir})
+	    AWK=${TOOL_AWK:Q} MAKE=${MAKE:Q} ${HOST_SH} ./makeobsolete -b -t ${OBSOLETE.dir})
 .else
 	(cd ${NETBSDSRCDIR}/distrib/sets && \
-	    MAKE=${MAKE:Q} ${HOST_SH} ./makeobsolete -t ${OBSOLETE.dir})
+	    AWK=${TOOL_AWK:Q} MAKE=${MAKE:Q} ${HOST_SH} ./makeobsolete -t ${OBSOLETE.dir})
 .endif
 .for file in ${OBSOLETE.files}
 	${_MKMSG_INSTALL} ${DESTDIR}/var/db/obsolete/${file}
@@ -632,7 +634,10 @@ snap_md_post: .PHONY check_DESTDIR check_RELEASEDIR snap_post
 clean:
 	-rm -rf ${CDROM.dir} ${CDROM.pathlist} ${OBSOLETE.dir}
 
+SUBDIR=	rc.d
+
 .include <bsd.prog.mk>
+.include <bsd.subdir.mk>
 
 test:
 	@echo ${OBSOLETE.files}

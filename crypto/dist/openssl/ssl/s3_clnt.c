@@ -997,7 +997,7 @@ int ssl3_get_server_certificate(SSL *s)
 		}
 
 	i=ssl_verify_cert_chain(s,sk);
-	if ((s->verify_mode != SSL_VERIFY_NONE) && (!i)
+	if ((s->verify_mode != SSL_VERIFY_NONE) && (i <= 0)
 #ifndef OPENSSL_NO_KRB5
 	    && !((s->s3->tmp.new_cipher->algorithm_mkey & SSL_kKRB5) &&
 		 (s->s3->tmp.new_cipher->algorithm_auth & SSL_aKRB5))
@@ -1460,6 +1460,7 @@ int ssl3_get_key_exchange(SSL *s)
 		s->session->sess_cert->peer_ecdh_tmp=ecdh;
 		ecdh=NULL;
 		BN_CTX_free(bn_ctx);
+		bn_ctx = NULL;
 		EC_POINT_free(srvr_ecpoint);
 		srvr_ecpoint = NULL;
 		}
@@ -1533,7 +1534,7 @@ int ssl3_get_key_exchange(SSL *s)
 			EVP_VerifyUpdate(&md_ctx,&(s->s3->client_random[0]),SSL3_RANDOM_SIZE);
 			EVP_VerifyUpdate(&md_ctx,&(s->s3->server_random[0]),SSL3_RANDOM_SIZE);
 			EVP_VerifyUpdate(&md_ctx,param,param_len);
-			if (!EVP_VerifyFinal(&md_ctx,p,(int)n,pkey))
+			if (EVP_VerifyFinal(&md_ctx,p,(int)n,pkey) <= 0)
 				{
 				/* bad signature */
 				al=SSL_AD_DECRYPT_ERROR;
@@ -1551,7 +1552,7 @@ int ssl3_get_key_exchange(SSL *s)
 			EVP_VerifyUpdate(&md_ctx,&(s->s3->client_random[0]),SSL3_RANDOM_SIZE);
 			EVP_VerifyUpdate(&md_ctx,&(s->s3->server_random[0]),SSL3_RANDOM_SIZE);
 			EVP_VerifyUpdate(&md_ctx,param,param_len);
-			if (!EVP_VerifyFinal(&md_ctx,p,(int)n,pkey))
+			if (EVP_VerifyFinal(&md_ctx,p,(int)n,pkey) <= 0)
 				{
 				/* bad signature */
 				al=SSL_AD_DECRYPT_ERROR;

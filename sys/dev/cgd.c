@@ -1,4 +1,4 @@
-/* $NetBSD: cgd.c,v 1.53 2008/09/12 16:51:55 christos Exp $ */
+/* $NetBSD: cgd.c,v 1.53.4.3 2010/01/30 19:00:46 snj Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.53 2008/09/12 16:51:55 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.53.4.3 2010/01/30 19:00:46 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -344,13 +344,13 @@ cgdstart(struct dk_softc *dksc, struct buf *bp)
 	return 0;
 }
 
-/* expected to be called at splbio() */
 static void
 cgdiodone(struct buf *nbp)
 {
 	struct	buf *obp = nbp->b_private;
 	struct	cgd_softc *cs = getcgd_softc(obp->b_dev);
 	struct	dk_softc *dksc = &cs->sc_dksc;
+	int s;
 
 	KDASSERT(cs);
 
@@ -385,10 +385,12 @@ cgdiodone(struct buf *nbp)
 	obp->b_resid = 0;
 	if (obp->b_error != 0)
 		obp->b_resid = obp->b_bcount;
+	s = splbio();
 	disk_unbusy(&dksc->sc_dkdev, obp->b_bcount - obp->b_resid,
 	    (obp->b_flags & B_READ));
 	biodone(obp);
 	dk_iodone(di, dksc);
+	splx(s);
 }
 
 /* XXX: we should probably put these into dksubr.c, mostly */
@@ -461,6 +463,21 @@ cgdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		}
 		ret = cgd_ioctl_clr(cs, data, l);
 		break;
+
+	case DIOCCACHESYNC:
+		/*
+		 * XXX Do we really need to care about having a writable
+		 * file descriptor here?
+		 */
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/*
+		 * We pass this call down to the underlying disk.
+		 */
+		ret = VOP_IOCTL(cs->sc_tvn, cmd, data, flag, l->l_cred);
+		break;
+
 	default:
 		ret = dk_ioctl(di, dksc, dev, cmd, data, flag, l);
 		break;
@@ -621,14 +638,34 @@ cgd_ioctl_clr(struct cgd_softc *cs, void *data, struct lwp *l)
 }
 
 static int
+getsize(struct lwp *l, struct vnode *vp, size_t *size)
+{
+	struct partinfo dpart;
+	struct dkwedge_info dkw;
+	int ret;
+
+	if ((ret = VOP_IOCTL(vp, DIOCGWEDGEINFO, &dkw, FREAD,
+	    l->l_cred)) == 0) {
+		*size = dkw.dkw_size;
+		return 0;
+	}
+
+	if ((ret = VOP_IOCTL(vp, DIOCGPART, &dpart, FREAD, l->l_cred)) == 0) {
+		*size = dpart.part->p_size;
+		return 0;
+	}
+
+	return ret;
+}
+
+
+static int
 cgdinit(struct cgd_softc *cs, const char *cpath, struct vnode *vp,
 	struct lwp *l)
 {
 	struct	dk_geom *pdg;
-	struct	partinfo dpart;
 	struct	vattr va;
 	size_t	size;
-	int	maxsecsize = 0;
 	int	ret;
 	char	*tmppath;
 
@@ -648,14 +685,8 @@ cgdinit(struct cgd_softc *cs, const char *cpath, struct vnode *vp,
 
 	cs->sc_tdev = va.va_rdev;
 
-	ret = VOP_IOCTL(vp, DIOCGPART, &dpart, FREAD, l->l_cred);
-	if (ret)
+	if ((ret = getsize(l, vp, &size)) != 0)
 		goto bail;
-
-	maxsecsize =
-	    ((dpart.disklab->d_secsize > maxsecsize) ?
-	    dpart.disklab->d_secsize : maxsecsize);
-	size = dpart.part->p_size;
 
 	if (!size) {
 		ret = ENODEV;

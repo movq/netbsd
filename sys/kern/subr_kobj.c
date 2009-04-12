@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_kobj.c,v 1.24 2008/10/20 20:07:35 ad Exp $	*/
+/*	$NetBSD: subr_kobj.c,v 1.24.4.2 2009/06/17 20:20:54 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
 #include "opt_modular.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_kobj.c,v 1.24 2008/10/20 20:07:35 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_kobj.c,v 1.24.4.2 2009/06/17 20:20:54 bouyer Exp $");
 
 #define	ELFSIZE		ARCH_ELFSIZE
 
@@ -189,11 +189,12 @@ kobj_load_file(kobj_t *kop, const char *filename, const char *base,
 		path = PNBUF_GET();
 		snprintf(path, MAXPATHLEN - 1, "%s/%s/%s.kmod", base,
 		    filename, filename);
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, path);
+		NDINIT(&nd, LOOKUP, FOLLOW | NOCHROOT, UIO_SYSSPACE, path);
 		error = vn_open(&nd, FREAD, 0);
 		if (error != 0) {
 			strlcat(path, ".o", MAXPATHLEN);
-			NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, path);
+			NDINIT(&nd, LOOKUP, FOLLOW | NOCHROOT, UIO_SYSSPACE,
+			    path);
 			error = vn_open(&nd, FREAD, 0);
 		}
 		PNBUF_PUT(path);
@@ -802,25 +803,25 @@ kobj_jettison(kobj_t ko)
 {
 	int i;
 
-	for (i = 0; i < ko->ko_nrel; i++) {
-		if (ko->ko_reltab[i].rel) {
-			kobj_free(ko, ko->ko_reltab[i].rel,
-			    ko->ko_reltab[i].size);
-		}
-	}
-	for (i = 0; i < ko->ko_nrela; i++) {
-		if (ko->ko_relatab[i].rela) {
-			kobj_free(ko, ko->ko_relatab[i].rela,
-			    ko->ko_relatab[i].size);
-		}
-	}
 	if (ko->ko_reltab != NULL) {
+		for (i = 0; i < ko->ko_nrel; i++) {
+			if (ko->ko_reltab[i].rel) {
+				kobj_free(ko, ko->ko_reltab[i].rel,
+				    ko->ko_reltab[i].size);
+			}
+		}
 		kobj_free(ko, ko->ko_reltab, ko->ko_nrel *
 		    sizeof(*ko->ko_reltab));
 		ko->ko_reltab = NULL;
 		ko->ko_nrel = 0;
 	}
 	if (ko->ko_relatab != NULL) {
+		for (i = 0; i < ko->ko_nrela; i++) {
+			if (ko->ko_relatab[i].rela) {
+				kobj_free(ko, ko->ko_relatab[i].rela,
+				    ko->ko_relatab[i].size);
+			}
+		}
 		kobj_free(ko, ko->ko_relatab, ko->ko_nrela *
 		    sizeof(*ko->ko_relatab));
 		ko->ko_relatab = NULL;

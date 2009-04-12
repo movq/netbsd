@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2008/08/15 15:55:07 rtr Exp $
+#	$NetBSD: Makefile,v 1.3.8.3 2009/09/28 01:57:05 snj Exp $
 
 .include "../Makefile.serverlib"
 .include "../Makefile.servermod"
@@ -8,13 +8,12 @@ LIB=		xkb
 .PATH:		${X11SRCDIR.xorg-server}/${LIB}
 .PATH:		${X11SRCDIR.X11}/src
 .PATH:		${X11SRCDIR.xkbfile}/src
-DDXSRCS=	ddxBeep.c ddxCtrls.c ddxFakeBtn.c ddxFakeMtn.c \
+DDXSRCS=	ddxBeep.c ddxCtrls.c ddxFakeMtn.c \
 		ddxInit.c ddxKeyClick.c ddxLEDs.c ddxLoad.c \
-		ddxList.c ddxDevBtn.c \
-		ddxKillSrv.c ddxVT.c ddxPrivate.c
+		ddxList.c ddxDevBtn.c
 DIXSRCS=	xkb.c xkbUtils.c xkbEvents.c xkbAccessX.c xkbSwap.c \
 		xkbLEDs.c xkbInit.c xkbActions.c xkbPrKeyEv.c
-XKBFILESRCS=	maprules.c xkmread.c xkbtext.c xkbfmisc.c xkberrs.c \
+XKBFILESRCS=	maprules.c xkmread.c xkbtext.c xkbfmisc.c \
 		xkbout.c
 X11SRCS=	XKBMisc.c XKBAlloc.c XKBGAlloc.c XKBMAlloc.c
 
@@ -31,24 +30,19 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/include \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/common \
 		-I${X11SRCDIR.xorg-server}/../include
 
-CPPFLAGS+=	-DXKB_IN_SERVER -DHAVE_XKB_CONFIG_H
+# For ${XKBCOMPDIR}
+.include "../../../bin/xkbcomp/Makefile.common"
 
-CPPFLAGS.xkbInit.c=	-DXKB_BASE_DIRECTORY=\"${X11LIBDIR}/xkb\" \
-			-DXKB_BIN_DIRECTORY=\"${X11BINDIR}\" \
-			-DXKM_OUTPUT_DIR=\"${X11LIBDIR}/xkb/compiled\" \
-			-DXKB_DFLT_DISABLED=0
+CPPFLAGS+=	-DXKB_IN_SERVER -DHAVE_XKB_CONFIG_H \
+		-DXKB_BASE_DIRECTORY=\"${X11LIBDIR}/xkb\" \
+		-DXKB_BIN_DIRECTORY=\"${X11BINDIR}\" \
+		-DXKM_OUTPUT_DIR=\"${XKBCOMPDIR}\" \
+		-DXKB_DFLT_DISABLED=0
 
 COPTS.XKBAlloc.c=	-Wno-error	# XXX gcc 3.3
 COPTS.XKBMAlloc.c=	-Wno-error	# XXX gcc 3.3
 COPTS.xkb.c=		-Wno-error	# XXX gcc 3.3
 COPTS.xkbUtils.c=	-Wno-error	# XXX gcc 3.3
-
-# XXX?
-.for _S in	ddxKillSrv.c \
-		ddxVT.c \
-		ddxPrivate.c
-CPPFLAGS.${_S}=		-DXF86DDXACTIONS
-.endfor
 
 CLEANFILES+=		${BUILDOBJS}
 realall: ${BUILDOBJS}

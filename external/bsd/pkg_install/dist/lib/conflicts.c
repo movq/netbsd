@@ -1,3 +1,34 @@
+/*	$NetBSD: conflicts.c,v 1.1.1.1.6.3 2010/02/03 00:38:22 snj Exp $	*/
+
+/*-
+ * Copyright (c) 2007 Roland Illig <rillig@NetBSD.org>.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE
+ * COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
 /*
  * XXX: Reading the +CONTENTS files of all installed packages is
  * rather slow. Since this check is necessary to avoid conflicting
@@ -12,6 +43,12 @@
 #endif
 
 #include <nbcompat.h>
+
+#if HAVE_SYS_CDEFS_H
+#include <sys/cdefs.h>
+#endif
+
+__RCSID("$NetBSD: conflicts.c,v 1.1.1.1.6.3 2010/02/03 00:38:22 snj Exp $");
 
 #if HAVE_ERR_H
 #include <err.h>
@@ -30,33 +67,24 @@
  */
 struct package_conflict {
 	const char *pkgname;
+	const char *skip_pkgname;
 	char **conflicting_pkgname;
 	char **conflicting_pattern;
 };
 
-static void *
-nonnull(void *p)
-{
-
-	if (p == NULL) {
-		err(EXIT_FAILURE, "NullPointerException");
-		/* NOTREACHED */
-	}
-	return p;
-}
-
 static FILE *
 fopen_contents(const char *pkgname, const char *mode)
 {
-	char fname[MaxPathSize];
+	char *fname;
 	FILE *f;
 
-	snprintf(fname, sizeof(fname), "%s/%s/%s", _pkgdb_getPKGDB_DIR(), pkgname, CONTENTS_FNAME);
+	fname = pkgdb_pkg_file(pkgname, CONTENTS_FNAME);
 	f = fopen(fname, mode);
 	if (f == NULL) {
 		err(EXIT_FAILURE, "%s", fname);
 		/* NOTREACHED */
 	}
+	free(fname);
 	return f;
 }
 
@@ -70,6 +98,10 @@ check_package_conflict(const char *pkgname, void *v)
 	FILE *f;
 	int rv;
 
+	if (conflict->skip_pkgname != NULL &&
+	    strcmp(conflict->skip_pkgname, pkgname) == 0)
+		return 0;
+
 	rv = 0;
 
 	f = fopen_contents(pkgname, "r");
@@ -81,8 +113,8 @@ check_package_conflict(const char *pkgname, void *v)
 			continue;
 
 		if (pkg_match(p->name, conflict->pkgname) == 1) {
-			*(conflict->conflicting_pkgname) = nonnull(strdup(pkgname));
-			*(conflict->conflicting_pattern) = nonnull(strdup(p->name));
+			*(conflict->conflicting_pkgname) = xstrdup(pkgname);
+			*(conflict->conflicting_pattern) = xstrdup(p->name);
 			rv = 1 /* nonzero, stop iterating */;
 			break;
 		}
@@ -100,12 +132,14 @@ check_package_conflict(const char *pkgname, void *v)
  * variables are set to NULL.
  */
 int
-some_installed_package_conflicts_with(const char *pkgname, char **inst_pkgname, char **inst_pattern)
+some_installed_package_conflicts_with(const char *pkgname,
+    const char *skip_pkgname, char **inst_pkgname, char **inst_pattern)
 {
 	struct package_conflict cfl;
 	int rv;
 
 	cfl.pkgname = pkgname;
+	cfl.skip_pkgname = skip_pkgname;
 	*inst_pkgname = NULL;
 	*inst_pattern = NULL;
 	cfl.conflicting_pkgname = inst_pkgname;
@@ -129,5 +163,4 @@ int main(int argc, char **argv)
 		printf("no\n");
 	return 0;
 }
-void cleanup(int i) {}
 #endif

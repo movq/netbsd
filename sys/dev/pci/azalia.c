@@ -1,4 +1,4 @@
-/*	$NetBSD: azalia.c,v 1.64 2008/06/26 15:51:10 kent Exp $	*/
+/*	$NetBSD: azalia.c,v 1.64.6.2 2010/01/21 08:38:45 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: azalia.c,v 1.64 2008/06/26 15:51:10 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: azalia.c,v 1.64.6.2 2010/01/21 08:38:45 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -2071,6 +2071,7 @@ azalia_stream_halt(stream_t *this)
 
 	if (this->bdlist.addr == NULL)
 		return EINVAL;
+	this->intr = this->intr_arg = NULL;
 	ctl = STR_READ_2(this, CTL);
 	ctl &= ~(HDA_SD_CTL_DEIE | HDA_SD_CTL_FEIE | HDA_SD_CTL_IOCE | HDA_SD_CTL_RUN);
 	STR_WRITE_2(this, CTL, ctl);
@@ -2256,7 +2257,7 @@ azalia_query_devinfo(void *v, mixer_devinfo_t *mdev)
 
 	az = v;
 	co = &az->codecs[az->codecno];
-	if (mdev->index >= co->nmixers)
+	if (mdev->index < 0 || mdev->index >= co->nmixers)
 		return ENXIO;
 	*mdev = co->mixers[mdev->index].devinfo;
 	return 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: init_sysctl.c,v 1.149 2008/10/22 11:25:19 ad Exp $ */
+/*	$NetBSD: init_sysctl.c,v 1.149.4.7 2009/07/01 22:42:28 snj Exp $ */
 
 /*-
  * Copyright (c) 2003, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.149 2008/10/22 11:25:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.149.4.7 2009/07/01 22:42:28 snj Exp $");
 
 #include "opt_sysv.h"
 #include "opt_compat_netbsd32.h"
@@ -1693,7 +1693,7 @@ sysctl_kern_lwp(SYSCTLFN_ARGS)
 	sysctl_unlock();
 	if (pid == -1) {
 		mutex_enter(proc_lock);
-		LIST_FOREACH(p, &allproc, p_list) {
+		PROCLIST_FOREACH(p, &allproc) {
 			/* Grab a hold on the process. */
 			if (!rw_tryenter(&p->p_reflock, RW_READER)) {
 				continue;
@@ -2005,8 +2005,8 @@ sysctl_kern_file2(SYSCTLFN_ARGS)
 			} else {
 				mutex_exit(&fp->f_lock);
 			}
+			needed += elem_size;
 			if (elem_count > 0) {
-				needed += elem_size;
 				if (elem_count != INT_MAX)
 					elem_count--;
 			}
@@ -2021,7 +2021,7 @@ sysctl_kern_file2(SYSCTLFN_ARGS)
 			return (EINVAL);
 		sysctl_unlock();
 		mutex_enter(proc_lock);
-		LIST_FOREACH(p, &allproc, p_list) {
+		PROCLIST_FOREACH(p, &allproc) {
 			if (p->p_stat == SIDL) {
 				/* skip embryonic processes */
 				continue;
@@ -2038,6 +2038,11 @@ sysctl_kern_file2(SYSCTLFN_ARGS)
 			    NULL, NULL);
 			mutex_exit(p->p_lock);
 			if (error != 0) {
+				/*
+				 * Don't leak kauth retval if we're silently
+				 * skipping this entry.
+				 */
+				error = 0;
 				continue;
 			}
 
@@ -2076,8 +2081,8 @@ sysctl_kern_file2(SYSCTLFN_ARGS)
 				} else {
 					mutex_exit(&ff->ff_lock);
 				}
+				needed += elem_size;
 				if (elem_count > 0) {
-					needed += elem_size;
 					if (elem_count != INT_MAX)
 						elem_count--;
 				}
@@ -2113,7 +2118,7 @@ fill_file(struct kinfo_file *kp, const file_t *fp, const fdfile_t *ff,
 
 	kp->ki_fileaddr =	PTRTOUINT64(fp);
 	kp->ki_flag =		fp->f_flag;
-	kp->ki_iflags =		fp->f_iflags;
+	kp->ki_iflags =		0;
 	kp->ki_ftype =		fp->f_type;
 	kp->ki_count =		fp->f_count;
 	kp->ki_msgcount =	fp->f_msgcount;
@@ -2147,21 +2152,21 @@ fill_file(struct kinfo_file *kp, const file_t *fp, const fdfile_t *ff,
 static int
 sysctl_doeproc(SYSCTLFN_ARGS)
 {
-	struct eproc *eproc;
-	struct kinfo_proc2 *kproc2;
-	struct kinfo_proc *dp;
+	union {
+		struct kinfo_proc kproc;
+		struct kinfo_proc2 kproc2;
+	} *kbuf;
 	struct proc *p, *next, *marker;
-	char *where, *dp2;
+	char *where, *dp;
 	int type, op, arg, error;
-	u_int elem_size, elem_count;
+	u_int elem_size, kelem_size, elem_count;
 	size_t buflen, needed;
 	bool match, zombie, mmmbrains;
 
 	if (namelen == 1 && name[0] == CTL_QUERY)
 		return (sysctl_query(SYSCTLFN_CALL(rnode)));
 
-	dp = oldp;
-	dp2 = where = oldp;
+	dp = where = oldp;
 	buflen = where != NULL ? *oldlenp : 0;
 	error = 0;
 	needed = 0;
@@ -2175,7 +2180,8 @@ sysctl_doeproc(SYSCTLFN_ARGS)
 			arg = name[1];
 		else
 			arg = 0;		/* Quell compiler warning */
-		elem_size = elem_count = 0;	/* Ditto */
+		elem_count = 0;	/* Ditto */
+		kelem_size = elem_size = sizeof(kbuf->kproc);
 	} else {
 		if (namelen != 4)
 			return (EINVAL);
@@ -2183,18 +2189,14 @@ sysctl_doeproc(SYSCTLFN_ARGS)
 		arg = name[1];
 		elem_size = name[2];
 		elem_count = name[3];
+		kelem_size = sizeof(kbuf->kproc2);
 	}
 
 	sysctl_unlock();
 
-	if (type == KERN_PROC) {
-		eproc = kmem_alloc(sizeof(*eproc), KM_SLEEP);
-		kproc2 = NULL;
-	} else {
-		eproc = NULL;
-		kproc2 = kmem_alloc(sizeof(*kproc2), KM_SLEEP);
-	}
+	kbuf = kmem_alloc(sizeof(*kbuf), KM_SLEEP);
 	marker = kmem_alloc(sizeof(*marker), KM_SLEEP);
+	marker->p_flag = PK_MARKER;
 
 	mutex_enter(proc_lock);
 	mmmbrains = false;
@@ -2208,6 +2210,8 @@ sysctl_doeproc(SYSCTLFN_ARGS)
 				break;
 		}
 		next = LIST_NEXT(p, p_list);
+		if ((p->p_flag & PK_MARKER) != 0)
+			continue;
 
 		/*
 		 * Skip embryonic processes.
@@ -2304,51 +2308,32 @@ sysctl_doeproc(SYSCTLFN_ARGS)
 			LIST_INSERT_AFTER(p, marker, p_list);
 		}
 
-		if (type == KERN_PROC) {
-			if (buflen >= sizeof(struct kinfo_proc)) {
-				fill_eproc(p, eproc, zombie);
-				mutex_exit(p->p_lock);
-				mutex_exit(proc_lock);
-				error = dcopyout(l, p, &dp->kp_proc,
-				    sizeof(struct proc));
-				mutex_enter(proc_lock);
-				if (error) {
-					goto bah;
-				}
-				error = dcopyout(l, eproc, &dp->kp_eproc,
-				    sizeof(*eproc));
-				if (error) {
-					goto bah;
-				}
-				dp++;
-				buflen -= sizeof(struct kinfo_proc);
+		if (buflen >= elem_size &&
+		    (type == KERN_PROC || elem_count > 0)) {
+			if (type == KERN_PROC) {
+				kbuf->kproc.kp_proc = *p;
+				fill_eproc(p, &kbuf->kproc.kp_eproc, zombie);
 			} else {
-				mutex_exit(p->p_lock);
-			}
-			needed += sizeof(struct kinfo_proc);
-		} else { /* KERN_PROC2 */
-			if (buflen >= elem_size && elem_count > 0) {
-				fill_kproc2(p, kproc2, zombie);
-				mutex_exit(p->p_lock);
-				mutex_exit(proc_lock);
-				/*
-				 * Copy out elem_size, but not larger than
-				 * the size of a struct kinfo_proc2.
-				 */
-				error = dcopyout(l, kproc2, dp2,
-				    min(sizeof(*kproc2), elem_size));
-				mutex_enter(proc_lock);
-				if (error) {
-					goto bah;
-				}
-				dp2 += elem_size;
-				buflen -= elem_size;
+				fill_kproc2(p, &kbuf->kproc2, zombie);
 				elem_count--;
-			} else {
-				mutex_exit(p->p_lock);
 			}
-			needed += elem_size;
+			mutex_exit(p->p_lock);
+			mutex_exit(proc_lock);
+			/*
+			 * Copy out elem_size, but not larger than kelem_size
+			 */
+			error = dcopyout(l, kbuf, dp,
+			    min(kelem_size, elem_size));
+			mutex_enter(proc_lock);
+			if (error) {
+				goto bah;
+			}
+			dp += elem_size;
+			buflen -= elem_size;
+		} else {
+			mutex_exit(p->p_lock);
 		}
+		needed += elem_size;
 
 		/*
 		 * Release reference to process.
@@ -2363,10 +2348,7 @@ sysctl_doeproc(SYSCTLFN_ARGS)
 	mutex_exit(proc_lock);
 
 	if (where != NULL) {
-		if (type == KERN_PROC)
-			*oldlenp = (char *)dp - where;
-		else
-			*oldlenp = dp2 - where;
+		*oldlenp = dp - where;
 		if (needed > *oldlenp) {
 			error = ENOMEM;
 			goto out;
@@ -2375,10 +2357,8 @@ sysctl_doeproc(SYSCTLFN_ARGS)
 		needed += KERN_PROCSLOP;
 		*oldlenp = needed;
 	}
-	if (kproc2)
-		kmem_free(kproc2, sizeof(*kproc2));
-	if (eproc)
-		kmem_free(eproc, sizeof(*eproc));
+	if (kbuf)
+		kmem_free(kbuf, sizeof(*kbuf));
 	if (marker)
 		kmem_free(marker, sizeof(*marker));
 	sysctl_relock();
@@ -2391,10 +2371,8 @@ sysctl_doeproc(SYSCTLFN_ARGS)
  cleanup:
 	mutex_exit(proc_lock);
  out:
-	if (kproc2)
-		kmem_free(kproc2, sizeof(*kproc2));
-	if (eproc)
-		kmem_free(eproc, sizeof(*eproc));
+	if (kbuf)
+		kmem_free(kbuf, sizeof(*kbuf));
 	if (marker)
 		kmem_free(marker, sizeof(*marker));
 	sysctl_relock();
@@ -2996,6 +2974,14 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki, bool zombie)
 		ki->p_vm_tsize = vm->vm_tsize;
 		ki->p_vm_dsize = vm->vm_dsize;
 		ki->p_vm_ssize = vm->vm_ssize;
+		ki->p_vm_vsize = vm->vm_map.size;
+		/*
+		 * Since the stack is initially mapped mostly with
+		 * PROT_NONE and grown as needed, adjust the "mapped size"
+		 * to skip the unused stack portion.
+		 */
+		ki->p_vm_msize =
+		    atop(vm->vm_map.size) - vm->vm_issize + vm->vm_ssize;
 
 		/* Pick the primary (first) LWP */
 		l = proc_active_lwp(p);
@@ -3166,6 +3152,7 @@ fill_eproc(struct proc *p, struct eproc *ep, bool zombie)
 		ep->e_vm.vm_tsize = vm->vm_tsize;
 		ep->e_vm.vm_dsize = vm->vm_dsize;
 		ep->e_vm.vm_ssize = vm->vm_ssize;
+		ep->e_vm.vm_map.size = vm->vm_map.size;
 
 		/* Pick the primary (first) LWP */
 		l = proc_active_lwp(p);

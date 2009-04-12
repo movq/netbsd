@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.en,v 1.149 2008/02/04 01:54:56 riz Exp $	*/
+/*	$NetBSD: msg.mi.en,v 1.149.14.4 2009/05/18 19:35:13 bouyer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -44,6 +44,9 @@ message usage
 
 message sysinst_message_language
 {Installation messages in English}
+
+message sysinst_message_locale
+{en_US.ISO8859-1}
 
 message Yes {Yes}
 message No {No}
@@ -222,7 +225,7 @@ message fssizesok
 {Accept partition sizes.  Free space %d %s, %d free partitions.}
 
 message fssizesbad
-{Reduce partition sizes by %d %s (%d sectors).}
+{Reduce partition sizes by %d %s (%u sectors).}
 
 message startoutsidedisk
 {The start value you specified is beyond the end of the disk.
@@ -233,6 +236,13 @@ message endoutsidedisk
 Your partition size has been truncated to %d %s.
 
 Type enter to continue
+}
+
+message toobigdisklabel
+{
+This disk is too large for a disklabel partition table to be used
+and hence cannot be used as a bootable disk or to hold the root
+partition.
 }
 
 message fspart
@@ -247,7 +257,7 @@ message fspart_header
 }
 
 message fspart_row
-{%9d %9d %9d %-10s %-5s %-5s %s}
+{%9lu %9lu %9lu %-10s %-5s %-5s %s}
 
 message show_all_unused_partitions
 {Show all unused partitions}
@@ -449,7 +459,7 @@ must be nfs mountable.
 
 message floppysource
 {Enter the floppy device to be used and transfer directory on the target
-filesystem.  The set files must be in the root directory of the floppies.
+file system.  The set files must be in the root directory of the floppies.
 
 }
 
@@ -955,3 +965,8 @@ postfix. The file /etc/mailer.conf still chooses the removed
 sendmail. Do you want to upgrade /etc/mailer.conf automatically for
 postfix? If you choose "No" you will have to update /etc/mailer.conf
 yourself to ensure proper email delivery.}
+
+message license
+{To use the network interface %s, you must agree to the license in
+file %s. To view this file now, you can type ^Z, look at the contents of
+the file and then type "fg" to resume.}
