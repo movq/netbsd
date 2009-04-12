@@ -1,4 +1,4 @@
-/* $NetBSD: udf_strat_direct.c,v 1.5 2008/08/29 15:04:18 reinoud Exp $ */
+/* $NetBSD: udf_strat_direct.c,v 1.5.4.5 2009/07/09 19:44:34 snj Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -28,12 +28,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_strat_direct.c,v 1.5 2008/08/29 15:04:18 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_strat_direct.c,v 1.5.4.5 2009/07/09 19:44:34 snj Exp $");
 #endif /* not lint */
 
 
 #if defined(_KERNEL_OPT)
-#include "opt_quota.h"
 #include "opt_compat_netbsd.h"
 #endif
 
@@ -116,9 +115,7 @@ udf_wr_nodedscr_callback(struct buf *buf)
 	udf_node->outstanding_nodedscr--;
 	if (udf_node->outstanding_nodedscr == 0) {
 		/* unlock the node */
-		KASSERT(udf_node->i_flags & IN_CALLBACK_ULK);
-		UDF_UNLOCK_NODE(udf_node, IN_CALLBACK_ULK);
-
+		UDF_UNLOCK_NODE(udf_node, 0);
 		wakeup(&udf_node->outstanding_nodedscr);
 	}
 	/* unreference the vnode so it can be recycled */
@@ -269,6 +266,8 @@ udf_queue_buf_direct(struct udf_strat_args *args)
 	if ((buf->b_flags & B_READ) == 0) {
 		/* writing */
 		queue = UDF_SHED_SEQWRITING;
+		if (what == UDF_C_ABSOLUTE)
+			queue = UDF_SHED_WRITING;
 		if (what == UDF_C_DSCR)
 			queue = UDF_SHED_WRITING;
 		if (what == UDF_C_NODE)
@@ -278,7 +277,8 @@ udf_queue_buf_direct(struct udf_strat_args *args)
 	/* use disc sheduler */
 	class = ump->discinfo.mmc_class;
 	KASSERT((class == MMC_CLASS_UNKN) || (class == MMC_CLASS_DISC) ||
-		(ump->discinfo.mmc_cur & MMC_CAP_HW_DEFECTFREE));
+		(ump->discinfo.mmc_cur & MMC_CAP_HW_DEFECTFREE) ||
+		(ump->vfs_mountp->mnt_flag & MNT_RDONLY));
 
 	if (queue == UDF_SHED_READING) {
 		DPRINTF(SHEDULE, ("\nudf_issue_buf READ %p : sector %d type %d,"
@@ -299,23 +299,10 @@ udf_queue_buf_direct(struct udf_strat_args *args)
 			"type %d, b_resid %d, b_bcount %d, b_bufsize %d\n",
 			buf, (uint32_t) buf->b_blkno / blks, buf->b_udf_c_type,
 			buf->b_resid, buf->b_bcount, buf->b_bufsize));
-		/* if we have FIDs fixup using buffer's sector number(s) */
-		if (buf->b_udf_c_type == UDF_C_FIDS) {
-			panic("UDF_C_FIDS in SHED_WRITING!\n");
-			buf_len = buf->b_bcount;
-			sectornr = our_sectornr;
-			bpos = 0;
-			while (buf_len) {
-				len = MIN(buf_len, sector_size);
-				fidblk = (uint8_t *) buf->b_data + bpos;
-				udf_fixup_fid_block(fidblk, sector_size,
-					0, len, sectornr);
-				sectornr++;
-				bpos += len;
-				buf_len -= len;
-			}
-		}
-		udf_fixup_node_internals(ump, buf->b_data, buf->b_udf_c_type);
+		KASSERT(buf->b_udf_c_type == UDF_C_DSCR || 
+			buf->b_udf_c_type == UDF_C_ABSOLUTE ||
+			buf->b_udf_c_type == UDF_C_NODE);
+		 udf_fixup_node_internals(ump, buf->b_data, buf->b_udf_c_type);
 		VOP_STRATEGY(ump->devvp, buf);
 		return;
 	}

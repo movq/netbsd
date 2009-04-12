@@ -1,6 +1,6 @@
 /* 
  * dhcpcd - DHCP client daemon
- * Copyright 2006-2008 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2009 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include "common.h"
@@ -39,10 +40,12 @@
 static int signal_pipe[2];
 
 static const int handle_sigs[] = {
-	SIGHUP,
 	SIGALRM,
+	SIGHUP,
+	SIGINT,
+	SIGPIPE,
 	SIGTERM,
-	SIGINT
+	SIGUSR1,
 };
 
 static void
@@ -50,15 +53,10 @@ signal_handler(int sig)
 {
 	int serrno = errno;
 
-	write(signal_pipe[1], &sig, sizeof(sig));
+	if (write(signal_pipe[1], &sig, sizeof(sig)) != sizeof(sig))
+		syslog(LOG_ERR, "failed to write signal %d: %m", sig);
 	/* Restore errno */
 	errno = serrno;
-}
-
-int
-signal_fd(void)
-{
-	return (signal_pipe[0]);
 }
 
 /* Read a signal from the signal pipe. Returns 0 if there is
@@ -69,11 +67,11 @@ signal_read(void)
 {
 	int sig = -1;
 	char buf[16];
-	size_t bytes;
+	ssize_t bytes;
 
 	memset(buf, 0, sizeof(buf));
 	bytes = read(signal_pipe[0], buf, sizeof(buf));
-	if (bytes >= sizeof(sig))
+	if (bytes >= 0 && (size_t)bytes >= sizeof(sig))
 		memcpy(&sig, buf, sizeof(sig));
 	return sig;
 }
@@ -93,7 +91,7 @@ signal_init(void)
 		return -1;
 	if (set_cloexec(signal_pipe[1]) == -1)
 		return -1;
-	return 0;
+	return signal_pipe[0];
 }
 
 static int
@@ -123,3 +121,4 @@ signal_reset(void)
 {
 	return signal_handle(SIG_DFL);
 }
+

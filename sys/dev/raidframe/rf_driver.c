@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_driver.c,v 1.118 2008/04/28 20:23:56 martin Exp $	*/
+/*	$NetBSD: rf_driver.c,v 1.118.10.2 2009/12/10 22:59:16 snj Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -66,7 +66,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.118 2008/04/28 20:23:56 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.118.10.2 2009/12/10 22:59:16 snj Exp $");
 
 #include "opt_raid_diagnostic.h"
 
@@ -107,6 +107,7 @@ __KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.118 2008/04/28 20:23:56 martin Exp $
 #include "rf_options.h"
 #include "rf_shutdown.h"
 #include "rf_kintf.h"
+#include "rf_paritymap.h"
 
 #include <sys/buf.h>
 
@@ -223,12 +224,24 @@ rf_Shutdown(RF_Raid_t *raidPtr)
 
 	/* Wait for any parity re-writes to stop... */
 	while (raidPtr->parity_rewrite_in_progress) {
-		printf("Waiting for parity re-write to exit...\n");
+		printf("raid%d: Waiting for parity re-write to exit...\n",
+		       raidPtr->raidid);
 		tsleep(&raidPtr->parity_rewrite_in_progress, PRIBIO,
 		       "rfprwshutdown", 0);
 	}
 
+	/* Wait for any reconstruction to stop... */
+	while (raidPtr->reconInProgress) {
+		printf("raid%d: Waiting for reconstruction to stop...\n",
+		       raidPtr->raidid);
+		tsleep(&raidPtr->waitForReconCond, PRIBIO,
+		       "rfreshutdown",0);
+	}
+
 	raidPtr->valid = 0;
+
+	if (raidPtr->parity_map != NULL)
+		rf_paritymap_detach(raidPtr);
 
 	rf_update_component_labels(raidPtr, RF_FINAL_COMPONENT_UPDATE);
 
@@ -404,6 +417,11 @@ rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 		DO_RAID_FAIL();
 		return(rc);
 	}
+
+	/* Set up parity map stuff, if applicable. */
+#ifndef RF_NO_PARITY_MAP
+	rf_paritymap_attach(raidPtr, cfgPtr->force);
+#endif
 
 	raidPtr->valid = 1;
 
@@ -664,6 +682,11 @@ rf_DoAccess(RF_Raid_t * raidPtr, RF_IoType_t type, int async_flag,
 	RF_ETIMER_START(desc->tracerec.tot_timer);
 #endif
 	desc->async_flag = async_flag;
+
+	if (raidPtr->parity_map != NULL && 
+	    type == RF_IO_TYPE_WRITE)
+		rf_paritymap_begin(raidPtr->parity_map, raidAddress, 
+		    numBlocks);
 
 	rf_ContinueRaidAccess(desc);
 

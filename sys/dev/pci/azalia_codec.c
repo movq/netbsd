@@ -1,4 +1,4 @@
-/*	$NetBSD: azalia_codec.c,v 1.71 2008/08/24 16:12:03 kent Exp $	*/
+/*	$NetBSD: azalia_codec.c,v 1.71.4.3 2009/03/02 20:16:34 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: azalia_codec.c,v 1.71 2008/08/24 16:12:03 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: azalia_codec.c,v 1.71.4.3 2009/03/02 20:16:34 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -117,6 +117,7 @@ static int	alc260_set_port(codec_t *, mixer_ctrl_t *);
 static int	alc260_get_port(codec_t *, mixer_ctrl_t *);
 static int	alc260_unsol_event(codec_t *, int);
 static int	alc262_init_widget(const codec_t *, widget_t *, nid_t);
+static int	alc268_init_dacgroup(codec_t *);
 static int	alc662_init_dacgroup(codec_t *);
 static int	alc861_init_dacgroup(codec_t *);
 static int	alc861vdgr_init_dacgroup(codec_t *);
@@ -198,6 +199,14 @@ azalia_codec_init_vtbl(codec_t *this)
 		break;
 	case 0x10ec0268:
 		this->name = "Realtek ALC268";
+		this->init_dacgroup = alc268_init_dacgroup;
+		this->mixer_init = generic_mixer_autoinit;
+		this->init_widget = generic_mixer_init_widget;
+		break;
+	case 0x10ec0269:
+		this->name = "Realtek ALC269";
+		this->mixer_init = generic_mixer_autoinit;
+		this->init_widget = generic_mixer_init_widget;
 		break;
 	case 0x10ec0662:
 		this->name = "Realtek ALC662-GR";
@@ -236,6 +245,8 @@ azalia_codec_init_vtbl(codec_t *this)
 	case 0x10ec0885:
 		this->name = "Realtek ALC885";
 		this->init_dacgroup = alc885_init_dacgroup;
+		this->mixer_init = generic_mixer_autoinit;
+		this->init_widget = generic_mixer_init_widget;
 		break;
 	case 0x10ec0888:
 		this->name = "Realtek ALC888";
@@ -1341,6 +1352,37 @@ generic_mixer_create_virtual(codec_t *this)
 		}
 	}
 
+	if (mdac == -1) {
+		/*
+		 * no volume mixer found on the DAC; enumerate peer widgets
+		 * and try to find a volume mixer on them
+		 */
+		widget_t *w;
+		int j;
+		FOR_EACH_WIDGET(this, i) {
+			w = &this->w[i];
+			for (j = 0; j < w->nconnections; j++)
+				if (w->connections[j] == cgdac->conv[0])
+					break;
+
+			if (j == w->nconnections)
+				continue;
+
+			for (j = 0; j < this->nmixers; j++) {
+				if (this->mixers[j].devinfo.type !=
+				    AUDIO_MIXER_VALUE)
+					continue;
+				if (this->mixers[j].nid == w->nid) {
+					mdac = mmaster = j;
+					break;
+				}
+			}
+
+			if (mdac == -1)
+				break;
+		}
+	}
+
 	if (mdac >= 0) {
 		err = generic_mixer_ensure_capacity(this, this->nmixers + 1);
 		if (err)
@@ -2374,7 +2416,7 @@ alc260_unsol_event(codec_t *this, int tag)
 }
 
 /* ----------------------------------------------------------------
- * Realtek ALC861
+ * Realtek ALC262
  * ---------------------------------------------------------------- */
 
 static int
@@ -2386,6 +2428,25 @@ alc262_init_widget(const codec_t *this, widget_t *w, nid_t nid)
 		break;
 	}
 
+	return 0;
+}
+
+/* ----------------------------------------------------------------
+ * Realtek ALC268
+ * ---------------------------------------------------------------- */
+
+static int
+alc268_init_dacgroup(codec_t *this)
+{
+	static const convgroupset_t dacs = {
+		-1, 1,
+		{{2, {0x02, 0x03}}}}; /* analog 4ch */
+	static const convgroupset_t adcs = {
+		-1, 1,
+		{{2, {0x08, 0x07}}}};	/* analog 4ch */
+
+	this->dacs = dacs;
+	this->adcs = adcs;
 	return 0;
 }
 

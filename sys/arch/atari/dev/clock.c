@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.41 2008/06/11 14:35:53 tsutsui Exp $	*/
+/*	$NetBSD: clock.c,v 1.41.6.2 2009/10/04 00:31:52 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.41 2008/06/11 14:35:53 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.41.6.2 2009/10/04 00:31:52 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -239,7 +239,6 @@ void		*auxp;
 	MFP->mf_tadr  = divisor;	/* Set divisor			*/
 
 	clk_timecounter.tc_frequency = CLOCK_HZ;
-	tc_init(&clk_timecounter);
 
 	if (hz != 48 && hz != 64 && hz != 96) { /* XXX */
 		printf (": illegal value %d for systemclock, reset to %d\n\t",
@@ -247,6 +246,7 @@ void		*auxp;
 		hz = 64;
 	}
 	printf(": system hz %d timer-A divisor 200/%d\n", hz, divisor);
+	tc_init(&clk_timecounter);
 
 #ifdef STATCLOCK
 	if ((stathz == 0) || (stathz > hz) || (CLOCK_HZ % stathz))
@@ -319,21 +319,29 @@ statintr(frame)
 static u_int
 clk_getcounter(struct timecounter *tc)
 {
-	u_int delta;
-	u_char ipra, tadr;
-	int s, cur_hardclock;
+	uint32_t delta, count, cur_hardclock;
+	uint8_t ipra, tadr;
+	int s;
+	static uint32_t lastcount;
 
 	s = splhigh();
+	cur_hardclock = hardclock_ticks;
 	ipra = MFP->mf_ipra;
 	tadr = MFP->mf_tadr;
 	delta = divisor - tadr;
 
 	if (ipra & IA_TIMA)
 		delta += divisor;
-	cur_hardclock = hardclock_ticks;
 	splx(s);
 
-	return (divisor - tadr) + divisor * cur_hardclock;
+	count = (divisor * cur_hardclock) + delta;
+	if ((int32_t)(count - lastcount) < 0) {
+		/* XXX wrapped; maybe hardclock() is blocked more than 2/HZ */
+		count = lastcount + 1;
+	}
+	lastcount = count;
+
+	return count;
 }
 
 #define TIMB_FREQ	614400

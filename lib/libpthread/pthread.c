@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread.c,v 1.106 2008/10/08 10:03:28 ad Exp $	*/
+/*	$NetBSD: pthread.c,v 1.106.2.3 2010/05/20 05:02:07 snj Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread.c,v 1.106 2008/10/08 10:03:28 ad Exp $");
+__RCSID("$NetBSD: pthread.c,v 1.106.2.3 2010/05/20 05:02:07 snj Exp $");
 
 #define	__EXPOSE_STACK	1
 
@@ -240,11 +240,14 @@ pthread__init(void)
 static void
 pthread__fork_callback(void)
 {
+	struct __pthread_st *self;
 
 	/* lwpctl state is not copied across fork. */
 	if (_lwp_ctl(LWPCTL_FEATURE_CURCPU, &pthread__first->pt_lwpctl)) {
 		err(1, "_lwp_ctl");
 	}
+	self = pthread__self();
+	self->pt_lid = _lwp_self();
 }
 
 static void
@@ -358,23 +361,17 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 	 */
 	if (!PTQ_EMPTY(&pthread__deadqueue)) {
 		pthread_mutex_lock(&pthread__deadqueue_lock);
-		newthread = PTQ_FIRST(&pthread__deadqueue);
-		if (newthread != NULL) {
-			PTQ_REMOVE(&pthread__deadqueue, newthread, pt_deadq);
-			pthread_mutex_unlock(&pthread__deadqueue_lock);
+		PTQ_FOREACH(newthread, &pthread__deadqueue, pt_deadq) {
 			/* Still running? */
-			if (newthread->pt_lwpctl->lc_curcpu !=
-			    LWPCTL_CPU_EXITED &&
-			    (_lwp_kill(newthread->pt_lid, 0) == 0 ||
-			    errno != ESRCH)) {
-				pthread_mutex_lock(&pthread__deadqueue_lock);
-				PTQ_INSERT_TAIL(&pthread__deadqueue,
-				    newthread, pt_deadq);
-				pthread_mutex_unlock(&pthread__deadqueue_lock);
-				newthread = NULL;
-			}
-		} else
-			pthread_mutex_unlock(&pthread__deadqueue_lock);
+			if (newthread->pt_lwpctl->lc_curcpu ==
+			    LWPCTL_CPU_EXITED ||
+			    (_lwp_kill(newthread->pt_lid, 0) == -1 &&
+			    errno == ESRCH))
+				break;
+		}
+		if (newthread)
+			PTQ_REMOVE(&pthread__deadqueue, newthread, pt_deadq);
+		pthread_mutex_unlock(&pthread__deadqueue_lock);
 	}
 
 	/*
@@ -1281,7 +1278,13 @@ pthread__stackid_setup(void *base, size_t size, pthread_t *tp)
 static int
 pthread__cmp(struct __pthread_st *a, struct __pthread_st *b)
 {
-	return b - a;
+
+	if ((uintptr_t)a < (uintptr_t)b)
+		return (-1);
+	else if (a == b)
+		return 0;
+	else
+		return 1;
 }
 RB_GENERATE_STATIC(__pthread__alltree, __pthread_st, pt_alltree, pthread__cmp)
 #endif

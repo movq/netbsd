@@ -1,4 +1,4 @@
-/*	$NetBSD: v_ex.c,v 1.2 2008/10/29 17:50:49 christos Exp $ */
+/*	$NetBSD: v_ex.c,v 1.2.2.2 2009/10/18 09:58:03 sborrill Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -178,7 +178,7 @@ v_switch(SCR *sp, VICMD *vp)
 {
 	EXCMD cmd;
 	char *name;
-	CHAR_T *wp;
+	const CHAR_T *wp;
 	size_t wlen;
 
 	/*
@@ -528,6 +528,7 @@ v_ecl(SCR *sp)
 
 	new->frp = wp->ccl_sp->frp;
 	new->frp->flags = sp->frp->flags;
+	new->conv = wp->ccl_sp->conv;
 
 	/* Move the cursor to the end. */
 	(void)db_last(new, &new->lno);

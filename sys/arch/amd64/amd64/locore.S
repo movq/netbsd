@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.47 2008/06/02 14:41:41 ad Exp $	*/
+/*	$NetBSD: locore.S,v 1.47.8.4 2010/04/22 20:02:48 snj Exp $	*/
 
 /*
  * Copyright-o-rama!
@@ -235,7 +235,7 @@ _C_LABEL(lapic_isr):
 #endif
 
 	.globl	_C_LABEL(cpu_id),_C_LABEL(cpu_vendorname), _C_LABEL(cpu_brand_id)
-	.globl	_C_LABEL(cpuid_level),_C_LABEL(cpu_feature),_C_LABEL(cpu_feature2)
+	.globl	_C_LABEL(cpuid_level)
 	.globl	_C_LABEL(esym),_C_LABEL(eblob),_C_LABEL(boothowto)
 	.globl	_C_LABEL(bootinfo),_C_LABEL(atdevbase)
 	.globl	_C_LABEL(proc0paddr),_C_LABEL(PDPpaddr)
@@ -245,10 +245,6 @@ _C_LABEL(lapic_isr):
 _C_LABEL(cpu):		.long	0	# are we 386, 386sx, or 486,
 					#   or Pentium, or..
 _C_LABEL(cpu_id):	.long	0	# saved from `cpuid' instruction
-_C_LABEL(cpu_feature):	.long	0	# feature flags from 'cpuid'
-					#   instruction
-_C_LABEL(cpu_feature2):	.long	0	# feature flags from 'cpuid'
-					#   instruction
 _C_LABEL(cpuid_level):	.long	-1	# max. level accepted by 'cpuid'
 					#   instruction
 _C_LABEL(cpu_vendorname):	.space	16	# vendor string returned by `cpuid'
@@ -274,12 +270,24 @@ _C_LABEL(biosextmem):	.long	REALEXTMEM
 #define	RELOC(x)	_RELOC(_C_LABEL(x))
 
 #ifndef XEN
-	.globl	gdt64
+	.globl	gdt64_lo
+	.globl	gdt64_hi
 
-gdt64:
-	.word	gdt64_end-gdt64_start
+#define GDT64_LIMIT gdt64_end-gdt64_start-1
+
+/* Temporary gdt64, with base address in low memory */
+gdt64_lo:
+	.word	GDT64_LIMIT
 	.quad	_RELOC(gdt64_start)
 .align 64
+
+/* Temporary gdt64, with base address in high memory */
+gdt64_hi:
+	.word	GDT64_LIMIT
+	.quad	gdt64_start
+.align 64
+
+#undef GDT64_LIMIT
 
 gdt64_start:
 	.quad 0x0000000000000000	/* always empty */
@@ -288,7 +296,7 @@ gdt64_start:
 gdt64_end:
 
 farjmp64:
-	.long	longmode-KERNBASE
+	.long	_RELOC(longmode)
 	.word	GSEL(GCODE_SEL, SEL_KPL)
 	
 #endif	/* !XEN */
@@ -411,17 +419,10 @@ start:	movw	$0x1234,0x472			# warm boot
 	movl	$1,%eax
 	cpuid
 	movl	%eax,RELOC(cpu_id)
-	movl	%edx,RELOC(cpu_feature)
-	movl	%ecx,RELOC(cpu_feature2)
 
 	/* Brand ID is bits 0-7 of %ebx */
 	andl	$255,%ebx
 	movl	%ebx,RELOC(cpu_brand_id)
-
-	/* add AMD specific feature flags */
-	movl	$0x80000001,%eax
-	cpuid
-	orl	%edx,RELOC(cpu_feature)
 
 	/*
 	 * Finished with old stack; load new %esp now instead of later so we
@@ -643,7 +644,7 @@ compat:
 	 * in it to do that.
 	 */
 
-	movl	$RELOC(gdt64),%eax
+	movl	$RELOC(gdt64_lo),%eax
 	lgdt	(%eax)
 	movl	$RELOC(farjmp64),%eax
 	ljmp	*(%eax)
@@ -659,9 +660,17 @@ longmode:
 	 */
 	movabsq	$longmode_hi,%rax
 	jmp	*%rax
+
 longmode_hi:
+
 	/*
-	 * We have arrived.
+	 * We left the identity mapped area. Base address of
+	 * the temporary gdt64 should now be in high memory.
+	 */
+	movq	$RELOC(gdt64_hi),%rax
+	lgdt	(%rax)
+
+	/*
 	 * There's no need anymore for the identity mapping in low
 	 * memory, remove it.
 	 */
@@ -959,15 +968,14 @@ ENTRY(cpu_switchto)
 2:
 #ifndef XEN
 	movl	$IPL_IPI,CPUVAR(ILEVEL)
-	movl	PCB_CR0(%r14),%ecx
+	movl	PCB_CR0(%r14),%ecx	/* has CR0_TS clear */
 	movq	%cr0,%rdx
 
 	/*
 	 * If our floating point registers are on a different CPU,
 	 * set CR0_TS so we'll trap rather than reuse bogus state.
 	 */
-	movq	PCB_FPCPU(%r14),%rax
-	cmpq	CPUVAR(SELF),%rax
+	cmpq	CPUVAR(FPCURLWP),%r12
 	je	3f
 	orq	$CR0_TS,%rcx
 
@@ -1261,7 +1269,7 @@ ENTRY(sse2_idlezero_page)
 	xorq	%rax, %rax
 	.align	16
 1:
-	cmpl	$0, CPUVAR(RESCHED)
+	testl	$RESCHED_KPREEMPT, CPUVAR(RESCHED)
 	jnz	2f
 	movnti	%rax, 0(%rdi)
 	movnti	%rax, 8(%rdi)

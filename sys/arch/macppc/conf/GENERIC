@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.271 2008/10/07 12:43:32 pgoyette Exp $
+# $NetBSD: GENERIC,v 1.271.4.2 2009/03/02 20:14:34 snj Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/macppc/conf/std.macppc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.271 $"
+#ident 		"GENERIC-$Revision: 1.271.4.2 $"
 
 maxusers	32
 
@@ -107,6 +107,7 @@ file-system	PTYFS		# /dev/pts/N support
 file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 #file-system	HFS		# experimental - Apple HFS+ (read-only)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 
 # File system options
 options 	QUOTA		# UFS quotas
@@ -285,8 +286,9 @@ trm*	at pci? dev ? function ?	# Tekram DC-395U/UW/F, DC-315/U SCSI
 chipsfb*	at pci?	function ?	# C&T 65550
 machfb*		at pci? function ?	# ATI Mach 64, Rage, Rage Pro
 
-radeonfb*	at pci? function ?	# ATI Radeon. R3xx is problematic
-options 	RADEONFB_MMAP_BARS	# allow mmap()ing BARs - needed for X
+# radeonfb is disabled because it causes trouble on some radeon variants
+#radeonfb*	at pci? function ?	# ATI Radeon. R3xx is problematic
+#options 	RADEONFB_MMAP_BARS	# allow mmap()ing BARs - needed for X
 
 voodoofb*	at pci? function ?	# 3Dfx Voodoo3 
 r128fb*		at pci? function ?	# ATI Rage 128
@@ -596,6 +598,7 @@ pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	nsmb			# SMB requester
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	putter			# for puffs(4) and pud(4)
 
 # Veriexec
 #

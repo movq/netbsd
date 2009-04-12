@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.57 2008/10/15 08:13:17 ad Exp $	*/
+/*	$NetBSD: cpu.c,v 1.57.4.4 2010/04/22 20:02:48 snj Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.57 2008/10/15 08:13:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.57.4.4 2010/04/22 20:02:48 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_mpbios.h"		/* for MPDEBUG */
@@ -166,6 +166,13 @@ static void	cpu_init_idle_lwp(struct cpu_info *);
 
 uint32_t cpus_attached = 0;
 uint32_t cpus_running = 0;
+
+/* CPUID feature flags */
+uint32_t cpu_feature;  /* %edx */
+uint32_t cpu_feature2; /* %ecx */
+uint32_t cpu_feature3; /* extended features - %edx */
+uint32_t cpu_feature4; /* extended features - %ecx */
+uint32_t cpu_feature_padlock; /* VIA PadLock feature flags */
 
 extern char x86_64_doubleflt_stack[];
 
@@ -399,9 +406,14 @@ cpu_attach(device_t parent, device_t self, void *aux)
 		pmap_cpu_init_late(ci);
 		cpu_start_secondary(ci);
 		if (ci->ci_flags & CPUF_PRESENT) {
+			struct cpu_info *tmp;
+
 			cpu_identify(ci);
-			ci->ci_next = cpu_info_list->ci_next;
-			cpu_info_list->ci_next = ci;
+			tmp = cpu_info_list;
+			while (tmp->ci_next)
+				tmp = tmp->ci_next;
+
+			tmp->ci_next = ci;
 		}
 		break;
 
@@ -508,7 +520,7 @@ cpu_boot_secondary_processors(void)
 	u_long i;
 
 	/* Now that we know the number of CPUs, patch the text segment. */
-	x86_patch();
+	x86_patch(false);
 
 	for (i=0; i < maxcpus; i++) {
 		ci = cpu_lookup(i);
@@ -964,7 +976,7 @@ cpu_init_msrs(struct cpu_info *ci, bool full)
 		wrmsr(MSR_KERNELGSBASE, 0);
 	}
 
-	if (cpu_feature & CPUID_NOX)
+	if (cpu_feature3 & CPUID_NOX)
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_NXE);
 }
 #endif	/* __x86_64__ */
@@ -1002,7 +1014,7 @@ cpu_suspend(device_t dv PMF_FN_ARGS)
 
 	if (sc->sc_wasonline) {
 		mutex_enter(&cpu_lock);
-		err = cpu_setonline(ci, false);
+		err = cpu_setstate(ci, false);
 		mutex_exit(&cpu_lock);
 	
 		if (err)
@@ -1028,7 +1040,7 @@ cpu_resume(device_t dv PMF_FN_ARGS)
 
 	if (sc->sc_wasonline) {
 		mutex_enter(&cpu_lock);
-		err = cpu_setonline(ci, true);
+		err = cpu_setstate(ci, true);
 		mutex_exit(&cpu_lock);
 	}
 

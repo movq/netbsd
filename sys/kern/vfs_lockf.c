@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_lockf.c,v 1.69 2008/10/11 13:40:57 pooka Exp $	*/
+/*	$NetBSD: vfs_lockf.c,v 1.69.4.3 2009/09/05 11:36:29 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.69 2008/10/11 13:40:57 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.69.4.3 2009/09/05 11:36:29 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -190,11 +190,12 @@ lf_printlist(const char *tag, struct lockf *lock)
  * 0 - always allocate.  1 - cutoff at limit.  2 - cutoff at double limit.
  */
 static struct lockf *
-lf_alloc(uid_t uid, int allowfail)
+lf_alloc(int allowfail)
 {
 	struct uidinfo *uip;
 	struct lockf *lock;
 	u_long lcnt;
+	const uid_t uid = kauth_cred_geteuid(kauth_cred_get());
 
 	uip = uid_find(uid);
 	lcnt = atomic_inc_ulong_nv(&uip->ui_lockcnt);
@@ -383,6 +384,7 @@ lf_split(struct lockf *lock1, struct lockf *lock2, struct lockf **sparelock)
 	 */
 	splitlock = *sparelock;
 	*sparelock = NULL;
+	cv_destroy(&splitlock->lf_cv);
 	memcpy(splitlock, lock1, sizeof(*splitlock));
 	cv_init(&splitlock->lf_cv, lockstr);
 
@@ -806,7 +808,6 @@ lf_getlock(struct lockf *lock, struct flock *fl)
 int
 lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 {
-	struct lwp *l = curlwp;
 	struct flock *fl = ap->a_fl;
 	struct lockf *lock = NULL;
 	struct lockf *sparelock;
@@ -834,6 +835,18 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 	default:
 		return EINVAL;
 	}
+
+	if (fl->l_len == 0)
+		end = -1;
+	else {
+		if (fl->l_len > 0)
+			end = start + fl->l_len - 1;
+		else {
+			/* lockf() allows -ve lengths */
+			end = start - 1;
+			start += fl->l_len;
+		}
+	}
 	if (start < 0)
 		return EINVAL;
 
@@ -851,7 +864,7 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 			/*
 			 * Byte-range lock might need one more lock.
 			 */
-			sparelock = lf_alloc(kauth_cred_geteuid(l->l_cred), 0);
+			sparelock = lf_alloc(0);
 			if (sparelock == NULL) {
 				error = ENOMEM;
 				goto quit;
@@ -868,8 +881,23 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 		return EINVAL;
 	}
 
-	lock = lf_alloc(kauth_cred_geteuid(l->l_cred),
-	    ap->a_op != F_UNLCK ? 1 : 2);
+	switch (ap->a_op) {
+	case F_SETLK:
+		lock = lf_alloc(1);
+		break;
+	case F_UNLCK:
+		if (start == 0 || end == -1) {
+			/* never split */
+			lock = lf_alloc(0);
+		} else {
+			/* might split */
+			lock = lf_alloc(2);
+		}
+		break;
+	case F_GETLK:
+		lock = lf_alloc(0);
+		break;
+	}
 	if (lock == NULL) {
 		error = ENOMEM;
 		goto quit;
@@ -888,10 +916,6 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 		}
 	}
 
-	if (fl->l_len == 0)
-		end = -1;
-	else
-		end = start + fl->l_len - 1;
 	/*
 	 * Create the lockf structure.
 	 */
@@ -905,7 +929,7 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 	if (lock->lf_flags & F_POSIX) {
 		KASSERT(curproc == (struct proc *)ap->a_id);
 	}
-	lock->lf_id = (struct proc *)ap->a_id;
+	lock->lf_id = ap->a_id;
 
 	/*
 	 * Do the requested operation.

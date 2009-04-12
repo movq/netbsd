@@ -1,4 +1,4 @@
-/*	$NetBSD: common.h,v 1.1.1.2 2008/10/07 15:55:20 joerg Exp $	*/
+/*	$NetBSD: common.h,v 1.1.1.2.4.2 2010/02/03 00:25:23 snj Exp $	*/
 /*-
  * Copyright (c) 1998-2004 Dag-Erling Coïdan Smørgrav
  * All rights reserved.
@@ -46,12 +46,14 @@
 #endif
 
 #if !defined(__sun) && !defined(__hpux) && !defined(__INTERIX) && \
-    !defined(__digital__) && !defined(__linux) && !defined(__sgi)
+    !defined(__digital__) && !defined(__linux) && !defined(__MINT__) && \
+    !defined(__sgi)
 #define HAVE_SA_LEN
 #endif
 
 /* Connection */
 typedef struct fetchconn conn_t;
+
 struct fetchconn {
 	int		 sd;		/* socket descriptor */
 	char		*buf;		/* buffer */
@@ -70,7 +72,11 @@ struct fetchconn {
 	const SSL_METHOD *ssl_meth;	/* SSL method */
 #  endif
 #endif
-	int		 ref;		/* reference count */
+
+	struct url	*cache_url;
+	int		cache_af;
+	int		(*cache_close)(conn_t *);
+	conn_t		*next_cached;
 };
 
 /* Structure used for error message lists */
@@ -80,24 +86,20 @@ struct fetcherr {
 	const char	*string;
 };
 
-/* for fetch_writev */
-struct iovec;
-
 void		 fetch_seterr(struct fetcherr *, int);
 void		 fetch_syserr(void);
 void		 fetch_info(const char *, ...);
 int		 fetch_default_port(const char *);
 int		 fetch_default_proxy_port(const char *);
 int		 fetch_bind(int, int, const char *);
-conn_t		*fetch_connect(const char *, int, int, int);
+conn_t		*fetch_cache_get(const struct url *, int);
+void		 fetch_cache_put(conn_t *, int (*)(conn_t *));
+conn_t		*fetch_connect(struct url *, int, int);
 conn_t		*fetch_reopen(int);
-conn_t		*fetch_ref(conn_t *);
 int		 fetch_ssl(conn_t *, int);
 ssize_t		 fetch_read(conn_t *, char *, size_t);
 int		 fetch_getln(conn_t *);
-ssize_t		 fetch_write(conn_t *, const char *, size_t);
-ssize_t		 fetch_writev(conn_t *, struct iovec *, int);
-int		 fetch_putln(conn_t *, const char *, size_t);
+ssize_t		 fetch_write(conn_t *, const void *, size_t);
 int		 fetch_close(conn_t *);
 int		 fetch_add_entry(struct url_list *, struct url *, const char *, int);
 int		 fetch_netrc_auth(struct url *url);

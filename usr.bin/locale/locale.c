@@ -1,4 +1,4 @@
-/*	$NetBSD: locale.c,v 1.5 2006/02/16 19:19:49 tnozaki Exp $	*/
+/*	$NetBSD: locale.c,v 1.5.28.2 2009/01/26 00:46:33 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Alexey Zelkin <phantom@FreeBSD.org>
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: locale.c,v 1.5 2006/02/16 19:19:49 tnozaki Exp $");
+__RCSID("$NetBSD: locale.c,v 1.5.28.2 2009/01/26 00:46:33 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -61,7 +61,7 @@ __RCSID("$NetBSD: locale.c,v 1.5 2006/02/16 19:19:49 tnozaki Exp $");
 #include "citrus_region.h"
 #include "citrus_lookup.h"
 #endif
-#include "rune.h"
+#include "setlocale_local.h"
 
 /* Local prototypes */
 void	init_locales_list(void);
@@ -476,7 +476,7 @@ init_locales_list_alias(void)
 			    --n, ++s);
 #endif
 			n = (size_t)(s - t);
-			s = malloc(n);
+			s = malloc(n + 1);
 			if (s == NULL)
 				err(1, "could not allocate memory");
 			memcpy(s, t, n);

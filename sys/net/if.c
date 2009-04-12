@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.230 2008/10/24 21:46:09 dyoung Exp $	*/
+/*	$NetBSD: if.c,v 1.230.4.3 2010/06/12 16:37:55 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2008 The NetBSD Foundation, Inc.
@@ -90,7 +90,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if.c,v 1.230 2008/10/24 21:46:09 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if.c,v 1.230.4.3 2010/06/12 16:37:55 riz Exp $");
 
 #include "opt_inet.h"
 
@@ -1615,6 +1615,9 @@ ifioctl(struct socket *so, u_long cmd, void *data, struct lwp *l)
 		return ENXIO;
 
 	switch (cmd) {
+	case SIOCALIFADDR:
+	case SIOCDLIFADDR:
+	case SIOCSIFADDRPREF:
 	case SIOCSIFFLAGS:
 	case SIOCSIFCAP:
 	case SIOCSIFMETRIC:
@@ -1710,7 +1713,7 @@ ifioctl(struct socket *so, u_long cmd, void *data, struct lwp *l)
 	}
 #ifdef COMPAT_OIFREQ
 	if (cmd != ocmd)
-		ifreqn2o(oifr, ifr);
+		ifreqn2o(ifr, oifr);
 #endif
 
 	return error;
@@ -1813,20 +1816,14 @@ ifreq_setaddr(const u_long cmd, struct ifreq *ifr, const struct sockaddr *sa)
 {
 	uint8_t len;
 	u_long ncmd;
-	const uint8_t osockspace = sizeof(ifr->ifr_addr);
-	const uint8_t sockspace = sizeof(ifr->ifr_ifru.ifru_space);
 
-#ifdef INET6
-	if (cmd == SIOCGIFPSRCADDR_IN6 || cmd == SIOCGIFPDSTADDR_IN6)
-		len = MIN(sizeof(struct sockaddr_in6), sa->sa_len);
-	else
-#endif /* INET6 */
 	if ((ncmd = compat_cvtcmd(cmd)) != cmd)
-		len = MIN(osockspace, sa->sa_len);
+		len = sizeof(ifr->ifr_addr);
 	else
-		len = MIN(sockspace, sa->sa_len);
+		len = sizeof(ifr->ifr_ifru.ifru_space);
 	if (len < sa->sa_len)
 		return EFBIG;
+	memset(&ifr->ifr_addr, 0, len);
 	sockaddr_copy(&ifr->ifr_addr, len, sa);
 	return 0;
 }

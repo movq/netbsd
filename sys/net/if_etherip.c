@@ -1,4 +1,4 @@
-/*      $NetBSD: if_etherip.c,v 1.22 2008/10/24 21:41:04 dyoung Exp $        */
+/*      $NetBSD: if_etherip.c,v 1.22.4.2 2008/11/19 03:40:27 snj Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_etherip.c,v 1.22 2008/10/24 21:41:04 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_etherip.c,v 1.22.4.2 2008/11/19 03:40:27 snj Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -214,6 +214,9 @@ etherip_attach(device_t parent, device_t self, void *aux)
 	sc->sc_src = NULL;
 	sc->sc_dst = NULL;
 
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
 	/*
 	 * In order to obtain unique initial Ethernet address on a host,
 	 * do some randomisation using the current uptime.  It's not meant
@@ -320,6 +323,8 @@ etherip_detach(device_t self, int flags)
 	if_detach(ifp);
 	rtcache_free(&sc->sc_ro);
 	ifmedia_delete_instance(&sc->sc_im, IFM_INST_ANY);
+
+	pmf_device_deregister(self);
 
 	return 0;
 }

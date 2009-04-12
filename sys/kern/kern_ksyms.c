@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_ksyms.c,v 1.41 2008/10/24 13:55:42 christos Exp $	*/
+/*	$NetBSD: kern_ksyms.c,v 1.41.4.2 2010/02/14 13:35:43 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_ksyms.c,v 1.41 2008/10/24 13:55:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ksyms.c,v 1.41.4.2 2010/02/14 13:35:43 bouyer Exp $");
 
 #ifdef _KERNEL
 #include "opt_ddb.h"
@@ -399,6 +399,12 @@ addsymtab(const char *name, void *symstart, size_t symsize,
 	ksyms_initted = true;
 }
 
+void
+ksyms_init_finalize()
+{
+	mutex_init(&ksyms_lock, MUTEX_DEFAULT, IPL_NONE);
+}
+
 /*
  * Setup the kernel symbol table stuff.
  */
@@ -411,7 +417,6 @@ ksyms_init(int symsize, void *start, void *end)
 	size_t strsize = 0;
 	Elf_Ehdr *ehdr;
 
-	mutex_init(&ksyms_lock, MUTEX_DEFAULT, IPL_NONE);
 #ifdef SYMTAB_SPACE
 	if (symsize <= 0 &&
 	    strncmp(db_symtab, SYMTAB_FILLER, sizeof(SYMTAB_FILLER))) {
@@ -469,7 +474,7 @@ ksyms_init(int symsize, void *start, void *end)
 	    &kernel_symtab, start);
 
 #ifdef DEBUG
-	printf("Loaded initial symtab at %p, strtab at %p, # entries %ld\n",
+	aprint_normal("Loaded initial symtab at %p, strtab at %p, # entries %ld\n",
 	    kernel_symtab.sd_symstart, kernel_symtab.sd_strstart,
 	    (long)kernel_symtab.sd_symsize/sizeof(Elf_Sym));
 #endif

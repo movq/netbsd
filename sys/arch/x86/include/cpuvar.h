@@ -1,4 +1,4 @@
-/* 	$NetBSD: cpuvar.h,v 1.27 2008/05/13 22:39:17 ad Exp $ */
+/* 	$NetBSD: cpuvar.h,v 1.27.8.3 2010/04/22 20:02:48 snj Exp $ */
 
 /*-
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
@@ -91,6 +91,7 @@ struct cpu_attach_args {
 #include "opt_enhanced_speedstep.h"
 #include "opt_intel_coretemp.h"
 #include "opt_intel_odcm.h"
+#include "opt_via_c7temp.h"
 #endif
 
 #ifdef MULTIPROCESSOR
@@ -116,6 +117,10 @@ void x86_cpu_idle_mwait(void);
 void x86_cpu_idle_xen(void);
 #endif
 
+#ifdef VIA_C7TEMP
+void viac7temp_register(struct cpu_info *);
+#endif
+
 #ifdef INTEL_CORETEMP
 void coretemp_register(struct cpu_info *);
 #endif
@@ -127,6 +132,7 @@ void clockmod_init(void);
 #ifdef ENHANCED_SPEEDSTEP
 void	est_init(int);
 int	via_get_bus_clock(struct cpu_info *);
+int	viac7_get_bus_clock(struct cpu_info *);
 int	p3_get_bus_clock(struct cpu_info *);
 int	p4_get_bus_clock(struct cpu_info *);
 #endif
@@ -136,6 +142,11 @@ void	cpu_get_tsc_freq(struct cpu_info *);
 extern int cpu_vendor;
 extern bool x86_mp_online;
 
+extern uint32_t cpu_feature;
+extern uint32_t cpu_feature2;
+extern uint32_t cpu_feature3;
+extern uint32_t cpu_feature4;
+extern uint32_t cpu_feature_padlock;
 #endif
 
 #endif /* !_X86_CPUVAR_H_ */

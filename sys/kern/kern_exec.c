@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exec.c,v 1.280 2008/10/21 20:52:11 matt Exp $	*/
+/*	$NetBSD: kern_exec.c,v 1.280.4.3 2009/04/01 21:03:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.280 2008/10/21 20:52:11 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.280.4.3 2009/04/01 21:03:04 snj Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_syscall_debug.h"
@@ -236,13 +236,13 @@ const struct emul emul_netbsd = {
 	startlwp,
 };
 
-#ifdef LKM
 /*
  * Exec lock. Used to control access to execsw[] structures.
  * This must not be static so that netbsd32 can access it, too.
  */
 krwlock_t exec_lock;
 
+#ifdef LKM
 static void link_es(struct execsw_entry **, const struct execsw *);
 #endif /* LKM */
 
@@ -498,6 +498,7 @@ execve1(struct lwp *l, const char *path, char * const *args,
 	ksiginfoq_t		kq;
 	char			*pathbuf;
 	size_t			pathbuflen;
+	uid_t			uid;
 
 	p = l->l_proc;
 
@@ -517,9 +518,8 @@ execve1(struct lwp *l, const char *path, char * const *args,
 	 * to call exec in order to do something useful.
 	 */
 			
-	if ((p->p_flag & PK_SUGID) &&
-	    chgproccnt(kauth_cred_getuid(l->l_cred), 0) >
-	    p->p_rlimit[RLIMIT_NPROC].rlim_cur)
+	if ((p->p_flag & PK_SUGID) && (uid = kauth_cred_getuid(l->l_cred)) != 0
+	    && chgproccnt(uid, 0) > p->p_rlimit[RLIMIT_NPROC].rlim_cur)
 		return EAGAIN;
 
 	oldlwpflags = l->l_flag & (LW_SA | LW_SA_UPCALL);
@@ -572,9 +572,7 @@ execve1(struct lwp *l, const char *path, char * const *args,
 	pack.ep_esch = NULL;
 	pack.ep_pax_flags = 0;
 
-#ifdef LKM
 	rw_enter(&exec_lock, RW_READER);
-#endif
 
 	/* see if we can run it. */
 	if ((error = check_exec(l, &pack)) != 0) {
@@ -755,6 +753,7 @@ execve1(struct lwp *l, const char *path, char * const *args,
 	vm->vm_daddr = (void*)pack.ep_daddr;
 	vm->vm_dsize = btoc(pack.ep_dsize);
 	vm->vm_ssize = btoc(pack.ep_ssize);
+	vm->vm_issize = 0;
 	vm->vm_maxsaddr = (void *)pack.ep_maxsaddr;
 	vm->vm_minsaddr = (void *)pack.ep_minsaddr;
 
@@ -1091,9 +1090,7 @@ execve1(struct lwp *l, const char *path, char * const *args,
 
 	/* Allow new references from the debugger/procfs. */
 	rw_exit(&p->p_reflock);
-#ifdef LKM
 	rw_exit(&exec_lock);
-#endif
 
 	mutex_enter(proc_lock);
 
@@ -1149,9 +1146,7 @@ execve1(struct lwp *l, const char *path, char * const *args,
 	if (pack.ep_interp != NULL)
 		vrele(pack.ep_interp);
 
-#ifdef LKM
 	rw_exit(&exec_lock);
-#endif
 
  clrflg:
 	lwp_lock(l);
@@ -1165,9 +1160,7 @@ execve1(struct lwp *l, const char *path, char * const *args,
  exec_abort:
 	PNBUF_PUT(pathbuf);
 	rw_exit(&p->p_reflock);
-#ifdef LKM
 	rw_exit(&exec_lock);
-#endif
 
 	/*
 	 * the old process doesn't exist anymore.  exit gracefully.
@@ -1577,6 +1570,7 @@ exec_init(int init_boot)
 	nexecs = nexecs_builtin;
 	execsw = kmem_alloc(nexecs * sizeof(struct execsw *), KM_SLEEP);
 
+	rw_init(&exec_lock);
 	pool_init(&exec_pool, NCARGS, 0, 0, PR_NOALIGN|PR_NOTOUCH,
 	    "execargs", &exec_palloc, IPL_NONE);
 	pool_sethardlimit(&exec_pool, maxexec, "should not happen", 0);

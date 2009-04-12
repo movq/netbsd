@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_resource.c,v 1.147 2008/10/11 13:40:57 pooka Exp $	*/
+/*	$NetBSD: kern_resource.c,v 1.147.4.2 2009/08/14 21:15:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.147 2008/10/11 13:40:57 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.147.4.2 2009/08/14 21:15:16 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -228,6 +228,11 @@ donice(struct lwp *l, struct proc *chgp, int n)
 	kauth_cred_t cred = l->l_cred;
 
 	KASSERT(mutex_owned(chgp->p_lock));
+
+	if (kauth_cred_geteuid(cred) && kauth_cred_getuid(cred) &&
+	    kauth_cred_geteuid(cred) != kauth_cred_geteuid(chgp->p_cred) &&
+	    kauth_cred_getuid(cred) != kauth_cred_geteuid(chgp->p_cred))
+		return (EPERM);
 
 	if (n > PRIO_MAX)
 		n = PRIO_MAX;
@@ -1002,6 +1007,7 @@ SYSCTL_SETUP(sysctl_proc_setup, "sysctl proc subtree setup")
 	create_proc_plimit("maxproc",		PROC_PID_LIMIT_NPROC);
 	create_proc_plimit("descriptors",	PROC_PID_LIMIT_NOFILE);
 	create_proc_plimit("sbsize",		PROC_PID_LIMIT_SBSIZE);
+	create_proc_plimit("vmemoryuse",	PROC_PID_LIMIT_AS);
 
 #undef create_proc_plimit
 

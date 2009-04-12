@@ -1,0 +1,7 @@
+#	$NetBSD: md.sparc,v 1.4.14.2 2010/03/17 03:17:19 snj Exp $
+./usr/libdata/debug/usr/X11R7/bin/Xvfb.debug		-unknown-	debug,xorg
+./usr/libdata/debug/usr/X11R7/bin/gtf.debug		-unknown-	debug,xorg
+./usr/libdata/debug/usr/X11R7/bin/pcitweak.debug	-unknown-	obsolete
+./usr/libdata/debug/usr/X11R7/bin/scanpci.debug		-unknown-	obsolete
+./usr/libdata/debug/usr/X11R7/bin/xf86cfg.debug		-unknown-	obsolete
+./usr/libdata/debug/usr/X11R7/bin/xf86config.debug	-unknown-	obsolete

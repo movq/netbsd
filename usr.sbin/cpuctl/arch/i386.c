@@ -1,4 +1,4 @@
-/*	$NetBSD: i386.c,v 1.13 2008/10/14 15:49:04 cegger Exp $	*/
+/*	$NetBSD: i386.c,v 1.13.2.4 2009/10/04 00:16:53 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: i386.c,v 1.13 2008/10/14 15:49:04 cegger Exp $");
+__RCSID("$NetBSD: i386.c,v 1.13.2.4 2009/10/04 00:16:53 snj Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -71,6 +71,7 @@ __RCSID("$NetBSD: i386.c,v 1.13 2008/10/14 15:49:04 cegger Exp $");
 #include <err.h>
 #include <assert.h>
 #include <math.h>
+#include <util.h>
 
 #include <machine/specialreg.h>
 #include <machine/cpu.h>
@@ -82,7 +83,7 @@ __RCSID("$NetBSD: i386.c,v 1.13 2008/10/14 15:49:04 cegger Exp $");
 #include "../cpuctl.h"
 
 /* Size of buffer for printing humanized numbers */
-#define HUMAN_BUFSIZE 5
+#define HUMAN_BUFSIZE sizeof("999KB")
 
 #define       x86_cpuid(a,b)  x86_cpuid2((a),0,(b))
 
@@ -121,6 +122,10 @@ struct cpu_nocpuid_nameclass {
 	void (*cpu_info)(struct cpu_info *);
 };
 
+struct cpu_extend_nameclass {
+	int ext_model;
+	const char *cpu_models[CPU_MAXMODEL+1];
+};
 
 struct cpu_cpuid_nameclass {
 	const char *cpu_id;
@@ -132,6 +137,7 @@ struct cpu_cpuid_nameclass {
 		void (*cpu_setup)(struct cpu_info *);
 		void (*cpu_probe)(struct cpu_info *);
 		void (*cpu_info)(struct cpu_info *);
+		struct cpu_extend_nameclass *cpu_extended_names;
 	} cpu_family[CPU_MAXFAMILY - CPU_MINFAMILY + 1];
 };
 
@@ -236,6 +242,21 @@ const char *modifiers[] = {
 	""
 };
 
+struct cpu_extend_nameclass intel_family6_ext_models[] = {
+	{ /* Extended models 1x */
+	  0x01, { NULL,			NULL,
+		  NULL,			NULL,
+		  NULL,			"EP80579 Integrated Processor",
+		  "Celeron (45nm)",	"Core 2 Extreme",
+		  NULL,			NULL,
+		  "Core i7 (Nehalem)",	NULL,
+		  "Atom",		"XeonMP (Nehalem)",
+		   NULL,		NULL} },
+	{ /* End of list */
+	  0x00, { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+		  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL} }
+};
+
 const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 	{
 		"GenuineIntel",
@@ -253,6 +274,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family 5 */
 		{
@@ -265,6 +287,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				0, 0, 0, 0, 0, 0, 0,
 				"Pentium"	/* Default */
 			},
+			NULL,
 			NULL,
 			NULL,
 			NULL,
@@ -290,6 +313,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			intel_family_new_probe,
 			NULL,
+			&intel_family6_ext_models[0],
 		},
 		/* Family > 6 */
 		{
@@ -301,6 +325,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			},
 			NULL,
 			intel_family_new_probe,
+			NULL,
 			NULL,
 		} }
 	},
@@ -323,6 +348,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family 5 */
 		{
@@ -336,6 +362,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			amd_family5_setup,
 			NULL,
 			amd_cpu_cacheinfo,
+			NULL,
 		},
 		/* Family 6 */
 		{
@@ -350,6 +377,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			amd_family6_probe,
 			amd_cpu_cacheinfo,
+			NULL,
 		},
 		/* Family > 6 */
 		{
@@ -362,6 +390,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			amd_family6_probe,
 			amd_cpu_cacheinfo,
+			NULL,
 		} }
 	},
 	{
@@ -380,6 +409,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			cyrix6x86_cpu_setup, /* XXX ?? */
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family 5 */
 		{
@@ -391,6 +421,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				"6x86"		/* Default */
 			},
 			cyrix6x86_cpu_setup,
+			NULL,
 			NULL,
 			NULL,
 		},
@@ -405,6 +436,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			cyrix6x86_cpu_setup,
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family > 6 */
 		{
@@ -414,6 +446,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				0, 0, 0, 0, 0, 0, 0, 0,
 				"Unknown 6x86MX"		/* Default */
 			},
+			NULL,
 			NULL,
 			NULL,
 			NULL,
@@ -434,6 +467,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family 5: Geode family, formerly MediaGX */
 		{
@@ -447,6 +481,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			cyrix6x86_cpu_setup,
 			NULL,
 			amd_cpu_cacheinfo,
+			NULL,
 		},
 		/* Family 6, not yet available from NSC */
 		{
@@ -459,6 +494,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family > 6, not yet available from NSC */
 		{
@@ -468,6 +504,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				0, 0, 0, 0, 0, 0, 0, 0,
 				"Pentium Pro compatible"	/* Default */
 			},
+			NULL,
 			NULL,
 			NULL,
 			NULL,
@@ -488,6 +525,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family 5 */
 		{
@@ -500,6 +538,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			winchip_cpu_setup,
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family 6, VIA acquired IDT Centaur design subsidiary */
 		{
@@ -507,12 +546,14 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			{
 				0, 0, 0, 0, 0, 0, "C3 Samuel",
 				"C3 Samuel 2/Ezra", "C3 Ezra-T",
-				"C3 Nehemiah", "C7 Esther", 0, 0, 0, 0, 0,
-				"C3"	/* Default */
+				"C3 Nehemiah", "C7 Esther", 0, 0, "C7 Esther",
+				0, "VIA Nano",
+				"Unknown VIA/IDT"	/* Default */
 			},
 			NULL,
 			via_cpu_probe,
 			via_cpu_cacheinfo,
+			NULL,
 		},
 		/* Family > 6, not yet available from VIA */
 		{
@@ -522,6 +563,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				0, 0, 0, 0, 0, 0, 0, 0,
 				"Pentium Pro compatible"	/* Default */
 			},
+			NULL,
 			NULL,
 			NULL,
 			NULL,
@@ -542,6 +584,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family 5 */
 		{
@@ -554,6 +597,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			NULL,
 			transmeta_cpu_info,
+			NULL,
 		},
 		/* Family 6, not yet available from Transmeta */
 		{
@@ -566,6 +610,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			NULL,
 			NULL,
 			NULL,
+			NULL,
 		},
 		/* Family > 6, not yet available from Transmeta */
 		{
@@ -575,6 +620,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				0, 0, 0, 0, 0, 0, 0, 0,
 				"Pentium Pro compatible"	/* Default */
 			},
+			NULL,
 			NULL,
 			NULL,
 			NULL,
@@ -1180,17 +1226,18 @@ transmeta_cpu_info(struct cpu_info *ci)
 void
 identifycpu(const char *cpuname)
 {
-	const char *name, *modifier, *vendorname, *brand = "";
+	const char *name = "", *modifier, *vendorname, *brand = "";
 	int class = CPUCLASS_386, i, xmax;
-	int modif, family, model;
+	int modif, family, model, ext_model;
+	const struct cpu_extend_nameclass *modlist;
 	const struct cpu_cpuid_nameclass *cpup = NULL;
 	const struct cpu_cpuid_family *cpufam;
-	char *buf;
 	const char *feature_str[5];
 	struct cpu_info *ci, cistore;
 	extern int cpu;
 	extern int cpu_info_level;
 	size_t sz;
+	char buf[256];
 
 	ci = &cistore;
 	memset(ci, 0, sizeof(*ci));
@@ -1200,7 +1247,6 @@ identifycpu(const char *cpuname)
 	ci->ci_cpuid_level = cpu_info_level;
 	cpu_probe_features(ci);
 
-	buf = malloc(MAXPATHLEN);
 	if (ci->ci_cpuid_level == -1) {
 		if (cpu < 0 || cpu >= __arraycount(i386_nocpuid_cpus))
 			errx(1, "unknown cpu type %d", cpu);
@@ -1217,6 +1263,7 @@ identifycpu(const char *cpuname)
 		if (family < CPU_MINFAMILY)
 			errx(1, "identifycpu: strange family value");
 		model = CPUID2MODEL(ci->ci_signature);
+		ext_model = CPUID2EXTMODEL(ci->ci_signature);
 
 		for (i = 0; i < xmax; i++) {
 			if (!strncmp((char *)ci->ci_vendor,
@@ -1245,11 +1292,29 @@ identifycpu(const char *cpuname)
 			if (family > CPU_MAXFAMILY) {
 				family = CPU_MAXFAMILY;
 				model = CPU_DEFMODEL;
-			} else if (model > CPU_MAXMODEL)
+			} else if (model > CPU_MAXMODEL) {
 				model = CPU_DEFMODEL;
+				ext_model = 0;
+			}
 			cpufam = &cpup->cpu_family[family - CPU_MINFAMILY];
-			name = cpufam->cpu_models[model];
-			if (name == NULL)
+			if (cpufam->cpu_extended_names == NULL ||
+			    ext_model == 0)
+				name = cpufam->cpu_models[model];
+			else {
+				/*
+				 * Scan list(s) of extended model names
+				 */
+				modlist = cpufam->cpu_extended_names;
+				while (modlist->ext_model != 0) {
+					if (modlist->ext_model == ext_model) {
+						name =
+						     modlist->cpu_models[model];
+						break;
+					}
+					modlist++;
+				}
+			}
+			if (name == NULL || *name == '\0')
 			    name = cpufam->cpu_models[CPU_DEFMODEL];
 			class = cpufam->cpu_class;
 			ci->ci_info = cpufam->cpu_info;
@@ -1343,47 +1408,44 @@ identifycpu(const char *cpuname)
 	
 	if (ci->ci_feature_flags) {
 		if ((ci->ci_feature_flags & CPUID_MASK1) != 0) {
-			bitmask_snprintf(ci->ci_feature_flags,
-			    feature_str[0], buf, MAXPATHLEN);
+			snprintb(buf, sizeof(buf), feature_str[0],
+			    ci->ci_feature_flags);
 			aprint_verbose("%s: features %s\n", cpuname, buf);
 		}
 		if ((ci->ci_feature_flags & CPUID_MASK2) != 0) {
-			bitmask_snprintf(ci->ci_feature_flags,
-			    feature_str[1], buf, MAXPATHLEN);
+			snprintb(buf, sizeof(buf), feature_str[1],
+			    ci->ci_feature_flags);
 			aprint_verbose("%s: features %s\n", cpuname, buf);
 		}
 		if ((ci->ci_feature_flags & CPUID_MASK3) != 0) {
-			bitmask_snprintf(ci->ci_feature_flags,
-			    feature_str[2], buf, MAXPATHLEN);
+			snprintb(buf, sizeof(buf), feature_str[2],
+			    ci->ci_feature_flags);
 			aprint_verbose("%s: features %s\n", cpuname, buf);
 		}
 	}
 
 	if (ci->ci_feature2_flags) {
-		bitmask_snprintf(ci->ci_feature2_flags,
-		    CPUID2_FLAGS, buf, MAXPATHLEN);
+		snprintb(buf, sizeof(buf), CPUID2_FLAGS, ci->ci_feature2_flags);
 		aprint_verbose("%s: features2 %s\n", cpuname, buf);
 	}
 
 	if (ci->ci_feature3_flags) {
-		bitmask_snprintf(ci->ci_feature3_flags,
-			feature_str[3], buf, MAXPATHLEN);
+		snprintb(buf, sizeof(buf), feature_str[3],
+		    ci->ci_feature3_flags);
 		aprint_verbose("%s: features3 %s\n", cpuname, buf);
 	}
 
 	if (ci->ci_feature4_flags) {
-		bitmask_snprintf(ci->ci_feature4_flags,
-			feature_str[4], buf, MAXPATHLEN);
+		snprintb(buf, sizeof(buf), feature_str[4],
+		    ci->ci_feature4_flags);
 		aprint_verbose("%s: features4 %s\n", cpuname, buf);
 	}
 
 	if (ci->ci_padlock_flags) {
-		bitmask_snprintf(ci->ci_padlock_flags,
-			CPUID_FLAGS_PADLOCK, buf, MAXPATHLEN);
+		snprintb(buf, sizeof(buf), CPUID_FLAGS_PADLOCK,
+		    ci->ci_padlock_flags);
 		aprint_verbose("%s: padlock features %s\n", cpuname, buf);
 	}
-
-	free(buf);
 
 	if (*cpu_brand_string != '\0')
 		aprint_normal("%s: \"%s\"\n", cpuname, cpu_brand_string);
@@ -1778,7 +1840,7 @@ static void
 powernow_probe(struct cpu_info *ci)
 {
 	uint32_t regs[4];
-	char line[256];
+	char buf[256];
 
 	x86_cpuid(0x80000000, regs);
 
@@ -1787,7 +1849,7 @@ powernow_probe(struct cpu_info *ci)
 		return;
 	x86_cpuid(0x80000007, regs);
 
-	bitmask_snprintf(regs[3], CPUID_APM_FLAGS, line, sizeof(line));
+	snprintb(buf, sizeof(buf), CPUID_APM_FLAGS, regs[3]);
 	aprint_normal_dev(ci->ci_dev, "AMD Power Management features: %s\n",
-	    line);
+	    buf);
 }

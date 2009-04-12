@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2008/10/27 20:32:41 veego Exp $
+#	$NetBSD: Makefile,v 1.4.2.2 2009/09/17 04:24:28 snj Exp $
 
 # Top level Makefile to cross build xorg inside the NetBSD tree.
 
@@ -36,11 +36,7 @@ do-build:
 	${MAKEDIRTARGET} . ${targ}
 .endfor
 
-.for dir in	tools lib/libXdmcp lib/libXau lib/libX11 lib/libICE lib/libSM \
-		lib/libXext lib/libXpm lib/libXt lib/libXrender lib/libXfixes \
-		lib/libXdamage lib/libdrm lib/libXxf86vm lib/libGL lib/libXmu \
-		lib/expat lib/freetype lib/fontconfig lib/libXp lib/libXrandr \
-		lib
+.for dir in	tools lib
 do-${dir:S/\//-/g}:
 .  for targ in dependall install
 	${MAKEDIRTARGET} ${dir} ${targ}
@@ -62,7 +58,9 @@ DISTRIBTARGETS=	\
 	bin/xfs \
 	bin/xinit \
 	bin/xsm \
-	lib/fontconfig/etc
+	lib/fontconfig/etc \
+	lib/fontconfig/etc/conf.avail \
+	lib/fontconfig/etc/conf.d
 
 distribution: check_X11SRCDIR
 .for tgt in ${DISTRIBTARGETS}

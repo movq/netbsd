@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2008/10/14 23:37:19 cube Exp $
+#	$NetBSD: Makefile,v 1.3.4.2 2009/09/17 04:24:28 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -26,10 +26,17 @@ CPPFLAGS.resource.c=	\
 	-DDEF_AUTH_DIR=\"${XDMVARDIR}\" \
 	-DDEF_GREETER_LIB=\"${XDMGREETERLIB}\"
 
-LDADD+=		-lXau -lXdmcp -lXinerama -lXpm -lXmu
-LDADD+=		-lXt -lSM -lICE -lXext -lX11 -lcrypt
-DPADD+=		${LIBXAU} ${LIBXDMCP} ${LIBXINERAMA} ${LIBXPM} ${LIBXMU}
-DPADD+=		${LIBXT} ${LIBSM} ${LIBICE} ${LIBXEXT} ${LIBX11} ${LIBCRYPT}
+LDADD+=		-lXau -lXdmcp -lXft -lXinerama -lXpm
+LDADD+=		-lXmu -lXt -lSM -lICE -lXext -lX11
+LDADD+=		-lcrypt -lfreetype
+DPADD+=		${LIBXAU} ${LIBXDMCP} ${LIBXFT} ${LIBXINERAMA} ${LIBXPM}
+DPADD+=		${LIBXMU} ${LIBXT} ${LIBSM} ${LIBICE} ${LIBXEXT} ${LIBX11}
+DPADD+=		${LIBCRYPT} ${LIBFREETYPE}
+
+.if (${USE_PAM} != "no")
+LDADD+= -lpam ${PAM_STATIC_LDADD}
+DPADD+= ${LIBPAM} ${PAM_STATIC_DPADD}
+.endif
 
 SUBDIR=		chooser config
 TARGETS+=	configinstall
@@ -42,6 +49,7 @@ BUILDSYMLINKS+=	xdm.man.cpp xdm.man
 .include "Makefile.xdm"
 
 CPPFLAGS.resource.c+=	-DDEF_CHOOSER=\"${XDMCHOOSERPATH}\"
+CPPFLAGS+=		-I${DESTDIR}${X11INCDIR}/freetype2
 
 X11MANCPP=	yes
 X11EXTRAMANDEFS+=	-DARC4_RANDOM \

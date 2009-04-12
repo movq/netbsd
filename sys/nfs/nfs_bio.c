@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_bio.c,v 1.179 2008/10/17 14:24:43 christos Exp $	*/
+/*	$NetBSD: nfs_bio.c,v 1.179.4.2 2010/07/16 18:31:59 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_bio.c,v 1.179 2008/10/17 14:24:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_bio.c,v 1.179.4.2 2010/07/16 18:31:59 riz Exp $");
 
 #include "opt_nfs.h"
 #include "opt_ddb.h"
@@ -921,7 +921,7 @@ nfs_doio_write(struct buf *bp, struct uio *uiop)
 	int iomode;
 	bool stalewriteverf = false;
 	int i, npages = (bp->b_bcount + PAGE_SIZE - 1) >> PAGE_SHIFT;
-	struct vm_page **pgs, *spgs[64];
+	struct vm_page **pgs, *spgs[UBC_MAX_PAGES];
 #ifndef NFS_V2_ONLY
 	bool needcommit = true; /* need only COMMIT RPC */
 #else
@@ -1045,7 +1045,7 @@ again:
 				pgs[i]->flags &= ~(PG_NEEDCOMMIT | PG_RDONLY);
 			}
 			mutex_exit(&uobj->vmobjlock);
-			return 0;
+			goto out;
 		} else if (error == NFSERR_STALEWRITEVERF) {
 			nfs_clearcommit(vp->v_mount);
 			goto again;
@@ -1224,7 +1224,7 @@ nfs_getpages(void *v)
 	struct uvm_object *uobj = &vp->v_uobj;
 	struct nfsnode *np = VTONFS(vp);
 	const int npages = *ap->a_count;
-	struct vm_page *pg, **pgs, **opgs, *spgs[64];
+	struct vm_page *pg, **pgs, **opgs, *spgs[UBC_MAX_PAGES];
 	off_t origoffset, len;
 	int i, error;
 	bool v3 = NFS_ISV3(vp);

@@ -1,4 +1,4 @@
-/*	$NetBSD: cut.c,v 1.1.1.2 2008/05/18 14:29:40 aymeric Exp $ */
+/*	$NetBSD: cut.c,v 1.1.1.2.6.2 2010/01/09 01:53:03 snj Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -69,7 +69,7 @@ int
 cut(SCR *sp, CHAR_T *namep, MARK *fm, MARK *tm, int flags)
 {
 	CB *cbp;
-	CHAR_T name;
+	CHAR_T name = '\0';
 	db_recno_t lno;
 	int append, copy_one, copy_def;
 
@@ -98,19 +98,19 @@ cut(SCR *sp, CHAR_T *namep, MARK *fm, MARK *tm, int flags)
 	append = copy_one = copy_def = 0;
 	if (namep != NULL) {
 		name = *namep;
-		if (LF_ISSET(CUT_NUMREQ) || LF_ISSET(CUT_NUMOPT) &&
-		    (LF_ISSET(CUT_LINEMODE) || fm->lno != tm->lno)) {
+		if (LF_ISSET(CUT_NUMREQ) || (LF_ISSET(CUT_NUMOPT) &&
+		    (LF_ISSET(CUT_LINEMODE) || fm->lno != tm->lno))) {
 			copy_one = 1;
 			cb_rotate(sp);
 		}
-		if ((append = isupper(name)) == 1) {
+		if ((append = ISUPPER(name)) == 1) {
 			if (!copy_one)
 				copy_def = 1;
-			name = tolower(name);
+			name = TOLOWER(name);
 		}
 namecb:		CBNAME(sp, cbp, name);
-	} else if (LF_ISSET(CUT_NUMREQ) || LF_ISSET(CUT_NUMOPT) &&
-	    (LF_ISSET(CUT_LINEMODE) || fm->lno != tm->lno)) {
+	} else if (LF_ISSET(CUT_NUMREQ) || (LF_ISSET(CUT_NUMOPT) &&
+	    (LF_ISSET(CUT_LINEMODE) || fm->lno != tm->lno))) {
 		name = '1';
 		cb_rotate(sp);
 		goto namecb;

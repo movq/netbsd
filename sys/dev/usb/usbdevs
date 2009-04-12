@@ -1,4 +1,4 @@
-$NetBSD: usbdevs,v 1.519 2008/10/25 17:35:44 christos Exp $
+$NetBSD: usbdevs,v 1.519.4.5 2010/03/09 03:45:43 snj Exp $
 
 /*
  * Copyright (c) 1998-2004 The NetBSD Foundation, Inc.
@@ -454,6 +454,7 @@ vendor SILICOM		0x1485	Silicom
 vendor RALINK		0x1485	Ralink Technology
 vendor RALINK_2		0x148f	Ralink Technology
 vendor CONCEPTRONIC	0x14b2	Conceptronic
+vendor SUPERTOP		0x14cd  SuperTop
 vendor PLANEX3		0x14ea	Planex Communications
 vendor SILICONPORTALS	0x1527	Silicon Portals
 vendor OQO		0x1557	OQO
@@ -872,6 +873,7 @@ product COREGA FETHER_USB_TXS	0x000d	FEther USB-TXS
 product COREGA WLANUSB		0x0012	Wireless LAN USB Stick-11
 product COREGA FETHER_USB2_TX	0x0017	FEther USB2-TX
 product COREGA WLUSB_11_KEY	0x001a	ULUSB-11 Key
+product COREGA CGUSBRS232R	0x002a	CG-USBRS232R
 product COREGA CGWLUSB2GL	0x002d	CG-WLUSB2GL
 product COREGA CGWLUSB2GPX	0x002e	CG-WLUSB2GPX
 product COREGA FETHER_USB_TXC	0x9601	FEther USB-TXC
@@ -1056,7 +1058,8 @@ product FREECOM DVD		0xfc01	Connector for DVD drive
 
 /* Future Technology Devices products */
 product FTDI SERIAL_8U232AM	0x6001	8U232AM Serial converter
-product FTDI SERIAL_2232C	0x6010	2232C USB FAST SERIAL ADAPTER
+product FTDI SERIAL_2232C	0x6010	2232C USB dual FAST SERIAL ADAPTER
+product FTDI SERIAL_4232H	0x6011	2232H USB quad FAST SERIAL ADAPTER
 product FTDI PS2KBDMS		0x8371	PS/2 Keyboard/Mouse
 product FTDI SERIAL_8U100AX	0x8372	8U100AX Serial converter
 product FTDI MHAM_KW		0xeee8	KW
@@ -1541,6 +1544,8 @@ product MICROSOFT XBOX_DVD_PLAYBACK	0x0284	Xbox DVD Movie Playback Kit
 product MICROSOFT XBOX_CONTROLLER_S10	0x0285	Xbox Controller S (1.0)
 product MICROSOFT XBOX_CONTROLLER_HUB	0x0288	Xbox Controller Hub
 product MICROSOFT XBOX_CONTROLLER_S12	0x0289	Xbox Controller S (1.2)
+product MICROSOFT 24GHZ_XCVR10		0x071d  2.4GHz Transceiver V1.0
+product MICROSOFT 24GHZ_XCVR20		0x071f  2.4GHz Transceiver V2.0
 
 /* Microtech products */
 product MICROTECH SCSIDB25	0x0004	USB-SCSI-DB25
@@ -2189,6 +2194,9 @@ product SUN KEYBOARD_TYPE_6	0x0005	Type 6 USB keyboard
 product SUN KEYBOARD_TYPE_7	0x00a2	Type 7 USB keyboard
 /* XXX The above is a North American PC style keyboard possibly */
 product SUN MOUSE		0x0100	Type 6 USB mouse
+
+/* SuperTop products */
+product SUPERTOP IDEBRIDGE      0x6600  SuperTop IDE Bridge
 
 /* Supra products */
 product DIAMOND2 SUPRAEXPRESS56K 0x07da Supra Express 56K modem

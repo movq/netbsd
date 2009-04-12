@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc.c,v 1.96 2008/07/29 16:27:01 matt Exp $	 */
+/*	$NetBSD: reloc.c,v 1.96.4.2 2010/01/23 17:34:16 bouyer Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: reloc.c,v 1.96 2008/07/29 16:27:01 matt Exp $");
+__RCSID("$NetBSD: reloc.c,v 1.96.4.2 2010/01/23 17:34:16 bouyer Exp $");
 #endif /* not lint */
 
 #include <err.h>

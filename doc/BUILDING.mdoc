@@ -1,4 +1,4 @@
-.\"	$NetBSD: BUILDING.mdoc,v 1.67 2008/09/24 07:36:52 apb Exp $
+.\"	$NetBSD: BUILDING.mdoc,v 1.67.2.3 2009/05/11 19:40:22 bouyer Exp $
 .\"
 .\" Copyright (c) 2001-2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -33,7 +33,7 @@
 .\" Toolchain prefix for commands
 .ds toolprefix nb
 .
-.Dd September 10, 2008
+.Dd May 1, 2009
 .Dt BUILDING 8
 .Os NetBSD
 .
@@ -514,6 +514,13 @@ to include RCS IDs for use with
 .Xr ident 1 .
 .DFLTn
 .
+.It Sy MKSUBPIXEL
+.YorN
+For X builds, decides if subpixel rendering code in FreeType
+is turned on.
+Turned off by default because of patent issues.
+.DFLTn
+.
 .It Sy MKTTINTERP
 .YorN
 For X builds, decides if the TrueType bytecode interpreter
@@ -549,20 +556,8 @@ This also has implications on full builds (see next subsection).
 .
 .It Sy MKX11
 .YorN
-Indicates whether X11R6 is built from
+Indicates whether X11 is built from
 .Sy X11SRCDIR .
-.Pp
-Mutually exclusive to 
-.Sy MKXORG != no .
-.DFLTn
-.
-.It Sy MKXORG
-.YorN
-Indicates whether X11R7 (modular Xorg) is built from
-.Sy X11SRCDIR .
-.Pp
-Mutually exclusive to 
-.Sy MKX11 != no .
 .DFLTn
 .
 .It Sy TOOLDIR
@@ -635,6 +630,17 @@ The main X11R6 source is found in
 .Sy X11SRCDIR Ns Pa /xfree/xc .
 .DFLT
 .Dq /usr/xsrc
+.
+.It Sy X11FLAVOUR
+The style of X11 cross-built, set to either
+.Dq Xorg
+or
+.Dq XFree86 .
+.DFLT
+.Dq Xorg
+on amd64, i386, macppc, shark and sparc64 platforms,
+.Dq XFree86
+on everything else.
 .
 .El
 .

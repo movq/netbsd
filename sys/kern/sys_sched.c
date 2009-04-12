@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_sched.c,v 1.30 2008/10/18 19:24:04 rmind Exp $	*/
+/*	$NetBSD: sys_sched.c,v 1.30.4.3 2009/03/08 03:15:36 snj Exp $	*/
 
 /*
  * Copyright (c) 2008, Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -29,13 +29,20 @@
 /*
  * System calls relating to the scheduler.
  *
+ * Lock order:
+ *
+ *	cpu_lock ->
+ *	    proc_lock ->
+ *		proc_t::p_lock ->
+ *		    lwp_t::lwp_lock
+ *
  * TODO:
  *  - Handle pthread_setschedprio() as defined by POSIX;
  *  - Handle sched_yield() case for SCHED_FIFO as defined by POSIX;
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_sched.c,v 1.30 2008/10/18 19:24:04 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_sched.c,v 1.30.4.3 2009/03/08 03:15:36 snj Exp $");
 
 #include <sys/param.h>
 
@@ -204,9 +211,8 @@ sys__sched_setparam(struct lwp *l, const struct sys__sched_setparam_args *uap,
 
 	error = do_sched_setparam(SCARG(uap, pid), SCARG(uap, lid),
 	    SCARG(uap, policy), &params);
-
- out:
-	return (error);
+out:
+	return error;
 }
 
 int
@@ -279,12 +285,13 @@ sys__sched_getparam(struct lwp *l, const struct sys__sched_getparam_args *uap,
 	error = copyout(&params, SCARG(uap, params), sizeof(params));
 	if (error == 0 && SCARG(uap, policy) != NULL)
 		error = copyout(&policy, SCARG(uap, policy), sizeof(int));
-
- out:
-	return (error);
+out:
+	return error;
 }
 
-/* Allocate the CPU set, and get it from userspace */
+/*
+ * Allocate the CPU set, and get it from userspace.
+ */
 static int
 genkcpuset(kcpuset_t **dset, const cpuset_t *sset, size_t size)
 {
@@ -311,31 +318,61 @@ sys__sched_setaffinity(struct lwp *l,
 		syscallarg(const cpuset_t *) cpuset;
 	} */
 	kcpuset_t *cpuset, *cpulst = NULL;
-	struct cpu_info *ci = NULL;
+	struct cpu_info *ici, *ci;
 	struct proc *p;
 	struct lwp *t;
 	CPU_INFO_ITERATOR cii;
+	bool alloff;
 	lwpid_t lid;
 	u_int lcnt;
 	int error;
 
-	if ((error = genkcpuset(&cpuset, SCARG(uap, cpuset), SCARG(uap, size))))
+	error = genkcpuset(&cpuset, SCARG(uap, cpuset), SCARG(uap, size));
+	if (error)
 		return error;
 
-	/* Look for a CPU in the set */
-	for (CPU_INFO_FOREACH(cii, ci)) {
-		error = kcpuset_isset(cpu_index(ci), cpuset);
-		if (error) {
-			if (error == -1) {
-				error = E2BIG;
-				goto out;
-			}
-			break;
+	/*
+	 * Traverse _each_ CPU to:
+	 *  - Check that CPUs in the mask have no assigned processor set.
+	 *  - Check that at least one CPU from the mask is online.
+	 *  - Find the first target CPU to migrate.
+	 *
+	 * To avoid the race with CPU online/offline calls and processor sets,
+	 * cpu_lock will be locked for the entire operation.
+	 */
+	ci = NULL;
+	alloff = false;
+	mutex_enter(&cpu_lock);
+	for (CPU_INFO_FOREACH(cii, ici)) {
+		struct schedstate_percpu *ispc;
+
+		if (kcpuset_isset(cpu_index(ici), cpuset) == 0)
+			continue;
+
+		ispc = &ici->ci_schedstate;
+		/* Check that CPU is not in the processor-set */
+		if (ispc->spc_psid != PS_NONE) {
+			error = EPERM;
+			goto out;
+		}
+		/* Skip offline CPUs */
+		if (ispc->spc_flags & SPCF_OFFLINE) {
+			alloff = true;
+			continue;
+		}
+		/* Target CPU to migrate */
+		if (ci == NULL) {
+			ci = ici;
 		}
 	}
 	if (ci == NULL) {
+		if (alloff) {
+			/* All CPUs in the set are offline */
+			error = EPERM;
+			goto out;
+		}
 		/* Empty set */
-		kcpuset_unuse(cpuset, NULL);
+		kcpuset_unuse(cpuset, &cpulst);
 		cpuset = NULL; 
 	}
 
@@ -373,15 +410,7 @@ sys__sched_setaffinity(struct lwp *l,
 	}
 
 #ifdef KERN_SA
-	/*
-	 * Don't permit changing the affinity of an SA process. The only
-	 * thing that would make sense wold be to set the affinity of
-	 * a VP and all threads running on it. But we don't support that
-	 * now, so just don't permit it.
-	 *
-	 * Test is here so that caller gets auth errors before SA
-	 * errors.
-	 */
+	/* Changing the affinity of a SA process is not supported */
 	if ((p->p_sflag & (PS_SA | PS_WEXIT)) != 0 || p->p_sa != NULL) {
 		mutex_exit(p->p_lock);
 		error = EINVAL;
@@ -424,6 +453,7 @@ sys__sched_setaffinity(struct lwp *l,
 	if (lcnt == 0)
 		error = ESRCH;
 out:
+	mutex_exit(&cpu_lock);
 	if (cpuset != NULL)
 		kcpuset_unuse(cpuset, &cpulst);
 	kcpuset_destroy(cpulst);
@@ -447,7 +477,8 @@ sys__sched_getaffinity(struct lwp *l,
 	kcpuset_t *cpuset;
 	int error;
 
-	if ((error = genkcpuset(&cpuset, SCARG(uap, cpuset), SCARG(uap, size))))
+	error = genkcpuset(&cpuset, SCARG(uap, cpuset), SCARG(uap, size));
+	if (error)
 		return error;
 
 	/* Locks the LWP */

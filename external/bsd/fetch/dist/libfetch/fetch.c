@@ -1,4 +1,4 @@
-/*	$NetBSD: fetch.c,v 1.1.1.3 2008/10/29 16:18:13 joerg Exp $	*/
+/*	$NetBSD: fetch.c,v 1.1.1.3.2.2 2010/02/03 00:25:23 snj Exp $	*/
 /*-
  * Copyright (c) 1998-2004 Dag-Erling Coïdan Smørgrav
  * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>
@@ -50,7 +50,7 @@ auth_t	 fetchAuthMethod;
 int	 fetchLastErrCode;
 char	 fetchLastErrString[MAXERRSTRING];
 int	 fetchTimeout;
-int	 fetchRestartCalls = 1;
+volatile int	 fetchRestartCalls = 1;
 int	 fetchDebug;
 
 
@@ -80,9 +80,7 @@ static struct fetcherr url_errlist[] = {
 fetchIO *
 fetchXGet(struct url *URL, struct url_stat *us, const char *flags)
 {
-	int direct;
 
-	direct = CHECK_FLAG('d');
 	if (us != NULL) {
 		us->size = -1;
 		us->atime = us->mtime = 0;
@@ -116,9 +114,7 @@ fetchGet(struct url *URL, const char *flags)
 fetchIO *
 fetchPut(struct url *URL, const char *flags)
 {
-	int direct;
 
-	direct = CHECK_FLAG('d');
 	if (strcasecmp(URL->scheme, SCHEME_FILE) == 0)
 		return (fetchPutFile(URL, flags));
 	else if (strcasecmp(URL->scheme, SCHEME_FTP) == 0)
@@ -138,9 +134,7 @@ fetchPut(struct url *URL, const char *flags)
 int
 fetchStat(struct url *URL, struct url_stat *us, const char *flags)
 {
-	int direct;
 
-	direct = CHECK_FLAG('d');
 	if (us != NULL) {
 		us->size = -1;
 		us->atime = us->mtime = 0;
@@ -165,9 +159,7 @@ int
 fetchList(struct url_list *ue, struct url *URL, const char *pattern,
     const char *flags)
 {
-	int direct;
 
-	direct = CHECK_FLAG('d');
 	if (strcasecmp(URL->scheme, SCHEME_FILE) == 0)
 		return (fetchListFile(ue, URL, pattern, flags));
 	else if (strcasecmp(URL->scheme, SCHEME_FTP) == 0)
@@ -417,7 +409,7 @@ fetchParseURL(const char *URL)
 		}
 		URL += 2;
 		p = URL;
-		goto find_hostname;
+		goto find_user;
 	}
 	if (strncmp(URL, "ftp:", 4) == 0) {
 		pre_quoted = 1;
@@ -446,7 +438,7 @@ find_user:
 
 		/* password */
 		if (*q == ':') {
-			for (q++, i = 0; (*q != ':') && (*q != '@'); q++)
+			for (q++, i = 0; (*q != '@'); q++)
 				if (i < URL_PWDLEN)
 					u->pwd[i++] = *q;
 		}
@@ -456,7 +448,6 @@ find_user:
 		p = URL;
 	}
 
-find_hostname:
 	/* hostname */
 #ifdef INET6
 	if (*p == '[' && (q = strchr(p + 1, ']')) != NULL &&

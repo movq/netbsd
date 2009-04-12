@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_vfsops.c,v 1.137 2008/06/28 01:34:05 rumble Exp $	*/
+/*	$NetBSD: ext2fs_vfsops.c,v 1.137.6.5 2009/10/27 21:41:07 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.137 2008/06/28 01:34:05 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.137.6.5 2009/10/27 21:41:07 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -167,6 +167,19 @@ static const struct ufs_ops ext2fs_ufsops = {
 	.uo_update = ext2fs_update,
 	.uo_vfree = ext2fs_vfree,
 };
+
+/* Fill in the inode uid/gid from ext2 halves.  */
+void
+ext2fs_set_inode_guid(struct inode *ip)
+{
+
+	ip->i_gid = ip->i_e2fs_gid;
+	ip->i_uid = ip->i_e2fs_uid;
+	if (ip->i_e2fs->e2fs.e2fs_rev > E2FS_REV0) {
+		ip->i_gid |= ip->i_e2fs_gid_high << 16;
+		ip->i_uid |= ip->i_e2fs_uid_high << 16;
+	}
+}
 
 static int
 ext2fs_modcmd(modcmd_t cmd, void *arg)
@@ -348,8 +361,15 @@ ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			 * used for our initial mount
 			 */
 			ump = VFSTOUFS(mp);
-			if (devvp != ump->um_devvp)
-				error = EINVAL;
+			if (devvp != ump->um_devvp) {
+				if (devvp->v_rdev != ump->um_devvp->v_rdev)
+					error = EINVAL;
+				else {
+					vrele(devvp);
+					devvp = ump->um_devvp;
+					vref(devvp);
+				}
+			}
 		}
 	} else {
 		if (!update) {
@@ -454,7 +474,7 @@ ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			fs->e2fs_fmod = 1;
 		}
 		if (args->fspec == NULL)
-			return EINVAL;
+			return 0;
 	}
 
 	error = set_statvfs_info(path, UIO_USERSPACE, args->fspec,
@@ -559,6 +579,7 @@ ext2fs_reload(struct mount *mountp, kauth_cred_t cred)
 	    howmany(fs->e2fs_ncg, fs->e2fs_bsize / sizeof(struct ext2_gd));
 	fs->e2fs_ipb = fs->e2fs_bsize / EXT2_DINODE_SIZE;
 	fs->e2fs_itpg = fs->e2fs.e2fs_ipg / fs->e2fs_ipb;
+	brelse(bp, 0);
 
 	/*
 	 * Step 3: re-read summary information from disk.
@@ -627,6 +648,7 @@ loop:
 		cp = (char *)bp->b_data +
 		    (ino_to_fsbo(fs, ip->i_number) * EXT2_DINODE_SIZE);
 		e2fs_iload((struct ext2fs_dinode *)cp, ip->i_din.e2fs_din);
+		ext2fs_set_inode_guid(ip);
 		brelse(bp, 0);
 		vput(vp);
 		mutex_enter(&mntvnode_lock);
@@ -1059,6 +1081,7 @@ retry:
 	cp = (char *)bp->b_data + (ino_to_fsbo(fs, ino) * EXT2_DINODE_SIZE);
 	ip->i_din.e2fs_din = pool_get(&ext2fs_dinode_pool, PR_WAITOK);
 	e2fs_iload((struct ext2fs_dinode *)cp, ip->i_din.e2fs_din);
+	ext2fs_set_inode_guid(ip);
 	brelse(bp, 0);
 
 	/* If the inode was deleted, reset all fields */

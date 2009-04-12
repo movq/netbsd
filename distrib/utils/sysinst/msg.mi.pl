@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.60 2008/02/04 01:54:56 riz Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.60.14.3 2009/05/18 19:35:14 bouyer Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -46,6 +46,9 @@ message usage
 
 message sysinst_message_language
 {Komunikaty instalacyjne w jezyku polskim}
+
+message sysinst_message_locale
+{pl_PL.ISO8859-2}
 
 message Yes {Tak}
 message No {Nie}
@@ -219,7 +222,7 @@ message fssizesok
 {Zaakceptuj rozmiary partycji. Wolne miejsce %d %s, %d wolnych partycji.}
 
 message fssizesbad
-{Zmniejsz rozmiary partycji o %d %s (%d sektorow).}
+{Zmniejsz rozmiary partycji o %d %s (%u sektorow).}
 
 message startoutsidedisk
 {Wartosc poczatkowa ktora podales jest poza koncem dysku.
@@ -228,6 +231,13 @@ message startoutsidedisk
 message endoutsidedisk
 {Przy tej wartosci, koniec partycji znajduje sie poza koncem dysku. Rozmiar
 twojej partycji zostal zmniejszony do %d %s.
+}
+
+message toobigdisklabel
+{
+This disk is too large for a disklabel partition table to be used
+and hence cannot be used as a bootable disk or to hold the root
+partition.
 }
 
 message fspart
@@ -241,7 +251,7 @@ message fspart_header	/* XXX abbreviations (or change fspart_row below) */
 }
 
 message fspart_row
-{%9d %9d %10d %-10s %-7s %-9s %s}
+{%9lu %9lu %10lu %-10s %-7s %-9s %s}
 
 message show_all_unused_partitions
 {Pokaz wszystkie nieuzywane partycje}
@@ -945,3 +955,9 @@ postfix. The file /etc/mailer.conf still chooses the removed
 sendmail. Do you want to upgrade /etc/mailer.conf automatically for
 postfix? If you choose "No" you will have to update /etc/mailer.conf
 yourself to ensure proper email delivery.}
+
+message license
+{To use the network interface %s, you must agree to the license in
+file %s.
+To view this file now, you can type ^Z, look at the contents of
+the file and then type "fg" to resume.}

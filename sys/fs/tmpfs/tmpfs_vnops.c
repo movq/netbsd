@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs_vnops.c,v 1.51 2008/06/19 19:03:44 christos Exp $	*/
+/*	$NetBSD: tmpfs_vnops.c,v 1.51.6.6 2009/12/07 04:30:13 snj Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tmpfs_vnops.c,v 1.51 2008/06/19 19:03:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tmpfs_vnops.c,v 1.51.6.6 2009/12/07 04:30:13 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/dirent.h>
@@ -219,6 +219,7 @@ tmpfs_lookup(void *v)
 				error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred);
 				if (error != 0)
 					goto out;
+				cnp->cn_flags |= SAVENAME;
 			} else
 				de = NULL;
 
@@ -270,8 +271,10 @@ tmpfs_mknod(void *v)
 	struct vattr *vap = ((struct vop_mknod_args *)v)->a_vap;
 
 	if (vap->va_type != VBLK && vap->va_type != VCHR &&
-	    vap->va_type != VFIFO)
+	    vap->va_type != VFIFO) {
+		vput(dvp);
 		return EINVAL;
+	}
 
 	return tmpfs_alloc_file(dvp, vpp, vap, cnp, NULL);
 }
@@ -688,6 +691,7 @@ out:
 		vrele(dvp);
 	else
 		vput(dvp);
+	PNBUF_PUT(cnp->cn_pnbuf);
 
 	return error;
 }
@@ -715,9 +719,7 @@ tmpfs_link(void *v)
 
 	/* Lock vp because we will need to run tmpfs_update over it, which
 	 * needs the vnode to be locked. */
-	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-	if (error != 0)
-		goto out1;
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
 	/* XXX: Why aren't the following two tests done by the caller? */
 
@@ -764,16 +766,24 @@ tmpfs_link(void *v)
 
 out:
 	VOP_UNLOCK(vp, 0);
-out1:
 	PNBUF_PUT(cnp->cn_pnbuf);
-
 	vput(dvp);
 
 	return error;
 }
 
-/* --------------------------------------------------------------------- */
-
+/*
+ * tmpfs_rename: rename routine.
+ *
+ * Arguments: fdvp (from-parent vnode), fvp (from-leaf), tdvp (to-parent)
+ * and tvp (to-leaf), if exists (NULL if not).
+ *
+ * => Caller holds a reference on fdvp and fvp, they are unlocked.
+ *    Note: fdvp and fvp can refer to the same object (i.e. when it is root).
+ *
+ * => Both tdvp and tvp are referenced and locked.  It is our responsibility
+ *    to release the references and unlock them (or destroy).
+ */
 int
 tmpfs_rename(void *v)
 {
@@ -816,36 +826,39 @@ tmpfs_rename(void *v)
 	tdnode = VP_TO_TMPFS_DIR(tdvp);
 	tmp = VFS_TO_TMPFS(tdvp->v_mount);
 
+	if (fdvp == tvp) {
+		error = 0;
+		goto out_unlocked;
+	}
+
 	/* If we need to move the directory between entries, lock the
 	 * source so that we can safely operate on it. */
 
 	/* XXX: this is a potential locking order violation! */
 	if (fdnode != tdnode) {
-		error = vn_lock(fdvp, LK_EXCLUSIVE | LK_RETRY);
-		if (error != 0)
-			goto out_unlocked;
+		vn_lock(fdvp, LK_EXCLUSIVE | LK_RETRY);
 	}
 
+	/*
+	 * If the node we were renaming has scarpered, just give up.
+	 */
 	de = tmpfs_dir_lookup(fdnode, fcnp);
-	if (de == NULL) {
+	if (de == NULL || de->td_node != fnode) {
 		error = ENOENT;
 		goto out;
 	}
-	KASSERT(de->td_node == fnode);
 
-	/* If source and target are the same file, there is nothing to do. */
+	/* If source and target is the same vnode, remove the source link. */
 	if (fvp == tvp) {
-		error = 0;
-		goto out;
+		/*
+		 * Detach and free the directory entry.  Drops the link
+		 * count on the node.
+		 */
+		tmpfs_dir_detach(fdvp, de);
+		tmpfs_free_dirent(VFS_TO_TMPFS(fvp->v_mount), de, true);
+		VN_KNOTE(fdvp, NOTE_WRITE);
+		goto out_ok;
 	}
-
-	/* Avoid manipulating '.' and '..' entries. */
-	if (de == NULL) {
-		KASSERT(fvp->v_type == VDIR);
-		error = EINVAL;
-		goto out;
-	}
-	KASSERT(de->td_node == fnode);
 
 	/* If replacing an existing entry, ensure we can do the operation. */
 	if (tvp != NULL) {
@@ -956,7 +969,7 @@ tmpfs_rename(void *v)
 		fnode->tn_status |= TMPFS_NODE_CHANGED;
 		tdnode->tn_status |= TMPFS_NODE_MODIFIED;
 	}
-
+ out_ok:
 	/* Notify listeners of tdvp about the change in the directory (either
 	 * because a new entry was added or because one was removed) and
 	 * listeners of fvp about the rename. */
@@ -1074,6 +1087,7 @@ tmpfs_rmdir(void *v)
 	/* Release the nodes. */
 	vput(dvp);
 	vput(vp);
+	PNBUF_PUT(cnp->cn_pnbuf);
 
 	return error;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls.c,v 1.376 2008/10/22 11:16:29 ad Exp $	*/
+/*	$NetBSD: vfs_syscalls.c,v 1.376.4.5 2010/02/14 13:27:45 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.376 2008/10/22 11:16:29 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.376.4.5 2010/02/14 13:27:45 bouyer Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_43.h"
@@ -288,7 +288,7 @@ mount_get_vfsops(const char *fstype, struct vfsops **vfsops)
 
 	/* If we can autoload a vfs module, try again */
 	mutex_enter(&module_lock);
-	(void)module_autoload(fstype, MODULE_CLASS_VFS);
+	(void)module_autoload(fstypename, MODULE_CLASS_VFS);
 	mutex_exit(&module_lock);
 
 	if ((*vfsops = vfs_getopsbyname(fstypename)) != NULL)
@@ -3051,7 +3051,7 @@ do_sys_utimes(struct lwp *l, struct vnode *vp, const char *path, int flag,
 	if (setbirthtime)
 		vattr.va_birthtime = ts[1];
 	if (vanull)
-		vattr.va_flags |= VA_UTIMES_NULL;
+		vattr.va_vaflags |= VA_UTIMES_NULL;
 	error = VOP_SETATTR(vp, &vattr, l->l_cred);
 	VOP_UNLOCK(vp, 0);
 
@@ -3317,7 +3317,7 @@ do_sys_rename(const char *from, const char *to, enum uio_seg seg, int retain)
 	uint32_t saveflag;
 	int error;
 
-	NDINIT(&fromnd, DELETE, LOCKPARENT | SAVESTART | TRYEMULROOT,
+	NDINIT(&fromnd, DELETE, LOCKPARENT | SAVESTART | TRYEMULROOT | INRENAME,
 	    seg, from);
 	if ((error = namei(&fromnd)) != 0)
 		return (error);
@@ -3382,7 +3382,7 @@ do_sys_rename(const char *from, const char *to, enum uio_seg seg, int retain)
 
 	NDINIT(&tond, RENAME,
 	    LOCKPARENT | LOCKLEAF | NOCACHE | SAVESTART | TRYEMULROOT
-	      | (fvp->v_type == VDIR ? CREATEDIR : 0),
+	      | INRENAME | (fvp->v_type == VDIR ? CREATEDIR : 0),
 	    seg, to);
 	if ((error = namei(&tond)) != 0) {
 		VFS_RENAMELOCK_EXIT(fs);
@@ -3426,10 +3426,10 @@ do_sys_rename(const char *from, const char *to, enum uio_seg seg, int retain)
 		char *f1, *f2;
 
 		f1 = malloc(fromnd.ni_cnd.cn_namelen + 1, M_TEMP, M_WAITOK);
-		strlcpy(f1, fromnd.ni_cnd.cn_nameptr, fromnd.ni_cnd.cn_namelen);
+		strlcpy(f1, fromnd.ni_cnd.cn_nameptr, fromnd.ni_cnd.cn_namelen + 1);
 
 		f2 = malloc(tond.ni_cnd.cn_namelen + 1, M_TEMP, M_WAITOK);
-		strlcpy(f2, tond.ni_cnd.cn_nameptr, tond.ni_cnd.cn_namelen);
+		strlcpy(f2, tond.ni_cnd.cn_nameptr, tond.ni_cnd.cn_namelen + 1);
 
 		error = veriexec_renamechk(l, fvp, f1, tvp, f2);
 
@@ -3624,7 +3624,7 @@ dorevoke(struct vnode *vp, kauth_cred_t cred)
 
 	if ((error = VOP_GETATTR(vp, &vattr, cred)) != 0)
 		return error;
-	if (kauth_cred_geteuid(cred) != vattr.va_uid &&
+	if (kauth_cred_geteuid(cred) == vattr.va_uid ||
 	    (error = kauth_authorize_generic(cred,
 	    KAUTH_GENERIC_ISSUSER, NULL)) == 0)
 		VOP_REVOKE(vp, REVOKEALL);
