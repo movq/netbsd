@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_parse.c,v 1.1 2009/04/12 15:33:51 christos Exp $	*/
+/*	$NetBSD: ns_parse.c,v 1.1.1.1 2009/04/12 15:33:51 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")

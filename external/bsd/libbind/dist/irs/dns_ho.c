@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_ho.c,v 1.1 2009/04/12 15:33:42 christos Exp $	*/
+/*	$NetBSD: dns_ho.c,v 1.1.1.1 2009/04/12 15:33:42 christos Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2006, 2008  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: strsep.c,v 1.1 2009/04/12 15:33:26 christos Exp $	*/
+/*	$NetBSD: strsep.c,v 1.1.1.1 2009/04/12 15:33:26 christos Exp $	*/
 
 #if defined(LIBC_SCCS) && !defined(lint)
 static const char sccsid[] = "strsep.c	8.1 (Berkeley) 6/4/93";

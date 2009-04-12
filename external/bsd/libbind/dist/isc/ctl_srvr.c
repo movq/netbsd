@@ -1,4 +1,4 @@
-/*	$NetBSD: ctl_srvr.c,v 1.1 2009/04/12 15:33:46 christos Exp $	*/
+/*	$NetBSD: ctl_srvr.c,v 1.1.1.1 2009/04/12 15:33:46 christos Exp $	*/
 
 /*
  * Copyright (C) 2004-2006, 2008  Internet Systems Consortium, Inc. ("ISC")

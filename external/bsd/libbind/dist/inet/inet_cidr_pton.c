@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_cidr_pton.c,v 1.1 2009/04/12 15:33:34 christos Exp $	*/
+/*	$NetBSD: inet_cidr_pton.c,v 1.1.1.1 2009/04/12 15:33:34 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")

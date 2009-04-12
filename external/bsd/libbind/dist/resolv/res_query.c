@@ -1,4 +1,4 @@
-/*	$NetBSD: res_query.c,v 1.1 2009/04/12 15:33:55 christos Exp $	*/
+/*	$NetBSD: res_query.c,v 1.1.1.1 2009/04/12 15:33:55 christos Exp $	*/
 
 /*
  * Portions Copyright (C) 2004, 2005, 2008  Internet Systems Consortium, Inc. ("ISC")

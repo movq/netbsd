@@ -1,4 +1,4 @@
-/*	$NetBSD: res_send.c,v 1.1 2009/04/12 15:33:58 christos Exp $	*/
+/*	$NetBSD: res_send.c,v 1.1.1.1 2009/04/12 15:33:58 christos Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")

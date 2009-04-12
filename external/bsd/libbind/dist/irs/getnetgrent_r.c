@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetgrent_r.c,v 1.1 2009/04/12 15:33:42 christos Exp $	*/
+/*	$NetBSD: getnetgrent_r.c,v 1.1.1.1 2009/04/12 15:33:42 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2008  Internet Systems Consortium, Inc. ("ISC")
