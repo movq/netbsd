@@ -1,4 +1,4 @@
-dnl $Id: configure.ac,v 1.1 2009/04/23 06:31:56 agc Exp $
+dnl $Id: configure.ac,v 1.1.1.1 2009/04/23 06:31:56 agc Exp $
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.57)
 AC_INIT([netpgp],[20090422],[Alistair Crooks <agc@netbsd.org> c0596823])
