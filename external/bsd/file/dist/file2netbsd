@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: file2netbsd,v 1.1 2009/05/08 16:35:04 christos Exp $
+#	$NetBSD: file2netbsd,v 1.1.1.1 2009/05/08 16:35:04 christos Exp $
 #
 # Copyright (c) 2003 The NetBSD Foundation, Inc.
 # All rights reserved.

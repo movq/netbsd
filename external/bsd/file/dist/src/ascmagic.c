@@ -1,4 +1,4 @@
-/*	$NetBSD: ascmagic.c,v 1.1 2009/05/08 16:35:06 christos Exp $	*/
+/*	$NetBSD: ascmagic.c,v 1.1.1.1 2009/05/08 16:35:06 christos Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
@@ -41,7 +41,7 @@
 #if 0
 FILE_RCSID("@(#)$File: ascmagic.c,v 1.75 2009/02/03 20:27:51 christos Exp $")
 #else
-__RCSID("$NetBSD: ascmagic.c,v 1.1 2009/05/08 16:35:06 christos Exp $");
+__RCSID("$NetBSD: ascmagic.c,v 1.1.1.1 2009/05/08 16:35:06 christos Exp $");
 #endif
 #endif	/* lint */
 

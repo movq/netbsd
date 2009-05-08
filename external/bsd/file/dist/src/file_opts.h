@@ -1,4 +1,4 @@
-/*	$NetBSD: file_opts.h,v 1.1 2009/05/08 16:35:06 christos Exp $	*/
+/*	$NetBSD: file_opts.h,v 1.1.1.1 2009/05/08 16:35:06 christos Exp $	*/
 
 /*
  * Table of command-line options

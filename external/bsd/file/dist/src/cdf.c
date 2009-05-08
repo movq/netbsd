@@ -1,4 +1,4 @@
-/*	$NetBSD: cdf.c,v 1.1 2009/05/08 16:35:06 christos Exp $	*/
+/*	$NetBSD: cdf.c,v 1.1.1.1 2009/05/08 16:35:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008 Christos Zoulas
@@ -37,7 +37,7 @@
 #if 0
 FILE_RCSID("@(#)$File: cdf.c,v 1.30 2009/05/06 14:29:47 christos Exp $")
 #else
-__RCSID("$NetBSD: cdf.c,v 1.1 2009/05/08 16:35:06 christos Exp $");
+__RCSID("$NetBSD: cdf.c,v 1.1.1.1 2009/05/08 16:35:06 christos Exp $");
 #endif
 #endif
 

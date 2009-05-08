@@ -1,4 +1,4 @@
-/*	$NetBSD: magic.c,v 1.1 2009/05/08 16:35:05 christos Exp $	*/
+/*	$NetBSD: magic.c,v 1.1.1.1 2009/05/08 16:35:05 christos Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2003.
@@ -33,7 +33,7 @@
 #if 0
 FILE_RCSID("@(#)$File: magic.c,v 1.62 2009/03/20 21:25:41 christos Exp $")
 #else
-__RCSID("$NetBSD: magic.c,v 1.1 2009/05/08 16:35:05 christos Exp $");
+__RCSID("$NetBSD: magic.c,v 1.1.1.1 2009/05/08 16:35:05 christos Exp $");
 #endif
 #endif	/* lint */
 
