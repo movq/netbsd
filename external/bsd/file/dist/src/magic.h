@@ -1,4 +1,4 @@
-/*	$NetBSD: magic.h,v 1.1 2009/05/08 16:35:04 christos Exp $	*/
+/*	$NetBSD: magic.h,v 1.1.1.1 2009/05/08 16:35:04 christos Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2003.

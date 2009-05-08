@@ -1,4 +1,4 @@
-/*	$NetBSD: elfclass.h,v 1.1 2009/05/08 16:35:06 christos Exp $	*/
+/*	$NetBSD: elfclass.h,v 1.1.1.1 2009/05/08 16:35:06 christos Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2008.

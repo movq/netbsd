@@ -1,4 +1,4 @@
-/*	$NetBSD: py_magic.h,v 1.1 2009/05/08 16:35:10 christos Exp $	*/
+/*	$NetBSD: py_magic.h,v 1.1.1.1 2009/05/08 16:35:10 christos Exp $	*/
 
 /*
    Python wrappers for magic functions.

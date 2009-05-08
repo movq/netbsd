@@ -1,4 +1,4 @@
-/*	$NetBSD: encoding.c,v 1.1 2009/05/08 16:35:06 christos Exp $	*/
+/*	$NetBSD: encoding.c,v 1.1.1.1 2009/05/08 16:35:06 christos Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
@@ -40,7 +40,7 @@
 #if 0
 FILE_RCSID("@(#)$File: encoding.c,v 1.3 2009/02/03 20:27:51 christos Exp $")
 #else
-__RCSID("$NetBSD: encoding.c,v 1.1 2009/05/08 16:35:06 christos Exp $");
+__RCSID("$NetBSD: encoding.c,v 1.1.1.1 2009/05/08 16:35:06 christos Exp $");
 #endif
 #endif	/* lint */
 
