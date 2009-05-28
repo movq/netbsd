@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_net_private.h,v 1.2 2009/05/27 23:41:20 pooka Exp $	*/
+/*	$NetBSD: rump_net_private.h,v 1.3 2009/05/28 00:02:16 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -30,6 +30,19 @@
 
 void		rump_net_init(void);
 void		rump_netisr_init(void);
+
+#define DOMAINADD(dom)							\
+do {									\
+	if (!pffinddomain(dom.dom_family)) {				\
+		domain_attach(&dom);					\
+        }								\
+} while (/*CONSTCOND*/0)
+
+void 		rump_net_net_init(void);
+void 		rump_net_inet_init(void);
+void 		rump_net_local_init(void);
+void 		rump_net_sockin_init(void);
+void 		rump_net_virtif_init(void);
 
 void		rump_dummyif_create(void);
 
