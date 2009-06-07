@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor_mm.c,v 1.1 2009/06/07 22:19:12 christos Exp $	*/
+/*	$NetBSD: monitor_mm.c,v 1.1.1.1 2009/06/07 22:19:12 christos Exp $	*/
 /* $OpenBSD: monitor_mm.c,v 1.15 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>

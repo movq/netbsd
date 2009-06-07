@@ -1,4 +1,4 @@
-/*	$NetBSD: sftp-common.c,v 1.1 2009/06/07 22:19:20 christos Exp $	*/
+/*	$NetBSD: sftp-common.c,v 1.1.1.1 2009/06/07 22:19:20 christos Exp $	*/
 /* $OpenBSD: sftp-common.c,v 1.20 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor.c,v 1.1 2009/06/07 22:19:12 christos Exp $	*/
+/*	$NetBSD: monitor.c,v 1.1.1.1 2009/06/07 22:19:12 christos Exp $	*/
 /* $OpenBSD: monitor.c,v 1.101 2009/02/12 03:26:22 djm Exp $ */
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>

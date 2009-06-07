@@ -1,4 +1,4 @@
-/*	$NetBSD: channels.h,v 1.1 2009/06/07 22:19:06 christos Exp $	*/
+/*	$NetBSD: channels.h,v 1.1.1.1 2009/06/07 22:19:06 christos Exp $	*/
 /* $OpenBSD: channels.h,v 1.98 2009/02/12 03:00:56 djm Exp $ */
 
 /*

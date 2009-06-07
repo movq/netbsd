@@ -1,4 +1,4 @@
-/*	$NetBSD: scp.c,v 1.1 2009/06/07 22:19:17 christos Exp $	*/
+/*	$NetBSD: scp.c,v 1.1.1.1 2009/06/07 22:19:17 christos Exp $	*/
 /* $OpenBSD: scp.c,v 1.164 2008/10/10 04:55:16 stevesk Exp $ */
 /*
  * scp - secure remote copy.  This is basically patched BSD rcp which

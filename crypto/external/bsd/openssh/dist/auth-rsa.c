@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-rsa.c,v 1.1 2009/06/07 22:19:02 christos Exp $	*/
+/*	$NetBSD: auth-rsa.c,v 1.1.1.1 2009/06/07 22:19:02 christos Exp $	*/
 /* $OpenBSD: auth-rsa.c,v 1.73 2008/07/02 12:03:51 dtucker Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

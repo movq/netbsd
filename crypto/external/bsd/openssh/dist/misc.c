@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.1 2009/06/07 22:19:11 christos Exp $	*/
+/*	$NetBSD: misc.c,v 1.1.1.1 2009/06/07 22:19:11 christos Exp $	*/
 /* $OpenBSD: misc.c,v 1.71 2009/02/21 19:32:04 tobias Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.

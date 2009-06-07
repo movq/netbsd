@@ -1,4 +1,4 @@
-/*	$NetBSD: serverloop.c,v 1.1 2009/06/07 22:19:18 christos Exp $	*/
+/*	$NetBSD: serverloop.c,v 1.1.1.1 2009/06/07 22:19:18 christos Exp $	*/
 /* $OpenBSD: serverloop.c,v 1.157 2009/02/12 03:16:01 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

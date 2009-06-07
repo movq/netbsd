@@ -1,4 +1,4 @@
-/*	$NetBSD: readpass.c,v 1.1 2009/06/07 22:19:15 christos Exp $	*/
+/*	$NetBSD: readpass.c,v 1.1.1.1 2009/06/07 22:19:15 christos Exp $	*/
 /* $OpenBSD: readpass.c,v 1.47 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.

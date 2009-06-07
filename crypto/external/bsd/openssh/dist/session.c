@@ -1,4 +1,4 @@
-/*	$NetBSD: session.c,v 1.1 2009/06/07 22:19:19 christos Exp $	*/
+/*	$NetBSD: session.c,v 1.1.1.1 2009/06/07 22:19:19 christos Exp $	*/
 /* $OpenBSD: session.c,v 1.245 2009/01/22 09:46:01 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland

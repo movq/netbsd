@@ -1,4 +1,4 @@
-/*	$NetBSD: myproposal.h,v 1.1 2009/06/07 22:19:12 christos Exp $	*/
+/*	$NetBSD: myproposal.h,v 1.1.1.1 2009/06/07 22:19:12 christos Exp $	*/
 /* $OpenBSD: myproposal.h,v 1.23 2009/01/23 07:58:11 djm Exp $ */
 
 /*

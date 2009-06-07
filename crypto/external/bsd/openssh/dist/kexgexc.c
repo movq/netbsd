@@ -1,4 +1,4 @@
-/*	$NetBSD: kexgexc.c,v 1.1 2009/06/07 22:19:10 christos Exp $	*/
+/*	$NetBSD: kexgexc.c,v 1.1.1.1 2009/06/07 22:19:10 christos Exp $	*/
 /* $OpenBSD: kexgexc.c,v 1.11 2006/11/06 21:25:28 markus Exp $ */
 /*
  * Copyright (c) 2000 Niels Provos.  All rights reserved.

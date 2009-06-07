@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.1 2009/06/07 22:19:10 christos Exp $	*/
+/*	$NetBSD: key.c,v 1.1.1.1 2009/06/07 22:19:10 christos Exp $	*/
 /* $OpenBSD: key.c,v 1.80 2008/10/10 05:00:12 stevesk Exp $ */
 /*
  * read_bignum():

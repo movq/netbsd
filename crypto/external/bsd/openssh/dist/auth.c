@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.c,v 1.1 2009/06/07 22:19:02 christos Exp $	*/
+/*	$NetBSD: auth.c,v 1.1.1.1 2009/06/07 22:19:02 christos Exp $	*/
 /* $OpenBSD: auth.c,v 1.80 2008/11/04 07:58:09 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.

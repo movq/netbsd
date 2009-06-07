@@ -1,4 +1,4 @@
-/*	$NetBSD: packet.c,v 1.1 2009/06/07 22:19:14 christos Exp $	*/
+/*	$NetBSD: packet.c,v 1.1.1.1 2009/06/07 22:19:14 christos Exp $	*/
 /* $OpenBSD: packet.c,v 1.160 2009/02/13 11:50:21 markus Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

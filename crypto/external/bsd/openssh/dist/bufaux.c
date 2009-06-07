@@ -1,4 +1,4 @@
-/*	$NetBSD: bufaux.c,v 1.1 2009/06/07 22:19:04 christos Exp $	*/
+/*	$NetBSD: bufaux.c,v 1.1.1.1 2009/06/07 22:19:04 christos Exp $	*/
 /* $OpenBSD: bufaux.c,v 1.46 2008/06/10 23:21:34 dtucker Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

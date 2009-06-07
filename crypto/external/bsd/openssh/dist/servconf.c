@@ -1,4 +1,4 @@
-/*	$NetBSD: servconf.c,v 1.1 2009/06/07 22:19:18 christos Exp $	*/
+/*	$NetBSD: servconf.c,v 1.1.1.1 2009/06/07 22:19:18 christos Exp $	*/
 /* $OpenBSD: servconf.c,v 1.194 2009/01/22 10:02:34 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
