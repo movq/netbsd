@@ -1,4 +1,4 @@
-/*	$NetBSD: dh.c,v 1.1 2009/06/07 22:19:08 christos Exp $	*/
+/*	$NetBSD: dh.c,v 1.1.1.1 2009/06/07 22:19:08 christos Exp $	*/
 /* $OpenBSD: dh.c,v 1.47 2008/06/26 09:19:39 djm Exp $ */
 /*
  * Copyright (c) 2000 Niels Provos.  All rights reserved.

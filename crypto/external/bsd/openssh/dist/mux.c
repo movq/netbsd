@@ -1,4 +1,4 @@
-/*	$NetBSD: mux.c,v 1.1 2009/06/07 22:19:13 christos Exp $	*/
+/*	$NetBSD: mux.c,v 1.1.1.1 2009/06/07 22:19:13 christos Exp $	*/
 /* $OpenBSD: mux.c,v 1.7 2008/06/13 17:21:20 dtucker Exp $ */
 /*
  * Copyright (c) 2002-2008 Damien Miller <djm@openbsd.org>

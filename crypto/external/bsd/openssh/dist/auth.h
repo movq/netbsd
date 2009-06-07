@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.h,v 1.1 2009/06/07 22:19:02 christos Exp $	*/
+/*	$NetBSD: auth.h,v 1.1.1.1 2009/06/07 22:19:02 christos Exp $	*/
 /* $OpenBSD: auth.h,v 1.62 2008/11/04 08:22:12 djm Exp $ */
 
 /*

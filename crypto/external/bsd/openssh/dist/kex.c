@@ -1,4 +1,4 @@
-/*	$NetBSD: kex.c,v 1.1 2009/06/07 22:19:09 christos Exp $	*/
+/*	$NetBSD: kex.c,v 1.1.1.1 2009/06/07 22:19:09 christos Exp $	*/
 /* $OpenBSD: kex.c,v 1.80 2008/09/06 12:24:13 djm Exp $ */
 /*
  * Copyright (c) 2000, 2001 Markus Friedl.  All rights reserved.

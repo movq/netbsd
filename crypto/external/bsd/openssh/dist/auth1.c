@@ -1,4 +1,4 @@
-/*	$NetBSD: auth1.c,v 1.1 2009/06/07 22:19:00 christos Exp $	*/
+/*	$NetBSD: auth1.c,v 1.1.1.1 2009/06/07 22:19:00 christos Exp $	*/
 /* $OpenBSD: auth1.c,v 1.73 2008/07/04 23:30:16 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland

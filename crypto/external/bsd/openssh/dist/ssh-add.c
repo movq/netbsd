@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-add.c,v 1.1 2009/06/07 22:19:22 christos Exp $	*/
+/*	$NetBSD: ssh-add.c,v 1.1.1.1 2009/06/07 22:19:22 christos Exp $	*/
 /* $OpenBSD: ssh-add.c,v 1.90 2007/09/09 11:38:01 sobrado Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

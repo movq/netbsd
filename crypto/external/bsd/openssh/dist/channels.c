@@ -1,4 +1,4 @@
-/*	$NetBSD: channels.c,v 1.1 2009/06/07 22:19:06 christos Exp $	*/
+/*	$NetBSD: channels.c,v 1.1.1.1 2009/06/07 22:19:06 christos Exp $	*/
 /* $OpenBSD: channels.c,v 1.295 2009/02/12 03:00:56 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

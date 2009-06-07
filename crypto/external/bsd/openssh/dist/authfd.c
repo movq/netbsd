@@ -1,4 +1,4 @@
-/*	$NetBSD: authfd.c,v 1.1 2009/06/07 22:19:04 christos Exp $	*/
+/*	$NetBSD: authfd.c,v 1.1.1.1 2009/06/07 22:19:04 christos Exp $	*/
 /* $OpenBSD: authfd.c,v 1.80 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

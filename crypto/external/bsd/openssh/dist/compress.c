@@ -1,4 +1,4 @@
-/*	$NetBSD: compress.c,v 1.1 2009/06/07 22:19:08 christos Exp $	*/
+/*	$NetBSD: compress.c,v 1.1.1.1 2009/06/07 22:19:08 christos Exp $	*/
 /* $OpenBSD: compress.c,v 1.25 2006/08/06 01:13:32 stevesk Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

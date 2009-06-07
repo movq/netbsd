@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-options.c,v 1.1 2009/06/07 22:19:01 christos Exp $	*/
+/*	$NetBSD: auth-options.c,v 1.1.1.1 2009/06/07 22:19:01 christos Exp $	*/
 /* $OpenBSD: auth-options.c,v 1.44 2009/01/22 10:09:16 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

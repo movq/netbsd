@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-agent.c,v 1.1 2009/06/07 22:19:22 christos Exp $	*/
+/*	$NetBSD: ssh-agent.c,v 1.1.1.1 2009/06/07 22:19:22 christos Exp $	*/
 /* $OpenBSD: ssh-agent.c,v 1.159 2008/06/28 14:05:15 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

@@ -1,4 +1,4 @@
-/*	$NetBSD: dns.h,v 1.1 2009/06/07 22:19:08 christos Exp $	*/
+/*	$NetBSD: dns.h,v 1.1.1.1 2009/06/07 22:19:08 christos Exp $	*/
 /* $OpenBSD: dns.h,v 1.10 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*

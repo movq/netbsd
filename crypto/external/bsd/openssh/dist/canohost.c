@@ -1,4 +1,4 @@
-/*	$NetBSD: canohost.c,v 1.1 2009/06/07 22:19:04 christos Exp $	*/
+/*	$NetBSD: canohost.c,v 1.1.1.1 2009/06/07 22:19:04 christos Exp $	*/
 /* $OpenBSD: canohost.c,v 1.64 2009/02/12 03:00:56 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

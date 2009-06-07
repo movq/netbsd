@@ -1,4 +1,4 @@
-/*	$NetBSD: clientloop.c,v 1.1 2009/06/07 22:19:07 christos Exp $	*/
+/*	$NetBSD: clientloop.c,v 1.1.1.1 2009/06/07 22:19:07 christos Exp $	*/
 /* $OpenBSD: clientloop.c,v 1.209 2009/02/12 03:00:56 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>

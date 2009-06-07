@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-keyscan.c,v 1.1 2009/06/07 22:19:24 christos Exp $	*/
+/*	$NetBSD: ssh-keyscan.c,v 1.1.1.1 2009/06/07 22:19:24 christos Exp $	*/
 /* $OpenBSD: ssh-keyscan.c,v 1.78 2009/01/22 10:02:34 djm Exp $ */
 /*
  * Copyright 1995, 1996 by David Mazieres <dm@lcs.mit.edu>.

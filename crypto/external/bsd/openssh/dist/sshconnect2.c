@@ -1,4 +1,4 @@
-/*	$NetBSD: sshconnect2.c,v 1.1 2009/06/07 22:19:28 christos Exp $	*/
+/*	$NetBSD: sshconnect2.c,v 1.1.1.1 2009/06/07 22:19:28 christos Exp $	*/
 /* $OpenBSD: sshconnect2.c,v 1.170 2008/11/04 08:22:13 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.

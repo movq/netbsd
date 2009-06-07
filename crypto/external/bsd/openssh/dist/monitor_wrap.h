@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor_wrap.h,v 1.1 2009/06/07 22:19:13 christos Exp $	*/
+/*	$NetBSD: monitor_wrap.h,v 1.1.1.1 2009/06/07 22:19:13 christos Exp $	*/
 /* $OpenBSD: monitor_wrap.h,v 1.21 2008/11/04 08:22:13 djm Exp $ */
 
 /*

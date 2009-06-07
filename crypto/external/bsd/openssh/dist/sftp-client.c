@@ -1,4 +1,4 @@
-/*	$NetBSD: sftp-client.c,v 1.1 2009/06/07 22:19:20 christos Exp $	*/
+/*	$NetBSD: sftp-client.c,v 1.1.1.1 2009/06/07 22:19:20 christos Exp $	*/
 /* $OpenBSD: sftp-client.c,v 1.86 2008/06/26 06:10:09 djm Exp $ */
 /*
  * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>

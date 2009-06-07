@@ -1,4 +1,4 @@
-/*	$NetBSD: sshpty.h,v 1.1 2009/06/07 22:19:31 christos Exp $	*/
+/*	$NetBSD: sshpty.h,v 1.1.1.1 2009/06/07 22:19:31 christos Exp $	*/
 /* $OpenBSD: sshpty.h,v 1.11 2008/05/19 15:45:07 djm Exp $ */
 
 /*

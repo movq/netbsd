@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-keygen.c,v 1.1 2009/06/07 22:19:23 christos Exp $	*/
+/*	$NetBSD: ssh-keygen.c,v 1.1.1.1 2009/06/07 22:19:23 christos Exp $	*/
 /* $OpenBSD: ssh-keygen.c,v 1.173 2009/02/21 19:32:04 tobias Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
