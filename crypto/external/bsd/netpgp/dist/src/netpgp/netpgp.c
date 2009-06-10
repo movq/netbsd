@@ -41,12 +41,6 @@
 #include <netpgp.h>
 
 /*
- * 2048 is the absolute minimum, really - we should really look at
- * bumping this to 4096 or even higher - agc, 20090522
- */
-#define DEFAULT_NUMBITS 2048
-
-/*
  * Similraily, SHA1 is now looking as though it should not be used.
  * Let's pre-empt this by specifying SHA256 - gpg interoperates just
  * fine with SHA256 - agc, 20090522
@@ -61,12 +55,7 @@ static const char *usage =
 		"\t\t[options] files... OR\n"
 	"\t--verify [options] files... OR\n"
 	"\t--cat [--output=file] [options] files... OR\n"
-	"\t--clearsign [--output=file] [options] files... OR\n\n"
-	"\t--export-keys [options] OR\n"
-	"\t--find-key [options] OR\n"
-	"\t--generate-key [options] OR\n"
-	"\t--import-key [options] OR\n"
-	"\t--list-keys [options] OR\n\n"
+	"\t--clearsign [--output=file] [options] files... OR\n"
 	"\t--list-packets [options] OR\n"
 	"\t--version\n"
 	"where options are:\n"
@@ -78,11 +67,6 @@ static const char *usage =
 
 enum optdefs {
 	/* commands */
-	LIST_KEYS = 1,
-	FIND_KEY,
-	EXPORT_KEY,
-	IMPORT_KEY,
-	GENERATE_KEY,
 	ENCRYPT,
 	DECRYPT,
 	SIGN,
@@ -98,7 +82,6 @@ enum optdefs {
 	USERID,
 	ARMOUR,
 	HOMEDIR,
-	NUMBITS,
 	DETACHED,
 	HASH_ALG,
 	OUTPUT,
@@ -114,12 +97,6 @@ enum optdefs {
 #define EXIT_ERROR	2
 
 static struct option options[] = {
-	/* key-management commands */
-	{"list-keys",	no_argument,		NULL,	LIST_KEYS},
-	{"find-key",	no_argument,		NULL,	FIND_KEY},
-	{"export-key",	no_argument,		NULL,	EXPORT_KEY},
-	{"import-key",	no_argument,		NULL,	IMPORT_KEY},
-	{"generate-key", no_argument,		NULL,	GENERATE_KEY},
 	/* file manipulation commands */
 	{"encrypt",	no_argument,		NULL,	ENCRYPT},
 	{"decrypt",	no_argument,		NULL,	DECRYPT},
@@ -145,7 +122,6 @@ static struct option options[] = {
 	{"homedir",	required_argument, 	NULL,	HOMEDIR},
 	{"armor",	no_argument,		NULL,	ARMOUR},
 	{"armour",	no_argument,		NULL,	ARMOUR},
-	{"numbits",	required_argument, 	NULL,	NUMBITS},
 	{"detach",	no_argument,		NULL,	DETACHED},
 	{"detached",	no_argument,		NULL,	DETACHED},
 	{"hash-alg",	required_argument, 	NULL,	HASH_ALG},
@@ -163,7 +139,6 @@ typedef struct prog_t {
 	char	*progname;			/* program name */
 	char	*output;			/* output file name */
 	int	 overwrite;			/* overwrite files? */
-	int	 numbits;			/* # of bits */
 	int	 armour;			/* ASCII armor */
 	int	 detached;			/* use separate file */
 	int	 cmd;				/* netpgp command */
@@ -189,18 +164,6 @@ netpgp_cmd(netpgp_t *netpgp, prog_t *p, char *f)
 	const int	cleartext = 1;
 
 	switch (p->cmd) {
-	case LIST_KEYS:
-		return netpgp_list_keys(netpgp);
-	case FIND_KEY:
-		return netpgp_find_key(netpgp, netpgp_getvar(netpgp, "userid"));
-	case EXPORT_KEY:
-		return netpgp_export_key(netpgp,
-				netpgp_getvar(netpgp, "userid"));
-	case IMPORT_KEY:
-		return netpgp_import_key(netpgp, f);
-	case GENERATE_KEY:
-		return netpgp_generate_key(netpgp,
-				netpgp_getvar(netpgp, "userid"), p->numbits);
 	case ENCRYPT:
 		return netpgp_encrypt_file(netpgp,
 					netpgp_getvar(netpgp, "userid"),
@@ -287,7 +250,6 @@ main(int argc, char **argv)
 	(void) memset(&p, 0x0, sizeof(p));
 	(void) memset(&netpgp, 0x0, sizeof(netpgp));
 	p.progname = argv[0];
-	p.numbits = DEFAULT_NUMBITS;
 	p.overwrite = 1;
 	p.output = NULL;
 	if (argc < 2) {
@@ -300,20 +262,10 @@ main(int argc, char **argv)
 	optindex = 0;
 	while ((ch = getopt_long(argc, argv, "", options, &optindex)) != -1) {
 		switch (options[optindex].val) {
-		case LIST_KEYS:
-			p.cmd = options[optindex].val;
-			break;
 		case COREDUMPS:
 			netpgp_setvar(&netpgp, "coredumps", "allowed");
 			p.cmd = options[optindex].val;
 			break;
-		case GENERATE_KEY:
-			netpgp_setvar(&netpgp, "userid checks", "skip");
-			p.cmd = options[optindex].val;
-			break;
-		case FIND_KEY:
-		case EXPORT_KEY:
-		case IMPORT_KEY:
 		case ENCRYPT:
 		case DECRYPT:
 		case SIGN:
@@ -363,14 +315,6 @@ main(int argc, char **argv)
 				exit(EXIT_ERROR);
 			}
 			set_homedir(&netpgp, optarg, NULL);
-			break;
-		case NUMBITS:
-			if (optarg == NULL) {
-				(void) fprintf(stderr,
-				"No number of bits argument provided\n");
-				exit(EXIT_ERROR);
-			}
-			p.numbits = atoi(optarg);
 			break;
 		case HASH_ALG:
 			if (optarg == NULL) {

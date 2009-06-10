@@ -1,4 +1,4 @@
-.\" $NetBSD: netpgp.1,v 1.1 2009/06/09 00:51:03 agc Exp $
+.\" $NetBSD: netpgp.1,v 1.2 2009/06/10 00:38:09 agc Exp $
 .\"
 .\" Copyright (c) 2009 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd June 8, 2009
+.Dd June 9, 2009
 .Dt NETPGP 1
 .Os
 .Sh NAME
@@ -70,28 +70,6 @@
 .Op Fl Fl pass-fd Ns = Ns Ar fd
 .Op options
 .Ar file ...
-.Pp
-.Nm
-.Fl Fl export-key
-.Op options
-.Ar file ...
-.Nm
-.Fl Fl find-key
-.Op options
-.Ar file ...
-.Nm
-.Fl Fl generate-key
-.Op options
-.Ar file ...
-.Nm
-.Fl Fl import-key
-.Op options
-.Ar file ...
-.Nm
-.Fl Fl list-keys
-.Op options
-.Ar file ...
-.Pp
 .Nm
 .Fl Fl list-packets
 .Op Fl Fl pass-fd Ns = Ns Ar fd
@@ -139,23 +117,9 @@ into text such that the contents can only be viewed by someone
 with the corresponding private key.
 This is called encryption.
 .Pp
-The
-.Nm
-utility can also be used to generate a new key-pair for a user.
-As mentioned before,
-this key is in two parts, the public key (which is known
-by other people) and the private key.
+To manipulate keys themselves, a separate utility is provided, called
+.Xr netpgpkeys 1 .
 .Pp
-In addition to these primary uses, the third way of using
-.Nm
-is to maintain keyrings.
-Key and keyring management commands available are:
-.Fl Fl export-key ,
-.Fl Fl find-key ,
-.Fl Fl generate-key ,
-.Fl Fl import-key ,
-and
-.Fl Fl list-keys .
 Keyrings are collections of public keys belonging to other users.
 By using other means of identification, it is possible to establish
 the bona fides of other users.
@@ -207,29 +171,6 @@ to type it in, using
 .Xr getpass 3 .
 .It Fl Fl encrypt
 Use the user's public key to encrypt the files named on the command line.
-.El
-.Pp
-In addition, key and keyring management can be done with the
-following commands:
-.Bl -tag -width Ar
-.It Fl Fl export-key
-Display the current public key in a format suitable for export.
-This can be used to place the keyring on one of the
-public key servers, for example.
-.It Fl Fl find-key
-Find the appropriate public key from the current keyring.
-If no keyring is provided, the user's public keyring is used.
-.It Fl Fl generate-key
-This command is used to generate a new public and private key pair.
-The user id is taken from the command line, and the user will be
-prompted to provide a suitable pass phrase.
-.It Fl Fl import-key
-Import a public key as retrieved from one of the public key servers.
-This is in the form of a file which has previously been
-retrieved from elsewhere.
-.It Fl Fl list-keys
-List all the public keys in the current keyring.
-If no keyring is provided, the user's public keyring is used.
 .It Fl Fl list-packets
 List all the
 .Dq packets
@@ -275,14 +216,6 @@ find that sub-directory.
 .It Fl Fl keyring Ar keyring
 This option specifies an alternative keyring to be used.
 All keyring operations will be relative to this alternative keyring.
-.It Fl Fl numbits Ar numbits
-specifies the number of bits to be used when generating a key.
-The default number of bits is 2048.
-This is considered the absolute
-minimum which should be chosen at the time of writing (2009).
-Due to advances in computing power every year, this number should
-be reviewed, and increased when it becomes easier to factor 2048
-bit numbers.
 .It Fl Fl output
 specifies a filename to which verified output from a signed file
 may be redirected.
@@ -336,8 +269,8 @@ This option should be used wisely, and any core dumps should
 be deleted in a secure manner when no longer needed.
 .El
 .Sh PASS PHRASES
-The pass phrase cannot be changed by
-.Nm
+At the present time, the pass phrase cannot be changed by
+.Xr netpgpkeys 1
 once it has been chosen, and will
 be used for the life of the key, so a wise choice is advised.
 The pass phrase should not be an easily guessable word or phrase,
@@ -429,6 +362,7 @@ utility will return 0 for success,
 1 if the file's signature does not match what was expected,
 or 2 if any other error occurs.
 .Sh SEE ALSO
+.Xr netpgpkeys 1 ,
 .Xr getpass 3 ,
 .\" .Xr libbz2 3 ,
 .Xr libnetpgp 3 ,
