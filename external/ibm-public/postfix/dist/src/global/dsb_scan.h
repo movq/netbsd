@@ -1,4 +1,4 @@
-/*	$NetBSD: dsb_scan.h,v 1.1 2009/06/23 10:08:45 tron Exp $	*/
+/*	$NetBSD: dsb_scan.h,v 1.1.1.1 2009/06/23 10:08:45 tron Exp $	*/
 
 #ifndef _DSB_SCAN_H_INCLUDED_
 #define _DSB_SCAN_H_INCLUDED_

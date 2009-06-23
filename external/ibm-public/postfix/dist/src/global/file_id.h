@@ -1,4 +1,4 @@
-/*	$NetBSD: file_id.h,v 1.1 2009/06/23 10:08:46 tron Exp $	*/
+/*	$NetBSD: file_id.h,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
 
 #ifndef _FILE_ID_H_INCLUDED_
 #define _FILE_ID_H_INCLUDED_

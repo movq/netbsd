@@ -1,4 +1,4 @@
-/*	$NetBSD: xsasl_cyrus.h,v 1.1 2009/06/23 10:09:02 tron Exp $	*/
+/*	$NetBSD: xsasl_cyrus.h,v 1.1.1.1 2009/06/23 10:09:02 tron Exp $	*/
 
 #ifndef _XSASL_CYRUS_H_INCLUDED_
 #define _XSASL_CYRUS_H_INCLUDED_

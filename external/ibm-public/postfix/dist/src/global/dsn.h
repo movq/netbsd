@@ -1,4 +1,4 @@
-/*	$NetBSD: dsn.h,v 1.1 2009/06/23 10:08:45 tron Exp $	*/
+/*	$NetBSD: dsn.h,v 1.1.1.1 2009/06/23 10:08:45 tron Exp $	*/
 
 #ifndef _DSN_H_INCLUDED_
 #define _DSN_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: conv_time.h,v 1.1 2009/06/23 10:08:45 tron Exp $	*/
+/*	$NetBSD: conv_time.h,v 1.1.1.1 2009/06/23 10:08:45 tron Exp $	*/
 
 #ifndef _CONV_TIME_INCLUDED_
 #define _CONV_TIME_INCLUDED_

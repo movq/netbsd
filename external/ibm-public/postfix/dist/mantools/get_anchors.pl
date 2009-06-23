@@ -3,8 +3,8 @@
 # Copyright (c) 2004 Liviu Daia <Liviu.Daia@imar.ro>
 # All rights reserved.
 #
-# $Revision: 1.1 $
-# $Id: get_anchors.pl,v 1.1 2009/06/23 10:08:36 tron Exp $
+# $Revision: 1.1.1.1 $
+# $Id: get_anchors.pl,v 1.1.1.1 2009/06/23 10:08:36 tron Exp $
 # $Source: /home/mike/src/cvs/netbsd/src/external/ibm-public/postfix/dist/mantools/get_anchors.pl,v $
 #
 

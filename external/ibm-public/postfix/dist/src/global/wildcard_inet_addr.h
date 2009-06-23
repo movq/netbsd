@@ -1,4 +1,4 @@
-/*	$NetBSD: wildcard_inet_addr.h,v 1.1 2009/06/23 10:08:48 tron Exp $	*/
+/*	$NetBSD: wildcard_inet_addr.h,v 1.1.1.1 2009/06/23 10:08:48 tron Exp $	*/
 
 #ifndef _WILDCARD_INET_ADDR_H_INCLUDED_
 #define _WILDCARD_INET_ADDR_H_INCLUDED_

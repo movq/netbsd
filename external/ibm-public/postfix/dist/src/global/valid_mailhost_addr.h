@@ -1,4 +1,4 @@
-/*	$NetBSD: valid_mailhost_addr.h,v 1.1 2009/06/23 10:08:48 tron Exp $	*/
+/*	$NetBSD: valid_mailhost_addr.h,v 1.1.1.1 2009/06/23 10:08:48 tron Exp $	*/
 
 #ifndef _VALID_MAILHOST_ADDR_H_INCLUDED_
 #define _VALID_MAILHOST_ADDR_H_INCLUDED_

@@ -1,5 +1,5 @@
 #! /bin/sh
-#	$NetBSD: postmulti-script,v 1.1 2009/06/23 10:08:23 tron Exp $
+#	$NetBSD: postmulti-script,v 1.1.1.1 2009/06/23 10:08:23 tron Exp $
 #
 
 umask 022

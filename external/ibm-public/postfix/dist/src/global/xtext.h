@@ -1,4 +1,4 @@
-/*	$NetBSD: xtext.h,v 1.1 2009/06/23 10:08:48 tron Exp $	*/
+/*	$NetBSD: xtext.h,v 1.1.1.1 2009/06/23 10:08:48 tron Exp $	*/
 
 #ifndef _XTEXT_H_INCLUDED_
 #define _XTEXT_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: deliver_pass.h,v 1.1 2009/06/23 10:08:45 tron Exp $	*/
+/*	$NetBSD: deliver_pass.h,v 1.1.1.1 2009/06/23 10:08:45 tron Exp $	*/
 
 #ifndef _DELIVER_PASS_H_INCLUDED_
 #define _DELIVER_PASS_H_INCLUDED_

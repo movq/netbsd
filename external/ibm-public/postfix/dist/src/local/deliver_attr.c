@@ -1,4 +1,4 @@
-/*	$NetBSD: deliver_attr.c,v 1.1 2009/06/23 10:08:48 tron Exp $	*/
+/*	$NetBSD: deliver_attr.c,v 1.1.1.1 2009/06/23 10:08:48 tron Exp $	*/
 
 /*++
 /* NAME

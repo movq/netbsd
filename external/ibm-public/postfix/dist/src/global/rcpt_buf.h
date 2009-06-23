@@ -1,4 +1,4 @@
-/*	$NetBSD: rcpt_buf.h,v 1.1 2009/06/23 10:08:47 tron Exp $	*/
+/*	$NetBSD: rcpt_buf.h,v 1.1.1.1 2009/06/23 10:08:47 tron Exp $	*/
 
 #ifndef _RCPT_BUF_H_INCLUDED_
 #define _RCPT_BUF_H_INCLUDED_

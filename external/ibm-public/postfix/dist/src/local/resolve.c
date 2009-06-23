@@ -1,4 +1,4 @@
-/*	$NetBSD: resolve.c,v 1.1 2009/06/23 10:08:49 tron Exp $	*/
+/*	$NetBSD: resolve.c,v 1.1.1.1 2009/06/23 10:08:49 tron Exp $	*/
 
 /*++
 /* NAME

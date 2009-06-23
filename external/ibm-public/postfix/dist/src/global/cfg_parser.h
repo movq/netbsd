@@ -1,4 +1,4 @@
-/*	$NetBSD: cfg_parser.h,v 1.1 2009/06/23 10:08:45 tron Exp $	*/
+/*	$NetBSD: cfg_parser.h,v 1.1.1.1 2009/06/23 10:08:45 tron Exp $	*/
 
 #ifndef _CFG_PARSER_H_INCLUDED_
 #define _CFG_PARSER_H_INCLUDED_

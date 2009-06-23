@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_command.h,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: exec_command.h,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 #ifndef _EXEC_COMMAND_H_INCLUDED_
 #define _EXEC_COMMAND_H_INCLUDED_

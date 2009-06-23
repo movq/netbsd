@@ -1,4 +1,4 @@
-/*	$NetBSD: user_acl.c,v 1.1 2009/06/23 10:08:48 tron Exp $	*/
+/*	$NetBSD: user_acl.c,v 1.1.1.1 2009/06/23 10:08:48 tron Exp $	*/
 
 /*++
 /* NAME

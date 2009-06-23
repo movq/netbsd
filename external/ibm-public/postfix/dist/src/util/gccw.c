@@ -1,4 +1,4 @@
-/*	$NetBSD: gccw.c,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: gccw.c,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
  /*
   * This is is a regression test for all the things that gcc is meant to warn

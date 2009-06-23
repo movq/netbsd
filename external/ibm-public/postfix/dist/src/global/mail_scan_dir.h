@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_scan_dir.h,v 1.1 2009/06/23 10:08:47 tron Exp $	*/
+/*	$NetBSD: mail_scan_dir.h,v 1.1.1.1 2009/06/23 10:08:47 tron Exp $	*/
 
 #ifndef _MAIL_SCAN_DIR_H_INCLUDED_
 #define _MAIL_SCAN_DIR_H_INCLUDED_

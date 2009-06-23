@@ -1,4 +1,4 @@
-/*	$NetBSD: vstring.c,v 1.1 2009/06/23 10:09:01 tron Exp $	*/
+/*	$NetBSD: vstring.c,v 1.1.1.1 2009/06/23 10:09:01 tron Exp $	*/
 
 /*++
 /* NAME

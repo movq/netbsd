@@ -1,4 +1,4 @@
-/*	$NetBSD: format_tv.h,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: format_tv.h,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 #ifndef _FORMAT_TV_H_INCLUDED_
 #define _FORMAT_TV_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: been_here.h,v 1.1 2009/06/23 10:08:45 tron Exp $	*/
+/*	$NetBSD: been_here.h,v 1.1.1.1 2009/06/23 10:08:45 tron Exp $	*/
 
 #ifndef _BEEN_HERE_H_INCLUDED_
 #define _BEEN_HERE_H_INCLUDED_

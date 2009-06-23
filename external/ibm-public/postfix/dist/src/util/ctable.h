@@ -1,4 +1,4 @@
-/*	$NetBSD: ctable.h,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: ctable.h,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 #ifndef _CTABLE_H_INCLUDED_
 #define _CTABLE_H_INCLUDED_

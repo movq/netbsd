@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_copy.h,v 1.1 2009/06/23 10:08:46 tron Exp $	*/
+/*	$NetBSD: mail_copy.h,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
 
 #ifndef _MAIL_COPY_H_INCLUDED_
 #define _MAIL_COPY_H_INCLUDED_

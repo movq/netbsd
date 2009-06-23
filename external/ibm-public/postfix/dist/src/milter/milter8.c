@@ -1,4 +1,4 @@
-/*	$NetBSD: milter8.c,v 1.1 2009/06/23 10:08:50 tron Exp $	*/
+/*	$NetBSD: milter8.c,v 1.1.1.1 2009/06/23 10:08:50 tron Exp $	*/
 
 /*++
 /* NAME

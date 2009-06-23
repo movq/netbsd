@@ -1,4 +1,4 @@
-/*	$NetBSD: events.c,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: events.c,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 /*++
 /* NAME

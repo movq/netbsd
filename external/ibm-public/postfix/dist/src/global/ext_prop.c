@@ -1,4 +1,4 @@
-/*	$NetBSD: ext_prop.c,v 1.1 2009/06/23 10:08:46 tron Exp $	*/
+/*	$NetBSD: ext_prop.c,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-#	$NetBSD: main.cf,v 1.1 2009/06/23 10:08:23 tron Exp $
+#	$NetBSD: main.cf,v 1.1.1.1 2009/06/23 10:08:23 tron Exp $
 #
 # Global Postfix configuration file. This file lists only a subset
 # of all parameters. For the syntax, and for a complete parameter

@@ -1,4 +1,4 @@
-/*	$NetBSD: dns.h,v 1.1 2009/06/23 10:08:43 tron Exp $	*/
+/*	$NetBSD: dns.h,v 1.1.1.1 2009/06/23 10:08:43 tron Exp $	*/
 
 #ifndef _DNS_H_INCLUDED_
 #define _DNS_H_INCLUDED_
