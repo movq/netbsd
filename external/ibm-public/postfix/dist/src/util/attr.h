@@ -1,4 +1,4 @@
-/*	$NetBSD: attr.h,v 1.1 2009/06/23 10:08:58 tron Exp $	*/
+/*	$NetBSD: attr.h,v 1.1.1.1 2009/06/23 10:08:58 tron Exp $	*/
 
 #ifndef _ATTR_H_INCLUDED_
 #define _ATTR_H_INCLUDED_

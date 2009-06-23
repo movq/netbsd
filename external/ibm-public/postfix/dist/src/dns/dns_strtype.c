@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_strtype.c,v 1.1 2009/06/23 10:08:43 tron Exp $	*/
+/*	$NetBSD: dns_strtype.c,v 1.1.1.1 2009/06/23 10:08:43 tron Exp $	*/
 
 /*++
 /* NAME

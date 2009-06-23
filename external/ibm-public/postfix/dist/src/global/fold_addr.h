@@ -1,4 +1,4 @@
-/*	$NetBSD: fold_addr.h,v 1.1 2009/06/23 10:08:46 tron Exp $	*/
+/*	$NetBSD: fold_addr.h,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
 
 #ifndef _FOLD_ADDR_H_INCLUDED_
 #define _FOLD_ADDR_H_INCLUDED_

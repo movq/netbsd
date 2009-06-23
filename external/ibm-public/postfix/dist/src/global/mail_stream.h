@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_stream.h,v 1.1 2009/06/23 10:08:47 tron Exp $	*/
+/*	$NetBSD: mail_stream.h,v 1.1.1.1 2009/06/23 10:08:47 tron Exp $	*/
 
 #ifndef _MAIL_STREAM_H_INCLUDED_
 #define _MAIL_STREAM_H_INCLUDED_

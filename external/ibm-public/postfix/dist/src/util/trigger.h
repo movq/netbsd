@@ -1,4 +1,4 @@
-/*	$NetBSD: trigger.h,v 1.1 2009/06/23 10:09:01 tron Exp $	*/
+/*	$NetBSD: trigger.h,v 1.1.1.1 2009/06/23 10:09:01 tron Exp $	*/
 
 #ifndef _TRIGGER_H_INCLUDED_
 #define _TRIGGER_H_INCLUDED_

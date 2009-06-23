@@ -1,4 +1,4 @@
-/*	$NetBSD: smtpd_token.c,v 1.1 2009/06/23 10:08:56 tron Exp $	*/
+/*	$NetBSD: smtpd_token.c,v 1.1.1.1 2009/06/23 10:08:56 tron Exp $	*/
 
 /*++
 /* NAME

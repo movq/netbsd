@@ -1,4 +1,4 @@
-/*	$NetBSD: binhash.h,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: binhash.h,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 #ifndef _BINHASH_H_INCLUDED_
 #define _BINHASH_H_INCLUDED_

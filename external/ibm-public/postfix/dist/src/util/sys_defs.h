@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_defs.h,v 1.1 2009/06/23 10:09:01 tron Exp $	*/
+/*	$NetBSD: sys_defs.h,v 1.1.1.1 2009/06/23 10:09:01 tron Exp $	*/
 
 #ifndef _SYS_DEFS_H_INCLUDED_
 #define _SYS_DEFS_H_INCLUDED_

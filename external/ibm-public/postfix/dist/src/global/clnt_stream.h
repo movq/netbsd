@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_stream.h,v 1.1 2009/06/23 10:08:45 tron Exp $	*/
+/*	$NetBSD: clnt_stream.h,v 1.1.1.1 2009/06/23 10:08:45 tron Exp $	*/
 
 #ifndef _CLNT_STREAM_H_INCLUDED_
 #define _CLNT_STREAM_H_INCLUDED_

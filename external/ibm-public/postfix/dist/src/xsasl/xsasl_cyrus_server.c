@@ -1,4 +1,4 @@
-/*	$NetBSD: xsasl_cyrus_server.c,v 1.1 2009/06/23 10:09:02 tron Exp $	*/
+/*	$NetBSD: xsasl_cyrus_server.c,v 1.1.1.1 2009/06/23 10:09:02 tron Exp $	*/
 
 /*++
 /* NAME

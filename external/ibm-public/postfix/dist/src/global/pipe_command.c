@@ -1,4 +1,4 @@
-/*	$NetBSD: pipe_command.c,v 1.1 2009/06/23 10:08:47 tron Exp $	*/
+/*	$NetBSD: pipe_command.c,v 1.1.1.1 2009/06/23 10:08:47 tron Exp $	*/
 
 /*++
 /* NAME

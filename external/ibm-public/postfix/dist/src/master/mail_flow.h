@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_flow.h,v 1.1 2009/06/23 10:08:49 tron Exp $	*/
+/*	$NetBSD: mail_flow.h,v 1.1.1.1 2009/06/23 10:08:49 tron Exp $	*/
 
 #ifndef _MAIL_FLOW_H_INCLUDED_
 #define _MAIL_FLOW_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: find_inet.h,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: find_inet.h,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 #ifndef _FIND_INET_H_INCLUDED_
 #define _FIND_INET_H_INCLUDED_

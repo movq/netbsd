@@ -1,4 +1,4 @@
-/*	$NetBSD: attr_scan0.c,v 1.1 2009/06/23 10:08:58 tron Exp $	*/
+/*	$NetBSD: attr_scan0.c,v 1.1.1.1 2009/06/23 10:08:58 tron Exp $	*/
 
 /*++
 /* NAME

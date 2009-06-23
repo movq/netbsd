@@ -1,4 +1,4 @@
-/*	$NetBSD: rewrite_clnt.h,v 1.1 2009/06/23 10:08:48 tron Exp $	*/
+/*	$NetBSD: rewrite_clnt.h,v 1.1.1.1 2009/06/23 10:08:48 tron Exp $	*/
 
 #ifndef _REWRITE_CLNT_H_INCLUDED_
 #define _REWRITE_CLNT_H_INCLUDED_

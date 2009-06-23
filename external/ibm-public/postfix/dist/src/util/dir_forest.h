@@ -1,4 +1,4 @@
-/*	$NetBSD: dir_forest.h,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: dir_forest.h,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 #ifndef _DIR_FOREST_H_INCLUDED_
 #define _DIR_FOREST_H_INCLUDED_

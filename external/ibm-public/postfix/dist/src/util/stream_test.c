@@ -1,4 +1,4 @@
-/*	$NetBSD: stream_test.c,v 1.1 2009/06/23 10:09:01 tron Exp $	*/
+/*	$NetBSD: stream_test.c,v 1.1.1.1 2009/06/23 10:09:01 tron Exp $	*/
 
 #include "sys_defs.h"
 #include <sys/stat.h>

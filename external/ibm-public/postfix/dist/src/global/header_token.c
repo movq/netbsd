@@ -1,4 +1,4 @@
-/*	$NetBSD: header_token.c,v 1.1 2009/06/23 10:08:46 tron Exp $	*/
+/*	$NetBSD: header_token.c,v 1.1.1.1 2009/06/23 10:08:46 tron Exp $	*/
 
 /*++
 /* NAME

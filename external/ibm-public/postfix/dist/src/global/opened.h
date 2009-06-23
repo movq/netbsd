@@ -1,4 +1,4 @@
-/*	$NetBSD: opened.h,v 1.1 2009/06/23 10:08:47 tron Exp $	*/
+/*	$NetBSD: opened.h,v 1.1.1.1 2009/06/23 10:08:47 tron Exp $	*/
 
 #ifndef _OPENED_H_INCLUDED_
 #define _OPENED_H_INCLUDED_

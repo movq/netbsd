@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_sdbm.h,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: dict_sdbm.h,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 #ifndef _DICT_SDBM_H_INCLUDED_
 #define _DICT_SDBM_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: lmtp_params.c,v 1.1 2009/06/23 10:08:53 tron Exp $	*/
+/*	$NetBSD: lmtp_params.c,v 1.1.1.1 2009/06/23 10:08:53 tron Exp $	*/
 
     static const CONFIG_STR_TABLE lmtp_str_table[] = {
 	VAR_NOTIFY_CLASSES, DEF_NOTIFY_CLASSES, &var_notify_classes, 0, 0,

@@ -1,4 +1,4 @@
-/*	$NetBSD: base64_code.h,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: base64_code.h,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 #ifndef _BASE64_CODE_H_INCLUDED_
 #define _BASE64_CODE_H_INCLUDED_

@@ -1,4 +1,4 @@
-/*	$NetBSD: auto_clnt.h,v 1.1 2009/06/23 10:08:59 tron Exp $	*/
+/*	$NetBSD: auto_clnt.h,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 #ifndef _AUTO_CLNT_H_INCLUDED_
 #define _AUTO_CLNT_H_INCLUDED_

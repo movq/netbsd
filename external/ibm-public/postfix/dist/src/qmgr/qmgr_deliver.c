@@ -1,4 +1,4 @@
-/*	$NetBSD: qmgr_deliver.c,v 1.1 2009/06/23 10:08:52 tron Exp $	*/
+/*	$NetBSD: qmgr_deliver.c,v 1.1.1.1 2009/06/23 10:08:52 tron Exp $	*/
 
 /*++
 /* NAME

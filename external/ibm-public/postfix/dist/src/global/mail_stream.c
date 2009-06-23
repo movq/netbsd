@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_stream.c,v 1.1 2009/06/23 10:08:47 tron Exp $	*/
+/*	$NetBSD: mail_stream.c,v 1.1.1.1 2009/06/23 10:08:47 tron Exp $	*/
 
 /*++
 /* NAME

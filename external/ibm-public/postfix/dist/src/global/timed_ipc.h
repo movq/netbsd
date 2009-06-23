@@ -1,4 +1,4 @@
-/*	$NetBSD: timed_ipc.h,v 1.1 2009/06/23 10:08:48 tron Exp $	*/
+/*	$NetBSD: timed_ipc.h,v 1.1.1.1 2009/06/23 10:08:48 tron Exp $	*/
 
 #ifndef _TIMED_IPC_H_INCLUDED_
 #define _TIMED_IPC_H_INCLUDED_
