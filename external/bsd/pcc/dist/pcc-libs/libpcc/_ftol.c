@@ -1,4 +1,4 @@
-/*	$Id: _ftol.c,v 1.1 2009/09/04 00:27:36 gmcgarry Exp $	*/
+/*	$Id: _ftol.c,v 1.1.1.1 2009/09/04 00:27:36 gmcgarry Exp $	*/
 
 /*
  * _ftol() and _ftol2() implementations used on win32 when linking against

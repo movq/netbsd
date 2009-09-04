@@ -1,4 +1,4 @@
-; $Id: _ftol.asm,v 1.1 2009/09/04 00:27:36 gmcgarry Exp $
+; $Id: _ftol.asm,v 1.1.1.1 2009/09/04 00:27:36 gmcgarry Exp $
 ;
 ; Implementation of _ftol(), _ftol2() for win32 and masm.
 ;

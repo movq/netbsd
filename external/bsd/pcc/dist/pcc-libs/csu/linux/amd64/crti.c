@@ -1,4 +1,4 @@
-/* $Id: crti.c,v 1.1 2009/09/04 00:27:35 gmcgarry Exp $ */
+/* $Id: crti.c,v 1.1.1.1 2009/09/04 00:27:35 gmcgarry Exp $ */
 /*-
  * Copyright (c) 2009 Gregory McGarry <g.mcgarry@ieee.org>
  *
@@ -31,4 +31,4 @@ asm(	"	.section .fini	\n"
 	"	subq $8,%rsp	\n"
 	"	.previous	\n");
 
-IDENT("$Id: crti.c,v 1.1 2009/09/04 00:27:35 gmcgarry Exp $");
+IDENT("$Id: crti.c,v 1.1.1.1 2009/09/04 00:27:35 gmcgarry Exp $");

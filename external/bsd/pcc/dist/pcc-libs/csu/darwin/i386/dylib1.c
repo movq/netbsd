@@ -1,4 +1,4 @@
-/*	$Id: dylib1.c,v 1.1 2009/09/04 00:27:35 gmcgarry Exp $	*/
+/*	$Id: dylib1.c,v 1.1.1.1 2009/09/04 00:27:35 gmcgarry Exp $	*/
 /*-
  * Copyright (c) 2009 Gregory McGarry <g.mcgarry@ieee.org>
  *
@@ -67,4 +67,4 @@ asm(
 
 asm("\t.subsections_via_symbols\n");
 
-IDENT("$Id: dylib1.c,v 1.1 2009/09/04 00:27:35 gmcgarry Exp $");
+IDENT("$Id: dylib1.c,v 1.1.1.1 2009/09/04 00:27:35 gmcgarry Exp $");

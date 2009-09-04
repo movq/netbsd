@@ -1,4 +1,4 @@
-/*	$Id: crt0.c,v 1.1 2009/09/04 00:27:35 gmcgarry Exp $	*/
+/*	$Id: crt0.c,v 1.1.1.1 2009/09/04 00:27:35 gmcgarry Exp $	*/
 /*-
  * Copyright (c) 2009 Gregory McGarry <g.mcgarry@ieee.org>
  *
@@ -50,4 +50,4 @@ __start(int argc, char *argv[], char *envp[])
 
 #include "common.c"
 
-IDENT("$Id: crt0.c,v 1.1 2009/09/04 00:27:35 gmcgarry Exp $");
+IDENT("$Id: crt0.c,v 1.1.1.1 2009/09/04 00:27:35 gmcgarry Exp $");
