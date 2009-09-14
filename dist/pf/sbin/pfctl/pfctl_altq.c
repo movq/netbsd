@@ -1,5 +1,4 @@
-/*	$NetBSD: pfctl_altq.c,v 1.8 2008/06/18 09:06:26 yamt Exp $	*/
-/*	$OpenBSD: pfctl_altq.c,v 1.92 2007/05/27 05:15:17 claudio Exp $	*/
+/*	$OpenBSD: pfctl_altq.c,v 1.83 2004/03/14 21:51:44 dhartmei Exp $	*/
 
 /*
  * Copyright (c) 2002
@@ -22,10 +21,6 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#ifdef __NetBSD__
-#include <sys/param.h>
-#include <sys/mbuf.h>
-#endif
 
 #include <net/if.h>
 #include <netinet/in.h>
@@ -98,6 +93,21 @@ pfaltq_store(struct pf_altq *a)
 	TAILQ_INSERT_TAIL(&altqs, altq, entries);
 }
 
+void
+pfaltq_free(struct pf_altq *a)
+{
+	struct pf_altq	*altq;
+
+	TAILQ_FOREACH(altq, &altqs, entries) {
+		if (strncmp(a->ifname, altq->ifname, IFNAMSIZ) == 0 &&
+		    strncmp(a->qname, altq->qname, PF_QNAME_SIZE) == 0) {
+			TAILQ_REMOVE(&altqs, altq, entries);
+			free(altq);
+			return;
+		}
+	}
+}
+
 struct pf_altq *
 pfaltq_lookup(const char *ifname)
 {
@@ -147,7 +157,7 @@ print_altq(const struct pf_altq *a, unsigned level, struct node_queue_bw *bw,
 	struct node_queue_opt *qopts)
 {
 	if (a->qname[0] != 0) {
-		print_queue(a, level, bw, 1, qopts);
+		print_queue(a, level, bw, 0, qopts);
 		return;
 	}
 
@@ -228,8 +238,8 @@ eval_pfaltq(struct pfctl *pf, struct pf_altq *pa, struct node_queue_bw *bw,
 		pa->ifbandwidth = bw->bw_absolute;
 	else
 		if ((rate = getifspeed(pa->ifname)) == 0) {
-			fprintf(stderr, "interface %s does not know its bandwidth, "
-			    "please specify an absolute bandwidth\n",
+			fprintf(stderr, "cannot determine interface bandwidth "
+			    "for %s, specify an absolute bandwidth\n",
 			    pa->ifname);
 			errors++;
 		} else if ((pa->ifbandwidth = eval_bwspec(bw, rate)) == 0)
@@ -294,8 +304,7 @@ eval_pfqueue(struct pfctl *pf, struct pf_altq *pa, struct node_queue_bw *bw,
     struct node_queue_opt *opts)
 {
 	/* should be merged with expand_queue */
-	struct pf_altq	*if_pa, *parent, *altq;
-	u_int32_t	 bwsum;
+	struct pf_altq	*if_pa, *parent;
 	int		 error = 0;
 
 	/* find the corresponding interface and copy fields used by queues */
@@ -327,35 +336,22 @@ eval_pfqueue(struct pfctl *pf, struct pf_altq *pa, struct node_queue_bw *bw,
 		pa->qlimit = DEFAULT_QLIMIT;
 
 	if (pa->scheduler == ALTQT_CBQ || pa->scheduler == ALTQT_HFSC) {
-		pa->bandwidth = eval_bwspec(bw,
-		    parent == NULL ? 0 : parent->bandwidth);
+		if ((pa->bandwidth = eval_bwspec(bw,
+		    parent == NULL ? 0 : parent->bandwidth)) == 0) {
+			fprintf(stderr, "bandwidth for %s invalid (%d / %d)\n",
+			    pa->qname, bw->bw_absolute, bw->bw_percent);
+			return (1);
+		}
 
 		if (pa->bandwidth > pa->ifbandwidth) {
 			fprintf(stderr, "bandwidth for %s higher than "
 			    "interface\n", pa->qname);
 			return (1);
 		}
-		/* check the sum of the child bandwidth is under parent's */
-		if (parent != NULL) {
-			if (pa->bandwidth > parent->bandwidth) {
-				warnx("bandwidth for %s higher than parent",
-				    pa->qname);
-				return (1);
-			}
-			bwsum = 0;
-			TAILQ_FOREACH(altq, &altqs, entries) {
-				if (strncmp(altq->ifname, pa->ifname,
-				    IFNAMSIZ) == 0 &&
-				    altq->qname[0] != 0 &&
-				    strncmp(altq->parent, pa->parent,
-				    PF_QNAME_SIZE) == 0)
-					bwsum += altq->bandwidth;
-			}
-			bwsum += pa->bandwidth;
-			if (bwsum > parent->bandwidth) {
-				warnx("the sum of the child bandwidth higher"
-				    " than parent \"%s\"", parent->qname);
-			}
+		if (parent != NULL && pa->bandwidth > parent->bandwidth) {
+			fprintf(stderr, "bandwidth for %s higher than parent\n",
+			    pa->qname);
+			return (1);
 		}
 	}
 
@@ -480,7 +476,10 @@ cbq_compute_idletime(struct pfctl *pf, struct pf_altq *pa)
 		maxidle = ptime * maxidle;
 	else
 		maxidle = ptime * maxidle_s;
-	offtime = cptime * (1.0 + 1.0/(1.0 - g) * (1.0 - gtom) / gtom);
+	if (minburst)
+		offtime = cptime * (1.0 + 1.0/(1.0 - g) * (1.0 - gtom) / gtom);
+	else
+		offtime = cptime;
 	minidle = -((double)opts->maxpktsize * (double)nsPerByte);
 
 	/* scale parameters */
@@ -556,10 +555,8 @@ print_cbq_opts(const struct pf_altq *a)
 			printf(" cleardscp");
 		if (opts->flags & CBQCLF_FLOWVALVE)
 			printf(" flowvalve");
-#ifdef CBQCLF_BORROW
 		if (opts->flags & CBQCLF_BORROW)
 			printf(" borrow");
-#endif
 		if (opts->flags & CBQCLF_WRR)
 			printf(" wrr");
 		if (opts->flags & CBQCLF_EFFICIENT)
@@ -687,8 +684,8 @@ eval_pfqueue_hfsc(struct pfctl *pf, struct pf_altq *pa)
 	}
 
 	if ((opts->rtsc_m1 < opts->rtsc_m2 && opts->rtsc_m1 != 0) ||
-	    (opts->lssc_m1 < opts->lssc_m2 && opts->lssc_m1 != 0) ||
-	    (opts->ulsc_m1 < opts->ulsc_m2 && opts->ulsc_m1 != 0)) {
+	    (opts->rtsc_m1 < opts->rtsc_m2 && opts->rtsc_m1 != 0) ||
+	    (opts->rtsc_m1 < opts->rtsc_m2 && opts->rtsc_m1 != 0)) {
 		warnx("m1 must be zero for convex curve: %s", pa->qname);
 		return (-1);
 	}
@@ -698,7 +695,7 @@ eval_pfqueue_hfsc(struct pfctl *pf, struct pf_altq *pa)
 	 * for the real-time service curve, the sum of the service curves
 	 * should not exceed 80% of the interface bandwidth.  20% is reserved
 	 * not to over-commit the actual interface bandwidth.
-	 * for the linkshare service curve, the sum of the child service
+	 * for the link-sharing service curve, the sum of the child service
 	 * curve should not exceed the parent service curve.
 	 * for the upper-limit service curve, the assigned bandwidth should
 	 * be smaller than the interface bandwidth, and the upper-limit should
@@ -725,7 +722,7 @@ eval_pfqueue_hfsc(struct pfctl *pf, struct pf_altq *pa)
 		if (strncmp(altq->parent, pa->parent, PF_QNAME_SIZE) != 0)
 			continue;
 
-		/* if the class has a linkshare service curve, add it. */
+		/* if the class has a link-sharing service curve, add it. */
 		if (opts->lssc_m2 != 0 && altq->pq_u.hfsc_opts.lssc_m2 != 0) {
 			sc.m1 = altq->pq_u.hfsc_opts.lssc_m1;
 			sc.d = altq->pq_u.hfsc_opts.lssc_d;
@@ -736,35 +733,22 @@ eval_pfqueue_hfsc(struct pfctl *pf, struct pf_altq *pa)
 
 	/* check the real-time service curve.  reserve 20% of interface bw */
 	if (opts->rtsc_m2 != 0) {
-		/* add this queue to the sum */
-		sc.m1 = opts->rtsc_m1;
-		sc.d = opts->rtsc_d;
-		sc.m2 = opts->rtsc_m2;
-		gsc_add_sc(&rtsc, &sc);
-		/* compare the sum with 80% of the interface */
 		sc.m1 = 0;
 		sc.d = 0;
 		sc.m2 = pa->ifbandwidth / 100 * 80;
 		if (!is_gsc_under_sc(&rtsc, &sc)) {
-			warnx("real-time sc exceeds 80%% of the interface "
-			    "bandwidth (%s)", rate2str((double)sc.m2));
+			warnx("real-time sc exceeds the interface bandwidth");
 			goto err_ret;
 		}
 	}
 
-	/* check the linkshare service curve. */
+	/* check the link-sharing service curve. */
 	if (opts->lssc_m2 != 0) {
-		/* add this queue to the child sum */
-		sc.m1 = opts->lssc_m1;
-		sc.d = opts->lssc_d;
-		sc.m2 = opts->lssc_m2;
-		gsc_add_sc(&lssc, &sc);
-		/* compare the sum of the children with parent's sc */
 		sc.m1 = parent->pq_u.hfsc_opts.lssc_m1;
 		sc.d = parent->pq_u.hfsc_opts.lssc_d;
 		sc.m2 = parent->pq_u.hfsc_opts.lssc_m2;
 		if (!is_gsc_under_sc(&lssc, &sc)) {
-			warnx("linkshare sc exceeds parent's sc");
+			warnx("link-sharing sc exceeds parent's sc");
 			goto err_ret;
 		}
 	}
@@ -881,9 +865,7 @@ print_hfsc_opts(const struct pf_altq *a, const struct node_queue_opt *qopts)
 /*
  * admission control using generalized service curve
  */
-#ifndef __NetBSD__
 #define	INFINITY	HUGE_VAL  /* positive infinity defined in <math.h> */
-#endif /* !__NetBSD__ */
 
 /* add a new service curve to a generalized service curve */
 static void
@@ -1087,41 +1069,23 @@ rate2str(double rate)
 u_int32_t
 getifspeed(char *ifname)
 {
-#ifdef __NetBSD__
-	int			 s;
-	struct ifdatareq	 ifdr;
-	struct if_data		*ifrdat;
-
-	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-		err(1, "getifspeed: socket");
-	memset(&ifdr, 0, sizeof(ifdr));
-	if (strlcpy(ifdr.ifdr_name, ifname, sizeof(ifdr.ifdr_name)) >=
-	    sizeof(ifdr.ifdr_name))
-		errx(1, "getifspeed: strlcpy");
-	if (ioctl(s, SIOCGIFDATA, &ifdr) == -1)
-		err(1, "getifspeed: SIOCGIFDATA");
-	ifrdat = &ifdr.ifdr_data;
-	if (close(s) == -1)
-		err(1, "getifspeed: close");
-	return ((u_int32_t)ifrdat->ifi_baudrate);
-#else
 	int		s;
 	struct ifreq	ifr;
 	struct if_data	ifrdat;
 
 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
 		err(1, "socket");
-	bzero(&ifr, sizeof(ifr));
 	if (strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name)) >=
 	    sizeof(ifr.ifr_name))
 		errx(1, "getifspeed: strlcpy");
 	ifr.ifr_data = (caddr_t)&ifrdat;
 	if (ioctl(s, SIOCGIFDATA, (caddr_t)&ifr) == -1)
 		err(1, "SIOCGIFDATA");
+	if (shutdown(s, SHUT_RDWR) == -1)
+		err(1, "shutdown");
 	if (close(s))
 		err(1, "close");
 	return ((u_int32_t)ifrdat.ifi_baudrate);
-#endif /* !__NetBSD__ */
 }
 
 u_long
@@ -1132,13 +1096,14 @@ getifmtu(char *ifname)
 
 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
 		err(1, "socket");
-	bzero(&ifr, sizeof(ifr));
 	if (strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name)) >=
 	    sizeof(ifr.ifr_name))
 		errx(1, "getifmtu: strlcpy");
 	if (ioctl(s, SIOCGIFMTU, (caddr_t)&ifr) == -1)
 		err(1, "SIOCGIFMTU");
-	if (close(s) == -1)
+	if (shutdown(s, SHUT_RDWR) == -1)
+		err(1, "shutdown");
+	if (close(s))
 		err(1, "close");
 	if (ifr.ifr_mtu > 0)
 		return (ifr.ifr_mtu);

@@ -1,5 +1,4 @@
-/*	$NetBSD: pflogd.c,v 1.7 2009/08/07 16:37:12 minskim Exp $	*/
-/*	$OpenBSD: pflogd.c,v 1.45 2007/06/06 14:11:26 henning Exp $	*/
+/*	$OpenBSD: pflogd.c,v 1.27 2004/02/13 19:01:57 otto Exp $	*/
 
 /*
  * Copyright (c) 2001 Theo de Raadt
@@ -35,24 +34,14 @@
 #include <sys/ioctl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
-#include <net/if.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-/*
- * If we're going to include parts of the libpcap internals we MUST
- * set the feature-test macros they expect, or they may misbehave.
- */
-#define HAVE_STRLCPY
-#define HAVE_SNPRINTF
-#define HAVE_VSNPRINTF
 #include <pcap-int.h>
 #include <pcap.h>
 #include <syslog.h>
 #include <signal.h>
-#include <err.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <fcntl.h>
@@ -81,11 +70,10 @@ char *copy_argv(char * const *);
 void  dump_packet(u_char *, const struct pcap_pkthdr *, const u_char *);
 void  dump_packet_nobuf(u_char *, const struct pcap_pkthdr *, const u_char *);
 int   flush_buffer(FILE *);
-int   if_exists(char *);
 int   init_pcap(void);
 void  logmsg(int, const char *, ...);
 void  purge_buffer(void);
-int   reset_dump(int);
+int   reset_dump(void);
 int   scan_dump(FILE *, off_t);
 int   set_snaplen(int);
 void  set_suspended(int);
@@ -93,8 +81,6 @@ void  sig_alrm(int);
 void  sig_close(int);
 void  sig_hup(int);
 void  usage(void);
-
-static int try_reset_dump(int);
 
 /* buffer must always be greater than snaplen */
 static int    bufpkt = 0;	/* number of packets in buffer */
@@ -114,9 +100,8 @@ set_suspended(int s)
 		return;
 
 	suspended = s;
-	setproctitle("[%s] -s %d -i %s -f %s",
-	    suspended ? "suspended" : "running",
-	    cur_snaplen, interface, filename);
+	setproctitle("[%s] -s %d -f %s",
+            suspended ? "suspended" : "running", cur_snaplen, filename);
 }
 
 char *
@@ -162,9 +147,8 @@ logmsg(int pri, const char *message, ...)
 __dead void
 usage(void)
 {
-	fprintf(stderr, "usage: pflogd [-Dx] [-d delay] [-f filename]");
-	fprintf(stderr, " [-i interface] [-p pidfile]\n");
-	fprintf(stderr, "              [-s snaplen] [expression]\n");
+	fprintf(stderr, "usage: pflogd [-Dx] [-d delay] [-f filename] ");
+	fprintf(stderr, "[-s snaplen] [expression]\n");
 	exit(1);
 }
 
@@ -201,35 +185,6 @@ set_pcap_filter(void)
 }
 
 int
-if_exists(char *ifname)
-{
-	int s;
-#ifdef SIOCGIFDATA
-	struct ifdatareq ifr;
-#define ifr_name ifdr_name
-#else
-	struct ifreq ifr;
-	struct if_data ifrdat;
-#endif
-
-	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
-		err(1, "socket");
-	bzero(&ifr, sizeof(ifr));
-	if (strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name)) >=
-		sizeof(ifr.ifr_name))
-			errx(1, "main ifr_name: strlcpy");
-#ifndef ifr_name
-	ifr.ifr_data = (caddr_t)&ifrdat;
-#endif
-	if (ioctl(s, SIOCGIFDATA, (caddr_t)&ifr) == -1)
-		return (0);
-	if (close(s))
-		err(1, "close");
-
-	return (1);
-}
-
-int
 init_pcap(void)
 {
 	hpcap = pcap_open_live(interface, snaplen, 1, PCAP_TO_MS, errbuf);
@@ -250,12 +205,10 @@ init_pcap(void)
 	cur_snaplen = snaplen = pcap_snapshot(hpcap);
 
 	/* lock */
-#ifdef __OpenBSD__
 	if (ioctl(pcap_fileno(hpcap), BIOCLOCK) < 0) {
 		logmsg(LOG_ERR, "BIOCLOCK: %s", strerror(errno));
 		return (-1);
 	}
-#endif
 
 	return (0);
 }
@@ -275,25 +228,7 @@ set_snaplen(int snap)
 }
 
 int
-reset_dump(int nomove)
-{
-	int ret;
-
-	for (;;) {
-		ret = try_reset_dump(nomove);
-		if (ret <= 0)
-			break;
-	}
-
-	return (ret);
-}
-
-/*
- * tries to (re)open log file, nomove flag is used with -x switch
- * returns 0: success, 1: retry (log moved), -1: error
- */
-int
-try_reset_dump(int nomove)
+reset_dump(void)
 {
 	struct pcap_file_header hdr;
 	struct stat st;
@@ -315,26 +250,23 @@ try_reset_dump(int nomove)
 	 */
 	fd = priv_open_log();
 	if (fd < 0)
-		return (-1);
+		return (1);
 
 	fp = fdopen(fd, "a+");
 
 	if (fp == NULL) {
 		logmsg(LOG_ERR, "Error: %s: %s", filename, strerror(errno));
-		close(fd);
-		return (-1);
+		return (1);
 	}
 	if (fstat(fileno(fp), &st) == -1) {
 		logmsg(LOG_ERR, "Error: %s: %s", filename, strerror(errno));
-		fclose(fp);
-		return (-1);
+		return (1);
 	}
 
 	/* set FILE unbuffered, we do our own buffering */
 	if (setvbuf(fp, NULL, _IONBF, 0)) {
 		logmsg(LOG_ERR, "Failed to set output buffers");
-		fclose(fp);
-		return (-1);
+		return (1);
 	}
 
 #define TCPDUMP_MAGIC 0xa1b2c3d4
@@ -342,9 +274,10 @@ try_reset_dump(int nomove)
 	if (st.st_size == 0) {
 		if (snaplen != cur_snaplen) {
 			logmsg(LOG_NOTICE, "Using snaplen %d", snaplen);
-			if (set_snaplen(snaplen))
+			if (set_snaplen(snaplen)) {
 				logmsg(LOG_WARNING,
 				    "Failed, using old settings");
+			}
 		}
 		hdr.magic = TCPDUMP_MAGIC;
 		hdr.version_major = PCAP_VERSION_MAJOR;
@@ -356,15 +289,11 @@ try_reset_dump(int nomove)
 
 		if (fwrite((char *)&hdr, sizeof(hdr), 1, fp) != 1) {
 			fclose(fp);
-			return (-1);
+			return (1);
 		}
 	} else if (scan_dump(fp, st.st_size)) {
+		/* XXX move file and continue? */
 		fclose(fp);
-		if (nomove || priv_move_log()) {
-			logmsg(LOG_ERR,
-			    "Invalid/incompatible log file, move it away");
-			return (-1);
-		}
 		return (1);
 	}
 
@@ -380,11 +309,7 @@ int
 scan_dump(FILE *fp, off_t size)
 {
 	struct pcap_file_header hdr;
-#ifdef __OpenBSD__
 	struct pcap_pkthdr ph;
-#else
-	struct pcap_sf_pkthdr ph;
-#endif
 	off_t pos;
 
 	/*
@@ -407,6 +332,7 @@ scan_dump(FILE *fp, off_t size)
 	    hdr.version_minor != PCAP_VERSION_MINOR ||
 	    hdr.linktype != hpcap->linktype ||
 	    hdr.snaplen > PFLOGD_MAXSNAPLEN) {
+		logmsg(LOG_ERR, "Invalid/incompatible log file, move it away");
 		return (1);
 	}
 
@@ -452,9 +378,6 @@ scan_dump(FILE *fp, off_t size)
 void
 dump_packet_nobuf(u_char *user, const struct pcap_pkthdr *h, const u_char *sp)
 {
-#ifndef __OpenBSD__
-	struct pcap_sf_pkthdr sf_hdr;
-#endif
 	FILE *f = (FILE *)user;
 
 	if (suspended) {
@@ -462,27 +385,11 @@ dump_packet_nobuf(u_char *user, const struct pcap_pkthdr *h, const u_char *sp)
 		return;
 	}
 
-#ifndef __OpenBSD__
-	sf_hdr.ts.tv_sec  = h->ts.tv_sec;
-	sf_hdr.ts.tv_usec = h->ts.tv_usec;
-	sf_hdr.caplen     = h->caplen;
-	sf_hdr.len        = h->len;
-#endif
-
-#ifdef __OpenBSD__
 	if (fwrite((char *)h, sizeof(*h), 1, f) != 1) {
-#else
-	if (fwrite(&sf_hdr, sizeof(sf_hdr), 1, f) != 1) {
-#endif
 		/* try to undo header to prevent corruption */
 		off_t pos = ftello(f);
-#ifdef __OpenBSD__
 		if (pos < sizeof(*h) ||
 		    ftruncate(fileno(f), pos - sizeof(*h))) {
-#else
-		if (pos < sizeof(sf_hdr) ||
-		    ftruncate(fileno(f), pos - sizeof(sf_hdr))) {
-#endif
 			logmsg(LOG_ERR, "Write failed, corrupted logfile!");
 			set_suspended(1);
 			gotsig_close = 1;
@@ -551,12 +458,7 @@ void
 dump_packet(u_char *user, const struct pcap_pkthdr *h, const u_char *sp)
 {
 	FILE *f = (FILE *)user;
-#ifdef __OpenBSD__
 	size_t len = sizeof(*h) + h->caplen;
-#else
-	struct pcap_sf_pkthdr sf_hdr;
-	size_t len = sizeof(sf_hdr) + h->caplen;
-#endif
 
 	if (len < sizeof(*h) || h->caplen > (size_t)cur_snaplen) {
 		logmsg(LOG_NOTICE, "invalid size %u (%u/%u), packet dropped",
@@ -583,19 +485,9 @@ dump_packet(u_char *user, const struct pcap_pkthdr *h, const u_char *sp)
 		return;
 	}
 
- append:
-#ifdef __OpenBSD__
+ append:	
 	memcpy(bufpos, h, sizeof(*h));
 	memcpy(bufpos + sizeof(*h), sp, h->caplen);
-#else
-	sf_hdr.ts.tv_sec  = h->ts.tv_sec;
-	sf_hdr.ts.tv_usec = h->ts.tv_usec;
-	sf_hdr.caplen     = h->caplen;
-	sf_hdr.len        = h->len;
-
-	memcpy(bufpos, &sf_hdr, sizeof(sf_hdr));
-	memcpy(bufpos + sizeof(sf_hdr), sp, h->caplen);
-#endif
 
 	bufpos += len;
 	bufleft -= len;
@@ -608,40 +500,29 @@ int
 main(int argc, char **argv)
 {
 	struct pcap_stat pstat;
-	int ch, np, ret, Xflag = 0;
+	int ch, np, Xflag = 0;
 	pcap_handler phandler = dump_packet;
-	const char *errstr = NULL;
-	char *pidf = NULL;
-
-	ret = 0;
 
 	closefrom(STDERR_FILENO + 1);
 
-	while ((ch = getopt(argc, argv, "Dxd:f:i:p:s:")) != -1) {
+	while ((ch = getopt(argc, argv, "Dxd:s:f:")) != -1) {
 		switch (ch) {
 		case 'D':
 			Debug = 1;
 			break;
 		case 'd':
-			delay = strtonum(optarg, 5, 60*60, &errstr);
-			if (errstr)
+			delay = atoi(optarg);
+			if (delay < 5 || delay > 60*60)
 				usage();
 			break;
 		case 'f':
 			filename = optarg;
 			break;
-		case 'i':
-			interface = optarg;
-			break;
-		case 'p':
-			pidf = optarg;
-			break;
 		case 's':
-			snaplen = strtonum(optarg, 0, PFLOGD_MAXSNAPLEN,
-			    &errstr);
+			snaplen = atoi(optarg);
 			if (snaplen <= 0)
 				snaplen = DEF_SNAPLEN;
-			if (errstr)
+			if (snaplen > PFLOGD_MAXSNAPLEN)
 				snaplen = PFLOGD_MAXSNAPLEN;
 			break;
 		case 'x':
@@ -657,24 +538,15 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	/* does interface exist */
-	if (!if_exists(interface)) {
-		warn("Failed to initialize: %s", interface);
-		logmsg(LOG_ERR, "Failed to initialize: %s", interface);
-		logmsg(LOG_ERR, "Exiting, init failure");
-		exit(1);
-	}
-
 	if (!Debug) {
 		openlog("pflogd", LOG_PID | LOG_CONS, LOG_DAEMON);
 		if (daemon(0, 0)) {
 			logmsg(LOG_WARNING, "Failed to become daemon: %s",
 			    strerror(errno));
 		}
-		pidfile(pidf);
+		pidfile(NULL);
 	}
 
-	tzset();
 	(void)umask(S_IRWXG | S_IRWXO);
 
 	/* filter will be used by the privileged process */
@@ -716,7 +588,7 @@ main(int argc, char **argv)
 		bufpkt = 0;
 	}
 
-	if (reset_dump(Xflag) < 0) {
+	if (reset_dump()) {
 		if (Xflag)
 			return (1);
 
@@ -727,21 +599,14 @@ main(int argc, char **argv)
 
 	while (1) {
 		np = pcap_dispatch(hpcap, PCAP_NUM_PKTS,
-		    phandler, (u_char *)dpcap);
-		if (np < 0) {
-			if (!if_exists(interface) == -1) {
-				logmsg(LOG_NOTICE, "interface %s went away",
-				    interface);
-				ret = -1;
-				break;
-			}
+		    dump_packet, (u_char *)dpcap);
+		if (np < 0)
 			logmsg(LOG_NOTICE, "%s", pcap_geterr(hpcap));
-		}
 
 		if (gotsig_close)
 			break;
 		if (gotsig_hup) {
-			if (reset_dump(0)) {
+			if (reset_dump()) {
 				logmsg(LOG_ERR,
 				    "Logging suspended: open error");
 				set_suspended(1);
@@ -752,8 +617,6 @@ main(int argc, char **argv)
 		if (gotsig_alrm) {
 			if (dpcap)
 				flush_buffer(dpcap);
-			else 
-				gotsig_hup = 1;
 			gotsig_alrm = 0;
 			alarm(delay);
 		}
@@ -776,5 +639,5 @@ main(int argc, char **argv)
 	pcap_close(hpcap);
 	if (!Debug)
 		closelog();
-	return (ret);
+	return (0);
 }

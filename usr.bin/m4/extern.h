@@ -1,6 +1,3 @@
-/*	$NetBSD: extern.h,v 1.12 2003/10/27 00:12:43 lukem Exp $	*/
-/*	$OpenBSD: extern.h,v 1.28 2001/10/10 18:12:00 espie Exp $	*/
-
 /*-
  * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -16,7 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,118 +36,61 @@
  *	@(#)extern.h	8.1 (Berkeley) 6/6/93
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
-#include <err.h>
-#include <unistd.h>
-
-/* eval.c */
-extern void	eval __P((const char *[], int, int));
-extern void	dodefine __P((const char *, const char *));
-extern unsigned long expansion_id;
-
-/* expr.c */
-extern int	expr __P((const char *));
-
-/* gnum4.c */
-extern void 	addtoincludepath __P((const char *));
-extern struct input_file *fopen_trypath __P((struct input_file *, const char *));
-extern void	doindir __P((const char *[], int));
-extern void	dobuiltin __P((const char *[], int));
-extern void	dopatsubst __P((const char *[], int));
-extern void	doregexp __P((const char *[], int));
-extern void	doprintlineno __P((struct input_file *));
-extern void	doprintfilename __P((struct input_file *));
-extern void	doesyscmd __P((const char *));
- 
-
-/* look.c */
-extern ndptr	addent __P((const char *));
-extern unsigned	hash __P((const char *));
-extern ndptr	lookup __P((const char *));
-extern void	remhash __P((const char *, int));
-
-/* main.c */
-extern void outputstr __P((const char *));
-extern int builtin_type __P((const char *));
-extern const char *builtin_realname __P((int));
-
-/* misc.c */
-extern void	chrsave __P((int));
-extern char 	*compute_prevep __P((void));
-extern void	getdiv __P((int));
-extern ptrdiff_t indx __P((const char *, const char *));
-extern void 	initspaces __P((void));
-extern void	killdiv __P((void));
-extern void	onintr __P((int));
-extern void	pbnum __P((int));
-extern void	pbunsigned __P((unsigned long));
-extern void	pbstr __P((const char *));
-extern void	putback __P((int));
-extern void	*xalloc __P((size_t));
-extern char	*xstrdup __P((const char *));
-extern void	usage __P((const char *));
-extern void	resizedivs __P((int));
-extern size_t	buffer_mark __P((void));
-extern void	dump_buffer __P((FILE *, size_t));
-
-extern int 	obtain_char __P((struct input_file *));
-extern void	set_input __P((struct input_file *, FILE *, const char *));
-extern void	release_input __P((struct input_file *));
-
-/* speeded-up versions of chrsave/putback */
-#define PUTBACK(c)				\
-	do {					\
-		if (bp >= endpbb)		\
-			enlarge_bufspace();	\
-		*bp++ = (c);			\
-	} while(0)
-	
-#define CHRSAVE(c)				\
-	do {					\
-		if (ep >= endest)		\
-			enlarge_strspace();	\
-		*ep++ = (c);			\
-	} while(0)
-
-/* and corresponding exposure for local symbols */
-extern void enlarge_bufspace __P((void));
-extern void enlarge_strspace __P((void));
-extern char *endpbb;
-extern char *endest;
-
-/* trace.c */
-extern void	mark_traced __P((const char *, int));
-extern int	is_traced __P((const char *));
-extern void	trace_file __P((const char *));
-extern ssize_t	trace __P((const char **, int, struct input_file *));
-extern void	finish_trace __P((size_t));
-extern void	set_trace_flags __P((const char *));
-extern int traced_macros;
-extern FILE *traceout;
+char	*basename __P((char *));
+char	*xalloc __P((unsigned long));
+int	expr __P((char *));
+ndptr	addent __P((char *));
+void	chrsave __P((int));
+void	dochc __P((char *[], int));
+void	dochq __P((char *[], int));
+void	dodefine __P((char *, char *));
+void	dodefn __P((char *));
+void	dodiv __P((int));
+void	dodump __P((char *[], int));
+void	doifelse __P((char *[], int));
+int	doincl __P((char *));
+int	dopaste __P((char *));
+void	dopushdef __P((char *, char *));
+void	dosub __P((char *[], int));
+void	doundiv __P((char *[], int));
+void	eval __P((char *[], int, int));
+void	expand __P((char *[], int));
+void	getdiv __P((int));
+char	*xstrdup __P((const char *));
+int	hash __P((char *));
+int	indx __P((char *, char *));
+void	killdiv __P((void));
+ndptr	lookup __P((char *));
+void	map __P((char *, char *, char *, char *));
+void	onintr __P((int));
+void	oops __P((const char *, ...));
+void	pbnum __P((int));
+void	pbstr __P((char *));
+void	putback __P((int));
+void	remhash __P((char *, int));
+void	usage __P((void));
 
 extern ndptr hashtab[];		/* hash table for macros etc. */
-extern stae *mstack;		/* stack of m4 machine */
-extern char *sstack;		/* shadow stack, for string space extension */
+extern stae mstack[];		/* stack of m4 machine */
 extern FILE *active;		/* active output file pointer */
-extern struct input_file infile[];/* input file stack (0=stdin) */
-extern FILE **outfile;		/* diversion array(0=bitbucket) */
-extern int maxout;		/* maximum number of diversions */
+extern FILE *infile[];		/* input file stack (0=stdin) */
+extern FILE *outfile[];		/* diversion array(0=bitbucket) */
 extern int fp; 			/* m4 call frame pointer */
 extern int ilevel;		/* input file stack pointer */
 extern int oindex;		/* diversion index. */
 extern int sp;			/* current m4 stack pointer */
 extern char *bp;		/* first available character */
-extern char *buf;		/* push-back buffer */
+extern char buf[];		/* push-back buffer */
 extern char *bufbase;		/* buffer base for this ilevel */
 extern char *bbase[];		/* buffer base per ilevel */
-extern char ecommt[MAXCCHARS+1];/* end character for comment */
+extern char ecommt;		/* end character for comment */
+extern char *endest;		/* end of string space */
+extern char *endpbb;		/* end of push-back buffer */
 extern char *ep;		/* first free char in strspace */
-extern char lquote[MAXCCHARS+1];/* left quote character (`) */
+extern char lquote;		/* left quote character (`) */
+extern char *m4temp;		/* filename for diversions */
 extern char *m4wraps;		/* m4wrap string default. */
 extern char *null;		/* as it says.. just a null. */
-extern char rquote[MAXCCHARS+1];/* right quote character (') */
-extern char scommt[MAXCCHARS+1];/* start character for comment */
-extern int mimic_gnu;		/* behaves like gnu-m4 */
+extern char *progname;		/* program name */
+extern char rquote;		/* right quote character (') */
+extern char scommt;		/* start character for comment */

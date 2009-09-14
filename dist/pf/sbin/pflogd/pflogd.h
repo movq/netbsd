@@ -1,5 +1,4 @@
-/*	$NetBSD: pflogd.h,v 1.4 2008/06/18 09:06:26 yamt Exp $	*/
-/*	$OpenBSD: pflogd.h,v 1.3 2006/01/15 16:38:04 canacar Exp $ */
+/*	$OpenBSD: pflogd.h,v 1.2 2004/01/15 20:15:14 canacar Exp $ */
 
 /*
  * Copyright (c) 2003 Can Erkin Acar
@@ -17,11 +16,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef __OpenBSD__
 #include <sys/limits.h>
-#else
-#include <limits.h>
-#endif
 #include <pcap.h>
 
 #define DEF_SNAPLEN 116		/* default plus allow for larger header of pflog */
@@ -42,7 +37,6 @@ void  logmsg(int priority, const char *message, ...);
 int	priv_init(void);
 int	priv_set_snaplen(int snaplen);
 int	priv_open_log(void);
-int	priv_move_log(void);
 pcap_t *pcap_open_live_fd(int fd, int snaplen, char *ebuf);
 
 void set_pcap_filter(void);

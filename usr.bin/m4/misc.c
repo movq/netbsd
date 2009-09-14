@@ -1,12 +1,9 @@
-/*	$NetBSD: misc.c,v 1.18 2007/10/05 07:36:45 lukem Exp $	*/
-/*	$OpenBSD: misc.c,v 1.25 2001/10/10 11:17:37 espie Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Ozan Yigit at York University.
+ * Ozan Yigit.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,7 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,351 +34,178 @@
  * SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
-#include <sys/cdefs.h>
-#if defined(__RCSID) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: misc.c,v 1.18 2007/10/05 07:36:45 lukem Exp $");
-#endif
+#ifndef lint
+static char sccsid[] = "@(#)misc.c	5.6 (Berkeley) 2/26/91";
 #endif /* not lint */
 
-#include <sys/types.h>
-#include <errno.h>
+/*
+ * misc.c
+ * Facility: m4 macro processor
+ * by: oz
+ */
+ 
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
 #include <string.h>
-#include <util.h>
 #include "mdef.h"
-#include "stdd.h"
-#include "extern.h"
+#include "extr.h" 
 #include "pathnames.h"
-
-char *ep;		/* first free char in strspace */
-static char *strspace;	/* string space for evaluation */
-char *endest;		/* end of string space	       */
-static size_t strsize = STRSPMAX;
-static size_t bufsize = BUFSIZE;
-
-char *buf;			/* push-back buffer	       */
-char *bufbase;			/* the base for current ilevel */
-char *bbase[MAXINP];		/* the base for each ilevel    */
-char *bp; 			/* first available character   */
-char *endpbb;			/* end of push-back buffer     */
-
-
+ 
 /*
- * find the index of second str in the first str.
+ * indx - find the index of second str in the
+ *        first str.
  */
-ptrdiff_t
 indx(s1, s2)
-	const char *s1;
-	const char *s2;
+char *s1;
+char *s2;
 {
-	char *t;
-
-	t = strstr(s1, s2);
-	if (t == NULL)
-		return (-1);
-	return (t - s1);
+        register char *t;
+        register char *p;
+        register char *m;
+ 
+        for (p = s1; *p; p++) {
+                for (t = p, m = s2; *m && *m == *t; m++, t++)
+                        ;
+                if (!*m)
+                        return(p - s1);
+        }
+        return (-1);
 }
-
+ 
 /*
  *  putback - push character back onto input
+ *
  */
-void
-putback(c)
-	int c;
+putback (c)
+char c;
 {
-	if (c == EOF)
-		return;
-	if (bp >= endpbb)
-		enlarge_bufspace();
-	*bp++ = c;
+        if (bp < endpbb)
+                *bp++ = c;
+        else
+                error("m4: too many characters pushed back");
 }
-
+ 
 /*
  *  pbstr - push string back onto input
  *          putback is replicated to improve
  *          performance.
+ *
  */
-void
 pbstr(s)
-	const char *s;
+register char *s;
 {
-	size_t n;
+        register char *es;
+	register char *zp;
 
-	n = strlen(s);
-	while (endpbb - bp <= n)
-		enlarge_bufspace();
-	while (n > 0)
-		*bp++ = s[--n];
+	es = s;
+	zp = bp;
+
+        while (*es)
+                es++;
+        es--;
+        while (es >= s)
+                if (zp < endpbb)
+                        *zp++ = *es--;
+        if ((bp = zp) == endpbb)
+                error("m4: too many characters pushed back");
 }
-
+ 
 /*
  *  pbnum - convert number to string, push back on input.
+ *
  */
-void
-pbnum(n)
-	int n;
+pbnum (n)
+int n;
 {
-	int num;
+        register int num;
+ 
+        num = (n < 0) ? -n : n;
+        do {
+                putback(num % 10 + '0');
+        }
+        while ((num /= 10) > 0);
 
-	num = (n < 0) ? -n : n;
-	do {
-		putback(num % 10 + '0');
-	}
-	while ((num /= 10) > 0);
-
-	if (n < 0)
-		putback('-');
+        if (n < 0) putback('-');
 }
-
-/*
- *  pbunsigned - convert unsigned long to string, push back on input.
- */
-void
-pbunsigned(n)
-	unsigned long n;
-{
-	do {
-		putback(n % 10 + '0');
-	}
-	while ((n /= 10) > 0);
-}
-
-void 
-initspaces()
-{
-	int i;
-
-	strspace = xalloc(strsize+1);
-	ep = strspace;
-	endest = strspace+strsize;
-	buf = (char *)xalloc(bufsize);
-	bufbase = buf;
-	bp = buf;
-	endpbb = buf + bufsize;
-	for (i = 0; i < MAXINP; i++)
-		bbase[i] = buf;
-}
-
-void 
-enlarge_strspace()
-{
-	char *newstrspace;
-	int i;
-
-	strsize *= 2;
-	newstrspace = malloc(strsize + 1);
-	if (!newstrspace)
-		errx(1, "string space overflow");
-	memcpy(newstrspace, strspace, strsize/2);
-	for (i = 0; i <= sp; i++) 
-		if (sstack[i])
-			mstack[i].sstr = (mstack[i].sstr - strspace) 
-			    + newstrspace;
-	ep = (ep-strspace) + newstrspace;
-	free(strspace);
-	strspace = newstrspace;
-	endest = strspace + strsize;
-}
-
-void
-enlarge_bufspace()
-{
-	char *newbuf;
-	int i;
-
-	bufsize *= 2;
-	newbuf = realloc(buf, bufsize);
-	if (!newbuf)
-		errx(1, "too many characters pushed back");
-	for (i = 0; i < MAXINP; i++)
-		bbase[i] = (bbase[i]-buf)+newbuf;
-	bp = (bp-buf)+newbuf;
-	bufbase = (bufbase-buf)+newbuf;
-	buf = newbuf;
-	endpbb = buf+bufsize;
-}
-
+ 
 /*
  *  chrsave - put single char on string space
+ *
  */
-void
-chrsave(c)
-	int c;
+chrsave (c)
+char c;
 {
-	if (ep >= endest) 
-		enlarge_strspace();
-	*ep++ = c;
+/***        if (sp < 0)
+                putc(c, active);
+        else ***/ if (ep < endest)
+                *ep++ = c;
+        else
+                error("m4: string space overflow");
 }
-
+ 
 /*
- * read in a diversion file, and dispose it.
+ * getdiv - read in a diversion file, and
+ *          trash it.
  */
-void
-getdiv(n)
-	int n;
-{
-	int c;
+getdiv(ind) {
+        register int c;
+        register FILE *dfil;
+ 
+        if (active == outfile[ind])
+                error("m4: undivert: diversion still active.");
+        (void) fclose(outfile[ind]);
+        outfile[ind] = NULL;
+        m4temp[UNIQUE] = ind + '0';
+        if ((dfil = fopen(m4temp, "r")) == NULL)
+                error("m4: cannot undivert.");
+        else
+                while((c = getc(dfil)) != EOF)
+                        putc(c, active);
+        (void) fclose(dfil);
 
-	if (active == outfile[n])
-		errx(1, "undivert: diversion still active");
-	rewind(outfile[n]);
-	while ((c = getc(outfile[n])) != EOF)
-		putc(c, active);
-	(void) fclose(outfile[n]);
-	outfile[n] = NULL;
+	if (unlink(m4temp) == -1)
+                error("m4: cannot unlink.");
 }
-
-void
-onintr(signo)
-	int signo;
+ 
+/*
+ * Very fatal error. Close all files
+ * and die hard.
+ */
+error(s)
+char *s;
 {
-#define intrmessage	"m4: interrupted.\n"
-	write(STDERR_FILENO, intrmessage, sizeof(intrmessage));
-	(void)raise_default_signal(signo);
-	_exit(1);
+        killdiv();
+        fprintf(stderr,"%s\n",s);
+        exit(1);
 }
-
+ 
+/*
+ * Interrupt handling
+ */
+static char *msg = "\ninterrupted.";
+ 
+void
+onintr() {
+        error(msg);
+}
+ 
 /*
  * killdiv - get rid of the diversion files
+ *
  */
-void
-killdiv()
-{
-	int n;
-
-	for (n = 0; n < maxout; n++)
-		if (outfile[n] != NULL) {
-			(void) fclose(outfile[n]);
-		}
+killdiv() {
+        register int n;
+ 
+        for (n = 0; n < MAXOUT; n++)
+                if (outfile[n] != NULL) {
+                        (void) fclose (outfile[n]);
+                        m4temp[UNIQUE] = n + '0';
+                        (void) unlink (m4temp);
+                }
 }
-
-/*
- * resizedivs: allocate more diversion files */
-void
-resizedivs(n)
-	int n;
-{
-	int i;
-
-	outfile = (FILE **)realloc(outfile, sizeof(FILE *) * n);
-	if (outfile == NULL)
-		    errx(1, "too many diverts %d", n);
-	for (i = maxout; i < n; i++)
-		outfile[i] = NULL;
-	maxout = n;
-}
-
-void *
-xalloc(n)
-	size_t n;
-{
-	char *p = malloc(n);
-
-	if (p == NULL)
-		err(1, "malloc");
-	return p;
-}
-
-char *
-xstrdup(s)
-	const char *s;
-{
-	char *p = strdup(s);
-	if (p == NULL)
-		err(1, "strdup");
-	return p;
-}
-
-void
-usage(progname)
-	const char *progname;
-{
-	fprintf(stderr, "usage: %s [-Pg] [-Dname[=val]] [-I dirname] [-Uname]\n", progname);
-	fprintf(stderr, "\t[-d flags] [-o trfile] [-t macro]\n");
-	exit(1);
-}
-
-int 
-obtain_char(f)
-	struct input_file *f;
-{
-	if (f->c == EOF)
-		return EOF;
-	else if (f->c == '\n')
-		f->lineno++;
-
-	f->c = fgetc(f->file);
-	return f->c;
-}
-
-void 
-set_input(f, real, name)
-	struct input_file *f;
-	FILE *real;
-	const char *name;
-{
-	f->file = real;
-	f->lineno = 1;
-	f->c = 0;
-	f->name = xstrdup(name);
-}
-
-void 
-release_input(f)
-	struct input_file *f;
-{
-	if (f->file != stdin)
-	    fclose(f->file);
-	f->c = EOF;
-	/*
-	 * XXX can't free filename, as there might still be 
-	 * error information pointing to it.
-	 */
-}
-
-void
-doprintlineno(f)
-	struct input_file *f;
-{
-	pbunsigned(f->lineno);
-}
-
-void
-doprintfilename(f)
-	struct input_file *f;
-{
-	pbstr(rquote);
-	pbstr(f->name);
-	pbstr(lquote);
-}
-
-/* 
- * buffer_mark/dump_buffer: allows one to save a mark in a buffer,
- * and later dump everything that was added since then to a file.
- */
-size_t
-buffer_mark()
-{
-	return bp - buf;
-}
-
-
-void
-dump_buffer(f, m)
-	FILE *f;
-	size_t m;
-{
-	char *s;
-
-	for (s = bp; s-buf > m;)
-		fputc(*--s, f);
+ 
+usage() {
+        fprintf(stderr, "usage: m4 [-Dname[=val]] [-Uname]\n");
+        exit(1);
 }

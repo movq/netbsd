@@ -1,4 +1,4 @@
-/*	$NetBSD: trace.c,v 1.5 2004/06/20 22:20:16 jmc Exp $	*/
+/*	$NetBSD: trace.c,v 1.1 2001/11/14 06:16:10 tv Exp $	*/
 /* $OpenBSD: trace.c,v 1.3 2001/09/29 15:47:18 espie Exp $ */
 
 /*
@@ -26,20 +26,16 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
 #include <sys/types.h>
+#include <err.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include "mdef.h"
 #include "stdd.h"
 #include "extern.h"
 
-FILE *traceout;
+FILE *traceout = stderr;
 
 int traced_macros = 0;
 
@@ -130,7 +126,8 @@ void
 trace_file(name)
 	const char *name;
 {
-	if (traceout)
+
+	if (traceout != stderr)
 		fclose(traceout);
 	traceout = fopen(name, "w");
 	if (!traceout)
@@ -211,16 +208,14 @@ static void
 print_header(inp)
 	struct input_file *inp;
 {
-	FILE *out = traceout ? traceout : stderr;
-
-	fprintf(out, "m4trace:");
+	fprintf(traceout, "m4trace:");
 	if (flags & TRACE_FILENAME)
-		fprintf(out, "%s:", inp->name);
+		fprintf(traceout, "%s:", inp->name);
 	if (flags & TRACE_LINENO)
-		fprintf(out, "%lu:", inp->lineno);
-	fprintf(out, " -%d- ", frame_level());
+		fprintf(traceout, "%lu:", inp->lineno);
+	fprintf(traceout, " -%d- ", frame_level());
 	if (flags & TRACE_ID)
-		fprintf(out, "id %lu: ", expansion_id);
+		fprintf(traceout, "id %lu: ", expansion_id);
 }
 
 ssize_t 
@@ -229,14 +224,12 @@ trace(argv, argc, inp)
 	int argc;
 	struct input_file *inp;
 {
-	FILE *out = traceout ? traceout : stderr;
-
 	print_header(inp);
 	if (flags & TRACE_CONT) {
-		fprintf(out, "%s ...\n", argv[1]);
+		fprintf(traceout, "%s ...\n", argv[1]);
 		print_header(inp);
 	}
-	fprintf(out, "%s", argv[1]);
+	fprintf(traceout, "%s", argv[1]);
 	if ((flags & TRACE_ARGS) && argc > 2) {
 		char delim[3];
 		int i;
@@ -244,7 +237,7 @@ trace(argv, argc, inp)
 		delim[0] = LPAREN;
 		delim[1] = EOS;
 		for (i = 2; i < argc; i++) {
-			fprintf(out, "%s%s%s%s", delim, 
+			fprintf(traceout, "%s%s%s%s", delim, 
 			    (flags & TRACE_QUOTE) ? lquote : "", 
 			    argv[i], 
 			    (flags & TRACE_QUOTE) ? rquote : "");
@@ -252,17 +245,17 @@ trace(argv, argc, inp)
 			delim[1] = ' ';
 			delim[2] = EOS;
 		}
-		fprintf(out, "%c", RPAREN);
+		fprintf(traceout, "%c", RPAREN);
 	}
 	if (flags & TRACE_CONT) {
-		fprintf(out, " -> ???\n");
+		fprintf(traceout, " -> ???\n");
 		print_header(inp);
-		fprintf(out, argc > 2 ? "%s(...)" : "%s", argv[1]);
+		fprintf(traceout, argc > 2 ? "%s(...)" : "%s", argv[1]);
 	}
 	if (flags & TRACE_EXPANSION)
 		return buffer_mark();
 	else {
-		fprintf(out, "\n");
+		fprintf(traceout, "\n");
 		return -1;
 	}
 }
@@ -271,13 +264,11 @@ void
 finish_trace(mark)
 size_t mark;
 {
-	FILE *out = traceout ? traceout : stderr;
-
-	fprintf(out, " -> ");
+	fprintf(traceout, " -> ");
 	if (flags & TRACE_QUOTE)
-		fprintf(out, "%s", lquote);
-	dump_buffer(out, mark);
+		fprintf(traceout, "%s", lquote);
+	dump_buffer(traceout, mark);
 	if (flags & TRACE_QUOTE)
-		fprintf(out, "%s", rquote);
-	fprintf(out, "\n");
+		fprintf(traceout, "%s", rquote);
+	fprintf(traceout, "\n");
 }

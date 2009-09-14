@@ -1,12 +1,9 @@
-/*	$NetBSD: expr.c,v 1.18 2006/05/11 01:22:20 mrg Exp $	*/
-/*	$OpenBSD: expr.c,v 1.11 2000/01/11 14:00:57 espie Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Ozan Yigit at York University.
+ * Ozan Yigit.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,7 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,53 +34,48 @@
  * SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
-#include <sys/cdefs.h>
-#if defined(__RCSID) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)expr.c	8.2 (Berkeley) 4/29/95";
-#else
-__RCSID("$NetBSD: expr.c,v 1.18 2006/05/11 01:22:20 mrg Exp $");
-#endif
+#ifndef lint
+static char sccsid[] = "@(#)expr.c	5.3 (Berkeley) 2/26/91";
 #endif /* not lint */
 
-#include <sys/types.h>
-#include <ctype.h>
-#include <stddef.h>
+#include <setjmp.h>
 #include <stdio.h>
-#include "mdef.h"
-#include "extern.h"
 
 /*
  *      expression evaluator: performs a standard recursive
  *      descent parse to evaluate any expression permissible
  *      within the following grammar:
  *
- *	expr	:	query EOS
- *	query	:	lor
- *		|	lor "?" query ":" query
- *	lor	:	land { "||" land }
- *	land	:	bor { "&&" bor }
- *	bor	:	xor { "|" xor }
- *	xor	:	band { "^" eqrel }
- *	band	:	eqrel { "&" eqrel }
- *	eqrel	:	nerel { ("==" | "!=") nerel }
- *	nerel	:	shift { ("<" | ">" | "<=" | ">=") shift }
- *	shift	:	primary { ("<<" | ">>") primary }
- *	primary	:	term { ("+" | "-") term }
- *	term	:	exp { ("*" | "/" | "%") exp }
- *	exp	:	unary { "**" unary }
- *	unary	:	factor
- *		|	("+" | "-" | "~" | "!") unary
- *	factor	:	constant
- *		|	"(" query ")"
- *	constant:	num
- *		|	"'" CHAR "'"
- *	num	:	DIGIT
- *		|	DIGIT num
+ *      expr    :       query EOS
+ *      query   :       lor
+ *              |       lor "?" query ":" query
+ *      lor     :       land { "||" land }
+ *      land    :       bor { "&&" bor }
+ *      bor     :       bxor { "|" bxor }
+ *      bxor    :       band { "^" band }
+ *      band    :       eql { "&" eql }
+ *      eql     :       relat { eqrel relat }
+ *      relat   :       shift { rel shift }
+ *      shift   :       primary { shop primary }
+ *      primary :       term { addop term }
+ *      term    :       unary { mulop unary }
+ *      unary   :       factor
+ *              |       unop unary
+ *      factor  :       constant
+ *              |       "(" query ")"
+ *      constant:       num
+ *              |       "'" CHAR "'"
+ *      num     :       DIGIT
+ *              |       DIGIT num
+ *      shop    :       "<<"
+ *              |       ">>"
+ *      eqlrel  :       "="
+ *              |       "=="
+ *              |       "!="
+ *      rel     :       "<"
+ *              |       ">"
+ *              |       "<="
+ *              |       ">="
  *
  *
  *      This expression evaluator is lifted from a public-domain
@@ -89,7 +85,10 @@ __RCSID("$NetBSD: expr.c,v 1.18 2006/05/11 01:22:20 mrg Exp $");
  *      Originally by:  Mike Lutz
  *                      Bob Harper
  */
-
+ 
+#define TRUE    1
+#define FALSE   0
+#define EOS     (char) 0
 #define EQL     0
 #define NEQ     1
 #define LSS     2
@@ -98,524 +97,504 @@ __RCSID("$NetBSD: expr.c,v 1.18 2006/05/11 01:22:20 mrg Exp $");
 #define GEQ     5
 #define OCTAL   8
 #define DECIMAL 10
-#define HEX	16
-
-static const char *nxtch;		       /* Parser scan pointer */
-static const char *where;
-
-static int query(int);
-static int lor(int);
-static int land(int);
-static int bor(int);
-static int xor(int);
-static int band(int);
-static int eqrel(int);
-static int nerel(int);
-static int shift(int);
-static int primary(int);
-static int term(int);
-static int m4_exp(int);
-static int unary(int);
-static int factor(int);
-static int constant(int);
-static int num(int);
-static int skipws(void);
-static void experr(const char *);
-
+ 
+static char *nxtch;     /* Parser scan pointer */
+ 
 /*
  * For longjmp
  */
-#include <setjmp.h>
-static jmp_buf expjump;
-
+static jmp_buf  expjump;
+ 
 /*
  * macros:
+ *
  *      ungetch - Put back the last character examined.
  *      getch   - return the next character from expr string.
  */
 #define ungetch()       nxtch--
 #define getch()         *nxtch++
-
-int
+ 
 expr(expbuf)
-	const char *expbuf;
+char *expbuf;
 {
-	int rval;
-
-	nxtch = expbuf;
-	where = expbuf;
-	if (setjmp(expjump) != 0)
-		return FALSE;
-
-	rval = query(1);
-	if (skipws() == EOS)
-		return rval;
-
-	printf("m4: ill-formed expression.\n");
-	return FALSE;
+        register int rval;
+ 
+        nxtch = expbuf;
+        if (setjmp(expjump) != 0)
+                return (FALSE);
+        rval = query();
+        if (skipws() == EOS)
+                return(rval);
+        experr("Ill-formed expression");
 }
-
+ 
 /*
  * query : lor | lor '?' query ':' query
+ *
  */
-static int
-query(int mayeval)
+query()
 {
-	int bool, true_val, false_val;
-
-	bool = lor(mayeval);
-	if (skipws() != '?') {
-		ungetch();
-		return bool;
-	}
-
-	true_val = query(bool);
-	if (skipws() != ':')
-		experr("bad query: missing \":\"");
-
-	false_val = query(!bool);
-	return bool ? true_val : false_val;
+        register int bool, true_val, false_val;
+ 
+        bool = lor();
+        if (skipws() != '?') {
+                ungetch();
+                return(bool);
+        }
+ 
+        true_val = query();
+        if (skipws() != ':')
+                experr("Bad query");
+ 
+        false_val = query();
+        return(bool ? true_val : false_val);
 }
-
+ 
 /*
  * lor : land { '||' land }
+ *
  */
-static int
-lor(int mayeval)
+lor()
 {
-	int c, vl, vr;
-
-	vl = land(mayeval);
-	while ((c = skipws()) == '|') {
-		if (getch() != '|') {
-			ungetch();
-			break;
-		}
-		if (vl != 0)
-			mayeval = 0;
-		vr = land(mayeval);
-		vl = vl || vr;
-	}
-
-	ungetch();
-	return vl;
+        register int c, vl, vr;
+ 
+        vl = land();
+        while ((c = skipws()) == '|' && getch() == '|') {
+                vr = land();
+                vl = vl || vr;
+        }
+ 
+        if (c == '|')
+                ungetch();
+        ungetch();
+        return(vl);
 }
-
+ 
 /*
- * land : not { '&&' not }
+ * land : bor { '&&' bor }
+ *
  */
-static int
-land(int mayeval)
+land()
 {
-	int c, vl, vr;
-
-	vl = bor(mayeval);
-	while ((c = skipws()) == '&') {
-		if (getch() != '&') {
-			ungetch();
-			break;
-		}
-		if (vl == 0)
-			mayeval = 0;
-		vr = bor(mayeval);
-		vl = vl && vr;
-	}
-
-	ungetch();
-	return vl;
+        register int c, vl, vr;
+ 
+        vl = bor();
+        while ((c = skipws()) == '&' && getch() == '&') {
+                vr = bor();
+                vl = vl && vr;
+        }
+ 
+        if (c == '&')
+                ungetch();
+        ungetch();
+        return(vl);
 }
-
+ 
 /*
- * bor : xor { "|" xor }
+ * bor : bxor { '|' bxor }
+ *
  */
-static int
-bor(int mayeval)
+bor()
 {
-	int vl, vr, c, cr;
-
-	vl = xor(mayeval);
-	while ((c = skipws()) == '|') {
-		cr = getch();
-		ungetch();
-		if (cr == '|')
-			break;
-		vr = xor(mayeval);
-		vl |= vr;
-	}
-	ungetch();
-	return (vl);
+        register int vl, vr, c;
+ 
+        vl = bxor();
+        while ((c = skipws()) == '|' && getch() != '|') {
+                ungetch();
+                vr = bxor();
+                vl |= vr;
+        }
+ 
+        if (c == '|')
+                ungetch();
+        ungetch();
+        return(vl);
 }
-
+ 
 /*
- * xor : band { "^" band }
+ * bxor : band { '^' band }
+ *
  */
-static int
-xor(int mayeval)
+bxor()
 {
-	int vl, vr, c;
-
-	vl = band(mayeval);
-	while ((c = skipws()) == '^') {
-		vr = band(mayeval);
-		vl ^= vr;
-	}
-	ungetch();
-	return (vl);
+        register int vl, vr;
+ 
+        vl = band();
+        while (skipws() == '^') {
+                vr = band();
+                vl ^= vr;
+        }
+ 
+        ungetch();
+        return(vl);
 }
-
+ 
 /*
- * band : eqrel { "&" eqrel }
+ * band : eql { '&' eql }
+ *
  */
-static int
-band(int mayeval)
+band()
 {
-	int c, cr, vl, vr;
-
-	vl = eqrel(mayeval);
-	while ((c = skipws()) == '&') {
-		cr = getch();
-		ungetch();
-		if (cr == '&')
-			break;
-		vr = eqrel(mayeval);
-		vl &= vr;
-	}
-	ungetch();
-	return vl;
+        register int vl, vr, c;
+ 
+        vl = eql();
+        while ((c = skipws()) == '&' && getch() != '&') {
+                ungetch();
+                vr = eql();
+                vl &= vr;
+        }
+ 
+        if (c == '&')
+                ungetch();
+        ungetch();
+        return(vl);
 }
-
+ 
 /*
- * eqrel : nerel { ("==" | "!=" ) nerel }
+ * eql : relat { eqrel relat }
+ *
  */
-static int
-eqrel(int mayeval)
+eql()
 {
-	int vl, vr, c, cr;
-
-	vl = nerel(mayeval);
-	while ((c = skipws()) == '!' || c == '=') {
-		if ((cr = getch()) != '=') {
-			ungetch();
-			break;
-		}
-		vr = nerel(mayeval);
-		switch (c) {
-		case '=':
-			vl = (vl == vr);
-			break;
-		case '!':
-			vl = (vl != vr);
-			break;
-		}
-	}
-	ungetch();
-	return vl;
+        register int vl, vr, rel;
+ 
+        vl = relat();
+        while ((rel = geteql()) != -1) {
+                vr = relat();
+ 
+                switch (rel) {
+ 
+                case EQL:
+                        vl = (vl == vr);
+                        break;
+                case NEQ:
+                        vl = (vl != vr);
+                        break;
+                }
+        }
+        return(vl);
 }
-
+ 
 /*
- * nerel : shift { ("<=" | ">=" | "<" | ">") shift }
+ * relat : shift { rel shift }
+ *
  */
-static int
-nerel(int mayeval)
+relat()
 {
-	int vl, vr, c, cr;
-
-	vl = shift(mayeval);
-	while ((c = skipws()) == '<' || c == '>') {
-		if ((cr = getch()) != '=') {
-			ungetch();
-			cr = '\0';
-		}
-		vr = shift(mayeval);
-		switch (c) {
-		case '<':
-			vl = (cr == '\0') ? (vl < vr) : (vl <= vr);
-			break;
-		case '>':
-			vl = (cr == '\0') ? (vl > vr) : (vl >= vr);
-			break;
-		}
-	}
-	ungetch();
-	return vl;
+        register int vl, vr, rel;
+ 
+        vl = shift();
+        while ((rel = getrel()) != -1) {
+ 
+                vr = shift();
+                switch (rel) {
+ 
+                case LEQ:
+                        vl = (vl <= vr);
+                        break;
+                case LSS:
+                        vl = (vl < vr);
+                        break;
+                case GTR:
+                        vl = (vl > vr);
+                        break;
+                case GEQ:
+                        vl = (vl >= vr);
+                        break;
+                }
+        }
+        return(vl);
 }
-
+ 
 /*
- * shift : primary { ("<<" | ">>") primary }
+ * shift : primary { shop primary }
+ *
  */
-static int
-shift(int mayeval)
+shift()
 {
-	int vl, vr, c;
-
-	vl = primary(mayeval);
-	while (((c = skipws()) == '<' || c == '>') && getch() == c) {
-		vr = primary(mayeval);
-
-		if (c == '<')
-			vl <<= vr;
-		else
-			vl >>= vr;
-	}
-
-	if (c == '<' || c == '>')
-		ungetch();
-	ungetch();
-	return vl;
+        register int vl, vr, c;
+ 
+        vl = primary();
+        while (((c = skipws()) == '<' || c == '>') && c == getch()) {
+                vr = primary();
+ 
+                if (c == '<')
+                        vl <<= vr;
+                else
+                        vl >>= vr;
+        }
+ 
+        if (c == '<' || c == '>')
+                ungetch();
+        ungetch();
+        return(vl);
 }
-
+ 
 /*
- * primary : term { ("+" | "-") term }
+ * primary : term { addop term }
+ *
  */
-static int
-primary(int mayeval)
+primary()
 {
-	int c, vl, vr;
-
-	vl = term(mayeval);
-	while ((c = skipws()) == '+' || c == '-') {
-		vr = term(mayeval);
-
-		if (c == '+')
-			vl += vr;
-		else
-			vl -= vr;
-	}
-
-	ungetch();
-	return vl;
+        register int c, vl, vr;
+ 
+        vl = term();
+        while ((c = skipws()) == '+' || c == '-') {
+                vr = term();
+                if (c == '+')
+                        vl += vr;
+                else
+                        vl -= vr;
+        }
+ 
+        ungetch();
+        return(vl);
 }
-
+ 
 /*
- * term : exp { ("*" | "/" | "%") exp }
+ * <term> := <unary> { <mulop> <unary> }
+ *
  */
-static int
-term(int mayeval)
+term()
 {
-	int c, vl, vr;
-
-	vl = m4_exp(mayeval);
-	while ((c = skipws()) == '*' || c == '/' || c == '%') {
-		vr = m4_exp(mayeval);
-
-		switch (c) {
-		case '*':
-			vl *= vr;
-			break;
-		case '/':
-			if (!mayeval)
-				/* short-circuit */;
-			else if (vr == 0)
-				errx(1, "division by zero in eval.");
-			else
-				vl /= vr;
-			break;
-		case '%':
-			if (!mayeval)
-				/* short-circuit */;
-			else if (vr == 0)
-				errx(1, "modulo zero in eval.");
-			else
-				vl %= vr;
-			break;
-		}
-	}
-	ungetch();
-	return vl;
+        register int c, vl, vr;
+ 
+        vl = unary();
+        while ((c = skipws()) == '*' || c == '/' || c == '%') {
+                vr = unary();
+ 
+                switch (c) {
+                case '*':
+                        vl *= vr;
+                        break;
+                case '/':
+                        vl /= vr;
+                        break;
+                case '%':
+                        vl %= vr;
+                        break;
+                }
+        }
+        ungetch();
+        return(vl);
 }
-
+ 
 /*
- * exp : unary { "**" exp }
+ * unary : factor | unop unary
+ *
  */
-static int
-m4_exp(int mayeval)
+unary()
 {
-	int c, vl, vr, n;
-
-	vl = unary(mayeval);
-	while ((c = skipws()) == '*') {
-		if (getch() != '*') {
-			ungetch();
-			break;
-		}
-		vr = unary(mayeval);
-		n = 1;
-		while (vr-- > 0)
-			n *= vl;
-		return n;
-	}
-
-	ungetch();
-	return vl;
+        register int val, c;
+ 
+        if ((c = skipws()) == '!' || c == '~' || c == '-') {
+                val = unary();
+ 
+                switch (c) {
+                case '!':
+                        return(! val);
+                case '~':
+                        return(~ val);
+                case '-':
+                        return(- val);
+                }
+        }
+ 
+        ungetch();
+        return(factor());
 }
-
-/*
- * unary : factor | ("+" | "-" | "~" | "!") unary
- */
-static int
-unary(int mayeval)
-{
-	int val, c;
-
-	if ((c = skipws()) == '+' || c == '-' || c == '~' || c == '!') {
-		val = unary(mayeval);
-
-		switch (c) {
-		case '+':
-			return val;
-		case '-':
-			return -val;
-		case '~':
-			return ~val;
-		case '!':
-			return !val;
-		}
-	}
-
-	ungetch();
-	return factor(mayeval);
-}
-
+ 
 /*
  * factor : constant | '(' query ')'
+ *
  */
-static int
-factor(int mayeval)
+factor()
 {
-	int val;
-
-	if (skipws() == '(') {
-		val = query(mayeval);
-		if (skipws() != ')')
-			experr("bad factor: missing \")\"");
-		return val;
-	}
-
-	ungetch();
-	return constant(mayeval);
+        register int val;
+ 
+        if (skipws() == '(') {
+                val = query();
+                if (skipws() != ')')
+                        experr("Bad factor");
+                return(val);
+        }
+ 
+        ungetch();
+        return(constant());
 }
-
+ 
 /*
  * constant: num | 'char'
- * Note: constant() handles multi-byte constants
+ *
  */
-static int
-constant(int mayeval)
+constant()
 {
-	int i;
-	int value;
-	char c;
-	int v[sizeof(int)];
-
-	if (skipws() != '\'') {
-		ungetch();
-		return num(mayeval);
-	}
-	for (i = 0; i < sizeof(int); i++) {
-		if ((c = getch()) == '\'') {
-			ungetch();
-			break;
-		}
-		if (c == '\\') {
-			switch (c = getch()) {
-			case '0':
-			case '1':
-			case '2':
-			case '3':
-			case '4':
-			case '5':
-			case '6':
-			case '7':
-				ungetch();
-				c = num(mayeval);
-				break;
-			case 'n':
-				c = 012;
-				break;
-			case 'r':
-				c = 015;
-				break;
-			case 't':
-				c = 011;
-				break;
-			case 'b':
-				c = 010;
-				break;
-			case 'f':
-				c = 014;
-				break;
-			}
-		}
-		v[i] = c;
-	}
-	if (i == 0 || getch() != '\'')
-		experr("illegal character constant");
-	for (value = 0; --i >= 0;) {
-		value <<= 8;
-		value += v[i];
-	}
-	return value;
+        /*
+         * Note: constant() handles multi-byte constants
+         */
+ 
+        register int    i;
+        register int    value;
+        register char   c;
+        int             v[sizeof (int)];
+ 
+        if (skipws() != '\'') {
+                ungetch();
+                return(num());
+        }
+        for (i = 0; i < sizeof(int); i++) {
+                if ((c = getch()) == '\'') {
+                        ungetch();
+                        break;
+                }
+                if (c == '\\') {
+                        switch (c = getch()) {
+                        case '0':
+                        case '1':
+                        case '2':
+                        case '3':
+                        case '4':
+                        case '5':
+                        case '6':
+                        case '7':
+                                ungetch();
+                                c = num();
+                                break;
+                        case 'n':
+                                c = 012;
+                                break;
+                        case 'r':
+                                c = 015;
+                                break;
+                        case 't':
+                                c = 011;
+                                break;
+                        case 'b':
+                                c = 010;
+                                break;
+                        case 'f':
+                                c = 014;
+                                break;
+                        }
+                }
+                v[i] = c;
+        }
+        if (i == 0 || getch() != '\'')
+                experr("Illegal character constant");
+        for (value = 0; --i >= 0;) {
+                value <<= 8;
+                value += v[i];
+        }
+        return(value);
 }
-
+ 
 /*
  * num : digit | num digit
+ *
  */
-static int
-num(int mayeval)
+num()
 {
-	int rval, c, base;
-	int ndig;
-
-	base = ((c = skipws()) == '0') ? OCTAL : DECIMAL;
-	rval = 0;
-	ndig = 0;
-	if (base == OCTAL) {
-		c = skipws();
-		if (c == 'x' || c == 'X') {
-			base = HEX;
-			c = skipws();
-		} else
-			ndig++;
-	}
-	while ((base == HEX && isxdigit(c)) ||
-			(c >= '0' && c <= (base == OCTAL ? '7' : '9'))) {
-		rval *= base;
-		if (isalpha(c))
-			rval += (tolower(c) - 'a' + 10);
-		else
-			rval += (c - '0');
-		c = getch();
-		ndig++;
-	}
-	ungetch();
-
-	if (ndig == 0)
-		experr("bad constant");
-
-	return rval;
+        register int rval, c, base;
+        int ndig;
+ 
+        base = ((c = skipws()) == '0') ? OCTAL : DECIMAL;
+        rval = 0;
+        ndig = 0;
+        while (c >= '0' && c <= (base == OCTAL ? '7' : '9')) {
+                rval *= base;
+                rval += (c - '0');
+                c = getch();
+                ndig++;
+        }
+        ungetch();
+        if (ndig)
+                return(rval);
+        experr("Bad constant");
 }
-
+ 
+/*
+ * eqlrel : '=' | '==' | '!='
+ *
+ */
+geteql()
+{
+        register int c1, c2;
+ 
+        c1 = skipws();
+        c2 = getch();
+ 
+        switch (c1) {
+ 
+        case '=':
+                if (c2 != '=')
+                        ungetch();
+                return(EQL);
+ 
+        case '!':
+                if (c2 == '=')
+                        return(NEQ);
+                ungetch();
+                ungetch();
+                return(-1);
+ 
+        default:
+                ungetch();
+                ungetch();
+                return(-1);
+        }
+}
+ 
+/*
+ * rel : '<' | '>' | '<=' | '>='
+ *
+ */
+getrel()
+{
+        register int c1, c2;
+ 
+        c1 = skipws();
+        c2 = getch();
+ 
+        switch (c1) {
+ 
+        case '<':
+                if (c2 == '=')
+                        return(LEQ);
+                ungetch();
+                return(LSS);
+ 
+        case '>':
+                if (c2 == '=')
+                        return(GEQ);
+                ungetch();
+                return(GTR);
+ 
+        default:
+                ungetch();
+                ungetch();
+                return(-1);
+        }
+}
+ 
 /*
  * Skip over any white space and return terminating char.
  */
-static int
 skipws()
 {
-	char c;
-
-	while ((c = getch()) <= ' ' && c > EOS)
-		;
-	return c;
+        register char c;
+ 
+        while ((c = getch()) <= ' ' && c > EOS)
+                ;
+        return(c);
 }
-
+ 
 /*
- * resets environment to eval(), prints an error 
- * and forces eval to return FALSE.
+ * Error handler - resets environment to eval(), prints an error,
+ * and returns FALSE.
  */
-static void
 experr(msg)
-	const char *msg;
+char *msg;
 {
-	printf("m4: %s in expr %s.\n", msg, where);
-	longjmp(expjump, -1);
+        printf("mp: %s\n",msg);
+        longjmp(expjump, -1);          /* Force eval() to return FALSE */
 }

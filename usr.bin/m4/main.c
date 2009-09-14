@@ -1,12 +1,9 @@
-/*	$NetBSD: main.c,v 1.37 2008/07/21 14:19:24 lukem Exp $	*/
-/*	$OpenBSD: main.c,v 1.51 2001/10/06 10:52:25 espie Exp $	*/
-
-/*-
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+/*
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Ozan Yigit at York University.
+ * Ozan Yigit.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,7 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,22 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
-#include <sys/cdefs.h>
-#if defined(__COPYRIGHT) && !defined(lint)
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
- The Regents of the University of California.  All rights reserved.");
-#endif /* not lint */
-
-#if defined(__RCSID) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: main.c,v 1.37 2008/07/21 14:19:24 lukem Exp $");
-#endif
+#ifndef lint
+static char sccsid[] = "@(#)main.c	5.6 (Berkeley) 3/6/91";
 #endif /* not lint */
 
 /*
@@ -57,152 +44,191 @@ __RCSID("$NetBSD: main.c,v 1.37 2008/07/21 14:19:24 lukem Exp $");
  * by: oz
  */
 
-#include <sys/types.h>
-#include <assert.h>
-#include <ctype.h>
-#include <errno.h>
 #include <signal.h>
-#include <stddef.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "mdef.h"
-#include "stdd.h"
-#include "extern.h"
 #include "pathnames.h"
 
+/*
+ * m4 - macro processor
+ *
+ * PD m4 is based on the macro tool distributed with the software 
+ * tools (VOS) package, and described in the "SOFTWARE TOOLS" and 
+ * "SOFTWARE TOOLS IN PASCAL" books. It has been expanded to include 
+ * most of the command set of SysV m4, the standard UN*X macro processor.
+ *
+ * Since both PD m4 and UN*X m4 are based on SOFTWARE TOOLS macro,
+ * there may be certain implementation similarities between
+ * the two. The PD m4 was produced without ANY references to m4
+ * sources.
+ *
+ * References:
+ *
+ *	Software Tools distribution: macro
+ *
+ *	Kernighan, Brian W. and P. J. Plauger, SOFTWARE
+ *	TOOLS IN PASCAL, Addison-Wesley, Mass. 1981
+ *
+ *	Kernighan, Brian W. and P. J. Plauger, SOFTWARE
+ *	TOOLS, Addison-Wesley, Mass. 1976
+ *
+ *	Kernighan, Brian W. and Dennis M. Ritchie,
+ *	THE M4 MACRO PROCESSOR, Unix Programmer's Manual,
+ *	Seventh Edition, Vol. 2, Bell Telephone Labs, 1979
+ *
+ *	System V man page for M4
+ *
+ * Modification History:
+ *
+ * Jan 28 1986 Oz	Break the whole thing into little
+ *			pieces, for easier (?) maintenance.
+ *
+ * Dec 12 1985 Oz	Optimize the code, try to squeeze
+ *			few microseconds out..
+ *
+ * Dec 05 1985 Oz	Add getopt interface, define (-D),
+ *			undefine (-U) options.
+ *
+ * Oct 21 1985 Oz	Clean up various bugs, add comment handling.
+ *
+ * June 7 1985 Oz	Add some of SysV m4 stuff (m4wrap, pushdef,
+ *			popdef, decr, shift etc.).
+ *
+ * June 5 1985 Oz	Initial cut.
+ *
+ * Implementation Notes:
+ *
+ * [1]	PD m4 uses a different (and simpler) stack mechanism than the one 
+ *	described in Software Tools and Software Tools in Pascal books. 
+ *	The triple stack nonsense is replaced with a single stack containing 
+ *	the call frames and the arguments. Each frame is back-linked to a 
+ * 	previous stack frame, which enables us to rewind the stack after 
+ * 	each nested call is completed. Each argument is a character pointer 
+ *	to the beginning of the argument string within the string space.
+ *	The only exceptions to this are (*) arg 0 and arg 1, which are
+ * 	the macro definition and macro name strings, stored dynamically
+ *	for the hash table.
+ *
+ *	    .					   .
+ *	|   .	|  <-- sp			|  .  |
+ *	+-------+				+-----+
+ *	| arg 3 ------------------------------->| str |
+ *	+-------+				|  .  |
+ *	| arg 2 --------------+ 		   .
+ *	+-------+	      |
+ *	    *		      |			|     |
+ *	+-------+	      | 		+-----+
+ *	| plev	|  <-- fp     +---------------->| str |
+ *	+-------+				|  .  |
+ *	| type	|				   .
+ *	+-------+
+ *	| prcf	-----------+		plev: paren level
+ *	+-------+  	   |		type: call type
+ *	|   .	| 	   |		prcf: prev. call frame
+ *	    .	   	   |
+ *	+-------+	   |
+ *	|	<----------+
+ *	+-------+
+ *
+ * [2]	We have three types of null values:
+ *
+ *		nil  - nodeblock pointer type 0
+ *		null - null string ("")
+ *		NULL - Stdio-defined NULL
+ *
+ */
+
 ndptr hashtab[HASHSIZE];	/* hash table for macros etc.  */
-stae *mstack;		 	/* stack of m4 machine         */
-char *sstack;		 	/* shadow stack, for string space extension */
-static size_t STACKMAX;		/* current maximum size of stack */
+char buf[BUFSIZE];		/* push-back buffer	       */
+char *bp = buf; 		/* first available character   */
+char *endpbb = buf+BUFSIZE;	/* end of push-back buffer     */
+stae mstack[STACKMAX+1]; 	/* stack of m4 machine         */
+char strspace[STRSPMAX+1];	/* string space for evaluation */
+char *ep = strspace;		/* first free char in strspace */
+char *endest= strspace+STRSPMAX;/* end of string space	       */
 int sp; 			/* current m4  stack pointer   */
 int fp; 			/* m4 call frame pointer       */
-struct input_file infile[MAXINP];/* input file stack (0=stdin)  */
-FILE **outfile;			/* diversion array(0=bitbucket)*/
-int maxout;
+FILE *infile[MAXINP];		/* input file stack (0=stdin)  */
+FILE *outfile[MAXOUT];		/* diversion array(0=bitbucket)*/
 FILE *active;			/* active output file pointer  */
+char *m4temp;			/* filename for diversions     */
 int ilevel = 0; 		/* input file stack pointer    */
 int oindex = 0; 		/* diversion index..	       */
 char *null = "";                /* as it says.. just a null..  */
 char *m4wraps = "";             /* m4wrap string default..     */
-int m4prefix = 0;		/* prefix keywords with m4_    */
-char lquote[MAXCCHARS+1] = {LQUOTE};	/* left quote character  (`)   */
-char rquote[MAXCCHARS+1] = {RQUOTE};	/* right quote character (')   */
-char scommt[MAXCCHARS+1] = {SCOMMT};	/* start character for comment */
-char ecommt[MAXCCHARS+1] = {ECOMMT};	/* end character for comment   */
-
+char lquote = LQUOTE;		/* left quote character  (`)   */
+char rquote = RQUOTE;		/* right quote character (')   */
+char scommt = SCOMMT;		/* start character for comment */
+char ecommt = ECOMMT;		/* end character for comment   */
 struct keyblk keywrds[] = {	/* m4 keywords to be installed */
-	{ "include",      INCLTYPE },
-	{ "sinclude",     SINCTYPE },
-	{ "define",       DEFITYPE },
-	{ "defn",         DEFNTYPE },
-	{ "divert",       DIVRTYPE | NOARGS },
-	{ "expr",         EXPRTYPE },
-	{ "eval",         EXPRTYPE },
-	{ "substr",       SUBSTYPE },
-	{ "ifelse",       IFELTYPE },
-	{ "ifdef",        IFDFTYPE },
-	{ "len",          LENGTYPE },
-	{ "incr",         INCRTYPE },
-	{ "decr",         DECRTYPE },
-	{ "dnl",          DNLNTYPE | NOARGS },
-	{ "changequote",  CHNQTYPE | NOARGS },
-	{ "changecom",    CHNCTYPE | NOARGS },
-	{ "index",        INDXTYPE },
+	"include",      INCLTYPE,
+	"sinclude",     SINCTYPE,
+	"define",       DEFITYPE,
+	"defn",         DEFNTYPE,
+	"divert",       DIVRTYPE,
+	"expr",         EXPRTYPE,
+	"eval",         EXPRTYPE,
+	"substr",       SUBSTYPE,
+	"ifelse",       IFELTYPE,
+	"ifdef",        IFDFTYPE,
+	"len",          LENGTYPE,
+	"incr",         INCRTYPE,
+	"decr",         DECRTYPE,
+	"dnl",          DNLNTYPE,
+	"changequote",  CHNQTYPE,
+	"changecom",    CHNCTYPE,
+	"index",        INDXTYPE,
 #ifdef EXTENDED
-	{ "paste",        PASTTYPE },
-	{ "spaste",       SPASTYPE },
-    	/* Newer extensions, needed to handle gnu-m4 scripts */
-	{ "indir",        INDIRTYPE},
-	{ "builtin",      BUILTINTYPE},
-	{ "patsubst",	  PATSTYPE},
-	{ "regexp",	  REGEXPTYPE},
-	{ "esyscmd",	  ESYSCMDTYPE},
-	{ "__file__",	  FILENAMETYPE | NOARGS},
-	{ "__line__",	  LINETYPE | NOARGS},
+	"paste",        PASTTYPE,
+	"spaste",       SPASTYPE,
 #endif
-	{ "popdef",       POPDTYPE },
-	{ "pushdef",      PUSDTYPE },
-	{ "dumpdef",      DUMPTYPE | NOARGS },
-	{ "shift",        SHIFTYPE | NOARGS },
-	{ "translit",     TRNLTYPE },
-	{ "undefine",     UNDFTYPE },
-	{ "undivert",     UNDVTYPE | NOARGS },
-	{ "divnum",       DIVNTYPE | NOARGS },
-	{ "maketemp",     MKTMTYPE },
-	{ "errprint",     ERRPTYPE | NOARGS },
-	{ "m4wrap",       M4WRTYPE | NOARGS },
-	{ "m4exit",       EXITTYPE | NOARGS },
-	{ "syscmd",       SYSCTYPE },
-	{ "sysval",       SYSVTYPE | NOARGS },
-	{ "traceon",	  TRACEONTYPE | NOARGS },
-	{ "traceoff",	  TRACEOFFTYPE | NOARGS },
-
-#if defined(unix) || defined(__unix__) 
-	{ "unix",         SELFTYPE | NOARGS },
-#else
-#ifdef vms
-	{ "vms",          SELFTYPE | NOARGS },
-#endif
-#endif
+	"popdef",       POPDTYPE,
+	"pushdef",      PUSDTYPE,
+	"dumpdef",      DUMPTYPE,
+	"shift",        SHIFTYPE,
+	"translit",     TRNLTYPE,
+	"undefine",     UNDFTYPE,
+	"undivert",     UNDVTYPE,
+	"divnum",       DIVNTYPE,
+	"maketemp",     MKTMTYPE,
+	"errprint",     ERRPTYPE,
+	"m4wrap",       M4WRTYPE,
+	"m4exit",       EXITTYPE,
+	"syscmd",       SYSCTYPE,
+	"sysval",       SYSVTYPE,
+	"unix",         MACRTYPE,
 };
 
 #define MAXKEYS	(sizeof(keywrds)/sizeof(struct keyblk))
 
+extern ndptr lookup();
+extern ndptr addent();
+extern void onintr();
+
 extern int optind;
 extern char *optarg;
 
-#define MAXRECORD 50
-static struct position {
-	char *name;
-	unsigned long line;
-} quotes[MAXRECORD], paren[MAXRECORD];
-
-static void record __P((struct position *, int));
-static void dump_stack __P((struct position *, int));
-
-static void macro __P((void));
-static void initkwds __P((void));
-static ndptr inspect __P((int, char *));
-static int do_look_ahead __P((int, const char *));
-
-static void enlarge_stack __P((void));
-
-int main __P((int, char *[]));
-
-int
 main(argc,argv)
 	int argc;
-	char *argv[];
+	char **argv;
 {
-	int c;
-	int n;
+	register int c;
+	register int n;
 	char *p;
 
 	if (signal(SIGINT, SIG_IGN) != SIG_IGN)
 		signal(SIGINT, onintr);
-
-	/*
-	 * We need to know if -P is there before checking -D and -U.
-	 */
-	while ((c = getopt(argc, argv, "D:I:PU:d:go:t:")) != -1)
-		if (c == 'P')
-			m4prefix = 1;
-	optind = 1;
-
+#ifdef NONZEROPAGES
+	initm4();
+#endif
 	initkwds();
-	initspaces();
-	STACKMAX = INITSTACKMAX;
 
-	mstack = (stae *)xalloc(sizeof(stae) * STACKMAX);
-	sstack = (char *)xalloc(STACKMAX);
+	while ((c = getopt(argc, argv, "tD:U:o:")) != EOF)
+		switch(c) {
 
-	maxout = 0;
-	outfile = NULL;
-	resizedivs(MAXOUT);
-
-	while ((c = getopt(argc, argv, "D:I:PU:d:go:t:")) != -1)
-		switch (c) {
 		case 'D':               /* define something..*/
 			for (p = optarg; *p; p++)
 				if (*p == '=')
@@ -211,132 +237,74 @@ main(argc,argv)
 				*p++ = EOS;
 			dodefine(optarg, p);
 			break;
-		case 'I':
-			addtoincludepath(optarg);
-			break;
-		case 'P':
-			break;
 		case 'U':               /* undefine...       */
 			remhash(optarg, TOP);
 			break;
-		case 'd':
-			set_trace_flags(optarg);
-			break;
-		case 'g':
-			mimic_gnu = 1;
-			break;
-		case 'o':
-			trace_file(optarg);
-                        break;
-		case 't':
-			mark_traced(optarg, 1);
-			break;
+		case 'o':		/* specific output   */
 		case '?':
 		default:
-			usage(argv[0]);
+			usage();
 		}
 
-        argc -= optind;
-        argv += optind;
-
+	infile[0] = stdin;		/* default input (naturally) */
 	active = stdout;		/* default active output     */
-	bbase[0] = bufbase;
-        if (!argc) {
- 		sp = -1;		/* stack pointer initialized */
-		fp = 0; 		/* frame pointer initialized */
-		set_input(infile+0, stdin, "stdin");
-					/* default input (naturally) */
-		macro();
-	} else
-		for (; argc--; ++argv) {
-			p = *argv;
-			if (p[0] == '-' && p[1] == EOS)
-				set_input(infile, stdin, "stdin");
-			else if (fopen_trypath(infile, p) == NULL)
-				err(1, "%s", p);
-			sp = -1;
-			fp = 0; 
-			macro();
-		    	release_input(infile);
-		}
+	m4temp = mktemp(strdup(DIVNAM));/* filename for diversions   */
+
+	sp = -1;			/* stack pointer initialized */
+	fp = 0; 			/* frame pointer initialized */
+
+	macro();			/* get some work done here   */
 
 	if (*m4wraps) { 		/* anything for rundown ??   */
 		ilevel = 0;		/* in case m4wrap includes.. */
-		bufbase = bp = buf;	/* use the entire buffer   */
+		putback(EOF);		/* eof is a must !!	     */
 		pbstr(m4wraps); 	/* user-defined wrapup act   */
 		macro();		/* last will and testament   */
 	}
 
 	if (active != stdout)
 		active = stdout;	/* reset output just in case */
-	for (n = 1; n < maxout; n++)	/* default wrap-up: undivert */
+	for (n = 1; n < MAXOUT; n++)	/* default wrap-up: undivert */
 		if (outfile[n] != NULL)
 			getdiv(n);
 					/* remove bitbucket if used  */
 	if (outfile[0] != NULL) {
 		(void) fclose(outfile[0]);
+		m4temp[UNIQUE] = '0';
+		(void) unlink(m4temp);
 	}
 
-	return 0;
+	exit(0);
 }
 
-/*
- * Look ahead for `token'.
- * (on input `t == token[0]')
- * Used for comment and quoting delimiters.
- * Returns 1 if `token' present; copied to output.
- *         0 if `token' not found; all characters pushed back
- */
-static int
-do_look_ahead(t, token)
-	int	t;
-	const char	*token;
-{
-	int i;
-
-	assert((unsigned char)t == (unsigned char)token[0]);
-
-	for (i = 1; *++token; i++) {
-		t = gpbc();
-		if (t == EOF || (unsigned char)t != (unsigned char)*token) {
-			putback(t);
-			while (--i)
-				putback(*--token);
-			return 0;
-		}
-	}
-	return 1;
-}
-
-#define LOOK_AHEAD(t, token) (t != EOF && 		\
-    (unsigned char)(t)==(unsigned char)(token)[0] && 	\
-    do_look_ahead(t,token))
+ndptr inspect();	/* forward ... */
 
 /*
  * macro - the work horse..
+ *
  */
-static void
-macro()
-{
-	char token[MAXTOK+1];
-	int t, l;
-	ndptr p;
-	int  nlpar;
-
-	l = 0;		/* XXXGCC -Wuninitialized [sun2] */
+macro() {
+	char token[MAXTOK];
+	register char *s;
+	register int t, l;
+	register ndptr p;
+	register int  nlpar;
 
 	cycle {
-		t = gpbc();
-		if (t == '_' || isalpha(t)) {
-			p = inspect(t, token);
-			if (p != nil)
-				putback(l = gpbc());
-			if (p == nil || (l != LPAREN && 
-			    (p->type & NEEDARGS) != 0))
-				outputstr(token);
+		if ((t = gpbc()) == '_' || isalpha(t)) {
+			putback(t);
+			if ((p = inspect(s = token)) == nil) {
+				if (sp < 0)
+					while (*s)
+						putc(*s++, active);
+				else
+					while (*s)
+						chrsave(*s++);
+			}
 			else {
 		/*
 		 * real thing.. First build a call frame:
+		 *
 		 */
 				pushf(fp);	/* previous call frm */
 				pushf(p->type); /* type of the call  */
@@ -344,92 +312,58 @@ macro()
 				fp = sp;	/* new frame pointer */
 		/*
 		 * now push the string arguments:
+		 *
 		 */
-				pushs1(p->defn);	/* defn string */
-				pushs1(p->name);	/* macro name  */
-				pushs(ep);	      	/* start next..*/
+				pushs(p->defn);	      /* defn string */
+				pushs(p->name);	      /* macro name  */
+				pushs(ep);	      /* start next..*/
 
-				if (l != LPAREN && PARLEV == 0)  {   
-				    /* no bracks  */
-					chrsave(EOS);
-
-					if (sp == STACKMAX)
-						errx(1, "internal stack overflow");
-					eval((const char **) mstack+fp+1, 2, 
-					    CALTYP);
-
-					ep = PREVEP;	/* flush strspace */
-					sp = PREVSP;	/* previous sp..  */
-					fp = PREVFP;	/* rewind stack...*/
+				putback(l = gpbc());
+				if (l != LPAREN)  {   /* add bracks  */
+					putback(RPAREN);
+					putback(LPAREN);
 				}
 			}
-		} else if (t == EOF) {
-			if (sp > -1) {
-				warnx( "unexpected end of input, unclosed parenthesis:");
-				dump_stack(paren, PARLEV);
-				exit(1);
-			}
-			if (ilevel <= 0)
+		}
+		else if (t == EOF) {
+			if (sp > -1)
+				error("m4: unexpected end of input");
+			if (--ilevel < 0)
 				break;			/* all done thanks.. */
-			release_input(infile+ilevel--);
-			bufbase = bbase[ilevel];
+			(void) fclose(infile[ilevel+1]);
 			continue;
 		}
 	/*
-	 * non-alpha token possibly seen..
-	 * [the order of else if .. stmts is important.]
+	 * non-alpha single-char token seen..
+	 * [the order of else if .. stmts is
+	 * important.]
+	 *
 	 */
-		else if (LOOK_AHEAD(t,lquote)) {	/* strip quotes */
-			nlpar = 0;
-			record(quotes, nlpar++);
-			/*
-			 * Opening quote: scan forward until matching
-			 * closing quote has been found.
-			 */
+		else if (t == lquote) { 		/* strip quotes */
+			nlpar = 1;
 			do {
-
-				l = gpbc();
-				if (LOOK_AHEAD(l,rquote)) {
-					if (--nlpar > 0)
-						outputstr(rquote);
-				} else if (LOOK_AHEAD(l,lquote)) {
-					record(quotes, nlpar++);
-					outputstr(lquote);
-				} else if (l == EOF) {
-					if (nlpar == 1)
-						warnx("unclosed quote:");
+				if ((l = gpbc()) == rquote)
+					nlpar--;
+				else if (l == lquote)
+					nlpar++;
+				else if (l == EOF)
+					error("m4: missing right quote");
+				if (nlpar > 0) {
+					if (sp < 0)
+						putc(l, active);
 					else
-						warnx("%d unclosed quotes:", nlpar);
-					dump_stack(quotes, nlpar);
-					exit(1);
-				} else {
-					if (nlpar > 0) {
-						if (sp < 0)
-							putc(l, active);
-						else
-							CHRSAVE(l);
-					}
+						chrsave(l);
 				}
 			}
 			while (nlpar != 0);
 		}
 
-		else if (sp < 0 && LOOK_AHEAD(t, scommt)) {
-			fputs(scommt, active);
-
-			for(;;) {
-				t = gpbc();
-				if (LOOK_AHEAD(t, ecommt)) {
-					fputs(ecommt, active);
-					break;
-				}
-				if (t == EOF)
-					break;
-				putc(t, active);
-			}
-		}
-
 		else if (sp < 0) {		/* not in a macro at all */
+			if (t == scommt) {	/* comment handling here */
+				putc(t, active);
+				while ((t = gpbc()) != ecommt)
+					putc(t, active);
+			}
 			putc(t, active);	/* output directly..	 */
 		}
 
@@ -441,7 +375,7 @@ macro()
 			while (isspace(l = gpbc()))
 				;		/* skip blank, tab, nl.. */
 			putback(l);
-			record(paren, PARLEV++);
+			PARLEV++;
 			break;
 
 		case RPAREN:
@@ -451,10 +385,12 @@ macro()
 				chrsave(EOS);
 
 				if (sp == STACKMAX)
-					errx(1, "internal stack overflow");
+					error("m4: internal stack overflow");
 
-				eval((const char **) mstack+fp+1, sp-fp, 
-				    CALTYP);
+				if (CALTYP == MACRTYPE)
+					expand(mstack+fp+1, sp-fp);
+				else
+					eval(mstack+fp+1, sp-fp, CALTYP);
 
 				ep = PREVEP;	/* flush strspace */
 				sp = PREVSP;	/* previous sp..  */
@@ -463,196 +399,87 @@ macro()
 			break;
 
 		case COMMA:
-			if (PARLEV == 1) {
+			if (PARLEV == 1)	{
 				chrsave(EOS);		/* new argument   */
 				while (isspace(l = gpbc()))
 					;
 				putback(l);
 				pushs(ep);
-			} else
-				chrsave(t);
+			}
 			break;
-
 		default:
-			if (LOOK_AHEAD(t, scommt)) {
-				char *p;
-				for (p = scommt; *p; p++)
-					chrsave(*p);
-				for(;;) {
-					t = gpbc();
-					if (LOOK_AHEAD(t, ecommt)) {
-						for (p = ecommt; *p; p++)
-							chrsave(*p);
-						break;
-					}
-					if (t == EOF)
-					    break;
-					CHRSAVE(t);
-				}
-			} else
-				CHRSAVE(t);		/* stack the char */
+			chrsave(t);			/* stack the char */
 			break;
 		}
 	}
 }
 
-/* 
- * output string directly, without pushing it for reparses. 
- */
-void
-outputstr(s)
-	const char *s;
-{
-	if (sp < 0)
-		while (*s)
-			putc(*s++, active);
-	else
-		while (*s)
-			CHRSAVE(*s++);
-}
 
 /*
  * build an input token..
  * consider only those starting with _ or A-Za-z. This is a
  * combo with lookup to speed things up.
  */
-static ndptr
-inspect(c, tp) 
-	int c;
-	char *tp;
+ndptr
+inspect(tp) 
+register char *tp;
 {
-	char *name = tp;
-	char *etp = tp+MAXTOK;
-	ndptr p;
-	unsigned int h;
-	
-	h = *tp++ = c;
+	register int h = 0;
+	register char c;
+	register char *name = tp;
+	register char *etp = tp+MAXTOK;
+	register ndptr p;
 
-	while ((isalnum(c = gpbc()) || c == '_') && tp < etp)
-		h = (h << 5) + h + (*tp++ = c);
-	if (c != EOF)
-		PUTBACK(c);
+	while (tp < etp && (isalnum(c = gpbc()) || c == '_'))
+		h += (*tp++ = c);
+	putback(c);
+	if (tp == etp)
+		error("m4: token too long");
 	*tp = EOS;
-	/* token is too long, it won't match anything, but it can still
-	 * be output. */
-	if (tp == ep) {
-		outputstr(name);
-		while (isalnum(c = gpbc()) || c == '_') {
-			if (sp < 0)
-				putc(c, active);
-			else
-				CHRSAVE(c);
-		}
-		*name = EOS;
-		return nil;
-	}
-
-	for (p = hashtab[h % HASHSIZE]; p != nil; p = p->nxtptr)
-		if (h == p->hv && STREQ(name, p->name))
+	for (p = hashtab[h%HASHSIZE]; p != nil; p = p->nxtptr)
+		if (strcmp(name, p->name) == 0)
 			break;
-	return p;
+	return(p);
 }
+
+#ifdef NONZEROPAGES
+/*
+ * initm4 - initialize various tables. Useful only if your system 
+ * does not know anything about demand-zero pages.
+ *
+ */
+initm4()
+{
+	register int i;
+
+	for (i = 0; i < HASHSIZE; i++)
+		hashtab[i] = nil;
+	for (i = 0; i < MAXOUT; i++)
+		outfile[i] = NULL;
+}
+#endif
 
 /*
- * initkwds - initialise m4 keywords as fast as possible.
+ * initkwds - initialise m4 keywords as fast as possible. 
  * This very similar to install, but without certain overheads,
- * such as calling lookup. Malloc is not used for storing the
- * keyword strings, since we simply use the static pointers
- * within keywrds block.
+ * such as calling lookup. Malloc is not used for storing the 
+ * keyword strings, since we simply use the static  pointers
+ * within keywrds block. We also assume that there is enough memory 
+ * to at least install the keywords (i.e. malloc won't fail).
+ *
  */
-static void
-initkwds()
-{
-	size_t i;
-	unsigned int h;
-	ndptr p;
-	char *k;
+initkwds() {
+	register int i;
+	register int h;
+	register ndptr p;
 
 	for (i = 0; i < MAXKEYS; i++) {
-		k = (char *)keywrds[i].knam;
-		if (m4prefix) {
-			size_t klen = strlen(k);
-			char *newk = malloc(klen + 4);
-
-			if (snprintf(newk, klen+4, "m4_%s", k) == -1)
-				err(1, "snprintf");
-			keywrds[i].knam = newk;
-			k = newk;
-		}
-		h = hash(k);
-		p = (ndptr) xalloc(sizeof(struct ndblock));
-		p->nxtptr = hashtab[h % HASHSIZE];
-		hashtab[h % HASHSIZE] = p;
-		p->name = xstrdup(keywrds[i].knam);
+		h = hash(keywrds[i].knam);
+		p = (ndptr) malloc(sizeof(struct ndblock));
+		p->nxtptr = hashtab[h];
+		hashtab[h] = p;
+		p->name = keywrds[i].knam;
 		p->defn = null;
-		p->hv = h;
-		p->type = keywrds[i].ktyp & TYPEMASK;
-		if ((keywrds[i].ktyp & NOARGS) == 0)
-			p->type |= NEEDARGS;
+		p->type = keywrds[i].ktyp | STATIC;
 	}
-}
-
-/* Look up a builtin type, even if overridden by the user */
-int 
-builtin_type(key)
-	const char *key;
-{
-	int i;
-
-	for (i = 0; i != MAXKEYS; i++)
-		if (STREQ(keywrds[i].knam, key))
-			return keywrds[i].ktyp;
-	return -1;
-}
-
-const char *
-builtin_realname(n)
-	int n;
-{
-	int i;
-
-	for (i = 0; i != MAXKEYS; i++)
-		if (((keywrds[i].ktyp ^ n) & TYPEMASK) == 0)
-			return keywrds[i].knam;
-	return NULL;
-}
-
-static void
-record(t, lev)
-	struct position *t;
-	int lev;
-{
-	if (lev < MAXRECORD) {
-		t[lev].name = CURRENT_NAME;
-		t[lev].line = CURRENT_LINE;
-	}
-}
-
-static void
-dump_stack(t, lev)
-	struct position *t;
-	int lev;
-{
-	int i;
-
-	for (i = 0; i < lev; i++) {
-		if (i == MAXRECORD) {
-			fprintf(stderr, "   ...\n");
-			break;
-		}
-		fprintf(stderr, "   %s at line %lu\n", 
-			t[i].name, t[i].line);
-	}
-}
-
-
-static void 
-enlarge_stack()
-{
-	STACKMAX *= 2;
-	mstack = realloc(mstack, sizeof(stae) * STACKMAX);
-	sstack = realloc(sstack, STACKMAX);
-	if (mstack == NULL || sstack == NULL)
-		errx(1, "Evaluation stack overflow (%lu)", 
-		    (unsigned long)STACKMAX);
 }
