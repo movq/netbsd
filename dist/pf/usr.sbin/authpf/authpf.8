@@ -1,21 +1,30 @@
-.\" $NetBSD: authpf.8,v 1.10 2009/09/10 13:17:39 wiz Exp $
-.\" $OpenBSD: authpf.8,v 1.44 2007/05/31 19:20:22 jmc Exp $
+.\" $OpenBSD: authpf.8,v 1.31 2003/12/10 04:10:37 beck Exp $
 .\"
-.\" Copyright (c) 1998-2007 Bob Beck (beck@openbsd.org>.  All rights reserved.
+.\" Copyright (c) 2002 Bob Beck (beck@openbsd.org>.  All rights reserved.
 .\"
-.\" Permission to use, copy, modify, and distribute this software for any
-.\" purpose with or without fee is hereby granted, provided that the above
-.\" copyright notice and this permission notice appear in all copies.
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\" 3. The name of the author may not be used to endorse or promote products
+.\"    derived from this software without specific prior written permission.
 .\"
-.\" THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-.\" WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-.\" MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-.\" ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-.\" WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-.\" ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-.\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+.\" THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+.\" IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+.\" OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+.\" IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+.\" INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+.\" NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+.\" DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+.\" THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+.\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+.\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd May 31, 2007
+.Dd January 10, 2002
 .Dt AUTHPF 8
 .Os
 .Sh NAME
@@ -51,10 +60,6 @@ can add filter and translation rules using the syntax described in
 requires that the
 .Xr pf 4
 system be enabled before use.
-.Nm
-can also maintain the list of IP address of connected users
-in the "authpf_users"
-.Pa table .
 .Pp
 .Nm
 is meant to be used with users who can connect via
@@ -88,16 +93,11 @@ in order to cause evaluation of any
 .Nm
 rules:
 .Bd -literal -offset indent
-nat-anchor "authpf/*"
-rdr-anchor "authpf/*"
-binat-anchor "authpf/*"
-anchor "authpf/*"
+nat-anchor authpf
+rdr-anchor authpf
+binat-anchor authpf
+anchor authpf
 .Ed
-.Pp
-The "/*" at the end of the anchor name is required for
-.Xr pf 4
-to process the rulesets attached to the anchor by
-.Nm authpf .
 .Sh FILTER AND TRANSLATION RULES
 Filter and translation rules for
 .Nm
@@ -113,14 +113,10 @@ Additionally, the macro
 .Em user_id
 is assigned the user name.
 .Pp
-Filter and translation rules are stored in a file called
-.Pa authpf.rules .
-This file will first be searched for in
+Filter and nat rules will first be searched for in
 .Pa /etc/authpf/users/$USER/
 and then in
 .Pa /etc/authpf/ .
-Only one of these files will be used if both are present.
-.Pp
 Per-user rules from the
 .Pa /etc/authpf/users/$USER/
 directory are intended to be used when non-default rules
@@ -128,11 +124,21 @@ are needed on an individual user basis.
 It is important to ensure that a user can not write or change
 these configuration files.
 .Pp
+Filter and translation rules are loaded from the file
+.Pa /etc/authpf/users/$USER/authpf.rules .
+If this file does not exist the file
+.Pa /etc/authpf/authpf.rules
+is used.
 The
 .Pa authpf.rules
 file must exist in one of the above locations for
 .Nm
 to run.
+.Pp
+Translation rules are also loaded from this file.
+The use of translation rules in an
+.Pa authpf.rules
+file is optional.
 .Sh CONFIGURATION
 Options are controlled by the
 .Pa /etc/authpf/authpf.conf
@@ -148,10 +154,6 @@ Currently, the allowed values are as follows:
 Use the specified
 .Pa anchor
 name instead of "authpf".
-.It table=name
-Use the specified
-.Pa table
-name instead of "authpf_users".
 .El
 .Sh USER MESSAGES
 On successful invocation,
@@ -216,18 +218,9 @@ it becomes unresponsive, or if arp or address spoofing is used to
 hijack the session.
 Note that TCP keepalives are not sufficient for
 this, since they are not secure.
-Also note that the various SSH tunnelling mechanisms,
-such as
-.Ar AllowTcpForwarding
-and
-.Ar PermitTunnel ,
-should be disabled for
-.Nm
-users to prevent them from circumventing restrictions imposed by the
-packet filter ruleset.
 .Pp
 .Nm
-will remove state table entries that were created during a user's
+will remove statetable entries that were created during a user's
 session.
 This ensures that there will be no unauthenticated traffic
 allowed to pass after the controlling
@@ -269,14 +262,6 @@ enable
 by creating an appropriate
 .Pa /etc/authpf/authpf.conf
 file.
-.Sh FILES
-.Bl -tag -width "/etc/authpf/authpf.conf" -compact
-.It Pa /etc/authpf/authpf.conf
-.It Pa /etc/authpf/authpf.allow
-.It Pa /etc/authpf/authpf.rules
-.It Pa /etc/authpf/authpf.message
-.It Pa /etc/authpf/authpf.problem
-.El
 .Sh EXAMPLES
 .Sy Control Files
 \- To illustrate the user-specific access control
@@ -390,7 +375,8 @@ an email to remove@bulkmailerz.net.
 wireless network (a hub with several hundred ports), the default rule set as
 well as the per-user rules should probably allow very few things beyond
 encrypted protocols like
-.Xr ssh 1
+.Xr ssh 1 ,
+.Xr ssl 8 ,
 or
 .Xr ipsec 4 .
 On a securely switched network, with plug-in jacks for visitors who are
@@ -405,15 +391,15 @@ Example
 # ssh and use us as a dns server.
 internal_if="fxp1"
 gateway_addr="10.0.1.1"
-nat-anchor "authpf/*"
-rdr-anchor "authpf/*"
-binat-anchor "authpf/*"
+nat-anchor authpf
+rdr-anchor authpf
+binat-anchor authpf
 block in on $internal_if from any to any
 pass in quick on $internal_if proto tcp from any to $gateway_addr \e
       port = ssh
 pass in quick on $internal_if proto udp from any to $gateway_addr \e
       port = domain
-anchor "authpf/*"
+anchor authpf
 .Ed
 .Pp
 .Sy For a switched, wired net
@@ -425,7 +411,8 @@ TCP connections.
 external_if = "xl0"
 internal_if = "fxp0"
 
-pass in log quick on $internal_if proto tcp from $user_ip to any
+pass in log quick on $internal_if proto tcp from $user_ip to any \e
+      keep state
 pass in quick on $internal_if from $user_ip to any
 .Ed
 .Pp
@@ -440,15 +427,16 @@ ipsec_gw="10.2.3.4"
 
 # rdr ftp for proxying by ftp-proxy(8)
 rdr on $internal_if proto tcp from $user_ip to any port 21 \e
-      -\*[Gt] 127.0.0.1 port 8021
+      -> 127.0.0.1 port 8081
 
 # allow out ftp, ssh, www and https only, and allow user to negotiate
 # ipsec with the ipsec server.
 pass in log quick on $internal_if proto tcp from $user_ip to any \e
-      port { 21, 22, 80, 443 }
+      port { 21, 22, 80, 443 } flags S/SA
 pass in quick on $internal_if proto tcp from $user_ip to any \e
       port { 21, 22, 80, 443 }
-pass in quick proto udp from $user_ip to $ipsec_gw port = isakmp
+pass in quick proto udp from $user_ip to $ipsec_gw port = isakmp \e
+      keep state
 pass in quick proto esp from $user_ip to $ipsec_gw
 .Ed
 .Pp
@@ -461,9 +449,9 @@ ext_if = "fxp1"
 ext_addr = 129.128.11.10
 int_if = "fxp0"
 # nat and tag connections...
-nat on $ext_if from $user_ip to any tag $user_ip -\*[Gt] $ext_addr
+nat on $ext_if from $user_ip to any tag $user_ip -> $ext_addr
 pass in quick on $int_if from $user_ip to any
-pass out log quick on $ext_if tagged $user_ip
+pass out log quick on $ext_if tagged $user_ip keep state
 .Ed
 .Pp
 With the above rules added by
@@ -477,33 +465,14 @@ Oct 31 19:42:30.296553 rule 0.bbeck(20267).1/0(match): pass out on fxp1: \e
 129.128.11.10.60539 > 198.137.240.92.22: S 2131494121:2131494121(0) win \e
 16384 <mss 1460,nop,nop,sackOK> (DF)
 .Ed
-.Pp
-.Sy Using the authpf_users table
-\- Simple
-.Nm
-settings can be implemented without an anchor by just using the "authpf_users"
-.Pa table .
-For example, the following
-.Xr pf.conf 5
-lines will give SMTP and IMAP access to logged in users:
-.Bd -literal
-table <authpf_users> persist
-pass in on $ext_if proto tcp from <authpf_users> \e
-        to port { smtp imap }
-.Ed
-.Pp
-It is also possible to use the "authpf_users"
-.Pa table
-in combination with anchors.
-For example,
-.Xr pf 4
-processing can be sped up by looking up the anchor
-only for packets coming from logged in users:
-.Bd -literal
-table <authpf_users> persist
-anchor "authpf/*" from <authpf_users>
-rdr-anchor "authpf/*" from <authpf_users>
-.Ed
+.Sh FILES
+.Bl -tag -width "/etc/authpf/authpf.conf" -compact
+.It Pa /etc/authpf/authpf.conf
+.It Pa /etc/authpf/authpf.allow
+.It Pa /etc/authpf/authpf.rules
+.It Pa /etc/authpf/authpf.message
+.It Pa /etc/authpf/authpf.problem
+.El
 .Sh SEE ALSO
 .Xr pf 4 ,
 .Xr pf.conf 5 ,

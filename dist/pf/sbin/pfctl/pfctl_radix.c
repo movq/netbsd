@@ -1,5 +1,4 @@
-/*	$NetBSD: pfctl_radix.c,v 1.5 2008/06/18 09:06:26 yamt Exp $	*/
-/*	$OpenBSD: pfctl_radix.c,v 1.27 2005/05/21 21:03:58 henning Exp $ */
+/*	$OpenBSD: pfctl_radix.c,v 1.24 2004/02/10 18:29:30 henning Exp $ */
 
 /*
  * Copyright (c) 2002 Cedric Berger
@@ -394,6 +393,44 @@ pfr_tst_addrs(struct pfr_table *tbl, struct pfr_addr *addr, int size,
 }
 
 int
+pfr_ina_begin(struct pfr_table *trs, int *ticket, int *ndel, int flags)
+{
+	struct pfioc_table io;
+
+	bzero(&io, sizeof io);
+	if (trs != NULL)
+		io.pfrio_table = *trs;
+	io.pfrio_flags = flags;
+	if (ioctl(dev, DIOCRINABEGIN, &io))
+		return (-1);
+	if (ndel != NULL)
+		*ndel = io.pfrio_ndel;
+	if (ticket != NULL)
+		*ticket = io.pfrio_ticket;
+	return (0);
+}
+
+int
+pfr_ina_commit(struct pfr_table *trs, int ticket, int *nadd, int *nchange,
+    int flags)
+{
+	struct pfioc_table io;
+
+	bzero(&io, sizeof io);
+	if (trs != NULL)
+		io.pfrio_table = *trs;
+	io.pfrio_flags = flags;
+	io.pfrio_ticket = ticket;
+	if (ioctl(dev, DIOCRINACOMMIT, &io))
+		return (-1);
+	if (nadd != NULL)
+		*nadd = io.pfrio_nadd;
+	if (nchange != NULL)
+		*nchange = io.pfrio_nchange;
+	return (0);
+}
+
+int
 pfr_ina_define(struct pfr_table *tbl, struct pfr_addr *addr, int size,
     int *nadd, int *naddr, int ticket, int flags)
 {
@@ -422,7 +459,7 @@ pfr_ina_define(struct pfr_table *tbl, struct pfr_addr *addr, int size,
 /* interface management code */
 
 int
-pfi_get_ifaces(const char *filter, struct pfi_kif *buf, int *size)
+pfi_get_ifaces(const char *filter, struct pfi_if *buf, int *size, int flags)
 {
 	struct pfioc_iface io;
 
@@ -431,6 +468,7 @@ pfi_get_ifaces(const char *filter, struct pfi_kif *buf, int *size)
 		return (-1);
 	}
 	bzero(&io, sizeof io);
+	io.pfiio_flags = flags;
 	if (filter != NULL)
 		if (strlcpy(io.pfiio_name, filter, sizeof(io.pfiio_name)) >=
 		    sizeof(io.pfiio_name)) {
@@ -451,7 +489,7 @@ pfi_get_ifaces(const char *filter, struct pfi_kif *buf, int *size)
 size_t buf_esize[PFRB_MAX] = { 0,
 	sizeof(struct pfr_table), sizeof(struct pfr_tstats),
 	sizeof(struct pfr_addr), sizeof(struct pfr_astats),
-	sizeof(struct pfi_kif), sizeof(struct pfioc_trans_e)
+	sizeof(struct pfi_if), sizeof(struct pfioc_trans_e)
 };
 
 /*
@@ -567,7 +605,7 @@ pfr_buf_load(struct pfr_buffer *b, char *file, int nonetwork,
 	if (!strcmp(file, "-"))
 		fp = stdin;
 	else {
-		fp = pfctl_fopen(file, "r");
+		fp = fopen(file, "r");
 		if (fp == NULL)
 			return (-1);
 	}
@@ -589,7 +627,7 @@ pfr_next_token(char buf[BUF_SIZE], FILE *fp)
 
 	for (;;) {
 		/* skip spaces */
-		while (isspace((unsigned char)next_ch) && !feof(fp))
+		while (isspace(next_ch) && !feof(fp))
 			next_ch = fgetc(fp);
 		/* remove from '#' until end of line */
 		if (next_ch == '#')
@@ -609,7 +647,7 @@ pfr_next_token(char buf[BUF_SIZE], FILE *fp)
 		if (i < BUF_SIZE)
 			buf[i++] = next_ch;
 		next_ch = fgetc(fp);
-	} while (!feof(fp) && !isspace((unsigned char)next_ch));
+	} while (!feof(fp) && !isspace(next_ch));
 	if (i >= BUF_SIZE) {
 		errno = EINVAL;
 		return (-1);

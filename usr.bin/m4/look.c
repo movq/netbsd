@@ -1,12 +1,9 @@
-/*	$NetBSD: look.c,v 1.10 2004/06/20 22:20:15 jmc Exp $	*/
-/*	$OpenBSD: look.c,v 1.8 2001/09/17 08:11:13 espie Exp $	*/
-
 /*
- * Copyright (c) 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 1989 The Regents of the University of California.
+ * All rights reserved.
  *
  * This code is derived from software contributed to Berkeley by
- * Ozan Yigit at York University.
+ * Ozan Yigit.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -16,7 +13,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *	This product includes software developed by the University of
+ *	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -33,17 +34,8 @@
  * SUCH DAMAGE.
  */
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-
-#include <sys/cdefs.h>
-#if defined(__RCSID) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)look.c	8.1 (Berkeley) 6/6/93";
-#else
-__RCSID("$NetBSD: look.c,v 1.10 2004/06/20 22:20:15 jmc Exp $");
-#endif
+#ifndef lint
+static char sccsid[] = "@(#)look.c	5.3 (Berkeley) 2/26/91";
 #endif /* not lint */
 
 /*
@@ -52,94 +44,82 @@ __RCSID("$NetBSD: look.c,v 1.10 2004/06/20 22:20:15 jmc Exp $");
  * by: oz
  */
 
-#include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stddef.h>
 #include <string.h>
 #include "mdef.h"
-#include "stdd.h"
-#include "extern.h"
+#include "extr.h"
 
-static void freent __P((ndptr));
-
-unsigned
-hash(name)
-	const char *name;
+/*
+ *  hash - compute hash value using the proverbial
+ *	   hashing function. Taken from K&R.
+ */
+hash (name)
+register char *name;
 {
-	unsigned int h = 0;
+	register int h = 0;
 	while (*name)
-		h = (h << 5) + h + *name++;
-	return (h);
+		h += *name++;
+	return (h % HASHSIZE);
 }
 
 /*
- * find name in the hash table
+ * lookup - find name in the hash table
+ *
  */
-ndptr 
-lookup(name)
-	const char *name;
+ndptr lookup(name)
+char *name;
 {
-	ndptr p;
-	unsigned int h;
+	register ndptr p;
 
-	h = hash(name);
-	for (p = hashtab[h % HASHSIZE]; p != nil; p = p->nxtptr)
-		if (h == p->hv && STREQ(name, p->name))
+	for (p = hashtab[hash(name)]; p != nil; p = p->nxtptr)
+		if (strcmp(name, p->name) == 0)
 			break;
 	return (p);
 }
 
 /*
- * hash and create an entry in the hash table.
- * The new entry is added in front of a hash bucket.
+ * addent - hash and create an entry in the hash
+ *	    table. The new entry is added in front
+ *	    of a hash bucket.
  */
-ndptr 
-addent(name)
-	const char *name;
+ndptr addent(name)
+char *name;
 {
-	unsigned int h;
+	register int h;
 	ndptr p;
 
 	h = hash(name);
-	p = (ndptr) xalloc(sizeof(struct ndblock));
-	p->nxtptr = hashtab[h % HASHSIZE];
-	hashtab[h % HASHSIZE] = p;
-	p->name = xstrdup(name);
-	p->hv = h;
+	if ((p = (ndptr) malloc(sizeof(struct ndblock))) != NULL) {
+		p->nxtptr = hashtab[h];
+		hashtab[h] = p;
+		p->name = strdup(name);
+	}
+	else
+		error("m4: no more memory.");
 	return p;
 }
 
-static void
-freent(p)
-	ndptr p;
-{
-	free((char *) p->name);
-	if (p->defn != null)
-		free((char *) p->defn);
-	free((char *) p);
-}
-
 /*
- * remove an entry from the hashtable
+ * remhash - remove an entry from the hashtable
+ *
  */
-void
 remhash(name, all)
-	const char *name;
-	int all;
+char *name;
+int all;
 {
-	unsigned int h;
-	ndptr xp, tp, mp;
+	register int h;
+	register ndptr xp, tp, mp;
 
 	h = hash(name);
-	mp = hashtab[h % HASHSIZE];
+	mp = hashtab[h];
 	tp = nil;
 	while (mp != nil) {
-		if (mp->hv == h && STREQ(mp->name, name)) {
+		if (strcmp(mp->name, name) == 0) {
 			mp = mp->nxtptr;
 			if (tp == nil) {
-				freent(hashtab[h % HASHSIZE]);
-				hashtab[h % HASHSIZE] = mp;
+				freent(hashtab[h]);
+				hashtab[h] = mp;
 			}
 			else {
 				xp = tp->nxtptr;
@@ -155,3 +135,19 @@ remhash(name, all)
 		}
 	}
 }
+
+/*
+ * freent - free a hashtable information block
+ *
+ */
+freent(p)
+ndptr p;
+{
+	if (!(p->type & STATIC)) {
+		free(p->name);
+		if (p->defn != null)
+			free(p->defn);
+	}
+	free(p);
+}
+

@@ -1,5 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.3 2004/11/14 11:26:48 yamt Exp $	*/
-/*	$OpenBSD: pathnames.h,v 1.7 2004/04/25 18:40:42 beck Exp $	*/
+/*	$OpenBSD: pathnames.h,v 1.6 2003/06/03 20:38:59 beck Exp $	*/
 
 /*
  * Copyright (C) 2002 Chris Kuethe (ckuethe@ualberta.ca)
@@ -36,4 +35,3 @@
 #define PATH_DEVFILE		"/dev/pf"
 #define PATH_PIDFILE		"/var/authpf"
 #define PATH_AUTHPF_SHELL	"/usr/sbin/authpf"
-#define PATH_PFCTL		"/sbin/pfctl"
