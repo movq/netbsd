@@ -1,4 +1,4 @@
-/*	$NetBSD: unix.c,v 1.1 2009/10/25 00:01:35 christos Exp $	*/
+/*	$NetBSD: unix.c,v 1.1.1.1 2009/10/25 00:01:35 christos Exp $	*/
 
 /* dynamic loader (ifndef FORCE_STATIC_PROVIDER) */
 

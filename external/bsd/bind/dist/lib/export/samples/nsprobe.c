@@ -1,4 +1,4 @@
-/*	$NetBSD: nsprobe.c,v 1.1 2009/10/25 00:02:42 christos Exp $	*/
+/*	$NetBSD: nsprobe.c,v 1.1.1.1 2009/10/25 00:02:42 christos Exp $	*/
 
 /*
  * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")

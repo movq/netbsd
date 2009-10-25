@@ -1,4 +1,4 @@
-/*	$NetBSD: win32.c,v 1.1 2009/10/25 00:01:35 christos Exp $	*/
+/*	$NetBSD: win32.c,v 1.1.1.1 2009/10/25 00:01:35 christos Exp $	*/
 
 /* missing code for WIN32 */
 

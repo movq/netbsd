@@ -1,4 +1,4 @@
-/*	$NetBSD: bind.keys.h,v 1.1 2009/10/25 00:01:32 christos Exp $	*/
+/*	$NetBSD: bind.keys.h,v 1.1.1.1 2009/10/25 00:01:32 christos Exp $	*/
 
 #define TRUSTED_KEYS "\
 trusted-keys {\n\
