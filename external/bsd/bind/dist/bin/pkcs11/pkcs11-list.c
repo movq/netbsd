@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs11-list.c,v 1.1 2009/10/25 00:01:34 christos Exp $	*/
+/*	$NetBSD: pkcs11-list.c,v 1.1.1.1 2009/10/25 00:01:34 christos Exp $	*/
 
 /* pkcs11-list [-P] [-m module] [-s slot] [-i $id | -l $label] [-p $pin] */
 

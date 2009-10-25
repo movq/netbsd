@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs11-keygen.c,v 1.1 2009/10/25 00:01:34 christos Exp $	*/
+/*	$NetBSD: pkcs11-keygen.c,v 1.1.1.1 2009/10/25 00:01:34 christos Exp $	*/
 
 /* pkcs11-keygen - pkcs11 rsa key generator
  *
