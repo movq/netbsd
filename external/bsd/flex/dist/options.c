@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.1 2009/10/26 00:26:28 christos Exp $	*/
+/*	$NetBSD: options.c,v 1.1.1.1 2009/10/26 00:26:28 christos Exp $	*/
 
 /* flex - tool to generate fast lexical analyzers */
 

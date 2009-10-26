@@ -1,4 +1,4 @@
-/*	$NetBSD: ccl.c,v 1.1 2009/10/26 00:25:06 christos Exp $	*/
+/*	$NetBSD: ccl.c,v 1.1.1.1 2009/10/26 00:25:06 christos Exp $	*/
 
 /* ccl - routines for character classes */
 

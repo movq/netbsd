@@ -1,4 +1,4 @@
-/*	$NetBSD: tables_shared.c,v 1.1 2009/10/26 00:27:05 christos Exp $	*/
+/*	$NetBSD: tables_shared.c,v 1.1.1.1 2009/10/26 00:27:05 christos Exp $	*/
 
 #ifdef FLEX_SCANNER
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: ecs.c,v 1.1 2009/10/26 00:24:20 christos Exp $	*/
+/*	$NetBSD: ecs.c,v 1.1.1.1 2009/10/26 00:24:20 christos Exp $	*/
 
 /* ecs - equivalence class routines */
 

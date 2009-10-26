@@ -1,4 +1,4 @@
-/*	$NetBSD: buf.c,v 1.1 2009/10/26 00:25:04 christos Exp $	*/
+/*	$NetBSD: buf.c,v 1.1.1.1 2009/10/26 00:25:04 christos Exp $	*/
 
 /* flex - tool to generate fast lexical analyzers */
 

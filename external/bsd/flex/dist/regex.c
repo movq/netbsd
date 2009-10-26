@@ -1,4 +1,4 @@
-/*	$NetBSD: regex.c,v 1.1 2009/10/26 00:26:41 christos Exp $	*/
+/*	$NetBSD: regex.c,v 1.1.1.1 2009/10/26 00:26:41 christos Exp $	*/
 
 /** regex - regular expression functions related to POSIX regex lib. */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: wc2.l,v 1.1 2009/10/26 00:28:34 christos Exp $	*/
+/*	$NetBSD: wc2.l,v 1.1.1.1 2009/10/26 00:28:34 christos Exp $	*/
 
 /* Somewhat faster "wc" tool: match more text with each rule */
 

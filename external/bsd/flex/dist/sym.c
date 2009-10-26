@@ -1,4 +1,4 @@
-/*	$NetBSD: sym.c,v 1.1 2009/10/26 00:27:03 christos Exp $	*/
+/*	$NetBSD: sym.c,v 1.1.1.1 2009/10/26 00:27:03 christos Exp $	*/
 
 /* sym - symbol table routines */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfa.c,v 1.1 2009/10/26 00:26:28 christos Exp $	*/
+/*	$NetBSD: nfa.c,v 1.1.1.1 2009/10/26 00:26:28 christos Exp $	*/
 
 /* nfa - NFA construction routines */
 

@@ -1,5 +1,5 @@
 \input texinfo.tex @c -*-texinfo-*-
-@c $NetBSD: flex.texi,v 1.1 2009/10/26 00:27:40 christos Exp $
+@c $NetBSD: flex.texi,v 1.1.1.1 2009/10/26 00:27:40 christos Exp $
 @c %**start of header
 @setfilename flex.info
 @settitle Lexical Analysis With Flex

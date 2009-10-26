@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.1 2009/10/26 00:26:26 christos Exp $	*/
+/*	$NetBSD: misc.c,v 1.1.1.1 2009/10/26 00:26:26 christos Exp $	*/
 
 /* misc - miscellaneous flex routines */
 

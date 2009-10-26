@@ -1,4 +1,4 @@
-/*	$NetBSD: scanflags.c,v 1.1 2009/10/26 00:26:55 christos Exp $	*/
+/*	$NetBSD: scanflags.c,v 1.1.1.1 2009/10/26 00:26:55 christos Exp $	*/
 
 /* scanflags - flags used by scanning. */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: scanner-1.l,v 1.1 2009/10/26 00:29:21 christos Exp $	*/
+/*	$NetBSD: scanner-1.l,v 1.1.1.1 2009/10/26 00:29:21 christos Exp $	*/
 
  //  This file is part of flex.
  //  

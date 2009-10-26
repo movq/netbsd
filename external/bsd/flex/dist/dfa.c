@@ -1,4 +1,4 @@
-/*	$NetBSD: dfa.c,v 1.1 2009/10/26 00:25:56 christos Exp $	*/
+/*	$NetBSD: dfa.c,v 1.1.1.1 2009/10/26 00:25:56 christos Exp $	*/
 
 /* dfa - DFA construction routines */
 

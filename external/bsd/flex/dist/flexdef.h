@@ -1,4 +1,4 @@
-/*	$NetBSD: flexdef.h,v 1.1 2009/10/26 00:25:59 christos Exp $	*/
+/*	$NetBSD: flexdef.h,v 1.1.1.1 2009/10/26 00:25:59 christos Exp $	*/
 
 
 /* flexdef - definitions file for flex */

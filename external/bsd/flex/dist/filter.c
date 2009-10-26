@@ -1,4 +1,4 @@
-/*	$NetBSD: filter.c,v 1.1 2009/10/26 00:26:00 christos Exp $	*/
+/*	$NetBSD: filter.c,v 1.1.1.1 2009/10/26 00:26:00 christos Exp $	*/
 
 /* filter - postprocessing of flex output through filters */
 

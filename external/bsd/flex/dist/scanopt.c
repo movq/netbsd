@@ -1,4 +1,4 @@
-/*	$NetBSD: scanopt.c,v 1.1 2009/10/26 00:26:56 christos Exp $	*/
+/*	$NetBSD: scanopt.c,v 1.1.1.1 2009/10/26 00:26:56 christos Exp $	*/
 
 /* flex - tool to generate fast lexical analyzers */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: skel.c,v 1.1 2009/10/26 00:27:03 christos Exp $	*/
+/*	$NetBSD: skel.c,v 1.1.1.1 2009/10/26 00:27:03 christos Exp $	*/
 
 /* File created from flex.skl via mkskel.sh */
 
