@@ -1,4 +1,4 @@
-/*	$NetBSD: lr0.c,v 1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: lr0.c,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
 
 /* Id: lr0.c,v 1.9 2009/10/27 09:20:39 tom Exp */
 

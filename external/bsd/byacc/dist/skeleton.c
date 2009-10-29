@@ -1,4 +1,4 @@
-/*	$NetBSD: skeleton.c,v 1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: skeleton.c,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
 
 /* Id: skeleton.c,v 1.19 2008/12/24 14:52:28 tom Exp */
 

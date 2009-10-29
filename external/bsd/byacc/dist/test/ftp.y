@@ -1,4 +1,4 @@
-/*	$NetBSD: ftp.y,v 1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: ftp.y,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
 
 /*
  * Copyright (c) 1985, 1988 Regents of the University of California.

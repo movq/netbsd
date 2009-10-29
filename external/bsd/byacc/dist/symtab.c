@@ -1,4 +1,4 @@
-/*	$NetBSD: symtab.c,v 1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: symtab.c,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
 
 /* Id: symtab.c,v 1.7 2008/11/24 21:30:35 tom Exp */
 

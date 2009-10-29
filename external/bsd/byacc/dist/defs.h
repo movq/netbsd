@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: defs.h,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
 
 /* Id: defs.h,v 1.20 2009/10/27 10:47:43 tom Exp */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: reader.c,v 1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: reader.c,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
 
 /* Id: reader.c,v 1.18 2009/10/27 09:04:07 tom Exp */
 

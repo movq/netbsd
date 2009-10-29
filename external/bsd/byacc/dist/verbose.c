@@ -1,4 +1,4 @@
-/*	$NetBSD: verbose.c,v 1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: verbose.c,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
 
 /* Id: verbose.c,v 1.8 2009/10/27 09:12:43 tom Exp */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkpar.c,v 1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: mkpar.c,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
 
 /* Id: mkpar.c,v 1.10 2009/10/27 10:50:13 tom Exp */
 

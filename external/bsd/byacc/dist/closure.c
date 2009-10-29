@@ -1,4 +1,4 @@
-/*	$NetBSD: closure.c,v 1.1 2009/10/29 00:46:52 christos Exp $	*/
+/*	$NetBSD: closure.c,v 1.1.1.1 2009/10/29 00:46:52 christos Exp $	*/
 
 /* Id: closure.c,v 1.7 2009/10/27 09:30:14 tom Exp */
 

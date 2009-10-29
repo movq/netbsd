@@ -1,4 +1,4 @@
-/*	$NetBSD: grammar.y,v 1.1 2009/10/29 00:46:53 christos Exp $	*/
+/*	$NetBSD: grammar.y,v 1.1.1.1 2009/10/29 00:46:53 christos Exp $	*/
 
 /* Id: grammar.y,v 1.1 2004/03/24 21:29:23 tom Exp
  *
