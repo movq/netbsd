@@ -1,4 +1,4 @@
-/*	$NetBSD: poll.c,v 1.1 2009/11/02 10:01:02 plunky Exp $	*/
+/*	$NetBSD: poll.c,v 1.1.1.1 2009/11/02 10:01:02 plunky Exp $	*/
 /*	$OpenBSD: poll.c,v 1.2 2002/06/25 15:50:15 mickey Exp $	*/
 
 /*

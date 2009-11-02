@@ -1,4 +1,4 @@
-/*	$NetBSD: regress.gen.h,v 1.1 2009/11/02 10:01:03 plunky Exp $	*/
+/*	$NetBSD: regress.gen.h,v 1.1.1.1 2009/11/02 10:01:03 plunky Exp $	*/
 /*
  * Automatically generated from ./regress.rpc
  */

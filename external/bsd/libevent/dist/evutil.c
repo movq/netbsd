@@ -1,4 +1,4 @@
-/*	$NetBSD: evutil.c,v 1.1 2009/11/02 10:00:59 plunky Exp $	*/
+/*	$NetBSD: evutil.c,v 1.1.1.1 2009/11/02 10:00:59 plunky Exp $	*/
 /*
  * Copyright (c) 2007 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.

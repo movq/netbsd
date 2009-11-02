@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_http.c,v 1.1 2009/11/02 10:01:04 plunky Exp $	*/
+/*	$NetBSD: regress_http.c,v 1.1.1.1 2009/11/02 10:01:04 plunky Exp $	*/
 /*
  * Copyright (c) 2003-2006 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.

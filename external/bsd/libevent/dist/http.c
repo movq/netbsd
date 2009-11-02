@@ -1,4 +1,4 @@
-/*	$NetBSD: http.c,v 1.1 2009/11/02 10:01:01 plunky Exp $	*/
+/*	$NetBSD: http.c,v 1.1.1.1 2009/11/02 10:01:01 plunky Exp $	*/
 /*
  * Copyright (c) 2002-2006 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.

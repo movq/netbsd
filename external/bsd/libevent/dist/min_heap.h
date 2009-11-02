@@ -1,4 +1,4 @@
-/*	$NetBSD: min_heap.h,v 1.1 2009/11/02 10:01:01 plunky Exp $	*/
+/*	$NetBSD: min_heap.h,v 1.1.1.1 2009/11/02 10:01:01 plunky Exp $	*/
 /*
  * Copyright (c) 2006 Maxim Yegorushkin <maxim.yegorushkin@gmail.com>
  * All rights reserved.

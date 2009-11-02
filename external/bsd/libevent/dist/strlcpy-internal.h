@@ -1,4 +1,4 @@
-/*	$NetBSD: strlcpy-internal.h,v 1.1 2009/11/02 10:01:02 plunky Exp $	*/
+/*	$NetBSD: strlcpy-internal.h,v 1.1.1.1 2009/11/02 10:01:02 plunky Exp $	*/
 #ifndef _STRLCPY_INTERNAL_H_
 #define _STRLCPY_INTERNAL_H_
 

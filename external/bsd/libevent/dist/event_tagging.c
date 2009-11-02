@@ -1,4 +1,4 @@
-/*	$NetBSD: event_tagging.c,v 1.1 2009/11/02 10:00:58 plunky Exp $	*/
+/*	$NetBSD: event_tagging.c,v 1.1.1.1 2009/11/02 10:00:58 plunky Exp $	*/
 /*
  * Copyright (c) 2003, 2004 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.

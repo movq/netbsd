@@ -1,4 +1,4 @@
-/*	$NetBSD: buffer.c,v 1.1 2009/11/02 10:00:52 plunky Exp $	*/
+/*	$NetBSD: buffer.c,v 1.1.1.1 2009/11/02 10:00:52 plunky Exp $	*/
 /*
  * Copyright (c) 2002, 2003 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.

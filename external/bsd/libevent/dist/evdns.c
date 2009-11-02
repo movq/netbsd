@@ -1,5 +1,5 @@
-/*	$NetBSD: evdns.c,v 1.1 2009/11/02 10:00:55 plunky Exp $	*/
-/* $Id: evdns.c,v 1.1 2009/11/02 10:00:55 plunky Exp $ */
+/*	$NetBSD: evdns.c,v 1.1.1.1 2009/11/02 10:00:55 plunky Exp $	*/
+/* $Id: evdns.c,v 1.1.1.1 2009/11/02 10:00:55 plunky Exp $ */
 
 /* The original version of this module was written by Adam Langley; for
  * a history of modifications, check out the subversion logs.

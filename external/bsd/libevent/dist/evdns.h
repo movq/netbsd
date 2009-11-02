@@ -1,4 +1,4 @@
-/*	$NetBSD: evdns.h,v 1.1 2009/11/02 10:00:56 plunky Exp $	*/
+/*	$NetBSD: evdns.h,v 1.1.1.1 2009/11/02 10:00:56 plunky Exp $	*/
 /*
  * Copyright (c) 2006 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.

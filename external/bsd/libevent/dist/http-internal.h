@@ -1,4 +1,4 @@
-/*	$NetBSD: http-internal.h,v 1.1 2009/11/02 10:00:59 plunky Exp $	*/
+/*	$NetBSD: http-internal.h,v 1.1.1.1 2009/11/02 10:00:59 plunky Exp $	*/
 /*
  * Copyright 2001 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.

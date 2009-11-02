@@ -1,4 +1,4 @@
-/*	$NetBSD: evrpc-internal.h,v 1.1 2009/11/02 10:00:58 plunky Exp $	*/
+/*	$NetBSD: evrpc-internal.h,v 1.1.1.1 2009/11/02 10:00:58 plunky Exp $	*/
 /*
  * Copyright (c) 2006 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: event-internal.h,v 1.1 2009/11/02 10:00:53 plunky Exp $	*/
+/*	$NetBSD: event-internal.h,v 1.1.1.1 2009/11/02 10:00:53 plunky Exp $	*/
 /*
  * Copyright (c) 2000-2004 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.
